@@ -1393,7 +1393,10 @@ pub(crate) fn spec() -> CommandSpec {
          - MANPAGER, PAGER: pager command; fallback is less (Unix), more.com (Windows)\n\
          - FORCE_COLOR: not supported; redirected stdout stays plain\n\
          - RICH_GRAPHICS: sixel forces Sixel on; none (or kitty, iterm) rules it out\n\
-         - RICH_SIXEL: 0/1 overrides Sixel detection when RICH_GRAPHICS is unset",
+         - RICH_SIXEL: 0/1 overrides Sixel detection when RICH_GRAPHICS is unset\n\
+         - RICH_MICRO: kitty, iterm, sixel, blocks or text: how micro assets are drawn on a \
+         terminal (never off one)\n\
+         - RICH_CELL_PIXELS: WxH, the cell size in pixels micro assets are fitted to",
     )
     .section(
         "",

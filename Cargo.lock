@@ -1600,6 +1600,7 @@ dependencies = [
  "rs-rich-interact",
  "rs-rich-lumis",
  "rs-rich-mermaid",
+ "rs-rich-micro",
  "rs-rich-record",
  "same-file",
  "serde_json",
@@ -1676,7 +1677,7 @@ dependencies = [
 
 [[package]]
 name = "rs-rich-mermaid"
-version = "0.0.2"
+version = "0.0.3"
 dependencies = [
  "rs-rich",
  "rs-rich-art",

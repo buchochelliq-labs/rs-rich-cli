@@ -92,7 +92,7 @@ Entries below record subsequent releases and development.
   `rich.micro = [name, cols, rows, id]`, so measure, wrapping, cropping,
   tables and panels size it exactly and pipes and exports get plain text.
   `MicroView` offers each complete placement to `MicroRenderer`s, the seam
-  terminal graphics plug into; this release ships `FallbackRenderer` only.
+  terminal graphics plug into (see the rendering section below).
 - Release tooling knows the crate: `release.py`, the package checks, the
   release workflow's tags, the CI test matrix and the readiness version
   pattern (which now also matches `rs-rich-record` and `rs-rich-interact`
@@ -150,6 +150,72 @@ already bumped for this release. Nothing in `rs-rich` changes.
 
 Existing behaviour that changes: typing in a `TreeSelect` now lists the
 matches' ancestors too, in tree order, instead of a flat ranking.
+
+### Micro assets on a terminal: Kitty, iTerm2, Sixel, fallback and animation
+
+Versions: `rs-rich-art` 0.0.11 → 0.0.12 and `rs-rich-ext` 0.0.11 → 0.0.12
+(their source changed and 0.0.11 is published), `rs-rich-mermaid` 0.0.2 →
+0.0.3 and `rs-rich-record` 0.0.1 → 0.0.2 for their new requirements on them.
+`rs-rich-micro` 0.0.1, `rs-rich-interact` 0.0.2 and `rs-rich-cli` 0.0.14 are
+unpublished and keep their versions. Nothing in `rs-rich` changes.
+
+0.0.14 workstream 6 ([plan](docs/plans/0.0.14.md), #572–#577, #584):
+micro assets are drawn with the terminal's own graphics where it has them.
+
+- **Choosing (#573).** `rich_micro::select` picks Kitty, then iTerm2, then
+  Sixel (when the cell size in pixels is known), then half-blocks, then the
+  emoji or text fallback. `RICH_MICRO=kitty|iterm|sixel|blocks|text`
+  overrides it on a terminal; output that is not a terminal always gets the
+  text fallback. `rich doctor` reports the choice, its reason, the cell size
+  and whether assets animate (`micro` in `--report json`).
+- **Cell size and graphics beside core (ext).**
+  `rich_ext::graphics::GraphicsEnvironment` carries the graphics protocol
+  and the cell size in pixels (`RICH_CELL_PIXELS=WxH`, then `TIOCGWINSZ`'s
+  pixel fields through `rustix`, then a `CSI 16 t` query made only when
+  stdin and stdout are a terminal), leaving core's `TargetCapabilities` as
+  upstream has it. `Environment` gains `cell_pixels` (defaulted) and
+  `MapEnvironment` a `cell_pixels` field and builder; `Field::new` is public.
+- **Kitty (#574), iTerm2 (#575) and inline Sixel (#576) in `rs-rich-art`.**
+  New `kitty` and `iterm` features: Kitty's graphics protocol with Unicode
+  placeholders (U+10EEEE and the row/column diacritics), chunked quiet
+  transmission, frame animation and delete by id; iTerm2 inline images at an
+  exact size in cells. `SixelArt::encode_cells` is the Sixel encoder at an
+  exact cell size without a trailing line break. The `graphics` module fits
+  images to an exact number of cells, decodes and resamples animations under
+  a memory budget, encodes PNG and GIF, and draws an image over reserved
+  cells with the cursor saved and restored (`graphics::overlay`).
+- **Drawing (`rs-rich-micro`).** `MicroGraphics` holds a terminal's drawing
+  state. Its renderer draws every asset in a `MicroView`: Kitty placeholders
+  (each image transmitted once per session and reused by id), iTerm2 and
+  Sixel images over blank cells, or block cells, and checks at render time
+  that the console is a terminal, so pipes, logs and exports stay byte for
+  byte the fallback. Kitty placeholders are only ever produced after the
+  markup pre-pass, and drawn output fed back to it is reported, not reused.
+- **Fallback (#577).** Where no protocol draws: the emoji or text, then a
+  half-block rendering at exactly the asset's cells (on a colour terminal),
+  then the alt text.
+- **A graphics side channel (ext, interact).** `Frame`s carry `Placement`s
+  beside their cells (`frame::graphics`: `Graphic`, `PlacementSource`,
+  `plan`). `LiveCoordinator::with_graphics`, `Painter::set_graphics` and
+  `EventLoop::graphics` draw them after the cell diff, redraw them when the
+  cells under them are repainted, never draw them off a terminal, and
+  release what the terminal holds when the view closes, so no Kitty id
+  leaks.
+- **Animation (#572).** Frames are fitted to the cells, deduplicated and
+  rate-limited under the package limits. Kitty and iTerm2 play them
+  natively; Sixel and blocks show the frame the clock is on at each redraw,
+  and the event loop wakes for the next one. `RICH_A11Y=reduced-motion`,
+  `RICH_ANIMATION=0` and non-interactive output show the still image.
+- **Cache (#584).** Decoded images are cached in memory (keyed by source
+  hash, size in cells and cell size; 32 MiB by default) and, for
+  `MicroGraphics::detect`, as fitted PNGs under the user cache directory.
+- **Tests.** A PTY test per protocol plays the output through a real
+  pseudo-terminal into an emulator and checks bytes and cursor position
+  through wrapping, a table, a scroll and a live redraw; fallback output is
+  byte-identical in pipes and exports; animation stops with reduced motion;
+  no Kitty id is left after a view closes.
+- **Not yet:** WebP animations and frame-sequence animations draw their
+  still image; images are one row high.
 
 ### Interact 0.0.2: composition, a public kit and a keymap registry
 

@@ -43,6 +43,23 @@
 //! the clock is on, like a spinner, whenever the view is redrawn, and the
 //! source tells an event loop when the next frame is due.
 //! `RICH_A11Y=reduced-motion` and `RICH_ANIMATION=0` show the still frame.
+//!
+//! ```no_run
+//! use std::sync::Arc;
+//! use rich::Console;
+//! use rich_micro::{render_markup, FallbackPreference, Layer, MicroAsset, MicroGraphics, MicroRegistry};
+//!
+//! let mut registry = MicroRegistry::new();
+//! registry.add(Layer::Inline, MicroAsset::new("ship", "rocket")?.with_emoji("🚀")?)?;
+//! let registry = Arc::new(registry);
+//!
+//! // Detects the terminal once: Kitty, iTerm2, Sixel, blocks or text.
+//! let graphics = MicroGraphics::detect(Arc::clone(&registry));
+//! let console = Console::new();
+//! let (text, _) = render_markup(&console, "Deploying :micro:ship:", &registry, FallbackPreference::Emoji);
+//! console.print(&graphics.view(text));
+//! # Ok::<(), rich_micro::MicroError>(())
+//! ```
 
 use std::collections::{HashMap, HashSet};
 use std::fmt;
