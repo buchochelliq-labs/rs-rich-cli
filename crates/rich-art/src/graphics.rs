@@ -126,7 +126,10 @@ fn over_budget() -> ImageError {
 /// A still PNG decodes to one frame. Frames past `budget.max_frames` are
 /// dropped; decoding stops with an error when the frames so far take more
 /// than `budget.max_bytes`.
-pub fn decode_animation(bytes: &[u8], budget: FrameBudget) -> Result<Vec<AnimationFrame>, ImageError> {
+pub fn decode_animation(
+    bytes: &[u8],
+    budget: FrameBudget,
+) -> Result<Vec<AnimationFrame>, ImageError> {
     let frames: Box<dyn Iterator<Item = Result<Frame, ImageError>>> = if bytes.starts_with(b"GIF8")
     {
         let mut decoder = GifDecoder::new(Cursor::new(bytes))?;
@@ -193,7 +196,11 @@ pub fn resample(
             continue;
         }
         carried = Duration::ZERO;
-        let image = fit_to_pixels(&DynamicImage::ImageRgba8(frame.image.clone()), width, height);
+        let image = fit_to_pixels(
+            &DynamicImage::ImageRgba8(frame.image.clone()),
+            width,
+            height,
+        );
         match out.last_mut() {
             Some(previous) if previous.image == image => previous.delay += delay,
             _ => out.push(AnimationFrame { image, delay }),
@@ -366,6 +373,11 @@ mod tests {
         assert_eq!(decoded.len(), 2);
         assert_eq!(decoded[1].delay, Duration::from_millis(200));
         let png = encode_png(&frames[0].image).expect("png");
-        assert_eq!(decode_animation(&png, FrameBudget::default()).unwrap().len(), 1);
+        assert_eq!(
+            decode_animation(&png, FrameBudget::default())
+                .unwrap()
+                .len(),
+            1
+        );
     }
 }

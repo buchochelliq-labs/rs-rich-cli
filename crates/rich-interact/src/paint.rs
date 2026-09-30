@@ -5,9 +5,16 @@
 //! only the cells [`Frame::diff`] reports as changed, moving the cursor with
 //! relative sequences, so an unchanged view writes nothing at all. That is
 //! what lets an idle event loop stay silent.
+//!
+//! Graphics (micro assets drawn with Kitty, iTerm2 or Sixel) come through a
+//! [`PlacementSource`] ([`Painter::set_graphics`]): the placements it finds
+//! on a view's cells are drawn after the cell diff, redrawn when the cells
+//! under them are repainted, and released when the region finishes.
+
+use std::sync::Arc;
 
 use rich::{ColorSystem, Segment};
-use rich_ext::frame::Frame;
+use rich_ext::frame::{plan_graphics, Change, Frame, PlacementSource};
 
 use crate::component::View;
 
@@ -73,7 +80,6 @@ fn cell_len_of(c: char) -> usize {
 }
 
 /// Paints successive views into one region.
-#[derive(Debug)]
 pub struct Painter {
     system: Option<ColorSystem>,
     no_color: bool,
@@ -87,6 +93,23 @@ pub struct Painter {
     /// Where the terminal cursor was left for the view, and whether shown.
     cursor: Option<(usize, usize)>,
     cursor_shown: bool,
+    graphics: Option<Arc<dyn PlacementSource>>,
+}
+
+impl std::fmt::Debug for Painter {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Painter")
+            .field("system", &self.system)
+            .field("no_color", &self.no_color)
+            .field("previous", &self.previous)
+            .field("extent", &self.extent)
+            .field("height", &self.height)
+            .field("row", &self.row)
+            .field("cursor", &self.cursor)
+            .field("cursor_shown", &self.cursor_shown)
+            .field("graphics", &self.graphics.is_some())
+            .finish()
+    }
 }
 
 impl Painter {
@@ -101,7 +124,20 @@ impl Painter {
             cursor: None,
             // The session hides the cursor on entry.
             cursor_shown: false,
+            graphics: None,
         }
+    }
+
+    /// Draw the graphics `source` places on each view's cells. Give it only
+    /// when the painter writes to a terminal that showed it can draw them.
+    pub fn set_graphics(&mut self, source: Option<Arc<dyn PlacementSource>>) {
+        self.graphics = source;
+        self.previous = None;
+    }
+
+    /// The graphics source, if any.
+    pub fn graphics(&self) -> Option<&Arc<dyn PlacementSource>> {
+        self.graphics.as_ref()
     }
 
     /// Repaint every row next time: after a resize, or after another
@@ -165,15 +201,28 @@ impl Painter {
         // line is still a row of the frame rather than a terminator.
         for line in &view.lines[..rows] {
             let start = segments.len();
-            segments.extend(line.iter().cloned());
+            match &self.graphics {
+                Some(source) => segments.extend(source.prepare(line.clone())),
+                None => segments.extend(line.iter().cloned()),
+            }
             // The one way to the terminal: nothing raw gets past it.
             sanitize_line(&mut segments[start..]);
             segments.push(Segment::line());
         }
-        let frame = Frame::from_segments(&segments);
+        let mut frame = Frame::from_segments(&segments);
         let height = frame.height();
+        if let Some(source) = &self.graphics {
+            let placements = source
+                .placements(&frame)
+                .into_iter()
+                .filter(|p| p.row + p.rows <= height)
+                .collect();
+            frame.set_placements(placements);
+        }
         let mut out = String::new();
-        match self.previous.take() {
+        let mut changes = Vec::new();
+        let previous = self.previous.take();
+        match &previous {
             None => {
                 // Everything: from the top of the region down.
                 if self.extent > 0 {
@@ -189,11 +238,16 @@ impl Painter {
                         self.system,
                         self.no_color,
                     ));
+                    changes.push(Change {
+                        row,
+                        columns: 0..frame.row_width(row).max(1),
+                    });
                 }
                 self.extent = self.extent.max(height);
             }
             Some(previous) => {
-                for change in frame.diff(&previous) {
+                changes = frame.diff(previous);
+                for change in changes.clone() {
                     let row = change.row;
                     self.go(row, change.columns.start, &mut out);
                     if row < height {
@@ -216,6 +270,26 @@ impl Painter {
                     }
                 }
                 self.extent = self.extent.max(height);
+            }
+        }
+        if self.graphics.is_some() {
+            let old = previous.as_ref().map_or(&[][..], Frame::placements);
+            let plan = plan_graphics(old, frame.placements(), &changes);
+            for (row, columns) in &plan.repaint {
+                let end = columns.end.min(frame.cells(*row).len());
+                if columns.start < end {
+                    self.go(*row, columns.start, &mut out);
+                    out.push_str(&frame.encode_span(
+                        *row,
+                        columns.start..end,
+                        self.system,
+                        self.no_color,
+                    ));
+                }
+            }
+            for placement in &plan.draw {
+                self.go(placement.row, placement.column, &mut out);
+                out.push_str(&placement.graphic.draw(placement.frame));
             }
         }
         // The caret, or the cursor hidden.
@@ -248,6 +322,14 @@ impl Painter {
     /// shown again either way.
     pub fn finish(&mut self, clear: bool) -> String {
         let mut out = String::new();
+        if let Some(source) = &self.graphics {
+            // What stays on screen keeps its images; the rest is released.
+            let retained = match (&self.previous, clear) {
+                (Some(frame), false) => frame.placements().to_vec(),
+                _ => Vec::new(),
+            };
+            out.push_str(&source.release(&retained));
+        }
         if clear {
             if self.extent > 0 {
                 self.up_to(0, &mut out);
@@ -374,6 +456,71 @@ mod tests {
         assert_eq!(sanitized_column(&line, 1), 3);
         assert_eq!(sanitized_column(&line, 2), 4);
         assert_eq!(sanitized_column(&[Segment::new("ab", None)], 2), 2);
+    }
+
+    #[derive(Debug)]
+    struct Star;
+
+    impl rich_ext::frame::Graphic for Star {
+        fn key(&self) -> u64 {
+            7
+        }
+        fn draw(&self, frame: usize) -> String {
+            format!("<star{frame}>")
+        }
+    }
+
+    /// Places a star on every `*`, and swaps `?` for `*` first.
+    struct Stars;
+
+    impl PlacementSource for Stars {
+        fn prepare(&self, line: Vec<Segment>) -> Vec<Segment> {
+            line.into_iter()
+                .map(|s| Segment::new(s.text.replace('?', "*"), s.style))
+                .collect()
+        }
+        fn placements(&self, frame: &Frame) -> Vec<rich_ext::frame::Placement> {
+            let mut out = Vec::new();
+            for row in 0..frame.height() {
+                for (column, cell) in frame.cells(row).iter().enumerate() {
+                    if cell.text == "*" {
+                        out.push(rich_ext::frame::Placement {
+                            row,
+                            column,
+                            cols: 1,
+                            rows: 1,
+                            graphic: Arc::new(Star),
+                            frame: 0,
+                        });
+                    }
+                }
+            }
+            out
+        }
+        fn release(&self, retained: &[rich_ext::frame::Placement]) -> String {
+            format!("<release {}>", retained.len())
+        }
+    }
+
+    #[test]
+    fn graphics_are_drawn_after_the_cells_and_redrawn_when_wiped() {
+        let mut painter = Painter::new(None, false);
+        painter.set_graphics(Some(Arc::new(Stars)));
+        let out = painter.paint(&view(&["a ? b", "x"]), 10);
+        assert_eq!(out, "\ra * b\r\n\rx\x1b[1A\r\x1b[2C<star0>");
+        // Unchanged: nothing.
+        assert_eq!(painter.paint(&view(&["a ? b", "x"]), 10), "");
+        // A change beside it leaves it.
+        assert_eq!(painter.paint(&view(&["a ? c", "x"]), 10), "\r\x1b[4Cc");
+        // Gone: its cell is part of the diff; nothing is drawn.
+        assert_eq!(painter.paint(&view(&["a . c", "x"]), 10), "\r\x1b[2C.");
+        painter.paint(&view(&["a ? c", "x"]), 10);
+        // Closing the region releases what is no longer on screen.
+        assert!(painter.finish(true).starts_with("<release 0>"));
+        let mut painter = Painter::new(None, false);
+        painter.set_graphics(Some(Arc::new(Stars)));
+        painter.paint(&view(&["?"]), 10);
+        assert!(painter.finish(false).starts_with("<release 1>"));
     }
 
     #[test]
