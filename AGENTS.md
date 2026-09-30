@@ -31,6 +31,8 @@ rich-cli ──▶ rich-mermaid ──▶ rich-plugin-api      (a plugin crate; 
              rich-record  ──▶ rich-ext ──▶ rich    (tapes: `rich record`; PTY, VT emulator, renderers)
 rich-cli ──▶ rich-interact ──▶ rich-ext ──▶ rich   (interactive components: session, event loop, viewport;
                                                  `rich choose`/`filter`/`input`/`confirm`/`pager`)
+rich-micro ──▶ rich-ext ──▶ rich      (micro assets: model, `.richmicro` packages, layered registry,
+           └──▶ rich-plugin-api        `:micro:name:` markup; no CLI command yet)
 rich-py  ──▶ rich          (Python bindings; outside the workspace, released to PyPI only)
 ```
 
@@ -56,6 +58,7 @@ possible, and keep the boundary free of core back-dependencies.
 | `rs-rich-lumis` | independent SemVer | whenever we ship anything             |
 | `rs-rich-record` | independent SemVer | whenever we ship anything            |
 | `rs-rich-interact` | independent SemVer | whenever we ship anything          |
+| `rs-rich-micro` | independent SemVer | whenever we ship anything             |
 | `rs-rich-macros` | independent SemVer | whenever we ship anything            |
 | `rs-rich-art`  | independent SemVer | whenever we ship anything              |
 | `rs-rich` (PyPI, `crates/rich-py`) | independent SemVer, `python-v…` tags | whenever we ship anything |
