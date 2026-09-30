@@ -420,6 +420,47 @@ A named format also overrides the file extension. To make detection the default,
 set `format = "auto"` in your [config](#config-profiles); a mode you pick
 explicitly, such as `--markdown`, ignores it.
 
+### Explore it interactively
+
+`rich explore FILE` opens the same document as a tree you move through, fold
+and search, and prints the path of the node you pick, as the JSONPath
+`--select` takes. It reads every format `rich inspect` reads, from a file or
+stdin (`--format` as above), and paints on stderr, so a script captures the
+answer:
+
+```bash
+rich --inspect --select "$(rich explore config.yaml)" config.yaml
+port=$(rich explore --print value config.yaml)
+kubectl get pods -o json | rich explore
+```
+
+![rich explore with a node's subtree previewed](media/tapes/explore/expanded.png)
+
+| Key | Does |
+|---|---|
+| ↑ ↓, PageUp, PageDown, Home, End | Move |
+| → ← | Open or fold a container; ← on a leaf goes to its parent |
+| typing | Search keys and values, collapsed or not. The tree keeps each match's ancestors, so you see where it is, and the cursor goes to the best match |
+| Ctrl+Y | Copy the focused node's path (`$.server.port`) |
+| Alt+Y | Copy its value: a string as it is, anything else as indented JSON |
+| Enter | Print the path, or the value with `--print value` |
+| Escape | Cancel (exit 1) |
+
+The line under the prompt shows where the focused node is
+(`$ › server › port`), and a preview beside the tree (below it under 72
+columns) draws its subtree. `--header`, `--height`, `--value QUERY` (start
+searching) and `--mouse` work as for the other [interactive
+commands](#ask-in-a-script), and so do the exit codes. Without a terminal it
+prints the tree, as `rich inspect` does.
+
+Copies go to the terminal's clipboard through OSC 52, which works over SSH.
+It is on only where the terminal is known to take it (kitty, iTerm2,
+WezTerm, Windows Terminal, ghostty, Alacritty, foot, contour, rio, VS
+Code), never when the output is not a terminal, and not inside tmux or
+screen, which pass OSC 52 on only when configured to. `RICH_CLIPBOARD=1`
+turns it on anyway and `RICH_CLIPBOARD=0` off. When a copy cannot go
+anywhere the footer says so.
+
 ## Render Markdown, and keep the links readable
 
 ```bash
@@ -788,7 +829,8 @@ terminal clear codes. See [watch recipes](recipes.md#watch-json-while-editing).
 ## Ask in a script
 
 `rich choose`, `rich filter`, `rich input`, `rich confirm`, `rich pager`,
-`rich write`, `rich file`, `rich color` and `rich asset` are the interactive
+`rich write`, `rich file`, `rich color`, `rich asset` and `rich explore`
+([above](#explore-it-interactively)) are the interactive
 components as shell commands, in the manner of gum. The
 answer goes to stdout and the component paints on stderr, so a script
 captures the answer with `$(…)`; keys come from the terminal even when stdin
@@ -870,7 +912,7 @@ ask line by line on stderr and read the answer from stdin; `choose` from stdin
 and `file` answer with `--selected` (with `--multi`, nothing marked is no
 answer); `write` prints what stdin held; `filter` prints the lines that match `--value`, best first, blank lines
 included, so it works as a fuzzy `grep`; `pager` writes the content out,
-byte for byte. When the line prompt's input ends (`</dev/null`), `--default`
+byte for byte. When the line prompt's input ends (stdin from `/dev/null`), `--default`
 or `--selected` is the answer, as for an empty line; without one the command
 exits 3, since there was no answer, rather than 1. `write` with no input at
 all answers with `--value`. The prompt shows terminal controls in

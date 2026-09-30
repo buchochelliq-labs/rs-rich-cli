@@ -565,6 +565,13 @@ pub struct FilterState {
     hidden: Vec<bool>,
     limits: Vec<usize>,
     matches: Vec<(usize, Vec<usize>)>,
+    /// Each candidate's parent, for a tree: matches then keep their
+    /// ancestors, in tree order ([`set_tree`](Self::set_tree)).
+    parents: Option<Vec<Option<usize>>>,
+    /// Which matches are only there as a match's ancestor.
+    context: Vec<bool>,
+    /// The position of the best match.
+    best: Option<usize>,
 }
 
 impl FilterState {
@@ -597,6 +604,18 @@ impl FilterState {
     /// Takes effect on the next [`refilter`](Self::refilter).
     pub fn set_hidden(&mut self, hidden: Vec<bool>) {
         self.hidden = hidden;
+    }
+
+    /// Filter as a tree (#428): `parents[i]` is candidate `i`'s parent,
+    /// and candidates come in tree order, each parent before its children.
+    /// While a query is typed, what matches keeps its ancestors, so a match
+    /// shows where it is: the list is the matches and their ancestors in
+    /// tree order, the ancestors marked as [context](Self::is_context) with
+    /// nothing highlighted, and [`best`](Self::best) is where the best match
+    /// is. `None` goes back to a flat ranking. Takes effect on the next
+    /// [`refilter`](Self::refilter).
+    pub fn set_tree(&mut self, parents: Option<Vec<Option<usize>>>) {
+        self.parents = parents;
     }
 
     /// Highlight at most the first `limits[i]` characters of candidate `i`:
@@ -661,17 +680,44 @@ impl FilterState {
         let hidden = &self.hidden;
         let limits = &self.limits;
         let candidates = &self.candidates;
-        self.matches = rank(&self.query, candidates.iter().map(String::as_str))
-            .into_iter()
-            .filter(|(index, _)| filtering || !hidden.get(*index).copied().unwrap_or(false))
-            .map(|(index, found)| {
-                let mut positions = found.positions;
-                if let Some(limit) = limits.get(index) {
-                    positions.retain(|position| position < limit);
-                }
-                (index, positions)
-            })
-            .collect();
+        let ranked: Vec<(usize, Vec<usize>)> =
+            rank(&self.query, candidates.iter().map(String::as_str))
+                .into_iter()
+                .filter(|(index, _)| filtering || !hidden.get(*index).copied().unwrap_or(false))
+                .map(|(index, found)| {
+                    let mut positions = found.positions;
+                    if let Some(limit) = limits.get(index) {
+                        positions.retain(|position| position < limit);
+                    }
+                    (index, positions)
+                })
+                .collect();
+        match &self.parents {
+            Some(parents) if filtering => {
+                let best = ranked.first().map(|(index, _)| *index);
+                let (matches, context) = keep_ancestors(ranked, parents);
+                self.best = best.and_then(|best| matches.iter().position(|(i, _)| *i == best));
+                self.matches = matches;
+                self.context = context;
+            }
+            _ => {
+                self.best = (!ranked.is_empty()).then_some(0);
+                self.context = vec![false; ranked.len()];
+                self.matches = ranked;
+            }
+        }
+    }
+
+    /// Whether the match at `position` is only there as an ancestor of a
+    /// match ([`set_tree`](Self::set_tree)): drawn dim, not picked first.
+    pub fn is_context(&self, position: usize) -> bool {
+        self.context.get(position).copied().unwrap_or(false)
+    }
+
+    /// The position of the best match: the first, unless a tree keeps
+    /// ancestors above it.
+    pub fn best(&self) -> Option<usize> {
+        self.best
     }
 
     /// The matches, best first: candidate indices and the positions to
@@ -698,6 +744,76 @@ impl FilterState {
     pub fn position_of(&self, index: usize) -> Option<usize> {
         self.matches.iter().position(|(i, _)| *i == index)
     }
+}
+
+/// `index`'s ancestors in a tree given by `parents`, nearest first.
+///
+/// ```
+/// use rich_interact::kit::ancestors;
+///
+/// // 0 ─ 1 ─ 2, and 3 under 0.
+/// let parents = [None, Some(0), Some(1), Some(0)];
+/// assert_eq!(ancestors(&parents, 2).collect::<Vec<_>>(), [1, 0]);
+/// ```
+pub fn ancestors(parents: &[Option<usize>], index: usize) -> impl Iterator<Item = usize> + '_ {
+    let mut at = parents.get(index).copied().flatten();
+    // A malformed parent list (a cycle) stops after every node once.
+    let mut left = parents.len();
+    std::iter::from_fn(move || {
+        let current = at.filter(|_| left > 0)?;
+        left -= 1;
+        at = parents.get(current).copied().flatten();
+        Some(current)
+    })
+}
+
+/// Tree filtering that keeps ancestors (#428): `matches` (candidate
+/// indices with the positions to highlight, in any order) plus every
+/// ancestor of each, in tree order (index order, parents before
+/// children). Returns the list and, for each entry, whether it is only
+/// there as an ancestor (context), with nothing highlighted.
+///
+/// ```
+/// use rich_interact::kit::keep_ancestors;
+///
+/// //  0 config
+/// //  1 ├── server
+/// //  2 │   └── port
+/// //  3 └── debug
+/// let parents = [None, Some(0), Some(1), Some(0)];
+/// let (list, context) = keep_ancestors(vec![(2, vec![0, 1])], &parents);
+/// assert_eq!(list, [(0, vec![]), (1, vec![]), (2, vec![0, 1])]);
+/// assert_eq!(context, [true, true, false]);
+/// ```
+pub fn keep_ancestors(
+    matches: Vec<(usize, Vec<usize>)>,
+    parents: &[Option<usize>],
+) -> (Vec<(usize, Vec<usize>)>, Vec<bool>) {
+    let count = parents
+        .len()
+        .max(matches.iter().map(|(i, _)| i + 1).max().unwrap_or(0));
+    let mut found: Vec<Option<Vec<usize>>> = vec![None; count];
+    let mut kept = vec![false; count];
+    for (index, positions) in matches {
+        for ancestor in ancestors(parents, index) {
+            if kept[ancestor] {
+                break;
+            }
+            kept[ancestor] = true;
+        }
+        kept[index] = true;
+        found[index] = Some(positions);
+    }
+    let mut list = Vec::new();
+    let mut context = Vec::new();
+    for (index, positions) in found.into_iter().enumerate() {
+        if !kept[index] {
+            continue;
+        }
+        context.push(positions.is_none());
+        list.push((index, positions.unwrap_or_default()));
+    }
+    (list, context)
 }
 
 // ---------------------------------------------------------------------------

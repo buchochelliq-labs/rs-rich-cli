@@ -1,0 +1,22 @@
+❯ path=$(rich explore config.yaml)
+? config.yaml › grace
+  $ › users › [1] › name
+  ▾ $ {…} 6 keys                              │ name: "grace"
+  └── ▾ users: […] 2 items                    │
+      └── ▾ [1]: {…} 2 keys                   │
+❯         └── name: "grace"                   │
+                                              │
+                                              │
+                                              │
+                                              │
+                                              │
+                                              │
+  4/25 · ↑↓ move · enter pick · ←→ fold · ctrl+y path · alt+y value · esc cancel
+
+
+
+
+
+
+
+

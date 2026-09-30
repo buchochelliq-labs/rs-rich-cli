@@ -80,7 +80,7 @@ ureq = { workspace = true, optional = true }
 rich-art = { workspace = true, optional = true, features = ["gif", "sixel"] }
 rich-mermaid = { workspace = true, optional = true }
 rich-record = { workspace = true, optional = true }
-rich-interact = { workspace = true, optional = true }
+rich-interact = { workspace = true, optional = true, features = ["data"] }
 rich-lumis = { workspace = true, optional = true }
 
 toml = "1.1"

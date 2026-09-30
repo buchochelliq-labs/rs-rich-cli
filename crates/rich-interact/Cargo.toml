@@ -28,6 +28,19 @@ name = "rich_interact"
 [lints]
 workspace = true
 
+[features]
+# `DataExplorer`: explore a JSON, YAML, TOML, XML, INI or dotenv document
+# (#465), parsed by rich-ext's data layer.
+data = ["rich-ext/data"]
+
+[[example]]
+name = "explore"
+required-features = ["data"]
+
+[[test]]
+name = "explore"
+required-features = ["data"]
+
 [dependencies]
 rich = { workspace = true, features = ["syntax"] }
 rich-ext.workspace = true
@@ -47,6 +60,8 @@ signal-hook = "0.3"
 libc = "0.2"
 
 [dev-dependencies]
+# Every format the data explorer reads, in its tests.
+rich-ext = { workspace = true, features = ["data", "yaml", "toml", "xml"] }
 # Plugin-registered actions (#491), in tests.
 rich-plugin-api.workspace = true
 # Directories for the file picker's tests.

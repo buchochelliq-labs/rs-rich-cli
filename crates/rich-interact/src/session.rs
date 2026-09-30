@@ -326,6 +326,17 @@ pub trait Backend {
     fn take_resumed(&mut self) -> bool {
         false
     }
+    /// Whether [`copy`](Backend::copy) reaches a clipboard (#488): `Ok`
+    /// when it does, or why not. The default: it does not.
+    fn clipboard(&self) -> Result<(), String> {
+        Err("this backend has no clipboard".into())
+    }
+    /// Put `text` on the clipboard. Only called when
+    /// [`clipboard`](Backend::clipboard) is `Ok`.
+    fn copy(&mut self, text: &str) -> io::Result<()> {
+        let _ = text;
+        Ok(())
+    }
 }
 
 /// The real terminal: keys from it, paints to standard output or standard
@@ -337,6 +348,8 @@ pub struct Session {
     /// The row the cursor was on when the session started (inline, with
     /// the mouse on).
     origin: u16,
+    /// Whether the terminal takes OSC 52 copies, detected at the start.
+    clipboard: rich_ext::clipboard::Clipboard,
 }
 
 impl Session {
@@ -361,6 +374,9 @@ impl Session {
             start: Instant::now(),
             active: false,
             origin: 0,
+            clipboard: rich_ext::clipboard::Clipboard::detect(
+                &crate::clipboard::SessionEnvironment,
+            ),
         };
         session.enter()?;
         Ok(session)
@@ -471,6 +487,21 @@ impl Backend for Session {
 
     fn write(&mut self, text: &str) -> io::Result<()> {
         self.options.output.write(text)
+    }
+
+    fn clipboard(&self) -> Result<(), String> {
+        let field = self.clipboard.field();
+        if field.value {
+            Ok(())
+        } else {
+            Err(field.reason.clone())
+        }
+    }
+
+    fn copy(&mut self, text: &str) -> io::Result<()> {
+        let sequence = rich_ext::clipboard::osc52(text)
+            .map_err(|error| io::Error::new(io::ErrorKind::InvalidInput, error.to_string()))?;
+        self.options.output.write(&sequence)
     }
 
     fn elapsed(&self) -> Duration {

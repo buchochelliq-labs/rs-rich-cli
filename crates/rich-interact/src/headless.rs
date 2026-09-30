@@ -124,6 +124,9 @@ pub struct Record {
     /// How many times Ctrl+Z suspended the run
     /// ([`Headless::suspendable`]).
     pub suspends: usize,
+    /// What components put on the clipboard
+    /// ([`clipboard::copy`](crate::clipboard::copy)), in order.
+    pub copies: Vec<String>,
 }
 
 impl Record {
@@ -149,6 +152,9 @@ pub struct Headless {
     /// Whether Ctrl+Z suspends, as on a real terminal on Unix, instead of
     /// reaching the component. Off by default.
     pub suspendable: bool,
+    /// Whether copies reach a (recorded) clipboard. On by default; off
+    /// tests a terminal without OSC 52.
+    pub clipboard: bool,
 }
 
 impl Headless {
@@ -160,6 +166,7 @@ impl Headless {
             record: Rc::new(RefCell::new(Record::default())),
             handoff_code: Some(0),
             suspendable: false,
+            clipboard: true,
         }
     }
 
@@ -239,6 +246,19 @@ impl Backend for Headless {
 
     fn suspend(&mut self) -> io::Result<()> {
         self.record.borrow_mut().suspends += 1;
+        Ok(())
+    }
+
+    fn clipboard(&self) -> Result<(), String> {
+        if self.clipboard {
+            Ok(())
+        } else {
+            Err("the headless clipboard is off".into())
+        }
+    }
+
+    fn copy(&mut self, text: &str) -> io::Result<()> {
+        self.record.borrow_mut().copies.push(text.to_string());
         Ok(())
     }
 }

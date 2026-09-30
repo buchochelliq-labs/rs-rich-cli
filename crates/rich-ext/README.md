@@ -226,6 +226,9 @@ and benchmark capture and comparison.
   contrast or monochrome; `a11y::contrast::check_theme` checks a theme's
   contrast and colour-blind safety.
 - `ansi_explain::explain` decodes escape sequences.
+- `clipboard::Clipboard` copies through OSC 52 where the terminal takes it
+  (`RICH_CLIPBOARD=0|1` overrides), and `clipboard::CopyFormat` writes a
+  table row or cell as text, CSV or JSON.
 - `source_view::SourceView` shows source with line numbers and search
   highlights; `hex::HexView` is a `hexdump -C`-style dump;
   `unicode_inspect::UnicodeView` breaks text into graphemes, code points and

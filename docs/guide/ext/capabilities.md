@@ -232,6 +232,33 @@ rich doctor --report json > doctor.json
 See [Using the CLI](../../cli.md#inspect-your-environment) for the rest of its
 report.
 
+## The clipboard (OSC 52)
+
+`rich_ext::clipboard` decides whether to copy through OSC 52 the same way,
+with provenance, from the same `Environment`. It is its own check rather
+than a field of `Report`, since the rows `rich doctor` shows stay as they
+were. `RICH_CLIPBOARD=0|1` overrides it. Otherwise it is off when the
+output is not a terminal, on `TERM=dumb` and inside tmux or screen, and on
+only for terminals known to take OSC 52:
+
+```rust
+use rich_ext::capabilities::MapEnvironment;
+use rich_ext::clipboard::{self, Clipboard};
+
+let env = MapEnvironment::tty().var("TERM_PROGRAM", "WezTerm");
+let field = clipboard::detect(&env);
+assert!(field.value);
+assert_eq!(field.reason, "TERM_PROGRAM=WezTerm");
+
+let mut out = Vec::new();
+Clipboard::detect(&env).copy(&mut out, "hi")?;
+assert_eq!(out, b"\x1b]52;c;aGk=\x07");
+```
+
+`CopyFormat` writes a table row or cell as text, CSV or JSON for copying.
+Interactive components copy through `rich_interact::clipboard`: see
+[Explorers, copying and live lists](../interact/explorers.md#copying-to-the-clipboard).
+
 ## Gotchas
 
 - **Capabilities are not preferences.** A terminal that can show colour may

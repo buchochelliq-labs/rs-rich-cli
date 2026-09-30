@@ -370,6 +370,17 @@ fn parse_document(
     Ok((format, node))
 }
 
+/// Parse a document for `rich explore`, as `--inspect` parses it: the same
+/// detection, and the same `file:line:column: invalid FORMAT` errors.
+#[cfg(feature = "interact")]
+pub(crate) fn parse_node(
+    format: InputFormat,
+    content: &str,
+    resource: Option<&str>,
+) -> Result<Node, String> {
+    parse_document(format, content, resource).map(|(_, node)| node)
+}
+
 /// Search hits borrow their document, so this owns it and builds the view
 /// when rendered.
 struct Found {

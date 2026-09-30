@@ -21,6 +21,7 @@
 //! a [`Keymap`] (context `select`), so they can be rebound and listed.
 
 use std::cell::Cell;
+use std::sync::mpsc::{Receiver, TryRecvError};
 use std::time::Duration;
 
 use rich::Segment;
@@ -66,7 +67,14 @@ pub fn select_keymap() -> Keymap {
         .bind("clear", keys("ctrl+u"), "clear the filter")
         .bind("delete", keys("backspace"), "delete a character")
         .bind("actions", keys("ctrl+k"), "actions")
+        .bind("reload", Vec::new(), "reload the items")
 }
+
+/// How often a select fed from a channel looks for new items.
+const FEED_POLL: Duration = Duration::from_millis(100);
+
+/// Where reloaded items come from (#485).
+type Source<T> = Box<dyn FnMut() -> Vec<Item<T>> + Send>;
 
 /// Actions only a multi-select has.
 const MARKING: [&str; 3] = ["mark", "mark-up", "mark-all"];
@@ -125,6 +133,13 @@ pub struct Select<T> {
     space: Cell<usize>,
     /// The border between the list and a preview beside it.
     divider: Divider,
+    /// A line shown in place of the footer until the next key: what an
+    /// action just did ("copied path").
+    status: Option<Vec<Segment>>,
+    /// What the `reload` key reloads the items from (#485).
+    source: Option<Source<T>>,
+    /// New items sent from elsewhere, taken on every event and tick.
+    feed: Option<Receiver<Vec<Item<T>>>>,
 }
 
 impl<T> Select<T> {
@@ -166,6 +181,9 @@ impl<T> Select<T> {
             clicked: None,
             space: Cell::new(usize::MAX),
             divider: Divider::new(3).min(MIN_PANE),
+            status: None,
+            source: None,
+            feed: None,
         };
         select.refilter();
         select
@@ -245,6 +263,28 @@ impl<T> Select<T> {
     /// it, and the border beside a preview drags.
     pub fn with_mouse(mut self, on: bool) -> Self {
         self.mouse = on;
+        self
+    }
+
+    /// Reload the items from `source` when `key` is pressed (#485), as
+    /// [`reload`](Self::reload) does: the query, the focused item and the
+    /// marks stay.
+    pub fn reload_on(
+        mut self,
+        key: Key,
+        source: impl FnMut() -> Vec<Item<T>> + Send + 'static,
+    ) -> Self {
+        self.keymap.rebind("reload", [key]);
+        self.source = Some(Box::new(source));
+        self
+    }
+
+    /// Take new items from `feed` whenever they arrive (#485): a watcher or
+    /// a command on another thread sends the whole list again, and the
+    /// select [reloads](Self::reload) it, keeping the query, the focused
+    /// item and the marks. The select looks every 100 ms.
+    pub fn reload_from(mut self, feed: Receiver<Vec<Item<T>>>) -> Self {
+        self.feed = Some(feed);
         self
     }
 
@@ -346,6 +386,95 @@ impl<T> Select<T> {
         self.steady = steady;
     }
 
+    /// Replace the items and keep the user's place (#485): the query stays
+    /// and is matched against the new items, the focused item stays
+    /// focused if it is still there (matched by label), and so do the
+    /// marks. Per-item settings (values, prefixes, what is hidden) are
+    /// cleared, as with [`replace_items`](Self::replace_items); a view that
+    /// sets them sets them again.
+    pub fn reload(&mut self, items: Vec<Item<T>>) {
+        let focused = self.focused().map(|index| self.items[index].label.clone());
+        let marked: std::collections::HashSet<String> = self
+            .list
+            .selected()
+            .into_iter()
+            .map(|index| self.items[index].label.clone())
+            .collect();
+        let offset = self.list.offset();
+        self.list.clear_selection(items.len());
+        for (index, item) in items.iter().enumerate() {
+            if marked.contains(&item.label) {
+                self.list.set_selected(index, true);
+            }
+        }
+        self.items = items;
+        self.values.clear();
+        self.prefixes.clear();
+        self.hidden.clear();
+        if self.default.is_some_and(|index| index >= self.items.len()) {
+            self.default = None;
+        }
+        self.menu = None;
+        self.clicked = None;
+        self.refilter();
+        let target = focused
+            .and_then(|label| self.items.iter().position(|item| item.label == label))
+            .and_then(|index| self.filter.position_of(index));
+        if let Some(position) = target {
+            // Where it was on screen, if that still works.
+            self.list.set_offset(offset.min(position));
+            self.list.set_cursor(position);
+            self.scroll();
+        }
+    }
+
+    /// Take the newest list sent through [`reload_from`](Self::reload_from).
+    fn poll_feed(&mut self) {
+        let Some(feed) = &self.feed else { return };
+        let mut latest = None;
+        loop {
+            match feed.try_recv() {
+                Ok(items) => latest = Some(items),
+                Err(TryRecvError::Empty) => break,
+                Err(TryRecvError::Disconnected) => {
+                    self.feed = None;
+                    break;
+                }
+            }
+        }
+        if let Some(items) = latest {
+            self.reload(items);
+        }
+    }
+
+    /// Show `status` in place of the footer until the next key: what an
+    /// action just did.
+    pub fn set_status(&mut self, status: Option<String>) {
+        self.status = status.map(|status| vec![text(format!("  {status}"), &self.theme.hint)]);
+    }
+
+    /// The status line, if one is showing.
+    pub fn status(&self) -> Option<&[Segment]> {
+        self.status.as_deref()
+    }
+
+    /// Filter as a tree (#428; see [`FilterState::set_tree`]): matches keep
+    /// their ancestors, dimmed, and the cursor goes to the best match.
+    pub fn set_tree(&mut self, parents: Option<Vec<Option<usize>>>) {
+        self.filter.set_tree(parents);
+        self.refilter();
+    }
+
+    /// How often to tick: the repaint interval, and often enough to take
+    /// fed items.
+    pub fn tick_interval(&self) -> Option<Duration> {
+        match (self.repaint, self.feed.is_some()) {
+            (Some(repaint), true) => Some(repaint.min(FEED_POLL)),
+            (None, true) => Some(FEED_POLL),
+            (repaint, false) => repaint,
+        }
+    }
+
     /// Replace the items, keeping the settings; the query is cleared.
     pub fn replace_items(&mut self, items: Vec<Item<T>>) {
         self.list.clear_selection(items.len());
@@ -431,6 +560,7 @@ impl<T> Select<T> {
         let cursor = focused
             .and_then(|index| self.filter.position_of(index))
             .filter(|_| !self.filter.is_filtering())
+            .or_else(|| self.filter.best())
             .unwrap_or(0);
         self.list.set_len(self.filter.len());
         self.list.reset(cursor, self.shown());
@@ -451,6 +581,10 @@ impl<T> Select<T> {
     /// `None` carries on.
     pub fn event(&mut self, event: &Event, context: &Context<'_>) -> Option<Flow<Vec<usize>>> {
         self.space.set(context.height);
+        self.poll_feed();
+        if matches!(event, Event::Key(_) | Event::Paste(_) | Event::Mouse(_)) {
+            self.status = None;
+        }
         let flow = self.event_inner(event, context.width);
         match &flow {
             Some(Flow::Done(indices)) => {
@@ -548,6 +682,12 @@ impl<T> Select<T> {
             }
         }
         match self.key_action(key) {
+            Some("reload") if self.source.is_some() => {
+                if let Some(source) = self.source.as_mut() {
+                    let items = source();
+                    self.reload(items);
+                }
+            }
             Some("pick") => return self.pick_focused(),
             Some("cancel") => return Some(Flow::Cancel),
             Some("up") => self.step(-1),
@@ -697,7 +837,12 @@ impl<T> Select<T> {
                 text(prefix.clone(), &theme.hint)
             });
         }
-        let base = focused.then_some(&theme.focused);
+        // An ancestor kept only to place a match (a tree's filter) is dim.
+        let base = if self.filter.is_context(position) {
+            Some(&theme.hint)
+        } else {
+            focused.then_some(&theme.focused)
+        };
         line.extend(highlight(&item.label, positions, base, &theme.matched));
         if let Some(description) = &item.description {
             line.push(text(format!("  {description}"), &theme.hint));
@@ -763,7 +908,10 @@ impl<T> Select<T> {
             line.extend(heading.iter().cloned());
             lines.push(fit(line, width));
         }
-        let footer = |this: &Self| vec![this.footer(width)];
+        let footer = |this: &Self| match &this.status {
+            Some(status) => vec![fit(status.clone(), width)],
+            None => vec![this.footer(width)],
+        };
         let preview = self
             .focused()
             .and_then(|index| self.items[index].preview.as_ref());
@@ -831,7 +979,10 @@ impl<T> Select<T> {
         }
         let mut keymap = Keymap::new("select");
         for binding in self.keymap.bindings() {
-            if self.multi || !MARKING.contains(&binding.action.as_str()) {
+            let action = binding.action.as_str();
+            let shown = (self.multi || !MARKING.contains(&action))
+                && (action != "reload" || self.source.is_some());
+            if shown {
                 keymap.add(binding);
             }
         }
@@ -925,7 +1076,7 @@ impl<T: Clone> Component for Select<T> {
     }
 
     fn tick(&self) -> Option<Duration> {
-        self.repaint
+        self.tick_interval()
     }
 
     fn mouse(&self) -> bool {
@@ -994,6 +1145,26 @@ impl<T> MultiSelect<T> {
         MultiSelect(self.0.with_mouse(on))
     }
 
+    /// See [`Select::reload_on`]: marks stay with their items.
+    pub fn reload_on(
+        self,
+        key: Key,
+        source: impl FnMut() -> Vec<Item<T>> + Send + 'static,
+    ) -> Self {
+        MultiSelect(self.0.reload_on(key, source))
+    }
+
+    /// See [`Select::reload_from`].
+    pub fn reload_from(self, feed: Receiver<Vec<Item<T>>>) -> Self {
+        MultiSelect(self.0.reload_from(feed))
+    }
+
+    /// Replace the items, keeping the query, the focus and the marks: see
+    /// [`Select::reload`].
+    pub fn reload(&mut self, items: Vec<Item<T>>) {
+        self.0.reload(items);
+    }
+
     /// Mark these items to begin with; they are also the default without a
     /// terminal.
     pub fn marked(mut self, indices: impl IntoIterator<Item = usize>) -> Self {
@@ -1040,7 +1211,7 @@ impl<T: Clone> Component for MultiSelect<T> {
     }
 
     fn tick(&self) -> Option<Duration> {
-        self.0.repaint
+        self.0.tick_interval()
     }
 
     fn mouse(&self) -> bool {

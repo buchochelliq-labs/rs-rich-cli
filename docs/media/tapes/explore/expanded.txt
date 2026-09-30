@@ -1,0 +1,22 @@
+❯ path=$(rich explore config.yaml)
+? config.yaml ›
+  $ › server › port
+  ▾ $ {…} 6 keys                              │ port: 8080
+  ├── name: "storefront"                      │
+  ├── version: "2.4.1"                        │
+  ├── ▾ server: {…} 3 keys                    │
+  │   ├── host: "0.0.0.0"                     │
+❯ │   ├── port: 8080                          │
+  │   └── ▸ tls: {…} 2 keys                   │
+  ├── ▸ database: {…} 2 keys                  │
+  ├── ▸ users: […] 2 items                    │
+  └── ▸ features: {…} 2 keys                  │
+  10/25 · ↑↓ move · enter pick · ←→ fold · ctrl+y path · alt+y value · esc cancel
+
+
+
+
+
+
+
+

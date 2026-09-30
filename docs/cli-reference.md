@@ -293,6 +293,7 @@ Self-contained examples; ignores config; accepts --no-color.
 | `file` | Browse from DIR (default .) and print the path picked: type to filter, → opens, ← goes up, Ctrl+T shows hidden files; without a terminal, print --selected |
 | `color` | Pick a colour and print it: rich's named colours, the 256 palette (Tab), or hex and rgb typed in, with a live swatch |
 | `asset` | Pick an emoji, a box style or a spinner, with a preview, and print it |
+| `explore` | Explore a JSON, YAML, TOML, XML, INI or .env document: ← → fold, type to search, Ctrl+Y copies the path and Alt+Y the value (OSC 52), Enter prints the path; without a terminal, print the tree |
 | `completions` | Print a shell completion script |
 | `docs` | Print reference documentation generated from this help |
 | `bench` | Compare benchmark runs |
@@ -1193,6 +1194,53 @@ Pick one of rich's box styles by name, for --panel
 
 ```sh
 rich asset --kind box
+```
+
+### rich explore
+
+Explore a JSON, YAML, TOML, XML, INI or .env document: ← → fold, type to search, Ctrl+Y copies the path and Alt+Y the value (OSC 52), Enter prints the path; without a terminal, print the tree
+
+#### Usage
+
+```text
+rich explore [OPTIONS] [FILE]
+```
+
+#### Options
+
+| Option | Description |
+| --- | --- |
+| `--format <FORMAT>` | The document's format (default auto: from the file name, then the content), as for --inspect. Possible values: `auto`, `json`, `yaml`, `toml`, `xml`, `ini`, `env`. |
+| `--header <TEXT>` | The prompt above the tree (default the file name) |
+| `--height <ROWS>` | Show at most ROWS at once (default 10), fewer when the terminal is shorter. |
+| `--value <QUERY>` | Start with QUERY searched. |
+| `--print <WHAT>` | What Enter prints: the node's JSONPath (default), or its value (a string as it is, anything else as JSON) Possible values: `path`, `value`. |
+| `--mouse` | Report the mouse: click a row to focus it and again to pick it, drag the border beside a preview (off by default: it takes text selection from the terminal) |
+
+#### Arguments
+
+| Argument | Description |
+| --- | --- |
+| `[FILE]` | The document; `-` or none reads standard input. |
+
+#### Examples
+
+Browse a document
+
+```sh
+rich explore package.json
+```
+
+Pick a node, then show it
+
+```sh
+rich --inspect --select "$(rich explore config.yaml)" config.yaml
+```
+
+Pick a value from a command's output
+
+```sh
+kubectl get pods -o json | rich explore --print value
 ```
 
 ### rich completions

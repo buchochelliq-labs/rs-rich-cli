@@ -1,7 +1,8 @@
 //! `rich choose`, `rich filter`, `rich input`, `rich confirm`,
-//! `rich pager`, `rich write`, `rich file`, `rich color` and `rich asset`
-//! (#493, #494): the rs-rich-interact components as shell commands. Not
-//! upstream: a CLI convenience over the rs-rich-interact library.
+//! `rich pager`, `rich write`, `rich file`, `rich color`, `rich asset` and
+//! `rich explore` (#493, #494, #465): the rs-rich-interact components as
+//! shell commands. Not upstream: a CLI convenience over the rs-rich-interact
+//! library.
 //!
 //! They are made for scripts. The answer goes to standard output and the
 //! component paints on standard error, so `choice=$(rich choose a b c)`
@@ -15,7 +16,8 @@
 //! line by line on standard error; `choose` from standard input and `file`
 //! answer with `--selected`; `filter` prints the lines that match `--value`,
 //! so it is a fuzzy `grep` in a pipeline; `pager` writes the content out;
-//! `write` answers with what standard input held.
+//! `write` answers with what standard input held; `explore` prints the
+//! document's tree, as `rich --inspect` would.
 //!
 //! `--mouse` (#476) turns mouse reporting on where a command has something
 //! to click: rows, buttons, the border beside a preview. It is off by
@@ -30,14 +32,17 @@ use std::time::{Duration, Instant};
 use rich_ext::cli_doc::{ArgSpec, CommandSpec};
 use rich_ext::sanitize_terminal_controls;
 use rich_interact::{
-    AssetKind, AssetPicker, Choice, ColorFormat, ColorPicker, Confirm, Error as RunError, Fallback,
-    FileMode, FilePicker, Input, Item, LoopOptions, MultiSelect, NotInteractive, Outcome, Output,
-    Pager, Policy, Preview, RunOptions, Select, SessionOptions, TextArea,
+    AssetKind, AssetPicker, Choice, ColorFormat, ColorPicker, Confirm, DataExplorer,
+    Error as RunError, Fallback, FileMode, FilePicker, Input, Item, LoopOptions, MultiSelect,
+    NotInteractive, Outcome, Output, Pager, Policy, Preview, RunOptions, Select, SessionOptions,
+    TextArea,
 };
+
+use crate::inspect::InputFormat;
 
 /// The commands, in the order help lists them.
 const COMMANDS: &[&str] = &[
-    "choose", "filter", "input", "confirm", "pager", "write", "file", "color", "asset",
+    "choose", "filter", "input", "confirm", "pager", "write", "file", "color", "asset", "explore",
 ];
 
 /// The command word, when the first word that is not an option is one and
@@ -338,7 +343,7 @@ pub(super) fn commands() -> Vec<CommandSpec> {
                     .value_name("TEXT")
                     .help("The prompt above the list"),
             )
-            .arg(height)
+            .arg(height.clone())
             .arg(
                 ArgSpec::option("value")
                     .value_name("QUERY")
@@ -349,10 +354,57 @@ pub(super) fn commands() -> Vec<CommandSpec> {
                     .value_name("NAME")
                     .help("Focus NAME; the answer without a terminal and to an empty line"),
             )
-            .arg(mouse)
+            .arg(mouse.clone())
             .example(
                 "rich asset --kind box",
                 "Pick one of rich's box styles by name, for --panel",
+            ),
+        CommandSpec::new("explore")
+            .about(
+                "Explore a JSON, YAML, TOML, XML, INI or .env document: ← → fold, type to search, \
+                 Ctrl+Y copies the path and Alt+Y the value (OSC 52), Enter prints the path; \
+                 without a terminal, print the tree",
+            )
+            .usage("explore [OPTIONS] [FILE]")
+            .arg(ArgSpec::positional("FILE").help("The document; `-` or none reads standard input"))
+            .arg(
+                ArgSpec::option("format")
+                    .value_name("FORMAT")
+                    .choices(["auto", "json", "yaml", "toml", "xml", "ini", "env"])
+                    .help(
+                        "The document's format (default auto: from the file name, then the \
+                         content), as for --inspect",
+                    ),
+            )
+            .arg(
+                ArgSpec::option("header")
+                    .value_name("TEXT")
+                    .help("The prompt above the tree (default the file name)"),
+            )
+            .arg(height)
+            .arg(
+                ArgSpec::option("value")
+                    .value_name("QUERY")
+                    .help("Start with QUERY searched"),
+            )
+            .arg(
+                ArgSpec::option("print")
+                    .value_name("WHAT")
+                    .choices(["path", "value"])
+                    .help(
+                        "What Enter prints: the node's JSONPath (default), or its value (a \
+                         string as it is, anything else as JSON)",
+                    ),
+            )
+            .arg(mouse)
+            .example("rich explore package.json", "Browse a document")
+            .example(
+                "rich --inspect --select \"$(rich explore config.yaml)\" config.yaml",
+                "Pick a node, then show it",
+            )
+            .example(
+                "kubectl get pods -o json | rich explore --print value",
+                "Pick a value from a command's output",
             ),
     ]
 }
@@ -385,6 +437,10 @@ struct Args {
     file: bool,
     extensions: Vec<String>,
     format: Option<String>,
+    /// `rich explore --format`.
+    data_format: Option<InputFormat>,
+    /// `rich explore --print`: `value` rather than the path.
+    print_value: bool,
     kind: Option<String>,
     /// The global `--no-color`.
     no_color: bool,
@@ -457,6 +513,9 @@ fn parse_args(command: &'static str, args: &[String]) -> Result<Args, String> {
             "--required",
         ],
         "confirm" => &["--default", "--affirmative", "--negative", "--mouse"],
+        "explore" => &[
+            "--format", "--header", "--height", "--value", "--print", "--mouse",
+        ],
         _ => &["--search"],
     };
     let mut seen_command = false;
@@ -535,6 +594,17 @@ fn parse_args(command: &'static str, args: &[String]) -> Result<Args, String> {
                     }
                 }
             }
+            "--format" if command == "explore" => {
+                parsed.data_format = Some(InputFormat::parse(&value()?)?);
+            }
+            "--print" => {
+                let what = value()?;
+                parsed.print_value = match what.as_str() {
+                    "path" => false,
+                    "value" => true,
+                    _ => return Err(format!("--print: {what:?} is not path or value")),
+                };
+            }
             "--format" => {
                 let format = value()?;
                 if !matches!(format.as_str(), "hex" | "name" | "rgb") {
@@ -573,7 +643,7 @@ fn parse_args(command: &'static str, args: &[String]) -> Result<Args, String> {
     // Arguments that were not valid Unicode are text here (items, prompts),
     // shown lossily; only the pager's FILE and the file picker's DIR and
     // --selected are paths, read through fs_path.
-    if !matches!(command, "pager" | "file") {
+    if !matches!(command, "pager" | "file" | "explore") {
         for positional in &mut parsed.positionals {
             *positional = text_arg(positional);
         }
@@ -614,6 +684,9 @@ fn parse_args(command: &'static str, args: &[String]) -> Result<Args, String> {
             }
         }
         "pager" if parsed.positionals.len() > 1 => return Err("`rich pager` pages one FILE".into()),
+        "explore" if parsed.positionals.len() > 1 => {
+            return Err("`rich explore` explores one FILE".into())
+        }
         "write" | "color" | "asset" if !parsed.positionals.is_empty() => {
             return Err(format!(
                 "`rich {command}` takes no arguments; the prompt is --header"
@@ -661,6 +734,7 @@ pub(super) fn dispatch(command: &'static str, args: &[String]) -> ExitCode {
         "file" => file(&args),
         "color" => color(&args),
         "asset" => asset(&args),
+        "explore" => explore(&args),
         _ => pager(&args),
     });
     match result {
@@ -1216,6 +1290,66 @@ fn asset(args: &Args) -> Answer {
         Outcome::Cancelled => Outcome::Cancelled,
         Outcome::Interrupted => Outcome::Interrupted,
     }))
+}
+
+/// `rich explore`: a document's path or value, picked from its tree.
+/// Without a terminal, the tree is printed, as `rich --inspect` prints it.
+fn explore(args: &Args) -> Answer {
+    let path = args
+        .positionals
+        .first()
+        .map(String::as_str)
+        .filter(|path| *path != "-");
+    if path.is_none() && std::io::stdin().is_terminal() {
+        return Err((
+            ExitClass::Usage,
+            "`rich explore` needs a FILE, or a document on standard input".into(),
+        ));
+    }
+    let source = match path {
+        Some(path) => {
+            let file = std::fs::File::open(fs_path(path))
+                .map_err(|error| (ExitClass::Input, format!("could not read {path}: {error}")))?;
+            String::from_utf8_lossy(&read_bounded(file, MAX_INPUT_BYTES, path)?).into_owned()
+        }
+        None => read_stdin()?,
+    };
+    let format = args.data_format.unwrap_or(InputFormat::Auto);
+    let document = crate::inspect::parse_node(format, &source, path)
+        .map_err(|message| (ExitClass::Input, message))?;
+    let name = path.map_or_else(|| "stdin".to_string(), controls::shown);
+    let options = run_options(Fallback::Default, args.no_color);
+    if options.policy.detect_for(options.session.output).is_err() {
+        // No terminal to explore on: the whole tree, as --inspect draws it.
+        let console = Console::builder().no_color(args.no_color).build();
+        console.print(&rich_ext::data::Explorer::new(&document).root_label(name));
+        return Ok(ExitCode::SUCCESS);
+    }
+    let mut explorer =
+        DataExplorer::new(args.header.clone().unwrap_or(name), document).with_mouse(args.mouse);
+    if let Some(rows) = args.height {
+        explorer = explorer.height(rows);
+    }
+    if let Some(query) = &args.value {
+        explorer = explorer.query(query.clone());
+    }
+    match rich_interact::run(&mut explorer, &options) {
+        Ok(Outcome::Done(path)) => {
+            let answer = if args.print_value {
+                explorer
+                    .document()
+                    .at(&path)
+                    .map(rich_ext::data::copy_text)
+                    .unwrap_or_default()
+            } else {
+                rich_interact::components::json_path(&path)
+            };
+            write_stdout(&format!("{answer}\n"))
+        }
+        Ok(Outcome::Cancelled) => Ok(ExitCode::from(EXIT_CANCELLED)),
+        Ok(Outcome::Interrupted) => Ok(ExitCode::from(EXIT_INTERRUPTED)),
+        Err(error) => Err((ExitClass::Input, error.to_string())),
+    }
 }
 
 /// How often a picker with `--preview` repaints, so a preview shows as
