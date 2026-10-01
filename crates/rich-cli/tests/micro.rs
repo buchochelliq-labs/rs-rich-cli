@@ -474,3 +474,84 @@ fn create_and_add_leave_an_existing_link_alone() {
     assert!(!out.status.success());
     assert!(std::fs::symlink_metadata(user.join("team.x.richmicro")).is_ok());
 }
+
+/// [`rich`], failing the test when it has not finished within 20 seconds.
+#[cfg(unix)]
+fn rich_within(work: &Path, home: &Path, args: &[&str]) -> Output {
+    let mut child = Command::new(env!("CARGO_BIN_EXE_rich"))
+        .current_dir(work)
+        .env("HOME", home)
+        .env("XDG_CONFIG_HOME", home.join(".config"))
+        .env("COLUMNS", "100")
+        .env("NO_COLOR", "1")
+        .env_remove("RICH_MICRO")
+        .args(args)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
+    while child.try_wait().unwrap().is_none() {
+        if std::time::Instant::now() > deadline {
+            let _ = child.kill();
+            panic!("rich {args:?} hung");
+        }
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+    child.wait_with_output().unwrap()
+}
+
+#[cfg(unix)]
+#[test]
+fn a_fifo_in_a_layer_is_skipped_with_a_warning() {
+    // Release-test audit A, F6: a FIFO named `*.richmicro` in a (cloned,
+    // untrusted) project's .rich/micro hung every `--project` command, and
+    // every command once the project was trusted.
+    let (root, work, home) = dirs();
+    let layer = work.join(".rich/micro");
+    std::fs::create_dir_all(&layer).unwrap();
+    let made = Command::new("mkfifo")
+        .arg(layer.join("a.richmicro"))
+        .status()
+        .unwrap();
+    assert!(made.success());
+    let pkg = root.path().join("pkg");
+    package(&pkg, simple_manifest("team/x"));
+
+    let out = rich_within(&work, &home, &["micro", "remove", "--project", "foo"]);
+    assert_eq!(out.status.code(), Some(2), "{}", text(&out.stderr));
+    let out = rich_within(
+        &work,
+        &home,
+        &["micro", "add", "--project", pkg.to_str().unwrap()],
+    );
+    assert!(out.status.success(), "{}", text(&out.stderr));
+    let out = rich_within(&work, &home, &["micro", "uninstall", "--project", "foo"]);
+    assert_eq!(out.status.code(), Some(2), "{}", text(&out.stderr));
+    let out = rich_within(&work, &home, &["micro", "packs", "--micro-project"]);
+    assert!(out.status.success(), "{}", text(&out.stderr));
+    let out = rich_within(&work, &home, &["micro", "list", "--micro-project"]);
+    assert!(out.status.success(), "{}", text(&out.stderr));
+    assert!(
+        text(&out.stderr).contains("not a regular file"),
+        "{}",
+        text(&out.stderr)
+    );
+    assert!(
+        text(&out.stdout).contains("team/x"),
+        "{}",
+        text(&out.stdout)
+    );
+
+    // Writing to an untrusted project's layer does not trust it: what was
+    // added there is not drawn.
+    let out = rich_within(&work, &home, &["-p", "--emoji", "a :micro:team/x: b"]);
+    assert_eq!(text(&out.stdout), "a :micro:team/x: b\n");
+    let out = rich_within(
+        &work,
+        &home,
+        &["-p", "--emoji", "--micro-project", "a :micro:team/x: b"],
+    );
+    assert_eq!(text(&out.stdout), "a ok b\n");
+}

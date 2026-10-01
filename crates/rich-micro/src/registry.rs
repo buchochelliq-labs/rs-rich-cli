@@ -223,8 +223,10 @@ impl MicroRegistry {
 
     /// Load every package and pack in `dir` into `layer`, in file-name order.
     /// Entries are package or pack directories and `.richmicro` / `.zip`
-    /// archives; hidden entries and other files are skipped. A missing
-    /// directory is an empty layer.
+    /// archives; hidden entries and other files are skipped. An entry named
+    /// like an archive that is not a regular file (a FIFO, socket or device)
+    /// is rejected without being opened. A missing directory is an empty
+    /// layer.
     pub fn load_dir(&mut self, layer: Layer, dir: &Path, limits: &Limits, report: &mut LoadReport) {
         if layer != Layer::BuiltIn || self.layers[layer.index()].assets.is_empty() {
             self.layers[layer.index()].origin = Some(dir.display().to_string());

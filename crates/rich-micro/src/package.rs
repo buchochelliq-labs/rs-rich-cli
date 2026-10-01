@@ -150,6 +150,14 @@ fn io_error(path: &Path, error: impl std::fmt::Display) -> MicroError {
     MicroError::Io(format!("{}: {error}", path.display()))
 }
 
+/// A FIFO, socket or device where a package or archive was expected.
+fn not_a_file(path: &Path) -> MicroError {
+    MicroError::Io(format!(
+        "{} is not a regular file or a directory",
+        path.display()
+    ))
+}
+
 /// Read at most `limit` bytes; more is an error, whatever a header claimed.
 fn read_bounded(mut reader: impl Read, limit: u64, what: &str) -> Result<Vec<u8>, MicroError> {
     let mut out = Vec::new();
@@ -196,6 +204,9 @@ impl Source {
     /// the count, each name, and no links, encryption or duplicates.
     fn archive(path: &Path, limits: &Limits) -> Result<Self, MicroError> {
         let metadata = std::fs::metadata(path).map_err(|e| io_error(path, e))?;
+        if !metadata.is_file() {
+            return Err(not_a_file(path));
+        }
         if metadata.len() > limits.max_archive_bytes {
             return Err(MicroError::Limit(format!(
                 "{} is larger than {} bytes",
@@ -204,6 +215,10 @@ impl Source {
             )));
         }
         let file = File::open(path).map_err(|e| io_error(path, e))?;
+        // What was opened, in case the path changed since it was checked.
+        if !file.metadata().is_ok_and(|m| m.is_file()) {
+            return Err(not_a_file(path));
+        }
         let mut archive = zip::ZipArchive::new(file).map_err(|e| io_error(path, e))?;
         if archive.len() > limits.max_entries {
             return Err(MicroError::Limit(format!(
@@ -780,13 +795,17 @@ pub fn load_pack(path: &Path, layer: Layer, limits: &Limits) -> Result<Pack, Mic
 /// (`pack.json`), as a directory or a zip archive.
 pub fn load(path: &Path, layer: Layer, limits: &Limits) -> Result<Loaded, MicroError> {
     let metadata = std::fs::symlink_metadata(path).map_err(|e| io_error(path, e))?;
-    let is_dir = if metadata.file_type().is_symlink() {
-        std::fs::metadata(path)
-            .map_err(|e| io_error(path, e))?
-            .is_dir()
+    let metadata = if metadata.file_type().is_symlink() {
+        std::fs::metadata(path).map_err(|e| io_error(path, e))?
     } else {
-        metadata.is_dir()
+        metadata
     };
+    let is_dir = metadata.is_dir();
+    // Only a regular file is opened as an archive: opening a FIFO blocks
+    // until something writes to it, and a device or socket is no archive.
+    if !is_dir && !metadata.is_file() {
+        return Err(not_a_file(path));
+    }
     let mut source = if is_dir {
         Source::directory(path)?
     } else {
