@@ -67,6 +67,7 @@ before the fix.
 - `TextBuffer` (and so `Input`) could leave the caret inside a grapheme (typing in front of U+FE0F or a combining mark, deleting what kept two clusters apart, `set_caret`), and `window` measured the cells before the caret with `cell_len` but dropped whole graphemes, so it underflowed: a panic in debug builds, a wild caret column in release. The caret now always snaps to a grapheme boundary, and both sides of the window are counted grapheme by grapheme with saturating arithmetic.
 - `kit::keep_ancestors` (and so `FilterState::set_tree` with a caller's parent list) panicked on a parent index past the list. Such a parent now ends the walk up.
 - `Tabs` with no tabs panicked on Tab and Shift+Tab (an unchecked index of the active tab), and on a click below its bar (a container's mouse routing trusted a rect for a child that was not there); from Python, `Tabs().headless("shift+tab")` raised `PanicException`. Both are checked now.
+- A plugin component never received the key names it declared: a key bound to its action arrived in canonical form (`esc` as `escape`, `Control+X` as `ctrl+x`), and Shift+Tab always as the undocumented `backtab`. A bound key now arrives as the first name the plugin declared for the action, spelled as declared, and `Key`'s `Display` writes Shift+Tab as `shift+tab` (which `Key::parse` already read), so plugins, Python components (`event.key`) and the docs agree.
 ### 0.0.14 release test: fixes from audit A
 
 Versions: none bumped; `rs-rich-micro` 0.0.1, `rs-rich-ext` 0.0.12,

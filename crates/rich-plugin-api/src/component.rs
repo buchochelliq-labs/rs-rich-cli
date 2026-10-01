@@ -62,7 +62,10 @@ pub type ComponentFactory = Arc<dyn Fn() -> Box<dyn PluginComponent> + Send + Sy
 pub enum ComponentEvent {
     /// A key, by name: `a`, `A`, `enter`, `down`, `space`, `tab`,
     /// `backspace`, `f5`, with `ctrl+`, `alt+` and `shift+` before it, in
-    /// that order (`ctrl+shift+left`).
+    /// that order (`ctrl+shift+left`, `shift+tab`). A key that does one of
+    /// the component's [`bindings`](PluginComponent::bindings) arrives as
+    /// the first key declared for that action, spelled as declared (`esc`
+    /// stays `esc`), even when the user rebound it.
     Key(String),
     /// Text pasted at once.
     Paste(String),

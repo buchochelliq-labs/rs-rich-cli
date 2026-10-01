@@ -167,6 +167,22 @@ def test_empty_tabs_take_tab_and_shift_tab():
     assert record.value == "ok"
 
 
+def test_shift_tab_is_named_shift_tab():
+    # 0.0.14 release-test audit B5: Shift+Tab was reported as `backtab`.
+    seen = []
+
+    class Keys(Component):
+        def handle(self, event):
+            seen.append(event.key)
+            return Done(None) if event.key == "enter" else None
+
+        def render(self, context):
+            return "keys"
+
+    Keys().headless("shift+tab ctrl+shift+tab escape enter", width=20, height=3)
+    assert seen == ["shift+tab", "ctrl+shift+tab", "escape", "enter"]
+
+
 def test_map_says_what_an_answer_means():
     seen = []
     name = Map(Input("Name"), lambda value: seen.append(value))
