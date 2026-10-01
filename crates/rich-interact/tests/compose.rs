@@ -470,3 +470,47 @@ fn empty_tabs_take_any_event() {
     let (outcome, _) = headless::run(column, script, 40, 6);
     assert_eq!(outcome.unwrap(), Outcome::Done("ok".to_string()));
 }
+
+/// `#` and `,` in a keymap file are a comment and a separator, so a line
+/// binding them once parsed as "no keys" and silently unbound the action
+/// (0.0.14 release-test audit B7). Such a line is now an error, the keys
+/// can be quoted, and unbinding is spelled `none`.
+#[test]
+fn overrides_never_unbind_by_accident() {
+    use rich_interact::KeyCode;
+
+    for line in [
+        "select.down = #",
+        "select.down = ,",
+        "select.down = , ,",
+        "select.down =",
+        "select.down =   # unbind?",
+        "select.down = \"#",
+    ] {
+        assert!(Overrides::parse(line).is_err(), "{line:?} parsed");
+    }
+    let overrides = Overrides::parse(
+        "select.down = \"#\"  # the hash key\n\
+         select.up = ',', ctrl+#\n\
+         select.pick = '\"' enter\n\
+         select.cancel = none\n",
+    )
+    .unwrap();
+    assert_eq!(overrides.get("select.down").unwrap(), [Key::char('#')]);
+    assert_eq!(
+        overrides.get("select.up").unwrap(),
+        [Key::char(','), Key::parse("ctrl+#").unwrap()]
+    );
+    assert_eq!(
+        overrides.get("select.pick").unwrap(),
+        [Key::char('"'), Key::new(KeyCode::Enter)]
+    );
+    assert_eq!(overrides.get("select.cancel").unwrap(), []);
+    // A configuration table: the same quoting; a bare comma is an error,
+    // an empty value still unbinds.
+    let table = Overrides::from_pairs([("select.down", "\",\""), ("select.up", "")]).unwrap();
+    assert_eq!(table.get("select.down").unwrap(), [Key::char(',')]);
+    assert_eq!(table.get("select.up").unwrap(), []);
+    assert!(Overrides::from_pairs([("select.down", ",")]).is_err());
+    assert!(keymap::try_keys(",").is_err());
+}

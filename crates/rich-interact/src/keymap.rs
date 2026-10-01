@@ -48,13 +48,65 @@ pub fn keys(names: &str) -> Vec<Key> {
 }
 
 /// Keys from names separated by spaces or commas, or the first name that
-/// does not parse.
+/// does not parse. A name in quotes (`"#"`, `','`, `"ctrl+,"`) is taken as
+/// it is, which is how to write the comma key, or the hash key in a file
+/// where `#` starts a comment. Text that holds only separators (a bare `,`)
+/// is an error, not "no keys"; text with nothing in it is no keys.
+///
+/// ```
+/// use rich_interact::keymap::try_keys;
+/// use rich_interact::Key;
+///
+/// assert_eq!(try_keys("\",\" ctrl+n").unwrap(), [Key::char(','), Key::ctrl('n')]);
+/// assert_eq!(try_keys("").unwrap(), []);
+/// assert!(try_keys(",").is_err());
+/// ```
 pub fn try_keys(names: &str) -> Result<Vec<Key>, String> {
+    let names = key_names(names)?;
     names
-        .split(|c: char| c.is_whitespace() || c == ',')
-        .filter(|name| !name.is_empty())
-        .map(|name| Key::parse(name).ok_or_else(|| name.to_string()))
+        .iter()
+        .map(|name| Key::parse(name).ok_or_else(|| name.clone()))
         .collect()
+}
+
+/// The key names in `text`: separated by whitespace or commas, or quoted.
+/// An unclosed quote, or separators with no name, is an error (the text).
+fn key_names(text: &str) -> Result<Vec<String>, String> {
+    let mut names = Vec::new();
+    let mut name = String::new();
+    let mut chars = text.chars();
+    while let Some(c) = chars.next() {
+        match c {
+            '"' | '\'' if name.is_empty() => {
+                let mut quoted = String::new();
+                let mut closed = false;
+                for d in chars.by_ref() {
+                    if d == c {
+                        closed = true;
+                        break;
+                    }
+                    quoted.push(d);
+                }
+                if !closed || quoted.is_empty() {
+                    return Err(text.trim().to_string());
+                }
+                names.push(quoted);
+            }
+            c if c.is_whitespace() || c == ',' => {
+                if !name.is_empty() {
+                    names.push(std::mem::take(&mut name));
+                }
+            }
+            c => name.push(c),
+        }
+    }
+    if !name.is_empty() {
+        names.push(name);
+    }
+    if names.is_empty() && !text.trim().is_empty() {
+        return Err(text.trim().to_string());
+    }
+    Ok(names)
 }
 
 /// One thing a key does: an action, in a context, with a description.
@@ -310,19 +362,37 @@ impl Overrides {
             if context.is_empty() || action.is_empty() {
                 return Err(format!("{id:?} is not context.action"));
             }
-            let keys =
-                try_keys(names.as_ref()).map_err(|name| format!("{id}: unknown key {name:?}"))?;
+            let keys = try_keys(names.as_ref()).map_err(|name| {
+                if name.contains([',', '"', '\'']) {
+                    format!("{id}: no key in {name:?} (quote a comma key: \",\")")
+                } else {
+                    format!("{id}: unknown key {name:?}")
+                }
+            })?;
             overrides.set(context, action, keys);
         }
         Ok(overrides)
     }
 
-    /// One `context.action = key, key` per line; `#` starts a comment and
-    /// blank lines are skipped. An empty right-hand side unbinds.
+    /// One `context.action = key, key` per line; blank lines are skipped,
+    /// and `#` at the start of a line or after a space starts a comment
+    /// (`ctrl+#` is a key). Quote a key that is a separator or a comment:
+    /// `"#"`, `","`. `none` unbinds the action; a line with no keys is an
+    /// error, so a stray `#` or `,` never unbinds one by accident.
+    ///
+    /// ```
+    /// use rich_interact::keymap::Overrides;
+    /// use rich_interact::Key;
+    ///
+    /// let overrides = Overrides::parse("select.down = \"#\" j # keys\nselect.up = none").unwrap();
+    /// assert_eq!(overrides.get("select.down").unwrap(), [Key::char('#'), Key::char('j')]);
+    /// assert_eq!(overrides.get("select.up").unwrap(), []);
+    /// assert!(Overrides::parse("select.down = #").is_err());
+    /// ```
     pub fn parse(text: &str) -> Result<Overrides, String> {
         let mut pairs = Vec::new();
         for (number, line) in text.lines().enumerate() {
-            let line = line.split('#').next().unwrap_or("").trim();
+            let line = strip_comment(line).trim();
             if line.is_empty() {
                 continue;
             }
@@ -332,10 +402,40 @@ impl Overrides {
                     number + 1
                 ));
             };
-            pairs.push((id.trim().to_string(), names.trim().to_string()));
+            let (id, names) = (id.trim(), names.trim());
+            if names.is_empty() {
+                return Err(format!(
+                    "line {}: {id} has no keys (quote a \"#\" key; `none` unbinds)",
+                    number + 1
+                ));
+            }
+            let names = if names.eq_ignore_ascii_case("none") {
+                ""
+            } else {
+                names
+            };
+            pairs.push((id.to_string(), names.to_string()));
         }
         Overrides::from_pairs(pairs)
     }
+}
+
+/// `line` without its comment: from a `#` at the start or after
+/// whitespace, outside quotes.
+fn strip_comment(line: &str) -> &str {
+    let mut quote = None;
+    let mut previous = ' ';
+    for (index, c) in line.char_indices() {
+        match quote {
+            Some(open) if c == open => quote = None,
+            Some(_) => {}
+            None if c == '"' || c == '\'' => quote = Some(c),
+            None if c == '#' && previous.is_whitespace() => return &line[..index],
+            None => {}
+        }
+        previous = c;
+    }
+    line
 }
 
 static INSTALLED: RwLock<Option<Overrides>> = RwLock::new(None);
@@ -368,7 +468,7 @@ mod tests {
     #[test]
     fn parses_overrides() {
         let overrides = Overrides::parse(
-            "# mine\nselect.down = ctrl+n, down\n\ntabs.next = alt+l # comment\nx.y =\n",
+            "# mine\nselect.down = ctrl+n, down\n\ntabs.next = alt+l # comment\nx.y = none\n",
         )
         .unwrap();
         assert_eq!(
