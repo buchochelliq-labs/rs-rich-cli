@@ -118,7 +118,10 @@ pub fn table_keymap() -> Keymap {
 /// underline.
 pub struct TableSelect<T> {
     select: Select<T>,
+    /// The headings as drawn (controls shown as pictures).
     headers: Vec<String>,
+    /// The headings and every row's cells as given: what copies carry.
+    raw_headers: Vec<String>,
     cells: Vec<Vec<String>>,
     widths: Vec<usize>,
     /// The focused column, once moved to.
@@ -137,10 +140,12 @@ impl<T> TableSelect<T> {
         R: IntoIterator<Item = (V, Vec<String>)>,
         V: Into<Item<T>>,
     {
-        let headers: Vec<String> = headers.into_iter().map(|h| shown(&h.into())).collect();
+        // Drawn sanitised; copied and given to actions as they are.
+        let raw_headers: Vec<String> = headers.into_iter().map(Into::into).collect();
+        let headers: Vec<String> = raw_headers.iter().map(|h| shown(h)).collect();
         let rows: Vec<(Item<T>, Vec<String>)> = rows
             .into_iter()
-            .map(|(item, cells)| (item.into(), cells.iter().map(|c| shown(c)).collect()))
+            .map(|(item, cells)| (item.into(), cells))
             .collect();
         let columns = rows
             .iter()
@@ -149,9 +154,12 @@ impl<T> TableSelect<T> {
             .max()
             .unwrap_or(0);
         let mut widths = vec![0; columns];
-        for cells in rows.iter().map(|(_, cells)| cells).chain([&headers]) {
+        for (column, cell) in headers.iter().enumerate() {
+            widths[column] = widths[column].max(cell_len(cell));
+        }
+        for (_, cells) in &rows {
             for (column, cell) in cells.iter().enumerate() {
-                widths[column] = widths[column].max(cell_len(cell));
+                widths[column] = widths[column].max(cell_len(&shown(cell)));
             }
         }
         let line = |cells: &[String]| -> String {
@@ -170,7 +178,8 @@ impl<T> TableSelect<T> {
         let items: Vec<Item<T>> = rows
             .into_iter()
             .map(|(mut item, cells)| {
-                item.label = line(&cells);
+                let drawn: Vec<String> = cells.iter().map(|cell| shown(cell)).collect();
+                item.label = line(&drawn);
                 values.push(cells.join("\t"));
                 table.push(cells);
                 item
@@ -182,6 +191,7 @@ impl<T> TableSelect<T> {
         let mut view = TableSelect {
             select,
             headers,
+            raw_headers,
             cells: table,
             widths,
             column: None,
@@ -265,7 +275,7 @@ impl<T> TableSelect<T> {
             let value = row.get(column).map_or("", String::as_str);
             ("cell", self.format.cell(value))
         } else {
-            ("row", self.format.row(&self.headers, row))
+            ("row", self.format.row(&self.raw_headers, row))
         };
         let result = clipboard::copy(copied);
         let what = format!("{what} as {}", self.format.name());

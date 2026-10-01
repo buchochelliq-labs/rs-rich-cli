@@ -325,3 +325,42 @@ fn the_theme_picker_lists_plugin_themes() {
     let picker = ThemePicker::from_registry("Theme", &registry);
     assert_eq!(picker.names(), ["default", "dusk", "solar"]);
 }
+
+/// Copies and action values carry the cells as given, not as drawn: a
+/// newline, a tab or a quote is quoted by CSV and escaped by JSON, never
+/// turned into a control picture or a space (0.0.14 release-test audit
+/// B6). Only the rows on screen show the sanitised text.
+#[test]
+fn a_table_copies_its_raw_cells() {
+    let rows = vec![(
+        0usize,
+        vec![
+            "line1\nline2".to_string(),
+            "x\ty".to_string(),
+            "say \"hi\", twice".to_string(),
+        ],
+    )];
+    let table = || {
+        TableSelect::new("T", ["a\nb", "tab\there", "c"], rows.clone()).copy_format(CopyFormat::Csv)
+    };
+    let script = Script::new().keys("ctrl+y alt+f ctrl+y alt+f ctrl+y ctrl+right alt+y escape");
+    let (_, record) = headless::run(table(), script, 60, 8);
+    assert_eq!(
+        record.copies,
+        [
+            "\"line1\nline2\",x\ty,\"say \"\"hi\"\", twice\"",
+            r#"{"a\nb": "line1\nline2", "tab\there": "x\ty", "c": "say \"hi\", twice"}"#,
+            "line1\nline2\tx\ty\tsay \"hi\", twice",
+            "x\ty",
+        ]
+    );
+    // What is drawn is still sanitised.
+    let frame = record.frames[0].clone();
+    assert!(frame.contains("line1␊line2"), "{frame}");
+    assert!(!frame.contains('\t'), "{frame}");
+    // An action sees the raw row.
+    assert_eq!(
+        table().select().target(0).value,
+        "line1\nline2\tx\ty\tsay \"hi\", twice"
+    );
+}

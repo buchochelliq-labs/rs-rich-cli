@@ -68,6 +68,7 @@ before the fix.
 - `kit::keep_ancestors` (and so `FilterState::set_tree` with a caller's parent list) panicked on a parent index past the list. Such a parent now ends the walk up.
 - `Tabs` with no tabs panicked on Tab and Shift+Tab (an unchecked index of the active tab), and on a click below its bar (a container's mouse routing trusted a rect for a child that was not there); from Python, `Tabs().headless("shift+tab")` raised `PanicException`. Both are checked now.
 - A plugin component never received the key names it declared: a key bound to its action arrived in canonical form (`esc` as `escape`, `Control+X` as `ctrl+x`), and Shift+Tab always as the undocumented `backtab`. A bound key now arrives as the first name the plugin declared for the action, spelled as declared, and `Key`'s `Display` writes Shift+Tab as `shift+tab` (which `Key::parse` already read), so plugins, Python components (`event.key`) and the docs agree.
+- `TableSelect` copied (Ctrl+Y, Alt+Y; text, CSV and JSON) and handed actions the cells as drawn, with newlines turned into control pictures and tabs into spaces, so CSV quoting and JSON escaping never saw them. Copies and action values now carry the cells and headings as given; only the rows on screen are sanitised.
 ### 0.0.14 release test: fixes from audit A
 
 Versions: none bumped; `rs-rich-micro` 0.0.1, `rs-rich-ext` 0.0.12,
