@@ -239,8 +239,9 @@ fn a_background_job_is_not_stopped_by_the_cell_size_query() {
 fn the_cell_size_query_reads_only_the_replies() {
     // F3: a terminal that answers is still asked, and the reader stops at
     // the device-attributes reply. A key pressed while the terminal was
-    // answering ("zz" and Return before the replies) is given back to the
-    // next program where the system allows it (TIOCSTI).
+    // answering ("zz" and Return before the replies) is dropped, never
+    // pushed back on the input queue (TIOCSTI would replay terminal replies
+    // to the shell as typed input), so the next `read` sees nothing.
     let dir = tempfile::tempdir().unwrap();
     let home = dir.path().join("home");
     std::fs::create_dir_all(&home).unwrap();
@@ -259,8 +260,5 @@ fn the_cell_size_query_reads_only_the_replies() {
         Duration::from_secs(20),
     );
     assert!(out.contains("\"cell_pixels\": \"10x20\""), "{out:?}");
-    let tiocsti = std::fs::read_to_string("/proc/sys/dev/tty/legacy_tiocsti");
-    if tiocsti.map_or(true, |v| v.trim() == "1") {
-        assert!(out.contains("GOT=[zz]"), "{out:?}");
-    }
+    assert!(!out.contains("GOT=[zz]"), "{out:?}");
 }

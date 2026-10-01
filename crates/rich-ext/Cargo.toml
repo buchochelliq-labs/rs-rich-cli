@@ -66,8 +66,7 @@ wasmi = { version = "2", default-features = false, features = ["std", "validate"
 
 # The terminal's cell size in pixels (`TIOCGWINSZ`) and the `CSI 16 t` query.
 # rustix is already in the tree through `terminal_size`; libc (already in the
-# tree) blocks SIGTTOU/SIGTTIN around the query and gives back typeahead
-# (`TIOCSTI`), which rustix does not wrap.
+# tree) blocks SIGTTOU/SIGTTIN around the query, which rustix does not wrap.
 [target.'cfg(unix)'.dependencies]
 rustix = { version = "1", default-features = false, features = ["std", "termios", "fs", "event", "process"] }
 libc = "0.2"

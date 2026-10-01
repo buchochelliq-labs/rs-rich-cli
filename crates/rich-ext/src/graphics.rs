@@ -16,9 +16,11 @@
 //! stopped with `SIGTTOU`), and skipped when input is already waiting
 //! (typeahead belongs to whatever reads next). A device-attributes request
 //! (`CSI c`) follows it, so the reader stops as soon as the terminal has
-//! answered both, and any byte read that is not part of a reply is given
-//! back to the terminal's input queue (`TIOCSTI`, where the system allows
-//! it).
+//! answered both. A byte read during the exchange that is not part of a
+//! reply is dropped, never pushed back on the terminal's input queue:
+//! `TIOCSTI` would replay whatever arrived (another program's terminal
+//! reply included) to the shell as typed input. Only a key pressed in the
+//! milliseconds the terminal takes to answer can be lost that way.
 
 use std::time::Duration;
 
@@ -121,15 +123,12 @@ fn query_unix(timeout: Duration) -> Option<CellPixels> {
     tcsetattr(&tty, OptionalActions::Now, &raw).ok()?;
     // In raw mode a partly typed line is readable too: anything waiting is
     // the user's, for whatever reads next, so there is no query.
-    let (cell, stray) = if input_waiting(&tty) {
-        (None, Vec::new())
+    let cell = if input_waiting(&tty) {
+        None
     } else {
-        exchange(&tty, timeout)
+        exchange(&tty, timeout).0
     };
     let _ = tcsetattr(&tty, OptionalActions::Now, &saved);
-    // Given back in the restored mode, so they are processed (echoed, a
-    // return made a newline) as if typed now.
-    give_back(&tty, &stray);
     cell
 }
 
@@ -282,31 +281,6 @@ fn exchange(tty: &rustix::fd::OwnedFd, timeout: Duration) -> (Option<CellPixels>
     (cell, stray)
 }
 
-/// Put `bytes` back on `tty`'s input queue, as if typed again. Where the
-/// system refuses (`TIOCSTI` needs privilege on some kernels), they are
-/// lost: the query only runs when nothing was waiting, so this is input
-/// typed during the few milliseconds the terminal took to answer.
-// rustix has no wrapper for TIOCSTI.
-#[cfg(unix)]
-#[allow(unsafe_code)]
-fn give_back(tty: &rustix::fd::OwnedFd, bytes: &[u8]) {
-    use rustix::fd::AsRawFd;
-    for byte in bytes {
-        // SAFETY: TIOCSTI reads one byte through the pointer, which is valid
-        // for the call.
-        let pushed = unsafe {
-            libc::ioctl(
-                tty.as_raw_fd(),
-                libc::TIOCSTI as _,
-                byte as *const u8 as *const libc::c_char,
-            )
-        };
-        if pushed != 0 {
-            break;
-        }
-    }
-}
-
 /// The window size stdout's terminal reports, as `(columns, rows)` and
 /// `(x pixels, y pixels)`, when it is a terminal that says.
 pub(crate) fn stdout_window() -> Option<((u16, u16), (u16, u16))> {
@@ -444,7 +418,7 @@ mod tests {
         );
         assert_eq!(classify(b"\x1b[4;600;800t"), Reply::CellSize(None));
         assert_eq!(classify(b"\x1b[?62;22c"), Reply::Attributes);
-        // Keys the user pressed: given back.
+        // Keys the user pressed: not replies, so dropped.
         assert_eq!(classify(b"\x1b[A"), Reply::Other);
         assert_eq!(classify(b"\x1bOP"), Reply::Other);
         assert_eq!(classify(b"\x1b\x1b"), Reply::Other);
