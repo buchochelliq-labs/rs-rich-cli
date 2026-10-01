@@ -1698,6 +1698,7 @@ dependencies = [
  "rs-rich-ext",
  "rs-rich-plugin-api",
  "serde_json",
+ "sha2",
  "tempfile",
  "vt100",
  "zip",
