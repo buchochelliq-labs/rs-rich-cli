@@ -68,7 +68,7 @@
 //! ```
 
 use std::fmt;
-use std::panic::{catch_unwind, AssertUnwindSafe};
+use std::panic::AssertUnwindSafe;
 use std::time::Duration;
 
 use rich::Style;
@@ -79,6 +79,7 @@ use rich_ext::registry::ExtensionRegistry;
 use crate::component::{Component, Context, Flow, View};
 use crate::event::{Event, Key, MouseKind};
 use crate::keymap::{Binding, Keymap};
+use crate::session::catch_panic;
 
 /// No component is registered under a name, or its factory failed.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -160,7 +161,7 @@ impl PluginView {
     /// The plugin's bindings, with this view's and the installed rebinds.
     fn bindings(&self) -> Keymap {
         let mut keymap = self.keymap.clone();
-        let declared = catch_unwind(AssertUnwindSafe(|| self.inner.bindings())).unwrap_or_default();
+        let declared = catch_panic(AssertUnwindSafe(|| self.inner.bindings())).unwrap_or_default();
         for binding in declared {
             let keys = binding.keys.iter().filter_map(|name| Key::parse(name));
             keymap.add(Binding::new(
@@ -178,7 +179,7 @@ impl PluginView {
         if self.failed.is_some() {
             return None;
         }
-        match catch_unwind(AssertUnwindSafe(|| f(&mut *self.inner))) {
+        match catch_panic(AssertUnwindSafe(|| f(&mut *self.inner))) {
             Ok(value) => Some(value),
             Err(panic) => {
                 self.failed = Some(panic_message(&*panic));
@@ -268,7 +269,7 @@ impl Component for PluginView {
             return self.failure_view(message, context);
         }
         let inner = ComponentContext::new(context.console, context.width, context.height);
-        match catch_unwind(AssertUnwindSafe(|| self.inner.render(&inner))) {
+        match catch_panic(AssertUnwindSafe(|| self.inner.render(&inner))) {
             Ok(view) => View {
                 lines: view.lines,
                 cursor: view.cursor,
@@ -283,12 +284,12 @@ impl Component for PluginView {
         if self.failed.is_some() {
             return None;
         }
-        catch_unwind(AssertUnwindSafe(|| self.inner.tick())).unwrap_or(None)
+        catch_panic(AssertUnwindSafe(|| self.inner.tick())).unwrap_or(None)
     }
 
     fn mouse(&self) -> bool {
         self.failed.is_none()
-            && catch_unwind(AssertUnwindSafe(|| self.inner.mouse())).unwrap_or(false)
+            && catch_panic(AssertUnwindSafe(|| self.inner.mouse())).unwrap_or(false)
     }
 
     fn keymap(&self) -> Keymap {
@@ -300,7 +301,7 @@ impl Component for PluginView {
 
     fn focusable(&self) -> bool {
         self.failed.is_none()
-            && catch_unwind(AssertUnwindSafe(|| self.inner.focusable())).unwrap_or(false)
+            && catch_panic(AssertUnwindSafe(|| self.inner.focusable())).unwrap_or(false)
     }
 }
 

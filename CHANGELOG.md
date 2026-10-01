@@ -57,6 +57,12 @@ Entries below record subsequent releases and development.
 
 ## [Unreleased]
 
+### 0.0.14 release test: fixes from audit B
+
+Each finding was reproduced, then fixed with a regression test that failed
+before the fix.
+
+- A plugin component's panic, caught by its `PluginView`, also ran the session's panic hook, which took the live session out of raw mode (and off the alternate screen, mouse and paste) and printed the panic over the view. Panics caught through the new `session::catch_panic` now leave a live session alone; uncaught panics still restore the terminal.
 ### 0.0.14 release test: fixes from audit A
 
 Versions: none bumped; `rs-rich-micro` 0.0.1, `rs-rich-ext` 0.0.12,
