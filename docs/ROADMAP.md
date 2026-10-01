@@ -215,7 +215,7 @@ and #499). Delivered:
 - Atkinson dithering, OKLab distance, Sixel/GIF colour modes, alpha backgrounds
   (#498) and `--theme-file` (#499).
 
-## 0.0.14 — composable interactive views and micro assets (planned)
+## 0.0.14 — composable interactive views and micro assets (release-tested, not yet published)
 
 The [0.0.14 plan](plans/0.0.14.md) covers the second slice of
 [milestone 4](https://github.com/buchochelliq-labs/rs-rich-cli/milestone/4)
@@ -237,7 +237,8 @@ and the micro-assets epic (#565):
   `.richmicro` package format, a built-in library and `rich micro`
   (#566–#587).
 
-Core does not change, and stays at 0.0.9.
+Core does not change, and stays at 0.0.9. Every workstream is merged and
+the release test passed; see the [0.0.14 release notes](releases/0.0.14.md).
 
 ## 0.0.13 — interactive CLI, first slice (published 2026-09-29)
 
