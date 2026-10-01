@@ -20,7 +20,7 @@ iTerm2, then Sixel, then half-blocks, then the emoji or text fallback.
 | Alacritty, GNOME Terminal (VTE), Terminal.app, the Linux console with colour | the emoji fallback; half-blocks with `RICH_MICRO=blocks` | frame by frame (blocks) | no image protocol |
 | tmux, GNU screen | the emoji fallback unless passthrough is configured | — | set `RICH_MICRO=blocks` or `text`, or allow passthrough and set `RICH_MICRO` to the outer terminal's protocol |
 | `TERM=dumb`, no colour | the text fallback, else the alt text | none | |
-| pipes, log files, `--export-html`/`--export-svg`, captures | the text fallback, byte for byte | none | never an escape sequence, whatever `RICH_MICRO` says |
+| pipes, log files, `--export-html`/`--export-svg`, `--pager`, captures | the text fallback, byte for byte | none | never an escape sequence, whatever `RICH_MICRO` says; with an export or the pager, `rich -p` prints the fallback on the terminal too |
 
 "Native" animation is played by the terminal itself; "frame by frame"
 means the frame that is due is drawn whenever the view redraws (a live
