@@ -12,8 +12,10 @@
 //!
 //! The first rule that matches decides:
 //!
-//! * `RICH_CLIPBOARD=0|1` (also `true/false/yes/no/on/off`) — the override;
-//! * not a terminal → no: a pipe, a log or an export never gets the escape;
+//! * not a terminal → no: a pipe, a log or an export never gets the escape,
+//!   whatever `RICH_CLIPBOARD` says;
+//! * `RICH_CLIPBOARD=0|1` (also `true/false/yes/no/on/off`) — the override,
+//!   on a terminal;
 //! * `TERM=dumb` → no;
 //! * inside tmux or screen → no: tmux only passes OSC 52 on with
 //!   `set-clipboard on`, which is not its default. Override with
@@ -80,13 +82,15 @@ pub fn detect(env: &dyn Environment) -> Field<bool> {
         reason,
     };
     let var = |name: &str| Origin::Environment(name.to_string());
+    // Before the override: forcing OSC 52 is for a terminal that takes it
+    // undetected, never for a file or a pipe that would keep the escape.
+    if !env.is_terminal() {
+        return field(false, Origin::Inferred, "not a terminal".into());
+    }
     if let Some(raw) = get(CLIPBOARD_VAR) {
         if let Some(value) = parse_bool(&raw) {
             return field(value, var(CLIPBOARD_VAR), format!("{CLIPBOARD_VAR}={raw}"));
         }
-    }
-    if !env.is_terminal() {
-        return field(false, Origin::Inferred, "not a terminal".into());
     }
     let term = get("TERM").unwrap_or_default();
     let lower = term.to_ascii_lowercase();
@@ -168,8 +172,8 @@ impl Clipboard {
         }
     }
 
-    /// Detect from the process: `RICH_CLIPBOARD`, standard output's
-    /// terminal and the terminal's identity.
+    /// Detect from the process: standard output's terminal,
+    /// `RICH_CLIPBOARD` and the terminal's identity.
     pub fn system() -> Clipboard {
         Clipboard::detect(&SystemEnvironment)
     }
@@ -399,8 +403,13 @@ mod tests {
         let field = detect(&off);
         assert!(!field.value);
         assert_eq!(field.origin, Origin::Environment(CLIPBOARD_VAR.into()));
-        // Forced on even through a pipe: the user said so.
-        assert!(detect(&MapEnvironment::new().var(CLIPBOARD_VAR, "yes")).value);
+        // Forced on, on a terminal that is not known to take it.
+        assert!(detect(&MapEnvironment::tty().var(CLIPBOARD_VAR, "yes")).value);
+        // Never through a pipe, forced or not: a log or a file would hold
+        // the escape (release-test audit A).
+        let piped = detect(&MapEnvironment::new().var(CLIPBOARD_VAR, "yes"));
+        assert!(!piped.value);
+        assert_eq!(piped.reason, "not a terminal");
         // Nonsense is ignored.
         assert!(!detect(&MapEnvironment::tty().var(CLIPBOARD_VAR, "maybe")).value);
     }

@@ -34,7 +34,8 @@
 //! terminal, inside tmux, an unknown terminal: see
 //! [`rich_ext::clipboard::detect`]), [`copy`] returns
 //! [`ClipboardError::Unsupported`] and nothing is written.
-//! `RICH_CLIPBOARD=1` forces it on and `RICH_CLIPBOARD=0` off.
+//! On a terminal, `RICH_CLIPBOARD=1` forces it on and `RICH_CLIPBOARD=0`
+//! off.
 
 use std::cell::RefCell;
 

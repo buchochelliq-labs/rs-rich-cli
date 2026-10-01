@@ -249,9 +249,9 @@ report.
 `rich_ext::clipboard` decides whether to copy through OSC 52 the same way,
 with provenance, from the same `Environment`. It is its own check rather
 than a field of `Report`, since the rows `rich doctor` shows stay as they
-were. `RICH_CLIPBOARD=0|1` overrides it. Otherwise it is off when the
-output is not a terminal, on `TERM=dumb` and inside tmux or screen, and on
-only for terminals known to take OSC 52:
+were. It is always off when the output is not a terminal; on a terminal
+`RICH_CLIPBOARD=0|1` overrides it. Otherwise it is off on `TERM=dumb` and
+inside tmux or screen, and on only for terminals known to take OSC 52:
 
 ```rust
 use rich_ext::capabilities::MapEnvironment;

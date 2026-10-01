@@ -120,9 +120,10 @@ let line = clipboard::report("path", &result); // "copied path", or why not
 A real session writes an OSC 52 sequence, and only when
 `rich_ext::clipboard::detect` says the terminal takes one:
 
-- `RICH_CLIPBOARD=1` or `0` decides, whatever else is true;
-- otherwise, never when the output is not a terminal, on `TERM=dumb`, or
-  inside tmux or screen, which pass OSC 52 on only when configured to;
+- never when the output is not a terminal, whatever else is true;
+- `RICH_CLIPBOARD=1` or `0` decides on a terminal;
+- otherwise, never on `TERM=dumb` or inside tmux or screen, which pass
+  OSC 52 on only when configured to;
 - yes for kitty, iTerm2, WezTerm, Windows Terminal, ghostty, Alacritty,
   foot, contour, rio and VS Code's terminal;
 - no for anything else.
