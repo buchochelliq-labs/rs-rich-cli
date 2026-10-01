@@ -5,13 +5,16 @@ components are made of public pieces, containers are components too, and a
 keymap records every key. You can write a component from the pieces, put it
 beside the built-ins, and run the result like any other component.
 
-This page covers four things:
+This page covers:
 
 - the [kit](#the-kit) of line helpers and state types;
 - the [containers](#containers) (`Column`, `Row`, `Stack`, `Split`, `Tabs`
   and `Layers`);
 - how [focus and events](#focus-routing-and-bubbling) travel between them;
-- the [keymap](#the-keymap) registry.
+- the [keymap](#the-keymap) registry;
+- components [written in Python](#components-from-python) and
+  [shipped by plugins](#components-from-plugins), which compose with the
+  built-ins the same way.
 
 A complete example is in the repository:
 [`crates/rich-interact/examples/custom_component.rs`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/crates/rich-interact/examples/custom_component.rs).
@@ -299,3 +302,108 @@ let script = Script::new().keys("down space alt+right alt+left enter");
 let (outcome, record) = headless::run(app(), script, 72, 16);
 assert!(record.frames.iter().any(|frame| frame.contains("Where to?")));
 ```
+
+## Components from Python
+
+The Python package (`rs_rich.interact`, from PyPI `rs-rich` 0.0.3) has the
+same model. Subclass `Component`, and put it in the same containers as the
+built-ins:
+
+| Method | Returns | Default |
+|---|---|---|
+| `render(context)` | a renderable (a `str` is console markup) for `context.width` × `context.height` | none: you write it |
+| `handle(event)` | `None` to carry on, `Done(value)`, `Cancel()`, or `Ignored()` to let the event bubble | `Ignored()` |
+| `keymap()` | a `Keymap` of the keys it uses, for help and hints | `None` |
+| `focusable()`, `mouse()`, `tick()` | whether Tab stops on it, whether it wants the mouse, how often it wants a `"tick"` (seconds) | `True`, `False`, `None` |
+| `start(context)`, `default_value()` | a flow before the first paint; the answer without a terminal | `None` |
+
+The containers are `Column`, `Row`, `Stack`, `Split`, `Tabs` and `Layers`
+(with `Layer.modal` and `Layer.popover`), plus `Label` and `Map`. A
+built-in's answer finishes the whole composition, as its Python value.
+`Map(component, done)` says otherwise: `done(value)` returns `None` to carry
+on, or `Done(...)` to finish.
+
+```python
+from rs_rich.interact import Component, Done, Ignored, Keymap, Select, Split
+
+
+class Counter(Component):
+    def __init__(self):
+        self.count = 0
+        self.keys = Keymap("counter").bind("up", "up k", "count up").bind("done", "enter", "answer")
+
+    def handle(self, event):
+        action = self.keys.action(event)
+        if action == "up":
+            self.count += 1
+        elif action == "done":
+            return Done(self.count)
+        else:
+            return Ignored()  # Tab bubbles up and moves focus
+
+    def render(self, context):
+        return f"count [bold]{self.count}[/]"
+
+    def keymap(self):
+        return self.keys
+
+
+app = Split(Counter(), Select("File", ["a.rs", "b.rs"]), ratio=40)
+print(app.headless("up tab down enter", width=60, height=6).value)  # b.rs
+```
+
+It runs through the same drivers as a single component: `ask`, `run`,
+`headless` and `degrade`. The GIL is released between events and taken
+back for each call into Python. An exception from `handle`, `render`, a
+`Map` or binding callback, or a layer factory ends the run, and the call
+that started it raises the exception. See
+[Interactive components](https://buchochelliq-labs.github.io/rs-rich-cli/python/interact/#your-own-components) in
+the Python docs.
+
+## Components from plugins
+
+A plugin registers a component by name, and an app mounts it beside the
+built-ins. The plugin depends on `rs-rich-plugin-api` and core only, so it
+implements that crate's small contract, `rich_plugin_api::component`:
+
+- `PluginComponent::handle(event, context)` gets a `ComponentEvent`: a key
+  by name (`"up"`, `"ctrl+k"`), a paste, a resize, a tick, the mouse or a
+  link. It returns a `ComponentFlow`: `Continue`, `Done(text)`, `Cancel` or
+  `Ignored`;
+- `render(context)` returns a `ComponentView` of core segments;
+- `bindings()`, `focusable()`, `tick()` and `mouse()` have defaults.
+
+The plugin registers a factory, which makes a fresh component for each
+mount:
+
+```rust
+registrar.component("counter", Arc::new(|| Box::new(Counter::default())));
+```
+
+`rich_interact::plugin::PluginView` mounts it from a registry. Its answer
+is the plugin's text; map it into your container's output like any other
+child:
+
+```rust
+use rich_interact::compose::{ComponentExt, Split};
+use rich_interact::plugin::PluginView;
+use rich_interact::{Flow, Select};
+
+let registry = rich_ext::ExtensionRegistry::with_linked_plugins()?;
+let counter = PluginView::mount(&registry, "counter")?; // UnknownComponent lists the names
+let app = Split::horizontal(
+    counter.map(Flow::Done),
+    Select::new("File", ["a.rs", "b.rs"]).map(|file| Flow::Done(file.to_string())),
+);
+```
+
+The plugin's bindings are listed under its registered name, so the help
+overlay shows them and configuration rebinds them (`counter.up = k`); a
+rebound key reaches the plugin as the key it declared. A plugin component
+that panics does not take the app down. Its pane shows the panic, and it
+stops taking focus and events.
+
+Components come from plugins compiled into the program: added with
+`add_plugin`, or linked with `export_plugin!`. A runtime plugin (a native
+library or a WASM module) exchanges text through a stateless ABI, which has
+no component kind in this release. See [Plugins](../../PLUGINS.md).

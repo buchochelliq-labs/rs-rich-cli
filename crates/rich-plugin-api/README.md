@@ -14,6 +14,9 @@ A plugin is a type that implements [`Plugin`]: it describes itself with
 - renderers for Markdown code fences of a given language;
 - named text transforms (`TextTransform`), which a host chains into a
   pipeline.
+- named interactive components (`PluginComponent`, in the `component`
+  module), which an app mounts beside the built-in components of
+  `rs-rich-interact`.
 
 This crate depends only on `rs-rich`. A plugin never depends on `rs-rich-ext`,
 which is where plugins are hosted:
@@ -36,8 +39,8 @@ a different one. Two more ways in are opt-in:
   for plugins loaded from a file: a native library (`export_dylib_plugin!`
   writes its C entry point, with no unsafe code in the plugin) or a sandboxed
   WASM module. They may contribute transforms, highlighters and Markdown fence
-  renderers that return markup or ANSI; the host sanitizes everything they
-  return. Loading is in `rs-rich-ext`, behind its `dylib-plugins` and
+  renderers that return markup or ANSI (not components, which keep state);
+  the host sanitizes everything they return. Loading is in `rs-rich-ext`, behind its `dylib-plugins` and
   `wasm-plugins` features. See `examples/dylib-plugin` and
   `examples/wasm/shout.wat` in the repository.
 

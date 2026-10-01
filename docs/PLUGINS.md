@@ -75,6 +75,7 @@ adds capabilities through a `PluginRegistrar`:
 | `fence_renderer(language, renderer)` | a `FenceRenderer` for Markdown fences in that language |
 | `transform(name, transform)` | a `TextTransform`, chained by name into a text pipeline (0.0.12; see [Transforms](guide/ext/transforms.md)) |
 | `action(name, action)` | a `CustomAction` on interactive views: list items, table rows, tree nodes and file entries (0.0.13, #491; see [Actions](guide/interact/index.md#actions)). It has a default body, so a host without interactive views ignores it |
+| `component(name, factory)` | an interactive component (a `PluginComponent`, from `rich_plugin_api::component`) that an app mounts by name beside the built-ins with `rich_interact::plugin::PluginView` (0.0.14; see [Components from plugins](guide/interact/custom-components.md#components-from-plugins)). The factory makes a fresh one per mount. It has a default body, so a host without interactive views ignores it |
 
 ```rust
 use rich_ext::plugin::{Plugin, PluginError, PluginMetadata, PluginRegistrar};
@@ -116,8 +117,9 @@ was.
 provides the number highlighter and the `syntect` code highlighter. Query what
 is registered with `plugins()`, `code_highlighter(name)`, `theme(name)`,
 `box_style(name)`, `renderer(name)`, `fence_renderer(language)`,
-`transform(name)`, `transform_names()`, `actions()` and
-`provided_by(capability)`.
+`transform(name)`, `transform_names()`, `actions()`, `component(name)`,
+`component_names()`, `create_component(name)` (a fresh instance, or `None`
+when the factory panics) and `provided_by(capability)`.
 `text_pipeline(names)` chains registered text transforms, in the order given,
 into a `rich_ext::transform::Pipeline`. `fences()` combines every registered fence renderer
 into one for `Markdown::fence_renderer`, routed by language.
@@ -190,7 +192,12 @@ text only, through the ABI in `rich_plugin_api::abi`. It may contribute:
 | `fence-markup` | a fence's code and the width | `rich` markup, as a `FenceRenderer` |
 | `fence-ansi` | a fence's code and the width | ANSI SGR text, as a `FenceRenderer` |
 
-Themes, box styles, renderables and code highlighters stay compile-time only.
+Themes, box styles, renderables, code highlighters and interactive
+components stay compile-time only. A component keeps state between events,
+and the runtime ABI is stateless text in and out: each WASM call runs in a
+fresh instance. So a component comes from a plugin added with `add_plugin`
+or linked with `export_plugin!`, and `rich plugins list` shows it as
+`component "name"`.
 
 - **A native plugin** is a `cdylib` that depends on `rs-rich-plugin-api` and
   calls `export_dylib_plugin!` with an `abi::Exports` description; it needs no

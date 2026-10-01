@@ -23,8 +23,9 @@ use rich::{
     Highlighter, Text, Theme,
 };
 use rich_plugin_api::{
-    is_valid_name, Capability, CustomAction, HighlighterFactory, Plugin, PluginError,
-    PluginMetadata, PluginRegistrar, SourceRenderer, TextTransform, PLUGIN_API_VERSION,
+    is_valid_name, Capability, ComponentFactory, CustomAction, HighlighterFactory, Plugin,
+    PluginComponent, PluginError, PluginMetadata, PluginRegistrar, SourceRenderer, TextTransform,
+    PLUGIN_API_VERSION,
 };
 
 use crate::transform::Pipeline;
@@ -56,6 +57,7 @@ pub struct ExtensionRegistry {
     fence_renderers: BTreeMap<String, (String, Arc<dyn FenceRenderer>)>,
     transforms: BTreeMap<String, (String, Arc<dyn TextTransform>)>,
     actions: BTreeMap<String, (String, Arc<dyn CustomAction>)>,
+    components: BTreeMap<String, (String, ComponentFactory)>,
     plugins: Vec<RegisteredPlugin>,
     /// The code highlighter chosen as every console's default, and its theme.
     default_code_highlighter: Option<(String, Option<String>)>,
@@ -297,6 +299,9 @@ impl ExtensionRegistry {
         for (name, value) in staged.actions {
             self.actions.insert(name, (id.clone(), value));
         }
+        for (name, value) in staged.components {
+            self.components.insert(name, (id.clone(), value));
+        }
         self.plugins.push(RegisteredPlugin {
             metadata,
             capabilities: staged.capabilities,
@@ -314,6 +319,7 @@ impl ExtensionRegistry {
             Capability::FenceRenderer(language) => self.fence_renderers.get(language).map(|e| &e.0),
             Capability::Transform(name) => self.transforms.get(name).map(|e| &e.0),
             Capability::Action(name) => self.actions.get(name).map(|e| &e.0),
+            Capability::Component(name) => self.components.get(name).map(|e| &e.0),
             _ => None,
         }
         .map(String::as_str)
@@ -420,6 +426,30 @@ impl ExtensionRegistry {
             .collect()
     }
 
+    /// The factory of the interactive component registered as `name`
+    /// (`PluginRegistrar::component`). `rs-rich-interact`'s `PluginView`
+    /// mounts one beside the built-in components.
+    pub fn component(&self, name: &str) -> Option<ComponentFactory> {
+        self.components.get(name).map(|e| e.1.clone())
+    }
+
+    /// A fresh instance of the component registered as `name`. `None` when
+    /// no plugin registered one, or its factory panicked: a third-party bug
+    /// must not take the host down.
+    pub fn create_component(&self, name: &str) -> Option<Box<dyn PluginComponent>> {
+        let factory = self.component(name)?;
+        catch_unwind(AssertUnwindSafe(|| factory())).ok()
+    }
+
+    /// Every interactive component's name (sorted), with the plugin that
+    /// registered it.
+    pub fn component_names(&self) -> Vec<(&str, &str)> {
+        self.components
+            .iter()
+            .map(|(name, (plugin, _))| (name.as_str(), plugin.as_str()))
+            .collect()
+    }
+
     /// Every text transform name, sorted.
     pub fn transform_names(&self) -> Vec<&str> {
         self.transforms.keys().map(String::as_str).collect()
@@ -515,6 +545,7 @@ struct Staged {
     fence_renderers: Vec<(String, Arc<dyn FenceRenderer>)>,
     transforms: Vec<(String, Arc<dyn TextTransform>)>,
     actions: Vec<(String, Arc<dyn CustomAction>)>,
+    components: Vec<(String, ComponentFactory)>,
 }
 
 /// Routes fences by language; see [`ExtensionRegistry::fences`].
@@ -593,6 +624,13 @@ impl PluginRegistrar for Staged {
         self.check(name);
         self.capabilities.push(Capability::Action(name.to_string()));
         self.actions.push((name.to_string(), action));
+    }
+
+    fn component(&mut self, name: &str, factory: ComponentFactory) {
+        self.check(name);
+        self.capabilities
+            .push(Capability::Component(name.to_string()));
+        self.components.push((name.to_string(), factory));
     }
 }
 
@@ -1052,6 +1090,64 @@ mod tests {
             }
             fn register(&self, registrar: &mut dyn PluginRegistrar) -> Result<(), PluginError> {
                 registrar.action("reveal", Arc::new(Reveal));
+                Ok(())
+            }
+        }
+        assert!(matches!(
+            registry.add_plugin(&Again),
+            Err(PluginError::Conflict { .. })
+        ));
+    }
+
+    #[test]
+    fn plugins_register_components_by_name() {
+        use rich_plugin_api::component::{
+            ComponentContext, ComponentEvent, ComponentFlow, ComponentView,
+        };
+        struct Blank;
+        impl PluginComponent for Blank {
+            fn handle(&mut self, _: &ComponentEvent, _: &ComponentContext<'_>) -> ComponentFlow {
+                ComponentFlow::Ignored
+            }
+            fn render(&self, _: &ComponentContext<'_>) -> ComponentView {
+                ComponentView::default()
+            }
+        }
+        struct Views;
+        impl Plugin for Views {
+            fn metadata(&self) -> PluginMetadata {
+                PluginMetadata::new("views", "Views", "0.0.0")
+            }
+            fn register(&self, registrar: &mut dyn PluginRegistrar) -> Result<(), PluginError> {
+                registrar.component("blank", Arc::new(|| Box::new(Blank)));
+                registrar.component("broken", Arc::new(|| panic!("no")));
+                Ok(())
+            }
+        }
+        let mut registry = ExtensionRegistry::new();
+        registry.add_plugin(&Views).unwrap();
+        assert_eq!(
+            registry.component_names(),
+            [("blank", "views"), ("broken", "views")]
+        );
+        assert_eq!(
+            registry.provided_by(&Capability::Component("blank".into())),
+            Some("views")
+        );
+        assert!(registry.create_component("blank").is_some());
+        // A factory that panics mounts nothing; an unknown name neither.
+        assert!(registry.create_component("broken").is_none());
+        assert!(
+            registry.create_component("nope").is_none() && registry.component("nope").is_none()
+        );
+        // The name is taken for every other plugin.
+        struct Again;
+        impl Plugin for Again {
+            fn metadata(&self) -> PluginMetadata {
+                PluginMetadata::new("again", "Again", "0.0.0")
+            }
+            fn register(&self, registrar: &mut dyn PluginRegistrar) -> Result<(), PluginError> {
+                registrar.component("blank", Arc::new(|| Box::new(Blank)));
                 Ok(())
             }
         }

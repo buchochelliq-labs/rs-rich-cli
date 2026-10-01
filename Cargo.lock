@@ -1657,7 +1657,7 @@ dependencies = [
 
 [[package]]
 name = "rs-rich-lumis"
-version = "0.0.2"
+version = "0.0.3"
 dependencies = [
  "lumis",
  "rs-rich",
@@ -1703,7 +1703,7 @@ dependencies = [
 
 [[package]]
 name = "rs-rich-plugin-api"
-version = "0.0.2"
+version = "0.0.3"
 dependencies = [
  "inventory",
  "rs-rich",

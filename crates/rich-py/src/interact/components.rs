@@ -3,6 +3,7 @@
 //! the parent module), and [`drive`], which runs any of them.
 
 use std::sync::Arc;
+use std::time::Duration;
 
 use pyo3::exceptions::{PyTypeError, PyValueError};
 use pyo3::prelude::*;
@@ -12,10 +13,12 @@ use pyo3::{PyTraverseError, PyVisit};
 use rich::Renderable;
 use rich_interact::{
     Answers, Choice as CoreChoice, Component, Confirm as CoreConfirm, Context, Event as CoreEvent,
-    Flow, Form as CoreForm, Input as CoreInput, Item as CoreItem, Key, MultiSelect as CoreMulti,
-    Pager as CorePager, Preview, PreviewLayout, Select as CoreSelect, Suggestion, Value, View,
+    Flow, Form as CoreForm, Input as CoreInput, Item as CoreItem, Key, Keymap,
+    MultiSelect as CoreMulti, Pager as CorePager, Preview, PreviewLayout, Select as CoreSelect,
+    Suggestion, Value, View,
 };
 
+use super::compose::{self, Node};
 use super::{execute, iterable, record, Build, Mode, Record};
 use crate::renderable::{self, PyRenderable};
 
@@ -1395,6 +1398,15 @@ pub(crate) struct Event {
     column: Option<u16>,
     #[pyo3(get)]
     row: Option<u16>,
+    /// The key itself, for `Keymap.action(event)`.
+    pressed: Option<Key>,
+}
+
+impl Event {
+    /// The key pressed, for a key event.
+    pub(super) fn pressed(&self) -> Option<Key> {
+        self.pressed
+    }
 }
 
 #[pymethods]
@@ -1419,11 +1431,13 @@ fn event(value: &CoreEvent) -> Event {
         mouse: None,
         column: None,
         row: None,
+        pressed: None,
     };
     match value {
         CoreEvent::Key(key) => {
             event.kind = "key";
             event.key = Some(key.to_string());
+            event.pressed = Some(*key);
         }
         CoreEvent::Mouse(mouse) => {
             use rich_interact::MouseKind;
@@ -1486,6 +1500,10 @@ impl Done {
     fn value(&self, py: Python<'_>) -> Py<PyAny> {
         self.value.clone_ref(py)
     }
+
+    fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
+        Ok(format!("Done({})", self.value.bind(py).repr()?))
+    }
 }
 
 /// `Cancel()`: what a Python component's `handle` returns to cancel.
@@ -1498,15 +1516,116 @@ impl Cancel {
     fn new() -> Self {
         Cancel
     }
+
+    fn __repr__(&self) -> &'static str {
+        "Cancel()"
+    }
 }
 
-/// A Python object as a component: `render(width, height)` returns a
-/// renderable; `handle(event)` returns `None` to continue, `Done(value)`
-/// or `Cancel()`; an optional `default_value()` is the answer without a
-/// terminal. An exception in either ends the run and is raised from it.
-struct PyComponent {
+/// `Ignored()`: what a Python component's `handle` returns for an event
+/// that is not for it, so it bubbles to the container it is in (Tab moves
+/// focus, a container's own binding runs). `Component.handle` returns it
+/// by default.
+#[pyclass(name = "Ignored", module = "rs_rich.interact", frozen)]
+pub(crate) struct Ignored;
+
+#[pymethods]
+impl Ignored {
+    #[new]
+    fn new() -> Self {
+        Ignored
+    }
+
+    fn __repr__(&self) -> &'static str {
+        "Ignored()"
+    }
+}
+
+/// What a Python callback's result means: `None` carries on, `Done(value)`
+/// finishes, `Cancel()` cancels and `Ignored()` leaves the event to the
+/// container (the classes themselves count as their instances). `what`
+/// names the callback in the error for anything else.
+pub(super) fn flow(result: &Bound<'_, PyAny>, what: &str) -> PyResult<Flow<Py<PyAny>>> {
+    let py = result.py();
+    if result.is_none() {
+        Ok(Flow::Continue)
+    } else if let Ok(done) = result.cast::<Done>() {
+        Ok(Flow::Done(done.get().value.clone_ref(py)))
+    } else if result.is_instance_of::<Cancel>() || result.is(py.get_type::<Cancel>().as_any()) {
+        Ok(Flow::Cancel)
+    } else if result.is_instance_of::<Ignored>() || result.is(py.get_type::<Ignored>().as_any()) {
+        Ok(Flow::Ignored)
+    } else {
+        Err(PyTypeError::new_err(format!(
+            "{what} must return None, Done(value), Cancel() or Ignored(), got {}",
+            result.repr()?
+        )))
+    }
+}
+
+/// A Python object as a component. Two kinds:
+///
+/// - a subclass of `Component` (`subclass`): `render(context)`,
+///   `handle(event)`, and `keymap()`, `focusable()`, `mouse()`, `tick()`,
+///   `start(context)` and `default_value()`, each with a default;
+/// - any object with `render(width, height)` and `handle(event)` (the
+///   0.0.13 protocol), and an optional `default_value()`.
+///
+/// `handle` returns a flow (see [`flow`]); `render` a renderable (`str`
+/// is console markup) or `None`. An exception in any of them ends the run
+/// and is raised from it.
+pub(super) struct PyComponent {
     object: Py<PyAny>,
+    subclass: bool,
     failed: bool,
+}
+
+impl PyComponent {
+    pub(super) fn new(object: Py<PyAny>, subclass: bool) -> PyComponent {
+        PyComponent {
+            object,
+            subclass,
+            failed: false,
+        }
+    }
+
+    /// Whether a Python exception is pending: this component's, or one
+    /// from anywhere else in the run.
+    fn stopped(&self) -> bool {
+        self.failed || renderable::has_pending()
+    }
+
+    /// Call `method` with the arguments `args` makes, and convert the
+    /// result, with the GIL; an exception is kept for the run (`None`).
+    fn call<T>(
+        &self,
+        method: &str,
+        args: impl for<'py> FnOnce(Python<'py>) -> PyResult<Bound<'py, PyTuple>>,
+        convert: impl for<'py> FnOnce(&Bound<'py, PyAny>) -> PyResult<T>,
+    ) -> Option<T> {
+        Python::attach(|py| {
+            let result = args(py)
+                .and_then(|args| self.object.bind(py).call_method1(method, args))
+                .and_then(|result| convert(&result));
+            result
+                .map_err(|error| renderable::report_error(py, error))
+                .ok()
+        })
+    }
+
+    /// The one argument `render` and `start` take: the context.
+    fn context<'py>(py: Python<'py>, context: &Context<'_>) -> PyResult<Bound<'py, PyTuple>> {
+        let context = Py::new(py, compose::PyContext::new(context))?;
+        PyTuple::new(py, [context])
+    }
+
+    /// A flow, or, when the call raised, the end of this component.
+    fn settle(&mut self, flow: Option<Flow<Py<PyAny>>>) -> Flow<Py<PyAny>> {
+        flow.unwrap_or_else(|| {
+            self.failed = true;
+            Flow::Cancel
+        })
+    }
 }
 
 impl Build for PyComponent {
@@ -1520,56 +1639,116 @@ impl Build for PyComponent {
 impl Component for PyComponent {
     type Output = Py<PyAny>;
 
-    fn handle(&mut self, value: &CoreEvent, _: &Context<'_>) -> Flow<Py<PyAny>> {
-        // An exception from `render` (kept for the scope) ends it too.
-        if self.failed || renderable::has_pending() {
+    fn start(&mut self, context: &Context<'_>) -> Flow<Py<PyAny>> {
+        if !self.subclass {
+            return Flow::Continue;
+        }
+        if self.stopped() {
             return Flow::Cancel;
         }
-        Python::attach(|py| {
-            let flow = self
-                .object
-                .bind(py)
-                .call_method1("handle", (event(value),))
-                .and_then(|result| {
-                    if result.is_none() {
-                        Ok(Flow::Continue)
-                    } else if let Ok(done) = result.cast::<Done>() {
-                        Ok(Flow::Done(done.get().value.clone_ref(py)))
-                    } else if result.is_instance_of::<Cancel>()
-                        || result.is(py.get_type::<Cancel>().as_any())
-                    {
-                        Ok(Flow::Cancel)
-                    } else {
-                        Err(PyTypeError::new_err(format!(
-                            "handle() must return None, Done(value) or Cancel(), got {}",
-                            result.repr()?
-                        )))
-                    }
-                });
-            flow.unwrap_or_else(|error| {
-                self.failed = true;
-                renderable::report_error(py, error);
-                Flow::Cancel
-            })
-        })
+        let flow = self.call(
+            "start",
+            |py| Self::context(py, context),
+            |result| match flow(result, "start()")? {
+                // Nothing is being handled yet: nothing to leave to anyone.
+                Flow::Ignored => Ok(Flow::Continue),
+                flow => Ok(flow),
+            },
+        );
+        self.settle(flow)
+    }
+
+    fn handle(&mut self, value: &CoreEvent, _: &Context<'_>) -> Flow<Py<PyAny>> {
+        // An exception from `render` (kept for the scope) ends it too.
+        if self.stopped() {
+            return Flow::Cancel;
+        }
+        let flow = self.call(
+            "handle",
+            |py| PyTuple::new(py, [Py::new(py, event(value))?]),
+            |result| flow(result, "handle()"),
+        );
+        self.settle(flow)
     }
 
     fn render(&self, context: &Context<'_>) -> View {
-        if self.failed || renderable::has_pending() {
+        if self.stopped() {
             return View::default();
         }
-        let rendered = Python::attach(|py| {
-            self.object
-                .bind(py)
-                .call_method1("render", (context.width, context.height))
-                .map(|renderable| renderable.unbind())
-                .map_err(|error| renderable::report_error(py, error))
-                .ok()
-        });
-        match rendered {
+        let keep = |result: &Bound<'_, PyAny>| -> PyResult<Option<Py<PyAny>>> {
+            Ok((!result.is_none()).then(|| result.clone().unbind()))
+        };
+        let rendered = if self.subclass {
+            self.call("render", |py| Self::context(py, context), keep)
+        } else {
+            let size = (context.width, context.height);
+            self.call("render", |py| size.into_pyobject(py), keep)
+        };
+        match rendered.flatten() {
             Some(renderable) => View::new(context.lines(&PyRenderable::new(renderable))),
             None => View::default(),
         }
+    }
+
+    fn tick(&self) -> Option<Duration> {
+        if !self.subclass || self.stopped() {
+            return None;
+        }
+        self.call(
+            "tick",
+            |py| Ok(PyTuple::empty(py)),
+            |result| {
+                let Some(seconds) = result.extract::<Option<f64>>()? else {
+                    return Ok(None);
+                };
+                match Duration::try_from_secs_f64(seconds) {
+                    Ok(interval) if !interval.is_zero() => Ok(Some(interval)),
+                    _ => Err(PyValueError::new_err(format!(
+                        "tick() must return None or a positive number of seconds, got {seconds}"
+                    ))),
+                }
+            },
+        )
+        .flatten()
+    }
+
+    fn mouse(&self) -> bool {
+        self.subclass
+            && !self.stopped()
+            && self
+                .call(
+                    "mouse",
+                    |py| Ok(PyTuple::empty(py)),
+                    |result| result.is_truthy(),
+                )
+                .unwrap_or(false)
+    }
+
+    fn keymap(&self) -> Keymap {
+        if !self.subclass || self.stopped() {
+            return Keymap::default();
+        }
+        self.call(
+            "keymap",
+            |py| Ok(PyTuple::empty(py)),
+            |result| super::keymap::keymap_of(result, "keymap()"),
+        )
+        .unwrap_or_default()
+    }
+
+    fn focusable(&self) -> bool {
+        if self.stopped() {
+            return false;
+        }
+        if !self.subclass {
+            return true;
+        }
+        self.call(
+            "focusable",
+            |py| Ok(PyTuple::empty(py)),
+            |result| result.is_truthy(),
+        )
+        .unwrap_or(false)
     }
 
     fn default_value(&self) -> Option<Py<PyAny>> {
@@ -1589,11 +1768,77 @@ impl Component for PyComponent {
 }
 
 // ---------------------------------------------------------------------------
+// Children of containers
+
+/// The node for a component of this module, a picker, or a Python
+/// component, if `component` is one. A built-in's answer finishes its
+/// container with the answer's Python value (see `compose::leaf`).
+pub(super) fn leaf(py: Python<'_>, component: &Bound<'_, PyAny>) -> PyResult<Option<Node>> {
+    if let Ok(select) = component.cast::<Select>() {
+        let select = select.get();
+        let items: Vec<Py<Item>> = select.items.iter().map(|i| i.clone_ref(py)).collect();
+        return Ok(Some(compose::leaf(
+            select.prepare(py)?,
+            move |py, index| Ok(items[index].get().value.clone_ref(py)),
+        )));
+    }
+    if let Ok(multi) = component.cast::<MultiSelect>() {
+        let multi = multi.get();
+        let items: Vec<Py<Item>> = multi.items.iter().map(|i| i.clone_ref(py)).collect();
+        return Ok(Some(compose::leaf(
+            multi.prepare(py)?,
+            move |py, indices| {
+                let values = indices
+                    .into_iter()
+                    .map(|index| items[index].get().value.clone_ref(py));
+                Ok(PyList::new(py, values)?.into_any().unbind())
+            },
+        )));
+    }
+    if let Ok(input) = component.cast::<Input>() {
+        return Ok(Some(compose::leaf(input.get().prepare(py), |py, text| {
+            Ok(PyString::new(py, &text).into_any().unbind())
+        })));
+    }
+    if let Ok(confirm) = component.cast::<Confirm>() {
+        return Ok(Some(compose::leaf(confirm.get().prepare(py), |py, id| {
+            Ok(PyString::new(py, &id).into_any().unbind())
+        })));
+    }
+    if let Ok(form) = component.cast::<Form>() {
+        return Ok(Some(compose::leaf(form.get().prepare(py), answers)));
+    }
+    if let Ok(pager) = component.cast::<Pager>() {
+        let build = PagerBuild {
+            renderable: shared(pager.get().renderable.bind(py)),
+            search: pager.get().search.clone(),
+        };
+        return Ok(Some(compose::leaf(build, |py, ()| Ok(py.None()))));
+    }
+    if let Some(node) = super::pickers::leaf(component)? {
+        return Ok(Some(node));
+    }
+    if component.is_instance_of::<compose::Base>() {
+        let object = PyComponent::new(component.clone().unbind(), true);
+        return Ok(Some(Box::new(move || Box::new(object))));
+    }
+    if component.hasattr("handle")? && component.hasattr("render")? {
+        let object = PyComponent::new(component.clone().unbind(), false);
+        return Ok(Some(Box::new(move || Box::new(object))));
+    }
+    Ok(None)
+}
+
+// ---------------------------------------------------------------------------
 // Dispatch
 
-/// Run `component` (one of this module's classes, or a Python component)
-/// in `mode`.
+/// Run `component` (one of this module's classes, a container, or a Python
+/// component) in `mode`.
 pub(crate) fn drive(py: Python<'_>, component: &Bound<'_, PyAny>, mode: Mode) -> PyResult<Record> {
+    if let Some(node) = compose::tree(py, component)? {
+        let ran = execute(py, compose::Tree(node), mode)?;
+        return record(py, ran, Ok);
+    }
     if let Ok(select) = component.cast::<Select>() {
         let select = select.get();
         let ran = execute(py, select.prepare(py)?, mode)?;
@@ -1639,17 +1884,14 @@ pub(crate) fn drive(py: Python<'_>, component: &Bound<'_, PyAny>, mode: Mode) ->
         Err(mode) => mode,
     };
     if component.hasattr("handle")? && component.hasattr("render")? {
-        let build = PyComponent {
-            object: component.clone().unbind(),
-            failed: false,
-        };
+        let build = PyComponent::new(component.clone().unbind(), false);
         let ran = execute(py, build, mode)?;
         return record(py, ran, Ok);
     }
     Err(PyTypeError::new_err(format!(
         "expected an interactive component (Select, MultiSelect, Input, Confirm, Form, Pager, \
-         TextArea, FilePicker, ColorPicker, AssetPicker, or an object with handle() and \
-         render()), got {}",
+         TextArea, FilePicker, ColorPicker, AssetPicker, a Component subclass, a container, or \
+         an object with handle() and render()), got {}",
         component.get_type().name()?
     )))
 }
@@ -1671,6 +1913,7 @@ pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
         ("InteractEvent", py.get_type::<Event>()),
         ("InteractDone", py.get_type::<Done>()),
         ("InteractCancel", py.get_type::<Cancel>()),
+        ("InteractIgnored", py.get_type::<Ignored>()),
     ] {
         m.add(name, class)?;
     }

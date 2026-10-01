@@ -220,6 +220,7 @@ pub(crate) fn capability_kind(capability: &Capability) -> &'static str {
         Capability::Renderer(_) => "renderer",
         Capability::FenceRenderer(_) => "fence_renderer",
         Capability::Transform(_) => "transform",
+        Capability::Component(_) => "component",
         _ => "other",
     }
 }

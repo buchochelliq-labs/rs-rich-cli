@@ -446,37 +446,139 @@ written, escape sequences included).
 
 ## Your own components
 
-Any object with `render(width, height)` and `handle(event)` is a component:
-`render` returns a renderable, and `handle` returns `None` to go on,
-`Done(value)` to finish or `Cancel()` to cancel. `event.kind` is `"key"`
-(with `event.key` the key's name), `"paste"` (`event.text`), `"resize"`
-(`event.columns`, `event.rows`), `"mouse"` (`event.mouse` is `"down"`,
-`"up"`, `"drag"`, `"moved"`, `"scroll_up"` or `"scroll_down"`, at
-`event.column` and `event.row` of the component's view), `"link"` (a click
-on a hyperlink, its URL in `event.text`) or `"tick"`. An optional
-`default_value()` is the answer without a terminal.
+Subclass `Component` (0.0.3) to write a component in Python. It composes
+with the built-ins in every container (see [Composing components](#composing-components))
+and runs through the same drivers.
+
+| Method | Returns | Default |
+|---|---|---|
+| `render(context)` | a renderable (a `str` is console markup) for `context.width` × `context.height`, or `None` | none: you write it |
+| `handle(event)` | `None` to carry on, `Done(value)` to finish, `Cancel()` to cancel, or `Ignored()` for an event that is not for it | `Ignored()` |
+| `keymap()` | a `Keymap` of the keys it uses, which containers list | `None` |
+| `focusable()` | whether Tab stops on it in a container | `True` |
+| `mouse()` | whether it wants mouse events | `False` |
+| `tick()` | how often, in seconds, it wants a `"tick"` event | `None` (never) |
+| `start(context)` | a flow before the first paint: `Done(value)` finishes at once | `None` |
+| `default_value()` | the answer without a terminal, when the fallback is `"default"` | `None` |
+
+`event.kind` is `"key"` (with `event.key` the key's name), `"paste"`
+(`event.text`), `"resize"` (`event.columns`, `event.rows`), `"mouse"`
+(`event.mouse` is `"down"`, `"up"`, `"drag"`, `"moved"`, `"scroll_up"` or
+`"scroll_down"`, at `event.column` and `event.row` of the component's view),
+`"link"` (a click on a hyperlink, its URL in `event.text`) or `"tick"`.
+
+Return `Ignored()` for a key you do not use: in a container it bubbles up,
+so Tab moves focus and the container's own bindings run. A `Keymap`
+declares the keys, and `keymap.action(event)` says what one means, so a
+container can list them and they can be rebound:
 
 ```python
-from rs_rich.interact import Done, headless
+from rs_rich.interact import Component, Done, Ignored, Keymap
 
-class Counter:
+
+class Counter(Component):
     def __init__(self):
         self.count = 0
+        self.keys = Keymap("counter").bind("up", "up k", "count up").bind("done", "enter", "answer")
+
     def handle(self, event):
-        if event.key == "up":
+        action = self.keys.action(event)
+        if action == "up":
             self.count += 1
-        elif event.key == "enter":
+        elif action == "done":
             return Done(self.count)
-    def render(self, width, height):
+        else:
+            return Ignored()
+
+    def render(self, context):
         return f"count: [bold]{self.count}[/]"
 
-record = headless(Counter(), "up up enter", width=20, height=3)
+    def keymap(self):
+        return self.keys
+
+
+record = Counter().headless("up k enter", width=20, height=3)
 print(record.frames, record.value)
 ```
 
 ```text
 ['count: 0', 'count: 1', 'count: 2'] 2
 ```
+
+`Keymap(context)` takes `bind(action, keys, description)` (keys are names
+separated by spaces or commas, or a list), `rebind(action, keys)`,
+`action(event_or_key_name)`, `keys(action)` and `bindings`, a list of
+`Binding`s (`context`, `action`, `keys`, `description`, `id`,
+`keys_label`).
+
+Any object with `render(width, height)` and `handle(event)` is a component
+too, as in 0.0.2: `render` gets the size instead of a context, and an
+optional `default_value()` is the answer without a terminal. It composes
+the same way, without a keymap.
+
+## Composing components
+
+The containers of `rs-rich-interact` hold built-ins, your components and
+other containers:
+
+| Container | Lays out |
+|---|---|
+| `Column(*children, gap=0)`, `Row(...)`, `Stack(*children, axis="vertical", gap=0)` | children along an axis. `child(component, size=None, ratio=None)` adds one: `size` fixed cells, `ratio` a share of what is left; with neither, a child of a column takes the rows it renders |
+| `Split(first, second, *, axis="horizontal", ratio=50, at=None, min=None, mins=None)`, `Split.horizontal(...)`, `Split.vertical(...)` | two panes with a border. Alt+H/Alt+L (Alt+K/Alt+J stacked) move the border |
+| `Tabs(tabs=(), *, active=0)`, `tab(title, component)` | one child at a time under a bar of titles; Alt+Left/Alt+Right and Alt+1–9 switch |
+| `Layers(base)`, `open_on(action, keys, description, factory)`, `open(layer)` | `Layer.modal(component, title=..., size=(w, h))` and `Layer.popover(...)` over a base. `factory()` returns a `Layer` or a component (shown as a modal); Escape dismisses the top layer |
+| `Label(markup)` | markup that takes no focus |
+
+Tab and Shift+Tab move focus between the focusable children; keys go to the
+focused one. Every container also has `on(action, keys, description,
+handler)` (run `handler()` when a key bubbles up unused), `shortcut(...)`
+(before the focused child sees it), `rebind(action, keys)` (`focus-next`
+and its own actions), `with_mouse()`, `keymap()`, `map(...)`, `ask()` and
+`headless()`. Handlers return a flow, like `handle`.
+
+A built-in's answer finishes the whole composition, as its Python value
+(the item's value, the text, the choice's id). `Map(component, done=None,
+*, cancel=None)` says what it means instead: `done(value)` returns `None` to
+carry on (the component stays, showing its answer, and focus moves past
+it) or `Done(...)` to finish; `cancel()` does the same for a cancel, which
+otherwise cancels the composition. `component.map(done)` is the same.
+
+```python
+from rs_rich.interact import Column, Input, Label, Map, Script, Select, Split
+
+answers = {}
+form = Column(
+    Label("[bold]New file[/]"),
+    Map(Input("Name"), lambda name: answers.update(name=name)),
+    Split(Counter(), Select("Kind", ["text", "code"]), ratio=40),
+)
+record = form.headless(Script().text("notes").keys("enter tab down enter"), width=60, height=8)
+print(answers, record.value)
+```
+
+```text
+{'name': 'notes'} code
+```
+
+`keymap(component)` (or a container's `keymap()`) lists the bindings a
+composition has before its first event, the focused child's first:
+
+```python
+from rs_rich.interact import keymap
+
+print([binding.id for binding in keymap(Split(Counter(), Select("Kind", ["a"]))).bindings][:3])
+```
+
+```text
+['counter.up', 'counter.done', 'split.focus-next']
+```
+
+Python code a composition runs (a component's methods, `Map` and binding
+callbacks, a layer factory) takes the GIL for the call; the run releases it
+between events. An exception from any of it ends the run and is raised by
+`ask`, `run`, `headless` or `degrade`, and so is a callback that returns
+something other than a flow. A container that contains itself raises
+`RecursionError` when it runs.
 
 ## Fuzzy matching
 
@@ -513,3 +615,8 @@ commands: `choose`, `filter`, `input`, `confirm`, `pager`, `write`, `file`,
 - `Input`'s background suggestion `provider`: fixed `suggestions` only.
 - The multi-component `EventLoop` with timers, and hand-offs to another
   program (`Flow::Handoff`) from Python components.
+- The overlays and chrome (palette, help, status bar), `LayerHandle`,
+  `Painted`, and components that plugins register (they are mounted from
+  Rust, with `rich_interact::plugin::PluginView`).
+- A Python component's text cursor: `render` returns a renderable, and the
+  cursor stays hidden.

@@ -13,6 +13,7 @@ use rich_interact::{
     FilePicker as CoreFile, Key, TextArea as CoreText,
 };
 
+use super::compose::{self, Node};
 use super::{execute, record, Build, Mode, Record};
 
 fn key(name: &str) -> PyResult<Key> {
@@ -576,6 +577,29 @@ pub(crate) fn drive(
         return record(py, ran, text).map(Ok);
     }
     Ok(Err(mode))
+}
+
+/// The node for a picker, as a child of a container (see `compose::leaf`),
+/// if `component` is one.
+pub(super) fn leaf(component: &Bound<'_, PyAny>) -> PyResult<Option<Node>> {
+    let text = |py: Python<'_>, value: String| -> PyResult<Py<PyAny>> {
+        Ok(PyString::new(py, &value).into_any().unbind())
+    };
+    if let Ok(area) = component.cast::<TextArea>() {
+        return Ok(Some(compose::leaf(area.get().prepare(), text)));
+    }
+    if let Ok(picker) = component.cast::<FilePicker>() {
+        return Ok(Some(compose::leaf(picker.get().prepare(), |py, path| {
+            Ok(path.into_pyobject(py)?.into_any().unbind())
+        })));
+    }
+    if let Ok(picker) = component.cast::<ColorPicker>() {
+        return Ok(Some(compose::leaf(picker.get().prepare(), text)));
+    }
+    if let Ok(picker) = component.cast::<AssetPicker>() {
+        return Ok(Some(compose::leaf(picker.get().prepare(), text)));
+    }
+    Ok(None)
 }
 
 pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {

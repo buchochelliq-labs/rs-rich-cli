@@ -106,11 +106,13 @@ const KINDS: &[&str] = &[
     "renderer",
     "fence_renderer",
     "transform",
+    "component",
 ];
 
 /// One thing a plugin registered: `Capability(kind, name=None)`, where
 /// `kind` is `"highlighter"` (unnamed), `"code_highlighter"`, `"theme"`,
-/// `"box_style"`, `"renderer"`, `"fence_renderer"` or `"transform"`.
+/// `"box_style"`, `"renderer"`, `"fence_renderer"`, `"transform"` or
+/// `"component"` (an interactive component, registered by a Rust plugin).
 #[pyclass(
     name = "Capability",
     module = "rs_rich.plugins",
@@ -151,6 +153,7 @@ impl Capability {
             "renderer" => CoreCapability::Renderer(named(name)?),
             "fence_renderer" => CoreCapability::FenceRenderer(named(name)?),
             "transform" => CoreCapability::Transform(named(name)?),
+            "component" => CoreCapability::Component(named(name)?),
             other => {
                 return Err(PyValueError::new_err(format!(
                     "unknown capability kind {other:?}; expected one of {}",
@@ -181,7 +184,8 @@ impl Capability {
             | CoreCapability::BoxStyle(name)
             | CoreCapability::Renderer(name)
             | CoreCapability::FenceRenderer(name)
-            | CoreCapability::Transform(name) => Some(name),
+            | CoreCapability::Transform(name)
+            | CoreCapability::Component(name) => Some(name),
             _ => None,
         }
     }
