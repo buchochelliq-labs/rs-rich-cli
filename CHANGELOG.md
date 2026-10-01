@@ -59,9 +59,75 @@ Entries below record subsequent releases and development.
 
 ### 0.0.14 release test: fixes from audit B
 
-Each finding was reproduced, then fixed with a regression test that failed
-before the fix.
+The release-test audit B of interact's composition, keymaps, kit,
+built-ins, chrome, explorers and plugin components (B1–B8, and three of its
+suspected issues). Each finding was reproduced, then fixed with a
+regression test that failed before the fix (the spinner and viewport tests
+cover new builders). Versions: no bumps; every crate touched
+(`rs-rich-interact` 0.0.2, `rs-rich-cli` 0.0.14, `rs-rich-plugin-api`
+0.0.3, docs only) is already unpublished.
 
+- A plugin component's panic, caught by its `PluginView`, also ran the
+  session's panic hook, which took the live session out of raw mode (and off
+  the alternate screen, mouse and paste) and printed the panic over the
+  view. Panics caught through the new `session::catch_panic` now leave a
+  live session alone; uncaught panics still restore the terminal.
+- `TreeSelect`, `DataExplorer` and `rich explore` took quadratic time on
+  wide documents (each parent found by scanning back over earlier siblings)
+  and memory proportional to nodes × depth (a path, JSONPath and guide
+  string per node): a 400 KB nested array took 2.4 GB. Parents now come from
+  a depth stack, `last` from one pass, paths and JSONPaths are worked out
+  for the focused or copied node only (new `TreeSelect::paths_with`), guides
+  are drawn for the rows on screen, and the explorer's preview draws at most
+  a screenful of each container's children; `DataExplorer::focused` now
+  returns an owned `Path`. `rich explore` refuses a document with more than
+  1,000,000 nodes (exit 3) with a hint to narrow it with `--inspect
+  --select`.
+- `TextBuffer` (and so `Input`) could leave the caret inside a grapheme
+  (typing in front of U+FE0F or a combining mark, deleting what kept two
+  clusters apart, `set_caret`), and `window` measured the cells before the
+  caret with `cell_len` but dropped whole graphemes, so it underflowed: a
+  panic in debug builds, a wild caret column in release. The caret now
+  always snaps to a grapheme boundary, and both sides of the window are
+  counted grapheme by grapheme with saturating arithmetic.
+- `kit::keep_ancestors` (and so `FilterState::set_tree` with a caller's
+  parent list) panicked on a parent index past the list. Such a parent now
+  ends the walk up.
+- `Tabs` with no tabs panicked on Tab and Shift+Tab (an unchecked index of
+  the active tab), and on a click below its bar (a container's mouse routing
+  trusted a rect for a child that was not there); from Python,
+  `Tabs().headless("shift+tab")` raised `PanicException`. Both are checked
+  now.
+- A plugin component never received the key names it declared: a key bound
+  to its action arrived in canonical form (`esc` as `escape`, `Control+X` as
+  `ctrl+x`), and Shift+Tab always as the undocumented `backtab`. A bound key
+  now arrives as the first name the plugin declared for the action, spelled
+  as declared, and `Key`'s `Display` writes Shift+Tab as `shift+tab` (which
+  `Key::parse` already read), so plugins, Python components (`event.key`)
+  and the docs agree.
+- `TableSelect` copied (Ctrl+Y, Alt+Y; text, CSV and JSON) and handed
+  actions the cells as drawn, with newlines turned into control pictures and
+  tabs into spaces, so CSV quoting and JSON escaping never saw them. Copies
+  and action values now carry the cells and headings as given; only the rows
+  on screen are sanitised.
+- `Overrides::parse` silently unbound an action bound to `#` (stripped as a
+  comment) or `,` (a separator), as did a bare `,` in
+  `Overrides::from_pairs` and `try_keys`. A line with no keys is now an
+  error, `none` unbinds explicitly, `#` starts a comment only at the start
+  of a line or after a space, and key names can be quoted (`"#"`, `","`,
+  `'"'`). A bare `,` is an error everywhere.
+- `StatusBar` spinners ignored `RICH_A11Y=reduced-motion` (and
+  `no-animation`, `screen-reader`) and `RICH_ANIMATION=0`, which stop every
+  other animation. They now hold their first frame and the bar stops
+  ticking; `StatusBar::animate(bool)` overrides.
+- `Viewport` run as a component advertised `viewport.*` bindings but matched
+  hard-coded keys, so rebinding changed the help, not the keys. It now looks
+  its keys up in its keymap (new `Viewport::rebind`, `viewport_keymap` and
+  `ScrollState::act`); installed overrides apply too.
+- `Breadcrumbs` and `Tabs` measured crumbs and titles with `cell_len` (a
+  control is no cells) while the painter shows each control as a one-cell
+  picture, so a click after a title holding controls landed on the wrong
+  crumb or tab. Both now lay out and measure the text as painted.
 - A plugin component's panic, caught by its `PluginView`, also ran the session's panic hook, which took the live session out of raw mode (and off the alternate screen, mouse and paste) and printed the panic over the view. Panics caught through the new `session::catch_panic` now leave a live session alone; uncaught panics still restore the terminal.
 - `TreeSelect`, `DataExplorer` and `rich explore` took quadratic time on wide documents (each parent found by scanning back over earlier siblings) and memory proportional to nodes × depth (a path, JSONPath and guide string per node): a 400 KB nested array took 2.4 GB. Parents now come from a depth stack, `last` from one pass, paths and JSONPaths are worked out for the focused or copied node only (new `TreeSelect::paths_with`), guides are drawn for the rows on screen, and the explorer's preview draws at most a screenful of each container's children; `DataExplorer::focused` now returns an owned `Path`. `rich explore` refuses a document with more than 1,000,000 nodes (exit 3) with a hint to narrow it with `--inspect --select`.
 - `TextBuffer` (and so `Input`) could leave the caret inside a grapheme (typing in front of U+FE0F or a combining mark, deleting what kept two clusters apart, `set_caret`), and `window` measured the cells before the caret with `cell_len` but dropped whole graphemes, so it underflowed: a panic in debug builds, a wild caret column in release. The caret now always snaps to a grapheme boundary, and both sides of the window are counted grapheme by grapheme with saturating arithmetic.
