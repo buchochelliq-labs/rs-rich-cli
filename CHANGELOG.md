@@ -71,6 +71,7 @@ before the fix.
 - `TableSelect` copied (Ctrl+Y, Alt+Y; text, CSV and JSON) and handed actions the cells as drawn, with newlines turned into control pictures and tabs into spaces, so CSV quoting and JSON escaping never saw them. Copies and action values now carry the cells and headings as given; only the rows on screen are sanitised.
 - `Overrides::parse` silently unbound an action bound to `#` (stripped as a comment) or `,` (a separator), as did a bare `,` in `Overrides::from_pairs` and `try_keys`. A line with no keys is now an error, `none` unbinds explicitly, `#` starts a comment only at the start of a line or after a space, and key names can be quoted (`"#"`, `","`, `'"'`). A bare `,` is an error everywhere.
 - `StatusBar` spinners ignored `RICH_A11Y=reduced-motion` (and `no-animation`, `screen-reader`) and `RICH_ANIMATION=0`, which still every other animation. They now hold their first frame and the bar stops ticking; `StatusBar::animate(bool)` overrides.
+- `Viewport` run as a component advertised `viewport.*` bindings but matched hard-coded keys, so rebinding changed the help, not the keys. It now looks its keys up in its keymap (new `Viewport::rebind`, `viewport_keymap` and `ScrollState::act`); installed overrides apply too.
 ### 0.0.14 release test: fixes from audit A
 
 Versions: none bumped; `rs-rich-micro` 0.0.1, `rs-rich-ext` 0.0.12,

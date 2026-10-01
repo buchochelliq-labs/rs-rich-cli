@@ -532,10 +532,29 @@ impl ScrollState {
             .bind("bottom", keys("end G"), "to the bottom")
     }
 
+    /// Do one of [`keymap`](Self::keymap)'s actions (`scroll-up`,
+    /// `page-down`, `top`, ...): how a component that looks its keys up in
+    /// a keymap, and so honours rebinding, scrolls. Returns whether
+    /// `action` is a scroll action (moved or not).
+    pub fn act(&mut self, action: &str, page: usize) -> bool {
+        let page_step = page.max(1) as isize;
+        match action {
+            "scroll-up" => self.scroll(-1, page),
+            "scroll-down" => self.scroll(1, page),
+            "page-up" => self.scroll(-page_step, page),
+            "page-down" => self.scroll(page_step, page),
+            "top" => self.scroll_to(0, page),
+            "bottom" => self.scroll_to(usize::MAX, page),
+            _ => return false,
+        };
+        true
+    }
+
     /// Move with the usual keys and the mouse wheel: arrows and `j`/`k` by a
     /// line, PageUp/PageDown, `b` and Space by a page, Home/End and `g`/`G`
     /// to the ends, and the wheel by three lines. Returns whether the event
-    /// was a scroll key (moved or not).
+    /// was a scroll key (moved or not). The keys are fixed; see
+    /// [`act`](Self::act) for keys from a keymap.
     pub fn handle(&mut self, event: &Event, page: usize) -> bool {
         let page_step = page.max(1) as isize;
         match event {

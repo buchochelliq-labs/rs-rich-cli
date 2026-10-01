@@ -9,17 +9,35 @@
 use rich::{Segment, Style};
 
 use crate::component::{Component, Context, Flow, View};
-use crate::event::{Event, KeyCode};
+use crate::event::{Event, Key};
+use crate::keymap::{keys, Keymap};
 use crate::kit::ScrollState;
 
+/// The keys of a [`Viewport`] run as a component, in context `viewport`:
+/// [`ScrollState::keymap`]'s and `done` and `quit`.
+pub fn viewport_keymap() -> Keymap {
+    let mut keymap = Keymap::new("viewport")
+        .bind("done", keys("enter"), "finish here")
+        .bind("quit", keys("q escape"), "quit");
+    keymap.extend(ScrollState::keymap("viewport"));
+    keymap
+}
+
 /// Lines, and the first one shown: a [`ScrollState`] over them.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug)]
 pub struct Viewport {
     lines: Vec<Vec<Segment>>,
     scroll: ScrollState,
     /// Rows shown; `None` fills the context's height (less the status line
     /// when the viewport runs as a component).
     height: Option<usize>,
+    keymap: Keymap,
+}
+
+impl Default for Viewport {
+    fn default() -> Self {
+        Viewport::new(Vec::new())
+    }
 }
 
 impl Viewport {
@@ -28,7 +46,16 @@ impl Viewport {
             scroll: ScrollState::new(lines.len()),
             lines,
             height: None,
+            keymap: viewport_keymap(),
         }
+    }
+
+    /// Make `keys` do `action` (see [`viewport_keymap`]) when the viewport
+    /// runs as a component. Installed overrides (`viewport.page-down = n`)
+    /// apply too.
+    pub fn rebind(mut self, action: &str, keys: impl IntoIterator<Item = Key>) -> Viewport {
+        self.keymap.rebind(action, keys);
+        self
     }
 
     /// Show `height` rows instead of filling the space.
@@ -109,18 +136,25 @@ impl Viewport {
 }
 
 /// As a component: a pager over its lines with a status line. Enter
-/// finishes with the offset reached; `q` and Escape cancel.
+/// finishes with the offset reached; `q` and Escape cancel. Its keys come
+/// from its [keymap](viewport_keymap), so they can be rebound.
 impl Component for Viewport {
     type Output = usize;
 
     fn handle(&mut self, event: &Event, context: &Context<'_>) -> Flow<usize> {
         let page = self.page(context.height.saturating_sub(1));
-        if self.handle_scroll(event, page) {
-            return Flow::Continue;
-        }
-        match event.key().map(|key| key.code) {
-            Some(KeyCode::Enter) => Flow::Done(self.offset()),
-            Some(KeyCode::Escape | KeyCode::Char('q')) => Flow::Cancel,
+        let Some(key) = event.key() else {
+            // The wheel.
+            return if self.handle_scroll(event, page) {
+                Flow::Continue
+            } else {
+                Flow::Ignored
+            };
+        };
+        match self.keymap.action(key) {
+            Some("done") => Flow::Done(self.offset()),
+            Some("quit") => Flow::Cancel,
+            Some(action) if self.scroll.act(action, page) => Flow::Continue,
             _ => Flow::Ignored,
         }
     }
@@ -136,13 +170,8 @@ impl Component for Viewport {
         View::new(lines)
     }
 
-    fn keymap(&self) -> crate::keymap::Keymap {
-        use crate::keymap::keys;
-        let mut keymap = crate::keymap::Keymap::new("viewport")
-            .bind("done", keys("enter"), "finish here")
-            .bind("quit", keys("q escape"), "quit");
-        keymap.extend(ScrollState::keymap("viewport"));
-        keymap
+    fn keymap(&self) -> Keymap {
+        self.keymap.clone()
     }
 
     fn default_value(&self) -> Option<usize> {
@@ -199,6 +228,20 @@ mod tests {
         });
         assert!(viewport.handle_scroll(&wheel, 10));
         assert_eq!(viewport.offset(), 3);
+    }
+
+    /// Run as a component, a viewport's keys follow its keymap, so
+    /// rebinding them works (0.0.14 release-test audit B).
+    #[test]
+    fn rebound_keys_scroll_it() {
+        use crate::headless::{self, Script};
+
+        let viewport = Viewport::new(lines(50)).rebind("scroll-down", [Key::char('n')]);
+        let (outcome, _) = headless::run(viewport, Script::new().keys("n n j enter"), 20, 6);
+        assert_eq!(outcome.unwrap(), crate::Outcome::Done(2));
+        let viewport = Viewport::new(lines(50)).rebind("done", [Key::char('x')]);
+        let (outcome, _) = headless::run(viewport, Script::new().keys("end x"), 20, 6);
+        assert_eq!(outcome.unwrap(), crate::Outcome::Done(45));
     }
 
     #[test]
