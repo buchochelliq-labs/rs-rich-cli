@@ -471,3 +471,90 @@ fn at_the_end_of_input_the_default_answers() {
         );
     }
 }
+
+/// A tiny xorshift generator, so the fuzz below is the same on every run.
+struct Rng(u64);
+
+impl Rng {
+    fn below(&mut self, n: usize) -> usize {
+        self.0 ^= self.0 << 13;
+        self.0 ^= self.0 >> 7;
+        self.0 ^= self.0 << 17;
+        (self.0 % n as u64) as usize
+    }
+}
+
+/// The caret always sits on a grapheme boundary, and the field's window
+/// never panics, whatever is typed around joiners, variation selectors,
+/// combining marks and wide characters (0.0.14 release-test audit B2):
+/// typing `☺` in front of U+FE0F once left the caret inside the cluster,
+/// and the window then subtracted more cells than it had.
+#[test]
+fn the_caret_stays_on_a_grapheme_boundary() {
+    use rich_interact::kit::TextBuffer;
+
+    const PIECES: &[&str] = &[
+        "a", "☺", "\u{fe0f}", "\u{200d}", "\u{301}", "中", "e\u{301}", "👨", "🇺", "🇸", " ", "\t",
+    ];
+    let mut rng = Rng(0x9e37_79b9_7f4a_7c15);
+    for _ in 0..3000 {
+        let mut buffer = TextBuffer::new();
+        for _ in 0..12 {
+            match rng.below(11) {
+                0..=3 => buffer.insert(PIECES[rng.below(PIECES.len())]),
+                4 => buffer.left(),
+                5 => buffer.right(),
+                6 => {
+                    buffer.backspace();
+                }
+                7 => {
+                    buffer.delete();
+                }
+                8 => buffer.delete_word(),
+                9 => buffer.home(),
+                _ => buffer.set_caret(rng.below(buffer.len() + 2)),
+            }
+            assert!(
+                buffer.stops().contains(&buffer.caret()),
+                "caret {} inside a grapheme of {:?} (stops {:?})",
+                buffer.caret(),
+                buffer.text(),
+                buffer.stops()
+            );
+            for available in 0..6 {
+                for mask in [None, Some('*')] {
+                    let (shown, column) = buffer.window(available, mask);
+                    // Cells counted grapheme by grapheme, as the window
+                    // counts them.
+                    let cells = rich::cells::split_graphemes(&shown).1;
+                    assert!(column <= cells, "column {column} past {shown:?}");
+                }
+            }
+        }
+    }
+    // The reported cases.
+    let mut buffer = TextBuffer::with_text("☺\u{fe0f}");
+    buffer.set_caret(1);
+    assert_eq!(buffer.caret(), 0);
+    let _ = buffer.window(1, None);
+    let _ = TextBuffer::with_text("\u{200d}a中").window(1, None);
+}
+
+#[test]
+fn typing_before_a_variation_selector_in_a_narrow_field() {
+    for width in [1u16, 4, 8, 10, 12, 14] {
+        let script = Script::new()
+            .text("\u{fe0f}")
+            .keys("home")
+            .text("☺")
+            .text("x")
+            .keys("enter");
+        let (outcome, _) = headless::run(Input::new("Name"), script, width, 5);
+        // The `x` goes after the whole cluster.
+        assert_eq!(
+            outcome.unwrap(),
+            Outcome::Done("☺\u{fe0f}x".to_string()),
+            "width {width}"
+        );
+    }
+}

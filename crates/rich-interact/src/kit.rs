@@ -889,9 +889,25 @@ impl TextBuffer {
         self.caret
     }
 
-    /// Put the caret at character `caret` (clamped to the end).
+    /// Put the caret at character `caret` (clamped to the end), or at the
+    /// start of the grapheme `caret` falls inside.
     pub fn set_caret(&mut self, caret: usize) {
         self.caret = caret.min(self.len());
+        self.snap(false);
+    }
+
+    /// Move the caret onto a grapheme boundary: on to the end of the
+    /// grapheme it is inside (`forward`) or back to its start. Typing a
+    /// base character in front of a combining mark or U+FE0F, or deleting
+    /// what kept two clusters apart, can leave it inside one.
+    fn snap(&mut self, forward: bool) {
+        let stops = self.stops();
+        self.caret = if forward {
+            stops.iter().copied().find(|&stop| stop >= self.caret)
+        } else {
+            stops.iter().rev().copied().find(|&stop| stop <= self.caret)
+        }
+        .unwrap_or(self.caret);
     }
 
     /// The byte offset of character `caret`.
@@ -946,6 +962,7 @@ impl TextBuffer {
         let at = self.byte(self.caret);
         self.value.insert_str(at, text);
         self.caret += text.chars().count();
+        self.snap(true);
     }
 
     /// Move the caret one grapheme left.
@@ -975,6 +992,7 @@ impl TextBuffer {
         let (from, to) = (self.byte(previous), self.byte(self.caret));
         self.value.replace_range(from..to, "");
         self.caret = previous;
+        self.snap(false);
         true
     }
 
@@ -985,6 +1003,7 @@ impl TextBuffer {
         }
         let (from, to) = (self.byte(self.caret), self.byte(self.next_stop()));
         self.value.replace_range(from..to, "");
+        self.snap(false);
         true
     }
 
@@ -1008,6 +1027,7 @@ impl TextBuffer {
         let (from, to) = (self.byte(start), self.byte(self.caret));
         self.value.replace_range(from..to, "");
         self.caret = start;
+        self.snap(false);
     }
 
     /// Keep the text and caret as an undo point.
@@ -1043,23 +1063,36 @@ impl TextBuffer {
     /// what to show and the caret's column in it.
     pub fn window(&self, available: usize, mask: Option<char>) -> (String, usize) {
         let shown = Self::masked(&self.value, mask);
-        let before = cell_len(&Self::masked(self.before_caret(), mask));
+        // Masking keeps one character for each, so the caret is the same
+        // character index in what is shown.
+        let caret = shown
+            .char_indices()
+            .nth(self.caret)
+            .map_or(shown.len(), |(index, _)| index);
+        // The cells before the caret and the cells dropped are both counted
+        // grapheme by grapheme: `cell_len` of the whole prefix can differ
+        // from that (a leading U+200D joins what follows it).
+        let (spans, _) = split_graphemes(&shown);
+        let before: usize = spans
+            .iter()
+            .filter(|(start, _, _)| *start < caret)
+            .map(|(_, _, cells)| cells)
+            .sum();
         // One cell for the caret after the last character.
         let skip = (before + 1).saturating_sub(available.max(1));
         if skip == 0 {
             return (shown, before);
         }
-        let (spans, _) = split_graphemes(&shown);
         let mut dropped = 0;
         let mut from = shown.len();
         for (start, _, cells) in spans {
-            if dropped >= skip {
+            if dropped >= skip || start >= caret {
                 from = start;
                 break;
             }
             dropped += cells;
         }
-        (shown[from..].to_string(), before - dropped)
+        (shown[from..].to_string(), before.saturating_sub(dropped))
     }
 }
 
