@@ -790,7 +790,8 @@ pub fn ancestors(parents: &[Option<usize>], index: usize) -> impl Iterator<Item 
 /// indices with the positions to highlight, in any order) plus every
 /// ancestor of each, in tree order (index order, parents before
 /// children). Returns the list and, for each entry, whether it is only
-/// there as an ancestor (context), with nothing highlighted.
+/// there as an ancestor (context), with nothing highlighted. A parent
+/// index past the list is not a node: the walk up stops there.
 ///
 /// ```
 /// use rich_interact::kit::keep_ancestors;
@@ -814,8 +815,9 @@ pub fn keep_ancestors(
     let mut found: Vec<Option<Vec<usize>>> = vec![None; count];
     let mut kept = vec![false; count];
     for (index, positions) in matches {
+        // A parent past the list (a malformed parent list) ends the walk.
         for ancestor in ancestors(parents, index) {
-            if kept[ancestor] {
+            if kept.get(ancestor).is_none_or(|&kept| kept) {
                 break;
             }
             kept[ancestor] = true;
