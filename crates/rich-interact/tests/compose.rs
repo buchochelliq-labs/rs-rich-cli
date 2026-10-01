@@ -463,7 +463,10 @@ fn empty_tabs_take_any_event() {
     let column = Column::new()
         .child(Tabs::<String>::new())
         .child(Input::new("x").map(|text: String| Flow::Done(text)));
-    let script = Script::new().keys("tab shift+tab tab").text("ok").keys("enter");
+    let script = Script::new()
+        .keys("tab shift+tab tab")
+        .text("ok")
+        .keys("enter");
     let (outcome, _) = headless::run(column, script, 40, 6);
     assert_eq!(outcome.unwrap(), Outcome::Done("ok".to_string()));
 }
