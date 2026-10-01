@@ -141,14 +141,44 @@ fn in_foreground(tty: &rustix::fd::OwnedFd) -> bool {
 /// Whether `tty` has input waiting, without waiting.
 #[cfg(unix)]
 fn input_waiting(tty: &rustix::fd::OwnedFd) -> bool {
-    use rustix::event::{poll, PollFd, PollFlags, Timespec};
-    let mut fds = [PollFd::new(tty, PollFlags::IN)];
-    let now = Timespec {
-        tv_sec: 0,
-        tv_nsec: 0,
-    };
     // An error counts as waiting: when in doubt, do not read.
-    !matches!(poll(&mut fds, Some(&now)), Ok(0))
+    readable(tty, Duration::ZERO) != Some(false)
+}
+
+/// Whether `tty` has input to read within `timeout`; `None` on an error.
+/// This is `select`, not `poll`: macOS's `poll` does not support terminal
+/// devices (it answers `POLLNVAL` for `/dev/tty`).
+#[cfg(unix)]
+#[allow(unsafe_code)]
+fn readable(tty: &rustix::fd::OwnedFd, timeout: Duration) -> Option<bool> {
+    use rustix::fd::AsRawFd;
+    let fd = tty.as_raw_fd();
+    if !(0..libc::FD_SETSIZE as i32).contains(&fd) {
+        return None;
+    }
+    let mut wait = libc::timeval {
+        tv_sec: timeout.as_secs().try_into().unwrap_or(libc::time_t::MAX),
+        tv_usec: timeout.subsec_micros() as _,
+    };
+    // SAFETY: `set` is initialised by FD_ZERO before use, `fd` is open and
+    // below FD_SETSIZE, and select only reads and writes `set` and `wait`.
+    let ready = unsafe {
+        let mut set: libc::fd_set = std::mem::zeroed();
+        libc::FD_ZERO(&mut set);
+        libc::FD_SET(fd, &mut set);
+        libc::select(
+            fd + 1,
+            &mut set,
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            &mut wait,
+        )
+    };
+    match ready {
+        0 => Some(false),
+        n if n > 0 => Some(true),
+        _ => None,
+    }
 }
 
 /// `SIGTTOU` and `SIGTTIN` blocked on this thread until dropped.
@@ -236,7 +266,6 @@ fn classify(sequence: &[u8]) -> Reply {
 /// the cell size and the bytes read that were not part of a reply.
 #[cfg(unix)]
 fn exchange(tty: &rustix::fd::OwnedFd, timeout: Duration) -> (Option<CellPixels>, Vec<u8>) {
-    use rustix::event::{poll, PollFd, PollFlags, Timespec};
     use std::time::Instant;
 
     if rustix::io::write(tty, b"\x1b[16t\x1b[c").is_err() {
@@ -247,12 +276,7 @@ fn exchange(tty: &rustix::fd::OwnedFd, timeout: Duration) -> (Option<CellPixels>
     let mut sequence: Vec<u8> = Vec::new();
     let mut stray: Vec<u8> = Vec::new();
     while let Some(left) = deadline.checked_duration_since(Instant::now()) {
-        let wait = Timespec {
-            tv_sec: left.as_secs() as _,
-            tv_nsec: left.subsec_nanos() as _,
-        };
-        let mut fds = [PollFd::new(tty, PollFlags::IN)];
-        if !matches!(poll(&mut fds, Some(&wait)), Ok(n) if n > 0) {
+        if readable(tty, left) != Some(true) {
             break;
         }
         let mut byte = [0u8; 1];

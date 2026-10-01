@@ -94,8 +94,9 @@ fn a_caught_plugin_panic_keeps_the_session() {
     pty.wait_for("failed: boom");
     pty.send("s");
     std::thread::sleep(std::time::Duration::from_millis(200));
-    // Cooked mode would hold the `s` until a line end.
-    pty.send("\r");
+    // Cooked mode would hold the `s` until a line end. In raw mode the
+    // session has ended on `s`, and the child may be gone already.
+    let _ = pty.try_send("\r");
     let (output, parser) = pty.finish();
     assert!(
         output.contains("after-panic tty is RAW; failure=Some(\\\"boom\\\")"),

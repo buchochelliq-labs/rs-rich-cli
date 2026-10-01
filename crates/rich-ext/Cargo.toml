@@ -68,7 +68,7 @@ wasmi = { version = "2", default-features = false, features = ["std", "validate"
 # rustix is already in the tree through `terminal_size`; libc (already in the
 # tree) blocks SIGTTOU/SIGTTIN around the query, which rustix does not wrap.
 [target.'cfg(unix)'.dependencies]
-rustix = { version = "1", default-features = false, features = ["std", "termios", "fs", "event", "process"] }
+rustix = { version = "1", default-features = false, features = ["std", "termios", "fs", "process"] }
 libc = "0.2"
 
 [dev-dependencies]
