@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "name": "dev",
+  "version": "1.0.0",
+  "description": "Developer icons: bug, branch, terminal, package",
+  "license": "MIT",
+  "author": "rs-rich-cli contributors",
+  "packages": [
+    "bug",
+    "branch",
+    "terminal",
+    "package"
+  ]
+}

@@ -130,7 +130,11 @@ nav:
           - Building your own components: guide/interact/custom-components.md
           - Overlays and chrome: guide/interact/overlays.md
           - Explorers, copying and live lists: guide/interact/explorers.md
-      - Micro assets (rs-rich-micro): guide/micro/index.md
+      - Micro assets (rs-rich-micro):
+          - guide/micro/index.md
+          - Authoring: guide/micro/authoring.md
+          - In the rich CLI: guide/micro/cli.md
+          - Terminal compatibility: guide/micro/terminals.md
       - The rich CLI:
           - guide/cli/index.md
           - Walkthrough: guide/cli/walkthrough.md

@@ -28,8 +28,11 @@ use crate::package::{self, Limits, Loaded};
 /// [`MicroRoots::from_env`], or set the fields for tests and embedders.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct MicroRoots {
-    /// Built-in packages shipped on disk, if any. (The library's own built-in
-    /// set is compiled in; this is for distributions that ship more.)
+    /// Load the library's own built-in set ([`crate::builtin`]), compiled
+    /// in. On in [`from_env`](Self::from_env); off in `default()`.
+    pub builtin_set: bool,
+    /// Built-in packages shipped on disk, if any, loaded after the
+    /// library's own set: for distributions that ship more.
     pub builtin: Option<PathBuf>,
     /// The user's directory, normally `~/.config/rich/micro/`.
     pub user: Option<PathBuf>,
@@ -50,6 +53,7 @@ impl MicroRoots {
             .or_else(|| std::env::var_os("USERPROFILE"))
             .map(PathBuf::from);
         MicroRoots {
+            builtin_set: true,
             builtin: None,
             user: home.as_deref().map(Self::user_dir),
             project: project_root.map(Self::project_dir),
@@ -135,9 +139,8 @@ pub struct MicroRegistry {
 }
 
 impl MicroRegistry {
-    /// An empty registry: every layer present, none holding anything. The
-    /// built-in layer is filled by the library's built-in set, which a later
-    /// release adds.
+    /// An empty registry: every layer present, none holding anything.
+    /// [`builtin`](Self::builtin) has the library's built-in set.
     pub fn new() -> Self {
         let mut registry = MicroRegistry::default();
         registry.layers[Layer::BuiltIn.index()].origin = Some("rs-rich-micro".to_string());
@@ -145,11 +148,63 @@ impl MicroRegistry {
         registry
     }
 
-    /// Load every file-backed layer in `roots`. The project layer loads only
-    /// when `roots.project_trusted`.
+    /// A registry holding the library's built-in set ([`crate::builtin`])
+    /// in its built-in layer.
+    ///
+    /// ```
+    /// use rich_micro::MicroRegistry;
+    ///
+    /// let registry = MicroRegistry::builtin();
+    /// let loading = registry.require("status/loading")?;
+    /// assert_eq!(loading.license(), Some("MIT"));
+    /// # Ok::<(), rich_micro::MicroError>(())
+    /// ```
+    pub fn builtin() -> Self {
+        let mut registry = MicroRegistry::new();
+        registry.load_builtin_set(&mut LoadReport::default());
+        registry
+    }
+
+    /// Add the library's built-in set to the built-in layer.
+    pub fn load_builtin_set(&mut self, report: &mut LoadReport) {
+        for (pack, loaded) in crate::builtin::PACKS
+            .iter()
+            .zip(crate::builtin::packs(Layer::BuiltIn))
+        {
+            let path = PathBuf::from(format!("builtin:{pack}"));
+            match loaded {
+                Ok(pack) => {
+                    for asset in pack.assets {
+                        report.collisions.extend(self.insert(Layer::BuiltIn, asset));
+                    }
+                    for (package, error) in pack.rejected {
+                        report.rejected.push(Rejected {
+                            layer: Layer::BuiltIn,
+                            path: path.clone(),
+                            package: Some(package),
+                            error,
+                        });
+                    }
+                }
+                Err(error) => report.rejected.push(Rejected {
+                    layer: Layer::BuiltIn,
+                    path,
+                    package: None,
+                    error,
+                }),
+            }
+        }
+    }
+
+    /// Load every file-backed layer in `roots`, and the built-in set when
+    /// `roots.builtin_set`. The project layer loads only when
+    /// `roots.project_trusted`.
     pub fn load(roots: &MicroRoots, limits: &Limits) -> (Self, LoadReport) {
         let mut registry = MicroRegistry::new();
         let mut report = LoadReport::default();
+        if roots.builtin_set {
+            registry.load_builtin_set(&mut report);
+        }
         if let Some(dir) = &roots.builtin {
             registry.load_dir(Layer::BuiltIn, dir, limits, &mut report);
         }
@@ -171,7 +226,9 @@ impl MicroRegistry {
     /// archives; hidden entries and other files are skipped. A missing
     /// directory is an empty layer.
     pub fn load_dir(&mut self, layer: Layer, dir: &Path, limits: &Limits, report: &mut LoadReport) {
-        self.layers[layer.index()].origin = Some(dir.display().to_string());
+        if layer != Layer::BuiltIn || self.layers[layer.index()].assets.is_empty() {
+            self.layers[layer.index()].origin = Some(dir.display().to_string());
+        }
         let entries = match std::fs::read_dir(dir) {
             Ok(entries) => entries,
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => return,

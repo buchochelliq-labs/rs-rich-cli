@@ -83,6 +83,12 @@ macro_rules! select_builders {
         pub fn select(&self) -> &Select<T> {
             &self.select
         }
+
+        /// An icon before each row's label, by item index: see
+        /// [`Select::set_icons`].
+        pub fn set_icons(&mut self, icons: Vec<Option<rich::Text>>) {
+            self.select.set_icons(icons);
+        }
     };
 }
 

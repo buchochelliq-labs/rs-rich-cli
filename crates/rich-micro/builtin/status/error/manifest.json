@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "name": "status/error",
+  "alt": "red circle with a white cross",
+  "size": "2x1",
+  "kind": "static",
+  "fallback": {
+    "emoji": "❌",
+    "text": "XX"
+  },
+  "static": "static.png",
+  "version": "1.0.0",
+  "license": "MIT",
+  "author": "rs-rich-cli contributors"
+}

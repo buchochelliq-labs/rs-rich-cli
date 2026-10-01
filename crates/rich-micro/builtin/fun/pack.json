@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "name": "fun",
+  "version": "1.0.0",
+  "description": "Fun icons: heart, star, cat, coffee",
+  "license": "MIT",
+  "author": "rs-rich-cli contributors",
+  "packages": [
+    "heart",
+    "star",
+    "cat",
+    "coffee"
+  ]
+}

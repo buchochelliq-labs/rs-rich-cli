@@ -1,0 +1,11 @@
+{
+  "tape": "docs/tapes/explore-icons.tape",
+  "tape_fnv1a64": "62a3782ebe717f4d",
+  "recorder": "rs-rich-record 0.0.2",
+  "rich": null,
+  "commit": "f71c19df49d71e1a87f2ddaed5b33b39fee6f039",
+  "screenshots": [
+    "icons"
+  ],
+  "note": "Every frame is real output of the program under test on a PTY."
+}

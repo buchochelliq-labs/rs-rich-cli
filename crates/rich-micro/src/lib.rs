@@ -23,6 +23,11 @@
 //!   `rich-ext`'s live regions and the interactive painter.
 //! - [`cache`]: decoded images fitted to their cells, cached in memory and
 //!   on disk.
+//! - [`pipeline`]: any picture or animation to an asset's images: fitted,
+//!   adjusted, sharpened, with its transparency decided; [`create`] writes
+//!   the package.
+//! - [`builtin`]: the built-in library (status, dev and fun sets), drawn for
+//!   this project; [`MicroRegistry::builtin`] loads it.
 //!
 //! ```
 //! use rich::Console;
@@ -39,7 +44,9 @@
 //! ```
 
 pub mod api;
+pub mod builtin;
 pub mod cache;
+pub mod create;
 pub mod error;
 pub mod graphics;
 pub mod image;
@@ -47,6 +54,7 @@ pub mod markup;
 pub mod model;
 pub mod name;
 pub mod package;
+pub mod pipeline;
 pub mod registry;
 pub mod render;
 
@@ -68,3 +76,5 @@ pub use render::{
     fallback_cells, placeholder, FallbackPreference, FallbackRenderer, MicroMeta, MicroRenderer,
     MicroView, Placement, MICRO_META_KEY, PAD_CELL,
 };
+/// The size of a terminal cell in pixels, as the cache and pipeline take it.
+pub use rich_art::graphics::CellPixels;

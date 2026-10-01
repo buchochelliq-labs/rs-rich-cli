@@ -1,0 +1,155 @@
+<svg class="rich-terminal" viewBox="0 0 1238 635.5999999999999" xmlns="http://www.w3.org/2000/svg">
+    <!-- Generated with Rich https://www.textualize.io -->
+    <style>
+
+    @font-face {
+        font-family: "Fira Code";
+        src: local("FiraCode-Regular"),
+                url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff2/FiraCode-Regular.woff2") format("woff2"),
+                url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff/FiraCode-Regular.woff") format("woff");
+        font-style: normal;
+        font-weight: 400;
+    }
+    @font-face {
+        font-family: "Fira Code";
+        src: local("FiraCode-Bold"),
+                url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff2/FiraCode-Bold.woff2") format("woff2"),
+                url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff/FiraCode-Bold.woff") format("woff");
+        font-style: bold;
+        font-weight: 700;
+    }
+
+    .rich-record-matrix {
+        font-family: Fira Code, monospace;
+        font-size: 20px;
+        line-height: 24.4px;
+        font-variant-east-asian: full-width;
+    }
+
+    .rich-record-title {
+        font-size: 18px;
+        font-weight: bold;
+        font-family: arial;
+    }
+
+    .rich-record-r1 { fill: #ff2c7a;font-weight: bold }
+.rich-record-r2 { fill: #c5c8c6 }
+.rich-record-r3 { fill: #777877 }
+.rich-record-r4 { fill: #c5c8c6;font-weight: bold }
+.rich-record-r5 { fill: #60683a }
+.rich-record-r6 { fill: #604d64 }
+.rich-record-r7 { fill: #00823d;font-weight: bold }
+    </style>
+
+    <defs>
+    <clipPath id="rich-record-clip-terminal">
+      <rect x="0" y="0" width="1219.0" height="584.5999999999999" />
+    </clipPath>
+    <clipPath id="rich-record-line-0">
+    <rect x="0" y="1.5" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="rich-record-line-1">
+    <rect x="0" y="25.9" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="rich-record-line-2">
+    <rect x="0" y="50.3" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="rich-record-line-3">
+    <rect x="0" y="74.7" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="rich-record-line-4">
+    <rect x="0" y="99.1" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="rich-record-line-5">
+    <rect x="0" y="123.5" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="rich-record-line-6">
+    <rect x="0" y="147.9" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="rich-record-line-7">
+    <rect x="0" y="172.3" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="rich-record-line-8">
+    <rect x="0" y="196.7" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="rich-record-line-9">
+    <rect x="0" y="221.1" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="rich-record-line-10">
+    <rect x="0" y="245.5" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="rich-record-line-11">
+    <rect x="0" y="269.9" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="rich-record-line-12">
+    <rect x="0" y="294.3" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="rich-record-line-13">
+    <rect x="0" y="318.7" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="rich-record-line-14">
+    <rect x="0" y="343.1" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="rich-record-line-15">
+    <rect x="0" y="367.5" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="rich-record-line-16">
+    <rect x="0" y="391.9" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="rich-record-line-17">
+    <rect x="0" y="416.3" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="rich-record-line-18">
+    <rect x="0" y="440.7" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="rich-record-line-19">
+    <rect x="0" y="465.1" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="rich-record-line-20">
+    <rect x="0" y="489.5" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="rich-record-line-21">
+    <rect x="0" y="513.9" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="rich-record-line-22">
+    <rect x="0" y="538.3" width="1220" height="24.65"/>
+            </clipPath>
+    </defs>
+
+    <rect fill="#292929" stroke="rgba(255,255,255,0.35)" stroke-width="1" x="1" y="1" width="1236" height="633.6" rx="8"/><text class="rich-record-title" fill="#c5c8c6" text-anchor="middle" x="618" y="27">rich_interact&#160;·&#160;micro&#160;assets&#160;in&#160;the&#160;chrome</text>
+            <g transform="translate(26,22)">
+            <circle cx="0" cy="0" r="7" fill="#ff5f57"/>
+            <circle cx="22" cy="0" r="7" fill="#febc2e"/>
+            <circle cx="44" cy="0" r="7" fill="#28c840"/>
+            </g>
+        
+    <g transform="translate(9, 41)" clip-path="url(#rich-record-clip-terminal)">
+    
+    <g class="rich-record-matrix">
+    <text class="rich-record-r1" x="0" y="20" textLength="12.2" clip-path="url(#rich-record-line-0)">❯</text><text class="rich-record-r2" x="12.2" y="20" textLength="1207.8" clip-path="url(#rich-record-line-0)">&#160;micro_showcase&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;</text><text class="rich-record-r2" x="1220" y="20" textLength="12.2" clip-path="url(#rich-record-line-0)">
+</text><text class="rich-record-r2" x="0" y="44.4" textLength="170.8" clip-path="url(#rich-record-line-1)">📦&#160;rs-rich-cli</text><text class="rich-record-r3" x="170.8" y="44.4" textLength="36.6" clip-path="url(#rich-record-line-1)">&#160;›&#160;</text><text class="rich-record-r2" x="207.4" y="44.4" textLength="85.4" clip-path="url(#rich-record-line-1)">release</text><text class="rich-record-r3" x="292.8" y="44.4" textLength="36.6" clip-path="url(#rich-record-line-1)">&#160;›&#160;</text><text class="rich-record-r4" x="329.4" y="44.4" textLength="73.2" clip-path="url(#rich-record-line-1)">0.0.14</text><text class="rich-record-r2" x="1220" y="44.4" textLength="12.2" clip-path="url(#rich-record-line-1)">
+</text><text class="rich-record-r5" x="0" y="68.8" textLength="12.2" clip-path="url(#rich-record-line-2)">?</text><text class="rich-record-r3" x="12.2" y="68.8" textLength="158.6" clip-path="url(#rich-record-line-2)">&#160;Next&#160;step&#160;›&#160;</text><text class="rich-record-r2" x="170.8" y="68.8" textLength="1049.2" clip-path="url(#rich-record-line-2)">╭─&#160;Commands&#160;───────────────────────────────────────────────────────────╮&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;</text><text class="rich-record-r2" x="1220" y="68.8" textLength="12.2" clip-path="url(#rich-record-line-2)">
+</text><text class="rich-record-r6" x="0" y="93.2" textLength="24.4" clip-path="url(#rich-record-line-3)">❯&#160;</text><text class="rich-record-r3" x="24.4" y="93.2" textLength="146.4" clip-path="url(#rich-record-line-3)">✅&#160;Run&#160;the&#160;t</text><text class="rich-record-r2" x="170.8" y="93.2" textLength="12.2" clip-path="url(#rich-record-line-3)">│</text><text class="rich-record-r7" x="183" y="93.2" textLength="12.2" clip-path="url(#rich-record-line-3)">?</text><text class="rich-record-r4" x="207.4" y="93.2" textLength="85.4" clip-path="url(#rich-record-line-3)">Command</text><text class="rich-record-r3" x="305" y="93.2" textLength="12.2" clip-path="url(#rich-record-line-3)">›</text><text class="rich-record-r2" x="317.2" y="93.2" textLength="902.8" clip-path="url(#rich-record-line-3)">&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;│&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;</text><text class="rich-record-r2" x="1220" y="93.2" textLength="12.2" clip-path="url(#rich-record-line-3)">
+</text><text class="rich-record-r3" x="0" y="117.6" textLength="170.8" clip-path="url(#rich-record-line-4)">&#160;&#160;🐛&#160;Fix&#160;the&#160;f</text><text class="rich-record-r2" x="170.8" y="117.6" textLength="12.2" clip-path="url(#rich-record-line-4)">│</text><text class="rich-record-r1" x="183" y="117.6" textLength="24.4" clip-path="url(#rich-record-line-4)">❯&#160;</text><text class="rich-record-r2" x="207.4" y="117.6" textLength="36.6" clip-path="url(#rich-record-line-4)">⏳&#160;</text><text class="rich-record-r3" x="244" y="117.6" textLength="73.2" clip-path="url(#rich-record-line-4)">deploy</text><text class="rich-record-r4" x="329.4" y="117.6" textLength="244" clip-path="url(#rich-record-line-4)">Mark&#160;the&#160;deploy&#160;done</text><text class="rich-record-r2" x="573.4" y="117.6" textLength="646.6" clip-path="url(#rich-record-line-4)">&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;│&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;</text><text class="rich-record-r2" x="1220" y="117.6" textLength="12.2" clip-path="url(#rich-record-line-4)">
+</text><text class="rich-record-r3" x="0" y="142" textLength="170.8" clip-path="url(#rich-record-line-5)">&#160;&#160;🔀&#160;Merge&#160;the</text><text class="rich-record-r2" x="170.8" y="142" textLength="73.2" clip-path="url(#rich-record-line-5)">│&#160;&#160;🐛&#160;</text><text class="rich-record-r3" x="244" y="142" textLength="61" clip-path="url(#rich-record-line-5)">debug</text><text class="rich-record-r2" x="305" y="142" textLength="915" clip-path="url(#rich-record-line-5)">&#160;&#160;Quit&#160;without&#160;a&#160;step&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;│&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;</text><text class="rich-record-r2" x="1220" y="142" textLength="12.2" clip-path="url(#rich-record-line-5)">
+</text><text class="rich-record-r3" x="0" y="166.4" textLength="170.8" clip-path="url(#rich-record-line-6)">&#160;&#160;📦&#160;Build&#160;the</text><text class="rich-record-r2" x="170.8" y="166.4" textLength="73.2" clip-path="url(#rich-record-line-6)">│&#160;&#160;💻&#160;</text><text class="rich-record-r3" x="244" y="166.4" textLength="73.2" clip-path="url(#rich-record-line-6)">select</text><text class="rich-record-r2" x="317.2" y="166.4" textLength="646.6" clip-path="url(#rich-record-line-6)">&#160;pick&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;</text><text class="rich-record-r3" x="963.8" y="166.4" textLength="73.2" clip-path="url(#rich-record-line-6)">enter&#160;</text><text class="rich-record-r2" x="1037" y="166.4" textLength="183" clip-path="url(#rich-record-line-6)">│&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;</text><text class="rich-record-r2" x="1220" y="166.4" textLength="12.2" clip-path="url(#rich-record-line-6)">
+</text><text class="rich-record-r3" x="0" y="190.8" textLength="146.4" clip-path="url(#rich-record-line-7)">&#160;&#160;💖&#160;Ship&#160;it</text><text class="rich-record-r2" x="146.4" y="190.8" textLength="97.6" clip-path="url(#rich-record-line-7)">&#160;&#160;│&#160;&#160;💻&#160;</text><text class="rich-record-r3" x="244" y="190.8" textLength="73.2" clip-path="url(#rich-record-line-7)">select</text><text class="rich-record-r2" x="317.2" y="190.8" textLength="671" clip-path="url(#rich-record-line-7)">&#160;cancel&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;</text><text class="rich-record-r3" x="988.2" y="190.8" textLength="48.8" clip-path="url(#rich-record-line-7)">esc&#160;</text><text class="rich-record-r2" x="1037" y="190.8" textLength="183" clip-path="url(#rich-record-line-7)">│&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;</text><text class="rich-record-r2" x="1220" y="190.8" textLength="12.2" clip-path="url(#rich-record-line-7)">
+</text><text class="rich-record-r3" x="0" y="215.2" textLength="170.8" clip-path="url(#rich-record-line-8)">&#160;&#160;5/5&#160;·&#160;↑↓&#160;mov</text><text class="rich-record-r2" x="170.8" y="215.2" textLength="73.2" clip-path="url(#rich-record-line-8)">│&#160;&#160;💻&#160;</text><text class="rich-record-r3" x="244" y="215.2" textLength="73.2" clip-path="url(#rich-record-line-8)">select</text><text class="rich-record-r2" x="317.2" y="215.2" textLength="610" clip-path="url(#rich-record-line-8)">&#160;move&#160;up&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;</text><text class="rich-record-r3" x="927.2" y="215.2" textLength="109.8" clip-path="url(#rich-record-line-8)">↑/ctrl+p&#160;</text><text class="rich-record-r2" x="1037" y="215.2" textLength="183" clip-path="url(#rich-record-line-8)">│&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;</text><text class="rich-record-r2" x="1220" y="215.2" textLength="12.2" clip-path="url(#rich-record-line-8)">
+</text><text class="rich-record-r2" x="0" y="239.6" textLength="244" clip-path="url(#rich-record-line-9)">&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;│&#160;&#160;💻&#160;</text><text class="rich-record-r3" x="244" y="239.6" textLength="73.2" clip-path="url(#rich-record-line-9)">select</text><text class="rich-record-r2" x="317.2" y="239.6" textLength="610" clip-path="url(#rich-record-line-9)">&#160;move&#160;down&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;</text><text class="rich-record-r3" x="927.2" y="239.6" textLength="109.8" clip-path="url(#rich-record-line-9)">↓/ctrl+n&#160;</text><text class="rich-record-r2" x="1037" y="239.6" textLength="183" clip-path="url(#rich-record-line-9)">│&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;</text><text class="rich-record-r2" x="1220" y="239.6" textLength="12.2" clip-path="url(#rich-record-line-9)">
+</text><text class="rich-record-r2" x="0" y="264" textLength="244" clip-path="url(#rich-record-line-10)">&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;│&#160;&#160;💻&#160;</text><text class="rich-record-r3" x="244" y="264" textLength="73.2" clip-path="url(#rich-record-line-10)">select</text><text class="rich-record-r2" x="317.2" y="264" textLength="658.8" clip-path="url(#rich-record-line-10)">&#160;page&#160;up&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;</text><text class="rich-record-r3" x="976" y="264" textLength="61" clip-path="url(#rich-record-line-10)">pgup&#160;</text><text class="rich-record-r2" x="1037" y="264" textLength="183" clip-path="url(#rich-record-line-10)">│&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;</text><text class="rich-record-r2" x="1220" y="264" textLength="12.2" clip-path="url(#rich-record-line-10)">
+</text><text class="rich-record-r2" x="0" y="288.4" textLength="244" clip-path="url(#rich-record-line-11)">&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;│&#160;&#160;💻&#160;</text><text class="rich-record-r3" x="244" y="288.4" textLength="73.2" clip-path="url(#rich-record-line-11)">select</text><text class="rich-record-r2" x="317.2" y="288.4" textLength="658.8" clip-path="url(#rich-record-line-11)">&#160;page&#160;down&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;</text><text class="rich-record-r3" x="976" y="288.4" textLength="61" clip-path="url(#rich-record-line-11)">pgdn&#160;</text><text class="rich-record-r2" x="1037" y="288.4" textLength="183" clip-path="url(#rich-record-line-11)">│&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;</text><text class="rich-record-r2" x="1220" y="288.4" textLength="12.2" clip-path="url(#rich-record-line-11)">
+</text><text class="rich-record-r2" x="0" y="312.8" textLength="244" clip-path="url(#rich-record-line-12)">&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;│&#160;&#160;💻&#160;</text><text class="rich-record-r3" x="244" y="312.8" textLength="73.2" clip-path="url(#rich-record-line-12)">select</text><text class="rich-record-r2" x="317.2" y="312.8" textLength="658.8" clip-path="url(#rich-record-line-12)">&#160;first&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;</text><text class="rich-record-r3" x="976" y="312.8" textLength="61" clip-path="url(#rich-record-line-12)">home&#160;</text><text class="rich-record-r2" x="1037" y="312.8" textLength="183" clip-path="url(#rich-record-line-12)">│&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;</text><text class="rich-record-r2" x="1220" y="312.8" textLength="12.2" clip-path="url(#rich-record-line-12)">
+</text><text class="rich-record-r2" x="0" y="337.2" textLength="244" clip-path="url(#rich-record-line-13)">&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;│&#160;&#160;💻&#160;</text><text class="rich-record-r3" x="244" y="337.2" textLength="73.2" clip-path="url(#rich-record-line-13)">select</text><text class="rich-record-r2" x="317.2" y="337.2" textLength="671" clip-path="url(#rich-record-line-13)">&#160;last&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;</text><text class="rich-record-r3" x="988.2" y="337.2" textLength="48.8" clip-path="url(#rich-record-line-13)">end&#160;</text><text class="rich-record-r2" x="1037" y="337.2" textLength="183" clip-path="url(#rich-record-line-13)">│&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;</text><text class="rich-record-r2" x="1220" y="337.2" textLength="12.2" clip-path="url(#rich-record-line-13)">
+</text><text class="rich-record-r2" x="0" y="361.6" textLength="244" clip-path="url(#rich-record-line-14)">&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;│&#160;&#160;💻&#160;</text><text class="rich-record-r3" x="244" y="361.6" textLength="73.2" clip-path="url(#rich-record-line-14)">select</text><text class="rich-record-r2" x="317.2" y="361.6" textLength="634.4" clip-path="url(#rich-record-line-14)">&#160;clear&#160;the&#160;filter&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;</text><text class="rich-record-r3" x="951.6" y="361.6" textLength="85.4" clip-path="url(#rich-record-line-14)">ctrl+u&#160;</text><text class="rich-record-r2" x="1037" y="361.6" textLength="183" clip-path="url(#rich-record-line-14)">│&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;</text><text class="rich-record-r2" x="1220" y="361.6" textLength="12.2" clip-path="url(#rich-record-line-14)">
+</text><text class="rich-record-r2" x="0" y="386" textLength="244" clip-path="url(#rich-record-line-15)">&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;│&#160;&#160;💻&#160;</text><text class="rich-record-r3" x="244" y="386" textLength="73.2" clip-path="url(#rich-record-line-15)">select</text><text class="rich-record-r2" x="317.2" y="386" textLength="597.8" clip-path="url(#rich-record-line-15)">&#160;delete&#160;a&#160;character&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;</text><text class="rich-record-r3" x="915" y="386" textLength="122" clip-path="url(#rich-record-line-15)">backspace&#160;</text><text class="rich-record-r2" x="1037" y="386" textLength="183" clip-path="url(#rich-record-line-15)">│&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;</text><text class="rich-record-r2" x="1220" y="386" textLength="12.2" clip-path="url(#rich-record-line-15)">
+</text><text class="rich-record-r2" x="0" y="410.4" textLength="244" clip-path="url(#rich-record-line-16)">&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;│&#160;&#160;💻&#160;</text><text class="rich-record-r3" x="244" y="410.4" textLength="73.2" clip-path="url(#rich-record-line-16)">select</text><text class="rich-record-r2" x="317.2" y="410.4" textLength="634.4" clip-path="url(#rich-record-line-16)">&#160;actions&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;</text><text class="rich-record-r3" x="951.6" y="410.4" textLength="85.4" clip-path="url(#rich-record-line-16)">ctrl+k&#160;</text><text class="rich-record-r2" x="1037" y="410.4" textLength="183" clip-path="url(#rich-record-line-16)">│&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;</text><text class="rich-record-r2" x="1220" y="410.4" textLength="12.2" clip-path="url(#rich-record-line-16)">
+</text><text class="rich-record-r2" x="0" y="434.8" textLength="207.4" clip-path="url(#rich-record-line-17)">&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;│&#160;&#160;</text><text class="rich-record-r3" x="207.4" y="434.8" textLength="97.6" clip-path="url(#rich-record-line-17)">overlays</text><text class="rich-record-r2" x="305" y="434.8" textLength="695.4" clip-path="url(#rich-record-line-17)">&#160;&#160;help&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;</text><text class="rich-record-r3" x="1000.4" y="434.8" textLength="36.6" clip-path="url(#rich-record-line-17)">f1&#160;</text><text class="rich-record-r2" x="1037" y="434.8" textLength="183" clip-path="url(#rich-record-line-17)">│&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;</text><text class="rich-record-r2" x="1220" y="434.8" textLength="12.2" clip-path="url(#rich-record-line-17)">
+</text><text class="rich-record-r2" x="0" y="459.2" textLength="183" clip-path="url(#rich-record-line-18)">&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;│</text><text class="rich-record-r3" x="183" y="459.2" textLength="500.2" clip-path="url(#rich-record-line-18)">&#160;&#160;15/15&#160;·&#160;↑↓&#160;move&#160;·&#160;enter&#160;run&#160;·&#160;esc&#160;close</text><text class="rich-record-r2" x="683.2" y="459.2" textLength="536.8" clip-path="url(#rich-record-line-18)">&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;│&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;</text><text class="rich-record-r2" x="1220" y="459.2" textLength="12.2" clip-path="url(#rich-record-line-18)">
+</text><text class="rich-record-r2" x="0" y="483.6" textLength="1220" clip-path="url(#rich-record-line-19)">&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;╰──────────────────────────────────────────────────────────────────────╯&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;</text><text class="rich-record-r2" x="1220" y="483.6" textLength="12.2" clip-path="url(#rich-record-line-19)">
+</text><text class="rich-record-r2" x="0" y="508" textLength="146.4" clip-path="url(#rich-record-line-20)">⏳&#160;deploying</text><text class="rich-record-r3" x="146.4" y="508" textLength="36.6" clip-path="url(#rich-record-line-20)">&#160;│&#160;</text><text class="rich-record-r2" x="183" y="508" textLength="536.8" clip-path="url(#rich-record-line-20)">✅&#160;3&#160;checks&#160;passed&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;</text><text class="rich-record-r4" x="719.8" y="508" textLength="12.2" clip-path="url(#rich-record-line-20)">↑</text><text class="rich-record-r3" x="732" y="508" textLength="134.2" clip-path="url(#rich-record-line-20)">&#160;move&#160;up&#160;·&#160;</text><text class="rich-record-r4" x="866.2" y="508" textLength="12.2" clip-path="url(#rich-record-line-20)">↓</text><text class="rich-record-r3" x="878.4" y="508" textLength="158.6" clip-path="url(#rich-record-line-20)">&#160;move&#160;down&#160;│&#160;</text><text class="rich-record-r4" x="1037" y="508" textLength="73.2" clip-path="url(#rich-record-line-20)">ctrl+o</text><text class="rich-record-r3" x="1122.4" y="508" textLength="97.6" clip-path="url(#rich-record-line-20)">commands</text><text class="rich-record-r2" x="1220" y="508" textLength="12.2" clip-path="url(#rich-record-line-20)">
+</text><text class="rich-record-r2" x="1220" y="532.4" textLength="12.2" clip-path="url(#rich-record-line-21)">
+</text><text class="rich-record-r2" x="1220" y="556.8" textLength="12.2" clip-path="url(#rich-record-line-22)">
+</text><rect x="329.4" y="74.7" width="12.2" height="24.65" fill="#c5c8c6" opacity="0.7"/>
+    </g>
+    </g>
+</svg>

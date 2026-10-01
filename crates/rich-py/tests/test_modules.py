@@ -56,6 +56,7 @@ def test_the_stubs_describe_exactly_the_compiled_module():
         "RenderableType",
         "RichCast",
         "ConsoleRenderable",
+        "MicroPreference",
     }
     # Stubbed for every build, compiled only into some (the lumis wheel).
     optional = {"LumisPlugin"}
@@ -70,7 +71,7 @@ AREA_MODULES = [
     "markdown", "syntax", "json", "pretty", "traceback", "highlighter",
     "live", "progress", "status", "screen", "pager", "prompt", "logging",
     "color", "emoji", "theme", "segment", "measure", "terminal_theme",
-    "ext", "art", "mermaid", "plugins",
+    "ext", "art", "mermaid", "plugins", "micro",
 ]
 
 

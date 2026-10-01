@@ -179,6 +179,20 @@ impl DataExplorer {
         }
     }
 
+    /// An icon before each node: `icon(path, node)` returns one line of
+    /// text (a micro asset's placeholder, say: a folder for a map, a list
+    /// for an array) or `None`. Micro asset placeholders keep their tags,
+    /// so the painter's graphics draw them where the terminal can.
+    pub fn icons(mut self, icon: impl Fn(&Path, &Node) -> Option<rich::Text>) -> Self {
+        let icons = self
+            .paths
+            .iter()
+            .map(|path| self.root.at(path).and_then(|node| icon(path, node)))
+            .collect();
+        self.tree.set_icons(icons);
+        self
+    }
+
     /// Show at most `rows` rows at once (default 10).
     pub fn height(mut self, rows: usize) -> Self {
         self.tree = self.tree.height(rows);

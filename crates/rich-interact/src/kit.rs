@@ -63,6 +63,25 @@ pub fn text(text: impl Into<String>, style: &Style) -> Segment {
     Segment::new(text, Some(style.clone()))
 }
 
+/// The first line of `text` as segments, unwrapped, its styles and style
+/// metadata kept: an icon for a list row, a crumb or a status item. A micro
+/// asset's placeholder (`rich_micro::placeholder`) stays tagged, so the
+/// painter's graphics can draw the asset over its cells.
+pub fn icon(text: &rich::Text) -> Vec<Segment> {
+    let console = rich::Console::builder().width(4096).build();
+    let options = console.options().update_width(4096);
+    let mut text = text.clone();
+    text.set_no_wrap(Some(true));
+    console
+        .render_lines(&text, &options, false)
+        .into_iter()
+        .next()
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|segment| !segment.text.is_empty())
+        .collect()
+}
+
 /// A segment of unstyled `text`.
 pub fn plain(text: impl Into<String>) -> Segment {
     Segment::new(text, None)

@@ -122,6 +122,7 @@ nav:
   - Art and Mermaid:
       - Art (images, FIGlet, GIFs, diffs): art.md
       - Mermaid: mermaid.md
+  - Micro assets: micro.md
   - Plugins: plugins.md
   - The command line: cli.md
   - Compatibility: compatibility.md

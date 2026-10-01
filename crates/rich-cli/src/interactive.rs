@@ -332,10 +332,10 @@ pub(super) fn commands() -> Vec<CommandSpec> {
             .arg(
                 ArgSpec::option("kind")
                     .value_name("KIND")
-                    .choices(["emoji", "box", "spinner"])
+                    .choices(["emoji", "box", "spinner", "micro"])
                     .help(
-                        "What to pick (default emoji): an emoji prints as itself, a box style or \
-                         spinner by name",
+                        "What to pick (default emoji): an emoji prints as itself, a box style, \
+                         spinner or micro asset by name",
                     ),
             )
             .arg(
@@ -355,9 +355,16 @@ pub(super) fn commands() -> Vec<CommandSpec> {
                     .help("Focus NAME; the answer without a terminal and to an empty line"),
             )
             .arg(mouse.clone())
+            .arg(ArgSpec::flag("micro-project").help(
+                "With --kind micro, list the project's ./.rich/micro/ assets too (trust it)",
+            ))
             .example(
                 "rich asset --kind box",
                 "Pick one of rich's box styles by name, for --panel",
+            )
+            .example(
+                "rich asset --kind micro",
+                "Pick a micro asset by name, for :micro:NAME: in --print --emoji text",
             ),
         CommandSpec::new("explore")
             .about(
@@ -396,6 +403,10 @@ pub(super) fn commands() -> Vec<CommandSpec> {
                          string as it is, anything else as JSON)",
                     ),
             )
+            .arg(ArgSpec::flag("icons").help(
+                "Mark true, false and null values with the status/success, status/error and \
+                 status/info micro assets (drawn as the terminal can, or their emoji)",
+            ))
             .arg(mouse)
             .example("rich explore package.json", "Browse a document")
             .example(
@@ -442,6 +453,10 @@ struct Args {
     /// `rich explore --print`: `value` rather than the path.
     print_value: bool,
     kind: Option<String>,
+    /// `rich explore --icons`.
+    icons: bool,
+    /// `--micro-project`: the project's micro assets are trusted.
+    micro_project: bool,
     /// The global `--no-color`.
     no_color: bool,
 }
@@ -503,6 +518,8 @@ fn parse_args(command: &'static str, args: &[String]) -> Result<Args, String> {
             "--value",
             "--selected",
             "--mouse",
+            "--micro-project",
+            "--no-micro-project",
         ],
         "input" => &[
             "--prompt",
@@ -514,7 +531,7 @@ fn parse_args(command: &'static str, args: &[String]) -> Result<Args, String> {
         ],
         "confirm" => &["--default", "--affirmative", "--negative", "--mouse"],
         "explore" => &[
-            "--format", "--header", "--height", "--value", "--print", "--mouse",
+            "--format", "--header", "--height", "--value", "--print", "--mouse", "--icons",
         ],
         _ => &["--search"],
     };
@@ -570,6 +587,9 @@ fn parse_args(command: &'static str, args: &[String]) -> Result<Args, String> {
             "--multi" => parsed.multi = true,
             "--password" => parsed.password = true,
             "--mouse" => parsed.mouse = true,
+            "--icons" => parsed.icons = true,
+            "--micro-project" => parsed.micro_project = true,
+            "--no-micro-project" => parsed.micro_project = false,
             "--show-line-numbers" => parsed.line_numbers = true,
             "--all" => parsed.all = true,
             "--directory" => parsed.directory = true,
@@ -614,8 +634,16 @@ fn parse_args(command: &'static str, args: &[String]) -> Result<Args, String> {
             }
             "--kind" => {
                 let kind = value()?;
-                if !matches!(kind.as_str(), "emoji" | "box" | "spinner") {
-                    return Err(format!("--kind: {kind:?} is not emoji, box or spinner"));
+                let micro = cfg!(feature = "art") && kind == "micro";
+                if !micro && !matches!(kind.as_str(), "emoji" | "box" | "spinner") {
+                    return Err(format!(
+                        "--kind: {kind:?} is not emoji, box, spinner or micro{}",
+                        if cfg!(feature = "art") {
+                            ""
+                        } else {
+                            " (micro needs a build with the art feature)"
+                        }
+                    ));
                 }
                 parsed.kind = Some(kind);
             }
@@ -703,6 +731,9 @@ fn parse_args(command: &'static str, args: &[String]) -> Result<Args, String> {
         }
         "file" if parsed.positionals.len() > 1 => {
             return Err("`rich file` starts from one DIR".into())
+        }
+        "explore" if parsed.icons && !cfg!(feature = "art") => {
+            return Err("--icons needs a build with the art feature".into())
         }
         "file" | "asset" if parsed.selected.len() > 1 => {
             return Err("--selected is given once".into())
@@ -1260,10 +1291,22 @@ fn asset(args: &Args) -> Answer {
             AssetKind::Emoji => "Emoji",
             AssetKind::Box => "Box style",
             AssetKind::Spinner => "Spinner",
+            // `Micro`, which exists whenever anything in the build turns on
+            // rs-rich-interact's `micro` feature.
+            #[allow(unreachable_patterns)]
+            _ => "Micro asset",
         }
         .to_string()
     });
-    let mut picker = AssetPicker::new(prompt, kind).with_mouse(args.mouse);
+    #[cfg(feature = "art")]
+    let picker = if args.kind.as_deref() == Some("micro") {
+        AssetPicker::micro(prompt, &crate::micro::registry(args.micro_project))
+    } else {
+        AssetPicker::new(prompt, kind)
+    };
+    #[cfg(not(feature = "art"))]
+    let picker = AssetPicker::new(prompt, kind);
+    let mut picker = picker.with_mouse(args.mouse);
     if let Some(selected) = args.selected.first() {
         let name = selected.trim_matches(':');
         if !picker.items().iter().any(|item| item.label == name) {
@@ -1332,6 +1375,11 @@ fn explore(args: &Args) -> Answer {
     }
     if let Some(query) = &args.value {
         explorer = explorer.query(query.clone());
+    }
+    #[cfg(feature = "art")]
+    if args.icons {
+        let registry = rich_micro::MicroRegistry::builtin();
+        explorer = explorer.icons(|_, node| crate::micro::value_icon(&registry, node));
     }
     match rich_interact::run(&mut explorer, &options) {
         Ok(Outcome::Done(path)) => {

@@ -149,6 +149,8 @@ the right:
 | `StatusItem::hints(n)` | the first `n` key hints from the keymap: `↑ move up · ↓ move down` |
 | `StatusItem::spinner(name, markup)` | one of core's spinners, by name, and markup after it |
 | `StatusItem::badge(text, style)` | a short label in a style of its own |
+| `StatusItem::icon(text, markup)` | an icon (one line of text) and markup after it |
+| `StatusItem::micro(asset, markup)` | a micro asset and markup (the `micro` feature) |
 
 A spinner's frame is picked by time, the way core's `Spinner` picks it. The
 bar ticks while a spinner shows. `StatusBar::clock` replaces the clock, so a
@@ -181,6 +183,38 @@ behind `…`. With the mouse on, a click on a crumb cuts the path after that
 crumb, or does what `on_pick` says. `crumbs()` returns a handle, `Crumbs`,
 that changes the path while it shows (`push`, `pop`, `truncate` and `set`).
 `Overlays::breadcrumbs` puts them over the component.
+`Breadcrumbs::icons(|index, crumb| …)` puts an icon before a crumb.
+
+## Micro assets in the chrome
+
+Everything that shows an icon keeps the icon's style metadata, so a micro
+asset's placeholder (`rich_micro::placeholder`) stays tagged and the
+painter's graphics draw the asset over its cells where the terminal can,
+and its emoji or text shows everywhere else:
+
+| Where | API |
+|---|---|
+| a status-bar badge | `StatusItem::micro(asset, markup)`, or `StatusItem::icon(&text, markup)` |
+| a breadcrumb | `Breadcrumbs::icons(\|index, crumb\| Some(text))` |
+| a list or tree row | `Select::set_icons`, `TreeSelect::set_icons`, `TableSelect::set_icons` |
+| an explorer node | `DataExplorer::icons(\|path, node\| …)` |
+| a palette category | `Palette::category_icon(category, &text)`, `Overlays::category_icon(category, text)` |
+| the asset picker | `AssetPicker::micro(prompt, &registry)`, `AssetKind::Micro` |
+
+`StatusItem::micro`, `AssetKind::Micro` and `AssetPicker::micro` need the
+crate's `micro` feature (which brings in `rs-rich-micro`); the icon APIs
+take any one-line `rich::Text`. To draw images rather than fallbacks, give
+the event loop a graphics source:
+`event_loop.graphics(MicroGraphics::detect(registry).source())`. The
+`micro_showcase` example does all of this
+(`cargo run -p rs-rich-interact --features micro --example micro_showcase`):
+
+![micro assets in the status bar, breadcrumbs and rows](../../media/tapes/micro-chrome/chrome.png)
+
+![micro assets before the palette's categories](../../media/tapes/micro-chrome/palette.png)
+
+The recording's PTY has no image protocol, so each asset shows its emoji
+fallback.
 
 ## Testing
 

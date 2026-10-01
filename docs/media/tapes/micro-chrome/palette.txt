@@ -1,0 +1,24 @@
+❯ micro_showcase
+📦 rs-rich-cli › release › 0.0.14
+? Next step › ╭─ Commands ───────────────────────────────────────────────────────────╮
+❯ ✅ Run the t│? Command ›                                                           │
+  🐛 Fix the f│❯ ⏳ deploy Mark the deploy done                                      │
+  🔀 Merge the│  🐛 debug  Quit without a step                                       │
+  📦 Build the│  💻 select pick                                                enter │
+  💖 Ship it  │  💻 select cancel                                                esc │
+  5/5 · ↑↓ mov│  💻 select move up                                          ↑/ctrl+p │
+              │  💻 select move down                                        ↓/ctrl+n │
+              │  💻 select page up                                              pgup │
+              │  💻 select page down                                            pgdn │
+              │  💻 select first                                                home │
+              │  💻 select last                                                  end │
+              │  💻 select clear the filter                                   ctrl+u │
+              │  💻 select delete a character                              backspace │
+              │  💻 select actions                                            ctrl+k │
+              │  overlays  help                                                   f1 │
+              │  15/15 · ↑↓ move · enter run · esc close                             │
+              ╰──────────────────────────────────────────────────────────────────────╯
+⏳ deploying │ ✅ 3 checks passed                          ↑ move up · ↓ move down │ ctrl+o commands
+
+
+

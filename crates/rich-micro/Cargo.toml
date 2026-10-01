@@ -22,7 +22,7 @@ readme = "README.md"
 documentation = "https://docs.rs/rs-rich-micro"
 keywords = ["terminal", "emoji", "icons", "images", "rich"]
 categories = ["command-line-interface"]
-include = ["src/**/*", "README.md", "LICENSE", "Cargo.toml"]
+include = ["src/**/*", "builtin/**/*", "README.md", "LICENSE", "Cargo.toml"]
 
 [lib]
 name = "rich_micro"

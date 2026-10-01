@@ -118,6 +118,10 @@ pub struct Select<T> {
     pub(crate) prefixes: Vec<String>,
     /// Prefixes drawn as they are rather than dimmed.
     pub(crate) prefix_plain: bool,
+    /// An icon after each prefix, by index: cells drawn as they are, style
+    /// metadata kept (a micro asset's placeholder, which the painter's
+    /// graphics draw over).
+    pub(crate) icons: Vec<Option<Vec<Segment>>>,
     /// Items left out while nothing is typed: a collapsed node's children.
     pub(crate) hidden: Vec<bool>,
     /// A line of extra key hints for the footer.
@@ -174,6 +178,7 @@ impl<T> Select<T> {
             heading: None,
             prefixes: Vec::new(),
             prefix_plain: false,
+            icons: Vec::new(),
             hidden: Vec::new(),
             hints: None,
             steady: false,
@@ -369,6 +374,17 @@ impl<T> Select<T> {
         self.prefix_plain = plain;
     }
 
+    /// An icon before each label, by index, after its prefix: one line of
+    /// text (see [`kit::icon`](crate::kit::icon)), its styles and metadata
+    /// kept, so a micro asset's placeholder cells stay tagged for the
+    /// painter's graphics. `None` leaves an item without one.
+    pub fn set_icons(&mut self, icons: Vec<Option<rich::Text>>) {
+        self.icons = icons
+            .iter()
+            .map(|icon| icon.as_ref().map(crate::kit::icon))
+            .collect();
+    }
+
     /// Items left out while nothing is typed, by index: a collapsed node's
     /// children. Call [`refilter`](Self::refilter) after.
     pub fn set_hidden(&mut self, hidden: Vec<bool>) {
@@ -410,6 +426,7 @@ impl<T> Select<T> {
         self.items = items;
         self.values.clear();
         self.prefixes.clear();
+        self.icons.clear();
         self.hidden.clear();
         if self.default.is_some_and(|index| index >= self.items.len()) {
             self.default = None;
@@ -481,6 +498,7 @@ impl<T> Select<T> {
         self.items = items;
         self.values.clear();
         self.prefixes.clear();
+        self.icons.clear();
         self.hidden.clear();
         self.filter.query_mut().clear();
         self.default = None;
@@ -836,6 +854,10 @@ impl<T> Select<T> {
             } else {
                 text(prefix.clone(), &theme.hint)
             });
+        }
+        if let Some(Some(icon)) = self.icons.get(*index) {
+            line.extend(icon.iter().cloned());
+            line.push(plain(" "));
         }
         // An ancestor kept only to place a match (a tree's filter) is dim.
         let base = if self.filter.is_context(position) {

@@ -228,6 +228,7 @@ Choose at most one; the default auto-detects .md/.rst/.json/.csv/.tsv/.ipynb by 
 | `--theme-style <NAME=STYLE>...` | Override a theme binding; repeatable and worker-safe. |
 | `--theme-file <PATH>` | Load styles from an upstream rich theme file ([styles] section); --theme and --theme-style override it. Config: `theme_file`. |
 | `--plugin <PATH>...` | Load a runtime plugin: a WASM module (.wasm, sandboxed) or a native library (.so, .dylib, .dll, which runs its own code), in a build with the wasm-plugins or dylib-plugins feature; repeatable. `rich plugins list` shows what is loaded. Config: `plugins`. |
+| `--micro-project`, `--no-micro-project` | Load micro assets from the project's .rich/micro/ (off by default: a project's assets load only when you trust it; ./rich.toml cannot turn this on) Config: `micro_project`. |
 
 ### Output & reports
 
@@ -297,6 +298,7 @@ Self-contained examples; ignores config; accepts --no-color.
 | `completions` | Print a shell completion script |
 | `docs` | Print reference documentation generated from this help |
 | `bench` | Compare benchmark runs |
+| `micro` | Micro assets: emoji-sized images and animations written :micro:name: (with --emoji). List, show, preview, add, remove and create them; install packs |
 | `record` | Run tapes (scripted terminal sessions: type, press keys, wait for screen text, take screenshots) in a real terminal and write PNG, SVG and text screenshots, an asciinema cast, a GIF, an MP4 (with FFmpeg) and an HTML page with a player; --check compares screenshots with committed ones instead |
 | `plugins` | List the plugins this build has — built in, linked, and any --plugin PATH loads — with their source, version, ABI and capabilities |
 | `doctor` | Read-only build, terminal, config and pager diagnostics; --report json writes diagnostic data to stdout |
@@ -874,7 +876,7 @@ rich config explain [OPTIONS] [KEY]
 
 | Argument | Description |
 | --- | --- |
-| `[KEY]` | Explain one setting instead of all of them. Possible values: `mode`, `format`, `width`, `panel`, `padding`, `log_presentation`, `mermaid_backend`, `highlighter`, `code_theme`, `height`, `image_fit`, `image_anchor`, `image_max_width`, `image_max_height`, `image_background`, `image_color`, `image_dither`, `image_color_distance`, `image_brightness`, `image_contrast`, `image_gamma`, `image_rotate`, `image_flip_horizontal`, `image_flip_vertical`, `image_grayscale`, `export_html`, `export_svg`, `pager`, `auto_pager`, `watch`, `watch_interval`, `watch_debounce`, `watch_poll`, `watch_exit_on_error`, `watch_cache`, `batch`, `batch_input_root`, `batch_preserve_dirs`, `batch_name_template`, `jobs`, `progress`, `continue_on_error`, `overwrite`, `collision`, `theme`, `theme_file`, `plugins`, `no_color`, `sanitize`. |
+| `[KEY]` | Explain one setting instead of all of them. Possible values: `mode`, `format`, `width`, `panel`, `padding`, `log_presentation`, `mermaid_backend`, `highlighter`, `code_theme`, `height`, `image_fit`, `image_anchor`, `image_max_width`, `image_max_height`, `image_background`, `image_color`, `image_dither`, `image_color_distance`, `image_brightness`, `image_contrast`, `image_gamma`, `image_rotate`, `image_flip_horizontal`, `image_flip_vertical`, `image_grayscale`, `export_html`, `export_svg`, `pager`, `auto_pager`, `watch`, `watch_interval`, `watch_debounce`, `watch_poll`, `watch_exit_on_error`, `watch_cache`, `batch`, `batch_input_root`, `batch_preserve_dirs`, `batch_name_template`, `jobs`, `progress`, `continue_on_error`, `overwrite`, `collision`, `theme`, `theme_file`, `plugins`, `micro_project`, `no_color`, `sanitize`. |
 
 #### rich config reference
 
@@ -1183,12 +1185,13 @@ rich asset [OPTIONS]
 
 | Option | Description |
 | --- | --- |
-| `--kind <KIND>` | What to pick (default emoji): an emoji prints as itself, a box style or spinner by name. Possible values: `emoji`, `box`, `spinner`. |
+| `--kind <KIND>` | What to pick (default emoji): an emoji prints as itself, a box style, spinner or micro asset by name. Possible values: `emoji`, `box`, `spinner`, `micro`. |
 | `--header <TEXT>` | The prompt above the list. |
 | `--height <ROWS>` | Show at most ROWS at once (default 10), fewer when the terminal is shorter. |
 | `--value <QUERY>` | Start with QUERY typed. |
 | `--selected <NAME>` | Focus NAME; the answer without a terminal and to an empty line. |
 | `--mouse` | Report the mouse: click a row to focus it and again to pick it, drag the border beside a preview (off by default: it takes text selection from the terminal) |
+| `--micro-project` | With --kind micro, list the project's ./.rich/micro/ assets too (trust it) |
 
 #### Examples
 
@@ -1196,6 +1199,12 @@ Pick one of rich's box styles by name, for --panel
 
 ```sh
 rich asset --kind box
+```
+
+Pick a micro asset by name, for :micro:NAME: in --print --emoji text
+
+```sh
+rich asset --kind micro
 ```
 
 ### rich explore
@@ -1217,6 +1226,7 @@ rich explore [OPTIONS] [FILE]
 | `--height <ROWS>` | Show at most ROWS at once (default 10), fewer when the terminal is shorter. |
 | `--value <QUERY>` | Start with QUERY searched. |
 | `--print <WHAT>` | What Enter prints: the node's JSONPath (default), or its value (a string as it is, anything else as JSON) Possible values: `path`, `value`. |
+| `--icons` | Mark true, false and null values with the status/success, status/error and status/info micro assets (drawn as the terminal can, or their emoji) |
 | `--mouse` | Report the mouse: click a row to focus it and again to pick it, drag the border beside a preview (off by default: it takes text selection from the terminal) |
 
 #### Arguments
@@ -1388,6 +1398,284 @@ Gate CI on a 10% slowdown
 rich bench compare baseline.json candidate.json --threshold 10
 ```
 
+### rich micro
+
+Micro assets: emoji-sized images and animations written :micro:name: (with --emoji). List, show, preview, add, remove and create them; install packs
+
+#### Usage
+
+```text
+rich micro [list | show | preview | add | remove | create | install | uninstall | packs] …
+```
+
+#### Commands
+
+| Command | Description |
+| --- | --- |
+| `list` | Every asset that resolves, drawn, with its size, kind, layer and alt text |
+| `show` | One asset: its metadata, fallbacks, files and how its name resolved |
+| `preview` | Draw an asset inline, as this terminal shows it, and magnified at the terminal's cell size; a package path or an image file (run through the pipeline) works too |
+| `add` | Copy a package (a folder or .richmicro file) into the user layer |
+| `remove` | Delete an asset's package from the user layer |
+| `create` | Run an image (PNG, APNG, GIF or JPEG) through the pipeline and write a package the registry accepts |
+| `install` | Install a pack (a folder or zip with pack.json) into the user layer |
+| `uninstall` | Remove an installed pack by name from the user layer |
+| `packs` | The packs in each layer and the assets they hold |
+
+#### Examples
+
+Every asset, drawn as this terminal can
+
+```sh
+rich micro list
+```
+
+One asset, inline and magnified
+
+```sh
+rich micro preview status/loading
+```
+
+Micro assets in text
+
+```sh
+rich -p --emoji "Deploying :micro:status/loading: done :micro:status/success:"
+```
+
+#### rich micro list
+
+Every asset that resolves, drawn, with its size, kind, layer and alt text
+
+##### Usage
+
+```text
+rich micro list [--layer built-in|user|project] [--micro-project] [--report json]
+```
+
+##### Options
+
+| Option | Description |
+| --- | --- |
+| `--layer <LAYER>` | Only this layer's assets. Possible values: `built-in`, `user`, `project`. |
+| `--report <FORMAT>` | json: write data to stdout (also --json) Possible values: `human`, `json`. |
+
+#### rich micro show
+
+One asset: its metadata, fallbacks, files and how its name resolved
+
+##### Usage
+
+```text
+rich micro show NAME [--report json]
+```
+
+##### Options
+
+| Option | Description |
+| --- | --- |
+| `--report <FORMAT>` | json: write data to stdout (also --json) Possible values: `human`, `json`. |
+
+##### Arguments
+
+| Argument | Description |
+| --- | --- |
+| `[NAME]` | The asset's name, e.g. status/success. |
+
+#### rich micro preview
+
+Draw an asset inline, as this terminal shows it, and magnified at the terminal's cell size; a package path or an image file (run through the pipeline) works too
+
+##### Usage
+
+```text
+rich micro preview NAME|PACKAGE|IMAGE [PIPELINE OPTIONS] [--report json]
+```
+
+##### Options
+
+| Option | Description |
+| --- | --- |
+| `--report <FORMAT>` | json: write data to stdout (also --json) Possible values: `human`, `json`. |
+| `--size <COLSxROWS>` | Cells the asset takes: 2x1 (default, an emoji's footprint) or 1x1. |
+| `--fit <FIT>` | contain (default) keeps the whole image; cover fills and crops. Possible values: `contain`, `cover`, `stretch`. |
+| `--anchor <ANCHOR>` | What cover keeps: center (default), top, bottom, left, right, …. |
+| `--brightness <F>` | Multiply brightness (1 = as is) |
+| `--contrast <F>` | Scale contrast (1 = as is) |
+| `--gamma <F>` | Gamma (above 1 brightens mid-tones) |
+| `--grayscale` | Gray levels only. |
+| `--sharpen <RADIUS>` | Unsharp mask of RADIUS pixels after fitting (e.g. 0.8) |
+| `--transparency <MODE>` | threshold[:ALPHA] (default threshold:128), keep, flatten:#rrggbb, or key:#rrggbb to make a background colour transparent. |
+| `--colors <PALETTE>` | Reduce to a palette (default truecolor) Possible values: `truecolor`, `256`, `16`, `grayscale`. |
+| `--dither <DITHER>` | Dithering for --colors (default none) Possible values: `none`, `floyd-steinberg`, `bayer`, `atkinson`. |
+| `--cell <WxH>` | Pixels per cell to make images for (default 8x16; preview: the terminal's) |
+
+##### Arguments
+
+| Argument | Description |
+| --- | --- |
+| `[TARGET]` | An asset name, a package, or an image. |
+
+#### rich micro add
+
+Copy a package (a folder or .richmicro file) into the user layer
+
+##### Usage
+
+```text
+rich micro add PACKAGE [--project] [--report json]
+```
+
+##### Options
+
+| Option | Description |
+| --- | --- |
+| `--project` | Use the project's ./.rich/micro/ instead of the user layer. |
+| `--report <FORMAT>` | json: write data to stdout (also --json) Possible values: `human`, `json`. |
+
+##### Arguments
+
+| Argument | Description |
+| --- | --- |
+| `[PACKAGE]` | The package to add. |
+
+#### rich micro remove
+
+Delete an asset's package from the user layer
+
+##### Usage
+
+```text
+rich micro remove NAME [--project] [--report json]
+```
+
+##### Options
+
+| Option | Description |
+| --- | --- |
+| `--project` | Use the project's ./.rich/micro/ instead of the user layer. |
+| `--report <FORMAT>` | json: write data to stdout (also --json) Possible values: `human`, `json`. |
+
+##### Arguments
+
+| Argument | Description |
+| --- | --- |
+| `[NAME]` | The asset to remove. |
+
+#### rich micro create
+
+Run an image (PNG, APNG, GIF or JPEG) through the pipeline and write a package the registry accepts
+
+##### Usage
+
+```text
+rich micro create IMAGE --name NAME --alt TEXT [--emoji E] [--text T] [OPTIONS]
+```
+
+##### Options
+
+| Option | Description |
+| --- | --- |
+| `--name <NAME>` | The asset's name: [a-z0-9_-] with / namespaces. |
+| `--alt <TEXT>` | Alt text (required) |
+| `--emoji <EMOJI>` | The emoji fallback. |
+| `--text <TEXT>` | The text fallback. |
+| `--license <SPDX>` | The asset's licence. |
+| `--author <NAME>` | Its author. |
+| `--version <VERSION>` | Its version. |
+| `--output <PATH>` | Where to write it (default ./NAME with / as ., or the layer with --add) |
+| `--archive` | Write a .richmicro zip, not a folder. |
+| `--add` | Write it into the user (or --project) layer. |
+| `--project` | Use the project's ./.rich/micro/ instead of the user layer. |
+| `--report <FORMAT>` | json: write data to stdout (also --json) Possible values: `human`, `json`. |
+| `--size <COLSxROWS>` | Cells the asset takes: 2x1 (default, an emoji's footprint) or 1x1. |
+| `--fit <FIT>` | contain (default) keeps the whole image; cover fills and crops. Possible values: `contain`, `cover`, `stretch`. |
+| `--anchor <ANCHOR>` | What cover keeps: center (default), top, bottom, left, right, …. |
+| `--brightness <F>` | Multiply brightness (1 = as is) |
+| `--contrast <F>` | Scale contrast (1 = as is) |
+| `--gamma <F>` | Gamma (above 1 brightens mid-tones) |
+| `--grayscale` | Gray levels only. |
+| `--sharpen <RADIUS>` | Unsharp mask of RADIUS pixels after fitting (e.g. 0.8) |
+| `--transparency <MODE>` | threshold[:ALPHA] (default threshold:128), keep, flatten:#rrggbb, or key:#rrggbb to make a background colour transparent. |
+| `--colors <PALETTE>` | Reduce to a palette (default truecolor) Possible values: `truecolor`, `256`, `16`, `grayscale`. |
+| `--dither <DITHER>` | Dithering for --colors (default none) Possible values: `none`, `floyd-steinberg`, `bayer`, `atkinson`. |
+| `--cell <WxH>` | Pixels per cell to make images for (default 8x16; preview: the terminal's) |
+
+##### Arguments
+
+| Argument | Description |
+| --- | --- |
+| `[IMAGE]` | The source image or animation. |
+
+##### Examples
+
+Make an asset from an image and add it to your layer
+
+```sh
+rich micro create logo.png --name team/logo --alt "our logo" --text TL --add
+```
+
+#### rich micro install
+
+Install a pack (a folder or zip with pack.json) into the user layer
+
+##### Usage
+
+```text
+rich micro install PACK [--project] [--report json]
+```
+
+##### Options
+
+| Option | Description |
+| --- | --- |
+| `--project` | Use the project's ./.rich/micro/ instead of the user layer. |
+| `--report <FORMAT>` | json: write data to stdout (also --json) Possible values: `human`, `json`. |
+
+##### Arguments
+
+| Argument | Description |
+| --- | --- |
+| `[PACK]` | The pack to install. |
+
+#### rich micro uninstall
+
+Remove an installed pack by name from the user layer
+
+##### Usage
+
+```text
+rich micro uninstall NAME [--project] [--report json]
+```
+
+##### Options
+
+| Option | Description |
+| --- | --- |
+| `--project` | Use the project's ./.rich/micro/ instead of the user layer. |
+| `--report <FORMAT>` | json: write data to stdout (also --json) Possible values: `human`, `json`. |
+
+##### Arguments
+
+| Argument | Description |
+| --- | --- |
+| `[NAME]` | The pack's name. |
+
+#### rich micro packs
+
+The packs in each layer and the assets they hold
+
+##### Usage
+
+```text
+rich micro packs [--micro-project] [--report json]
+```
+
+##### Options
+
+| Option | Description |
+| --- | --- |
+| `--report <FORMAT>` | json: write data to stdout (also --json) Possible values: `human`, `json`. |
+
 ### rich record
 
 Run tapes (scripted terminal sessions: type, press keys, wait for screen text, take screenshots) in a real terminal and write PNG, SVG and text screenshots, an asciinema cast, a GIF, an MP4 (with FFmpeg) and an HTML page with a player; --check compares screenshots with committed ones instead
@@ -1516,6 +1804,7 @@ Settings are read from these sources, lowest precedence first; a later source ov
 | `theme` | string | | | `--theme` | Select a named theme from config |
 | `theme_file` | string | | | `--theme-file` | Load styles from an upstream rich theme file ([styles] section); --theme and --theme-style override it |
 | `plugins` | list of paths | | | `--plugin` | Load a runtime plugin: a WASM module (.wasm, sandboxed) or a native library (.so, .dylib, .dll, which runs its own code), in a build with the wasm-plugins or dylib-plugins feature; repeatable. `rich plugins list` shows what is loaded |
+| `micro_project` | bool | | | `--micro-project` | Load micro assets from the project's .rich/micro/ (off by default: a project's assets load only when you trust it; ./rich.toml cannot turn this on) |
 | `no_color` | bool | | `NO_COLOR` | `--no-color` | Disable colored output (as does a non-empty NO_COLOR) |
 | `sanitize` | bool | | | `--sanitize` | Replace input terminal controls, JSON/notebook strings, titles and captions with visible inert text. On by default for `rich view` and text `rich diff`; --no-sanitize turns it off there |
 

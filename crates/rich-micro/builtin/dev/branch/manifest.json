@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "name": "dev/branch",
+  "alt": "branching line with three commit dots",
+  "size": "2x1",
+  "kind": "static",
+  "fallback": {
+    "emoji": "🔀",
+    "text": "Y"
+  },
+  "static": "static.png",
+  "version": "1.0.0",
+  "license": "MIT",
+  "author": "rs-rich-cli contributors"
+}

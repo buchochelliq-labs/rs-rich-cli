@@ -1,0 +1,30 @@
+❯ rich micro list --layer built-in
+┏━━━━┳━━━━━━━━━━━━━━━━┳━━━━━━┳━━━━━━━━━━┳━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃    ┃ Name           ┃ Size ┃ Kind     ┃ Layer    ┃ Alt text                                   ┃
+┡━━━━╇━━━━━━━━━━━━━━━━╇━━━━━━╇━━━━━━━━━━╇━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
+│ 🔀 │ dev/branch     │ 2x1  │ static   │ built-in │ branching line with three commit dots      │
+│ 🐛 │ dev/bug        │ 2x1  │ static   │ built-in │ green bug with six legs                    │
+│ 📦 │ dev/package    │ 2x1  │ static   │ built-in │ closed cardboard box                       │
+│ 💻 │ dev/terminal   │ 2x1  │ static   │ built-in │ terminal window with a prompt              │
+│ 🐱 │ fun/cat        │ 2x1  │ static   │ built-in │ orange cat face                            │
+│ ☕ │ fun/coffee     │ 2x1  │ animated │ built-in │ steaming cup of coffee                     │
+│ 💖 │ fun/heart      │ 2x1  │ animated │ built-in │ red heart, beating                         │
+│ ⭐ │ fun/star       │ 2x1  │ static   │ built-in │ yellow five-pointed star                   │
+│ ❌ │ status/error   │ 2x1  │ static   │ built-in │ red circle with a white cross              │
+│ ℹ⠀ │ status/info    │ 2x1  │ static   │ built-in │ blue circle with a white letter i          │
+│ ⏳ │ status/loading │ 2x1  │ animated │ built-in │ ring of dots turning, for work in progress │
+│ ✅ │ status/success │ 2x1  │ static   │ built-in │ green circle with a white check mark       │
+│ ⚠⠀ │ status/warning │ 2x1  │ static   │ built-in │ amber triangle with an exclamation mark    │
+└────┴────────────────┴──────┴──────────┴──────────┴────────────────────────────────────────────┘
+❯
+
+
+
+
+
+
+
+
+
+
+

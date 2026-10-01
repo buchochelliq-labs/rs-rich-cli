@@ -1,5 +1,6 @@
 //! An asset picker (#461, `rich asset`): emoji by shortcode name, table and
-//! panel box styles, and spinners, with a fuzzy search and a preview.
+//! panel box styles, spinners and (with the `micro` feature) micro assets,
+//! with a fuzzy search and a preview.
 //!
 //! Every list comes from core's public API: emoji glyphs through
 //! `rich::emoji::replace` (the names are those of core's table), the box
@@ -28,6 +29,10 @@ pub enum AssetKind {
     /// A box style for tables and panels.
     Box,
     Spinner,
+    /// A micro asset (`rs-rich-micro`), by name: drawn in the list and
+    /// magnified in the preview. Needs the `micro` feature.
+    #[cfg(feature = "micro")]
+    Micro,
 }
 
 impl AssetKind {
@@ -36,6 +41,8 @@ impl AssetKind {
             "emoji" => AssetKind::Emoji,
             "box" => AssetKind::Box,
             "spinner" => AssetKind::Spinner,
+            #[cfg(feature = "micro")]
+            "micro" => AssetKind::Micro,
             _ => return None,
         })
     }
@@ -71,6 +78,53 @@ pub fn emoji(name: &str) -> Option<String> {
     (glyph != code).then_some(glyph)
 }
 
+/// The cell size micro previews are magnified at: the default guess, so a
+/// preview looks the same everywhere.
+#[cfg(feature = "micro")]
+fn rich_art_cell() -> rich_micro::CellPixels {
+    rich_micro::CellPixels::DEFAULT
+}
+
+/// A micro asset's preview: the asset inline, its image magnified, and what
+/// it says about itself.
+#[cfg(feature = "micro")]
+struct MicroPreview {
+    asset: Arc<rich_micro::MicroAsset>,
+    still: Option<rich_micro::pipeline::Magnified>,
+}
+
+#[cfg(feature = "micro")]
+impl Renderable for MicroPreview {
+    fn rich_render(&self, console: &Console, options: &ConsoleOptions) -> Vec<Segment> {
+        let asset = &self.asset;
+        let mut head = rich_micro::placeholder(asset, rich_micro::FallbackPreference::Emoji);
+        head.append(
+            &format!(" {}", asset.name()),
+            Some(rich::Style::parse("bold").unwrap_or_default().into()),
+        );
+        let mut out = head.rich_render(console, options);
+        out.push(Segment::line());
+        if let Some(still) = &self.still {
+            out.extend(still.rich_render(console, options));
+        }
+        let fallback = asset.fallback();
+        let mut about = format!(
+            "{}\n{} {} · emoji {} · text {}",
+            asset.alt(),
+            asset.size(),
+            asset.kind().as_str(),
+            fallback.emoji.as_deref().unwrap_or("-"),
+            fallback.text.as_deref().unwrap_or("-"),
+        );
+        if let Some(license) = asset.license() {
+            about.push_str(&format!("\nlicence {license}"));
+        }
+        about.push_str(&format!("\n:micro:{}:", asset.name()));
+        out.extend(rich::Text::new(about).rich_render(console, options));
+        out
+    }
+}
+
 /// A small table drawn with a box style.
 struct BoxPreview(BoxSet);
 
@@ -92,6 +146,10 @@ pub struct AssetPicker {
 
 impl AssetPicker {
     pub fn new(prompt: impl Into<String>, kind: AssetKind) -> AssetPicker {
+        #[cfg(feature = "micro")]
+        if kind == AssetKind::Micro {
+            return AssetPicker::micro(prompt, &rich_micro::MicroRegistry::builtin());
+        }
         let mut prefixes = Vec::new();
         let items: Vec<Item<String>> = match kind {
             AssetKind::Emoji => EMOJI
@@ -123,11 +181,52 @@ impl AssetPicker {
                     Some(Item::new(name.to_string(), *name).preview(Preview::Text(preview)))
                 })
                 .collect(),
+            #[cfg(feature = "micro")]
+            AssetKind::Micro => unreachable!("built by AssetPicker::micro"),
         };
         let mut select = Select::new(prompt, items);
         select.prefixes = prefixes;
         select.prefix_plain = true;
         AssetPicker { kind, select }
+    }
+
+    /// Pick one of `registry`'s micro assets; the answer is its name. Each
+    /// row shows the asset (its placeholder, which the painter's graphics
+    /// draw over where the terminal can; its emoji or text elsewhere) and
+    /// its alt text; the preview magnifies its image.
+    #[cfg(feature = "micro")]
+    pub fn micro(prompt: impl Into<String>, registry: &rich_micro::MicroRegistry) -> AssetPicker {
+        let mut cache = rich_micro::ImageCache::new(8 << 20, None);
+        let limits = rich_micro::Limits::default();
+        let mut icons = Vec::new();
+        let items: Vec<Item<String>> = registry
+            .assets()
+            .into_iter()
+            .map(|asset| {
+                icons.push(Some(rich_micro::placeholder(
+                    asset,
+                    rich_micro::FallbackPreference::Emoji,
+                )));
+                let still = cache
+                    .prepare(asset, rich_art_cell(), false, &limits)
+                    .map(|prepared| {
+                        rich_micro::pipeline::Magnified(prepared.frames[0].image.clone())
+                    });
+                let preview = MicroPreview {
+                    asset: std::sync::Arc::clone(asset),
+                    still,
+                };
+                Item::new(asset.name().to_string(), asset.name())
+                    .description(asset.alt())
+                    .preview(Preview::Renderable(Arc::new(preview)))
+            })
+            .collect();
+        let mut select = Select::new(prompt, items);
+        select.set_icons(icons);
+        AssetPicker {
+            kind: AssetKind::Micro,
+            select,
+        }
     }
 
     pub fn kind(&self) -> AssetKind {
@@ -227,6 +326,8 @@ impl Component for AssetPicker {
             AssetKind::Emoji => "Emoji name",
             AssetKind::Box => "Box style",
             AssetKind::Spinner => "Spinner",
+            #[cfg(feature = "micro")]
+            AssetKind::Micro => "Micro asset",
         };
         let default = self.select.default_value();
         let default_label = self
@@ -301,5 +402,34 @@ mod tests {
         assert_eq!(boxes.items().len(), BOX_STYLES.len());
         let spinners = AssetPicker::new("Spinner", AssetKind::Spinner);
         assert_eq!(spinners.items().len(), rich::spinner::spinner_names().len());
+    }
+
+    #[cfg(feature = "micro")]
+    #[test]
+    fn lists_micro_assets_with_their_icons_and_previews() {
+        let picker = AssetPicker::new("Micro", AssetKind::Micro);
+        assert!(picker
+            .items()
+            .iter()
+            .any(|item| item.label == "status/success"));
+        let item = picker
+            .items()
+            .iter()
+            .find(|item| item.label == "status/loading")
+            .unwrap();
+        let shown = plain(&*item.preview.as_ref().unwrap().renderable(), 40);
+        assert!(
+            shown.contains("status/loading") && shown.contains("ring of dots"),
+            "{shown}"
+        );
+        assert!(shown.contains('▀'), "{shown}");
+        let (outcome, record) = crate::headless::run(
+            AssetPicker::new("Micro", AssetKind::Micro).query("heart"),
+            crate::headless::Script::new().keys("enter"),
+            60,
+            12,
+        );
+        assert_eq!(outcome.unwrap().value().unwrap(), "fun/heart");
+        assert!(record.frames.iter().any(|frame| frame.contains("💖")));
     }
 }

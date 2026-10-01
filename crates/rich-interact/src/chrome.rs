@@ -114,8 +114,14 @@ pub enum StatusItem {
     /// core's `Spinner` picks it, and the bar ticks while one shows.
     Spinner { name: String, text: String },
     /// A short label in a style of its own, padded by a space each side:
-    /// a mode, a count, a state. The badge a micro asset shows in later.
+    /// a mode, a count, a state.
     Badge { text: String, style: Style },
+    /// An icon, then markup: a micro asset's badge (`✅ deployed`). The
+    /// icon is one line of cells ([`kit::icon`]) with its style metadata,
+    /// so a micro asset's placeholder is drawn over by the painter's
+    /// graphics where the terminal can show images, and shows its emoji or
+    /// text fallback anywhere else.
+    Icon { icon: Vec<Segment>, text: String },
 }
 
 impl StatusItem {
@@ -132,6 +138,26 @@ impl StatusItem {
             name: name.into(),
             text: markup.into(),
         }
+    }
+
+    /// `icon` (one line of text, such as a micro asset's placeholder),
+    /// then `markup`.
+    pub fn icon(icon: &rich::Text, markup: impl Into<String>) -> StatusItem {
+        StatusItem::Icon {
+            icon: kit::icon(icon),
+            text: markup.into(),
+        }
+    }
+
+    /// A micro asset (its placeholder, drawn by the painter's graphics
+    /// where the terminal can, its emoji or text elsewhere), then `markup`.
+    /// Needs the `micro` feature.
+    #[cfg(feature = "micro")]
+    pub fn micro(asset: &rich_micro::MicroAsset, markup: impl Into<String>) -> StatusItem {
+        StatusItem::icon(
+            &rich_micro::placeholder(asset, rich_micro::FallbackPreference::Emoji),
+            markup,
+        )
     }
 
     /// A badge in `style`, a style definition (`bold white on blue`); one
@@ -316,6 +342,14 @@ impl<M> StatusBar<M> {
                     line
                 }
                 StatusItem::Badge { text, style } => vec![kit::text(format!(" {text} "), style)],
+                StatusItem::Icon { icon, text } => {
+                    let mut line = icon.clone();
+                    if !text.is_empty() {
+                        line.push(kit::plain(" "));
+                        line.extend(inline(context, text));
+                    }
+                    line
+                }
             }
         };
         let join = |right: bool| -> Vec<Segment> {
@@ -484,6 +518,7 @@ impl Crumbs {
 }
 
 type PickHandler<'a, M> = Box<dyn FnMut(usize, &Crumbs) -> Flow<M> + 'a>;
+type IconFor<'a> = Box<dyn Fn(usize, &str) -> Option<rich::Text> + 'a>;
 
 /// Where you are, as a path of crumbs (#482): `project › src › main.rs`,
 /// the last in bold. A path wider than the line loses crumbs from the
@@ -492,6 +527,7 @@ type PickHandler<'a, M> = Box<dyn FnMut(usize, &Crumbs) -> Flow<M> + 'a>;
 /// says. It takes no focus and no keys.
 pub struct Breadcrumbs<'a, M = ()> {
     crumbs: Crumbs,
+    icons: Option<IconFor<'a>>,
     separator: String,
     theme: Theme,
     current: Style,
@@ -509,12 +545,21 @@ impl<'a, M> Breadcrumbs<'a, M> {
         crumbs.set(path);
         Breadcrumbs {
             crumbs,
+            icons: None,
             separator: "›".to_string(),
             theme: Theme::default(),
             current: style("bold"),
             mouse: false,
             on_pick: None,
         }
+    }
+
+    /// An icon before a crumb: `icon(index, crumb)` returns one line of
+    /// text (a micro asset's placeholder, say) or `None`. It counts in the
+    /// crumb's width and clicks on it pick the crumb.
+    pub fn icons(mut self, icon: impl Fn(usize, &str) -> Option<rich::Text> + 'a) -> Self {
+        self.icons = Some(Box::new(icon));
+        self
     }
 
     /// What goes between crumbs (default `›`).
@@ -553,7 +598,22 @@ impl<'a, M> Breadcrumbs<'a, M> {
         let path = self.crumbs.get();
         let separator = format!(" {} ", self.separator);
         let gap = cell_len(&separator);
-        let widths: Vec<usize> = path.iter().map(|crumb| cell_len(crumb)).collect();
+        let icons: Vec<Option<Vec<Segment>>> = path
+            .iter()
+            .enumerate()
+            .map(|(index, crumb)| {
+                self.icons
+                    .as_ref()
+                    .and_then(|icon| icon(index, crumb))
+                    .map(|text| kit::icon(&text))
+                    .filter(|icon| !icon.is_empty())
+            })
+            .collect();
+        let widths: Vec<usize> = path
+            .iter()
+            .zip(&icons)
+            .map(|(crumb, icon)| cell_len(crumb) + icon.as_ref().map_or(0, |i| kit::width(i) + 1))
+            .collect();
         // Drop crumbs from the left until the rest fits after `… › `.
         let mut first = 0;
         let total = |from: usize| -> usize {
@@ -581,6 +641,10 @@ impl<'a, M> Breadcrumbs<'a, M> {
                 column += gap;
             }
             let last = index + 1 == path.len();
+            if let Some(icon) = &icons[index] {
+                line.extend(icon.iter().cloned());
+                line.push(kit::plain(" "));
+            }
             line.push(if last {
                 kit::text(crumb.clone(), &self.current)
             } else {
@@ -680,5 +744,24 @@ mod tests {
         assert_eq!(text(&crumbs.layout(18).0), "… › src › main.rs");
         let (_, spans) = crumbs.layout(40);
         assert_eq!(spans[1], (1, 7..14));
+        let crumbs: Breadcrumbs = Breadcrumbs::new(["home", "src"])
+            .icons(|index, _| (index == 1).then(|| rich::Text::new("[]")));
+        let (line, spans) = crumbs.layout(40);
+        assert_eq!(text(&line), "home › [] src");
+        assert_eq!(spans[1], (1, 7..13));
+    }
+
+    #[test]
+    fn icons_keep_their_metadata() {
+        let mut meta = rich::style::Meta::new();
+        meta.insert("rich.micro", rich::style::MetaValue::Str("x".into()));
+        let mut icon = rich::Text::new("");
+        icon.append("ok", Some(Style::from_meta(meta).into()));
+        let bar: StatusBar = StatusBar::new().left("a", StatusItem::icon(&icon, "deployed"));
+        assert_eq!(bar.line_text(20), "ok deployed");
+        let StatusItem::Icon { icon, .. } = StatusItem::icon(&icon, "") else {
+            unreachable!()
+        };
+        assert!(icon[0].style.as_ref().unwrap().meta_ref().is_some());
     }
 }

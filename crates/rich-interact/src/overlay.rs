@@ -169,6 +169,8 @@ pub fn palette_keymap() -> Keymap {
 /// what it lists is what the host can do then.
 pub struct Palette {
     commands: Vec<Command>,
+    /// An icon before a category's name, by category.
+    icons: Vec<(String, Vec<Segment>)>,
     /// Indices into `commands` of those listed: in an active context.
     listed: Vec<usize>,
     active: Option<Vec<String>>,
@@ -184,6 +186,7 @@ impl Palette {
     pub fn new(commands: impl IntoIterator<Item = Command>) -> Palette {
         let mut palette = Palette {
             commands: commands.into_iter().collect(),
+            icons: Vec::new(),
             listed: Vec::new(),
             active: None,
             filter: FilterState::default(),
@@ -209,6 +212,27 @@ impl Palette {
     }
 
     /// Add a command.
+    /// Show `icon` (one line of text: a micro asset's placeholder, say)
+    /// before `category`'s name on each of its commands.
+    pub fn category_icon(mut self, category: impl Into<String>, icon: &rich::Text) -> Self {
+        let category = category.into();
+        self.icons.retain(|(known, _)| *known != category);
+        self.icons.push((category, kit::icon(icon)));
+        self
+    }
+
+    fn icon(&self, category: &str) -> Option<&[Segment]> {
+        self.icons
+            .iter()
+            .find(|(known, _)| known == category)
+            .map(|(_, icon)| icon.as_slice())
+    }
+
+    /// A category's width: its icon and a space, then its name.
+    fn category_cells(&self, category: &str) -> usize {
+        cell_len(category) + self.icon(category).map_or(0, |icon| kit::width(icon) + 1)
+    }
+
     pub fn command(mut self, command: Command) -> Self {
         self.commands.push(command);
         self.relist();
@@ -331,12 +355,20 @@ impl Palette {
         let (in_category, in_label): (Vec<usize>, Vec<usize>) =
             positions.iter().partition(|&&p| p < split);
         let in_label: Vec<usize> = in_label.iter().map(|p| p - split).collect();
-        let mut category = kit::highlight(
+        let mut category = match self.icon(&command.category) {
+            Some(icon) => {
+                let mut cells = icon.to_vec();
+                cells.push(kit::plain(" "));
+                cells
+            }
+            None => Vec::new(),
+        };
+        category.extend(kit::highlight(
             &command.category,
             &in_category,
             Some(&theme.hint),
             &theme.matched,
-        );
+        ));
         category.push(kit::plain(" "));
         line.extend(kit::pad(category, category_width + 1));
         let base = focused.then_some(&theme.focused);
@@ -442,7 +474,7 @@ impl Component for Palette {
         let category_width = self
             .listed
             .iter()
-            .map(|&index| cell_len(&self.commands[index].category))
+            .map(|&index| self.category_cells(&self.commands[index].category))
             .max()
             .unwrap_or(0)
             .min(width / 3);
@@ -929,6 +961,7 @@ pub struct Overlays<'a, M> {
     layers: Layers<'a, M>,
     keymap: Keymap,
     commands: Vec<Command>,
+    category_icons: Vec<(String, rich::Text)>,
     handlers: Vec<(String, Handler<'a, M>)>,
     picked: Rc<RefCell<Option<Picked>>>,
     region: Option<ActionTarget>,
@@ -946,6 +979,7 @@ impl<'a, M: 'a> Overlays<'a, M> {
             layers: Layers::new(component),
             keymap: overlays_keymap(),
             commands: Vec::new(),
+            category_icons: Vec::new(),
             handlers: Vec::new(),
             picked: Rc::new(RefCell::new(None)),
             region: None,
@@ -962,6 +996,15 @@ impl<'a, M: 'a> Overlays<'a, M> {
     /// [`SHORTCUTS`], [`ACTIONS`]); no keys turns it off.
     pub fn rebind(mut self, action: &str, keys: impl IntoIterator<Item = Key>) -> Self {
         self.keymap.rebind(action, keys);
+        self
+    }
+
+    /// Show `icon` before `category` in the palette: see
+    /// [`Palette::category_icon`].
+    pub fn category_icon(mut self, category: impl Into<String>, icon: rich::Text) -> Self {
+        let category = category.into();
+        self.category_icons.retain(|(known, _)| *known != category);
+        self.category_icons.push((category, icon));
         self
     }
 
@@ -1098,11 +1141,15 @@ impl<'a, M: 'a> Overlays<'a, M> {
             .into_iter()
             .filter(|b| !b.keys.is_empty() && b.id() != format!("overlays.{PALETTE}"));
         // Your commands first: they are what the host is for.
-        Palette::new(self.commands.iter().cloned())
+        let mut palette = Palette::new(self.commands.iter().cloned())
             .commands(bindings.map(|b| Command::from_binding(&b)))
             .contexts(active)
             .hints(&keymap)
-            .theme(self.theme.clone())
+            .theme(self.theme.clone());
+        for (category, icon) in &self.category_icons {
+            palette = palette.category_icon(category.clone(), icon);
+        }
+        palette
     }
 
     /// The area the component and its layers take: all but the chrome.
@@ -1381,6 +1428,33 @@ mod tests {
         let help = help.query("tab");
         let found: Vec<String> = help.matches().iter().map(|b| b.id()).collect();
         assert_eq!(found, ["tabs.next"]);
+    }
+
+    #[test]
+    fn palette_categories_show_their_icons() {
+        let palette = Palette::new([
+            Command::new("a", "deploy").category("ship"),
+            Command::new("b", "open").category("file"),
+        ])
+        .category_icon("ship", &rich::Text::new("^^"));
+        let console = rich::Console::new();
+        let context = Context {
+            console: &console,
+            width: 40,
+            height: 6,
+        };
+        let view = palette.render(&context);
+        let rows: Vec<String> = view
+            .lines
+            .iter()
+            .map(|line| line.iter().map(|s| s.text.as_str()).collect::<String>())
+            .collect();
+        assert!(
+            rows.iter().any(|r| r.contains("^^ ship deploy")),
+            "{rows:?}"
+        );
+        // Categories line up: the other one is padded past the icon.
+        assert!(rows.iter().any(|r| r.contains("file    open")), "{rows:?}");
     }
 
     #[test]
