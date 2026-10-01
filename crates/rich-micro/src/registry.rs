@@ -416,7 +416,9 @@ impl MicroRegistry {
             let slot = &self.layers[layer.index()];
             let mut entry = PrecedenceLayer::new(layer.as_str());
             if let Some(origin) = &slot.origin {
-                entry = entry.origin(origin.clone());
+                // A layer directory's path is the filesystem's, and may hold
+                // terminal controls: shown, never run.
+                entry = entry.origin(rich_ext::sanitize_terminal_controls(origin));
             }
             let mut values: BTreeMap<&str, String> = BTreeMap::new();
             for (name, asset) in &slot.assets {

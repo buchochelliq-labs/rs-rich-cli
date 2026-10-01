@@ -116,7 +116,8 @@ pub enum Loaded {
 }
 
 /// Check a path from a manifest or an archive: relative, `/`-separated, no
-/// empty, `.` or `..` segments, no backslashes, drive letters or NULs.
+/// empty, `.` or `..` segments, no backslashes, drive letters, NULs or other
+/// control characters.
 /// Returns it normalised (without a trailing `/`).
 pub fn safe_relative(path: &str) -> Result<String, MicroError> {
     let unsafe_path = |why: &str| MicroError::UnsafePath(format!("unsafe path {path:?}: {why}"));
@@ -128,6 +129,11 @@ pub fn safe_relative(path: &str) -> Result<String, MicroError> {
     }
     if path.contains('\\') || path.contains('\0') || path.contains(':') {
         return Err(unsafe_path("backslashes, colons and NULs are not allowed"));
+    }
+    // Paths are quoted in messages and `rich micro show`: no C0 or C1
+    // control or DEL may reach the terminal through one.
+    if path.chars().any(char::is_control) {
+        return Err(unsafe_path("control characters are not allowed"));
     }
     let trimmed = path.strip_suffix('/').unwrap_or(path);
     for segment in trimmed.split('/') {
@@ -437,6 +443,23 @@ fn string<'a>(
     }
 }
 
+/// [`string`] for free text shown to people (`version`, `license`,
+/// `author`, `description`): no C0 or C1 control or DEL, which a terminal
+/// would run rather than show.
+fn plain<'a>(
+    map: &'a Map<String, Value>,
+    key: &str,
+    what: &str,
+) -> Result<Option<&'a str>, MicroError> {
+    let value = string(map, key, what)?;
+    if value.is_some_and(|value| value.chars().any(char::is_control)) {
+        return Err(MicroError::Manifest(format!(
+            "{what}: {key:?} holds control characters"
+        )));
+    }
+    Ok(value)
+}
+
 fn required<'a>(map: &'a Map<String, Value>, key: &str, what: &str) -> Result<&'a str, MicroError> {
     string(map, key, what)?.ok_or_else(|| MicroError::Manifest(format!("{what}: missing {key:?}")))
 }
@@ -545,13 +568,13 @@ fn read_package(
     for alias in strings(&map, "aliases", &what)? {
         asset = asset.with_alias(&alias).map_err(in_manifest)?;
     }
-    if let Some(version) = string(&map, "version", &what)? {
+    if let Some(version) = plain(&map, "version", &what)? {
         asset = asset.with_version(version);
     }
-    if let Some(license) = string(&map, "license", &what)? {
+    if let Some(license) = plain(&map, "license", &what)? {
         asset = asset.with_license(license);
     }
-    if let Some(author) = string(&map, "author", &what)? {
+    if let Some(author) = plain(&map, "author", &what)? {
         asset = asset.with_author(author);
     }
 
@@ -674,6 +697,9 @@ fn read_pack(
     check_keys(&map, PACK_KEYS, &what)?;
     let name = required(&map, "name", &what)?;
     check_name(name)?;
+    for key in ["description", "license", "author"] {
+        plain(&map, key, &what)?;
+    }
     let packages = strings(&map, "packages", &what)?;
     if packages.len() > limits.max_packages {
         return Err(MicroError::Limit(format!(
@@ -683,7 +709,7 @@ fn read_pack(
     }
     let mut pack = Pack {
         name: name.to_string(),
-        version: string(&map, "version", &what)?.map(str::to_string),
+        version: plain(&map, "version", &what)?.map(str::to_string),
         assets: Vec::new(),
         rejected: Vec::new(),
     };
@@ -801,6 +827,11 @@ mod tests {
             "C:/x",
             "a\\b",
             "a\0",
+            "a\u{1b}]0;title\u{7}",
+            "a\u{7f}",
+            "a\u{9b}2J",
+            "a\u{85}b",
+            "a\tb",
         ] {
             assert!(
                 matches!(safe_relative(bad), Err(MicroError::UnsafePath(_))),

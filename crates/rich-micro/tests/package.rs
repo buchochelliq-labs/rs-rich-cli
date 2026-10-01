@@ -404,3 +404,49 @@ fn neither_package_nor_pack() {
         "{error}"
     );
 }
+
+#[test]
+fn control_characters_in_manifest_and_pack_strings_are_refused() {
+    // Release-test audit A, F1: a manifest or pack string reaches the
+    // terminal through `rich micro show`, `packs` and the loading warnings,
+    // so none may hold a C0 or C1 control or DEL.
+    let image = || vec![("static.png", png(16, 16))];
+    let evil = "\u{1b}]0;PWNED\u{7}\u{1b}[31mRED";
+    for key in ["version", "license", "author"] {
+        for value in [evil, "1\u{1b}[2J", "a\u{7f}", "a\u{9b}2J", "a\u{85}"] {
+            let mut m = manifest("ok");
+            m[key] = json!(value);
+            let error = rejects(m, &image()).to_string();
+            assert!(error.contains("control"), "{key}={value:?}: {error}");
+        }
+    }
+    let mut m = manifest("ok");
+    m["static"] = json!("s\u{1b}[2J.png");
+    let error = rejects(m, &[("s\u{1b}[2J.png", png(16, 16))]);
+    assert!(matches!(error, MicroError::UnsafePath(_)), "{error}");
+
+    let dir = tempfile::tempdir().unwrap();
+    let pack = dir.path().join("evil");
+    simple_package(&pack.join("good"), "evil/good");
+    for key in ["version", "description", "license", "author"] {
+        let mut index = json!({"schema_version": 1, "name": "evil", "packages": ["good"]});
+        index[key] = json!(evil);
+        std::fs::write(pack.join("pack.json"), index.to_string()).unwrap();
+        let error = load_pack(&pack, Layer::User, &limits()).unwrap_err();
+        assert!(error.to_string().contains("control"), "{key}: {error}");
+    }
+    // A package entry naming a control character is refused as unsafe; the
+    // rest of the pack still loads.
+    std::fs::write(
+        pack.join("pack.json"),
+        json!({"schema_version": 1, "name": "evil", "packages": ["good", evil]}).to_string(),
+    )
+    .unwrap();
+    let loaded = load_pack(&pack, Layer::User, &limits()).unwrap();
+    assert_eq!(loaded.assets.len(), 1);
+    assert!(
+        matches!(loaded.rejected[0].1, MicroError::UnsafePath(_)),
+        "{:?}",
+        loaded.rejected
+    );
+}

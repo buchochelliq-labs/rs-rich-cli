@@ -501,6 +501,18 @@ impl Context {
     }
 }
 
+/// A line on standard error. Everything these messages quote (package
+/// paths, pack entries, manifest fields, errors) is untrusted, so its
+/// terminal controls are shown, never run.
+fn note(line: &str) {
+    eprintln!("{}", controls::shown(line));
+}
+
+/// Untrusted text for a table cell, its controls shown.
+fn shown_cell(value: &str) -> Text {
+    Text::new(controls::shown(value))
+}
+
 /// Loading problems, as warnings on standard error.
 fn warn(report: &rich_micro::LoadReport) {
     for rejected in &report.rejected {
@@ -509,17 +521,17 @@ fn warn(report: &rich_micro::LoadReport) {
             .as_deref()
             .map(|p| format!(" ({p})"))
             .unwrap_or_default();
-        eprintln!(
+        note(&format!(
             "rich: warning: micro asset {}{package} not loaded: {}",
-            controls::shown(&rejected.path.display().to_string()),
-            controls::shown(&rejected.error.to_string())
-        );
+            rejected.path.display(),
+            rejected.error
+        ));
     }
     for collision in &report.collisions {
-        eprintln!(
+        note(&format!(
             "rich: warning: micro asset {} in the {} layer: kept {}, ignored {}",
             collision.name, collision.layer, collision.kept, collision.dropped
-        );
+        ));
     }
 }
 
@@ -606,17 +618,17 @@ fn list(context: &Context, request: &Request) -> Result<(), Failure> {
     for asset in &assets {
         table.add_row_cells(vec![
             rich::table::Cell::Text(rich_micro::placeholder(asset, preference)),
-            Text::new(asset.name()).into(),
+            shown_cell(asset.name()).into(),
             Text::new(asset.size().to_string()).into(),
             Text::new(asset.kind().as_str()).into(),
             Text::new(asset.origin().layer.as_str()).into(),
-            Text::new(asset.alt()).into(),
+            shown_cell(asset.alt()).into(),
         ]);
     }
     let registry = Arc::new(registry);
     context.print(&registry, table);
-    if let Some(note) = untrusted_note(&report) {
-        eprintln!("rich: note: {note}");
+    if let Some(untrusted) = untrusted_note(&report) {
+        note(&format!("rich: note: {untrusted}"));
     }
     Ok(())
 }
@@ -667,7 +679,7 @@ fn show(context: &Context, request: &Request) -> Result<(), Failure> {
         rich_micro::placeholder(&asset, preference(&console)),
     );
     for (key, value) in details(&asset) {
-        row(&mut table, key, Text::new(value.as_str()));
+        row(&mut table, key, shown_cell(&value));
     }
     let registry = Arc::new(registry);
     context.print(&registry, table);
@@ -942,7 +954,7 @@ fn preview(context: &Context, request: &Request) -> Result<(), Failure> {
         console.print(
             &Text::from_markup(&format!(
                 "[bold]{}[/] → {} cells, {width}×{height} pixels, {} frame(s)",
-                rich::markup::escape(&path.display().to_string()),
+                rich::markup::escape(&controls::shown(&path.display().to_string())),
                 processed.size,
                 processed.frames.len()
             ))
@@ -988,7 +1000,7 @@ fn preview(context: &Context, request: &Request) -> Result<(), Failure> {
     for (key, value) in details(&asset) {
         table.add_row_cells(vec![
             Text::styled(key, Style::parse("bold").unwrap_or_default()).into(),
-            Text::new(value.as_str()).into(),
+            shown_cell(&value).into(),
         ]);
     }
     table.add_row_cells(vec![
@@ -1072,7 +1084,7 @@ fn done(context: &Context, value: serde_json::Value, message: String) {
     if context.json {
         context.out_json(&value);
     } else {
-        eprintln!("{message}");
+        note(&message);
     }
 }
 
@@ -1213,7 +1225,7 @@ fn create(context: &Context, request: &Request) -> Result<(), Failure> {
         }));
         return Ok(());
     }
-    eprintln!(
+    note(&format!(
         "created {} ({} {}, {} frame(s)){}: {}",
         asset.name(),
         asset.size(),
@@ -1223,7 +1235,7 @@ fn create(context: &Context, request: &Request) -> Result<(), Failure> {
             .map(|l| format!(" in the {l} layer"))
             .unwrap_or_default(),
         dest.display()
-    );
+    ));
     let console = context.console();
     console.print(&filmstrip(&processed.frames, console.width()));
     Ok(())
@@ -1251,10 +1263,10 @@ fn install(context: &Context, request: &Request) -> Result<(), Failure> {
     }
     for (package, error) in &pack.rejected {
         if !context.json {
-            eprintln!(
+            note(&format!(
                 "rich: warning: {package} in pack {} not loaded: {error}",
                 pack.name
-            );
+            ));
         }
     }
     done(
@@ -1374,19 +1386,19 @@ fn packs(context: &Context) -> Result<(), Failure> {
         .add_column("Path");
     for (layer, name, version, path, assets) in &rows {
         table.add_row_cells(vec![
-            Text::new(name.as_str()).into(),
-            Text::new(version.as_deref().unwrap_or("-")).into(),
+            shown_cell(name).into(),
+            shown_cell(version.as_deref().unwrap_or("-")).into(),
             Text::new(layer.as_str()).into(),
             Text::new(assets.len().to_string()).into(),
-            Text::new(path.as_str()).into(),
+            shown_cell(path).into(),
         ]);
     }
     context.console().print(&table);
     if project_hidden {
-        eprintln!(
+        note(&format!(
             "rich: note: {} is not loaded: the project is not trusted (pass --micro-project)",
             project.display()
-        );
+        ));
     }
     Ok(())
 }

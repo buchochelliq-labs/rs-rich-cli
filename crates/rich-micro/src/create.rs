@@ -98,6 +98,20 @@ impl PackageSpec {
         for alias in &self.aliases {
             asset = asset.with_alias(alias)?;
         }
+        for (key, value) in [
+            ("version", &self.version),
+            ("license", &self.license),
+            ("author", &self.author),
+        ] {
+            if value
+                .as_deref()
+                .is_some_and(|value| value.chars().any(char::is_control))
+            {
+                return Err(MicroError::Manifest(format!(
+                    "the {key} holds control characters"
+                )));
+            }
+        }
         Ok(())
     }
 
@@ -291,6 +305,9 @@ mod tests {
         assert!(write_package(&dest, &spec, &processed, false).is_err());
         let spec = PackageSpec::new("ok", "alt").text("TOO-WIDE");
         assert!(write_package(&dest, &spec, &processed, false).is_err());
+        let spec = PackageSpec::new("ok", "alt").author("\u{1b}]0;title\u{7}");
+        let error = write_package(&dest, &spec, &processed, false).unwrap_err();
+        assert!(error.to_string().contains("control"), "{error}");
         assert!(!dest.exists());
     }
 

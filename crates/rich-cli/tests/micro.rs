@@ -312,3 +312,109 @@ fn asset_picks_micro_assets_by_name() {
     );
     assert_eq!(out.status.code(), Some(2));
 }
+
+/// A PNG header (signature, IHDR, IDAT, IEND): enough for the package
+/// reader's header check.
+fn png(width: u32, height: u32) -> Vec<u8> {
+    let mut out = b"\x89PNG\r\n\x1a\n".to_vec();
+    let mut chunk = |kind: &[u8], data: &[u8]| {
+        out.extend((data.len() as u32).to_be_bytes());
+        out.extend(kind);
+        out.extend(data);
+        out.extend([0; 4]);
+    };
+    let mut ihdr = width.to_be_bytes().to_vec();
+    ihdr.extend(height.to_be_bytes());
+    ihdr.extend([8, 6, 0, 0, 0]);
+    chunk(b"IHDR", &ihdr);
+    chunk(b"IDAT", &[]);
+    chunk(b"IEND", &[]);
+    out
+}
+
+/// A package directory at `dir` holding `manifest`.
+fn package(dir: &Path, manifest: serde_json::Value) {
+    std::fs::create_dir_all(dir).unwrap();
+    std::fs::write(dir.join("manifest.json"), manifest.to_string()).unwrap();
+    std::fs::write(dir.join("s.png"), png(16, 16)).unwrap();
+}
+
+fn simple_manifest(name: &str) -> serde_json::Value {
+    serde_json::json!({
+        "schema_version": 1, "name": name, "alt": "a square",
+        "static": "s.png", "fallback": {"text": "ok"},
+    })
+}
+
+/// No terminal control (ESC, BEL, C1 CSI) reaches the terminal.
+fn assert_inert(what: &str, out: &Output) {
+    for (stream, bytes) in [("stdout", &out.stdout), ("stderr", &out.stderr)] {
+        let shown = text(bytes);
+        assert!(
+            !shown.contains(['\u{1b}', '\u{7}', '\u{9b}']),
+            "{what} {stream}: {shown:?}"
+        );
+    }
+}
+
+#[test]
+fn untrusted_package_strings_never_reach_the_terminal_raw() {
+    // Release-test audit A, F1: pack entry names, manifest fields and the
+    // paths packages live at are untrusted; every message that quotes them
+    // shows their controls instead of executing them.
+    let (root, work, home) = dirs();
+    let evil = "\u{1b}]0;PWNED\u{7}\u{1b}[31mRED";
+    // A pack naming a package with controls in it.
+    let pack = root.path().join("evilpack");
+    package(&pack.join("good"), simple_manifest("evil/good"));
+    std::fs::write(
+        pack.join("pack.json"),
+        serde_json::json!({"schema_version": 1, "name": "evil", "packages": ["good", evil]})
+            .to_string(),
+    )
+    .unwrap();
+    let out = rich(&work, &home, &["micro", "install", pack.to_str().unwrap()]);
+    assert!(out.status.success(), "{}", text(&out.stderr));
+    assert_inert("install", &out);
+    assert!(
+        text(&out.stderr).contains("␛]0;PWNED␇"),
+        "{}",
+        text(&out.stderr)
+    );
+    let out = rich(&work, &home, &["micro", "list"]);
+    assert_inert("list", &out);
+    let out = rich(&work, &home, &["micro", "packs"]);
+    assert_inert("packs", &out);
+
+    // A package whose manifest carries controls is refused, and saying so
+    // does not run them.
+    let pkg = root.path().join("evilpkg");
+    let mut manifest = simple_manifest("evilauthor");
+    manifest["author"] = serde_json::json!(evil);
+    manifest["version"] = serde_json::json!("1\u{1b}[2J");
+    package(&pkg, manifest);
+    let out = rich(&work, &home, &["micro", "add", pkg.to_str().unwrap()]);
+    assert_inert("add", &out);
+    assert!(!out.status.success(), "{}", text(&out.stdout));
+    let out = rich(&work, &home, &["micro", "show", "evilauthor"]);
+    assert_inert("show", &out);
+
+    // Packages in user-layer folders whose names hold controls: their
+    // origins (in `show`, `explain` and the collision warning) are shown.
+    let user = home.join(".config/rich/micro");
+    package(&user.join(format!("a{evil}")), simple_manifest("team/x"));
+    package(&user.join(format!("b{evil}")), simple_manifest("team/x"));
+    let out = rich(&work, &home, &["micro", "show", "team/x"]);
+    assert!(out.status.success(), "{}", text(&out.stderr));
+    assert_inert("show (origin)", &out);
+    let out = rich(&work, &home, &["micro", "remove", "team/x"]);
+    assert_inert("remove", &out);
+
+    // An untrusted project under a directory whose name holds controls.
+    let project = root.path().join(format!("p{evil}"));
+    std::fs::create_dir_all(project.join(".rich/micro")).unwrap();
+    for args in [&["micro", "list"][..], &["micro", "packs"]] {
+        let out = rich(&project, &home, args);
+        assert_inert("untrusted note", &out);
+    }
+}
