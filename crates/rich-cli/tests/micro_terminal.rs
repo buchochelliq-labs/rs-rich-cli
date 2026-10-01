@@ -190,6 +190,28 @@ fn exports_and_the_pager_get_the_fallback_on_a_graphics_terminal() {
 }
 
 #[test]
+fn the_cell_size_query_keeps_typeahead() {
+    // F3: with no pixel size from the window and no RICH_CELL_PIXELS, rich
+    // asks the terminal (`CSI 16 t`). What the user typed before that must
+    // reach the next program, not the query's reader.
+    let dir = tempfile::tempdir().unwrap();
+    let home = dir.path().join("home");
+    std::fs::create_dir_all(&home).unwrap();
+    let env = terminal_env(false, &[("HOME", home.to_str().unwrap())]);
+    let script =
+        format!("sleep 0.3; '{RICH}' -p 'x :micro:status/success:' --emoji; read x; echo GOT=[$x]");
+    let out = in_pty(
+        "/bin/sh",
+        &["-c", &script],
+        dir.path(),
+        &env,
+        b"typed-ahead\n",
+        Duration::from_secs(20),
+    );
+    assert!(out.contains("GOT=[typed-ahead]"), "{out:?}");
+}
+
+#[test]
 fn a_background_job_is_not_stopped_by_the_cell_size_query() {
     // F4: a job in the background may not change the terminal's modes; the
     // kernel stops it (SIGTTOU) until `fg`. The query is skipped there.
@@ -211,4 +233,34 @@ fn a_background_job_is_not_stopped_by_the_cell_size_query() {
     );
     assert!(out.contains("END"), "{out:?}");
     assert!(!out.contains("Stopped"), "{out:?}");
+}
+
+#[test]
+fn the_cell_size_query_reads_only_the_replies() {
+    // F3: a terminal that answers is still asked, and the reader stops at
+    // the device-attributes reply. A key pressed while the terminal was
+    // answering ("zz" and Return before the replies) is given back to the
+    // next program where the system allows it (TIOCSTI).
+    let dir = tempfile::tempdir().unwrap();
+    let home = dir.path().join("home");
+    std::fs::create_dir_all(&home).unwrap();
+    let env = terminal_env(false, &[("HOME", home.to_str().unwrap())]);
+    let script = format!(
+        "'{RICH}' micro preview status/success --report json; \
+         read x; echo GOT=[$x]"
+    );
+    let out = in_pty_answering(
+        "/bin/sh",
+        &["-c", &script],
+        dir.path(),
+        &env,
+        b"",
+        Some(("\u{1b}[16t\u{1b}[c", b"zz\r\x1b[6;20;10t\x1b[?62;22c")),
+        Duration::from_secs(20),
+    );
+    assert!(out.contains("\"cell_pixels\": \"10x20\""), "{out:?}");
+    let tiocsti = std::fs::read_to_string("/proc/sys/dev/tty/legacy_tiocsti");
+    if tiocsti.map_or(true, |v| v.trim() == "1") {
+        assert!(out.contains("GOT=[zz]"), "{out:?}");
+    }
 }

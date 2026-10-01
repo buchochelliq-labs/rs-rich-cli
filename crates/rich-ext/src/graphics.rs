@@ -10,9 +10,15 @@
 //! when both stdin and stdout are a terminal, so a pipe is never written a
 //! query and never waits for a reply.
 //!
-//! The query is skipped unless the process is in the terminal's foreground
-//! process group: a background job that touched the terminal's modes would
-//! be stopped with `SIGTTOU`.
+//! The query shares the terminal with the user, so it stays out of the way:
+//! it is skipped unless the process is in the terminal's foreground process
+//! group (a background job that touched the terminal's modes would be
+//! stopped with `SIGTTOU`), and skipped when input is already waiting
+//! (typeahead belongs to whatever reads next). A device-attributes request
+//! (`CSI c`) follows it, so the reader stops as soon as the terminal has
+//! answered both, and any byte read that is not part of a reply is given
+//! back to the terminal's input queue (`TIOCSTI`, where the system allows
+//! it).
 
 use std::time::Duration;
 
@@ -70,7 +76,8 @@ pub fn parse_cell_pixels_reply(bytes: &[u8]) -> Option<CellPixels> {
 /// at most `timeout` for the reply. The terminal is put in raw mode for the
 /// exchange and restored after. `None` without a controlling terminal, on
 /// Windows, when the process is not in the terminal's foreground process
-/// group, or when the terminal does not answer in time.
+/// group, when input is already waiting to be read, or when the terminal
+/// does not answer in time.
 ///
 /// Only call it when the program is interactive: it writes to and reads
 /// from `/dev/tty`.
@@ -112,42 +119,37 @@ fn query_unix(timeout: Duration) -> Option<CellPixels> {
     let mut raw = saved.clone();
     raw.make_raw();
     tcsetattr(&tty, OptionalActions::Now, &raw).ok()?;
-    let result = (|| {
-        use rustix::event::{poll, PollFd, PollFlags, Timespec};
-        use std::time::Instant;
-        rustix::io::write(&tty, b"\x1b[16t").ok()?;
-        let deadline = Instant::now() + timeout;
-        let mut reply = Vec::new();
-        let mut buffer = [0u8; 64];
-        while reply.len() < 256 {
-            let left = deadline.checked_duration_since(Instant::now())?;
-            let wait = Timespec {
-                tv_sec: left.as_secs() as _,
-                tv_nsec: left.subsec_nanos() as _,
-            };
-            let mut fds = [PollFd::new(&tty, PollFlags::IN)];
-            if poll(&mut fds, Some(&wait)).ok()? == 0 {
-                return None;
-            }
-            let read = rustix::io::read(&tty, &mut buffer).ok()?;
-            if read == 0 {
-                return None;
-            }
-            reply.extend_from_slice(&buffer[..read]);
-            if let Some(cell) = parse_cell_pixels_reply(&reply) {
-                return Some(cell);
-            }
-        }
-        None
-    })();
+    // In raw mode a partly typed line is readable too: anything waiting is
+    // the user's, for whatever reads next, so there is no query.
+    let (cell, stray) = if input_waiting(&tty) {
+        (None, Vec::new())
+    } else {
+        exchange(&tty, timeout)
+    };
     let _ = tcsetattr(&tty, OptionalActions::Now, &saved);
-    result
+    // Given back in the restored mode, so they are processed (echoed, a
+    // return made a newline) as if typed now.
+    give_back(&tty, &stray);
+    cell
 }
 
 /// Whether this process is in `tty`'s foreground process group.
 #[cfg(unix)]
 fn in_foreground(tty: &rustix::fd::OwnedFd) -> bool {
     rustix::termios::tcgetpgrp(tty).is_ok_and(|group| group == rustix::process::getpgrp())
+}
+
+/// Whether `tty` has input waiting, without waiting.
+#[cfg(unix)]
+fn input_waiting(tty: &rustix::fd::OwnedFd) -> bool {
+    use rustix::event::{poll, PollFd, PollFlags, Timespec};
+    let mut fds = [PollFd::new(tty, PollFlags::IN)];
+    let now = Timespec {
+        tv_sec: 0,
+        tv_nsec: 0,
+    };
+    // An error counts as waiting: when in doubt, do not read.
+    !matches!(poll(&mut fds, Some(&now)), Ok(0))
 }
 
 /// `SIGTTOU` and `SIGTTIN` blocked on this thread until dropped.
@@ -179,6 +181,128 @@ impl Drop for JobSignals {
         // SAFETY: restores the mask `block` saved.
         unsafe {
             libc::pthread_sigmask(libc::SIG_SETMASK, &self.0, std::ptr::null_mut());
+        }
+    }
+}
+
+/// What one escape sequence read during the exchange turned out to be.
+#[derive(Debug, PartialEq, Eq)]
+#[cfg_attr(not(unix), allow(dead_code))]
+enum Reply {
+    /// Not finished yet.
+    Partial,
+    /// The `CSI 16 t` reply, when it names a cell size.
+    CellSize(Option<CellPixels>),
+    /// The device-attributes reply (`ESC [ ? … c`): the terminal has
+    /// answered everything asked.
+    Attributes,
+    /// Not a reply to either question: the user's input.
+    Other,
+}
+
+/// Classify `sequence`, which starts with ESC.
+#[cfg_attr(not(unix), allow(dead_code))]
+fn classify(sequence: &[u8]) -> Reply {
+    let Some(rest) = sequence.strip_prefix(b"\x1b") else {
+        return Reply::Other;
+    };
+    let Some((&first, rest)) = rest.split_first() else {
+        return Reply::Partial;
+    };
+    if first != b'[' {
+        return Reply::Other;
+    }
+    let (attributes, body) = match rest.split_first() {
+        None => return Reply::Partial,
+        Some((b'?', body)) => (true, body),
+        Some(_) => (false, rest),
+    };
+    let Some((&last, params)) = body.split_last() else {
+        return Reply::Partial;
+    };
+    let in_params = |b: &u8| b.is_ascii_digit() || *b == b';';
+    if !params.iter().all(in_params) || sequence.len() > 32 {
+        return Reply::Other;
+    }
+    match (attributes, last) {
+        (_, b) if in_params(&b) => Reply::Partial,
+        (true, b'c') => Reply::Attributes,
+        (false, b't') => Reply::CellSize(parse_cell_pixels_reply(sequence)),
+        _ => Reply::Other,
+    }
+}
+
+/// Write the query and a device-attributes request, and read the replies
+/// a byte at a time until the second arrives or `timeout` passes. Returns
+/// the cell size and the bytes read that were not part of a reply.
+#[cfg(unix)]
+fn exchange(tty: &rustix::fd::OwnedFd, timeout: Duration) -> (Option<CellPixels>, Vec<u8>) {
+    use rustix::event::{poll, PollFd, PollFlags, Timespec};
+    use std::time::Instant;
+
+    if rustix::io::write(tty, b"\x1b[16t\x1b[c").is_err() {
+        return (None, Vec::new());
+    }
+    let deadline = Instant::now() + timeout;
+    let mut cell = None;
+    let mut sequence: Vec<u8> = Vec::new();
+    let mut stray: Vec<u8> = Vec::new();
+    while let Some(left) = deadline.checked_duration_since(Instant::now()) {
+        let wait = Timespec {
+            tv_sec: left.as_secs() as _,
+            tv_nsec: left.subsec_nanos() as _,
+        };
+        let mut fds = [PollFd::new(tty, PollFlags::IN)];
+        if !matches!(poll(&mut fds, Some(&wait)), Ok(n) if n > 0) {
+            break;
+        }
+        let mut byte = [0u8; 1];
+        if !matches!(rustix::io::read(tty, &mut byte), Ok(1)) {
+            break;
+        }
+        if sequence.is_empty() && byte[0] != 0x1b {
+            stray.push(byte[0]);
+            continue;
+        }
+        sequence.push(byte[0]);
+        match classify(&sequence) {
+            Reply::Partial => {}
+            Reply::CellSize(found) => {
+                cell = cell.or(found);
+                sequence.clear();
+            }
+            Reply::Attributes => {
+                sequence.clear();
+                break;
+            }
+            Reply::Other => stray.append(&mut sequence),
+        }
+    }
+    stray.append(&mut sequence);
+    (cell, stray)
+}
+
+/// Put `bytes` back on `tty`'s input queue, as if typed again. Where the
+/// system refuses (`TIOCSTI` needs privilege on some kernels), they are
+/// lost: the query only runs when nothing was waiting, so this is input
+/// typed during the few milliseconds the terminal took to answer.
+// rustix has no wrapper for TIOCSTI.
+#[cfg(unix)]
+#[allow(unsafe_code)]
+fn give_back(tty: &rustix::fd::OwnedFd, bytes: &[u8]) {
+    use rustix::fd::AsRawFd;
+    for byte in bytes {
+        // SAFETY: TIOCSTI reads one byte through the pointer, which is valid
+        // for the call.
+        let pushed = unsafe {
+            libc::ioctl(
+                tty.as_raw_fd(),
+                libc::TIOCSTI as _,
+                byte as *const u8 as *const libc::c_char,
+            )
+        };
+        if pushed != 0 {
+            break;
         }
     }
 }
@@ -261,8 +385,8 @@ impl GraphicsEnvironment {
 
     /// Detect from the process. When the cell size is still unknown and both
     /// stdin and stdout are a terminal, ask the terminal (`CSI 16 t`,
-    /// waiting at most 100 ms) — from the foreground only
-    /// ([`query_cell_pixels`]).
+    /// waiting at most 100 ms) — from the foreground only, and only when no
+    /// input is waiting ([`query_cell_pixels`]).
     pub fn system() -> GraphicsEnvironment {
         use std::io::IsTerminal;
         let mut environment = GraphicsEnvironment::detect(&SystemEnvironment);
@@ -306,6 +430,25 @@ mod tests {
         );
         assert_eq!(parse_cell_pixels_reply(b"\x1b[6;18"), None);
         assert_eq!(parse_cell_pixels_reply(b"\x1b[4;600;800t"), None);
+    }
+
+    #[test]
+    fn classifies_what_the_query_reads() {
+        assert_eq!(classify(b"\x1b"), Reply::Partial);
+        assert_eq!(classify(b"\x1b["), Reply::Partial);
+        assert_eq!(classify(b"\x1b[6;18"), Reply::Partial);
+        assert_eq!(classify(b"\x1b[?62;2"), Reply::Partial);
+        assert_eq!(
+            classify(b"\x1b[6;18;9t"),
+            Reply::CellSize(CellPixels::new(9, 18))
+        );
+        assert_eq!(classify(b"\x1b[4;600;800t"), Reply::CellSize(None));
+        assert_eq!(classify(b"\x1b[?62;22c"), Reply::Attributes);
+        // Keys the user pressed: given back.
+        assert_eq!(classify(b"\x1b[A"), Reply::Other);
+        assert_eq!(classify(b"\x1bOP"), Reply::Other);
+        assert_eq!(classify(b"\x1b\x1b"), Reply::Other);
+        assert_eq!(classify(b"\x1b[1;5D"), Reply::Other);
     }
 
     #[test]

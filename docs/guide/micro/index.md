@@ -142,7 +142,9 @@ never holds an escape. `rich doctor` reports the choice and the reason.
 Images are fitted to the cell size in pixels, from `RICH_CELL_PIXELS=WxH`,
 the terminal's window size in pixels, or (for `MicroGraphics::detect` on an
 interactive terminal that has a graphics protocol) a `CSI 16 t` query; 8×16
-is assumed otherwise.
+is assumed otherwise. The query is asked only by a foreground process and
+only when no input is waiting, so it never stops a background job or eats
+typeahead; set `RICH_CELL_PIXELS` to skip it altogether.
 
 ### Animation
 
