@@ -1620,6 +1620,7 @@ dependencies = [
  "anyhow",
  "clap",
  "fancy-regex 0.19.2",
+ "libc",
  "libloading",
  "log",
  "quick-xml",

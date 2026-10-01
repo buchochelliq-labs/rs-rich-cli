@@ -46,6 +46,20 @@ fn in_pty(
     typed: &[u8],
     limit: Duration,
 ) -> String {
+    in_pty_answering(program, args, cwd, env, typed, None, limit)
+}
+
+/// [`in_pty`], with the terminal writing `answer.1` once `answer.0` appears
+/// in the output.
+fn in_pty_answering(
+    program: &str,
+    args: &[&str],
+    cwd: &Path,
+    env: &[(String, String)],
+    typed: &[u8],
+    mut answer: Option<(&str, &[u8])>,
+    limit: Duration,
+) -> String {
     let pty = native_pty_system()
         .openpty(PtySize {
             rows: 24,
@@ -81,6 +95,13 @@ fn in_pty(
     loop {
         while let Ok(bytes) = receive.try_recv() {
             out.extend(bytes);
+        }
+        if let Some((trigger, reply)) = answer {
+            if String::from_utf8_lossy(&out).contains(trigger) {
+                writer.write_all(reply).unwrap();
+                writer.flush().unwrap();
+                answer = None;
+            }
         }
         if child.try_wait().unwrap().is_some() || Instant::now() > deadline {
             break;
@@ -166,4 +187,28 @@ fn exports_and_the_pager_get_the_fallback_on_a_graphics_terminal() {
             "{mode} pager: {paged:?}"
         );
     }
+}
+
+#[test]
+fn a_background_job_is_not_stopped_by_the_cell_size_query() {
+    // F4: a job in the background may not change the terminal's modes; the
+    // kernel stops it (SIGTTOU) until `fg`. The query is skipped there.
+    let dir = tempfile::tempdir().unwrap();
+    let home = dir.path().join("home");
+    std::fs::create_dir_all(&home).unwrap();
+    let env = terminal_env(false, &[("HOME", home.to_str().unwrap())]);
+    let script = format!(
+        "set -m; '{RICH}' -p 'x :micro:status/success:' --emoji & sleep 3; jobs -l; \
+         kill -9 %1 2>/dev/null; echo END"
+    );
+    let out = in_pty(
+        "/bin/sh",
+        &["-c", &script],
+        dir.path(),
+        &env,
+        b"",
+        Duration::from_secs(20),
+    );
+    assert!(out.contains("END"), "{out:?}");
+    assert!(!out.contains("Stopped"), "{out:?}");
 }

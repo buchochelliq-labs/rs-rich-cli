@@ -9,6 +9,10 @@
 //! [`GraphicsEnvironment::system`] asks with a `CSI 16 t` query, and only
 //! when both stdin and stdout are a terminal, so a pipe is never written a
 //! query and never waits for a reply.
+//!
+//! The query is skipped unless the process is in the terminal's foreground
+//! process group: a background job that touched the terminal's modes would
+//! be stopped with `SIGTTOU`.
 
 use std::time::Duration;
 
@@ -65,7 +69,8 @@ pub fn parse_cell_pixels_reply(bytes: &[u8]) -> Option<CellPixels> {
 /// Ask the controlling terminal for its cell size with `CSI 16 t`, waiting
 /// at most `timeout` for the reply. The terminal is put in raw mode for the
 /// exchange and restored after. `None` without a controlling terminal, on
-/// Windows, or when the terminal does not answer in time.
+/// Windows, when the process is not in the terminal's foreground process
+/// group, or when the terminal does not answer in time.
 ///
 /// Only call it when the program is interactive: it writes to and reads
 /// from `/dev/tty`.
@@ -83,10 +88,8 @@ pub fn query_cell_pixels(timeout: Duration) -> Option<CellPixels> {
 
 #[cfg(unix)]
 fn query_unix(timeout: Duration) -> Option<CellPixels> {
-    use rustix::event::{poll, PollFd, PollFlags, Timespec};
     use rustix::fs::{open, Mode, OFlags};
     use rustix::termios::{tcgetattr, tcsetattr, OptionalActions};
-    use std::time::Instant;
 
     let tty = open(
         "/dev/tty",
@@ -94,11 +97,24 @@ fn query_unix(timeout: Duration) -> Option<CellPixels> {
         Mode::empty(),
     )
     .ok()?;
+    // A background job may not change the terminal's modes or read from it:
+    // the kernel would stop it (SIGTTOU, SIGTTIN) until `fg`. Ask only from
+    // the foreground, with both signals blocked so a job sent to the
+    // background in between is not stopped (its read fails with EIO).
+    if !in_foreground(&tty) {
+        return None;
+    }
+    let _blocked = JobSignals::block()?;
+    if !in_foreground(&tty) {
+        return None;
+    }
     let saved = tcgetattr(&tty).ok()?;
     let mut raw = saved.clone();
     raw.make_raw();
     tcsetattr(&tty, OptionalActions::Now, &raw).ok()?;
     let result = (|| {
+        use rustix::event::{poll, PollFd, PollFlags, Timespec};
+        use std::time::Instant;
         rustix::io::write(&tty, b"\x1b[16t").ok()?;
         let deadline = Instant::now() + timeout;
         let mut reply = Vec::new();
@@ -126,6 +142,45 @@ fn query_unix(timeout: Duration) -> Option<CellPixels> {
     })();
     let _ = tcsetattr(&tty, OptionalActions::Now, &saved);
     result
+}
+
+/// Whether this process is in `tty`'s foreground process group.
+#[cfg(unix)]
+fn in_foreground(tty: &rustix::fd::OwnedFd) -> bool {
+    rustix::termios::tcgetpgrp(tty).is_ok_and(|group| group == rustix::process::getpgrp())
+}
+
+/// `SIGTTOU` and `SIGTTIN` blocked on this thread until dropped.
+#[cfg(unix)]
+struct JobSignals(libc::sigset_t);
+
+// rustix has no safe wrapper for the signal mask.
+#[cfg(unix)]
+#[allow(unsafe_code)]
+impl JobSignals {
+    fn block() -> Option<JobSignals> {
+        // SAFETY: the sets are initialised by sigemptyset before use, and
+        // pthread_sigmask only reads `set` and writes `old`.
+        unsafe {
+            let mut set: libc::sigset_t = std::mem::zeroed();
+            libc::sigemptyset(&mut set);
+            libc::sigaddset(&mut set, libc::SIGTTOU);
+            libc::sigaddset(&mut set, libc::SIGTTIN);
+            let mut old: libc::sigset_t = std::mem::zeroed();
+            (libc::pthread_sigmask(libc::SIG_BLOCK, &set, &mut old) == 0).then_some(JobSignals(old))
+        }
+    }
+}
+
+#[cfg(unix)]
+#[allow(unsafe_code)]
+impl Drop for JobSignals {
+    fn drop(&mut self) {
+        // SAFETY: restores the mask `block` saved.
+        unsafe {
+            libc::pthread_sigmask(libc::SIG_SETMASK, &self.0, std::ptr::null_mut());
+        }
+    }
 }
 
 /// The window size stdout's terminal reports, as `(columns, rows)` and
@@ -206,7 +261,8 @@ impl GraphicsEnvironment {
 
     /// Detect from the process. When the cell size is still unknown and both
     /// stdin and stdout are a terminal, ask the terminal (`CSI 16 t`,
-    /// waiting at most 100 ms).
+    /// waiting at most 100 ms) — from the foreground only
+    /// ([`query_cell_pixels`]).
     pub fn system() -> GraphicsEnvironment {
         use std::io::IsTerminal;
         let mut environment = GraphicsEnvironment::detect(&SystemEnvironment);

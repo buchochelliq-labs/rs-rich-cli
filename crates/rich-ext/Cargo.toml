@@ -64,10 +64,13 @@ clap = { version = "4.5", default-features = false, features = ["std", "help", "
 libloading = { version = "0.9", optional = true }
 wasmi = { version = "2", default-features = false, features = ["std", "validate", "stable", "auto-dispatch"], optional = true }
 
-# The terminal's cell size in pixels (`TIOCGWINSZ`) and the `CSI 16 t` query,
-# without unsafe code. Already in the tree through `terminal_size`.
+# The terminal's cell size in pixels (`TIOCGWINSZ`) and the `CSI 16 t` query.
+# rustix is already in the tree through `terminal_size`; libc (already in the
+# tree) blocks SIGTTOU/SIGTTIN around the query and gives back typeahead
+# (`TIOCSTI`), which rustix does not wrap.
 [target.'cfg(unix)'.dependencies]
-rustix = { version = "1", default-features = false, features = ["std", "termios", "fs", "event"] }
+rustix = { version = "1", default-features = false, features = ["std", "termios", "fs", "event", "process"] }
+libc = "0.2"
 
 [dev-dependencies]
 serde_json.workspace = true
