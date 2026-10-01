@@ -451,7 +451,8 @@ The line under the prompt shows where the focused node is
 columns) draws its subtree. `--header`, `--height`, `--value QUERY` (start
 searching) and `--mouse` work as for the other [interactive
 commands](#ask-in-a-script), and so do the exit codes. Without a terminal it
-prints the tree, as `rich inspect` does.
+prints the tree, as `rich inspect` does. A document with more than a million
+nodes is refused (exit 3): narrow it first with `rich --inspect --select`.
 
 Copies go to the terminal's clipboard through OSC 52, which works over SSH.
 It is on only where the terminal is known to take it (kitty, iTerm2,

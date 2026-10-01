@@ -46,6 +46,9 @@ pub enum PreviewLayout {
     Hidden,
 }
 
+/// Works out an item's [`ActionTarget::value`] from its index.
+pub(crate) type ValueOf = std::sync::Arc<dyn Fn(usize) -> String + Send + Sync>;
+
 /// The narrowest a pane gets when the border between them is dragged.
 const MIN_PANE: usize = 12;
 
@@ -112,6 +115,12 @@ pub struct Select<T> {
     /// Each item's identity for an action ([`ActionTarget::value`]); the
     /// label when empty.
     values: Vec<String>,
+    /// Each item's identity where `values` has none, worked out when asked
+    /// (a tree node's path), so a large list keeps no string per item.
+    pub(crate) value_of: Option<ValueOf>,
+    /// A tree's guides, drawn for the rows on screen only (in place of
+    /// `prefixes`).
+    pub(crate) guides: Option<crate::components::views::Guides>,
     /// A line above the list, under the question: a table's headings.
     pub(crate) heading: Option<Vec<Segment>>,
     /// Text before each label, not searched: a tree's guides, an emoji.
@@ -175,6 +184,8 @@ impl<T> Select<T> {
             menu: None,
             keymap: select_keymap(),
             values: Vec::new(),
+            value_of: None,
+            guides: None,
             heading: None,
             prefixes: Vec::new(),
             prefix_plain: false,
@@ -425,6 +436,8 @@ impl<T> Select<T> {
         }
         self.items = items;
         self.values.clear();
+        self.value_of = None;
+        self.guides = None;
         self.prefixes.clear();
         self.icons.clear();
         self.hidden.clear();
@@ -497,6 +510,8 @@ impl<T> Select<T> {
         self.list.clear_selection(items.len());
         self.items = items;
         self.values.clear();
+        self.value_of = None;
+        self.guides = None;
         self.prefixes.clear();
         self.icons.clear();
         self.hidden.clear();
@@ -550,6 +565,11 @@ impl<T> Select<T> {
                 .values
                 .get(index)
                 .cloned()
+                .or_else(|| self.value_of.as_ref().map(|value| value(index)))
+                .or_else(|| {
+                    let guides = self.guides.as_ref()?;
+                    Some(guides.path(index, |node| self.items[node].label.as_str()))
+                })
                 .unwrap_or_else(|| label.clone()),
             label,
         }
@@ -848,11 +868,15 @@ impl<T> Select<T> {
                 text(format!("{} ", theme.unchecked), &theme.hint)
             });
         }
-        if let Some(prefix) = self.prefixes.get(*index).filter(|p| !p.is_empty()) {
+        let prefix = match &self.guides {
+            Some(guides) => Some(guides.prefix(*index)),
+            None => self.prefixes.get(*index).cloned(),
+        };
+        if let Some(prefix) = prefix.filter(|p| !p.is_empty()) {
             line.push(if self.prefix_plain {
-                plain(prefix.clone())
+                plain(prefix)
             } else {
-                text(prefix.clone(), &theme.hint)
+                text(prefix, &theme.hint)
             });
         }
         if let Some(Some(icon)) = self.icons.get(*index) {

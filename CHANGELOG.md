@@ -63,6 +63,7 @@ Each finding was reproduced, then fixed with a regression test that failed
 before the fix.
 
 - A plugin component's panic, caught by its `PluginView`, also ran the session's panic hook, which took the live session out of raw mode (and off the alternate screen, mouse and paste) and printed the panic over the view. Panics caught through the new `session::catch_panic` now leave a live session alone; uncaught panics still restore the terminal.
+- `TreeSelect`, `DataExplorer` and `rich explore` took quadratic time on wide documents (each parent found by scanning back over earlier siblings) and memory proportional to nodes × depth (a path, JSONPath and guide string per node): a 400 KB nested array took 2.4 GB. Parents now come from a depth stack, `last` from one pass, paths and JSONPaths are worked out for the focused or copied node only (new `TreeSelect::paths_with`), guides are drawn for the rows on screen, and the explorer's preview draws at most a screenful of each container's children; `DataExplorer::focused` now returns an owned `Path`. `rich explore` refuses a document with more than 1,000,000 nodes (exit 3) with a hint to narrow it with `--inspect --select`.
 ### 0.0.14 release test: fixes from audit A
 
 Versions: none bumped; `rs-rich-micro` 0.0.1, `rs-rich-ext` 0.0.12,

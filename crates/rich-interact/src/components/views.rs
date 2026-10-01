@@ -8,6 +8,7 @@
 //! ancestors (#428), shows the focused node's breadcrumbs and copies its
 //! path (#464), all through the terminal [clipboard](crate::clipboard).
 
+use std::sync::Arc;
 use std::time::Duration;
 
 use rich::cells::cell_len;
@@ -362,12 +363,13 @@ pub fn tree_keymap() -> Keymap {
 /// terminal's [clipboard](crate::clipboard).
 pub struct TreeSelect<T> {
     select: Select<T>,
-    parents: Vec<Option<usize>>,
+    parents: Arc<[Option<usize>]>,
     /// Whether each node is the last of its parent's children.
     last: Vec<bool>,
     parent_of_any: Vec<bool>,
     collapsed: Vec<bool>,
-    /// Each node's name in the breadcrumbs (its label by default).
+    /// Each node's name in the breadcrumbs, by index, where it is not its
+    /// label.
     crumbs: Vec<String>,
     breadcrumbs: bool,
     /// The width the breadcrumbs were last laid out at.
@@ -378,58 +380,50 @@ pub struct TreeSelect<T> {
 }
 
 impl<T> TreeSelect<T> {
+    /// A tree of `nodes`, in order, each with its depth.
+    ///
+    /// Building it is linear in the number of nodes, and so is what it
+    /// keeps: each node's path (the labels joined by `/`) is worked out
+    /// when it is asked for, and its guides when its row is drawn.
     pub fn new<I, V>(prompt: impl Into<String>, nodes: I) -> TreeSelect<T>
     where
         I: IntoIterator<Item = (usize, V)>,
         V: Into<Item<T>>,
     {
         let mut items: Vec<Item<T>> = Vec::new();
-        let mut depths: Vec<usize> = Vec::new();
         let mut parents: Vec<Option<usize>> = Vec::new();
+        // The open path: the last node seen at each depth down to the one
+        // before.
+        let mut open: Vec<usize> = Vec::new();
         for (depth, node) in nodes {
             // No deeper than one below the node before.
-            let depth = depth.min(depths.last().map_or(0, |d| d + 1));
-            let parent = (0..items.len()).rev().find(|&i| depths[i] + 1 == depth);
-            let parent = if depth == 0 { None } else { parent };
+            let depth = depth.min(open.len());
+            open.truncate(depth);
+            let index = items.len();
+            parents.push(open.last().copied());
+            open.push(index);
             let mut item: Item<T> = node.into();
             item.label = shown(&item.label);
             items.push(item);
-            depths.push(depth);
-            parents.push(parent);
         }
         let count = items.len();
         let mut parent_of_any = vec![false; count];
         for parent in parents.iter().flatten() {
             parent_of_any[*parent] = true;
         }
-        let last: Vec<bool> = (0..count)
-            .map(|i| !(i + 1..count).any(|j| parents[j] == parents[i]))
-            .collect();
-        let values: Vec<String> = (0..count)
-            .map(|i| {
-                let mut path = vec![items[i].label.as_str()];
-                let mut at = parents[i];
-                while let Some(parent) = at {
-                    path.push(items[parent].label.as_str());
-                    at = parents[parent];
-                }
-                path.reverse();
-                path.join("/")
-            })
-            .collect();
-        let crumbs = items.iter().map(|item| item.label.clone()).collect();
+        let last = last_children(&parents, None);
+        let parents: Arc<[Option<usize>]> = parents.into();
         let mut select = Select::new(prompt, items);
         select.set_kind(TargetKind::Node);
-        select.set_values(values);
         select.hints = Some("←→ fold".into());
-        select.set_tree(Some(parents.clone()));
+        select.set_tree(Some(parents.to_vec()));
         let mut tree = TreeSelect {
             select,
             parents,
             last,
             parent_of_any,
             collapsed: vec![false; count],
-            crumbs,
+            crumbs: Vec::new(),
             breadcrumbs: false,
             width: usize::MAX,
             filtered: false,
@@ -451,32 +445,42 @@ impl<T> TreeSelect<T> {
     /// Each node's name in the breadcrumbs, by index, in place of its
     /// label: a key rather than `key: value`, say.
     pub fn crumbs(mut self, crumbs: Vec<String>) -> Self {
-        for (index, crumb) in crumbs.into_iter().enumerate().take(self.crumbs.len()) {
-            self.crumbs[index] = shown(&crumb);
-        }
+        let count = self.parents.len();
+        self.crumbs = crumbs
+            .into_iter()
+            .take(count)
+            .map(|crumb| shown(&crumb))
+            .collect();
         self.crumb_line();
         self
     }
 
     /// What Ctrl+Y copies and actions see as each node's value, by index,
-    /// in place of the labels joined by `/`: a JSON path, say.
+    /// in place of the labels joined by `/`: a JSON path, say. Nodes past
+    /// the end of `paths` keep the joined labels.
     pub fn paths(mut self, paths: Vec<String>) -> Self {
-        let mut values: Vec<String> = (0..self.parents.len())
-            .map(|index| self.select.target(index).value)
-            .collect();
-        for (index, path) in paths.into_iter().enumerate().take(values.len()) {
-            values[index] = path;
-        }
-        self.select.set_values(values);
+        self.select.set_values(paths);
+        self
+    }
+
+    /// Like [`paths`](Self::paths), with each node's value worked out from
+    /// its index when it is asked for (the focused node's, on Ctrl+Y or an
+    /// action), so a large tree keeps no string per node.
+    pub fn paths_with(mut self, path: impl Fn(usize) -> String + Send + Sync + 'static) -> Self {
+        self.select.set_values(Vec::new());
+        self.select.value_of = Some(Arc::new(path));
         self
     }
 
     /// Collapse every node at `depth` or deeper that has children, and
     /// expand the rest: `fold_below(1)` shows the roots' children only.
     pub fn fold_below(mut self, depth: usize) -> Self {
+        // Parents come before their children, so one pass finds each
+        // node's depth.
+        let mut depths = vec![0usize; self.parents.len()];
         for index in 0..self.parents.len() {
-            let deep = crate::kit::ancestors(&self.parents, index).count() >= depth;
-            self.collapsed[index] = deep && self.parent_of_any[index];
+            depths[index] = self.parents[index].map_or(0, |parent| depths[parent] + 1);
+            self.collapsed[index] = depths[index] >= depth && self.parent_of_any[index];
         }
         self.update();
         self
@@ -501,11 +505,19 @@ impl<T> TreeSelect<T> {
     /// The names on the path to node `index`, from the root.
     pub fn path_to(&self, index: usize) -> Vec<&str> {
         let mut path: Vec<&str> = crate::kit::ancestors(&self.parents, index)
-            .map(|ancestor| self.crumbs[ancestor].as_str())
+            .map(|ancestor| self.crumb(ancestor))
             .collect();
         path.reverse();
-        path.push(self.crumbs[index].as_str());
+        path.push(self.crumb(index));
         path
+    }
+
+    /// Node `index`'s name in the breadcrumbs.
+    fn crumb(&self, index: usize) -> &str {
+        match self.crumbs.get(index) {
+            Some(crumb) => crumb,
+            None => &self.select.items()[index].label,
+        }
     }
 
     /// Show `status` in place of the footer until the next key.
@@ -566,12 +578,14 @@ impl<T> TreeSelect<T> {
 
     /// The guides and fold markers, and which nodes a collapse hides.
     fn update(&mut self) {
-        let hidden = (0..self.parents.len())
-            .map(|index| {
-                crate::kit::ancestors(&self.parents, index).any(|ancestor| self.collapsed[ancestor])
-            })
-            .collect();
-        self.select.prefixes = self.guides(None);
+        // Parents come before their children: a node is hidden when its
+        // parent is collapsed or hidden.
+        let mut hidden = vec![false; self.parents.len()];
+        for index in 0..self.parents.len() {
+            hidden[index] =
+                self.parents[index].is_some_and(|parent| self.collapsed[parent] || hidden[parent]);
+        }
+        self.select.guides = Some(self.guides(None));
         self.select.hidden = hidden;
         self.select.refilter();
         self.filtered = false;
@@ -579,54 +593,41 @@ impl<T> TreeSelect<T> {
         self.crumb_line();
     }
 
-    /// Each node's guides and fold marker. With `shown`, only the nodes
-    /// listed count: a filtered tree draws the branches between what it
-    /// lists, and a node whose children are listed is open.
-    fn guides(&self, shown: Option<&[bool]>) -> Vec<String> {
+    /// What the guides are drawn from. With `shown`, only the nodes listed
+    /// count: a filtered tree draws the branches between what it lists,
+    /// and a node whose children are listed is open.
+    fn guides(&self, shown: Option<&[bool]>) -> Guides {
         let count = self.parents.len();
         let (last, open) = match shown {
             None => (self.last.clone(), None),
             Some(shown) => {
-                let mut last = vec![true; count];
                 let mut open = vec![false; count];
-                let mut seen = std::collections::HashSet::new();
-                for index in (0..count).rev().filter(|&i| shown[i]) {
-                    last[index] = seen.insert(self.parents[index]);
-                    if let Some(parent) = self.parents[index] {
+                for (index, parent) in self.parents.iter().enumerate() {
+                    if let Some(parent) = parent.filter(|_| shown[index]) {
                         open[parent] = true;
                     }
                 }
-                (last, Some(open))
+                (last_children(&self.parents, Some(shown)), Some(open))
             }
         };
-        (0..count)
+        let markers = (0..count)
             .map(|index| {
-                let up: Vec<usize> = crate::kit::ancestors(&self.parents, index).collect();
-                let mut guides = String::new();
-                // Each ancestor below the root draws a bar if more of its
-                // siblings follow.
-                for &ancestor in up.iter().rev().skip(1) {
-                    guides.push_str(if last[ancestor] { "    " } else { "│   " });
-                }
-                if self.parents[index].is_some() {
-                    guides.push_str(if last[index] {
-                        "└── "
-                    } else {
-                        "├── "
-                    });
-                }
                 let collapsed = match &open {
                     Some(open) => !open[index],
                     None => self.collapsed[index],
                 };
-                guides.push_str(match (self.parent_of_any[index], collapsed) {
-                    (true, true) => "▸ ",
-                    (true, false) => "▾ ",
-                    _ => "",
-                });
-                guides
+                match (self.parent_of_any[index], collapsed) {
+                    (true, true) => Marker::Folded,
+                    (true, false) => Marker::Open,
+                    _ => Marker::Leaf,
+                }
             })
-            .collect()
+            .collect();
+        Guides {
+            parents: Arc::clone(&self.parents),
+            last,
+            markers,
+        }
     }
 
     /// Redraw the guides for what the filter lists, once a query is typed,
@@ -636,7 +637,7 @@ impl<T> TreeSelect<T> {
         if !filtering && !self.filtered {
             return;
         }
-        self.select.prefixes = if filtering {
+        let guides = if filtering {
             let mut shown = vec![false; self.parents.len()];
             for (index, _) in self.select.filter().matches() {
                 shown[*index] = true;
@@ -645,6 +646,7 @@ impl<T> TreeSelect<T> {
         } else {
             self.guides(None)
         };
+        self.select.guides = Some(guides);
         self.filtered = filtering;
     }
 
@@ -674,6 +676,87 @@ impl<T> TreeSelect<T> {
             _ => return false,
         }
         true
+    }
+}
+
+/// Whether each node is the last of its parent's children, in one pass
+/// from the end. With `shown`, only the nodes listed count.
+fn last_children(parents: &[Option<usize>], shown: Option<&[bool]>) -> Vec<bool> {
+    let count = parents.len();
+    let mut last = vec![true; count];
+    // Whether a later child was seen, by parent (the roots at `count`).
+    let mut seen = vec![false; count + 1];
+    for index in (0..count).rev() {
+        if shown.is_some_and(|shown| !shown[index]) {
+            continue;
+        }
+        let slot = parents[index].unwrap_or(count);
+        last[index] = !seen[slot];
+        seen[slot] = true;
+    }
+    last
+}
+
+/// A tree node's fold marker.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Marker {
+    /// No children.
+    Leaf,
+    Folded,
+    Open,
+}
+
+/// What a [`TreeSelect`]'s guides are drawn from. Its [`Select`] draws a
+/// row's guides when it draws the row, so a large tree keeps no string per
+/// node and the work is the rows on screen times their depth.
+pub(crate) struct Guides {
+    parents: Arc<[Option<usize>]>,
+    /// Whether each node is drawn as the last of its parent's children.
+    last: Vec<bool>,
+    markers: Vec<Marker>,
+}
+
+impl Guides {
+    /// Node `index`'s guides and fold marker: `│   ├── ▸ `.
+    pub(crate) fn prefix(&self, index: usize) -> String {
+        if index >= self.parents.len() {
+            return String::new();
+        }
+        let up: Vec<usize> = crate::kit::ancestors(&self.parents, index).collect();
+        let mut guides = String::new();
+        // Each ancestor below the root draws a bar if more of its siblings
+        // follow.
+        for &ancestor in up.iter().rev().skip(1) {
+            guides.push_str(if self.last[ancestor] {
+                "    "
+            } else {
+                "│   "
+            });
+        }
+        if self.parents[index].is_some() {
+            guides.push_str(if self.last[index] {
+                "└── "
+            } else {
+                "├── "
+            });
+        }
+        guides.push_str(match self.markers[index] {
+            Marker::Folded => "▸ ",
+            Marker::Open => "▾ ",
+            Marker::Leaf => "",
+        });
+        guides
+    }
+
+    /// Node `index`'s path: the names `name` gives it and its ancestors,
+    /// from the root, joined by `/`.
+    pub(crate) fn path<'a>(&self, index: usize, name: impl Fn(usize) -> &'a str) -> String {
+        let mut path: Vec<&str> = crate::kit::ancestors(&self.parents, index)
+            .map(&name)
+            .collect();
+        path.reverse();
+        path.push(name(index));
+        path.join("/")
     }
 }
 

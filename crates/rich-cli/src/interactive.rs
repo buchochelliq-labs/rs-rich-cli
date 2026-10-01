@@ -60,6 +60,10 @@ const EXIT_INTERRUPTED: u8 = 130;
 const MAX_INPUT_BYTES: usize = 64 * 1024 * 1024;
 /// The most items `choose` and `filter` read from standard input.
 const MAX_ITEMS: usize = 1_000_000;
+/// The most nodes `explore` lists. The explorer keeps a few hundred bytes a
+/// node, so 64 MiB of `[0,0,…]` (32 million nodes) would take gigabytes;
+/// past this a document is better narrowed first (`--inspect --select`).
+const MAX_EXPLORE_NODES: usize = 1_000_000;
 /// How long a `--preview` command may run before it is killed.
 const PREVIEW_TIMEOUT: Duration = Duration::from_secs(5);
 /// The most output kept from a `--preview` command.
@@ -1368,6 +1372,15 @@ fn explore(args: &Args) -> Answer {
         console.print(&rich_ext::data::Explorer::new(&document).root_label(name));
         return Ok(ExitCode::SUCCESS);
     }
+    if more_nodes_than(&document, MAX_EXPLORE_NODES) {
+        return Err((
+            ExitClass::Input,
+            format!(
+                "{name} has more than {MAX_EXPLORE_NODES} nodes, too many to explore; \
+                 narrow it first with `rich --inspect --select PATH`"
+            ),
+        ));
+    }
     let mut explorer =
         DataExplorer::new(args.header.clone().unwrap_or(name), document).with_mouse(args.mouse);
     if let Some(rows) = args.height {
@@ -1398,6 +1411,25 @@ fn explore(args: &Args) -> Answer {
         Ok(Outcome::Interrupted) => Ok(ExitCode::from(EXIT_INTERRUPTED)),
         Err(error) => Err((ExitClass::Input, error.to_string())),
     }
+}
+
+/// Whether `document` has more than `limit` nodes, counting no further.
+fn more_nodes_than(document: &rich_ext::data::Node, limit: usize) -> bool {
+    use rich_ext::data::Value;
+    let mut count = 0;
+    let mut stack = vec![document];
+    while let Some(node) = stack.pop() {
+        count += 1;
+        if count > limit {
+            return true;
+        }
+        match &node.value {
+            Value::Seq(items) => stack.extend(items),
+            Value::Map(entries) => stack.extend(entries.iter().map(|(_, value)| value)),
+            _ => {}
+        }
+    }
+    false
 }
 
 /// How often a picker with `--preview` repaints, so a preview shows as

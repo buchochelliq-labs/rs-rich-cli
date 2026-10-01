@@ -1088,6 +1088,22 @@ mod pty {
         }
     }
 
+    /// A document with more than a million nodes is refused with a hint,
+    /// rather than building an explorer that takes gigabytes (audit B8).
+    #[test]
+    fn explore_refuses_a_document_with_too_many_nodes() {
+        let file = std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join("explore-huge.json");
+        std::fs::write(&file, format!("[{}]", vec!["0"; 1_000_000].join(","))).unwrap();
+        let pty = Pty::start(&format!(
+            r#"rich explore '{}' >/dev/null; echo "code=$?""#,
+            file.display()
+        ));
+        let out = pty.finish();
+        assert!(out.contains("more than 1000000 nodes"), "{out}");
+        assert!(out.contains("rich --inspect --select PATH"), "{out}");
+        assert!(out.contains("code=3"), "{out}");
+    }
+
     /// Ctrl+Y writes OSC 52 only where the clipboard is on: forced here,
     /// since the test terminal (xterm-256color) is not known to take it.
     #[test]
