@@ -302,3 +302,23 @@ fn a_pasted_query_drops_terminal_controls() {
     assert_eq!(outcome.unwrap(), Outcome::Done("src/main.rs"));
     assert!(!record.output().contains('\u{9b}'), "{:?}", record.output());
 }
+
+/// A parent index past the list is skipped, not indexed (0.0.14
+/// release-test audit B3): `keep_ancestors` and `FilterState::set_tree`
+/// take a caller's parent list as it is.
+#[test]
+fn keep_ancestors_skips_a_parent_past_the_list() {
+    use rich_interact::kit::{keep_ancestors, FilterState};
+
+    let (list, context) = keep_ancestors(vec![(1, vec![0])], &[None, Some(7)]);
+    assert_eq!(list, [(1, vec![0])]);
+    assert_eq!(context, [false]);
+
+    let mut filter = FilterState::default();
+    filter.set_tree(Some(vec![None, Some(7), Some(1)]));
+    filter.set_candidates(["root", "lost", "leaf"]);
+    filter.query_mut().push_str("leaf");
+    filter.refilter();
+    let indices: Vec<usize> = filter.matches().iter().map(|(index, _)| *index).collect();
+    assert_eq!(indices, [1, 2]);
+}

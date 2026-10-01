@@ -451,14 +451,16 @@ The line under the prompt shows where the focused node is
 columns) draws its subtree. `--header`, `--height`, `--value QUERY` (start
 searching) and `--mouse` work as for the other [interactive
 commands](#ask-in-a-script), and so do the exit codes. Without a terminal it
-prints the tree, as `rich inspect` does.
+prints the tree, as `rich inspect` does. A document with more than a million
+nodes is refused (exit 3): narrow it first with `rich --inspect --select`.
 
 Copies go to the terminal's clipboard through OSC 52, which works over SSH.
 It is on only where the terminal is known to take it (kitty, iTerm2,
 WezTerm, Windows Terminal, ghostty, Alacritty, foot, contour, rio, VS
 Code), never when the output is not a terminal, and not inside tmux or
-screen, which pass OSC 52 on only when configured to. `RICH_CLIPBOARD=1`
-turns it on anyway and `RICH_CLIPBOARD=0` off. When a copy cannot go
+screen, which pass OSC 52 on only when configured to. On a terminal,
+`RICH_CLIPBOARD=1` turns it on anyway and `RICH_CLIPBOARD=0` off; output
+that is not a terminal never gets the escape, even with `RICH_CLIPBOARD=1`. When a copy cannot go
 anywhere the footer says so.
 
 ## Render Markdown, and keep the links readable

@@ -442,3 +442,94 @@ fn a_layer_opened_before_the_run_starts_with_the_host() {
     let (outcome, _) = headless::run(layers, Script::new(), 40, 8);
     assert_eq!(outcome.unwrap(), Outcome::Done("started".to_string()));
 }
+
+/// Tabs with no tabs take every key, click and resize without panicking
+/// (0.0.14 release-test audit B4): Tab and Shift+Tab once indexed the
+/// active tab unchecked. Alone the keys are ignored; in a column, focus
+/// moves past the empty tabs to the input.
+#[test]
+fn empty_tabs_take_any_event() {
+    let script = Script::new()
+        .keys("tab shift+tab alt+right alt+left right left enter space a")
+        .click(1, 0)
+        .click(3, 2)
+        .resize(10, 3)
+        .keys("escape");
+    // Nothing finishes it: the script runs out.
+    let (outcome, record) = headless::run(Tabs::<String>::new(), script, 40, 5);
+    assert!(outcome.is_err(), "{outcome:?}");
+    assert!(!record.frames.is_empty());
+
+    let column = Column::new()
+        .child(Tabs::<String>::new())
+        .child(Input::new("x").map(|text: String| Flow::Done(text)));
+    let script = Script::new()
+        .keys("tab shift+tab tab")
+        .text("ok")
+        .keys("enter");
+    let (outcome, _) = headless::run(column, script, 40, 6);
+    assert_eq!(outcome.unwrap(), Outcome::Done("ok".to_string()));
+}
+
+/// `#` and `,` in a keymap file are a comment and a separator, so a line
+/// binding them once parsed as "no keys" and silently unbound the action
+/// (0.0.14 release-test audit B7). Such a line is now an error, the keys
+/// can be quoted, and unbinding is spelled `none`.
+#[test]
+fn overrides_never_unbind_by_accident() {
+    use rich_interact::KeyCode;
+
+    for line in [
+        "select.down = #",
+        "select.down = ,",
+        "select.down = , ,",
+        "select.down =",
+        "select.down =   # unbind?",
+        "select.down = \"#",
+    ] {
+        assert!(Overrides::parse(line).is_err(), "{line:?} parsed");
+    }
+    let overrides = Overrides::parse(
+        "select.down = \"#\"  # the hash key\n\
+         select.up = ',', ctrl+#\n\
+         select.pick = '\"' enter\n\
+         select.cancel = none\n",
+    )
+    .unwrap();
+    assert_eq!(overrides.get("select.down").unwrap(), [Key::char('#')]);
+    assert_eq!(
+        overrides.get("select.up").unwrap(),
+        [Key::char(','), Key::parse("ctrl+#").unwrap()]
+    );
+    assert_eq!(
+        overrides.get("select.pick").unwrap(),
+        [Key::char('"'), Key::new(KeyCode::Enter)]
+    );
+    assert_eq!(overrides.get("select.cancel").unwrap(), []);
+    // A configuration table: the same quoting; a bare comma is an error,
+    // an empty value still unbinds.
+    let table = Overrides::from_pairs([("select.down", "\",\""), ("select.up", "")]).unwrap();
+    assert_eq!(table.get("select.down").unwrap(), [Key::char(',')]);
+    assert_eq!(table.get("select.up").unwrap(), []);
+    assert!(Overrides::from_pairs([("select.down", ",")]).is_err());
+    assert!(keymap::try_keys(",").is_err());
+}
+
+/// A tab title holding controls is measured as painted (each control a
+/// one-cell picture), so a click lands on the tab under it (0.0.14
+/// release-test audit B).
+#[test]
+fn tab_clicks_measure_titles_as_painted() {
+    // Painted: ` a␛␛␛␛ ` (columns 0-6), a space, ` two ` (8-12).
+    let tabs = || {
+        Tabs::<String>::new()
+            .tab("a\u{1b}\u{1b}\u{1b}\u{1b}", Label::new("first"))
+            .tab("two", Label::new("second"))
+            .with_mouse(true)
+    };
+    for (column, expected) in [(5, 0), (9, 1)] {
+        let mut tabs = tabs();
+        let _ = headless::run(&mut tabs, Script::new().click(column, 0), 40, 5);
+        assert_eq!(tabs.selected(), expected, "click at {column}");
+    }
+}

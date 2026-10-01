@@ -146,10 +146,12 @@ impl fmt::Display for Key {
         if self.modifiers.alt {
             f.write_str("alt+")?;
         }
-        if self.modifiers.shift {
+        // Shift+Tab is written as it is parsed and documented: `shift+tab`.
+        if self.modifiers.shift || self.code == KeyCode::BackTab {
             f.write_str("shift+")?;
         }
         match self.code {
+            KeyCode::BackTab => f.write_str("tab"),
             KeyCode::Char(' ') => f.write_str("space"),
             KeyCode::Char(c) => write!(f, "{c}"),
             KeyCode::F(n) => write!(f, "f{n}"),

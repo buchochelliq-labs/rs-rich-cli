@@ -1529,6 +1529,7 @@ name = "rs-rich-ext"
 version = "0.0.12"
 dependencies = [
  "fancy-regex 0.19.2",
+ "libc",
  "quick-xml",
  "rs-rich",
  "rs-rich-plugin-api",
@@ -1580,6 +1581,7 @@ dependencies = [
  "rs-rich-ext",
  "rs-rich-plugin-api",
  "serde_json",
+ "sha2",
  "zip",
 ]
 

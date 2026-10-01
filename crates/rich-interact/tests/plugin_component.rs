@@ -181,3 +181,73 @@ fn an_unknown_component_names_the_ones_there_are() {
     assert_eq!(error.available, ["broken", "counter"]);
     assert!(error.to_string().contains("available: broken, counter"));
 }
+
+/// Records every key name it is sent; Enter answers.
+struct Names(Arc<std::sync::Mutex<Vec<String>>>, Vec<ComponentBinding>);
+
+impl PluginComponent for Names {
+    fn handle(&mut self, event: &ComponentEvent, _: &ComponentContext<'_>) -> ComponentFlow {
+        let Some(key) = event.key() else {
+            return ComponentFlow::Ignored;
+        };
+        self.0.lock().unwrap().push(key.to_string());
+        if key == "enter" {
+            return ComponentFlow::Done(String::new());
+        }
+        ComponentFlow::Continue
+    }
+
+    fn render(&self, context: &ComponentContext<'_>) -> ComponentView {
+        ComponentView::new(context.markup("names"))
+    }
+
+    fn bindings(&self) -> Vec<ComponentBinding> {
+        self.1.clone()
+    }
+}
+
+/// A key bound to one of the plugin's actions arrives as the name the
+/// plugin declared for it, alias and all, and Shift+Tab is `shift+tab`
+/// as `ComponentEvent::Key` documents (0.0.14 release-test audit B5):
+/// they arrived as `backtab` and `escape`.
+#[test]
+fn a_plugin_sees_the_key_names_it_declared() {
+    let seen = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let plugin = Names(
+        Arc::clone(&seen),
+        vec![
+            ComponentBinding::new("back", ["shift+tab"], "back"),
+            ComponentBinding::new("quit", ["esc", "q"], "quit"),
+            ComponentBinding::new("cut", ["Control+X"], "cut"),
+        ],
+    );
+    let view = PluginView::new("names", Box::new(plugin));
+    let script = Script::new().keys("shift+tab escape q ctrl+x ctrl+shift+left shift+tab enter");
+    let _ = headless::run(view, script, 40, 5);
+    assert_eq!(
+        *seen.lock().unwrap(),
+        [
+            "shift+tab",
+            "esc",
+            "esc",
+            "Control+X",
+            "ctrl+shift+left",
+            "shift+tab",
+            "enter"
+        ]
+    );
+
+    // Undeclared, Shift+Tab is still `shift+tab`.
+    let seen = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let view = PluginView::new("names", Box::new(Names(Arc::clone(&seen), Vec::new())));
+    let _ = headless::run(
+        view,
+        Script::new().keys("shift+tab ctrl+shift+tab enter"),
+        40,
+        5,
+    );
+    assert_eq!(
+        *seen.lock().unwrap(),
+        ["shift+tab", "ctrl+shift+tab", "enter"]
+    );
+}

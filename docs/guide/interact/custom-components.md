@@ -277,11 +277,18 @@ You can rebind keys at two levels:
   CLI's, can rebind any component:
 
 ```text
-# one per line; an empty right-hand side unbinds
+# one per line; `none` unbinds
 select.down = ctrl+n, down
 tabs.next   = alt+l
 split.grow  = alt+.
+select.pick = enter, "#"   # quote a key that is a comma or a hash
+overlays.shortcuts = none
 ```
+
+A `#` at the start of a line or after a space starts a comment, so the hash
+and comma keys are written in quotes (`"#"`, `","`). A line with no keys is
+an error rather than an unbind, so a stray `#` or `,` cannot unbind an
+action by accident.
 
 `Select` (and the views built on it), `Input` and every container dispatch
 through their keymaps, so rebinding changes what they do. The other

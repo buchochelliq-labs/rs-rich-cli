@@ -98,6 +98,20 @@ impl PackageSpec {
         for alias in &self.aliases {
             asset = asset.with_alias(alias)?;
         }
+        for (key, value) in [
+            ("version", &self.version),
+            ("license", &self.license),
+            ("author", &self.author),
+        ] {
+            if value
+                .as_deref()
+                .is_some_and(|value| value.chars().any(char::is_control))
+            {
+                return Err(MicroError::Manifest(format!(
+                    "the {key} holds control characters"
+                )));
+            }
+        }
         Ok(())
     }
 
@@ -174,9 +188,10 @@ pub fn package_files(
 
 /// Write a package for `spec` and `processed` at `dest`: a directory, or
 /// with `archive` a zip file (`dest` should then end in `.richmicro`).
-/// `dest` must not exist. The package is read back under the default
-/// [`Limits`] and returned, in the user layer; a package that would not
-/// load is removed and its error returned.
+/// `dest` must not exist, not even as a dangling symbolic link. The package
+/// is read back under the default [`Limits`] and returned, in the user
+/// layer; a package that would not load is removed (only ever what this call
+/// created) and its error returned.
 pub fn write_package(
     dest: &Path,
     spec: &PackageSpec,
@@ -184,16 +199,30 @@ pub fn write_package(
     archive: bool,
 ) -> Result<MicroAsset, MicroError> {
     let files = package_files(spec, processed)?;
-    if dest.exists() {
-        return Err(MicroError::Io(format!("{} already exists", dest.display())));
+    let exists = || MicroError::Io(format!("{} already exists", dest.display()));
+    // `symlink_metadata`: a dangling link does not `exist()`, but is there.
+    if std::fs::symlink_metadata(dest).is_ok() {
+        return Err(exists());
     }
     if let Some(parent) = dest.parent().filter(|p| !p.as_os_str().is_empty()) {
         std::fs::create_dir_all(parent).map_err(|e| io_error(parent, e))?;
     }
-    let written = if archive {
-        write_archive(dest, &files)
+    // Created exclusively (neither follows a link): when this fails,
+    // something else is at `dest`, and it is left alone.
+    let created = if archive {
+        std::fs::File::create_new(dest).map(Some)
     } else {
-        write_directory(dest, &files)
+        std::fs::create_dir(dest).map(|()| None)
+    };
+    let archive_file = match created {
+        Ok(file) => file,
+        Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => return Err(exists()),
+        Err(e) => return Err(io_error(dest, e)),
+    };
+    // From here `dest` is this call's own.
+    let written = match archive_file {
+        Some(file) => write_archive(file, dest, &files),
+        None => write_directory(dest, &files),
     };
     let loaded =
         written.and_then(|()| package::load_package(dest, Layer::User, &Limits::default()));
@@ -204,7 +233,6 @@ pub fn write_package(
 }
 
 fn write_directory(dest: &Path, files: &[(&str, Vec<u8>)]) -> Result<(), MicroError> {
-    std::fs::create_dir(dest).map_err(|e| io_error(dest, e))?;
     for (name, bytes) in files {
         let path = dest.join(name);
         std::fs::write(&path, bytes).map_err(|e| io_error(&path, e))?;
@@ -212,9 +240,12 @@ fn write_directory(dest: &Path, files: &[(&str, Vec<u8>)]) -> Result<(), MicroEr
     Ok(())
 }
 
-fn write_archive(dest: &Path, files: &[(&str, Vec<u8>)]) -> Result<(), MicroError> {
+fn write_archive(
+    file: std::fs::File,
+    dest: &Path,
+    files: &[(&str, Vec<u8>)],
+) -> Result<(), MicroError> {
     use zip::write::SimpleFileOptions;
-    let file = std::fs::File::create_new(dest).map_err(|e| io_error(dest, e))?;
     let mut writer = zip::ZipWriter::new(file);
     let options = SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated);
     for (name, bytes) in files {
@@ -228,7 +259,7 @@ fn write_archive(dest: &Path, files: &[(&str, Vec<u8>)]) -> Result<(), MicroErro
 }
 
 fn remove(path: &Path) {
-    if path.is_dir() {
+    if std::fs::symlink_metadata(path).is_ok_and(|m| m.is_dir()) {
         let _ = std::fs::remove_dir_all(path);
     } else {
         let _ = std::fs::remove_file(path);
@@ -291,7 +322,38 @@ mod tests {
         assert!(write_package(&dest, &spec, &processed, false).is_err());
         let spec = PackageSpec::new("ok", "alt").text("TOO-WIDE");
         assert!(write_package(&dest, &spec, &processed, false).is_err());
+        let spec = PackageSpec::new("ok", "alt").author("\u{1b}]0;title\u{7}");
+        let error = write_package(&dest, &spec, &processed, false).unwrap_err();
+        assert!(error.to_string().contains("control"), "{error}");
         assert!(!dest.exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn an_existing_link_is_refused_and_left_alone() {
+        // Release-test audit A, F5: a dangling symbolic link at the
+        // destination does not "exist", but it is not this call's to remove.
+        let dir = tempfile::tempdir().unwrap();
+        let processed = animated();
+        let spec = PackageSpec::new("ok", "alt").text("ok");
+        for archive in [false, true] {
+            let dest = dir.path().join(format!("out-{archive}"));
+            std::os::unix::fs::symlink("/nonexistent/target", &dest).unwrap();
+            let error = write_package(&dest, &spec, &processed, archive).unwrap_err();
+            assert!(error.to_string().contains("already exists"), "{error}");
+            let link = std::fs::symlink_metadata(&dest).expect("the link is still there");
+            assert!(link.file_type().is_symlink());
+            // A link to a directory is refused the same way, and the
+            // directory keeps what it held.
+            let target = dir.path().join(format!("target-{archive}"));
+            std::fs::create_dir(&target).unwrap();
+            std::fs::write(target.join("keep"), "x").unwrap();
+            let dest = dir.path().join(format!("dir-{archive}"));
+            std::os::unix::fs::symlink(&target, &dest).unwrap();
+            assert!(write_package(&dest, &spec, &processed, archive).is_err());
+            assert!(target.join("keep").is_file());
+            assert!(std::fs::symlink_metadata(&dest).is_ok());
+        }
     }
 
     #[test]

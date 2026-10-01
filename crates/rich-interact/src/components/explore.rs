@@ -47,39 +47,125 @@ pub fn json_path(path: &Path) -> String {
     }
 }
 
-/// The subtree at a path, drawn by [`Explorer`] when the preview renders.
-/// Holding the document and a path, not a copy, keeps a large document's
-/// previews cheap.
-struct Subtree {
+/// Where each node of a document sits, in the order a [`DataExplorer`]
+/// lists them: its parent and its position among the parent's children.
+/// Paths, values and previews are worked out from it when they are needed,
+/// so what the explorer keeps per node does not grow with the depth.
+struct Shape {
     root: Arc<Node>,
-    path: Path,
+    parents: Vec<Option<usize>>,
+    positions: Vec<usize>,
+}
+
+impl Shape {
+    /// The positions from the root down to node `index`.
+    fn route(&self, index: usize) -> Vec<usize> {
+        let mut route = vec![self.positions[index]];
+        let mut at = self.parents[index];
+        while let Some(parent) = at {
+            route.push(self.positions[parent]);
+            at = self.parents[parent];
+        }
+        // The root's own position is not a step.
+        route.pop();
+        route.reverse();
+        route
+    }
+
+    /// Node `index` and its path.
+    fn node(&self, index: usize) -> (Path, &Node) {
+        let mut node: &Node = &self.root;
+        let mut path = Path::root();
+        for position in self.route(index) {
+            let (segment, child) = match &node.value {
+                Value::Seq(items) => (PathSegment::Index(position), &items[position]),
+                Value::Map(entries) => {
+                    let (key, child) = &entries[position];
+                    (PathSegment::Key(key.clone()), child)
+                }
+                _ => unreachable!("a route only steps into containers"),
+            };
+            path.push(segment);
+            node = child;
+        }
+        (path, node)
+    }
+
+    fn path(&self, index: usize) -> Path {
+        self.node(index).0
+    }
+}
+
+/// A node's name: `$` for the root, its key, or `[index]`.
+fn name(segment: Option<&PathSegment>) -> String {
+    match segment {
+        None => "$".to_string(),
+        Some(PathSegment::Key(key)) => key.clone(),
+        Some(PathSegment::Index(index)) => format!("[{index}]"),
+    }
+}
+
+/// Every node under `root`, parents before children in document order:
+/// `visit(path, position, node)`, `position` being its place among its
+/// parent's children. One path is kept and changed as the walk goes, so
+/// the walk's memory is the depth, not the width times the depth.
+fn walk<'a>(root: &'a Node, mut visit: impl FnMut(&[PathSegment], usize, &'a Node)) {
+    visit(&[], 0, root);
+    let mut segments: Vec<PathSegment> = Vec::new();
+    // Each open container and the position of its next child.
+    let mut stack: Vec<(&'a Node, usize)> = vec![(root, 0)];
+    while let Some((node, next)) = stack.last_mut() {
+        let position = *next;
+        let child = match &node.value {
+            Value::Seq(items) => items
+                .get(position)
+                .map(|child| (PathSegment::Index(position), child)),
+            Value::Map(entries) => entries
+                .get(position)
+                .map(|(key, child)| (PathSegment::Key(key.clone()), child)),
+            _ => None,
+        };
+        let Some((segment, child)) = child else {
+            stack.pop();
+            segments.pop();
+            continue;
+        };
+        *next += 1;
+        segments.push(segment);
+        visit(&segments, position, child);
+        stack.push((child, 0));
+    }
+}
+
+/// The subtree of a node, drawn by [`Explorer`] when the preview renders.
+/// Holding the document's shape and an index, not a copy or a path, keeps
+/// a large document's previews cheap.
+struct Subtree {
+    shape: Arc<Shape>,
+    index: usize,
     depth: usize,
 }
 
 impl Subtree {
-    fn view(&self) -> Option<Explorer<'_>> {
-        let node = self.root.at(&self.path)?;
-        let label = match self.path.last() {
-            None => "$".to_string(),
-            Some(PathSegment::Key(key)) => key.clone(),
-            Some(PathSegment::Index(index)) => format!("[{index}]"),
-        };
-        Some(Explorer::new(node).max_depth(self.depth).root_label(label))
+    /// The subtree, with at most `rows` children of each container: the
+    /// pane is never taller than the terminal, so what it shows is the
+    /// same, and a container with a million children costs a screenful.
+    fn view(&self, rows: usize) -> Explorer<'_> {
+        let (path, node) = self.shape.node(self.index);
+        Explorer::new(node)
+            .max_depth(self.depth)
+            .max_length(rows.max(1))
+            .root_label(name(path.last()))
     }
 }
 
 impl Renderable for Subtree {
     fn rich_render(&self, console: &Console, options: &ConsoleOptions) -> Vec<Segment> {
-        self.view()
-            .map(|view| view.rich_render(console, options))
-            .unwrap_or_default()
+        self.view(options.max_height).rich_render(console, options)
     }
 
     fn measure(&self, console: &Console, options: &ConsoleOptions) -> Measurement {
-        self.view().map_or_else(
-            || Measurement::new(0, 0),
-            |view| view.measure(console, options),
-        )
+        self.view(options.max_height).measure(console, options)
     }
 }
 
@@ -109,72 +195,66 @@ impl Renderable for Subtree {
 /// ```
 pub struct DataExplorer {
     tree: TreeSelect<usize>,
-    root: Arc<Node>,
-    paths: Vec<Path>,
+    shape: Arc<Shape>,
     keymap: Keymap,
 }
 
 impl DataExplorer {
     /// Explore `node` under `prompt` (a file name, say). Only the root's
     /// children show at first.
+    ///
+    /// Building it is linear in the number of nodes: a node's path, its
+    /// JSONPath and its preview are worked out from its place in the
+    /// document when they are needed.
     pub fn new(prompt: impl Into<String>, node: Node) -> DataExplorer {
         let root = Arc::new(node);
         let mut nodes: Vec<(usize, Item<usize>)> = Vec::new();
-        let mut paths = Vec::new();
         let mut crumbs = Vec::new();
-        // Parents before children, in document order.
-        let mut stack: Vec<(Path, usize)> = vec![(Path::root(), 0)];
-        while let Some((path, depth)) = stack.pop() {
-            let Some(node) = root.at(&path) else { continue };
-            let name = match path.last() {
-                None => "$".to_string(),
-                Some(PathSegment::Key(key)) => key.clone(),
-                Some(PathSegment::Index(index)) => format!("[{index}]"),
-            };
+        let mut parents = Vec::new();
+        let mut positions = Vec::new();
+        // The index of the last node seen at each depth.
+        let mut open: Vec<usize> = Vec::new();
+        walk(&root, |segments, position, node| {
+            let depth = segments.len();
+            let name = name(segments.last());
             let value = display_value(node);
             let label = if value.is_empty() {
                 name.clone()
-            } else if path.is_root() {
+            } else if depth == 0 {
                 format!("{name} {value}")
             } else {
                 format!("{name}: {value}")
             };
             let index = nodes.len();
-            let preview = Preview::Renderable(Arc::new(Subtree {
-                root: Arc::clone(&root),
-                path: path.clone(),
-                depth: 3,
-            }));
-            let mut item = Item::new(index, label);
-            item.preview = Some(preview);
-            nodes.push((depth, item));
+            open.truncate(depth);
+            parents.push(open.last().copied());
+            open.push(index);
+            positions.push(position);
+            nodes.push((depth, Item::new(index, label)));
             crumbs.push(name);
-            match &node.value {
-                Value::Map(entries) => {
-                    for (key, _) in entries.iter().rev() {
-                        stack.push((path.child_key(key), depth + 1));
-                    }
-                }
-                Value::Seq(items) => {
-                    for i in (0..items.len()).rev() {
-                        stack.push((path.child_index(i), depth + 1));
-                    }
-                }
-                _ => {}
-            }
-            paths.push(path);
+        });
+        let shape = Arc::new(Shape {
+            root,
+            parents,
+            positions,
+        });
+        for (index, (_, item)) in nodes.iter_mut().enumerate() {
+            item.preview = Some(Preview::Renderable(Arc::new(Subtree {
+                shape: Arc::clone(&shape),
+                index,
+                depth: 3,
+            })));
         }
-        let jsonpaths = paths.iter().map(json_path).collect();
+        let paths = Arc::clone(&shape);
         let mut tree = TreeSelect::new(prompt, nodes)
             .crumbs(crumbs)
-            .paths(jsonpaths)
+            .paths_with(move |index| json_path(&paths.path(index)))
             .breadcrumbs(true)
             .fold_below(1);
         tree.set_hints(Some("←→ fold · ctrl+y path · alt+y value".into()));
         DataExplorer {
             tree,
-            root,
-            paths,
+            shape,
             keymap: explore_keymap(),
         }
     }
@@ -184,11 +264,10 @@ impl DataExplorer {
     /// for an array) or `None`. Micro asset placeholders keep their tags,
     /// so the painter's graphics draw them where the terminal can.
     pub fn icons(mut self, icon: impl Fn(&Path, &Node) -> Option<rich::Text>) -> Self {
-        let icons = self
-            .paths
-            .iter()
-            .map(|path| self.root.at(path).and_then(|node| icon(path, node)))
-            .collect();
+        let mut icons = Vec::new();
+        walk(&self.shape.root, |segments, _, node| {
+            icons.push(icon(&Path::from(segments.to_vec()), node));
+        });
         self.tree.set_icons(icons);
         self
     }
@@ -238,12 +317,12 @@ impl DataExplorer {
 
     /// The document.
     pub fn document(&self) -> &Node {
-        &self.root
+        &self.shape.root
     }
 
     /// The focused node's path.
-    pub fn focused(&self) -> Option<&Path> {
-        self.tree.focused().map(|index| &self.paths[index])
+    pub fn focused(&self) -> Option<Path> {
+        self.tree.focused().map(|index| self.shape.path(index))
     }
 
     /// The tree underneath.
@@ -253,10 +332,10 @@ impl DataExplorer {
 
     /// Alt+Y: copy the focused node's value.
     fn copy_value(&mut self) {
-        let Some(node) = self.focused().and_then(|path| self.root.at(path)) else {
+        let Some(index) = self.tree.focused() else {
             return;
         };
-        let result = clipboard::copy(copy_text(node));
+        let result = clipboard::copy(copy_text(self.shape.node(index).1));
         self.tree
             .set_status(Some(clipboard::report("value", &result)));
     }
@@ -280,7 +359,7 @@ impl Component for DataExplorer {
             }
         }
         match self.tree.handle(event, context) {
-            Flow::Done(index) => Flow::Done(self.paths[index].clone()),
+            Flow::Done(index) => Flow::Done(self.shape.path(index)),
             Flow::Continue => Flow::Continue,
             Flow::Cancel => Flow::Cancel,
             Flow::Ignored => Flow::Ignored,
@@ -301,6 +380,6 @@ impl Component for DataExplorer {
     }
 
     fn prompt(&mut self, io: &mut dyn LineIo) -> Result<Option<Path>, NotInteractive> {
-        Ok(self.tree.prompt(io)?.map(|index| self.paths[index].clone()))
+        Ok(self.tree.prompt(io)?.map(|index| self.shape.path(index)))
     }
 }

@@ -4,7 +4,9 @@
 //! Everything a [`Session`] turns on is recorded in a process-wide flag
 //! set, and undone by whichever comes first: [`Session::leave`], dropping
 //! the session (an early return, `?`), or a panic, through a hook installed
-//! on first use that restores the terminal before the panic message prints.
+//! on first use that restores the terminal before the panic message prints
+//! (a panic caught by [`catch_panic`], which the session survives, leaves
+//! it alone).
 //! Ctrl+C arrives as a key in raw mode, so it ends the event loop the
 //! ordinary way. On Unix, SIGTERM, SIGHUP and SIGQUIT restore the terminal
 //! too, from a thread that then takes the signal's default action. Ctrl+Z
@@ -18,7 +20,9 @@
 //! calls [`run`](crate::run) from inside another) fails with
 //! [`io::ErrorKind::ResourceBusy`] and changes nothing.
 
+use std::cell::Cell;
 use std::io::{self, Write};
+use std::panic::UnwindSafe;
 use std::process::Command;
 use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::sync::Once;
@@ -259,10 +263,33 @@ fn write_direct(text: &str) {
     }
 }
 
+thread_local! {
+    /// How many [`catch_panic`] calls are running on this thread.
+    static CATCHING: Cell<usize> = const { Cell::new(0) };
+}
+
+/// [`std::panic::catch_unwind`] for code that runs inside a live session
+/// and carries on after a panic (a plugin component's
+/// [`PluginView`](crate::plugin::PluginView)): the session's panic hook
+/// neither gives the terminal back nor prints the panic message over the
+/// view for a panic caught here, since the session goes on. A panic nothing
+/// catches still restores the terminal before its message prints.
+pub fn catch_panic<R>(f: impl FnOnce() -> R + UnwindSafe) -> std::thread::Result<R> {
+    CATCHING.with(|depth| depth.set(depth.get() + 1));
+    let result = std::panic::catch_unwind(f);
+    CATCHING.with(|depth| depth.set(depth.get() - 1));
+    result
+}
+
 fn install_hook() {
     HOOK.call_once(|| {
         let previous = std::panic::take_hook();
         std::panic::set_hook(Box::new(move |info| {
+            // Caught on this thread while a session is live: the session
+            // runs on, and the catcher reports the panic itself.
+            if CATCHING.with(Cell::get) > 0 && ACTIVE.load(Ordering::SeqCst) != 0 {
+                return;
+            }
             let _ = restore();
             previous(info);
         }));

@@ -500,6 +500,18 @@ fn images_are_cached_in_memory_and_on_disk() {
     assert!(graphics.cache_bytes() > 0);
     let files: Vec<_> = std::fs::read_dir(dir.path()).unwrap().collect();
     assert_eq!(files.len(), 2, "one optimised variant per asset and size");
+    // Named by a SHA-256 of everything the variant depends on, so a crafted
+    // package cannot collide with another asset's key and replace its
+    // cached image (release-test audit A; a 64-bit FNV-1a could be).
+    for file in &files {
+        let name = file.as_ref().unwrap().file_name();
+        let name = name.to_str().unwrap();
+        let stem = name
+            .strip_suffix(".png")
+            .unwrap_or_else(|| panic!("{name}"));
+        assert_eq!(stem.len(), 64, "{name}");
+        assert!(stem.bytes().all(|b| b.is_ascii_hexdigit()), "{name}");
+    }
     // A new session reads the variants back and draws the same bytes.
     let again = MicroGraphics::new(
         Arc::clone(&registry),

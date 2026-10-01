@@ -74,8 +74,15 @@ impl Pty {
     }
 
     pub fn send(&mut self, bytes: &str) {
-        self.writer.write_all(bytes.as_bytes()).unwrap();
-        self.writer.flush().unwrap();
+        self.try_send(bytes).unwrap();
+    }
+
+    /// Send `bytes` when the child may already have finished: on macOS a
+    /// write to the master fails (EIO) once the terminal's last reader is
+    /// gone, where Linux buffers it.
+    pub fn try_send(&mut self, bytes: &str) -> std::io::Result<()> {
+        self.writer.write_all(bytes.as_bytes())?;
+        self.writer.flush()
     }
 
     /// Finish, and return the whole output and the final screen.

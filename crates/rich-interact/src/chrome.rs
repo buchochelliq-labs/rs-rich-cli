@@ -253,6 +253,8 @@ pub struct StatusBar<M = ()> {
     separator: String,
     theme: Theme,
     clock: Rc<dyn Fn() -> Duration>,
+    /// Whether spinners turn; off, each shows its first frame.
+    animate: bool,
     _output: PhantomData<fn() -> M>,
 }
 
@@ -271,6 +273,7 @@ impl<M> StatusBar<M> {
             separator: "│".to_string(),
             theme: Theme::default(),
             clock: Rc::new(move || started.elapsed()),
+            animate: animation_allowed(&rich_ext::capabilities::SystemEnvironment),
             _output: PhantomData,
         }
     }
@@ -318,6 +321,15 @@ impl<M> StatusBar<M> {
         self
     }
 
+    /// Whether spinners turn (default: unless `RICH_ANIMATION=0`, or
+    /// `RICH_A11Y` asks for reduced motion, no animation or a screen
+    /// reader, as for every other animation). Off, a spinner shows its
+    /// first frame and the bar never ticks.
+    pub fn animate(mut self, on: bool) -> Self {
+        self.animate = on;
+        self
+    }
+
     /// A handle that changes this bar's items while it shows.
     pub fn handle(&self) -> StatusHandle {
         self.handle.clone()
@@ -328,7 +340,11 @@ impl<M> StatusBar<M> {
     pub fn line(&self, context: &Context<'_>, keymap: Option<&Keymap>) -> Vec<Segment> {
         let shared = self.handle.shared.borrow();
         let keymap = keymap.or(shared.keymap.as_ref());
-        let now = (self.clock)();
+        let now = if self.animate {
+            (self.clock)()
+        } else {
+            Duration::ZERO
+        };
         let part = |entry: &Entry| -> Vec<Segment> {
             match &entry.item {
                 StatusItem::Text(markup) => inline(context, markup),
@@ -424,8 +440,11 @@ impl<M> StatusBar<M> {
         line
     }
 
-    /// The fastest spinner's interval, while one shows.
+    /// The fastest spinner's interval, while one shows and turns.
     fn spinner_interval(&self) -> Option<Duration> {
+        if !self.animate {
+            return None;
+        }
         let shared = self.handle.shared.borrow();
         shared
             .entries
@@ -436,6 +455,20 @@ impl<M> StatusBar<M> {
             })
             .min()
     }
+}
+
+/// Whether animation may run in `env`: `RICH_ANIMATION` when set, else not
+/// when `RICH_A11Y` lists `reduced-motion`, `no-animation` or
+/// `screen-reader` (the same reading as the capability report's).
+fn animation_allowed(env: &dyn rich_ext::capabilities::Environment) -> bool {
+    if let Some(on) = env
+        .var("RICH_ANIMATION")
+        .and_then(|value| rich_ext::capabilities::parse_bool(&value))
+    {
+        return on;
+    }
+    let policy = rich_ext::a11y::AccessibilityPolicy::from_env(env);
+    !(policy.no_animation || policy.reduced_motion)
 }
 
 /// A spinner's interval and frames, by name; `dots` for one unknown.
@@ -595,7 +628,14 @@ impl<'a, M> Breadcrumbs<'a, M> {
     /// The line at `width`, and each crumb shown: its index and the cells
     /// it takes.
     pub fn layout(&self, width: usize) -> (Vec<Segment>, Vec<(usize, std::ops::Range<usize>)>) {
-        let path = self.crumbs.get();
+        // As painted: a control in a crumb shows as a one-cell picture, so
+        // the spans clicks are matched against count it.
+        let path: Vec<String> = self
+            .crumbs
+            .get()
+            .iter()
+            .map(|crumb| kit::shown(crumb))
+            .collect();
         let separator = format!(" {} ", self.separator);
         let gap = cell_len(&separator);
         let icons: Vec<Option<Vec<Segment>>> = path
@@ -717,9 +757,39 @@ mod tests {
         assert_eq!(spinner_frame("no-such", Duration::ZERO), "⠋");
         let bar: StatusBar = StatusBar::new()
             .left("work", StatusItem::spinner("line", "building"))
-            .clock(|| Duration::from_millis(270));
+            .clock(|| Duration::from_millis(270))
+            .animate(true);
         assert_eq!(bar.line_text(30), "| building");
         assert_eq!(Component::tick(&bar), Some(Duration::from_millis(130)));
+    }
+
+    /// Reduced motion stills a spinner on its first frame, and the bar
+    /// stops ticking, like every other animation (0.0.14 release-test
+    /// audit B).
+    #[test]
+    fn spinners_hold_still_under_reduced_motion() {
+        use rich_ext::capabilities::MapEnvironment;
+        let env = |pairs: &[(&str, &str)]| {
+            let mut env = MapEnvironment::tty();
+            for (name, value) in pairs {
+                env.vars.insert(name.to_string(), value.to_string());
+            }
+            env
+        };
+        assert!(animation_allowed(&env(&[])));
+        assert!(!animation_allowed(&env(&[("RICH_A11Y", "reduced-motion")])));
+        assert!(!animation_allowed(&env(&[("RICH_A11Y", "screen-reader")])));
+        assert!(!animation_allowed(&env(&[("RICH_ANIMATION", "0")])));
+        assert!(animation_allowed(&env(&[
+            ("RICH_A11Y", "reduced-motion"),
+            ("RICH_ANIMATION", "1")
+        ])));
+        let bar: StatusBar = StatusBar::new()
+            .left("work", StatusItem::spinner("line", "building"))
+            .clock(|| Duration::from_millis(270))
+            .animate(false);
+        assert_eq!(bar.line_text(30), "- building");
+        assert_eq!(Component::tick(&bar), None);
     }
 
     #[test]
@@ -749,6 +819,17 @@ mod tests {
         let (line, spans) = crumbs.layout(40);
         assert_eq!(text(&line), "home › [] src");
         assert_eq!(spans[1], (1, 7..13));
+    }
+
+    /// A crumb holding controls is measured as painted (each control a
+    /// one-cell picture), so a click lands on the crumb under it (0.0.14
+    /// release-test audit B).
+    #[test]
+    fn breadcrumbs_measure_controls_as_painted() {
+        let crumbs: Breadcrumbs = Breadcrumbs::new(["a\u{1b}\u{1b}\u{1b}", "bb"]);
+        let (line, spans) = crumbs.layout(40);
+        assert_eq!(text(&line), "a␛␛␛ › bb");
+        assert_eq!(spans, [(0, 0..4), (1, 7..9)]);
     }
 
     #[test]

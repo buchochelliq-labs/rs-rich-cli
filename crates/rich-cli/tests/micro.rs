@@ -312,3 +312,246 @@ fn asset_picks_micro_assets_by_name() {
     );
     assert_eq!(out.status.code(), Some(2));
 }
+
+/// A PNG header (signature, IHDR, IDAT, IEND): enough for the package
+/// reader's header check.
+fn png(width: u32, height: u32) -> Vec<u8> {
+    let mut out = b"\x89PNG\r\n\x1a\n".to_vec();
+    let mut chunk = |kind: &[u8], data: &[u8]| {
+        out.extend((data.len() as u32).to_be_bytes());
+        out.extend(kind);
+        out.extend(data);
+        out.extend([0; 4]);
+    };
+    let mut ihdr = width.to_be_bytes().to_vec();
+    ihdr.extend(height.to_be_bytes());
+    ihdr.extend([8, 6, 0, 0, 0]);
+    chunk(b"IHDR", &ihdr);
+    chunk(b"IDAT", &[]);
+    chunk(b"IEND", &[]);
+    out
+}
+
+/// A package directory at `dir` holding `manifest`.
+fn package(dir: &Path, manifest: serde_json::Value) {
+    std::fs::create_dir_all(dir).unwrap();
+    std::fs::write(dir.join("manifest.json"), manifest.to_string()).unwrap();
+    std::fs::write(dir.join("s.png"), png(16, 16)).unwrap();
+}
+
+fn simple_manifest(name: &str) -> serde_json::Value {
+    serde_json::json!({
+        "schema_version": 1, "name": name, "alt": "a square",
+        "static": "s.png", "fallback": {"text": "ok"},
+    })
+}
+
+/// No terminal control (ESC, BEL, C1 CSI) reaches the terminal.
+fn assert_inert(what: &str, out: &Output) {
+    for (stream, bytes) in [("stdout", &out.stdout), ("stderr", &out.stderr)] {
+        let shown = text(bytes);
+        assert!(
+            !shown.contains(['\u{1b}', '\u{7}', '\u{9b}']),
+            "{what} {stream}: {shown:?}"
+        );
+    }
+}
+
+#[test]
+fn untrusted_package_strings_never_reach_the_terminal_raw() {
+    // Release-test audit A, F1: pack entry names, manifest fields and the
+    // paths packages live at are untrusted; every message that quotes them
+    // shows their controls instead of executing them.
+    let (root, work, home) = dirs();
+    let evil = "\u{1b}]0;PWNED\u{7}\u{1b}[31mRED";
+    // A pack naming a package with controls in it.
+    let pack = root.path().join("evilpack");
+    package(&pack.join("good"), simple_manifest("evil/good"));
+    std::fs::write(
+        pack.join("pack.json"),
+        serde_json::json!({"schema_version": 1, "name": "evil", "packages": ["good", evil]})
+            .to_string(),
+    )
+    .unwrap();
+    let out = rich(&work, &home, &["micro", "install", pack.to_str().unwrap()]);
+    assert!(out.status.success(), "{}", text(&out.stderr));
+    assert_inert("install", &out);
+    assert!(
+        text(&out.stderr).contains("␛]0;PWNED␇"),
+        "{}",
+        text(&out.stderr)
+    );
+    let out = rich(&work, &home, &["micro", "list"]);
+    assert_inert("list", &out);
+    let out = rich(&work, &home, &["micro", "packs"]);
+    assert_inert("packs", &out);
+
+    // A package whose manifest carries controls is refused, and saying so
+    // does not run them.
+    let pkg = root.path().join("evilpkg");
+    let mut manifest = simple_manifest("evilauthor");
+    manifest["author"] = serde_json::json!(evil);
+    manifest["version"] = serde_json::json!("1\u{1b}[2J");
+    package(&pkg, manifest);
+    let out = rich(&work, &home, &["micro", "add", pkg.to_str().unwrap()]);
+    assert_inert("add", &out);
+    assert!(!out.status.success(), "{}", text(&out.stdout));
+    let out = rich(&work, &home, &["micro", "show", "evilauthor"]);
+    assert_inert("show", &out);
+
+    // Packages in user-layer folders whose names hold controls: their
+    // origins (in `show`, `explain` and the collision warning) are shown.
+    let user = home.join(".config/rich/micro");
+    package(&user.join(format!("a{evil}")), simple_manifest("team/x"));
+    package(&user.join(format!("b{evil}")), simple_manifest("team/x"));
+    let out = rich(&work, &home, &["micro", "show", "team/x"]);
+    assert!(out.status.success(), "{}", text(&out.stderr));
+    assert_inert("show (origin)", &out);
+    let out = rich(&work, &home, &["micro", "remove", "team/x"]);
+    assert_inert("remove", &out);
+
+    // An untrusted project under a directory whose name holds controls.
+    let project = root.path().join(format!("p{evil}"));
+    std::fs::create_dir_all(project.join(".rich/micro")).unwrap();
+    for args in [&["micro", "list"][..], &["micro", "packs"]] {
+        let out = rich(&project, &home, args);
+        assert_inert("untrusted note", &out);
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn create_and_add_leave_an_existing_link_alone() {
+    // Release-test audit A, F5: `create --output PATH` over a dangling
+    // symbolic link refused with "File exists" and then deleted the link.
+    let (_root, work, home) = dirs();
+    source(&work);
+    std::os::unix::fs::symlink("/nonexistent/target", work.join("out")).unwrap();
+    let out = rich(
+        &work,
+        &home,
+        &[
+            "micro",
+            "create",
+            "heart.gif",
+            "--name",
+            "x",
+            "--alt",
+            "y",
+            "--output",
+            "out",
+        ],
+    );
+    assert!(!out.status.success());
+    assert!(
+        text(&out.stderr).contains("already exists"),
+        "{}",
+        text(&out.stderr)
+    );
+    let link = std::fs::symlink_metadata(work.join("out")).expect("the link is kept");
+    assert!(link.file_type().is_symlink());
+
+    // `add` checks its destination the same way.
+    let out = rich(
+        &work,
+        &home,
+        &[
+            "micro",
+            "create",
+            "heart.gif",
+            "--name",
+            "team/x",
+            "--alt",
+            "y",
+            "--archive",
+        ],
+    );
+    assert!(out.status.success(), "{}", text(&out.stderr));
+    let user = home.join(".config/rich/micro");
+    std::fs::create_dir_all(&user).unwrap();
+    std::os::unix::fs::symlink("/nonexistent/target", user.join("team.x.richmicro")).unwrap();
+    let out = rich(&work, &home, &["micro", "add", "team.x.richmicro"]);
+    assert!(!out.status.success());
+    assert!(std::fs::symlink_metadata(user.join("team.x.richmicro")).is_ok());
+}
+
+/// [`rich`], failing the test when it has not finished within 20 seconds.
+#[cfg(unix)]
+fn rich_within(work: &Path, home: &Path, args: &[&str]) -> Output {
+    let mut child = Command::new(env!("CARGO_BIN_EXE_rich"))
+        .current_dir(work)
+        .env("HOME", home)
+        .env("XDG_CONFIG_HOME", home.join(".config"))
+        .env("COLUMNS", "100")
+        .env("NO_COLOR", "1")
+        .env_remove("RICH_MICRO")
+        .args(args)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
+    while child.try_wait().unwrap().is_none() {
+        if std::time::Instant::now() > deadline {
+            let _ = child.kill();
+            panic!("rich {args:?} hung");
+        }
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+    child.wait_with_output().unwrap()
+}
+
+#[cfg(unix)]
+#[test]
+fn a_fifo_in_a_layer_is_skipped_with_a_warning() {
+    // Release-test audit A, F6: a FIFO named `*.richmicro` in a (cloned,
+    // untrusted) project's .rich/micro hung every `--project` command, and
+    // every command once the project was trusted.
+    let (root, work, home) = dirs();
+    let layer = work.join(".rich/micro");
+    std::fs::create_dir_all(&layer).unwrap();
+    let made = Command::new("mkfifo")
+        .arg(layer.join("a.richmicro"))
+        .status()
+        .unwrap();
+    assert!(made.success());
+    let pkg = root.path().join("pkg");
+    package(&pkg, simple_manifest("team/x"));
+
+    let out = rich_within(&work, &home, &["micro", "remove", "--project", "foo"]);
+    assert_eq!(out.status.code(), Some(2), "{}", text(&out.stderr));
+    let out = rich_within(
+        &work,
+        &home,
+        &["micro", "add", "--project", pkg.to_str().unwrap()],
+    );
+    assert!(out.status.success(), "{}", text(&out.stderr));
+    let out = rich_within(&work, &home, &["micro", "uninstall", "--project", "foo"]);
+    assert_eq!(out.status.code(), Some(2), "{}", text(&out.stderr));
+    let out = rich_within(&work, &home, &["micro", "packs", "--micro-project"]);
+    assert!(out.status.success(), "{}", text(&out.stderr));
+    let out = rich_within(&work, &home, &["micro", "list", "--micro-project"]);
+    assert!(out.status.success(), "{}", text(&out.stderr));
+    assert!(
+        text(&out.stderr).contains("not a regular file"),
+        "{}",
+        text(&out.stderr)
+    );
+    assert!(
+        text(&out.stdout).contains("team/x"),
+        "{}",
+        text(&out.stdout)
+    );
+
+    // Writing to an untrusted project's layer does not trust it: what was
+    // added there is not drawn.
+    let out = rich_within(&work, &home, &["-p", "--emoji", "a :micro:team/x: b"]);
+    assert_eq!(text(&out.stdout), "a :micro:team/x: b\n");
+    let out = rich_within(
+        &work,
+        &home,
+        &["-p", "--emoji", "--micro-project", "a :micro:team/x: b"],
+    );
+    assert_eq!(text(&out.stdout), "a ok b\n");
+}

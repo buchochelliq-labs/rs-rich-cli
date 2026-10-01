@@ -97,8 +97,16 @@ turns tree filtering on for a list you build yourself.
 from the left (`… › bin › main.rs`) when it is too wide. `crumbs` names each
 node in it (a key instead of `key: value`), and `paths` sets what Ctrl+Y
 copies and what actions see as each node's value. By default that is the
-labels joined by `/`. `fold_below(depth)` folds everything from a depth
-down. `set_collapsed(index, bool)` folds or opens one node.
+labels joined by `/`. `paths_with(|index| …)` works each one out when it
+is asked for instead, so a large tree keeps no string per node.
+`fold_below(depth)` folds everything from a depth down.
+`set_collapsed(index, bool)` folds or opens one node.
+
+Building a tree is linear in its nodes, and so is what it keeps: the
+paths and the guides (`│   ├── `) are worked out for the focused node and
+the rows on screen. `DataExplorer` keeps each node's place in the document,
+not its path, and its preview draws at most a screenful of each
+container's children.
 
 The breadcrumbs line is drawn by a small private helper for now. It will
 move to the shared breadcrumbs component of the status bar work (#482).
@@ -120,9 +128,10 @@ let line = clipboard::report("path", &result); // "copied path", or why not
 A real session writes an OSC 52 sequence, and only when
 `rich_ext::clipboard::detect` says the terminal takes one:
 
-- `RICH_CLIPBOARD=1` or `0` decides, whatever else is true;
-- otherwise, never when the output is not a terminal, on `TERM=dumb`, or
-  inside tmux or screen, which pass OSC 52 on only when configured to;
+- never when the output is not a terminal, whatever else is true;
+- `RICH_CLIPBOARD=1` or `0` decides on a terminal;
+- otherwise, never on `TERM=dumb` or inside tmux or screen, which pass
+  OSC 52 on only when configured to;
 - yes for kitty, iTerm2, WezTerm, Windows Terminal, ghostty, Alacritty,
   foot, contour, rio and VS Code's terminal;
 - no for anything else.

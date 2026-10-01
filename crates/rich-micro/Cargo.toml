@@ -45,6 +45,10 @@ serde_json.workspace = true
 zip = { version = "8", default-features = false, features = ["deflate-flate2"] }
 # zip's deflate needs a flate2 backend: the pure-Rust miniz_oxide one.
 flate2 = { version = "1.1", default-features = false, features = ["rust_backend"] }
+# The on-disk cache's file names: a SHA-256 of what a variant depends on, so a
+# crafted package cannot collide with another asset's key. Already in the
+# tree (lumis).
+sha2 = "0.11"
 
 [dev-dependencies]
 tempfile = "3"

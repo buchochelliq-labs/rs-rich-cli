@@ -532,10 +532,29 @@ impl ScrollState {
             .bind("bottom", keys("end G"), "to the bottom")
     }
 
+    /// Do one of [`keymap`](Self::keymap)'s actions (`scroll-up`,
+    /// `page-down`, `top`, ...): how a component that looks its keys up in
+    /// a keymap, and so honours rebinding, scrolls. Returns whether
+    /// `action` is a scroll action (moved or not).
+    pub fn act(&mut self, action: &str, page: usize) -> bool {
+        let page_step = page.max(1) as isize;
+        match action {
+            "scroll-up" => self.scroll(-1, page),
+            "scroll-down" => self.scroll(1, page),
+            "page-up" => self.scroll(-page_step, page),
+            "page-down" => self.scroll(page_step, page),
+            "top" => self.scroll_to(0, page),
+            "bottom" => self.scroll_to(usize::MAX, page),
+            _ => return false,
+        };
+        true
+    }
+
     /// Move with the usual keys and the mouse wheel: arrows and `j`/`k` by a
     /// line, PageUp/PageDown, `b` and Space by a page, Home/End and `g`/`G`
     /// to the ends, and the wheel by three lines. Returns whether the event
-    /// was a scroll key (moved or not).
+    /// was a scroll key (moved or not). The keys are fixed; see
+    /// [`act`](Self::act) for keys from a keymap.
     pub fn handle(&mut self, event: &Event, page: usize) -> bool {
         let page_step = page.max(1) as isize;
         match event {
@@ -790,7 +809,8 @@ pub fn ancestors(parents: &[Option<usize>], index: usize) -> impl Iterator<Item 
 /// indices with the positions to highlight, in any order) plus every
 /// ancestor of each, in tree order (index order, parents before
 /// children). Returns the list and, for each entry, whether it is only
-/// there as an ancestor (context), with nothing highlighted.
+/// there as an ancestor (context), with nothing highlighted. A parent
+/// index past the list is not a node: the walk up stops there.
 ///
 /// ```
 /// use rich_interact::kit::keep_ancestors;
@@ -814,8 +834,9 @@ pub fn keep_ancestors(
     let mut found: Vec<Option<Vec<usize>>> = vec![None; count];
     let mut kept = vec![false; count];
     for (index, positions) in matches {
+        // A parent past the list (a malformed parent list) ends the walk.
         for ancestor in ancestors(parents, index) {
-            if kept[ancestor] {
+            if kept.get(ancestor).is_none_or(|&kept| kept) {
                 break;
             }
             kept[ancestor] = true;
@@ -889,9 +910,25 @@ impl TextBuffer {
         self.caret
     }
 
-    /// Put the caret at character `caret` (clamped to the end).
+    /// Put the caret at character `caret` (clamped to the end), or at the
+    /// start of the grapheme `caret` falls inside.
     pub fn set_caret(&mut self, caret: usize) {
         self.caret = caret.min(self.len());
+        self.snap(false);
+    }
+
+    /// Move the caret onto a grapheme boundary: on to the end of the
+    /// grapheme it is inside (`forward`) or back to its start. Typing a
+    /// base character in front of a combining mark or U+FE0F, or deleting
+    /// what kept two clusters apart, can leave it inside one.
+    fn snap(&mut self, forward: bool) {
+        let stops = self.stops();
+        self.caret = if forward {
+            stops.iter().copied().find(|&stop| stop >= self.caret)
+        } else {
+            stops.iter().rev().copied().find(|&stop| stop <= self.caret)
+        }
+        .unwrap_or(self.caret);
     }
 
     /// The byte offset of character `caret`.
@@ -946,6 +983,7 @@ impl TextBuffer {
         let at = self.byte(self.caret);
         self.value.insert_str(at, text);
         self.caret += text.chars().count();
+        self.snap(true);
     }
 
     /// Move the caret one grapheme left.
@@ -975,6 +1013,7 @@ impl TextBuffer {
         let (from, to) = (self.byte(previous), self.byte(self.caret));
         self.value.replace_range(from..to, "");
         self.caret = previous;
+        self.snap(false);
         true
     }
 
@@ -985,6 +1024,7 @@ impl TextBuffer {
         }
         let (from, to) = (self.byte(self.caret), self.byte(self.next_stop()));
         self.value.replace_range(from..to, "");
+        self.snap(false);
         true
     }
 
@@ -1008,6 +1048,7 @@ impl TextBuffer {
         let (from, to) = (self.byte(start), self.byte(self.caret));
         self.value.replace_range(from..to, "");
         self.caret = start;
+        self.snap(false);
     }
 
     /// Keep the text and caret as an undo point.
@@ -1043,23 +1084,36 @@ impl TextBuffer {
     /// what to show and the caret's column in it.
     pub fn window(&self, available: usize, mask: Option<char>) -> (String, usize) {
         let shown = Self::masked(&self.value, mask);
-        let before = cell_len(&Self::masked(self.before_caret(), mask));
+        // Masking keeps one character for each, so the caret is the same
+        // character index in what is shown.
+        let caret = shown
+            .char_indices()
+            .nth(self.caret)
+            .map_or(shown.len(), |(index, _)| index);
+        // The cells before the caret and the cells dropped are both counted
+        // grapheme by grapheme: `cell_len` of the whole prefix can differ
+        // from that (a leading U+200D joins what follows it).
+        let (spans, _) = split_graphemes(&shown);
+        let before: usize = spans
+            .iter()
+            .filter(|(start, _, _)| *start < caret)
+            .map(|(_, _, cells)| cells)
+            .sum();
         // One cell for the caret after the last character.
         let skip = (before + 1).saturating_sub(available.max(1));
         if skip == 0 {
             return (shown, before);
         }
-        let (spans, _) = split_graphemes(&shown);
         let mut dropped = 0;
         let mut from = shown.len();
         for (start, _, cells) in spans {
-            if dropped >= skip {
+            if dropped >= skip || start >= caret {
                 from = start;
                 break;
             }
             dropped += cells;
         }
-        (shown[from..].to_string(), before - dropped)
+        (shown[from..].to_string(), before.saturating_sub(dropped))
     }
 }
 

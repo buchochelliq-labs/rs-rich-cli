@@ -4,10 +4,12 @@
 //! [`Limits`], fitted to exactly its cells at the terminal's cell size, and
 //! (for an animation) resampled: deduplicated and rate-limited under a
 //! memory budget. The result, a [`Prepared`], is kept in an in-memory cache
-//! keyed by a hash of the source bytes, the size in cells and the cell size,
 //! bounded in bytes (the oldest entries go first). A still image fitted to
 //! its cells is also written to an on-disk cache of optimised variants, so
-//! the next process decodes a tiny PNG instead of the source.
+//! the next process decodes a tiny PNG instead of the source. A variant is
+//! named by a SHA-256 of everything it depends on (the source bytes, the
+//! size in cells, the cell size and whether it is animated), so no package
+//! can name another asset's variant and replace what it draws.
 
 use std::collections::{HashMap, VecDeque};
 use std::path::{Path, PathBuf};
@@ -20,28 +22,33 @@ use rich_art::graphics::{
 };
 use rich_art::image::{self, DynamicImage};
 
+use sha2::{Digest, Sha256};
+
 use crate::model::{ImageFormat, ImageRef, MicroAsset};
 use crate::package::Limits;
 
-/// FNV-1a, 64-bit: stable across builds, so on-disk keys stay valid.
-pub(crate) fn fnv1a(parts: &[&[u8]]) -> u64 {
-    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+/// SHA-256 of `parts`, each length-prefixed so ("ab", "c") and ("a", "bc")
+/// differ, after a tag naming this key's layout. Stable across builds, so
+/// on-disk keys stay valid.
+pub(crate) fn digest(parts: &[&[u8]]) -> [u8; 32] {
+    let mut hasher = Sha256::new();
+    hasher.update(b"rs-rich-micro variant v2");
     for part in parts {
-        for byte in *part {
-            hash ^= u64::from(*byte);
-            hash = hash.wrapping_mul(0x0100_0000_01b3);
-        }
-        // Separate the parts, so ("ab", "c") and ("a", "bc") differ.
-        hash ^= 0xff;
-        hash = hash.wrapping_mul(0x0100_0000_01b3);
+        hasher.update((part.len() as u64).to_le_bytes());
+        hasher.update(part);
     }
-    hash
+    hasher.finalize().into()
+}
+
+fn hex(bytes: &[u8]) -> String {
+    bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
 
 /// An asset's image, ready to draw at one size.
 #[derive(Debug)]
 pub struct Prepared {
-    /// Hash of the source bytes, the size in cells and the cell size.
+    /// The first 64 bits of the SHA-256 of the source bytes, the size in
+    /// cells and the cell size: an id for the image within a session.
     pub key: u64,
     pub cols: usize,
     pub rows: usize,
@@ -226,7 +233,7 @@ impl ImageCache {
     ) -> Option<Prepared> {
         let bytes = asset.read_variant(image, limits).ok()?;
         let (cols, rows) = (identity.cols, identity.rows);
-        let key = fnv1a(&[
+        let digest = digest(&[
             &bytes,
             &(cols as u64).to_le_bytes(),
             &(rows as u64).to_le_bytes(),
@@ -234,8 +241,9 @@ impl ImageCache {
             &identity.cell.height.to_le_bytes(),
             &[u8::from(animated)],
         ]);
+        let key = u64::from_le_bytes(digest[..8].try_into().expect("8 bytes"));
         if !animated {
-            if let Some(fitted) = self.disk_get(key, cols, rows, identity.cell) {
+            if let Some(fitted) = self.disk_get(&digest, cols, rows, identity.cell) {
                 return Some(Prepared::new(
                     key,
                     cols,
@@ -262,7 +270,7 @@ impl ImageCache {
                 rows,
                 identity.cell,
             );
-            self.disk_put(key, &fitted);
+            self.disk_put(&digest, &fitted);
             vec![still(fitted)]
         };
         if frames.is_empty() {
@@ -271,18 +279,18 @@ impl ImageCache {
         Some(Prepared::new(key, cols, rows, identity.cell, frames))
     }
 
-    fn disk_path(&self, key: u64) -> Option<PathBuf> {
-        Some(self.disk.as_ref()?.join(format!("{key:016x}.png")))
+    fn disk_path(&self, digest: &[u8; 32]) -> Option<PathBuf> {
+        Some(self.disk.as_ref()?.join(format!("{}.png", hex(digest))))
     }
 
     fn disk_get(
         &self,
-        key: u64,
+        digest: &[u8; 32],
         cols: usize,
         rows: usize,
         cell: CellPixels,
     ) -> Option<image::RgbaImage> {
-        let path = self.disk_path(key)?;
+        let path = self.disk_path(digest)?;
         let bytes = std::fs::read(&path).ok()?;
         let image = image::load_from_memory_with_format(&bytes, image::ImageFormat::Png)
             .ok()?
@@ -291,8 +299,8 @@ impl ImageCache {
         (image.dimensions() == cell.span(cols, rows)).then_some(image)
     }
 
-    fn disk_put(&self, key: u64, image: &image::RgbaImage) {
-        let Some(path) = self.disk_path(key) else {
+    fn disk_put(&self, digest: &[u8; 32], image: &image::RgbaImage) {
+        let Some(path) = self.disk_path(digest) else {
             return;
         };
         if path.exists() {
@@ -388,9 +396,11 @@ mod tests {
     use super::*;
 
     #[test]
-    fn fnv_separates_parts() {
-        assert_ne!(fnv1a(&[b"ab", b"c"]), fnv1a(&[b"a", b"bc"]));
-        assert_eq!(fnv1a(&[b"x"]), fnv1a(&[b"x"]));
+    fn digests_separate_parts() {
+        assert_ne!(digest(&[b"ab", b"c"]), digest(&[b"a", b"bc"]));
+        assert_ne!(digest(&[b"ab", b""]), digest(&[b"ab"]));
+        assert_eq!(digest(&[b"x"]), digest(&[b"x"]));
+        assert_eq!(hex(&[0, 0xab]), "00ab");
     }
 
     #[test]

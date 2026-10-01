@@ -68,17 +68,20 @@
 //! ```
 
 use std::fmt;
-use std::panic::{catch_unwind, AssertUnwindSafe};
+use std::panic::AssertUnwindSafe;
 use std::time::Duration;
 
 use rich::Style;
-use rich_ext::plugin::component::{ComponentContext, ComponentEvent, ComponentFlow};
+use rich_ext::plugin::component::{
+    ComponentBinding, ComponentContext, ComponentEvent, ComponentFlow,
+};
 use rich_ext::plugin::PluginComponent;
 use rich_ext::registry::ExtensionRegistry;
 
 use crate::component::{Component, Context, Flow, View};
 use crate::event::{Event, Key, MouseKind};
 use crate::keymap::{Binding, Keymap};
+use crate::session::catch_panic;
 
 /// No component is registered under a name, or its factory failed.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -157,10 +160,18 @@ impl PluginView {
         self.failed.as_deref()
     }
 
+    /// The bindings the plugin declares, as it declares them.
+    fn declared(&self) -> Vec<ComponentBinding> {
+        catch_panic(AssertUnwindSafe(|| self.inner.bindings())).unwrap_or_default()
+    }
+
     /// The plugin's bindings, with this view's and the installed rebinds.
     fn bindings(&self) -> Keymap {
+        self.keymap_of(self.declared())
+    }
+
+    fn keymap_of(&self, declared: Vec<ComponentBinding>) -> Keymap {
         let mut keymap = self.keymap.clone();
-        let declared = catch_unwind(AssertUnwindSafe(|| self.inner.bindings())).unwrap_or_default();
         for binding in declared {
             let keys = binding.keys.iter().filter_map(|name| Key::parse(name));
             keymap.add(Binding::new(
@@ -178,7 +189,7 @@ impl PluginView {
         if self.failed.is_some() {
             return None;
         }
-        match catch_unwind(AssertUnwindSafe(|| f(&mut *self.inner))) {
+        match catch_panic(AssertUnwindSafe(|| f(&mut *self.inner))) {
             Ok(value) => Some(value),
             Err(panic) => {
                 self.failed = Some(panic_message(&*panic));
@@ -190,17 +201,17 @@ impl PluginView {
 
 /// The name of `key` for the plugin, through `keymap` (the plugin's
 /// bindings with every rebind): a key that now does one of the plugin's
-/// actions arrives as the first key the plugin declared for it, so a
-/// rebound key does what the plugin knows; a declared key rebound away from
-/// its action does not arrive at all (`None`); any other key as itself.
-fn translate(keymap: &Keymap, key: Key) -> Option<String> {
+/// actions arrives as the first key the plugin declared for it, spelled as
+/// the plugin spelled it (`esc`, `shift+tab`), so a rebound key does what
+/// the plugin knows; a declared key rebound away from its action does not
+/// arrive at all (`None`); any other key as itself.
+fn translate(keymap: &Keymap, declared: &[ComponentBinding], key: Key) -> Option<String> {
     if let Some(action) = keymap.action(key) {
-        let declared = keymap
-            .declared()
+        let name = declared
             .iter()
             .find(|binding| binding.action == action)
-            .and_then(|binding| binding.keys.first().copied());
-        return Some(declared.unwrap_or(key).to_string());
+            .and_then(|binding| binding.keys.iter().find(|name| Key::parse(name).is_some()));
+        return Some(name.cloned().unwrap_or_else(|| key.to_string()));
     }
     if keymap
         .declared()
@@ -245,10 +256,13 @@ impl Component for PluginView {
 
     fn handle(&mut self, value: &Event, context: &Context<'_>) -> Flow<String> {
         let event = match value {
-            Event::Key(key) => match translate(&self.bindings(), *key) {
-                Some(name) => ComponentEvent::Key(name),
-                None => return Flow::Ignored,
-            },
+            Event::Key(key) => {
+                let declared = self.declared();
+                match translate(&self.keymap_of(declared.clone()), &declared, *key) {
+                    Some(name) => ComponentEvent::Key(name),
+                    None => return Flow::Ignored,
+                }
+            }
             other => match event(other) {
                 Some(event) => event,
                 None => return Flow::Ignored,
@@ -268,7 +282,7 @@ impl Component for PluginView {
             return self.failure_view(message, context);
         }
         let inner = ComponentContext::new(context.console, context.width, context.height);
-        match catch_unwind(AssertUnwindSafe(|| self.inner.render(&inner))) {
+        match catch_panic(AssertUnwindSafe(|| self.inner.render(&inner))) {
             Ok(view) => View {
                 lines: view.lines,
                 cursor: view.cursor,
@@ -283,12 +297,12 @@ impl Component for PluginView {
         if self.failed.is_some() {
             return None;
         }
-        catch_unwind(AssertUnwindSafe(|| self.inner.tick())).unwrap_or(None)
+        catch_panic(AssertUnwindSafe(|| self.inner.tick())).unwrap_or(None)
     }
 
     fn mouse(&self) -> bool {
         self.failed.is_none()
-            && catch_unwind(AssertUnwindSafe(|| self.inner.mouse())).unwrap_or(false)
+            && catch_panic(AssertUnwindSafe(|| self.inner.mouse())).unwrap_or(false)
     }
 
     fn keymap(&self) -> Keymap {
@@ -300,7 +314,7 @@ impl Component for PluginView {
 
     fn focusable(&self) -> bool {
         self.failed.is_none()
-            && catch_unwind(AssertUnwindSafe(|| self.inner.focusable())).unwrap_or(false)
+            && catch_panic(AssertUnwindSafe(|| self.inner.focusable())).unwrap_or(false)
     }
 }
 

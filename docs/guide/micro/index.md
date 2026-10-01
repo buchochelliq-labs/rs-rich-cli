@@ -142,7 +142,9 @@ never holds an escape. `rich doctor` reports the choice and the reason.
 Images are fitted to the cell size in pixels, from `RICH_CELL_PIXELS=WxH`,
 the terminal's window size in pixels, or (for `MicroGraphics::detect` on an
 interactive terminal that has a graphics protocol) a `CSI 16 t` query; 8×16
-is assumed otherwise.
+is assumed otherwise. The query is asked only by a foreground process and
+only when no input is waiting, so it never stops a background job or eats
+typeahead; set `RICH_CELL_PIXELS` to skip it altogether.
 
 ### Animation
 
@@ -175,7 +177,9 @@ in cells and the cell size, within 32 MiB by default. `MicroGraphics::detect`
 also keeps the fitted still images under the user cache directory
 (`RICH_CACHE_DIR/micro`, else `$XDG_CACHE_HOME/rich/micro`,
 `~/Library/Caches/rich/micro` or `%LOCALAPPDATA%\rich\cache\micro`), so a
-later run reads a tiny PNG instead of decoding the source.
+later run reads a tiny PNG instead of decoding the source. Each file is
+named by a SHA-256 of the source bytes, the size in cells, the cell size and
+whether it is animated, so no package can name another asset's file.
 
 ### Terminal compatibility
 

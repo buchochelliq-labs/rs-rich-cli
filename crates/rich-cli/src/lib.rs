@@ -4656,8 +4656,12 @@ fn run_once_with_fetch(mut cli: Cli, prefetched: Option<(String, Option<String>)
                 Err(err) => return fail(&cli, ExitClass::Data, err),
             };
             let fit = text.measurement().1;
+            // Drawn only when the output goes to the terminal alone: an
+            // export, the pager or a watch capture would record Kitty's
+            // placeholder cells or the blank cells under an image, so they
+            // (and the terminal with them) keep the fallback.
             #[cfg(feature = "art")]
-            if let Some(registry) = micro {
+            if let Some(registry) = micro.filter(|_| export.terminal_only()) {
                 return decorate_and_emit(
                     &cli,
                     &console,
@@ -6539,6 +6543,18 @@ struct Export<'a> {
     auto_pager: bool,
 }
 
+impl Export<'_> {
+    /// Whether the output goes straight to the terminal and nowhere else: no
+    /// export, no pager, no watch capture.
+    fn terminal_only(&self) -> bool {
+        !watch::capturing()
+            && self.html_path.is_none()
+            && self.svg_path.is_none()
+            && !self.pager
+            && !self.auto_pager
+    }
+}
+
 /// Render once and deliver it everywhere it was asked for.
 ///
 /// The exports do **not** replace the terminal output — upstream prints the
@@ -6560,12 +6576,7 @@ fn should_page(
 }
 
 fn emit(console: &Console, export: &Export, render: impl FnOnce(&Console)) -> Result<(), String> {
-    if !watch::capturing()
-        && export.html_path.is_none()
-        && export.svg_path.is_none()
-        && !export.pager
-        && !export.auto_pager
-    {
+    if export.terminal_only() {
         render(console);
         return Ok(());
     }

@@ -240,3 +240,47 @@ fn explain_shows_the_chain() {
         "alias of x"
     );
 }
+
+#[cfg(unix)]
+#[test]
+fn fifos_and_sockets_in_a_layer_are_skipped_not_opened() {
+    // Release-test audit A, F6: a FIFO named like an archive (committed in
+    // a cloned project, say) blocked the loader forever in `open`.
+    let dir = tempfile::tempdir().unwrap();
+    with_alt(&dir.path().join("ok"), "ok", "ok");
+    let fifo = dir.path().join("a.richmicro");
+    let made = std::process::Command::new("mkfifo")
+        .arg(&fifo)
+        .status()
+        .unwrap();
+    assert!(made.success());
+    let _socket = std::os::unix::net::UnixListener::bind(dir.path().join("b.zip")).unwrap();
+    // A link to the FIFO is no better.
+    std::os::unix::fs::symlink(&fifo, dir.path().join("c.richmicro")).unwrap();
+
+    let (send, receive) = std::sync::mpsc::channel();
+    let path = dir.path().to_path_buf();
+    std::thread::spawn(move || {
+        let mut registry = MicroRegistry::new();
+        let mut report = Default::default();
+        registry.load_dir(Layer::User, &path, &Limits::default(), &mut report);
+        let direct =
+            rich_micro::package::load(&path.join("a.richmicro"), Layer::User, &Limits::default());
+        let _ = send.send((registry.names().len(), report, direct.is_err()));
+    });
+    let (names, report, direct_failed) = receive
+        .recv_timeout(std::time::Duration::from_secs(10))
+        .expect("loading a layer with a FIFO in it returns");
+    assert_eq!(names, 1);
+    assert!(direct_failed);
+    let rejected: Vec<String> = report
+        .rejected
+        .iter()
+        .map(|r| format!("{}: {}", r.path.display(), r.error))
+        .collect();
+    assert_eq!(rejected.len(), 3, "{rejected:?}");
+    assert!(
+        rejected.iter().all(|r| r.contains("not a regular file")),
+        "{rejected:?}"
+    );
+}

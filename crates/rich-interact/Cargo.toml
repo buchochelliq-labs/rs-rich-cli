@@ -48,6 +48,10 @@ required-features = ["micro"]
 name = "explore"
 required-features = ["data"]
 
+[[test]]
+name = "explore_scale"
+required-features = ["data"]
+
 [dependencies]
 rich = { workspace = true, features = ["syntax"] }
 rich-ext.workspace = true

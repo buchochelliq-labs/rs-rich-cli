@@ -116,7 +116,8 @@ pub enum Loaded {
 }
 
 /// Check a path from a manifest or an archive: relative, `/`-separated, no
-/// empty, `.` or `..` segments, no backslashes, drive letters or NULs.
+/// empty, `.` or `..` segments, no backslashes, drive letters, NULs or other
+/// control characters.
 /// Returns it normalised (without a trailing `/`).
 pub fn safe_relative(path: &str) -> Result<String, MicroError> {
     let unsafe_path = |why: &str| MicroError::UnsafePath(format!("unsafe path {path:?}: {why}"));
@@ -128,6 +129,11 @@ pub fn safe_relative(path: &str) -> Result<String, MicroError> {
     }
     if path.contains('\\') || path.contains('\0') || path.contains(':') {
         return Err(unsafe_path("backslashes, colons and NULs are not allowed"));
+    }
+    // Paths are quoted in messages and `rich micro show`: no C0 or C1
+    // control or DEL may reach the terminal through one.
+    if path.chars().any(char::is_control) {
+        return Err(unsafe_path("control characters are not allowed"));
     }
     let trimmed = path.strip_suffix('/').unwrap_or(path);
     for segment in trimmed.split('/') {
@@ -142,6 +148,14 @@ pub fn safe_relative(path: &str) -> Result<String, MicroError> {
 
 fn io_error(path: &Path, error: impl std::fmt::Display) -> MicroError {
     MicroError::Io(format!("{}: {error}", path.display()))
+}
+
+/// A FIFO, socket or device where a package or archive was expected.
+fn not_a_file(path: &Path) -> MicroError {
+    MicroError::Io(format!(
+        "{} is not a regular file or a directory",
+        path.display()
+    ))
 }
 
 /// Read at most `limit` bytes; more is an error, whatever a header claimed.
@@ -190,6 +204,9 @@ impl Source {
     /// the count, each name, and no links, encryption or duplicates.
     fn archive(path: &Path, limits: &Limits) -> Result<Self, MicroError> {
         let metadata = std::fs::metadata(path).map_err(|e| io_error(path, e))?;
+        if !metadata.is_file() {
+            return Err(not_a_file(path));
+        }
         if metadata.len() > limits.max_archive_bytes {
             return Err(MicroError::Limit(format!(
                 "{} is larger than {} bytes",
@@ -198,6 +215,10 @@ impl Source {
             )));
         }
         let file = File::open(path).map_err(|e| io_error(path, e))?;
+        // What was opened, in case the path changed since it was checked.
+        if !file.metadata().is_ok_and(|m| m.is_file()) {
+            return Err(not_a_file(path));
+        }
         let mut archive = zip::ZipArchive::new(file).map_err(|e| io_error(path, e))?;
         if archive.len() > limits.max_entries {
             return Err(MicroError::Limit(format!(
@@ -437,6 +458,23 @@ fn string<'a>(
     }
 }
 
+/// [`string`] for free text shown to people (`version`, `license`,
+/// `author`, `description`): no C0 or C1 control or DEL, which a terminal
+/// would run rather than show.
+fn plain<'a>(
+    map: &'a Map<String, Value>,
+    key: &str,
+    what: &str,
+) -> Result<Option<&'a str>, MicroError> {
+    let value = string(map, key, what)?;
+    if value.is_some_and(|value| value.chars().any(char::is_control)) {
+        return Err(MicroError::Manifest(format!(
+            "{what}: {key:?} holds control characters"
+        )));
+    }
+    Ok(value)
+}
+
 fn required<'a>(map: &'a Map<String, Value>, key: &str, what: &str) -> Result<&'a str, MicroError> {
     string(map, key, what)?.ok_or_else(|| MicroError::Manifest(format!("{what}: missing {key:?}")))
 }
@@ -545,13 +583,13 @@ fn read_package(
     for alias in strings(&map, "aliases", &what)? {
         asset = asset.with_alias(&alias).map_err(in_manifest)?;
     }
-    if let Some(version) = string(&map, "version", &what)? {
+    if let Some(version) = plain(&map, "version", &what)? {
         asset = asset.with_version(version);
     }
-    if let Some(license) = string(&map, "license", &what)? {
+    if let Some(license) = plain(&map, "license", &what)? {
         asset = asset.with_license(license);
     }
-    if let Some(author) = string(&map, "author", &what)? {
+    if let Some(author) = plain(&map, "author", &what)? {
         asset = asset.with_author(author);
     }
 
@@ -674,6 +712,9 @@ fn read_pack(
     check_keys(&map, PACK_KEYS, &what)?;
     let name = required(&map, "name", &what)?;
     check_name(name)?;
+    for key in ["description", "license", "author"] {
+        plain(&map, key, &what)?;
+    }
     let packages = strings(&map, "packages", &what)?;
     if packages.len() > limits.max_packages {
         return Err(MicroError::Limit(format!(
@@ -683,7 +724,7 @@ fn read_pack(
     }
     let mut pack = Pack {
         name: name.to_string(),
-        version: string(&map, "version", &what)?.map(str::to_string),
+        version: plain(&map, "version", &what)?.map(str::to_string),
         assets: Vec::new(),
         rejected: Vec::new(),
     };
@@ -754,13 +795,17 @@ pub fn load_pack(path: &Path, layer: Layer, limits: &Limits) -> Result<Pack, Mic
 /// (`pack.json`), as a directory or a zip archive.
 pub fn load(path: &Path, layer: Layer, limits: &Limits) -> Result<Loaded, MicroError> {
     let metadata = std::fs::symlink_metadata(path).map_err(|e| io_error(path, e))?;
-    let is_dir = if metadata.file_type().is_symlink() {
-        std::fs::metadata(path)
-            .map_err(|e| io_error(path, e))?
-            .is_dir()
+    let metadata = if metadata.file_type().is_symlink() {
+        std::fs::metadata(path).map_err(|e| io_error(path, e))?
     } else {
-        metadata.is_dir()
+        metadata
     };
+    let is_dir = metadata.is_dir();
+    // Only a regular file is opened as an archive: opening a FIFO blocks
+    // until something writes to it, and a device or socket is no archive.
+    if !is_dir && !metadata.is_file() {
+        return Err(not_a_file(path));
+    }
     let mut source = if is_dir {
         Source::directory(path)?
     } else {
@@ -801,6 +846,11 @@ mod tests {
             "C:/x",
             "a\\b",
             "a\0",
+            "a\u{1b}]0;title\u{7}",
+            "a\u{7f}",
+            "a\u{9b}2J",
+            "a\u{85}b",
+            "a\tb",
         ] {
             assert!(
                 matches!(safe_relative(bad), Err(MicroError::UnsafePath(_))),
