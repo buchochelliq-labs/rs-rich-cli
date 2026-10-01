@@ -155,6 +155,18 @@ def test_every_container_takes_python_and_built_in_children():
     assert flows(Split.vertical(Select("File", FILES), Counter()), "tab up enter") == 1
 
 
+def test_empty_tabs_take_tab_and_shift_tab():
+    # 0.0.14 release-test audit B4: Tab and Shift+Tab on Tabs with no tabs
+    # (built from data that may be empty) raised PanicException.
+    for keys in ("tab", "shift+tab", "tab shift+tab alt+right enter"):
+        record = Tabs().headless(keys, width=40, height=5)
+        assert record.frames
+    record = Column(Tabs([]), Input("Name")).headless(
+        Script().keys("tab shift+tab tab").text("ok").keys("enter"), width=40, height=6
+    )
+    assert record.value == "ok"
+
+
 def test_map_says_what_an_answer_means():
     seen = []
     name = Map(Input("Name"), lambda value: seen.append(value))

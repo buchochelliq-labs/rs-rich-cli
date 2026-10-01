@@ -537,9 +537,11 @@ impl<'a, M> Group<'a, M> {
         rects: &[(usize, Rect)],
     ) -> Flow<M> {
         let (column, row) = (mouse.column as usize, mouse.row as usize);
+        // A rect for a child that is not there (Tabs with no tabs) is
+        // nothing under the mouse.
         let under = rects
             .iter()
-            .find(|(_, rect)| rect.contains(column, row))
+            .find(|(index, rect)| *index < self.children.len() && rect.contains(column, row))
             .map(|(index, _)| *index);
         let mut focused = false;
         let target = match mouse.kind {
@@ -1660,7 +1662,13 @@ impl<M> Component for Tabs<'_, M> {
         match action.as_str() {
             FOCUS_NEXT | FOCUS_PREVIOUS => {
                 let forward = action == FOCUS_NEXT;
-                if self.group.children[self.active].focus_step(forward) {
+                // No tabs, no child to step through.
+                if self
+                    .group
+                    .children
+                    .get_mut(self.active)
+                    .is_some_and(|child| child.focus_step(forward))
+                {
                     Flow::Continue
                 } else {
                     Flow::Ignored

@@ -442,3 +442,28 @@ fn a_layer_opened_before_the_run_starts_with_the_host() {
     let (outcome, _) = headless::run(layers, Script::new(), 40, 8);
     assert_eq!(outcome.unwrap(), Outcome::Done("started".to_string()));
 }
+
+/// Tabs with no tabs take every key, click and resize without panicking
+/// (0.0.14 release-test audit B4): Tab and Shift+Tab once indexed the
+/// active tab unchecked. Alone the keys are ignored; in a column, focus
+/// moves past the empty tabs to the input.
+#[test]
+fn empty_tabs_take_any_event() {
+    let script = Script::new()
+        .keys("tab shift+tab alt+right alt+left right left enter space a")
+        .click(1, 0)
+        .click(3, 2)
+        .resize(10, 3)
+        .keys("escape");
+    // Nothing finishes it: the script runs out.
+    let (outcome, record) = headless::run(Tabs::<String>::new(), script, 40, 5);
+    assert!(outcome.is_err(), "{outcome:?}");
+    assert!(!record.frames.is_empty());
+
+    let column = Column::new()
+        .child(Tabs::<String>::new())
+        .child(Input::new("x").map(|text: String| Flow::Done(text)));
+    let script = Script::new().keys("tab shift+tab tab").text("ok").keys("enter");
+    let (outcome, _) = headless::run(column, script, 40, 6);
+    assert_eq!(outcome.unwrap(), Outcome::Done("ok".to_string()));
+}
