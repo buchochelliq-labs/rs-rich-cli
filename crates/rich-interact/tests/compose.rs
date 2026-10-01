@@ -514,3 +514,22 @@ fn overrides_never_unbind_by_accident() {
     assert!(Overrides::from_pairs([("select.down", ",")]).is_err());
     assert!(keymap::try_keys(",").is_err());
 }
+
+/// A tab title holding controls is measured as painted (each control a
+/// one-cell picture), so a click lands on the tab under it (0.0.14
+/// release-test audit B).
+#[test]
+fn tab_clicks_measure_titles_as_painted() {
+    // Painted: ` a␛␛␛␛ ` (columns 0-6), a space, ` two ` (8-12).
+    let tabs = || {
+        Tabs::<String>::new()
+            .tab("a\u{1b}\u{1b}\u{1b}\u{1b}", Label::new("first"))
+            .tab("two", Label::new("second"))
+            .with_mouse(true)
+    };
+    for (column, expected) in [(5, 0), (9, 1)] {
+        let mut tabs = tabs();
+        let _ = headless::run(&mut tabs, Script::new().click(column, 0), 40, 5);
+        assert_eq!(tabs.selected(), expected, "click at {column}");
+    }
+}

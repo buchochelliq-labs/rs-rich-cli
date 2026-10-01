@@ -628,7 +628,14 @@ impl<'a, M> Breadcrumbs<'a, M> {
     /// The line at `width`, and each crumb shown: its index and the cells
     /// it takes.
     pub fn layout(&self, width: usize) -> (Vec<Segment>, Vec<(usize, std::ops::Range<usize>)>) {
-        let path = self.crumbs.get();
+        // As painted: a control in a crumb shows as a one-cell picture, so
+        // the spans clicks are matched against count it.
+        let path: Vec<String> = self
+            .crumbs
+            .get()
+            .iter()
+            .map(|crumb| kit::shown(crumb))
+            .collect();
         let separator = format!(" {} ", self.separator);
         let gap = cell_len(&separator);
         let icons: Vec<Option<Vec<Segment>>> = path
@@ -812,6 +819,17 @@ mod tests {
         let (line, spans) = crumbs.layout(40);
         assert_eq!(text(&line), "home › [] src");
         assert_eq!(spans[1], (1, 7..13));
+    }
+
+    /// A crumb holding controls is measured as painted (each control a
+    /// one-cell picture), so a click lands on the crumb under it (0.0.14
+    /// release-test audit B).
+    #[test]
+    fn breadcrumbs_measure_controls_as_painted() {
+        let crumbs: Breadcrumbs = Breadcrumbs::new(["a\u{1b}\u{1b}\u{1b}", "bb"]);
+        let (line, spans) = crumbs.layout(40);
+        assert_eq!(text(&line), "a␛␛␛ › bb");
+        assert_eq!(spans, [(0, 0..4), (1, 7..9)]);
     }
 
     #[test]

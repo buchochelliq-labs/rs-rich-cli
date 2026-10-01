@@ -1583,7 +1583,9 @@ impl<'a, M> Tabs<'a, M> {
                 line.push(kit::plain(" "));
                 at += 1;
             }
-            let label = format!(" {title} ");
+            // As painted: a control in a title shows as a one-cell picture,
+            // so the spans clicks are matched against count it.
+            let label = format!(" {} ", kit::shown(title));
             let cells = rich::cells::cell_len(&label);
             let style = if index == self.active {
                 &self.selected
