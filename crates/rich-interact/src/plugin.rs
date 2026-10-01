@@ -256,13 +256,13 @@ impl Component for PluginView {
 
     fn handle(&mut self, value: &Event, context: &Context<'_>) -> Flow<String> {
         let event = match value {
-            Event::Key(key) => match {
+            Event::Key(key) => {
                 let declared = self.declared();
-                translate(&self.keymap_of(declared.clone()), &declared, *key)
-            } {
-                Some(name) => ComponentEvent::Key(name),
-                None => return Flow::Ignored,
-            },
+                match translate(&self.keymap_of(declared.clone()), &declared, *key) {
+                    Some(name) => ComponentEvent::Key(name),
+                    None => return Flow::Ignored,
+                }
+            }
             other => match event(other) {
                 Some(event) => event,
                 None => return Flow::Ignored,
