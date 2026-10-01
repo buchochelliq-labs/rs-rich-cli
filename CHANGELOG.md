@@ -57,6 +57,21 @@ Entries below record subsequent releases and development.
 
 ## [Unreleased]
 
+### 0.0.14 release test: fixes from audit A
+
+Versions: none bumped; `rs-rich-micro` 0.0.1, `rs-rich-ext` 0.0.12,
+`rs-rich-cli` 0.0.14 and `rs-rich-interact` 0.0.2 are already unpublished.
+Nothing in `rs-rich` changes.
+
+- **F1**: control characters (C0, C1, DEL) are refused in every manifest and pack string (`version`, `license`, `author`, `description`, package and image paths through `safe_relative`) and in `micro create`'s metadata, and every `rich micro` message and table cell that quotes a package name, path or error shows controls instead of running them.
+- **F2**: `rich -p --emoji` with `:micro:` assets exports (`--export-html`/`--export-svg`), pages (`--pager`) and captures the fallback, never Kitty placeholder cells or the blank cells under an iTerm2/Sixel image; the terminal shows the fallback too in that case.
+- **F3**: the `CSI 16 t` cell-size query keeps typeahead: it is skipped when input is waiting, stops at a `CSI c` sentinel reply, and gives back (`TIOCSTI`, where allowed) any byte read that is not a reply.
+- **F4**: the cell-size query runs only from the terminal's foreground process group, with `SIGTTOU`/`SIGTTIN` blocked, so a background `rich -p --emoji` job is no longer stopped.
+- **F5**: `rich micro create --output` (and `add`, `install`) check the destination with `symlink_metadata`, and `create` only removes what it created: a dangling link at the destination is refused and left alone.
+- **F6**: only regular files are opened as `.richmicro`/`.zip` archives; a FIFO, socket or device in a layer directory is skipped with a warning instead of hanging `rich micro` (including `--project` commands in an untrusted project, which still never draw that project's assets).
+- `RICH_CLIPBOARD=1` no longer writes OSC 52 to output that is not a terminal; the override applies on terminals only, as the docs now say.
+- The on-disk micro image cache names its files by a SHA-256 of the source bytes and geometry instead of a 64-bit FNV-1a, so a crafted package cannot replace another asset's cached image.
+
 ### Components from Python and plugins: plugin API 0.0.3, Python 0.0.3
 
 Versions: `rs-rich-plugin-api` 0.0.2 → 0.0.3 (its source changed and 0.0.2
