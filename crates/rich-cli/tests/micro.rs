@@ -418,3 +418,59 @@ fn untrusted_package_strings_never_reach_the_terminal_raw() {
         assert_inert("untrusted note", &out);
     }
 }
+
+#[cfg(unix)]
+#[test]
+fn create_and_add_leave_an_existing_link_alone() {
+    // Release-test audit A, F5: `create --output PATH` over a dangling
+    // symbolic link refused with "File exists" and then deleted the link.
+    let (_root, work, home) = dirs();
+    source(&work);
+    std::os::unix::fs::symlink("/nonexistent/target", work.join("out")).unwrap();
+    let out = rich(
+        &work,
+        &home,
+        &[
+            "micro",
+            "create",
+            "heart.gif",
+            "--name",
+            "x",
+            "--alt",
+            "y",
+            "--output",
+            "out",
+        ],
+    );
+    assert!(!out.status.success());
+    assert!(
+        text(&out.stderr).contains("already exists"),
+        "{}",
+        text(&out.stderr)
+    );
+    let link = std::fs::symlink_metadata(work.join("out")).expect("the link is kept");
+    assert!(link.file_type().is_symlink());
+
+    // `add` checks its destination the same way.
+    let out = rich(
+        &work,
+        &home,
+        &[
+            "micro",
+            "create",
+            "heart.gif",
+            "--name",
+            "team/x",
+            "--alt",
+            "y",
+            "--archive",
+        ],
+    );
+    assert!(out.status.success(), "{}", text(&out.stderr));
+    let user = home.join(".config/rich/micro");
+    std::fs::create_dir_all(&user).unwrap();
+    std::os::unix::fs::symlink("/nonexistent/target", user.join("team.x.richmicro")).unwrap();
+    let out = rich(&work, &home, &["micro", "add", "team.x.richmicro"]);
+    assert!(!out.status.success());
+    assert!(std::fs::symlink_metadata(user.join("team.x.richmicro")).is_ok());
+}

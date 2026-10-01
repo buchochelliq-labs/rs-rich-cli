@@ -1121,7 +1121,8 @@ fn add(context: &Context, request: &Request) -> Result<(), Failure> {
         Some(ext) => dir.join(format!("{}.{ext}", asset.name().replace('/', "."))),
         None => package_path(&dir, asset.name(), false),
     };
-    if dest.exists() {
+    // `symlink_metadata`: a dangling link at `dest` is there too.
+    if std::fs::symlink_metadata(&dest).is_ok() {
         return Err(usage(format!("{} already exists", dest.display())));
     }
     copy_into(&source, &dest)?;
@@ -1249,7 +1250,8 @@ fn install(context: &Context, request: &Request) -> Result<(), Failure> {
         Some(ext) => dir.join(format!("{}.{ext}", pack.name.replace('/', "."))),
         None => dir.join(pack.name.replace('/', ".")),
     };
-    if dest.exists() {
+    // `symlink_metadata`: a dangling link at `dest` is there too.
+    if std::fs::symlink_metadata(&dest).is_ok() {
         return Err(usage(format!(
             "pack {} is already installed: {}; uninstall it first",
             pack.name,
