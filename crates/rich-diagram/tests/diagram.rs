@@ -370,3 +370,16 @@ fn edges_to_missing_nodes_are_refused() {
         "edge 0 -> 3 names a node that does not exist (1 nodes)"
     );
 }
+
+#[test]
+fn edges_without_any_nodes_are_refused() {
+    // An empty graph draws as nothing, but not when its edges name nodes.
+    let graph = Graph::from_parts(Direction::TopDown, Vec::new(), vec![Edge::new(0, 1)]);
+    let error = draw(&graph, false).unwrap_err();
+    assert_eq!(
+        error.to_string(),
+        "edge 0 -> 1 names a node that does not exist (0 nodes)"
+    );
+    let empty = Graph::from_parts(Direction::TopDown, Vec::new(), Vec::new());
+    assert!(draw(&empty, false).unwrap().lines.is_empty());
+}

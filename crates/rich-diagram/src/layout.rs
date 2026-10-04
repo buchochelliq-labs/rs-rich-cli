@@ -106,12 +106,7 @@ const W: u8 = 8;
 /// assert_eq!(ascii.lines[1], "| A +->| B |");
 /// ```
 pub fn draw(graph: &Graph, ascii: bool) -> Result<Drawing, DrawError> {
-    if graph.nodes().is_empty() {
-        return Ok(Drawing {
-            lines: Vec::new(),
-            width: 0,
-        });
-    }
+    // Checked first, so a graph with edges but no nodes is refused too.
     let count = graph.nodes().len();
     if let Some(edge) = graph
         .edges()
@@ -122,6 +117,12 @@ pub fn draw(graph: &Graph, ascii: bool) -> Result<Drawing, DrawError> {
             "edge {} -> {} names a node that does not exist ({count} nodes)",
             edge.from, edge.to
         )));
+    }
+    if graph.nodes().is_empty() {
+        return Ok(Drawing {
+            lines: Vec::new(),
+            width: 0,
+        });
     }
     let graph = printable(graph);
     let graph = graph.as_ref();
