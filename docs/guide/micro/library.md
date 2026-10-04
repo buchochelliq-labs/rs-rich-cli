@@ -37,9 +37,9 @@ rich -p --emoji "Deploy :micro:status/success: done"
 
 <!-- micro-gallery:end -->
 
-The fallback column is what a terminal with no image protocol shows by
-default: the emoji, or the text where emoji are turned off. Alt text is what
-screen readers, logs and plain exports get.
+The fallback column is what shows when no image is drawn: the emoji where
+the output is UTF-8, the text where it is not, and the alt text only for an
+asset with neither.
 
 ## Drawing modes, side by side
 
@@ -50,7 +50,7 @@ terminal (see [Terminal compatibility](terminals.md)):
 |---|---|---|
 | `kitty`, `iterm`, `sixel` | the terminal speaks that image protocol | the image above, in pixels, fitted to exactly its cells |
 | `blocks` | a colour terminal with no image protocol | the asset's emoji; with `RICH_MICRO=blocks`, its image scaled to 2×2 colour samples, one per half cell |
-| `text` | `TERM=dumb` or no colour, and always for pipes, log files and exports | the text fallback, else the alt text |
+| `text` | `TERM=dumb` or no colour, `RICH_MICRO=text`, and always for pipes, log files and exports | no image: the emoji where the output is UTF-8, the text fallback where it is not, else the alt text |
 
 The recording below is real: the same line with the emoji, then with
 `RICH_MICRO=blocks`, then `rich micro preview fun/heart` with both
