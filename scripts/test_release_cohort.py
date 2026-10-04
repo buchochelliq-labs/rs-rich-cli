@@ -104,6 +104,11 @@ class Check(unittest.TestCase):
         errors = cohort.check(cohort.files_on_disk(self.root))
         self.assertTrue(any("crates/rich-py/Cargo.toml says 0.3.1" in e for e in errors), errors)
 
+    def test_the_pypi_name_must_be_the_project_published(self):
+        errors = self.errors(config=CONFIG.replace('name = "rs-rich"\nregistry = "pypi"',
+                                                   'name = "rs-rich-typo"\nregistry = "pypi"'))
+        self.assertTrue(any("names the PyPI project 'rs-rich'" in e for e in errors), errors)
+
     def test_sync_rewrites_versions_from_the_manifests(self):
         write_tree(self.root, art=ART.replace("0.2.0", "0.2.5"))
         changed = cohort.sync(self.root / "RELEASES.toml")
@@ -237,6 +242,25 @@ class Tag(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "disagrees"):
             self.run_tag()
         self.assertEqual(self.remote_tags(), [])
+
+    def test_a_published_version_still_waits_for_its_run_to_finish(self):
+        package = cohort.Package("rs-rich-art", "crates.io", "x", "0.2.0")
+        runs = iter([("in_progress", "", "u"), ("in_progress", "", "u"), ("completed", "success", "u")])
+        sleeps = []
+        cohort.wait_for(package, 60, status=lambda p: 200, conclusion=lambda p: next(runs),
+                        sleep=sleeps.append)
+        self.assertEqual(len(sleeps), 2)
+
+    def test_a_run_that_fails_after_uploading_stops_the_wait(self):
+        package = cohort.Package("rs-rich-art", "crates.io", "x", "0.2.0")
+        with self.assertRaisesRegex(RuntimeError, "ended failure"):
+            cohort.wait_for(package, 60, status=lambda p: 200,
+                            conclusion=lambda p: ("completed", "failure", "https://example/run"),
+                            sleep=lambda s: None)
+
+    def test_without_gh_the_registry_decides(self):
+        package = cohort.Package("rs-rich-art", "crates.io", "x", "0.2.0")
+        cohort.wait_for(package, 60, status=lambda p: 200, conclusion=lambda p: None, sleep=lambda s: None)
 
     def test_a_failed_release_run_stops_the_wait(self):
         package = cohort.Package("rs-rich-art", "crates.io", "x", "0.2.0")

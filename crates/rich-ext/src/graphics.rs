@@ -383,8 +383,11 @@ impl GraphicsEnvironment {
 
     /// Detect from the process. When the cell size is still unknown and both
     /// stdin and stdout are a terminal, ask the terminal (`CSI 16 t`,
-    /// waiting at most 100 ms) — from the foreground only, and only when no
-    /// input is waiting ([`query_cell_pixels`]).
+    /// waiting at most 500 ms) — from the foreground only, and only when no
+    /// input is waiting ([`query_cell_pixels`]). Every terminal answers the
+    /// device-attributes request sent with it, which ends the wait at once,
+    /// so the timeout only bounds a terminal that answers nothing; a shorter
+    /// one let a reply over a slow link arrive late, as typed input.
     pub fn system() -> GraphicsEnvironment {
         use std::io::IsTerminal;
         let mut environment = GraphicsEnvironment::detect(&SystemEnvironment);
@@ -393,7 +396,7 @@ impl GraphicsEnvironment {
             && std::io::stdin().is_terminal()
             && environment.graphics.value != Graphics::None
         {
-            if let Some(cell) = query_cell_pixels(Duration::from_millis(100)) {
+            if let Some(cell) = query_cell_pixels(Duration::from_millis(500)) {
                 environment.cell_pixels =
                     Field::new(Some(cell), Origin::Inferred, "CSI 16 t reply");
             }

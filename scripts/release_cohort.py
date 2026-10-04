@@ -145,6 +145,11 @@ def check(read):
             errors.append(f"{package.name}: {CONFIG} says {package.version}, "
                           f"{package.manifest} says {actual} (run release_cohort.py sync)")
         if package.registry == "pypi":
+            # The name is what `unreleased` and `tag` look up on PyPI: it must
+            # be the project pypi-release.yml uploads, or they ask about another.
+            project = tomllib.loads(read(package.manifest))["project"]["name"]
+            if project != package.name:
+                errors.append(f"{package.name}: {package.manifest} names the PyPI project {project!r}")
             cargo = tomllib.loads(read(PYPI_CARGO))["package"]["version"]
             if cargo != actual:
                 errors.append(f"{package.name}: {package.manifest} says {actual}, {PYPI_CARGO} says {cargo}")
@@ -280,14 +285,19 @@ def run_conclusion(package):
 
 
 def wait_for(package, timeout, status=registry_status, conclusion=run_conclusion, sleep=time.sleep):
+    """Return once the release is done: its run succeeded and the version is
+    on the registry. The run uploads before it verifies the upload as a
+    consumer would, so the version can appear while the run still fails;
+    when the run cannot be seen (no `gh`), the registry alone decides."""
     deadline = time.monotonic() + timeout
     while True:
-        if is_published(package, status):
-            print(f"{package} is published", flush=True)
-            return
+        published = is_published(package, status)
         run = conclusion(package)
         if run and run[0] == "completed" and run[1] != "success":
             raise RuntimeError(f"The {package.tag} release run ended {run[1]}: {run[2]}")
+        if published and (run is None or run[0] == "completed"):
+            print(f"{package} is published", flush=True)
+            return
         if time.monotonic() > deadline:
             raise RuntimeError(f"{package} did not appear within {timeout // 60} minutes; "
                                f"check the {package.workflow} run for {package.tag}")

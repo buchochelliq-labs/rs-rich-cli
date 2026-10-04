@@ -57,7 +57,7 @@ fn in_pty_answering(
     cwd: &Path,
     env: &[(String, String)],
     typed: &[u8],
-    mut answer: Option<(&str, &[u8])>,
+    answer: Option<(&str, &[u8])>,
     limit: Duration,
 ) -> String {
     let pty = native_pty_system()
@@ -82,10 +82,27 @@ fn in_pty_answering(
     writer.flush().unwrap();
     let mut reader = pty.master.try_clone_reader().unwrap();
     let (send, receive) = mpsc::channel();
+    let answer = answer.map(|(trigger, reply)| (trigger.as_bytes().to_vec(), reply.to_vec()));
+    // The reader answers the query itself, the moment it reads the trigger,
+    // as a terminal would: no hop through the polling loop below, whose
+    // latency on a loaded runner can outlast the query's timeout.
     std::thread::spawn(move || {
+        let mut answer = answer;
+        let mut seen = Vec::new();
         let mut buffer = [0u8; 4096];
         while let Ok(read) = reader.read(&mut buffer) {
-            if read == 0 || send.send(buffer[..read].to_vec()).is_err() {
+            if read == 0 {
+                break;
+            }
+            if let Some((trigger, reply)) = &answer {
+                seen.extend_from_slice(&buffer[..read]);
+                if seen.windows(trigger.len()).any(|w| w == trigger.as_slice()) {
+                    let _ = writer.write_all(reply);
+                    let _ = writer.flush();
+                    answer = None;
+                }
+            }
+            if send.send(buffer[..read].to_vec()).is_err() {
                 break;
             }
         }
@@ -95,13 +112,6 @@ fn in_pty_answering(
     loop {
         while let Ok(bytes) = receive.try_recv() {
             out.extend(bytes);
-        }
-        if let Some((trigger, reply)) = answer {
-            if String::from_utf8_lossy(&out).contains(trigger) {
-                writer.write_all(reply).unwrap();
-                writer.flush().unwrap();
-                answer = None;
-            }
         }
         if child.try_wait().unwrap().is_some() || Instant::now() > deadline {
             break;
