@@ -4,9 +4,10 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use rich::{Cell, ColorSystem, Console, Panel, Table, Text};
+use rich::{Cell, ColorSystem, Columns, Console, Layout, Panel, Table, Text};
 use rich_ext::chart::{
-    Bar, BarChart, Charset, Histogram, LineChart, Orientation, Series, Sparkline, ValueFormat,
+    Band, Bar, BarChart, BulletChart, Charset, Gauge, Heatmap, Histogram, KpiCard, LineChart,
+    Orientation, Series, Sparkline, State, Status, StatusMatrix, Timeline, ValueFormat,
 };
 
 const REQUESTS: [f64; 24] = [
@@ -167,6 +168,194 @@ fn show_table(console: &Console) {
 }
 // --8<-- [end:table]
 
+// --8<-- [start:gauge]
+fn show_gauges(console: &Console) {
+    let cpu = Gauge::new("cpu", 72.0)
+        .range(0.0, 100.0)
+        .target(80.0)
+        .band(Band::new(60.0, "ok").style("chart.ok"))
+        .band(Band::new(85.0, "high").style("chart.warning"))
+        .band(Band::new(100.0, "critical").style("chart.critical"))
+        .unit("%");
+    // One line: label, bar, value and the band the value is in.
+    console.print(&cpu.clone().bar_width(24));
+    // Full width: a scale under the bar and a legend.
+    console.print(&cpu.full_width(true));
+    console.print(&Text::new(""));
+    // Several gauges with their columns aligned.
+    let quarter = BulletChart::new()
+        .gauge(Gauge::new("revenue", 270.0).range(0.0, 300.0).target(250.0))
+        .gauge(Gauge::new("profit", 22.5).range(0.0, 30.0).target(26.0))
+        .gauge(
+            Gauge::new("new customers", 1650.0)
+                .range(0.0, 2000.0)
+                .target(1800.0)
+                .band(Band::new(1400.0, "poor").style("chart.critical"))
+                .band(Band::new(1700.0, "fair").style("chart.warning"))
+                .band(Band::new(2000.0, "good").style("chart.ok")),
+        )
+        .bar_width(30);
+    console.print(&quarter);
+}
+// --8<-- [end:gauge]
+
+// --8<-- [start:heatmap]
+fn show_heatmap(console: &Console) {
+    let hours: Vec<String> = (0..24).map(|h| format!("{h:02}")).collect();
+    let mut map = Heatmap::new().columns(hours);
+    for (day, name) in ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
+        .into_iter()
+        .enumerate()
+    {
+        let weekend = if day >= 5 { 0.4 } else { 1.0 };
+        let load = (0..24).map(|h| {
+            let peak = (-((h as f64 - 14.0).powi(2)) / 30.0).exp();
+            (peak * 900.0 * weekend + 40.0 * day as f64).round()
+        });
+        map = map.row(name, load);
+    }
+    console.print(&map);
+    // In ASCII: ten shades, so it reads in black and white.
+    let ascii = Console::builder()
+        .width(60)
+        .color_system(None)
+        .ascii_only(true)
+        .build();
+    console.print(&Text::new(ascii.render_to_string(&map).trim_end()));
+}
+// --8<-- [end:heatmap]
+
+// --8<-- [start:matrix]
+fn show_matrix(console: &Console) {
+    let matrix = StatusMatrix::new()
+        // Your own state: a name, a symbol, an ASCII symbol and a style.
+        .state(State::new("running", '◌', 'o', "chart.state.unknown"))
+        .columns(["linux", "macos", "windows", "wasm"])
+        .row("unit", ["pass", "pass", "pass", "pass"])
+        .row("integration", ["pass", "flaky", "fail", "skip"])
+        .row("docs", ["pass", "pass", "running", "skip"]);
+    console.print(&matrix);
+}
+// --8<-- [end:matrix]
+
+fn trend(seed: f64) -> Vec<f64> {
+    (0..20)
+        .map(|i| 50.0 + 30.0 * ((i as f64 + seed) / 3.0).sin())
+        .collect()
+}
+
+// --8<-- [start:cards]
+fn show_cards(console: &Console) {
+    let cards = vec![
+        KpiCard::new("Requests", 12_400.0)
+            .unit("/s")
+            .previous(11_430.0)
+            .caption("last week")
+            .trend(trend(0.0))
+            .status(Status::Ok),
+        KpiCard::new("Errors", 42.0)
+            .delta(-14.0)
+            .higher_is_better(false)
+            .caption("per hour")
+            .trend(trend(4.0))
+            .status(Status::Warning),
+        KpiCard::new("Latency", 412.0)
+            .unit(" ms")
+            .previous(260.0)
+            .higher_is_better(false)
+            .trend(trend(8.0))
+            .status(Status::Critical),
+    ];
+    let cells = cards
+        .into_iter()
+        .map(|card| Cell::Renderable(Arc::new(card.width(24))))
+        .collect();
+    console.print(&Columns::from_cells(cells));
+}
+// --8<-- [end:cards]
+
+// --8<-- [start:timeline]
+fn show_timeline(console: &Console) {
+    let build = Timeline::new()
+        .span("fetch", 0.0, 4.0)
+        .span("compile", 4.0, 26.0)
+        // Overlapping ranges on one row are stacked.
+        .span("test", 12.0, 30.0)
+        .span("test", 20.0, 34.0)
+        .span("package", 34.0, 39.0)
+        .milestone("ship", 40.0)
+        .unit("s")
+        .width(60);
+    console.print(&build);
+    console.print(&Text::new(""));
+    // Ten minutes idle between two short bursts: the gap is cut out.
+    let jobs = Timeline::new()
+        .span("worker 1", 0.0, 3.0)
+        .span("worker 1", 3.0, 5.0)
+        .span("worker 2", 2.0, 6.0)
+        .span("worker 1", 600.0, 604.0)
+        .span("worker 2", 602.0, 610.0)
+        .milestone("deploy", 611.0)
+        .unit("s")
+        .width(60);
+    console.print(&jobs);
+}
+// --8<-- [end:timeline]
+
+// --8<-- [start:dashboard]
+fn dashboard() -> Layout {
+    let card = |c: KpiCard| Layout::with_renderable(Box::new(c.expand(true)));
+    let mut cards = Layout::new().size(6);
+    cards.split_row(vec![
+        card(
+            KpiCard::new("Requests", 1240.0)
+                .unit("/s")
+                .previous(1180.0)
+                .trend(trend(0.0)),
+        ),
+        card(
+            KpiCard::new("Errors", 7.0)
+                .delta(2.0)
+                .higher_is_better(false)
+                .trend(trend(5.0))
+                .status(Status::Warning),
+        ),
+    ]);
+    let checks = StatusMatrix::new()
+        .columns(["eu", "us", "ap"])
+        .row("api", ["pass", "pass", "flaky"])
+        .row("worker", ["pass", "fail", "pass"]);
+    let deploy = Timeline::new()
+        .span("build", 0.0, 18.0)
+        .span("test", 12.0, 34.0)
+        .span("rollout", 36.0, 52.0)
+        .milestone("live", 60.0)
+        .unit("s");
+    let mut root = Layout::new();
+    root.split_column(vec![
+        cards,
+        Layout::with_renderable(Box::new(Panel::new(Box::new(checks)).title("checks"))).size(6),
+        Layout::with_renderable(Box::new(Panel::new(Box::new(deploy)).title("deploy"))),
+    ]);
+    root
+}
+// --8<-- [end:dashboard]
+
+/// A renderable drawn `height` rows tall: a `Layout` otherwise fills the
+/// console's height.
+struct Rows(Layout, usize);
+
+impl rich::Renderable for Rows {
+    fn rich_render(&self, console: &Console, options: &rich::ConsoleOptions) -> Vec<rich::Segment> {
+        self.0.rich_render(console, &options.update_height(self.1))
+    }
+}
+
+fn show_dashboard(console: &Console) {
+    // In `Live`, rebuild it each tick: `live.update(Box::new(dashboard()))`.
+    console.print(&Rows(dashboard(), 20));
+}
+
 fn main() {
     let shots = Shots::from_args();
     shots.shot("sparkline", 60, "Sparkline", show_sparklines);
@@ -177,6 +366,12 @@ fn main() {
     shots.shot("plain", 66, "LineChart without colour", show_without_colour);
     shots.shot("ascii", 66, "ASCII", show_ascii);
     shots.shot("table", 66, "Charts in a table and a panel", show_table);
+    shots.shot("gauge", 60, "Gauge and BulletChart", show_gauges);
+    shots.shot("heatmap", 60, "Heatmap", show_heatmap);
+    shots.shot("matrix", 60, "StatusMatrix", show_matrix);
+    shots.shot("cards", 76, "KpiCard", show_cards);
+    shots.shot("timeline", 62, "Timeline", show_timeline);
+    shots.shot("dashboard", 66, "A dashboard in a Layout", show_dashboard);
 }
 
 /// `--svg DIR` writes each shot as `DIR/guide_charts-<shot>.svg`; without it,

@@ -90,6 +90,52 @@ Entries below record subsequent releases and development.
   example and its output, the crate README, and `AGENTS.md`'s dependency
   graph and versioning table.
 
+### KPI and status charts (0.0.15 workstream 2)
+
+The renderables a dashboard is made of, in `rich_ext::chart` next to the
+charts of workstream 1 and built on the same `Scale`, `ValueFormat`,
+`Charset`, `Sparkline`, axis fitting and `chart.*` theme keys. Nothing under
+`crates/rich/src` changed.
+
+- `Gauge` and `BulletChart` (#251): a value against a range with a target
+  marker (`│`) and threshold `Band`s. The track is shaded by band (`░`/`▒`,
+  `.`/`:` in ASCII), the bar takes the style of the band the value is in
+  and the band's name is written after the value. One line by default;
+  `.full_width(true)` fills the width and adds a scale line and a legend.
+  `BulletChart` stacks gauges with aligned columns.
+- `Heatmap` (#250): a labelled grid of values as shades, five in blocks
+  (` ░▒▓█`) and ten in ASCII (` .:-=+*#%@`), with `chart.heat.1`–`5`
+  colours and a legend; missing values are `·` (`?`). Narrow widths merge
+  neighbouring columns by their mean.
+- `StatusMatrix` and `State` (#254): rows × columns of states, built-in
+  `pass` `✓`, `fail` `✗`, `skip` `○`, `flaky` `≈` (`+ X - ~` in ASCII) or
+  your own, each a symbol and a colour, with a legend that counts them.
+- `KpiCard` and `Status` (#256): a label, a value, a delta with an arrow and
+  sign (`▲ +8.5%`, `▼ -14`, `=`; `^`/`v` in ASCII) coloured by
+  `higher_is_better`, an optional sparkline and a status (`✓ ok`,
+  `! warning`, `✗ critical`). Cards measure to their content or take
+  `.width(n)` / `.expand(true)`, so they sit in `Columns`, a table or a
+  `Layout`.
+- `Timeline`, `Span` and `Milestone` (#252): labelled ranges on a numeric
+  (seconds or any unit) scale; overlapping ranges on a row are stacked,
+  touching ones alternate `█`/`▓`, lengths are written after ranges,
+  milestones are marked `◆`. When the range is wider than the plot, idle
+  gaps are cut out (`≈` on the axis) so short ranges keep a column. No new
+  dependency.
+- New theme keys: `chart.track`, `chart.target`, `chart.ok`,
+  `chart.warning`, `chart.critical`, `chart.unknown`, `chart.delta.*`,
+  `chart.kpi.*`, `chart.heat.1`–`5`, `chart.state.*` and `chart.milestone`.
+- Tests: `tests/kpi.rs` snapshots each renderable in blocks, Braille and
+  ASCII with colour on (exact ANSI) and off, its shrinking order, a `Table`
+  cell, a `Panel`, cards in `Columns`, and a dashboard `Layout` updating in
+  `Live`; every new renderable joins the 1–200 width sweep and the
+  ASCII-only check in `tests/charts.rs`.
+- Example: `kpi_dashboard` (cards, a status matrix, gauges and a timeline
+  in a `Layout`, updating in `Live`; `--ascii`, `--no-color`,
+  `--frames N`). Docs: a section per renderable in the
+  [Charts](docs/guide/ext/charts.md) guide, with screenshots from
+  `guide_charts`.
+
 ### Charts (0.0.15 workstream 1)
 
 `rich_ext::chart` (#221, #257): charts drawn with text, as renderables over
