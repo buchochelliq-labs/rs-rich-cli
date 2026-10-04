@@ -4,8 +4,8 @@ use rich::measure::Measurement;
 use rich::{Console, ConsoleOptions, Renderable, Segment, Style};
 
 use super::{
-    cells, entries_width, has_colour, lines_to_segments, theme_style, truncate, wrap_entries,
-    Charset, Line, Scale, ValueFormat,
+    cell_units, cells, entries_width, has_colour, lines_to_segments, theme_style, truncate,
+    wrap_entries, Charset, Line, Scale, ValueFormat,
 };
 
 /// Levels for blocks, lowest first.
@@ -241,7 +241,7 @@ impl Heatmap {
         // Headers at their column's first cell, where they fit.
         if self.columns.iter().any(|c| !c.is_empty()) {
             let plot = grid.buckets.len() * grid.cell;
-            let mut row = vec![' '; plot];
+            let mut row = vec![" ".to_string(); plot];
             let mut free = 0;
             for (i, (start, _)) in grid.buckets.iter().enumerate() {
                 let Some(header) = self.columns.get(*start) else {
@@ -253,15 +253,15 @@ impl Heatmap {
                 if at < free || at + len > plot || len == 0 {
                     continue;
                 }
-                for (k, c) in header.chars().enumerate() {
-                    row[at + k] = c;
+                for (k, unit) in cell_units(&header).into_iter().enumerate() {
+                    row[at + k] = unit;
                 }
                 free = at + len + 1;
             }
-            if row.iter().any(|c| *c != ' ') {
+            if row.iter().any(|c| c != " ") {
                 let mut line = Line::new();
                 line.pad(lead);
-                line.push(&row.into_iter().collect::<String>(), label_style.clone());
+                line.push(&row.concat(), label_style.clone());
                 out.push(line);
             }
         }

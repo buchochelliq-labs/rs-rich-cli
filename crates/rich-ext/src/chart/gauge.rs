@@ -5,8 +5,8 @@ use rich::measure::Measurement;
 use rich::{Console, ConsoleOptions, Renderable, Segment, Style};
 
 use super::{
-    cells, has_colour, lines_to_segments, theme_style, truncate, user_style, wrap_entries,
-    BarChart, Charset, Line, Scale, ValueFormat,
+    cell_units, cells, has_colour, lines_to_segments, theme_style, truncate, user_style,
+    wrap_entries, BarChart, Charset, Line, Scale, ValueFormat,
 };
 
 /// Bar cells in the compact form when [`Gauge::bar_width`] is not set.
@@ -371,7 +371,7 @@ impl Gauge {
     /// The scale line: bounds, target and band edges under their cells.
     fn scale_line(&self, console: &Console, ascii: bool, offset: usize, width: usize) -> Line {
         let scale = self.scale();
-        let mut row: Vec<char> = vec![' '; width];
+        let mut row: Vec<String> = vec![" ".to_string(); width];
         let mut taken: Vec<(usize, usize)> = Vec::new();
         // Each label goes at the first of its places that is free.
         let mut place = |text: &str, starts: &[usize]| {
@@ -385,8 +385,8 @@ impl Gauge {
                 if end > width || taken.iter().any(|&(a, b)| start < b + 1 && a < end + 1) {
                     continue;
                 }
-                for (i, ch) in text.chars().enumerate() {
-                    row[start + i] = ch;
+                for (i, unit) in cell_units(&text).into_iter().enumerate() {
+                    row[start + i] = unit;
                 }
                 taken.push((start, end));
                 return;
@@ -420,7 +420,7 @@ impl Gauge {
         let mut line = Line::new();
         line.pad(offset);
         let style = has_colour(console).then(|| theme_style(console, "chart.axis"));
-        line.push(&row.into_iter().collect::<String>(), style);
+        line.push(&row.concat(), style);
         line
     }
 

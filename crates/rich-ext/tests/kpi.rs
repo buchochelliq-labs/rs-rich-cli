@@ -793,3 +793,40 @@ fn dashboard_in_a_layout_updates_in_live() {
     assert!(out.contains("│ 2 "), "{out:?}");
     assert!(out.contains("│ 3.5k "), "{out:?}");
 }
+
+// --------------------------------------------------- labels by terminal cell
+
+/// Labels placed on the plot go by terminal cell: a combining mark rides on
+/// its character and a wide character takes two cells, at every width.
+#[test]
+fn labels_with_combining_marks_and_wide_characters() {
+    let accent = "e\u{301}";
+    let heatmap = Heatmap::new()
+        .columns([accent, "日本", "x"])
+        .row("api", [1.0, 4.0, 9.0])
+        .row("db", [2.0, 7.0, 3.0]);
+    let gauge = Gauge::new("cpu", 72.0)
+        .range(0.0, 100.0)
+        .target(80.0)
+        .unit("e\u{301}日")
+        .full_width(true);
+    let timeline = Timeline::new()
+        .span("build", 0.0, 4.0)
+        .span("test", 4.0, 9.0)
+        .milestone("日本 e\u{301}", 10.0)
+        .unit("e\u{301}");
+    let charts: [&dyn Renderable; 3] = [&heatmap, &gauge, &timeline];
+    for width in 1..=80 {
+        for chart in charts {
+            // Colour takes the same paths; it must not panic either.
+            render(&color(width), chart);
+            for line in render(&plain(width), chart).lines() {
+                assert!(cell_len(line) <= width, "{width}: {line:?}");
+            }
+        }
+    }
+    let out = render(&plain(60), &heatmap);
+    assert!(out.contains(accent) && out.contains("日本"), "{out}");
+    let out = render(&plain(60), &timeline);
+    assert!(out.contains("日本 e\u{301}"), "{out}");
+}

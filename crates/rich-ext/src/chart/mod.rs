@@ -302,6 +302,35 @@ pub(crate) fn lines_to_segments(lines: Vec<Line>, width: usize) -> Vec<Segment> 
     out
 }
 
+/// `text` as terminal cells, one entry per cell: a character with the
+/// zero-width marks after it, and an empty entry for the second cell of a
+/// wide character. Its length is `cells(text)`, so a label placed with it
+/// lands on cell offsets, not character indices. Zero-width characters with
+/// nothing before them are dropped.
+pub(crate) fn cell_units(text: &str) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    let mut wide = false;
+    for c in text.chars() {
+        match char_cell_width(c) {
+            0 => {
+                // On the character's own cell, past a wide one's spacer.
+                let at = out.len().checked_sub(if wide { 2 } else { 1 });
+                if let Some(cell) = at.and_then(|i| out.get_mut(i)) {
+                    cell.push(c);
+                }
+            }
+            w => {
+                out.push(c.to_string());
+                wide = w > 1;
+                if wide {
+                    out.push(String::new());
+                }
+            }
+        }
+    }
+    out
+}
+
 /// `text` cut to `width` cells, ending in `…` (`.` in ASCII) when cut. In
 /// ASCII, characters past U+007F first go through
 /// [`ascii_text`](crate::fidelity::ascii_text).

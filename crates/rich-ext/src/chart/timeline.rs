@@ -5,8 +5,8 @@ use rich::{Console, ConsoleOptions, Renderable, Segment, Style};
 
 use super::axis::{exact_label, fit, AxisRequest};
 use super::{
-    cells, has_colour, lines_to_segments, series_key, theme_style, truncate, user_style, Charset,
-    Line, Scale, ValueFormat,
+    cell_units, cells, has_colour, lines_to_segments, series_key, theme_style, truncate,
+    user_style, Charset, Line, Scale, ValueFormat,
 };
 
 /// Columns an elided gap takes.
@@ -557,7 +557,8 @@ impl Timeline {
         for (index, row) in rows.iter().enumerate() {
             let row_style = colour.then(|| theme_style(console, &series_key(index)));
             for (lane_no, lane) in self.lanes(row).into_iter().enumerate() {
-                let mut cells_row: Vec<(char, Option<Style>)> = vec![(' ', None); plot];
+                let mut cells_row: Vec<(String, Option<Style>)> =
+                    vec![(" ".to_string(), None); plot];
                 let placed: Vec<(usize, usize)> =
                     lane.iter().map(|s| mapping.span(s.start, s.end)).collect();
                 let mut glyph = full;
@@ -574,7 +575,7 @@ impl Timeline {
                         None => row_style.clone().unwrap_or_default(),
                     });
                     for cell in cells_row.iter_mut().take(b + 1).skip(a) {
-                        *cell = (glyph, style.clone());
+                        *cell = (glyph.to_string(), style.clone());
                     }
                 }
                 if self.durations {
@@ -584,8 +585,8 @@ impl Timeline {
                         let start = placed[k].1 + 2;
                         let limit = placed.get(k + 1).map_or(plot, |n| n.0.saturating_sub(1));
                         if start + cells(&text) <= limit {
-                            for (i, c) in text.chars().enumerate() {
-                                cells_row[start + i] = (c, value_style.clone());
+                            for (i, unit) in cell_units(&text).into_iter().enumerate() {
+                                cells_row[start + i] = (unit, value_style.clone());
                             }
                         }
                     }
@@ -601,8 +602,8 @@ impl Timeline {
                     line.push(&text, label_style.clone());
                     line.pad(pad + 1);
                 }
-                for (c, style) in cells_row {
-                    line.push(&c.to_string(), style);
+                for (unit, style) in cells_row {
+                    line.push(&unit, style);
                 }
                 out.push(line);
             }
@@ -618,10 +619,10 @@ impl Timeline {
         if !marks.is_empty() {
             marks.sort_by_key(|(c, _)| *c);
             let style = colour.then(|| theme_style(console, "chart.milestone"));
-            let mut row: Vec<(char, Option<Style>)> = vec![(' ', None); plot];
+            let mut row: Vec<(String, Option<Style>)> = vec![(" ".to_string(), None); plot];
             let marker = if ascii { '*' } else { '◆' };
             for (col, _) in &marks {
-                row[*col] = (marker, style.clone());
+                row[*col] = (marker.to_string(), style.clone());
             }
             // After the marker when it fits, else before it, else cut.
             let mut free = 0;
@@ -640,15 +641,15 @@ impl Timeline {
                     continue;
                 }
                 let text = truncate(&mark.label, room, ascii);
-                for (i, c) in text.chars().enumerate() {
-                    row[start + i] = (c, label_style.clone());
+                for (i, unit) in cell_units(&text).into_iter().enumerate() {
+                    row[start + i] = (unit, label_style.clone());
                 }
                 free = (start + cells(&text)).max(col + 1) + 1;
             }
             let mut line = Line::new();
             line.pad(part(label_w));
-            for (c, style) in row {
-                line.push(&c.to_string(), style);
+            for (unit, style) in row {
+                line.push(&unit, style);
             }
             out.push(line);
         }
@@ -672,7 +673,7 @@ impl Timeline {
                 }
             })
             .collect();
-        let mut labels: Vec<char> = vec![' '; plot];
+        let mut labels: Vec<String> = vec![" ".to_string(); plot];
         let mut taken: Vec<(usize, usize)> = Vec::new();
         for (col, text, anchor) in &mapping.labels {
             let text = truncate(text, plot, ascii);
@@ -688,8 +689,8 @@ impl Timeline {
             if taken.iter().any(|&(a, b)| start < b + 1 && a < end + 1) {
                 continue;
             }
-            for (i, c) in text.chars().enumerate() {
-                labels[start + i] = c;
+            for (i, unit) in cell_units(&text).into_iter().enumerate() {
+                labels[start + i] = unit;
             }
             taken.push((start, end));
             if *col < plot {
@@ -702,7 +703,7 @@ impl Timeline {
         out.push(axis_line);
         let mut label_line = Line::new();
         label_line.pad(part(label_w));
-        label_line.push(&labels.into_iter().collect::<String>(), label_style);
+        label_line.push(&labels.concat(), label_style);
         out.push(label_line);
         out
     }
