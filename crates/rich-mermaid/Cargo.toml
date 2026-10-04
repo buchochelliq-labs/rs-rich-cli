@@ -1,12 +1,13 @@
 # crates/rich-mermaid — Mermaid diagrams for the `rich` Rust port.
 #
 # A plugin built on rs-rich-plugin-api: it never depends on rs-rich-ext. Draws
-# flowcharts as text natively; the optional `mmdc` feature adds Mermaid's own
-# CLI for every diagram type, shown through rs-rich-art. Independent SemVer from
-# 0.0.1. See AGENTS.md → Versioning and docs/PLUGINS.md.
+# flowcharts as text natively, through rs-rich-diagram's layout; the optional
+# `mmdc` feature adds Mermaid's own CLI for every diagram type, shown through
+# rs-rich-art. Independent SemVer from 0.0.1. See AGENTS.md → Versioning and
+# docs/PLUGINS.md.
 [package]
 name = "rs-rich-mermaid"
-version = "0.0.3"
+version = "0.0.4"
 description = "Mermaid diagrams for the `rich` Rust port: flowcharts drawn as text, and every diagram type through mermaid-cli"
 edition.workspace = true
 license.workspace = true
@@ -37,6 +38,8 @@ mmdc = ["dep:rich-art", "rich-art/sixel"]
 [dependencies]
 rich = { workspace = true, features = ["syntax"] }
 rich-plugin-api.workspace = true
+# The graph model, layered layout and drawing a parsed flowchart goes through.
+rich-diagram.workspace = true
 rich-art = { workspace = true, optional = true }
 
 [dev-dependencies]

@@ -1614,6 +1614,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "rs-rich-diagram"
+version = "0.0.1"
+dependencies = [
+ "rs-rich",
+]
+
+[[package]]
 name = "rs-rich-ext"
 version = "0.0.12"
 dependencies = [
@@ -1679,10 +1686,11 @@ dependencies = [
 
 [[package]]
 name = "rs-rich-mermaid"
-version = "0.0.3"
+version = "0.0.4"
 dependencies = [
  "rs-rich",
  "rs-rich-art",
+ "rs-rich-diagram",
  "rs-rich-ext",
  "rs-rich-plugin-api",
 ]

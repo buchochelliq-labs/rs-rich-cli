@@ -1,0 +1,32 @@
+# crates/rich-diagram — graph diagrams: a graph model, a layered layout and a
+# box-drawing renderable (0.0.15, #227, #258).
+#
+# Not a port of anything upstream: an rs-rich addition. The layout was lifted
+# out of rs-rich-mermaid so every diagram source (Mermaid flowcharts now; DOT
+# and Cargo graphs next) draws the same way. Depends on core only, so Mermaid
+# can use it without pulling in rs-rich-ext. Independent SemVer from 0.0.1.
+# See AGENTS.md → Versioning.
+[package]
+name = "rs-rich-diagram"
+version = "0.0.1"
+description = "Graph diagrams for rs-rich: a graph model, a layered layout, and box-drawing rendering with an ASCII fallback"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+readme = "README.md"
+documentation = "https://docs.rs/rs-rich-diagram"
+keywords = ["terminal", "diagram", "graph", "layout", "rich"]
+categories = ["command-line-interface", "visualization"]
+include = ["src/**/*", "README.md", "LICENSE", "Cargo.toml"]
+
+[lib]
+name = "rich_diagram"
+
+[lints]
+workspace = true
+
+[dependencies]
+rich.workspace = true

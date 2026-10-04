@@ -18,113 +18,13 @@ pub const MAX_EDGES: usize = 2000;
 /// The longest link, in ranks. Each extra `-` (or `=`, `.`) lengthens a link
 /// by one rank; Mermaid documents lengths 1 to 3 and sets no maximum, but
 /// every rank a link spans costs layout work, so longer runs are treated as
-/// this length.
-pub const MAX_LINK_LENGTH: usize = 10;
+/// this length. The layout's own cap, [`rich_diagram::MAX_EDGE_LENGTH`].
+pub const MAX_LINK_LENGTH: usize = rich_diagram::MAX_EDGE_LENGTH;
 
-/// Which way the flowchart flows.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub enum Direction {
-    /// `TD` or `TB`.
-    #[default]
-    TopDown,
-    /// `BT`.
-    BottomUp,
-    /// `LR`.
-    LeftRight,
-    /// `RL`.
-    RightLeft,
-}
-
-impl Direction {
-    /// Whether ranks run horizontally (`LR` / `RL`).
-    pub fn is_horizontal(self) -> bool {
-        matches!(self, Direction::LeftRight | Direction::RightLeft)
-    }
-}
-
-/// A node's shape, from the brackets around its label.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub enum Shape {
-    /// `A[text]`
-    #[default]
-    Rect,
-    /// `A(text)`
-    Round,
-    /// `A([text])`
-    Stadium,
-    /// `A[[text]]`
-    Subroutine,
-    /// `A[(text)]`
-    Cylinder,
-    /// `A((text))`
-    Circle,
-    /// `A(((text)))`
-    DoubleCircle,
-    /// `A>text]`
-    Asymmetric,
-    /// `A{text}`
-    Rhombus,
-    /// `A{{text}}`
-    Hexagon,
-    /// `A[/text/]`
-    Parallelogram,
-    /// `A[\text\]`
-    ParallelogramAlt,
-    /// `A[/text\]`
-    Trapezoid,
-    /// `A[\text/]`
-    TrapezoidAlt,
-}
-
-/// A node.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Node {
-    pub id: String,
-    /// The label, with `<br>` turned into `\n` and control characters removed.
-    pub label: String,
-    pub shape: Shape,
-}
-
-/// How an edge is drawn.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Stroke {
-    /// `-->`
-    Solid,
-    /// `==>`
-    Thick,
-    /// `-.->`
-    Dotted,
-    /// `~~~`: laid out but not drawn.
-    Invisible,
-}
-
-/// The end of an edge.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Head {
-    None,
-    /// `>`
-    Arrow,
-    /// `o`
-    Circle,
-    /// `x`
-    Cross,
-}
-
-/// An edge between two nodes (indexes into [`Flowchart::nodes`]).
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Edge {
-    pub from: usize,
-    pub to: usize,
-    pub label: Option<String>,
-    pub stroke: Stroke,
-    /// The head at `from` (`<-->` has one at both ends).
-    pub start: Head,
-    /// The head at `to`.
-    pub end: Head,
-    /// The minimum number of ranks the edge spans: 1 for `-->`, 2 for `--->`,
-    /// at most [`MAX_LINK_LENGTH`].
-    pub length: usize,
-}
+/// The graph model a flowchart is drawn through. `Direction` is the header's
+/// (`TD`/`TB`, `BT`, `LR`, `RL`); each [`Shape`] names the brackets that make
+/// it; an [`Edge`]'s `length` is at most [`MAX_LINK_LENGTH`].
+pub use rich_diagram::{Direction, Edge, Head, Node, Shape, Stroke};
 
 /// A parsed flowchart.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -135,6 +35,13 @@ pub struct Flowchart {
     pub edges: Vec<Edge>,
     /// Things the text renderer simplified, to show under the diagram.
     pub notes: Vec<String>,
+}
+
+impl Flowchart {
+    /// The flowchart as a [`rich_diagram::Graph`], to lay out and draw.
+    pub fn to_graph(&self) -> rich_diagram::Graph {
+        rich_diagram::Graph::from_parts(self.direction, self.nodes.clone(), self.edges.clone())
+    }
 }
 
 /// Why a source could not be parsed as a flowchart.

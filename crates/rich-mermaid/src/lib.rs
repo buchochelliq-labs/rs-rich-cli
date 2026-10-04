@@ -1,10 +1,10 @@
 //! Mermaid diagrams for the `rich` Rust port.
 //!
 //! [`Mermaid`] renders a diagram's source. Flowcharts (`graph` / `flowchart`)
-//! are drawn as text with box-drawing characters, by this crate alone. With the
-//! optional `mmdc` feature, and when asked for with [`Backend::Mmdc`], every
-//! diagram type is rendered by Mermaid's own CLI and shown as an image through
-//! `rs-rich-art`. Whatever cannot be drawn is shown as its source, in a code
+//! are drawn as text with box-drawing characters, through `rs-rich-diagram`'s
+//! layered layout, with no external tools. With the optional `mmdc` feature,
+//! and when asked for with [`Backend::Mmdc`], every diagram type is rendered
+//! by Mermaid's own CLI and shown as an image through `rs-rich-art`. Whatever cannot be drawn is shown as its source, in a code
 //! block, under a one-line note saying why.
 //!
 //! [`MermaidPlugin`] registers the same through the plugin API: a fence
@@ -22,7 +22,6 @@
 
 use std::sync::Arc;
 
-use rich::cells::{cell_len, set_cell_size};
 use rich::console::{Console, ConsoleOptions};
 use rich::protocol::{FenceRenderer, Renderable};
 use rich::segment::Segment;
@@ -141,25 +140,8 @@ impl Mermaid {
             }
         };
         let width = options.max_width;
-        let mut lines: Vec<String> = diagram
-            .lines
-            .iter()
-            .map(|line| {
-                if cell_len(line) > width {
-                    set_cell_size(line, width).trim_end().to_string()
-                } else {
-                    line.clone()
-                }
-            })
-            .collect();
-        // Cropping can leave rows empty at either end.
-        while lines.last().is_some_and(|line| line.is_empty()) {
-            lines.pop();
-        }
-        let leading = lines.iter().take_while(|line| line.is_empty()).count();
-        lines.drain(..leading);
         let mut segments = Vec::new();
-        for line in lines {
+        for line in diagram.cropped(width) {
             segments.push(Segment::new(line, None));
             segments.push(Segment::line());
         }
