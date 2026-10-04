@@ -104,7 +104,7 @@ class PublicationTests(unittest.TestCase):
                     patch.dict("release.os.environ", {"GITHUB_OUTPUT": str(output)}):
                 release.main()
             cargo.assert_called_once_with(
-                ["cargo", "metadata", "--no-deps", "--format-version", "1", "--locked"], text=True,
+                ["cargo", "metadata", "--no-deps", "--format-version", "1", "--locked"], text=True, encoding="utf-8",
             )
             exported = output.read_text().removeprefix("selection=").strip()
             self.assertEqual(json.loads(exported), {"rs-rich-cli": "0.0.3"})

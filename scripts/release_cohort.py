@@ -18,16 +18,20 @@ Requires Python 3.11+ and git; `tag` uses the GitHub CLI (`gh`), when present,
 to stop as soon as a release run fails.
 """
 
+import sys
+
+if sys.version_info < (3, 11):
+    sys.exit(f"release_cohort.py needs Python 3.11 or newer (for tomllib); this is {sys.version.split()[0]}")
+
 import argparse
 from dataclasses import dataclass
 from pathlib import Path
 import re
 import shutil
 import subprocess
-import sys
 import time
 import tomllib
-from urllib.error import HTTPError
+from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -67,7 +71,7 @@ def files_on_disk(root=ROOT):
 def files_at(commit):
     """Read files as they are at `commit`, whatever is checked out."""
     return lambda path: subprocess.check_output(
-        ["git", "show", f"{commit}:{path}"], cwd=ROOT, text=True
+        ["git", "show", f"{commit}:{path}"], cwd=ROOT, text=True, encoding="utf-8"
     )
 
 
@@ -253,7 +257,7 @@ def unreleased(tag, packages, status=registry_status):
 
 
 def git(*args, capture=True):
-    result = subprocess.run(["git", *args], cwd=ROOT, check=True, text=True,
+    result = subprocess.run(["git", *args], cwd=ROOT, check=True, text=True, encoding="utf-8",
                             stdout=subprocess.PIPE if capture else None)
     return (result.stdout or "").strip()
 
@@ -278,7 +282,7 @@ def run_conclusion(package):
     result = subprocess.run(
         ["gh", "run", "list", "--workflow", package.workflow, "--branch", package.tag, "--limit", "1",
          "--json", "status,conclusion,url", "--jq", '.[0] | "\\(.status) \\(.conclusion) \\(.url)"'],
-        cwd=ROOT, text=True, capture_output=True,
+        cwd=ROOT, text=True, encoding="utf-8", capture_output=True,
     )
     fields = result.stdout.split()
     return tuple(fields) if result.returncode == 0 and len(fields) == 3 else None
@@ -332,7 +336,7 @@ def tag(commit, remote, timeout, dry_run, status=registry_status, wait=wait_for)
             continue
         else:
             local = subprocess.run(["git", "rev-parse", "--verify", "--quiet", f"refs/tags/{package.tag}^{{commit}}"],
-                                   cwd=ROOT, text=True, capture_output=True).stdout.strip()
+                                   cwd=ROOT, text=True, encoding="utf-8", capture_output=True).stdout.strip()
             if local and local != sha:
                 raise RuntimeError(f"A local tag {package.tag} points at {local[:12]}; delete it first")
             if not local:
@@ -377,6 +381,15 @@ def main():
             tag(args.commit, args.remote, args.timeout * 60, args.dry_run)
     except (RuntimeError, ValueError, subprocess.CalledProcessError) as error:
         print(f"error: {error}", file=sys.stderr)
+        return 1
+    except URLError as error:
+        # Raised when a registry cannot be reached at all; an HTTP status is
+        # handled where it is read. python.org's macOS installer leaves Python
+        # without CA certificates until "Install Certificates.command" runs.
+        print(f"error: could not reach crates.io or PyPI: {error.reason}", file=sys.stderr)
+        if "CERTIFICATE_VERIFY_FAILED" in str(error.reason):
+            print("hint: on macOS, run \"Install Certificates.command\" from your Python's "
+                  "Applications folder, then try again", file=sys.stderr)
         return 1
     return 0
 

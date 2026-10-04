@@ -29,12 +29,12 @@ def validate_tag(tag):
     if not TAG.fullmatch(tag):
         raise ValueError(f"Invalid release tag: {tag!r}")
     ref = f"refs/tags/{tag}"
-    kind = subprocess.check_output(["git", "cat-file", "-t", ref], text=True).strip()
+    kind = subprocess.check_output(["git", "cat-file", "-t", ref], text=True, encoding="utf-8").strip()
     if kind != "tag":
         raise ValueError(f"Release tag {tag!r} must be annotated, not lightweight")
     sha = subprocess.check_output(["git", "rev-parse", "--verify", f"{ref}^{{commit}}"],
-                                  text=True).strip()
-    head = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
+                                  text=True, encoding="utf-8").strip()
+    head = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True, encoding="utf-8").strip()
     if sha != head:
         raise ValueError("Release tag must point at the checked-out commit")
     subprocess.run(["git", "merge-base", "--is-ancestor", sha, "origin/main"], check=True)
@@ -187,7 +187,7 @@ def main():
                 stream.write(f"sha={sha}\n")
     elif args.command == "plan":
         metadata = json.loads(subprocess.check_output(
-            ["cargo", "metadata", "--no-deps", "--format-version", "1", "--locked"], text=True,
+            ["cargo", "metadata", "--no-deps", "--format-version", "1", "--locked"], text=True, encoding="utf-8",
         ))
         root = tomllib.loads(Path("Cargo.toml").read_text(encoding="utf-8"))
         selection = select(args.tag, metadata, root)

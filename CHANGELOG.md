@@ -71,6 +71,11 @@ Entries below record subsequent releases and development.
   published, in their first job, before the full gate or any build.
 - Rust 1.99's Clippy (`needless_borrows_for_generic_args`) flagged one call in
   rs-rich-ext's completion generator; fixed so every CI job builds again.
+- `release_cohort.py tag` reads committed manifests as UTF-8. It used the
+  locale's encoding, so on Windows (cp1252) even `--dry-run` failed on the
+  non-ASCII in rs-rich's manifest. `release.py` likewise. An unreachable
+  registry now prints one error line (with the macOS certificate hint when that
+  is the cause) instead of a traceback, and Python older than 3.11 is named.
 
 ### 0.0.14 release test: fixes from audit B
 
