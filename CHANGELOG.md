@@ -57,6 +57,39 @@ Entries below record subsequent releases and development.
 
 ## [Unreleased]
 
+### Diagrams (0.0.15 workstream 3)
+
+- New crate `rs-rich-diagram` 0.0.1 (`rich_diagram`), depending on core
+  `rs-rich` only: a graph model (`Graph`, `Node`, `Edge`, `Shape`,
+  `Stroke`, `Head`, `Direction`), the layered layout (`draw` → `Drawing`),
+  and a `Diagram` renderable (#227, #258) that measures to its drawing and
+  crops each line at the width it is given, in box drawing or ASCII (which
+  follows `Console::ascii_only` unless set). A chaining builder draws a
+  diagram from code: `Graph::new(Direction::LeftRight).node("a",
+  "API").edge("a", "b").label("reads")`. Labels lose their control
+  characters before drawing. No `plugin` feature yet: nothing in this crate
+  needs `rs-rich-plugin-api` until the DOT plugin (workstream 4).
+- `rs-rich-mermaid` 0.0.4: the layout moved out unchanged; a parsed
+  `Flowchart` converts into a `rich_diagram::Graph` (`Flowchart::to_graph`)
+  and draws through `rs-rich-diagram`. `flowchart::{Direction, Shape, Node,
+  Edge, Stroke, Head}` are now re-exports of `rich_diagram`'s types (same
+  variants and fields), `layout::Diagram` is an alias of
+  `rich_diagram::Drawing`, and `draw` keeps its signature. Every Mermaid
+  snapshot is byte-identical, and a new test checks that random graphs built
+  with the builder render as their Mermaid source.
+- `rs-rich-cli` 0.0.15: requires `rs-rich-mermaid` 0.0.4 (manifest only from
+  this workstream).
+- Release tooling: `rs-rich-diagram` is in `RELEASES.toml` (before
+  `rs-rich-mermaid`), `scripts/release.py`, the release workflow's tag
+  filter, the release-readiness pattern, the CI test matrix (all features),
+  the Python workflow's paths, `docs/BRANCHING.md` and the release skill.
+  Its first version goes up through the release workflow's new-crate path
+  with its own `rs-rich-diagram-v0.0.1` tag, after `rs-rich` and before
+  `rs-rich-mermaid` 0.0.4.
+- Docs: a [Diagrams guide](docs/guide/diagram/index.md) with a builder
+  example and its output, the crate README, and `AGENTS.md`'s dependency
+  graph and versioning table.
+
 ### Micro asset docs
 
 - A [built-in library](docs/guide/micro/library.md) page shows every
