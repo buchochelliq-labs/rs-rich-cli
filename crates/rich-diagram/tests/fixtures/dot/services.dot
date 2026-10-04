@@ -1,0 +1,19 @@
+// A small service map, the way people sketch one by hand.
+digraph services {
+  rankdir=LR
+  label="Request path"
+  node [shape=box, fontname="Helvetica"]
+
+  web [label="Browser", shape=ellipse]
+  subgraph cluster_backend {
+    label = "Backend"
+    api [label="API"]
+    db  [label="Postgres", shape=cylinder]
+    api -> db [label="reads"]
+  }
+  cache [shape=diamond, label="Cache?"]
+
+  web -> api [label="HTTPS"]
+  api -> cache [style=dashed]
+  cache -> db [style=bold, label="miss"]
+}

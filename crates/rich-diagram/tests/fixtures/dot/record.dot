@@ -1,0 +1,4 @@
+digraph {
+  node [shape=record]
+  s [label="{a|b}"]
+}

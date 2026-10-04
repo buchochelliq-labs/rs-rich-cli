@@ -1,0 +1,7 @@
+                               /--------\
+                     +-----+ +>< Cache? >=+        .----------.
+.---------. +-HTTPS->| API +.+ \--------/ +=miss==>| Postgres |
+| Browser +-+        |     +-+            +-reads->|          |
+'---------'          +-----+ +------------+        '----------'
+Request path
+DOT: clusters are drawn without their frames: Backend (api, db)
