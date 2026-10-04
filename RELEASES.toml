@@ -1,0 +1,92 @@
+# Release numbers: every package this repository publishes, the version it is
+# at, and the order to publish in.
+#
+# Each entry's tag is derived, never written: a crates.io package is tagged
+# `<name>-v<version>` (release.yml), the PyPI package `python-v<version>`
+# (pypi-release.yml). Entries are listed in publication order, each after
+# every workspace crate it depends on.
+#
+#   python3 scripts/release_cohort.py check    CI: this file matches every
+#                                             manifest, and the order is valid
+#   python3 scripts/release_cohort.py sync     rewrite the versions from the
+#                                             manifests after a bump
+#   python3 scripts/release_cohort.py status   what is published, tagged, or due
+#   python3 scripts/release_cohort.py tag      tag everything not yet released,
+#                                             one at a time, on main
+#
+# A version already on its registry is never tagged again: `tag` skips it, and
+# both release workflows fail a tag whose version is already published.
+
+[[package]]
+name = "rs-rich"
+registry = "crates.io"
+manifest = "crates/rich/Cargo.toml"
+version = "0.0.9"
+
+[[package]]
+name = "rs-rich-macros"
+registry = "crates.io"
+manifest = "crates/rich-macros/Cargo.toml"
+version = "0.0.3"
+
+[[package]]
+name = "rs-rich-plugin-api"
+registry = "crates.io"
+manifest = "crates/rich-plugin-api/Cargo.toml"
+version = "0.0.3"
+
+[[package]]
+name = "rs-rich-art"
+registry = "crates.io"
+manifest = "crates/rich-art/Cargo.toml"
+version = "0.0.12"
+
+[[package]]
+name = "rs-rich-mermaid"
+registry = "crates.io"
+manifest = "crates/rich-mermaid/Cargo.toml"
+version = "0.0.3"
+
+[[package]]
+name = "rs-rich-lumis"
+registry = "crates.io"
+manifest = "crates/rich-lumis/Cargo.toml"
+version = "0.0.3"
+
+[[package]]
+name = "rs-rich-ext"
+registry = "crates.io"
+manifest = "crates/rich-ext/Cargo.toml"
+version = "0.0.12"
+
+[[package]]
+name = "rs-rich-micro"
+registry = "crates.io"
+manifest = "crates/rich-micro/Cargo.toml"
+version = "0.0.1"
+
+[[package]]
+name = "rs-rich-record"
+registry = "crates.io"
+manifest = "crates/rich-record/Cargo.toml"
+version = "0.0.2"
+
+[[package]]
+name = "rs-rich-interact"
+registry = "crates.io"
+manifest = "crates/rich-interact/Cargo.toml"
+version = "0.0.2"
+
+[[package]]
+name = "rs-rich-cli"
+registry = "crates.io"
+manifest = "crates/rich-cli/Cargo.toml"
+version = "0.0.14"
+
+# The Python bindings: PyPI `rs-rich`, versioned by crates/rich-py/pyproject.toml
+# (its Cargo.toml must agree). Outside the Cargo workspace.
+[[package]]
+name = "rs-rich"
+registry = "pypi"
+manifest = "crates/rich-py/pyproject.toml"
+version = "0.0.3"

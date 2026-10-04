@@ -34,6 +34,9 @@ jobs:
           version="$(python3 -c 'import tomllib; print(tomllib.load(open("crates/rich-py/pyproject.toml","rb"))["project"]["version"])')"
           test "${tag}" = "python-v${version}" || { echo "tag ${tag} does not match pyproject version ${version}"; exit 1; }
           git merge-base --is-ancestor "${GITHUB_SHA}" origin/main || { echo "${tag} is not on main"; exit 1; }
+      # A version on PyPI is permanent: refuse the tag before building wheels.
+      - name: Refuse a version already on PyPI
+        run: python3 scripts/release_cohort.py unreleased "${GITHUB_REF_NAME}"
 
   wheels:
     name: wheel (${{ matrix.name }})

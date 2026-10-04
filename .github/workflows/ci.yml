@@ -40,6 +40,9 @@ jobs:
       - name: Check manifest-version documentation
         run: python3 scripts/gen_versions.py --check
 
+      - name: RELEASES.toml matches the manifests and the dependency order
+        run: python3 scripts/release_cohort.py check
+
       - name: Test release selection and registry verification
         run: python3 -m unittest discover -s scripts -p 'test_release*.py' -v
 

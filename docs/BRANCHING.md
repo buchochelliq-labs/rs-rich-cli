@@ -337,6 +337,32 @@ all release tags and manual dispatches.
 The gate requires an annotated tag pointing at the checked-out commit on `main`;
 lightweight tags are rejected before CI or publication.
 
+### Release numbers and tagging (`RELEASES.toml`)
+
+`RELEASES.toml` lists every package this repository publishes, its version and
+its place in the publication order; each tag is derived from it
+(`<crate>-v<version>`, or `python-v<version>` for PyPI). CI runs
+`scripts/release_cohort.py check`, which fails when an entry's version differs
+from its manifest, a publishable crate is missing, or a crate is listed before a
+workspace crate it depends on. After a version bump, `release_cohort.py sync`
+rewrites the versions from the manifests.
+
+`release_cohort.py tag` tags the merged commit on `main` (by default
+`origin/main`). For each entry in order it skips a version already on crates.io
+or PyPI, never tagging it; otherwise it pushes the annotated tag and waits for
+the version to appear before the next, stopping when the release run fails
+(with the GitHub CLI) or after `--timeout` minutes. One tag at a time keeps
+dependencies published first and stays inside the release workflow's
+concurrency group, which keeps only one pending run. It is safe to re-run: a
+tag that exists but is not yet published is waited on, not recreated, and a
+tag on another commit stops it. `--dry-run` shows the plan; `status` shows
+every package's state.
+
+Both release workflows also refuse a published version from the tag itself:
+the first job runs `release_cohort.py unreleased <tag>`, which fails when the
+tag selects a version already on its registry, or one `RELEASES.toml` does not
+name, before the full gate or any build.
+
 ### Registry authentication (Trusted Publishing)
 
 Since 0.0.10 the workflow publishes existing crates with no long-lived

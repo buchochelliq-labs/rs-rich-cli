@@ -57,6 +57,21 @@ Entries below record subsequent releases and development.
 
 ## [Unreleased]
 
+### Release numbers and tagging
+
+- `RELEASES.toml` lists every published package (the eleven crates and PyPI
+  `rs-rich`) with its version, in publication order. CI checks it against the
+  manifests and the workspace dependency graph; `scripts/release_cohort.py sync`
+  updates it after a bump.
+- `scripts/release_cohort.py tag` tags the merged commit on `main` from it: it
+  skips any version already on crates.io or PyPI, pushes one annotated tag at a
+  time, and waits for each release before the next. `status` and `--dry-run`
+  show the plan.
+- `release.yml` and `pypi-release.yml` fail a tag whose version is already
+  published, in their first job, before the full gate or any build.
+- Rust 1.99's Clippy (`needless_borrows_for_generic_args`) flagged one call in
+  rs-rich-ext's completion generator; fixed so every CI job builds again.
+
 ### 0.0.14 release test: fixes from audit B
 
 The release-test audit B of interact's composition, keymaps, kit,
@@ -139,6 +154,7 @@ Nothing in `rs-rich` changes.
 - **F2**: `rich -p --emoji` with `:micro:` assets exports (`--export-html`/`--export-svg`), pages (`--pager`) and captures the fallback, never Kitty placeholder cells or the blank cells under an iTerm2/Sixel image; the terminal shows the fallback too in that case.
 - **F3**: the `CSI 16 t` cell-size query keeps typeahead: it is skipped when input is waiting, and stops at a `CSI c` sentinel reply. Bytes read during the exchange that are not a reply are dropped, never replayed with `TIOCSTI`, which would feed terminal replies to the shell as typed input.
 - The cell-size query waits on the terminal with `select`, not `poll`: macOS's `poll` rejects `/dev/tty` (`POLLNVAL`), so the query never ran there. Found by the macOS CI job.
+- The cell-size query waits up to 500 ms, not 100 ms. The device-attributes request sent with it ends the wait as soon as the terminal answers, so only a terminal that answers nothing waits the full time; the shorter timeout let a reply over a slow link (or a loaded CI runner) arrive late and reach the shell as typed input.
 - **F4**: the cell-size query runs only from the terminal's foreground process group, with `SIGTTOU`/`SIGTTIN` blocked, so a background `rich -p --emoji` job is no longer stopped.
 - **F5**: `rich micro create --output` (and `add`, `install`) check the destination with `symlink_metadata`, and `create` only removes what it created: a dangling link at the destination is refused and left alone.
 - **F6**: only regular files are opened as `.richmicro`/`.zip` archives; a FIFO, socket or device in a layer directory is skipped with a warning instead of hanging `rich micro` (including `--project` commands in an untrusted project, which still never draw that project's assets).

@@ -618,7 +618,7 @@ fn zsh(root: &CommandSpec, nodes: &[Node<'_>]) -> String {
                 let target = nodes
                     .iter()
                     .find(|n| &n.id == id)
-                    .map(&fname)
+                    .map(fname)
                     .unwrap_or_default();
                 let words: Vec<String> = std::iter::once(&child.name)
                     .chain(&child.aliases)
