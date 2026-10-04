@@ -143,6 +143,12 @@ pub mod live;
 #[cfg(feature = "data")]
 pub mod data;
 
+// Real sources drawn as trees: Cargo dependency graphs and JSON Schemas.
+#[cfg(feature = "data")]
+pub mod deps;
+#[cfg(feature = "data")]
+pub mod schema;
+
 // CLI authoring: help, errors, completions, docs, config reference and
 // precedence from one command description.
 pub mod cli_doc;

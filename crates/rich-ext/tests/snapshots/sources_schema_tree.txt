@@ -1,0 +1,17 @@
+Order  object  no other properties  A customer's order.
+├── id (required)  string  pattern=/^ord_[a-z0-9]+$/  Order id.
+├── status  enum  one of "pending", "paid", "shipped", default="pending"
+├── customer  object  → #/$defs/customer
+│   ├── email (required)  string  format=email
+│   └── referrer  object  → #/$defs/customer (recursive)  Who referred them.
+├── items (required)  array  minItems=1
+│   └── [items]  object  → #/$defs/item
+│       ├── sku (required)  string
+│       ├── quantity (required)  integer  minimum=1
+│       └── price  number  exclusiveMinimum=0
+├── payment  one of
+│   ├── [1] Card  object
+│   │   └── last4 (required)  string  minLength=4, maxLength=4
+│   └── [2] Invoice  object
+│       └── due  string  format=date
+└── notes  string | null  maxLength=500
