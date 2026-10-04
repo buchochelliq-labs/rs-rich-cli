@@ -168,6 +168,16 @@ class Unreleased(unittest.TestCase):
         pypi = (ROOT / ".github/workflows/pypi-release.yml").read_text()
         self.assertLess(pypi.index("release_cohort.py unreleased"), pypi.index("  wheels:"))
 
+    def test_the_release_tests_install_what_ci_tests_install(self):
+        # pypi-release.yml runs the same suite as python.yml against the
+        # built wheel; a dependency only CI installs (Pillow, for the micro
+        # page) fails the release after every wheel is built.
+        def test_deps(workflow):
+            text = (ROOT / ".github/workflows" / workflow).read_text()
+            line = next(l for l in text.splitlines() if "pip install" in l and "pytest" in l)
+            return set(line.split("pip install", 1)[1].split()[1:])  # all but the package itself
+        self.assertLessEqual(test_deps("python.yml"), test_deps("pypi-release.yml"))
+
 
 class Tag(unittest.TestCase):
     """`tag` against a throwaway repository and its bare `origin`."""

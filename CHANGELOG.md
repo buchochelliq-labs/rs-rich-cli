@@ -76,6 +76,10 @@ Entries below record subsequent releases and development.
   non-ASCII in rs-rich's manifest. `release.py` likewise. An unreachable
   registry now prints one error line (with the macOS certificate hint when that
   is the cause) instead of a traceback, and Python older than 3.11 is named.
+- `pypi-release.yml`'s test job installs Pillow, as `python.yml`'s does: the
+  micro assets page's example uses it, so the first `python-v0.0.3` run failed
+  after building every wheel, before anything reached PyPI. A test now keeps
+  the release job's test dependencies a superset of CI's.
 
 ### 0.0.14 release test: fixes from audit B
 
