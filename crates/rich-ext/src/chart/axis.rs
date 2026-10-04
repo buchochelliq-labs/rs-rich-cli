@@ -8,7 +8,7 @@
 //! column it sits on.
 
 use super::cells;
-use super::scale::{Scale, ValueFormat};
+use super::scale::{clean, Scale, ValueFormat};
 
 /// Where an axis's labels go and what every position is worth.
 #[derive(Clone, Debug, PartialEq)]
@@ -95,19 +95,25 @@ fn read(label: &str) -> Option<f64> {
     number.parse::<f64>().ok().map(|v| v * scale)
 }
 
-/// Whether `label` writes `value` exactly.
+/// Whether `label` writes `value` exactly (to float noise, relative to the
+/// value, so `0` never passes for a tiny non-zero value).
 fn exact(label: &str, value: f64) -> bool {
-    read(label).is_some_and(|v| (v - value).abs() <= 1e-9 * value.abs().max(1.0))
+    read(label).is_some_and(|v| (v - value).abs() <= 1e-9 * value.abs())
 }
 
-/// Drop floating-point noise and negative zero.
-fn clean(v: f64) -> f64 {
-    let magnitude = 10f64.powi(9 - v.abs().max(1.0).log10().floor() as i32);
-    let rounded = (v * magnitude).round() / magnitude;
-    if rounded == 0.0 {
-        0.0
+/// `value` in `format` when that writes it exactly, else in full: a
+/// fallback label still names the value its row or column stands for.
+fn exact_label(format: ValueFormat, value: f64) -> String {
+    let label = format.format(value);
+    if exact(&label, value) {
+        return label;
+    }
+    let value = clean(value);
+    let magnitude = value.abs();
+    if magnitude != 0.0 && !(1e-4..1e15).contains(&magnitude) {
+        format!("{value:e}")
     } else {
-        rounded
+        format!("{value}")
     }
 }
 
@@ -157,8 +163,8 @@ pub(crate) fn fit(request: &AxisRequest) -> AxisFit {
             Vec::new()
         } else {
             vec![
-                (0, request.format.format(data.min())),
-                (cells, request.format.format(data.max())),
+                (0, exact_label(request.format, data.min())),
+                (cells, exact_label(request.format, data.max())),
             ]
         },
     };
@@ -316,6 +322,24 @@ mod tests {
                 assert!(fit.scale().min() <= lo && fit.scale().max() >= hi - 1e-9);
             }
         }
+    }
+
+    #[test]
+    fn fallback_labels_are_exact() {
+        // No round step lands on these bounds' rows, and compact would
+        // write them `1.2k` and `5.7k`.
+        let fit = rows(Scale::new(1234.0, 5678.0), true, &[7]);
+        assert_eq!(
+            fit.labels,
+            [(0, "1234".to_string()), (7, "5678".to_string())]
+        );
+        // Too small for compact's two decimals: never `0`.
+        let fit = rows(Scale::new(1e-12, 7e-12), true, &[5]);
+        assert_eq!(
+            fit.labels,
+            [(0, "1e-12".to_string()), (5, "7e-12".to_string())]
+        );
+        assert_even(&fit);
     }
 
     #[test]

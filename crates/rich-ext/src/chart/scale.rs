@@ -80,14 +80,16 @@ impl Scale {
     /// Override either bound. A bound left `None` keeps its value; if the
     /// result is empty or reversed it is fixed up as [`new`](Self::new) does.
     pub fn bounds(self, min: Option<f64>, max: Option<f64>) -> Self {
-        let min = min.filter(|v| v.is_finite()).unwrap_or(self.min);
-        let max = max.filter(|v| v.is_finite()).unwrap_or(self.max);
-        if min > max {
+        let min = min.filter(|v| v.is_finite());
+        let max = max.filter(|v| v.is_finite());
+        let width = self.span().abs().max(1.0);
+        match (min, max) {
             // Only one bound was given and it passed the other: keep the
             // given one and widen away from it.
-            return Scale::new(min, min + (self.max - self.min).abs().max(1.0));
+            (Some(lo), None) if lo > self.max => Scale::new(lo, lo + width),
+            (None, Some(hi)) if hi < self.min => Scale::new(hi - width, hi),
+            (lo, hi) => Scale::new(lo.unwrap_or(self.min), hi.unwrap_or(self.max)),
         }
-        Scale::new(min, max)
     }
 
     /// Stretch the scale so it contains 0, as bars need.
@@ -182,9 +184,13 @@ fn nice_number(x: f64, round: bool) -> f64 {
     nice * power
 }
 
-/// Drop floating-point noise (`0.30000000000000004`) and negative zero.
-fn clean(v: f64) -> f64 {
-    let rounded = (v * 1e9).round() / 1e9;
+/// Drop floating-point noise (`0.30000000000000004`) and negative zero,
+/// keeping twelve significant digits whatever the magnitude.
+pub(crate) fn clean(v: f64) -> f64 {
+    if !v.is_finite() {
+        return v;
+    }
+    let rounded: f64 = format!("{v:.11e}").parse().unwrap_or(v);
     if rounded == 0.0 {
         0.0
     } else {
@@ -286,6 +292,27 @@ mod tests {
         // Already nice: unchanged.
         let s = Scale::new(0.0, 100.0).nice(5);
         assert_eq!((s.min(), s.max()), (0.0, 100.0));
+    }
+
+    #[test]
+    fn a_single_bound_past_the_data_is_kept() {
+        let data = Scale::from_values([150.0, 200.0]);
+        let s = data.bounds(None, Some(100.0));
+        assert_eq!((s.min(), s.max()), (50.0, 100.0));
+        let s = data.bounds(Some(300.0), None);
+        assert_eq!((s.min(), s.max()), (300.0, 350.0));
+        // Both given, in either order.
+        let s = data.bounds(Some(10.0), Some(0.0));
+        assert_eq!((s.min(), s.max()), (0.0, 10.0));
+    }
+
+    #[test]
+    fn tiny_scales_keep_their_magnitude() {
+        let s = Scale::new(1e-12, 5e-12).nice(5);
+        assert_eq!((s.min(), s.max()), (1e-12, 5e-12));
+        assert_eq!(s.ticks(5), vec![1e-12, 2e-12, 3e-12, 4e-12, 5e-12]);
+        assert_eq!(clean(0.1 + 0.2), 0.3);
+        assert_eq!(clean(-0.0).to_bits(), 0.0f64.to_bits());
     }
 
     #[test]

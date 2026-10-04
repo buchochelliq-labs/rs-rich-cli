@@ -27,6 +27,8 @@ fn color(width: usize) -> Console {
         .width(width)
         .force_terminal(true)
         .color_system(Some(ColorSystem::Standard))
+        // Explicit, so an inherited NO_COLOR cannot turn colour off here.
+        .no_color(false)
         .theme(rich_ext::extended_theme())
         .build()
 }
