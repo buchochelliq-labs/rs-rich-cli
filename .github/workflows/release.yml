@@ -66,6 +66,15 @@ jobs:
           RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
         run: python3 scripts/release.py plan "$RELEASE_TAG"
 
+      # Fail in seconds, not after the full gate: a version on crates.io is
+      # permanent, so a tag selecting one is refused here (RELEASES.toml must
+      # also name the tag's version). `verify_only` checks a published release.
+      - name: Refuse a tag whose version is already released
+        if: ${{ inputs.verify_only != true }}
+        env:
+          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+        run: python3 scripts/release_cohort.py unreleased "$RELEASE_TAG"
+
       - name: Require an annotated tag and pin its validated commit
         id: commit
         env:

@@ -57,6 +57,19 @@ Entries below record subsequent releases and development.
 
 ## [Unreleased]
 
+### Release numbers and tagging
+
+- `RELEASES.toml` lists every published package (the eleven crates and PyPI
+  `rs-rich`) with its version, in publication order. CI checks it against the
+  manifests and the workspace dependency graph; `scripts/release_cohort.py sync`
+  updates it after a bump.
+- `scripts/release_cohort.py tag` tags the merged commit on `main` from it: it
+  skips any version already on crates.io or PyPI, pushes one annotated tag at a
+  time, and waits for each release before the next. `status` and `--dry-run`
+  show the plan.
+- `release.yml` and `pypi-release.yml` fail a tag whose version is already
+  published, in their first job, before the full gate or any build.
+
 ### 0.0.14 release test: fixes from audit B
 
 The release-test audit B of interact's composition, keymaps, kit,

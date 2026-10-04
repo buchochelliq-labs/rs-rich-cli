@@ -73,7 +73,10 @@ ambient color suppression invalidates tests that assert ANSI output.
 
 Update each selected manifest version, every affected internal requirement in
 the root `Cargo.toml`, and `Cargo.lock`. Do not invent a workspace package version.
-Re-run `cargo check --workspace --locked`. Audit the intended tag locally:
+Re-run `cargo check --workspace --locked`, then
+`python3 scripts/release_cohort.py sync` so `RELEASES.toml` carries the new
+versions (`release_cohort.py check` fails CI until it does). Audit the intended
+tag locally:
 
 ```bash
 python3 scripts/release.py plan v0.0.3
@@ -149,8 +152,17 @@ target unless there is a specific reason not to.
 ## 3. Land on main, then tag
 
 After the release PR merges, fetch `origin/main` and verify the exact intended
-commit. Only with authorization to publish, create and push the annotated tag
-on that commit. Require:
+commit. Only with authorization to publish, tag it from `RELEASES.toml`:
+
+```bash
+python3 scripts/release_cohort.py tag --dry-run   # the plan
+python3 scripts/release_cohort.py tag             # tag and wait, one at a time
+```
+
+It never tags a version already on crates.io or PyPI, pushes one annotated
+tag at a time in dependency order, and waits for each release before the next
+(see `docs/BRANCHING.md`, "Release numbers and tagging"). Tagging by hand is
+the same contract: create and push the annotated tag on that commit. Require:
 
 ```bash
 git merge-base --is-ancestor "$(git rev-list -n1 <tag>)" origin/main
