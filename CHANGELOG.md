@@ -71,6 +71,9 @@ changed.
 - `BarChart`: label, bar and value per row, with eighth-cell blocks, half-cell
   Braille or `#` and `=` in ASCII; negative values extend left of zero. It
   shrinks the bar, then drops the values, then cuts the labels.
+  `.orientation(Orientation::Vertical)` stands the bars up side by side
+  (`▁▂▃▄▅▆▇█`, `⣤⣿`, or `#` and `.`), labels underneath and values just
+  above each bar; negative values hang below zero. `Histogram` takes it too.
 - `Histogram`: raw values into equal bins labelled `[low, high)`, rounded to
   round edges unless a range is given.
 - `LineChart` and `Series`: lines and scatter points on a Braille canvas

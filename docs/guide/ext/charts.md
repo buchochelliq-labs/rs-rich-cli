@@ -76,6 +76,31 @@ it falls between the smallest and largest value:
 - `.show_values(false)` leaves the values out; `.format(ValueFormat::Fixed(1))`
   writes them with one decimal instead of the compact form (`1.2k`, `3.4M`).
 
+### Vertical bars
+
+`.orientation(Orientation::Vertical)` stands the bars up side by side, with
+the labels underneath:
+
+```rust
+--8<-- "crates/rich-ext/examples/guide_charts.rs:vertical"
+```
+
+![Vertical bar charts with positive and negative values](../../media/guide/guide_charts-vertical.svg)
+
+- `.bar_width(rows)` is the tallest bar's height here, 8 rows by default.
+- Blocks give eighth-row precision (`▁▂▃▄▅▆▇█`), Braille half rows (`⣤⣿`),
+  ASCII `#` and a half `.`. A value above zero always shows at least a
+  sliver.
+- Each bar gets a slot as wide as the widest label or value, with a cell
+  between slots, and is up to 3 cells thick. Each value sits just above
+  its bar.
+- Negative values hang below the zero line at whole-row precision, their
+  values under them.
+- When the width is short the values go first, then the labels are cut
+  (and left out below two cells), then the gaps between bars. Bars that
+  still do not fit are left off the right.
+- `Histogram` takes `.orientation(..)` too.
+
 ## Histograms
 
 `Histogram::new(values).bins(n)` counts raw values into `n` bins of equal

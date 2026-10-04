@@ -5,7 +5,7 @@
 use std::sync::Arc;
 
 use rich::{Cell, Console, Panel, Table, Text};
-use rich_ext::chart::{BarChart, Charset, Histogram, LineChart, Series, Sparkline};
+use rich_ext::chart::{BarChart, Charset, Histogram, LineChart, Orientation, Series, Sparkline};
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
@@ -46,6 +46,11 @@ fn main() {
             ("west", -12.0),
         ])
         .bar_width(30),
+    );
+    console.print(
+        &BarChart::from_pairs([("q1", 18.0), ("q2", -7.5), ("q3", 4.0), ("q4", -12.0)])
+            .orientation(Orientation::Vertical)
+            .bar_width(6),
     );
     console.print(&Text::new(""));
 

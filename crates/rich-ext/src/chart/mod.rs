@@ -9,7 +9,7 @@
 //! | Type | Draws |
 //! |---|---|
 //! | [`Sparkline`] | one line, one cell per value (two in Braille) |
-//! | [`BarChart`] | a label, a bar and a value per row |
+//! | [`BarChart`] | a label, a bar and a value per row, or columns side by side ([`Orientation::Vertical`]) |
 //! | [`Histogram`] | raw values counted into bins, drawn as a [`BarChart`] |
 //! | [`LineChart`] | one or more [`Series`] as lines or scattered points, with axes and a legend |
 //!
@@ -54,7 +54,7 @@ mod line;
 mod scale;
 mod sparkline;
 
-pub use bar::{Bar, BarChart, Histogram};
+pub use bar::{Bar, BarChart, Histogram, Orientation};
 pub use canvas::DotCanvas;
 pub use line::{LineChart, Series, SeriesKind};
 pub use scale::{Scale, ValueFormat};

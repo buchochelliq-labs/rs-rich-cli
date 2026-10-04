@@ -1,4 +1,4 @@
-//! Horizontal bar charts and histograms.
+//! Bar charts, horizontal and vertical, and histograms.
 
 use rich::measure::Measurement;
 use rich::{Console, ConsoleOptions, Renderable, Segment, Style};
@@ -17,6 +17,43 @@ const BRAILLE_HALF: char = '⡇';
 /// [`Charset::Ascii`]: a full cell and a half.
 const ASCII_FULL: char = '#';
 const ASCII_HALF: char = '=';
+
+/// Vertical bars, bottom up: 1/8 to 7/8 of a cell.
+const LOWER_EIGHTHS: [char; 7] = ['▁', '▂', '▃', '▄', '▅', '▆', '▇'];
+/// Vertical [`Charset::Braille`] and [`Charset::Ascii`] half cells.
+const BRAILLE_LOWER_HALF: char = '⣤';
+const ASCII_LOWER_HALF: char = '.';
+/// Rows for the tallest vertical bar when [`BarChart::bar_width`] is not set.
+const DEFAULT_COLUMN: usize = 8;
+/// The thickest vertical bar, in cells.
+const MAX_THICKNESS: usize = 3;
+
+/// Which way a [`BarChart`]'s bars run.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum Orientation {
+    /// Left to right, one bar per line with its label before it and its
+    /// value after (the default).
+    #[default]
+    Horizontal,
+    /// Bottom to top, side by side, with labels under the bars and values
+    /// just above them (below, for negative values).
+    Vertical,
+}
+
+/// How a vertical chart fits its width.
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct Columns {
+    /// Cells per bar, its label and its value.
+    slot: usize,
+    /// Cells between slots.
+    gap: usize,
+    /// Cells of bar glyphs, centred in the slot.
+    thickness: usize,
+    labels: bool,
+    values: bool,
+    /// How many bars fit, from the first.
+    shown: usize,
+}
 
 /// The narrowest bar drawn before labels and values give way.
 const MIN_BAR: usize = 4;
@@ -52,7 +89,8 @@ impl Bar {
     }
 }
 
-/// Horizontal bars: a label, a bar and the value on each line.
+/// Bars: by default horizontal, a label, a bar and the value on each line;
+/// with [`Orientation::Vertical`], columns side by side.
 ///
 /// - Lengths are measured from zero on a scale that runs from the smallest
 ///   to the largest value and always includes zero (override with
@@ -66,6 +104,16 @@ impl Bar {
 ///   40 by default) and the value. Given less, the bar shrinks to 4 cells,
 ///   then the values go, then the labels are cut (with `…`, or `.` in
 ///   ASCII), then the bar takes whatever is left.
+/// - [`Orientation::Vertical`] draws columns bottom up, as tall as
+///   [`bar_width`](Self::bar_width) rows (8 by default): eighth-cell blocks
+///   (`▁▂▃▄▅▆▇█`), half-cell Braille (`⣤⣿`), or `#` and a half `.` in
+///   ASCII. Each bar has a slot as wide as the widest label or value, with
+///   a cell between slots, and is up to 3 cells thick. Labels go under the
+///   bars and each value just above its bar; negative values hang below
+///   the zero line at whole-cell precision, their values under them. Given
+///   less width the values go, then the labels are cut (and dropped below
+///   two cells), then the gaps, and bars that still do not fit are left
+///   off the right.
 ///
 /// ```
 /// use rich::Console;
@@ -91,6 +139,30 @@ impl Bar {
 ///      worker #           4\n"
 /// );
 /// ```
+///
+/// Vertical:
+///
+/// ```
+/// use rich::Console;
+/// use rich_ext::chart::{BarChart, Orientation};
+///
+/// let console = Console::builder().width(40).color_system(None).build();
+/// let chart = BarChart::from_pairs([("mon", 4.0), ("tue", 7.5), ("wed", -2.0)])
+///     .orientation(Orientation::Vertical)
+///     .bar_width(4);
+/// assert_eq!(
+///     console.render_to_string(&chart),
+///     concat!(
+///         "    7.5    \n",
+///         " 4  ███    \n",
+///         "▅▅▅ ███    \n",
+///         "███ ███    \n",
+///         "        ███\n",
+///         "        -2 \n",
+///         "mon tue wed\n",
+///     )
+/// );
+/// ```
 #[derive(Clone, Debug, PartialEq)]
 pub struct BarChart {
     bars: Vec<Bar>,
@@ -101,6 +173,7 @@ pub struct BarChart {
     show_values: bool,
     format: ValueFormat,
     style: Option<String>,
+    orientation: Orientation,
 }
 
 impl Default for BarChart {
@@ -121,6 +194,7 @@ impl BarChart {
             show_values: true,
             format: ValueFormat::Compact,
             style: None,
+            orientation: Orientation::Horizontal,
         }
     }
 
@@ -168,7 +242,14 @@ impl BarChart {
         self
     }
 
-    /// Cells for the longest bar (default 40, at least 1).
+    /// Which way the bars run (default [`Orientation::Horizontal`]).
+    pub fn orientation(mut self, orientation: Orientation) -> Self {
+        self.orientation = orientation;
+        self
+    }
+
+    /// Cells for the longest bar (default 40, at least 1); rows for the
+    /// tallest when [`Orientation::Vertical`] (default 8).
     pub fn bar_width(mut self, width: usize) -> Self {
         self.bar_width = Some(width.max(1));
         self
@@ -220,7 +301,187 @@ impl BarChart {
     }
 
     fn natural_bar(&self) -> usize {
-        self.bar_width.unwrap_or(DEFAULT_BAR)
+        self.bar_width.unwrap_or(match self.orientation {
+            Orientation::Horizontal => DEFAULT_BAR,
+            Orientation::Vertical => DEFAULT_COLUMN,
+        })
+    }
+
+    /// The vertical layout for `width` cells.
+    fn columns(&self, width: usize) -> Columns {
+        let n = self.bars.len().max(1);
+        let label = self.label_width();
+        let value = self.value_width();
+        let fits = |slot: usize, gap: usize| n * slot + (n - 1) * gap <= width;
+        let full = |slot: usize, labels: bool, values: bool| Columns {
+            slot,
+            gap: 1,
+            thickness: slot.min(MAX_THICKNESS),
+            labels,
+            values,
+            shown: n,
+        };
+        let with_values = label.max(value).max(1);
+        if fits(with_values, 1) {
+            return full(with_values, label > 0, value > 0);
+        }
+        let without = label.max(1);
+        if fits(without, 1) {
+            return full(without, label > 0, false);
+        }
+        let room = (width + 1) / n;
+        if room >= 2 {
+            // A label cut to one cell would be only the `…`.
+            return full(room - 1, label > 0 && room > 2, false);
+        }
+        Columns {
+            slot: 1,
+            gap: 0,
+            thickness: 1,
+            labels: false,
+            values: false,
+            shown: n.min(width.max(1)),
+        }
+    }
+
+    /// A vertical bar's cells, bottom up, for `length` rows (a fraction
+    /// of a row allowed).
+    fn column_glyphs(charset: Charset, length: f64, sliver: bool) -> Vec<char> {
+        let full = length.floor() as usize;
+        let rest = length - full as f64;
+        let mut out = Vec::new();
+        match charset {
+            Charset::Ascii | Charset::Braille => {
+                let (whole, half) = if charset == Charset::Ascii {
+                    (ASCII_FULL, ASCII_LOWER_HALF)
+                } else {
+                    (BRAILLE_FULL, BRAILLE_LOWER_HALF)
+                };
+                let halves = (rest * 2.0).round() as usize;
+                out.extend(std::iter::repeat_n(whole, full + halves / 2));
+                if halves == 1 || (out.is_empty() && sliver) {
+                    out.push(half);
+                }
+            }
+            _ => {
+                let eighths = (rest * 8.0).round() as usize;
+                out.extend(std::iter::repeat_n(FULL_BLOCK, full + eighths / 8));
+                if !eighths.is_multiple_of(8) {
+                    out.push(LOWER_EIGHTHS[eighths % 8 - 1]);
+                } else if out.is_empty() && sliver {
+                    out.push(LOWER_EIGHTHS[0]);
+                }
+            }
+        }
+        out
+    }
+
+    fn bar_style(&self, console: &Console, bar: &Bar, negative: bool) -> Style {
+        match (&bar.style, &self.style) {
+            (Some(s), _) => user_style(console, s),
+            (None, _) if negative => theme_style(console, "chart.negative"),
+            (None, Some(s)) => user_style(console, s),
+            (None, None) => theme_style(console, "chart.bar"),
+        }
+    }
+
+    fn vertical_lines(&self, console: &Console, width: usize, charset: Charset) -> Vec<Line> {
+        let ascii = charset == Charset::Ascii;
+        let colour = has_colour(console);
+        let layout = self.columns(width);
+        let shown = layout.shown;
+        let width = (shown * layout.slot + shown.saturating_sub(1) * layout.gap).min(width);
+        let height = self.natural_bar();
+        let scale = self.scale();
+        let zero = scale.normalize(0.0).unwrap_or(0.0) * height as f64;
+        let zero_row = (zero.round() as usize).min(height);
+        let full = match charset {
+            Charset::Ascii => ASCII_FULL,
+            Charset::Braille => BRAILLE_FULL,
+            _ => FULL_BLOCK,
+        };
+        let label_style = colour.then(|| theme_style(console, "chart.label"));
+        let value_style = colour.then(|| theme_style(console, "chart.value"));
+
+        // Rows counted from the bottom of the plot; a value may sit one row
+        // above it or one below.
+        let (bottom, top) = (-1i64, height as i64);
+        let rows = (top - bottom + 1) as usize;
+        let mut grid: Vec<Vec<(char, Option<Style>)>> = vec![vec![(' ', None); width]; rows];
+        let mut put = |row: i64, col: usize, c: char, style: Option<Style>| {
+            if (bottom..=top).contains(&row) && col < width {
+                grid[(top - row) as usize][col] = (c, style);
+            }
+        };
+        let mut used = (0i64, height as i64 - 1);
+        for (index, bar) in self.bars.iter().take(layout.shown).enumerate() {
+            let left = index * (layout.slot + layout.gap);
+            let bar_left = left + (layout.slot - layout.thickness) / 2;
+            let style = colour.then(|| self.bar_style(console, bar, bar.value < 0.0));
+            // Draw the bar; the row its value goes in.
+            let value_row = match scale.normalize(bar.value) {
+                None => zero_row as i64,
+                Some(n) if bar.value < 0.0 => {
+                    let start = (n * height as f64).round() as usize;
+                    let len = zero_row.saturating_sub(start).max(1).min(zero_row);
+                    for row in zero_row - len..zero_row {
+                        for col in bar_left..bar_left + layout.thickness {
+                            put(row as i64, col, full, style.clone());
+                        }
+                    }
+                    (zero_row - len) as i64 - 1
+                }
+                Some(n) => {
+                    let length = (n * height as f64 - zero).max(0.0);
+                    let glyphs = Self::column_glyphs(charset, length, bar.value > 0.0);
+                    let drawn = glyphs.len().min(height - zero_row);
+                    for (i, glyph) in glyphs.iter().take(drawn).enumerate() {
+                        for col in bar_left..bar_left + layout.thickness {
+                            put((zero_row + i) as i64, col, *glyph, style.clone());
+                        }
+                    }
+                    (zero_row + drawn) as i64
+                }
+            };
+            if layout.values {
+                let value = self.format.format(bar.value);
+                let start = left + (layout.slot - cells(&value)) / 2;
+                for (i, c) in value.chars().enumerate() {
+                    put(value_row, start + i, c, value_style.clone());
+                }
+                used = (used.0.min(value_row), used.1.max(value_row));
+            }
+        }
+
+        // Only the rows above and below the plot that hold a value stay.
+        let mut out: Vec<Line> = grid
+            .into_iter()
+            .enumerate()
+            .filter(|(i, _)| (used.0..=used.1).contains(&(top - *i as i64)))
+            .map(|(_, row)| {
+                let mut line = Line::new();
+                for (c, style) in row {
+                    line.push(&c.to_string(), style);
+                }
+                line
+            })
+            .collect();
+        if layout.labels {
+            let mut line = Line::new();
+            for (index, bar) in self.bars.iter().take(layout.shown).enumerate() {
+                if index > 0 {
+                    line.pad(layout.gap);
+                }
+                let label = truncate(&bar.label, layout.slot, ascii);
+                let pad = layout.slot - cells(&label);
+                line.pad(pad / 2);
+                line.push(&label, label_style.clone());
+                line.pad(pad - pad / 2);
+            }
+            line.pad(width.saturating_sub(line.width()));
+            out.push(line);
+        }
+        out
     }
 
     /// (label, bar, value) widths for `width` cells, after shrinking.
@@ -297,21 +558,15 @@ impl BarChart {
             line.push(&truncate("no data", width, ascii), None);
             return vec![line];
         }
+        if self.orientation == Orientation::Vertical {
+            return self.vertical_lines(console, width, charset);
+        }
         let (label_w, bar_w, value_w) = self.layout(width);
         let scale = self.scale();
         let zero = scale.normalize(0.0).unwrap_or(0.0) * bar_w as f64;
         let zero_cell = zero.round() as usize;
-        let style_of = |bar: &Bar, negative: bool| -> Option<Style> {
-            if !colour {
-                return None;
-            }
-            Some(match (&bar.style, &self.style) {
-                (Some(s), _) => user_style(console, s),
-                (None, _) if negative => theme_style(console, "chart.negative"),
-                (None, Some(s)) => user_style(console, s),
-                (None, None) => theme_style(console, "chart.bar"),
-            })
-        };
+        let style_of =
+            |bar: &Bar, negative: bool| colour.then(|| self.bar_style(console, bar, negative));
         let label_style = colour.then(|| theme_style(console, "chart.label"));
         let value_style = colour.then(|| theme_style(console, "chart.value"));
         self.bars
@@ -362,6 +617,11 @@ impl BarChart {
     }
 
     fn natural_width(&self) -> usize {
+        if self.orientation == Orientation::Vertical {
+            let n = self.bars.len();
+            let slot = self.label_width().max(self.value_width()).max(1);
+            return n * slot + n.saturating_sub(1);
+        }
         let l = self.label_width();
         let v = self.value_width();
         l + usize::from(l > 0) + self.natural_bar() + v + usize::from(v > 0)
@@ -378,7 +638,11 @@ impl Renderable for BarChart {
             return Measurement::new(7, 7).with_maximum(options.max_width);
         }
         let max = self.natural_width();
-        Measurement::new(MIN_BAR.min(max), max)
+        let min = match self.orientation {
+            Orientation::Horizontal => MIN_BAR,
+            Orientation::Vertical => self.bars.len(),
+        };
+        Measurement::new(min.min(max), max)
             .with_maximum(options.max_width)
             .normalize()
     }
@@ -447,7 +711,14 @@ impl Histogram {
         self
     }
 
-    /// Cells for the tallest bin (default 40).
+    /// Which way the bars run (default [`Orientation::Horizontal`]).
+    pub fn orientation(mut self, orientation: Orientation) -> Self {
+        self.chart = self.chart.orientation(orientation);
+        self
+    }
+
+    /// Cells for the tallest bin (default 40); rows when vertical
+    /// (default 8).
     pub fn bar_width(mut self, width: usize) -> Self {
         self.chart = self.chart.bar_width(width);
         self

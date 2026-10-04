@@ -6,7 +6,8 @@ use std::sync::Arc;
 use rich::cells::cell_len;
 use rich::{Cell, ColorSystem, Console, Live, Panel, Renderable, Table};
 use rich_ext::chart::{
-    Bar, BarChart, Charset, Histogram, LineChart, Series, SeriesKind, Sparkline, ValueFormat,
+    Bar, BarChart, Charset, Histogram, LineChart, Orientation, Series, SeriesKind, Sparkline,
+    ValueFormat,
 };
 
 fn plain(width: usize) -> Console {
@@ -257,6 +258,123 @@ fn bar_chart_measures_to_content() {
     assert_eq!(render(&plain(40), &empty), "no data\n");
     assert_eq!(render(&plain(4), &empty), "no …\n");
     assert_eq!(render(&ascii(4), &empty), "no .\n");
+}
+
+// ---------------------------------------------------------- vertical bars
+
+fn weekly() -> BarChart {
+    BarChart::from_pairs([("mon", 3.0), ("tue", 7.25), ("wed", 5.5), ("thu", 0.0)])
+        .orientation(Orientation::Vertical)
+        .range(0.0, 8.0)
+        .bar_width(4)
+}
+
+#[test]
+fn vertical_bar_snapshots() {
+    // Two units a row: 7.25 is three rows and five eighths.
+    assert_eq!(
+        render(&plain(40), &weekly()),
+        concat!(
+            "     7.25          \n",
+            "     ▅▅▅  5.5      \n",
+            " 3   ███  ▆▆▆      \n",
+            "▄▄▄  ███  ███      \n",
+            "███  ███  ███   0  \n",
+            "mon  tue  wed  thu \n",
+        )
+    );
+    assert_eq!(
+        render(&plain(40), &weekly().charset(Charset::Braille)),
+        concat!(
+            "     7.25          \n",
+            "     ⣤⣤⣤  5.5      \n",
+            " 3   ⣿⣿⣿  ⣿⣿⣿      \n",
+            "⣤⣤⣤  ⣿⣿⣿  ⣿⣿⣿      \n",
+            "⣿⣿⣿  ⣿⣿⣿  ⣿⣿⣿   0  \n",
+            "mon  tue  wed  thu \n",
+        )
+    );
+    assert_eq!(
+        render(&plain(40), &weekly().charset(Charset::Ascii)),
+        concat!(
+            "     7.25          \n",
+            "     ...  5.5      \n",
+            " 3   ###  ###      \n",
+            "...  ###  ###      \n",
+            "###  ###  ###   0  \n",
+            "mon  tue  wed  thu \n",
+        )
+    );
+    assert_eq!(
+        render(&ascii(40), &weekly()),
+        render(&plain(40), &weekly().charset(Charset::Ascii))
+    );
+}
+
+#[test]
+fn vertical_bars_colour_on_and_off() {
+    let chart = BarChart::new()
+        .bar("up", 4.0)
+        .push(Bar::new("down", -2.0))
+        .push(Bar::new("hot", 3.0).style("chart.over"))
+        .orientation(Orientation::Vertical)
+        .bar_width(3);
+    assert_eq!(
+        render(&color(40), &chart),
+        concat!(
+            " 4         3  \n",
+            "\x1b[36m███\x1b[0m       \x1b[1;31m▄▄▄\x1b[0m \n",
+            "\x1b[36m███\x1b[0m       \x1b[1;31m███\x1b[0m \n",
+            "     \x1b[35m███\x1b[0m      \n",
+            "      -2      \n",
+            " up  down hot \n",
+        )
+    );
+    // Without colour, height, the side of zero and the written value
+    // carry it.
+    assert_eq!(
+        render(&no_color(40), &chart),
+        concat!(
+            " 4         3  \n",
+            "███       ▄▄▄ \n",
+            "███       ███ \n",
+            "     ███      \n",
+            "      -2      \n",
+            " up  down hot \n",
+        )
+    );
+}
+
+#[test]
+fn vertical_bars_shrink_values_labels_then_gaps() {
+    let chart = BarChart::from_pairs([("requests", 100.0), ("errors", 25.0), ("drops", 12345.0)])
+        .orientation(Orientation::Vertical)
+        .bar_width(2);
+    // Slots as wide as the widest label or value.
+    let full = concat!(
+        "                   12.3k  \n",
+        "  100       25      ███   \n",
+        "  ▁▁▁      ▁▁▁      ███   \n",
+        "requests  errors   drops  \n",
+    );
+    assert_eq!(render(&plain(40), &chart), full);
+    assert_eq!(render(&plain(26), &chart), full);
+    // Values go first, then labels are cut, then dropped.
+    assert_eq!(
+        render(&plain(20), &chart),
+        concat!(
+            "               ███  \n",
+            " ▁▁▁    ▁▁▁    ███  \n",
+            "reque… errors drops \n",
+        )
+    );
+    assert_eq!(render(&plain(8), &chart), "      ██\n▁▁ ▁▁ ██\nr… e… d…\n");
+    assert_eq!(render(&plain(5), &chart), "    █\n▁ ▁ █\n");
+    // Then the gaps, then the bars that do not fit.
+    assert_eq!(render(&plain(3), &chart), "  █\n▁▁█\n");
+    assert_eq!(render(&plain(2), &chart), "  \n▁▁\n");
+    let m = chart.measure(&plain(80), &plain(80).options());
+    assert_eq!((m.minimum, m.maximum), (3, 3 * 8 + 2));
 }
 
 // -------------------------------------------------------------- histogram
@@ -607,14 +725,21 @@ fn default_height_fits_its_labels() {
 // ------------------------------------------------------------ properties
 
 fn every_chart() -> Vec<(&'static str, Box<dyn Renderable>)> {
-    let long: Vec<f64> = (0..300).map(|i| ((i as f64) / 7.0).sin() * 100.0).collect();
-    let mut out: Vec<(&'static str, Box<dyn Renderable>)> = Vec::new();
-    for charset in [
+    [
         Charset::Auto,
         Charset::Blocks,
         Charset::Braille,
         Charset::Ascii,
-    ] {
+    ]
+    .into_iter()
+    .flat_map(charts_for)
+    .collect()
+}
+
+fn charts_for(charset: Charset) -> Vec<(&'static str, Box<dyn Renderable>)> {
+    let long: Vec<f64> = (0..300).map(|i| ((i as f64) / 7.0).sin() * 100.0).collect();
+    let mut out: Vec<(&'static str, Box<dyn Renderable>)> = Vec::new();
+    {
         out.push((
             "sparkline",
             Box::new(
@@ -640,6 +765,28 @@ fn every_chart() -> Vec<(&'static str, Box<dyn Renderable>)> {
             ),
         ));
         out.push(("bars-empty", Box::new(BarChart::new().charset(charset))));
+        out.push((
+            "vertical-bars",
+            Box::new(
+                BarChart::new()
+                    .bar("a rather long label", 1234.5)
+                    .bar("日本語", -300.0)
+                    .bar("nan", f64::NAN)
+                    .bar("zero", 0.0)
+                    .bar("tiny", 0.01)
+                    .orientation(Orientation::Vertical)
+                    .charset(charset),
+            ),
+        ));
+        out.push((
+            "vertical-histogram",
+            Box::new(
+                Histogram::new(long.clone())
+                    .bins(12)
+                    .orientation(Orientation::Vertical)
+                    .charset(charset),
+            ),
+        ));
         out.push((
             "histogram",
             Box::new(Histogram::new(long.clone()).bins(12).charset(charset)),
@@ -695,7 +842,7 @@ fn no_line_is_wider_than_the_width_given() {
 
 #[test]
 fn ascii_charset_on_a_unicode_console_is_ascii() {
-    for (name, chart) in every_chart().into_iter().skip(21) {
+    for (name, chart) in charts_for(Charset::Ascii) {
         let out = render(&plain(60), chart.as_ref());
         assert!(out.is_ascii(), "{name}: {out:?}");
     }

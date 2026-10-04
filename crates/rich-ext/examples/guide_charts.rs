@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use rich::{Cell, ColorSystem, Console, Panel, Table, Text};
 use rich_ext::chart::{
-    Bar, BarChart, Charset, Histogram, LineChart, Series, Sparkline, ValueFormat,
+    Bar, BarChart, Charset, Histogram, LineChart, Orientation, Series, Sparkline, ValueFormat,
 };
 
 const REQUESTS: [f64; 24] = [
@@ -50,6 +50,29 @@ fn show_bars(console: &Console) {
     );
 }
 // --8<-- [end:bars]
+
+// --8<-- [start:vertical]
+fn show_vertical(console: &Console) {
+    let week = BarChart::from_pairs([
+        ("mon", 31.0),
+        ("tue", 42.5),
+        ("wed", 38.0),
+        ("thu", 51.0),
+        ("fri", 47.0),
+        ("sat", 12.0),
+        ("sun", 9.5),
+    ])
+    .orientation(Orientation::Vertical)
+    .bar_width(8);
+    console.print(&week);
+    // Negative values hang below zero, their values under them.
+    console.print(
+        &BarChart::from_pairs([("q1", 18.0), ("q2", -7.5), ("q3", 4.0), ("q4", -12.0)])
+            .orientation(Orientation::Vertical)
+            .bar_width(6),
+    );
+}
+// --8<-- [end:vertical]
 
 fn latencies() -> Vec<f64> {
     (0..400)
@@ -148,6 +171,7 @@ fn main() {
     let shots = Shots::from_args();
     shots.shot("sparkline", 60, "Sparkline", show_sparklines);
     shots.shot("bars", 60, "BarChart", show_bars);
+    shots.shot("vertical", 60, "Vertical BarChart", show_vertical);
     shots.shot("histogram", 60, "Histogram", show_histogram);
     shots.shot("line", 66, "LineChart", show_line);
     shots.shot("plain", 66, "LineChart without colour", show_without_colour);
