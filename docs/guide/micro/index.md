@@ -12,6 +12,8 @@ terminal supports them, half-block cells or the emoji or text fallback
 everywhere else, with animation), the image pipeline that makes packages,
 and a built-in library (`status/`, `dev/` and `fun/` sets).
 
+- [The built-in library](library.md): every built-in asset, magnified,
+  with its animation and fallbacks, and the drawing modes side by side.
 - [Authoring micro assets](authoring.md): the pipeline, `rich micro
   create`, the manifest, packs and the built-in library.
 - [Micro assets in the `rich` CLI](cli.md): `rich micro`, `:micro:` in

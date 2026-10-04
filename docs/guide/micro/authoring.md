@@ -177,7 +177,8 @@ emoji code or a third-party logo.
 | `dev` | `dev/bug`, `dev/branch`, `dev/terminal`, `dev/package` |
 | `fun` | `fun/heart` (animated), `fun/star`, `fun/cat`, `fun/coffee` (animated) |
 
-All are MIT, like the rest of the project. There are no third-party logos
+[The built-in library](library.md) shows each one magnified, with its
+animation. All are MIT, like the rest of the project. There are no third-party logos
 (git, Rust, Python, Docker and the like): their trademark and licence terms
 keep them out of a default library. Package them yourself if you have the
 right to.

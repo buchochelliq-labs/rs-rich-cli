@@ -57,6 +57,18 @@ Entries below record subsequent releases and development.
 
 ## [Unreleased]
 
+### Micro asset docs
+
+- A [built-in library](docs/guide/micro/library.md) page shows every
+  built-in micro asset magnified from its own file, animations at their real
+  frame timings, with its alt text, fallbacks and licence.
+  `scripts/micro_gallery.py` regenerates the page and its images, and CI runs
+  it with `--check`.
+- A `micro-modes` tape records the same line with emoji and as half-blocks,
+  then `rich micro preview fun/heart`. The recordings page gains a Micro assets
+  section with it and the existing `micro`, `micro-chrome` and `explore-icons`
+  tapes, which it did not show before.
+
 ### Release numbers and tagging
 
 - `RELEASES.toml` lists every published package (the eleven crates and PyPI

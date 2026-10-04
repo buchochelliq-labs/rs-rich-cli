@@ -27,6 +27,7 @@ motion turned on in your system settings the cards stay still.
 [![rich explore searching a YAML document](media/tapes/explore/search.png){ data-gif="explore.gif" loading=lazy }<span class="tape-card-title">Explore a document</span>](#explore-a-document){ .tape-card }
 [![A Markdown file paged in a viewport](media/tapes/viewport/paged.png){ data-gif="viewport.gif" loading=lazy }<span class="tape-card-title">An interactive component</span>](#an-interactive-component){ .tape-card }
 [![The command palette over a file list](media/tapes/palette/palette.png){ data-gif="palette.gif" loading=lazy }<span class="tape-card-title">Overlays and chrome</span>](#overlays-and-chrome){ .tape-card }
+[![fun/heart previewed, its frames magnified](media/tapes/micro-modes/modes.png){ data-gif="micro-modes.gif" loading=lazy }<span class="tape-card-title">Micro assets</span>](#micro-assets){ .tape-card }
 [![The guided tour, inspecting structured data](media/tapes/tour/inspect.png){ data-gif="tour.gif" loading=lazy }<span class="tape-card-title">The guided tour</span>](demos.md#run-the-suite-in-your-terminal){ .tape-card }
 [![rich choose in the 0.0.13 release recording](media/tapes/release-0.0.13/choose.png){ data-gif="release-0.0.13.gif" loading=lazy }<span class="tape-card-title">The 0.0.13 release</span>](releases/0.0.13.md){ .tape-card }
 
@@ -207,6 +208,47 @@ region's actions in a modal. See
 | ![A badge, a spinner and key hints under the list](media/tapes/statusbar/status.png) | ![The region's actions in a modal](media/tapes/statusbar/actions.png) | ![The note changed by the command](media/tapes/statusbar/refreshed.png) |
 
 [Tape](tapes/statusbar.tape) · [Cast](media/tapes/statusbar/statusbar.cast) · [GIF](media/tapes/statusbar/statusbar.gif) · [Page](media/tapes/statusbar/statusbar.html)
+
+## Micro assets
+
+Emoji-sized images in text, `:micro:name:`. A pseudo-terminal speaks no
+image protocol, so these show each asset's emoji, or its image as
+half-block cells with `RICH_MICRO=blocks`; a Kitty, iTerm2 or Sixel
+terminal draws the image itself in the same cells. See
+[the built-in library](guide/micro/library.md) for the images.
+
+<div class="tape-player" data-cast="../media/tapes/micro-modes/micro-modes.cast" data-poster="npt:0:6">
+  <img src="../media/tapes/micro-modes/micro-modes.gif" alt="The same line with emoji and half-blocks, then fun/heart previewed">
+</div>
+
+[Tape](tapes/micro-modes.tape) · [Cast](media/tapes/micro-modes/micro-modes.cast) · [GIF](media/tapes/micro-modes/micro-modes.gif) · [Page](media/tapes/micro-modes/micro-modes.html)
+
+`rich micro`: the built-in library listed, `status/loading` previewed, and
+`:micro:` codes in `--print --emoji` text.
+
+<div class="tape-player" data-cast="../media/tapes/micro/micro.cast" data-poster="npt:0:4">
+  <img src="../media/tapes/micro/micro.gif" alt="rich micro list, preview and markup">
+</div>
+
+| List | Preview | In text |
+|---|---|---|
+| ![rich micro list](media/tapes/micro/list.png) | ![rich micro preview status/loading](media/tapes/micro/preview.png) | ![micro assets in --print text](media/tapes/micro/markup.png) |
+
+[Tape](tapes/micro.tape) · [Cast](media/tapes/micro/micro.cast) · [GIF](media/tapes/micro/micro.gif) · [Page](media/tapes/micro/micro.html)
+
+Micro assets in the interactive views: an icon per row, a badge in the
+status bar, an icon on the first crumb and before each of the command
+palette's categories, then `rich explore --icons`.
+
+<div class="tape-player" data-cast="../media/tapes/micro-chrome/micro-chrome.cast" data-poster="npt:0:4">
+  <img src="../media/tapes/micro-chrome/micro-chrome.gif" alt="Micro assets in the status bar, breadcrumbs, rows and command palette">
+</div>
+
+| Chrome | Palette | Explorer |
+|---|---|---|
+| ![micro assets in the status bar, breadcrumbs and rows](media/tapes/micro-chrome/chrome.png) | ![micro assets before the palette's categories](media/tapes/micro-chrome/palette.png) | ![rich explore --icons](media/tapes/explore-icons/icons.png) |
+
+[Tape](tapes/micro-chrome.tape) · [Cast](media/tapes/micro-chrome/micro-chrome.cast) · [GIF](media/tapes/micro-chrome/micro-chrome.gif) · [Page](media/tapes/micro-chrome/micro-chrome.html) · [Explorer tape](tapes/explore-icons.tape)
 
 ## How it works
 
