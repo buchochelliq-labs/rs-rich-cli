@@ -89,6 +89,11 @@ changed.
 - Docs: a [Charts](docs/guide/ext/charts.md) guide page with screenshots
   from `examples/guide_charts.rs`, and `examples/charts.rs`
   (`cargo run -p rs-rich-ext --example charts`).
+- Versions, as the plan's package impact table says: `rs-rich-ext` 0.0.12 →
+  0.0.13 for the new module, and its dependents for their requirement on it
+  (Cargo reads `0.0.x` as exact): `rs-rich-micro` 0.0.2, `rs-rich-interact`
+  0.0.3, `rs-rich-record` 0.0.3 (manifest only), `rs-rich-cli` 0.0.15, and
+  PyPI `rs-rich` 0.0.4, whose wheel bundles them. `RELEASES.toml` synced.
 
 ### Micro asset docs
 
