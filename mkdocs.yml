@@ -130,6 +130,7 @@ nav:
           - Building your own components: guide/interact/custom-components.md
           - Overlays and chrome: guide/interact/overlays.md
           - Explorers, copying and live lists: guide/interact/explorers.md
+      - Diagrams (rs-rich-diagram): guide/diagram/index.md
       - Micro assets (rs-rich-micro):
           - guide/micro/index.md
           - The built-in library: guide/micro/library.md

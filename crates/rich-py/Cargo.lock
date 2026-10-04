@@ -1500,7 +1500,7 @@ dependencies = [
 
 [[package]]
 name = "rs-rich-cli"
-version = "0.0.14"
+version = "0.0.15"
 dependencies = [
  "cap-fs-ext",
  "cap-std",
@@ -1522,6 +1522,13 @@ dependencies = [
  "toml",
  "ureq",
  "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "rs-rich-diagram"
+version = "0.0.1"
+dependencies = [
+ "rs-rich",
 ]
 
 [[package]]
@@ -1564,10 +1571,11 @@ dependencies = [
 
 [[package]]
 name = "rs-rich-mermaid"
-version = "0.0.3"
+version = "0.0.4"
 dependencies = [
  "rs-rich",
  "rs-rich-art",
+ "rs-rich-diagram",
  "rs-rich-plugin-api",
 ]
 

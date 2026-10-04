@@ -222,13 +222,19 @@ fn render(c: &Console, demo: &str, frame: usize) {
         }
         "overflow" => {
             use rich::Overflow;
-            let long = "supercalifragilisticexpialidocious";
-            c.print_str("[dim]fold[/]");
-            c.print(&Text::new(long).overflow(Overflow::Fold));
-            c.print_str("[dim]crop[/]");
-            c.print(&Text::new(long).overflow(Overflow::Crop));
-            c.print_str("[dim]ellipsis[/]");
-            c.print(&Text::new(long).overflow(Overflow::Ellipsis));
+            // Longer than the panels are wide, so each method has something
+            // to do; all but fold keep the line whole (no_wrap) and fit it.
+            let long = "supercalifragilisticexpialidocious-and-then-some";
+            for (overflow, name) in [
+                (Overflow::Fold, "fold"),
+                (Overflow::Crop, "crop"),
+                (Overflow::Ellipsis, "ellipsis"),
+            ] {
+                let text = Text::new(long)
+                    .overflow(overflow)
+                    .no_wrap(overflow != Overflow::Fold);
+                c.print(&Panel::new(Box::new(text)).title(name));
+            }
         }
         "pretty" => {
             #[derive(Debug)]

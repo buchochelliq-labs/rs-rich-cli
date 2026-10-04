@@ -138,7 +138,7 @@ There are two separate decisions here:
    crate does not, by policy alone, require an unrelated crate's version to
    change.
 2. **The tag explicitly selects what ships.** A `vX.Y.Z` tag retains the
-   coordinated workspace meaning: all eleven manifests and their internal
+   coordinated workspace meaning: all twelve manifests and their internal
    requirements must agree at `X.Y.Z`. A `<crate>-vX.Y.Z` tag selects only that
    crate, whose manifest must match the tag. Unselected crates keep their own
    versions and are neither published nor verified as if they had changed.
@@ -157,6 +157,7 @@ There are two separate decisions here:
 | `rs-rich-record-v0.0.1` | Only `rs-rich-record` at `0.0.1` |
 | `rs-rich-interact-v0.0.1` | Only `rs-rich-interact` at `0.0.1` |
 | `rs-rich-micro-v0.0.1` | Only `rs-rich-micro` at `0.0.1` |
+| `rs-rich-diagram-v0.0.1` | Only `rs-rich-diagram` at `0.0.1` |
 
 The same forms accept SemVer prereleases, for example
 `rs-rich-cli-v0.0.3-rc.1`. Manual dispatch accepts an **existing tag** in one of
@@ -408,8 +409,11 @@ adds `rs-rich-record` 0.0.1 after `rs-rich-ext` 0.0.11 and before the
 `rs-rich-interact` 0.0.1 after `rs-rich-ext` 0.0.11, also before the
 `rs-rich-cli` 0.0.13 tag, whose default `interact` feature depends on it. Both
 go through the workflow with their own tags (`rs-rich-interact-v0.0.1`,
-`rs-rich-record-v0.0.1`) and the environment's token. By hand, from the tagged
-commit on `main`:
+`rs-rich-record-v0.0.1`) and the environment's token. 0.0.15 adds
+`rs-rich-diagram` 0.0.1, which depends on `rs-rich` only: its own
+`rs-rich-diagram-v0.0.1` tag goes after `rs-rich` is on crates.io and before
+the `rs-rich-mermaid` 0.0.4 tag, which depends on it unconditionally. By hand,
+from the tagged commit on `main`:
 
 ```bash
 cargo publish -p rs-rich-macros --locked   # with a maintainer's API token

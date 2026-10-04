@@ -10,7 +10,8 @@
 mod common;
 
 use std::io::Read;
-use std::sync::{Arc, Mutex};
+use std::sync::{mpsc, Arc, Mutex};
+use std::time::{Duration, Instant};
 
 use portable_pty::{native_pty_system, CommandBuilder, PtySize};
 use rich::protocol::{Support, TargetCapabilities};
@@ -53,6 +54,12 @@ fn markup(registry: &MicroRegistry, source: &str) -> Text {
 }
 
 /// `bytes` played through a PTY into an emulator of `COLS × ROWS`.
+///
+/// The slave stays open here until everything `cat` wrote has been read:
+/// on macOS, output still queued when the last slave descriptor closes is
+/// discarded and the master reads EOF, which left the screen empty when
+/// `cat` finished before the first read. The line discipline turns each
+/// `\n` into `\r\n`, so the expected length is known exactly.
 fn through_pty(bytes: &[u8]) -> vt100::Parser {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("out");
@@ -68,23 +75,32 @@ fn through_pty(bytes: &[u8]) -> vt100::Parser {
     let mut command = CommandBuilder::new("cat");
     command.arg(&path);
     let mut child = pty.slave.spawn_command(command).unwrap();
-    drop(pty.slave);
+    let expected = bytes.len() + bytes.iter().filter(|&&b| b == b'\n').count();
     let mut reader = pty.master.try_clone_reader().unwrap();
-    let mut out = Vec::new();
-    let mut buffer = [0u8; 65536];
-    loop {
-        match reader.read(&mut buffer) {
-            Ok(0) | Err(_) => break,
-            Ok(read) => {
-                out.extend_from_slice(&buffer[..read]);
-                // `cat` has written everything once the file is through.
-                if out.len() >= bytes.len() && child.try_wait().ok().flatten().is_some() {
-                    break;
-                }
+    let (sender, chunks) = mpsc::channel();
+    std::thread::spawn(move || {
+        let mut buffer = [0u8; 65536];
+        while let Ok(read @ 1..) = reader.read(&mut buffer) {
+            if sender.send(buffer[..read].to_vec()).is_err() {
+                break;
             }
+        }
+    });
+    let deadline = Instant::now() + Duration::from_secs(10);
+    let mut out = Vec::new();
+    while out.len() < expected {
+        let left = deadline.saturating_duration_since(Instant::now());
+        match chunks.recv_timeout(left) {
+            Ok(chunk) => out.extend_from_slice(&chunk),
+            Err(_) => panic!(
+                "read {} of {expected} bytes from the PTY: {:?}",
+                out.len(),
+                String::from_utf8_lossy(&out)
+            ),
         }
     }
     child.wait().unwrap();
+    drop(pty.slave);
     let mut parser = vt100::Parser::new(ROWS, COLS, 0);
     parser.process(&out);
     parser

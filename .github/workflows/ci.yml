@@ -178,6 +178,10 @@ jobs:
           # conformance tests included).
           - crate: rs-rich-micro
             args: ""
+          # The graph model, layered layout and Diagram renderable (Mermaid's
+          # flowcharts draw through it; its snapshots are checked from both).
+          - crate: rs-rich-diagram
+            args: "--all-features"
           # Every lumis language (its default); the bundles only select fewer.
           - crate: rs-rich-lumis
             args: ""
