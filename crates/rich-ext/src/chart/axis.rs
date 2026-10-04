@@ -103,7 +103,7 @@ fn exact(label: &str, value: f64) -> bool {
 
 /// `value` in `format` when that writes it exactly, else in full: a
 /// fallback label still names the value its row or column stands for.
-fn exact_label(format: ValueFormat, value: f64) -> String {
+pub(crate) fn exact_label(format: ValueFormat, value: f64) -> String {
     let label = format.format(value);
     if exact(&label, value) {
         return label;

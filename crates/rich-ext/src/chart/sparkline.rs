@@ -130,6 +130,16 @@ impl Sparkline {
         &self.values
     }
 
+    /// The charset this sparkline draws with on `console`.
+    pub(crate) fn resolved_charset(&self, console: &Console, options: &ConsoleOptions) -> Charset {
+        self.charset.resolve(console, options, Charset::Blocks)
+    }
+
+    /// Cells for every value and the summary, at `charset`.
+    pub(crate) fn natural_width(&self, charset: Charset) -> usize {
+        self.natural_cells(charset) + self.summary_width()
+    }
+
     fn scale(&self) -> Scale {
         Scale::from_values(self.values.iter().copied()).bounds(self.min, self.max)
     }
@@ -207,7 +217,7 @@ impl Sparkline {
             .collect()
     }
 
-    fn line(&self, console: &Console, charset: Charset, width: usize) -> Line {
+    pub(crate) fn line(&self, console: &Console, charset: Charset, width: usize) -> Line {
         let per_cell = Self::per_cell(charset);
         let natural = self.natural_cells(charset);
         let summary_w = self.summary_width();

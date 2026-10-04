@@ -21,7 +21,8 @@
 //! - Workflows: [`workflow`], [`transfer`], [`countdown`], [`notify`],
 //!   [`cancel`], [`table`], [`badge`], [`size_bar`], [`format`](mod@format), [`redact`]
 //!   (experimental).
-//! - Charts: [`chart`] (sparklines, bars, histograms, line and scatter plots).
+//! - Charts: [`chart`] (sparklines, bars, histograms, line and scatter plots,
+//!   gauges, heatmaps, status matrices, KPI cards and timelines).
 //! - Inspectors: [`source_view`], [`hex`], [`unicode_inspect`],
 //!   [`env_inspect`].
 //! - Layout and live output: [`layout`], [`live`].

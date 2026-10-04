@@ -512,7 +512,7 @@ impl BarChart {
 
     /// The glyphs for a bar of `length` cells (a fraction of a cell
     /// allowed).
-    fn glyphs(charset: Charset, length: f64, sliver: bool) -> String {
+    pub(crate) fn glyphs(charset: Charset, length: f64, sliver: bool) -> String {
         let full = length.floor() as usize;
         let rest = length - full as f64;
         let mut out = String::new();

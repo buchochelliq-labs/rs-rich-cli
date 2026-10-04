@@ -1,5 +1,6 @@
-//! Charts drawn with text: sparklines, bars, histograms, and line and
-//! scatter plots.
+//! Charts drawn with text: sparklines, bars, histograms, line and scatter
+//! plots, and the KPI and status renderables a dashboard is made of
+//! (gauges, heatmaps, status matrices, KPI cards and timelines).
 //!
 //! Every chart here is a [`Renderable`](rich::Renderable) that measures
 //! itself, so it can sit in a `Table` cell, a `Panel` or a `Live` display.
@@ -12,6 +13,12 @@
 //! | [`BarChart`] | a label, a bar and a value per row, or columns side by side ([`Orientation::Vertical`]) |
 //! | [`Histogram`] | raw values counted into bins, drawn as a [`BarChart`] |
 //! | [`LineChart`] | one or more [`Series`] as lines or scattered points, with axes and a legend |
+//! | [`Gauge`] | a value against a range, with a target and threshold [`Band`]s, on one line or full width |
+//! | [`BulletChart`] | several gauges, one per line, their columns aligned |
+//! | [`Heatmap`] | a labelled grid of values as shades, with a legend |
+//! | [`StatusMatrix`] | rows and columns of [`State`]s (pass, fail, skip, flaky, your own), each a symbol and a colour |
+//! | [`KpiCard`] | a label, a value, a delta with its direction, a sparkline and a [`Status`] |
+//! | [`Timeline`] | labelled ranges on a numeric or seconds scale, overlaps stacked, milestones |
 //!
 //! What they share:
 //!
@@ -50,15 +57,25 @@
 mod axis;
 mod bar;
 mod canvas;
+mod gauge;
+mod heatmap;
+mod kpi;
 mod line;
 mod scale;
 mod sparkline;
+mod status;
+mod timeline;
 
 pub use bar::{Bar, BarChart, Histogram, Orientation};
 pub use canvas::DotCanvas;
+pub use gauge::{Band, BulletChart, Gauge};
+pub use heatmap::Heatmap;
+pub use kpi::KpiCard;
 pub use line::{LineChart, Series, SeriesKind};
 pub use scale::{Scale, ValueFormat};
 pub use sparkline::Sparkline;
+pub use status::{State, Status, StatusMatrix};
+pub use timeline::{Milestone, Span, Timeline};
 
 use rich::cells::char_cell_width;
 use rich::{Console, ConsoleOptions, Segment, Style};
@@ -82,6 +99,29 @@ pub const STYLES: &[(&str, &str)] = &[
     ("chart.series.3", "yellow"),
     ("chart.series.4", "green"),
     ("chart.series.5", "blue"),
+    ("chart.track", "bright_black"),
+    ("chart.target", "bold"),
+    ("chart.ok", "green"),
+    ("chart.warning", "yellow"),
+    ("chart.critical", "bold red"),
+    ("chart.unknown", "bright_black"),
+    ("chart.delta.good", "green"),
+    ("chart.delta.bad", "red"),
+    ("chart.delta.flat", "bright_black"),
+    ("chart.kpi.label", "none"),
+    ("chart.kpi.value", "bold"),
+    ("chart.kpi.border", "bright_black"),
+    ("chart.heat.1", "blue"),
+    ("chart.heat.2", "cyan"),
+    ("chart.heat.3", "green"),
+    ("chart.heat.4", "yellow"),
+    ("chart.heat.5", "red"),
+    ("chart.state.pass", "green"),
+    ("chart.state.fail", "bold red"),
+    ("chart.state.skip", "bright_black"),
+    ("chart.state.flaky", "yellow"),
+    ("chart.state.unknown", "magenta"),
+    ("chart.milestone", "bold yellow"),
 ];
 
 /// How many `chart.series.N` styles there are; series past it cycle.
@@ -189,6 +229,13 @@ impl Line {
         self.spans.push((text.to_string(), style));
     }
 
+    /// Append the runs of `other`.
+    pub(crate) fn append(&mut self, other: Line) {
+        for (text, style) in other.spans {
+            self.push(&text, style);
+        }
+    }
+
     /// Append `n` spaces.
     pub(crate) fn pad(&mut self, n: usize) {
         if n > 0 {
@@ -286,6 +333,47 @@ pub(crate) fn truncate(text: &str, width: usize, ascii: bool) -> String {
     out.push_str(&" ".repeat(width - 1 - used));
     out.push(if ascii { '.' } else { '…' });
     out
+}
+
+/// Legend entries, each a list of styled runs, laid out two cells apart
+/// and wrapped to `width`. An entry wider than `width` is left to be cropped.
+pub(crate) fn wrap_entries(entries: Vec<Vec<(String, Option<Style>)>>, width: usize) -> Vec<Line> {
+    let mut out = Vec::new();
+    let mut line = Line::new();
+    for entry in entries {
+        let entry_w: usize = entry.iter().map(|(t, _)| cells(t)).sum();
+        if line.width() > 0 && line.width() + 2 + entry_w > width {
+            out.push(std::mem::take(&mut line));
+        }
+        if line.width() > 0 {
+            line.pad(2);
+        }
+        for (text, style) in entry {
+            line.push(&text, style);
+        }
+    }
+    if line.width() > 0 {
+        out.push(line);
+    }
+    out
+}
+
+/// The width of legend `entries` on one line.
+pub(crate) fn entries_width(entries: &[Vec<(String, Option<Style>)>]) -> usize {
+    let total: usize = entries
+        .iter()
+        .map(|e| e.iter().map(|(t, _)| cells(t)).sum::<usize>())
+        .sum();
+    total + 2 * entries.len().saturating_sub(1)
+}
+
+/// `text` centred in `width` cells (cut first when longer).
+pub(crate) fn centre(line: &mut Line, text: &str, width: usize, style: Option<Style>, ascii: bool) {
+    let text = truncate(text, width, ascii);
+    let pad = width - cells(&text);
+    line.pad(pad / 2);
+    line.push(&text, style);
+    line.pad(pad - pad / 2);
 }
 
 /// The width of `text` in cells.
