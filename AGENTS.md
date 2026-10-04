@@ -27,6 +27,9 @@ rich-cli ──▶ rich-ext ──▶ rich
                  ├──▶ rich-plugin-api ──▶ rich   (the plugin contract; plugins depend on it, not on ext)
                  └──▶ rich-macros   (proc-macros; optional, behind ext's `macros` feature)
 rich-cli ──▶ rich-mermaid ──▶ rich-plugin-api      (a plugin crate; optional rich-art for `mmdc`)
+                  └──▶ rich-diagram ──▶ rich     (graph model, layered layout, `Diagram` renderable;
+                            └ ─ ▶ rich-plugin-api   only behind its `plugin` feature, which the DOT
+                                                 plugin adds in 0.0.15 WS4; not present in 0.0.1)
              rich-lumis   ──▶ rich-plugin-api      (a plugin crate: the lumis/tree-sitter highlighter)
              rich-record  ──▶ rich-ext ──▶ rich    (tapes: `rich record`; PTY, VT emulator, renderers)
 rich-cli ──▶ rich-interact ──▶ rich-ext ──▶ rich   (interactive components: session, event loop, viewport;
@@ -59,6 +62,7 @@ possible, and keep the boundary free of core back-dependencies.
 | `rs-rich-record` | independent SemVer | whenever we ship anything            |
 | `rs-rich-interact` | independent SemVer | whenever we ship anything          |
 | `rs-rich-micro` | independent SemVer | whenever we ship anything             |
+| `rs-rich-diagram` | independent SemVer | whenever we ship anything           |
 | `rs-rich-macros` | independent SemVer | whenever we ship anything            |
 | `rs-rich-art`  | independent SemVer | whenever we ship anything              |
 | `rs-rich` (PyPI, `crates/rich-py`) | independent SemVer, `python-v…` tags | whenever we ship anything |

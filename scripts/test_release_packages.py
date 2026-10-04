@@ -71,10 +71,11 @@ class StagedCargoTests(unittest.TestCase):
             root = Path(directory)
             target = root / "target"
             (root / "Cargo.toml").write_text(
-                '[workspace]\nresolver="2"\nmembers=["core","plugin-api","macros","ext","art","mermaid","lumis","record","interact","micro","cli"]\n')
+                '[workspace]\nresolver="2"\nmembers=["core","plugin-api","macros","ext","art","diagram","mermaid","lumis","record","interact","micro","cli"]\n')
             for folder, name in [("core", "rs-rich"), ("plugin-api", "rs-rich-plugin-api"),
                                  ("macros", "rs-rich-macros"),
                                  ("ext", "rs-rich-ext"), ("art", "rs-rich-art"),
+                                 ("diagram", "rs-rich-diagram"),
                                  ("mermaid", "rs-rich-mermaid"), ("lumis", "rs-rich-lumis"),
                                  ("record", "rs-rich-record"), ("interact", "rs-rich-interact"),
                                  ("micro", "rs-rich-micro"),
@@ -129,12 +130,13 @@ class StagedCargoTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="restage-regression-") as directory:
             root = Path(directory)
             (root / "Cargo.toml").write_text(
-                '[workspace]\nresolver="2"\nmembers=["core","plugin-api","macros","ext","art","mermaid","lumis","record","interact","micro","cli"]\n')
+                '[workspace]\nresolver="2"\nmembers=["core","plugin-api","macros","ext","art","diagram","mermaid","lumis","record","interact","micro","cli"]\n')
             for folder, name, dependency in [("core", "rs-rich", None),
                                              ("plugin-api", "rs-rich-plugin-api", None),
                                              ("macros", "rs-rich-macros", None),
                                              ("ext", "rs-rich-ext", ("rs-rich", "core")),
                                              ("art", "rs-rich-art", None),
+                                             ("diagram", "rs-rich-diagram", None),
                                              ("mermaid", "rs-rich-mermaid", None),
                                              ("lumis", "rs-rich-lumis", None),
                                              ("record", "rs-rich-record", None),

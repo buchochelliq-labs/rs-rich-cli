@@ -1585,7 +1585,7 @@ dependencies = [
 
 [[package]]
 name = "rs-rich-cli"
-version = "0.0.14"
+version = "0.0.15"
 dependencies = [
  "cap-fs-ext",
  "cap-std",
