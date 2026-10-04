@@ -57,6 +57,39 @@ Entries below record subsequent releases and development.
 
 ## [Unreleased]
 
+### Charts (0.0.15 workstream 1)
+
+`rich_ext::chart` (#221, #257): charts drawn with text, as renderables over
+core's public `Renderable` and `Measurement`. Nothing under `crates/rich/src`
+changed.
+
+- `Sparkline`: one line, one cell per value (`▁▂▃▄▅▆▇█`, two values per
+  cell in Braille, `_.-:=+*#` in ASCII). Given fewer cells than values it
+  resamples, each cell the mean of an equal bucket. `.min_max(true)` and
+  `.threshold(t)` style the cells and say it in words (`min 2 max 9`,
+  `3 > 80`), so they read without colour.
+- `BarChart`: label, bar and value per row, with eighth-cell blocks, half-cell
+  Braille or `#` and `=` in ASCII; negative values extend left of zero. It
+  shrinks the bar, then drops the values, then cuts the labels.
+- `Histogram`: raw values into equal bins labelled `[low, high)`, rounded to
+  round edges unless a range is given.
+- `LineChart` and `Series`: lines and scatter points on a Braille canvas
+  (`DotCanvas`, 2×4 dots per cell), with a y axis, x labels and a legend.
+  Series differ by colour and marker; with no colour and more than one
+  series the plot switches to markers at cell resolution. ASCII plots with
+  `*`, `+`, `o`, `x` and `.`.
+- Shared: `Scale` (linear, round ticks, NaN and infinities skipped, never an
+  empty range, explicit bounds), `ValueFormat` (`1.2k`, `3.4M`, fixed
+  decimals) and `Charset` (an ASCII console, by encoding or `Fidelity`,
+  always gets ASCII). Theme keys `chart.*` in `extended_theme()`.
+- Tests: snapshots for every chart in blocks, Braille and ASCII with colour
+  on and off; every chart at widths 1 to 200 on four consoles never writes
+  a line wider than its width, and the ASCII consoles' output holds no
+  character above U+007F; charts in a `Table` cell, a `Panel` and `Live`.
+- Docs: a [Charts](docs/guide/ext/charts.md) guide page with screenshots
+  from `examples/guide_charts.rs`, and `examples/charts.rs`
+  (`cargo run -p rs-rich-ext --example charts`).
+
 ### Micro asset docs
 
 - A [built-in library](docs/guide/micro/library.md) page shows every

@@ -21,6 +21,7 @@
 //! - Workflows: [`workflow`], [`transfer`], [`countdown`], [`notify`],
 //!   [`cancel`], [`table`], [`badge`], [`size_bar`], [`format`](mod@format), [`redact`]
 //!   (experimental).
+//! - Charts: [`chart`] (sparklines, bars, histograms, line and scatter plots).
 //! - Inspectors: [`source_view`], [`hex`], [`unicode_inspect`],
 //!   [`env_inspect`].
 //! - Layout and live output: [`layout`], [`live`].
@@ -47,6 +48,7 @@ pub mod ansi_explain;
 pub mod badge;
 pub mod cancel;
 pub mod capabilities;
+pub mod chart;
 pub mod cli;
 pub mod clipboard;
 pub mod encoding;
