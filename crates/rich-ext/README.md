@@ -255,6 +255,10 @@ For build, deploy and release tools, all in the default build:
   token prefixes, AWS key ids, JWTs, URL passwords, your own patterns) before
   they are shown or written. **Experimental and best effort**: read redacted
   output before sharing it.
+- `chart`: `Sparkline`, `BarChart` (horizontal or vertical), `Histogram` and
+  `LineChart` (Braille line and scatter plots) that fit the width they are
+  given, each with an ASCII form and a reading that does not depend on
+  colour.
 
 ### Coordinated Live regions
 

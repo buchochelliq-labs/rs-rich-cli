@@ -110,6 +110,7 @@ nav:
           - Transfers, retries and notifications: guide/ext/transfers-and-status.md
           - Sorting, grouping and streaming tables: guide/ext/tables.md
           - Badges, size bars and redaction: guide/ext/badges-and-redaction.md
+          - Charts: guide/ext/charts.md
           - Macros and derive: guide/ext/macros.md
           - Structured data: guide/ext/structured-data.md
           - Transforms: guide/ext/transforms.md

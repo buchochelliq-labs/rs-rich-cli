@@ -22,8 +22,8 @@ pub const EXTRA_STYLES: &[(&str, &str)] = &[
 /// Every table of named styles this crate adds, in the order
 /// [`extended_theme`] layers them: [`EXTRA_STYLES`], the CLI help, config and
 /// precedence styles, the diff and test-report styles, and the styles of the
-/// workflow, transfer, countdown, notification, table, badge and size-bar
-/// renderables.
+/// workflow, transfer, countdown, notification, table, badge, size-bar and
+/// chart renderables.
 ///
 /// A module with theme keys adds its table here, and nowhere else.
 pub const STYLE_TABLES: &[&[(&str, &str)]] = &[
@@ -37,6 +37,7 @@ pub const STYLE_TABLES: &[&[(&str, &str)]] = &[
     crate::table::STYLES,
     crate::badge::STYLES,
     crate::size_bar::STYLES,
+    crate::chart::STYLES,
 ];
 
 /// Upstream's default theme plus every table in [`STYLE_TABLES`].
