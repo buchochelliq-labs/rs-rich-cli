@@ -1,0 +1,11 @@
+{
+  "tape": "docs/tapes/micro-modes.tape",
+  "tape_fnv1a64": "36982c2494ad2a9a",
+  "recorder": "rs-rich-record 0.0.2",
+  "rich": null,
+  "commit": "61c002edd4924ccd4bb4cf4b82dec44836a5eb36",
+  "screenshots": [
+    "modes"
+  ],
+  "note": "Every frame is real output of the program under test on a PTY."
+}

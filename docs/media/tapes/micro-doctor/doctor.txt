@@ -1,0 +1,13 @@
+❯ micro
+Micro assets: blocks (no graphics protocol; colour cells); cell size unknown (8x16 assumed); animation on
+❯ TERM=xterm-kitty micro
+Micro assets: kitty (TERM=xterm-kitty); cell size unknown (8x16 assumed); animation on
+❯ TERM_PROGRAM=iTerm.app micro
+Micro assets: iterm (TERM_PROGRAM=iTerm.app); cell size unknown (8x16 assumed); animation on
+❯ TERM=xterm-kitty RICH_CELL_PIXELS=10x20 micro
+Micro assets: kitty (TERM=xterm-kitty); cell size 10x20 px; animation on
+❯ RICH_MICRO=text micro
+Micro assets: text (RICH_MICRO=text); cell size unknown (8x16 assumed); animation on
+❯
+
+

@@ -76,6 +76,34 @@ let asset = write_package(std::path::Path::new("team.ok"), &spec, &processed, fa
 From Python, `rs_rich.micro.micro_create_package(image, dest, name=…, alt=…)`
 does the same.
 
+### Recorded, start to finish
+
+A 128×128 rocket drawn for these docs
+([`rocket.png`](../../tapes/fixtures/micro/rocket.png)), previewed through
+the pipeline, then made into an asset and used:
+
+```sh
+rich micro preview rocket.png --sharpen 0.8
+rich micro create rocket.png --name team/rocket --alt 'teal rocket, lifting off' \
+    --emoji 🚀 --text '^^' --license MIT --sharpen 0.8 --add
+rich micro list --layer user
+rich -p --emoji 'Launched :micro:team/rocket: by the team'
+```
+
+| Through the pipeline | Added and used |
+|---|---|
+| ![rocket.png fitted to 16×16 pixels, magnified](../../media/tapes/micro-create/pipeline.png) | ![team/rocket listed in the user layer and used in text](../../media/tapes/micro-create/added.png) |
+
+![The authoring tape playing](../../media/tapes/micro-create/micro-create.gif)
+
+[Tape](../../tapes/micro-create.tape) · [Cast](../../media/tapes/micro-create/micro-create.cast) · [GIF](../../media/tapes/micro-create/micro-create.gif)
+
+The rocket is tall and thin, so `contain` leaves transparent columns on
+either side. That costs nothing in a pixel mode, but the 2×2 half-block
+samples of a mostly transparent asset come out nearly empty, which is one
+more reason to give every asset an emoji. `--fit cover` crops to fill the
+cells instead.
+
 ## Preview at the real cell size
 
 ```sh
@@ -177,7 +205,8 @@ emoji code or a third-party logo.
 | `dev` | `dev/bug`, `dev/branch`, `dev/terminal`, `dev/package` |
 | `fun` | `fun/heart` (animated), `fun/star`, `fun/cat`, `fun/coffee` (animated) |
 
-All are MIT, like the rest of the project. There are no third-party logos
+[The built-in library](library.md) shows each one magnified, with its
+animation. All are MIT, like the rest of the project. There are no third-party logos
 (git, Rust, Python, Docker and the like): their trademark and licence terms
 keep them out of a default library. Package them yourself if you have the
 right to.

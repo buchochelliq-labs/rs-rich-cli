@@ -1,0 +1,12 @@
+{
+  "tape": "docs/tapes/micro-create.tape",
+  "tape_fnv1a64": "0be19db5cd6cc67a",
+  "recorder": "rs-rich-record 0.0.2",
+  "rich": null,
+  "commit": "e463a6f81064868f4e430fdddac4f6800e6f7cb9",
+  "screenshots": [
+    "pipeline",
+    "added"
+  ],
+  "note": "Every frame is real output of the program under test on a PTY."
+}

@@ -19,8 +19,8 @@ iTerm2, then Sixel, then half-blocks, then the emoji or text fallback.
 | foot, mlterm, Windows Terminal ≥ 1.22, mintty, xterm `-ti vt340` | Sixel, once the cell size in pixels is known | frame by frame, on redraw | Sixel is used only when the terminal is found (or said) to support it |
 | Alacritty, GNOME Terminal (VTE), Terminal.app, the Linux console with colour | the emoji fallback; half-blocks with `RICH_MICRO=blocks` | frame by frame (blocks) | no image protocol |
 | tmux, GNU screen | the emoji fallback unless passthrough is configured | — | set `RICH_MICRO=blocks` or `text`, or allow passthrough and set `RICH_MICRO` to the outer terminal's protocol |
-| `TERM=dumb`, no colour | the text fallback, else the alt text | none | |
-| pipes, log files, `--export-html`/`--export-svg`, `--pager`, captures | the text fallback, byte for byte | none | never an escape sequence, whatever `RICH_MICRO` says; with an export or the pager, `rich -p` prints the fallback on the terminal too |
+| `TERM=dumb`, no colour | the emoji in UTF-8 output, else the text fallback, else the alt text | none | |
+| pipes, log files, `--export-html`/`--export-svg`, `--pager`, captures | the fallback (the emoji in UTF-8 output, else the text), byte for byte | none | never an escape sequence, whatever `RICH_MICRO` says; with an export or the pager, `rich -p` prints the fallback on the terminal too |
 
 "Native" animation is played by the terminal itself; "frame by frame"
 means the frame that is due is drawn whenever the view redraws (a live
@@ -44,6 +44,14 @@ $ rich doctor --report json | jq .micro
 $ rich micro preview status/loading
 $ RICH_MICRO=kitty rich micro preview status/success
 ```
+
+`rich doctor` names the mode and why. Recorded with the variables each
+terminal sets put in by hand (the recorder's own terminal draws no images,
+so this shows the choice, not the drawing):
+
+![rich doctor's micro line for a plain terminal, kitty, iTerm2, a known cell size and RICH_MICRO=text](../../media/tapes/micro-doctor/doctor.png)
+
+[Tape](../../tapes/micro-doctor.tape) · [GIF](../../media/tapes/micro-doctor/micro-doctor.gif)
 
 If an image protocol draws garbage (a terminal that claims one it does not
 have, or a multiplexer in the way), set `RICH_MICRO=blocks` or `text` in
