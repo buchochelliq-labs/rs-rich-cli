@@ -1,7 +1,9 @@
 """Tests for scripts/release_cohort.py: RELEASES.toml checks, the tag guard, and tagging."""
 
 from pathlib import Path
+import os
 import subprocess
+import sys
 import tempfile
 import unittest
 from unittest import mock
@@ -68,6 +70,17 @@ class RepositoryConfig(unittest.TestCase):
         tags = [p.tag for p in packages]
         self.assertIn("rs-rich-cli-v" + next(p.version for p in packages if p.name == "rs-rich-cli"), tags)
         self.assertEqual(sum(t.startswith("python-v") for t in tags), 1)
+
+    def test_tag_reads_committed_manifests_as_utf8_whatever_the_locale(self):
+        # `tag` reads manifests with `git show`. Under a non-UTF-8 locale
+        # (Windows' cp1252, or C here) text mode decoded them with that
+        # encoding and failed on the non-ASCII in rs-rich's manifest.
+        script = ("import sys, release_cohort as c; "
+                  "sys.exit('\\n'.join(c.check(c.files_at('HEAD'))) or 0)")
+        env = {**os.environ, "LC_ALL": "C", "LANG": "C", "PYTHONUTF8": "0", "PYTHONCOERCECLOCALE": "0"}
+        result = subprocess.run([sys.executable, "-c", script], cwd=ROOT / "scripts", env=env,
+                                capture_output=True, text=True, encoding="utf-8")
+        self.assertEqual(result.returncode, 0, result.stderr)
 
 
 class Check(unittest.TestCase):
