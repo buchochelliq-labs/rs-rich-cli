@@ -110,4 +110,4 @@ def test_style_repr_and_equality():
     assert str(Style(bold=True, color="red")) == "bold red"
     assert Style(bold=True) + Style(italic=True) == Style.parse("bold italic")
     assert repr(Style()) == "Style()"
-    assert rs_rich.__version__ == "0.0.3"
+    assert rs_rich.__version__ == "0.0.4"

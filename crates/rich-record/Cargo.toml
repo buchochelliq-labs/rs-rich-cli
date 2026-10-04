@@ -7,7 +7,7 @@
 # is a thin command over it. Independent SemVer from 0.0.1.
 [package]
 name = "rs-rich-record"
-version = "0.0.2"
+version = "0.0.3"
 description = "Record scripted terminal sessions (tapes) into screenshots, asciinema casts, GIF and MP4"
 edition.workspace = true
 license.workspace = true

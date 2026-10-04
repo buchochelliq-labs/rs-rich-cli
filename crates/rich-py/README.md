@@ -54,5 +54,5 @@ The `lumis` (tree-sitter) code highlighter is a separate build
 
 ## Versions
 
-The package has its own version (0.0.3) and is released from `python-v…`
+The package has its own version (0.0.4) and is released from `python-v…`
 tags. It bundles the rs-rich Rust crate from the same commit.

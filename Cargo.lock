@@ -1622,7 +1622,7 @@ dependencies = [
 
 [[package]]
 name = "rs-rich-ext"
-version = "0.0.12"
+version = "0.0.13"
 dependencies = [
  "anyhow",
  "clap",
@@ -1650,7 +1650,7 @@ dependencies = [
 
 [[package]]
 name = "rs-rich-interact"
-version = "0.0.2"
+version = "0.0.3"
 dependencies = [
  "crossterm",
  "libc",
@@ -1697,7 +1697,7 @@ dependencies = [
 
 [[package]]
 name = "rs-rich-micro"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "flate2",
  "portable-pty",
@@ -1722,7 +1722,7 @@ dependencies = [
 
 [[package]]
 name = "rs-rich-record"
-version = "0.0.2"
+version = "0.0.3"
 dependencies = [
  "color_quant 2.0.0",
  "fancy-regex 0.19.2",

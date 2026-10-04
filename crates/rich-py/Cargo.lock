@@ -1533,7 +1533,7 @@ dependencies = [
 
 [[package]]
 name = "rs-rich-ext"
-version = "0.0.12"
+version = "0.0.13"
 dependencies = [
  "fancy-regex 0.19.2",
  "libc",
@@ -1550,7 +1550,7 @@ dependencies = [
 
 [[package]]
 name = "rs-rich-interact"
-version = "0.0.2"
+version = "0.0.3"
 dependencies = [
  "crossterm",
  "libc",
@@ -1581,7 +1581,7 @@ dependencies = [
 
 [[package]]
 name = "rs-rich-micro"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "flate2",
  "rs-rich",
@@ -1603,7 +1603,7 @@ dependencies = [
 
 [[package]]
 name = "rs-rich-py"
-version = "0.0.3"
+version = "0.0.4"
 dependencies = [
  "pyo3",
  "rs-rich",

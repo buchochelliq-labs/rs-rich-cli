@@ -90,6 +90,52 @@ Entries below record subsequent releases and development.
   example and its output, the crate README, and `AGENTS.md`'s dependency
   graph and versioning table.
 
+### Charts (0.0.15 workstream 1)
+
+`rich_ext::chart` (#221, #257): charts drawn with text, as renderables over
+core's public `Renderable` and `Measurement`. Nothing under `crates/rich/src`
+changed.
+
+- `Sparkline`: one line, one cell per value (`▁▂▃▄▅▆▇█`, two values per
+  cell in Braille, `_.-:=+*#` in ASCII). Given fewer cells than values it
+  resamples, each cell the mean of an equal bucket. `.min_max(true)` and
+  `.threshold(t)` style the cells and say it in words (`min 2 max 9`,
+  `3 > 80`), so they read without colour.
+- `BarChart`: label, bar and value per row, with eighth-cell blocks, half-cell
+  Braille or `#` and `=` in ASCII; negative values extend left of zero. It
+  shrinks the bar, then drops the values, then cuts the labels.
+  `.orientation(Orientation::Vertical)` stands the bars up side by side
+  (`▁▂▃▄▅▆▇█`, `⣤⣿`, or `#` and `.`), labels underneath and values just
+  above each bar; negative values hang below zero. `Histogram` takes it too.
+- `Histogram`: raw values into equal bins labelled `[low, high)`, rounded to
+  round edges unless a range is given.
+- `LineChart` and `Series`: lines and scatter points on a Braille canvas
+  (`DotCanvas`, 2×4 dots per cell), with a y axis, x labels and a legend.
+  Series differ by colour and marker; with no colour and more than one
+  series the plot switches to markers at cell resolution. ASCII plots with
+  `*`, `+`, `o`, `x` and `.`.
+  Each row and column stands for one exact value at its centre; axis labels
+  sit on evenly spaced rows and columns and name that value, never a
+  rounded one. Without a fixed range the scales round out to a step that
+  fits whole rows and columns, and without `.height(..)` the chart picks
+  6 to 10 rows to suit its labels.
+- Shared: `Scale` (linear, round ticks, NaN and infinities skipped, never an
+  empty range, explicit bounds), `ValueFormat` (`1.2k`, `3.4M`, fixed
+  decimals) and `Charset` (an ASCII console, by encoding or `Fidelity`,
+  always gets ASCII). Theme keys `chart.*` in `extended_theme()`.
+- Tests: snapshots for every chart in blocks, Braille and ASCII with colour
+  on and off; every chart at widths 1 to 200 on four consoles never writes
+  a line wider than its width, and the ASCII consoles' output holds no
+  character above U+007F; charts in a `Table` cell, a `Panel` and `Live`.
+- Docs: a [Charts](docs/guide/ext/charts.md) guide page with screenshots
+  from `examples/guide_charts.rs`, and `examples/charts.rs`
+  (`cargo run -p rs-rich-ext --example charts`).
+- Versions, as the plan's package impact table says: `rs-rich-ext` 0.0.12 →
+  0.0.13 for the new module, and its dependents for their requirement on it
+  (Cargo reads `0.0.x` as exact): `rs-rich-micro` 0.0.2, `rs-rich-interact`
+  0.0.3, `rs-rich-record` 0.0.3 (manifest only), `rs-rich-cli` 0.0.15, and
+  PyPI `rs-rich` 0.0.4, whose wheel bundles them. `RELEASES.toml` synced.
+
 ### Micro asset docs
 
 - A [built-in library](docs/guide/micro/library.md) page shows every
