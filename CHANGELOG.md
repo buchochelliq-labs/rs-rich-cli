@@ -57,6 +57,58 @@ Entries below record subsequent releases and development.
 
 ## [Unreleased]
 
+### Diagrams from real sources (0.0.15 workstream 4)
+
+- `rs-rich-diagram` 0.0.1 (unreleased, so no bump): a DOT (Graphviz) parser
+  (#240), `rich_diagram::dot::parse` → `DotGraph`, for the subset people
+  write by hand: `graph`/`digraph`, `strict` (repeated edges merge), node and
+  edge statements with chains (`a -> b -> c`) and `{ … }` groups,
+  `label`/`shape`/`style` (and `dir`, `arrowhead`, `arrowtail`, `minlen`,
+  `rankdir`), `node`/`edge`/`graph` defaults scoped to their subgraph,
+  subgraphs and `cluster…` clusters, quoted IDs with `+`, and `//`, `/* */`
+  and `#` comments. Node ports, HTML-like labels, `record` shapes, bodiless
+  subgraph references and several graphs in one file are refused with a
+  `DotError` naming the construct and its line, never drawn partially.
+  Painting-only attributes are ignored; cluster frames and `rank`
+  constraints are accepted and noted under the drawing. A `Dot` renderable
+  draws a source (or the error and the source). New `plugin` feature
+  (`rs-rich-plugin-api`, optional): `plugin::DotPlugin` registers `dot` and
+  `graphviz` fence renderers and a `dot` source renderer. New `graphviz`
+  feature: `graphviz::render_svg` runs Graphviz's own `dot -Tsvg` with the
+  source on stdin, a timeout and size caps.
+- `rs-rich-ext` 0.0.13: `rich_ext::deps` (#248), behind `data`: `DepGraph`
+  from `cargo metadata --format-version 1`, `duplicates`, `paths_to`, and the
+  `DepTree` (as `cargo tree` prints it, with `(*)` repeats, build and dev
+  sections, `(duplicate)` marks and an optional summary) and `WhyTree`
+  (`cargo tree -i`) renderables. `rich_ext::schema` (#244), behind `data`:
+  `SchemaTree` (types, `(required)`, constraints, local `$ref`s and
+  `$anchor`s resolved with cycle protection, `oneOf`/`anyOf`/`allOf`, items,
+  `not`, `if`/`then`/`else`) and `SchemaDiff` (added, removed and changed,
+  with breaking changes marked).
+- `rs-rich-cli` 0.0.15: `rich dot FILE` (alias `graphviz`; `.dot` and `.gv`
+  detected) draws DOT natively and exits 4 naming the construct and line it
+  refuses; ```` ```dot ```` fences draw in Markdown; `--dot-backend
+  text|graphviz|off` and the `dot_backend` key, where `graphviz` makes
+  `--export-svg` write Graphviz's own SVG (falling back to the text
+  drawing's, with a warning, without `dot`) and a working-directory
+  `rich.toml` cannot choose it. `rich deps [MANIFEST]` runs `cargo metadata`
+  (or reads `--metadata FILE`) and draws the tree, with `--why CRATE`,
+  `--graph` (through the layout), `--depth N`, `--duplicates` and
+  `--no-dev`. `rich schema FILE` draws a schema; `rich schema OLD NEW` what
+  changed. `rich plugins` lists the built-in `dot` plugin. Depends on
+  `rs-rich-diagram` directly (features `plugin`, `graphviz`).
+- Fixtures and tests for each source: DOT files under
+  `crates/rich-diagram/tests/fixtures/dot` (snapshots in Unicode and ASCII,
+  and the refused constructs), `cargo metadata` and two schema versions
+  under `crates/rich-ext/tests/fixtures/sources`, and CLI tests over the
+  same files. Nothing under `crates/rich/src` changes; `rs-rich-plugin-api`
+  is unchanged.
+- Docs: a DOT section in the [Diagrams guide](docs/guide/diagram/index.md),
+  [Dependency graphs and JSON Schemas](docs/guide/ext/sources.md) with
+  output examples, the CLI reference, `docs/PORTING.md`, `docs/PLUGINS.md`,
+  the crate READMEs, and `AGENTS.md`'s dependency graph (`rich-diagram`'s
+  `plugin` feature now exists, and `rich-cli ──▶ rich-diagram`).
+
 ### Diagrams (0.0.15 workstream 3)
 
 - New crate `rs-rich-diagram` 0.0.1 (`rich_diagram`), depending on core

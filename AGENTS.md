@@ -27,9 +27,10 @@ rich-cli ──▶ rich-ext ──▶ rich
                  ├──▶ rich-plugin-api ──▶ rich   (the plugin contract; plugins depend on it, not on ext)
                  └──▶ rich-macros   (proc-macros; optional, behind ext's `macros` feature)
 rich-cli ──▶ rich-mermaid ──▶ rich-plugin-api      (a plugin crate; optional rich-art for `mmdc`)
-                  └──▶ rich-diagram ──▶ rich     (graph model, layered layout, `Diagram` renderable;
-                            └ ─ ▶ rich-plugin-api   only behind its `plugin` feature, which the DOT
-                                                 plugin adds in 0.0.15 WS4; not present in 0.0.1)
+                  └──▶ rich-diagram ──▶ rich     (graph model, layered layout, `Diagram` renderable,
+                            └ ─ ▶ rich-plugin-api   the DOT parser; the plugin API only behind its
+                                                 `plugin` feature: the `dot` fence and source renderer)
+rich-cli ──▶ rich-diagram                          (`rich dot`, ```dot fences, `rich deps --graph`)
              rich-lumis   ──▶ rich-plugin-api      (a plugin crate: the lumis/tree-sitter highlighter)
              rich-record  ──▶ rich-ext ──▶ rich    (tapes: `rich record`; PTY, VT emulator, renderers)
 rich-cli ──▶ rich-interact ──▶ rich-ext ──▶ rich   (interactive components: session, event loop, viewport;

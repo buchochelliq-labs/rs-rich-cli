@@ -23,6 +23,7 @@ const IMAGE: &str = "Image";
 const INSPECT: &str = "Inspect";
 const DIFF: &str = "Diff & ANSI";
 const VIEWERS: &str = "Viewers";
+const SOURCES: &str = "Diagram sources";
 const EXPORT: &str = "Export";
 const PAGING: &str = "Paging";
 const WATCH: &str = "Watch";
@@ -94,6 +95,17 @@ fn command_options(name: &str) -> Vec<ArgSpec> {
         ],
         "unicode" => &["limit", "width"],
         "mermaid" => &["mermaid-backend", "width"],
+        "dot" => &["dot-backend", "export-svg", "width"],
+        "deps" => &[
+            "metadata",
+            "why",
+            "graph",
+            "depth",
+            "duplicates",
+            "no-dev",
+            "width",
+        ],
+        "schema" => &["width"],
         "env" => &["show-secrets", "width"],
         "capture" => &["cast", "redact", "redact-pattern", "sanitize", "width"],
         "inspect" => &[
@@ -505,6 +517,53 @@ fn mode_options() -> Vec<ArgSpec> {
         )
         .choices(["text", "mmdc", "off"])
         .config_key("mermaid_backend"),
+        option(
+            "dot-backend",
+            "BACKEND",
+            MODE_OPTIONS,
+            "How DOT graphs (`rich dot`, ```dot fences in Markdown) are drawn: text draws them \
+             natively, graphviz also makes --export-svg write Graphviz's own SVG (the `dot` \
+             program, installed separately), off leaves fences as code",
+        )
+        .choices(["text", "graphviz", "off"])
+        .config_key("dot_backend"),
+        option(
+            "metadata",
+            "FILE",
+            SOURCES,
+            "With `rich deps`, read `cargo metadata --format-version 1` JSON from FILE (`-` for \
+             stdin) instead of running cargo",
+        ),
+        option(
+            "why",
+            "CRATE",
+            SOURCES,
+            "With `rich deps`, show what pulls CRATE (`name` or `name@version`) in: every path \
+             from the workspace to it",
+        ),
+        flag(
+            "graph",
+            SOURCES,
+            "With `rich deps`, draw the dependencies (or --why's paths) as a diagram instead of \
+             a tree",
+        ),
+        option(
+            "depth",
+            "N",
+            SOURCES,
+            "With `rich deps`, show at most N levels below each workspace member",
+        ),
+        flag(
+            "duplicates",
+            SOURCES,
+            "With `rich deps`, keep only the branches that lead to a crate resolved at more than \
+             one version",
+        ),
+        flag(
+            "no-dev",
+            SOURCES,
+            "With `rich deps`, leave dev-dependencies out",
+        ),
         option(
             "highlighter",
             "NAME",
@@ -1335,9 +1394,46 @@ pub(crate) fn spec() -> CommandSpec {
             "Draw a Mermaid diagram: flowcharts as text, every type through mmdc where built in \
              (.mmd and .mermaid files are detected)",
         ),
+        (
+            "dot",
+            &["graphviz"][..],
+            "Draw a DOT (Graphviz) graph as text (.dot and .gv files are detected); what the \
+             native parser does not support is refused with its line",
+        ),
     ] {
         spec = spec.subcommand(mode_command(name, aliases, about));
     }
+    spec = spec.subcommand(
+        CommandSpec::new("deps")
+            .about(
+                "A Cargo dependency tree from `cargo metadata`, crates resolved at several \
+                 versions marked; --why CRATE for what pulls a crate in, --graph to draw it",
+            )
+            .usage("deps [OPTIONS] [MANIFEST]")
+            .arg(ArgSpec::positional("manifest").value(ValueHint::Path).help(
+                "A Cargo.toml, or the directory holding one (default: the working directory)",
+            ))
+            .args(command_options("deps")),
+    );
+    spec = spec.subcommand(
+        CommandSpec::new("schema")
+            .about(
+                "A JSON Schema as a tree: types, required markers, constraints, $refs resolved; \
+                 with two schemas, what changed between them and which changes break",
+            )
+            .usage("schema [OPTIONS] SCHEMA [NEW_SCHEMA]")
+            .arg(
+                ArgSpec::positional("schema")
+                    .value(ValueHint::Path)
+                    .help("A JSON Schema file, an http(s) URL, or `-` for stdin"),
+            )
+            .arg(
+                ArgSpec::positional("new_schema")
+                    .value(ValueHint::Path)
+                    .help("A second version: show what changed from SCHEMA to it"),
+            )
+            .args(command_options("schema")),
+    );
     spec = spec.subcommand(config_command());
     #[cfg(feature = "interact")]
     for command in super::interactive::commands() {
@@ -1564,6 +1660,7 @@ mod tests {
     const INSPECT: &str = include_str!("inspect.rs");
     const TOOLS: &str = include_str!("tools.rs");
     const VIEWERS: &str = include_str!("viewers.rs");
+    const SOURCES_RS: &str = include_str!("sources.rs");
     #[cfg(feature = "interact")]
     const INTERACTIVE: &str = include_str!("interactive.rs");
     #[cfg(feature = "art")]
@@ -1619,6 +1716,7 @@ mod tests {
             item(INSPECT, "impl DataOptions {"),
             item(TOOLS, "impl ToolOptions {"),
             item(VIEWERS, "impl ViewerOptions {"),
+            item(SOURCES_RS, "impl GraphSourceOptions {"),
         ] {
             out.extend(option_literals(source));
         }

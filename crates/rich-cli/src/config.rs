@@ -27,6 +27,9 @@ struct Configuration {
     /// Set when a working-directory `rich.toml` asked for
     /// `mermaid_backend = "mmdc"`, which was ignored (see `load`).
     ignored_mmdc: bool,
+    /// Set when a working-directory `rich.toml` asked for
+    /// `dot_backend = "graphviz"`, which was ignored (see `load`).
+    ignored_graphviz: bool,
     /// Set when a working-directory `rich.toml` listed `plugins`, which were
     /// ignored (see `load`).
     ignored_plugins: bool,
@@ -217,6 +220,7 @@ const VALUE_KEYS: &[&str] = &[
     "format",
     "theme_file",
     "mermaid_backend",
+    "dot_backend",
     "highlighter",
     "code_theme",
     "plugins",
@@ -272,6 +276,9 @@ pub(crate) fn validate_value(key: &str, value: &Value) -> Result<(), String> {
             "mermaid_backend" => value
                 .as_str()
                 .is_some_and(|v| matches!(v, "text" | "mmdc" | "off")),
+            "dot_backend" => value
+                .as_str()
+                .is_some_and(|v| matches!(v, "text" | "graphviz" | "off")),
             // A choice among the engines compiled in, so a project's
             // `rich.toml` may set it; the name is checked when rich runs, with
             // the choices in the error.
@@ -437,6 +444,7 @@ fn decode_configuration(text: &str, selected: Option<&str>) -> Result<Configurat
         ignored_theme_file: false,
         ignored_sanitize: false,
         ignored_mmdc: false,
+        ignored_graphviz: false,
         ignored_plugins: false,
         ignored_micro_project: false,
         ignored_export: Vec::new(),
@@ -507,10 +515,12 @@ fn load(args: &Arguments, roots: &ConfigRoots) -> Result<(Configuration, Option<
     // (`theme_file`: a FIFO hangs every run) or to write (`export_html`,
     // `export_svg`: any path the user can write), nor turn off the sanitizing
     // `rich view` and `rich diff` do by default, nor start a browser for every
-    // Markdown document (`mermaid_backend = "mmdc"`), nor load a plugin, which
-    // runs its code (`plugins`).
+    // Markdown document (`mermaid_backend = "mmdc"`), nor run Graphviz's
+    // `dot` (`dot_backend = "graphviz"`), nor load a plugin, which runs its
+    // code (`plugins`).
     if untrusted {
         let (mut theme_file, mut sanitize, mut mmdc, mut plugins) = (false, false, false, false);
+        let mut graphviz = false;
         let mut micro_project = false;
         let mut export = Vec::new();
         for table in std::iter::once(&mut settings.settings)
@@ -525,6 +535,10 @@ fn load(args: &Arguments, roots: &ConfigRoots) -> Result<(Configuration, Option<
             if table.get("mermaid_backend").and_then(Value::as_str) == Some("mmdc") {
                 table.remove("mermaid_backend");
                 mmdc = true;
+            }
+            if table.get("dot_backend").and_then(Value::as_str) == Some("graphviz") {
+                table.remove("dot_backend");
+                graphviz = true;
             }
             plugins |= table.remove("plugins").is_some();
             if table.get("micro_project") == Some(&Value::Boolean(true)) {
@@ -541,6 +555,7 @@ fn load(args: &Arguments, roots: &ConfigRoots) -> Result<(Configuration, Option<
         settings.ignored_theme_file = theme_file;
         settings.ignored_sanitize = sanitize;
         settings.ignored_mmdc = mmdc;
+        settings.ignored_graphviz = graphviz;
         settings.ignored_plugins = plugins;
         settings.ignored_micro_project = micro_project;
         settings.ignored_export = export;
@@ -776,6 +791,9 @@ pub(crate) fn config_args(args: &[String], roots: &ConfigRoots) -> Result<Vec<St
     if configuration.ignored_mmdc && !json_report && !explicit.contains("mermaid_backend") {
         eprintln!("rich: warning: {UNTRUSTED_MMDC}");
     }
+    if configuration.ignored_graphviz && !json_report && !explicit.contains("dot_backend") {
+        eprintln!("rich: warning: {UNTRUSTED_GRAPHVIZ}");
+    }
     if configuration.ignored_plugins && !json_report {
         eprintln!("rich: warning: {UNTRUSTED_PLUGINS}");
     }
@@ -959,6 +977,7 @@ pub(crate) fn inspect(args: &[String], roots: &ConfigRoots) -> Result<Option<Str
             ignored_theme_file: configuration.ignored_theme_file,
             ignored_sanitize: configuration.ignored_sanitize,
             ignored_mmdc: configuration.ignored_mmdc,
+            ignored_graphviz: configuration.ignored_graphviz,
             ignored_plugins: configuration.ignored_plugins,
             ignored_micro_project: configuration.ignored_micro_project,
             ignored_export: &configuration.ignored_export,
@@ -1006,6 +1025,8 @@ struct Layers<'a> {
     ignored_sanitize: bool,
     /// The working-directory config's `mermaid_backend = "mmdc"` was ignored.
     ignored_mmdc: bool,
+    /// The working-directory config's `dot_backend = "graphviz"` was ignored.
+    ignored_graphviz: bool,
     /// The working-directory config's `plugins` were ignored.
     ignored_plugins: bool,
     /// The working-directory config's `micro_project = true` was ignored.
@@ -1099,6 +1120,7 @@ fn explain(layers: &Layers, key: Option<&str>) -> String {
         ),
         (layers.ignored_sanitize, "sanitize", UNTRUSTED_SANITIZE),
         (layers.ignored_mmdc, "mermaid_backend", UNTRUSTED_MMDC),
+        (layers.ignored_graphviz, "dot_backend", UNTRUSTED_GRAPHVIZ),
         (layers.ignored_plugins, "plugins", UNTRUSTED_PLUGINS),
         (
             layers.ignored_micro_project,
@@ -1153,6 +1175,13 @@ const UNTRUSTED_SANITIZE: &str =
 const UNTRUSTED_MMDC: &str =
     "mermaid_backend = \"mmdc\" in ./rich.toml is ignored: a project's config may not start a \
      browser; pass --mermaid-backend mmdc, or set it in ~/.config/rich/config.toml or a file \
+     given with --config";
+
+/// Why a working-directory `rich.toml`'s `dot_backend = "graphviz"` has no
+/// effect.
+const UNTRUSTED_GRAPHVIZ: &str =
+    "dot_backend = \"graphviz\" in ./rich.toml is ignored: a project's config may not run \
+     programs; pass --dot-backend graphviz, or set it in ~/.config/rich/config.toml or a file \
      given with --config";
 
 /// Why a working-directory `rich.toml`'s `plugins` have no effect.
