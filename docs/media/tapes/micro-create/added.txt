@@ -1,0 +1,18 @@
+❯ rich micro list --layer user
+┏━━━━┳━━━━━━━━━━━━━┳━━━━━━┳━━━━━━━━┳━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃    ┃ Name        ┃ Size ┃ Kind   ┃ Layer ┃ Alt text                 ┃
+┡━━━━╇━━━━━━━━━━━━━╇━━━━━━╇━━━━━━━━╇━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━┩
+│ 🚀 │ team/rocket │ 2x1  │ static │ user  │ teal rocket, lifting off │
+└────┴─────────────┴──────┴────────┴───────┴──────────────────────────┘
+❯ rich -p --emoji 'Launched :micro:team/rocket: by the team'
+Launched 🚀 by the team
+❯
+
+
+
+
+
+
+
+
+

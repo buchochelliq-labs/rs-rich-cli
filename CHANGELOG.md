@@ -68,6 +68,11 @@ Entries below record subsequent releases and development.
   then `rich micro preview fun/heart`. The recordings page gains a Micro assets
   section with it and the existing `micro`, `micro-chrome` and `explore-icons`
   tapes, which it did not show before.
+- Two more tapes: `micro-create` (a PNG through the pipeline, `rich micro
+  create --add`, listed and used, with a source image drawn for the docs) and
+  `micro-doctor` (the mode `rich doctor` picks for a plain terminal, kitty,
+  iTerm2, a known cell size and `RICH_MICRO=text`). The library page opens
+  with a contact sheet of every asset.
 
 ### Release numbers and tagging
 

@@ -1,5 +1,7 @@
 # The built-in library
 
+![Every built-in micro asset: the status, dev and fun packs, one row each](../../media/micro/library/library.png)
+
 `rs-rich-micro` ships thirteen assets in three packs, drawn for this project
 and licensed MIT. Each image below is the asset's own file, magnified ten
 times so each of its 16×16 pixels shows as a square. Animated assets play

@@ -223,6 +223,26 @@ terminal draws the image itself in the same cells. See
 
 [Tape](tapes/micro-modes.tape) · [Cast](media/tapes/micro-modes/micro-modes.cast) · [GIF](media/tapes/micro-modes/micro-modes.gif) · [Page](media/tapes/micro-modes/micro-modes.html)
 
+Making an asset: a 128×128 PNG previewed through the pipeline, written
+into the user layer with `rich micro create --add`, listed and used.
+
+<div class="tape-player" data-cast="../media/tapes/micro-create/micro-create.cast" data-poster="npt:0:5">
+  <img src="../media/tapes/micro-create/micro-create.gif" alt="rich micro create making team/rocket from a PNG">
+</div>
+
+| Through the pipeline | Added and used |
+|---|---|
+| ![rocket.png fitted to 16×16 pixels, magnified](media/tapes/micro-create/pipeline.png) | ![team/rocket listed and used in text](media/tapes/micro-create/added.png) |
+
+[Tape](tapes/micro-create.tape) · [Cast](media/tapes/micro-create/micro-create.cast) · [GIF](media/tapes/micro-create/micro-create.gif) · [Page](media/tapes/micro-create/micro-create.html)
+
+Which mode a terminal gets, and why: `rich doctor` with the variables
+kitty and iTerm2 set.
+
+![rich doctor's micro line under five terminal settings](media/tapes/micro-doctor/doctor.png)
+
+[Tape](tapes/micro-doctor.tape) · [Cast](media/tapes/micro-doctor/micro-doctor.cast) · [GIF](media/tapes/micro-doctor/micro-doctor.gif) · [Page](media/tapes/micro-doctor/micro-doctor.html)
+
 `rich micro`: the built-in library listed, `status/loading` previewed, and
 `:micro:` codes in `--print --emoji` text.
 

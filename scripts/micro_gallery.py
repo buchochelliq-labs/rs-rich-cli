@@ -3,7 +3,7 @@
 Every asset in crates/rich-micro/builtin/ is drawn magnified, a pixel per
 square, on the dark background the terminal screenshots use: its still
 image as a PNG and, for an animated asset, its animation as a GIF with the
-same frame timings. The page's table (between the markers) lists each one
+same frame timings, plus library.png, every still in one row per pack. The page's table (between the markers) lists each one
 with its alt text, fallbacks, kind and licence, read from its manifest.
 
     python3 scripts/micro_gallery.py           # rewrite the images and the table
@@ -84,6 +84,22 @@ def render(manifest, folder):
     return out
 
 
+def sheet(found) -> bytes:
+    """Every asset's still image in one row per pack, for the top of the page."""
+    gap, size = 2 * SCALE, 16 * SCALE
+    packs = {}
+    for manifest, folder in found:
+        packs.setdefault(manifest["name"].split("/")[0], []).append(magnify(Image.open(folder / manifest["static"])))
+    columns = max(len(row) for row in packs.values())
+    out = Image.new("RGB", (gap + columns * (size + gap), gap + len(packs) * (size + gap)), BACKGROUND[:3])
+    for y, row in enumerate(packs.values()):
+        for x, picture in enumerate(row):
+            out.paste(picture, (gap + x * (size + gap), gap + y * (size + gap)))
+    data = io.BytesIO()
+    out.save(data, "PNG", optimize=True)
+    return data.getvalue()
+
+
 def table(found) -> str:
     rows = [
         "| Image | Name | Alt text | Fallback | Kind | Licence |",
@@ -133,6 +149,7 @@ def main() -> int:
     wanted = {}
     for manifest, folder in found:
         wanted.update(render(manifest, folder))
+    wanted["library.png"] = sheet(found)
     page = page_with(table(found))
 
     if args.check:

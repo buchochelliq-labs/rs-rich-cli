@@ -45,6 +45,14 @@ $ rich micro preview status/loading
 $ RICH_MICRO=kitty rich micro preview status/success
 ```
 
+`rich doctor` names the mode and why. Recorded with the variables each
+terminal sets put in by hand (the recorder's own terminal draws no images,
+so this shows the choice, not the drawing):
+
+![rich doctor's micro line for a plain terminal, kitty, iTerm2, a known cell size and RICH_MICRO=text](../../media/tapes/micro-doctor/doctor.png)
+
+[Tape](../../tapes/micro-doctor.tape) · [GIF](../../media/tapes/micro-doctor/micro-doctor.gif)
+
 If an image protocol draws garbage (a terminal that claims one it does not
 have, or a multiplexer in the way), set `RICH_MICRO=blocks` or `text` in
 your shell profile. Layout never changes with the choice: every mode puts
