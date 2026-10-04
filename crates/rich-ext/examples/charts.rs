@@ -70,7 +70,7 @@ fn main() {
         .series(Series::line("memory %", mem))
         .series(Series::scatter("alerts", spikes))
         .y_range(0.0, 100.0)
-        .height(10)
+        .height(11)
         .width(64);
     console.print(&chart);
     console.print(&Text::new(""));

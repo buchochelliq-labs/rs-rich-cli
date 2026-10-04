@@ -110,13 +110,22 @@ its points, `Series::scatter(name, points)` does not, and
 
 - The plot is Braille by default: each cell holds 2×4 dots, so a chart 60
   cells wide has 120 points across.
-- The y scale is rounded out to whole ticks (`0, 20, … 100`) unless
-  `.y_range(..)` fixes it. The x scale runs from the first to the last x
-  value unless `.x_range(..)` fixes it. `.y_format(..)` and `.x_format(..)`
-  write the tick labels.
-- It is `.height(rows)` rows of plot (8 by default), an axis line, a row of
-  x labels and the legend. It fills the width it is given, or `.width(n)`.
-  When the width is short it drops the y labels, then the axes.
+- Every row and column of the plot stands for one exact value, at its
+  centre. Axis labels sit on evenly spaced rows and columns, and each label
+  is the value of the row or column it is on; nothing is rounded to fit.
+- Without `.y_range(..)` and `.x_range(..)`, each scale rounds out to a
+  step of 1, 2, 2.5 or 5 times a power of ten that falls on whole rows or
+  columns. The x scale may then run a little past the last point.
+- With a fixed range, a row or column gets a label only when the format
+  writes its value exactly, so a range must divide into the rows for every
+  label to show: `.y_range(0.0, 100.0)` on 11 rows labels every 20, on 10
+  rows only `0` and `100`. `.y_format(..)` and `.x_format(..)` write the
+  labels.
+- It is `.height(rows)` rows of plot, an axis line, a row of x labels and
+  the legend. Without `.height(..)` it takes 6 to 10 rows, near 8, picking
+  the height its y labels divide best. It fills the width it is given, or
+  `.width(n)`. When the width is short it drops the y labels, then the
+  axes.
 - A NaN or infinite value breaks a line.
 
 ### Without colour

@@ -4,6 +4,7 @@ use rich::cells::char_cell_width;
 use rich::measure::Measurement;
 use rich::{Console, ConsoleOptions, Renderable, Segment, Style};
 
+use super::axis::{self, AxisFit, AxisRequest};
 use super::canvas::bresenham;
 use super::{
     cells, has_colour, lines_to_segments, series_key, theme_style, truncate, user_style, Charset,
@@ -118,11 +119,16 @@ impl Series {
 ///   dots carry no shape, so when the console shows no colour and there is
 ///   more than one series, the chart plots at cell resolution with markers
 ///   instead.
-/// - The y scale is rounded out to whole ticks unless you fix it with
-///   [`y_range`](Self::y_range); the x scale runs from the first to the last
-///   x value unless you fix it with [`x_range`](Self::x_range).
-/// - It is [`height`](Self::height) rows of plot (8 by default) plus an
-///   axis line, a row of x labels and the legend. It fills the width it is
+/// - Every row and column of the plot stands for one exact value, at its
+///   centre. Axis labels sit on evenly spaced rows and columns, and each
+///   names the value of the row or column it is on. The scales round out to
+///   a step that fits whole rows and columns (2, 5, 10, 25… a label apart),
+///   unless you fix them with [`y_range`](Self::y_range) and
+///   [`x_range`](Self::x_range); then only rows whose value the format
+///   writes exactly are labelled (at least the two bounds).
+/// - It is [`height`](Self::height) rows of plot (6 to 10 by default, the
+///   one the labels fit best) plus an axis line, a row of x labels and the
+///   legend. It fills the width it is
 ///   given (or [`width`](Self::width)); when that is short it drops the y
 ///   labels, then the axes, and the x labels and legend are cut to fit.
 ///
@@ -133,15 +139,17 @@ impl Series {
 /// let console = Console::builder().width(24).color_system(None).build();
 /// let chart = LineChart::new()
 ///     .series(Series::from_values("load", [1.0, 3.0, 2.0, 5.0, 4.0]))
-///     .height(4)
+///     .height(6)
 ///     .charset(Charset::Ascii);
 /// assert_eq!(
 ///     console.render_to_string(&chart),
 ///     concat!(
-///         "6 +              ****   \n",
-///         "4 +            **    ***\n",
-///         "2 +   *********         \n",
-///         "0 +***                  \n",
+///         "6 +                     \n",
+///         "5 +               ***   \n",
+///         "4 +             **   ***\n",
+///         "3 +    ****   **        \n",
+///         "2 +  **    ***          \n",
+///         "1 +**                   \n",
 ///         "  ++----+----+----+----+\n",
 ///         "   0    1    2    3    4\n",
 ///         "* load                  \n",
@@ -151,7 +159,7 @@ impl Series {
 #[derive(Clone, Debug, PartialEq)]
 pub struct LineChart {
     series: Vec<Series>,
-    height: usize,
+    height: Option<usize>,
     width: Option<usize>,
     x_min: Option<f64>,
     x_max: Option<f64>,
@@ -174,7 +182,7 @@ impl LineChart {
     pub fn new() -> Self {
         LineChart {
             series: Vec::new(),
-            height: 8,
+            height: None,
             width: None,
             x_min: None,
             x_max: None,
@@ -198,10 +206,11 @@ impl LineChart {
         &self.series
     }
 
-    /// Rows of plot, not counting the axis, x labels and legend (default 8,
-    /// at least 1).
+    /// Rows of plot, not counting the axis, x labels and legend (at least
+    /// 1). By default the chart takes 6 to 10 rows, near 8, picking the
+    /// height whose rows its y labels divide evenly.
     pub fn height(mut self, rows: usize) -> Self {
-        self.height = rows.max(1);
+        self.height = Some(rows.max(1));
         self
     }
 
@@ -249,23 +258,40 @@ impl LineChart {
         self
     }
 
-    fn y_ticks_wanted(&self) -> usize {
-        (self.height / 2 + 1).clamp(2, 6)
+    /// The y axis: how many rows, what each is worth, and its labels.
+    fn y_axis(&self) -> AxisFit {
+        let ys = self.series.iter().flat_map(|s| s.finite().map(|p| p.1));
+        let fixed = self.y_min.is_some() || self.y_max.is_some();
+        let data = Scale::from_values(ys).bounds(self.y_min, self.y_max);
+        let (cells, wanted): (Vec<usize>, usize) = match self.height {
+            Some(rows) => (vec![rows - 1], (rows / 2 + 1).clamp(2, 6)),
+            None => (vec![7, 6, 8, 5, 9], 5),
+        };
+        axis::fit(&AxisRequest {
+            data,
+            fixed,
+            cells: &cells,
+            wanted,
+            label_room: false,
+            format: self.y_format,
+        })
     }
 
-    /// The x scale, the y scale and the y tick step.
-    fn scales(&self) -> (Scale, Scale, f64) {
+    /// The x axis across `columns` columns.
+    fn x_axis(&self, columns: usize) -> AxisFit {
         let xs = self.series.iter().flat_map(|s| s.finite().map(|p| p.0));
-        let ys = self.series.iter().flat_map(|s| s.finite().map(|p| p.1));
-        let x = Scale::from_values(xs).bounds(self.x_min, self.x_max);
-        let y = Scale::from_values(ys);
-        let wanted = self.y_ticks_wanted();
-        if self.y_min.is_none() && self.y_max.is_none() {
-            (x, y.nice(wanted), y.step(wanted))
-        } else {
-            let y = y.bounds(self.y_min, self.y_max);
-            (x, y, y.step(wanted))
-        }
+        let fixed = self.x_min.is_some() || self.x_max.is_some();
+        let data = Scale::from_values(xs).bounds(self.x_min, self.x_max);
+        let guess =
+            cells(&self.x_format.format(data.min())).max(cells(&self.x_format.format(data.max())));
+        axis::fit(&AxisRequest {
+            data,
+            fixed,
+            cells: &[columns.saturating_sub(1)],
+            wanted: (columns / (guess + 3)).max(2),
+            label_room: true,
+            format: self.x_format,
+        })
     }
 
     fn marker(&self, index: usize, ascii: bool) -> char {
@@ -302,19 +328,19 @@ impl LineChart {
             line.push(&truncate("no data", width, ascii), None);
             return vec![line];
         }
-        let (x_scale, y_scale, y_step) = self.scales();
-        let rows = self.height;
+        let y_axis = self.y_axis();
+        let rows = y_axis.cells + 1;
         let axis_style = colour.then(|| theme_style(console, "chart.axis"));
         let label_style = colour.then(|| theme_style(console, "chart.label"));
 
-        // Y ticks and the space their labels need.
-        let y_ticks: Vec<(f64, String)> = y_scale
-            .ticks_every(y_step)
-            .into_iter()
-            .map(|t| (t, self.y_format.format(t)))
-            .collect();
-        let label_w = y_ticks.iter().map(|(_, l)| cells(l)).max().unwrap_or(0);
-        let (labels, axis) = if width >= label_w + 2 + MIN_PLOT {
+        // Y labels and the space they need.
+        let label_w = y_axis
+            .labels
+            .iter()
+            .map(|(_, l)| cells(l))
+            .max()
+            .unwrap_or(0);
+        let (labels, axis) = if label_w > 0 && width >= label_w + 2 + MIN_PLOT {
             (true, true)
         } else if width >= 2 {
             (false, true)
@@ -323,8 +349,10 @@ impl LineChart {
         };
         let prefix = if labels { label_w + 1 } else { 0 } + usize::from(axis);
         let plot_w = width.saturating_sub(prefix).max(1);
+        let x_axis = self.x_axis(plot_w);
 
-        // Plot.
+        // Plot. Each row and column has an exact value at its centre; in
+        // Braille that centre falls between its middle dots.
         let braille = charset == Charset::Braille;
         let (dot_w, dot_h) = if braille {
             (plot_w * 2, rows * 4)
@@ -332,11 +360,16 @@ impl LineChart {
             (plot_w, rows)
         };
         let to_dot = |x: f64, y: f64| -> (i64, i64) {
-            let nx = x_scale.normalize(x).unwrap_or(0.0);
-            let ny = y_scale.normalize(y).unwrap_or(0.0);
+            let col = x_axis.position(x);
+            let row = y_axis.cells as f64 - y_axis.position(y);
+            let (dx, dy) = if braille {
+                (col * 2.0 + 0.5, row * 4.0 + 1.5)
+            } else {
+                (col, row)
+            };
             (
-                (nx * (dot_w - 1) as f64).round() as i64,
-                ((1.0 - ny) * (dot_h - 1) as f64).round() as i64,
+                (dx.round() as i64).clamp(0, dot_w as i64 - 1),
+                (dy.round() as i64).clamp(0, dot_h as i64 - 1),
             )
         };
         let mut canvas = DotCanvas::new(plot_w, rows);
@@ -369,12 +402,10 @@ impl LineChart {
             }
         }
 
-        // Which plot row each y tick lands on (the first tick wins a row).
+        // The row each y label names, counted from the top.
         let mut tick_rows: Vec<Option<&str>> = vec![None; rows];
-        for (t, label) in &y_ticks {
-            let (_, dy) = to_dot(x_scale.min(), *t);
-            let row = (dy.max(0) as usize / if braille { 4 } else { 1 }).min(rows - 1);
-            tick_rows[row].get_or_insert(label.as_str());
+        for (position, label) in &y_axis.labels {
+            tick_rows[y_axis.cells - position] = Some(label.as_str());
         }
 
         let styles: Vec<Option<Style>> = (0..self.series.len())
@@ -420,16 +451,12 @@ impl LineChart {
 
         // X axis and labels.
         if axis {
-            // As many ticks as labels of the bounds' width fit, with gaps.
-            let label_guess = cells(&self.x_format.format(x_scale.min()))
-                .max(cells(&self.x_format.format(x_scale.max())));
-            let x_ticks: Vec<(usize, String)> = x_scale
-                .ticks((plot_w / (label_guess + 3)).max(2))
-                .into_iter()
-                .map(|t| {
-                    let col = (x_scale.normalize(t).unwrap_or(0.0) * (plot_w - 1) as f64).round();
-                    (col as usize, self.x_format.format(t))
-                })
+            // Labels on evenly spaced columns, each the column's value.
+            let x_ticks: Vec<(usize, String)> = x_axis
+                .labels
+                .iter()
+                .filter(|(col, _)| *col < plot_w)
+                .cloned()
                 .collect();
             let mut rule = Line::new();
             rule.pad(prefix - 1);

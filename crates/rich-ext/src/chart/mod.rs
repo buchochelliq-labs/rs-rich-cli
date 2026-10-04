@@ -47,6 +47,7 @@
 //! );
 //! ```
 
+mod axis;
 mod bar;
 mod canvas;
 mod line;

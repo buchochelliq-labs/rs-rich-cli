@@ -77,7 +77,7 @@ fn line_chart() -> LineChart {
             "tx",
             [6.0, 5.0, 5.0, 3.0, 2.0, 2.0, 1.0],
         ))
-        .height(4)
+        .height(5)
 }
 
 // ------------------------------------------------------------- sparklines
@@ -306,12 +306,13 @@ fn line_chart_braille_in_colour() {
     assert_eq!(
         strip_ansi(&out),
         concat!(
-            "10 ┤                     ⢀⡀   \n",
-            "   │⠤⢄⣀⡀        ⣀⠤⣀⣀ ⢀⡠⠔⠊⠁⠈⠉⠑⠒\n",
-            " 5 ┤  ⢀⡨⠝⠫⢍⣉⠉⣑⠖⠮⢄⣀⣀ ⠉⠁        \n",
-            " 0 ┤⠔⠊⠁     ⠉      ⠉⠉⠉⠉⠉⠉⠉⠑⠒⠢⠤\n",
-            "   └┬───┬───┬────┬───┬───┬───┬\n",
-            "    0   1   2    3   4   5   6\n",
+            "8 ┤                   ⢀⡠⢄⣀⡀   \n",
+            "6 ┤⠠⢄⣀⡀        ⡠⢄⣀⡀ ⡠⠔⠁   ⠈⠉  \n",
+            "4 ┤   ⢈⡩⣉⠉⠉⠉⠒⡤⣊   ⠈⠉          \n",
+            "2 ┤ ⡠⠔⠁  ⠉⠒⠤⠊  ⠉⠑⠒⠢⠤⠤⠤⠤⠤⢄⣀⡀   \n",
+            "0 ┤⠈                      ⠈⠉  \n",
+            "  └┬───┬───┬───┬───┬───┬───┬──\n",
+            "   0   1   2   3   4   5   6  \n",
             "● rx  ◆ tx                    \n",
         )
     );
@@ -326,12 +327,13 @@ fn line_chart_without_colour_uses_markers() {
     assert_eq!(
         render(&no_color(30), &line_chart()),
         concat!(
-            "10 ┤                          \n",
-            "   │◆◆         ●●●●    ●●●●●●●\n",
-            " 5 ┤  ◆◆◆◆◆◆◆◆◆◆◆◆◆◆◆◆◆◆◆◆◆   \n",
-            " 0 ┤●●                     ◆◆◆\n",
-            "   └┬───┬───┬────┬───┬───┬───┬\n",
-            "    0   1   2    3   4   5   6\n",
+            "8 ┤                   ●●●     \n",
+            "6 ┤◆◆         ●●●   ●●   ●●●  \n",
+            "4 ┤  ◆◆◆◆◆◆◆◆●   ●●●          \n",
+            "2 ┤ ●●   ●●● ◆◆◆◆◆◆◆◆◆◆◆◆     \n",
+            "0 ┤●                     ◆◆◆  \n",
+            "  └┬───┬───┬───┬───┬───┬───┬──\n",
+            "   0   1   2   3   4   5   6  \n",
             "● rx  ◆ tx                    \n",
         )
     );
@@ -347,8 +349,8 @@ fn line_chart_without_colour_uses_markers() {
     assert_eq!(
         render(&plain(16), &one),
         concat!(
-            "10 ┤           ⣀\n",
-            " 0 ┤⠤⠒⠒⠉⠉⠒⠒⠤⠔⠊⠉ \n",
+            "10 ┤          ⢀⡀\n",
+            " 0 ┤⠐⠒⠊⠉⠉⠉⠒⠒⠊⠉⠁ \n",
             "   └┬──────┬────\n",
             "    0      2    \n",
         )
@@ -360,12 +362,13 @@ fn line_chart_ascii_and_blocks() {
     assert_eq!(
         render(&ascii(30), &line_chart()),
         concat!(
-            "10 +                          \n",
-            "   |++         ****    *******\n",
-            " 5 +  +++++++++++++++++++++   \n",
-            " 0 +**                     +++\n",
-            "   ++---+---+----+---+---+---+\n",
-            "    0   1   2    3   4   5   6\n",
+            "8 +                   ***     \n",
+            "6 +++         ***   **   ***  \n",
+            "4 +  ++++++++*   ***          \n",
+            "2 + **   *** ++++++++++++     \n",
+            "0 +*                     +++  \n",
+            "  ++---+---+---+---+---+---+--\n",
+            "   0   1   2   3   4   5   6  \n",
             "* rx  + tx                    \n",
         )
     );
@@ -392,18 +395,18 @@ fn scatter_chart() {
     assert_eq!(
         render(&ascii(24), &chart),
         concat!(
-            "10.0 +#                *\n",
-            "     |           *      \n",
-            " 0.0 +*     *          #\n",
-            "     ++-----+----+-----+\n",
-            "      0     1    2     3\n",
+            "10.0 +#              *  \n",
+            "     |          *       \n",
+            " 0.0 +*    *         #  \n",
+            "     ++----+----+----+--\n",
+            "      0    1    2    3  \n",
             "* a  # b                \n",
         )
     );
     // Braille scatter: one dot per point, each series in its colour.
     let braille = render(&color(24), &chart.clone().charset(Charset::Braille));
-    assert!(braille.contains("\x1b[36m⡀\x1b[0m"), "{braille:?}");
-    assert!(braille.contains("\x1b[35m⠂\x1b[0m"), "{braille:?}");
+    assert!(braille.contains("\x1b[36m⠂\x1b[0m"), "{braille:?}");
+    assert!(braille.contains("\x1b[35m⠠\x1b[0m"), "{braille:?}");
 }
 
 #[test]
@@ -454,6 +457,150 @@ fn line_chart_degenerate_data() {
             "  ++-----+-----+\n",
             "   0     2     4\n",
         )
+    );
+}
+
+/// The value a chart label writes (`1.2k` is 1200).
+fn read_label(label: &str) -> f64 {
+    let (number, scale) = match label.chars().last() {
+        Some('k') => (&label[..label.len() - 1], 1e3),
+        Some('M') => (&label[..label.len() - 1], 1e6),
+        _ => (label, 1.0),
+    };
+    number.parse::<f64>().expect(label) * scale
+}
+
+/// Read a rendered line chart's axes: `(row, value)` of each y label, the
+/// columns of the x ticks, and the x labels.
+fn axis_labels(out: &str) -> (Vec<(usize, f64)>, Vec<usize>, Vec<String>) {
+    let lines: Vec<Vec<char>> = out.lines().map(|l| l.chars().collect()).collect();
+    let rule = lines
+        .iter()
+        .position(|l| {
+            l.contains(&'└') || l.iter().collect::<String>().trim_start().starts_with("++")
+        })
+        .expect("an x axis");
+    let corner = lines[rule].iter().position(|c| *c != ' ').unwrap();
+    let mut rows = Vec::new();
+    for (row, line) in lines[..rule].iter().enumerate() {
+        let label: String = line[..corner].iter().collect();
+        if label.trim().is_empty() {
+            assert!(matches!(line[corner], '│' | '|'), "{out}");
+        } else {
+            assert!(matches!(line[corner], '┤' | '+'), "{out}");
+            rows.push((row, read_label(label.trim())));
+        }
+    }
+    let ticks: Vec<usize> = lines[rule]
+        .iter()
+        .enumerate()
+        .skip(corner + 1)
+        .filter(|(_, c)| matches!(c, '┬' | '+'))
+        .map(|(i, _)| i)
+        .collect();
+    let labels: Vec<String> = lines[rule + 1]
+        .iter()
+        .collect::<String>()
+        .split_whitespace()
+        .map(str::to_string)
+        .collect();
+    (rows, ticks, labels)
+}
+
+fn all_equal(gaps: &[usize]) -> bool {
+    gaps.windows(2).all(|w| w[0] == w[1])
+}
+
+fn progression(values: &[f64]) -> bool {
+    let steps: Vec<f64> = values.windows(2).map(|w| w[1] - w[0]).collect();
+    steps
+        .iter()
+        .all(|s| (s - steps[0]).abs() <= 1e-9 * steps[0].abs().max(1.0))
+}
+
+#[test]
+fn axis_labels_are_evenly_spaced_and_exact() {
+    let wave: Vec<(f64, f64)> = (0..90)
+        .map(|i| (i as f64 * 0.7, 37.0 + 41.0 * (i as f64 / 9.0).sin()))
+        .collect();
+    let datasets: Vec<(&str, Vec<(f64, f64)>)> = vec![
+        ("wave", wave),
+        ("small", vec![(0.0, 0.012), (1.0, 0.04), (2.0, 0.027)]),
+        ("negative", vec![(-5.0, -30.0), (5.0, 12.5), (15.0, -2.0)]),
+        ("large", vec![(1990.0, 1_200.0), (2025.0, 86_000.0)]),
+        ("flat", vec![(0.0, 4.0), (1.0, 4.0)]),
+    ];
+    // With a fixed y range every row has a known value.
+    let fixed = [
+        None,
+        Some((0.0, 100.0)),
+        Some((-1.0, 1.0)),
+        Some((0.0, 3.0)),
+    ];
+    for (name, points) in &datasets {
+        for range in fixed {
+            for height in 4..=20 {
+                for (console, charset) in [
+                    (plain(60), Charset::Braille),
+                    (ascii(60), Charset::Ascii),
+                    (plain(37), Charset::Braille),
+                ] {
+                    let mut chart = LineChart::new()
+                        .series(Series::line(*name, points.clone()))
+                        .height(height)
+                        .charset(charset);
+                    if let Some((lo, hi)) = range {
+                        chart = chart.y_range(lo, hi);
+                    }
+                    let out = render(&console, &chart);
+                    let (rows, ticks, labels) = axis_labels(&out);
+                    let context = format!("{name} {range:?} height {height}\n{out}");
+
+                    // Y: two labels or more, one on the bottom row, on
+                    // evenly spaced rows and evenly spaced in value.
+                    assert!(rows.len() >= 2, "{context}");
+                    assert_eq!(rows.last().unwrap().0, height - 1, "{context}");
+                    let gaps: Vec<usize> = rows.windows(2).map(|w| w[1].0 - w[0].0).collect();
+                    assert!(all_equal(&gaps), "uneven y labels: {context}");
+                    let values: Vec<f64> = rows.iter().map(|r| r.1).collect();
+                    assert!(progression(&values), "y labels: {context}");
+                    // Each label is exactly the value of its row.
+                    if let Some((lo, hi)) = range {
+                        let unit = (hi - lo) / (height - 1) as f64;
+                        for (row, value) in &rows {
+                            let own = lo + (height - 1 - row) as f64 * unit;
+                            assert!((value - own).abs() < 1e-9, "row {row}: {context}");
+                        }
+                    }
+
+                    // X: every tick labelled, on evenly spaced columns.
+                    assert!(ticks.len() >= 2, "{context}");
+                    assert_eq!(ticks.len(), labels.len(), "{context}");
+                    let gaps: Vec<usize> = ticks.windows(2).map(|w| w[1] - w[0]).collect();
+                    assert!(all_equal(&gaps), "uneven x labels: {context}");
+                    let values: Vec<f64> = labels.iter().map(|l| read_label(l)).collect();
+                    assert!(progression(&values), "x labels: {context}");
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn default_height_fits_its_labels() {
+    // Without `.height`, 0..100 takes 9 rows: a label every 25, two rows
+    // apart.
+    let chart = LineChart::new()
+        .series(Series::from_values("p", [0.0, 50.0, 100.0]))
+        .y_range(0.0, 100.0)
+        .legend(false)
+        .charset(Charset::Ascii);
+    let out = render(&plain(30), &chart);
+    let (rows, _, _) = axis_labels(&out);
+    assert_eq!(
+        rows,
+        [(0, 100.0), (2, 75.0), (4, 50.0), (6, 25.0), (8, 0.0)],
+        "{out}"
     );
 }
 

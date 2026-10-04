@@ -78,6 +78,11 @@ changed.
   Series differ by colour and marker; with no colour and more than one
   series the plot switches to markers at cell resolution. ASCII plots with
   `*`, `+`, `o`, `x` and `.`.
+  Each row and column stands for one exact value at its centre; axis labels
+  sit on evenly spaced rows and columns and name that value, never a
+  rounded one. Without a fixed range the scales round out to a step that
+  fits whole rows and columns, and without `.height(..)` the chart picks
+  6 to 10 rows to suit its labels.
 - Shared: `Scale` (linear, round ticks, NaN and infinities skipped, never an
   empty range, explicit bounds), `ValueFormat` (`1.2k`, `3.4M`, fixed
   decimals) and `Charset` (an ASCII console, by encoding or `Fidelity`,

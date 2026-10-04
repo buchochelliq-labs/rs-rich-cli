@@ -77,7 +77,7 @@ fn traffic() -> LineChart {
         .series(Series::line("memory %", memory))
         .series(Series::scatter("alerts", alerts))
         .y_range(0.0, 100.0)
-        .height(10)
+        .height(11)
         .width(64)
     // --8<-- [end:line]
 }
