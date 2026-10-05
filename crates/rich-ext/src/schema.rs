@@ -129,6 +129,16 @@ const CONSTRAINTS: &[&str] = &[
 /// The most levels drawn or compared below the root.
 const DEPTH: usize = 32;
 
+/// The most entries a [`SchemaTree`] draws. Definitions shared through
+/// `$ref`s are drawn in place wherever they are used, so a small schema can
+/// name exponentially many paths; past this the tree ends with a note.
+pub const MAX_ENTRIES: usize = 10_000;
+
+/// The most changes a [`SchemaDiff`] lists, and the most pairs of differing
+/// schemas it compares, before it stops and says so.
+pub const MAX_CHANGES: usize = 10_000;
+pub const MAX_COMPARISONS: usize = 100_000;
+
 // --------------------------------------------------------------- resolving
 
 /// Resolves `$ref`s within one document.
@@ -347,16 +357,23 @@ impl SchemaTree {
                     .map(str::to_string)
             })
             .unwrap_or_else(|| "schema".into());
-        let mut stack = Vec::new();
-        self.node(
-            &resolver,
-            &self.schema,
-            &name,
-            false,
-            0,
-            &mut stack,
-            console,
-        )
+        let mut walk = Walk {
+            refs: Vec::new(),
+            // The root is a schema every other is inside: `#` is recursive.
+            targets: vec![&self.schema as *const Value],
+            budget: MAX_ENTRIES,
+            truncated: false,
+        };
+        let mut tree = self
+            .node(&resolver, &self.schema, &name, false, 0, &mut walk, console)
+            .unwrap_or_else(|| Tree::new(name.clone()));
+        if walk.truncated {
+            tree.add(Text::styled(
+                format!("… (the tree stops at {MAX_ENTRIES} entries)"),
+                theme_style(console, "schema.description"),
+            ));
+        }
+        tree
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -367,9 +384,14 @@ impl SchemaTree {
         name: &str,
         required: bool,
         depth: usize,
-        stack: &mut Vec<String>,
+        walk: &mut Walk,
         console: &Console,
-    ) -> Tree {
+    ) -> Option<Tree> {
+        if walk.budget == 0 {
+            walk.truncated = true;
+            return None;
+        }
+        walk.budget -= 1;
         let mut label = Text::new("");
         label.append(name, Some(theme_style(console, "schema.name").into()));
         if required {
@@ -378,21 +400,35 @@ impl SchemaTree {
                 Some(theme_style(console, "schema.required").into()),
             );
         }
-        // Follow `$ref`s to the schema they name, guarding against cycles.
+        // Follow `$ref`s to the schema they name, guarding against cycles:
+        // a reference is recursive when it is spelled like one being drawn,
+        // or names (however it is spelled) a schema being drawn.
         let mut target = schema;
         let mut followed = Vec::new();
+        let mut followed_targets: Vec<*const Value> = Vec::new();
         let mut note: Option<String> = None;
         while let Some(reference) = target.get("$ref").and_then(Value::as_str) {
-            if stack.iter().any(|seen| seen == reference) || followed.contains(&reference) {
+            let resolved = resolver.resolve(reference);
+            let inside = |value: &Value| {
+                walk.targets
+                    .iter()
+                    .chain(&followed_targets)
+                    .any(|&seen| std::ptr::eq(seen, value))
+            };
+            if walk.refs.iter().any(|seen| seen == reference)
+                || followed.contains(&reference)
+                || resolved.as_ref().is_ok_and(|value| inside(value))
+            {
                 note = Some(format!("→ {reference} (recursive)"));
-                if let Ok(resolved) = resolver.resolve(reference) {
+                if let Ok(resolved) = resolved {
                     target = resolved;
                 }
                 break;
             }
-            match resolver.resolve(reference) {
+            match resolved {
                 Ok(resolved) => {
                     followed.push(reference);
+                    followed_targets.push(resolved as *const Value);
                     // Sibling keywords next to `$ref` still apply; show the
                     // referenced schema's own.
                     target = resolved;
@@ -450,24 +486,26 @@ impl SchemaTree {
         }
         let mut tree = Tree::new(label);
         if note.is_some() {
-            return tree;
+            return Some(tree);
         }
         if depth >= self.max_depth {
             tree.add(Text::styled(
                 "…",
                 theme_style(console, "schema.description"),
             ));
-            return tree;
+            return Some(tree);
         }
         let pushed = followed.len();
-        stack.extend(followed.iter().map(|r| r.to_string()));
-        self.children(resolver, target, depth, stack, console, &mut tree);
+        walk.refs.extend(followed.iter().map(|r| r.to_string()));
+        walk.targets.extend(followed_targets);
+        self.children(resolver, target, depth, walk, console, &mut tree);
         if !std::ptr::eq(target, schema) {
             // Keywords beside the `$ref` (draft 2019-09 and later).
-            self.children(resolver, schema, depth, stack, console, &mut tree);
+            self.children(resolver, schema, depth, walk, console, &mut tree);
         }
-        stack.truncate(stack.len() - pushed);
-        tree
+        walk.refs.truncate(walk.refs.len() - pushed);
+        walk.targets.truncate(walk.targets.len() - pushed);
+        Some(tree)
     }
 
     fn children(
@@ -475,7 +513,7 @@ impl SchemaTree {
         resolver: &Resolver<'_>,
         schema: &Value,
         depth: usize,
-        stack: &mut Vec<String>,
+        walk: &mut Walk,
         console: &Console,
         tree: &mut Tree,
     ) {
@@ -489,10 +527,10 @@ impl SchemaTree {
                     name,
                     required.contains(name),
                     next,
-                    stack,
+                    walk,
                     console,
                 );
-                tree.add_tree(child);
+                tree.add_drawn(child);
             }
         }
         if let Some(Value::Object(patterns)) = schema.get("patternProperties") {
@@ -503,10 +541,10 @@ impl SchemaTree {
                     &format!("/{pattern}/"),
                     false,
                     next,
-                    stack,
+                    walk,
                     console,
                 );
-                tree.add_tree(child);
+                tree.add_drawn(child);
             }
         }
         if let Some(additional @ Value::Object(_)) = schema.get("additionalProperties") {
@@ -516,10 +554,10 @@ impl SchemaTree {
                 "[other properties]",
                 false,
                 next,
-                stack,
+                walk,
                 console,
             );
-            tree.add_tree(child);
+            tree.add_drawn(child);
         }
         let tuple = schema
             .get("prefixItems")
@@ -532,15 +570,15 @@ impl SchemaTree {
                     &format!("[{index}]"),
                     false,
                     next,
-                    stack,
+                    walk,
                     console,
                 );
-                tree.add_tree(child);
+                tree.add_drawn(child);
             }
         }
         if let Some(items) = schema.get("items").filter(|items| !items.is_array()) {
-            let child = self.node(resolver, items, "[items]", false, next, stack, console);
-            tree.add_tree(child);
+            let child = self.node(resolver, items, "[items]", false, next, walk, console);
+            tree.add_drawn(child);
         }
         for (keyword, title) in [
             ("oneOf", "one of"),
@@ -556,7 +594,7 @@ impl SchemaTree {
                         .and_then(Value::as_str)
                         .map(|title| format!("[{}] {title}", index + 1))
                         .unwrap_or_else(|| format!("[{}]", index + 1));
-                    group.add_tree(self.node(resolver, branch, &name, false, next, stack, console));
+                    group.add_drawn(self.node(resolver, branch, &name, false, next, walk, console));
                 }
                 // A schema that is only the branches already says "one of"
                 // on its own line: the branches go straight under it.
@@ -571,9 +609,12 @@ impl SchemaTree {
         }
         for keyword in ["not", "if", "then", "else"] {
             if let Some(branch) = schema.get(keyword) {
-                let mut child = self.node(resolver, branch, keyword, false, next, stack, console);
-                child.set_label(self.relabel(resolver, branch, keyword, console));
-                tree.add_tree(child);
+                if let Some(mut child) =
+                    self.node(resolver, branch, keyword, false, next, walk, console)
+                {
+                    child.set_label(self.relabel(resolver, branch, keyword, console));
+                    tree.add_tree(child);
+                }
             }
         }
     }
@@ -607,6 +648,28 @@ impl SchemaTree {
             );
         }
         label
+    }
+}
+
+/// A [`SchemaTree`] walk: the `$ref`s being drawn (as written, and the
+/// schemas they name), and how many entries may still be drawn.
+struct Walk {
+    refs: Vec<String>,
+    targets: Vec<*const Value>,
+    budget: usize,
+    truncated: bool,
+}
+
+/// `tree.add_drawn(child)`: add the child when the walk drew one.
+trait AddChild {
+    fn add_drawn(&mut self, child: Option<Tree>);
+}
+
+impl AddChild for Tree {
+    fn add_drawn(&mut self, child: Option<Tree>) {
+        if let Some(child) = child {
+            self.add_tree(child);
+        }
     }
 }
 
@@ -681,6 +744,7 @@ pub struct Change {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SchemaDiff {
     changes: Vec<Change>,
+    truncated: bool,
     old_name: String,
     new_name: String,
 }
@@ -692,10 +756,13 @@ impl SchemaDiff {
             new: Resolver { root: new },
             changes: Vec::new(),
             seen: Vec::new(),
+            budget: MAX_COMPARISONS,
+            truncated: false,
         };
         differ.compare(old, new, "", 0);
         SchemaDiff {
             changes: differ.changes,
+            truncated: differ.truncated,
             old_name: "old".into(),
             new_name: "new".into(),
         }
@@ -716,6 +783,24 @@ impl SchemaDiff {
         self.changes.is_empty()
     }
 
+    /// Whether the comparison stopped early, at its budget, so more may
+    /// differ than [`SchemaDiff::changes`] lists.
+    pub fn is_truncated(&self) -> bool {
+        self.truncated
+    }
+
+    /// What the summary adds when the comparison stopped early.
+    fn stopped(&self) -> String {
+        if self.truncated {
+            format!(
+                " (stopped after {MAX_CHANGES} changes or {MAX_COMPARISONS} comparisons: \
+                 more may differ)"
+            )
+        } else {
+            String::new()
+        }
+    }
+
     /// How many changes may refuse a document the old schema accepted.
     pub fn breaking(&self) -> usize {
         self.changes.iter().filter(|c| c.breaking).count()
@@ -725,10 +810,11 @@ impl SchemaDiff {
         let count = self.changes.len();
         let breaking = self.breaking();
         format!(
-            "{} → {}: {count} change{}, {breaking} breaking",
+            "{} → {}: {count} change{}, {breaking} breaking{}",
             self.old_name,
             self.new_name,
-            if count == 1 { "" } else { "s" }
+            if count == 1 { "" } else { "s" },
+            self.stopped()
         )
     }
 }
@@ -736,7 +822,12 @@ impl SchemaDiff {
 impl Renderable for SchemaDiff {
     fn rich_render(&self, console: &Console, options: &ConsoleOptions) -> Vec<Segment> {
         if self.changes.is_empty() {
-            let text = Text::new(format!("{} → {}: no changes", self.old_name, self.new_name));
+            let text = Text::new(format!(
+                "{} → {}: no changes{}",
+                self.old_name,
+                self.new_name,
+                self.stopped()
+            ));
             return text.rich_render(console, options);
         }
         let mut table = Table::new()
@@ -770,8 +861,13 @@ impl Renderable for SchemaDiff {
 
     fn measure(&self, console: &Console, options: &ConsoleOptions) -> rich::measure::Measurement {
         if self.changes.is_empty() {
-            return Text::new(format!("{} → {}: no changes", self.old_name, self.new_name))
-                .measure(console, options);
+            return Text::new(format!(
+                "{} → {}: no changes{}",
+                self.old_name,
+                self.new_name,
+                self.stopped()
+            ))
+            .measure(console, options);
         }
         let mut table = Table::new();
         table.add_column("");
@@ -790,8 +886,14 @@ struct Differ<'a> {
     old: Resolver<'a>,
     new: Resolver<'a>,
     changes: Vec<Change>,
-    /// `$ref` pairs being compared, so a recursive schema ends.
-    seen: Vec<(String, String)>,
+    /// The pairs of schemas `$ref`s led to that are being compared (by
+    /// identity, however the references were spelled), so a recursive
+    /// schema ends.
+    seen: Vec<(*const Value, *const Value)>,
+    /// Comparisons of differing schemas left before the diff stops.
+    budget: usize,
+    /// Whether it stopped (at the budget, or at [`MAX_CHANGES`]).
+    truncated: bool,
 }
 
 fn join(path: &str, name: &str) -> String {
@@ -825,6 +927,10 @@ fn number(value: Option<&Value>) -> Option<f64> {
 
 impl<'a> Differ<'a> {
     fn push(&mut self, kind: ChangeKind, path: &str, detail: String, breaking: bool) {
+        if self.changes.len() >= MAX_CHANGES {
+            self.truncated = true;
+            return;
+        }
         self.changes.push(Change {
             kind,
             path: shown(path),
@@ -833,10 +939,14 @@ impl<'a> Differ<'a> {
         });
     }
 
-    /// Follow `$ref`s, returning the schema and the last reference followed.
-    /// Keywords beside a `$ref` (draft 2019-09 and later) still apply, so
-    /// they are laid over the schema it names, the outermost last.
-    fn follow<'v>(resolver: &Resolver<'v>, schema: &'v Value) -> (Cow<'v, Value>, Option<String>) {
+    /// Follow `$ref`s, returning the schema, the last reference followed and
+    /// the schema it named. Keywords beside a `$ref` (draft 2019-09 and
+    /// later) still apply, so they are laid over the schema it names, the
+    /// outermost last.
+    fn follow<'v>(
+        resolver: &Resolver<'v>,
+        schema: &'v Value,
+    ) -> (Cow<'v, Value>, Option<String>, *const Value) {
         let mut last = None;
         let mut target = schema;
         let mut siblings = Vec::new();
@@ -857,11 +967,12 @@ impl<'a> Differ<'a> {
                 _ => break,
             }
         }
+        let named = target as *const Value;
         let mut merged = match target {
-            _ if siblings.is_empty() => return (Cow::Borrowed(target), last),
+            _ if siblings.is_empty() => return (Cow::Borrowed(target), last, named),
             Value::Object(map) => map.clone(),
             Value::Bool(true) => serde_json::Map::new(),
-            _ => return (Cow::Borrowed(target), last),
+            _ => return (Cow::Borrowed(target), last, named),
         };
         // Siblings apply alongside the target, not instead of it: a keyword
         // both set keeps the target's value, and the sibling's goes in an
@@ -889,20 +1000,17 @@ impl<'a> Differ<'a> {
                 *all_of = Value::Array(vec![Value::Object(both)]);
             }
         }
-        (Cow::Owned(Value::Object(merged)), last)
+        (Cow::Owned(Value::Object(merged)), last, named)
     }
 
     fn compare(&mut self, old: &Value, new: &Value, path: &str, depth: usize) {
         if depth > DEPTH {
             return;
         }
-        let (old, old_ref) = Self::follow(&self.old, old);
-        let (new, new_ref) = Self::follow(&self.new, new);
+        let (old, old_ref, old_named) = Self::follow(&self.old, old);
+        let (new, new_ref, new_named) = Self::follow(&self.new, new);
         if old_ref.is_some() || new_ref.is_some() {
-            let pair = (
-                old_ref.clone().unwrap_or_default(),
-                new_ref.clone().unwrap_or_default(),
-            );
+            let pair = (old_named, new_named);
             if self.seen.contains(&pair) {
                 return;
             }
@@ -915,9 +1023,16 @@ impl<'a> Differ<'a> {
     }
 
     fn compare_resolved(&mut self, old: &Value, new: &Value, path: &str, depth: usize) {
-        if old == new {
+        if old == new || self.truncated {
             return;
         }
+        // Shared definitions are compared wherever they are used, which a
+        // small schema can make exponentially many places: stop at a budget.
+        if self.budget == 0 {
+            self.truncated = true;
+            return;
+        }
+        self.budget -= 1;
         let (old_type, new_type) = (type_of(old), type_of(new));
         if old_type != new_type {
             // Widening (`string` → `string | null`, anything → `any`) accepts
@@ -935,7 +1050,7 @@ impl<'a> Differ<'a> {
             );
         }
         self.compare_enum(old, new, path);
-        self.compare_constraints(old, new, path);
+        self.compare_constraints(old, new, path, depth);
         self.compare_properties(old, new, path, depth);
         // Items.
         match (old.get("items"), new.get("items")) {
@@ -1042,7 +1157,7 @@ impl<'a> Differ<'a> {
         }
     }
 
-    fn compare_constraints(&mut self, old: &Value, new: &Value, path: &str) {
+    fn compare_constraints(&mut self, old: &Value, new: &Value, path: &str, depth: usize) {
         let mut keys: Vec<&str> = CONSTRAINTS.to_vec();
         keys.extend(["const", "additionalProperties"]);
         for key in keys {
@@ -1056,7 +1171,7 @@ impl<'a> Differ<'a> {
             {
                 if let (Some(x), Some(y)) = (a, b) {
                     if x.is_object() && y.is_object() {
-                        self.compare(x, y, &join(path, "[other properties]"), 0);
+                        self.compare(x, y, &join(path, "[other properties]"), depth + 1);
                         continue;
                     }
                 }
@@ -1159,7 +1274,7 @@ impl<'a> Differ<'a> {
         let new_props = new.get("properties").and_then(Value::as_object);
         for (name, schema) in old_props.into_iter().flatten() {
             if new_props.is_none_or(|props| !props.contains_key(name)) {
-                let (resolved, _) = Self::follow(&self.old, schema);
+                let (resolved, _, _) = Self::follow(&self.old, schema);
                 self.push(
                     ChangeKind::Removed,
                     &join(path, name),
@@ -1172,7 +1287,7 @@ impl<'a> Differ<'a> {
             match old_props.and_then(|props| props.get(name)) {
                 Some(before) => self.compare(before, schema, &join(path, name), depth + 1),
                 None => {
-                    let (resolved, _) = Self::follow(&self.new, schema);
+                    let (resolved, _, _) = Self::follow(&self.new, schema);
                     self.push(
                         ChangeKind::Added,
                         &join(path, name),

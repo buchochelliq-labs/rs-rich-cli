@@ -115,9 +115,11 @@ and their width. The layout is layered (Sugiyama-style):
 5. every edge is routed orthogonally, with its own port on a node and its own
    track in the gap between two ranks.
 
-A self-loop is marked `↻` (`@` in ASCII). The layout refuses graphs needing
-more than 5000 points (nodes, plus one per rank a long edge crosses) and
-drawings over 2 million cells; `Diagram` shows a one-line note instead.
+A self-loop is marked `↻` (`@` in ASCII). The layout refuses, before any
+layout work, graphs of more than 2000 edges (`rich_diagram::MAX_EDGES`) or
+5000 nodes; then graphs needing more than 5000 points (nodes, plus one per
+rank a long edge crosses) and drawings over 2 million cells. `Diagram` shows
+a one-line note instead; nothing is drawn in part.
 
 ## Width and ASCII
 
@@ -197,13 +199,17 @@ was accepted but is not drawn.
   (`a -> { b c }`);
 - attribute lists, and `node [ … ]`, `edge [ … ]` and `graph [ … ]` defaults,
   scoped to the subgraph they are set in. Nodes take `label` (`\n`, `\l` and
-  `\r` break lines; `\N` is the node's name) and `shape`; edges take `label`,
-  `style` (`dashed`/`dotted` draw dotted, `bold` thick, `invis` invisible),
+  `\r` break lines; `\N` is the node's name, `\G` the graph's) and `shape`;
+  edges take `label` (`\T` is the tail's name, `\H` the head's, `\E` the
+  edge's, `a->b`; an escape the object has no name for stands for its
+  letter, as in Graphviz), `style` (`dashed`/`dotted` draw dotted, `bold`
+  thick, `invis` laid out but not drawn),
   `dir`, `arrowhead`, `arrowtail` and `minlen`; the graph takes `rankdir`
   (`TB`, `LR`, `BT`, `RL`) and `label`, drawn under the graph;
 - subgraphs; one named `cluster…` is a cluster, with its `label`;
-- quoted IDs (with `+` concatenation), numerals, and `//`, `/* */` and `#`
-  comments.
+- quoted IDs (with `+` concatenation), numerals (lexed as Graphviz lexes
+  them: `1.2.3` is `1.2` then `.3`, and a `.` without a digit is an error),
+  and `//`, `/* */` and `#` comments, anywhere between tokens.
 
 Shapes map to the nearest box: `box`/`rect` → `Rect`, `ellipse` (the
 default) and `style=rounded` → `Round`, `circle` → `Circle`, `diamond` →
@@ -215,7 +221,12 @@ box, as Graphviz draws it. Attributes that only change how Graphviz paints
 **Refused**, with an error naming the construct and its line, never drawn
 partially: node ports (`a:out -> b`), HTML-like labels (`label=<…>`), the
 `record` and `Mrecord` shapes, a `subgraph` referred to without a body, and
-more than one graph in a file:
+more than one graph in a file. So are sources past the parser's bounds, the
+same as Mermaid's: over 64 KB (`rich_diagram::MAX_SOURCE`), more than 500
+nodes (`MAX_NODES`) or 2000 edges (`MAX_EDGES`, counted as `{ … }` groups
+expand, so `{a b c} -> {d e f}` is nine; repeats a `strict` graph merges
+do not count), or `{ … }` groups and subgraphs nested more than 64 deep
+(`dot::MAX_NESTING`):
 
 ```text
 line 3: a node port (`a:…`) is not supported (connect the node itself)
@@ -226,7 +237,11 @@ source; `rich dot` prints it as an error and exits 4.
 
 **Accepted but not drawn:** cluster frames (the nodes are laid out with the
 rest, and a note names each cluster's members) and `rank` constraints. Both
-come with a note under the drawing.
+come with a note under the drawing. **Drawn differently, with a note naming
+the nodes:** invisible nodes (`style=invis`) are drawn, and nodes without an
+outline (`shape=plaintext`, `plain`, `none`) are drawn in a box: the layout
+has no borderless shape. With ASCII, the notes are ASCII too (`...` for
+`…`).
 
 The service map in `crates/rich-diagram/tests/fixtures/dot/services.dot`:
 
@@ -299,9 +314,17 @@ rich dot services.dot --dot-backend graphviz --export-svg services.svg
 Like `mmdc` for Mermaid, it only runs where you chose it: on the command
 line, or in your own config (`~/.config/rich/config.toml` or `--config`). A
 project's `./rich.toml` with `dot_backend = "graphviz"` is ignored with a
-warning, so running `rich` in a cloned repository never starts a program it
-names. Without `dot` installed the export falls back to the text drawing's
-SVG with a warning.
+warning, so a cloned repository's `rich.toml` cannot make `rich` start
+Graphviz or any other program it names. Without `dot` installed the export
+falls back to the text drawing's SVG with a warning.
+
+One command does run a program for the directory it is in: `rich deps`
+without `--metadata FILE` runs `cargo metadata`, and Cargo reads that
+project's `.cargo/config.toml`. `rich deps` turns off the `rustc` wrappers
+such a file can name, but the rest is Cargo's behaviour (see
+[Running Cargo](../ext/sources.md#running-cargo)); in a checkout you do not
+trust, use `cargo metadata` output you made yourself, with `--metadata
+FILE`, which runs nothing.
 
 ## From Mermaid
 

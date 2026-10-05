@@ -342,3 +342,162 @@ fn printing_a_drawing_ends_with_one_newline() {
         );
     }
 }
+
+// ------------------------------------------------- hostile and edge inputs
+
+/// Run `f` on a thread with a deadline, so a hang fails the test instead of
+/// stalling the suite.
+fn within<T: Send + 'static>(seconds: u64, f: impl FnOnce() -> T + Send + 'static) -> T {
+    let (send, receive) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let _ = send.send(f());
+    });
+    receive
+        .recv_timeout(std::time::Duration::from_secs(seconds))
+        .unwrap_or_else(|_| panic!("did not finish within {seconds}s"))
+}
+
+#[test]
+fn deep_nesting_is_refused_not_overflowed() {
+    let source = format!("digraph {{\n{}a{} }}", "{".repeat(1000), "}".repeat(1000));
+    let error = dot::parse(&source).unwrap_err();
+    assert_eq!(error.line, 2, "{error}");
+    assert!(error.to_string().contains("nesting"), "{error}");
+    // Nesting within the limit still parses.
+    let ok = format!("digraph {{ {}a{} }}", "{".repeat(60), "}".repeat(60));
+    assert_eq!(dot::parse(&ok).unwrap().graph.nodes().len(), 1);
+}
+
+#[test]
+fn group_cross_products_are_refused_while_they_expand() {
+    let group = |prefix: &str, n: usize| {
+        let ids: Vec<String> = (0..n).map(|i| format!("{prefix}{i}")).collect();
+        format!("{{{}}}", ids.join(" "))
+    };
+    // 240 × 240 edges from 5 KB of source.
+    for strict in ["", "strict "] {
+        let source = format!(
+            "{strict}digraph {{\n{} -> {}\n}}",
+            group("a", 240),
+            group("b", 240)
+        );
+        let error = within(10, move || dot::parse(&source).map(|_| ())).unwrap_err();
+        assert!(
+            error.to_string().contains("more than 2000 edges"),
+            "{error}"
+        );
+        assert_eq!(error.line, 2, "{error}");
+    }
+    // Repeats merged by `strict` do not count towards the cap.
+    let repeated = format!("strict digraph {{ {} }}", "a -> b\n".repeat(5000));
+    assert_eq!(dot::parse(&repeated).unwrap().graph.edges().len(), 1);
+    let nodes: String = (0..=rich_diagram::MAX_NODES)
+        .map(|i| format!("n{i}\n"))
+        .collect();
+    let error = dot::parse(&format!("digraph {{\n{nodes}}}")).unwrap_err();
+    assert!(error.to_string().contains("more than 500 nodes"), "{error}");
+    let big = format!("digraph {{ {} }}", "a -> b; ".repeat(9000));
+    let error = dot::parse(&big).unwrap_err();
+    assert!(error.to_string().contains("bytes"), "{error}");
+}
+
+#[test]
+fn draw_refuses_too_many_edges_up_front() {
+    let mut graph = Graph::new(Direction::TopDown);
+    let a = graph.add_node(rich_diagram::Node::new("a", "a"));
+    let b = graph.add_node(rich_diagram::Node::new("b", "b"));
+    for _ in 0..=rich_diagram::MAX_EDGES {
+        graph.add_edge(rich_diagram::Edge::new(a, b));
+    }
+    let error = within(10, move || rich_diagram::draw(&graph, false)).unwrap_err();
+    assert!(error.to_string().contains("2001 edges"), "{error}");
+    let mut graph = Graph::new(Direction::TopDown);
+    for i in 0..=rich_diagram::layout::MAX_VERTICES {
+        graph.add_node(rich_diagram::Node::new(i.to_string(), "x"));
+    }
+    let error = within(10, move || rich_diagram::draw(&graph, true)).unwrap_err();
+    assert!(error.to_string().contains("5001 nodes"), "{error}");
+}
+
+#[test]
+fn a_comment_between_an_attribute_and_its_value_is_skipped() {
+    let parsed = dot::parse("digraph { rankdir /* c */ = LR; a -> b }").unwrap();
+    assert_eq!(parsed.graph.direction(), Direction::LeftRight);
+    assert_eq!(parsed.graph.nodes().len(), 2);
+    let parsed = dot::parse("digraph { label // c\n = \"L\"; a }").unwrap();
+    assert_eq!(parsed.label.as_deref(), Some("L"));
+}
+
+#[test]
+fn numerals_lex_as_graphviz_lexes_them() {
+    // `1.2.3` is `1.2` then `.3`, as Graphviz splits it.
+    let parsed = dot::parse("digraph { 1.2.3 -> -.5 }").unwrap();
+    let ids: Vec<&str> = parsed.graph.nodes().iter().map(|n| n.id.as_str()).collect();
+    assert_eq!(ids, ["1.2", ".3", "-.5"]);
+    for source in ["digraph { a -> . }", "digraph { a -> -. }"] {
+        let error = dot::parse(source).unwrap_err();
+        assert!(error.to_string().contains("`.`"), "{source}: {error}");
+    }
+}
+
+#[test]
+fn edge_label_escapes_name_the_edge_and_its_ends() {
+    let parsed = dot::parse(
+        "digraph G { a -> b [label=\"\\E: \\T to \\H in \\G\"]; c [label=\"\\N/\\G/\\T\"] }",
+    )
+    .unwrap();
+    assert_eq!(
+        parsed.graph.edges()[0].label.as_deref(),
+        Some("a->b: a to b in G")
+    );
+    // `\T` means nothing on a node: like Graphviz, the letter stands alone.
+    assert_eq!(parsed.graph.nodes()[2].label, "c/G/T");
+    let parsed = dot::parse("graph { a -- b [label=\"\\E\"] }").unwrap();
+    assert_eq!(parsed.graph.edges()[0].label.as_deref(), Some("a--b"));
+}
+
+#[test]
+fn invisible_and_outline_free_nodes_are_noted() {
+    let parsed = dot::parse(
+        "digraph { a -> b [style=invis]; c [style=invis]; x [shape=plaintext]; y [shape=none] }",
+    )
+    .unwrap();
+    assert_eq!(parsed.graph.edges()[0].stroke, Stroke::Invisible);
+    assert!(
+        parsed
+            .notes
+            .iter()
+            .any(|n| n == "invisible nodes (`style=invis`) are drawn: c"),
+        "{:?}",
+        parsed.notes
+    );
+    assert!(
+        parsed
+            .notes
+            .iter()
+            .any(|n| n == "nodes without an outline (`shape=plaintext`, `plain` or `none`) are drawn boxed: x, y"),
+        "{:?}",
+        parsed.notes
+    );
+}
+
+#[test]
+fn ascii_notes_are_ascii() {
+    let console = Console::builder().width(60).color_system(None).build();
+    let refused = console.render_export(&Dot::new("digraph { a:p -> b }").ascii(true));
+    assert!(refused.is_ascii(), "{refused}");
+    assert!(refused.contains("(`a:...`)"), "{refused}");
+    // Too large to draw: the reason says how large, in ASCII.
+    let wide: Vec<String> = (0..44).map(|i| format!("a{i}")).collect();
+    let tall: Vec<String> = (0..45).map(|i| format!("b{i}")).collect();
+    let source = format!(
+        "digraph {{ {{{}}} -> {{{}}} }}",
+        wide.join(" "),
+        tall.join(" ")
+    );
+    let parsed = dot::parse(&source).unwrap();
+    let error = rich_diagram::draw(&parsed.graph, true).unwrap_err();
+    assert!(error.to_string().is_ascii(), "{error}");
+    let out = console.render_export(&Dot::new(source).ascii(true));
+    assert!(out.is_ascii(), "{out}");
+}

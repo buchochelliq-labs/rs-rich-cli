@@ -71,8 +71,9 @@ print(diagram.draw_graph(diagram.Graph().edge("a", "b"), ascii=True))
 `Graph.nodes` and `Graph.edges` read the graph back (`DiagramNode`: `id`,
 `label`, `shape`; `DiagramEdge`: `source` and `target` as node indexes,
 `label`, `stroke`, `start`, `end`, `length`). A graph too large to lay out
-renders as a one-line note; `draw_graph` and `Diagram.drawing()` raise
-`DiagramLayoutError` instead.
+(more than 2000 edges or 5000 nodes, checked before any layout work, or a
+layout past its point or cell caps) renders as a one-line note;
+`draw_graph` and `Diagram.drawing()` raise `DiagramLayoutError` instead.
 
 ## DOT
 
@@ -87,6 +88,9 @@ clusters (drawn without their frames, with a note). What the parser does not
 support (a node port, an HTML-like label, the `record` shape, ...) is shown
 as the source under a note naming it and its line. `parse_dot` raises
 `DotError` instead, with `line` and `construct` (`None` for a syntax error).
+A source over 64 KB, with more than 500 nodes or 2000 edges (counted as
+`{ ... }` groups expand), or nested more than 64 levels deep is refused the
+same way, never drawn in part.
 A `DotGraph` has `graph`, `directed`, `strict`, `name`, `label`, `clusters`
 and `notes`.
 

@@ -298,25 +298,31 @@ impl DepGraph {
 
     /// The packages reachable from the roots, through the kinds in `kinds`
     /// (dev dependencies only from the roots themselves, as Cargo resolves
-    /// them).
+    /// them). A root keeps its dev dependencies however the walk reaches it,
+    /// through another root included.
     pub fn reachable(&self, kinds: &[DepKind]) -> Vec<bool> {
         let mut seen = vec![false; self.packages.len()];
-        let mut stack: Vec<(usize, bool)> = self.roots.iter().map(|&r| (r, true)).collect();
-        while let Some((package, root)) = stack.pop() {
+        let mut stack: Vec<usize> = self.roots.clone();
+        while let Some(package) = stack.pop() {
             if std::mem::replace(&mut seen[package], true) {
                 continue;
             }
+            let root = self.roots.contains(&package);
             for dep in &self.deps[package] {
-                if dep
-                    .kinds
-                    .iter()
-                    .any(|k| kinds.contains(k) && (root || *k != DepKind::Dev))
-                {
-                    stack.push((dep.package, false));
+                if self.follows(dep, root, kinds) {
+                    stack.push(dep.package);
                 }
             }
         }
         seen
+    }
+
+    /// Whether a walk through `kinds` follows `dep` from a package (a root,
+    /// or not): dev dependencies count only from the roots.
+    fn follows(&self, dep: &Dep, root: bool, kinds: &[DepKind]) -> bool {
+        dep.kinds
+            .iter()
+            .any(|k| kinds.contains(k) && (root || *k != DepKind::Dev))
     }
 
     /// Crates resolved at more than one version (among the packages
@@ -437,6 +443,19 @@ fn compare_versions(a: &str, b: &str) -> std::cmp::Ordering {
             .collect()
     };
     parts(a).cmp(&parts(b))
+}
+
+/// The deepest a [`DepTree`] or [`WhyTree`] is drawn: below it, a branch
+/// ends in a note. Real graphs are far shallower; this keeps a pathological
+/// one from exhausting the stack.
+pub const MAX_TREE_DEPTH: usize = 128;
+
+/// The note that ends a branch cut at [`MAX_TREE_DEPTH`].
+fn cut(console: &Console) -> Text {
+    Text::styled(
+        format!("… (deeper levels not shown: the tree stops at {MAX_TREE_DEPTH} levels)"),
+        theme_style(console, "deps.section"),
+    )
 }
 
 /// The label of one package in a tree.
@@ -571,11 +590,7 @@ impl DepTree {
             self.graph.duplicates_in(&self.kinds).into_keys().collect();
         // Which packages lead to a duplicate, for `duplicates_only`.
         let leads = if self.duplicates_only {
-            let mut leads: Vec<Option<bool>> = vec![None; self.graph.packages.len()];
-            for root in &self.graph.roots {
-                self.leads_to_duplicate(*root, &duplicates, &mut leads, &mut Vec::new());
-            }
-            Some(leads)
+            Some(self.leads_to_duplicate(&duplicates))
         } else {
             None
         };
@@ -605,35 +620,32 @@ impl DepTree {
         tree
     }
 
-    fn leads_to_duplicate(
-        &self,
-        package: usize,
-        duplicates: &HashSet<String>,
-        leads: &mut [Option<bool>],
-        stack: &mut Vec<usize>,
-    ) -> bool {
-        if let Some(known) = leads[package] {
-            return known;
-        }
-        if stack.contains(&package) {
-            return false;
-        }
-        stack.push(package);
-        let mut found = duplicates.contains(&self.graph.packages[package].name);
-        let root = self.graph.roots.contains(&package);
-        for dep in &self.graph.deps[package] {
-            if dep
-                .kinds
-                .iter()
-                .any(|k| self.kinds.contains(k) && (root || *k != DepKind::Dev))
-                && self.leads_to_duplicate(dep.package, duplicates, leads, stack)
-            {
-                found = true;
+    /// For each package, whether it is a duplicate or leads to one through
+    /// the edges the tree follows: a walk back from the duplicates, without
+    /// recursion, so a deep graph cannot exhaust the stack.
+    fn leads_to_duplicate(&self, duplicates: &HashSet<String>) -> Vec<Option<bool>> {
+        let count = self.graph.packages.len();
+        let mut dependents: Vec<Vec<usize>> = vec![Vec::new(); count];
+        for (from, deps) in self.graph.deps.iter().enumerate() {
+            let root = self.graph.roots.contains(&from);
+            for dep in deps {
+                if self.graph.follows(dep, root, &self.kinds) {
+                    dependents[dep.package].push(from);
+                }
             }
         }
-        stack.pop();
-        leads[package] = Some(found);
-        found
+        let mut leads = vec![Some(false); count];
+        let mut stack: Vec<usize> = (0..count)
+            .filter(|&p| duplicates.contains(&self.graph.packages[p].name))
+            .collect();
+        while let Some(package) = stack.pop() {
+            if leads[package] == Some(true) {
+                continue;
+            }
+            leads[package] = Some(true);
+            stack.extend(&dependents[package]);
+        }
+        leads
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -644,7 +656,7 @@ impl DepTree {
         root: bool,
         duplicates: &HashSet<String>,
         leads: Option<&[Option<bool>]>,
-        shown: &mut HashSet<usize>,
+        shown: &mut HashSet<(usize, bool)>,
         console: &Console,
     ) -> Tree {
         let deps: Vec<&Dep> = self.graph.deps[package]
@@ -652,9 +664,18 @@ impl DepTree {
             .filter(|dep| leads.is_none_or(|l| l[dep.package] == Some(true)))
             .collect();
         let expandable = !deps.is_empty() && self.max_depth.is_none_or(|max| depth < max);
-        let repeated = expandable && !shown.insert(package);
+        // A package is expanded once as a root (with its dev dependencies)
+        // and once elsewhere; expanded as a root covers both.
+        let repeated = expandable && !shown.insert((package, root));
+        if root {
+            shown.insert((package, false));
+        }
         let mut tree = Tree::new(label(&self.graph, package, duplicates, repeated, console));
         if !expandable || repeated {
+            return tree;
+        }
+        if depth >= MAX_TREE_DEPTH {
+            tree.add(cut(console));
             return tree;
         }
         for kind in [DepKind::Normal, DepKind::Build, DepKind::Dev] {
@@ -782,7 +803,17 @@ impl WhyTree {
         let mut trees: Vec<Tree> = self
             .targets
             .iter()
-            .map(|&target| self.up(target, None, &dependents, &duplicates, &mut shown, console))
+            .map(|&target| {
+                self.up(
+                    target,
+                    None,
+                    0,
+                    &dependents,
+                    &duplicates,
+                    &mut shown,
+                    console,
+                )
+            })
             .collect();
         if trees.len() == 1 {
             return trees.pop().expect("one tree");
@@ -794,10 +825,12 @@ impl WhyTree {
         tree
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn up(
         &self,
         package: usize,
         via: Option<&[DepKind]>,
+        depth: usize,
         dependents: &[Vec<(usize, Vec<DepKind>)>],
         duplicates: &HashSet<String>,
         shown: &mut HashSet<usize>,
@@ -825,8 +858,20 @@ impl WhyTree {
         if repeated || root {
             return tree;
         }
+        if depth >= MAX_TREE_DEPTH {
+            tree.add(cut(console));
+            return tree;
+        }
         for (parent, kinds) in parents {
-            tree.add_tree(self.up(*parent, Some(kinds), dependents, duplicates, shown, console));
+            tree.add_tree(self.up(
+                *parent,
+                Some(kinds),
+                depth + 1,
+                dependents,
+                duplicates,
+                shown,
+                console,
+            ));
         }
         tree
     }

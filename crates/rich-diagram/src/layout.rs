@@ -20,7 +20,7 @@
 use std::borrow::Cow;
 use std::fmt;
 
-use crate::graph::{Direction, Graph, Head, Shape, Stroke, MAX_EDGE_LENGTH};
+use crate::graph::{Direction, Graph, Head, Shape, Stroke, MAX_EDGES, MAX_EDGE_LENGTH};
 use rich::cells::{cell_len, char_cell_width, set_cell_size};
 
 /// A drawn graph: lines of text without trailing spaces.
@@ -92,9 +92,11 @@ const W: u8 = 8;
 
 /// Lay out and draw `graph`. `ascii` restricts the output to ASCII.
 ///
-/// Fails when the layout would place more than [`MAX_VERTICES`] points or
-/// the drawing would cover more than [`MAX_CELLS`] cells, and when an edge
-/// names a node that does not exist.
+/// Fails when the graph has more than [`MAX_EDGES`] edges or
+/// [`MAX_VERTICES`] nodes (checked first, before any layout work), when the
+/// layout would place more than [`MAX_VERTICES`] points or the drawing would
+/// cover more than [`MAX_CELLS`] cells, and when an edge names a node that
+/// does not exist.
 ///
 /// ```
 /// use rich_diagram::{draw, Direction, Graph};
@@ -118,6 +120,18 @@ pub fn draw(graph: &Graph, ascii: bool) -> Result<Drawing, DrawError> {
             edge.from, edge.to
         )));
     }
+    // Checked before any layout work, which grows faster than either.
+    if graph.edges().len() > MAX_EDGES {
+        return Err(DrawError::new(format!(
+            "it has {} edges, more than {MAX_EDGES}",
+            graph.edges().len()
+        )));
+    }
+    if count > MAX_VERTICES {
+        return Err(DrawError::new(format!(
+            "it has {count} nodes, more than {MAX_VERTICES}"
+        )));
+    }
     if graph.nodes().is_empty() {
         return Ok(Drawing {
             lines: Vec::new(),
@@ -138,7 +152,8 @@ pub fn draw(graph: &Graph, ascii: bool) -> Result<Drawing, DrawError> {
     let (width, height) = geometry.extent();
     if width.saturating_mul(height) > MAX_CELLS {
         return Err(DrawError::new(format!(
-            "it would take {width} × {height} cells to draw"
+            "it would take {width} {} {height} cells to draw",
+            if ascii { "x" } else { "×" }
         )));
     }
     Ok(render(graph, &geometry, ascii, width, height))

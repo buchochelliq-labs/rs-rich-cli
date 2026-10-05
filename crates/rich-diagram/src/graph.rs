@@ -11,6 +11,18 @@ use std::collections::HashMap;
 /// requests are drawn at this length.
 pub const MAX_EDGE_LENGTH: usize = 10;
 
+/// The largest source a parser reads, in bytes (64 KB). The DOT parser and
+/// Mermaid's flowcharts share these caps, so neither can be made to do
+/// unbounded work by a document.
+pub const MAX_SOURCE: usize = 64 * 1024;
+
+/// The most nodes a parsed source may declare.
+pub const MAX_NODES: usize = 500;
+
+/// The most edges a parsed source may declare (after `{ … }` groups expand),
+/// and the most [`draw`](crate::draw) lays out.
+pub const MAX_EDGES: usize = 2000;
+
 /// Which way the graph flows: the direction from an edge's source rank to its
 /// target rank.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
