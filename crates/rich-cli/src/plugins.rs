@@ -369,7 +369,7 @@ fn list(entries: &[&Entry], no_color: bool) -> String {
 /// The built-ins: the registry every render starts from, before linked and
 /// runtime plugins.
 fn base_registry(mermaid: MermaidBackend) -> ExtensionRegistry {
-    super::builtin_registry(mermaid)
+    super::builtin_registry(mermaid, true)
 }
 
 /// Every plugin this run has, built-ins first, then linked plugins (sorted by

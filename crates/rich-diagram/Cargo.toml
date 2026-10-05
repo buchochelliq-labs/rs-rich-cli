@@ -28,5 +28,23 @@ name = "rich_diagram"
 [lints]
 workspace = true
 
+[features]
+default = []
+# `plugin::DotPlugin`: a `dot` fence renderer and source renderer through
+# rs-rich-plugin-api, as rs-rich-mermaid registers Mermaid.
+plugin = ["dep:rich-plugin-api"]
+# `graphviz::render_svg`: run Graphviz's own `dot` binary (installed
+# separately) for SVG. No extra crates; off by default because it starts a
+# program, which only a caller that chose it should do.
+graphviz = []
+
 [dependencies]
 rich.workspace = true
+rich-plugin-api = { workspace = true, optional = true }
+
+[dev-dependencies]
+# Path only: stripped when packaging, so publishing never waits on ext.
+rich-ext = { package = "rs-rich-ext", path = "../rich-ext" }
+
+[package.metadata.docs.rs]
+all-features = true

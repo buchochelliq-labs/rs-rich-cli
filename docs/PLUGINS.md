@@ -139,6 +139,9 @@ mapped from tree-sitter capture names to upstream's Pygments token styles.
 The first plugin built this way is `rs-rich-mermaid` (`MermaidPlugin`): a
 `mermaid` fence renderer and source renderer, with flowcharts drawn as text and
 every diagram type through `mmdc` behind its `mmdc` feature.
+`rs-rich-diagram` (`rich_diagram::plugin::DotPlugin`, behind its `plugin`
+feature) registers DOT the same way: `dot` and `graphviz` fence renderers and a
+`dot` source renderer, drawn natively through the diagram layout.
 `rich doctor` lists the registered plugins and the API version (and includes
 them in `--json`).
 
@@ -236,7 +239,8 @@ its way:
   config. A project's `./rich.toml` may **not** list plugins; `rich` ignores
   the list with a warning, so cloning a repository and running `rich` in it
   never loads that repository's code. (The same rule keeps a project config
-  from choosing `mermaid_backend = "mmdc"` or files to write.)
+  from choosing `mermaid_backend = "mmdc"`, `dot_backend = "graphviz"` or
+  files to write.)
 - **Native plugins run arbitrary code, so they are trust-only.** Loading a
   library runs its initialisers, and every call runs in the `rich` process
   with the user's permissions. The ABI makes the boundary well-defined (only

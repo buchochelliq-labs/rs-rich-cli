@@ -1,0 +1,3 @@
+digraph {
+  a [label=<<b>bold</b>>]
+}

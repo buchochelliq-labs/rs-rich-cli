@@ -1,0 +1,9 @@
+/* CI pipeline: a chain, a fan-out group and edge defaults. */
+strict digraph "ci pipeline" {
+  edge [arrowhead=normal]
+  node [style=rounded]
+  checkout -> build -> test -> deploy
+  test -> { lint docs } [style=dotted]
+  build -> test            // strict: merged with the edge above
+  deploy [label="Deploy\nto prod", shape=hexagon]
+}
