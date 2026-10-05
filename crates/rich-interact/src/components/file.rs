@@ -31,6 +31,9 @@ use crate::item::{Actions, Item, Preview, TargetKind};
 use crate::keymap::{keys, Keymap};
 use crate::policy::{LineIo, NotInteractive};
 
+/// The actions the picker handles itself, in context `file`.
+const FILE_ACTIONS: [&str; 3] = ["open", "up", "hidden"];
+
 /// The most entries listed from one directory.
 const MAX_ENTRIES: usize = 50_000;
 /// The most bytes of a file read for its preview.
@@ -235,14 +238,26 @@ impl FilePicker {
     /// Make `keys` do `action` on this picker only; no keys unbinds it.
     /// The actions are the picker's own (`open`, `up`, `hidden`, in context
     /// `file`) and its list's (see [`select_keymap`](crate::components::select_keymap)).
+    /// A name both have means the picker's: `up` is going to the parent
+    /// directory, not the cursor. Write `select.up` for the list's (and
+    /// `file.up`, if you like, for the picker's).
     pub fn rebind(mut self, action: &str, keys: impl IntoIterator<Item = Key>) -> Self {
         let keys: Vec<Key> = keys.into_iter().collect();
-        self.rebound.rebind(action, keys.clone());
-        self.select = self.select.rebind(action, keys);
+        if let Some(action) = action.strip_prefix("select.") {
+            self.select = self.select.rebind(action, keys);
+            return self;
+        }
+        let action = action.strip_prefix("file.").unwrap_or(action);
+        if FILE_ACTIONS.contains(&action) {
+            self.rebound.rebind(action, keys);
+        } else {
+            self.select = self.select.rebind(action, keys);
+        }
         self
     }
 
-    /// The picker's own keys, without its list's.
+    /// The picker's own keys, without its list's (their actions are
+    /// [`FILE_ACTIONS`]).
     fn file_keymap(&self) -> Keymap {
         let mut keymap = Keymap::new("file")
             .bind("open", keys("right"), "open the directory")

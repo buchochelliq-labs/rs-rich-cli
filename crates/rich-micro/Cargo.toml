@@ -40,6 +40,9 @@ rich-plugin-api.workspace = true
 # Decoding, fitting to cells, and the Kitty, iTerm2 and Sixel encoders.
 rich-art = { workspace = true, features = ["image", "gif", "sixel", "kitty", "iterm"] }
 serde_json.workspace = true
+# Which parts of a Markdown source are code or URLs, so `:micro:` tokens
+# there stay as written; the parser and options core's `Markdown` uses.
+pulldown-cmark.workspace = true
 # `.richmicro` archives: reading only, stored and deflated entries (flate2's
 # pure-Rust backend). No encryption, no other codecs.
 zip = { version = "8", default-features = false, features = ["deflate-flate2"] }

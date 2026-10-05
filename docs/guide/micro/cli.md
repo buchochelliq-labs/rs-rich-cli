@@ -78,15 +78,18 @@ Tokens also expand where each label's `:emoji:` codes do:
 - a `--panel`'s `--title` and `--caption`, always (a panel's labels always
   expand `:emoji:` codes, as upstream's `Text.from_markup` does);
 - a CSV table's `--title` and `--caption`, with `--emoji`;
-- a `--markdown` document (or a `.md` file), outside code spans and fenced
-  blocks; `\:micro:name:` stays as written.
+- a `--markdown` document (or a `.md` file), outside code (spans and
+  blocks, indented or fenced, wherever they sit) and URLs (link and image
+  destinations, autolinks, reference definitions); `\:micro:name:` stays as
+  written.
 
 ```console
 $ rich -p "All checks passed" --panel rounded --title ":micro:status/success: CI"
 $ rich README.md    # :micro:status/success: in the text draws the asset
 ```
 
-They draw as images on a terminal that can, like `--print`'s.
+They draw as images on a terminal that can, like `--print`'s; exports, the
+pager and `--watch` show the fallback.
 
 ## In the interactive commands
 

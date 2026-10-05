@@ -240,10 +240,18 @@ impl Component for Confirm {
             .bind("previous", keys("left shift+tab"), "previous choice")
             .bind("next", keys("right tab"), "next choice");
         for choice in &self.choices {
+            // As written, and lowercase: an uppercase key answers to the
+            // lowercase press too, as in 0.0.14 (a lowercase one answers to
+            // the uppercase press through the fallback in `handle`).
+            let lower = choice.key.to_ascii_lowercase();
+            let mut keys = vec![Key::char(choice.key)];
+            if lower != choice.key {
+                keys.push(Key::char(lower));
+            }
             keymap.add(Binding::new(
                 "confirm",
                 format!("choose-{}", choice.id),
-                [Key::char(choice.key)],
+                keys,
                 choice.label.clone(),
             ));
         }

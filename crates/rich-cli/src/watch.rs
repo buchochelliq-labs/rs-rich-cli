@@ -77,6 +77,20 @@ pub(super) fn capturing() -> bool {
     capture_width().is_some()
 }
 
+/// Set for the rest of the process once a `--watch` starts repainting: a
+/// watch redraws its screen (or its regions) on every change, so output
+/// drawn straight to the terminal (micro images) would be left behind.
+static WATCHING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+pub(super) fn start_watching() {
+    WATCHING.store(true, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// Whether this process is watching (see [`start_watching`]).
+pub(super) fn watching() -> bool {
+    WATCHING.load(std::sync::atomic::Ordering::Relaxed)
+}
+
 /// Store rendered segments for the current frame; `false` when not capturing.
 pub(super) fn capture_segments(segments: Vec<Segment>) -> bool {
     CAPTURE.with(|slot| match slot.borrow_mut().as_mut() {

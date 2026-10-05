@@ -3663,11 +3663,13 @@ fn decorate_and_emit_with(
     }
 
     // Micro assets are drawn only when the output goes to the terminal alone:
-    // an export, the pager or a watch capture would record Kitty's
+    // an export, the pager or a watch would record (or repaint over) Kitty's
     // placeholder cells or the blank cells under an image, so they (and the
     // terminal with them) keep the fallback.
     #[cfg(feature = "art")]
-    if let Some(registry) = micro::take_drawing().filter(|_| export.terminal_only()) {
+    if let Some(registry) =
+        micro::take_drawing().filter(|_| export.terminal_only() && !watch::watching())
+    {
         renderable = micro::drawn(console, registry, renderable);
     }
 
@@ -3789,6 +3791,8 @@ fn run_watch(mut cli: Cli) -> ExitCode {
         }
         return first_failure.unwrap_or_else(|| ExitClass::Success.exit_code());
     }
+    // From here on the output repaints: micro assets keep their fallback.
+    watch::start_watching();
     let resource = resource.as_str();
     if !is_url(resource) {
         return watch::watch_files(cli);

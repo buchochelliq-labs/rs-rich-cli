@@ -65,16 +65,21 @@ ABI change of their own.
 
 - `rs-rich-micro` 0.0.2 (unreleased, so no bump): `PreparedMarkdown` and
   `MarkdownView` put `:micro:name:` in Markdown. Each token outside code
-  (fenced blocks and inline spans) becomes stand-in cells of the asset's
-  width, so the layout sizes it as the asset; the view turns them back into
-  tagged placeholders after rendering, which `MicroView` and
-  `MicroGraphics` draw. `\:micro:` stays literal, as Markdown drops the
-  backslash itself.
+  and URLs becomes stand-in cells of the asset's width, so the layout sizes
+  it as the asset; the view turns them back into tagged placeholders after
+  rendering, which `MicroView` and `MicroGraphics` draw. `\:micro:` stays
+  literal, as Markdown drops the backslash itself. What is code and what is
+  a URL comes from pulldown-cmark, with the options core's `Markdown` uses
+  (a new direct dependency, the version already in the tree): indented
+  blocks, fences in quotes and list items, code spans across a line break,
+  link and image destinations, autolinks and reference definitions keep
+  their tokens as written; link text expands.
 - `rs-rich-cli` 0.0.15: `:micro:name:` expands outside `--print` too: in a
   `--panel`'s `--title` and `--caption` (always, as their `:emoji:` codes
   do), in a CSV table's title and caption (with `--emoji`, where its
   `:emoji:` codes expand), and in `--markdown` documents. On a terminal they
-  draw as images; exports, the pager and `--watch` keep the fallback.
+  draw as images; exports, the pager and `--watch` (one file or several)
+  keep the fallback.
 - `rs-rich-cli` 0.0.15: `rich asset --kind micro` and `rich explore --icons`
   draw the assets as images (Kitty, iTerm2, Sixel or blocks) where the
   terminal can, not only their emoji fallback. The mode is chosen for
@@ -90,6 +95,15 @@ ABI change of their own.
   `pager_search_keymap` and `Viewport::act` are new. Rebinding a form's
   `next` away from Enter also takes Enter's submit on the last field;
   Ctrl+S still submits.
+- `rs-rich-interact` 0.0.3: a key rebound (or installed) onto an action now
+  does it even when an action declared earlier in the same context had the
+  key, and that action loses it (`Pager::rebind("scroll-down", keys("n"))`
+  used to leave `n` on next-match and scroll-down with no key).
+  `FilePicker::rebind` sends its own actions (`open`, `up`, `hidden`) to the
+  picker only, so rebinding `up` (to the parent directory) no longer takes
+  the list's cursor-up with it; `select.up` names the list's. A `Confirm`
+  choice with an uppercase key answers to the lowercase press again, as in
+  0.0.14.
 - `rs-rich-cli` 0.0.15: `rich micro preview` no longer labels a still image
   with a frame time ("100 ms"); only an animation's frames are timed. The
   `micro-create` docs tape is re-recorded.
