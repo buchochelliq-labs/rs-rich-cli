@@ -57,6 +57,50 @@ Entries below record subsequent releases and development.
 
 ## [Unreleased]
 
+### 0.0.15 release test: fixes from three audits
+
+Three audits covered the 0.0.15 delta; each finding was reproduced, then
+fixed with a regression test that failed (or aborted, or hung) before the
+fix. See the [0.0.15 release notes](docs/releases/0.0.15.md#what-the-release-test-found-and-fixed).
+
+- `rs-rich-diagram`: DOT nesting deeper than 64 levels is refused instead
+  of overflowing the stack; sources, nodes and edges are capped while
+  groups expand (64 KiB, 500, 2,000, shared with Mermaid as
+  `rich_diagram::{MAX_SOURCE, MAX_NODES, MAX_EDGES}`); strict-graph dedupe
+  is a hash lookup; `layout::draw` refuses more than 2,000 edges or 5,000
+  nodes before laying out. DOT handles `\E`, `\T` and `\H`, lexes numerals
+  as Graphviz does, skips a comment before `=`, notes invisible and
+  outline-free nodes, and writes ASCII-only notes on ASCII consoles.
+- `rs-rich-ext` `deps`: a workspace member reached through another member
+  keeps its dev-dependencies; members are expanded at the top level; trees
+  stop at 128 levels (`MAX_TREE_DEPTH`). `schema`: trees and diffs have
+  budgets (`MAX_ENTRIES`, `MAX_CHANGES`, `MAX_COMPARISONS`,
+  `SchemaDiff::is_truncated`) and say when they stop; cycles are found by
+  resolved target as well as by reference; the `additionalProperties`
+  path keeps the depth guard.
+- `rs-rich-ext` `chart`: labels the compact form cannot write exactly are
+  written in full on axes, timelines and histogram edges; histogram edges
+  are exact and values are counted against them; `ValueFormat::Fixed` caps
+  its decimals at `ValueFormat::MAX_DECIMALS` (17) instead of panicking;
+  ±1e308 ranges render with finite scales; huge sizes saturate or are
+  capped (65,535 rows); gauge legends are ASCII on ASCII consoles; a
+  non-finite KPI delta reads `= -`.
+- `rs-rich-cli`: `rich deps --why` exits 4 with a reason when the chosen
+  kinds reach no match; `rich deps` clears the `rustc` wrapper variables for
+  `cargo metadata`; `rich chart` refuses non-finite values and rows longer
+  than the header (exit 4); `rich doctor` reports every build feature;
+  `--help` lists `.mmd`, `.mermaid`, `.dot` and `.gv` among the
+  auto-detected types.
+- `rs-rich-micro`: `:micro:` tokens are left alone wherever the Markdown
+  parser sees code, and in link and image destinations; the ranges come
+  from `pulldown-cmark`, now a direct dependency.
+- `rs-rich-interact`: a `Confirm` choice answers to either case again; a
+  rebound or installed key takes precedence over an earlier action's
+  declared key; `FilePicker::rebind` keeps its own actions to the picker.
+- Python 0.0.4: `rs_rich.chart` takes any iterable where it took a list,
+  any pair as a point, and `None` in a timeline as a gap, and refuses
+  out-of-range decimals with `ValueError`.
+
 ### Docs refresh for 0.0.15
 
 - The README, the home page, the guide index, the CLI guide and walkthrough,
