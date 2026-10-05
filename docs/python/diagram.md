@@ -65,7 +65,6 @@ print(diagram.draw_graph(diagram.Graph().edge("a", "b"), ascii=True))
 ╭─────────╮         ┌─────┐         ╭──────────╮
 │ Browser ├──HTTPS─►│ API ├──reads─►│ Postgres │
 ╰─────────╯         └─────┘         ╰──────────╯
-
 ['+---+', '| a |', '+-+-+', '  |', '  v', '+---+', '| b |', '+---+']
 ```
 
@@ -103,7 +102,6 @@ except diagram.DotError as error:
 ╭───────╮  ╭──────╮  ╭──────╮
 │ build ├─►│ test ├─►│ ship │
 ╰───────╯  ╰──────╯  ╰──────╯
-
 3 a node port (`a:…`)
 ```
 

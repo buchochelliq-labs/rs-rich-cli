@@ -105,7 +105,6 @@ console.print(chart.LineChart([load], height=6, charset="ascii"), width=24)
   ++----+----+----+----+
    0    1    2    3    4
 * load                  
-
 ```
 
 ## Gauges and bullet charts
@@ -133,11 +132,9 @@ console.print(chart.BulletChart([
 
 ```text
 cpu ██████████████▍▒│░░░ 72% high
-
 high
 revenue ██████████│░  270
 profit  █████████░│░ 22.5
-
 ```
 
 ## Heatmaps and status matrices
@@ -173,13 +170,11 @@ console.print(chart.StatusMatrix(
 api ....====@@@@::::       
 web     ****%%%%????       
 0 [ .:-=+*#%@] 9  ? no data
-
      linux macos  win       
 unit   ✓     ✓     ✗        
 e2e    ✓     ⊘     ○        
 ✓ pass 3  ✗ fail 1  ○ skip 1
 ⊘ blocked 1                 
-
 ```
 
 ## KPI cards
@@ -205,7 +200,6 @@ console.print(chart.KpiCard("Requests", 1234, delta_percent=4.2, trend=[1, 2, 3,
 │ ▲ +4.2%              │
 │ ▁▃▅▃█                │
 ╰──────────────────────╯
-
 ```
 
 ## Timelines
@@ -236,5 +230,4 @@ test              ███████████████ 18s
                                 ship ◆  
         ┬───────┬───────┬───────┬───────
         0s     10s     20s     30s      
-
 ```

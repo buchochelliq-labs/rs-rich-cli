@@ -19,12 +19,13 @@ API_DB = "┌─────┐         ┌────┐\n│ API ├──rea
 
 
 def drawn(renderable, width: int = 40) -> str:
-    """What `renderable` draws at `width`, without `print`'s extra newline."""
+    """What `print` writes for `renderable` at `width`: the drawing and the
+    one newline `print` ends it with (no blank line after it)."""
     out = io.StringIO()
     Console(file=out, width=width, color_system=None).print(renderable)
     text = out.getvalue()
-    assert text.endswith("\n\n"), repr(text)
-    return text[:-1]
+    assert not text.endswith("\n\n"), repr(text)
+    return text
 
 
 def api_db() -> diagram.Graph:

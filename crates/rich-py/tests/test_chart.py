@@ -2,8 +2,8 @@
 
 Rich has no charts, so each expected drawing is what the Rust crate draws for
 the same chart: the cases are ``rich_ext::chart``'s own doc examples, which
-its doc tests assert byte for byte. ``Console.print`` ends the output with one
-more newline than the chart's last line (see ``drawn``).
+its doc tests assert byte for byte. A chart leaves its last newline to
+``Console.print``, like rich's renderables (see ``drawn``).
 """
 
 from __future__ import annotations
@@ -19,14 +19,14 @@ from rs_rich.table import Table
 
 
 def drawn(renderable, width: int = 40) -> str:
-    """What `renderable` draws at `width` without colour, as the Rust
-    crate's `render_to_string` returns it (the chart's own last newline
-    kept, `print`'s extra one dropped)."""
+    """What `print` writes for `renderable` at `width` without colour: the
+    chart's lines and the one newline `print` ends them with (the chart
+    adds none of its own, so no blank line follows it)."""
     out = io.StringIO()
     Console(file=out, width=width, color_system=None).print(renderable)
     text = out.getvalue()
-    assert text.endswith("\n\n"), repr(text)
-    return text[:-1]
+    assert not text.endswith("\n\n"), repr(text)
+    return text
 
 
 def coloured(renderable, width: int = 40) -> str:

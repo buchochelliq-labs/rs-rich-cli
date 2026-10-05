@@ -168,8 +168,8 @@ def test_every_case_has_an_expectation():
 def test_a_simple_flowchart():
     console = Console(file=io.StringIO(), width=40, color_system=None)
     console.print(mermaid.Mermaid("graph LR\n  A --> B"))
-    # The crate ends the diagram's last line itself, so print leaves a blank line.
-    assert console.file.getvalue() == "┌───┐  ┌───┐\n│ A ├─►│ B │\n└───┘  └───┘\n\n"
+    # The diagram leaves its last newline to print, so no blank line follows it.
+    assert console.file.getvalue() == "┌───┐  ┌───┐\n│ A ├─►│ B │\n└───┘  └───┘\n"
     assert console.file.getvalue() == EXPECTED["render_lr"]["out"]
 
 
@@ -481,50 +481,34 @@ EXPECTED: dict = {'clean_label': {'out': 'a\nb &amp; c &lt;d&gt;\ne'},
  'parse_unsupported': {'error': 'pie chart diagrams are not drawn as text',
                        'kind': 'unsupported',
                        'line': None},
- 'render_ascii': {'out': '+---+  +---+  +---+\n| A +->| B +->| C |\n+---+  +---+  +---+\n\n'},
- 'render_bt': {'out': '┌───┐\n'
-                      '│ C │\n'
-                      '└───┘\n'
-                      '  ▲\n'
-                      '  │\n'
-                      '┌─┴─┐\n'
-                      '│ B │\n'
-                      '└───┘\n'
-                      '  ▲\n'
-                      '  │\n'
-                      '┌─┴─┐\n'
-                      '│ A │\n'
-                      '└───┘\n'
-                      '\n'},
+ 'render_ascii': {'out': '+---+  +---+  +---+\n| A +->| B +->| C |\n+---+  +---+  +---+\n'},
+ 'render_bt': {'out': '┌───┐\n│ C │\n└───┘\n  ▲\n  │\n┌─┴─┐\n│ B │\n└───┘\n  ▲\n  │\n┌─┴─┐\n│ A │\n└───┘\n'},
  'render_cropped': {'out': '┌───────┐  ┌──────┐\n'
                            '│ Alpha ├─►│ Beta ├─\n'
                            '└───────┘  └──────┘\n'
                            'Mermaid: cropped to \n'
-                           '20 of 41 columns\n'
-                           '\n'},
+                           '20 of 41 columns\n'},
  'render_edges': {'out': '┌───┐         ┌───┐  ┌───┐  ┌───┐  ┌───┐  ┌───┐  ┌───┐     ┌───┐  ┌───┐\n'
                          '│ A ├──label─►│ B ├┄►│ C ├━►│ D ├─●│ E ├─×│ F │◄►│ G ├────►│ H │  │ I ├─┐ ┌───┐\n'
                          '└───┘         └───┘  └───┘  └───┘  └───┘  └───┘  └───┘     └───┘  └───┘ └►│ K │\n'
                          '                                                                        ┌►│   │\n'
                          '                                                                  ┌───┐ │ └───┘\n'
                          '                                                                  │ J ├─┘\n'
-                         '                                                                  └───┘\n'
-                         '\n'},
+                         '                                                                  └───┘\n'},
  'render_empty': {'out': 'Mermaid: the diagram is empty\n'
                          '                                                            \n'
                          ' %% nothing                                                 \n'
                          '                                                            \n'},
- 'render_lr': {'out': '┌───┐  ┌───┐\n│ A ├─►│ B │\n└───┘  └───┘\n\n'},
+ 'render_lr': {'out': '┌───┐  ┌───┐\n│ A ├─►│ B │\n└───┘  └───┘\n'},
  'render_mmdc_fallback': {'out': '┌───┐  ┌───┐\n'
                                  '│ A ├─►│ B │\n'
                                  '└───┘  └───┘\n'
-                                 'Mermaid: this build has no mmdc backend; drawn as text\n'
-                                 '\n'},
+                                 'Mermaid: this build has no mmdc backend; drawn as text\n'},
  'render_no_nodes': {'out': 'Mermaid: the flowchart has no nodes\n'
                             '                                                            \n'
                             ' graph TD                                                   \n'
                             '                                                            \n'},
- 'render_rl': {'out': '┌───┐  ┌───┐  ┌───┐\n│ C │◄─┤ B │◄─┤ A │\n└───┘  └───┘  └───┘\n\n'},
+ 'render_rl': {'out': '┌───┐  ┌───┐  ┌───┐\n│ C │◄─┤ B │◄─┤ A │\n└───┘  └───┘  └───┘\n'},
  'render_sequence_source': {'out': '\x1b[2;3mMermaid: sequence diagrams are not drawn as text\x1b[0m\n'
                                    '\x1b[48;2;43;48;59m                                                            '
                                    '\x1b[0m\n'
@@ -604,8 +588,7 @@ EXPECTED: dict = {'clean_label': {'out': 'a\nb &amp; c &lt;d&gt;\ne'},
                           '        ▼\n'
                           '   ┌─────────┐\n'
                           '   \\ trapalt /\n'
-                          '   └─────────┘\n'
-                          '\n'},
+                          '   └─────────┘\n'},
  'render_subgraph_note': {'out': '┌─────┐\n'
                                  '│ a1  │\n'
                                  '└──┬──┘\n'
@@ -619,8 +602,7 @@ EXPECTED: dict = {'clean_label': {'out': 'a\nb &amp; c &lt;d&gt;\ne'},
                                  '┌─────┐\n'
                                  '│ b1  │\n'
                                  '└─────┘\n'
-                                 '\x1b[2;3mMermaid: subgraphs are drawn without their frames\x1b[0m\n'
-                                 '\n'},
+                                 '\x1b[2;3mMermaid: subgraphs are drawn without their frames\x1b[0m\n'},
  'render_syntax_error': {'out': 'Mermaid: line 2: an arrow needs a node after it\n'
                                 '                                                            \n'
                                 ' graph TD                                                   \n'
@@ -640,8 +622,7 @@ EXPECTED: dict = {'clean_label': {'out': 'a\nb &amp; c &lt;d&gt;\ne'},
                              '   ▼        ▼\n'
                              '┌─────┐  ┌─────┐\n'
                              '│ OK  │  │ End │\n'
-                             '└─────┘  └─────┘\n'
-                             '\n'},
+                             '└─────┘  └─────┘\n'},
  'render_too_wide': {'out': {'len': 16483,
                              'sha256': '65d71ef9713a15272b6f8bc6a8b6f3af0a82cab1399d42c9c6dcc7f0341acf21'}}}
 # fmt: on

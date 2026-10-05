@@ -1,3 +1,4 @@
+│ deploy token=******************************************                              │
 ╰── exit · Nms ──╯
 ────────────────────────────────── Mermaid flowcharts ──────────────────────────────────
 $ rich mermaid flow.mmd
@@ -8,7 +9,6 @@ $ rich mermaid flow.mmd
 └─────────┘   └────────────┘ │ ┌───────┐
                              └►│ lumis │
                                └───────┘
-
 ───────────────────────────────────── Code themes ──────────────────────────────────────
 $ rich --syntax worker.rs --code-theme ansi_dark
 fn retry(job: &Job, attempts: u32) -> Result<(), Error> {
