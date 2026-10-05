@@ -31,7 +31,7 @@ in a real terminal: inspectors, diffs, Mermaid flowcharts drawn as text, code
 themes, `--filter` and `--highlight`, rich-cli's options, reStructuredText, a
 `rich choose` picker, banners and images.
 [Tour and reproduction](docs/demos.md) ·
-[0.0.14 release notes](docs/releases/0.0.14.md).
+[0.0.15 release notes](docs/releases/0.0.15.md).
 
 ## Install and try
 
@@ -142,10 +142,10 @@ why, is in [docs/ROADMAP.md](docs/ROADMAP.md); the tracking epic is
 
 ## Release history and development
 
-The [0.0.14 release notes](docs/releases/0.0.14.md) document the newest
-published cohort; older notes are in [`docs/releases/`](docs/releases/). This
-checkout carries the 0.0.15 cohort (charts and diagrams; see the
-[0.0.15 plan](docs/plans/0.0.15.md) and [`CHANGELOG.md`](CHANGELOG.md)). Later source changes are tracked in the [roadmap](docs/ROADMAP.md)
+The [0.0.15 release notes](docs/releases/0.0.15.md) document the newest
+published cohort, charts and diagrams; older notes are in
+[`docs/releases/`](docs/releases/), and [`CHANGELOG.md`](CHANGELOG.md) lists
+every change. Later source changes are tracked in the [roadmap](docs/ROADMAP.md)
 and development plans. The manifest table above describes this checkout;
 crates.io is the source for available published versions.
 
@@ -163,7 +163,9 @@ published: diagnostics, structured data, checked-markup macros,
 `rs-rich` Python package; [0.0.13](docs/releases/0.0.13.md) interactive
 components (`rs-rich-interact`), third-party plugins and `rich record`; and
 [0.0.14](docs/releases/0.0.14.md) composable interactive views, `rich explore`
-and micro assets (`rs-rich-micro`). See [copyable workflows](docs/recipes.md).
+and micro assets (`rs-rich-micro`); and [0.0.15](docs/releases/0.0.15.md)
+terminal charts and diagrams (`rs-rich-diagram`, `rich chart`, `rich dot`,
+`rich deps` and `rich schema`). See [copyable workflows](docs/recipes.md).
 
 ## Install
 

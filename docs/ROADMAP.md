@@ -215,7 +215,7 @@ and #499). Delivered:
 - Atkinson dithering, OKLab distance, Sixel/GIF colour modes, alpha backgrounds
   (#498) and `--theme-file` (#499).
 
-## 0.0.15 — terminal charts and diagrams (implemented, not yet published)
+## 0.0.15 — terminal charts and diagrams (published 2026-10-05)
 
 The [0.0.15 plan](plans/0.0.15.md) is the first slice of
 [milestone 5](https://github.com/buchochelliq-labs/rs-rich-cli/milestone/5),

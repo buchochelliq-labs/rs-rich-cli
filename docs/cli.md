@@ -13,9 +13,9 @@ to do. For the complete list of options, see the
 
 **Assumes** you can run commands in a terminal. Examples use real CLI output;
 sections marked with a version need at least that version. The latest
-published release is 0.0.14 (see the
-[0.0.14 release notes](releases/0.0.14.md)); `chart`, `dot`, `deps` and
-`schema` are new in 0.0.15.
+published release is 0.0.15 (see the
+[0.0.15 release notes](releases/0.0.15.md)), in which `chart`, `dot`, `deps`
+and `schema` are new.
 
 ---
 
