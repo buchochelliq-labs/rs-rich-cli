@@ -1328,8 +1328,9 @@ pub(crate) fn spec() -> CommandSpec {
         .args(root_args())
         .heading_note(
             RENDER_MODE,
-            "Choose at most one; the default auto-detects .md/.rst/.json/.csv/.tsv/.ipynb by \
-             extension — anything else with a file extension is syntax-highlighted.",
+            "Choose at most one; the default auto-detects .md/.rst/.json/.csv/.tsv/.ipynb, \
+             .mmd/.mermaid and .dot/.gv by extension — anything else with a file extension \
+             is syntax-highlighted.",
         )
         .heading_note(
             DEMO,

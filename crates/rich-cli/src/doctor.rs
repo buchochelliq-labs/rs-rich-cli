@@ -326,7 +326,7 @@ fn report(args: &[String]) -> Result<(serde_json::Value, Report, bool), String> 
         });
     let json = serde_json::json!({
         "package": {"name": env!("CARGO_PKG_NAME"), "version": env!("CARGO_PKG_VERSION")},
-        "features": {"art": cfg!(feature="art"), "fetch": cfg!(feature="fetch"), "syntax-cache": cfg!(feature="syntax-cache"), "onig": cfg!(feature="onig"), "json-escape-safe": cfg!(feature="json-escape-safe"), "mermaid": cfg!(feature="mermaid"), "mmdc": cfg!(feature="mmdc"), "lumis": cfg!(feature="lumis")},
+        "features": {"art": cfg!(feature="art"), "fetch": cfg!(feature="fetch"), "syntax-cache": cfg!(feature="syntax-cache"), "onig": cfg!(feature="onig"), "json-escape-safe": cfg!(feature="json-escape-safe"), "mermaid": cfg!(feature="mermaid"), "mmdc": cfg!(feature="mmdc"), "lumis": cfg!(feature="lumis"), "record": cfg!(feature="record"), "interact": cfg!(feature="interact"), "dylib-plugins": cfg!(feature="dylib-plugins"), "wasm-plugins": cfg!(feature="wasm-plugins")},
         "terminal": {"stdout_tty": console.is_terminal(), "width": console.width(), "height": console.height(), "color": color, "no_color": no_color, "detection": "local terminal and environment; no probe", "provenance": provenance},
         "image": {"requested_mode": requested_mode, "selected_mode": selected_mode, "sixel_inferred": sixel, "detection": "inferred from environment; no probe"},
         "micro": micro,

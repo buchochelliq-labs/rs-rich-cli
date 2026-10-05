@@ -35,7 +35,7 @@ rich --watch [OPTIONS] FILE...
 
 ### Render mode
 
-Choose at most one; the default auto-detects .md/.rst/.json/.csv/.tsv/.ipynb by extension — anything else with a file extension is syntax-highlighted.
+Choose at most one; the default auto-detects .md/.rst/.json/.csv/.tsv/.ipynb, .mmd/.mermaid and .dot/.gv by extension — anything else with a file extension is syntax-highlighted.
 
 | Option | Description |
 | --- | --- |
