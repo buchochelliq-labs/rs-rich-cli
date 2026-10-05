@@ -212,6 +212,10 @@ console.print(Mermaid("graph TD\n  A --> B", ascii=True))
 
 ```
 
+**Charts and diagrams**: sparklines, bars, line charts, gauges, heatmaps, KPI
+cards and timelines ([Charts](chart.md)), and graphs and DOT sources drawn as
+text ([Diagrams](diagram.md)).
+
 **Extensions** (`rs_rich.ext`): diagnostics and stack traces, structured data
 (JSON, YAML, TOML, XML, INI, dotenv), diffs and test reports, workflow views,
 redaction, inspectors and more. See [Extensions](ext/index.md).

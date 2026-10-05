@@ -32,7 +32,7 @@ use crate::layout::{draw, DrawError, Drawing};
 ///     .node("db", "DB")
 ///     .edge("api", "db").label("reads");
 /// let console = Console::builder().width(40).color_system(None).build();
-/// let out = console.render_to_string(&Diagram::new(graph));
+/// let out = console.render_export(&Diagram::new(graph));
 /// assert_eq!(
 ///     out,
 ///     "┌─────┐         ┌────┐\n\
@@ -92,24 +92,18 @@ impl Renderable for Diagram {
             Ok(drawing) => drawing,
             Err(error) => {
                 let style = Style::parse("dim italic").expect("valid style");
-                let mut segments =
-                    Text::styled(format!("Diagram: too large to draw: {error}"), style)
-                        .rich_render(console, options);
-                if segments
-                    .iter()
-                    .rev()
-                    .find(|segment| !segment.text.is_empty())
-                    .is_some_and(|segment| !segment.text.ends_with('\n'))
-                {
-                    segments.push(Segment::line());
-                }
-                return segments;
+                return Text::styled(format!("Diagram: too large to draw: {error}"), style)
+                    .rich_render(console, options);
             }
         };
+        // A newline between lines; like core's renderables, `print` ends
+        // the last one.
         let mut segments = Vec::new();
-        for line in drawing.cropped(options.max_width) {
+        for (index, line) in drawing.cropped(options.max_width).into_iter().enumerate() {
+            if index > 0 {
+                segments.push(Segment::line());
+            }
             segments.push(Segment::new(line, None));
-            segments.push(Segment::line());
         }
         segments
     }

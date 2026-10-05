@@ -142,7 +142,7 @@ impl Series {
 ///     .height(6)
 ///     .charset(Charset::Ascii);
 /// assert_eq!(
-///     console.render_to_string(&chart),
+///     console.render_export(&chart),
 ///     concat!(
 ///         "6 +                     \n",
 ///         "5 +               ***   \n",

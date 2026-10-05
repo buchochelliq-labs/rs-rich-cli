@@ -127,11 +127,11 @@ fn fit(width: usize, natural: Columns, full: bool) -> Columns {
 ///     .unit("%")
 ///     .bar_width(20);
 /// assert_eq!(
-///     console.render_to_string(&gauge),
+///     console.render_export(&gauge),
 ///     "cpu ██████████████▍▒│░░░ 72% high\n"
 /// );
 /// assert_eq!(
-///     console.render_to_string(&gauge.clone().charset(Charset::Ascii)),
+///     console.render_export(&gauge.clone().charset(Charset::Ascii)),
 ///     "cpu ##############=:|... 72% high\n"
 /// );
 /// ```
@@ -494,7 +494,7 @@ impl Renderable for Gauge {
 ///     .gauge(Gauge::new("profit", 22.5).range(0.0, 30.0).target(26.0))
 ///     .bar_width(12);
 /// assert_eq!(
-///     console.render_to_string(&chart),
+///     console.render_export(&chart),
 ///     "revenue ██████████│░  270\n\
 ///      profit  █████████░│░ 22.5\n"
 /// );

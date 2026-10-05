@@ -39,6 +39,10 @@ let graph = Graph::new(Direction::TopDown)
 Console::new().print(&Diagram::new(graph));
 ```
 
+In Python the same graph is built with [`rs_rich.diagram`](https://buchochelliq-labs.github.io/rs-rich-cli/python/diagram/).
+
+![The service graph drawn by Diagram](../../media/guide/guide_diagram-services.svg)
+
 `cargo run -p rs-rich-diagram --example services` prints:
 
 ```text
@@ -130,6 +134,8 @@ ASCII follows the console (`Console::ascii_only`, set for a non-UTF
 encoding) unless you choose with `Diagram::ascii(true)`. The same graph, with
 `cargo run -p rs-rich-diagram --example services -- 80 ascii`:
 
+![The service graph in ASCII](../../media/guide/guide_diagram-ascii.svg)
+
 ```text
       .---------.
       | Browser |
@@ -167,6 +173,8 @@ from untrusted input cannot reach the terminal as an escape sequence.
 
 `rich_diagram::dot` reads the DOT people write by hand and draws it through
 the same layout, natively: no Graphviz needed.
+
+![A DOT pipeline drawn by Dot: a chain, a dotted fan-out and a hexagon](../../media/guide/guide_diagram-dot.svg)
 
 ```rust
 use rich::Console;
@@ -267,6 +275,10 @@ rich dot services.dot           # alias: rich graphviz; .dot and .gv files are d
 rich README.md                  # ```dot fences draw as diagrams
 rich README.md --dot-backend off   # ... or stay code blocks, as upstream renders them
 ```
+
+[DOT in Markdown](../../recordings.md#dot-in-markdown) and
+[dependency trees](../../recordings.md#dependency-trees) are recorded in a
+terminal.
 
 ### Graphviz's own SVG
 

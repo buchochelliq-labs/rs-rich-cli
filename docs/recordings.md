@@ -27,6 +27,9 @@ motion turned on in your system settings the cards stay still.
 [![rich explore searching a YAML document](media/tapes/explore/search.png){ data-gif="explore.gif" loading=lazy }<span class="tape-card-title">Explore a document</span>](#explore-a-document){ .tape-card }
 [![A Markdown file paged in a viewport](media/tapes/viewport/paged.png){ data-gif="viewport.gif" loading=lazy }<span class="tape-card-title">An interactive component</span>](#an-interactive-component){ .tape-card }
 [![The command palette over a file list](media/tapes/palette/palette.png){ data-gif="palette.gif" loading=lazy }<span class="tape-card-title">Overlays and chrome</span>](#overlays-and-chrome){ .tape-card }
+[![A CSV file drawn as a line chart by rich chart](media/tapes/chart/lines.png){ data-gif="chart.gif" loading=lazy }<span class="tape-card-title">Charts from data</span>](#charts-from-data){ .tape-card }
+[![rich deps drawing a dependency graph](media/tapes/deps/graph.png){ data-gif="deps.gif" loading=lazy }<span class="tape-card-title">Dependency trees</span>](#dependency-trees){ .tape-card }
+[![A DOT fence drawn in a Markdown document](media/tapes/dot-fence/drawn.png){ data-gif="dot-fence.gif" loading=lazy }<span class="tape-card-title">DOT in Markdown</span>](#dot-in-markdown){ .tape-card }
 [![fun/heart previewed, its frames magnified](media/tapes/micro-modes/modes.png){ data-gif="micro-modes.gif" loading=lazy }<span class="tape-card-title">Micro assets</span>](#micro-assets){ .tape-card }
 [![The guided tour, inspecting structured data](media/tapes/tour/inspect.png){ data-gif="tour.gif" loading=lazy }<span class="tape-card-title">The guided tour</span>](demos.md#run-the-suite-in-your-terminal){ .tape-card }
 [![rich choose in the 0.0.13 release recording](media/tapes/release-0.0.13/choose.png){ data-gif="release-0.0.13.gif" loading=lazy }<span class="tape-card-title">The 0.0.13 release</span>](releases/0.0.13.md){ .tape-card }
@@ -208,6 +211,57 @@ region's actions in a modal. See
 | ![A badge, a spinner and key hints under the list](media/tapes/statusbar/status.png) | ![The region's actions in a modal](media/tapes/statusbar/actions.png) | ![The note changed by the command](media/tapes/statusbar/refreshed.png) |
 
 [Tape](tapes/statusbar.tape) · [Cast](media/tapes/statusbar/statusbar.cast) · [GIF](media/tapes/statusbar/statusbar.gif) · [Page](media/tapes/statusbar/statusbar.html)
+
+## Charts from data
+
+`rich chart` draws CSV, JSON or numbers piped in: bars labelled by a
+column, every numeric column as a line, a sparkline from `printf`, a
+heatmap, and a column that is not there refused with the ones that are. See
+[the charts guide](guide/ext/charts.md#from-the-shell-rich-chart).
+
+<div class="tape-player" data-cast="../media/tapes/chart/chart.cast" data-poster="npt:0:4">
+  <img src="../media/tapes/chart/chart.gif" alt="rich chart drawing a CSV file as bars, lines, a sparkline and a heatmap">
+</div>
+
+| Bars | Lines | Piped in, and a mistake |
+|---|---|---|
+| ![rich chart --kind bar](media/tapes/chart/bars.png) | ![rich chart with every numeric column as a line](media/tapes/chart/lines.png) | ![A sparkline from printf, a heatmap, and a missing column](media/tapes/chart/pipe.png) |
+
+[Tape](tapes/chart.tape) · [Cast](media/tapes/chart/chart.cast) · [GIF](media/tapes/chart/chart.gif) · [Page](media/tapes/chart/chart.html)
+
+## Dependency trees
+
+`rich deps` draws a Cargo workspace's dependencies from `cargo metadata`
+(here a saved copy, so the recording never changes): a tree that marks
+crates resolved at several versions, `--why` for what pulls a crate in, and
+`--graph` for the same through the diagram layout. See
+[Dependencies and schemas](guide/ext/sources.md).
+
+<div class="tape-player" data-cast="../media/tapes/deps/deps.cast" data-poster="npt:0:4">
+  <img src="../media/tapes/deps/deps.gif" alt="rich deps showing a tree, the paths to syn, and a graph">
+</div>
+
+| Tree | Why `syn` | Graph |
+|---|---|---|
+| ![rich deps --depth 2](media/tapes/deps/tree.png) | ![rich deps --why syn](media/tapes/deps/why.png) | ![rich deps --graph --depth 1](media/tapes/deps/graph.png) |
+
+[Tape](tapes/deps.tape) · [Cast](media/tapes/deps/deps.cast) · [GIF](media/tapes/deps/deps.gif) · [Page](media/tapes/deps/deps.html)
+
+## DOT in Markdown
+
+A ```` ```dot ```` fence in a Markdown document is drawn in place of the
+code block; `--dot-backend off` leaves it as code, as upstream renders it.
+See [the diagrams guide](guide/diagram/index.md).
+
+<div class="tape-player" data-cast="../media/tapes/dot-fence/dot-fence.cast" data-poster="npt:0:3">
+  <img src="../media/tapes/dot-fence/dot-fence.gif" alt="A Markdown document with a DOT fence, drawn and then left as code">
+</div>
+
+| Drawn | `--dot-backend off` |
+|---|---|
+| ![The release pipeline drawn as a graph](media/tapes/dot-fence/drawn.png) | ![The DOT source left as a code block](media/tapes/dot-fence/code.png) |
+
+[Tape](tapes/dot-fence.tape) · [Cast](media/tapes/dot-fence/dot-fence.cast) · [GIF](media/tapes/dot-fence/dot-fence.gif) · [Page](media/tapes/dot-fence/dot-fence.html)
 
 ## Micro assets
 

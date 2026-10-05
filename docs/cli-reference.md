@@ -122,6 +122,14 @@ Choose at most one; the default auto-detects .md/.rst/.json/.csv/.tsv/.ipynb by 
 | `--duplicates` | With `rich deps`, keep only the branches that lead to a crate resolved at more than one version. |
 | `--no-dev` | With `rich deps`, leave dev-dependencies out. |
 
+### Chart
+
+| Option | Description |
+| --- | --- |
+| `--kind <KIND>` | With `rich chart`, what to draw: spark (a sparkline per series), bar (a bar per row, labelled by --x), line (the default) and scatter (each series against --x, or the row number), or heatmap (rows by series, each value a shade) Possible values: `spark`, `bar`, `line`, `scatter`, `heatmap`. |
+| `--x <COLUMN>` | With `rich chart`, the column of x positions (line, scatter) or labels (bar, heatmap), by header or 1-based number (default: the row number; for labels, the first column that is not all numbers) |
+| `--y <COLUMN>...` | With `rich chart`, a column to draw, by header or 1-based number; repeatable, one series each (default: every numeric column but --x) |
+
 ### Image
 
 | Option | Description |
@@ -299,6 +307,7 @@ Self-contained examples; ignores config; accepts --no-color.
 | `dot`, `graphviz` | Draw a DOT (Graphviz) graph as text (.dot and .gv files are detected); what the native parser does not support is refused with its line |
 | `deps` | A Cargo dependency tree from `cargo metadata`, crates resolved at several versions marked; --why CRATE for what pulls a crate in, --graph to draw it |
 | `schema` | A JSON Schema as a tree: types, required markers, constraints, $refs resolved; with two schemas, what changed between them and which changes break |
+| `chart` | A chart from CSV, JSON or stdin: a sparkline, bars, lines, points or a heatmap; --x and --y pick the columns, a missing column or a value that is not a number is refused with its row and column |
 | `config` | Show, validate, explain or document configuration |
 | `choose` | Pick from ITEMs with a fuzzy-filtered list and print the choice; exits 1 when cancelled |
 | `filter` | Type to filter ITEMs and print the choice; without a terminal, print the lines that match --value |
@@ -925,6 +934,36 @@ rich schema [OPTIONS] SCHEMA [NEW_SCHEMA]
 | --- | --- |
 | `[SCHEMA]` | A JSON Schema file, an http(s) URL, or `-` for stdin. |
 | `[NEW_SCHEMA]` | A second version: show what changed from SCHEMA to it. |
+
+### rich chart
+
+A chart from CSV, JSON or stdin: a sparkline, bars, lines, points or a heatmap; --x and --y pick the columns, a missing column or a value that is not a number is refused with its row and column
+
+#### Usage
+
+```text
+rich chart [OPTIONS] [FILE]
+```
+
+#### Chart
+
+| Option | Description |
+| --- | --- |
+| `--kind <KIND>` | With `rich chart`, what to draw: spark (a sparkline per series), bar (a bar per row, labelled by --x), line (the default) and scatter (each series against --x, or the row number), or heatmap (rows by series, each value a shade) Possible values: `spark`, `bar`, `line`, `scatter`, `heatmap`. |
+| `--x <COLUMN>` | With `rich chart`, the column of x positions (line, scatter) or labels (bar, heatmap), by header or 1-based number (default: the row number; for labels, the first column that is not all numbers) |
+| `--y <COLUMN>...` | With `rich chart`, a column to draw, by header or 1-based number; repeatable, one series each (default: every numeric column but --x) |
+
+#### Layout
+
+| Option | Description |
+| --- | --- |
+| `-w`, `--width <N>` | Render the output N columns wide (the console keeps its own width, so --left/--center/--right still use it) |
+
+#### Arguments
+
+| Argument | Description |
+| --- | --- |
+| `[FILE]` | CSV, TSV, JSON, JSON Lines or whitespace-separated numbers, an http(s) URL, or `-` for stdin (the default) |
 
 ### rich config
 

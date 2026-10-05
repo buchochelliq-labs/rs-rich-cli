@@ -30,6 +30,7 @@ rich mermaid flow.mmd                                   # a Mermaid flowchart, d
 rich dot services.dot                                   # a DOT (Graphviz) graph, drawn as text
 rich deps --why syn                                     # Cargo dependency tree; what pulls a crate in
 rich schema order-v1.json order-v2.json                 # a JSON Schema as a tree, or what changed
+rich chart sales.csv --kind bar --x month --y revenue   # a chart from CSV, JSON or stdin
 rich diff old.rs new.rs --side-by-side                  # text diff; `git diff | rich diff -` for patches
 rich view src/main.rs --search todo                     # any file, rendered or highlighted, paged
 rich hex firmware.bin --offset 0x200 --length 64        # hex dump (alias: hexdump)
@@ -158,6 +159,14 @@ Diagram sources
   as a tree (`--metadata FILE`, `--why CRATE`, `--graph`, `--depth N`,
   `--duplicates`, `--no-dev`), and `rich schema FILE [NEW]` a JSON Schema, or
   what changed between two.
+
+Charts
+: `rich chart [FILE]` draws CSV, TSV, JSON, JSON Lines or bare numbers (from
+  a file, a URL or stdin) as a sparkline, bars, lines, points or a heatmap
+  (`--kind spark|bar|line|scatter|heatmap`). `--x COLUMN` names the
+  positions or labels and `--y COLUMN`, repeatable, the series; columns go
+  by header or 1-based number. A missing column, or a value that is not a
+  number, is refused with its row and column (exit 4).
 
 Filter and highlight
 : `--filter PATTERN` keeps only what matches, and `--highlight PATTERN` marks

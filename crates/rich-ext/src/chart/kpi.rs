@@ -63,7 +63,7 @@ impl Delta {
 ///     .caption("vs yesterday")
 ///     .status(Status::Warning);
 /// assert_eq!(
-///     console.render_to_string(&card),
+///     console.render_export(&card),
 ///     concat!(
 ///         "╭─────────────────────╮\n",
 ///         "│ Errors    ! warning │\n",

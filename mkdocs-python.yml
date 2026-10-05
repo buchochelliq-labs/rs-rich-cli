@@ -119,8 +119,10 @@ nav:
       - Layout and live output: ext/layout.md
       - CLI authoring: ext/cli-authoring.md
       - Testing and QA: ext/testing.md
-  - Art and Mermaid:
+  - Art, charts and diagrams:
       - Art (images, FIGlet, GIFs, diffs): art.md
+      - Charts: chart.md
+      - Diagrams (graphs, DOT): diagram.md
       - Mermaid: mermaid.md
   - Micro assets: micro.md
   - Plugins: plugins.md

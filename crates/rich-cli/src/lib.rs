@@ -20,8 +20,8 @@
 //! `--theme-file`, and the tool commands `inspect`, `diff` (images, text and
 //! patches), `view`, `hex`, `unicode`, `env`, `capture`, `ansi explain`,
 //! `doctor`, `bench compare`, `completions`, `docs` and `config`, and the
-//! diagram sources `dot`, `deps` and `schema`. Each composes public `rich` /
-//! `rich-ext` / `rich-art` / `rich-diagram` APIs.
+//! diagram sources `dot`, `deps` and `schema`, and `chart`. Each composes
+//! public `rich` / `rich-ext` / `rich-art` / `rich-diagram` APIs.
 
 use std::io::{BufRead, IsTerminal, Read, Write};
 use std::path::{Path, PathBuf};
@@ -33,6 +33,7 @@ mod batch_output;
 mod batch_paths;
 #[cfg(test)]
 mod batch_races;
+mod chart;
 mod cli_spec;
 mod config;
 mod controls;
@@ -134,6 +135,8 @@ enum Mode {
     Deps,
     /// `schema`: a JSON Schema as a tree, or two compared (`sources.rs`).
     Schema,
+    /// `chart`: a chart from CSV, JSON or stdin (`chart.rs`).
+    Chart,
 }
 
 impl Mode {
@@ -289,6 +292,11 @@ const MODE_SPECS: &[ModeSpec] = &[
         mode: Mode::Schema,
         primary: "schema",
         aliases: &["schema"],
+    },
+    ModeSpec {
+        mode: Mode::Chart,
+        primary: "chart",
+        aliases: &["chart"],
     },
 ];
 
@@ -540,6 +548,8 @@ struct Cli {
     dot_backend: Option<sources::DotBackend>,
     /// `rich deps` options: `--metadata`, `--why`, `--graph`, `--depth`, …
     graph_sources: sources::GraphSourceOptions,
+    /// `rich chart` options: `--kind`, `--x`, `--y`.
+    chart: chart::ChartOptions,
     /// `--highlighter NAME`: the console-wide code highlighter.
     highlighter: Option<String>,
     /// `--code-theme NAME`: a theme of the chosen code highlighter.
@@ -1050,6 +1060,9 @@ const VALUE_OPTIONS: &[&str] = &[
     "--metadata",
     "--why",
     "--depth",
+    "--kind",
+    "--x",
+    "--y",
     "--highlighter",
     "--code-theme",
     "--plugin",
@@ -1802,6 +1815,7 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
     let mut mermaid_backend = None;
     let mut dot_backend = None;
     let mut graph_sources = sources::GraphSourceOptions::default();
+    let mut chart = chart::ChartOptions::default();
     let mut highlighter: Option<String> = None;
     let mut plugins: Vec<String> = Vec::new();
     let mut code_theme: Option<String> = None;
@@ -1885,6 +1899,9 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
             continue;
         }
         if graph_sources.parse_option(arg, &mut iter)? {
+            continue;
+        }
+        if chart.parse_option(arg, &mut iter)? {
             continue;
         }
         if matches!(
@@ -2400,6 +2417,7 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
         .given()
         .into_iter()
         .chain(graph_sources.given())
+        .chain(chart.given())
     {
         if !commands.contains(&mode_name(mode)) {
             return Err(format!(
@@ -2860,6 +2878,7 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
         mermaid_backend,
         dot_backend,
         graph_sources,
+        chart,
         highlighter,
         code_theme,
         plugins,
@@ -4304,11 +4323,11 @@ fn run_once_with_fetch(mut cli: Cli, prefetched: Option<(String, Option<String>)
         let fit = view.measure(&console, &console.options()).maximum;
         return decorate_and_emit(&cli, &console, &export, view, Some(fit));
     }
-    if matches!(mode, Mode::Deps | Mode::Schema) {
-        let view = if mode == Mode::Deps {
-            sources::deps(&cli)
-        } else {
-            sources::schema(&cli)
+    if matches!(mode, Mode::Deps | Mode::Schema | Mode::Chart) {
+        let view = match mode {
+            Mode::Deps => sources::deps(&cli),
+            Mode::Schema => sources::schema(&cli),
+            _ => chart::chart(&cli),
         };
         let view = match view {
             Ok(view) => view,

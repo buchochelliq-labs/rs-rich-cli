@@ -104,7 +104,7 @@ The same over-long word under each overflow method.
 
 ## Beyond the core
 
-These come from `rs-rich-ext`, `rs-rich-art` and the `rich` command. Each image
+These come from `rs-rich-ext`, `rs-rich-art`, `rs-rich-diagram` and the `rich` command. Each image
 is the real output of a guide example or CLI command; follow the link for the
 code.
 
@@ -131,6 +131,26 @@ code.
 ![A unified diff with highlighted changes](media/guide/guide_diff-unified.svg)
 
 [Diffs and test reports guide](guide/ext/diffs-and-test-reports.md)
+
+### Charts
+
+![Two KPI cards, a status matrix and a timeline in a Layout](media/guide/guide_charts-dashboard.svg)
+
+![A Braille line chart with three series](media/guide/guide_charts-line.svg)
+
+![A rich chart recording: bars from a CSV file](media/tapes/chart/bars.png)
+
+[Charts guide](guide/ext/charts.md) · [`rich chart` recording](recordings.md#charts-from-data)
+
+### Diagrams
+
+![A service graph drawn as text](media/guide/guide_diagram-services.svg)
+
+![A DOT pipeline drawn natively](media/guide/guide_diagram-dot.svg)
+
+![rich deps drawing a dependency graph](media/tapes/deps/graph.png)
+
+[Diagrams guide](guide/diagram/index.md) · [Dependencies and schemas](guide/ext/sources.md) · [`rich deps`](recordings.md#dependency-trees) and [DOT in Markdown](recordings.md#dot-in-markdown) recordings
 
 ### Images
 

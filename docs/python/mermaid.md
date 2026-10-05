@@ -35,7 +35,6 @@ console.print(Mermaid("graph TD\n  A --> B", ascii=True))
 ┌───────┐  ╱────────╲       ╭────╮
 │ Start ├─►< Ready? >──yes─►( Go )
 └───────┘  ╲────────╱       ╰────╯
-
 +---+
 | A |
 +-+-+
@@ -44,7 +43,6 @@ console.print(Mermaid("graph TD\n  A --> B", ascii=True))
 +---+
 | B |
 +---+
-
 ```
 
 ```python
@@ -136,5 +134,4 @@ True False
 ┌───┐  ┌───┐
 │ x ├─►│ y │
 └───┘  └───┘
-
 ```

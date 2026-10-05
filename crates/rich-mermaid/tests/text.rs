@@ -6,7 +6,7 @@ use rich_mermaid::Mermaid;
 
 fn render(source: &str, width: usize, ascii: bool) -> String {
     let console = Console::builder().width(width).color_system(None).build();
-    console.render_to_string(&Mermaid::new(source).ascii(ascii))
+    console.render_export(&Mermaid::new(source).ascii(ascii))
 }
 
 fn check(name: &str, source: &str, width: usize, ascii: bool) {
@@ -201,4 +201,23 @@ fn very_long_links_are_capped() {
     );
     assert_eq!(capped, longest);
     assert!(capped.contains('▼'), "{capped}");
+}
+
+/// Like core's renderables, the drawing leaves the newline after its last
+/// line to `print`: no blank line follows a diagram, a cropped one with its
+/// note, or an unsupported source shown as code.
+#[test]
+fn printing_a_diagram_ends_with_one_newline() {
+    let console = Console::builder().width(30).color_system(None).build();
+    for source in [
+        "graph LR\n  A --> B",
+        "graph LR\n  Aaaaaaaaaaaa --> Bbbbbbbbbbbbb --> Cccccccccccc",
+        "sequenceDiagram\n  A->>B: hi",
+    ] {
+        let out = console.render_export(&Mermaid::new(source));
+        assert!(
+            out.ends_with('\n') && !out.ends_with("\n\n"),
+            "{source}: {out:?}"
+        );
+    }
 }

@@ -41,7 +41,7 @@ What the port cannot do (Jupyter output, a handful of `Table` options) raises
 | rs-rich's extensions | `rs_rich.ext` and its 39 submodules: diagnostics, structured data, diffs and test reports, transforms, workflows, tables and badges, terminal capabilities, frames, inspectors, live layouts, CLI docs, testing and QA |
 | Interactive components | `rs_rich.interact`: fuzzy `Select` and `MultiSelect`, `Input`, `Confirm`, `Form` and `Pager`, run on the terminal or headless (scripted keys in, frames out), with a fuzzy matcher |
 | Micro assets | `rs_rich.micro`: emoji-sized images written `:micro:name:`, a layered registry with a built-in library, `MicroMarkup` drawn through Kitty, iTerm2, Sixel or half-blocks (fallbacks elsewhere), and `micro_create_package` for your own |
-| Images and diagrams | `rs_rich.art` (images, Sixel, FIGlet, GIFs, image diffs; Pillow images when Pillow is installed), `rs_rich.mermaid` |
+| Images, charts and diagrams | `rs_rich.art` (images, Sixel, FIGlet, GIFs, image diffs; Pillow images when Pillow is installed), `rs_rich.chart` (sparklines, bars, line charts, gauges, heatmaps, KPI cards, timelines), `rs_rich.diagram` (graphs and DOT), `rs_rich.mermaid` |
 | Plugins | `rs_rich.plugins`: write highlighters, code highlighters, themes, boxes, renderers, fence renderers and transforms in Python, checked by the Rust plugin host |
 | The command line | `python -m rs_rich` and the `rich-rs` script: rs-rich's `rich` command, with `choose`, `filter`, `input`, `confirm` and `pager` |
 

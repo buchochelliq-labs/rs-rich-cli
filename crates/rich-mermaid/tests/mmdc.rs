@@ -53,7 +53,7 @@ fn render(source: &str, mmdc: MmdcOptions, sixel: bool) -> String {
         mmdc,
         ..MermaidOptions::default()
     };
-    console(sixel).render_to_string(&Mermaid::new(source).options(options))
+    console(sixel).render_export(&Mermaid::new(source).options(options))
 }
 
 /// `text` without CSI styling and Sixel (DCS) sequences.

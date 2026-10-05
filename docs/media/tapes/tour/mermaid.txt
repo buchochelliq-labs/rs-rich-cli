@@ -1,3 +1,4 @@
+│ 7      │ Error     │ text    │ 5 characters        │
 │ 12     │ ESC[0m    │ SGR     │ reset               │
 │ 16     │  done     │ text    │ 5 characters        │
 │ 21     │ <LF>      │ control │ line feed (newline) │
@@ -24,5 +25,4 @@ $ rich mermaid flow.mmd
 └─────────┘   └────────────┘ │ ┌───────┐
                              └►│ lumis │
                                └───────┘
-
 

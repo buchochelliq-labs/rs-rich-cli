@@ -1,0 +1,28 @@
+❯ rich release.md
+                                          Release pipeline
+
+Every change goes through the same stages:
+
+                                           ┌──────┐
+                         ┌──────┐ ┌───────►│ ship │
+                       ┌►│ test ├─┘        └──────┘
+             ┌───────┐ │ │      ├┄┐
+┌────────┐ ┌►│ build ├─┘ └──────┘ ┆        ┌─────┐
+│ commit ├─┘ │       │◄┐          └┄fails┄►│ fix │
+└────────┘   └───────┘ └───────────────────┤     │
+                                           └─────┘
+
+A failed test sends the change back to build.
+❯
+
+
+
+
+
+
+
+
+
+
+
+
