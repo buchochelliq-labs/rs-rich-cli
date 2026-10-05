@@ -559,6 +559,38 @@ inert symbols (`ESC[2J` becomes `␛[2J`). Use it for files you do not trust.
 `rich view` and the text `rich diff` do this by default; `--no-sanitize` turns
 it off there.
 
+## Charts and diagrams
+
+`rich chart` draws numbers from CSV, JSON or stdin (0.0.15). Columns go by
+header or by 1-based number:
+
+```bash
+rich chart sales.csv --kind bar --x month --y api
+rich chart sales.csv                       # every numeric column as a line
+seq 1 20 | rich chart --kind spark
+```
+
+![rich chart drawing bars from a CSV file](../../media/tapes/chart/bars.png)
+
+Graphs are drawn as text through one layout, whatever their source:
+
+```bash
+rich mermaid flow.mmd                      # a Mermaid flowchart
+rich dot services.dot                      # a DOT (Graphviz) graph
+rich deps --why syn                        # what pulls a crate into this workspace
+rich deps --graph --depth 1                # the same dependencies as a diagram
+rich schema order-v1.json order-v2.json    # a JSON Schema, or what changed
+```
+
+![rich deps --graph drawing a workspace's dependencies](../../media/tapes/deps/graph.png)
+
+These screenshots come from the [terminal recordings](../../recordings.md#charts-from-data),
+not the smoke tool. What to notice: the bars, lines and boxes read without
+colour, and a missing column or an unsupported DOT construct is refused with
+exit code 4 and a message naming it. See [Charts](../ext/charts.md),
+[Diagrams](../diagram/index.md) and
+[Dependency graphs and JSON Schemas](../ext/sources.md).
+
 ## Viewing and inspecting anything
 
 `view` shows a file the way it should be read, and pages it when it is taller

@@ -51,6 +51,13 @@ ext 0.0.9, art 0.0.9, CLI 0.0.11) is published. It adds
 diagnostics, structured data, checked-markup macros, `clap` and `tracing`
 integration, workflow renderables, and the `inspect`, `diff`, `view`, `hex`,
 `unicode`, `env` and `capture` commands.
+The [0.0.12 cohort](releases/0.0.12.md) added the plugin platform and the
+first Python package, [0.0.13](releases/0.0.13.md) interactive components and
+`rich record`, and [0.0.14](releases/0.0.14.md) composable interactive views,
+`rich explore` and micro assets; all three are published. This checkout
+carries the 0.0.15 cohort: terminal charts, `rs-rich-diagram` with DOT, and
+`rich chart`, `rich dot`, `rich deps` and `rich schema` (see the
+[0.0.15 plan](plans/0.0.15.md)).
 The [roadmap](ROADMAP.md) tracks subsequent work. Manifest versions below
 identify this checkout; the crates.io badges identify published packages.
 
@@ -79,8 +86,41 @@ identify this checkout; the crates.io badges identify published packages.
 - **The `rich` command**
 
     Render files from the shell, plus tools: `inspect` structured data, `diff`
-    text and patches, `view`, `hex`, `unicode`, `env`, `capture` and `doctor`.
+    text and patches, `view`, `hex`, `unicode`, `env`, `capture` and `doctor`;
+    `chart`, `dot`, `mermaid`, `deps` and `schema` to draw data and structure;
+    `choose`, `input`, `pager` and `explore` for scripts.
     See the [CLI guide](guide/cli/walkthrough.md).
+
+- **Charts**
+
+    Sparklines, bars, histograms, Braille line and scatter charts, gauges,
+    heatmaps, status matrices, KPI cards and timelines, each with an ASCII
+    form and a reading that does not depend on colour. See
+    [Charts](guide/ext/charts.md).
+
+- **Diagrams**
+
+    Graphs drawn with box-drawing characters through one layered layout, from
+    code, Mermaid flowcharts or DOT (Graphviz) sources; Cargo dependency
+    graphs and JSON Schemas. See [Diagrams](guide/diagram/index.md) and
+    [Dependency graphs and JSON Schemas](guide/ext/sources.md).
+
+- **Interactive components**
+
+    Fuzzy pickers, input, forms, pagers and explorers, composable into your
+    own views. See [Interactive](guide/interact/index.md).
+
+- **Micro assets**
+
+    Emoji-sized inline images written `:micro:name:`, drawn with Kitty,
+    iTerm2 or Sixel graphics, with a text fallback everywhere else. See
+    [Micro assets](guide/micro/index.md).
+
+- **Python**
+
+    `rs_rich`, Rich's API over the Rust core, with the port's extensions,
+    charts and diagrams. See the
+    [Python documentation](https://buchochelliq-labs.github.io/rs-rich-cli/python/).
 
 - **Rust ergonomics**
 
@@ -133,6 +173,13 @@ The badges below show the versions currently available on crates.io.
 | [`rs-rich-ext`](https://crates.io/crates/rs-rich-ext) | [![rs-rich-ext](https://img.shields.io/crates/v/rs-rich-ext.svg)](https://crates.io/crates/rs-rich-ext) | [docs.rs](https://docs.rs/rs-rich-ext) | extensions + plugin registry |
 | [`rs-rich-macros`](https://crates.io/crates/rs-rich-macros) | [![rs-rich-macros](https://img.shields.io/crates/v/rs-rich-macros.svg)](https://crates.io/crates/rs-rich-macros) | [docs.rs](https://docs.rs/rs-rich-macros) | checked markup and derive macros, used through `rs-rich-ext` |
 | [`rs-rich-art`](https://crates.io/crates/rs-rich-art) | [![rs-rich-art](https://img.shields.io/crates/v/rs-rich-art.svg)](https://crates.io/crates/rs-rich-art) | [docs.rs](https://docs.rs/rs-rich-art) | FIGlet text, image→ASCII, GIFs |
+| [`rs-rich-plugin-api`](https://crates.io/crates/rs-rich-plugin-api) | [![rs-rich-plugin-api](https://img.shields.io/crates/v/rs-rich-plugin-api.svg)](https://crates.io/crates/rs-rich-plugin-api) | [docs.rs](https://docs.rs/rs-rich-plugin-api) | the plugin contract |
+| [`rs-rich-mermaid`](https://crates.io/crates/rs-rich-mermaid) | [![rs-rich-mermaid](https://img.shields.io/crates/v/rs-rich-mermaid.svg)](https://crates.io/crates/rs-rich-mermaid) | [docs.rs](https://docs.rs/rs-rich-mermaid) | Mermaid flowcharts as text |
+| [`rs-rich-lumis`](https://crates.io/crates/rs-rich-lumis) | [![rs-rich-lumis](https://img.shields.io/crates/v/rs-rich-lumis.svg)](https://crates.io/crates/rs-rich-lumis) | [docs.rs](https://docs.rs/rs-rich-lumis) | the lumis (tree-sitter) highlighter |
+| [`rs-rich-record`](https://crates.io/crates/rs-rich-record) | [![rs-rich-record](https://img.shields.io/crates/v/rs-rich-record.svg)](https://crates.io/crates/rs-rich-record) | [docs.rs](https://docs.rs/rs-rich-record) | scripted terminal recordings |
+| [`rs-rich-interact`](https://crates.io/crates/rs-rich-interact) | [![rs-rich-interact](https://img.shields.io/crates/v/rs-rich-interact.svg)](https://crates.io/crates/rs-rich-interact) | [docs.rs](https://docs.rs/rs-rich-interact) | interactive components |
+| [`rs-rich-micro`](https://crates.io/crates/rs-rich-micro) | [![rs-rich-micro](https://img.shields.io/crates/v/rs-rich-micro.svg)](https://crates.io/crates/rs-rich-micro) | [docs.rs](https://docs.rs/rs-rich-micro) | micro assets |
+| [`rs-rich-diagram`](https://crates.io/crates/rs-rich-diagram) | [![rs-rich-diagram](https://img.shields.io/crates/v/rs-rich-diagram.svg)](https://crates.io/crates/rs-rich-diagram) | [docs.rs](https://docs.rs/rs-rich-diagram) | graph diagrams and DOT (new in 0.0.15; published with the cohort) |
 
 <a id="versions-prepared-in-this-checkout"></a>
 

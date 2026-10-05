@@ -57,6 +57,23 @@ Entries below record subsequent releases and development.
 
 ## [Unreleased]
 
+### Docs refresh for 0.0.15
+
+- The README, the home page, the guide index, the CLI guide and walkthrough,
+  [Using the CLI](docs/cli.md), Getting started, Architecture, Known issues
+  and the crate READMEs describe the 0.0.15 cohort: charts, `rs-rich-diagram`
+  and DOT, `rich chart`, `rich dot`, `rich deps` and `rich schema`,
+  `rs_rich.chart` and `rs_rich.diagram`, with cross-links between the Rust,
+  CLI and Python pages. Stale statements fixed: release history stopping at
+  0.0.11, `rs-rich` 0.0.7 and `rs-rich-ext` 0.0.11 in install snippets, the
+  CLI README's version, macOS "not covered by CI", "`rich` writes no cache"
+  (micro assets have one), `rs-rich-macros` "not on crates.io", the ext
+  registry described as internal, the missing crates in the architecture and
+  guide tables, `rich doctor --json` (it is `--report json`), and the Python
+  command line's claim to every command (`rich record` is not in the wheel).
+  `AGENTS.md`'s dependency graph now shows `rich-cli → rich-micro` and
+  `rich-art`, and what `rich-py` depends on.
+
 ### 0.0.14 follow-ups (0.0.15 workstream 6)
 
 The [0.0.14 known limits](docs/releases/0.0.14.md#known-limits) that were

@@ -12,7 +12,9 @@
 //! - Errors and logs: [`diagnostic`], [`dashboard`], [`stacktrace`],
 //!   [`hyperlink`], [`log_handler`] (`RichHandler`, `SpanView`), `adapters`
 //!   (`log` / `tracing` features), [`event`].
-//! - Data and authoring: `data` (`data` feature), [`derive`](mod@derive), [`macros`] (the
+//! - Data and authoring: `data`, `deps` (Cargo dependency trees) and `schema`
+//!   (JSON Schema trees and diffs), all behind the `data` feature;
+//!   [`derive`](mod@derive), [`macros`] (the
 //!   `macros` feature re-exports `richf!` and `#[derive(Rich)]`), [`cli_doc`]
 //!   (`clap` feature for `clap::Command`).
 //! - Diffs and testing: [`diff`], `testing` and `qa` (`testing` feature).

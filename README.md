@@ -31,7 +31,7 @@ in a real terminal: inspectors, diffs, Mermaid flowcharts drawn as text, code
 themes, `--filter` and `--highlight`, rich-cli's options, reStructuredText, a
 `rich choose` picker, banners and images.
 [Tour and reproduction](docs/demos.md) ·
-[0.0.13 release notes](docs/releases/0.0.13.md).
+[0.0.14 release notes](docs/releases/0.0.14.md).
 
 ## Install and try
 
@@ -91,7 +91,14 @@ in the release notes; the crates.io links show available packages.
 | `rs-rich-macros` | checked markup and derive macros (via `rs-rich-ext`'s `macros` feature) | `use rich_ext::richf` |
 | `rs-rich-cli` | CLI tracking Python rich-cli 1.8.1 | executable `rich` |
 | `rs-rich-art` | FIGlet, image→ASCII, animated GIFs | `use rich_art` |
-| `rs-rich` (PyPI) | Python bindings: Rich's API over the Rust core, plus the port's crates (`rs_rich.ext`, `rs_rich.interact`, ...) | `import rs_rich` |
+| `rs-rich-plugin-api` | the plugin contract: highlighters, themes, boxes, renderers, fence renderers, components | `use rich_plugin_api` |
+| `rs-rich-mermaid` | Mermaid flowcharts drawn as text, ```` ```mermaid ```` fences | `use rich_mermaid` |
+| `rs-rich-diagram` | graph model, layered layout and `Diagram` renderable; DOT (Graphviz) sources and ```` ```dot ```` fences | `use rich_diagram` |
+| `rs-rich-lumis` | the lumis (tree-sitter) code highlighter | `use rich_lumis` |
+| `rs-rich-record` | scripted terminal recordings (`rich record`) | `use rich_record` |
+| `rs-rich-interact` | interactive components: pickers, input, forms, pagers, explorers | `use rich_interact` |
+| `rs-rich-micro` | micro assets: emoji-sized inline images written `:micro:name:` | `use rich_micro` |
+| `rs-rich` (PyPI) | Python bindings: Rich's API over the Rust core, plus the port's crates (`rs_rich.ext`, `rs_rich.chart`, `rs_rich.diagram`, `rs_rich.interact`, ...) | `import rs_rich` |
 
 The published package names carry an `rs-` prefix because `rich` is already taken
 on crates.io by an unrelated crate. The library targets keep the short names, so
@@ -99,7 +106,9 @@ you still write `use rich::…`.
 
 The dependency arrow only ever points one way: `rich-cli → rich-ext → rich` and
 `rich-cli → rich-art → rich`, with `rich-ext → rich-macros` behind ext's optional
-`macros` feature. Nothing depends back on the CLI or ext. This keeps the core a clean mirror and
+`macros` feature; the other crates sit beside them (the full graph is in
+[AGENTS.md](AGENTS.md)). Core depends on none of them, and nothing depends back
+on the CLI. This keeps the core a clean mirror and
 makes upstream syncs a mechanical diff-and-port. See
 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
@@ -133,8 +142,10 @@ why, is in [docs/ROADMAP.md](docs/ROADMAP.md); the tracking epic is
 
 ## Release history and development
 
-The [0.0.11 release notes](docs/releases/0.0.11.md) document the newest
-cohort; older notes are in [`docs/releases/`](docs/releases/). Later source changes are tracked in the [roadmap](docs/ROADMAP.md)
+The [0.0.14 release notes](docs/releases/0.0.14.md) document the newest
+published cohort; older notes are in [`docs/releases/`](docs/releases/). This
+checkout carries the 0.0.15 cohort (charts and diagrams; see the
+[0.0.15 plan](docs/plans/0.0.15.md) and [`CHANGELOG.md`](CHANGELOG.md)). Later source changes are tracked in the [roadmap](docs/ROADMAP.md)
 and development plans. The manifest table above describes this checkout;
 crates.io is the source for available published versions.
 
@@ -146,7 +157,13 @@ modes with tone adjustments. The [0.0.11 cohort](docs/releases/0.0.11.md)
 (core 0.0.7, macros 0.0.1 (new), ext 0.0.9, art 0.0.9, CLI 0.0.11) is
 published: diagnostics, structured data, checked-markup macros,
 `clap` and `tracing` integration, workflow renderables, and the `inspect`, `diff`,
-`view`, `hex`, `unicode`, `env` and `capture` commands. See [copyable workflows](docs/recipes.md).
+`view`, `hex`, `unicode`, `env` and `capture` commands. The
+[0.0.12 cohort](docs/releases/0.0.12.md) added the plugin platform
+(`rs-rich-plugin-api`, `rs-rich-mermaid`, `rs-rich-lumis`) and the first
+`rs-rich` Python package; [0.0.13](docs/releases/0.0.13.md) interactive
+components (`rs-rich-interact`), third-party plugins and `rich record`; and
+[0.0.14](docs/releases/0.0.14.md) composable interactive views, `rich explore`
+and micro assets (`rs-rich-micro`). See [copyable workflows](docs/recipes.md).
 
 ## Install
 
@@ -161,7 +178,7 @@ syntect, its bincode 1.x and a second `fancy-regex` from your build:
 
 ```toml
 rs-rich = { version = "0.0.9", default-features = false }
-rs-rich-ext = { version = "0.0.11", default-features = false }  # if you use it
+rs-rich-ext = { version = "0.0.13", default-features = false }  # if you use it
 ```
 
 ## Try it
@@ -191,9 +208,14 @@ rich-cli 1.8.1's options (`--head`/`--tail`, `-n`, `--guides`, `--lexer`,
 `--emoji`, `--soft`, `--no-wrap`, `--max-width`, the `--text-*` alignments,
 the rule options, `--force-terminal` and `--rst`), interactive commands for
 scripts (`rich choose`, `filter`, `input`, `confirm` and `pager`) and
-`rich record` for scripted terminal recordings. See the
-[CLI guide](docs/guide/cli/walkthrough.md) and
-[CLI reference](docs/cli-reference.md).
+`rich record` for scripted terminal recordings. 0.0.14 adds `rich explore`
+and `rich micro`. 0.0.15 draws data and structure: `rich chart` (CSV, JSON or
+stdin as a sparkline, bars, lines, points or a heatmap), `rich dot` and
+```` ```dot ```` fences (DOT drawn natively), `rich deps` (Cargo dependency
+trees and graphs) and `rich schema` (a JSON Schema as a tree, or what changed
+between two). See the [CLI guide](docs/guide/cli/walkthrough.md),
+[Charts](docs/guide/ext/charts.md), [Diagrams](docs/guide/diagram/index.md)
+and the [CLI reference](docs/cli-reference.md).
 
 Library usage:
 

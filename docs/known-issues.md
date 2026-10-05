@@ -85,11 +85,15 @@ not configurable. See [Limits](cli.md#limits).
 `rich capture` shows the output in a panel, exports SVG or HTML, and records an
 asciicast with `--cast`. There is no PNG export; convert the SVG yourself.
 
-### `rs-rich-macros` is not on crates.io yet
+### Diagrams draw subgraph clusters without frames
 
-`rs-rich-macros` 0.0.1 is new in the 0.0.11 cohort. Until the cohort is
-published, `rs-rich-ext`'s `macros` feature (`richf!`, `#[derive(Rich)]`) works
-only from a checkout of this repository.
+`rs-rich-diagram` lays every node out in one graph. DOT `cluster…` subgraphs
+and `rank` constraints are accepted, and a note under the drawing names each
+cluster's members, but no frame is drawn around them. Node ports, HTML-like
+labels, `record` shapes and several graphs in one file are refused with the
+construct and its line (`rich dot` exits 4). For Graphviz's full layout, use
+`--dot-backend graphviz --export-svg` with Graphviz installed. See
+[Diagrams](guide/diagram/index.md#dot-graphviz).
 
 ### SVG export can squeeze CJK glyphs
 
@@ -186,6 +190,8 @@ fixes to `view`, stack traces and hyperlinks) are in the changelog instead. Full
 
 | Symptom | Fixed in |
 |---------|----------|
+| `rich mermaid` and `rich_mermaid::Mermaid` printed a blank line after the diagram | mermaid `0.0.4`, CLI `0.0.15` |
+| `rich micro preview` labelled a still image with a frame time ("100 ms") | CLI `0.0.15` |
 | `NO_COLOR` also dropped bold and underline in a terminal | core `0.0.7` |
 | A project `rich.toml` with `no_color = false` undid `NO_COLOR` | CLI `0.0.11` |
 | Markup in plain-string table cells and tree labels printed literally | core `0.0.7` |

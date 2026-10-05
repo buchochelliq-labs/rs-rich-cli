@@ -215,7 +215,7 @@ and #499). Delivered:
 - Atkinson dithering, OKLab distance, Sixel/GIF colour modes, alpha backgrounds
   (#498) and `--theme-file` (#499).
 
-## 0.0.15 — terminal charts and diagrams (planned)
+## 0.0.15 — terminal charts and diagrams (implemented, not yet published)
 
 The [0.0.15 plan](plans/0.0.15.md) is the first slice of
 [milestone 5](https://github.com/buchochelliq-labs/rs-rich-cli/milestone/5),
@@ -229,10 +229,11 @@ tracked in [#642](https://github.com/buchochelliq-labs/rs-rich-cli/issues/642):
   new `rs-rich-diagram`: box-drawing primitives (#227), network graphs
   (#258), a DOT plugin (#240), Cargo dependency graphs (#248) and a JSON
   Schema visualiser (#244);
-- `rich chart`, `rich deps` and `rich schema`, Python bindings, and the
-  small 0.0.14 follow-ups.
+- `rich chart`, `rich dot`, `rich deps` and `rich schema`, Python bindings
+  (`rs_rich.chart`, `rs_rich.diagram`), and the small 0.0.14 follow-ups.
 
-Core does not change, and stays at 0.0.9.
+Every workstream is merged (see the plan's Delivered table). Core does not
+change, and stays at 0.0.9.
 
 ## 0.0.14 — composable interactive views and micro assets (published 2026-10-04)
 

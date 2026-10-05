@@ -48,7 +48,7 @@ always available. The `use` path is `rich_ext::<module>`.
 | `cancel` | `CancelToken`: one cancellation flag, with child tokens, shared by the modules above | none | [Workflows](workflows.md#cancellation) |
 | `table` | `TableData`: stable multi-column sort, grouping and aggregates; `StreamingTable`: keyed rows that re-render only what changed | none | [Tables](tables.md) |
 | `badge`, `size_bar` | `Badge`/`Badges`: status, label, link and metadata chips; `SizeBar`: a size against a total or limit | none | [Badges and redaction](badges-and-redaction.md) |
-| `chart` | `Sparkline`, `BarChart`, `Histogram`, `LineChart` (Braille line and scatter), with `Scale`, `ValueFormat` and `Charset`; every chart has an ASCII form and reads without colour | none | [Charts](charts.md) |
+| `chart` | `Sparkline`, `BarChart`, `Histogram`, `LineChart` (Braille line and scatter), `Gauge`, `BulletChart`, `Heatmap`, `StatusMatrix`, `KpiCard` and `Timeline`, with `Scale`, `ValueFormat` and `Charset`; every chart has an ASCII form and reads without colour. In the shell: `rich chart` | none | [Charts](charts.md) |
 | `format` | Sizes, rates, durations, relative times, timestamps, percentages and numbers as people read them | none | [Badges and redaction](badges-and-redaction.md#formatters) |
 | `redact` | `Redactor` (**experimental**, best effort: check its output): mask secrets in strings, ANSI text and rendered segments before they are exported or recorded | none | [Badges and redaction](badges-and-redaction.md#redaction) |
 
@@ -84,21 +84,24 @@ always available. The `use` path is `rich_ext::<module>`.
 
 ## Feature flags
 
-All features are off by default.
+`syntax` and `markdown` are on by default (core's two features, and what
+needs them); every other feature is off.
 
 | Feature | Enables | Extra dependencies |
 |---|---|---|
+| `syntax`, `markdown` (default) | Highlighted `source_view`, `SourceDiff` and `PatchView`; `rst`, `cli_doc::markdown_view` | `rs-rich`'s `syntax` and `markdown` (syntect, pulldown-cmark) |
 | `macros` | `richf!`, `style!`, `theme_key!`, `markup!`, `#[derive(Rich)]`, print macros | `rs-rich-macros` |
 | `anyhow` | `Diagnostic::from_anyhow` | `anyhow` |
 | `log` | `adapters::LogAdapter`; `RichHandler` as an `EventSink` | `log` |
 | `tracing` | `adapters::EventLayer`; `RichHandler` as an `EventSink` | `tracing`, `tracing-subscriber` |
-| `data` | `rich_ext::data` with JSON, INI and dotenv | `serde`, `serde_json` |
+| `data` | `rich_ext::data` with JSON, INI and dotenv; `deps` and `schema` | `serde`, `serde_json` |
 | `yaml`, `toml`, `xml` | Those formats in `data` (each implies `data`) | `saphyr-parser`, `toml`, `quick-xml` |
 | `jsonpath` | JSONPath selectors in `data` | none |
 | `clap` | `CommandSpec::from_clap`, `cli_doc::clap::parse_or_exit` | `clap` |
 | `testing` | `testing`, `qa`, `diff::assert` | `serde`, `serde_json` |
 | `test-report` | `diff::test_report` | `serde`, `serde_json`, `quick-xml` |
 | `serde` | `Serialize` for capability reports, contrast findings and ANSI explanations | `serde` |
+| `dylib-plugins`, `wasm-plugins` | Loading runtime plugins: native libraries, or sandboxed WASM modules ([Extending](../../PLUGINS.md)) | `libloading`, `wasmi` |
 
 ## Examples
 
@@ -112,6 +115,7 @@ cargo run -p rs-rich-ext --example guide_diagnostics --features anyhow
 cargo run -p rs-rich-ext --example guide_logging --features log,tracing
 cargo run -p rs-rich-ext --example guide_live_layout
 cargo run -p rs-rich-ext --example guide_macros --features macros
+cargo run -p rs-rich-ext --example guide_charts
 ```
 
 ## See also

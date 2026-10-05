@@ -5,12 +5,17 @@ CSV, source code, notebooks, images — and compares images, text files and
 patches. It also explores structured data (`inspect`), shows any file (`view`),
 looks inside bytes, characters and escape sequences (`hex`, `unicode`,
 `ansi explain`), lists the environment (`env`) and captures a command's output
-(`capture`). This page is organised by what you are trying to do. For the
-complete list of options, see the [CLI reference](cli-reference.md).
+(`capture`). It draws charts and diagrams (`chart`, `mermaid`, `dot`, `deps`,
+`schema`), asks questions in scripts (`choose`, `input`, `confirm`, ...) and
+shows micro assets (`micro`). This page is organised by what you are trying
+to do. For the complete list of options, see the
+[CLI reference](cli-reference.md).
 
-**Assumes** you can run commands in a terminal. Examples use real CLI output
-from 0.0.11, the latest published release; see the
-[0.0.11 release notes](releases/0.0.11.md).
+**Assumes** you can run commands in a terminal. Examples use real CLI output;
+sections marked with a version need at least that version. The latest
+published release is 0.0.14 (see the
+[0.0.14 release notes](releases/0.0.14.md)); `chart`, `dot`, `deps` and
+`schema` are new in 0.0.15.
 
 ---
 
@@ -828,6 +833,52 @@ with `--watch-poll`, so same-size edits and atomic saves are detected even when
 timestamps are preserved. Redirected stdout renders once and exits without
 terminal clear codes. See [watch recipes](recipes.md#watch-json-while-editing).
 
+## Draw charts and diagrams
+
+`rich chart` draws numbers from a CSV, TSV, JSON or JSON Lines file, a URL
+or stdin (0.0.15):
+
+```bash
+rich chart sales.csv                                  # every numeric column as a line
+rich chart sales.csv --kind bar --x month --y api     # a bar per row, labelled
+seq 1 20 | rich chart --kind spark                    # numbers piped in
+```
+
+```text
+$ rich chart sales.csv --kind bar --y api --width 50
+Jan ███████████████████████▌                 30
+Feb █████████████████████████████████        42
+Mar ███████████████████████████▌             35
+Apr ████████████████████████████████████████ 51
+May █████████████████████████████████████▋   48
+```
+
+Diagrams are drawn as text, with box-drawing characters:
+
+```bash
+rich mermaid flow.mmd               # a Mermaid flowchart (alias mmd)
+rich dot services.dot               # a DOT (Graphviz) graph, natively (alias graphviz)
+rich README.md                      # ```mermaid and ```dot fences draw too
+rich deps --why syn                 # what pulls a crate into this Cargo workspace
+rich deps --graph --depth 1         # the dependencies as a diagram
+rich schema order-v1.json order-v2.json   # what changed between two JSON Schemas
+```
+
+`.mmd`, `.mermaid`, `.dot` and `.gv` files are detected, so `rich FILE`
+draws them too. A DOT construct the native parser does not support (node
+ports, HTML-like labels, `record` shapes) is refused with its line, exit 4.
+`--mermaid-backend mmdc` and `--dot-backend graphviz` hand the drawing to
+Mermaid's or Graphviz's own tools where they are installed; like plugins, a
+project's `./rich.toml` cannot turn them on. `--mermaid-backend off` and
+`--dot-backend off` leave the fences as code blocks, as upstream renders
+them.
+
+See [Charts](guide/ext/charts.md#from-the-shell-rich-chart),
+[Diagrams](guide/diagram/index.md) and
+[Dependency graphs and JSON Schemas](guide/ext/sources.md) for every option,
+and the [recordings](recordings.md#charts-from-data) to see them in a
+terminal.
+
 ## Ask in a script
 
 `rich choose`, `rich filter`, `rich input`, `rich confirm`, `rich pager`,
@@ -1390,6 +1441,7 @@ their own options there, and every other `rich` option still applies.
 
 - [CLI reference](cli-reference.md) — every option, generated from the description behind `--help`
 - [Comparing images](image-diff.md) — the image `--diff` workflow in depth
+- [Micro assets in the CLI](guide/micro/cli.md) — `rich micro` and `:micro:name:` in text
 - [Troubleshooting](troubleshooting.md) — error messages and what to do about them
 - [Parity with Python rich](parity.md) — how close the output is, and where it differs
 

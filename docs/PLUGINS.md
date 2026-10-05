@@ -143,7 +143,7 @@ every diagram type through `mmdc` behind its `mmdc` feature.
 feature) registers DOT the same way: `dot` and `graphviz` fence renderers and a
 `dot` source renderer, drawn natively through the diagram layout.
 `rich doctor` lists the registered plugins and the API version (and includes
-them in `--json`).
+them in `--report json`).
 
 ## Third-party plugins (0.0.13)
 
@@ -219,7 +219,9 @@ kind the host does not know.
 
 `rich plugins list` shows every plugin with its source (`built-in`, `linked`,
 `native`, `wasm`), version, ABI and capabilities, and `rich plugins info NAME`
-shows one; both take `--report json`. In a build with `dylib-plugins` or
+shows one; both take `--report json`. A default build has three built in:
+`rich-ext` (the syntect code highlighter), `dot` and `mermaid`, plus `lumis` in
+a build with that feature. In a build with `dylib-plugins` or
 `wasm-plugins` (`cargo install rs-rich-cli --features wasm-plugins`),
 `--plugin PATH` loads a runtime plugin for one run, and a `plugins = [...]`
 list in `~/.config/rich/config.toml` or a file given with `--config` loads
