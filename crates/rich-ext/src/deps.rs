@@ -322,7 +322,13 @@ impl DepGraph {
     /// Crates resolved at more than one version (among the packages
     /// reachable from the roots), by name, each with its versions in order.
     pub fn duplicates(&self) -> BTreeMap<String, Vec<String>> {
-        let reachable = self.reachable(&[DepKind::Normal, DepKind::Build, DepKind::Dev]);
+        self.duplicates_in(&[DepKind::Normal, DepKind::Build, DepKind::Dev])
+    }
+
+    /// [`DepGraph::duplicates`] among the packages reachable through the
+    /// kinds in `kinds` (as [`DepGraph::reachable`] follows them).
+    pub fn duplicates_in(&self, kinds: &[DepKind]) -> BTreeMap<String, Vec<String>> {
+        let reachable = self.reachable(kinds);
         let mut versions: BTreeMap<String, Vec<String>> = BTreeMap::new();
         for (package, _) in self.packages.iter().zip(&reachable).filter(|(_, r)| **r) {
             versions
@@ -356,12 +362,28 @@ impl DepGraph {
         found
     }
 
-    /// What depends on each package, the inverse of [`DepGraph::deps`].
-    pub fn dependents(&self) -> Vec<Vec<(usize, Vec<DepKind>)>> {
+    /// What depends on each package, the inverse of [`DepGraph::deps`]:
+    /// only the edges [`DepGraph::reachable`] follows through `kinds` (dev
+    /// dependencies only from the roots), from packages it reaches, each
+    /// with the kinds it is used as among those.
+    pub fn dependents(&self, kinds: &[DepKind]) -> Vec<Vec<(usize, Vec<DepKind>)>> {
+        let reachable = self.reachable(kinds);
         let mut dependents = vec![Vec::new(); self.packages.len()];
         for (from, deps) in self.deps.iter().enumerate() {
+            if !reachable[from] {
+                continue;
+            }
+            let root = self.roots.contains(&from);
             for dep in deps {
-                dependents[dep.package].push((from, dep.kinds.clone()));
+                let used: Vec<DepKind> = dep
+                    .kinds
+                    .iter()
+                    .copied()
+                    .filter(|k| kinds.contains(k) && (root || *k != DepKind::Dev))
+                    .collect();
+                if !used.is_empty() {
+                    dependents[dep.package].push((from, used));
+                }
             }
         }
         for list in &mut dependents {
@@ -370,10 +392,11 @@ impl DepGraph {
         dependents
     }
 
-    /// Up to `limit` paths from a root to `target`, each root first, shortest
-    /// first. Every path is simple (no package twice).
-    pub fn paths_to(&self, target: usize, limit: usize) -> Vec<Vec<usize>> {
-        let dependents = self.dependents();
+    /// Up to `limit` paths from a root to `target` through the kinds in
+    /// `kinds` (as [`DepGraph::dependents`] follows them), each root first,
+    /// shortest first. Every path is simple (no package twice).
+    pub fn paths_to(&self, target: usize, limit: usize, kinds: &[DepKind]) -> Vec<Vec<usize>> {
+        let dependents = self.dependents(kinds);
         // Breadth-first from the target up, so shorter paths come first.
         let mut paths = Vec::new();
         let mut queue = std::collections::VecDeque::from([vec![target]]);
@@ -495,7 +518,7 @@ impl DepTree {
 
     /// The summary lines [`DepTree::summary`] adds.
     fn summary_text(&self, console: &Console) -> Text {
-        let duplicates = self.graph.duplicates();
+        let duplicates = self.graph.duplicates_in(&self.kinds);
         let mut text = Text::new("");
         if duplicates.is_empty() {
             text.append(
@@ -544,7 +567,8 @@ impl DepTree {
 
     /// Build the [`Tree`] this renders as.
     pub fn tree(&self, console: &Console) -> Tree {
-        let duplicates: HashSet<String> = self.graph.duplicates().into_keys().collect();
+        let duplicates: HashSet<String> =
+            self.graph.duplicates_in(&self.kinds).into_keys().collect();
         // Which packages lead to a duplicate, for `duplicates_only`.
         let leads = if self.duplicates_only {
             let mut leads: Vec<Option<bool>> = vec![None; self.graph.packages.len()];
@@ -596,8 +620,12 @@ impl DepTree {
         }
         stack.push(package);
         let mut found = duplicates.contains(&self.graph.packages[package].name);
+        let root = self.graph.roots.contains(&package);
         for dep in &self.graph.deps[package] {
-            if dep.kinds.iter().any(|k| self.kinds.contains(k))
+            if dep
+                .kinds
+                .iter()
+                .any(|k| self.kinds.contains(k) && (root || *k != DepKind::Dev))
                 && self.leads_to_duplicate(dep.package, duplicates, leads, stack)
             {
                 found = true;
@@ -706,6 +734,7 @@ impl Renderable for DepTree {
 pub struct WhyTree {
     graph: DepGraph,
     targets: Vec<usize>,
+    kinds: Vec<DepKind>,
 }
 
 impl WhyTree {
@@ -718,7 +747,18 @@ impl WhyTree {
                 "no package {spec:?} in the dependency graph"
             )));
         }
-        Ok(WhyTree { graph, targets })
+        Ok(WhyTree {
+            graph,
+            targets,
+            kinds: vec![DepKind::Normal, DepKind::Build, DepKind::Dev],
+        })
+    }
+
+    /// Which kinds of dependency to follow up (all by default); dev
+    /// dependencies count only from the roots, as in [`DepTree`].
+    pub fn kinds(mut self, kinds: &[DepKind]) -> Self {
+        self.kinds = kinds.to_vec();
+        self
     }
 
     /// The packages asked about.
@@ -732,8 +772,9 @@ impl WhyTree {
 
     /// Build the [`Tree`] this renders as.
     pub fn tree(&self, console: &Console) -> Tree {
-        let duplicates: HashSet<String> = self.graph.duplicates().into_keys().collect();
-        let dependents = self.graph.dependents();
+        let duplicates: HashSet<String> =
+            self.graph.duplicates_in(&self.kinds).into_keys().collect();
+        let dependents = self.graph.dependents(&self.kinds);
         let mut shown = HashSet::new();
         let mut trees: Vec<Tree> = self
             .targets
@@ -873,7 +914,12 @@ mod tests {
     fn why_inverts_the_tree() {
         let graph = DepGraph::from_json(&metadata()).unwrap();
         let serde = graph.find("serde")[0];
-        assert_eq!(graph.paths_to(serde, 10).len(), 2);
+        assert_eq!(
+            graph
+                .paths_to(serde, 10, &[DepKind::Normal, DepKind::Dev])
+                .len(),
+            2
+        );
         let why = WhyTree::new(graph, "syn@1.0.109").unwrap();
         assert_eq!(
             render(&why),
@@ -891,6 +937,59 @@ mod tests {
         let out = render(&DepTree::new(graph).duplicates_only(true));
         assert!(!out.contains("cc v1.0.0"), "{out}");
         assert!(out.contains("syn v2.0.0"), "{out}");
+    }
+
+    #[test]
+    fn why_follows_only_the_selected_kinds() {
+        let graph = DepGraph::from_json(&metadata()).unwrap();
+        let serde = graph.find("serde")[0];
+        let no_dev = [DepKind::Normal, DepKind::Build];
+        assert_eq!(graph.paths_to(serde, 10, &no_dev).len(), 1);
+        let why = WhyTree::new(graph, "serde").unwrap().kinds(&no_dev);
+        assert_eq!(render(&why), "serde v1.0.0\n└── app v0.1.0");
+    }
+
+    /// [`metadata`] plus `log` at two versions: 0.4.0 a normal dependency of
+    /// `app`, 0.3.0 only through the dev dependency `insta`.
+    fn metadata_with_dev_only_duplicate() -> String {
+        let mut value: Value = serde_json::from_str(&metadata()).unwrap();
+        let crates_io = "registry+https://github.com/rust-lang/crates.io-index";
+        let packages = value["packages"].as_array_mut().unwrap();
+        for version in ["0.3.0", "0.4.0"] {
+            packages.push(
+                serde_json::json!({"id": format!("log {version}"), "name": "log",
+                "version": version, "source": crates_io}),
+            );
+        }
+        let dep = |id: &str| {
+            serde_json::json!({"name": "log", "pkg": id,
+                "dep_kinds": [{"kind": null, "target": null}]})
+        };
+        let nodes = value["resolve"]["nodes"].as_array_mut().unwrap();
+        nodes[0]["deps"]
+            .as_array_mut()
+            .unwrap()
+            .push(dep("log 0.4.0"));
+        nodes[5]["deps"]
+            .as_array_mut()
+            .unwrap()
+            .push(dep("log 0.3.0"));
+        nodes.push(serde_json::json!({"id": "log 0.3.0", "deps": []}));
+        nodes.push(serde_json::json!({"id": "log 0.4.0", "deps": []}));
+        value.to_string()
+    }
+
+    #[test]
+    fn duplicates_follow_the_selected_kinds() {
+        let graph = DepGraph::from_json(&metadata_with_dev_only_duplicate()).unwrap();
+        assert!(graph.duplicates().contains_key("log"));
+        let no_dev = [DepKind::Normal, DepKind::Build];
+        assert!(!graph.duplicates_in(&no_dev).contains_key("log"));
+        let out = render(&DepTree::new(graph.clone()).kinds(&no_dev));
+        assert!(out.contains("log v0.4.0\n"), "{out}");
+        assert!(!out.contains("log v0.4.0 (duplicate)"), "{out}");
+        let out = render(&DepTree::new(graph).kinds(&no_dev).duplicates_only(true));
+        assert!(!out.contains("log v"), "{out}");
     }
 
     #[test]
