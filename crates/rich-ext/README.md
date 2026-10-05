@@ -258,7 +258,11 @@ For build, deploy and release tools, all in the default build:
 - `chart`: `Sparkline`, `BarChart` (horizontal or vertical), `Histogram` and
   `LineChart` (Braille line and scatter plots) that fit the width they are
   given, each with an ASCII form and a reading that does not depend on
-  colour.
+  colour; and the pieces of a dashboard: `Gauge` and `BulletChart` (a value
+  against a target and threshold bands), `Heatmap`, `StatusMatrix` (states
+  as symbols and colours), `KpiCard` (value, delta, sparkline, status) and
+  `Timeline` (ranges, stacked overlaps, milestones, compressed gaps). See
+  the `kpi_dashboard` example.
 
 ### Coordinated Live regions
 

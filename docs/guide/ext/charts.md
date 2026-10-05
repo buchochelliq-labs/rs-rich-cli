@@ -8,6 +8,17 @@
 - **`LineChart`**: one or more series as lines or scattered points, with
   axes and a legend.
 
+And the pieces of a dashboard:
+
+- **`Gauge`** and **`BulletChart`**: a value against a range, with a target
+  and threshold bands, on one line or the full width.
+- **`Heatmap`**: a labelled grid of values drawn as shades, with a legend.
+- **`StatusMatrix`**: rows and columns of states (pass, fail, skip, flaky
+  or your own), each a symbol and a colour.
+- **`KpiCard`**: a label, a value, its change, a sparkline and a status.
+- **`Timeline`**: labelled ranges on a numeric or seconds scale, overlaps
+  stacked, with milestones; a Gantt strip when every range has its own row.
+
 Each chart is a renderable. It measures itself, so it works in a `Table`
 cell, a `Panel` or a `Live` display. It never writes a line wider than the
 width it is given: when space is short it drops labels, values and axes
@@ -21,6 +32,7 @@ The module needs no feature:
 cargo run -p rs-rich-ext --example guide_charts
 cargo run -p rs-rich-ext --example charts            # every chart on one screen
 cargo run -p rs-rich-ext --example charts -- --ascii
+cargo run -p rs-rich-ext --example kpi_dashboard     # cards, a matrix and a timeline, live
 ```
 
 The styles are theme keys (`chart.*`). Pass `rich_ext::extended_theme()` to
@@ -191,6 +203,11 @@ character above U+007F:
 | `Sparkline` | the ramp `_.-:=+*#`, lowest to highest |
 | `BarChart`, `Histogram` | `#` for a cell, `=` for half a cell |
 | `LineChart` | `*`, `+`, `o`, `x`, `.` per series; axes drawn with `-`, `+` and a vertical bar |
+| `Gauge`, `BulletChart` | `#` and `=` for the bar, `.` and `:` for the bands, a vertical bar for the target |
+| `Heatmap` | ten shades, ` .:-=+*#%@`, and `?` for a missing value |
+| `StatusMatrix` | each state's ASCII symbol: `+` pass, `X` fail, `-` skip, `~` flaky |
+| `KpiCard` | a border of `+`, `-` and vertical bars, `^` and `v` for the delta, the status's ASCII symbol |
+| `Timeline` | `#` and `=` for ranges, `*` for milestones, `~` where a gap is cut |
 
 Labels with characters above U+007F are written with `?` in their place, as
 [`fidelity::ascii_text`](capabilities.md) does.
@@ -207,12 +224,171 @@ given, or `.width(n)`:
 
 ![Sparklines and bars in a table, a line chart in a panel](../../media/guide/guide_charts-table.svg)
 
+## Gauges and bullet charts
+
+A `Gauge` shows one value against a range. `.target(t)` draws a `│` across
+the bar where the target is, and each `Band` is a threshold: the band runs
+up to its value, the bar takes the band's style while the value is in it,
+and the band's name is written after the value.
+
+```rust
+--8<-- "crates/rich-ext/examples/guide_charts.rs:gauge"
+```
+
+![A compact gauge, a full-width gauge with its scale and legend, and a bullet chart](../../media/guide/guide_charts-gauge.svg)
+
+- The bar fills with eighth-cell blocks (`█▉▊▋▌▍▎▏`), half-cell Braille, or
+  `#` and a half `=` in ASCII. The rest of the track is shaded by band,
+  alternating `░` and `▒` (`.` and `:`), so each band's extent shows
+  without colour.
+- The scale runs from 0 (or the smallest of the value, the target and the
+  bands) to the largest of them; `.range(min, max)` fixes it.
+- The compact form is one line, with a bar of `.bar_width(n)` cells (20 by
+  default). `.full_width(true)` fills the width and adds a scale line (the
+  bounds, the target and the band edges, each at its cell) and a legend
+  (`░ ok up to 60%  │ target 80%`).
+- Given less width the bar shrinks to 4 cells, then the band's name goes,
+  then the value, then the label is cut.
+- `BulletChart` stacks gauges with their labels, bars, values and band
+  names in aligned columns. Each keeps its own scale, target and bands.
+
+## Heatmaps
+
+A `Heatmap` is a grid of values, a row per label and a column per header,
+each cell a shade from the lowest value to the highest:
+
+```rust
+--8<-- "crates/rich-ext/examples/guide_charts.rs:heatmap"
+```
+
+![A heatmap of load by hour and day, in blocks and in ASCII](../../media/guide/guide_charts-heatmap.svg)
+
+- Values are scaled into equal steps: five in blocks (` ░▒▓█`), ten in
+  ASCII (` .:-=+*#%@`). The shade is the value, so the grid reads in black
+  and white; with colour each step also takes a `chart.heat.N` style, cold
+  to hot. `.range(min, max)` fixes the scale.
+- A NaN or infinite value is drawn `·` (`?` in ASCII), never as a low value,
+  and the legend says so.
+- Each value is `.cell_width(n)` cells wide (2 by default). A header is
+  written at its column's first cell when it fits with a space after the
+  one before, so with narrow cells every second or third header shows.
+- Given less width the cells narrow to one, then the row labels are cut,
+  then neighbouring columns are merged, each showing the mean of its
+  values, so every value still counts.
+
+## Status matrices
+
+A `StatusMatrix` is rows and columns of states, such as a test suite
+across platforms. Each state is a **symbol and a colour**, never colour
+alone, and the legend counts the cells in each:
+
+```rust
+--8<-- "crates/rich-ext/examples/guide_charts.rs:matrix"
+```
+
+![A status matrix of test suites across platforms](../../media/guide/guide_charts-matrix.svg)
+
+| State | Symbol | ASCII | Theme key |
+|---|---|---|---|
+| `pass` | `✓` | `+` | `chart.state.pass` |
+| `fail` | `✗` | `X` | `chart.state.fail` |
+| `skip` | `○` | `-` | `chart.state.skip` |
+| `flaky` | `≈` | `~` | `chart.state.flaky` |
+
+- `State::new(name, symbol, ascii, style)` adds a state, or replaces a
+  built-in one with the same name. A symbol must take one cell; a wide one
+  is replaced by its ASCII form.
+- A name with no state is drawn `?` in `chart.state.unknown` and named in
+  the legend as it is. A row shorter than the headers leaves its last cells
+  blank.
+- Columns are as wide as their widest header. Given less width the headers
+  are cut (and left out below three cells), then the row labels, then the
+  gaps; columns that still do not fit are left off the right.
+- `.counts()` returns how many cells are in each state.
+
+## KPI cards
+
+A `KpiCard` is one key number: a label, the value, its change, an optional
+sparkline and an optional `Status`:
+
+```rust
+--8<-- "crates/rich-ext/examples/guide_charts.rs:cards"
+```
+
+![Three KPI cards side by side in Columns](../../media/guide/guide_charts-cards.svg)
+
+- The change is an arrow and a signed number: `▲ +8.49%`, `▼ -14`, `= 0`
+  (`^`, `v` and `=` in ASCII). `.delta(d)` gives an amount,
+  `.delta_percent(p)` a percentage and `.previous(v)` the percentage change
+  from `v`. It is styled `chart.delta.good` or `chart.delta.bad` by whether
+  the change is for the better: `.higher_is_better(false)` for errors,
+  latency and costs. The arrow and the sign carry the direction without
+  colour.
+- `Status::Ok`, `Warning`, `Critical` and `Unknown` are a symbol and a word
+  (`✓ ok`, `! warning`, `✗ critical`, `? unknown`) in `chart.ok`,
+  `chart.warning`, `chart.critical` or `chart.unknown`.
+- A card measures to its content, so cards sit side by side in `Columns` or
+  a table. `.width(n)` fixes its width, border included, and `.expand(true)`
+  fills what it is given, as in a `Layout`. Cards with the same parts have
+  the same height, so a row of them lines up.
+- `.border(false)` leaves the border out; below 5 cells it goes anyway.
+
+## Timelines and Gantt strips
+
+A `Timeline` puts labelled ranges on a numeric scale, such as the steps of
+a build in seconds. Ranges with the same row label share a row:
+
+```rust
+--8<-- "crates/rich-ext/examples/guide_charts.rs:timeline"
+```
+
+![A Gantt strip of a build, and two bursts of jobs with the idle gap cut out](../../media/guide/guide_charts-timeline.svg)
+
+- Ranges on one row that overlap are **stacked** onto extra lines, so none
+  hides another. A range that starts where the one before it on its line
+  ends is drawn `▓` instead of `█` (`=` instead of `#`), so both show.
+- A range covers every column whose centre value is inside it, and at least
+  one. Its length is written after it when there is room
+  (`.durations(false)` leaves them out), so it reads without the axis.
+- `.milestone(label, at)` marks a point with `◆` (`*`) on a line under the
+  ranges, its label beside it.
+- The axis labels sit on evenly spaced columns and name each column's exact
+  value, as on a line chart; `.unit("s")` writes a unit after every value.
+  The scale is plain numbers: pass seconds (or any unit) as `f64`.
+- **Compression:** when the range is wider than the plot, so that the
+  shortest range would get less than a column, idle gaps longer than four
+  times the shortest range are cut out. Each cut takes three columns with
+  `≈` (`~`) on the axis, and each stretch is labelled at its start and end.
+  `.compress(false)` keeps the scale linear; `.range(min, max)` fixes it.
+- It fills the width given, or `.width(n)`. Given less, the row labels are
+  cut so the plot keeps 8 columns.
+
+## A dashboard
+
+Cards, a matrix and a timeline in a `Layout`, rebuilt and passed to
+`Live::update` on every tick, make a live dashboard. The
+[`kpi_dashboard`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/crates/rich-ext/examples/kpi_dashboard.rs)
+example runs one; this is a frame of a smaller one:
+
+```rust
+--8<-- "crates/rich-ext/examples/guide_charts.rs:dashboard"
+```
+
+![Two KPI cards, a status matrix and a timeline in a Layout](../../media/guide/guide_charts-dashboard.svg)
+
+Cards take `.expand(true)` to fill their region. The layout fills the
+console's height, so give `Live` a console with a fixed `.height(n)` or let
+it take the terminal's.
+
 ## The shared pieces
 
 | Type | What it does |
 |---|---|
 | `Scale` | A linear scale. `Scale::from_values` skips NaN and infinities and never has an empty range: when every value is `v` the range is twice as wide as `v` with `v` in the middle (`0..1` for 0), and no values gives `0..1`. `.nice(n)` widens to round bounds; `.ticks(n)` gives about `n` round values inside it; `.normalize(v)` maps to 0..1 |
 | `ValueFormat` | `Compact` (`950`, `0.25`, `1.2k`, `3.4M`) or `Fixed(decimals)` |
+| `Status` | A health level for a `KpiCard`: a symbol, a word and a theme key |
+| `State` | A state of a `StatusMatrix` cell: a name, a symbol, an ASCII symbol and a style |
+| `Band`, `Span`, `Milestone` | A gauge's threshold band; a timeline's range and point |
 | `Charset` | `Auto`, `Blocks`, `Braille`, `Ascii` |
 | `DotCanvas` | The Braille canvas the line chart draws on: set dots, draw lines, read cells |
 
@@ -227,4 +403,12 @@ Theme keys:
 | `chart.spark` | `cyan` | Sparklines |
 | `chart.over` | `bold red` | Sparkline values above the threshold |
 | `chart.min`, `chart.max` | `blue`, `bold green` | Sparkline extremes |
-| `chart.series.1` … `.5` | `cyan`, `magenta`, `yellow`, `green`, `blue` | Series, by position (they cycle) |
+| `chart.series.1` … `.5` | `cyan`, `magenta`, `yellow`, `green`, `blue` | Series, by position (they cycle); timeline rows |
+| `chart.track` | `bright_black` | A gauge's track and band shades |
+| `chart.target` | `bold` | A gauge's target marker |
+| `chart.ok`, `chart.warning`, `chart.critical`, `chart.unknown` | `green`, `yellow`, `bold red`, `bright_black` | `Status`, and bands that name them |
+| `chart.delta.good`, `chart.delta.bad`, `chart.delta.flat` | `green`, `red`, `bright_black` | A KPI card's change |
+| `chart.kpi.label`, `chart.kpi.value`, `chart.kpi.border` | none, `bold`, `bright_black` | A KPI card |
+| `chart.heat.1` … `.5` | `blue`, `cyan`, `green`, `yellow`, `red` | Heatmap steps, cold to hot |
+| `chart.state.pass`, `.fail`, `.skip`, `.flaky`, `.unknown` | `green`, `bold red`, `bright_black`, `yellow`, `magenta` | Status matrix states |
+| `chart.milestone` | `bold yellow` | Timeline milestones |

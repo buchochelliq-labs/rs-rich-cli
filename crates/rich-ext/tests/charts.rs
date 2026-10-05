@@ -1,13 +1,15 @@
 //! Charts (0.0.15 workstream 1): sparklines, bars, histograms, and line and
-//! scatter plots, in every glyph set, with colour on and off.
+//! scatter plots, in every glyph set, with colour on and off. The width
+//! sweep and the ASCII checks also cover the KPI and status renderables of
+//! workstream 2, whose snapshots are in `kpi.rs`.
 
 use std::sync::Arc;
 
 use rich::cells::cell_len;
 use rich::{Cell, ColorSystem, Console, Live, Panel, Renderable, Table};
 use rich_ext::chart::{
-    Bar, BarChart, Charset, Histogram, LineChart, Orientation, Series, SeriesKind, Sparkline,
-    ValueFormat,
+    Band, Bar, BarChart, BulletChart, Charset, Gauge, Heatmap, Histogram, KpiCard, LineChart,
+    Orientation, Series, SeriesKind, Sparkline, State, Status, StatusMatrix, Timeline, ValueFormat,
 };
 
 fn plain(width: usize) -> Console {
@@ -809,7 +811,103 @@ fn charts_for(charset: Charset) -> Vec<(&'static str, Box<dyn Renderable>)> {
         ));
         out.push(("line-empty", Box::new(LineChart::new().charset(charset))));
     }
+    out.extend(kpi_charts_for(charset, &long));
     out
+}
+
+/// Workstream 2's renderables, with long and wide labels, NaN and empty data.
+fn kpi_charts_for(charset: Charset, long: &[f64]) -> Vec<(&'static str, Box<dyn Renderable>)> {
+    let gauge = || {
+        Gauge::new("a rather long gauge label", 72.0)
+            .range(0.0, 100.0)
+            .target(80.0)
+            .band(Band::new(60.0, "ok"))
+            .band(Band::new(85.0, "日本語"))
+            .band(Band::new(100.0, "critical").style("chart.critical"))
+            .unit("%")
+            .charset(charset)
+    };
+    let matrix = StatusMatrix::new()
+        .state(State::new("blocked", '⊘', '#', "magenta"))
+        .columns(["ubuntu-latest", "日本語", "w"])
+        .row("a long row label", ["pass", "fail", "skip"])
+        .row("x", ["flaky", "blocked", "mystery"])
+        .row("short", ["pass"])
+        .charset(charset);
+    let headers: Vec<String> = (0..48).map(|h| format!("{h:02}")).collect();
+    let heatmap = Heatmap::new()
+        .columns(headers)
+        .row("series one", long.iter().take(48).copied())
+        .row("日本", long.iter().skip(48).take(40).copied())
+        .row("gaps", [f64::NAN, 1.0, f64::INFINITY])
+        .charset(charset);
+    let card = KpiCard::new("Requests per second", 12_400.0)
+        .unit("/s")
+        .previous(11_430.0)
+        .caption("vs last week")
+        .trend(long.iter().copied())
+        .status(Status::Critical)
+        .charset(charset);
+    let timeline = Timeline::new()
+        .span("compile the workspace", 0.0, 42.0)
+        .span("test", 30.0, 95.0)
+        .span("test", 40.0, 60.0)
+        .span("日本語", 1000.0, 1001.0)
+        .span("nan", f64::NAN, 3.0)
+        .milestone("release candidate", 1002.0)
+        .milestone("start", 0.0)
+        .unit("s")
+        .charset(charset);
+    vec![
+        ("gauge", Box::new(gauge())),
+        ("gauge-full", Box::new(gauge().full_width(true))),
+        (
+            "gauge-nan",
+            Box::new(Gauge::new("", f64::NAN).charset(charset)),
+        ),
+        (
+            "bullet",
+            Box::new(
+                BulletChart::new()
+                    .gauge(gauge())
+                    .gauge(Gauge::new("x", -5.0).target(f64::NAN))
+                    .charset(charset),
+            ),
+        ),
+        (
+            "bullet-full",
+            Box::new(
+                BulletChart::new()
+                    .gauge(gauge())
+                    .full_width(true)
+                    .charset(charset),
+            ),
+        ),
+        (
+            "bullet-empty",
+            Box::new(BulletChart::new().charset(charset)),
+        ),
+        ("matrix", Box::new(matrix)),
+        (
+            "matrix-empty",
+            Box::new(StatusMatrix::new().charset(charset)),
+        ),
+        ("heatmap", Box::new(heatmap)),
+        ("heatmap-empty", Box::new(Heatmap::new().charset(charset))),
+        ("card", Box::new(card.clone())),
+        ("card-expand", Box::new(card.clone().expand(true))),
+        (
+            "card-plain",
+            Box::new(KpiCard::new("", f64::NAN).border(false).charset(charset)),
+        ),
+        ("timeline", Box::new(timeline.clone())),
+        ("timeline-flat", Box::new(timeline.compress(false))),
+        (
+            "timeline-point",
+            Box::new(Timeline::new().span("p", 5.0, 5.0).charset(charset)),
+        ),
+        ("timeline-empty", Box::new(Timeline::new().charset(charset))),
+    ]
 }
 
 #[test]
