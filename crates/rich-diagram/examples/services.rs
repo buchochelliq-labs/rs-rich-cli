@@ -55,10 +55,13 @@ fn main() {
     );
 }
 
+/// A screenshot: its name, title, width, and what it prints.
+type Shot = (&'static str, &'static str, usize, Box<dyn Fn(&Console)>);
+
 /// The diagram guide's screenshots, as SVG.
 fn screenshots(dir: &std::path::Path) {
     std::fs::create_dir_all(dir).expect("create the SVG directory");
-    let shots: [(&str, &str, usize, Box<dyn Fn(&Console)>); 3] = [
+    let shots: [Shot; 3] = [
         (
             "services",
             "Diagram",
