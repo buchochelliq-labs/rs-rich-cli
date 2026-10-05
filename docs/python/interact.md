@@ -605,7 +605,7 @@ Match(score=43, positions=[0, 4])
 
 The wheel's `python -m rs_rich` has the `rich` binary's interactive
 commands: `choose`, `filter`, `input`, `confirm`, `pager`, `write`, `file`,
-`color` and `asset` (see [The command line](cli.md)).
+`color`, `asset` and `explore` (see [The command line](cli.md)).
 
 ## Not yet from Python
 

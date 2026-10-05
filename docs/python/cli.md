@@ -1,8 +1,9 @@
 # The command line
 
 The wheel ships the `rich` command line of this repository (the Rust port of
-[`rich-cli`](https://github.com/Textualize/rich-cli)), with every command and
-option the `rich` binary has:
+[`rich-cli`](https://github.com/Textualize/rich-cli)), with the commands and
+options of the `rich` binary (all but `rich record`; see
+[below](#what-the-build-includes)):
 
 ```bash
 python -m rs_rich README.md
@@ -161,7 +162,11 @@ Runs the command line and returns its exit status. It does not call
 Neither form captures output: to capture it, run the command line with
 `subprocess` as above.
 
-The build includes the default features of the `rich` binary: URL fetching
-(`rich-rs https://…`), images and GIFs, and Mermaid diagrams drawn as text.
-The `lumis` highlighter and the `mmdc` Mermaid backend are not in the wheel's
-command line.
+<a id="what-the-build-includes"></a>
+The build includes the default features of the `rich` binary but one: URL
+fetching (`rich-rs https://…`), images, GIFs and micro assets, Mermaid
+diagrams drawn as text, and the interactive commands. `rich chart`,
+`rich dot`, `rich deps` and `rich schema` are in every build. `rich record`
+is not: its recorder runs the `rich` binaries beside the running executable,
+which in a wheel is Python. The `lumis` highlighter and the `mmdc` Mermaid
+backend are not in the wheel's command line either.

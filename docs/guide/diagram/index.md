@@ -342,3 +342,11 @@ graph TD
 `rich_mermaid::Flowchart::to_graph` gives the `Graph` a parsed flowchart
 draws through. Mermaid's tests check both directions: its snapshots built
 with the builder, and random graphs written both ways.
+
+From the shell, `rich mermaid flow.mmd` (alias `mmd`; `.mmd` and `.mermaid`
+files are detected) draws a flowchart, and ```` ```mermaid ```` fences draw in
+Markdown; `--mermaid-backend mmdc` renders every diagram type through
+Mermaid's own CLI in a build with the `mmdc` feature. In Python, the same
+graphs, DOT sources and Mermaid diagrams are
+[`rs_rich.diagram`](https://buchochelliq-labs.github.io/rs-rich-cli/python/diagram/)
+and [`rs_rich.mermaid`](https://buchochelliq-labs.github.io/rs-rich-cli/python/mermaid/).

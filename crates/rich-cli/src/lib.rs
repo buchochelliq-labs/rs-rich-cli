@@ -19,9 +19,12 @@
 //! the default `art` feature), `--watch`, `--batch`, config profiles and
 //! `--theme-file`, and the tool commands `inspect`, `diff` (images, text and
 //! patches), `view`, `hex`, `unicode`, `env`, `capture`, `ansi explain`,
-//! `doctor`, `bench compare`, `completions`, `docs` and `config`, and the
-//! diagram sources `dot`, `deps` and `schema`, and `chart`. Each composes
-//! public `rich` / `rich-ext` / `rich-art` / `rich-diagram` APIs.
+//! `doctor`, `bench compare`, `completions`, `docs`, `config` and `plugins`;
+//! the diagram sources `mermaid`, `dot`, `deps` and `schema`, and `chart`;
+//! the interactive commands (`choose`, `filter`, `input`, `confirm`, `pager`,
+//! `write`, `file`, `color`, `asset`, `explore`); `micro`; and `record`. Each
+//! composes public `rich` / `rich-ext` / `rich-art` / `rich-diagram` /
+//! `rich-mermaid` / `rich-interact` / `rich-micro` / `rich-record` APIs.
 
 use std::io::{BufRead, IsTerminal, Read, Write};
 use std::path::{Path, PathBuf};

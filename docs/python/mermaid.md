@@ -5,7 +5,9 @@ from rs_rich import mermaid
 ```
 
 `rs_rich.mermaid` is the `rs-rich-mermaid` crate from Python. Rich has no
-counterpart.
+counterpart. Flowcharts are drawn through the same layout as
+[`rs_rich.diagram`](diagram.md), which also builds graphs in code and reads
+DOT.
 
 ## Mermaid
 

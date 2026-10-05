@@ -43,6 +43,8 @@ Settings are keyword arguments. Three are shared:
 
 From the shell, `rich chart` draws the same charts from CSV, JSON or stdin
 ([`rich chart`](https://buchochelliq-labs.github.io/rs-rich-cli/guide/ext/charts/#from-the-shell-rich-chart)).
+The [Rust charts guide](https://buchochelliq-labs.github.io/rs-rich-cli/guide/ext/charts/)
+has a screenshot of each chart.
 
 ## Sparklines, bars and histograms
 

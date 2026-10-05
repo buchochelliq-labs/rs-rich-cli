@@ -18,13 +18,21 @@ cargo install rs-rich-cli     # installs a binary called `rich`
 rich --version
 ```
 
-The package is `rs-rich-cli`; the binary is `rich`. Two default Cargo features
-can be turned off for a smaller, network-free binary:
+The package is `rs-rich-cli`; the binary is `rich`. Five default Cargo
+features can be turned off for a smaller, network-free binary:
 
 | Feature | Adds |
 |---|---|
 | `fetch` | `http(s)://` URLs as input |
-| `art` | images, GIFs and image diffs (`rich image`, `rich gif`, `rich diff a.png b.png`) |
+| `art` | images, GIFs and image diffs (`rich image`, `rich gif`, `rich diff a.png b.png`), and micro assets (`rich micro`) |
+| `mermaid` | `rich mermaid` and ```` ```mermaid ```` fences, drawn as text |
+| `record` | `rich record`: scripted terminal recordings |
+| `interact` | the interactive commands (`rich choose`, `filter`, `input`, `confirm`, `pager`, `write`, `file`, `color`, `asset`, `explore`) |
+
+`rich chart`, `rich dot`, `rich deps` and `rich schema` are in every build.
+`lumis`, `mmdc`, `dylib-plugins` and `wasm-plugins` are off by default; the
+[crate README](https://github.com/buchochelliq-labs/rs-rich-cli/tree/main/crates/rich-cli#features)
+lists what each adds.
 
 ```bash
 cargo install rs-rich-cli --no-default-features   # text only, no network
@@ -43,7 +51,8 @@ rich  [MODE]  RESOURCE  [decoration and export options]  [--config/--profile]
    standard input. With `print` and `rule` it is the text itself.
 2. **Render mode** — how to read it. Without one, `rich` picks from the file
    extension: `.md`, `.json`, `.csv`/`.tsv` and `.ipynb` get their own
-   renderer, and any other extension is syntax-highlighted. Choose one with a
+   renderer (`.mmd`/`.mermaid` and `.dot`/`.gv` are drawn as diagrams), and
+   any other extension is syntax-highlighted. Choose one with a
    subcommand (`rich json data.txt`) or the equivalent flag (`rich --json data.txt`).
 3. **Decoration and export** — options that work on any mode's output:
    `--width`, `--left/--center/--right`, `--panel`, `--padding`, `--title`,
@@ -70,6 +79,10 @@ On top of that it adds, without changing the mirrored behaviour:
 - new modes: JSON Lines and logs, `inspect` for structured data, text and
   patch diffs, perceptual image diffs, still images and GIFs, `ansi explain`,
   and the viewers `view`, `hex`, `unicode`, `env` and `capture`;
+- charts and diagrams: `chart`, `mermaid`, `dot`, `deps` and `schema`;
+- interactive commands for scripts (`choose`, `filter`, `input`, `confirm`,
+  `pager`, `write`, `file`, `color`, `asset`) and `explore`;
+- micro assets (`micro`), terminal recordings (`record`) and `plugins`;
 - workflow features: `--watch`, `--batch`, config profiles and themes,
   `--report json`, stable exit codes, `doctor`, `bench compare`, generated
   completions and man pages, and a guided `--demo`.
@@ -103,6 +116,17 @@ records exactly which parts are upstream and which are additions.
 | `unicode` | — | Graphemes, code points, UTF-8 bytes, widths and invalid sequences | [Viewers](walkthrough.md#viewing-and-inspecting-anything) |
 | `env` | — | Environment variables, with secret-named values and credentials inside values masked (best effort); PATH entries checked | [Viewers](walkthrough.md#viewing-and-inspecting-anything) |
 | `capture` | — | Run a command and show, export or record its output | [Viewers](walkthrough.md#viewing-and-inspecting-anything) |
+| `chart` | — | Draw CSV, JSON or stdin as a sparkline, bars, lines, points or a heatmap | [Charts](../ext/charts.md#from-the-shell-rich-chart) |
+| `mermaid`, `mmd` | — | Draw a Mermaid flowchart as text | [From Mermaid](../diagram/index.md#from-mermaid) |
+| `dot`, `graphviz` | — | Draw a DOT (Graphviz) graph as text | [Diagrams](../diagram/index.md#dot-graphviz) |
+| `deps` | — | A Cargo dependency tree or graph; `--why CRATE` | [Dependency graphs](../ext/sources.md#cargo-dependency-graphs) |
+| `schema` | — | A JSON Schema as a tree, or what changed between two | [JSON Schemas](../ext/sources.md) |
+| `choose`, `filter`, `input`, `confirm`, `pager` | — | Ask in a script: answer on stdout, exit 1 when cancelled | [Ask in a script](../../cli.md#ask-in-a-script) |
+| `write`, `file`, `color`, `asset` | — | A text area, a file, colour or asset picker | [Ask in a script](../../cli.md#ask-in-a-script) |
+| `explore` | — | Explore JSON, YAML, TOML, XML, INI or `.env` interactively | [Explore it interactively](../../cli.md#explore-it-interactively) |
+| `micro` | — | List, preview, add and create micro assets | [Micro assets in the CLI](../micro/cli.md) |
+| `record` | — | Run a tape and write screenshots, a cast, a GIF or an MP4 | [Terminal recordings](../../recordings.md#record-your-own) |
+| `plugins` | — | List the built-in, linked and loaded plugins | [Plugins](../../cli.md#plugins) |
 | — | `--watch` | Re-render files as they change | [Watch](walkthrough.md#watching-files) |
 | — | `--batch` | Convert many files to HTML/SVG | [Batch](walkthrough.md#converting-many-files) |
 | — | `--pager`, `--auto-pager` | Page long output | [Paging](walkthrough.md#paging) |
@@ -119,11 +143,12 @@ records exactly which parts are upstream and which are additions.
 | Code | Meaning |
 |---|---|
 | `0` | Success |
+| `1` | An interactive command was cancelled, or `rich confirm` was answered no |
 | `2` | Usage or configuration error |
 | `3` | Input, read or write error |
 | `4` | Parse or render error in the data |
 | `5` | A threshold or gate failed (`diff --threshold`, `bench compare`) |
-| `130` | A batch was interrupted with Ctrl+C |
+| `130` | A batch, or an interactive command, was interrupted with Ctrl+C |
 
 `rich capture` is the exception: it exits with the captured command's own
 status, or 128 plus the signal number when a signal ended it.
