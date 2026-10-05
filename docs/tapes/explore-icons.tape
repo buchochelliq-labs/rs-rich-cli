@@ -1,7 +1,8 @@
 # rich explore --icons: true, false and null values marked with the
 # built-in status/success, status/error and status/info micro assets. The
-# explorer runs without the graphics side channel and the PTY has no image
-# protocol anyway, so each asset shows its emoji fallback.
+# explorer draws them through the graphics side channel, but the PTY has no
+# image protocol, so each asset shows its emoji fallback; a Kitty, iTerm2 or
+# Sixel terminal draws the images in the same cells.
 Set Title "rich explore · micro-asset icons"
 Set Size 100x22
 Set TypingDelay 45ms

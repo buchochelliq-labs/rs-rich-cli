@@ -295,6 +295,31 @@ fn micro_markup_in_print_with_emoji() {
 }
 
 #[test]
+fn preview_times_only_animation_frames() {
+    // 0.0.15 workstream 6: a still image has no frame time to show.
+    let (_root, work, home) = dirs();
+    let builtin = Path::new(env!("CARGO_MANIFEST_DIR")).join("../rich-micro/builtin");
+    std::fs::copy(
+        builtin.join("status/success/static.png"),
+        work.join("still.png"),
+    )
+    .unwrap();
+    for args in [
+        &["micro", "preview", "status/success"][..],
+        &["micro", "preview", "still.png"],
+    ] {
+        let out = rich(&work, &home, args);
+        assert!(out.status.success(), "{args:?}: {}", text(&out.stderr));
+        let shown = text(&out.stdout);
+        assert!(!shown.contains(" ms"), "{args:?}: {shown}");
+    }
+    // An animation still shows each frame's time.
+    let out = rich(&work, &home, &["micro", "preview", "fun/heart"]);
+    let shown = text(&out.stdout);
+    assert!(shown.contains(" ms"), "{shown}");
+}
+
+#[test]
 fn micro_markup_in_titles_captions_and_markdown() {
     // 0.0.15 workstream 6: not only `--print --emoji`.
     let (_root, work, home) = dirs();

@@ -918,12 +918,15 @@ fn filmstrip(frames: &[rich_art::graphics::AnimationFrame], width: usize) -> ric
             .map(|frame| rich::table::Cell::Renderable(Arc::new(Magnified(frame.image.clone()))))
             .collect(),
     );
-    table.add_row_cells(
-        shown
-            .iter()
-            .map(|frame| Text::new(format!("{} ms", frame.delay.as_millis())).into())
-            .collect(),
-    );
+    // Each frame's time, for an animation: a still image has none to show.
+    if frames.len() > 1 {
+        table.add_row_cells(
+            shown
+                .iter()
+                .map(|frame| Text::new(format!("{} ms", frame.delay.as_millis())).into())
+                .collect(),
+        );
+    }
     table
 }
 
