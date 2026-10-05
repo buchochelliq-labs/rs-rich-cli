@@ -24,6 +24,9 @@ rich = { package = "rs-rich", path = "../rich" }
 rich-ext = { package = "rs-rich-ext", path = "../rich-ext", features = ["data", "yaml", "toml", "xml", "jsonpath", "test-report", "serde", "testing"] }
 rich-art = { package = "rs-rich-art", path = "../rich-art", features = ["image", "gif", "sixel"] }
 rich-mermaid = { package = "rs-rich-mermaid", path = "../rich-mermaid" }
+# `rs_rich.diagram`: graphs, their layered layout and DOT (0.0.15
+# workstream 5).
+rich-diagram = { package = "rs-rich-diagram", path = "../rich-diagram" }
 # `rs_rich.micro`: micro assets, their registry, markup and pipeline
 # (0.0.14 workstream 7).
 rich-micro = { package = "rs-rich-micro", path = "../rich-micro" }

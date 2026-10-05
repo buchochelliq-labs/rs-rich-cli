@@ -26,6 +26,8 @@
 //! | `interact` | `rich-interact`: components, drivers, fuzzy matching |
 //! | `micro` | `rich-micro`: micro assets, registry, markup, pipeline |
 //! | `art` | `rich-art` and Mermaid |
+//! | `chart` | `rich_ext::chart`: sparklines, bars, line charts, gauges, heatmaps, KPI cards, timelines |
+//! | `diagram` | `rs-rich-diagram`: graphs, their layout, DOT |
 //! | `plugins` | the plugin API from Python |
 //! | `cli` | the `rich` CLI from Python |
 
@@ -33,11 +35,13 @@ use pyo3::prelude::*;
 
 mod art;
 mod boxes;
+mod chart;
 mod cli;
 mod code;
 mod color;
 mod console;
 mod convert;
+mod diagram;
 mod errors;
 mod ext;
 mod interact;
@@ -80,6 +84,8 @@ fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     ext::register(m)?;
     interact::register(m)?;
     art::register(m)?;
+    chart::register(m)?;
+    diagram::register(m)?;
     micro::register(m)?;
     plugins::register(m)?;
     cli::register(m)?;

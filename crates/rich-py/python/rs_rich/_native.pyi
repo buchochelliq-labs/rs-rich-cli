@@ -4172,6 +4172,359 @@ MERMAID_MAX_NODES: int
 MERMAID_MAX_EDGES: int
 MERMAID_MAX_LINK_LENGTH: int
 
+# --- area: chart (rich_ext::chart) ---
+
+# ``rs_rich.chart``: every chart is a renderable built from keyword
+# arguments. ``charset`` is "auto", "blocks", "braille" or "ascii";
+# ``format`` is "compact" (``1.2k``) or a number of decimals; ``None`` in a
+# list of values is a gap.
+
+ChartCharset = Literal["auto", "blocks", "braille", "ascii"]
+ChartFormat = Union[None, Literal["compact"], int]
+ChartOrientation = Literal["horizontal", "vertical"]
+
+CHART_STYLES: List[Tuple[str, str]]
+
+def chart_format(value: float, format: ChartFormat = None) -> str: ...
+
+class Sparkline:
+    def __init__(
+        self,
+        values: Iterable[Optional[float]],
+        *,
+        range: Optional[Tuple[float, float]] = None,
+        min: Optional[float] = None,
+        max: Optional[float] = None,
+        charset: ChartCharset = "auto",
+        style: Optional[str] = None,
+        min_max: bool = False,
+        threshold: Optional[float] = None,
+        format: ChartFormat = None,
+    ) -> None: ...
+    @property
+    def values(self) -> List[float]: ...
+
+class ChartBar:
+    def __init__(self, label: str, value: Optional[float], *, style: Optional[str] = None) -> None: ...
+    @property
+    def label(self) -> str: ...
+    @property
+    def value(self) -> float: ...
+    @property
+    def style(self) -> Optional[str]: ...
+
+class BarChart:
+    def __init__(
+        self,
+        bars: Union[None, Iterable[Union[ChartBar, Tuple[str, Optional[float]]]], Dict[str, Optional[float]]] = None,
+        *,
+        range: Optional[Tuple[float, float]] = None,
+        max: Optional[float] = None,
+        charset: ChartCharset = "auto",
+        orientation: ChartOrientation = "horizontal",
+        bar_width: Optional[int] = None,
+        show_values: bool = True,
+        format: ChartFormat = None,
+        style: Optional[str] = None,
+    ) -> None: ...
+    def __len__(self) -> int: ...
+
+class Histogram:
+    def __init__(
+        self,
+        values: Iterable[Optional[float]],
+        *,
+        bins: Optional[int] = None,
+        range: Optional[Tuple[float, float]] = None,
+        charset: ChartCharset = "auto",
+        orientation: ChartOrientation = "horizontal",
+        bar_width: Optional[int] = None,
+        show_values: bool = True,
+        style: Optional[str] = None,
+    ) -> None: ...
+    def edges(self) -> List[float]: ...
+    def counts(self) -> List[int]: ...
+
+class Series:
+    def __init__(
+        self,
+        name: str,
+        points: Iterable[Union[Optional[float], Tuple[Optional[float], Optional[float]]]],
+        *,
+        kind: Literal["line", "scatter"] = "line",
+        style: Optional[str] = None,
+        marker: Optional[str] = None,
+    ) -> None: ...
+    @property
+    def name(self) -> str: ...
+    @property
+    def points(self) -> List[Tuple[float, float]]: ...
+    @property
+    def kind(self) -> str: ...
+
+class LineChart:
+    def __init__(
+        self,
+        series: Optional[Iterable[Series]] = None,
+        *,
+        height: Optional[int] = None,
+        width: Optional[int] = None,
+        x_range: Optional[Tuple[float, float]] = None,
+        y_range: Optional[Tuple[float, float]] = None,
+        charset: ChartCharset = "auto",
+        legend: bool = True,
+        x_format: ChartFormat = None,
+        y_format: ChartFormat = None,
+    ) -> None: ...
+    def __len__(self) -> int: ...
+
+class Band:
+    def __init__(self, upto: float, label: str, *, style: Optional[str] = None) -> None: ...
+    @property
+    def upto(self) -> float: ...
+    @property
+    def label(self) -> str: ...
+    @property
+    def style(self) -> Optional[str]: ...
+
+class Gauge:
+    def __init__(
+        self,
+        label: str,
+        value: float,
+        *,
+        range: Optional[Tuple[float, float]] = None,
+        target: Optional[float] = None,
+        bands: Optional[List[Band]] = None,
+        charset: ChartCharset = "auto",
+        bar_width: Optional[int] = None,
+        full_width: bool = False,
+        format: ChartFormat = None,
+        unit: Optional[str] = None,
+        style: Optional[str] = None,
+    ) -> None: ...
+    @property
+    def value(self) -> float: ...
+    @property
+    def band(self) -> Optional[str]: ...
+
+class BulletChart:
+    def __init__(
+        self,
+        gauges: Optional[List[Gauge]] = None,
+        *,
+        bar_width: Optional[int] = None,
+        full_width: bool = False,
+        charset: ChartCharset = "auto",
+    ) -> None: ...
+    def __len__(self) -> int: ...
+
+class Heatmap:
+    def __init__(
+        self,
+        rows: Union[None, Iterable[Tuple[str, Iterable[Optional[float]]]], Dict[str, Iterable[Optional[float]]]] = None,
+        *,
+        columns: Optional[List[str]] = None,
+        range: Optional[Tuple[float, float]] = None,
+        charset: ChartCharset = "auto",
+        cell_width: Optional[int] = None,
+        legend: bool = True,
+        format: ChartFormat = None,
+    ) -> None: ...
+    @property
+    def scale(self) -> Tuple[float, float]: ...
+
+class ChartState:
+    def __init__(self, name: str, symbol: str, ascii: str, style: str) -> None: ...
+    @staticmethod
+    def pass_() -> "ChartState": ...
+    @staticmethod
+    def fail() -> "ChartState": ...
+    @staticmethod
+    def skip() -> "ChartState": ...
+    @staticmethod
+    def flaky() -> "ChartState": ...
+    @property
+    def name(self) -> str: ...
+    @property
+    def symbol(self) -> str: ...
+    @property
+    def ascii(self) -> str: ...
+    @property
+    def style(self) -> str: ...
+
+class StatusMatrix:
+    def __init__(
+        self,
+        rows: Union[None, Iterable[Tuple[str, List[str]]], Dict[str, List[str]]] = None,
+        *,
+        columns: Optional[List[str]] = None,
+        states: Optional[List[ChartState]] = None,
+        legend: bool = True,
+        charset: ChartCharset = "auto",
+    ) -> None: ...
+    def counts(self) -> List[Tuple[str, int]]: ...
+
+class KpiCard:
+    def __init__(
+        self,
+        label: str,
+        value: float,
+        *,
+        format: ChartFormat = None,
+        unit: Optional[str] = None,
+        delta: Optional[float] = None,
+        delta_percent: Optional[float] = None,
+        previous: Optional[float] = None,
+        caption: Optional[str] = None,
+        higher_is_better: bool = True,
+        trend: Optional[Iterable[Optional[float]]] = None,
+        status: Optional[Literal["ok", "warning", "critical", "unknown"]] = None,
+        width: Optional[int] = None,
+        expand: bool = False,
+        border: bool = True,
+        charset: ChartCharset = "auto",
+    ) -> None: ...
+
+class TimelineSpan:
+    def __init__(self, row: str, start: float, end: float, *, style: Optional[str] = None) -> None: ...
+    @property
+    def row(self) -> str: ...
+    @property
+    def start(self) -> float: ...
+    @property
+    def end(self) -> float: ...
+
+class Timeline:
+    def __init__(
+        self,
+        spans: Optional[Iterable[Union[TimelineSpan, Tuple[str, float, float]]]] = None,
+        *,
+        milestones: Optional[List[Tuple[str, float]]] = None,
+        range: Optional[Tuple[float, float]] = None,
+        charset: ChartCharset = "auto",
+        format: ChartFormat = None,
+        unit: Optional[str] = None,
+        compress: bool = True,
+        durations: bool = True,
+        width: Optional[int] = None,
+    ) -> None: ...
+    @property
+    def rows(self) -> List[str]: ...
+
+# --- area: diagram (rs-rich-diagram) ---
+
+# ``rs_rich.diagram``: a ``Graph`` built in code, drawn by ``Diagram`` or
+# ``draw_graph``; DOT sources drawn by ``Dot`` and read by ``parse_dot``.
+
+DiagramDirection = Literal["TD", "TB", "BT", "LR", "RL"]
+DiagramHead = Optional[Literal["arrow", "circle", "cross", "none"]]
+
+DIAGRAM_MAX_EDGE_LENGTH: int
+
+class DiagramError(Exception):
+    """The base of the diagram errors."""
+
+class DotError(DiagramError):
+    """A DOT source could not be read: ``line`` is where, and ``construct``
+    names what this parser does not support (``None`` for a syntax error)."""
+    line: int
+    construct: Optional[str]
+
+class DiagramLayoutError(DiagramError):
+    """A graph too large to lay out."""
+
+class DiagramNode:
+    @property
+    def id(self) -> str: ...
+    @property
+    def label(self) -> str: ...
+    @property
+    def shape(self) -> str: ...
+
+class DiagramEdge:
+    @property
+    def source(self) -> int: ...
+    @property
+    def target(self) -> int: ...
+    @property
+    def label(self) -> Optional[str]: ...
+    @property
+    def stroke(self) -> str: ...
+    @property
+    def start(self) -> Optional[str]: ...
+    @property
+    def end(self) -> Optional[str]: ...
+    @property
+    def length(self) -> int: ...
+
+class Graph:
+    def __init__(self, direction: DiagramDirection = "TD") -> None: ...
+    def node(self, id: str, label: Optional[str] = None, *, shape: str = "rect") -> "Graph": ...
+    def edge(
+        self,
+        source: str,
+        target: str,
+        *,
+        label: Optional[str] = None,
+        stroke: Literal["solid", "thick", "dotted", "invisible"] = "solid",
+        start: DiagramHead = None,
+        end: DiagramHead = "arrow",
+        min_length: int = 1,
+    ) -> "Graph": ...
+    def link(self, source: str, target: str, *, label: Optional[str] = None) -> "Graph": ...
+    direction: str
+    @property
+    def nodes(self) -> List[DiagramNode]: ...
+    @property
+    def edges(self) -> List[DiagramEdge]: ...
+    def node_index(self, id: str) -> Optional[int]: ...
+    def __len__(self) -> int: ...
+
+def draw_graph(graph: Graph, ascii: bool = False) -> List[str]: ...
+
+class Diagram:
+    def __init__(self, graph: Graph, *, ascii: Optional[bool] = None) -> None: ...
+    @property
+    def graph(self) -> Graph: ...
+    @property
+    def ascii(self) -> Optional[bool]: ...
+    def drawing(self, ascii: bool = False) -> List[str]: ...
+
+class DotCluster:
+    @property
+    def id(self) -> str: ...
+    @property
+    def label(self) -> Optional[str]: ...
+    @property
+    def nodes(self) -> List[int]: ...
+
+class DotGraph:
+    @property
+    def graph(self) -> Graph: ...
+    @property
+    def directed(self) -> bool: ...
+    @property
+    def strict(self) -> bool: ...
+    @property
+    def name(self) -> Optional[str]: ...
+    @property
+    def label(self) -> Optional[str]: ...
+    @property
+    def clusters(self) -> List[DotCluster]: ...
+    @property
+    def notes(self) -> List[str]: ...
+
+def parse_dot(source: str) -> DotGraph: ...
+
+class Dot:
+    def __init__(self, source: str, *, ascii: Optional[bool] = None) -> None: ...
+    @property
+    def source(self) -> str: ...
+    @property
+    def ascii(self) -> Optional[bool]: ...
+    def parsed(self) -> DotGraph: ...
+
 # --- area: micro (rs-rich-micro) ---
 # `rs_rich.micro` re-exports these, with shorter aliases.
 
