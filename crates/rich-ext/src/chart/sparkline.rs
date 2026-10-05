@@ -37,13 +37,13 @@ const ASCII: [char; 8] = ['_', '.', '-', ':', '=', '+', '*', '#'];
 /// let console = Console::builder().width(40).color_system(None).build();
 /// let values = [2.0, 4.0, 3.0, 9.0, 6.0, 5.0];
 /// let spark = Sparkline::new(values).min_max(true);
-/// assert_eq!(console.render_to_string(&spark), "▁▃▂█▅▄ min 2 max 9\n");
+/// assert_eq!(console.render_export(&spark), "▁▃▂█▅▄ min 2 max 9\n");
 ///
 /// let ascii = Sparkline::new(values).charset(Charset::Ascii);
-/// assert_eq!(console.render_to_string(&ascii), "_-.#=:\n");
+/// assert_eq!(console.render_export(&ascii), "_-.#=:\n");
 ///
 /// let braille = Sparkline::new(values).charset(Charset::Braille);
-/// assert_eq!(console.render_to_string(&braille), "⣠⣸⣦\n");
+/// assert_eq!(console.render_export(&braille), "⣠⣸⣦\n");
 /// ```
 #[derive(Clone, Debug, PartialEq)]
 pub struct Sparkline {

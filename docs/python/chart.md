@@ -69,21 +69,14 @@ console.print(chart.Histogram([12, 14, 15, 21, 22, 23, 24, 38], bins=3, range=(1
 
 ```text
 ▁▂▁▂▄▆▅▃▇█
-
 ▁▂▁▂▄▆▅▃▇█ min 12 max 41 3 > 30
-
 api    ████████████████████   412
 web    █████████████        268.5
 worker ████▊                   97
-
 [10, 20) ██████   3
 [20, 30) ████████ 4
 [30, 40] ██       1
-
 ```
-
-Each chart ends its own last line, so `print` leaves a blank line after it,
-as it does in Rust.
 
 ## Line and scatter charts
 

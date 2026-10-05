@@ -265,6 +265,23 @@ fn note(text: &str, console: &Console, options: &ConsoleOptions) -> Vec<Segment>
     segments
 }
 
+/// Drop the newline that ends the last line: like core's renderables, the
+/// drawing leaves that to `print`, so it is not followed by a blank line.
+fn trim_final_newline(mut segments: Vec<Segment>) -> Vec<Segment> {
+    if let Some(index) = segments
+        .iter()
+        .rposition(|segment| !segment.text.is_empty())
+    {
+        if segments[index].text.ends_with('\n') {
+            segments[index].text.pop();
+            if segments[index].text.is_empty() {
+                segments.remove(index);
+            }
+        }
+    }
+    segments
+}
+
 /// End the last line, so whatever follows starts on a line of its own.
 fn end_line(segments: &mut Vec<Segment>) {
     if segments
@@ -279,7 +296,7 @@ fn end_line(segments: &mut Vec<Segment>) {
 
 impl Renderable for Mermaid {
     fn rich_render(&self, console: &Console, options: &ConsoleOptions) -> Vec<Segment> {
-        self.render(console, options)
+        trim_final_newline(self.render(console, options))
     }
 }
 

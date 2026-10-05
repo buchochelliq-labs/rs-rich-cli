@@ -23,7 +23,7 @@
 //!     .edge("start", "ok")
 //!     .edge("ok", "ship").label("yes");
 //! let console = Console::builder().width(40).color_system(None).build();
-//! let out = console.render_to_string(&Diagram::new(graph));
+//! let out = console.render_export(&Diagram::new(graph));
 //! assert!(out.contains("Tests pass?"), "{out}");
 //! assert!(out.lines().all(|line| rich::cells::cell_len(line) <= 40));
 //! ```

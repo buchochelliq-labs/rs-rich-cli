@@ -80,7 +80,11 @@ fn builder_graphs_render_as_their_mermaid_source() {
                 .split_inclusive('\n')
                 .filter(|line| !line.starts_with("Mermaid:"))
                 .collect();
-            assert_eq!(built, drawing, "case {case} at {width}:\n{source}");
+            assert_eq!(
+                built.trim_end_matches('\n'),
+                drawing.trim_end_matches('\n'),
+                "case {case} at {width}:\n{source}"
+            );
         }
     }
 }

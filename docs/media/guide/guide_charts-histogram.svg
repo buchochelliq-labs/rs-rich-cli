@@ -1,4 +1,4 @@
-<svg class="rich-terminal" viewBox="0 0 750 269.6" xmlns="http://www.w3.org/2000/svg">
+<svg class="rich-terminal" viewBox="0 0 750 245.2" xmlns="http://www.w3.org/2000/svg">
     <!-- Generated with Rich https://www.textualize.io -->
     <style>
 
@@ -38,7 +38,7 @@
 
     <defs>
     <clipPath id="guide_charts-histogram-clip-terminal">
-      <rect x="0" y="0" width="731.0" height="218.6" />
+      <rect x="0" y="0" width="731.0" height="194.2" />
     </clipPath>
     <clipPath id="guide_charts-histogram-line-0">
     <rect x="0" y="1.5" width="732" height="24.65"/>
@@ -61,12 +61,9 @@
 <clipPath id="guide_charts-histogram-line-6">
     <rect x="0" y="147.9" width="732" height="24.65"/>
             </clipPath>
-<clipPath id="guide_charts-histogram-line-7">
-    <rect x="0" y="172.3" width="732" height="24.65"/>
-            </clipPath>
     </defs>
 
-    <rect fill="#292929" stroke="rgba(255,255,255,0.35)" stroke-width="1" x="1" y="1" width="748" height="267.6" rx="8"/><text class="guide_charts-histogram-title" fill="#c5c8c6" text-anchor="middle" x="374" y="27">Histogram</text>
+    <rect fill="#292929" stroke="rgba(255,255,255,0.35)" stroke-width="1" x="1" y="1" width="748" height="243.2" rx="8"/><text class="guide_charts-histogram-title" fill="#c5c8c6" text-anchor="middle" x="374" y="27">Histogram</text>
             <g transform="translate(26,22)">
             <circle cx="0" cy="0" r="7" fill="#ff5f57"/>
             <circle cx="22" cy="0" r="7" fill="#febc2e"/>
@@ -84,7 +81,6 @@
 </text><text class="guide_charts-histogram-r1" x="0" y="142" textLength="122" clip-path="url(#guide_charts-histogram-line-5)">[150,&#160;175)</text><text class="guide_charts-histogram-r2" x="134.2" y="142" textLength="12.2" clip-path="url(#guide_charts-histogram-line-5)">▉</text><text class="guide_charts-histogram-r1" x="536.8" y="142" textLength="12.2" clip-path="url(#guide_charts-histogram-line-5)">4</text><text class="guide_charts-histogram-r1" x="732" y="142" textLength="12.2" clip-path="url(#guide_charts-histogram-line-5)">
 </text><text class="guide_charts-histogram-r1" x="0" y="166.4" textLength="122" clip-path="url(#guide_charts-histogram-line-6)">[175,&#160;200)</text><text class="guide_charts-histogram-r1" x="536.8" y="166.4" textLength="12.2" clip-path="url(#guide_charts-histogram-line-6)">0</text><text class="guide_charts-histogram-r1" x="732" y="166.4" textLength="12.2" clip-path="url(#guide_charts-histogram-line-6)">
 </text><text class="guide_charts-histogram-r1" x="0" y="190.8" textLength="122" clip-path="url(#guide_charts-histogram-line-7)">[200,&#160;225]</text><text class="guide_charts-histogram-r2" x="134.2" y="190.8" textLength="61" clip-path="url(#guide_charts-histogram-line-7)">████▍</text><text class="guide_charts-histogram-r1" x="524.6" y="190.8" textLength="24.4" clip-path="url(#guide_charts-histogram-line-7)">19</text><text class="guide_charts-histogram-r1" x="732" y="190.8" textLength="12.2" clip-path="url(#guide_charts-histogram-line-7)">
-</text><text class="guide_charts-histogram-r1" x="732" y="215.2" textLength="12.2" clip-path="url(#guide_charts-histogram-line-8)">
 </text>
     </g>
     </g>

@@ -1066,7 +1066,7 @@ pub fn parse(source: &str) -> Result<DotGraph, DotError> {
 /// use rich_diagram::Dot;
 ///
 /// let console = Console::builder().width(40).color_system(None).build();
-/// let out = console.render_to_string(&Dot::new("digraph { rankdir=LR; a -> b }"));
+/// let out = console.render_export(&Dot::new("digraph { rankdir=LR; a -> b }"));
 /// assert!(out.contains("│ a ├─►│ b │"), "{out}");
 /// ```
 #[derive(Clone, Debug)]
@@ -1157,6 +1157,13 @@ impl Renderable for Dot {
     }
 
     fn rich_render(&self, console: &Console, options: &ConsoleOptions) -> Vec<Segment> {
+        trim_final_newline(self.render_lines(console, options))
+    }
+}
+
+impl Dot {
+    /// The drawing, its label and notes, each line ending in a newline.
+    fn render_lines(&self, console: &Console, options: &ConsoleOptions) -> Vec<Segment> {
         let parsed = match self.parsed() {
             Ok(parsed) => parsed,
             Err(error) => return self.source_block(&error.to_string(), console, options),
@@ -1203,6 +1210,23 @@ fn note(text: &str, console: &Console, options: &ConsoleOptions) -> Vec<Segment>
     let style = Style::parse("dim italic").expect("valid style");
     let mut segments = Text::styled(format!("DOT: {text}"), style).rich_render(console, options);
     end_line(&mut segments);
+    segments
+}
+
+/// Drop the newline that ends the last line: like core's renderables, the
+/// drawing leaves that to `print`, so it is not followed by a blank line.
+fn trim_final_newline(mut segments: Vec<Segment>) -> Vec<Segment> {
+    if let Some(index) = segments
+        .iter()
+        .rposition(|segment| !segment.text.is_empty())
+    {
+        if segments[index].text.ends_with('\n') {
+            segments[index].text.pop();
+            if segments[index].text.is_empty() {
+                segments.remove(index);
+            }
+        }
+    }
     segments
 }
 

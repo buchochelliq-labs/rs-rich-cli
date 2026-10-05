@@ -47,7 +47,7 @@ const HEAT_STYLES: usize = 5;
 ///     .cell_width(4)
 ///     .charset(Charset::Ascii);
 /// assert_eq!(
-///     console.render_to_string(&map),
+///     console.render_export(&map),
 ///     concat!(
 ///         "    mon tue wed thu        \n",
 ///         "api ....====@@@@::::       \n",

@@ -218,7 +218,7 @@ struct Grid {
 ///     .row("unit", ["pass", "pass", "fail"])
 ///     .row("e2e", ["pass", "flaky", "skip"]);
 /// assert_eq!(
-///     console.render_to_string(&matrix),
+///     console.render_export(&matrix),
 ///     concat!(
 ///         "     linux macos  win                  \n",
 ///         "unit   ✓     ✓     ✗                   \n",

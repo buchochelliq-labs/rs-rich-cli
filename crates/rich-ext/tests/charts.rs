@@ -45,8 +45,15 @@ fn no_color(width: usize) -> Console {
         .build()
 }
 
+/// What `print` writes: the segments and the newline that ends the last
+/// line, so a renderable that ends its own last line shows as a blank one.
 fn render(console: &Console, r: &dyn Renderable) -> String {
-    console.segments_to_string(&r.rich_render(console, &console.options()))
+    let segments = r.rich_render(console, &console.options());
+    let mut out = console.segments_to_string(&segments);
+    if !segments.is_empty() {
+        out.push('\n');
+    }
+    out
 }
 
 /// `s` without CSI escape sequences.
@@ -168,7 +175,8 @@ fn sparkline_degenerate_data() {
         ),
         "▁ █ ▅\n"
     );
-    assert_eq!(render(&plain(10), &Sparkline::new([])), "\n");
+    // Nothing to draw: nothing is printed, not a blank line.
+    assert_eq!(render(&plain(10), &Sparkline::new([])), "");
     // Negative values.
     assert_eq!(
         render(&plain(10), &Sparkline::new([-4.0, 0.0, 4.0])),
@@ -999,7 +1007,7 @@ fn charts_sit_in_table_cells_and_panels() {
     table.add_row_cells(vec![Cell::Renderable(charts[0].1.clone())]);
     assert_eq!(
         render(&plain(80), &table),
-        "┏━━━━━━━━━━━━━━┓\n┃ trend        ┃\n┡━━━━━━━━━━━━━━┩\n│ ▁▂▂▄▆▅▃▆█▇▅▃ │\n└──────────────┘"
+        "┏━━━━━━━━━━━━━━┓\n┃ trend        ┃\n┡━━━━━━━━━━━━━━┩\n│ ▁▂▂▄▆▅▃▆█▇▅▃ │\n└──────────────┘\n"
     );
     let panel = Panel::new(Box::new(
         BarChart::new().bar("a", 3.0).bar("b", 1.0).bar_width(6),
@@ -1008,7 +1016,7 @@ fn charts_sit_in_table_cells_and_panels() {
     .expand(false);
     assert_eq!(
         render(&plain(80), &panel),
-        "╭─── bars ───╮\n│ a ██████ 3 │\n│ b ██     1 │\n╰────────────╯"
+        "╭─── bars ───╮\n│ a ██████ 3 │\n│ b ██     1 │\n╰────────────╯\n"
     );
 }
 
@@ -1041,4 +1049,16 @@ fn charts_update_in_live() {
     assert!(out.contains("▁█"), "{out:?}");
     assert!(out.contains("▁▅█"), "{out:?}");
     assert!(out.contains("● rx  ◆ tx"), "{out:?}");
+}
+
+/// Like core's renderables, a chart leaves the newline after its last line
+/// to `print`, so printing one is not followed by a blank line.
+#[test]
+fn printing_a_chart_ends_with_one_newline() {
+    for (name, chart) in every_chart() {
+        for width in [1, 20, 80] {
+            let out = plain(width).render_export(chart.as_ref());
+            assert!(!out.ends_with("\n\n"), "{name} at {width}: {out:?}");
+        }
+    }
 }
