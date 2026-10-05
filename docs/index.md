@@ -52,12 +52,11 @@ diagnostics, structured data, checked-markup macros, `clap` and `tracing`
 integration, workflow renderables, and the `inspect`, `diff`, `view`, `hex`,
 `unicode`, `env` and `capture` commands.
 The [0.0.12 cohort](releases/0.0.12.md) added the plugin platform and the
-first Python package, [0.0.13](releases/0.0.13.md) interactive components and
-`rich record`, and [0.0.14](releases/0.0.14.md) composable interactive views,
-`rich explore` and micro assets; all three are published. This checkout
-carries the 0.0.15 cohort: terminal charts, `rs-rich-diagram` with DOT, and
-`rich chart`, `rich dot`, `rich deps` and `rich schema` (see the
-[0.0.15 plan](plans/0.0.15.md)).
+first Python package; [0.0.13](releases/0.0.13.md) interactive components and
+`rich record`; [0.0.14](releases/0.0.14.md) composable interactive views,
+`rich explore` and micro assets; and [0.0.15](releases/0.0.15.md) terminal
+charts, `rs-rich-diagram` with DOT, `rich chart`, `rich dot`, `rich deps` and
+`rich schema`. All four are published.
 The [roadmap](ROADMAP.md) tracks subsequent work. Manifest versions below
 identify this checkout; the crates.io badges identify published packages.
 
