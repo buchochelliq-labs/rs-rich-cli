@@ -26,7 +26,7 @@ use rich::{Console, ConsoleOptions, Renderable, Segment, Text};
 
 use crate::component::{Component, Context, Flow, View};
 use crate::components::{text, PreviewLayout, Select, Theme};
-use crate::event::{Event, Key, KeyCode};
+use crate::event::{Event, Key};
 use crate::item::{Actions, Item, Preview, TargetKind};
 use crate::keymap::{keys, Keymap};
 use crate::policy::{LineIo, NotInteractive};
@@ -115,6 +115,8 @@ pub struct FilePicker {
     theme: Theme,
     /// Preview reads still going, or finished and not yet drawn.
     wake: Arc<PreviewWake>,
+    /// Keys rebound on this picker's own actions ([`FilePicker::rebind`]).
+    rebound: Keymap,
 }
 
 /// Shared by a picker and its previews: a read that outlasts
@@ -156,6 +158,7 @@ impl FilePicker {
             note: None,
             theme: Theme::default(),
             wake: Arc::default(),
+            rebound: Keymap::new("file"),
         };
         picker.load();
         picker
@@ -227,6 +230,26 @@ impl FilePicker {
     pub fn query(mut self, query: impl Into<String>) -> Self {
         self.select = self.select.query(query);
         self
+    }
+
+    /// Make `keys` do `action` on this picker only; no keys unbinds it.
+    /// The actions are the picker's own (`open`, `up`, `hidden`, in context
+    /// `file`) and its list's (see [`select_keymap`](crate::components::select_keymap)).
+    pub fn rebind(mut self, action: &str, keys: impl IntoIterator<Item = Key>) -> Self {
+        let keys: Vec<Key> = keys.into_iter().collect();
+        self.rebound.rebind(action, keys.clone());
+        self.select = self.select.rebind(action, keys);
+        self
+    }
+
+    /// The picker's own keys, without its list's.
+    fn file_keymap(&self) -> Keymap {
+        let mut keymap = Keymap::new("file")
+            .bind("open", keys("right"), "open the directory")
+            .bind("up", keys("left"), "go up (Backspace with no filter)")
+            .bind("hidden", keys("ctrl+t"), "show or hide hidden files");
+        keymap.extend(self.rebound.clone());
+        keymap
     }
 
     pub fn theme(mut self, theme: Theme) -> Self {
@@ -491,10 +514,19 @@ impl FilePicker {
     }
 
     fn key(&mut self, key: Key) -> bool {
-        let plain = key.modifiers == Default::default();
         let focused = self.select.focused().map(|index| self.entry(index));
-        match key.code {
-            KeyCode::Right if plain => {
+        let action = self
+            .file_keymap()
+            .action(key)
+            .map(str::to_string)
+            .or_else(|| {
+                // The list's `delete` (Backspace) with no filter to delete from.
+                (self.select.query_text().is_empty()
+                    && self.select.select_keymap().action(key) == Some("delete"))
+                .then(|| "up".to_string())
+            });
+        match action.as_deref() {
+            Some("open") => {
                 if let Some(Entry {
                     name: Some(name),
                     dir: true,
@@ -505,9 +537,8 @@ impl FilePicker {
                     self.up();
                 }
             }
-            KeyCode::Left if plain => self.up(),
-            KeyCode::Backspace if self.select.query_text().is_empty() => self.up(),
-            KeyCode::Char('t') if key.modifiers.ctrl => {
+            Some("up") => self.up(),
+            Some("hidden") => {
                 self.show_hidden = !self.show_hidden;
                 let focused = focused.and_then(|entry| entry.name);
                 self.load();
@@ -557,10 +588,7 @@ impl Component for FilePicker {
     }
 
     fn keymap(&self) -> Keymap {
-        let mut keymap = Keymap::new("file")
-            .bind("open", keys("right"), "open the directory")
-            .bind("up", keys("left"), "go up (Backspace with no filter)")
-            .bind("hidden", keys("ctrl+t"), "show or hide hidden files");
+        let mut keymap = self.file_keymap();
         keymap.extend(self.select.visible_keymap());
         keymap
     }

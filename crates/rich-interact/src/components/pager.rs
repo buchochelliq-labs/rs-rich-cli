@@ -13,7 +13,7 @@ use rich::{Renderable, Segment, Style};
 
 use crate::component::{Component, Context, Flow, View};
 use crate::components::{fit, plain, text, Theme};
-use crate::event::{Event, KeyCode};
+use crate::event::{Event, Key, KeyCode};
 use crate::keymap::{keys, Keymap};
 use crate::policy::{LineIo, NotInteractive};
 use crate::viewport::Viewport;
@@ -26,8 +26,33 @@ struct Hit {
     end: usize,
 }
 
+/// The keys of a [`Pager`], in context `pager`: `quit`, `search`,
+/// `next-match`, `previous-match` and [`ScrollState::keymap`]'s.
+///
+/// [`ScrollState::keymap`]: crate::kit::ScrollState::keymap
+pub fn pager_keymap() -> Keymap {
+    let mut keymap = Keymap::new("pager")
+        .bind("quit", keys("q escape"), "quit")
+        .bind("search", keys("/"), "search")
+        .bind("next-match", keys("n"), "next match")
+        .bind("previous-match", keys("N"), "previous match");
+    keymap.extend(crate::kit::ScrollState::keymap("pager"));
+    keymap
+}
+
+/// The keys of a [`Pager`] while a search is typed, in context
+/// `pager-search`.
+pub fn pager_search_keymap() -> Keymap {
+    Keymap::new("pager-search")
+        .bind("find", keys("enter"), "find")
+        .bind("cancel", keys("escape"), "stop searching")
+        .bind("delete", keys("backspace"), "delete a character")
+}
+
 /// Pages content; returns when closed.
 pub struct Pager {
+    keymap: Keymap,
+    search_keymap: Keymap,
     source: Option<Arc<dyn Renderable + Send + Sync>>,
     rendered_at: Option<usize>,
     viewport: Viewport,
@@ -55,6 +80,8 @@ impl Pager {
     /// Page lines already rendered.
     pub fn lines(lines: Vec<Vec<Segment>>) -> Pager {
         let mut pager = Pager {
+            keymap: pager_keymap(),
+            search_keymap: pager_search_keymap(),
             source: None,
             rendered_at: None,
             viewport: Viewport::default(),
@@ -69,6 +96,15 @@ impl Pager {
         };
         pager.set(lines);
         pager
+    }
+
+    /// Make `keys` do `action` (see [`pager_keymap`] and
+    /// [`pager_search_keymap`]) on this pager only; no keys unbinds it.
+    pub fn rebind(mut self, action: &str, keys: impl IntoIterator<Item = Key>) -> Self {
+        let keys: Vec<Key> = keys.into_iter().collect();
+        self.keymap.rebind(action, keys.clone());
+        self.search_keymap.rebind(action, keys);
+        self
     }
 
     pub fn theme(mut self, theme: Theme) -> Self {
@@ -247,9 +283,17 @@ impl Component for Pager {
             self.clicked.push(url.clone());
             return Flow::Continue;
         }
-        if let Some(typing) = &mut self.typing {
-            match event.key().map(|key| key.code) {
-                Some(KeyCode::Enter) => {
+        if self.typing.is_some() {
+            let Some(key) = event.key() else {
+                return Flow::Continue;
+            };
+            match self
+                .search_keymap
+                .action(key)
+                .map(str::to_string)
+                .as_deref()
+            {
+                Some("find") => {
                     self.query = self.typing.take();
                     self.find();
                     // The first match at or after the top of the page.
@@ -262,53 +306,49 @@ impl Component for Pager {
                     self.current = first;
                     self.jump(0, page);
                 }
-                Some(KeyCode::Escape) => self.typing = None,
-                Some(KeyCode::Backspace) => {
-                    if typing.pop().is_none() {
+                Some("cancel") => self.typing = None,
+                Some("delete") => {
+                    if self.typing.as_mut().and_then(String::pop).is_none() {
                         self.typing = None;
                     }
                 }
-                Some(KeyCode::Char(c)) => typing.push(c),
-                _ => {}
+                _ => {
+                    if let (KeyCode::Char(c), Some(typing)) = (key.code, &mut self.typing) {
+                        typing.push(c);
+                    }
+                }
             }
             return Flow::Continue;
         }
-        if self.viewport.handle_scroll(event, page) {
+        let Some(key) = event.key() else {
+            // The wheel.
+            self.viewport.handle_scroll(event, page);
             return Flow::Continue;
-        }
-        match event.key().map(|key| key.code) {
-            Some(KeyCode::Char('q') | KeyCode::Escape) => Flow::Done(()),
-            Some(KeyCode::Char('/')) => {
+        };
+        match self.keymap.action(key).map(str::to_string).as_deref() {
+            Some("quit") => Flow::Done(()),
+            Some("search") => {
                 self.typing = Some(String::new());
                 Flow::Continue
             }
-            Some(KeyCode::Char('n')) => {
+            Some("next-match") => {
                 self.jump(1, page);
                 Flow::Continue
             }
-            Some(KeyCode::Char('N')) => {
+            Some("previous-match") => {
                 self.jump(-1, page);
                 Flow::Continue
             }
-            Some(_) => Flow::Ignored,
-            None => Flow::Continue,
+            Some(action) if self.viewport.act(action, page) => Flow::Continue,
+            _ => Flow::Ignored,
         }
     }
 
     fn keymap(&self) -> Keymap {
         if self.typing.is_some() {
-            return Keymap::new("pager-search")
-                .bind("find", keys("enter"), "find")
-                .bind("cancel", keys("escape"), "stop searching")
-                .bind("delete", keys("backspace"), "delete a character");
+            return self.search_keymap.clone();
         }
-        let mut keymap = Keymap::new("pager")
-            .bind("quit", keys("q escape"), "quit")
-            .bind("search", keys("/"), "search")
-            .bind("next-match", keys("n"), "next match")
-            .bind("previous-match", keys("N"), "previous match");
-        keymap.extend(crate::kit::ScrollState::keymap("pager"));
-        keymap
+        self.keymap.clone()
     }
 
     fn render(&self, context: &Context<'_>) -> View {

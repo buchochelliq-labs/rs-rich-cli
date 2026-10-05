@@ -4,7 +4,8 @@
 //! summary) in a scrollable viewport, warnings are listed under it, and the
 //! choices are more than yes and no when the caller needs them (`Apply`,
 //! `Apply all`, `Skip`, `Cancel`). A choice's key picks it directly; Left,
-//! Right and Tab move between them and Enter picks the focused one.
+//! Right and Tab move between them and Enter picks the focused one. Every
+//! key comes from the [keymap](Component::keymap), so it can be rebound.
 
 use std::sync::Arc;
 
@@ -49,6 +50,8 @@ pub struct Confirm {
     theme: Theme,
     mouse: bool,
     answer: Option<Option<String>>,
+    /// Keys rebound on this sheet ([`Confirm::rebind`]).
+    rebound: Keymap,
 }
 
 impl Confirm {
@@ -66,7 +69,17 @@ impl Confirm {
             theme: Theme::default(),
             mouse: false,
             answer: None,
+            rebound: Keymap::new("confirm"),
         }
+    }
+
+    /// Make `keys` do `action` (in context `confirm`: `pick`, `cancel`,
+    /// `previous`, `next`, `choose-ID` for each choice, and the scroll
+    /// actions when there is a body) on this sheet only; no keys unbinds
+    /// it.
+    pub fn rebind(mut self, action: &str, keys: impl IntoIterator<Item = Key>) -> Self {
+        self.rebound.rebind(action, keys);
+        self
     }
 
     /// Show `renderable` in the body, after anything added before.
@@ -185,34 +198,37 @@ impl Component for Confirm {
             self.viewport.handle_scroll(event, page);
             return Flow::Continue;
         };
-        if !key.modifiers.ctrl && !key.modifiers.alt {
-            if let KeyCode::Char(c) = key.code {
-                let lower = c.to_ascii_lowercase();
+        let keymap = self.keymap();
+        // A choice's key picks it in either case.
+        let action = keymap.action(key).or_else(|| match key.code {
+            KeyCode::Char(c) if c.is_uppercase() => keymap.action(Key {
+                code: KeyCode::Char(c.to_ascii_lowercase()),
+                ..key
+            }),
+            _ => None,
+        });
+        let action = action.map(str::to_string);
+        let count = self.choices.len();
+        match action.as_deref() {
+            Some(action) if action.starts_with("choose-") => {
                 if let Some(index) = self
                     .choices
                     .iter()
-                    .position(|choice| choice.key.to_ascii_lowercase() == lower)
+                    .position(|choice| action["choose-".len()..] == choice.id)
                 {
                     return self.pick(index);
                 }
+                return Flow::Ignored;
             }
-        }
-        let count = self.choices.len();
-        match key.code {
-            KeyCode::Enter if count > 0 => return self.pick(self.focus),
-            KeyCode::Escape => {
+            Some("pick") if count > 0 => return self.pick(self.focus),
+            Some("cancel") => {
                 self.answer = Some(None);
                 return Flow::Cancel;
             }
-            KeyCode::Left | KeyCode::BackTab => {
-                self.focus = (self.focus + count - 1) % count.max(1)
-            }
-            KeyCode::Right | KeyCode::Tab => self.focus = (self.focus + 1) % count.max(1),
-            _ => {
-                if !self.viewport.handle_scroll(event, page) {
-                    return Flow::Ignored;
-                }
-            }
+            Some("previous") => self.focus = (self.focus + count - 1) % count.max(1),
+            Some("next") => self.focus = (self.focus + 1) % count.max(1),
+            Some(action) if self.viewport.act(action, page) => {}
+            _ => return Flow::Ignored,
         }
         Flow::Continue
     }
@@ -234,6 +250,7 @@ impl Component for Confirm {
         if !self.body.is_empty() {
             keymap.extend(crate::kit::ScrollState::keymap("confirm"));
         }
+        keymap.extend(self.rebound.clone());
         keymap
     }
 

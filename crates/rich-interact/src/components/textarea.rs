@@ -83,6 +83,8 @@ pub struct TextArea {
     /// read in `render`.
     top: Cell<usize>,
     answer: Option<Option<String>>,
+    /// Keys rebound on this area ([`TextArea::rebind`]).
+    rebound: Keymap,
 }
 
 impl TextArea {
@@ -95,6 +97,7 @@ impl TextArea {
             placeholder: None,
             limit: None,
             submit: Key::ctrl('d'),
+            rebound: Keymap::new("textarea"),
             height: 5,
             line_numbers: false,
             theme: Theme::default(),
@@ -151,6 +154,14 @@ impl TextArea {
             start += 1;
         }
         text
+    }
+
+    /// Make `keys` do `action` (in context `textarea`; see
+    /// [`keymap`](Component::keymap)) on this area only; no keys unbinds
+    /// it.
+    pub fn rebind(mut self, action: &str, keys: impl IntoIterator<Item = Key>) -> Self {
+        self.rebound.rebind(action, keys);
+        self
     }
 
     /// The key that submits (default Ctrl+D).
@@ -456,57 +467,65 @@ impl Component for TextArea {
             }
             return Flow::Continue;
         };
-        if key == self.submit {
-            let text = self.text();
-            self.answer = Some(Some(text.clone()));
-            return Flow::Done(text);
-        }
-        let ctrl = key.modifiers.ctrl;
-        match key.code {
-            KeyCode::Escape => {
+        let keymap = self.keymap();
+        // A key with modifiers that is not bound as it is does what it does
+        // without them, unless it types.
+        let action = keymap.action(key).or_else(|| {
+            let typing = matches!(key.code, KeyCode::Char(_));
+            (!typing && key.modifiers != crate::event::Modifiers::NONE)
+                .then(|| keymap.action(Key::new(key.code)))
+                .flatten()
+        });
+        match action.map(str::to_string).as_deref() {
+            Some("submit") => {
+                let text = self.text();
+                self.answer = Some(Some(text.clone()));
+                return Flow::Done(text);
+            }
+            Some("cancel") => {
                 self.answer = Some(None);
                 return Flow::Cancel;
             }
-            KeyCode::Enter => self.insert("\n"),
-            KeyCode::Tab => self.insert("    "),
-            KeyCode::Backspace => self.backspace(),
-            KeyCode::Delete => self.delete(),
-            KeyCode::Left => self.left(),
-            KeyCode::Right => self.right(),
-            KeyCode::Up => self.vertical(-1),
-            KeyCode::Down => self.vertical(1),
-            KeyCode::PageUp => self.vertical(-(height as isize)),
-            KeyCode::PageDown => self.vertical(height as isize),
-            KeyCode::Home if ctrl => (self.line, self.at) = (0, 0),
-            KeyCode::End if ctrl => {
+            Some("newline") => self.insert("\n"),
+            Some("indent") => self.insert("    "),
+            Some("backspace") => self.backspace(),
+            Some("delete") => self.delete(),
+            Some("left") => self.left(),
+            Some("right") => self.right(),
+            Some("up") => self.vertical(-1),
+            Some("down") => self.vertical(1),
+            Some("page-up") => self.vertical(-(height as isize)),
+            Some("page-down") => self.vertical(height as isize),
+            Some("top") => (self.line, self.at) = (0, 0),
+            Some("bottom") => {
                 self.line = self.lines.len() - 1;
                 self.at = self.lines[self.line].len();
             }
-            KeyCode::Home => self.at = 0,
-            KeyCode::End => self.at = self.lines[self.line].len(),
-            KeyCode::Char('a') if ctrl => self.at = 0,
-            KeyCode::Char('e') if ctrl => self.at = self.lines[self.line].len(),
-            KeyCode::Char('u') if ctrl => {
+            Some("home") => self.at = 0,
+            Some("end") => self.at = self.lines[self.line].len(),
+            Some("delete-to-start") => {
                 self.lines[self.line].replace_range(..self.at, "");
                 self.at = 0;
             }
-            KeyCode::Char('k') if ctrl => {
+            Some("delete-to-end") => {
                 let at = self.at;
                 self.lines[self.line].truncate(at);
             }
-            KeyCode::Char('w') if ctrl => self.kill_word(),
-            KeyCode::Char(c) if !ctrl && !key.modifiers.alt => {
-                let mut buffer = [0; 4];
-                self.insert(c.encode_utf8(&mut buffer));
-            }
-            _ => return Flow::Ignored,
+            Some("delete-word") => self.kill_word(),
+            _ => match key.code {
+                KeyCode::Char(c) if !key.modifiers.ctrl && !key.modifiers.alt => {
+                    let mut buffer = [0; 4];
+                    self.insert(c.encode_utf8(&mut buffer));
+                }
+                _ => return Flow::Ignored,
+            },
         }
         self.follow(context.width, height);
         Flow::Continue
     }
 
     fn keymap(&self) -> Keymap {
-        Keymap::new("textarea")
+        let mut keymap = Keymap::new("textarea")
             .bind("submit", [self.submit], "submit")
             .bind("cancel", keys("escape"), "cancel")
             .bind("newline", keys("enter"), "new line")
@@ -529,7 +548,9 @@ impl Component for TextArea {
             .bind("delete-to-end", keys("ctrl+k"), "delete to the line's end")
             .bind("delete-word", keys("ctrl+w"), "delete a word")
             .bind("backspace", keys("backspace"), "delete back")
-            .bind("delete", keys("delete"), "delete forward")
+            .bind("delete", keys("delete"), "delete forward");
+        keymap.extend(self.rebound.clone());
+        keymap
     }
 
     fn render(&self, context: &Context<'_>) -> View {
@@ -590,7 +611,9 @@ impl Component for TextArea {
         }
         hint.push_str(&format!(
             "enter new line · {} submit · esc cancel",
-            self.submit
+            self.keymap()
+                .key("submit")
+                .map_or_else(|| "-".to_string(), |key| key.to_string())
         ));
         lines.push(fit(vec![text(hint, &theme.hint)], width));
         let view = View::new(lines);
