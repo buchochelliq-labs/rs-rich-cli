@@ -246,6 +246,44 @@ fn titles_captions_and_markdown_draw_on_a_graphics_terminal() {
     }
 }
 
+#[cfg(feature = "interact")]
+#[test]
+fn the_interactive_commands_draw_micro_assets() {
+    // 0.0.15 workstream 6: `rich asset --kind micro` and `rich explore
+    // --icons` draw the assets as images, not their fallback, on the
+    // terminal they paint on (standard error), even with the answer piped.
+    let dir = tempfile::tempdir().unwrap();
+    let home = dir.path().join("home");
+    std::fs::create_dir_all(&home).unwrap();
+    std::fs::write(dir.path().join("doc.json"), r#"{"ok": true, "bad": false}"#).unwrap();
+    let env = terminal_env(
+        false,
+        &[
+            ("HOME", home.to_str().unwrap()),
+            ("RICH_CELL_PIXELS", "8x16"),
+            ("RICH_MICRO", "kitty"),
+            ("RICH_ANIMATION", "0"),
+        ],
+    );
+    for command in ["asset --kind micro --height 4", "explore --icons doc.json"] {
+        let script = format!("'{RICH}' {command} > answer.txt");
+        // Ctrl+C once the list (and its footer) is up.
+        let shown = in_pty_answering(
+            "/bin/sh",
+            &["-c", &script],
+            dir.path(),
+            &env,
+            b"",
+            Some(("esc cancel", b"\x03")),
+            Duration::from_secs(20),
+        );
+        assert!(shown.contains("\u{1b}_G"), "{command}: {shown:?}");
+        assert!(shown.contains('\u{10eeee}'), "{command}: {shown:?}");
+        // And deleted again when the command ends.
+        assert!(shown.contains("\u{1b}_Ga=d"), "{command}: {shown:?}");
+    }
+}
+
 #[test]
 fn the_cell_size_query_keeps_typeahead() {
     // F3: with no pixel size from the window and no RICH_CELL_PIXELS, rich

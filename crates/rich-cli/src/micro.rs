@@ -1420,6 +1420,41 @@ pub(crate) fn registry(trusted: bool) -> MicroRegistry {
     context.registry().0
 }
 
+/// Drawing for an interactive command, which paints on standard error:
+/// the terminal's mode, chosen as for printing, but for standard error, so
+/// `name=$(rich asset --kind micro)` still draws the list's images.
+#[cfg(feature = "interact")]
+pub(crate) fn picker_graphics(registry: Arc<MicroRegistry>) -> MicroGraphics {
+    use rich_ext::capabilities::SystemEnvironment;
+    use std::io::IsTerminal;
+    let mut environment = rich_ext::graphics::GraphicsEnvironment::system();
+    if !environment.interactive && std::io::stderr().is_terminal() {
+        environment.interactive = true;
+    }
+    let selection = rich_micro::select(&environment, &SystemEnvironment);
+    MicroGraphics::new(registry, selection).with_disk_cache(rich_micro::cache::user_cache_dir())
+}
+
+/// Run `component` with `graphics` drawing its micro assets, then delete
+/// the images it transmitted (Kitty's), on standard error where they were
+/// drawn.
+#[cfg(feature = "interact")]
+pub(crate) fn run_drawn<C: rich_interact::Component>(
+    component: C,
+    options: &rich_interact::RunOptions,
+    graphics: &MicroGraphics,
+) -> Result<rich_interact::Outcome<C::Output>, rich_interact::Error> {
+    let outcome = rich_interact::run_with_graphics(component, options, graphics.source());
+    let close = graphics.close();
+    if !close.is_empty() {
+        use std::io::Write;
+        let mut stderr = std::io::stderr();
+        let _ = stderr.write_all(close.as_bytes());
+        let _ = stderr.flush();
+    }
+    outcome
+}
+
 /// `rich explore --icons`: the built-in status assets for true, false and
 /// null.
 #[cfg(feature = "interact")]

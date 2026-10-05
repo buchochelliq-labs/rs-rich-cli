@@ -112,7 +112,9 @@ pub use compose::{
     Tabs,
 };
 pub use event::{Button, Event, Key, KeyCode, Modifiers, Mouse, MouseKind};
-pub use event_loop::{degrade, run, Error, EventLoop, Handle, LoopOptions, Outcome, RunOptions};
+pub use event_loop::{
+    degrade, run, run_with_graphics, Error, EventLoop, Handle, LoopOptions, Outcome, RunOptions,
+};
 pub use item::{Action, ActionFilter, ActionTarget, Actions, Item, Preview, TargetKind};
 pub use keymap::{Binding, Keymap};
 pub use overlay::{Command, Help, Menu, Overlays, Palette, Shortcuts};
