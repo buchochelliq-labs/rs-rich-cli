@@ -25,7 +25,7 @@ pub use explore::{explore_keymap, json_path, DataExplorer};
 pub use file::{display_name, display_path, FileMode, FilePicker};
 pub use form::{Answers, Form, Value};
 pub use input::{input_keymap, Input, Provider, Suggestion};
-pub use pager::Pager;
+pub use pager::{pager_keymap, pager_search_keymap, Pager};
 pub use select::{select_keymap, MultiSelect, PreviewLayout, Select};
 pub use textarea::TextArea;
 pub use theme::{ThemePicker, THEME_SAMPLE};

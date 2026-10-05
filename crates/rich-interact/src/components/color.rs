@@ -15,7 +15,7 @@ use rich::{Color, ColorTriplet, Segment, Style};
 
 use crate::component::{Component, Context, Flow, View};
 use crate::components::{fit, highlight, plain, question, text, Theme};
-use crate::event::{Button, Event, KeyCode, MouseKind};
+use crate::event::{Button, Event, Key, KeyCode, Modifiers, MouseKind};
 use crate::fuzzy::rank;
 use crate::keymap::{keys, Keymap};
 use crate::names::COLORS;
@@ -144,6 +144,8 @@ pub struct ColorPicker {
     /// Rows on screen, from the last context: the list is cut to fit.
     space: Cell<usize>,
     answer: Option<Option<String>>,
+    /// Keys rebound on this picker ([`ColorPicker::rebind`]).
+    rebound: Keymap,
 }
 
 /// Rows above the list or grid: the question and the swatch.
@@ -168,6 +170,7 @@ impl ColorPicker {
             clicked: None,
             space: Cell::new(usize::MAX),
             answer: None,
+            rebound: Keymap::new("color"),
         };
         picker.refilter();
         picker
@@ -220,6 +223,14 @@ impl ColorPicker {
     /// Start on the palette grid.
     pub fn palette(mut self, on: bool) -> Self {
         self.grid = on;
+        self
+    }
+
+    /// Make `keys` do `action` (in context `color`; see
+    /// [`keymap`](Component::keymap)) on this picker only; no keys unbinds
+    /// it.
+    pub fn rebind(mut self, action: &str, keys: impl IntoIterator<Item = Key>) -> Self {
+        self.rebound.rebind(action, keys);
         self
     }
 
@@ -449,48 +460,58 @@ impl Component for ColorPicker {
         let Some(key) = event.key() else {
             return Flow::Continue;
         };
-        let ctrl = key.modifiers.ctrl;
         // A click after a key is a first click again.
         self.clicked = None;
-        match key.code {
-            KeyCode::Enter => return self.pick(),
-            KeyCode::Escape => {
+        let keymap = self.keymap();
+        // A key with modifiers that is not bound as it is does what it does
+        // without them, unless it types.
+        let action = keymap.action(key).or_else(|| {
+            let typing = matches!(key.code, KeyCode::Char(_));
+            (!typing && key.modifiers != Modifiers::NONE)
+                .then(|| keymap.action(Key::new(key.code)))
+                .flatten()
+        });
+        match action.map(str::to_string).as_deref() {
+            Some("pick") => return self.pick(),
+            Some("cancel") => {
                 self.answer = Some(None);
                 return Flow::Cancel;
             }
-            KeyCode::Tab | KeyCode::BackTab => self.grid = !self.grid,
-            KeyCode::Up if self.grid => self.move_cell(0, -1),
-            KeyCode::Down if self.grid => self.move_cell(0, 1),
-            KeyCode::Left if self.grid => self.move_cell(-1, 0),
-            KeyCode::Right if self.grid => self.move_cell(1, 0),
-            KeyCode::Home if self.grid => self.cell = 0,
-            KeyCode::End if self.grid => self.cell = 255,
-            KeyCode::Up => self.step(-1),
-            KeyCode::Down => self.step(1),
-            KeyCode::PageUp => self.step(-(self.rows() as isize)),
-            KeyCode::PageDown => self.step(self.rows() as isize),
-            KeyCode::Char('u') if ctrl => {
+            Some("grid") => self.grid = !self.grid,
+            Some("up") if self.grid => self.move_cell(0, -1),
+            Some("down") if self.grid => self.move_cell(0, 1),
+            Some("left") if self.grid => self.move_cell(-1, 0),
+            Some("right") if self.grid => self.move_cell(1, 0),
+            Some("first") if self.grid => self.cell = 0,
+            Some("last") if self.grid => self.cell = 255,
+            Some("up") => self.step(-1),
+            Some("down") => self.step(1),
+            Some("page-up") => self.step(-(self.rows() as isize)),
+            Some("page-down") => self.step(self.rows() as isize),
+            Some("clear") => {
                 self.query.clear();
                 self.refilter();
             }
-            KeyCode::Backspace => {
+            Some("delete") => {
                 self.grid = false;
                 if self.query.pop().is_some() {
                     self.refilter();
                 }
             }
-            KeyCode::Char(c) if !ctrl && !key.modifiers.alt => {
-                self.grid = false;
-                self.query.push(c);
-                self.refilter();
-            }
-            _ => return Flow::Ignored,
+            _ => match key.code {
+                KeyCode::Char(c) if !key.modifiers.ctrl && !key.modifiers.alt => {
+                    self.grid = false;
+                    self.query.push(c);
+                    self.refilter();
+                }
+                _ => return Flow::Ignored,
+            },
         }
         Flow::Continue
     }
 
     fn keymap(&self) -> Keymap {
-        Keymap::new("color")
+        let mut keymap = Keymap::new("color")
             .bind("pick", keys("enter"), "pick")
             .bind("cancel", keys("escape"), "cancel")
             .bind(
@@ -507,7 +528,9 @@ impl Component for ColorPicker {
             .bind("first", keys("home"), "first cell (grid)")
             .bind("last", keys("end"), "last cell (grid)")
             .bind("clear", keys("ctrl+u"), "clear the filter")
-            .bind("delete", keys("backspace"), "delete a character")
+            .bind("delete", keys("backspace"), "delete a character");
+        keymap.extend(self.rebound.clone());
+        keymap
     }
 
     fn render(&self, context: &Context<'_>) -> View {

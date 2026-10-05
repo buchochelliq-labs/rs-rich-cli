@@ -1302,11 +1302,16 @@ fn asset(args: &Args) -> Answer {
         }
         .to_string()
     });
+    // Micro assets are drawn in their rows where the terminal can.
     #[cfg(feature = "art")]
-    let picker = if args.kind.as_deref() == Some("micro") {
-        AssetPicker::micro(prompt, &crate::micro::registry(args.micro_project))
+    let (picker, graphics) = if args.kind.as_deref() == Some("micro") {
+        let registry = std::sync::Arc::new(crate::micro::registry(args.micro_project));
+        (
+            AssetPicker::micro(prompt, &registry),
+            Some(crate::micro::picker_graphics(registry)),
+        )
     } else {
-        AssetPicker::new(prompt, kind)
+        (AssetPicker::new(prompt, kind), None)
     };
     #[cfg(not(feature = "art"))]
     let picker = AssetPicker::new(prompt, kind);
@@ -1331,7 +1336,14 @@ fn asset(args: &Args) -> Answer {
     if let Some(query) = &args.value {
         picker = picker.query(query.clone());
     }
-    let outcome = rich_interact::run(picker, &run_options(Fallback::Prompt, args.no_color));
+    let options = run_options(Fallback::Prompt, args.no_color);
+    #[cfg(feature = "art")]
+    let outcome = match &graphics {
+        Some(graphics) => crate::micro::run_drawn(picker, &options, graphics),
+        None => rich_interact::run(picker, &options),
+    };
+    #[cfg(not(feature = "art"))]
+    let outcome = rich_interact::run(picker, &options);
     finish(outcome.map(|outcome| match outcome {
         Outcome::Done(asset) => Outcome::Done(vec![asset]),
         Outcome::Cancelled => Outcome::Cancelled,
@@ -1389,12 +1401,25 @@ fn explore(args: &Args) -> Answer {
     if let Some(query) = &args.value {
         explorer = explorer.query(query.clone());
     }
+    // The icons are drawn as images where the terminal can.
     #[cfg(feature = "art")]
-    if args.icons {
-        let registry = rich_micro::MicroRegistry::builtin();
-        explorer = explorer.icons(|_, node| crate::micro::value_icon(&registry, node));
+    let registry = args
+        .icons
+        .then(|| std::sync::Arc::new(rich_micro::MicroRegistry::builtin()));
+    #[cfg(feature = "art")]
+    if let Some(registry) = &registry {
+        explorer = explorer.icons(|_, node| crate::micro::value_icon(registry, node));
     }
-    match rich_interact::run(&mut explorer, &options) {
+    #[cfg(feature = "art")]
+    let graphics = registry.map(crate::micro::picker_graphics);
+    #[cfg(feature = "art")]
+    let outcome = match &graphics {
+        Some(graphics) => crate::micro::run_drawn(&mut explorer, &options, graphics),
+        None => rich_interact::run(&mut explorer, &options),
+    };
+    #[cfg(not(feature = "art"))]
+    let outcome = rich_interact::run(&mut explorer, &options);
+    match outcome {
         Ok(Outcome::Done(path)) => {
             let answer = if args.print_value {
                 explorer

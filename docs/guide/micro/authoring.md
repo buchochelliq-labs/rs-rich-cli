@@ -117,7 +117,7 @@ shows it, and magnified: one image pixel per half cell, over a dark
 checkerboard where it is transparent, fitted to **this terminal's** cell
 size in pixels (from `RICH_CELL_PIXELS`, the window size, or a `CSI 16 t`
 query), which is what a graphics protocol will show. An animation shows its
-frames side by side with their times. Give an image file instead and it
+frames side by side with their times; a still image, its one frame. Give an image file instead and it
 shows what the pipeline would make of it, with the same options as
 `create`.
 

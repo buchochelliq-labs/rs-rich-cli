@@ -918,12 +918,15 @@ fn filmstrip(frames: &[rich_art::graphics::AnimationFrame], width: usize) -> ric
             .map(|frame| rich::table::Cell::Renderable(Arc::new(Magnified(frame.image.clone()))))
             .collect(),
     );
-    table.add_row_cells(
-        shown
-            .iter()
-            .map(|frame| Text::new(format!("{} ms", frame.delay.as_millis())).into())
-            .collect(),
-    );
+    // Each frame's time, for an animation: a still image has none to show.
+    if frames.len() > 1 {
+        table.add_row_cells(
+            shown
+                .iter()
+                .map(|frame| Text::new(format!("{} ms", frame.delay.as_millis())).into())
+                .collect(),
+        );
+    }
     table
 }
 
@@ -1420,6 +1423,41 @@ pub(crate) fn registry(trusted: bool) -> MicroRegistry {
     context.registry().0
 }
 
+/// Drawing for an interactive command, which paints on standard error:
+/// the terminal's mode, chosen as for printing, but for standard error, so
+/// `name=$(rich asset --kind micro)` still draws the list's images.
+#[cfg(feature = "interact")]
+pub(crate) fn picker_graphics(registry: Arc<MicroRegistry>) -> MicroGraphics {
+    use rich_ext::capabilities::SystemEnvironment;
+    use std::io::IsTerminal;
+    let mut environment = rich_ext::graphics::GraphicsEnvironment::system();
+    if !environment.interactive && std::io::stderr().is_terminal() {
+        environment.interactive = true;
+    }
+    let selection = rich_micro::select(&environment, &SystemEnvironment);
+    MicroGraphics::new(registry, selection).with_disk_cache(rich_micro::cache::user_cache_dir())
+}
+
+/// Run `component` with `graphics` drawing its micro assets, then delete
+/// the images it transmitted (Kitty's), on standard error where they were
+/// drawn.
+#[cfg(feature = "interact")]
+pub(crate) fn run_drawn<C: rich_interact::Component>(
+    component: C,
+    options: &rich_interact::RunOptions,
+    graphics: &MicroGraphics,
+) -> Result<rich_interact::Outcome<C::Output>, rich_interact::Error> {
+    let outcome = rich_interact::run_with_graphics(component, options, graphics.source());
+    let close = graphics.close();
+    if !close.is_empty() {
+        use std::io::Write;
+        let mut stderr = std::io::stderr();
+        let _ = stderr.write_all(close.as_bytes());
+        let _ = stderr.flush();
+    }
+    outcome
+}
+
 /// `rich explore --icons`: the built-in status assets for true, false and
 /// null.
 #[cfg(feature = "interact")]
@@ -1435,16 +1473,17 @@ pub(crate) fn value_icon(registry: &MicroRegistry, node: &rich_ext::data::Node) 
     Some(rich_micro::placeholder(asset, FallbackPreference::Emoji))
 }
 
-/// `:micro:name:` in `--print --emoji` markup: parse `content` with its
-/// micro tokens as placeholders, and a renderable that draws them as this
-/// terminal can. `None` when there are no tokens.
-pub(crate) fn print_markup(
-    console: &Console,
-    content: &str,
-    trusted: bool,
-) -> Option<(Text, Arc<MicroRegistry>)> {
-    if !content.contains(rich_micro::markup::TOKEN_PREFIX) {
-        return None;
+/// The registry `:micro:` markup expands against in this run: loaded once,
+/// with its warnings, however many places (the text, the title, the
+/// caption) hold tokens.
+fn markup_registry(trusted: bool) -> Arc<MicroRegistry> {
+    static LOADED: std::sync::Mutex<Option<(bool, Arc<MicroRegistry>)>> =
+        std::sync::Mutex::new(None);
+    let mut loaded = LOADED.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some((was, registry)) = loaded.as_ref() {
+        if *was == trusted {
+            return Arc::clone(registry);
+        }
     }
     let roots = ConfigRoots::default();
     let context = Context {
@@ -1456,21 +1495,127 @@ pub(crate) fn print_markup(
     };
     let (registry, report) = MicroRegistry::load(&context.roots(), &Limits::default());
     warn(&report);
+    let registry = Arc::new(registry);
+    *loaded = Some((trusted, Arc::clone(&registry)));
+    registry
+}
+
+/// The registry whose placeholders this run's output holds, once something
+/// expanded a token: [`take_drawing`] hands it to the last step, which draws
+/// them on a terminal.
+static DRAWING: std::sync::Mutex<Option<Arc<MicroRegistry>>> = std::sync::Mutex::new(None);
+
+fn draw_later(registry: &Arc<MicroRegistry>) {
+    *DRAWING.lock().unwrap_or_else(|e| e.into_inner()) = Some(Arc::clone(registry));
+}
+
+/// The registry to draw this run's placeholders with, if any expanded.
+pub(crate) fn take_drawing() -> Option<Arc<MicroRegistry>> {
+    DRAWING.lock().unwrap_or_else(|e| e.into_inner()).take()
+}
+
+/// Whether this run's output holds placeholders to draw.
+pub(crate) fn drawing_pending() -> bool {
+    DRAWING.lock().unwrap_or_else(|e| e.into_inner()).is_some()
+}
+
+fn has_tokens(content: &str) -> bool {
+    content.contains(rich_micro::markup::TOKEN_PREFIX)
+}
+
+/// `:micro:name:` in `--print --emoji` markup: parse `content` with its
+/// micro tokens as placeholders. `None` when there are no tokens.
+pub(crate) fn print_markup(console: &Console, content: &str, trusted: bool) -> Option<Text> {
+    if !has_tokens(content) {
+        return None;
+    }
+    let registry = markup_registry(trusted);
     let prepared = rich_micro::PreparedMarkup::new(content, &registry, preference(console));
     let parsed = console.build_text(prepared.markup());
-    Some((prepared.finish(&parsed), Arc::new(registry)))
+    draw_later(&registry);
+    Some(prepared.finish(&parsed))
+}
+
+/// A `--panel`'s `--title` or `--caption` with micro tokens: parsed as the
+/// panel parses a label (`Text.from_markup`, so `:emoji:` codes always
+/// expand, and micro tokens with them). `None` when there are no tokens.
+pub(crate) fn panel_label(console: &Console, label: &str, trusted: bool) -> Option<Text> {
+    if !has_tokens(label) {
+        return None;
+    }
+    let registry = markup_registry(trusted);
+    let prepared = rich_micro::PreparedMarkup::new(label, &registry, preference(console));
+    let markup = rich::emoji::replace(prepared.markup());
+    let parsed = Text::from_markup(&markup).unwrap_or_else(|_| Text::new(markup));
+    draw_later(&registry);
+    Some(prepared.finish(&parsed))
+}
+
+/// A CSV table's `--title` or `--caption` with micro tokens: parsed as the
+/// table parses one (`console.render_str`, so tokens expand with `--emoji`,
+/// where `:emoji:` codes do), in `style`. `None` when there are no tokens or
+/// no `--emoji`.
+pub(crate) fn table_label(
+    console: &Console,
+    label: &str,
+    style: &str,
+    trusted: bool,
+) -> Option<Text> {
+    if !has_tokens(label) || !console.emoji() {
+        return None;
+    }
+    let registry = markup_registry(trusted);
+    let prepared = rich_micro::PreparedMarkup::new(label, &registry, preference(console));
+    let mut text = prepared.finish(&console.render_str(prepared.markup(), Some(false)));
+    text.set_base_style(rich::style::StyleType::from(style));
+    draw_later(&registry);
+    Some(text)
+}
+
+/// `-m/--markdown` with micro tokens: `content` with its tokens swapped for
+/// stand-ins, which [`rich_micro::PreparedMarkdown::view`] turns back into
+/// placeholders. `None` when there are no tokens.
+pub(crate) fn markdown(
+    console: &Console,
+    content: &str,
+    trusted: bool,
+) -> Option<rich_micro::PreparedMarkdown> {
+    if !has_tokens(content) {
+        return None;
+    }
+    let registry = markup_registry(trusted);
+    let prepared = rich_micro::PreparedMarkdown::new(content, &registry, preference(console));
+    if !prepared.has_assets() {
+        return None;
+    }
+    draw_later(&registry);
+    Some(prepared)
 }
 
 /// `renderable` with its micro assets drawn, on a terminal.
 pub(crate) fn drawn(
     console: &Console,
     registry: Arc<MicroRegistry>,
-    renderable: Text,
+    renderable: Box<dyn Renderable>,
 ) -> Box<dyn Renderable> {
+    /// A boxed renderable as a sized one, for `MicroView`.
+    struct Boxed(Box<dyn Renderable>);
+    impl Renderable for Boxed {
+        fn rich_render(&self, console: &Console, options: &ConsoleOptions) -> Vec<Segment> {
+            self.0.rich_render(console, options)
+        }
+        fn measure(
+            &self,
+            console: &Console,
+            options: &ConsoleOptions,
+        ) -> rich::measure::Measurement {
+            self.0.measure(console, options)
+        }
+    }
     if console.is_terminal() {
-        Box::new(MicroGraphics::detect(registry).view(renderable))
+        Box::new(MicroGraphics::detect(registry).view(Boxed(renderable)))
     } else {
-        Box::new(renderable)
+        renderable
     }
 }
 

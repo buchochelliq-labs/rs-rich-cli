@@ -57,6 +57,43 @@ Entries below record subsequent releases and development.
 
 ## [Unreleased]
 
+### 0.0.14 follow-ups (0.0.15 workstream 6)
+
+The [0.0.14 known limits](docs/releases/0.0.14.md#known-limits) that were
+small. Plugin components over the dylib and WASM ABI stay out: they need an
+ABI change of their own.
+
+- `rs-rich-micro` 0.0.2 (unreleased, so no bump): `PreparedMarkdown` and
+  `MarkdownView` put `:micro:name:` in Markdown. Each token outside code
+  (fenced blocks and inline spans) becomes stand-in cells of the asset's
+  width, so the layout sizes it as the asset; the view turns them back into
+  tagged placeholders after rendering, which `MicroView` and
+  `MicroGraphics` draw. `\:micro:` stays literal, as Markdown drops the
+  backslash itself.
+- `rs-rich-cli` 0.0.15: `:micro:name:` expands outside `--print` too: in a
+  `--panel`'s `--title` and `--caption` (always, as their `:emoji:` codes
+  do), in a CSV table's title and caption (with `--emoji`, where its
+  `:emoji:` codes expand), and in `--markdown` documents. On a terminal they
+  draw as images; exports, the pager and `--watch` keep the fallback.
+- `rs-rich-cli` 0.0.15: `rich asset --kind micro` and `rich explore --icons`
+  draw the assets as images (Kitty, iTerm2, Sixel or blocks) where the
+  terminal can, not only their emoji fallback. The mode is chosen for
+  standard error, where the pickers paint, so `name=$(rich asset --kind
+  micro)` draws too, and the Kitty images are deleted when the command ends.
+- `rs-rich-interact` 0.0.3 (unreleased, so no bump): `run_with_graphics`
+  runs a component with a graphics source (`MicroGraphics::source`), as
+  `EventLoop::graphics` does for a loop.
+- `rs-rich-interact` 0.0.3: `Confirm`, `Pager`, `TextArea`, `ColorPicker`,
+  `Form` and `FilePicker` match keys through their keymaps, so their own
+  `rebind` (new on each) and the process-wide overrides (`keymap::install`,
+  the CLI's configuration) change what a key does. `pager_keymap`,
+  `pager_search_keymap` and `Viewport::act` are new. Rebinding a form's
+  `next` away from Enter also takes Enter's submit on the last field;
+  Ctrl+S still submits.
+- `rs-rich-cli` 0.0.15: `rich micro preview` no longer labels a still image
+  with a frame time ("100 ms"); only an animation's frames are timed. The
+  `micro-create` docs tape is re-recorded.
+
 ### Diagrams from real sources (0.0.15 workstream 4)
 
 - `rs-rich-diagram` 0.0.1 (unreleased, so no bump): a DOT (Graphviz) parser

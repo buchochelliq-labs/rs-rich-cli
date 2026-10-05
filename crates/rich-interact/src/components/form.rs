@@ -13,7 +13,7 @@ use rich::Segment;
 
 use crate::component::{Component, Context, Flow, View};
 use crate::components::{fit, plain, question, text, Input, Theme};
-use crate::event::{Event, KeyCode};
+use crate::event::{Event, Key, KeyCode};
 use crate::keymap::{keys, Keymap};
 use crate::policy::{LineIo, NotInteractive};
 
@@ -96,6 +96,8 @@ pub struct Form {
     theme: Theme,
     answer: Option<bool>,
     mouse: bool,
+    /// Actions rebound on this form ([`Form::rebind`]), with their keys.
+    rebound: Vec<(String, Vec<Key>)>,
 }
 
 /// What a row of the form is, for a click.
@@ -118,7 +120,55 @@ impl Form {
             theme: Theme::default(),
             answer: None,
             mouse: false,
+            rebound: Vec::new(),
         }
+    }
+
+    /// Make `keys` do `action` on this form only; no keys unbinds it. The
+    /// actions are the form's (`submit`, `cancel`, `next`, `previous`), a
+    /// choice field's (`next-option`, `previous-option`) and a toggle's
+    /// (`toggle`, `yes`, `no`); see [`keymap`](Component::keymap). A text
+    /// field's keys are its [`Input`]'s.
+    pub fn rebind(mut self, action: &str, keys: impl IntoIterator<Item = Key>) -> Self {
+        self.rebound
+            .push((action.to_string(), keys.into_iter().collect()));
+        self
+    }
+
+    /// `keymap` with this form's rebinding.
+    fn rebound(&self, mut keymap: Keymap) -> Keymap {
+        for (action, keys) in &self.rebound {
+            keymap.rebind(action, keys.clone());
+        }
+        keymap
+    }
+
+    /// The form's own keys, without the focused field's.
+    fn form_keymap(&self) -> Keymap {
+        self.rebound(
+            Keymap::new("form")
+                .bind("submit", keys("ctrl+s"), "submit (Enter on the last field)")
+                .bind("cancel", keys("escape"), "cancel")
+                .bind("next", keys("enter tab down"), "next field")
+                .bind("previous", keys("shift+tab up"), "previous field"),
+        )
+    }
+
+    fn choice_keymap(&self) -> Keymap {
+        self.rebound(
+            Keymap::new("form-choice")
+                .bind("next-option", keys("right space"), "next option")
+                .bind("previous-option", keys("left"), "previous option"),
+        )
+    }
+
+    fn toggle_keymap(&self) -> Keymap {
+        self.rebound(
+            Keymap::new("form-toggle")
+                .bind("toggle", keys("space left right"), "switch")
+                .bind("yes", keys("y"), "on")
+                .bind("no", keys("n"), "off"),
+        )
     }
 
     /// Report the mouse (#476): a click focuses a field (and flips a
@@ -284,24 +334,11 @@ impl Component for Form {
     }
 
     fn keymap(&self) -> Keymap {
-        let mut keymap = Keymap::new("form")
-            .bind("submit", keys("ctrl+s"), "submit (Enter on the last field)")
-            .bind("cancel", keys("escape"), "cancel")
-            .bind("next", keys("enter tab down"), "next field")
-            .bind("previous", keys("shift+tab up"), "previous field");
+        let mut keymap = self.form_keymap();
         match self.fields.get(self.focus).map(|field| &field.kind) {
             Some(Kind::Text(input)) => keymap.extend(input.keymap()),
-            Some(Kind::Choice { .. }) => keymap.extend(
-                Keymap::new("form-choice")
-                    .bind("next-option", keys("right space"), "next option")
-                    .bind("previous-option", keys("left"), "previous option"),
-            ),
-            Some(Kind::Toggle(_)) => keymap.extend(
-                Keymap::new("form-toggle")
-                    .bind("toggle", keys("space left right"), "switch")
-                    .bind("yes", keys("y"), "on")
-                    .bind("no", keys("n"), "off"),
-            ),
+            Some(Kind::Choice { .. }) => keymap.extend(self.choice_keymap()),
+            Some(Kind::Toggle(_)) => keymap.extend(self.toggle_keymap()),
             None => {}
         }
         keymap
@@ -327,17 +364,18 @@ impl Component for Form {
             return Flow::Continue;
         }
         // While a text field shows suggestions, the keys that pick one are
-        // its own: Tab and the arrows, and Enter with one selected.
+        // its own: `complete` and `up` and `down` (Tab and the arrows), and
+        // `submit` (Enter) with one selected.
         let field = &mut self.fields[self.focus];
         if let (Some(key), Kind::Text(input)) = (event.key(), &mut field.kind) {
             if input.suggesting() {
-                match key.code {
-                    KeyCode::Tab | KeyCode::Up | KeyCode::Down => {
+                match input.keymap().action(key) {
+                    Some("complete" | "up" | "down") => {
                         input.handle(event, context);
                         field.error = None;
                         return Flow::Continue;
                     }
-                    KeyCode::Enter if input.has_selection() => {
+                    Some("submit") if input.has_selection() => {
                         input.accept_selected();
                         field.error = None;
                         return Flow::Continue;
@@ -348,24 +386,27 @@ impl Component for Form {
         }
         if let Some(key) = event.key() {
             let last = self.focus + 1 == self.fields.len();
-            match key.code {
-                KeyCode::Escape => {
+            match self.form_keymap().action(key) {
+                Some("cancel") => {
                     self.answer = Some(false);
                     return Flow::Cancel;
                 }
-                KeyCode::Enter if last => return self.submit(),
-                KeyCode::Enter | KeyCode::Tab | KeyCode::Down => {
+                Some("submit") => return self.submit(),
+                // Enter on the last field submits.
+                Some("next") if last && key.code == KeyCode::Enter => return self.submit(),
+                Some("next") => {
                     self.move_focus(1);
                     return Flow::Continue;
                 }
-                KeyCode::BackTab | KeyCode::Up => {
+                Some("previous") => {
                     self.move_focus(-1);
                     return Flow::Continue;
                 }
-                KeyCode::Char('s') if key.modifiers.ctrl => return self.submit(),
                 _ => {}
             }
         }
+        let choice_keymap = self.choice_keymap();
+        let toggle_keymap = self.toggle_keymap();
         let field = &mut self.fields[self.focus];
         match &mut field.kind {
             Kind::Text(input) => {
@@ -380,16 +421,16 @@ impl Component for Form {
             }
             Kind::Choice { options, index } => {
                 let count = options.len().max(1);
-                match event.key().map(|key| key.code) {
-                    Some(KeyCode::Right | KeyCode::Char(' ')) => *index = (*index + 1) % count,
-                    Some(KeyCode::Left) => *index = (*index + count - 1) % count,
+                match event.key().and_then(|key| choice_keymap.action(key)) {
+                    Some("next-option") => *index = (*index + 1) % count,
+                    Some("previous-option") => *index = (*index + count - 1) % count,
                     _ => return Flow::Ignored,
                 }
             }
-            Kind::Toggle(on) => match event.key().map(|key| key.code) {
-                Some(KeyCode::Char(' ') | KeyCode::Left | KeyCode::Right) => *on = !*on,
-                Some(KeyCode::Char('y')) => *on = true,
-                Some(KeyCode::Char('n')) => *on = false,
+            Kind::Toggle(on) => match event.key().and_then(|key| toggle_keymap.action(key)) {
+                Some("toggle") => *on = !*on,
+                Some("yes") => *on = true,
+                Some("no") => *on = false,
                 _ => return Flow::Ignored,
             },
         }

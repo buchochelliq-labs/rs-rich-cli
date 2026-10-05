@@ -63,7 +63,8 @@ pub use cache::{ImageCache, Prepared};
 pub use error::MicroError;
 pub use graphics::{select, MicroGraphics, MicroMode, Selection};
 pub use markup::{
-    expand, markup_text, render_markup, Diagnostic, DiagnosticKind, MicroTransform, PreparedMarkup,
+    expand, markup_text, render_markup, Diagnostic, DiagnosticKind, MarkdownView, MicroTransform,
+    PreparedMarkdown, PreparedMarkup,
 };
 pub use model::{
     AssetKind, CellSize, Fallback, ImageFormat, ImageInfo, ImageRef, Layer, MicroAsset, Origin,

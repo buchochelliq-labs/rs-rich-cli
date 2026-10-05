@@ -3483,6 +3483,15 @@ fn measure_rendered(console: &Console, renderable: &dyn Renderable) -> usize {
 
 /// Only labels consumed by a panel or CSV table should be parsed. Other modes
 /// ignore these options upstream, including malformed unused markup.
+/// Whether something in this run expanded `:micro:` tokens whose
+/// placeholders are still to be drawn.
+fn micro_pending() -> bool {
+    #[cfg(feature = "art")]
+    return micro::drawing_pending();
+    #[cfg(not(feature = "art"))]
+    false
+}
+
 fn validate_labels(cli: &Cli) -> Result<(), String> {
     for label in cli.title.iter().chain(cli.caption.iter()) {
         Text::from_markup(label).map_err(|err| err.to_string())?;
@@ -3546,10 +3555,25 @@ fn decorate_and_emit_with(
 
     if let Some(box_set) = cli.panel {
         let mut panel = Panel::new(renderable).box_set(box_set);
-        if let Some(title) = cli.title.clone() {
+        // `:micro:name:` in a label expands where its `:emoji:` codes do:
+        // always, as `Text.from_markup` replaces them.
+        #[cfg(feature = "art")]
+        let micro_label = |label: &Option<String>| {
+            label
+                .as_deref()
+                .and_then(|label| micro::panel_label(console, label, cli.micro_project))
+        };
+        #[cfg(not(feature = "art"))]
+        let micro_label = |_: &Option<String>| None::<Text>;
+        let micro_title = micro_label(&cli.title);
+        if let Some(title) = micro_title.clone() {
+            panel = panel.title_as_text(title);
+        } else if let Some(title) = cli.title.clone() {
             panel = panel.title(title);
         }
-        if let Some(caption) = cli.caption.clone() {
+        if let Some(caption) = micro_label(&cli.caption) {
+            panel = panel.subtitle_as_text(caption);
+        } else if let Some(caption) = cli.caption.clone() {
             panel = panel.subtitle(caption);
         }
         if let Some(style) = cli.panel_style.clone() {
@@ -3571,9 +3595,18 @@ fn decorate_and_emit_with(
             .map(|title| {
                 // `Text.from_markup(title)` replaces emoji codes whatever the
                 // console's `emoji`, so the title draws (and measures) them.
-                let title = rich::emoji::replace(title);
-                let mut title = Text::from_markup(&title.replace('\n', " "))
-                    .expect("title markup validated before rendering");
+                let mut title = match &micro_title {
+                    Some(title) => {
+                        let mut flat = title.blank_copy();
+                        flat.append(&title.plain().replace('\n', " "), None);
+                        flat
+                    }
+                    None => {
+                        let title = rich::emoji::replace(title);
+                        Text::from_markup(&title.replace('\n', " "))
+                            .expect("title markup validated before rendering")
+                    }
+                };
                 title.expand_tabs(8);
                 cell_len(title.plain()) + 2
             })
@@ -3608,6 +3641,15 @@ fn decorate_and_emit_with(
             width: fit.unwrap_or(max_width),
             justify,
         });
+    }
+
+    // Micro assets are drawn only when the output goes to the terminal alone:
+    // an export, the pager or a watch capture would record Kitty's
+    // placeholder cells or the blank cells under an image, so they (and the
+    // terminal with them) keep the fallback.
+    #[cfg(feature = "art")]
+    if let Some(registry) = micro::take_drawing().filter(|_| export.terminal_only()) {
+        renderable = micro::drawn(console, registry, renderable);
     }
 
     // Upstream's final `console.print(renderable, width=max_width or None,
@@ -4469,7 +4511,14 @@ fn run_once_with_fetch(mut cli: Cli, prefetched: Option<(String, Option<String>)
         // `Markdown` defines no `__rich_measure__`, so upstream measures it as
         // the whole available width and a panel around it never shrinks.
         Mode::Markdown => {
-            let mut markdown = build_markdown(&content, cli.hyperlinks);
+            // `:micro:name:` outside code draws as its asset.
+            #[cfg(feature = "art")]
+            let micro = micro::markdown(&console, &content, cli.micro_project);
+            #[cfg(feature = "art")]
+            let source = micro.as_ref().map_or(content.as_str(), |m| m.source());
+            #[cfg(not(feature = "art"))]
+            let source = content.as_str();
+            let mut markdown = build_markdown(source, cli.hyperlinks);
             // ```mermaid and ```dot fences draw as diagrams unless
             // `--mermaid-backend off` / `--dot-backend off`.
             if let Some(fences) = plugin_registry_with(
@@ -4480,7 +4529,14 @@ fn run_once_with_fetch(mut cli: Cli, prefetched: Option<(String, Option<String>)
             {
                 markdown = markdown.fence_renderer(fences);
             }
-            (Box::new(markdown), None)
+            #[cfg(feature = "art")]
+            let view: Box<dyn Renderable> = match micro {
+                Some(micro) => Box::new(micro.view(markdown)),
+                None => Box::new(markdown),
+            };
+            #[cfg(not(feature = "art"))]
+            let view: Box<dyn Renderable> = Box::new(markdown);
+            (view, None)
         }
         // Upstream is `RestructuredText(data, code_theme=theme,
         // default_lexer=lexer or "python", show_errors=False)`; the theme
@@ -4578,6 +4634,24 @@ fn run_once_with_fetch(mut cli: Cli, prefetched: Option<(String, Option<String>)
                     return fail(&cli, ExitClass::Data, "Could not determine delimiter");
                 }
             };
+            // `:micro:name:` in the title and caption, where `:emoji:` codes
+            // expand (with `--emoji`).
+            #[cfg(feature = "art")]
+            let table = {
+                let mut table = table;
+                let label = |label: &Option<String>, style| {
+                    label.as_deref().and_then(|label| {
+                        micro::table_label(&console, label, style, cli.micro_project)
+                    })
+                };
+                if let Some(title) = label(&cli.title, "table.title") {
+                    table = table.title_text(title);
+                }
+                if let Some(caption) = label(&cli.caption, "table.caption") {
+                    table = table.caption_text(caption);
+                }
+                table
+            };
             // Stream undecorated CSV rows: measuring or collecting the complete
             // styled table first multiplies memory by hundreds on tall inputs.
             // Containers, alignment, paging and exports still need the full view.
@@ -4592,6 +4666,7 @@ fn run_once_with_fetch(mut cli: Cli, prefetched: Option<(String, Option<String>)
                 && cli.export_html.is_none()
                 && cli.export_svg.is_none()
                 && !watch::capturing()
+                && !micro_pending()
             {
                 let mut options = console.options();
                 options.max_width = cli.width.unwrap_or_else(|| {
@@ -4731,10 +4806,10 @@ fn run_once_with_fetch(mut cli: Cli, prefetched: Option<(String, Option<String>)
                 .then(|| micro::print_markup(&console, &content, cli.micro_project))
                 .flatten();
             #[cfg(feature = "art")]
-            let (mut text, micro) = match micro {
-                Some((text, registry)) => (text, Some(registry)),
-                None if mode == Mode::Print => (console.build_text(&content), None),
-                None => (Text::new(content.as_str()), None),
+            let mut text = match micro {
+                Some(text) => text,
+                None if mode == Mode::Print => console.build_text(&content),
+                None => Text::new(content.as_str()),
             };
             #[cfg(not(feature = "art"))]
             let mut text = if mode == Mode::Print {
@@ -4760,20 +4835,6 @@ fn run_once_with_fetch(mut cli: Cli, prefetched: Option<(String, Option<String>)
                 Err(err) => return fail(&cli, ExitClass::Data, err),
             };
             let fit = text.measurement().1;
-            // Drawn only when the output goes to the terminal alone: an
-            // export, the pager or a watch capture would record Kitty's
-            // placeholder cells or the blank cells under an image, so they
-            // (and the terminal with them) keep the fallback.
-            #[cfg(feature = "art")]
-            if let Some(registry) = micro.filter(|_| export.terminal_only()) {
-                return decorate_and_emit(
-                    &cli,
-                    &console,
-                    &export,
-                    micro::drawn(&console, registry, text),
-                    Some(fit),
-                );
-            }
             (Box::new(text), Some(fit))
         }
     };

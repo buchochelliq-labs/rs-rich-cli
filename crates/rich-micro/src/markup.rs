@@ -23,15 +23,17 @@
 use std::ops::Range;
 use std::sync::Arc;
 
+use rich::measure::Measurement;
 use rich::text::Span;
-use rich::{Console, Text};
+use rich::{Console, ConsoleOptions, Renderable, Segment, Text};
 use rich_plugin_api::{PluginError, TextTransform};
 
 use crate::model::MicroAsset;
 use crate::name::is_valid_name;
 use crate::registry::MicroRegistry;
 use crate::render::{
-    is_sentinel, placeholder_with, FallbackPreference, MicroMeta, SENTINEL_BASE, SENTINEL_LAST,
+    fallback_cells, is_sentinel, placeholder_with, FallbackPreference, MicroMeta, PAD_CELL,
+    SENTINEL_BASE, SENTINEL_LAST,
 };
 
 /// What opens a token.
@@ -401,6 +403,268 @@ pub fn markup_text(
         rich::markup::render(source)?
     };
     Ok((prepared.finish(&parsed), prepared.diagnostics))
+}
+
+/// Byte ranges of `source` that Markdown shows as code: fenced blocks
+/// (```` ``` ```` or `~~~`, to the matching close or the end) and inline
+/// code spans (a run of backticks to the next run of the same length on the
+/// same line). A token in one stays as written, as code does.
+fn markdown_code(source: &str) -> Vec<Range<usize>> {
+    let mut ranges = Vec::new();
+    // (marker, length, start) of an open fence.
+    let mut fence: Option<(u8, usize, usize)> = None;
+    let mut line_start = 0;
+    for line in source.split_inclusive('\n') {
+        let start = line_start;
+        line_start += line.len();
+        let trimmed = line.trim_start_matches(' ');
+        let indent = line.len() - trimmed.len();
+        let marker = trimmed.bytes().next().filter(|b| matches!(b, b'`' | b'~'));
+        let run = marker.map_or(0, |m| trimmed.bytes().take_while(|b| *b == m).count());
+        if let Some((m, length, open)) = fence {
+            if indent < 4 && marker == Some(m) && run >= length && trimmed[run..].trim().is_empty()
+            {
+                ranges.push(open..start + line.len());
+                fence = None;
+            }
+            continue;
+        }
+        if let Some(m) = marker.filter(|_| indent < 4 && run >= 3) {
+            fence = Some((m, run, start));
+            continue;
+        }
+        // Inline code spans.
+        let bytes = line.as_bytes();
+        let mut at = 0;
+        while at < bytes.len() {
+            if bytes[at] != b'`' {
+                at += 1;
+                continue;
+            }
+            let length = bytes[at..].iter().take_while(|b| **b == b'`').count();
+            let mut close = at + length;
+            let mut found = None;
+            while close < bytes.len() {
+                if bytes[close] == b'`' {
+                    let n = bytes[close..].iter().take_while(|b| **b == b'`').count();
+                    if n == length {
+                        found = Some(close + n);
+                        break;
+                    }
+                    close += n;
+                } else {
+                    close += 1;
+                }
+            }
+            match found {
+                Some(end) => {
+                    ranges.push(start + at..start + end);
+                    at = end;
+                }
+                None => at += length,
+            }
+        }
+    }
+    if let Some((_, _, open)) = fence {
+        ranges.push(open..source.len());
+    }
+    ranges
+}
+
+/// A Markdown source with its micro tokens swapped for stand-in cells, ready
+/// for a Markdown renderer; [`view`](Self::view) turns the stand-ins in its
+/// output into placeholders.
+///
+/// Markdown has no place for a tag, so each token becomes as many copies of
+/// one private-use character as the asset has columns (one cell each), and
+/// the layout sizes it as the asset. Tokens in code (fenced blocks and
+/// inline spans) stay as written; so does `\:micro:`, whose backslash
+/// Markdown drops itself.
+///
+/// ```
+/// use rich::markdown::Markdown;
+/// use rich_micro::{FallbackPreference, Layer, MicroAsset, MicroRegistry, PreparedMarkdown};
+///
+/// let mut registry = MicroRegistry::new();
+/// registry.add(Layer::Inline, MicroAsset::new("ship", "rocket")?.with_emoji("🚀")?)?;
+/// let prepared = PreparedMarkdown::new(
+///     "Go :micro:ship: `:micro:ship:`",
+///     &registry,
+///     FallbackPreference::Emoji,
+/// );
+/// let console = rich::Console::builder().width(40).build();
+/// let shown = console.render_export(&prepared.view(Markdown::new(prepared.source())));
+/// assert!(shown.starts_with("Go 🚀 "), "{shown:?}");
+/// assert!(shown.contains(":micro:ship:"), "{shown:?}");
+/// # Ok::<(), rich_micro::MicroError>(())
+/// ```
+#[derive(Clone, Debug)]
+pub struct PreparedMarkdown {
+    source: String,
+    /// Stand-in, the asset, and its occurrence tag.
+    tokens: Vec<(char, Arc<MicroAsset>, MicroMeta)>,
+    preference: FallbackPreference,
+    diagnostics: Vec<Diagnostic>,
+}
+
+impl PreparedMarkdown {
+    pub fn new(source: &str, registry: &MicroRegistry, preference: FallbackPreference) -> Self {
+        let mut prepared = PreparedMarkdown {
+            source: String::with_capacity(source.len()),
+            tokens: Vec::new(),
+            preference,
+            diagnostics: Vec::new(),
+        };
+        if !source.contains(TOKEN_PREFIX) {
+            prepared.source.push_str(source);
+            return prepared;
+        }
+        let usable = !source.chars().any(is_sentinel);
+        let code = markdown_code(source);
+        let in_code = |at: usize| code.iter().any(|range| range.contains(&at));
+        let mut cursor = 0;
+        for token in scan(source, false) {
+            match token {
+                // Markdown drops the backslash of `\:` itself.
+                Token::Escape(_) => {}
+                Token::Asset { range, .. } | Token::Malformed(range) if in_code(range.start) => {}
+                Token::Asset { range, name } => match registry.resolve(&name) {
+                    Some(asset)
+                        if usable
+                            && prepared.tokens.len()
+                                <= (SENTINEL_LAST - SENTINEL_BASE) as usize =>
+                    {
+                        let sentinel = char::from_u32(SENTINEL_BASE + prepared.tokens.len() as u32)
+                            .expect("private-use code point");
+                        prepared.source.push_str(&source[cursor..range.start]);
+                        prepared
+                            .source
+                            .extend(std::iter::repeat_n(sentinel, asset.cols()));
+                        prepared
+                            .tokens
+                            .push((sentinel, Arc::clone(asset), MicroMeta::new(asset)));
+                        cursor = range.end;
+                    }
+                    Some(_) => prepared.diagnostics.push(Diagnostic {
+                        offset: range.start,
+                        token: source[range].to_string(),
+                        kind: DiagnosticKind::Reserved,
+                    }),
+                    None => prepared.diagnostics.push(Diagnostic {
+                        offset: range.start,
+                        token: source[range].to_string(),
+                        kind: DiagnosticKind::UnknownAsset(name),
+                    }),
+                },
+                Token::Malformed(range) => prepared.diagnostics.push(Diagnostic {
+                    offset: range.start,
+                    token: source[range].to_string(),
+                    kind: DiagnosticKind::Malformed,
+                }),
+            }
+        }
+        prepared.source.push_str(&source[cursor..]);
+        prepared
+    }
+
+    /// The Markdown to render.
+    pub fn source(&self) -> &str {
+        &self.source
+    }
+
+    /// Whether any token was swapped.
+    pub fn has_assets(&self) -> bool {
+        !self.tokens.is_empty()
+    }
+
+    /// What was left as written.
+    pub fn diagnostics(&self) -> &[Diagnostic] {
+        &self.diagnostics
+    }
+
+    /// `inner` (a renderer of [`source`](Self::source)) with each run of
+    /// stand-ins drawn as its asset's placeholder cells, tagged, so a
+    /// [`MicroView`](crate::MicroView) can draw it. A run the layout cut
+    /// (wrapped or cropped) shows blank cells.
+    pub fn view<R: Renderable>(&self, inner: R) -> MarkdownView<R> {
+        MarkdownView {
+            inner,
+            tokens: self.tokens.clone(),
+            preference: self.preference,
+        }
+    }
+}
+
+/// [`PreparedMarkdown::view`].
+pub struct MarkdownView<R> {
+    inner: R,
+    tokens: Vec<(char, Arc<MicroAsset>, MicroMeta)>,
+    preference: FallbackPreference,
+}
+
+impl<R> MarkdownView<R> {
+    /// `segment` with each run of stand-ins replaced by placeholder cells.
+    fn restore(&self, segment: Segment, out: &mut Vec<Segment>) {
+        if segment.control || !segment.text.chars().any(is_sentinel) {
+            out.push(segment);
+            return;
+        }
+        let text = segment.text.as_str();
+        let mut plain_start = 0;
+        let mut chars = text.char_indices().peekable();
+        while let Some((at, c)) = chars.next() {
+            if !is_sentinel(c) {
+                continue;
+            }
+            let mut count = 1;
+            while chars.peek().is_some_and(|(_, next)| *next == c) {
+                chars.next();
+                count += 1;
+            }
+            let end = chars.peek().map_or(text.len(), |(next, _)| *next);
+            if at > plain_start {
+                out.push(Segment::new(&text[plain_start..at], segment.style.clone()));
+            }
+            plain_start = end;
+            let blank = PAD_CELL.to_string().repeat(count);
+            let Some((_, asset, meta)) = self.tokens.iter().find(|(s, _, _)| *s == c) else {
+                out.push(Segment::new(blank, segment.style.clone()));
+                continue;
+            };
+            let tag = meta.to_style();
+            let style = Some(match &segment.style {
+                Some(style) => style.combine(&tag),
+                None => tag,
+            });
+            let cells = if count == meta.cols {
+                fallback_cells(asset, self.preference)
+            } else {
+                blank
+            };
+            out.push(Segment::new(cells, style));
+        }
+        if plain_start < text.len() {
+            out.push(Segment::new(&text[plain_start..], segment.style.clone()));
+        }
+    }
+}
+
+impl<R: Renderable> Renderable for MarkdownView<R> {
+    fn rich_render(&self, console: &Console, options: &ConsoleOptions) -> Vec<Segment> {
+        let segments = self.inner.rich_render(console, options);
+        if self.tokens.is_empty() {
+            return segments;
+        }
+        let mut out = Vec::with_capacity(segments.len());
+        for segment in segments {
+            self.restore(segment, &mut out);
+        }
+        out
+    }
+
+    fn measure(&self, console: &Console, options: &ConsoleOptions) -> Measurement {
+        self.inner.measure(console, options)
+    }
 }
 
 /// The substitution as a plugin [`TextTransform`] (after parsing; see the

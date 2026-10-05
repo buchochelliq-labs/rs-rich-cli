@@ -645,6 +645,26 @@ pub struct RunOptions {
 /// driver. When the terminal is not interactive (see [`Policy`]), no
 /// session starts and the policy's fallback decides the result.
 pub fn run<C: Component>(component: C, options: &RunOptions) -> Result<Outcome<C::Output>, Error> {
+    run_drawing(component, options, None)
+}
+
+/// [`run`], with `graphics` drawing the images placed on the component's
+/// cells (micro assets through Kitty, iTerm2 or Sixel; see
+/// [`EventLoop::graphics`]). Without a terminal, nothing is drawn and the
+/// policy's fallback decides, as with [`run`].
+pub fn run_with_graphics<C: Component>(
+    component: C,
+    options: &RunOptions,
+    graphics: std::sync::Arc<dyn rich_ext::frame::PlacementSource>,
+) -> Result<Outcome<C::Output>, Error> {
+    run_drawing(component, options, Some(graphics))
+}
+
+fn run_drawing<C: Component>(
+    component: C,
+    options: &RunOptions,
+    graphics: Option<std::sync::Arc<dyn rich_ext::frame::PlacementSource>>,
+) -> Result<Outcome<C::Output>, Error> {
     let mut component = component;
     if let Err(reason) = options.policy.detect_for(options.session.output) {
         return degrade(
@@ -665,6 +685,9 @@ pub fn run<C: Component>(component: C, options: &RunOptions) -> Result<Outcome<C
         }
     }
     let mut event_loop = EventLoop::terminal(session, options.paint.clone())?;
+    if let Some(graphics) = graphics {
+        event_loop.graphics(graphics);
+    }
     let handle = event_loop.mount(component);
     event_loop.run()?;
     drop(event_loop);

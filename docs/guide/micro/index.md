@@ -17,7 +17,8 @@ and a built-in library (`status/`, `dev/` and `fun/` sets).
 - [Authoring micro assets](authoring.md): the pipeline, `rich micro
   create`, the manifest, packs and the built-in library.
 - [Micro assets in the `rich` CLI](cli.md): `rich micro`, `:micro:` in
-  `--print --emoji`, `rich asset --kind micro`, `rich explore --icons`.
+  `--print --emoji`, titles, captions and Markdown, `rich asset --kind
+  micro`, `rich explore --icons`.
 - [Terminal compatibility](terminals.md): what each terminal draws.
 - From Python: [`rs_rich.micro`](https://buchochelliq-labs.github.io/rs-rich-cli/python/micro/).
 
@@ -76,6 +77,30 @@ have, use `expand`, `MicroExt::expand_micro`, or `MicroTransform` in a
 transform pipeline (`MicroPlugin` registers it as `micro`). In code,
 `text.append_micro(&registry, "ship")` appends one, and `MicroAssetRef` is a
 renderable of its own.
+
+Markdown has no markup to tag, so `PreparedMarkdown` swaps each token
+outside code (fenced blocks and inline spans) for stand-in cells of the
+asset's width before core's `Markdown` renders it, and its `view` turns
+them back into tagged placeholders afterwards:
+
+```rust
+use rich::markdown::Markdown;
+use rich_micro::{FallbackPreference, Layer, MicroAsset, MicroRegistry, PreparedMarkdown};
+
+let mut registry = MicroRegistry::new();
+registry.add(Layer::Inline, MicroAsset::new("ship", "rocket")?.with_emoji("🚀")?)?;
+let prepared = PreparedMarkdown::new(
+    "Go :micro:ship: `:micro:ship:`",
+    &registry,
+    FallbackPreference::Emoji,
+);
+let console = rich::Console::builder().width(40).build();
+let shown = console.render_export(&prepared.view(Markdown::new(prepared.source())));
+assert!(shown.starts_with("Go 🚀 "), "{shown:?}");
+assert!(shown.contains(":micro:ship:"), "{shown:?}");
+```
+
+`graphics.view(…)` around the view draws the images, as below.
 
 ## Width and layout
 
@@ -163,8 +188,10 @@ interactive.
 ### Live regions and interactive views
 
 `Frame`s, `LiveCoordinator` and the interactive painter carry images beside
-their cells, as a list of placements: `live.with_graphics(graphics.source())`
-and `event_loop.graphics(graphics.source())`. Before a frame is built the
+their cells, as a list of placements: `live.with_graphics(graphics.source())`,
+`event_loop.graphics(graphics.source())`, and for one component
+`rich_interact::run_with_graphics(component, &options, graphics.source())`.
+Before a frame is built the
 source swaps the fallback cells for the mode's cells (Kitty placeholders, or
 blanks under an image); after the cell diff is written, images are drawn
 where they are new, moved, on another frame, or where the cells under them

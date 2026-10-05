@@ -111,6 +111,13 @@ impl Viewport {
         self.scroll.show(line, page)
     }
 
+    /// Do one of [`ScrollState::keymap`]'s actions (`scroll-up`,
+    /// `page-down`, ...), for a component that looks its keys up in a
+    /// keymap. Returns whether `action` is a scroll action.
+    pub fn act(&mut self, action: &str, page: usize) -> bool {
+        self.scroll.act(action, page)
+    }
+
     /// Move with the usual keys and the mouse wheel: arrows and `j`/`k` by a
     /// line, PageUp/PageDown and Space by a page, Home/End and `g`/`G` to
     /// the ends. Returns whether the event was a scroll key (moved or not).
