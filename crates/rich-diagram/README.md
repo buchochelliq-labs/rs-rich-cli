@@ -94,9 +94,36 @@ thick and dotted lines, and `v^<>` heads.
 Labels have their control characters removed before drawing, so a label from
 untrusted input cannot reach the terminal as an escape sequence.
 
+## DOT (Graphviz)
+
+`rich_diagram::dot::parse` reads the DOT people write by hand (`graph` and
+`digraph`, `strict`, node and edge statements with chains and `{ … }` groups,
+`label`/`shape`/`style` and the other common attributes, `node`/`edge`/`graph`
+defaults, subgraphs and `cluster…` clusters, quoted IDs, comments) into a
+`Graph`, and the `Dot` renderable draws a source through the layout:
+
+```rust
+use rich::Console;
+use rich_diagram::Dot;
+
+Console::new().print(&Dot::new("digraph { rankdir=LR; web -> api -> db }"));
+```
+
+What the drawing cannot represent (node ports, HTML-like labels, `record`
+shapes, several graphs in one file) is refused with a `DotError` naming the
+construct and its line, never drawn partially.
+
+Features, both off by default:
+
+- `plugin`: `plugin::DotPlugin`, a `dot` (and `graphviz`) fence renderer and
+  a `dot` source renderer through `rs-rich-plugin-api`.
+- `graphviz`: `graphviz::render_svg`, which runs Graphviz's own `dot -Tsvg`
+  (installed separately) with the source on stdin, a timeout and size caps.
+
 ## Limits
 
 The layout refuses (`DrawError`; `Diagram` shows a one-line note instead)
 graphs needing more than 5000 points (nodes plus one per rank a long edge
 crosses) and drawings over 2 million cells. An edge spans at most 10 ranks.
-Clusters (subgraph frames) are not drawn yet.
+Clusters (subgraph frames) are not drawn yet; DOT clusters are parsed and
+named in a note under the drawing.

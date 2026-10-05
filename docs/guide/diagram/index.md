@@ -2,7 +2,8 @@
 
 `rs-rich-diagram` (`rich_diagram`, new in 0.0.15) draws graphs in the
 terminal: a graph model, a layered layout, and a `Diagram` renderable that
-draws the result with box-drawing characters, or ASCII. `rich` draws no
+draws the result with box-drawing characters, or ASCII. It also reads DOT
+(Graphviz) sources natively ([below](#dot-graphviz)). `rich` draws no
 graphs, so this crate is an rs-rich addition, not a port; it depends on core
 `rs-rich` only, and core is unchanged.
 
@@ -88,7 +89,13 @@ Console::new().print(&Diagram::new(graph));
   with no heads; `heads(Head::Arrow, Head::Arrow)` makes it two-way.
 
 Clusters (subgraph frames) are not drawn yet: the layout lays every node out
-in one graph, as Mermaid's subgraphs always have been.
+in one graph, as Mermaid's subgraphs always have been. DOT clusters are
+parsed and listed in a note under the drawing.
+
+Two more sources draw through this layout from the CLI: `rich deps --graph`
+(Cargo dependencies) and DOT. See
+[Dependency graphs and JSON Schemas](../ext/sources.md) for `rich deps` and
+`rich schema`.
 
 ## The layout
 
@@ -155,6 +162,134 @@ encoding) unless you choose with `Diagram::ascii(true)`. The same graph, with
 
 Labels have their control characters removed before drawing, so a label
 from untrusted input cannot reach the terminal as an escape sequence.
+
+## DOT (Graphviz)
+
+`rich_diagram::dot` reads the DOT people write by hand and draws it through
+the same layout, natively: no Graphviz needed.
+
+```rust
+use rich::Console;
+use rich_diagram::Dot;
+
+let source = std::fs::read_to_string("services.dot").unwrap();
+Console::new().print(&Dot::new(source));
+```
+
+`dot::parse(source)` gives the `DotGraph` instead: the `Graph`, whether it is
+directed and `strict`, its name and `label`, its clusters, and notes on what
+was accepted but is not drawn.
+
+**Supported:**
+
+- `graph` and `digraph`, optionally `strict` (repeated edges merge into one),
+  named or not;
+- node statements (`a [label="A", shape=box]`) and edge statements, chains
+  included (`a -> b -> c`), with `{ … }` groups as endpoints
+  (`a -> { b c }`);
+- attribute lists, and `node [ … ]`, `edge [ … ]` and `graph [ … ]` defaults,
+  scoped to the subgraph they are set in. Nodes take `label` (`\n`, `\l` and
+  `\r` break lines; `\N` is the node's name) and `shape`; edges take `label`,
+  `style` (`dashed`/`dotted` draw dotted, `bold` thick, `invis` invisible),
+  `dir`, `arrowhead`, `arrowtail` and `minlen`; the graph takes `rankdir`
+  (`TB`, `LR`, `BT`, `RL`) and `label`, drawn under the graph;
+- subgraphs; one named `cluster…` is a cluster, with its `label`;
+- quoted IDs (with `+` concatenation), numerals, and `//`, `/* */` and `#`
+  comments.
+
+Shapes map to the nearest box: `box`/`rect` → `Rect`, `ellipse` (the
+default) and `style=rounded` → `Round`, `circle` → `Circle`, `diamond` →
+`Rhombus`, `cylinder` → `Cylinder`, `hexagon` → `Hexagon`, `parallelogram`,
+`trapezium`, `component` → `Subroutine`, and so on; an unknown shape is a
+box, as Graphviz draws it. Attributes that only change how Graphviz paints
+(`color`, `fontname`, `penwidth`, …) are accepted and ignored.
+
+**Refused**, with an error naming the construct and its line, never drawn
+partially: node ports (`a:out -> b`), HTML-like labels (`label=<…>`), the
+`record` and `Mrecord` shapes, a `subgraph` referred to without a body, and
+more than one graph in a file:
+
+```text
+line 3: a node port (`a:…`) is not supported (connect the node itself)
+```
+
+The `Dot` renderable shows that message under a dim `DOT:` note, with the
+source; `rich dot` prints it as an error and exits 4.
+
+**Accepted but not drawn:** cluster frames (the nodes are laid out with the
+rest, and a note names each cluster's members) and `rank` constraints. Both
+come with a note under the drawing.
+
+The service map in `crates/rich-diagram/tests/fixtures/dot/services.dot`:
+
+```dot
+// A small service map, the way people sketch one by hand.
+digraph services {
+  rankdir=LR
+  label="Request path"
+  node [shape=box, fontname="Helvetica"]
+
+  web [label="Browser", shape=ellipse]
+  subgraph cluster_backend {
+    label = "Backend"
+    api [label="API"]
+    db  [label="Postgres", shape=cylinder]
+    api -> db [label="reads"]
+  }
+  cache [shape=diamond, label="Cache?"]
+
+  web -> api [label="HTTPS"]
+  api -> cache [style=dashed]
+  cache -> db [style=bold, label="miss"]
+}
+```
+
+draws as:
+
+```text
+                               ╱────────╲
+                     ┌─────┐ ┌►< Cache? >━┐        ╭──────────╮
+╭─────────╮ ┌─HTTPS─►│ API ├┄┘ ╲────────╱ └━miss━━►│ Postgres │
+│ Browser ├─┘        │     ├─┐            ┌─reads─►│          │
+╰─────────╯          └─────┘ └────────────┘        ╰──────────╯
+Request path
+DOT: clusters are drawn without their frames: Backend (api, db)
+```
+
+### The plugin and the CLI
+
+With the `plugin` feature, `rich_diagram::plugin::DotPlugin` registers `dot`
+and `graphviz` fence renderers and a `dot` source renderer, as
+`rs-rich-mermaid` registers Mermaid. The `rich` CLI includes it:
+
+```bash
+rich dot services.dot           # alias: rich graphviz; .dot and .gv files are detected
+rich README.md                  # ```dot fences draw as diagrams
+rich README.md --dot-backend off   # ... or stay code blocks, as upstream renders them
+```
+
+### Graphviz's own SVG
+
+The `graphviz` feature adds `rich_diagram::graphviz::render_svg`, which runs
+Graphviz's `dot -Tsvg` (installed separately) for its full layout. The
+source goes to `dot` on its standard input, never through a shell; the
+process gets a timeout (20 s) and size caps on what goes in (256 KiB) and
+comes out (16 MiB).
+
+In the CLI, `--dot-backend graphviz` makes `--export-svg OUT.svg` write
+Graphviz's SVG instead of the text drawing's, while the terminal still shows
+the native drawing:
+
+```bash
+rich dot services.dot --dot-backend graphviz --export-svg services.svg
+```
+
+Like `mmdc` for Mermaid, it only runs where you chose it: on the command
+line, or in your own config (`~/.config/rich/config.toml` or `--config`). A
+project's `./rich.toml` with `dot_backend = "graphviz"` is ignored with a
+warning, so running `rich` in a cloned repository never starts a program it
+names. Without `dot` installed the export falls back to the text drawing's
+SVG with a warning.
 
 ## From Mermaid
 

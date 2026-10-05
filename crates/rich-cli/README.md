@@ -27,6 +27,9 @@ Tools that upstream `rich-cli` does not have:
 ```bash
 rich inspect deploy.yaml --select '$.servers[*].name'   # JSON/YAML/TOML/XML/INI/dotenv as a tree
 rich mermaid flow.mmd                                   # a Mermaid flowchart, drawn as text
+rich dot services.dot                                   # a DOT (Graphviz) graph, drawn as text
+rich deps --why syn                                     # Cargo dependency tree; what pulls a crate in
+rich schema order-v1.json order-v2.json                 # a JSON Schema as a tree, or what changed
 rich diff old.rs new.rs --side-by-side                  # text diff; `git diff | rich diff -` for patches
 rich view src/main.rs --search todo                     # any file, rendered or highlighted, paged
 rich hex firmware.bin --offset 0x200 --length 64        # hex dump (alias: hexdump)
@@ -145,6 +148,16 @@ Mermaid
   text. `--mermaid-backend mmdc` (a build with the `mmdc` feature) renders every
   diagram type through Mermaid's own CLI, which needs Node and a headless
   browser; `off` leaves fences as code.
+
+Diagram sources
+: `rich dot FILE` (alias `graphviz`; `.dot` and `.gv` files are detected) and
+  ` ```dot ` fences draw DOT natively; a construct the parser does not support
+  is refused with its line. `--dot-backend graphviz --export-svg OUT.svg`
+  writes Graphviz's own SVG (the `dot` program), which a project's
+  `./rich.toml` cannot turn on. `rich deps [MANIFEST]` draws `cargo metadata`
+  as a tree (`--metadata FILE`, `--why CRATE`, `--graph`, `--depth N`,
+  `--duplicates`, `--no-dev`), and `rich schema FILE [NEW]` a JSON Schema, or
+  what changed between two.
 
 Filter and highlight
 : `--filter PATTERN` keeps only what matches, and `--highlight PATTERN` marks

@@ -174,6 +174,15 @@ print_table(&[Release { name: "rs-rich", downloads: 1200 }]);
 - `Format::detect` guesses a format conservatively, and a `DataError` converts
   to a `Diagnostic` pointing at the line and column.
 
+The same feature adds two trees drawn from real sources (0.0.15):
+
+- `deps`: the resolved graph from `cargo metadata --format-version 1` as
+  `DepTree` (what `cargo tree` prints, with crates resolved at several
+  versions marked `(duplicate)`) and `WhyTree` (what pulls a crate in).
+- `schema`: a JSON Schema as `SchemaTree` (types, `(required)`, constraints,
+  local `$ref`s resolved with cycle protection, `oneOf`/`anyOf`/`allOf`), and
+  `SchemaDiff` between two versions, with breaking changes marked.
+
 ### CLI authoring
 
 `rich_ext::cli_doc` renders a command line from one description,

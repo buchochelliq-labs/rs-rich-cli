@@ -105,10 +105,22 @@ Choose at most one; the default auto-detects .md/.rst/.json/.csv/.tsv/.ipynb by 
 | `--rule-char <CHARACTER>` | With --rule, the character(s) the line is drawn with. Default: `─`. |
 | `--log-presentation <MODE>` | With --log, select log presentation. Default: `plain`. Config: `log_presentation`. Possible values: `plain`, `rich`. |
 | `--mermaid-backend <BACKEND>` | How Mermaid diagrams (`rich mermaid`, ```mermaid fences in Markdown) are drawn: text draws flowcharts as text, mmdc uses Mermaid's own CLI (a build with the mmdc feature; `rich mermaid` tries it first there), off leaves fences as code. Config: `mermaid_backend`. Possible values: `text`, `mmdc`, `off`. |
+| `--dot-backend <BACKEND>` | How DOT graphs (`rich dot`, ```dot fences in Markdown) are drawn: text draws them natively, graphviz also makes --export-svg write Graphviz's own SVG (the `dot` program, installed separately), off leaves fences as code. Config: `dot_backend`. Possible values: `text`, `graphviz`, `off`. |
 | `--highlighter <NAME>` | The code highlighter for source, Markdown code, view and diff: syntect (the default), or lumis in a build with the lumis feature. Config: `highlighter`. |
 | `--code-theme <NAME>` | A theme of the chosen code highlighter, e.g. ansi_dark (`rich doctor --report json` lists them) Config: `code_theme`. |
 | `--loop <N>` | With --gif, repeat N times (default 1; 0 = forever) |
 | `--gif-mode <M>` | With --gif: ascii or blocks (half-block pixels). Blocks fall back to ASCII without color or when piped. Default: `ascii`. Possible values: `ascii`, `blocks`. |
+
+### Diagram sources
+
+| Option | Description |
+| --- | --- |
+| `--metadata <FILE>` | With `rich deps`, read `cargo metadata --format-version 1` JSON from FILE (`-` for stdin) instead of running cargo. |
+| `--why <CRATE>` | With `rich deps`, show what pulls CRATE (`name` or `name@version`) in: every path from the workspace to it. |
+| `--graph` | With `rich deps`, draw the dependencies (or --why's paths) as a diagram instead of a tree. |
+| `--depth <N>` | With `rich deps`, show at most N levels below each workspace member. |
+| `--duplicates` | With `rich deps`, keep only the branches that lead to a crate resolved at more than one version. |
+| `--no-dev` | With `rich deps`, leave dev-dependencies out. |
 
 ### Image
 
@@ -284,6 +296,9 @@ Self-contained examples; ignores config; accepts --no-color.
 | `env` | List environment variables, secrets masked; `rich env PATH` checks each PATH entry |
 | `capture` | Run `rich capture -- COMMAND ARGS…` and show or export its output (--cast FILE records it, --redact masks secrets), then exit with the command's status |
 | `mermaid`, `mmd` | Draw a Mermaid diagram: flowcharts as text, every type through mmdc where built in (.mmd and .mermaid files are detected) |
+| `dot`, `graphviz` | Draw a DOT (Graphviz) graph as text (.dot and .gv files are detected); what the native parser does not support is refused with its line |
+| `deps` | A Cargo dependency tree from `cargo metadata`, crates resolved at several versions marked; --why CRATE for what pulls a crate in, --graph to draw it |
+| `schema` | A JSON Schema as a tree: types, required markers, constraints, $refs resolved; with two schemas, what changed between them and which changes break |
 | `config` | Show, validate, explain or document configuration |
 | `choose` | Pick from ITEMs with a fuzzy-filtered list and print the choice; exits 1 when cancelled |
 | `filter` | Type to filter ITEMs and print the choice; without a terminal, print the lines that match --value |
@@ -821,6 +836,96 @@ rich mermaid [OPTIONS] [RESOURCE]
 | --- | --- |
 | `[RESOURCE]` | A file path, an http(s) URL, or `-` for stdin; every `rich` option applies. |
 
+### rich dot
+
+Draw a DOT (Graphviz) graph as text (.dot and .gv files are detected); what the native parser does not support is refused with its line
+
+#### Usage
+
+```text
+rich dot [OPTIONS] [RESOURCE]
+```
+
+#### Mode options
+
+| Option | Description |
+| --- | --- |
+| `--dot-backend <BACKEND>` | How DOT graphs (`rich dot`, ```dot fences in Markdown) are drawn: text draws them natively, graphviz also makes --export-svg write Graphviz's own SVG (the `dot` program, installed separately), off leaves fences as code. Possible values: `text`, `graphviz`, `off`. |
+
+#### Export
+
+| Option | Description |
+| --- | --- |
+| `--export-svg <PATH>` | Also write an SVG document to PATH. Unlike the HTML, it references its font from a CDN, so it is not self-contained offline. |
+
+#### Layout
+
+| Option | Description |
+| --- | --- |
+| `-w`, `--width <N>` | Render the output N columns wide (the console keeps its own width, so --left/--center/--right still use it) |
+
+#### Arguments
+
+| Argument | Description |
+| --- | --- |
+| `[RESOURCE]` | A file path, an http(s) URL, or `-` for stdin; every `rich` option applies. |
+
+### rich deps
+
+A Cargo dependency tree from `cargo metadata`, crates resolved at several versions marked; --why CRATE for what pulls a crate in, --graph to draw it
+
+#### Usage
+
+```text
+rich deps [OPTIONS] [MANIFEST]
+```
+
+#### Diagram sources
+
+| Option | Description |
+| --- | --- |
+| `--metadata <FILE>` | With `rich deps`, read `cargo metadata --format-version 1` JSON from FILE (`-` for stdin) instead of running cargo. |
+| `--why <CRATE>` | With `rich deps`, show what pulls CRATE (`name` or `name@version`) in: every path from the workspace to it. |
+| `--graph` | With `rich deps`, draw the dependencies (or --why's paths) as a diagram instead of a tree. |
+| `--depth <N>` | With `rich deps`, show at most N levels below each workspace member. |
+| `--duplicates` | With `rich deps`, keep only the branches that lead to a crate resolved at more than one version. |
+| `--no-dev` | With `rich deps`, leave dev-dependencies out. |
+
+#### Layout
+
+| Option | Description |
+| --- | --- |
+| `-w`, `--width <N>` | Render the output N columns wide (the console keeps its own width, so --left/--center/--right still use it) |
+
+#### Arguments
+
+| Argument | Description |
+| --- | --- |
+| `[MANIFEST]` | A Cargo.toml, or the directory holding one (default: the working directory) |
+
+### rich schema
+
+A JSON Schema as a tree: types, required markers, constraints, $refs resolved; with two schemas, what changed between them and which changes break
+
+#### Usage
+
+```text
+rich schema [OPTIONS] SCHEMA [NEW_SCHEMA]
+```
+
+#### Layout
+
+| Option | Description |
+| --- | --- |
+| `-w`, `--width <N>` | Render the output N columns wide (the console keeps its own width, so --left/--center/--right still use it) |
+
+#### Arguments
+
+| Argument | Description |
+| --- | --- |
+| `[SCHEMA]` | A JSON Schema file, an http(s) URL, or `-` for stdin. |
+| `[NEW_SCHEMA]` | A second version: show what changed from SCHEMA to it. |
+
 ### rich config
 
 Show, validate, explain or document configuration.
@@ -876,7 +981,7 @@ rich config explain [OPTIONS] [KEY]
 
 | Argument | Description |
 | --- | --- |
-| `[KEY]` | Explain one setting instead of all of them. Possible values: `mode`, `format`, `width`, `panel`, `padding`, `log_presentation`, `mermaid_backend`, `highlighter`, `code_theme`, `height`, `image_fit`, `image_anchor`, `image_max_width`, `image_max_height`, `image_background`, `image_color`, `image_dither`, `image_color_distance`, `image_brightness`, `image_contrast`, `image_gamma`, `image_rotate`, `image_flip_horizontal`, `image_flip_vertical`, `image_grayscale`, `export_html`, `export_svg`, `pager`, `auto_pager`, `watch`, `watch_interval`, `watch_debounce`, `watch_poll`, `watch_exit_on_error`, `watch_cache`, `batch`, `batch_input_root`, `batch_preserve_dirs`, `batch_name_template`, `jobs`, `progress`, `continue_on_error`, `overwrite`, `collision`, `theme`, `theme_file`, `plugins`, `micro_project`, `no_color`, `sanitize`. |
+| `[KEY]` | Explain one setting instead of all of them. Possible values: `mode`, `format`, `width`, `panel`, `padding`, `log_presentation`, `mermaid_backend`, `dot_backend`, `highlighter`, `code_theme`, `height`, `image_fit`, `image_anchor`, `image_max_width`, `image_max_height`, `image_background`, `image_color`, `image_dither`, `image_color_distance`, `image_brightness`, `image_contrast`, `image_gamma`, `image_rotate`, `image_flip_horizontal`, `image_flip_vertical`, `image_grayscale`, `export_html`, `export_svg`, `pager`, `auto_pager`, `watch`, `watch_interval`, `watch_debounce`, `watch_poll`, `watch_exit_on_error`, `watch_cache`, `batch`, `batch_input_root`, `batch_preserve_dirs`, `batch_name_template`, `jobs`, `progress`, `continue_on_error`, `overwrite`, `collision`, `theme`, `theme_file`, `plugins`, `micro_project`, `no_color`, `sanitize`. |
 
 #### rich config reference
 
@@ -1764,6 +1869,7 @@ Settings are read from these sources, lowest precedence first; a later source ov
 | `padding` | string | | | `--padding` | Wrap output in padding (1, 2, or 4 comma-separated ints) |
 | `log_presentation` | enum: `plain`, `rich` | `plain` | | `--log-presentation` | With --log, select log presentation |
 | `mermaid_backend` | enum: `text`, `mmdc`, `off` | | | `--mermaid-backend` | How Mermaid diagrams (`rich mermaid`, ```mermaid fences in Markdown) are drawn: text draws flowcharts as text, mmdc uses Mermaid's own CLI (a build with the mmdc feature; `rich mermaid` tries it first there), off leaves fences as code |
+| `dot_backend` | enum: `text`, `graphviz`, `off` | | | `--dot-backend` | How DOT graphs (`rich dot`, ```dot fences in Markdown) are drawn: text draws them natively, graphviz also makes --export-svg write Graphviz's own SVG (the `dot` program, installed separately), off leaves fences as code |
 | `highlighter` | string | | | `--highlighter` | The code highlighter for source, Markdown code, view and diff: syntect (the default), or lumis in a build with the lumis feature |
 | `code_theme` | string | | | `--code-theme` | A theme of the chosen code highlighter, e.g. ansi_dark (`rich doctor --report json` lists them) |
 | `height` | positive integer | | | `--height` | With --image, render this many rows instead of the backend's default |

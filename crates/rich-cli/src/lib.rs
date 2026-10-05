@@ -19,8 +19,9 @@
 //! the default `art` feature), `--watch`, `--batch`, config profiles and
 //! `--theme-file`, and the tool commands `inspect`, `diff` (images, text and
 //! patches), `view`, `hex`, `unicode`, `env`, `capture`, `ansi explain`,
-//! `doctor`, `bench compare`, `completions`, `docs` and `config`. Each composes
-//! public `rich` / `rich-ext` / `rich-art` APIs.
+//! `doctor`, `bench compare`, `completions`, `docs` and `config`, and the
+//! diagram sources `dot`, `deps` and `schema`. Each composes public `rich` /
+//! `rich-ext` / `rich-art` / `rich-diagram` APIs.
 
 use std::io::{BufRead, IsTerminal, Read, Write};
 use std::path::{Path, PathBuf};
@@ -46,6 +47,7 @@ mod plugins;
 #[cfg(feature = "record")]
 mod record;
 mod render_target;
+mod sources;
 mod structured_log;
 mod tools;
 mod viewers;
@@ -126,6 +128,12 @@ enum Mode {
     Capture,
     /// `mermaid`: draw a Mermaid diagram (not upstream; see `rs-rich-mermaid`).
     Mermaid,
+    /// `dot`: draw a DOT (Graphviz) graph natively (`sources.rs`).
+    Dot,
+    /// `deps`: a Cargo dependency tree from `cargo metadata` (`sources.rs`).
+    Deps,
+    /// `schema`: a JSON Schema as a tree, or two compared (`sources.rs`).
+    Schema,
 }
 
 impl Mode {
@@ -143,7 +151,10 @@ impl Mode {
     }
 
     fn accepts_multiple_resources(self) -> bool {
-        matches!(self, Self::Gif | Self::Diff | Self::Env | Self::Capture)
+        matches!(
+            self,
+            Self::Gif | Self::Diff | Self::Env | Self::Capture | Self::Schema
+        )
     }
 }
 
@@ -263,6 +274,21 @@ const MODE_SPECS: &[ModeSpec] = &[
         mode: Mode::Mermaid,
         primary: "mermaid",
         aliases: &["mermaid", "mmd"],
+    },
+    ModeSpec {
+        mode: Mode::Dot,
+        primary: "dot",
+        aliases: &["dot", "graphviz"],
+    },
+    ModeSpec {
+        mode: Mode::Deps,
+        primary: "deps",
+        aliases: &["deps"],
+    },
+    ModeSpec {
+        mode: Mode::Schema,
+        primary: "schema",
+        aliases: &["schema"],
     },
 ];
 
@@ -509,6 +535,11 @@ struct Cli {
     /// `--mermaid-backend`: how Mermaid diagrams are drawn; `None` when not
     /// given (see [`MermaidBackend`]).
     mermaid_backend: Option<MermaidBackend>,
+    /// `--dot-backend`: how DOT graphs are drawn and exported; `None` when
+    /// not given (see [`sources::DotBackend`]).
+    dot_backend: Option<sources::DotBackend>,
+    /// `rich deps` options: `--metadata`, `--why`, `--graph`, `--depth`, …
+    graph_sources: sources::GraphSourceOptions,
     /// `--highlighter NAME`: the console-wide code highlighter.
     highlighter: Option<String>,
     /// `--code-theme NAME`: a theme of the chosen code highlighter.
@@ -657,15 +688,26 @@ fn mermaid_options(backend: MermaidBackend) -> rich_mermaid::MermaidOptions {
 /// The CLI's plugin registry: [`builtin_registry`], then the linked plugins
 /// and the runtime plugins `--plugin` loaded (see [`plugins`]).
 fn plugin_registry(mermaid: MermaidBackend) -> rich_ext::ExtensionRegistry {
-    let mut registry = builtin_registry(mermaid);
+    plugin_registry_with(mermaid, true)
+}
+
+/// [`plugin_registry`], leaving out the DOT plugin when `dot` is false
+/// (`--dot-backend off`).
+fn plugin_registry_with(mermaid: MermaidBackend, dot: bool) -> rich_ext::ExtensionRegistry {
+    let mut registry = builtin_registry(mermaid, dot);
     plugins::add_to(&mut registry);
     registry
 }
 
-/// The built-in plugins: rich-ext's, and Mermaid and lumis where compiled in.
-fn builtin_registry(mermaid: MermaidBackend) -> rich_ext::ExtensionRegistry {
-    #[cfg_attr(not(feature = "mermaid"), allow(unused_mut))]
+/// The built-in plugins: rich-ext's, DOT, and Mermaid and lumis where
+/// compiled in.
+fn builtin_registry(mermaid: MermaidBackend, dot: bool) -> rich_ext::ExtensionRegistry {
     let mut registry = rich_ext::ExtensionRegistry::with_defaults();
+    if dot {
+        registry
+            .add_plugin(&rich_diagram::plugin::DotPlugin::default())
+            .expect("the DOT plugin registers cleanly");
+    }
     #[cfg(feature = "mermaid")]
     if mermaid != MermaidBackend::Off {
         registry
@@ -1004,6 +1046,10 @@ const VALUE_OPTIONS: &[&str] = &[
     "--batch-name-template",
     "--log-presentation",
     "--mermaid-backend",
+    "--dot-backend",
+    "--metadata",
+    "--why",
+    "--depth",
     "--highlighter",
     "--code-theme",
     "--plugin",
@@ -1754,6 +1800,8 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
     let mut image_gamma = None;
     let mut log_presentation = String::from("plain");
     let mut mermaid_backend = None;
+    let mut dot_backend = None;
+    let mut graph_sources = sources::GraphSourceOptions::default();
     let mut highlighter: Option<String> = None;
     let mut plugins: Vec<String> = Vec::new();
     let mut code_theme: Option<String> = None;
@@ -1836,6 +1884,9 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
         if viewer_options.parse_option(arg, &mut iter)? {
             continue;
         }
+        if graph_sources.parse_option(arg, &mut iter)? {
+            continue;
+        }
         if matches!(
             arg.as_str(),
             "--pager" | "--auto-pager" | "--no-pager" | "--no-auto-pager"
@@ -1895,6 +1946,12 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
                     .next()
                     .ok_or("--mermaid-backend requires text, mmdc or off")?;
                 mermaid_backend = Some(MermaidBackend::parse(value)?);
+            }
+            "--dot-backend" => {
+                let value = iter
+                    .next()
+                    .ok_or("--dot-backend requires text, graphviz or off")?;
+                dot_backend = Some(sources::DotBackend::parse(value)?);
             }
             "--log-presentation" => {
                 let value = iter
@@ -2339,7 +2396,11 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
     {
         return Err(format!("{flag} only has an effect with --ansi-explain"));
     }
-    for (flag, commands) in viewer_options.given() {
+    for (flag, commands) in viewer_options
+        .given()
+        .into_iter()
+        .chain(graph_sources.given())
+    {
         if !commands.contains(&mode_name(mode)) {
             return Err(format!(
                 "{flag} only has an effect with `rich {}`",
@@ -2797,6 +2858,8 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
         image_gamma,
         log_presentation,
         mermaid_backend,
+        dot_backend,
+        graph_sources,
         highlighter,
         code_theme,
         plugins,
@@ -3290,6 +3353,7 @@ fn detect_mode(resource: Option<&str>) -> Mode {
         Some("rst") => Mode::Rst,
         Some("gif") => Mode::Gif,
         Some("mmd") | Some("mermaid") if cfg!(feature = "mermaid") => Mode::Mermaid,
+        Some("dot") | Some("gv") => Mode::Dot,
         // Anything the table above does not divert is source code, and upstream
         // highlights it: `rich main.rs` is syntax-highlighted with no flag at
         // all. We printed it raw instead, so `rich hello.py` produced no
@@ -4021,7 +4085,8 @@ fn run_once_with_fetch(mut cli: Cli, prefetched: Option<(String, Option<String>)
     if cli.sanitize {
         svg_title = sanitize_terminal_controls(&svg_title);
     }
-    let export = Export {
+    #[allow(unused_mut)]
+    let mut export = Export {
         html_path: cli.export_html.as_deref(),
         svg_path: cli.export_svg.as_deref(),
         svg_title: &svg_title,
@@ -4194,6 +4259,19 @@ fn run_once_with_fetch(mut cli: Cli, prefetched: Option<(String, Option<String>)
     }
     if mode == Mode::Env {
         let view = viewers::env(&cli.viewers, &cli.resources);
+        let fit = view.measure(&console, &console.options()).maximum;
+        return decorate_and_emit(&cli, &console, &export, view, Some(fit));
+    }
+    if matches!(mode, Mode::Deps | Mode::Schema) {
+        let view = if mode == Mode::Deps {
+            sources::deps(&cli)
+        } else {
+            sources::schema(&cli)
+        };
+        let view = match view {
+            Ok(view) => view,
+            Err((class, err)) => return fail(&cli, class, err),
+        };
         let fit = view.measure(&console, &console.options()).maximum;
         return decorate_and_emit(&cli, &console, &export, view, Some(fit));
     }
@@ -4392,9 +4470,13 @@ fn run_once_with_fetch(mut cli: Cli, prefetched: Option<(String, Option<String>)
         // the whole available width and a panel around it never shrinks.
         Mode::Markdown => {
             let mut markdown = build_markdown(&content, cli.hyperlinks);
-            // ```mermaid fences draw as diagrams unless `--mermaid-backend off`.
-            if let Some(fences) =
-                plugin_registry(cli.mermaid_backend.unwrap_or(MermaidBackend::Text)).fences()
+            // ```mermaid and ```dot fences draw as diagrams unless
+            // `--mermaid-backend off` / `--dot-backend off`.
+            if let Some(fences) = plugin_registry_with(
+                cli.mermaid_backend.unwrap_or(MermaidBackend::Text),
+                cli.dot_backend != Some(sources::DotBackend::Off),
+            )
+            .fences()
             {
                 markdown = markdown.fence_renderer(fences);
             }
@@ -4423,6 +4505,28 @@ fn run_once_with_fetch(mut cli: Cli, prefetched: Option<(String, Option<String>)
             let diagram =
                 rich_mermaid::Mermaid::new(content.clone()).options(mermaid_options(backend));
             (Box::new(diagram), None)
+        }
+        Mode::Dot => {
+            // `--dot-backend graphviz` gives `--export-svg` Graphviz's own
+            // SVG; the terminal still shows the native drawing.
+            let graphviz = cli.dot_backend == Some(sources::DotBackend::Graphviz);
+            let mut svg_done = false;
+            if let (true, Some(path)) = (graphviz, export.svg_path) {
+                svg_done = sources::graphviz_svg(&content, path);
+                if svg_done {
+                    export.svg_path = None;
+                }
+            }
+            match sources::dot(&content, cli.resource.as_deref()) {
+                Ok(diagram) => (diagram, None),
+                // Graphviz drew what the native parser refuses: say so, and
+                // keep its SVG.
+                Err((_, err)) if svg_done => {
+                    eprintln!("rich: warning: {err}; only Graphviz's SVG was written");
+                    return success(&cli);
+                }
+                Err((class, err)) => return fail(&cli, class, err),
+            }
         }
         Mode::Json => {
             // `rich.json.JSON` sets `text.no_wrap = True`, and every decorator

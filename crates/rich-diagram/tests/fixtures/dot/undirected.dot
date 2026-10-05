@@ -1,0 +1,6 @@
+graph network {
+  node [shape=circle]
+  a -- b -- c
+  a -- c [label="direct"]
+  c -- d [dir=forward]
+}

@@ -111,6 +111,7 @@ nav:
           - Sorting, grouping and streaming tables: guide/ext/tables.md
           - Badges, size bars and redaction: guide/ext/badges-and-redaction.md
           - Charts: guide/ext/charts.md
+          - Dependency graphs and JSON Schemas: guide/ext/sources.md
           - Macros and derive: guide/ext/macros.md
           - Structured data: guide/ext/structured-data.md
           - Transforms: guide/ext/transforms.md

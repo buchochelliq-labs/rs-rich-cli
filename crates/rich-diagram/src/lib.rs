@@ -28,13 +28,27 @@
 //! assert!(out.lines().all(|line| rich::cells::cell_len(line) <= 40));
 //! ```
 //!
+//! Sources:
+//!
+//! - [`dot`]: DOT (Graphviz) sources, parsed natively ([`dot::parse`]) and
+//!   drawn by the [`Dot`] renderable. With the `plugin` feature,
+//!   [`plugin::DotPlugin`] registers a `dot` fence renderer and source
+//!   renderer; with the `graphviz` feature, [`graphviz::render_svg`] runs
+//!   Graphviz's own `dot` for SVG.
+//!
 //! Clusters (subgraph frames) are not drawn yet: the layout lays every node
 //! out in one graph.
 
 pub mod diagram;
+pub mod dot;
 pub mod graph;
+#[cfg(feature = "graphviz")]
+pub mod graphviz;
 pub mod layout;
+#[cfg(feature = "plugin")]
+pub mod plugin;
 
 pub use diagram::Diagram;
+pub use dot::{Dot, DotError, DotGraph};
 pub use graph::{Direction, Edge, Graph, Head, Node, Shape, Stroke, MAX_EDGE_LENGTH};
 pub use layout::{draw, DrawError, Drawing};
