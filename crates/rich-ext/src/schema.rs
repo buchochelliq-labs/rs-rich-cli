@@ -863,9 +863,30 @@ impl<'a> Differ<'a> {
             Value::Bool(true) => serde_json::Map::new(),
             _ => return (Cow::Borrowed(target), last),
         };
+        // Siblings apply alongside the target, not instead of it: a keyword
+        // both set keeps the target's value, and the sibling's goes in an
+        // `allOf` branch, so a change to either one is still seen.
+        let mut both = serde_json::Map::new();
         for map in siblings.into_iter().rev() {
             for (key, value) in map.iter().filter(|(key, _)| *key != "$ref") {
-                merged.insert(key.clone(), value.clone());
+                match merged.get(key) {
+                    Some(existing) if existing != value => {
+                        both.insert(key.clone(), value.clone());
+                    }
+                    _ => {
+                        merged.insert(key.clone(), value.clone());
+                    }
+                }
+            }
+        }
+        if !both.is_empty() {
+            let all_of = merged
+                .entry("allOf")
+                .or_insert_with(|| Value::Array(Vec::new()));
+            if let Value::Array(branches) = all_of {
+                branches.push(Value::Object(both));
+            } else {
+                *all_of = Value::Array(vec![Value::Object(both)]);
             }
         }
         (Cow::Owned(Value::Object(merged)), last)
@@ -1354,6 +1375,23 @@ mod tests {
         new["$defs"]["s"]["type"] = json!("integer");
         assert_eq!(SchemaDiff::new(&schema(10), &new).breaking(), 1);
         assert!(SchemaDiff::new(&schema(10), &schema(10)).is_empty());
+    }
+
+    #[test]
+    fn a_keyword_in_both_the_ref_and_its_target_keeps_both() {
+        let schema = |target: u64, sibling: u64| {
+            json!({
+                "$defs": {"s": {"type": "string", "maxLength": target}},
+                "properties": {"name": {"$ref": "#/$defs/s", "maxLength": sibling}}
+            })
+        };
+        // The target tightens under an unchanged sibling: still a change.
+        let diff = SchemaDiff::new(&schema(5, 3), &schema(2, 3));
+        assert_eq!(diff.breaking(), 1, "{:?}", diff.changes());
+        // The sibling tightens under an unchanged target.
+        let diff = SchemaDiff::new(&schema(5, 3), &schema(5, 1));
+        assert_eq!(diff.breaking(), 1, "{:?}", diff.changes());
+        assert!(SchemaDiff::new(&schema(5, 3), &schema(5, 3)).is_empty());
     }
 
     #[test]

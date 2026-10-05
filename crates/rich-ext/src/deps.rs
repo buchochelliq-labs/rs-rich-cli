@@ -755,9 +755,12 @@ impl WhyTree {
     }
 
     /// Which kinds of dependency to follow up (all by default); dev
-    /// dependencies count only from the roots, as in [`DepTree`].
+    /// dependencies count only from the roots, as in [`DepTree`]. A target
+    /// those kinds never reach is left out, as `cargo tree -i -e` does.
     pub fn kinds(mut self, kinds: &[DepKind]) -> Self {
         self.kinds = kinds.to_vec();
+        let reachable = self.graph.reachable(&self.kinds);
+        self.targets.retain(|&target| reachable[target]);
         self
     }
 
@@ -977,6 +980,20 @@ mod tests {
         nodes.push(serde_json::json!({"id": "log 0.3.0", "deps": []}));
         nodes.push(serde_json::json!({"id": "log 0.4.0", "deps": []}));
         value.to_string()
+    }
+
+    #[test]
+    fn why_leaves_out_targets_the_kinds_never_reach() {
+        let graph = DepGraph::from_json(&metadata_with_dev_only_duplicate()).unwrap();
+        let no_dev = [DepKind::Normal, DepKind::Build];
+        // log 0.3.0 comes only through the dev dependency `insta`.
+        let why = WhyTree::new(graph.clone(), "log@0.3.0")
+            .unwrap()
+            .kinds(&no_dev);
+        assert!(why.targets().is_empty());
+        let why = WhyTree::new(graph, "log").unwrap().kinds(&no_dev);
+        assert_eq!(why.targets().len(), 1);
+        assert!(render(&why).starts_with("log v0.4.0"), "{}", render(&why));
     }
 
     #[test]
