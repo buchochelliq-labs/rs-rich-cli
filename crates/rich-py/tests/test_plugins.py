@@ -25,7 +25,7 @@ from rs_rich.text import Text
 from rs_rich.theme import Theme
 
 # Printed by the Rust reference program (see the module docstring).
-RUST_MERMAID = "┌───┐  ┌───┐  ┌───┐\n│ A ├─►│ B ├─►│ C │\n└───┘  └───┘  └───┘\n\n"
+RUST_MERMAID = "┌───┐  ┌───┐  ┌───┐\n│ A ├─►│ B ├─►│ C │\n└───┘  └───┘  └───┘\n"
 RUST_BOLD_SYNTAX = "\x1b[1mx = 1\x1b[0m               \n\x1b[1my = 2\x1b[0m               \n"
 RUST_UPPER = "\x1b[1mA\x1b[0mBC 12\n"
 RUST_NUMBERS = "abc \x1b[1;36m12\x1b[0m\n"

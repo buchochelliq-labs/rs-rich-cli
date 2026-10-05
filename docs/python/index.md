@@ -76,6 +76,8 @@ Your own classes render as they do with Rich, through `__rich__`,
 | `rs-rich-ext` (39 modules: diagnostics, data, diffs, workflows, tables, terminals, frames, testing and QA, ...) | `rs_rich.ext`, `rs_rich.ext.<module>` | [Extensions](ext/index.md) |
 | `rs-rich-interact` (pickers, input, confirmations, forms, a pager; headless runs; fuzzy matching) | `rs_rich.interact` | [Interactive components](interact.md) |
 | `rs-rich-art` (images, FIGlet, GIFs, image diffs) | `rs_rich.art` | [Art](art.md) |
+| `rs-rich-ext`'s charts (sparklines, bars, line charts, gauges, heatmaps, status matrices, KPI cards, timelines) | `rs_rich.chart` | [Charts](chart.md) |
+| `rs-rich-diagram` (graphs, their layout, DOT) | `rs_rich.diagram` | [Diagrams](diagram.md) |
 | `rs-rich-mermaid` | `rs_rich.mermaid` | [Mermaid](mermaid.md) |
 | `rs-rich-plugin-api` and the extension registry | `rs_rich.plugins` | [Plugins](plugins.md) |
 | `rs-rich-cli` (the `rich` command) | `python -m rs_rich`, the `rich-rs` script, `rs_rich.cli.main` | [The command line](cli.md) |

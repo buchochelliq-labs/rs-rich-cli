@@ -39,6 +39,9 @@ The styles are theme keys (`chart.*`). Pass `rich_ext::extended_theme()` to
 the console builder to get them, or define them in your own theme. Without
 them the same defaults are used.
 
+The same charts are in Python as [`rs_rich.chart`](https://buchochelliq-labs.github.io/rs-rich-cli/python/chart/),
+and in the shell as [`rich chart`](#from-the-shell-rich-chart).
+
 ## Sparklines
 
 `Sparkline::new(values)` draws each value as a cell whose height shows where
@@ -379,6 +382,54 @@ example runs one; this is a frame of a smaller one:
 Cards take `.expand(true)` to fill their region. The layout fills the
 console's height, so give `Live` a console with a fixed `.height(n)` or let
 it take the terminal's.
+
+## From the shell: `rich chart`
+
+`rich chart` draws data from a file, a URL or stdin with these charts, so a
+shell pipeline can end in a picture. It reads CSV and TSV (the dialect
+sniffed as `rich --csv` sniffs it), JSON (an array of records, of numbers or
+of rows, or an object of columns), JSON Lines, or whitespace-separated
+numbers.
+
+```bash
+rich chart sales.csv                                  # every numeric column as a line
+rich chart sales.csv --kind bar --x month --y api     # a bar per row, labelled
+rich chart sales.csv --kind heatmap                   # rows by series, as shades
+seq 1 20 | rich chart --kind spark                    # numbers piped in
+rich chart metrics.json --kind scatter --x t --y p50 --y p99
+```
+
+| Option | Meaning |
+|---|---|
+| `--kind spark\|bar\|line\|scatter\|heatmap` | What to draw; `line` by default |
+| `--x COLUMN` | The positions (line, scatter: numbers) or labels (bar, heatmap). Default: the row number; for labels, the first column that is not all numbers |
+| `--y COLUMN` | A series; repeat for several. Default: every numeric column but `--x` |
+| `--width N` | The width to draw in |
+
+Columns go by header or by 1-based number, so a CSV without a header works
+too (its columns are `1`, `2`, ...). An empty cell or a JSON `null` is a gap.
+A column that is not there, or a value that is not a number, is refused with
+exit code 4 and a message naming the row (counted from 1, after the header)
+and the column:
+
+```text
+$ rich chart sales.csv --y mobile
+rich: no column "mobile"; the columns are "month", "api", "web"
+$ rich chart sales.csv --x month
+rich: row 1, column "month": "Jan" is not a number (a line or scatter chart's --x is a position; --kind bar takes labels)
+```
+
+```text
+$ rich chart sales.csv --kind bar --y api --width 50
+Jan ███████████████████████▌                 30
+Feb █████████████████████████████████        42
+Mar ███████████████████████████▌             35
+Apr ████████████████████████████████████████ 51
+May █████████████████████████████████████▋   48
+```
+
+[The recording](../../recordings.md#charts-from-data) shows it in a
+terminal.
 
 ## The shared pieces
 

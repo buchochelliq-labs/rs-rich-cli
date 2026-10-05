@@ -1,0 +1,30 @@
+❯ rich deps --metadata metadata.json --depth 2
+demo-app v0.3.0
+├── demo-core v0.3.0
+│   ├── serde v1.0.210
+│   ├── strum_macros v0.25.3
+│   └── thiserror v1.0.64
+├── log v0.4.22
+├── serde v1.0.210
+│   └── serde_derive v1.0.210
+├── [build-dependencies]
+│   └── cc v1.1.28
+└── [dev-dependencies]
+    └── insta v1.40.0
+        ├── serde v1.0.210
+        └── similar v2.6.0
+demo-core v0.3.0 (*)
+duplicate: syn v1.0.109, v2.0.79
+❯
+
+
+
+
+
+
+
+
+
+
+
+

@@ -21,7 +21,7 @@ fn console(width: usize) -> Console {
 }
 
 fn render(graph: &Graph, width: usize, ascii: bool) -> String {
-    console(width).render_to_string(&Diagram::new(graph.clone()).ascii(ascii))
+    console(width).render_export(&Diagram::new(graph.clone()).ascii(ascii))
 }
 
 fn snapshot(name: &str) -> String {
@@ -191,11 +191,11 @@ fn ascii_output_is_ascii_and_follows_the_console() {
         .build();
     assert!(ascii_console.ascii_only());
     assert_eq!(
-        ascii_console.render_to_string(&Diagram::new(graph.clone())),
+        ascii_console.render_export(&Diagram::new(graph.clone())),
         out
     );
     assert_eq!(
-        console(80).render_to_string(&Diagram::new(graph)),
+        console(80).render_export(&Diagram::new(graph)),
         snapshot("labels_td")
     );
 }

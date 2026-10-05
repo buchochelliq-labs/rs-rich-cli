@@ -45,11 +45,11 @@
 //!
 //! let console = Console::builder().width(40).color_system(None).build();
 //! let spark = Sparkline::new([1.0, 3.0, 2.0, 8.0, 5.0]);
-//! assert_eq!(console.render_to_string(&spark), "▁▃▂█▅\n");
+//! assert_eq!(console.render_export(&spark), "▁▃▂█▅\n");
 //!
 //! let bars = BarChart::new().bar("api", 30.0).bar("web", 12.0).bar_width(10);
 //! assert_eq!(
-//!     console.render_to_string(&bars),
+//!     console.render_export(&bars),
 //!     "api ██████████ 30\nweb ████       12\n"
 //! );
 //! ```
@@ -284,7 +284,8 @@ impl Line {
 }
 
 /// `lines` as segments, each cropped to `width` and padded to the widest
-/// line so the block is square, each ending in a newline.
+/// line so the block is square, with a newline between them. Like core's
+/// renderables, the last line has none: `print` ends it.
 pub(crate) fn lines_to_segments(lines: Vec<Line>, width: usize) -> Vec<Segment> {
     let block = lines
         .iter()
@@ -292,12 +293,14 @@ pub(crate) fn lines_to_segments(lines: Vec<Line>, width: usize) -> Vec<Segment> 
         .max()
         .unwrap_or(0);
     let mut out = Vec::new();
-    for mut line in lines {
+    for (index, mut line) in lines.into_iter().enumerate() {
+        if index > 0 {
+            out.push(Segment::line());
+        }
         line.crop(width);
         let fill = block - line.width();
         line.pad(fill);
         line.into_segments(&mut out);
-        out.push(Segment::line());
     }
     out
 }

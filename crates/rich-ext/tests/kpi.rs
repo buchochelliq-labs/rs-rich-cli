@@ -45,8 +45,15 @@ fn no_color(width: usize) -> Console {
         .build()
 }
 
+/// What `print` writes: the segments and the newline that ends the last
+/// line, so a renderable that ends its own last line shows as a blank one.
 fn render(console: &Console, r: &dyn Renderable) -> String {
-    console.segments_to_string(&r.rich_render(console, &console.options()))
+    let segments = r.rich_render(console, &console.options());
+    let mut out = console.segments_to_string(&segments);
+    if !segments.is_empty() {
+        out.push('\n');
+    }
+    out
 }
 
 fn measure(console: &Console, r: &dyn Renderable) -> (usize, usize) {

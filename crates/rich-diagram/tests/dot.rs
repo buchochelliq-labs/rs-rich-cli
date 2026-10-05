@@ -14,7 +14,7 @@ fn fixture(name: &str) -> String {
 
 fn render(source: &str, width: usize, ascii: bool) -> String {
     let console = Console::builder().width(width).color_system(None).build();
-    console.render_to_string(&Dot::new(source).ascii(ascii))
+    console.render_export(&Dot::new(source).ascii(ascii))
 }
 
 fn check(name: &str, source: &str, width: usize, ascii: bool) {
@@ -306,5 +306,39 @@ mod graphviz {
         ));
         std::fs::create_dir_all(&dir).unwrap();
         dir
+    }
+}
+
+/// Like core's renderables, a drawing leaves the newline after its last
+/// line to `print`: printing a diagram, with or without a label or notes, or
+/// a refused source, is not followed by a blank line.
+#[test]
+fn printing_a_drawing_ends_with_one_newline() {
+    let console = Console::builder().width(30).color_system(None).build();
+    let graph = Graph::new(Direction::LeftRight)
+        .node("a", "A")
+        .node("b", "B")
+        .edge("a", "b");
+    let cases: Vec<(&str, Box<dyn rich::Renderable>)> = vec![
+        ("diagram", Box::new(Diagram::new(graph))),
+        ("dot", Box::new(Dot::new("digraph { a -> b }"))),
+        (
+            "label",
+            Box::new(Dot::new("digraph { label=\"L\"; a -> b }")),
+        ),
+        (
+            "cropped",
+            Box::new(Dot::new(
+                "digraph { aaaaaaaaaa -> bbbbbbbbbb -> cccccccccc }",
+            )),
+        ),
+        ("refused", Box::new(Dot::new("digraph { a:p -> b }"))),
+    ];
+    for (name, renderable) in cases {
+        let out = console.render_export(renderable.as_ref());
+        assert!(
+            out.ends_with('\n') && !out.ends_with("\n\n"),
+            "{name}: {out:?}"
+        );
     }
 }

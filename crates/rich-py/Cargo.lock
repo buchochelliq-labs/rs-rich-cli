@@ -1510,6 +1510,7 @@ dependencies = [
  "notify",
  "rs-rich",
  "rs-rich-art",
+ "rs-rich-diagram",
  "rs-rich-ext",
  "rs-rich-interact",
  "rs-rich-lumis",
@@ -1529,6 +1530,7 @@ name = "rs-rich-diagram"
 version = "0.0.1"
 dependencies = [
  "rs-rich",
+ "rs-rich-plugin-api",
 ]
 
 [[package]]
@@ -1609,6 +1611,7 @@ dependencies = [
  "rs-rich",
  "rs-rich-art",
  "rs-rich-cli",
+ "rs-rich-diagram",
  "rs-rich-ext",
  "rs-rich-interact",
  "rs-rich-lumis",

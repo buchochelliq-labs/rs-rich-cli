@@ -126,14 +126,14 @@ impl Bar {
 ///     .bar("worker", 4.0)
 ///     .bar_width(8);
 /// assert_eq!(
-///     console.render_to_string(&chart),
+///     console.render_export(&chart),
 ///     "api    ████████   31\n\
 ///      web    ███▎     12.5\n\
 ///      worker █           4\n"
 /// );
 /// let ascii = chart.charset(Charset::Ascii);
 /// assert_eq!(
-///     console.render_to_string(&ascii),
+///     console.render_export(&ascii),
 ///     "api    ########   31\n\
 ///      web    ###      12.5\n\
 ///      worker #           4\n"
@@ -151,7 +151,7 @@ impl Bar {
 ///     .orientation(Orientation::Vertical)
 ///     .bar_width(4);
 /// assert_eq!(
-///     console.render_to_string(&chart),
+///     console.render_export(&chart),
 ///     concat!(
 ///         "    7.5    \n",
 ///         " 4  ███    \n",
@@ -665,7 +665,7 @@ impl Renderable for BarChart {
 /// let latencies = [12.0, 14.0, 15.0, 21.0, 22.0, 23.0, 24.0, 38.0];
 /// let histogram = Histogram::new(latencies).bins(3).range(10.0, 40.0).bar_width(8);
 /// assert_eq!(
-///     console.render_to_string(&histogram),
+///     console.render_export(&histogram),
 ///     "[10, 20) ██████   3\n\
 ///      [20, 30) ████████ 4\n\
 ///      [30, 40] ██       1\n"

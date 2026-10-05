@@ -148,7 +148,6 @@ console.print(diagrams.renderer("mermaid").render("graph LR\nA-->B"))
 ┌───┐  ┌───┐
 │ A ├─►│ B │
 └───┘  └───┘
-
 ```
 
 `fences()` is one fence renderer routing each fence to the one registered for

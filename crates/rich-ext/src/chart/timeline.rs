@@ -204,7 +204,7 @@ impl Mapping {
 ///     .unit("s")
 ///     .width(40);
 /// assert_eq!(
-///     console.render_to_string(&build),
+///     console.render_export(&build),
 ///     concat!(
 ///         "fetch   ████ 4s                         \n",
 ///         "compile     █████████████████ 22s       \n",
