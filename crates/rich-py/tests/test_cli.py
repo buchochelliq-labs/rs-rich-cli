@@ -34,8 +34,12 @@ def rich_bin() -> str:
     cargo = shutil.which("cargo")
     if cargo is None:
         pytest.skip("no cargo to build the rich binary (set RS_RICH_CLI_BIN)")
+    # The wheel's CLI features (crates/rich-py/Cargo.toml: the defaults
+    # without `record`), so `rich doctor` reports the same build.
+    features = "fetch,art,mermaid,interact"
     built = subprocess.run(
-        [cargo, "build", "-p", "rs-rich-cli", "--bin", "rich", "--message-format=json"],
+        [cargo, "build", "-p", "rs-rich-cli", "--bin", "rich", "--no-default-features",
+         "--features", features, "--message-format=json"],
         cwd=REPO,
         capture_output=True,
         text=True,
