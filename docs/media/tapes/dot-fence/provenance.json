@@ -1,0 +1,12 @@
+{
+  "tape": "docs/tapes/dot-fence.tape",
+  "tape_fnv1a64": "efbcb5ddaca82b1f",
+  "recorder": "rs-rich-record 0.0.3",
+  "rich": null,
+  "commit": "66a265f09a575a7eccc7cb0d111ceb9212bfd357",
+  "screenshots": [
+    "drawn",
+    "code"
+  ],
+  "note": "Every frame is real output of the program under test on a PTY."
+}

@@ -1,0 +1,30 @@
+❯ rich deps --metadata metadata.json --why syn
+syn v1.0.109 (duplicate)
+└── strum_macros v0.25.3
+    └── demo-core v0.3.0
+syn v2.0.79 (duplicate)
+├── serde_derive v1.0.210
+│   └── serde v1.0.210
+│       ├── demo-app v0.3.0
+│       ├── demo-core v0.3.0
+│       └── insta v1.40.0
+│           └── demo-app v0.3.0 [dev]
+└── thiserror-impl v1.0.64
+    └── thiserror v1.0.64
+        └── demo-core v0.3.0
+❯
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

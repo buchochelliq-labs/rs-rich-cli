@@ -57,6 +57,37 @@ Entries below record subsequent releases and development.
 
 ## [Unreleased]
 
+### The CLI, Python and docs (0.0.15 workstream 5)
+
+- `rs-rich-cli` 0.0.15: `rich chart [FILE]` draws data from a file, a URL
+  or stdin with `rich_ext::chart`: `--kind spark|bar|line|scatter|heatmap`
+  (line by default), `--x COLUMN` for positions or labels and a repeatable
+  `--y COLUMN` per series, by header or 1-based number, and `--width`. It
+  reads CSV and TSV (sniffed as `--csv` sniffs), JSON (records, numbers,
+  rows, or an object of columns), JSON Lines and whitespace-separated
+  numbers; an empty cell or `null` is a gap. A missing column lists the
+  columns there are, and a value that is not a number names its row and
+  column; both exit 4. The parsing stays in the CLI (it reuses the CLI's
+  port of Python's `csv` sniffer, and picking columns is command routing);
+  `rs-rich-ext` and core are unchanged.
+- Python (`rs-rich` 0.0.4 on PyPI, already bumped): `rs_rich.chart` binds
+  every chart renderable (`Sparkline`, `BarChart`/`ChartBar`, `Histogram`,
+  `LineChart`/`Series`, `Gauge`/`Band`, `BulletChart`, `Heatmap`,
+  `StatusMatrix`/`ChartState`, `KpiCard`, `Timeline`/`TimelineSpan`), built
+  from keyword arguments, with `Bar`, `State` and `Span` as the Rust names.
+  `rs_rich.diagram` binds `rs-rich-diagram`: a chainable `Graph`,
+  `Diagram`, `draw_graph`, `Dot` and `parse_dot` (`DotError` carries `line`
+  and `construct`). Type stubs, tests against the crates' doc examples, and
+  [Charts](docs/python/chart.md) and [Diagrams](docs/python/diagram.md)
+  pages.
+- Docs: tapes for `rich chart`, `rich deps` and a ```` ```dot ```` fence in
+  Markdown, with cards and sections in [Terminal recordings](docs/recordings.md);
+  a `rich chart` section in the [charts guide](docs/guide/ext/charts.md);
+  Diagram, ASCII and DOT screenshots in the [diagrams guide](docs/guide/diagram/index.md)
+  from `cargo run -p rs-rich-diagram --example services -- --svg docs/media/guide`;
+  Charts and Diagrams in the [gallery](docs/gallery.md); the CLI reference
+  and `docs/PORTING.md`.
+
 ### Diagrams from real sources (0.0.15 workstream 4)
 
 - `rs-rich-diagram` 0.0.1 (unreleased, so no bump): a DOT (Graphviz) parser

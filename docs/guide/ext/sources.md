@@ -7,7 +7,8 @@ behind its `data` feature, as `rich_ext::deps` and `rich_ext::schema`; the
 colour alone: markers and words carry the meaning, and colour repeats it.
 
 The examples below use the fixtures in `crates/rich-ext/tests/fixtures/sources`,
-which CI renders on every change.
+which CI renders on every change. [A recording](../../recordings.md#dependency-trees)
+shows `rich deps` on the same fixture in a terminal.
 
 ## Cargo dependency graphs
 

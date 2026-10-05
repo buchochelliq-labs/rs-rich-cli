@@ -1,0 +1,28 @@
+❯ rich release.md --dot-backend off
+                                          Release pipeline
+
+Every change goes through the same stages:
+
+
+ digraph release {
+   rankdir=LR;
+   node [shape=box];
+   commit -> build -> test -> ship;
+   test -> fix [style=dashed, label="fails"];
+   fix -> build;
+ }
+
+
+A failed test sends the change back to build.
+❯
+
+
+
+
+
+
+
+
+
+
+
