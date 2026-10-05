@@ -200,8 +200,12 @@ Order  object  no other properties  A customer's order.
 removed, type changes, properties that became (or stopped being) required,
 enum values, constraints and branch counts, each marked `+`, `-` or `~`.
 `breaking` marks a change that may refuse a document the old version
-accepted: a new requirement, a removed property or enum value, a narrower
-type, a tighter bound. `rich schema OLD NEW` prints it:
+accepted: a new requirement, a removed enum value, a narrower type, a tighter
+bound, or a removed property the new version may refuse (through
+`additionalProperties: false` or a schema, or a `patternProperties` schema it
+matches; `true`, `{}` or no `additionalProperties` still accepts it). Keywords
+beside a local `$ref` are compared along with the schema it names.
+`rich schema OLD NEW` prints it:
 
 ```bash
 rich schema order-v1.schema.json order-v2.schema.json

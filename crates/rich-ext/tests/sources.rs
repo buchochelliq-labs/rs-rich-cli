@@ -90,7 +90,11 @@ fn why_shows_every_path_that_pulls_a_crate_in() {
         80,
     );
     let target = graph.find("unicode-ident")[0];
-    let paths = graph.paths_to(target, 100);
+    let paths = graph.paths_to(
+        target,
+        100,
+        &[DepKind::Normal, DepKind::Build, DepKind::Dev],
+    );
     assert!(paths.iter().all(|path| graph.roots().contains(&path[0])));
     assert!(paths.iter().all(|path| *path.last().unwrap() == target));
     let shortest: Vec<String> = paths[0].iter().map(|&p| graph.display(p)).collect();

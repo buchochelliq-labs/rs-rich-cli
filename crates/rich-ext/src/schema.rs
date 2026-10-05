@@ -41,6 +41,7 @@
 //! );
 //! ```
 
+use std::borrow::Cow;
 use std::collections::BTreeSet;
 use std::fmt;
 
@@ -833,24 +834,65 @@ impl<'a> Differ<'a> {
     }
 
     /// Follow `$ref`s, returning the schema and the last reference followed.
-    fn follow(resolver: &Resolver<'a>, mut schema: &'a Value) -> (&'a Value, Option<String>) {
+    /// Keywords beside a `$ref` (draft 2019-09 and later) still apply, so
+    /// they are laid over the schema it names, the outermost last.
+    fn follow<'v>(resolver: &Resolver<'v>, schema: &'v Value) -> (Cow<'v, Value>, Option<String>) {
         let mut last = None;
+        let mut target = schema;
+        let mut siblings = Vec::new();
         for _ in 0..DEPTH {
-            let Some(reference) = schema.get("$ref").and_then(Value::as_str) else {
+            let Some(reference) = target.get("$ref").and_then(Value::as_str) else {
                 break;
             };
             match resolver.resolve(reference) {
-                Ok(resolved) if !std::ptr::eq(resolved, schema) => {
+                Ok(resolved) if !std::ptr::eq(resolved, target) => {
+                    if let Value::Object(map) = target {
+                        if map.len() > 1 {
+                            siblings.push(map);
+                        }
+                    }
                     last = Some(reference.to_string());
-                    schema = resolved;
+                    target = resolved;
                 }
                 _ => break,
             }
         }
-        (schema, last)
+        let mut merged = match target {
+            _ if siblings.is_empty() => return (Cow::Borrowed(target), last),
+            Value::Object(map) => map.clone(),
+            Value::Bool(true) => serde_json::Map::new(),
+            _ => return (Cow::Borrowed(target), last),
+        };
+        // Siblings apply alongside the target, not instead of it: a keyword
+        // both set keeps the target's value, and the sibling's goes in an
+        // `allOf` branch, so a change to either one is still seen.
+        let mut both = serde_json::Map::new();
+        for map in siblings.into_iter().rev() {
+            for (key, value) in map.iter().filter(|(key, _)| *key != "$ref") {
+                match merged.get(key) {
+                    Some(existing) if existing != value => {
+                        both.insert(key.clone(), value.clone());
+                    }
+                    _ => {
+                        merged.insert(key.clone(), value.clone());
+                    }
+                }
+            }
+        }
+        if !both.is_empty() {
+            let all_of = merged
+                .entry("allOf")
+                .or_insert_with(|| Value::Array(Vec::new()));
+            if let Value::Array(branches) = all_of {
+                branches.push(Value::Object(both));
+            } else {
+                *all_of = Value::Array(vec![Value::Object(both)]);
+            }
+        }
+        (Cow::Owned(Value::Object(merged)), last)
     }
 
-    fn compare(&mut self, old: &'a Value, new: &'a Value, path: &str, depth: usize) {
+    fn compare(&mut self, old: &Value, new: &Value, path: &str, depth: usize) {
         if depth > DEPTH {
             return;
         }
@@ -865,14 +907,14 @@ impl<'a> Differ<'a> {
                 return;
             }
             self.seen.push(pair);
-            self.compare_resolved(old, new, path, depth);
+            self.compare_resolved(&old, &new, path, depth);
             self.seen.pop();
         } else {
-            self.compare_resolved(old, new, path, depth);
+            self.compare_resolved(&old, &new, path, depth);
         }
     }
 
-    fn compare_resolved(&mut self, old: &'a Value, new: &'a Value, path: &str, depth: usize) {
+    fn compare_resolved(&mut self, old: &Value, new: &Value, path: &str, depth: usize) {
         if old == new {
             return;
         }
@@ -919,14 +961,14 @@ impl<'a> Differ<'a> {
             ("anyOf", "any of"),
             ("allOf", "all of"),
         ] {
-            let branches = |schema: &'a Value| -> &'a [Value] {
+            fn branches<'v>(schema: &'v Value, keyword: &str) -> &'v [Value] {
                 schema
                     .get(keyword)
                     .and_then(Value::as_array)
                     .map(Vec::as_slice)
                     .unwrap_or_default()
-            };
-            let (a, b) = (branches(old), branches(new));
+            }
+            let (a, b) = (branches(old, keyword), branches(new, keyword));
             if a.len() != b.len() {
                 let breaking = match keyword {
                     "allOf" => b.len() > a.len(),
@@ -1000,7 +1042,7 @@ impl<'a> Differ<'a> {
         }
     }
 
-    fn compare_constraints(&mut self, old: &'a Value, new: &'a Value, path: &str) {
+    fn compare_constraints(&mut self, old: &Value, new: &Value, path: &str) {
         let mut keys: Vec<&str> = CONSTRAINTS.to_vec();
         keys.extend(["const", "additionalProperties"]);
         for key in keys {
@@ -1068,7 +1110,34 @@ impl<'a> Differ<'a> {
         }
     }
 
-    fn compare_properties(&mut self, old: &'a Value, new: &'a Value, path: &str, depth: usize) {
+    /// Whether a document with property `name` that the old schema accepted
+    /// may be refused now that `new` no longer lists it: by a
+    /// `patternProperties` schema it matches, else by `additionalProperties`.
+    /// Only `true` and `{}` are taken to accept whatever the old one did.
+    fn removal_breaks(new: &Value, name: &str) -> bool {
+        let accepts_all = |schema: &Value| {
+            schema == &Value::Bool(true) || schema.as_object().is_some_and(|map| map.is_empty())
+        };
+        let matching: Vec<&Value> = new
+            .get("patternProperties")
+            .and_then(Value::as_object)
+            .into_iter()
+            .flatten()
+            .filter(|(pattern, _)| {
+                // A pattern that does not compile might match: assume it does.
+                fancy_regex::Regex::new(pattern)
+                    .map_or(true, |regex| regex.is_match(name).unwrap_or(true))
+            })
+            .map(|(_, schema)| schema)
+            .collect();
+        if !matching.is_empty() {
+            return !matching.into_iter().all(accepts_all);
+        }
+        new.get("additionalProperties")
+            .is_some_and(|schema| !accepts_all(schema))
+    }
+
+    fn compare_properties(&mut self, old: &Value, new: &Value, path: &str, depth: usize) {
         let (was, now) = (required_names(old), required_names(new));
         for name in now.difference(&was) {
             self.push(
@@ -1094,8 +1163,8 @@ impl<'a> Differ<'a> {
                 self.push(
                     ChangeKind::Removed,
                     &join(path, name),
-                    format!("property removed ({})", type_of(resolved)),
-                    true,
+                    format!("property removed ({})", type_of(&resolved)),
+                    Self::removal_breaks(new, name),
                 );
             }
         }
@@ -1107,7 +1176,7 @@ impl<'a> Differ<'a> {
                     self.push(
                         ChangeKind::Added,
                         &join(path, name),
-                        format!("property added ({})", type_of(resolved)),
+                        format!("property added ({})", type_of(&resolved)),
                         false,
                     );
                 }
@@ -1231,7 +1300,7 @@ mod tests {
             lines,
             [
                 "~ name became required !",
-                "- gone property removed (boolean) !",
+                "- gone property removed (boolean)",
                 "~ id type integer → integer | null",
                 "+ kind enum value \"c\" added",
                 "- kind enum value \"b\" removed !",
@@ -1239,10 +1308,106 @@ mod tests {
                 "+ fresh property added (number)",
             ]
         );
-        assert_eq!(diff.breaking(), 4);
+        assert_eq!(diff.breaking(), 3);
         let out = render(&diff.names("v1", "v2"), 80);
-        assert!(out.contains("v1 → v2: 7 changes, 4 breaking"), "{out}");
+        assert!(out.contains("v1 → v2: 7 changes, 3 breaking"), "{out}");
         assert!(out.contains("breaking"), "{out}");
+    }
+
+    #[test]
+    fn removing_a_property_breaks_only_what_now_refuses_it() {
+        let old = json!({"properties": {"gone": {"type": "string"}, "x_tag": {}}});
+        let removed = |new: Value| -> Vec<bool> {
+            SchemaDiff::new(&old, &new)
+                .changes()
+                .iter()
+                .filter(|c| c.kind == ChangeKind::Removed)
+                .map(|c| c.breaking)
+                .collect()
+        };
+        // Absent or `true`: the name is still accepted, as anything.
+        assert_eq!(removed(json!({})), [false, false]);
+        assert_eq!(
+            removed(json!({"additionalProperties": true})),
+            [false, false]
+        );
+        assert_eq!(removed(json!({"additionalProperties": {}})), [false, false]);
+        // `false`, or a schema of its own: it may be refused.
+        assert_eq!(
+            removed(json!({"additionalProperties": false})),
+            [true, true]
+        );
+        assert_eq!(
+            removed(json!({"additionalProperties": {"type": "integer"}})),
+            [true, true]
+        );
+        // A matching `patternProperties` schema decides instead.
+        assert_eq!(
+            removed(json!({
+                "patternProperties": {"^x_": true},
+                "additionalProperties": false
+            })),
+            [true, false]
+        );
+        assert_eq!(
+            removed(json!({"patternProperties": {"^x_": {"type": "integer"}}})),
+            [false, true]
+        );
+    }
+
+    #[test]
+    fn keywords_beside_a_ref_are_compared() {
+        let schema = |max: u64| {
+            json!({
+                "$defs": {"s": {"type": "string"}},
+                "properties": {"name": {"$ref": "#/$defs/s", "maxLength": max}}
+            })
+        };
+        let diff = SchemaDiff::new(&schema(10), &schema(5));
+        let details: Vec<(&str, &str, bool)> = diff
+            .changes()
+            .iter()
+            .map(|c| (c.path.as_str(), c.detail.as_str(), c.breaking))
+            .collect();
+        assert_eq!(details, [("name", "maxLength 10 → 5", true)]);
+        // A change in the target is still found through a ref with siblings.
+        let mut new = schema(10);
+        new["$defs"]["s"]["type"] = json!("integer");
+        assert_eq!(SchemaDiff::new(&schema(10), &new).breaking(), 1);
+        assert!(SchemaDiff::new(&schema(10), &schema(10)).is_empty());
+    }
+
+    #[test]
+    fn a_keyword_in_both_the_ref_and_its_target_keeps_both() {
+        let schema = |target: u64, sibling: u64| {
+            json!({
+                "$defs": {"s": {"type": "string", "maxLength": target}},
+                "properties": {"name": {"$ref": "#/$defs/s", "maxLength": sibling}}
+            })
+        };
+        // The target tightens under an unchanged sibling: still a change.
+        let diff = SchemaDiff::new(&schema(5, 3), &schema(2, 3));
+        assert_eq!(diff.breaking(), 1, "{:?}", diff.changes());
+        // The sibling tightens under an unchanged target.
+        let diff = SchemaDiff::new(&schema(5, 3), &schema(5, 1));
+        assert_eq!(diff.breaking(), 1, "{:?}", diff.changes());
+        assert!(SchemaDiff::new(&schema(5, 3), &schema(5, 3)).is_empty());
+    }
+
+    #[test]
+    fn recursive_refs_with_siblings_diff_without_looping() {
+        let schema = |extra: &str| {
+            json!({
+                "$defs": {"node": {"properties": {
+                    "next": {"$ref": "#/$defs/node", "description": "the next one"},
+                    extra: {"type": "string"}
+                }}},
+                "$ref": "#/$defs/node",
+                "title": "List"
+            })
+        };
+        let diff = SchemaDiff::new(&schema("a"), &schema("b"));
+        assert_eq!(diff.changes().len(), 2, "{:?}", diff.changes());
     }
 
     #[test]

@@ -285,6 +285,46 @@ fn deps_why_and_graph() {
 }
 
 #[test]
+fn deps_why_no_dev_and_graph_duplicates_honour_their_flags() {
+    let metadata = source("cargo-metadata.json");
+    // `insta` reaches serde only as demo-app's dev dependency.
+    let why = ["deps", "--metadata", &metadata, "--why", "serde"];
+    let out = stdout(&run(&why));
+    assert!(out.contains("insta v1.40.0"), "{out}");
+    let out = stdout(&run(&[&why[..], &["--no-dev"]].concat()));
+    assert!(
+        out.contains("demo-app v0.3.0") && !out.contains("insta"),
+        "{out}"
+    );
+    let out = stdout(&run(
+        &[&why[..], &["--no-dev", "--graph", "-w", "200"]].concat()
+    ));
+    assert!(
+        out.contains("demo-app v0.3.0") && !out.contains("insta"),
+        "{out}"
+    );
+
+    // `--graph --duplicates`: only what leads to syn's two versions.
+    let out = stdout(&run(&[
+        "deps",
+        "--metadata",
+        &metadata,
+        "--graph",
+        "--duplicates",
+        "-w",
+        "200",
+    ]));
+    assert!(
+        out.contains("strum_macros v0.25.3") && out.contains("insta v1.40.0"),
+        "{out}"
+    );
+    assert!(
+        !out.contains("log v0.4.22") && !out.contains("cc v1.1.28") && !out.contains("similar"),
+        "{out}"
+    );
+}
+
+#[test]
 fn deps_runs_cargo_metadata_and_reports_its_failure() {
     let (_root, work, home) = setup();
     // No Cargo.toml here: cargo fails, and rich says so.

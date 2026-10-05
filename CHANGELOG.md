@@ -108,6 +108,16 @@ Entries below record subsequent releases and development.
   output examples, the CLI reference, `docs/PORTING.md`, `docs/PLUGINS.md`,
   the crate READMEs, and `AGENTS.md`'s dependency graph (`rich-diagram`'s
   `plugin` feature now exists, and `rich-cli ──▶ rich-diagram`).
+- Review fixes after #647: `rich deps --why --no-dev` (tree and `--graph`)
+  leaves out paths that only a dev-dependency makes; duplicate versions are
+  counted over the dependency kinds shown, so a version reachable only
+  through a hidden dev edge no longer marks the visible one; `--graph
+  --duplicates` keeps only the packages that lead to a duplicate.
+  `DepGraph::dependents` and `paths_to` take the kinds to follow, and
+  `WhyTree::kinds` and `DepGraph::duplicates_in` are new. `rich schema OLD
+  NEW` compares keywords beside a `$ref` (they were dropped for the
+  referenced schema), and a removed property is breaking only when the new
+  schema's `patternProperties` or `additionalProperties` would refuse it.
 
 ### Diagrams (0.0.15 workstream 3)
 

@@ -164,9 +164,11 @@ pub(crate) fn deps(cli: &Cli) -> Result<Box<dyn Renderable>, Failure> {
         kinds.pop();
     }
     if let Some(spec) = &options.why {
-        let why = WhyTree::new(graph, spec).map_err(|err| (ExitClass::Data, err.to_string()))?;
+        let why = WhyTree::new(graph, spec)
+            .map_err(|err| (ExitClass::Data, err.to_string()))?
+            .kinds(&kinds);
         if options.graph {
-            return Ok(Box::new(Diagram::new(why_diagram(&why))));
+            return Ok(Box::new(Diagram::new(why_diagram(&why, &kinds))));
         }
         return Ok(Box::new(why));
     }
@@ -175,6 +177,7 @@ pub(crate) fn deps(cli: &Cli) -> Result<Box<dyn Renderable>, Failure> {
             &graph,
             &kinds,
             options.depth,
+            options.duplicates,
         ))));
     }
     let mut tree = DepTree::new(graph)
@@ -222,9 +225,15 @@ fn add_edge(diagram: &mut Graph, from: usize, to: usize, kinds: &[DepKind]) {
 }
 
 /// The packages reachable from the roots within `depth` levels, and the
-/// edges between them.
-fn deps_diagram(graph: &DepGraph, kinds: &[DepKind], depth: Option<usize>) -> Graph {
-    let duplicates: Vec<String> = graph.duplicates().into_keys().collect();
+/// edges between them; with `duplicates_only`, only those on a path to a
+/// crate resolved at several versions.
+fn deps_diagram(
+    graph: &DepGraph,
+    kinds: &[DepKind],
+    depth: Option<usize>,
+    duplicates_only: bool,
+) -> Graph {
+    let duplicates: Vec<String> = graph.duplicates_in(kinds).into_keys().collect();
     let mut diagram = Graph::new(Direction::LeftRight);
     let mut index: Vec<Option<usize>> = vec![None; graph.packages().len()];
     let mut level: Vec<Option<usize>> = vec![None; graph.packages().len()];
@@ -252,9 +261,8 @@ fn deps_diagram(graph: &DepGraph, kinds: &[DepKind], depth: Option<usize>) -> Gr
             }
         }
     }
-    for &package in &order {
-        index[package] = Some(diagram.add_node(package_node(graph, package, &duplicates)));
-    }
+    // The edges drawn: between packages within `depth`, of the kinds asked.
+    let mut edges = Vec::new();
     for &package in &order {
         let root = graph.roots().contains(&package);
         for dep in graph.deps(package) {
@@ -264,22 +272,47 @@ fn deps_diagram(graph: &DepGraph, kinds: &[DepKind], depth: Option<usize>) -> Gr
                 .copied()
                 .filter(|k| kinds.contains(k) && (root || *k != DepKind::Dev))
                 .collect();
-            if let (Some(from), Some(to), false) =
-                (index[package], index[dep.package], kinds.is_empty())
-            {
-                add_edge(&mut diagram, from, to, &kinds);
+            if level[dep.package].is_some() && !kinds.is_empty() {
+                edges.push((package, dep.package, kinds));
             }
+        }
+    }
+    if duplicates_only {
+        // Keep the packages that are, or lead through drawn edges to, a
+        // duplicate.
+        let mut leads: Vec<bool> = (0..graph.packages().len())
+            .map(|p| level[p].is_some() && duplicates.contains(&graph.packages()[p].name))
+            .collect();
+        let mut changed = true;
+        while changed {
+            changed = false;
+            for (from, to, _) in &edges {
+                if leads[*to] && !leads[*from] {
+                    leads[*from] = true;
+                    changed = true;
+                }
+            }
+        }
+        order.retain(|&p| leads[p]);
+        edges.retain(|(from, to, _)| leads[*from] && leads[*to]);
+    }
+    for &package in &order {
+        index[package] = Some(diagram.add_node(package_node(graph, package, &duplicates)));
+    }
+    for (from, to, kinds) in &edges {
+        if let (Some(from), Some(to)) = (index[*from], index[*to]) {
+            add_edge(&mut diagram, from, to, kinds);
         }
     }
     diagram
 }
 
 /// The crate `--why` asked about, everything that depends on it up to the
-/// roots, and those edges.
-fn why_diagram(why: &WhyTree) -> Graph {
+/// roots through the kinds in `kinds`, and those edges.
+fn why_diagram(why: &WhyTree, kinds: &[DepKind]) -> Graph {
     let graph = why.graph();
-    let duplicates: Vec<String> = graph.duplicates().into_keys().collect();
-    let dependents = graph.dependents();
+    let duplicates: Vec<String> = graph.duplicates_in(kinds).into_keys().collect();
+    let dependents = graph.dependents(kinds);
     let mut keep = vec![false; graph.packages().len()];
     let mut stack: Vec<usize> = why.targets().to_vec();
     while let Some(package) = stack.pop() {
@@ -295,8 +328,14 @@ fn why_diagram(why: &WhyTree) -> Graph {
     }
     for package in (0..keep.len()).filter(|&p| keep[p]) {
         for dep in graph.deps(package) {
-            if let (Some(from), Some(to)) = (index[package], index[dep.package]) {
-                add_edge(&mut diagram, from, to, &dep.kinds);
+            // The kinds the inverse traversal followed, if it followed it.
+            let followed = dependents[dep.package]
+                .iter()
+                .find(|(parent, _)| *parent == package);
+            if let (Some(from), Some(to), Some((_, kinds))) =
+                (index[package], index[dep.package], followed)
+            {
+                add_edge(&mut diagram, from, to, kinds);
             }
         }
     }
