@@ -24,6 +24,7 @@ const INSPECT: &str = "Inspect";
 const DIFF: &str = "Diff & ANSI";
 const VIEWERS: &str = "Viewers";
 const SOURCES: &str = "Diagram sources";
+const CHART: &str = "Chart";
 const EXPORT: &str = "Export";
 const PAGING: &str = "Paging";
 const WATCH: &str = "Watch";
@@ -106,6 +107,7 @@ fn command_options(name: &str) -> Vec<ArgSpec> {
             "width",
         ],
         "schema" => &["width"],
+        "chart" => &["kind", "x", "y", "width"],
         "env" => &["show-secrets", "width"],
         "capture" => &["cast", "redact", "redact-pattern", "sanitize", "width"],
         "inspect" => &[
@@ -564,6 +566,31 @@ fn mode_options() -> Vec<ArgSpec> {
             SOURCES,
             "With `rich deps`, leave dev-dependencies out",
         ),
+        option(
+            "kind",
+            "KIND",
+            CHART,
+            "With `rich chart`, what to draw: spark (a sparkline per series), bar (a bar per \
+             row, labelled by --x), line (the default) and scatter (each series against --x, or \
+             the row number), or heatmap (rows by series, each value a shade)",
+        )
+        .choices(["spark", "bar", "line", "scatter", "heatmap"]),
+        option(
+            "x",
+            "COLUMN",
+            CHART,
+            "With `rich chart`, the column of x positions (line, scatter) or labels (bar, \
+             heatmap), by header or 1-based number (default: the row number; for labels, the \
+             first column that is not all numbers)",
+        ),
+        option(
+            "y",
+            "COLUMN",
+            CHART,
+            "With `rich chart`, a column to draw, by header or 1-based number; repeatable, one \
+             series each (default: every numeric column but --x)",
+        )
+        .multiple(true),
         option(
             "highlighter",
             "NAME",
@@ -1434,6 +1461,20 @@ pub(crate) fn spec() -> CommandSpec {
             )
             .args(command_options("schema")),
     );
+    spec = spec.subcommand(
+        CommandSpec::new("chart")
+            .about(
+                "A chart from CSV, JSON or stdin: a sparkline, bars, lines, points or a heatmap; \
+                 --x and --y pick the columns, a missing column or a value that is not a number \
+                 is refused with its row and column",
+            )
+            .usage("chart [OPTIONS] [FILE]")
+            .arg(ArgSpec::positional("file").value(ValueHint::Path).help(
+                "CSV, TSV, JSON, JSON Lines or whitespace-separated numbers, an http(s) URL, or \
+                 `-` for stdin (the default)",
+            ))
+            .args(command_options("chart")),
+    );
     spec = spec.subcommand(config_command());
     #[cfg(feature = "interact")]
     for command in super::interactive::commands() {
@@ -1661,6 +1702,7 @@ mod tests {
     const TOOLS: &str = include_str!("tools.rs");
     const VIEWERS: &str = include_str!("viewers.rs");
     const SOURCES_RS: &str = include_str!("sources.rs");
+    const CHART_RS: &str = include_str!("chart.rs");
     #[cfg(feature = "interact")]
     const INTERACTIVE: &str = include_str!("interactive.rs");
     #[cfg(feature = "art")]
@@ -1717,6 +1759,7 @@ mod tests {
             item(TOOLS, "impl ToolOptions {"),
             item(VIEWERS, "impl ViewerOptions {"),
             item(SOURCES_RS, "impl GraphSourceOptions {"),
+            item(CHART_RS, "impl ChartOptions {"),
         ] {
             out.extend(option_literals(source));
         }
