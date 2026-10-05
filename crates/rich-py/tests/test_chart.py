@@ -106,6 +106,10 @@ def test_line_chart_in_ascii():
 
 def test_series_take_values_or_points():
     assert chart.Series("a", [1, 2]).points == [(0.0, 1.0), (1.0, 2.0)]
+    # A generator is read once: the item looked at to tell values from
+    # points is kept.
+    assert chart.Series("g", (v for v in [1, 2])).points == [(0.0, 1.0), (1.0, 2.0)]
+    assert chart.Series("p", iter([(0, 1)])).points == [(0.0, 1.0)]
     scatter = chart.Series("b", [(0, 1), (2, 3)], kind="scatter", marker="x")
     assert scatter.points == [(0.0, 1.0), (2.0, 3.0)]
     assert scatter.kind == "scatter"

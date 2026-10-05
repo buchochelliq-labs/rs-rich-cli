@@ -19,7 +19,7 @@
 
 use pyo3::exceptions::{PyTypeError, PyValueError};
 use pyo3::prelude::*;
-use pyo3::types::PyDict;
+use pyo3::types::{PyDict, PyList};
 
 use rich::protocol::Renderable;
 use rich_ext::chart::{
@@ -408,6 +408,12 @@ impl Series {
         marker: Option<char>,
     ) -> PyResult<Self> {
         let kind = series_kind(kind)?;
+        // Read once into a list: a generator would lose the item looked at.
+        let points = PyList::new(
+            points.py(),
+            points.try_iter()?.collect::<PyResult<Vec<_>>>()?,
+        )?;
+        let points = points.as_any();
         let first = points.try_iter()?.next().transpose()?;
         let pairs = match first {
             Some(first)

@@ -22,6 +22,10 @@ fn run_with(files: &[(&str, &str)], stdin: &str, args: &[&str]) -> Output {
         .env("HOME", &home)
         .env("XDG_CONFIG_HOME", home.join(".config"))
         .env("COLUMNS", "60")
+        // A colour terminal, so `--force-terminal` gets colour whatever
+        // TERM the test runs under (`dumb` in many containers).
+        .env("TERM", "xterm-256color")
+        .env_remove("COLORTERM")
         .env_remove("NO_COLOR")
         .env_remove("FORCE_COLOR")
         .args(args)

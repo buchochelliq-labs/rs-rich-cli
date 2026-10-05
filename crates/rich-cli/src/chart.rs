@@ -238,9 +238,14 @@ fn parse(content: &str, resource: &str) -> Result<Data, String> {
         .next()
         .and_then(|name| name.rsplit_once('.'))
         .map(|(_, ext)| ext.to_ascii_lowercase());
-    let trimmed = content.trim_start_matches('\u{feff}').trim_start();
+    // A URL's text keeps its byte-order mark; files and stdin lose it on
+    // reading. Every parser gets the text without it.
+    let content = content.trim_start_matches('\u{feff}');
+    let trimmed = content.trim_start();
     let data = match extension.as_deref() {
-        Some("json" | "jsonl" | "ndjson") => parse_json(content)?,
+        Some("json") => parse_json(content)?,
+        // One record per line, even when there is only one.
+        Some("jsonl" | "ndjson") => json_to_data(json_lines(content, None)?)?,
         Some("csv") => parse_csv(content, Some(','))?,
         Some("tsv") => parse_csv(content, Some('\t'))?,
         _ if trimmed.starts_with(['[', '{']) => parse_json(content)?,
@@ -315,29 +320,43 @@ fn parse_csv(content: &str, fallback: Option<char>) -> Result<Data, String> {
 /// when it is all strings), or an object of columns. JSON Lines: one record
 /// per line.
 fn parse_json(content: &str) -> Result<Data, String> {
-    use serde_json::Value as Json;
-    let document = match serde_json::from_str::<Json>(content) {
+    let document = match serde_json::from_str::<serde_json::Value>(content) {
         Ok(document) => document,
-        Err(whole) => {
-            // JSON Lines: every non-blank line a record.
-            let mut records = Vec::new();
-            for (n, line) in content.lines().enumerate() {
-                if line.trim().is_empty() {
-                    continue;
-                }
-                match serde_json::from_str::<Json>(line) {
-                    Ok(record @ Json::Object(_)) => records.push(record),
-                    Ok(_) => return Err(format!("line {}: expected a JSON object", n + 1)),
-                    Err(err) if records.is_empty() => {
-                        let _ = err;
-                        return Err(format!("not valid JSON: {whole}"));
-                    }
-                    Err(err) => return Err(format!("line {}: {err}", n + 1)),
-                }
-            }
-            Json::Array(records)
-        }
+        Err(whole) => json_lines(content, Some(whole))?,
     };
+    json_to_data(document)
+}
+
+/// JSON Lines: every non-blank line a record, as one array. `whole` is the
+/// error from reading `content` as one document, reported instead when the
+/// first line is not JSON either.
+fn json_lines(
+    content: &str,
+    whole: Option<serde_json::Error>,
+) -> Result<serde_json::Value, String> {
+    use serde_json::Value as Json;
+    let mut records = Vec::new();
+    for (n, line) in content.lines().enumerate() {
+        if line.trim().is_empty() {
+            continue;
+        }
+        match serde_json::from_str::<Json>(line) {
+            Ok(record @ Json::Object(_)) => records.push(record),
+            Ok(_) => return Err(format!("line {}: expected a JSON object", n + 1)),
+            Err(err) => {
+                return Err(match &whole {
+                    Some(whole) if records.is_empty() => format!("not valid JSON: {whole}"),
+                    _ => format!("line {}: {err}", n + 1),
+                })
+            }
+        }
+    }
+    Ok(Json::Array(records))
+}
+
+/// A JSON document as rows and columns.
+fn json_to_data(document: serde_json::Value) -> Result<Data, String> {
+    use serde_json::Value as Json;
     let value = |json: &Json| match json {
         Json::Null => Value::Missing,
         Json::Number(n) => n.as_f64().map_or(Value::Missing, Value::Number),
@@ -539,6 +558,24 @@ mod tests {
 
     fn data(content: &str, resource: &str) -> Data {
         parse(content, resource).unwrap()
+    }
+
+    #[test]
+    fn a_byte_order_mark_is_dropped_before_any_parser() {
+        // A URL's text keeps its BOM; JSON must still parse.
+        let d = data("\u{feff}[{\"api\": 30}]", "https://example.com/data.json");
+        assert_eq!(d.columns, ["api"]);
+        let d = data("\u{feff}{\"api\": [1, 2]}", "https://example.com/data");
+        assert_eq!(d.columns, ["api"]);
+    }
+
+    #[test]
+    fn one_record_json_lines_is_a_row() {
+        let d = data("{\"api\": 30}\n", "one.jsonl");
+        assert_eq!(d.columns, ["api"]);
+        assert_eq!(d.rows, [[Value::Number(30.0)]]);
+        let d = data("{\"api\": 30}\n{\"api\": 31}\n", "two.ndjson");
+        assert_eq!(d.rows.len(), 2);
     }
 
     #[test]
