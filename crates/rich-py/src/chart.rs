@@ -19,7 +19,7 @@
 
 use pyo3::exceptions::{PyTypeError, PyValueError};
 use pyo3::prelude::*;
-use pyo3::types::{PyDict, PyList};
+use pyo3::types::{PyDict, PyList, PySequence, PyString};
 
 use rich::protocol::Renderable;
 use rich_ext::chart::{
@@ -78,10 +78,25 @@ fn value_format(format: Option<&Bound<'_, PyAny>>) -> PyResult<ValueFormat> {
             "format must be \"compact\" or a number of decimals",
         ));
     }
-    let decimals: usize = format
+    let decimals: i64 = format
         .extract()
-        .map_err(|_| PyTypeError::new_err("format must be \"compact\" or a number of decimals"))?;
-    Ok(ValueFormat::Fixed(decimals))
+        .map_err(|_| PyTypeError::new_err("format must be \"compact\" or a number of decimals"))
+        .or_else(|err| {
+            // An int too large for i64 is a number of decimals out of range.
+            if format.is_instance_of::<pyo3::types::PyInt>() {
+                Ok(i64::MAX)
+            } else {
+                Err(err)
+            }
+        })?;
+    match usize::try_from(decimals) {
+        Ok(decimals) if decimals <= ValueFormat::MAX_DECIMALS => Ok(ValueFormat::Fixed(decimals)),
+        _ => Err(PyValueError::new_err(format!(
+            "format: {} decimals is out of range; expected 0 to {}",
+            format.repr()?,
+            ValueFormat::MAX_DECIMALS
+        ))),
+    }
 }
 
 /// A number, with `None` as a gap (NaN).
@@ -103,18 +118,59 @@ fn numbers(values: &Bound<'_, PyAny>) -> PyResult<Vec<f64>> {
     values.try_iter()?.map(|v| number(&v?)).collect()
 }
 
-/// Any iterable of `(x, y)` pairs.
+/// The two items of a tuple, list or other sequence of length 2 (not a
+/// string), or `None`.
+fn pair<'py>(value: &Bound<'py, PyAny>) -> Option<(Bound<'py, PyAny>, Bound<'py, PyAny>)> {
+    if value.is_instance_of::<PyString>() {
+        return None;
+    }
+    let sequence = value.cast::<PySequence>().ok()?;
+    if sequence.len().ok()? != 2 {
+        return None;
+    }
+    Some((sequence.get_item(0).ok()?, sequence.get_item(1).ok()?))
+}
+
+/// Any iterable of `(x, y)` pairs: tuples, lists or other sequences of two.
 fn points(values: &Bound<'_, PyAny>) -> PyResult<Vec<(f64, f64)>> {
     values
         .try_iter()?
-        .map(|pair| {
-            let pair = pair?;
-            let (x, y): (Bound<'_, PyAny>, Bound<'_, PyAny>) = pair
-                .extract()
-                .map_err(|_| PyTypeError::new_err("a point is an (x, y) pair"))?;
+        .map(|item| {
+            let (x, y) =
+                pair(&item?).ok_or_else(|| PyTypeError::new_err("a point is an (x, y) pair"))?;
             Ok((number(&x)?, number(&y)?))
         })
         .collect()
+}
+
+/// Any iterable (not a string) as a list, each item read by `read`; `None`
+/// is empty. `what` names the argument in the error.
+fn each<'py, T>(
+    values: Option<&Bound<'py, PyAny>>,
+    what: &str,
+    read: impl Fn(&Bound<'py, PyAny>) -> PyResult<T>,
+) -> PyResult<Vec<T>> {
+    let Some(values) = values.filter(|v| !v.is_none()) else {
+        return Ok(Vec::new());
+    };
+    if values.is_instance_of::<PyString>() {
+        return Err(PyTypeError::new_err(format!(
+            "{what} must be an iterable, not a string"
+        )));
+    }
+    values
+        .try_iter()
+        .map_err(|_| PyTypeError::new_err(format!("{what} must be an iterable")))?
+        .map(|item| read(&item?))
+        .collect()
+}
+
+/// Any iterable of strings, such as column names.
+fn strings(values: Option<&Bound<'_, PyAny>>, what: &str) -> PyResult<Vec<String>> {
+    each(values, what, |item| {
+        item.extract::<String>()
+            .map_err(|_| PyTypeError::new_err(format!("{what} must be strings")))
+    })
 }
 
 /// Items of an iterable, or the `(key, value)` items of a mapping.
@@ -416,13 +472,7 @@ impl Series {
         let points = points.as_any();
         let first = points.try_iter()?.next().transpose()?;
         let pairs = match first {
-            Some(first)
-                if first
-                    .extract::<(Bound<'_, PyAny>, Bound<'_, PyAny>)>()
-                    .is_ok() =>
-            {
-                self::points(points)?
-            }
+            Some(first) if pair(&first).is_some() => self::points(points)?,
             _ => numbers(points)?
                 .into_iter()
                 .enumerate()
@@ -587,7 +637,7 @@ impl Gauge {
         value: f64,
         range: Option<(f64, f64)>,
         target: Option<f64>,
-        bands: Option<Vec<PyRef<'_, Band>>>,
+        bands: Option<&Bound<'_, PyAny>>,
         charset: &str,
         bar_width: Option<usize>,
         full_width: bool,
@@ -605,8 +655,13 @@ impl Gauge {
         if let Some(target) = target {
             inner = inner.target(target);
         }
-        for band in bands.unwrap_or_default() {
-            inner = inner.band(band.inner.clone());
+        let bands = each(bands, "bands", |item| {
+            item.cast::<Band>()
+                .map(|band| band.get().inner.clone())
+                .map_err(|_| PyTypeError::new_err("bands must be Bands"))
+        })?;
+        for band in bands {
+            inner = inner.band(band);
         }
         if let Some(width) = bar_width {
             inner = inner.bar_width(width);
@@ -650,18 +705,22 @@ impl BulletChart {
     #[new]
     #[pyo3(signature = (gauges=None, *, bar_width=None, full_width=false, charset="auto"))]
     fn new(
-        gauges: Option<Vec<PyRef<'_, Gauge>>>,
+        gauges: Option<&Bound<'_, PyAny>>,
         bar_width: Option<usize>,
         full_width: bool,
         charset: &str,
     ) -> PyResult<Self> {
-        let gauges = gauges.unwrap_or_default();
+        let gauges = each(gauges, "gauges", |item| {
+            item.cast::<Gauge>()
+                .map(|gauge| gauge.get().inner.clone())
+                .map_err(|_| PyTypeError::new_err("BulletChart takes Gauges"))
+        })?;
         let count = gauges.len();
         let mut inner = CoreBulletChart::new()
             .full_width(full_width)
             .charset(self::charset(charset)?);
         for gauge in gauges {
-            inner = inner.gauge(gauge.inner.clone());
+            inner = inner.gauge(gauge);
         }
         if let Some(width) = bar_width {
             inner = inner.bar_width(width);
@@ -698,7 +757,7 @@ impl Heatmap {
     #[allow(clippy::too_many_arguments)]
     fn new(
         rows: Option<&Bound<'_, PyAny>>,
-        columns: Option<Vec<String>>,
+        columns: Option<&Bound<'_, PyAny>>,
         range: Option<(f64, f64)>,
         charset: &str,
         cell_width: Option<usize>,
@@ -706,7 +765,7 @@ impl Heatmap {
         format: Option<&Bound<'_, PyAny>>,
     ) -> PyResult<Self> {
         let mut inner = CoreHeatmap::new()
-            .columns(columns.unwrap_or_default())
+            .columns(strings(columns, "columns")?)
             .charset(self::charset(charset)?)
             .legend(legend)
             .format(value_format(format)?);
@@ -839,23 +898,30 @@ impl StatusMatrix {
     #[pyo3(signature = (rows=None, *, columns=None, states=None, legend=true, charset="auto"))]
     fn new(
         rows: Option<&Bound<'_, PyAny>>,
-        columns: Option<Vec<String>>,
-        states: Option<Vec<PyRef<'_, ChartState>>>,
+        columns: Option<&Bound<'_, PyAny>>,
+        states: Option<&Bound<'_, PyAny>>,
         legend: bool,
         charset: &str,
     ) -> PyResult<Self> {
         let mut inner = CoreStatusMatrix::new()
-            .columns(columns.unwrap_or_default())
+            .columns(strings(columns, "columns")?)
             .legend(legend)
             .charset(self::charset(charset)?);
-        for state in states.unwrap_or_default() {
-            inner = inner.state(state.inner.clone());
+        let states = each(states, "states", |item| {
+            item.cast::<ChartState>()
+                .map(|state| state.get().inner.clone())
+                .map_err(|_| PyTypeError::new_err("states must be ChartStates"))
+        })?;
+        for state in states {
+            inner = inner.state(state);
         }
         if let Some(rows) = rows.filter(|r| !r.is_none()) {
+            let bad_row =
+                || PyTypeError::new_err("a status matrix row is a (label, [state names]) pair");
             for item in items(rows)? {
-                let (label, cells): (String, Vec<String>) = item.extract().map_err(|_| {
-                    PyTypeError::new_err("a status matrix row is a (label, [state names]) pair")
-                })?;
+                let (label, cells) = pair(&item).ok_or_else(bad_row)?;
+                let label: String = label.extract().map_err(|_| bad_row())?;
+                let cells = strings(Some(&cells), "a row's state names").map_err(|_| bad_row())?;
                 inner = inner.row(label, cells);
             }
         }
@@ -1033,7 +1099,7 @@ impl Timeline {
     #[allow(clippy::too_many_arguments)]
     fn new(
         spans: Option<&Bound<'_, PyAny>>,
-        milestones: Option<Vec<(String, f64)>>,
+        milestones: Option<&Bound<'_, PyAny>>,
         range: Option<(f64, f64)>,
         charset: &str,
         format: Option<&Bound<'_, PyAny>>,
@@ -1053,17 +1119,25 @@ impl Timeline {
                 let span = if let Ok(span) = item.cast::<TimelineSpan>() {
                     span.get().inner.clone()
                 } else {
-                    let (row, start, end): (String, f64, f64) = item.extract().map_err(|_| {
-                        PyTypeError::new_err(
-                            "a span is a TimelineSpan or a (row, start, end) triple",
-                        )
-                    })?;
-                    CoreSpan::new(row, start, end)
+                    let (row, start, end): (String, Bound<'_, PyAny>, Bound<'_, PyAny>) =
+                        item.extract().map_err(|_| {
+                            PyTypeError::new_err(
+                                "a span is a TimelineSpan or a (row, start, end) triple",
+                            )
+                        })?;
+                    // `None` is a gap, as in every chart: the span keeps
+                    // its row but is not drawn.
+                    CoreSpan::new(row, number(&start)?, number(&end)?)
                 };
                 inner = inner.push(span);
             }
         }
-        for (label, at) in milestones.unwrap_or_default() {
+        let milestones = each(milestones, "milestones", |item| {
+            let bad = || PyTypeError::new_err("a milestone is a (label, at) pair");
+            let (label, at) = pair(item).ok_or_else(bad)?;
+            Ok((label.extract::<String>().map_err(|_| bad())?, number(&at)?))
+        })?;
+        for (label, at) in milestones {
             inner = inner.milestone(label, at);
         }
         if let Some((lo, hi)) = range {

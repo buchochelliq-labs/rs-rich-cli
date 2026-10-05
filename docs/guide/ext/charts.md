@@ -128,7 +128,12 @@ width and draws them as a `BarChart`:
 ![A histogram of request latencies](../../media/guide/guide_charts-histogram.svg)
 
 - Each label is `[low, high)`, and the last `[low, high]`, so every value
-  falls in exactly one bin.
+  falls in exactly one bin, the one its label names: a value on an edge
+  counts in the bin that edge starts.
+- The edges are written exactly, never rounded: when the compact form would
+  round one (`1250` as `1.2k`), they are all written in full
+  (`[1000, 1250)`). `.edges()` returns them without floating-point noise
+  (`0.3`, not `0.30000000000000004`).
 - Without `.range(min, max)`, the bin width is rounded up to 1, 2, 2.5 or 5
   times a power of ten and the first edge down to a multiple of it, so the
   labels are round numbers. The last bins may then be empty.
@@ -156,6 +161,10 @@ its points, `Series::scatter(name, points)` does not, and
 - Without `.y_range(..)` and `.x_range(..)`, each scale rounds out to a
   step of 1, 2, 2.5 or 5 times a power of ten that falls on whole rows or
   columns. The x scale may then run a little past the last point.
+- When the compact format cannot write those round values exactly, as with
+  years (`2015` would read `2.0k`) or millisecond timestamps, the labels are
+  all written in full (`2015`, `2016`, …) rather than spreading the data
+  thinly over a coarser, writable step.
 - With a fixed range, a row or column gets a label only when the format
   writes its value exactly, so a range must divide into the rows for every
   label to show: `.y_range(0.0, 100.0)` on 11 rows labels every 20, on 10
@@ -323,7 +332,8 @@ sparkline and an optional `Status`:
 - The change is an arrow and a signed number: `▲ +8.49%`, `▼ -14`, `= 0`
   (`^`, `v` and `=` in ASCII). `.delta(d)` gives an amount,
   `.delta_percent(p)` a percentage and `.previous(v)` the percentage change
-  from `v`. It is styled `chart.delta.good` or `chart.delta.bad` by whether
+  from `v`. A change that is NaN or too large for an `f64` reads `= -`: no
+  sign, and the flat arrow. It is styled `chart.delta.good` or `chart.delta.bad` by whether
   the change is for the better: `.higher_is_better(false)` for errors,
   latency and costs. The arrow and the sign carry the direction without
   colour.
@@ -359,8 +369,9 @@ a build in seconds. Ranges with the same row label share a row:
   value, as on a line chart; `.unit("s")` writes a unit after every value.
   The scale is plain numbers: pass seconds (or any unit) as `f64`.
 - **Compression:** when the range is wider than the plot, so that the
-  shortest range would get less than a column, idle gaps longer than four
-  times the shortest range are cut out. Each cut takes three columns with
+  shortest range would get less than a column, idle gaps are cut out when
+  they are longer than both four times the shortest range and three
+  columns' worth of the uncut scale. Each cut takes three columns with
   `≈` (`~`) on the axis, and each stretch is labelled at its start and end.
   `.compress(false)` keeps the scale linear; `.range(min, max)` fixes it.
 - It fills the width given, or `.width(n)`. Given less, the row labels are
@@ -436,7 +447,7 @@ terminal.
 | Type | What it does |
 |---|---|
 | `Scale` | A linear scale. `Scale::from_values` skips NaN and infinities and never has an empty range: when every value is `v` the range is twice as wide as `v` with `v` in the middle (`0..1` for 0), and no values gives `0..1`. `.nice(n)` widens to round bounds; `.ticks(n)` gives about `n` round values inside it; `.normalize(v)` maps to 0..1 |
-| `ValueFormat` | `Compact` (`950`, `0.25`, `1.2k`, `3.4M`) or `Fixed(decimals)` |
+| `ValueFormat` | `Compact` (`950`, `0.25`, `1.2k`, `3.4M`, `1.0e15` from a thousand trillion) or `Fixed(decimals)` (at most `ValueFormat::MAX_DECIMALS`, 17; more are capped) |
 | `Status` | A health level for a `KpiCard`: a symbol, a word and a theme key |
 | `State` | A state of a `StatusMatrix` cell: a name, a symbol, an ASCII symbol and a style |
 | `Band`, `Span`, `Milestone` | A gauge's threshold band; a timeline's range and point |

@@ -59,6 +59,15 @@ struct Columns {
     band: usize,
 }
 
+impl Columns {
+    /// The line's width: the columns and a cell between each pair.
+    fn width(&self) -> usize {
+        let gap = |w: usize| usize::from(w > 0);
+        (self.label + gap(self.label) + gap(self.value) + self.value + gap(self.band) + self.band)
+            .saturating_add(self.bar)
+    }
+}
+
 /// Fit `natural` columns into `width`: the bar shrinks to 4 cells, then the
 /// band word goes, then the value, then the label is cut. `full` makes the
 /// bar take all the room left.
@@ -275,14 +284,12 @@ impl Gauge {
     }
 
     fn natural_width(&self) -> usize {
-        let c = self.natural();
-        let gap = |w: usize| usize::from(w > 0);
-        c.label + gap(c.label) + c.bar + gap(c.value) + c.value + gap(c.band) + c.band
+        self.natural().width()
     }
 
     /// The band index of the cell at `i` of `width`, by its centre.
     fn band_index(&self, scale: &Scale, i: usize, width: usize) -> usize {
-        let centre = scale.min() + (i as f64 + 0.5) / width as f64 * scale.span();
+        let centre = scale.lerp((i as f64 + 0.5) / width as f64);
         self.bands
             .iter()
             .position(|b| centre <= b.upto)
@@ -430,12 +437,13 @@ impl Gauge {
         let label = colour.then(|| theme_style(console, "chart.label"));
         let shades = if ascii { ASCII_SHADES } else { SHADES };
         let mut entries = Vec::new();
+        // Through `truncate`, so a unit such as `µs` is ASCII in ASCII.
+        let text = |text: String| truncate(&text, usize::MAX, ascii);
         for (i, band) in self.bands.iter().enumerate() {
-            let name = truncate(&band.label, usize::MAX, ascii);
             entries.push(vec![
                 (shades[i % 2].to_string(), track.clone()),
                 (
-                    format!(" {name} up to {}", self.text(band.upto)),
+                    text(format!(" {} up to {}", band.label, self.text(band.upto))),
                     label.clone(),
                 ),
             ]);
@@ -446,7 +454,7 @@ impl Gauge {
                     if ascii { "|" } else { "│" }.to_string(),
                     colour.then(|| theme_style(console, "chart.target")),
                 ),
-                (format!(" target {}", self.text(t)), label.clone()),
+                (text(format!(" target {}", self.text(t))), label.clone()),
             ]);
         }
         wrap_entries(entries, width)
@@ -579,9 +587,7 @@ impl Renderable for BulletChart {
         let max = if self.full_width {
             options.max_width
         } else {
-            let c = self.natural();
-            let gap = |w: usize| usize::from(w > 0);
-            c.label + gap(c.label) + c.bar + gap(c.value) + c.value + gap(c.band) + c.band
+            self.natural().width()
         };
         Measurement::new(MIN_BAR.min(max), max)
             .with_maximum(options.max_width)

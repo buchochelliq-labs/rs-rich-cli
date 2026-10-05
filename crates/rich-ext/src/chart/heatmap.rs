@@ -346,7 +346,7 @@ impl Renderable for Heatmap {
         }
         let ascii = self.charset.resolve(console, options, Charset::Blocks) == Charset::Ascii;
         let l = self.label_width();
-        let grid = l + usize::from(l > 0) + n * self.cell_width;
+        let grid = (l + usize::from(l > 0)).saturating_add(n.saturating_mul(self.cell_width));
         let legend = if self.legend {
             entries_width(&self.legend_entries(console, ascii, false))
         } else {

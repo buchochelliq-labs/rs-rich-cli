@@ -17,6 +17,8 @@ const ASCII_MARKERS: [char; 5] = ['*', '+', 'o', 'x', '.'];
 
 /// The narrowest plot area drawn before the y labels give way.
 const MIN_PLOT: usize = 4;
+/// The tallest plot drawn, in rows, whatever [`LineChart::height`] asks for.
+const MAX_HEIGHT: usize = u16::MAX as usize;
 
 /// How a [`Series`] is drawn.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
@@ -207,10 +209,10 @@ impl LineChart {
     }
 
     /// Rows of plot, not counting the axis, x labels and legend (at least
-    /// 1). By default the chart takes 6 to 10 rows, near 8, picking the
+    /// 1, at most 65535). By default the chart takes 6 to 10 rows, near 8, picking the
     /// height whose rows its y labels divide evenly.
     pub fn height(mut self, rows: usize) -> Self {
-        self.height = Some(rows.max(1));
+        self.height = Some(rows.clamp(1, MAX_HEIGHT));
         self
     }
 

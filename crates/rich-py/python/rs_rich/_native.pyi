@@ -4176,8 +4176,8 @@ MERMAID_MAX_LINK_LENGTH: int
 
 # ``rs_rich.chart``: every chart is a renderable built from keyword
 # arguments. ``charset`` is "auto", "blocks", "braille" or "ascii";
-# ``format`` is "compact" (``1.2k``) or a number of decimals; ``None`` in a
-# list of values is a gap.
+# ``format`` is "compact" (``1.2k``) or a number of decimals (0 to 17);
+# ``None`` in a list of values, or as a span's start or end, is a gap.
 
 ChartCharset = Literal["auto", "blocks", "braille", "ascii"]
 ChartFormat = Union[None, Literal["compact"], int]
@@ -4249,7 +4249,7 @@ class Series:
     def __init__(
         self,
         name: str,
-        points: Iterable[Union[Optional[float], Tuple[Optional[float], Optional[float]]]],
+        points: Iterable[Union[Optional[float], Tuple[Optional[float], Optional[float]], List[Optional[float]]]],
         *,
         kind: Literal["line", "scatter"] = "line",
         style: Optional[str] = None,
@@ -4295,7 +4295,7 @@ class Gauge:
         *,
         range: Optional[Tuple[float, float]] = None,
         target: Optional[float] = None,
-        bands: Optional[List[Band]] = None,
+        bands: Optional[Iterable[Band]] = None,
         charset: ChartCharset = "auto",
         bar_width: Optional[int] = None,
         full_width: bool = False,
@@ -4311,7 +4311,7 @@ class Gauge:
 class BulletChart:
     def __init__(
         self,
-        gauges: Optional[List[Gauge]] = None,
+        gauges: Optional[Iterable[Gauge]] = None,
         *,
         bar_width: Optional[int] = None,
         full_width: bool = False,
@@ -4324,7 +4324,7 @@ class Heatmap:
         self,
         rows: Union[None, Iterable[Tuple[str, Iterable[Optional[float]]]], Dict[str, Iterable[Optional[float]]]] = None,
         *,
-        columns: Optional[List[str]] = None,
+        columns: Optional[Iterable[str]] = None,
         range: Optional[Tuple[float, float]] = None,
         charset: ChartCharset = "auto",
         cell_width: Optional[int] = None,
@@ -4356,10 +4356,10 @@ class ChartState:
 class StatusMatrix:
     def __init__(
         self,
-        rows: Union[None, Iterable[Tuple[str, List[str]]], Dict[str, List[str]]] = None,
+        rows: Union[None, Iterable[Tuple[str, Iterable[str]]], Dict[str, Iterable[str]]] = None,
         *,
-        columns: Optional[List[str]] = None,
-        states: Optional[List[ChartState]] = None,
+        columns: Optional[Iterable[str]] = None,
+        states: Optional[Iterable[ChartState]] = None,
         legend: bool = True,
         charset: ChartCharset = "auto",
     ) -> None: ...
@@ -4398,9 +4398,9 @@ class TimelineSpan:
 class Timeline:
     def __init__(
         self,
-        spans: Optional[Iterable[Union[TimelineSpan, Tuple[str, float, float]]]] = None,
+        spans: Optional[Iterable[Union[TimelineSpan, Tuple[str, Optional[float], Optional[float]]]]] = None,
         *,
-        milestones: Optional[List[Tuple[str, float]]] = None,
+        milestones: Optional[Iterable[Tuple[str, Optional[float]]]] = None,
         range: Optional[Tuple[float, float]] = None,
         charset: ChartCharset = "auto",
         format: ChartFormat = None,

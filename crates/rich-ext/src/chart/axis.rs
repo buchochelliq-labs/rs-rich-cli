@@ -5,10 +5,11 @@
 //! or column). Labels go on every `gap`-th position from the low end, so
 //! they are evenly spaced, and each is written only when the formatter
 //! writes its value exactly: a label is always the value of the row or
-//! column it sits on.
+//! column it sits on. Labels [`ValueFormat::Compact`] cannot write exactly
+//! (`2015` would read `2.0k`) are all written in full instead.
 
 use super::cells;
-use super::scale::{clean, Scale, ValueFormat};
+use super::scale::{along, clean, Scale, ValueFormat};
 
 /// Where an axis's labels go and what every position is worth.
 #[derive(Clone, Debug, PartialEq)]
@@ -27,7 +28,7 @@ pub(crate) struct AxisFit {
 impl AxisFit {
     /// The scale positions `0..=cells` cover.
     pub fn scale(&self) -> Scale {
-        Scale::new(self.lo, self.lo + self.cells as f64 * self.unit)
+        Scale::new(self.lo, along(self.lo, self.cells as f64, self.unit))
     }
 
     /// Where `value` falls, in positions from the low end (fractional,
@@ -83,6 +84,16 @@ fn quarter_step(step: f64) -> bool {
     (mantissa - 2.5).abs() < 1e-6
 }
 
+/// Whether `step` is a round number: at most two significant digits
+/// after the first (`1`, `2.5`, `125`), so labels on it read well.
+fn round_step(step: f64) -> bool {
+    if !(step.is_finite() && step > 0.0) {
+        return false;
+    }
+    let scaled = step / 10f64.powf(step.log10().floor()) * 100.0;
+    (scaled - scaled.round()).abs() < 1e-6
+}
+
 /// Undo `ValueFormat::format`: the value a label says.
 fn read(label: &str) -> Option<f64> {
     let (number, scale) = match label.chars().last()? {
@@ -108,12 +119,36 @@ pub(crate) fn exact_label(format: ValueFormat, value: f64) -> String {
     if exact(&label, value) {
         return label;
     }
+    in_full(value)
+}
+
+/// `value` with every digit it has (to twelve significant), `1e-12` style
+/// when very small or large.
+fn in_full(value: f64) -> String {
     let value = clean(value);
     let magnitude = value.abs();
     if magnitude != 0.0 && !(1e-4..1e15).contains(&magnitude) {
         format!("{value:e}")
     } else {
         format!("{value}")
+    }
+}
+
+/// Labels for `values`, all in `format` when it writes every one exactly.
+/// Otherwise, for [`ValueFormat::Compact`], all in full, so a set of labels
+/// never mixes `1.5k` with `1510`; for [`ValueFormat::Fixed`], `None`.
+/// `None` too when a value is not finite.
+pub(crate) fn exact_labels(format: ValueFormat, values: &[f64]) -> Option<(Vec<String>, bool)> {
+    if values.iter().any(|v| !v.is_finite()) {
+        return None;
+    }
+    let labels: Vec<String> = values.iter().map(|&v| format.format(v)).collect();
+    if labels.iter().zip(values).all(|(l, &v)| exact(l, v)) {
+        return Some((labels, false));
+    }
+    match format {
+        ValueFormat::Compact => Some((values.iter().map(|&v| in_full(v)).collect(), true)),
+        ValueFormat::Fixed(_) => None,
     }
 }
 
@@ -126,24 +161,39 @@ struct Candidate {
     step: f64,
 }
 
+/// What writing a candidate's labels in full instead of in the chosen
+/// format costs: a round axis in the format's own short form wins a near
+/// tie, but not over one that spreads the data out.
+const IN_FULL: f64 = 0.2;
+
 impl Candidate {
-    /// The labels, or `None` when one would not be exact or they would not
-    /// fit side by side.
-    fn labels(&self, request: &AxisRequest) -> Option<Vec<(usize, String)>> {
-        let mut out = Vec::new();
-        let mut widest = 0;
-        let mut k = 0usize;
-        while k * self.gap <= self.cells {
-            let value = clean(self.lo + k as f64 * self.step);
-            let label = request.format.format(value);
-            if !exact(&label, value) {
-                return None;
-            }
-            widest = widest.max(cells(&label));
-            out.push((k * self.gap, label));
-            k += 1;
+    /// The labels and whether they had to be written in full, or `None`
+    /// when one would not be exact, the axis would run past the largest
+    /// `f64`, or they would not fit side by side.
+    fn labels(&self, request: &AxisRequest) -> Option<(Vec<(usize, String)>, bool)> {
+        if !along(self.lo, self.cells as f64, self.unit).is_finite() {
+            return None;
         }
-        (!request.label_room || widest + 2 <= self.gap).then_some(out)
+        let count = self.cells / self.gap + 1;
+        let values: Vec<f64> = (0..count)
+            .map(|k| clean(along(self.lo, k as f64, self.step)))
+            .collect();
+        let (labels, full) = exact_labels(request.format, &values)?;
+        // Written in full, a fixed range's labels are only worth it on
+        // round steps: `33.3333333333` is no label.
+        if full && request.fixed && !round_step(self.step) {
+            return None;
+        }
+        let widest = labels.iter().map(|l| cells(l)).max().unwrap_or(0);
+        if request.label_room && widest + 2 > self.gap {
+            return None;
+        }
+        let out = labels
+            .into_iter()
+            .enumerate()
+            .map(|(k, label)| (k * self.gap, label))
+            .collect();
+        Some((out, full))
     }
 }
 
@@ -157,7 +207,8 @@ pub(crate) fn fit(request: &AxisRequest) -> AxisFit {
         unit: if cells == 0 {
             0.0
         } else {
-            data.span() / cells as f64
+            // Divided first, so bounds near `±f64::MAX` do not overflow.
+            data.max() / cells as f64 - data.min() / cells as f64
         },
         labels: if cells == 0 {
             Vec::new()
@@ -177,7 +228,9 @@ pub(crate) fn fit(request: &AxisRequest) -> AxisFit {
 
     let wanted = request.wanted.max(2) as f64;
     let mut candidates = Vec::new();
-    for &cells in request.cells.iter().filter(|&&c| c > 0) {
+    // A range whose span overflows has no round steps to try.
+    let finite = (data.max() - data.min()).is_finite();
+    for &cells in request.cells.iter().filter(|&&c| c > 0 && finite) {
         let height_cost = cells.abs_diff(preferred) as f64 * 0.1;
         let mut push = |gap: usize, lo: f64, unit: f64, step: f64, waste: f64| {
             let labels = (cells / gap + 1) as f64;
@@ -208,7 +261,10 @@ pub(crate) fn fit(request: &AxisRequest) -> AxisFit {
                 push(gap, data.min(), unit, unit * gap as f64, 0.0);
             }
         } else {
-            for step in steps_near(data.span(), cells) {
+            for step in steps_near(data.span(), cells)
+                .into_iter()
+                .filter(|s| s.is_finite())
+            {
                 let lo = clean((data.min() / step + 1e-9).floor() * step);
                 let need = data.max() - lo;
                 // The widest gap that still reaches the data's top.
@@ -235,15 +291,29 @@ pub(crate) fn fit(request: &AxisRequest) -> AxisFit {
         }
     }
     candidates.sort_by(|a, b| a.cost.total_cmp(&b.cost));
+    let mut best: Option<(f64, AxisFit)> = None;
     for candidate in &candidates {
-        if let Some(labels) = candidate.labels(request) {
-            return AxisFit {
-                cells: candidate.cells,
-                lo: candidate.lo,
-                unit: candidate.unit,
-                labels,
-            };
+        if best
+            .as_ref()
+            .is_some_and(|(cost, _)| candidate.cost >= *cost)
+        {
+            break;
         }
+        if let Some((labels, full)) = candidate.labels(request) {
+            let cost = candidate.cost + if full { IN_FULL } else { 0.0 };
+            if best.as_ref().is_none_or(|(c, _)| cost < *c) {
+                let fit = AxisFit {
+                    cells: candidate.cells,
+                    lo: candidate.lo,
+                    unit: candidate.unit,
+                    labels,
+                };
+                best = Some((cost, fit));
+            }
+        }
+    }
+    if let Some((_, fit)) = best {
+        return fit;
     }
     // Nothing writes exactly: the bounds alone, at both ends.
     let mut fit = fallback(preferred);
@@ -333,13 +403,39 @@ mod tests {
             fit.labels,
             [(0, "1234".to_string()), (7, "5678".to_string())]
         );
-        // Too small for compact's two decimals: never `0`.
+        // Too small for compact's two decimals: never `0`, and every row
+        // is a round step, so each is labelled in full.
         let fit = rows(Scale::new(1e-12, 7e-12), true, &[5]);
         assert_eq!(
             fit.labels,
-            [(0, "1e-12".to_string()), (5, "7e-12".to_string())]
+            [
+                (0, "1e-12"),
+                (1, "2.2e-12"),
+                (2, "3.4e-12"),
+                (3, "4.6e-12"),
+                (4, "5.8e-12"),
+                (5, "7e-12")
+            ]
+            .map(|(p, l)| (p, l.to_string()))
         );
         assert_even(&fit);
+    }
+
+    #[test]
+    fn compact_labels_it_cannot_write_go_in_full() {
+        // Years: compact writes `2.0k`, so a 100 step was the only exact
+        // one; now the labels are the years.
+        let fit = rows(Scale::new(2015.0, 2024.0), false, &[9]);
+        assert!(fit.labels.len() >= 3, "{fit:?}");
+        assert!(fit.labels.iter().all(|(_, l)| !l.ends_with('k')), "{fit:?}");
+        assert_even(&fit);
+        assert!(fit.scale().max() - fit.scale().min() < 20.0, "{fit:?}");
+        // Never mixed: all short or all in full.
+        let fit = rows(Scale::new(1500.0, 1563.0), false, &[5]);
+        assert!(fit.labels.iter().all(|(_, l)| !l.ends_with('k')), "{fit:?}");
+        // A fixed range in full only on round steps.
+        let fit = rows(Scale::new(0.0, 100.0), true, &[9]);
+        assert_eq!(fit.labels, [(0, "0".to_string()), (9, "100".to_string())]);
     }
 
     #[test]

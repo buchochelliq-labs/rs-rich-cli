@@ -225,6 +225,54 @@ def test_formats_and_bad_arguments():
         chart.BarChart([1, 2])
 
 
+def test_fixed_decimals_out_of_range_are_refused():
+    assert chart.chart_format(1.5, 17) == "1.50000000000000000"
+    for decimals in (18, 70000, 10**6, -1):
+        with pytest.raises(ValueError, match="decimals"):
+            chart.chart_format(1.5, decimals)
+    with pytest.raises(ValueError, match="decimals"):
+        chart.Gauge("a", 1, format=70000)
+
+
+def test_any_iterable_where_a_list_is_taken():
+    gauges = chart.BulletChart(g for g in [chart.Gauge("a", 1), chart.Gauge("b", 2)])
+    assert len(gauges) == 2
+    banded = chart.Gauge("a", 1, range=(0, 2), bands=(b for b in [chart.Band(1, "low"), chart.Band(2, "high")]))
+    assert banded.band == "low"
+    timeline = chart.Timeline([("a", 0, 1)], milestones=(m for m in [("x", 1)]))
+    assert "x" in drawn(timeline)
+    matrix = chart.StatusMatrix(
+        [("api", (s for s in ["pass", "flaky"]))],
+        columns=(c for c in ["mon", "tue"]),
+        states=(s for s in [chart.ChartState("flaky", "~", "~", "yellow")]),
+    )
+    assert dict(matrix.counts())["flaky"] == 1
+    heat = chart.Heatmap({"a": [1, 2]}, columns=iter(["x", "y"]))
+    assert "x" in drawn(heat)
+    with pytest.raises(TypeError, match="columns"):
+        chart.Heatmap({"a": [1]}, columns="ab")
+    with pytest.raises(TypeError, match="Gauge"):
+        chart.BulletChart([1])
+
+
+def test_series_points_are_any_pair():
+    for points in ([[0, 1], [1, 2]], [(0, 1), (1, 2)], ((x, y) for x, y in [(0, 1), (1, 2)])):
+        assert chart.Series("a", points).points == [(0.0, 1.0), (1.0, 2.0)]
+    with pytest.raises(TypeError, match="pair"):
+        chart.Series("a", [(0, 1), [1, 2, 3]])
+
+
+def test_a_timeline_none_is_a_gap():
+    with_gap = chart.Timeline([("a", None, 1), ("b", 0, 2)], milestones=[("m", None)], width=30)
+    assert with_gap.rows == ["a", "b"]
+    out = drawn(with_gap, 30)
+    lines = out.splitlines()
+    assert lines[0].strip() == "a" and lines[1].startswith("b █"), out
+    assert "◆" not in out, out
+    with pytest.raises(TypeError, match="row, start, end"):
+        chart.Timeline([("a", 1)])
+
+
 def test_charts_compose_with_tables_and_panels():
     table = Table.grid(padding=(0, 1))
     table.add_column()
