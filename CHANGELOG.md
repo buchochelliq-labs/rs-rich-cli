@@ -7,55 +7,13 @@ absorbed and what our own crates did.
 
 The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
-## Core 0.0.5 / ext 0.0.7 / art 0.0.7 / CLI 0.0.9 — published 2026-09-22
+## 0.0.15 cohort — published 2026-10-05
 
-- Core 0.0.5: optional immutable rendering-environment extension seam; unchanged
-  default parity and public ConsoleOptions/Renderable requirements.
-- Ext 0.0.7: explicit targets/capabilities, deterministic optional snapshots,
-  constrained layouts/overflow, typed events/diagnostics, optional log/tracing
-  adapters and single-writer coordinated Live regions.
-- Art 0.0.7: still-image rotation, flips, grayscale and ordered Bayer dithering;
-  exact Braille/half-block edge regressions and same-source output examples.
-- CLI 0.0.9: directory-preserving/template batch names, config/worker routing,
-  typed log presentation, still-image exports, updated guided demo and real media.
-- Migration: exhaustive matches must include `Dither::Bayer4x4` and the added
-  unsigned/128-bit `Value` variants. New batch naming modes take output directories.
-- Fixed before merge: Live `print` no longer drops ordinary writes at interactive
-  widths 0/1, and diagnostic snippets strip CRLF carriage returns.
-- Release test passed on 2026-09-22 (full validation, golden parity, per-tag plans,
-  packaged consumer install, installed-binary screenshots); see
-  [expanded notes](docs/releases/0.0.9-expanded.md#release-test-2026-09-22).
-- Published from `main` at `c645220` in dependency order by the protected release
-  workflow: [`rs-rich-v0.0.5`](https://github.com/buchochelliq-labs/rs-rich-cli/actions/runs/35789282880), [`rs-rich-ext-v0.0.7`](https://github.com/buchochelliq-labs/rs-rich-cli/actions/runs/35792283558), [`rs-rich-art-v0.0.7`](https://github.com/buchochelliq-labs/rs-rich-cli/actions/runs/35792299240), [`rs-rich-cli-v0.0.9`](https://github.com/buchochelliq-labs/rs-rich-cli/actions/runs/35792320939). The core
-  upload first failed because crates.io required Trusted Publishing; it succeeded
-  after the crate setting was adjusted. The workflow still uses a stored token
-  (tracked for 0.0.10).
-
-## [0.0.1] — first release
-
-The first published version of all four crates: `rs-rich`, `rs-rich-ext`,
-`rs-rich-cli`, `rs-rich-art`.
-
-**Read the version number literally.** `0.0.1` is not modesty — the API takes
-breaking changes regularly (three in the week before this release), and the port
-is deliberately incomplete. What is implemented is byte-parity tested against
-real Python `rich` 15.0.0; what isn't is listed in the README and
-`docs/PORTING.md`, and what deliberately differs is in `docs/DIVERGENCES.md`.
-
-Two things worth knowing up front:
-
-- **Package names carry an `rs-` prefix** because `rich` is taken on crates.io.
-  The library targets keep the short names, so you write `use rich::…`, and the
-  CLI's binary is still `rich`.
-- **Crate versions are independent SemVer and do not mirror the upstream release.**
-  Which upstream version is tracked lives in `UPSTREAM.toml`. An earlier policy
-  mirrored the number; it was dropped before release because publishing a young
-  API as `15.0.0` would have been a lie, and the first breaking change would have
-  collided with upstream's next major.
-
-Entries below record subsequent releases and development.
-
-## [Unreleased]
+Diagram 0.0.1 (new crate) / mermaid 0.0.4 / ext 0.0.13 / micro 0.0.2 /
+record 0.0.3 / interact 0.0.3 / CLI 0.0.15 / Python 0.0.4. Unchanged and
+already published: core 0.0.9, macros 0.0.3, plugin API 0.0.3, art 0.0.12,
+lumis 0.0.3. Published from `main` at `61d031a` by the protected release
+workflows; see [the release notes](docs/releases/0.0.15.md#publication).
 
 ### 0.0.15 release test: fixes from three audits
 
@@ -412,6 +370,56 @@ changed.
   `micro-doctor` (the mode `rich doctor` picks for a plain terminal, kitty,
   iTerm2, a known cell size and `RICH_MICRO=text`). The library page opens
   with a contact sheet of every asset.
+
+## Core 0.0.5 / ext 0.0.7 / art 0.0.7 / CLI 0.0.9 — published 2026-09-22
+
+- Core 0.0.5: optional immutable rendering-environment extension seam; unchanged
+  default parity and public ConsoleOptions/Renderable requirements.
+- Ext 0.0.7: explicit targets/capabilities, deterministic optional snapshots,
+  constrained layouts/overflow, typed events/diagnostics, optional log/tracing
+  adapters and single-writer coordinated Live regions.
+- Art 0.0.7: still-image rotation, flips, grayscale and ordered Bayer dithering;
+  exact Braille/half-block edge regressions and same-source output examples.
+- CLI 0.0.9: directory-preserving/template batch names, config/worker routing,
+  typed log presentation, still-image exports, updated guided demo and real media.
+- Migration: exhaustive matches must include `Dither::Bayer4x4` and the added
+  unsigned/128-bit `Value` variants. New batch naming modes take output directories.
+- Fixed before merge: Live `print` no longer drops ordinary writes at interactive
+  widths 0/1, and diagnostic snippets strip CRLF carriage returns.
+- Release test passed on 2026-09-22 (full validation, golden parity, per-tag plans,
+  packaged consumer install, installed-binary screenshots); see
+  [expanded notes](docs/releases/0.0.9-expanded.md#release-test-2026-09-22).
+- Published from `main` at `c645220` in dependency order by the protected release
+  workflow: [`rs-rich-v0.0.5`](https://github.com/buchochelliq-labs/rs-rich-cli/actions/runs/35789282880), [`rs-rich-ext-v0.0.7`](https://github.com/buchochelliq-labs/rs-rich-cli/actions/runs/35792283558), [`rs-rich-art-v0.0.7`](https://github.com/buchochelliq-labs/rs-rich-cli/actions/runs/35792299240), [`rs-rich-cli-v0.0.9`](https://github.com/buchochelliq-labs/rs-rich-cli/actions/runs/35792320939). The core
+  upload first failed because crates.io required Trusted Publishing; it succeeded
+  after the crate setting was adjusted. The workflow still uses a stored token
+  (tracked for 0.0.10).
+
+## [0.0.1] — first release
+
+The first published version of all four crates: `rs-rich`, `rs-rich-ext`,
+`rs-rich-cli`, `rs-rich-art`.
+
+**Read the version number literally.** `0.0.1` is not modesty — the API takes
+breaking changes regularly (three in the week before this release), and the port
+is deliberately incomplete. What is implemented is byte-parity tested against
+real Python `rich` 15.0.0; what isn't is listed in the README and
+`docs/PORTING.md`, and what deliberately differs is in `docs/DIVERGENCES.md`.
+
+Two things worth knowing up front:
+
+- **Package names carry an `rs-` prefix** because `rich` is taken on crates.io.
+  The library targets keep the short names, so you write `use rich::…`, and the
+  CLI's binary is still `rich`.
+- **Crate versions are independent SemVer and do not mirror the upstream release.**
+  Which upstream version is tracked lives in `UPSTREAM.toml`. An earlier policy
+  mirrored the number; it was dropped before release because publishing a young
+  API as `15.0.0` would have been a lie, and the first breaking change would have
+  collided with upstream's next major.
+
+Entries below record subsequent releases and development.
+
+## [Unreleased]
 
 ### Release numbers and tagging
 
