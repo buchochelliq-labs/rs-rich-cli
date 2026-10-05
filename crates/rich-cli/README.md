@@ -47,9 +47,10 @@ rich micro list                                         # micro assets, drawn as
 rich record demo.tape                                   # run a scripted terminal recording
 ```
 
-This source is **`0.0.15`**, published on 2026-10-05. It follows independent
-SemVer; its version does not mirror Python `rich-cli`. The tracked upstream
-release is **`rich-cli` 1.8.1**, recorded in [`UPSTREAM.toml`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/UPSTREAM.toml).
+This source is **`0.0.15`**, prepared but not yet published (the latest
+published version is 0.0.14). It follows independent SemVer; its version does
+not mirror Python `rich-cli`. The tracked upstream release is **`rich-cli`
+1.8.1**, recorded in [`UPSTREAM.toml`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/UPSTREAM.toml).
 
 ## Render modes
 
@@ -215,7 +216,7 @@ Viewers and capture
 
 See the [workflow recipes](https://buchochelliq-labs.github.io/rs-rich-cli/recipes/), the
 [CLI reference](https://buchochelliq-labs.github.io/rs-rich-cli/cli-reference/) and the
-[0.0.15 release notes](https://buchochelliq-labs.github.io/rs-rich-cli/releases/0.0.15/). Source versions do not imply
+[0.0.14 release notes](https://buchochelliq-labs.github.io/rs-rich-cli/releases/0.0.14/). Source versions do not imply
 publication.
 
 ## Features
