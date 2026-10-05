@@ -86,7 +86,9 @@ pub(super) fn start_watching() {
     WATCHING.store(true, std::sync::atomic::Ordering::Relaxed);
 }
 
-/// Whether this process is watching (see [`start_watching`]).
+/// Whether this process is watching (see [`start_watching`]). Only the
+/// micro drawing step asks, so a build without `art` has no caller.
+#[cfg_attr(not(feature = "art"), allow(dead_code))]
 pub(super) fn watching() -> bool {
     WATCHING.load(std::sync::atomic::Ordering::Relaxed)
 }
