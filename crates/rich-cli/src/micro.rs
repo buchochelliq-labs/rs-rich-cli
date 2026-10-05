@@ -1435,16 +1435,17 @@ pub(crate) fn value_icon(registry: &MicroRegistry, node: &rich_ext::data::Node) 
     Some(rich_micro::placeholder(asset, FallbackPreference::Emoji))
 }
 
-/// `:micro:name:` in `--print --emoji` markup: parse `content` with its
-/// micro tokens as placeholders, and a renderable that draws them as this
-/// terminal can. `None` when there are no tokens.
-pub(crate) fn print_markup(
-    console: &Console,
-    content: &str,
-    trusted: bool,
-) -> Option<(Text, Arc<MicroRegistry>)> {
-    if !content.contains(rich_micro::markup::TOKEN_PREFIX) {
-        return None;
+/// The registry `:micro:` markup expands against in this run: loaded once,
+/// with its warnings, however many places (the text, the title, the
+/// caption) hold tokens.
+fn markup_registry(trusted: bool) -> Arc<MicroRegistry> {
+    static LOADED: std::sync::Mutex<Option<(bool, Arc<MicroRegistry>)>> =
+        std::sync::Mutex::new(None);
+    let mut loaded = LOADED.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some((was, registry)) = loaded.as_ref() {
+        if *was == trusted {
+            return Arc::clone(registry);
+        }
     }
     let roots = ConfigRoots::default();
     let context = Context {
@@ -1456,21 +1457,127 @@ pub(crate) fn print_markup(
     };
     let (registry, report) = MicroRegistry::load(&context.roots(), &Limits::default());
     warn(&report);
+    let registry = Arc::new(registry);
+    *loaded = Some((trusted, Arc::clone(&registry)));
+    registry
+}
+
+/// The registry whose placeholders this run's output holds, once something
+/// expanded a token: [`take_drawing`] hands it to the last step, which draws
+/// them on a terminal.
+static DRAWING: std::sync::Mutex<Option<Arc<MicroRegistry>>> = std::sync::Mutex::new(None);
+
+fn draw_later(registry: &Arc<MicroRegistry>) {
+    *DRAWING.lock().unwrap_or_else(|e| e.into_inner()) = Some(Arc::clone(registry));
+}
+
+/// The registry to draw this run's placeholders with, if any expanded.
+pub(crate) fn take_drawing() -> Option<Arc<MicroRegistry>> {
+    DRAWING.lock().unwrap_or_else(|e| e.into_inner()).take()
+}
+
+/// Whether this run's output holds placeholders to draw.
+pub(crate) fn drawing_pending() -> bool {
+    DRAWING.lock().unwrap_or_else(|e| e.into_inner()).is_some()
+}
+
+fn has_tokens(content: &str) -> bool {
+    content.contains(rich_micro::markup::TOKEN_PREFIX)
+}
+
+/// `:micro:name:` in `--print --emoji` markup: parse `content` with its
+/// micro tokens as placeholders. `None` when there are no tokens.
+pub(crate) fn print_markup(console: &Console, content: &str, trusted: bool) -> Option<Text> {
+    if !has_tokens(content) {
+        return None;
+    }
+    let registry = markup_registry(trusted);
     let prepared = rich_micro::PreparedMarkup::new(content, &registry, preference(console));
     let parsed = console.build_text(prepared.markup());
-    Some((prepared.finish(&parsed), Arc::new(registry)))
+    draw_later(&registry);
+    Some(prepared.finish(&parsed))
+}
+
+/// A `--panel`'s `--title` or `--caption` with micro tokens: parsed as the
+/// panel parses a label (`Text.from_markup`, so `:emoji:` codes always
+/// expand, and micro tokens with them). `None` when there are no tokens.
+pub(crate) fn panel_label(console: &Console, label: &str, trusted: bool) -> Option<Text> {
+    if !has_tokens(label) {
+        return None;
+    }
+    let registry = markup_registry(trusted);
+    let prepared = rich_micro::PreparedMarkup::new(label, &registry, preference(console));
+    let markup = rich::emoji::replace(prepared.markup());
+    let parsed = Text::from_markup(&markup).unwrap_or_else(|_| Text::new(markup));
+    draw_later(&registry);
+    Some(prepared.finish(&parsed))
+}
+
+/// A CSV table's `--title` or `--caption` with micro tokens: parsed as the
+/// table parses one (`console.render_str`, so tokens expand with `--emoji`,
+/// where `:emoji:` codes do), in `style`. `None` when there are no tokens or
+/// no `--emoji`.
+pub(crate) fn table_label(
+    console: &Console,
+    label: &str,
+    style: &str,
+    trusted: bool,
+) -> Option<Text> {
+    if !has_tokens(label) || !console.emoji() {
+        return None;
+    }
+    let registry = markup_registry(trusted);
+    let prepared = rich_micro::PreparedMarkup::new(label, &registry, preference(console));
+    let mut text = prepared.finish(&console.render_str(prepared.markup(), Some(false)));
+    text.set_base_style(rich::style::StyleType::from(style));
+    draw_later(&registry);
+    Some(text)
+}
+
+/// `-m/--markdown` with micro tokens: `content` with its tokens swapped for
+/// stand-ins, which [`rich_micro::PreparedMarkdown::view`] turns back into
+/// placeholders. `None` when there are no tokens.
+pub(crate) fn markdown(
+    console: &Console,
+    content: &str,
+    trusted: bool,
+) -> Option<rich_micro::PreparedMarkdown> {
+    if !has_tokens(content) {
+        return None;
+    }
+    let registry = markup_registry(trusted);
+    let prepared = rich_micro::PreparedMarkdown::new(content, &registry, preference(console));
+    if !prepared.has_assets() {
+        return None;
+    }
+    draw_later(&registry);
+    Some(prepared)
 }
 
 /// `renderable` with its micro assets drawn, on a terminal.
 pub(crate) fn drawn(
     console: &Console,
     registry: Arc<MicroRegistry>,
-    renderable: Text,
+    renderable: Box<dyn Renderable>,
 ) -> Box<dyn Renderable> {
+    /// A boxed renderable as a sized one, for `MicroView`.
+    struct Boxed(Box<dyn Renderable>);
+    impl Renderable for Boxed {
+        fn rich_render(&self, console: &Console, options: &ConsoleOptions) -> Vec<Segment> {
+            self.0.rich_render(console, options)
+        }
+        fn measure(
+            &self,
+            console: &Console,
+            options: &ConsoleOptions,
+        ) -> rich::measure::Measurement {
+            self.0.measure(console, options)
+        }
+    }
     if console.is_terminal() {
-        Box::new(MicroGraphics::detect(registry).view(renderable))
+        Box::new(MicroGraphics::detect(registry).view(Boxed(renderable)))
     } else {
-        Box::new(renderable)
+        renderable
     }
 }
 

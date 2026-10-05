@@ -200,6 +200,53 @@ fn exports_and_the_pager_get_the_fallback_on_a_graphics_terminal() {
 }
 
 #[test]
+fn titles_captions_and_markdown_draw_on_a_graphics_terminal() {
+    // 0.0.15 workstream 6: tokens outside `--print` draw as images too.
+    let dir = tempfile::tempdir().unwrap();
+    let home = dir.path().join("home");
+    std::fs::create_dir_all(&home).unwrap();
+    std::fs::write(
+        dir.path().join("t.md"),
+        "ok :micro:status/success: `:micro:status/error:`\n",
+    )
+    .unwrap();
+    let env = terminal_env(
+        false,
+        &[
+            ("HOME", home.to_str().unwrap()),
+            ("RICH_CELL_PIXELS", "8x16"),
+            ("RICH_MICRO", "kitty"),
+        ],
+    );
+    let runs: [&[&str]; 3] = [
+        &[
+            "-p",
+            "a wide body",
+            "--panel",
+            "rounded",
+            "--title",
+            ":micro:status/success:",
+        ],
+        &[
+            "-p",
+            "a wide body",
+            "--panel",
+            "rounded",
+            "--caption",
+            ":micro:status/success:",
+        ],
+        &["t.md"],
+    ];
+    for args in runs {
+        let shown = in_pty(RICH, args, dir.path(), &env, b"", Duration::from_secs(20));
+        // Kitty: the image transmitted, and its placeholder cells.
+        assert!(shown.contains("\u{1b}_G"), "{args:?}: {shown:?}");
+        assert!(shown.contains('\u{10eeee}'), "{args:?}: {shown:?}");
+        assert!(!shown.contains('✅'), "{args:?}: {shown:?}");
+    }
+}
+
+#[test]
 fn the_cell_size_query_keeps_typeahead() {
     // F3: with no pixel size from the window and no RICH_CELL_PIXELS, rich
     // asks the terminal (`CSI 16 t`). What the user typed before that must

@@ -294,6 +294,61 @@ fn micro_markup_in_print_with_emoji() {
     assert_eq!(text(&out.stdout), "ok :micro:status/success:\n");
 }
 
+#[test]
+fn micro_markup_in_titles_captions_and_markdown() {
+    // 0.0.15 workstream 6: not only `--print --emoji`.
+    let (_root, work, home) = dirs();
+    // A panel's labels expand `:emoji:` codes always, and micro tokens too.
+    let out = rich(
+        &work,
+        &home,
+        &[
+            "-p",
+            "a body wider than the caption",
+            "--panel",
+            "rounded",
+            "--title",
+            "T :micro:status/success:",
+            "--caption",
+            ":micro:status/error: c :micro:nope:",
+        ],
+    );
+    assert!(out.status.success(), "{}", text(&out.stderr));
+    let shown = text(&out.stdout);
+    let lines: Vec<&str> = shown.lines().collect();
+    assert!(lines[0].contains("─ T ✅ ─"), "{shown}");
+    assert!(lines[2].contains("❌ c :micro:nope:"), "{shown}");
+    // A CSV table's labels expand where its `:emoji:` codes do: with --emoji.
+    std::fs::write(work.join("t.csv"), "a,b\n1,2\n").unwrap();
+    let csv = |extra: &[&str]| {
+        let mut args = vec![
+            "t.csv",
+            "--title",
+            ":micro:status/success: t",
+            "--caption",
+            ":micro:status/error:",
+        ];
+        args.extend_from_slice(extra);
+        text(&rich(&work, &home, &args).stdout)
+    };
+    let shown = csv(&["--emoji"]);
+    assert!(shown.contains("✅ t") && shown.contains("❌"), "{shown}");
+    let shown = csv(&[]);
+    assert!(shown.contains(":micro:"), "{shown}");
+    // Markdown, outside code.
+    std::fs::write(
+        work.join("t.md"),
+        "# Status :micro:status/success:\n\nok **:micro:status/success:** \
+         `:micro:status/success:`\n",
+    )
+    .unwrap();
+    let out = rich(&work, &home, &["t.md"]);
+    assert!(out.status.success(), "{}", text(&out.stderr));
+    let shown = text(&out.stdout);
+    assert!(shown.contains("Status ✅"), "{shown}");
+    assert!(shown.contains("ok ✅ :micro:status/success:"), "{shown}");
+}
+
 #[cfg(feature = "interact")]
 #[test]
 fn asset_picks_micro_assets_by_name() {

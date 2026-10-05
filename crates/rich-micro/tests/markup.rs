@@ -269,3 +269,76 @@ fn plugin_registers_the_transform() {
         "*"
     );
 }
+
+/// Every tagged run in rendered segments: (text, meta).
+fn segment_placements(segments: &[rich::Segment]) -> Vec<(String, MicroMeta)> {
+    segments
+        .iter()
+        .filter_map(|segment| {
+            MicroMeta::from_segment(segment).map(|meta| (segment.text.clone(), meta))
+        })
+        .collect()
+}
+
+#[test]
+fn markdown_tokens_become_tagged_placeholders() {
+    // 0.0.15 workstream 6: `:micro:` in Markdown, not only in --print.
+    use rich::markdown::Markdown;
+    use rich_micro::PreparedMarkdown;
+    let registry = registry();
+    let source = "# Status :micro:check:\n\nDeploy **:micro:status/check:** done, \
+                  `:micro:check:` \\:micro:check: :micro:nope:\n\n```\n:micro:check:\n```\n";
+    let prepared = PreparedMarkdown::new(source, &registry, FallbackPreference::Emoji);
+    assert!(prepared.has_assets());
+    assert_eq!(
+        prepared
+            .diagnostics()
+            .iter()
+            .map(|d| &d.kind)
+            .collect::<Vec<_>>(),
+        [&DiagnosticKind::UnknownAsset("nope".into())]
+    );
+    let console = Console::builder()
+        .width(60)
+        .no_color(false)
+        .force_terminal(true)
+        .build();
+    let view = prepared.view(Markdown::new(prepared.source()));
+    let segments = console.render(&view, None);
+    let found = segment_placements(&segments);
+    assert_eq!(found.len(), 2, "{found:?}");
+    for (cells, meta) in &found {
+        assert_eq!(cells, "✅");
+        assert_eq!((meta.name.as_str(), meta.cols), ("status/check", 2));
+    }
+    // The bold around the token covers its placeholder.
+    assert!(
+        segments.iter().any(|s| MicroMeta::from_segment(s).is_some()
+            && s.style.as_ref().and_then(|style| style.attr(0)) == Some(true)),
+        "{segments:?}"
+    );
+    let shown: String = segments.iter().map(|s| s.text.as_str()).collect();
+    assert!(!shown.contains(|c: char| ('\u{100000}'..='\u{10fffd}').contains(&c)));
+    // Code, escapes and unknown names stay as written.
+    assert_eq!(shown.matches(":micro:check:").count(), 3, "{shown}");
+    assert!(shown.contains(":micro:nope:"));
+    // The stand-ins measure as the asset: every line is as wide as it is
+    // with the emoji written in.
+    let widths = |segments: Vec<rich::Segment>| -> Vec<usize> {
+        let mut lines = vec![0];
+        for segment in segments {
+            if segment.text == "\n" {
+                lines.push(0);
+            } else {
+                *lines.last_mut().unwrap() += segment.cell_length();
+            }
+        }
+        lines
+    };
+    let written = Markdown::new(&source.replacen(":micro:check:", "✅", 1).replacen(
+        ":micro:status/check:",
+        "✅",
+        1,
+    ));
+    assert_eq!(widths(segments), widths(console.render(&written, None)));
+}
