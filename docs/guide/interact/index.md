@@ -241,7 +241,10 @@ come from core's public API: the emoji names are those of core's table,
 each resolved through `rich::emoji::replace`. With the `micro` feature,
 `AssetKind::Micro` (or `AssetPicker::micro(prompt, &registry)`) lists micro
 assets, each drawn in its row and magnified in the preview, and answers
-with the asset's name.
+with the asset's name. Run it with
+`run_with_graphics(picker, &options, graphics.source())` (a
+`rich_micro::MicroGraphics`) to draw the rows' assets as images where the
+terminal can; `run` shows their emoji.
 
 ### TableSelect and TreeSelect
 

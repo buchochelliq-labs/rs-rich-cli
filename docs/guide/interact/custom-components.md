@@ -290,10 +290,15 @@ and comma keys are written in quotes (`"#"`, `","`). A line with no keys is
 an error rather than an unbind, so a stray `#` or `,` cannot unbind an
 action by accident.
 
-`Select` (and the views built on it), `Input` and every container dispatch
-through their keymaps, so rebinding changes what they do. The other
-built-ins declare their keys for help and hints. Rebinding them comes in a
-later release.
+Every built-in dispatches through its keymap, so rebinding changes what it
+does: `Select` (and the views built on it), `Input`, `Confirm`, `Pager`,
+`TextArea`, `ColorPicker`, `Form`, `FilePicker`, `Viewport` and every
+container. Each has a `rebind` of its own, and its context is the one its
+`keymap()` lists (`confirm`, `pager` and `pager-search`, `textarea`,
+`color`, `form` with `form-choice` and `form-toggle`, `file`). A
+`Confirm`'s choices are actions `choose-ID`; rebinding a `Form`'s `next`
+away from Enter also takes Enter's submit on the last field, and Ctrl+S
+still submits.
 
 ## Testing a composition
 
