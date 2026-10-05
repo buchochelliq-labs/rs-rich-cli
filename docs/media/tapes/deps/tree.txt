@@ -13,16 +13,16 @@ demo-app v0.3.0
     └── insta v1.40.0
         ├── serde v1.0.210
         └── similar v2.6.0
-demo-core v0.3.0 (*)
+demo-core v0.3.0
+├── serde v1.0.210 (*)
+├── strum_macros v0.25.3
+│   ├── proc-macro2 v1.0.86
+│   ├── quote v1.0.37
+│   └── syn v1.0.109 (duplicate)
+└── thiserror v1.0.64
+    └── thiserror-impl v1.0.64
 duplicate: syn v1.0.109, v2.0.79
 ❯
-
-
-
-
-
-
-
 
 
 

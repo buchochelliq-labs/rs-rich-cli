@@ -342,3 +342,57 @@ fn markdown_tokens_become_tagged_placeholders() {
     ));
     assert_eq!(widths(segments), widths(console.render(&written, None)));
 }
+
+/// Each token left as written in a prepared Markdown source.
+fn kept_tokens(source: &str) -> Vec<String> {
+    let prepared =
+        rich_micro::PreparedMarkdown::new(source, &registry(), FallbackPreference::Emoji);
+    let out = prepared.source();
+    out.match_indices(":micro:check:")
+        .map(|(at, _)| out[..at].lines().last().unwrap_or("").trim().to_string())
+        .collect()
+}
+
+#[test]
+fn markdown_code_is_whatever_the_parser_calls_code() {
+    // Indented blocks, fences in quotes and in list items, and code spans
+    // across a line break are code too: their tokens stay as written.
+    let source = "Para :micro:check:\n\n    indented :micro:check:\n\n> ```\n> quoted \
+                  :micro:check:\n> ```\n\n- item\n\n    ```\n    listfence :micro:check:\n    \
+                  ```\n\nspan ``a\n:micro:check: b``\n";
+    let prepared =
+        rich_micro::PreparedMarkdown::new(source, &registry(), FallbackPreference::Emoji);
+    assert!(prepared.has_assets());
+    assert_eq!(
+        kept_tokens(source),
+        ["indented", "> quoted", "listfence", "span ``a"],
+        "{:?}",
+        prepared.source()
+    );
+    assert!(!prepared.source().starts_with("Para :micro:"));
+}
+
+#[test]
+fn markdown_link_destinations_keep_their_tokens() {
+    // A token in a destination is part of the URL; the link text expands.
+    let source = "[go :micro:check:](https://ex.com/:micro:check:/x) \
+                  ![alt](a:micro:check:.png) <https://ex.com/:micro:check:> \
+                  [ref :micro:check:][r]\n\n[r]: https://ex.com/:micro:check:/y\n";
+    let prepared =
+        rich_micro::PreparedMarkdown::new(source, &registry(), FallbackPreference::Emoji);
+    let out = prepared.source();
+    assert!(out.contains("(https://ex.com/:micro:check:/x)"), "{out:?}");
+    assert!(out.contains("(a:micro:check:.png)"), "{out:?}");
+    assert!(out.contains("<https://ex.com/:micro:check:>"), "{out:?}");
+    assert!(
+        out.contains("[r]: https://ex.com/:micro:check:/y"),
+        "{out:?}"
+    );
+    assert!(!out.contains("[go :micro:"), "{out:?}");
+    assert!(!out.contains("[ref :micro:"), "{out:?}");
+    assert_eq!(out.matches(":micro:check:").count(), 4, "{out:?}");
+    // Rendered, the link still points at the URL as written.
+    let console = Console::builder().width(200).build();
+    let shown = console.render_export(&prepared.view(rich::markdown::Markdown::new(out)));
+    assert!(!shown.contains('\u{100000}'), "{shown:?}");
+}

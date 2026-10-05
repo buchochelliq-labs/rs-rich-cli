@@ -1062,3 +1062,264 @@ fn printing_a_chart_ends_with_one_newline() {
         }
     }
 }
+
+// ------------------------------------------------------- audit regressions
+
+/// Compact writes `2015` as `2.0k`; an axis over a small span of large
+/// values writes its labels in full rather than squashing the data onto a
+/// 100-step axis.
+#[test]
+fn compact_axes_write_large_values_in_full() {
+    let years: Vec<(f64, f64)> = (2015..=2024)
+        .map(|y| (y as f64, (y - 2010) as f64))
+        .collect();
+    let chart = LineChart::new()
+        .series(Series::line("rev", years))
+        .charset(Charset::Ascii)
+        .height(6);
+    let out = render(&plain(60), &chart);
+    assert!(out.contains("2015") && out.contains("2024"), "{out}");
+    assert!(!out.contains('k'), "{out}");
+    let (x, _, _) = axis_labels(&out);
+    assert!(x.len() >= 3, "{out}");
+
+    let ys: Vec<(f64, f64)> = (0..10)
+        .map(|i| (i as f64, 1500.0 + i as f64 * 7.0))
+        .collect();
+    let chart = LineChart::new()
+        .series(Series::line("p", ys))
+        .charset(Charset::Ascii)
+        .height(6);
+    let out = render(&plain(60), &chart);
+    assert!(out.contains("1500") && !out.contains("1.6k"), "{out}");
+    // The y labels name rows evenly, every one written in full.
+    let rows: Vec<&str> = out
+        .lines()
+        .filter_map(|l| l.split_once(" +").map(|(label, _)| label.trim()))
+        .filter(|l| !l.is_empty())
+        .collect();
+    assert!(rows.len() >= 2, "{out}");
+    assert!(rows.iter().all(|l| l.parse::<f64>().is_ok()), "{out}");
+
+    let timeline = Timeline::new()
+        .span("a", 1200.0, 1290.0)
+        .span("b", 1250.0, 1310.0)
+        .unit("ms");
+    let out = render(&plain(60), &timeline);
+    assert!(!out.contains("kms"), "{out}");
+    assert!(out.contains("1200ms"), "{out}");
+
+    // Compressed stretches label their ends in full too.
+    let timeline = Timeline::new()
+        .span("a", 0.0, 1.0)
+        .span("b", 1000.0, 1001.0)
+        .unit("s");
+    let out = render(&plain(40), &timeline);
+    assert!(out.contains('≈'), "{out}");
+    assert!(!out.contains("ks"), "{out}");
+    assert!(out.contains("1000s"), "{out}");
+}
+
+#[test]
+fn histogram_edges_are_written_exactly() {
+    let labels = |h: &Histogram| -> Vec<String> {
+        h.to_bar_chart()
+            .bars()
+            .iter()
+            .map(|b| b.label.clone())
+            .collect()
+    };
+    let big = Histogram::new((0..10).map(|i| 1000.0 + i as f64));
+    let big = labels(&big);
+    assert_eq!(big[0], "[1000, 1001)");
+    assert_eq!(big[9], "[1009, 1010]");
+    let small = labels(&Histogram::new((1..10).map(|i| i as f64 * 0.001)));
+    assert_eq!(small[0], "[0.001, 0.002)");
+    for set in [&big, &small] {
+        let mut unique = set.clone();
+        unique.dedup();
+        assert_eq!(unique.len(), set.len(), "{set:?}");
+    }
+    // One label would be `1.2k`: all are written in full.
+    let mixed = labels(&Histogram::new([1000.0, 1500.0]).bins(2));
+    assert_eq!(mixed, ["[1000, 1250)", "[1250, 1500]"]);
+}
+
+#[test]
+fn histogram_counts_match_their_labels() {
+    let h = Histogram::new([0.0, 0.3, 1.0]);
+    let edges = h.edges();
+    assert_eq!(edges[3], 0.3);
+    assert_eq!(edges[6], 0.6);
+    // 0.3 is in [0.3, 0.4), as its label says.
+    assert_eq!(h.counts(), vec![1, 0, 0, 1, 0, 0, 0, 0, 0, 1]);
+    let h = Histogram::new([0.0, 0.7, 1.0]);
+    assert_eq!(h.counts(), vec![1, 0, 0, 0, 0, 0, 0, 1, 0, 1]);
+    // The last bin is closed.
+    let h = Histogram::new([0.0, 1.0]).bins(2).range(0.0, 1.0);
+    assert_eq!(h.counts(), vec![1, 1]);
+}
+
+#[test]
+fn fixed_format_clamps_its_decimals() {
+    let text = ValueFormat::Fixed(70_000).format(1.5);
+    assert!(text.len() < 30, "{text}");
+    assert!(text.starts_with("1.5"), "{text}");
+    assert_eq!(
+        ValueFormat::Fixed(usize::MAX).format(2.0),
+        ValueFormat::Fixed(17).format(2.0)
+    );
+}
+
+#[test]
+fn gauge_units_are_ascii_on_an_ascii_console() {
+    let gauge = Gauge::new("lat", 30.0)
+        .range(0.0, 100.0)
+        .target(80.0)
+        .band(Band::new(50.0, "ok"))
+        .band(Band::new(100.0, "slow"))
+        .unit("µs")
+        .full_width(true);
+    for out in [
+        render(&ascii(50), &gauge),
+        render(&plain(50), &gauge.clone().charset(Charset::Ascii)),
+    ] {
+        assert!(out.is_ascii(), "{out}");
+        assert!(out.contains("up to 50?s"), "{out}");
+    }
+}
+
+/// Bounds near `f64::MAX` overflow `max - min`; every chart still draws
+/// and labels them, and nothing reads NaN.
+#[test]
+fn huge_ranges_render_sensibly() {
+    let h = Histogram::new([-1e308, 1e308]).bins(3);
+    assert!(h.edges().iter().all(|e| e.is_finite()), "{:?}", h.edges());
+    assert_eq!(h.counts().iter().sum::<usize>(), 2);
+    let h = Histogram::new([-1e308, 1e308]).bins(1);
+    assert_eq!(h.edges(), vec![-1e308, 1e308]);
+
+    let charts: Vec<(&str, Box<dyn Renderable>)> = vec![
+        ("spark", Box::new(Sparkline::new([-1e308, 0.0, 1e308]))),
+        (
+            "bar",
+            Box::new(
+                BarChart::new()
+                    .bar("a", 1e308)
+                    .bar("b", -1e308)
+                    .bar_width(10),
+            ),
+        ),
+        (
+            "line",
+            Box::new(
+                LineChart::new()
+                    .series(Series::from_values("s", [-1e308, 0.0, 1e308]))
+                    .height(5)
+                    .charset(Charset::Ascii),
+            ),
+        ),
+        (
+            "line x",
+            Box::new(
+                LineChart::new()
+                    .series(Series::line("s", [(-1e308, 1.0), (0.0, 2.0), (1e308, 3.0)]))
+                    .height(5)
+                    .charset(Charset::Ascii),
+            ),
+        ),
+        (
+            "gauge",
+            Box::new(Gauge::new("g", 1e308).range(-1e308, 1e308)),
+        ),
+        (
+            "heat",
+            Box::new(Heatmap::new().row("a", [-1e308, 0.0, 1e308])),
+        ),
+        (
+            "timeline",
+            Box::new(Timeline::new().span("a", -1e308, 0.0).span("b", 1.0, 1e308)),
+        ),
+        (
+            "histogram",
+            Box::new(Histogram::new([-1e308, 1e308]).bins(3)),
+        ),
+    ];
+    for (name, chart) in &charts {
+        let out = render(&plain(40), chart.as_ref());
+        assert!(
+            !out.contains("NaN") && !out.contains("inf"),
+            "{name}: {out}"
+        );
+        for line in out.lines() {
+            assert!(cell_len(line) <= 40, "{name}: {out}");
+        }
+    }
+    let spark = render(&plain(20), &Sparkline::new([-1e308, 0.0, 1e308]));
+    assert_eq!(spark, render(&plain(20), &Sparkline::new([-1.0, 0.0, 1.0])));
+    let bar = render(
+        &plain(40),
+        &BarChart::new()
+            .bar("a", 1e308)
+            .bar("b", -1e308)
+            .bar_width(10),
+    );
+    assert!(bar.contains("█████"), "{bar}");
+    let line = render(
+        &plain(40),
+        &LineChart::new()
+            .series(Series::from_values("s", [-1e308, 0.0, 1e308]))
+            .height(5)
+            .charset(Charset::Ascii),
+    );
+    assert!(
+        line.contains(" 1.0e308 +") && line.contains("-1.0e308 +"),
+        "{line}"
+    );
+    let timeline = render(
+        &plain(40),
+        &Timeline::new().span("a", -1e308, 0.0).span("b", 1.0, 1e308),
+    );
+    assert!(timeline.contains("e308"), "{timeline}");
+    let heat = render(&plain(40), &Heatmap::new().row("a", [-1e308, 0.0, 1e308]));
+    assert!(!heat.contains("99999"), "{heat}");
+}
+
+#[test]
+fn huge_sizes_do_not_overflow() {
+    let console = plain(40);
+    let options = console.options();
+    let m = BarChart::new()
+        .bar("a", 1.0)
+        .bar_width(usize::MAX)
+        .measure(&console, &options);
+    assert_eq!(m.maximum, 40);
+    let m = Gauge::new("a", 1.0)
+        .bar_width(usize::MAX)
+        .measure(&console, &options);
+    assert_eq!(m.maximum, 40);
+    let m = BulletChart::new()
+        .gauge(Gauge::new("a", 1.0))
+        .bar_width(usize::MAX)
+        .measure(&console, &options);
+    assert_eq!(m.maximum, 40);
+    let m = Heatmap::new()
+        .row("a", [1.0, 2.0])
+        .cell_width(usize::MAX)
+        .measure(&console, &options);
+    assert_eq!(m.maximum, 40);
+    let vertical = BarChart::new()
+        .bar("a", 1.0)
+        .orientation(Orientation::Vertical)
+        .bar_width(usize::MAX);
+    let out = render(&console, &vertical);
+    assert!(out.lines().count() <= usize::from(u16::MAX) + 2);
+    let line = LineChart::new()
+        .series(Series::from_values("s", [1.0, 2.0]))
+        .height(usize::MAX)
+        .charset(Charset::Ascii);
+    let out = render(&console, &line);
+    assert!(out.lines().count() <= usize::from(u16::MAX) + 4);
+    let canvas = rich_ext::chart::DotCanvas::new(usize::MAX, 2);
+    assert!(canvas.width() > 0);
+}

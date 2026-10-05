@@ -19,9 +19,12 @@
 //! the default `art` feature), `--watch`, `--batch`, config profiles and
 //! `--theme-file`, and the tool commands `inspect`, `diff` (images, text and
 //! patches), `view`, `hex`, `unicode`, `env`, `capture`, `ansi explain`,
-//! `doctor`, `bench compare`, `completions`, `docs` and `config`, and the
-//! diagram sources `dot`, `deps` and `schema`, and `chart`. Each composes
-//! public `rich` / `rich-ext` / `rich-art` / `rich-diagram` APIs.
+//! `doctor`, `bench compare`, `completions`, `docs`, `config` and `plugins`;
+//! the diagram sources `mermaid`, `dot`, `deps` and `schema`, and `chart`;
+//! the interactive commands (`choose`, `filter`, `input`, `confirm`, `pager`,
+//! `write`, `file`, `color`, `asset`, `explore`); `micro`; and `record`. Each
+//! composes public `rich` / `rich-ext` / `rich-art` / `rich-diagram` /
+//! `rich-mermaid` / `rich-interact` / `rich-micro` / `rich-record` APIs.
 
 use std::io::{BufRead, IsTerminal, Read, Write};
 use std::path::{Path, PathBuf};
@@ -3663,11 +3666,13 @@ fn decorate_and_emit_with(
     }
 
     // Micro assets are drawn only when the output goes to the terminal alone:
-    // an export, the pager or a watch capture would record Kitty's
+    // an export, the pager or a watch would record (or repaint over) Kitty's
     // placeholder cells or the blank cells under an image, so they (and the
     // terminal with them) keep the fallback.
     #[cfg(feature = "art")]
-    if let Some(registry) = micro::take_drawing().filter(|_| export.terminal_only()) {
+    if let Some(registry) =
+        micro::take_drawing().filter(|_| export.terminal_only() && !watch::watching())
+    {
         renderable = micro::drawn(console, registry, renderable);
     }
 
@@ -3789,6 +3794,8 @@ fn run_watch(mut cli: Cli) -> ExitCode {
         }
         return first_failure.unwrap_or_else(|| ExitClass::Success.exit_code());
     }
+    // From here on the output repaints: micro assets keep their fallback.
+    watch::start_watching();
     let resource = resource.as_str();
     if !is_url(resource) {
         return watch::watch_files(cli);

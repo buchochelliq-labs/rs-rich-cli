@@ -42,10 +42,13 @@ rich doctor                                             # what rich detected abo
 rich bench compare base.json new.json --threshold 10    # gate on benchmark regressions
 rich completions bash                                   # shell completions; `rich docs man` for man pages
 rich config explain width                               # where a setting comes from
+rich explore config.yaml                                # browse a document; Enter prints the path
+rich micro list                                         # micro assets, drawn as this terminal can
+rich record demo.tape                                   # run a scripted terminal recording
 ```
 
-This source is **`0.0.12`**, prepared but not yet published (the latest
-published version is 0.0.11). It follows independent SemVer; its version does
+This source is **`0.0.15`**, prepared but not yet published (the latest
+published version is 0.0.14). It follows independent SemVer; its version does
 not mirror Python `rich-cli`. The tracked upstream release is **`rich-cli`
 1.8.1**, recorded in [`UPSTREAM.toml`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/UPSTREAM.toml).
 
@@ -72,9 +75,9 @@ With no flag the mode is picked from the file extension; a bare `-` reads stdin.
 `--format auto` (the default) detects piped or extensionless input, and a named
 format (`json`, `yaml`, `toml`, `xml`, `ini`, `env`) overrides the extension.
 Preferred subcommands such as `rich json`, `rich markdown`, `rich csv`,
-`rich jsonl` and `rich log` are aliases over the same renderers. Mermaid has
-only a subcommand, `rich mermaid` (alias `mmd`); `.mmd` and `.mermaid` files
-are detected. Existing flat
+`rich jsonl` and `rich log` are aliases over the same renderers. Mermaid and
+DOT have only subcommands, `rich mermaid` (alias `mmd`) and `rich dot` (alias
+`graphviz`); `.mmd`, `.mermaid`, `.dot` and `.gv` files are detected. Existing flat
 flags remain supported.
 
 ## Options
@@ -196,6 +199,7 @@ Discovery and diagnostics
 
 Ask in a script
 : `rich choose`, `rich filter`, `rich input`, `rich confirm` and `rich pager`
+  (and `rich write`, `file`, `color`, `asset` and `explore`)
   paint on stderr and answer on stdout, so `x=$(rich choose a b c)` works, and
   read keys from the terminal even when stdin is the list (`ls | rich filter`).
   `--preview COMMAND` shows a command's output for the focused item. Exit codes:
@@ -212,7 +216,7 @@ Viewers and capture
 
 See the [workflow recipes](https://buchochelliq-labs.github.io/rs-rich-cli/recipes/), the
 [CLI reference](https://buchochelliq-labs.github.io/rs-rich-cli/cli-reference/) and the
-[0.0.13 release notes](https://buchochelliq-labs.github.io/rs-rich-cli/releases/0.0.13/). Source versions do not imply
+[0.0.14 release notes](https://buchochelliq-labs.github.io/rs-rich-cli/releases/0.0.14/). Source versions do not imply
 publication.
 
 ## Features
@@ -220,15 +224,20 @@ publication.
 These five are on by default and can be dropped for a smaller binary:
 
 - **`fetch`** — URL support (`rich <url>`), via `ureq` with bundled TLS roots.
-- **`art`** — `--gif` playback and `--diff`/`--image` picture rendering, via [`rs-rich-art`](https://crates.io/crates/rs-rich-art).
+- **`art`** — `--gif` playback and `--diff`/`--image` picture rendering, via [`rs-rich-art`](https://crates.io/crates/rs-rich-art), and micro assets (`rich micro`, `:micro:name:` with `--emoji`), via [`rs-rich-micro`](https://crates.io/crates/rs-rich-micro).
 - **`mermaid`** — `rich mermaid` and Mermaid fences in Markdown, drawn as text, via [`rs-rich-mermaid`](https://crates.io/crates/rs-rich-mermaid).
 - **`record`** — `rich record TAPE`: scripted terminal sessions rendered as screenshots, casts, GIF and MP4, via [`rs-rich-record`](https://crates.io/crates/rs-rich-record).
-- **`interact`** — `rich choose`, `filter`, `input`, `confirm` and `pager`, via [`rs-rich-interact`](https://crates.io/crates/rs-rich-interact).
+- **`interact`** — `rich choose`, `filter`, `input`, `confirm`, `pager`, `write`, `file`, `color`, `asset` and `explore`, via [`rs-rich-interact`](https://crates.io/crates/rs-rich-interact).
+
+`rich dot`, `rich deps`, `rich schema` and `rich chart` are in every build:
+DOT through [`rs-rich-diagram`](https://crates.io/crates/rs-rich-diagram)
+(with its `plugin` and `graphviz` features), the rest through `rs-rich-ext`.
 
 Off by default:
 
 - **`lumis`** — the tree-sitter highlighter (`--highlighter lumis`), via [`rs-rich-lumis`](https://crates.io/crates/rs-rich-lumis). It compiles many grammars, so the binary is much larger, and it needs Rust 1.91.
 - **`mmdc`** — the `mmdc` Mermaid backend. It starts Mermaid's CLI, which must be installed separately.
+- **`dylib-plugins`**, **`wasm-plugins`** — runtime plugins loaded with `--plugin PATH` or from a trusted config: native libraries, or sandboxed WASM modules.
 
 ```bash
 cargo install rs-rich-cli --no-default-features   # installs `rich`; no network or image decoders

@@ -135,3 +135,55 @@ fn file_picker_keys_rebind() {
         dir.path().join("top.txt")
     );
 }
+
+#[test]
+fn file_picker_up_rebinds_the_parent_key_only() {
+    // `up` is the picker's go-to-parent; rebinding it leaves the list's
+    // cursor-up alone. `select.up` is the list's.
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(dir.path().join("a.txt"), "x").unwrap();
+    std::fs::write(dir.path().join("b.txt"), "x").unwrap();
+    let picker = FilePicker::new("File", dir.path()).rebind("up", keys("ctrl+h"));
+    let (outcome, _) = headless::run(picker, Script::new().keys("down up enter"), 60, 12);
+    assert_eq!(outcome.unwrap().value().unwrap(), dir.path().join("a.txt"));
+    let picker = FilePicker::new("File", dir.path()).rebind("select.up", keys("ctrl+p"));
+    let (outcome, _) = headless::run(picker, Script::new().keys("down up enter"), 60, 12);
+    assert_eq!(outcome.unwrap().value().unwrap(), dir.path().join("b.txt"));
+    let picker = FilePicker::new("File", dir.path()).rebind("select.up", keys("ctrl+p"));
+    let (outcome, _) = headless::run(picker, Script::new().keys("down ctrl+p enter"), 60, 12);
+    assert_eq!(outcome.unwrap().value().unwrap(), dir.path().join("a.txt"));
+}
+
+#[test]
+fn confirm_choice_keys_answer_either_case() {
+    // As in 0.0.14: an uppercase choice key answers to the lowercase press,
+    // and a lowercase one to the uppercase press.
+    let confirm = || {
+        Confirm::new("Go?").choices([
+            Choice::new("all", "Apply all", 'A'),
+            Choice::new("skip", "Skip", 's'),
+        ])
+    };
+    for (press, want) in [("a", "all"), ("A", "all"), ("s", "skip"), ("S", "skip")] {
+        let (outcome, _) = headless::run(confirm(), Script::new().keys(press), 40, 8);
+        assert_eq!(outcome.unwrap(), Outcome::Done(want.to_string()), "{press}");
+    }
+}
+
+#[test]
+fn rebinding_onto_an_earlier_actions_key_takes_it() {
+    // `n` is declared for next-match, earlier than scroll-down: rebinding
+    // scroll-down onto it makes `n` scroll.
+    let lines: Vec<Vec<Segment>> = (1..=40)
+        .map(|n| vec![Segment::new(format!("line {n}"), None)])
+        .collect();
+    let pager = Pager::lines(lines).rebind("scroll-down", keys("n"));
+    let (outcome, record) = headless::run(pager, Script::new().keys("n n q"), 40, 10);
+    assert_eq!(outcome.unwrap(), Outcome::Done(()));
+    let frames = record.frames.join("\n---\n");
+    assert!(frames.contains("line 3"), "{frames}");
+    assert!(
+        !record.frames.last().unwrap().contains("line 1\n"),
+        "{frames}"
+    );
+}

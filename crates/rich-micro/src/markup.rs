@@ -405,68 +405,50 @@ pub fn markup_text(
     Ok((prepared.finish(&parsed), prepared.diagnostics))
 }
 
-/// Byte ranges of `source` that Markdown shows as code: fenced blocks
-/// (```` ``` ```` or `~~~`, to the matching close or the end) and inline
-/// code spans (a run of backticks to the next run of the same length on the
-/// same line). A token in one stays as written, as code does.
-fn markdown_code(source: &str) -> Vec<Range<usize>> {
-    let mut ranges = Vec::new();
-    // (marker, length, start) of an open fence.
-    let mut fence: Option<(u8, usize, usize)> = None;
-    let mut line_start = 0;
-    for line in source.split_inclusive('\n') {
-        let start = line_start;
-        line_start += line.len();
-        let trimmed = line.trim_start_matches(' ');
-        let indent = line.len() - trimmed.len();
-        let marker = trimmed.bytes().next().filter(|b| matches!(b, b'`' | b'~'));
-        let run = marker.map_or(0, |m| trimmed.bytes().take_while(|b| *b == m).count());
-        if let Some((m, length, open)) = fence {
-            if indent < 4 && marker == Some(m) && run >= length && trimmed[run..].trim().is_empty()
-            {
-                ranges.push(open..start + line.len());
-                fence = None;
-            }
-            continue;
-        }
-        if let Some(m) = marker.filter(|_| indent < 4 && run >= 3) {
-            fence = Some((m, run, start));
-            continue;
-        }
-        // Inline code spans.
-        let bytes = line.as_bytes();
-        let mut at = 0;
-        while at < bytes.len() {
-            if bytes[at] != b'`' {
-                at += 1;
+/// Byte ranges of `source` whose tokens stay as written: what the Markdown
+/// parser calls code (fenced and indented blocks, wherever they sit, and
+/// inline spans, across line breaks too), and what is a URL rather than
+/// text (link and image destinations, autolinks, reference definitions).
+/// Parsed with the options core's `Markdown` uses, so the two agree.
+fn markdown_literal(source: &str) -> Vec<Range<usize>> {
+    use pulldown_cmark::{Event, LinkType, Options, Parser, Tag, TagEnd};
+    let parser = Parser::new_ext(source, Options::ENABLE_TABLES);
+    let mut ranges: Vec<Range<usize>> = parser
+        .reference_definitions()
+        .iter()
+        .map(|(_, def)| def.span.clone())
+        .collect();
+    // (whole link or image, end of the last thing inside it) per open link.
+    let mut links: Vec<(Range<usize>, usize)> = Vec::new();
+    for (event, range) in parser.into_offset_iter() {
+        match event {
+            Event::Code(_) | Event::Start(Tag::CodeBlock(_)) => ranges.push(range.clone()),
+            Event::Start(Tag::Link {
+                link_type: LinkType::Autolink | LinkType::Email,
+                ..
+            }) => ranges.push(range.clone()),
+            Event::Start(Tag::Link { .. } | Tag::Image { .. }) => {
+                links.push((range.clone(), range.start + 1));
                 continue;
             }
-            let length = bytes[at..].iter().take_while(|b| **b == b'`').count();
-            let mut close = at + length;
-            let mut found = None;
-            while close < bytes.len() {
-                if bytes[close] == b'`' {
-                    let n = bytes[close..].iter().take_while(|b| **b == b'`').count();
-                    if n == length {
-                        found = Some(close + n);
-                        break;
+            Event::End(TagEnd::Link | TagEnd::Image) => {
+                // From the text's end to the link's: `](dest "title")` or
+                // `][label]`.
+                if let Some((whole, text_end)) = links.pop() {
+                    ranges.push(text_end..whole.end);
+                    if let Some(outer) = links.last_mut() {
+                        outer.1 = outer.1.max(whole.end);
                     }
-                    close += n;
-                } else {
-                    close += 1;
                 }
+                continue;
             }
-            match found {
-                Some(end) => {
-                    ranges.push(start + at..start + end);
-                    at = end;
-                }
-                None => at += length,
+            _ => {}
+        }
+        if let Some(open) = links.last_mut() {
+            if !range.is_empty() && range.end <= open.0.end {
+                open.1 = open.1.max(range.end);
             }
         }
-    }
-    if let Some((_, _, open)) = fence {
-        ranges.push(open..source.len());
     }
     ranges
 }
@@ -477,9 +459,10 @@ fn markdown_code(source: &str) -> Vec<Range<usize>> {
 ///
 /// Markdown has no place for a tag, so each token becomes as many copies of
 /// one private-use character as the asset has columns (one cell each), and
-/// the layout sizes it as the asset. Tokens in code (fenced blocks and
-/// inline spans) stay as written; so does `\:micro:`, whose backslash
-/// Markdown drops itself.
+/// the layout sizes it as the asset. Tokens in code (blocks and inline
+/// spans) and in URLs (link and image destinations, autolinks, reference
+/// definitions) stay as written; so does `\:micro:`, whose backslash
+/// Markdown drops itself. Link text expands.
 ///
 /// ```
 /// use rich::markdown::Markdown;
@@ -520,14 +503,18 @@ impl PreparedMarkdown {
             return prepared;
         }
         let usable = !source.chars().any(is_sentinel);
-        let code = markdown_code(source);
-        let in_code = |at: usize| code.iter().any(|range| range.contains(&at));
+        let literal = markdown_literal(source);
+        let literal_at = |token: &Range<usize>| {
+            literal
+                .iter()
+                .any(|range| range.start < token.end && token.start < range.end)
+        };
         let mut cursor = 0;
         for token in scan(source, false) {
             match token {
                 // Markdown drops the backslash of `\:` itself.
                 Token::Escape(_) => {}
-                Token::Asset { range, .. } | Token::Malformed(range) if in_code(range.start) => {}
+                Token::Asset { range, .. } | Token::Malformed(range) if literal_at(&range) => {}
                 Token::Asset { range, name } => match registry.resolve(&name) {
                     Some(asset)
                         if usable

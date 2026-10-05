@@ -3,6 +3,8 @@
 use rich::measure::Measurement;
 use rich::{Console, ConsoleOptions, Renderable, Segment, Style};
 
+use super::axis::exact_labels;
+use super::scale::{along, clean};
 use super::{
     cells, has_colour, lines_to_segments, theme_style, truncate, user_style, Charset, Line, Scale,
     ValueFormat,
@@ -25,6 +27,9 @@ const BRAILLE_LOWER_HALF: char = '⣤';
 const ASCII_LOWER_HALF: char = '.';
 /// Rows for the tallest vertical bar when [`BarChart::bar_width`] is not set.
 const DEFAULT_COLUMN: usize = 8;
+/// The tallest vertical bar drawn, in rows, whatever
+/// [`BarChart::bar_width`] asks for.
+const MAX_COLUMN: usize = u16::MAX as usize;
 /// The thickest vertical bar, in cells.
 const MAX_THICKNESS: usize = 3;
 
@@ -249,7 +254,7 @@ impl BarChart {
     }
 
     /// Cells for the longest bar (default 40, at least 1); rows for the
-    /// tallest when [`Orientation::Vertical`] (default 8).
+    /// tallest when [`Orientation::Vertical`] (default 8, at most 65535).
     pub fn bar_width(mut self, width: usize) -> Self {
         self.bar_width = Some(width.max(1));
         self
@@ -391,7 +396,7 @@ impl BarChart {
         let layout = self.columns(width);
         let shown = layout.shown;
         let width = (shown * layout.slot + shown.saturating_sub(1) * layout.gap).min(width);
-        let height = self.natural_bar();
+        let height = self.natural_bar().min(MAX_COLUMN);
         let scale = self.scale();
         let zero = scale.normalize(0.0).unwrap_or(0.0) * height as f64;
         let zero_row = (zero.round() as usize).min(height);
@@ -620,11 +625,11 @@ impl BarChart {
         if self.orientation == Orientation::Vertical {
             let n = self.bars.len();
             let slot = self.label_width().max(self.value_width()).max(1);
-            return n * slot + n.saturating_sub(1);
+            return n.saturating_mul(slot).saturating_add(n.saturating_sub(1));
         }
         let l = self.label_width();
         let v = self.value_width();
-        l + usize::from(l > 0) + self.natural_bar() + v + usize::from(v > 0)
+        (l + usize::from(l > 0) + v + usize::from(v > 0)).saturating_add(self.natural_bar())
     }
 }
 
@@ -654,8 +659,10 @@ impl Renderable for BarChart {
 /// Bins split the values' range (or [`range`](Self::range)) into
 /// [`bins`](Self::bins) equal parts (10 by default). Each label is
 /// `[low, high)`, the last `[low, high]`, so every value falls in exactly
-/// one; NaN and infinite values are not counted, and values outside an
-/// explicit range are left out.
+/// one, the one its label names; NaN and infinite values are not counted,
+/// and values outside an explicit range are left out. The edges are
+/// written exactly: in full (`[1000, 1250)`) when the compact form would
+/// round one of them.
 ///
 /// ```
 /// use rich::Console;
@@ -736,42 +743,60 @@ impl Histogram {
         self
     }
 
-    /// The bin edges, `bins + 1` of them, low to high.
+    /// The bin edges, `bins + 1` of them, low to high, without
+    /// floating-point noise (`0.3`, not `0.30000000000000004`).
     ///
     /// With an explicit [`range`](Self::range) the bins split it exactly.
     /// Otherwise the bin width is rounded up to 1, 2, 2.5 or 5 times a power
     /// of ten and the first edge down to a multiple of it, so the labels are
-    /// round numbers; the last bins may then be empty.
+    /// round numbers; the last bins may then be empty. A range too wide for
+    /// round bins (near `±f64::MAX`) is split exactly.
     pub fn edges(&self) -> Vec<f64> {
         let data = Scale::from_values(self.values.iter().copied());
         let bins = self.bins as f64;
-        let (start, step) = if self.min.is_some() || self.max.is_some() {
-            let scale = data.bounds(self.min, self.max);
-            (scale.min(), scale.span() / bins)
-        } else {
-            let mut step = bin_step(data.span() / bins);
-            let mut start = (data.min() / step).floor() * step;
-            // Rounding the start down can leave the top uncovered: widen.
-            while start + step * bins < data.max() {
-                step = bin_step(step * 1.001);
-                start = (data.min() / step).floor() * step;
-            }
-            (start, step)
+        let split = |scale: Scale| -> Vec<f64> {
+            (0..=self.bins)
+                .map(|i| clean(scale.lerp(i as f64 / bins)))
+                .collect()
         };
-        (0..=self.bins).map(|i| start + step * i as f64).collect()
+        if self.min.is_some() || self.max.is_some() {
+            let scale = data.bounds(self.min, self.max);
+            let step = scale.span() / bins;
+            if (scale.max() - scale.min()).is_finite() {
+                return (0..=self.bins)
+                    .map(|i| clean(scale.min() + step * i as f64))
+                    .collect();
+            }
+            return split(scale);
+        }
+        let mut step = bin_step(data.span() / bins);
+        let mut start = (data.min() / step).floor() * step;
+        // Rounding the start down can leave the top uncovered: widen.
+        while step.is_finite() && along(start, bins, step) < data.max() {
+            step = bin_step(step * 1.001);
+            start = (data.min() / step).floor() * step;
+        }
+        if !(start.is_finite() && along(start, bins, step).is_finite()) {
+            return split(data);
+        }
+        (0..=self.bins)
+            .map(|i| clean(along(start, i as f64, step)))
+            .collect()
     }
 
-    /// How many values fall in each bin.
+    /// How many values fall in each bin: `[low, high)`, the last
+    /// `[low, high]`, against the edges [`edges`](Self::edges) gives.
     pub fn counts(&self) -> Vec<usize> {
         let edges = self.edges();
         let (lo, hi) = (edges[0], edges[self.bins]);
-        let width = (hi - lo) / self.bins as f64;
+        let inner = &edges[1..self.bins];
         let mut counts = vec![0; self.bins];
         for v in self.values.iter().copied().filter(|v| v.is_finite()) {
             if v < lo || v > hi {
                 continue;
             }
-            let bin = (((v - lo) / width).floor() as usize).min(self.bins - 1);
+            // The bins whose low edge is at or below `v`, past the first.
+            let bin = inner.partition_point(|&edge| edge <= v);
             counts[bin] += 1;
         }
         counts
@@ -786,7 +811,14 @@ impl Histogram {
             };
         }
         let edges = self.edges();
-        let format = ValueFormat::Compact;
+        let written = exact_labels(ValueFormat::Compact, &edges)
+            .map(|(labels, _)| labels)
+            .unwrap_or_else(|| {
+                edges
+                    .iter()
+                    .map(|&e| ValueFormat::Compact.format(e))
+                    .collect()
+            });
         let counts = self.counts();
         let mut chart = BarChart {
             bars: Vec::new(),
@@ -794,11 +826,7 @@ impl Histogram {
         };
         for (i, count) in counts.into_iter().enumerate() {
             let close = if i + 1 == self.bins { ']' } else { ')' };
-            let label = format!(
-                "[{}, {}{close}",
-                format.format(edges[i]),
-                format.format(edges[i + 1])
-            );
+            let label = format!("[{}, {}{close}", written[i], written[i + 1]);
             chart.bars.push(Bar::new(label, count as f64));
         }
         chart

@@ -79,7 +79,9 @@ transform pipeline (`MicroPlugin` registers it as `micro`). In code,
 renderable of its own.
 
 Markdown has no markup to tag, so `PreparedMarkdown` swaps each token
-outside code (fenced blocks and inline spans) for stand-in cells of the
+outside code (blocks and inline spans, as pulldown-cmark parses them with
+core's options) and URLs (link and image destinations, autolinks, reference
+definitions; link text expands) for stand-in cells of the
 asset's width before core's `Markdown` renders it, and its `view` turns
 them back into tagged placeholders afterwards:
 

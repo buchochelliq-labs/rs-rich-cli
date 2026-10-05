@@ -4,6 +4,9 @@
 /// cell, in Unicode's dot numbering.
 const DOT_BITS: [[u8; 4]; 2] = [[0x01, 0x02, 0x04, 0x40], [0x08, 0x10, 0x20, 0x80]];
 
+/// The longest side of a [`DotCanvas`], in cells.
+const MAX_SIDE: usize = u16::MAX as usize;
+
 /// A grid of Braille cells you set dots on, 2 dots wide and 4 tall per cell.
 ///
 /// Each cell remembers which layer (series) last set a dot in it, so a chart
@@ -26,8 +29,10 @@ pub struct DotCanvas {
 
 impl DotCanvas {
     /// A blank canvas `width` × `height` cells (`2 * width` × `4 * height`
-    /// dots).
+    /// dots). Each side is at most 65535 cells; larger sizes are capped.
     pub fn new(width: usize, height: usize) -> Self {
+        let width = width.min(MAX_SIDE);
+        let height = height.min(MAX_SIDE);
         DotCanvas {
             width,
             height,

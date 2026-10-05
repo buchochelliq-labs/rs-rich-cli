@@ -116,9 +116,15 @@ impl Scale {
         self.max
     }
 
-    /// `max - min`, always above zero.
+    /// `max - min`, always above zero. Bounds near `±f64::MAX` would
+    /// overflow it; it is then `f64::MAX`.
     pub fn span(&self) -> f64 {
-        self.max - self.min
+        let span = self.max - self.min;
+        if span.is_finite() {
+            span
+        } else {
+            f64::MAX
+        }
     }
 
     /// Where `value` falls, from 0 (at `min`) to 1 (at `max`), clamped.
@@ -127,7 +133,25 @@ impl Scale {
         if !value.is_finite() {
             return None;
         }
-        Some(((value - self.min) / self.span()).clamp(0.0, 1.0))
+        let span = self.max - self.min;
+        let at = if span.is_finite() {
+            (value - self.min) / span
+        } else {
+            // Halved, so neither difference overflows.
+            (value * 0.5 - self.min * 0.5) / (self.max * 0.5 - self.min * 0.5)
+        };
+        Some(at.clamp(0.0, 1.0))
+    }
+
+    /// The value a fraction `t` of the way from `min` to `max` (0 gives
+    /// `min`, 1 gives `max`), without overflowing.
+    pub(crate) fn lerp(&self, t: f64) -> f64 {
+        let span = self.max - self.min;
+        if span.is_finite() {
+            self.min + t * span
+        } else {
+            self.min * (1.0 - t) + self.max * t
+        }
     }
 
     /// The tick step for about `count` ticks: 1, 2 or 5 times a power of ten.
@@ -184,6 +208,29 @@ fn nice_number(x: f64, round: bool) -> f64 {
     nice * power
 }
 
+/// `lo + k * unit`, without overflowing on the way when the result itself
+/// is finite.
+pub(crate) fn along(lo: f64, k: f64, unit: f64) -> f64 {
+    let offset = k * unit;
+    let value = lo + offset;
+    if value.is_finite() || !lo.is_finite() || !unit.is_finite() {
+        value
+    } else {
+        (lo * 0.5 + k * (unit * 0.5)) * 2.0
+    }
+}
+
+/// `(value - lo) / unit`: how many `unit`s `value` is past `lo`, without
+/// overflowing on the way.
+pub(crate) fn units_past(value: f64, lo: f64, unit: f64) -> f64 {
+    let diff = value - lo;
+    if diff.is_finite() {
+        diff / unit
+    } else {
+        (value * 0.5 - lo * 0.5) / unit * 2.0
+    }
+}
+
 /// Drop floating-point noise (`0.30000000000000004`) and negative zero,
 /// keeping twelve significant digits whatever the magnitude.
 pub(crate) fn clean(v: f64) -> f64 {
@@ -212,14 +259,21 @@ pub(crate) fn clean(v: f64) -> f64 {
 pub enum ValueFormat {
     /// Short forms: `950`, `0.25`, `12.5`, then `1.2k`, `3.4M`, `5.0B`
     /// ([`format::compact`] from a thousand up, at most two decimals
-    /// below).
+    /// below), and `1.0e15` from a thousand trillion. A chart axis or
+    /// histogram whose round values this cannot write exactly (`2015`
+    /// would read `2.0k`) writes them in full instead.
     #[default]
     Compact,
-    /// A fixed number of decimals: `Fixed(2)` writes `3.14`.
+    /// A fixed number of decimals: `Fixed(2)` writes `3.14`. At most
+    /// [`MAX_DECIMALS`](Self::MAX_DECIMALS) are written; more are capped.
     Fixed(usize),
 }
 
 impl ValueFormat {
+    /// The most decimals [`Fixed`](Self::Fixed) writes: an `f64` holds
+    /// at most 17 significant digits.
+    pub const MAX_DECIMALS: usize = 17;
+
     /// `value` in this format. NaN and infinities are written `-`.
     pub fn format(self, value: f64) -> String {
         if !value.is_finite() {
@@ -228,6 +282,7 @@ impl ValueFormat {
         let value = if value == 0.0 { 0.0 } else { value };
         match self {
             ValueFormat::Fixed(decimals) => {
+                let decimals = decimals.min(Self::MAX_DECIMALS);
                 let text = format!("{value:.decimals$}");
                 // `-0.0` rounds to "-0.0"; write it as zero.
                 if text
@@ -241,6 +296,10 @@ impl ValueFormat {
                 }
             }
             ValueFormat::Compact => {
+                if value.abs() >= 1e15 {
+                    // Past `T`, compact would write every digit.
+                    return format!("{value:.1e}");
+                }
                 if value.abs() >= 1000.0 {
                     return format::compact(value);
                 }

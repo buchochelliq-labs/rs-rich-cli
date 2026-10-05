@@ -82,7 +82,9 @@ jobs:
       # test_cli.py compares `python -m rs_rich` with the `rich` binary.
       - name: Build the rich binary
         run: |
-          cargo build -p rs-rich-cli --bin rich
+          # The wheel's CLI features (crates/rich-py/Cargo.toml: the defaults
+          # without `record`), so `rich doctor` reports the same build.
+          cargo build -p rs-rich-cli --bin rich --no-default-features --features fetch,art,mermaid,interact
           echo "RS_RICH_CLI_BIN=$PWD/target/debug/rich" >> "$GITHUB_ENV"
       - name: Install the bindings and the reference
         run: python -m pip install ./crates/rich-py "rich==15.0.0" pytest pillow

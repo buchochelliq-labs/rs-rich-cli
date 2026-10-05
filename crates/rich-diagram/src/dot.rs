@@ -21,6 +21,16 @@
 //! line, never drawn partially: node ports (`a:p`), HTML-like labels
 //! (`<…>`), `record` shapes, and more than one graph in a file.
 //!
+//! A source is read within fixed bounds, so a document cannot make it do
+//! unbounded work: at most [`MAX_SOURCE`] bytes, [`MAX_NODES`] nodes,
+//! [`MAX_EDGES`] edges (counted as `{ … }` groups expand) and
+//! [`MAX_NESTING`] levels of `{ … }` and subgraphs. Past any of them the
+//! source is refused with a [`DotError`], never drawn in part.
+//!
+//! Invisible nodes (`style=invis`) and nodes without an outline
+//! (`shape=plaintext`, `plain`, `none`) are drawn as boxes, with a note
+//! naming them; invisible edges are laid out but not drawn.
+//!
 //! [`Dot`] renders a source: the drawing, or the error and the source.
 
 use std::collections::HashMap;
@@ -35,7 +45,13 @@ use rich::style::Style;
 use rich::text::Text;
 
 use crate::graph::{Direction, Edge, Graph, Head, Node, Shape, Stroke};
+pub use crate::graph::{MAX_EDGES, MAX_NODES, MAX_SOURCE};
 use crate::layout::{draw, DrawError, Drawing};
+
+/// The deepest `{ … }` groups and subgraphs may nest. Each level is a
+/// recursive step of the parser, so deeper sources are refused rather than
+/// risk the stack.
+pub const MAX_NESTING: usize = 64;
 
 /// Why a DOT source was not read.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -139,6 +155,7 @@ enum Tok {
     Line,
 }
 
+#[derive(Clone)]
 struct Lexer<'a> {
     chars: std::iter::Peekable<std::str::Chars<'a>>,
     line: usize,
@@ -301,11 +318,13 @@ impl<'a> Lexer<'a> {
                         self.bump();
                         Ok(Some((Tok::Line, line)))
                     }
-                    Some(d) if d.is_ascii_digit() || d == '.' => Ok(Some((self.numeral(), line))),
+                    Some(d) if d.is_ascii_digit() || d == '.' => {
+                        Ok(Some((self.numeral(line)?, line)))
+                    }
                     _ => Err(DotError::syntax(line, "unexpected `-`")),
                 }
             }
-            c if c.is_ascii_digit() || c == '.' => Ok(Some((self.numeral(), line))),
+            c if c.is_ascii_digit() || c == '.' => Ok(Some((self.numeral(line)?, line))),
             c if id_start(c) => {
                 let mut text = String::new();
                 while let Some(&c) = self.chars.peek() {
@@ -351,20 +370,39 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    fn numeral(&mut self) -> Tok {
+    /// A numeral as Graphviz lexes one: `[-]?(.[0-9]+|[0-9]+(.[0-9]*)?)`.
+    /// A second `.` starts the next token (`1.2.3` is `1.2` then `.3`), and
+    /// a `.` without a digit is an error.
+    fn numeral(&mut self, line: usize) -> Result<Tok, DotError> {
         let mut text = String::new();
         if self.chars.peek() == Some(&'-') {
             text.push('-');
             self.bump();
         }
-        while let Some(&c) = self.chars.peek() {
-            if !(c.is_ascii_digit() || c == '.') {
-                break;
+        let mut digits = false;
+        let mut take_digits = |lexer: &mut Self, text: &mut String| {
+            while let Some(&c) = lexer.chars.peek() {
+                if !c.is_ascii_digit() {
+                    break;
+                }
+                digits = true;
+                text.push(c);
+                lexer.bump();
             }
-            text.push(c);
+        };
+        take_digits(self, &mut text);
+        if self.chars.peek() == Some(&'.') {
+            text.push('.');
             self.bump();
+            take_digits(self, &mut text);
         }
-        Tok::Id(text, false)
+        if !digits {
+            return Err(DotError::syntax(
+                line,
+                format!("expected a digit with the `.` in `{text}`"),
+            ));
+        }
+        Ok(Tok::Id(text, false))
     }
 }
 
@@ -405,6 +443,11 @@ struct Parser<'a> {
     ids: HashMap<String, usize>,
     nodes: Vec<(String, Attrs)>,
     edges: Vec<(usize, usize, Attrs)>,
+    /// With `strict`, each edge's index in `edges` by its ends (the lower
+    /// index first when undirected), so a repeat merges without a scan.
+    edge_index: HashMap<(usize, usize), usize>,
+    /// `{ … }` groups and subgraphs open around the current statement.
+    depth: usize,
     scopes: Vec<Scope>,
     clusters: Vec<Cluster>,
     rank_noted: bool,
@@ -582,12 +625,10 @@ impl<'a> Parser<'a> {
         }
         // `key = value` sets a graph attribute.
         if matches!(self.peek()?, Some(Tok::Id(..))) {
-            let mut ahead = self.lexer.chars.clone();
-            // The token after the peeked one: only `=` matters.
-            while ahead.peek().is_some_and(|c| c.is_whitespace()) {
-                ahead.next();
-            }
-            if ahead.peek() == Some(&'=') {
+            // The token after the peeked one, past any comments: only `=`
+            // matters.
+            let mut ahead = self.lexer.clone();
+            if ahead.skip().is_ok() && ahead.chars.peek() == Some(&'=') {
                 let key = self.id("an attribute name")?;
                 self.expect(Tok::Eq, "`=`")?;
                 let value = self.id("an attribute value")?;
@@ -646,31 +687,51 @@ impl<'a> Parser<'a> {
         for (key, value) in &attrs {
             set(&mut edge_attrs, key, value);
         }
-        for pair in groups.windows(2) {
+        // Groups expand to every pair: counted edge by edge, so a large
+        // cross product is refused as it grows, not after.
+        for (pair, &op_line) in groups.windows(2).zip(&lines[1..]) {
             for &from in &pair[0] {
                 for &to in &pair[1] {
-                    self.add_edge(from, to, &edge_attrs);
+                    self.add_edge(from, to, &edge_attrs, op_line)?;
                 }
             }
         }
         Ok(())
     }
 
-    fn add_edge(&mut self, from: usize, to: usize, attrs: &Attrs) {
+    fn add_edge(
+        &mut self,
+        from: usize,
+        to: usize,
+        attrs: &Attrs,
+        line: usize,
+    ) -> Result<(), DotError> {
+        let key = if self.directed {
+            (from, to)
+        } else {
+            (from.min(to), from.max(to))
+        };
         if self.strict {
-            let directed = self.directed;
-            if let Some((_, _, existing)) = self
-                .edges
-                .iter_mut()
-                .find(|(a, b, _)| (*a == from && *b == to) || (!directed && *a == to && *b == from))
-            {
+            if let Some(&index) = self.edge_index.get(&key) {
+                let existing = &mut self.edges[index].2;
                 for (key, value) in attrs {
                     set(existing, key, value);
                 }
-                return;
+                return Ok(());
             }
         }
+        if self.edges.len() >= MAX_EDGES {
+            return Err(DotError::unsupported(
+                line,
+                format!("a graph of more than {MAX_EDGES} edges"),
+                "`{ … }` groups count each edge they make; split the graph",
+            ));
+        }
+        if self.strict {
+            self.edge_index.insert(key, self.edges.len());
+        }
         self.edges.push((from, to, attrs.clone()));
+        Ok(())
     }
 
     /// One end of an edge: a node, or a subgraph's nodes.
@@ -689,7 +750,7 @@ impl<'a> Parser<'a> {
                 "connect the node itself",
             ));
         }
-        Ok(vec![self.node(&id)])
+        Ok(vec![self.node(&id, line)?])
     }
 
     fn subgraph(&mut self) -> Result<Vec<usize>, DotError> {
@@ -732,6 +793,13 @@ impl<'a> Parser<'a> {
                 "repeat its nodes",
             ));
         }
+        if self.depth >= MAX_NESTING {
+            return Err(DotError::unsupported(
+                line,
+                format!("nesting deeper than {MAX_NESTING} levels of `{{ … }}` and subgraphs"),
+                "flatten the subgraphs",
+            ));
+        }
         self.take()?;
         let inherited = self.scopes.last().cloned().unwrap_or_default();
         self.scopes.push(Scope {
@@ -739,13 +807,19 @@ impl<'a> Parser<'a> {
             ..inherited
         });
         self.open.push(index);
+        self.depth += 1;
         let members = self.statements();
+        self.depth -= 1;
         self.open.pop();
         let scope = self.scopes.pop().unwrap_or_default();
         let members = members?;
         if let Some(index) = index {
             if let Some(label) = get(&scope.graph, "label") {
-                self.clusters[index].label = Some(label_text(label, &name, ""));
+                let names = Names {
+                    graph: Some(&name),
+                    ..Names::default()
+                };
+                self.clusters[index].label = Some(label_text(label, &names));
             }
         }
         Ok(members)
@@ -762,9 +836,16 @@ impl<'a> Parser<'a> {
     }
 
     /// The index of node `id`, adding it with the defaults in force.
-    fn node(&mut self, id: &str) -> usize {
+    fn node(&mut self, id: &str, line: usize) -> Result<usize, DotError> {
         if let Some(&index) = self.ids.get(id) {
-            return index;
+            return Ok(index);
+        }
+        if self.nodes.len() >= MAX_NODES {
+            return Err(DotError::unsupported(
+                line,
+                format!("a graph of more than {MAX_NODES} nodes"),
+                "split the graph",
+            ));
         }
         let defaults = self
             .scopes
@@ -773,7 +854,7 @@ impl<'a> Parser<'a> {
             .unwrap_or_default();
         self.ids.insert(id.to_string(), self.nodes.len());
         self.nodes.push((id.to_string(), defaults));
-        self.nodes.len() - 1
+        Ok(self.nodes.len() - 1)
     }
 
     fn node_attr(
@@ -865,10 +946,22 @@ fn check_attr(key: &str, value: &str, line: usize) -> Result<(), DotError> {
     Ok(())
 }
 
-/// A label's text: `\n`, `\l` and `\r` break lines (a trailing one is
-/// dropped), `\N` is the node's name and `\G` the graph's, and any other
-/// escaped character stands for itself.
-fn label_text(raw: &str, node: &str, graph: &str) -> String {
+/// The names a label's escapes stand for, where the labelled object has
+/// them: `\N` a node's, `\G` the graph's (or a cluster's own), and on an
+/// edge `\T` its tail's, `\H` its head's and `\E` the edge's (`a->b`).
+#[derive(Default)]
+struct Names<'a> {
+    node: Option<&'a str>,
+    graph: Option<&'a str>,
+    /// Tail, head, and whether the graph is directed.
+    edge: Option<(&'a str, &'a str, bool)>,
+}
+
+/// A label's text, as Graphviz substitutes it: `\n`, `\l` and `\r` break
+/// lines (a trailing one is dropped), `\N`, `\G`, `\T`, `\H` and `\E` are
+/// the [`Names`] the object has, and any other escaped character (one of
+/// those the object lacks included) stands for itself.
+fn label_text(raw: &str, names: &Names<'_>) -> String {
     let mut out = String::new();
     let mut chars = raw.chars();
     while let Some(c) = chars.next() {
@@ -878,8 +971,20 @@ fn label_text(raw: &str, node: &str, graph: &str) -> String {
         }
         match chars.next() {
             Some('n' | 'l' | 'r') => out.push('\n'),
-            Some('N') => out.push_str(node),
-            Some('G') => out.push_str(graph),
+            Some('N') if names.node.is_some() => out.push_str(names.node.unwrap_or_default()),
+            Some('G') if names.graph.is_some() => out.push_str(names.graph.unwrap_or_default()),
+            Some(escape @ ('T' | 'H' | 'E')) if names.edge.is_some() => {
+                let (tail, head, directed) = names.edge.unwrap_or_default();
+                match escape {
+                    'T' => out.push_str(tail),
+                    'H' => out.push_str(head),
+                    _ => {
+                        out.push_str(tail);
+                        out.push_str(if directed { "->" } else { "--" });
+                        out.push_str(head);
+                    }
+                }
+            }
             Some(other) => out.push(other),
             None => out.push('\\'),
         }
@@ -934,6 +1039,13 @@ fn arrow(name: &str) -> Head {
 /// assert_eq!(error.to_string(), "line 2: a node port (`a:…`) is not supported (connect the node itself)");
 /// ```
 pub fn parse(source: &str) -> Result<DotGraph, DotError> {
+    if source.len() > MAX_SOURCE {
+        return Err(DotError::unsupported(
+            1,
+            format!("a source over {MAX_SOURCE} bytes ({})", source.len()),
+            "split the graph",
+        ));
+    }
     let mut parser = Parser {
         lexer: Lexer::new(source),
         peeked: None,
@@ -943,6 +1055,8 @@ pub fn parse(source: &str) -> Result<DotGraph, DotError> {
         ids: HashMap::new(),
         nodes: Vec::new(),
         edges: Vec::new(),
+        edge_index: HashMap::new(),
+        depth: 0,
         scopes: Vec::new(),
         clusters: Vec::new(),
         rank_noted: false,
@@ -965,7 +1079,14 @@ pub fn parse(source: &str) -> Result<DotGraph, DotError> {
         .iter()
         .map(|(id, attrs)| {
             let label = match get(attrs, "label") {
-                Some(raw) => label_text(raw, id, &graph_name),
+                Some(raw) => {
+                    let names = Names {
+                        node: Some(id),
+                        graph: Some(&graph_name),
+                        edge: None,
+                    };
+                    label_text(raw, &names)
+                }
                 None => id.clone(),
             };
             let style = get(attrs, "style").unwrap_or("");
@@ -984,8 +1105,13 @@ pub fn parse(source: &str) -> Result<DotGraph, DotError> {
         .iter()
         .map(|(from, to, attrs)| {
             let mut edge = Edge::new(*from, *to);
+            let names = Names {
+                node: None,
+                graph: Some(&graph_name),
+                edge: Some((&parser.nodes[*from].0, &parser.nodes[*to].0, directed)),
+            };
             edge.label = get(attrs, "label")
-                .map(|raw| label_text(raw, "", &graph_name))
+                .map(|raw| label_text(raw, &names))
                 .filter(|label| !label.is_empty());
             let style = get(attrs, "style").unwrap_or("");
             edge.stroke = style
@@ -1038,8 +1164,46 @@ pub fn parse(source: &str) -> Result<DotGraph, DotError> {
     if parser.rank_noted {
         notes.push("`rank` constraints are not applied".into());
     }
+    let named = |test: &dyn Fn(&Attrs) -> bool| -> Vec<&str> {
+        parser
+            .nodes
+            .iter()
+            .filter(|(_, attrs)| test(attrs))
+            .map(|(id, _)| id.as_str())
+            .collect()
+    };
+    let invisible = named(&|attrs| {
+        get(attrs, "style").is_some_and(|style| {
+            style
+                .split(',')
+                .any(|s| matches!(s.trim(), "invis" | "invisible"))
+        })
+    });
+    if !invisible.is_empty() {
+        notes.push(format!(
+            "invisible nodes (`style=invis`) are drawn: {}",
+            invisible.join(", ")
+        ));
+    }
+    let bare = named(&|attrs| {
+        get(attrs, "shape").is_some_and(|shape| {
+            ["plaintext", "plain", "none"]
+                .iter()
+                .any(|s| shape.eq_ignore_ascii_case(s))
+        })
+    });
+    if !bare.is_empty() {
+        notes.push(format!(
+            "nodes without an outline (`shape=plaintext`, `plain` or `none`) are drawn boxed: {}",
+            bare.join(", ")
+        ));
+    }
+    let names = Names {
+        graph: Some(&graph_name),
+        ..Names::default()
+    };
     let label = get(&graph_attrs, "label")
-        .map(|raw| label_text(raw, "", &graph_name))
+        .map(|raw| label_text(raw, &names))
         .filter(|label| !label.is_empty());
     Ok(DotGraph {
         graph: Graph::from_parts(direction, nodes, edges),
@@ -1121,7 +1285,8 @@ impl Dot {
         console: &Console,
         options: &ConsoleOptions,
     ) -> Vec<Segment> {
-        let mut segments = note(reason, console, options);
+        let ascii = self.ascii.unwrap_or_else(|| console.ascii_only());
+        let mut segments = note(reason, ascii, console, options);
         // The source comes from a document: drop control characters before
         // showing it.
         let source: String = self
@@ -1198,15 +1363,19 @@ impl Dot {
             notes.push(format!("cropped to {width} of {} columns", drawing.width));
         }
         for text in notes {
-            segments.extend(note(&text, console, options));
+            segments.extend(note(&text, ascii, console, options));
         }
         segments
     }
 }
 
-/// A dim note, wrapped to the width, ending its line.
-fn note(text: &str, console: &Console, options: &ConsoleOptions) -> Vec<Segment> {
-    let text: String = text.chars().filter(|c| !c.is_control()).collect();
+/// A dim note, wrapped to the width, ending its line. With `ascii`, the
+/// notes' own non-ASCII characters (`…`, `×`) are spelled in ASCII.
+fn note(text: &str, ascii: bool, console: &Console, options: &ConsoleOptions) -> Vec<Segment> {
+    let mut text: String = text.chars().filter(|c| !c.is_control()).collect();
+    if ascii {
+        text = text.replace('…', "...").replace('×', "x");
+    }
     let style = Style::parse("dim italic").expect("valid style");
     let mut segments = Text::styled(format!("DOT: {text}"), style).rich_render(console, options);
     end_line(&mut segments);

@@ -398,3 +398,67 @@ fn the_new_commands_have_help() {
     let out = stdout(&run(&["deps", "--help"]));
     assert!(out.contains("--why") && out.contains("--metadata"), "{out}");
 }
+
+#[test]
+fn deps_why_says_when_the_chosen_kinds_never_reach_the_crate() {
+    let metadata = source("cargo-metadata.json");
+    // `insta` is only demo-app's dev dependency.
+    let out = run(&[
+        "deps",
+        "--metadata",
+        &metadata,
+        "--why",
+        "insta",
+        "--no-dev",
+    ]);
+    assert_eq!(out.status.code(), Some(4), "{out:?}");
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains("insta is reached only through dev-dependencies"),
+        "{stderr}"
+    );
+    assert!(out.stdout.is_empty(), "{out:?}");
+    // With dev dependencies it is found.
+    let out = stdout(&run(&["deps", "--metadata", &metadata, "--why", "insta"]));
+    assert!(out.starts_with("insta v1.40.0"), "{out}");
+}
+
+/// `cargo metadata` honours the project's `.cargo/config.toml`; `rich deps`
+/// turns off its `rustc` wrappers, which would otherwise run.
+#[cfg(unix)]
+#[test]
+fn deps_does_not_run_the_projects_rustc_wrappers() {
+    use std::os::unix::fs::PermissionsExt;
+    let (root, work, home) = setup();
+    let project = root.path().join("project");
+    std::fs::create_dir_all(project.join("src")).unwrap();
+    std::fs::create_dir_all(project.join(".cargo")).unwrap();
+    std::fs::write(
+        project.join("Cargo.toml"),
+        "[package]\nname = \"wrapped\"\nversion = \"0.1.0\"\nedition = \"2021\"\n",
+    )
+    .unwrap();
+    std::fs::write(project.join("src/main.rs"), "fn main() {}\n").unwrap();
+    let marker = root.path().join("wrapper-ran");
+    let wrapper = project.join("wrapper.sh");
+    std::fs::write(
+        &wrapper,
+        format!("#!/bin/sh\ntouch '{}'\nexec \"$@\"\n", marker.display()),
+    )
+    .unwrap();
+    std::fs::set_permissions(&wrapper, std::fs::Permissions::from_mode(0o755)).unwrap();
+    std::fs::write(
+        project.join(".cargo/config.toml"),
+        format!(
+            "[build]\nrustc-wrapper = '{0}'\nrustc-workspace-wrapper = '{0}'\n",
+            wrapper.display()
+        ),
+    )
+    .unwrap();
+    // Cargo reads `.cargo/config.toml` from the directory it runs in.
+    let _ = work;
+    let out = run_in(&project, &home, &["deps"]);
+    let text = stdout(&out);
+    assert!(text.starts_with("wrapped v0.1.0"), "{text}");
+    assert!(!marker.exists(), "the project's rustc wrapper ran");
+}

@@ -296,9 +296,15 @@ does: `Select` (and the views built on it), `Input`, `Confirm`, `Pager`,
 container. Each has a `rebind` of its own, and its context is the one its
 `keymap()` lists (`confirm`, `pager` and `pager-search`, `textarea`,
 `color`, `form` with `form-choice` and `form-toggle`, `file`). A
-`Confirm`'s choices are actions `choose-ID`; rebinding a `Form`'s `next`
-away from Enter also takes Enter's submit on the last field, and Ctrl+S
-still submits.
+`Confirm`'s choices are actions `choose-ID` (a choice's key answers in
+either case); rebinding a `Form`'s `next` away from Enter also takes
+Enter's submit on the last field, and Ctrl+S still submits. A
+`FilePicker`'s own actions (`open`, `up` to the parent directory, `hidden`)
+rebind on the picker only; write `select.up` (and so on) for its list's.
+
+A key rebound onto an action takes it from any action that only declared
+it in the same context: after `Pager::rebind("scroll-down", keys("n"))`,
+`n` scrolls, and next-match has no key until you give it one.
 
 ## Testing a composition
 

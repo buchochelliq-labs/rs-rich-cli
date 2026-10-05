@@ -81,8 +81,9 @@ Build your own from the same pieces:
   child's coordinates; Tab and Shift+Tab move focus through nested
   containers.
 - **A keymap registry**: every component declares its keys (action,
-  description, context), rebindable per component or process-wide from
-  `context.action = keys` overrides, and listed for help and hints.
+  description, context), rebindable per component (with its
+  `rebind`) or process-wide from `context.action = keys` overrides, and
+  listed for help and hints.
 - **A public kit**: the line helpers and `ListState`, `ScrollState`,
   `FilterState`, `TextBuffer`, `Divider` and `ActionMenu`, which the
   built-ins are made of. See `examples/custom_component.rs`.
@@ -104,6 +105,11 @@ What else is in the box:
 - **Painting cell by cell.** Views are painted through
   `rich_ext::frame::Frame::diff`: only changed cells are written, so an idle
   loop writes nothing.
+- **Images in the cells.** Given a graphics source (`EventLoop::graphics`,
+  or `run_with_graphics` for one component), the painter draws micro assets
+  as Kitty, iTerm2 or Sixel images over their cells; with the `micro`
+  feature, `AssetPicker` lists micro assets and `StatusItem::micro` puts one
+  in the status bar.
 - **A session that always restores the terminal.** Raw mode, the alternate
   screen, mouse and bracketed paste are undone on every way out: finishing,
   `?`, Ctrl+C and a panic. `Flow::Handoff(command)` gives the terminal to

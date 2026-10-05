@@ -30,8 +30,12 @@ Settings are keyword arguments. Three are shared:
   line charts), `"blocks"`, `"braille"` or `"ascii"`. A console that is not
   UTF-8 always gets ASCII.
 - `format`: how values are written: `"compact"` (`1.2k`, `3.4M`; the
-  default) or a number of decimals. `chart_format(value, format)` writes one.
+  default) or a number of decimals from 0 to 17 (another number raises
+  `ValueError`). `chart_format(value, format)` writes one.
 - `None` in a list of values is a gap: it is skipped, never drawn as zero.
+- Arguments that take several items (`gauges`, `bands`, `columns`,
+  `states`, `milestones`, a matrix row's state names) take any iterable,
+  such as a list, a tuple or a generator, but not a string.
 
 `ChartBar`, `ChartState` and `TimelineSpan` are also exported as `Bar`,
 `State` and `Span`, their Rust names. Styles come from the theme keys in
@@ -39,6 +43,8 @@ Settings are keyword arguments. Three are shared:
 
 From the shell, `rich chart` draws the same charts from CSV, JSON or stdin
 ([`rich chart`](https://buchochelliq-labs.github.io/rs-rich-cli/guide/ext/charts/#from-the-shell-rich-chart)).
+The [Rust charts guide](https://buchochelliq-labs.github.io/rs-rich-cli/guide/ext/charts/)
+has a screenshot of each chart.
 
 ## Sparklines, bars and histograms
 
@@ -86,7 +92,8 @@ LineChart(series=None, *, height=None, width=None, x_range=None, y_range=None,
           charset="auto", legend=True, x_format=None, y_format=None)
 ```
 
-`points` is `(x, y)` pairs, or plain numbers at x = 0, 1, 2, ... `kind` is
+`points` is `(x, y)` pairs (tuples, lists or any other sequence of two), or
+plain numbers at x = 0, 1, 2, ... `kind` is
 `"line"` or `"scatter"`. In Braille each cell holds 2×4 points; in ASCII the
 chart plots with markers at cell resolution.
 
@@ -211,7 +218,9 @@ Timeline(spans=None, *, milestones=None, range=None, charset="auto", format=None
 ```
 
 Spans are `TimelineSpan`s or `(row, start, end)` triples; spans on one row
-that overlap stack. Milestones are `(label, at)` pairs.
+that overlap stack. Milestones are `(label, at)` pairs. `None` as a start,
+an end or a milestone's `at` is a gap, as in a list of values: the span's
+row is kept, but nothing is drawn for it.
 
 ```python
 console.print(chart.Timeline(

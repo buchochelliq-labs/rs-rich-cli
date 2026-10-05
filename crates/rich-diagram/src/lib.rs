@@ -50,5 +50,8 @@ pub mod plugin;
 
 pub use diagram::Diagram;
 pub use dot::{Dot, DotError, DotGraph};
-pub use graph::{Direction, Edge, Graph, Head, Node, Shape, Stroke, MAX_EDGE_LENGTH};
+pub use graph::{
+    Direction, Edge, Graph, Head, Node, Shape, Stroke, MAX_EDGES, MAX_EDGE_LENGTH, MAX_NODES,
+    MAX_SOURCE,
+};
 pub use layout::{draw, DrawError, Drawing};

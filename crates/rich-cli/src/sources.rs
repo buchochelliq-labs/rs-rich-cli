@@ -103,6 +103,15 @@ type Failure = (ExitClass, String);
 /// `cargo metadata` output: from `--metadata FILE` (`-` for stdin), else by
 /// running `cargo metadata --format-version 1` for the manifest the resource
 /// names (a `Cargo.toml` or its directory), else for the working directory.
+///
+/// Cargo runs with the configuration of the directory it is started in
+/// (`.cargo/config.toml` up the tree), which can name programs. `cargo
+/// metadata` runs `rustc` to learn the target; the project's `rustc`
+/// wrappers are turned off for it (an empty `RUSTC_WRAPPER` and
+/// `RUSTC_WORKSPACE_WRAPPER` override the configuration), since metadata
+/// needs no wrapper. What remains (a `build.rustc` naming another compiler,
+/// the toolchain a `rust-toolchain.toml` selects, fetching an index or git
+/// dependencies) is Cargo's own behaviour; `--metadata FILE` runs nothing.
 fn metadata(cli: &Cli) -> Result<String, Failure> {
     let options = &cli.graph_sources;
     if let Some(file) = &options.metadata {
@@ -120,6 +129,14 @@ fn metadata(cli: &Cli) -> Result<String, Failure> {
     let cargo = std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into());
     let mut command = std::process::Command::new(cargo);
     command.args(["metadata", "--format-version", "1"]);
+    for wrapper in [
+        "RUSTC_WRAPPER",
+        "CARGO_BUILD_RUSTC_WRAPPER",
+        "RUSTC_WORKSPACE_WRAPPER",
+        "CARGO_BUILD_RUSTC_WORKSPACE_WRAPPER",
+    ] {
+        command.env(wrapper, "");
+    }
     if let Some(resource) = &cli.resource {
         let mut manifest = fs_path(resource);
         if manifest.is_dir() {
@@ -164,9 +181,19 @@ pub(crate) fn deps(cli: &Cli) -> Result<Box<dyn Renderable>, Failure> {
         kinds.pop();
     }
     if let Some(spec) = &options.why {
-        let why = WhyTree::new(graph, spec)
-            .map_err(|err| (ExitClass::Data, err.to_string()))?
-            .kinds(&kinds);
+        let reachable = graph.reachable(&[DepKind::Normal, DepKind::Build, DepKind::Dev]);
+        let why = WhyTree::new(graph, spec).map_err(|err| (ExitClass::Data, err.to_string()))?;
+        let named = why.targets().to_vec();
+        let why = why.kinds(&kinds);
+        if why.targets().is_empty() {
+            // Nothing to draw: say why rather than print nothing.
+            let message = if options.no_dev && named.iter().any(|&p| reachable[p]) {
+                format!("{spec} is reached only through dev-dependencies (drop --no-dev)")
+            } else {
+                format!("{spec} is not reached from the roots through the dependency kinds chosen")
+            };
+            return Err((ExitClass::Data, message));
+        }
         if options.graph {
             return Ok(Box::new(Diagram::new(why_diagram(&why, &kinds))));
         }

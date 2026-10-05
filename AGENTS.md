@@ -34,10 +34,13 @@ rich-cli ──▶ rich-diagram                          (`rich dot`, ```dot fen
              rich-lumis   ──▶ rich-plugin-api      (a plugin crate: the lumis/tree-sitter highlighter)
              rich-record  ──▶ rich-ext ──▶ rich    (tapes: `rich record`; PTY, VT emulator, renderers)
 rich-cli ──▶ rich-interact ──▶ rich-ext ──▶ rich   (interactive components: session, event loop, viewport;
-                                                 `rich choose`/`filter`/`input`/`confirm`/`pager`)
-rich-micro ──▶ rich-ext ──▶ rich      (micro assets: model, `.richmicro` packages, layered registry,
-           └──▶ rich-plugin-api        `:micro:name:` markup; no CLI command yet)
-rich-py  ──▶ rich          (Python bindings; outside the workspace, released to PyPI only)
+                                                 `rich choose`/`filter`/`input`/`pager`/`explore`/…)
+rich-cli ──▶ rich-micro ──▶ rich-ext ──▶ rich      (micro assets: model, `.richmicro` packages, layered
+                 ├──▶ rich-plugin-api   registry, `:micro:name:` markup, terminal graphics;
+                 └──▶ rich-art          `rich micro`, behind the CLI's `art` feature)
+rich-cli ──▶ rich-art ──▶ rich                     (FIGlet, images, GIFs, image diffs; the CLI's `art` feature)
+rich-py  ──▶ rich, rich-ext, rich-art, rich-mermaid, rich-diagram, rich-micro, rich-interact, rich-cli
+                           (Python bindings; outside the workspace, released to PyPI only)
 ```
 
 If a change would make `crates/rich` diverge from upstream `rich`, it is almost

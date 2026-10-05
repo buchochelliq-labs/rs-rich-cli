@@ -247,6 +247,74 @@ fn a_value_that_is_not_a_number_names_its_row_and_column() {
     assert!(report.contains("\"code\":\"data\""), "{report}");
 }
 
+/// `1e400`, `nan` and `inf` read as floats, but no chart can place them:
+/// refused like any other value that is not a number.
+#[test]
+fn a_value_that_is_not_finite_names_its_row_and_column() {
+    for bad in ["1e400", "nan", "inf", "-inf"] {
+        let csv = format!("t,v\n1,2\n2,{bad}\n");
+        let (code, stderr) = failure(&run_with(
+            &[("bad.csv", &csv)],
+            "",
+            &["chart", "bad.csv", "--y", "v"],
+        ));
+        assert_eq!(code, Some(4), "{bad}");
+        assert!(
+            stderr.contains(&format!(
+                "row 2, column \"v\": \"{bad}\" is not a finite number"
+            )),
+            "{stderr}"
+        );
+    }
+    // Bare numbers on stdin too.
+    let (code, stderr) = failure(&run_with(&[], "1 2 inf\n", &["chart", "-"]));
+    assert_eq!(code, Some(4));
+    assert!(
+        stderr.contains("row 3, column \"value\": \"inf\" is not a finite number"),
+        "{stderr}"
+    );
+}
+
+#[test]
+fn a_row_longer_than_the_header_is_refused() {
+    let csv = "t,v\n1,2\n2,3,4\n";
+    let (code, stderr) = failure(&run_with(
+        &[("long.csv", csv)],
+        "",
+        &["chart", "long.csv", "--y", "v"],
+    ));
+    assert_eq!(code, Some(4));
+    assert!(
+        stderr.contains("row 2 has 3 cells, but the header names 2 columns"),
+        "{stderr}"
+    );
+    let json = r#"[["t","v"],[1,2],[2,3,4]]"#;
+    let (code, stderr) = failure(&run_with(
+        &[("long.json", json)],
+        "",
+        &["chart", "long.json", "--y", "v"],
+    ));
+    assert_eq!(code, Some(4));
+    assert!(
+        stderr.contains("row 2 has 3 cells, but the header names 2 columns"),
+        "{stderr}"
+    );
+}
+
+/// `rich chart years.csv --x year` spreads the years along the axis and
+/// labels them in full, not as `2.0k`.
+#[test]
+fn years_on_x_are_labelled_in_full() {
+    let csv = "year,revenue\n2015,5\n2016,6\n2017,8\n2018,7\n2019,9\n2020,12\n2021,11\n2022,13\n2023,15\n2024,14\n";
+    let out = stdout(&run_with(
+        &[("years.csv", csv)],
+        "",
+        &["chart", "years.csv", "--x", "year"],
+    ));
+    assert!(out.contains("2024"), "{out}");
+    assert!(!out.contains("2.0k") && !out.contains("2.1k"), "{out}");
+}
+
 #[test]
 fn data_with_nothing_to_chart_is_refused() {
     let (code, stderr) = failure(&run_with(&[], "", &["chart"]));

@@ -13,7 +13,8 @@ overrides it; a pipe always gets the text), animates where it can, and
 carries images through `rich-ext`'s live regions and the interactive
 painter. It also has the image pipeline that makes packages from any
 picture (`pipeline`, `create`) and a built-in library (`builtin`), which
-`rich micro` in the `rich` CLI puts on the command line.
+`rich micro` in the `rich` CLI puts on the command line. **0.0.2** adds
+`:micro:name:` in Markdown (`PreparedMarkdown`, `MarkdownView`).
 
 ```rust
 use rich::Console;
@@ -72,6 +73,10 @@ order wins. `MicroRegistry::explain(name)` shows the chain.
   as written and come back as diagnostics.
 - `render_markup` / `markup_text` / `PreparedMarkup` swap tokens out before
   core parses the markup, so `:micro:ship::fire:` gets both.
+- `PreparedMarkdown` does the same for a Markdown document: each token
+  outside code spans and fenced blocks becomes stand-in cells of the asset's
+  width, and its `view(Markdown::new(prepared.source()))` turns them back
+  into placeholders after rendering.
 - `MicroExt` on `Text` (`append_micro`, `expand_micro`), the `MicroAssetRef`
   renderable, and `MicroTransform` / `MicroPlugin` for transform pipelines.
 

@@ -215,7 +215,9 @@ impl KpiCard {
     fn delta_text(&self, ascii: bool) -> Option<String> {
         let delta = self.delta?;
         let v = delta.value();
-        let arrow = match (v.partial_cmp(&0.0), ascii) {
+        // NaN, or a change too large for an `f64`: flat, with no sign.
+        let direction = v.is_finite().then(|| v.partial_cmp(&0.0)).flatten();
+        let arrow = match (direction, ascii) {
             (Some(std::cmp::Ordering::Greater), false) => "▲",
             (Some(std::cmp::Ordering::Greater), true) => "^",
             (Some(std::cmp::Ordering::Less), false) => "▼",
@@ -233,7 +235,7 @@ impl KpiCard {
                 }
             }
         };
-        let sign = if v > 0.0 && number != "0" && number != "0%" {
+        let sign = if v > 0.0 && v.is_finite() && number != "0" && number != "0%" {
             "+"
         } else {
             ""

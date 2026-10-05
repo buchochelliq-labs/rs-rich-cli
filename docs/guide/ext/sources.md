@@ -33,8 +33,14 @@ console.print(&WhyTree::new(graph, "syn@1.0.109").unwrap());
 A package already shown is marked `(*)` instead of repeated, build and dev
 dependencies sit under `[build-dependencies]` and `[dev-dependencies]`, and a
 crate resolved at more than one version is marked `(duplicate)` and coloured.
-`max_depth`, `kinds` and `duplicates_only` trim it; `summary(true)` lists the
-duplicates underneath.
+Dev dependencies are a root's only, as Cargo resolves them; a root is
+expanded in full at the top level (its dev dependencies included) even when
+it was already shown as another root's dependency, so `demo-core` above is
+listed again with what it uses. `max_depth`, `kinds` and `duplicates_only`
+trim it; `summary(true)` lists the duplicates underneath, counting only the
+versions reachable through the kinds followed. A branch deeper than 128
+levels (`deps::MAX_TREE_DEPTH`, far past any real graph) ends in a
+`… (deeper levels not shown …)` note.
 
 ```bash
 rich deps                         # runs cargo metadata in the working directory
@@ -75,7 +81,10 @@ demo-app v0.3.0
     └── insta v1.40.0
         ├── serde v1.0.210 (*)
         └── similar v2.6.0
-demo-core v0.3.0 (*)
+demo-core v0.3.0
+├── serde v1.0.210 (*)
+├── strum_macros v0.25.3 (*)
+└── thiserror v1.0.64 (*)
 duplicate: syn v1.0.109, v2.0.79
 ```
 
@@ -98,9 +107,40 @@ demo-app v0.3.0
 └── [dev-dependencies]
     └── insta v1.40.0
         └── serde v1.0.210 (*)
-demo-core v0.3.0 (*)
+demo-core v0.3.0
+├── serde v1.0.210 (*)
+├── strum_macros v0.25.3 (*)
+└── thiserror v1.0.64 (*)
 duplicate: syn v1.0.109, v2.0.79
 ```
+
+### Running Cargo
+
+Without `--metadata`, `rich deps` runs `cargo metadata --format-version 1`
+(`$CARGO`, else `cargo` on the `PATH`) in the working directory. Cargo runs
+there with **that directory's Cargo configuration**: every
+`.cargo/config.toml` from it up to the root, and the `rust-toolchain.toml`
+rustup honours. `cargo metadata` compiles nothing, but it does run `rustc`
+to learn the target, and it may fetch the registry index and git
+dependencies as Cargo always does (`rich deps` does not pass `--offline` or
+`--locked`; Cargo's own settings and `CARGO_NET_OFFLINE` apply).
+
+A configuration can name programs. `rich deps` turns off the ones `cargo
+metadata` would run without needing them: it sets `RUSTC_WRAPPER`,
+`CARGO_BUILD_RUSTC_WRAPPER`, `RUSTC_WORKSPACE_WRAPPER` and
+`CARGO_BUILD_RUSTC_WORKSPACE_WRAPPER` to empty for Cargo, which overrides a
+`build.rustc-wrapper` or `build.rustc-workspace-wrapper` in the project's
+configuration. What it cannot turn off is the rest of Cargo's behaviour: a
+`build.rustc` naming another program still runs as the compiler, and a
+`rust-toolchain.toml` still selects (and rustup may install) a toolchain.
+Note that Cargo reads the configuration of the directory it is started in,
+not the manifest's: `rich deps path/to/Cargo.toml` uses the working
+directory's configuration (and that of the directories above it).
+
+So in a checkout you do not trust, do not run `rich deps` there. Make the
+metadata where running Cargo is safe (`cargo metadata --format-version 1 >
+meta.json`, in a sandbox or a container) and read it with `rich deps
+--metadata meta.json`, which runs nothing.
 
 ### What pulls a crate in
 
@@ -118,6 +158,13 @@ rich deps --why syn@1.0.109
 syn v1.0.109 (duplicate)
 └── strum_macros v0.25.3
     └── demo-core v0.3.0
+```
+
+With `--no-dev`, a crate only dev dependencies pull in is not reached, and
+`rich deps --why` says so and exits 4 rather than print nothing:
+
+```text
+rich: insta is reached only through dev-dependencies (drop --no-dev)
 ```
 
 ### As a diagram
@@ -160,8 +207,13 @@ description. Array items (`[items]`, or `[0]`, `[1]` for tuples),
 
 A `$ref` within the document (`#/$defs/…`, `#/definitions/…`, any JSON
 pointer, or a `$anchor`) is resolved and drawn in place, marked `→ #/$defs/…`;
-one that refers back to a schema it is already inside is marked `(recursive)`
-instead of drawn again, and one to another document is shown, not fetched.
+one that refers back to a schema it is already inside (however the reference
+is spelled: `#/%24defs/x` is `#/$defs/x`) is marked `(recursive)` instead of
+drawn again, and one to another document is shown, not fetched. A definition
+shared through `$ref`s is drawn wherever it is used, which a small schema can
+make exponentially many places: the tree stops at 10,000 entries
+(`schema::MAX_ENTRIES`) and ends with a `… (the tree stops at 10000
+entries)` note.
 
 ```rust
 use rich::Console;
@@ -205,7 +257,11 @@ accepted: a new requirement, a removed enum value, a narrower type, a tighter
 bound, or a removed property the new version may refuse (through
 `additionalProperties: false` or a schema, or a `patternProperties` schema it
 matches; `true`, `{}` or no `additionalProperties` still accepts it). Keywords
-beside a local `$ref` are compared along with the schema it names.
+beside a local `$ref` are compared along with the schema it names. Shared
+definitions are compared wherever they are used, so the diff has a budget
+too: it stops after 10,000 changes (`schema::MAX_CHANGES`) or 100,000
+comparisons of differing schemas (`MAX_COMPARISONS`), and then says so in its
+summary (`(stopped after …: more may differ)`; `SchemaDiff::is_truncated`).
 `rich schema OLD NEW` prints it:
 
 ```bash

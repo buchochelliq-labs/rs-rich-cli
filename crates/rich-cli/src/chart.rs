@@ -124,20 +124,29 @@ impl Value {
         }
     }
 
-    /// The value as a number: `Ok(NaN)` for a gap, `Err` for text that does
-    /// not read as one.
-    fn number(&self) -> Result<f64, &str> {
-        match self {
-            Value::Missing => Ok(f64::NAN),
-            Value::Number(n) => Ok(*n),
+    /// The value as a number: `Ok(NaN)` for a gap, `Err` with why for text
+    /// that does not read as one, or reads as one no chart can place
+    /// (`1e400`, `nan`, `inf`).
+    fn number(&self) -> Result<f64, String> {
+        let (n, text) = match self {
+            Value::Missing => return Ok(f64::NAN),
+            Value::Number(n) => (*n, None),
             Value::Text(text) => {
                 let trimmed = text.trim();
                 if trimmed.is_empty() {
-                    Ok(f64::NAN)
-                } else {
-                    trimmed.parse().map_err(|_| text.as_str())
+                    return Ok(f64::NAN);
+                }
+                match trimmed.parse::<f64>() {
+                    Ok(n) => (n, Some(text.as_str())),
+                    Err(_) => return Err(format!("{text:?} is not a number")),
                 }
             }
+        };
+        if n.is_finite() {
+            Ok(n)
+        } else {
+            let text = text.map_or_else(|| n.to_string(), str::to_string);
+            Err(format!("{text:?} is not a finite number"))
         }
     }
 }
@@ -179,13 +188,19 @@ impl Data {
     }
 
     /// Whether every value in `column` reads as a number (gaps aside), and
-    /// at least one is there.
+    /// at least one is there. `inf` and `1e400` count, so a column of
+    /// numbers with one of them is charted and refused at that row.
     fn is_numeric(&self, column: usize) -> bool {
         let mut any = false;
         for row in 0..self.rows.len() {
-            match self.cell(row, column).number() {
-                Ok(n) => any |= !n.is_nan(),
-                Err(_) => return false,
+            match self.cell(row, column) {
+                Value::Missing => {}
+                Value::Number(_) => any = true,
+                Value::Text(text) if text.trim().is_empty() => {}
+                Value::Text(text) => match text.trim().parse::<f64>() {
+                    Ok(_) => any = true,
+                    Err(_) => return false,
+                },
             }
         }
         any
@@ -196,14 +211,10 @@ impl Data {
     fn numbers(&self, column: usize) -> Result<Vec<f64>, Failure> {
         (0..self.rows.len())
             .map(|row| {
-                self.cell(row, column).number().map_err(|text| {
+                self.cell(row, column).number().map_err(|why| {
                     (
                         ExitClass::Data,
-                        format!(
-                            "row {}, column {:?}: {text:?} is not a number",
-                            row + 1,
-                            self.columns[column]
-                        ),
+                        format!("row {}, column {:?}: {why}", row + 1, self.columns[column]),
                     )
                 })
             })
@@ -264,7 +275,16 @@ fn parse(content: &str, resource: &str) -> Result<Data, String> {
 fn parse_numbers(content: &str) -> Option<Data> {
     let rows: Option<Vec<Vec<Value>>> = content
         .split_whitespace()
-        .map(|token| token.parse().ok().map(|n| vec![Value::Number(n)]))
+        .map(|token| {
+            token.parse::<f64>().ok().map(|n| {
+                // Kept as written, so a refusal quotes it.
+                vec![if n.is_finite() {
+                    Value::Number(n)
+                } else {
+                    Value::Text(token.to_string())
+                }]
+            })
+        })
         .collect();
     let rows = rows?;
     (!rows.is_empty()).then(|| Data {
@@ -290,7 +310,7 @@ fn parse_csv(content: &str, fallback: Option<char>) -> Result<Data, String> {
     let header = rows[0]
         .iter()
         .any(|cell| !cell.trim().is_empty() && cell.trim().parse::<f64>().is_err());
-    let columns = if header {
+    let columns: Vec<String> = if header {
         rows.remove(0)
             .into_iter()
             .map(|c| c.trim().to_string())
@@ -299,6 +319,9 @@ fn parse_csv(content: &str, fallback: Option<char>) -> Result<Data, String> {
         let width = rows.iter().map(Vec::len).max().unwrap_or(0);
         (1..=width).map(|n| n.to_string()).collect()
     };
+    if header {
+        refuse_long_rows(&rows, columns.len())?;
+    }
     let rows = rows
         .into_iter()
         .map(|row| {
@@ -314,6 +337,20 @@ fn parse_csv(content: &str, fallback: Option<char>) -> Result<Data, String> {
         })
         .collect();
     Ok(Data { columns, rows })
+}
+
+/// A row with more cells than the header names columns has values no
+/// column holds: refused, naming the row (counted from 1, after the
+/// header) rather than dropping them.
+fn refuse_long_rows<T>(rows: &[Vec<T>], columns: usize) -> Result<(), String> {
+    match rows.iter().position(|row| row.len() > columns) {
+        Some(n) => Err(format!(
+            "row {} has {} cells, but the header names {columns} columns",
+            n + 1,
+            rows[n].len()
+        )),
+        None => Ok(()),
+    }
 }
 
 /// JSON: an array of records, of numbers, or of arrays (the first a header
@@ -400,12 +437,15 @@ fn json_to_data(document: serde_json::Value) -> Result<Data, String> {
                 .first()
                 .and_then(Json::as_array)
                 .is_some_and(|first| !first.is_empty() && first.iter().all(Json::is_string));
-            let columns = if header {
+            let columns: Vec<String> = if header {
                 rows.remove(0).iter().map(Value::label).collect()
             } else {
                 let width = rows.iter().map(Vec::len).max().unwrap_or(0);
                 (1..=width).map(|n| n.to_string()).collect()
             };
+            if header {
+                refuse_long_rows(&rows, columns.len())?;
+            }
             Ok(Data { columns, rows })
         }
         Json::Array(items) if items.iter().all(|i| !i.is_object() && !i.is_array()) => Ok(Data {

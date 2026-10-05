@@ -6,7 +6,10 @@ of Python's `rich`.
 - **Flowcharts as text.** `graph` / `flowchart` diagrams in every direction
   (`TD`, `TB`, `BT`, `LR`, `RL`), the common node shapes, and solid, thick,
   dotted and labelled edges, drawn with box-drawing characters (or ASCII). No
-  external tools.
+  external tools. Since 0.0.4 the layout lives in
+  [`rs-rich-diagram`](https://crates.io/crates/rs-rich-diagram), which also
+  draws graphs built in code and DOT sources the same way;
+  `Flowchart::to_graph` gives a parsed flowchart as its `Graph`.
 - **Every diagram type through `mmdc`.** With the off-by-default `mmdc`
   feature and `Backend::Mmdc`, Mermaid's own CLI
   ([`@mermaid-js/mermaid-cli`](https://github.com/mermaid-js/mermaid-cli), Node

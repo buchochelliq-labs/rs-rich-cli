@@ -200,6 +200,33 @@ fn exports_and_the_pager_get_the_fallback_on_a_graphics_terminal() {
 }
 
 #[test]
+fn watch_gets_the_fallback_on_a_graphics_terminal() {
+    // `--watch` repaints the screen on every change, so a drawn image (and
+    // the Kitty placeholder cells under it) would be left behind; it keeps
+    // the fallback, as one file and as several.
+    let dir = tempfile::tempdir().unwrap();
+    let home = dir.path().join("home");
+    std::fs::create_dir_all(&home).unwrap();
+    std::fs::write(dir.path().join("t.md"), "ok :micro:status/success:\n").unwrap();
+    std::fs::write(dir.path().join("u.md"), "also :micro:status/success:\n").unwrap();
+    let env = terminal_env(
+        false,
+        &[
+            ("HOME", home.to_str().unwrap()),
+            ("RICH_CELL_PIXELS", "8x16"),
+            ("RICH_MICRO", "kitty"),
+        ],
+    );
+    let runs: [&[&str]; 2] = [&["t.md", "--watch"], &["t.md", "u.md", "--watch"]];
+    for args in runs {
+        let shown = in_pty(RICH, args, dir.path(), &env, b"", Duration::from_secs(4));
+        assert!(shown.contains('✅'), "{args:?}: {shown:?}");
+        assert!(!shown.contains("\u{1b}_G"), "{args:?}: {shown:?}");
+        assert!(!shown.contains('\u{10eeee}'), "{args:?}: {shown:?}");
+    }
+}
+
+#[test]
 fn titles_captions_and_markdown_draw_on_a_graphics_terminal() {
     // 0.0.15 workstream 6: tokens outside `--print` draw as images too.
     let dir = tempfile::tempdir().unwrap();

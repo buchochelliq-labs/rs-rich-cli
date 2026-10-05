@@ -18,6 +18,15 @@ fn doctor_json_reports_redirected_capabilities_without_environment_secrets() {
     assert_eq!(report["terminal"]["no_color"], true);
     assert_eq!(report["terminal"]["color"], "none");
     assert_eq!(report["features"]["art"], cfg!(feature = "art"));
+    // Every optional feature is reported, not only the rendering ones.
+    for (name, on) in [
+        ("record", cfg!(feature = "record")),
+        ("interact", cfg!(feature = "interact")),
+        ("dylib-plugins", cfg!(feature = "dylib-plugins")),
+        ("wasm-plugins", cfg!(feature = "wasm-plugins")),
+    ] {
+        assert_eq!(report["features"][name], on, "{name}");
+    }
     assert_eq!(report["config"]["disabled"], true);
     assert_eq!(report["pager"]["source"], "MANPAGER");
     assert_eq!(report["pager"]["program"], "missing-pager");

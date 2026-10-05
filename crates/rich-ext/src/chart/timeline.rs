@@ -3,7 +3,8 @@
 use rich::measure::Measurement;
 use rich::{Console, ConsoleOptions, Renderable, Segment, Style};
 
-use super::axis::{exact_label, fit, AxisRequest};
+use super::axis::{exact_label, exact_labels, fit, AxisRequest};
+use super::scale::{along, units_past};
 use super::{
     cell_units, cells, has_colour, lines_to_segments, series_key, theme_style, truncate,
     user_style, Charset, Line, Scale, ValueFormat,
@@ -78,7 +79,7 @@ struct Piece {
 
 impl Piece {
     fn hi(&self) -> f64 {
-        self.lo + self.cols.saturating_sub(1) as f64 * self.unit
+        along(self.lo, self.cols.saturating_sub(1) as f64, self.unit)
     }
 
     /// The columns whose centre falls in `start..=end`.
@@ -86,8 +87,10 @@ impl Piece {
         if self.unit <= 0.0 {
             return (start <= self.lo && self.lo <= end).then_some((self.col0, self.col0));
         }
-        let first = ((start - self.lo) / self.unit - 1e-9).ceil().max(0.0);
-        let last = ((end - self.lo) / self.unit + 1e-9)
+        let first = (units_past(start, self.lo, self.unit) - 1e-9)
+            .ceil()
+            .max(0.0);
+        let last = (units_past(end, self.lo, self.unit) + 1e-9)
             .floor()
             .min(self.cols as f64 - 1.0);
         (first <= last).then(|| (self.col0 + first as usize, self.col0 + last as usize))
@@ -98,9 +101,9 @@ impl Piece {
         if self.unit <= 0.0 {
             return (self.col0, (value - self.lo).abs());
         }
-        let k = ((value - self.lo) / self.unit).round();
-        let k = k.clamp(0.0, self.cols as f64 - 1.0);
-        let off = ((value - self.lo) / self.unit - k).abs();
+        let at = units_past(value, self.lo, self.unit);
+        let k = at.round().clamp(0.0, self.cols as f64 - 1.0);
+        let off = (at - k).abs();
         (self.col0 + k as usize, off)
     }
 }
@@ -138,7 +141,7 @@ impl Mapping {
             }
         }
         covered.unwrap_or_else(|| {
-            let c = self.point((start + end) / 2.0);
+            let c = self.point(start * 0.5 + end * 0.5);
             (c, c)
         })
     }
@@ -183,7 +186,8 @@ impl Mapping {
 ///   each value (`20s`).
 /// - **Compression:** when the range is wider than the plot, so that the
 ///   shortest range would get less than a column of its own, idle gaps
-///   longer than four times the shortest range are cut out
+///   longer than four times the shortest range, and longer than three
+///   columns' worth of the uncut scale, are cut out
 ///   ([`compress`](Self::compress), on by default). Each cut is three
 ///   columns with `≈` (`~`) on the axis, and the axis labels each stretch
 ///   at its start and end.
@@ -376,12 +380,13 @@ impl Timeline {
         range
     }
 
-    fn label(&self, value: f64) -> String {
-        format!("{}{}", exact_label(self.format, value), self.unit)
-    }
-
+    /// `value` and the unit; a length past `f64::MAX` is `-`.
     fn text(&self, value: f64) -> String {
-        format!("{}{}", self.format.format(value), self.unit)
+        if value.is_finite() {
+            format!("{}{}", self.format.format(value), self.unit)
+        } else {
+            self.format.format(value)
+        }
     }
 
     /// The plot's mapping for `plot` columns.
@@ -406,10 +411,7 @@ impl Timeline {
         let labels = axis
             .labels
             .iter()
-            .map(|(p, _)| {
-                let value = axis.lo + *p as f64 * axis.unit;
-                (*p, self.label(value), Anchor::Centre)
-            })
+            .map(|(p, label)| (*p, format!("{label}{}", self.unit), Anchor::Centre))
             .collect();
         Mapping {
             pieces: vec![Piece {
@@ -442,6 +444,7 @@ impl Timeline {
             .iter()
             .filter(|s| s.finite() && s.end > s.start)
             .map(|s| s.end - s.start)
+            .filter(|length| length.is_finite())
             .fold(f64::INFINITY, f64::min);
         if !shortest.is_finite() || plot < 2 * BREAK + 4 {
             return None;
@@ -505,20 +508,32 @@ impl Timeline {
             left -= 1;
         }
         let mut pieces = Vec::new();
-        let mut labels = Vec::new();
         let mut col0 = 0;
         for ((start, end), n) in busy.iter().zip(cols) {
             let unit = (end - start) / (n - 1) as f64;
-            let piece = Piece {
+            pieces.push(Piece {
                 lo: *start,
                 unit,
                 col0,
                 cols: n,
-            };
-            labels.push((col0, self.label(piece.lo), Anchor::Start));
-            labels.push((col0 + n - 1, self.label(piece.hi()), Anchor::End));
-            pieces.push(piece);
+            });
             col0 += n + BREAK;
+        }
+        // Every stretch's ends, written alike: all in full when compact
+        // cannot write one of them exactly.
+        let ends: Vec<f64> = pieces.iter().flat_map(|p| [p.lo, p.hi()]).collect();
+        let written = exact_labels(self.format, &ends)
+            .map(|(labels, _)| labels)
+            .unwrap_or_else(|| ends.iter().map(|&v| exact_label(self.format, v)).collect());
+        let mut labels = Vec::new();
+        for (piece, ends) in pieces.iter().zip(written.chunks(2)) {
+            labels.push((
+                piece.col0,
+                format!("{}{}", ends[0], self.unit),
+                Anchor::Start,
+            ));
+            let last = piece.col0 + piece.cols - 1;
+            labels.push((last, format!("{}{}", ends[1], self.unit), Anchor::End));
         }
         Some(Mapping { pieces, labels })
     }

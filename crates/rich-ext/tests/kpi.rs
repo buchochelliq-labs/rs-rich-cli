@@ -544,6 +544,18 @@ fn kpi_card_sizes() {
     assert!(render(&plain(20), &fixed).starts_with("p   \n2.00\n"));
 }
 
+/// A delta that overflows (or is NaN) has no sign and the flat arrow.
+#[test]
+fn kpi_non_finite_delta_is_flat() {
+    let card = KpiCard::new("k", 1e308).previous(-1e308).border(false);
+    let out = render(&plain(40), &card);
+    assert!(out.contains("= -"), "{out}");
+    assert!(!out.contains("+-") && !out.contains('▲'), "{out}");
+    let nan = KpiCard::new("k", 1.0).delta(f64::NAN).border(false);
+    let out = render(&plain(40), &nan);
+    assert!(out.contains("= -") && !out.contains("+-"), "{out}");
+}
+
 // -------------------------------------------------------------- timelines
 
 #[test]

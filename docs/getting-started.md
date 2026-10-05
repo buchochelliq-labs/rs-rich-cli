@@ -9,11 +9,8 @@ do not, [rustup.rs](https://rustup.rs) is the one-line installer.
 |---|---|
 | **Rust** | 1.90 or later (the MSRV, checked in CI) |
 | **Terminal** | any VT-capable terminal. On Windows use Windows Terminal — the legacy `cmd.exe` console is [not supported](known-issues.md#windows-legacy-console-is-not-supported) |
-| **Tested on** | Linux (`ubuntu-latest`) in CI; developed and exercised on Windows 11 |
+| **Tested on** | Linux (`ubuntu-latest`) and macOS in CI; developed and exercised on Windows 11 |
 | **Cost** | none — MIT licensed, no account, no network calls except the optional URL-fetch feature |
-
-macOS is expected to work and is not covered by CI, so it is untested rather
-than unsupported.
 
 ## Install
 
@@ -33,7 +30,7 @@ than unsupported.
 
     ```toml
     [dependencies]
-    rs-rich = "0.0.7"
+    rs-rich = "0.0.9"
     ```
 
 !!! tip "Published on crates.io"
@@ -43,7 +40,10 @@ than unsupported.
     [`rs-rich-ext`](https://crates.io/crates/rs-rich-ext) ·
     [`rs-rich-art`](https://crates.io/crates/rs-rich-art) ·
     [`rs-rich-macros`](https://crates.io/crates/rs-rich-macros) ·
-    `rs-rich-plugin-api` · `rs-rich-mermaid` · `rs-rich-lumis` (all new in 0.0.12) — follow the links for current published versions.
+    `rs-rich-plugin-api` · `rs-rich-mermaid` · `rs-rich-lumis` (new in 0.0.12) ·
+    `rs-rich-interact` · `rs-rich-record` (new in 0.0.13) ·
+    `rs-rich-micro` (new in 0.0.14) · `rs-rich-diagram` (new in 0.0.15) —
+    follow the links for current published versions.
     API documentation is on [docs.rs](https://docs.rs/rs-rich).
 
 ## Check the install worked
@@ -73,8 +73,13 @@ rich --print "[bold magenta]Hello[/] [green]World[/]"
 cargo uninstall rs-rich-cli
 ```
 
-`rich` writes no configuration files and no cache, so removing the binary
-removes it completely. For the library, delete the dependency from your
+`rich` writes no configuration files of its own. Two things can stay
+behind: micro assets you added with `rich micro add`, `install` or
+`create --add` (under `~/.config/rich/micro/`), and the cache of fitted
+micro-asset images (`RICH_CACHE_DIR/micro`, else `$XDG_CACHE_HOME/rich/micro`,
+`~/.cache/rich/micro`, `~/Library/Caches/rich/micro` on macOS or
+`%LOCALAPPDATA%\rich\cache\micro` on Windows). Delete those directories to
+remove it completely. For the library, delete the dependency from your
 `Cargo.toml`.
 
 ## The package is `rs-rich`, the crate is `rich`
@@ -84,7 +89,7 @@ package carries an `rs-` prefix. The library target keeps the short name, so the
 dependency and the `use` line differ:
 
 ```toml
-rs-rich = "0.0.7"      # the latest published release
+rs-rich = "0.0.9"      # the latest published release
 ```
 
 ```rust
@@ -92,7 +97,7 @@ use rich::Console;      // what you write
 ```
 
 The same applies to the others: `rs-rich-ext` is `rich_ext`, `rs-rich-art` is
-`rich_art`. `rs-rich-macros` is used through `rich_ext` (its `macros` feature),
+`rich_art`, `rs-rich-diagram` is `rich_diagram`, and so on. `rs-rich-macros` is used through `rich_ext` (its `macros` feature),
 for example `rich_ext::richf!`. The CLI package `rs-rich-cli` installs a binary called `rich`.
 
 ## Hello, world

@@ -13,8 +13,8 @@
 //!   [`Limits`].
 //! - [`MicroRegistry`]: built-in < user < trusted project < inline, with
 //!   aliases, collisions and [`explain`](MicroRegistry::explain).
-//! - [`markup`]: `:micro:name:` in markup and text; [`MicroExt`] and
-//!   [`MicroAssetRef`] in code.
+//! - [`markup`]: `:micro:name:` in markup and text, and in Markdown
+//!   ([`PreparedMarkdown`]); [`MicroExt`] and [`MicroAssetRef`] in code.
 //! - [`render`]: the placeholder representation, and the [`MicroRenderer`]
 //!   seam that terminal graphics plug into.
 //! - [`graphics`]: drawing on a terminal: [`select`] picks Kitty, iTerm2,

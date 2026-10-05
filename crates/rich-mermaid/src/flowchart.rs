@@ -9,12 +9,14 @@
 use std::collections::HashMap;
 use std::fmt;
 
-/// The largest source the parser accepts, in bytes.
-pub const MAX_SOURCE: usize = 64 * 1024;
-/// The most nodes a flowchart may have.
-pub const MAX_NODES: usize = 500;
-/// The most edges a flowchart may have.
-pub const MAX_EDGES: usize = 2000;
+/// The largest source the parser accepts, in bytes. Shared with the DOT
+/// parser: [`rich_diagram::MAX_SOURCE`].
+pub const MAX_SOURCE: usize = rich_diagram::MAX_SOURCE;
+/// The most nodes a flowchart may have ([`rich_diagram::MAX_NODES`]).
+pub const MAX_NODES: usize = rich_diagram::MAX_NODES;
+/// The most edges a flowchart may have ([`rich_diagram::MAX_EDGES`], also
+/// the most the layout draws).
+pub const MAX_EDGES: usize = rich_diagram::MAX_EDGES;
 /// The longest link, in ranks. Each extra `-` (or `=`, `.`) lengthens a link
 /// by one rank; Mermaid documents lengths 1 to 3 and sets no maximum, but
 /// every rank a link spans costs layout work, so longer runs are treated as

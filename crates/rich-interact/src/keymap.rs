@@ -244,29 +244,72 @@ impl Keymap {
         }
     }
 
-    /// The keys that do `binding`'s action now.
-    fn effective(&self, binding: &Binding) -> Vec<Key> {
+    /// The keys set for `binding`'s action, and where they come from:
+    /// 2 rebound on this keymap, 1 installed, 0 declared.
+    fn source(&self, binding: &Binding) -> (u8, Vec<Key>) {
         let id = binding.id();
         if let Some(keys) = self.rebound.get(&id) {
-            return keys.clone();
+            return (2, keys.clone());
         }
         if let Some(keys) = installed_keys(&id) {
-            return keys;
+            return (1, keys);
         }
-        binding.keys.clone()
+        (0, binding.keys.clone())
     }
 
-    /// The binding `key` triggers, if any: the first declared.
+    /// The keys that do `binding`'s action now: what was set for it, less
+    /// any key a closer level gave another action in the same context (a
+    /// key rebound onto `down` is no longer the declared `next`'s).
+    fn effective(&self, binding: &Binding) -> Vec<Key> {
+        let (level, mut keys) = self.source(binding);
+        if level < 2 {
+            for other in &self.bindings {
+                if other.context != binding.context || other.action == binding.action {
+                    continue;
+                }
+                let (other_level, taken) = self.source(other);
+                if other_level > level {
+                    keys.retain(|key| !taken.contains(key));
+                }
+            }
+        }
+        keys
+    }
+
+    /// The index of the binding `key` triggers: one whose keys were rebound
+    /// or installed before one declared, then the first.
+    fn find(&self, key: Key) -> Option<usize> {
+        let mut found: Option<(u8, usize)> = None;
+        for (index, binding) in self.bindings.iter().enumerate() {
+            let (level, _) = self.source(binding);
+            if found.is_some_and(|(best, _)| best >= level) {
+                continue;
+            }
+            if self.effective(binding).contains(&key) {
+                found = Some((level, index));
+            }
+        }
+        found.map(|(_, index)| index)
+    }
+
+    /// The binding `key` triggers, if any: see [`action`](Self::action).
     pub fn lookup(&self, key: Key) -> Option<Binding> {
-        self.bindings().into_iter().find(|b| b.keys.contains(&key))
+        self.find(key).map(|index| {
+            let binding = &self.bindings[index];
+            Binding {
+                keys: self.effective(binding),
+                ..binding.clone()
+            }
+        })
     }
 
-    /// The action `key` triggers, if any.
+    /// The action `key` triggers, if any: a binding whose keys were rebound
+    /// (or installed) wins over one with its declared keys, so a key moved
+    /// onto an action does it even when an earlier action declared it;
+    /// otherwise the first declared.
     pub fn action(&self, key: Key) -> Option<&str> {
-        self.bindings
-            .iter()
-            .find(|binding| self.effective(binding).contains(&key))
-            .map(|binding| binding.action.as_str())
+        self.find(key)
+            .map(|index| self.bindings[index].action.as_str())
     }
 
     /// Whether `key` triggers `action`.
@@ -505,5 +548,21 @@ mod tests {
         let listed: Vec<String> = outer.bindings().iter().map(ToString::to_string).collect();
         assert_eq!(listed, ["q  quit", "n  move down"]);
         assert_eq!(outer.lookup(Key::char('n')).unwrap().id(), "inner.down");
+    }
+
+    #[test]
+    fn a_rebound_key_moves_from_an_earlier_action() {
+        let keymap = Keymap::new("move-test")
+            .bind("next", keys("n"), "next match")
+            .bind("down", keys("down j"), "scroll down")
+            .rebound("down", keys("n"));
+        assert_eq!(keymap.action(Key::char('n')), Some("down"));
+        assert_eq!(keymap.lookup(Key::char('n')).unwrap().action, "down");
+        // `next` lost the key it had: nothing else is listed against `n`.
+        assert_eq!(keymap.keys("next"), []);
+        assert!(!keymap.is(Key::char('n'), "next"));
+        // A key no one rebound keeps its declared action.
+        let keymap = keymap.rebound("next", keys("m"));
+        assert_eq!(keymap.action(Key::char('m')), Some("next"));
     }
 }

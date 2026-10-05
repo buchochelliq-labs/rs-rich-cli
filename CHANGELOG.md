@@ -57,6 +57,67 @@ Entries below record subsequent releases and development.
 
 ## [Unreleased]
 
+### 0.0.15 release test: fixes from three audits
+
+Three audits covered the 0.0.15 delta; each finding was reproduced, then
+fixed with a regression test that failed (or aborted, or hung) before the
+fix. See the [0.0.15 release notes](docs/releases/0.0.15.md#what-the-release-test-found-and-fixed).
+
+- `rs-rich-diagram`: DOT nesting deeper than 64 levels is refused instead
+  of overflowing the stack; sources, nodes and edges are capped while
+  groups expand (64 KiB, 500, 2,000, shared with Mermaid as
+  `rich_diagram::{MAX_SOURCE, MAX_NODES, MAX_EDGES}`); strict-graph dedupe
+  is a hash lookup; `layout::draw` refuses more than 2,000 edges or 5,000
+  nodes before laying out. DOT handles `\E`, `\T` and `\H`, lexes numerals
+  as Graphviz does, skips a comment before `=`, notes invisible and
+  outline-free nodes, and writes ASCII-only notes on ASCII consoles.
+- `rs-rich-ext` `deps`: a workspace member reached through another member
+  keeps its dev-dependencies; members are expanded at the top level; trees
+  stop at 128 levels (`MAX_TREE_DEPTH`). `schema`: trees and diffs have
+  budgets (`MAX_ENTRIES`, `MAX_CHANGES`, `MAX_COMPARISONS`,
+  `SchemaDiff::is_truncated`) and say when they stop; cycles are found by
+  resolved target as well as by reference; the `additionalProperties`
+  path keeps the depth guard.
+- `rs-rich-ext` `chart`: labels the compact form cannot write exactly are
+  written in full on axes, timelines and histogram edges; histogram edges
+  are exact and values are counted against them; `ValueFormat::Fixed` caps
+  its decimals at `ValueFormat::MAX_DECIMALS` (17) instead of panicking;
+  ±1e308 ranges render with finite scales; huge sizes saturate or are
+  capped (65,535 rows); gauge legends are ASCII on ASCII consoles; a
+  non-finite KPI delta reads `= -`.
+- `rs-rich-cli`: `rich deps --why` exits 4 with a reason when the chosen
+  kinds reach no match; `rich deps` clears the `rustc` wrapper variables for
+  `cargo metadata`; `rich chart` refuses non-finite values and rows longer
+  than the header (exit 4); `rich doctor` reports every build feature;
+  `--help` lists `.mmd`, `.mermaid`, `.dot` and `.gv` among the
+  auto-detected types.
+- `rs-rich-micro`: `:micro:` tokens are left alone wherever the Markdown
+  parser sees code, and in link and image destinations; the ranges come
+  from `pulldown-cmark`, now a direct dependency.
+- `rs-rich-interact`: a `Confirm` choice answers to either case again; a
+  rebound or installed key takes precedence over an earlier action's
+  declared key; `FilePicker::rebind` keeps its own actions to the picker.
+- Python 0.0.4: `rs_rich.chart` takes any iterable where it took a list,
+  any pair as a point, and `None` in a timeline as a gap, and refuses
+  out-of-range decimals with `ValueError`.
+
+### Docs refresh for 0.0.15
+
+- The README, the home page, the guide index, the CLI guide and walkthrough,
+  [Using the CLI](docs/cli.md), Getting started, Architecture, Known issues
+  and the crate READMEs describe the 0.0.15 cohort: charts, `rs-rich-diagram`
+  and DOT, `rich chart`, `rich dot`, `rich deps` and `rich schema`,
+  `rs_rich.chart` and `rs_rich.diagram`, with cross-links between the Rust,
+  CLI and Python pages. Stale statements fixed: release history stopping at
+  0.0.11, `rs-rich` 0.0.7 and `rs-rich-ext` 0.0.11 in install snippets, the
+  CLI README's version, macOS "not covered by CI", "`rich` writes no cache"
+  (micro assets have one), `rs-rich-macros` "not on crates.io", the ext
+  registry described as internal, the missing crates in the architecture and
+  guide tables, `rich doctor --json` (it is `--report json`), and the Python
+  command line's claim to every command (`rich record` is not in the wheel).
+  `AGENTS.md`'s dependency graph now shows `rich-cli → rich-micro` and
+  `rich-art`, and what `rich-py` depends on.
+
 ### 0.0.14 follow-ups (0.0.15 workstream 6)
 
 The [0.0.14 known limits](docs/releases/0.0.14.md#known-limits) that were
@@ -65,16 +126,21 @@ ABI change of their own.
 
 - `rs-rich-micro` 0.0.2 (unreleased, so no bump): `PreparedMarkdown` and
   `MarkdownView` put `:micro:name:` in Markdown. Each token outside code
-  (fenced blocks and inline spans) becomes stand-in cells of the asset's
-  width, so the layout sizes it as the asset; the view turns them back into
-  tagged placeholders after rendering, which `MicroView` and
-  `MicroGraphics` draw. `\:micro:` stays literal, as Markdown drops the
-  backslash itself.
+  and URLs becomes stand-in cells of the asset's width, so the layout sizes
+  it as the asset; the view turns them back into tagged placeholders after
+  rendering, which `MicroView` and `MicroGraphics` draw. `\:micro:` stays
+  literal, as Markdown drops the backslash itself. What is code and what is
+  a URL comes from pulldown-cmark, with the options core's `Markdown` uses
+  (a new direct dependency, the version already in the tree): indented
+  blocks, fences in quotes and list items, code spans across a line break,
+  link and image destinations, autolinks and reference definitions keep
+  their tokens as written; link text expands.
 - `rs-rich-cli` 0.0.15: `:micro:name:` expands outside `--print` too: in a
   `--panel`'s `--title` and `--caption` (always, as their `:emoji:` codes
   do), in a CSV table's title and caption (with `--emoji`, where its
   `:emoji:` codes expand), and in `--markdown` documents. On a terminal they
-  draw as images; exports, the pager and `--watch` keep the fallback.
+  draw as images; exports, the pager and `--watch` (one file or several)
+  keep the fallback.
 - `rs-rich-cli` 0.0.15: `rich asset --kind micro` and `rich explore --icons`
   draw the assets as images (Kitty, iTerm2, Sixel or blocks) where the
   terminal can, not only their emoji fallback. The mode is chosen for
@@ -90,6 +156,15 @@ ABI change of their own.
   `pager_search_keymap` and `Viewport::act` are new. Rebinding a form's
   `next` away from Enter also takes Enter's submit on the last field;
   Ctrl+S still submits.
+- `rs-rich-interact` 0.0.3: a key rebound (or installed) onto an action now
+  does it even when an action declared earlier in the same context had the
+  key, and that action loses it (`Pager::rebind("scroll-down", keys("n"))`
+  used to leave `n` on next-match and scroll-down with no key).
+  `FilePicker::rebind` sends its own actions (`open`, `up`, `hidden`) to the
+  picker only, so rebinding `up` (to the parent directory) no longer takes
+  the list's cursor-up with it; `select.up` names the list's. A `Confirm`
+  choice with an uppercase key answers to the lowercase press again, as in
+  0.0.14.
 - `rs-rich-cli` 0.0.15: `rich micro preview` no longer labels a still image
   with a frame time ("100 ms"); only an animation's frames are timed. The
   `micro-create` docs tape is re-recorded.
