@@ -546,8 +546,12 @@ Console::new().print(&ErDiagram::new(model).direction(Direction::TopDown));
 What it cannot draw is a dim `ER:` note under the drawing: a relationship
 naming an entity that does not exist (left out), a column an entity does not
 have (drawn as given), a repeated entity name (the first is drawn), a group
-member that does not exist. `ErModel::to_graph` gives the `Graph` and those
-notes, for drawing it another way.
+member that does not exist. A relationship from an entity to itself
+(`parent_id REFERENCES categories(id)`) is marked `↻` beside the box, as the
+layout marks any self-edge, and its label is a note:
+`ER: categories refers to itself: parent_id → id (N:1)`.
+`ErModel::to_graph` gives the `Graph` and those notes, for drawing it
+another way.
 
 ## From Mermaid
 
