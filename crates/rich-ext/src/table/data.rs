@@ -1,8 +1,10 @@
 //! Plain rows with a sort, a grouping and totals, rendered as a core table.
 
+use rich::table::Cell;
 use rich::{Console, ConsoleOptions, Renderable, Segment, Table, Text};
 
 use super::group::{Aggregate, GroupBy};
+use super::rules::{ResolvedRules, StyleRules};
 use super::sort::{sorted_indices, SortKey};
 use super::{frame_builders, headers, style, Column, Frame, Value};
 
@@ -59,6 +61,7 @@ pub struct TableData {
     group: Option<GroupBy>,
     totals: Vec<Aggregate>,
     totals_label: String,
+    rules: StyleRules,
     pub(super) frame: Frame,
 }
 
@@ -74,6 +77,7 @@ impl TableData {
             group: None,
             totals: Vec::new(),
             totals_label: "total".to_string(),
+            rules: StyleRules::new(),
             frame: Frame::default(),
         }
     }
@@ -126,6 +130,14 @@ impl TableData {
         self
     }
 
+    /// Style cells, rows and columns by value ([`rules`](super::rules)).
+    /// Rules restyle the rows; group headers and summary rows keep their
+    /// own styles.
+    pub fn style_rules(mut self, rules: StyleRules) -> Self {
+        self.rules = rules;
+        self
+    }
+
     /// The columns.
     pub fn columns(&self) -> &[Column] {
         &self.columns
@@ -152,10 +164,18 @@ impl TableData {
         let headers = headers(console, &self.columns, &self.sort);
         let mut table = self.frame.table(&self.columns, &headers, true, true);
         let order = self.order();
+        let headers: Vec<&str> = self.columns.iter().map(Column::header).collect();
+        let rules = (!self.rules.is_empty()).then(|| self.rules.resolve(&headers, &self.rows));
+        let add = |table: &mut Table, row: &[Value]| match &rules {
+            None => {
+                table.add_row_text(self.cells(row));
+            }
+            Some(rules) => self.add_styled(table, rules, row),
+        };
         match &self.group {
             None => {
                 for &row in &order {
-                    table.add_row_text(self.cells(&self.rows[row]));
+                    add(&mut table, &self.rows[row]);
                 }
             }
             Some(group) => {
@@ -181,7 +201,7 @@ impl TableData {
                     }
                     table.add_row_text(header);
                     for &row in &g.rows {
-                        table.add_row_text(self.cells(&self.rows[row]));
+                        add(&mut table, &self.rows[row]);
                     }
                     if !group.aggregates().is_empty() {
                         table.add_row_text(self.summary(
@@ -211,6 +231,24 @@ impl TableData {
             .zip(row)
             .map(|(column, value)| column.cell(value))
             .collect()
+    }
+
+    /// A data row with its conditional styles: matching cells stylized over
+    /// their whole text, and a matching row style on the whole row.
+    fn add_styled(&self, table: &mut Table, rules: &ResolvedRules<'_>, row: &[Value]) {
+        let cells = self
+            .cells(row)
+            .into_iter()
+            .enumerate()
+            .map(|(index, mut text)| {
+                if let Some(style) = rules.cell_style(row, index) {
+                    let len = text.plain().len();
+                    text.stylize(style, 0, len);
+                }
+                Cell::Text(text)
+            })
+            .collect();
+        table.add_row_with(cells, rules.row_style(row).map(Into::into), false);
     }
 
     /// A summary row: each aggregate in its column (several in one column

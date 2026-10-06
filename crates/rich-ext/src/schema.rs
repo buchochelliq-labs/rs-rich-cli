@@ -19,6 +19,10 @@
 //! Neither reads colour alone: markers and words carry the meaning, and the
 //! styles come from the theme keys in [`STYLES`].
 //!
+//! [`model`] holds the format-neutral schema model ([`Schema`], [`Field`],
+//! [`DataType`]) that tabular row sources carry and that JSON Schema, Arrow
+//! and SQL DDL map into.
+//!
 //! ```
 //! use rich::Console;
 //! use rich_ext::schema::SchemaTree;
@@ -48,6 +52,10 @@ use std::fmt;
 use rich::table::Table;
 use rich::{Console, ConsoleOptions, Renderable, Segment, Style, Text, Tree};
 use serde_json::Value;
+
+pub mod model;
+
+pub use model::{DataType, Field, Schema};
 
 /// Theme keys for schema trees and diffs, with the styles used when a theme
 /// lacks them.
