@@ -356,7 +356,7 @@ impl<R: BufRead> CsvSource<R> {
         let text = std::mem::take(&mut self.record);
         self.state = State::StartRecord;
         self.pending.extend(
-            read_rows(&text, &self.dialect)
+            parse_rows(&text, &self.dialect)
                 .into_iter()
                 .filter(|row| !row.is_empty()),
         );
@@ -1057,7 +1057,12 @@ enum State {
 /// applied Python's universal newlines.
 pub fn read_rows(content: &str, dialect: &Dialect) -> Vec<Vec<String>> {
     // Strip a leading UTF-8 BOM so it doesn't cling to the first header cell.
-    let content = content.strip_prefix('\u{feff}').unwrap_or(content);
+    parse_rows(content.strip_prefix('\u{feff}').unwrap_or(content), dialect)
+}
+
+/// [`read_rows`] without stripping a byte-order mark: a [`CsvSource`] parses
+/// each record alone, and only the input's first may lose one.
+fn parse_rows(content: &str, dialect: &Dialect) -> Vec<Vec<String>> {
     let mut rows: Vec<Vec<String>> = Vec::new();
     let mut row: Vec<String> = Vec::new();
     let mut field = String::new();
@@ -1262,5 +1267,23 @@ mod tests {
         assert_eq!(rows.len(), 1);
         let rows = CsvReader::tsv().read("x\ty\n1\t2\n").unwrap();
         assert_eq!(rows.columns(), ["x", "y"]);
+    }
+
+    /// A byte-order mark is stripped from the start of the input only:
+    /// streaming used to strip one from the start of every record, so a
+    /// cell after a lone `\r` lost it where `read` kept it.
+    #[test]
+    fn streaming_strips_only_a_leading_byte_order_mark() {
+        let text = "\u{feff}a,b\n1,2\r\u{feff}x,y\n\u{feff}3,4\n";
+        let read = CsvReader::new().header(true).read(text).unwrap();
+        let streamed = CsvReader::new()
+            .header(true)
+            .source(text.as_bytes())
+            .unwrap()
+            .collect_rows()
+            .unwrap();
+        assert_eq!(streamed.columns(), ["a", "b"]);
+        assert_eq!(streamed.rows()[1][0], Value::from("\u{feff}x"));
+        assert_eq!(streamed.rows(), read.rows());
     }
 }
