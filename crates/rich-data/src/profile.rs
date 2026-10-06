@@ -679,7 +679,7 @@ impl Profiler {
 
     /// Add a row (missing cells are null; extra cells are ignored).
     pub fn push(&mut self, row: Row) {
-        let cells: Row = self
+        let mut cells: Row = self
             .indices
             .iter()
             .map(|&i| row.get(i).cloned().unwrap_or(Value::Null))
@@ -704,10 +704,13 @@ impl Profiler {
         }
         let bucket = self.buckets.last_mut().expect("a bucket was just added");
         bucket.0 += 1;
-        for (column, cell) in cells.iter().enumerate() {
+        // Null tokens become `Null` in the sample too, so a text column does
+        // not count `NA` as a value.
+        for (column, cell) in cells.iter_mut().enumerate() {
             if is_null(&self.options.nulls, cell) {
                 self.nulls[column] += 1;
                 bucket.1[column] += 1;
+                *cell = Value::Null;
             }
         }
         // Algorithm R: keep the first `sample` rows, then replace a kept row

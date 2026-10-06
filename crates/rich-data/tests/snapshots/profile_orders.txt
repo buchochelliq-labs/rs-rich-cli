@@ -4,7 +4,7 @@ orders.csv: 24 rows, 6 columns
 ┃ column   ┃ type    ┃   nulls ┃ distinct ┃        min ┃        max ┃    mean ┃
 ┡━━━━━━━━━━╇━━━━━━━━━╇━━━━━━━━━╇━━━━━━━━━━╇━━━━━━━━━━━━╇━━━━━━━━━━━━╇━━━━━━━━━┩
 │ order_id │ integer │       0 │       24 │       1001 │       1024 │  1012.5 │
-│ region   │ text    │  2 (8%) │        5 │         NA │         us │         │
+│ region   │ text    │  2 (8%) │        4 │       apac │         us │         │
 │ amount   │ float   │ 4 (17%) │       20 │       7.25 │        250 │ 63.3855 │
 │ status   │ text    │       0 │        4 │  cancelled │    shipped │         │
 │ placed   │ date    │       0 │       12 │ 2026-09-01 │ 2026-09-12 │         │
@@ -23,11 +23,10 @@ order_id · integer · median 1012.5 (p25 1006.75, p75 1018.25)
   [1020, 1022.5) ████████████████████████ 3
   [1022.5, 1025] ████████████████         2
 
-region · text · 2 nulls (8%) · 5 distinct
+region · text · 2 nulls (8%) · 4 distinct
   eu    ████████████████████████ 9
   us    ████████████████████████ 9
   apac  ████████                 3
-  NA    █████▍                   2
   latam ██▋                      1
 
 amount · float · 4 nulls (17%) · median 50.95 (p25 21.825, p75 82.95)

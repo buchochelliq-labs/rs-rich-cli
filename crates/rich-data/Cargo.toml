@@ -11,7 +11,7 @@
 [package]
 name = "rs-rich-data"
 version = "0.0.1"
-description = "Tabular data for rs-rich: CSV, TSV, JSONL, serde and Arrow row sources, type inference and column statistics"
+description = "Tabular data for rs-rich: CSV, TSV, JSONL, serde and Arrow row sources, type inference, column statistics, profiles and data-quality reports"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true

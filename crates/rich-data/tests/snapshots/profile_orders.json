@@ -87,9 +87,9 @@
       "type": "text",
       "nulls": 2,
       "null_rate": 0.08333333333333333,
-      "count": 24,
-      "distinct": 5,
-      "min": "NA",
+      "count": 22,
+      "distinct": 4,
+      "min": "apac",
       "max": "us",
       "mean": null,
       "median": null,
@@ -109,10 +109,6 @@
           {
             "value": "apac",
             "count": 3
-          },
-          {
-            "value": "NA",
-            "count": 2
           },
           {
             "value": "latam",

@@ -4,7 +4,7 @@ orders.csv: 24 rows, 6 columns
 ┃ column   ┃ type ┃ nul… ┃ dis… ┃  min ┃  max ┃ me
 ┡━━━━━━━━━━╇━━━━━━╇━━━━━━╇━━━━━━╇━━━━━━╇━━━━━━╇━━━
 │ order_id │ int… │    0 │   24 │ 1001 │ 1024 │ 10
-│ region   │ text │    2 │    5 │   NA │   us │   
+│ region   │ text │    2 │    4 │ apac │   us │   
 │          │      │ (8%) │      │      │      │   
 │ amount   │ flo… │    4 │   20 │ 7.25 │  250 │ 63
 │          │      │ (17… │      │      │      │   
@@ -27,11 +27,10 @@ p75 1018.25)
   [1020, 1022.5) ████████████████████████ 3
   [1022.5, 1025] ████████████████         2
 
-region · text · 2 nulls (8%) · 5 distinct
+region · text · 2 nulls (8%) · 4 distinct
   eu    ████████████████████████ 9
   us    ████████████████████████ 9
   apac  ████████                 3
-  NA    █████▍                   2
   latam ██▋                      1
 
 amount · float · 4 nulls (17%) · median 50.95 (p25
