@@ -515,6 +515,9 @@ impl<S: VirtualRows> VirtualTable<S> {
             .into_iter()
             .take(self.sample)
         {
+            // Pad short rows as `page` does, so a missing cell is sampled
+            // as the null marker it will show.
+            let row = normalize(row, self.columns.len());
             for ((width, column), value) in widths.iter_mut().zip(&self.columns).zip(&row) {
                 *width = (*width).max(self.cell(column, value).measurement().1);
             }
@@ -658,8 +661,20 @@ impl<S: VirtualRows> Renderable for VirtualTable<S> {
         crate::event::flatten(self.render_lines(console, options))
     }
 
+    /// The table's measurement, widened to the position line and footnote:
+    /// every line `rich_render` emits.
     fn measure(&self, console: &Console, options: &ConsoleOptions) -> rich::measure::Measurement {
-        self.to_table(console).measure(console, options)
+        let page = self.page();
+        let mut measurement = self.build(console, &page).measure(console, options);
+        let notes = self
+            .position
+            .then(|| page.position(console.ascii_only()))
+            .into_iter()
+            .chain(self.footnote.clone());
+        for note in notes {
+            measurement.maximum = measurement.maximum.max(Text::new(note).cell_len());
+        }
+        measurement
     }
 }
 
