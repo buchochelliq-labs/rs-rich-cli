@@ -184,8 +184,21 @@ fn sanitize_covers_schema_files() {
     ));
     assert!(out.contains("t␛[2J  table"), "{out}");
     assert!(out.contains("c␛]0;title␇  INT  → t␛[2J"), "{out}");
-    // Without it, the upstream-like default keeps them, as for any file.
+    // `rich schema` has no upstream output to keep, so, like `view` and the
+    // text diff, it sanitizes by default; `--no-sanitize` lets them through.
     let out = stdout(&run_in(dir.path(), &["schema", "evil.sql"], ""));
+    assert!(!out.contains('\x1b') && out.contains("t␛[2J"), "{out:?}");
+    let out = stdout(&run_in(
+        dir.path(),
+        &["schema", "evil.json", "evil2.json"],
+        "",
+    ));
+    assert!(!out.contains('\x1b'), "{out:?}");
+    let out = stdout(&run_in(
+        dir.path(),
+        &["--no-sanitize", "schema", "evil.sql"],
+        "",
+    ));
     assert!(out.contains("t\x1b[2J"), "{out:?}");
 }
 

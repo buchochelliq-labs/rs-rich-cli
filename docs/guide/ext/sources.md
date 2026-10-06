@@ -645,8 +645,9 @@ v1 → v2: 6 changes, 3 breaking
 └── + order_lines  table added (3 fields)
 ```
 
-The `rich schema` command still reads JSON Schema only; DDL and Arrow input
-and an ER view come to the CLI later in 0.0.16.
+From the command line, `rich schema` reads JSON Schema, SQL DDL (`.sql`,
+`.ddl`) and Arrow IPC files (with the CLI's `arrow` feature), compares any two,
+and draws an ER diagram with `--er`; see [the CLI docs](../../cli.md).
 
 ### ER diagrams
 

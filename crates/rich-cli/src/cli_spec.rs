@@ -1167,8 +1167,8 @@ fn output_options() -> Vec<ArgSpec> {
             "sanitize",
             OUTPUT,
             "Replace input terminal controls, JSON/notebook strings, titles and captions \
-             with visible inert text. On by default for `rich view` and text `rich diff`; \
-             --no-sanitize turns it off there",
+             with visible inert text. On by default for `rich view`, `rich schema` and \
+             text `rich diff`; --no-sanitize turns it off there",
         ),
         option(
             "report",
