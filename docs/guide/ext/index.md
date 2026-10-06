@@ -57,7 +57,7 @@ always available. The `use` path is `rich_ext::<module>`.
 | Module | What it gives you | Feature | Guide |
 |---|---|---|---|
 | `data` | One document tree for JSON, INI and dotenv; `Explorer`, tables, flatten, search, diff, redaction; `print_json`/`print_table`/`print_tree` for `serde` values | `data`; `yaml`, `toml`, `xml` for those formats; `jsonpath` for JSONPath selectors | [Structured data](structured-data.md) |
-| `deps`, `schema` | `DepTree`/`WhyTree`: `cargo metadata` as a dependency tree with duplicate versions marked, and what pulls a crate in; `SchemaTree`/`SchemaDiff`: a JSON Schema as a tree with local `$ref`s resolved, and what changed between two | `data` | [Dependency graphs and JSON Schemas](sources.md) |
+| `deps`, `schema` | `DepTree`/`WhyTree`: `cargo metadata` as a dependency tree with duplicate versions marked, and what pulls a crate in; `SchemaTree`/`SchemaDiff`: a JSON Schema as a tree with local `$ref`s resolved, and what changed between two; the format-neutral schema model they read, with JSON Schema and SQL DDL (`schema::sql`) mapped into it, `SchemaDiff::models` for any two, and `SchemaTimeline` for a series of versions | `data` | [Dependency graphs and JSON Schemas](sources.md) |
 | `cli_doc` | From one `CommandSpec`: help, errors as diagnostics, shell completions, Markdown and man pages, config reference and precedence | none; `clap` for `CommandSpec::from_clap` and `cli_doc::clap` | [CLI authoring](cli-authoring.md) |
 | `cli` | The `rich` binary's extension options (`--encoding`, `--gif-mode`) | none | [CLI authoring](cli-authoring.md) |
 

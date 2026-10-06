@@ -47,7 +47,7 @@ column by value, from Rust predicates or TOML rule tables) are
 
 | Feature | Default | What it adds |
 |---|---|---|
-| `arrow` | no | `rich_data::arrow`: `RecordBatch` rows, a streaming `BatchSource`, and Arrow schemas in the model (`arrow-array` and `arrow-schema`) |
+| `arrow` | no | `rich_data::arrow`: `RecordBatch` rows, a streaming `BatchSource`, Arrow schemas in the model, and the schema explorer (`tree`, `diff`) (`arrow-array` and `arrow-schema`) |
 
 ## Limits
 

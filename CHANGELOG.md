@@ -92,6 +92,59 @@ From integration feedback on `rs-rich-record` 0.0.3 as a library:
   paths, `docs/BRANCHING.md`, the release skill, `AGENTS.md`'s dependency
   graph and versioning table, and the version tables.
 
+### Schemas (0.0.16 workstream 4)
+
+[Plan](docs/plans/0.0.16.md), #268, #342, #347.
+
+- `rs-rich-ext` `schema::model` grows from workstream 1's minimal model:
+  a `Field` is also `required` (a value must be present) and has
+  `Constraint`s (`Const`, `Enum`, `Format`, `Pattern`, length, bounds and
+  item limits, `Default`, `Deprecated`/`ReadOnly`/`WriteOnly`,
+  `Additional`, `PrimaryKey`, `Unique`, `References(ForeignKey)` and
+  `Other`), values kept as a `Literal` as the source writes them, metadata
+  entries, a `FieldKind` (JSON Schema's pattern properties, other
+  properties, tuple and array items, composition groups and branches, and
+  conditions) and the reference its type came through (`reference`,
+  `Unexpanded` for a recursive or unresolved one). A `Schema` can hold
+  several named `tables` (a SQL file), table-level constraints (keys over
+  several columns), a description, metadata and a `truncated` flag;
+  `primary_key()` and `foreign_keys()` read the keys back. Workstream 1's
+  constructors and accessors are unchanged.
+- `schema::json`: JSON Schema → model (`to_field`, `to_model`).
+  `SchemaTree` and `SchemaDiff` are rebuilt on the model: the tree draws a
+  model `Field`, and the diff is a comparison engine over the model that
+  JSON Schema drives by following its `$ref`s lazily. Their JSON Schema
+  output is byte-identical: every existing test and snapshot passes
+  unchanged, and a differential check against the previous implementation
+  over 24,000 generated schemas (trees at two depths, diffs, coloured)
+  found no difference.
+- `schema::sql`: a small `CREATE TABLE` subset → model (`parse` →
+  `Parsed { schema, notes }`): column types as written, `NOT NULL`,
+  `DEFAULT`, `PRIMARY KEY`, `UNIQUE` and `REFERENCES`/`FOREIGN KEY` on
+  columns or tables, `CONSTRAINT` names, quoted identifiers, comments, MySQL
+  `ENUM` and `COMMENT`. `CHECK`, indexes and other statements are skipped
+  with a `Note` naming the line; unreadable DDL is a `SqlError` with its
+  line. Bounded by `MAX_INPUT` (16 MiB), `MAX_STATEMENTS`, `MAX_COLUMNS`,
+  `MAX_NESTING` and `MAX_NOTES`.
+- Schema diff for any two schemas (#268): `SchemaDiff::models(&old, &new)`
+  compares model schemas (fields by path, tables by name, keys and
+  metadata), with breaking changes marked, so DDL and Arrow versions diff
+  like JSON Schema. It is the same `SchemaDiff` type and rendering;
+  `SchemaDiff::summary()` is now public.
+- `SchemaTree::from_model` draws any model schema (tables with their
+  columns). `SchemaTree::schema()` now returns `Option<&Value>` (`None` for
+  a tree made from a model), beside a new `model()` and `root()`.
+- Schema evolution timeline (#347): `schema::SchemaTimeline` puts a series
+  of versions (`push`, `push_json`, placed with `at`) on `chart::Timeline`,
+  a row per field spanning the versions it is in and styled where it was
+  added, changed or broken, a milestone per version with its counts, and
+  every change listed under it.
+- `rs-rich-data` `arrow` (the Arrow schema explorer, #342): the mapping
+  marks non-nullable fields required, keeps field and schema metadata
+  (sorted by key) and names nested types by kind (`List`, `Struct`, `Map`,
+  `FixedSizeList(n)`) since their children are fields; `arrow::tree` draws
+  an Arrow schema and `arrow::diff` compares two.
+
 ### Records and conflicts (0.0.16 workstream 5)
 
 - `rs-rich-ext` 0.0.14: `data::RecordView` (#270), the record inspector:
