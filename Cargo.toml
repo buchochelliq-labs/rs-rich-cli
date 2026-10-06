@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/rich", "crates/rich-plugin-api", "crates/rich-macros", "crates/rich-ext", "crates/rich-cli", "crates/rich-art", "crates/rich-mermaid", "crates/rich-lumis", "crates/rich-record", "crates/rich-interact", "crates/rich-micro", "crates/rich-diagram"]
+members = ["crates/rich", "crates/rich-plugin-api", "crates/rich-macros", "crates/rich-ext", "crates/rich-cli", "crates/rich-art", "crates/rich-mermaid", "crates/rich-lumis", "crates/rich-record", "crates/rich-interact", "crates/rich-micro", "crates/rich-diagram", "crates/rich-data"]
 # The Python bindings build with maturin and need a Python interpreter; they
 # have their own workspace and CI workflow (`python.yml`).
 exclude = ["crates/rich-py"]
@@ -29,14 +29,15 @@ rust-version = "1.90"
 rich = { package = "rs-rich", path = "crates/rich", version = "0.0.9", default-features = false }
 rich-plugin-api = { package = "rs-rich-plugin-api", path = "crates/rich-plugin-api", version = "0.0.3" }
 rich-macros = { package = "rs-rich-macros", path = "crates/rich-macros", version = "0.0.3" }
-rich-ext = { package = "rs-rich-ext", path = "crates/rich-ext", version = "0.0.13" }
+rich-ext = { package = "rs-rich-ext", path = "crates/rich-ext", version = "0.0.14" }
 rich-art = { package = "rs-rich-art", path = "crates/rich-art", version = "0.0.12" }
 rich-diagram = { package = "rs-rich-diagram", path = "crates/rich-diagram", version = "0.0.1" }
 rich-mermaid = { package = "rs-rich-mermaid", path = "crates/rich-mermaid", version = "0.0.4" }
 rich-lumis = { package = "rs-rich-lumis", path = "crates/rich-lumis", version = "0.0.3" }
-rich-record = { package = "rs-rich-record", path = "crates/rich-record", version = "0.0.3" }
-rich-interact = { package = "rs-rich-interact", path = "crates/rich-interact", version = "0.0.3" }
-rich-micro = { package = "rs-rich-micro", path = "crates/rich-micro", version = "0.0.2" }
+rich-record = { package = "rs-rich-record", path = "crates/rich-record", version = "0.0.4" }
+rich-interact = { package = "rs-rich-interact", path = "crates/rich-interact", version = "0.0.4" }
+rich-micro = { package = "rs-rich-micro", path = "crates/rich-micro", version = "0.0.3" }
+rich-data = { package = "rs-rich-data", path = "crates/rich-data", version = "0.0.1" }
 # Cargo's default caret requirement treats 0.0.x specially: `version = "0.0.2"`
 # means >=0.0.2,<0.0.3, not >=0.0.2,<0.1.0. Therefore any internal crate bump
 # must also update every direct dependent's workspace requirement.

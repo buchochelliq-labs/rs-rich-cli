@@ -9,7 +9,70 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
-Nothing yet: every change so far is in a published cohort below.
+### Tabular foundation (0.0.16 workstream 1)
+
+[Plan](docs/plans/0.0.16.md), #214, #215, #261, #267.
+
+- `rs-rich-ext` `schema::model`: the format-neutral schema model, re-exported
+  as `schema::{Schema, Field, DataType}`. A `Schema` is an ordered list of
+  `Field`s, each with a name, a `DataType`, nullability, the source's own
+  type name (`with_native_type`) and a description. `DataType` covers `any`,
+  `unknown`, `boolean`, `integer`, `float`, `decimal(p,s)`, `string`,
+  `binary`, `date`, `timestamp[tz]`, and the nesting `list<…>`, `struct` and
+  `map<…, …>`, whose fields are a field's `children()`. `SchemaTree` and
+  `SchemaDiff` are unchanged: they still read JSON Schema directly, and the
+  mappings into the model arrive with workstream 4.
+- `rs-rich-ext` `table::rules`: conditional styles (#215). A `StyleRule`
+  names a column (a header or an index), a `Comparison` (`eq`, `ne`, `lt`,
+  `le`, `gt`, `ge`, `contains`, `starts_with`, `ends_with`, `empty`,
+  `not_empty`) against a value, or a Rust predicate (`StyleRule::when`),
+  and a style for the cell, the row or the column (`Target`). Numeric rules
+  read numbers from text cells, so CSV rows need no conversion. No
+  expression language. `TableData::style_rules` applies them while
+  rendering (without rules the output is unchanged), and
+  `StyleRules::resolve` gives any other renderer each row's and cell's
+  style. With the `toml` feature, `StyleRules::from_toml` and
+  `from_toml_value` read `[[rules]]` tables (`column`, `op`, `value`,
+  `style`, `target`), refusing unknown keys, ops and styles by index.
+- New crate `rs-rich-data` 0.0.1 (`rich_data`), on `rs-rich-ext`'s public
+  API: the `RowSource` contract (column names, an optional `Schema`, rows of
+  `table::Value` one at a time) and `Rows` in memory, which become a
+  `TableData` with numeric columns right-justified. Adapters (#214):
+  - `csv`: the CLI's port of Python's `csv.Sniffer` and `csv.reader`
+    (`sniff`, `has_header`, `read_rows`, `Dialect`) moved here unchanged
+    with its tests, and `CsvReader`, which sniffs as `rich --csv` does (or
+    takes a delimiter, dialect, fallback and header), applies universal
+    newlines, drops blank lines and keeps every field of a ragged row.
+    Cells stay text as written.
+  - `jsonl`: JSON Lines, whole (`read`) or streaming from a reader
+    (`source`), choosing columns and a schema from the first 1,000 records
+    and naming keys seen later (`unknown_keys`) instead of dropping them
+    silently; lines over 64 MiB are refused, schemas stop at 32 levels.
+  - `serialize`: any `serde::Serialize` rows, through `serde_json`'s data
+    model, whole or streaming.
+  - `arrow` (off-by-default feature, `arrow-array`/`arrow-schema` 60):
+    `RecordBatch` rows, a streaming `BatchSource`, and Arrow schemas mapped
+    into the model with Arrow's type names kept as native types.
+  - Type inference (#267), opt-in: `Inferrer` reads every cell and picks
+    integer, float, boolean, date, timestamp, null or text per column, with
+    `Evidence` (how many cells parsed as each type), configurable null
+    tokens and per-column overrides; `Inference` renders as a table,
+    `summary()` says it in words, and `apply` converts the cells and
+    attaches the schema.
+  - Column statistics (#261): `Stats` gives count, nulls, distinct, min,
+    max, mean, median, quantiles and the top values per column, rendered as
+    a table, or as a summary under each heading (`Stats::headers`).
+- `rs-rich-cli`: `--csv` and `rich chart` read CSV through `rs-rich-data`.
+  `rich --csv` output is byte-identical: the same reader, and 84 runs over
+  twelve inputs (sniffed, ragged, quoted, BOM, headerless, no delimiter;
+  `--head`, `--tail`, titles, a terminal, stdin and auto-detection) compare
+  equal before and after the move. `--csv` never infers types.
+- Release tooling: `rs-rich-data` is in `RELEASES.toml` (after
+  `rs-rich-interact`, before `rs-rich-cli`), `scripts/release.py` and its
+  tests, the release workflow's tag filter, the release-readiness pattern,
+  the CI test matrix (default and all features), the Python workflow's
+  paths, `docs/BRANCHING.md`, the release skill, `AGENTS.md`'s dependency
+  graph and versioning table, and the version tables.
 
 ## 0.0.15 cohort — published 2026-10-05
 

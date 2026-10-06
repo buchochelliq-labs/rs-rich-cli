@@ -179,6 +179,7 @@ The badges below show the versions currently available on crates.io.
 | [`rs-rich-interact`](https://crates.io/crates/rs-rich-interact) | [![rs-rich-interact](https://img.shields.io/crates/v/rs-rich-interact.svg)](https://crates.io/crates/rs-rich-interact) | [docs.rs](https://docs.rs/rs-rich-interact) | interactive components |
 | [`rs-rich-micro`](https://crates.io/crates/rs-rich-micro) | [![rs-rich-micro](https://img.shields.io/crates/v/rs-rich-micro.svg)](https://crates.io/crates/rs-rich-micro) | [docs.rs](https://docs.rs/rs-rich-micro) | micro assets |
 | [`rs-rich-diagram`](https://crates.io/crates/rs-rich-diagram) | [![rs-rich-diagram](https://img.shields.io/crates/v/rs-rich-diagram.svg)](https://crates.io/crates/rs-rich-diagram) | [docs.rs](https://docs.rs/rs-rich-diagram) | graph diagrams and DOT (new in 0.0.15; published with the cohort) |
+| [`rs-rich-data`](https://crates.io/crates/rs-rich-data) | [![rs-rich-data](https://img.shields.io/crates/v/rs-rich-data.svg)](https://crates.io/crates/rs-rich-data) | [docs.rs](https://docs.rs/rs-rich-data) | tabular data: row sources, inference and statistics (new in 0.0.16) |
 
 <a id="versions-prepared-in-this-checkout"></a>
 
@@ -193,15 +194,16 @@ Each crate versions independently; see [Branching and releases](BRANCHING.md).
 | [`rs-rich`](https://crates.io/crates/rs-rich) | `0.0.9` |
 | [`rs-rich-plugin-api`](https://crates.io/crates/rs-rich-plugin-api) | `0.0.3` |
 | [`rs-rich-macros`](https://crates.io/crates/rs-rich-macros) | `0.0.3` |
-| [`rs-rich-ext`](https://crates.io/crates/rs-rich-ext) | `0.0.13` |
-| [`rs-rich-cli`](https://crates.io/crates/rs-rich-cli) | `0.0.15` |
+| [`rs-rich-ext`](https://crates.io/crates/rs-rich-ext) | `0.0.14` |
+| [`rs-rich-cli`](https://crates.io/crates/rs-rich-cli) | `0.0.16` |
 | [`rs-rich-art`](https://crates.io/crates/rs-rich-art) | `0.0.12` |
 | [`rs-rich-mermaid`](https://crates.io/crates/rs-rich-mermaid) | `0.0.4` |
 | [`rs-rich-lumis`](https://crates.io/crates/rs-rich-lumis) | `0.0.3` |
-| [`rs-rich-record`](https://crates.io/crates/rs-rich-record) | `0.0.3` |
-| [`rs-rich-interact`](https://crates.io/crates/rs-rich-interact) | `0.0.3` |
-| [`rs-rich-micro`](https://crates.io/crates/rs-rich-micro) | `0.0.2` |
+| [`rs-rich-record`](https://crates.io/crates/rs-rich-record) | `0.0.4` |
+| [`rs-rich-interact`](https://crates.io/crates/rs-rich-interact) | `0.0.4` |
+| [`rs-rich-micro`](https://crates.io/crates/rs-rich-micro) | `0.0.3` |
 | [`rs-rich-diagram`](https://crates.io/crates/rs-rich-diagram) | `0.0.1` |
+| [`rs-rich-data`](https://crates.io/crates/rs-rich-data) | `0.0.1` |
 <!-- END MANIFEST VERSIONS -->
 
 ## Install

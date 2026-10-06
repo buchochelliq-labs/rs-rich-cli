@@ -73,15 +73,16 @@ in the release notes; the crates.io links show available packages.
 | [`rs-rich`](https://crates.io/crates/rs-rich) | `0.0.9` |
 | [`rs-rich-plugin-api`](https://crates.io/crates/rs-rich-plugin-api) | `0.0.3` |
 | [`rs-rich-macros`](https://crates.io/crates/rs-rich-macros) | `0.0.3` |
-| [`rs-rich-ext`](https://crates.io/crates/rs-rich-ext) | `0.0.13` |
-| [`rs-rich-cli`](https://crates.io/crates/rs-rich-cli) | `0.0.15` |
+| [`rs-rich-ext`](https://crates.io/crates/rs-rich-ext) | `0.0.14` |
+| [`rs-rich-cli`](https://crates.io/crates/rs-rich-cli) | `0.0.16` |
 | [`rs-rich-art`](https://crates.io/crates/rs-rich-art) | `0.0.12` |
 | [`rs-rich-mermaid`](https://crates.io/crates/rs-rich-mermaid) | `0.0.4` |
 | [`rs-rich-lumis`](https://crates.io/crates/rs-rich-lumis) | `0.0.3` |
-| [`rs-rich-record`](https://crates.io/crates/rs-rich-record) | `0.0.3` |
-| [`rs-rich-interact`](https://crates.io/crates/rs-rich-interact) | `0.0.3` |
-| [`rs-rich-micro`](https://crates.io/crates/rs-rich-micro) | `0.0.2` |
+| [`rs-rich-record`](https://crates.io/crates/rs-rich-record) | `0.0.4` |
+| [`rs-rich-interact`](https://crates.io/crates/rs-rich-interact) | `0.0.4` |
+| [`rs-rich-micro`](https://crates.io/crates/rs-rich-micro) | `0.0.3` |
 | [`rs-rich-diagram`](https://crates.io/crates/rs-rich-diagram) | `0.0.1` |
+| [`rs-rich-data`](https://crates.io/crates/rs-rich-data) | `0.0.1` |
 <!-- END MANIFEST VERSIONS -->
 
 | Package | Role | Import / installed name |
@@ -94,6 +95,7 @@ in the release notes; the crates.io links show available packages.
 | `rs-rich-plugin-api` | the plugin contract: highlighters, themes, boxes, renderers, fence renderers, components | `use rich_plugin_api` |
 | `rs-rich-mermaid` | Mermaid flowcharts drawn as text, ```` ```mermaid ```` fences | `use rich_mermaid` |
 | `rs-rich-diagram` | graph model, layered layout and `Diagram` renderable; DOT (Graphviz) sources and ```` ```dot ```` fences | `use rich_diagram` |
+| `rs-rich-data` | tabular data: CSV/TSV, JSONL, serde and Arrow row sources, type inference and column statistics | `use rich_data` |
 | `rs-rich-lumis` | the lumis (tree-sitter) code highlighter | `use rich_lumis` |
 | `rs-rich-record` | scripted terminal recordings (`rich record`) | `use rich_record` |
 | `rs-rich-interact` | interactive components: pickers, input, forms, pagers, explorers | `use rich_interact` |

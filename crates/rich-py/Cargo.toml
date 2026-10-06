@@ -6,7 +6,7 @@
 # tested by `.github/workflows/python.yml`.
 [package]
 name = "rs-rich-py"
-version = "0.0.4"
+version = "0.0.5"
 edition = "2021"
 license = "MIT"
 repository = "https://github.com/buchochelliq-labs/rs-rich-cli"

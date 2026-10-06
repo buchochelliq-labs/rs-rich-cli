@@ -1,0 +1,4 @@
+service,replicas,p99,healthy,deployed
+web,3,120.5,true,2026-10-01
+api,2,35,false,2026-10-02
+db,1,,true,2026-09-30

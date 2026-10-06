@@ -5,7 +5,7 @@
 # upstream release is recorded in UPSTREAM.toml. This package installs `rich`.
 [package]
 name = "rs-rich-cli"
-version = "0.0.15"
+version = "0.0.16"
 description = "The `rich` executable: a Rust port of Python `rich-cli` 1.8.1"
 edition.workspace = true
 license.workspace = true
@@ -84,6 +84,8 @@ rich-mermaid = { workspace = true, optional = true }
 # `rich dot` and ```dot fences (the DOT plugin), `rich deps --graph`, and
 # Graphviz's own SVG for `--dot-backend graphviz --export-svg`.
 rich-diagram = { workspace = true, features = ["plugin", "graphviz"] }
+# The CSV/TSV sniffer and reader behind `--csv` and `rich chart`.
+rich-data.workspace = true
 rich-record = { workspace = true, optional = true }
 rich-interact = { workspace = true, optional = true, features = ["data"] }
 rich-lumis = { workspace = true, optional = true }

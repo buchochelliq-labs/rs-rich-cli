@@ -39,6 +39,9 @@ rich-cli ──▶ rich-micro ──▶ rich-ext ──▶ rich      (micro asse
                  ├──▶ rich-plugin-api   registry, `:micro:name:` markup, terminal graphics;
                  └──▶ rich-art          `rich micro`, behind the CLI's `art` feature)
 rich-cli ──▶ rich-art ──▶ rich                     (FIGlet, images, GIFs, image diffs; the CLI's `art` feature)
+rich-cli ──▶ rich-data ──▶ rich-ext ──▶ rich       (tabular data: row sources; CSV/TSV, the reader `--csv`
+                                                 uses; JSONL, serde and Arrow (`arrow` feature) adapters;
+                                                 type inference and column statistics)
 rich-py  ──▶ rich, rich-ext, rich-art, rich-mermaid, rich-diagram, rich-micro, rich-interact, rich-cli
                            (Python bindings; outside the workspace, released to PyPI only)
 ```
@@ -67,6 +70,7 @@ possible, and keep the boundary free of core back-dependencies.
 | `rs-rich-interact` | independent SemVer | whenever we ship anything          |
 | `rs-rich-micro` | independent SemVer | whenever we ship anything             |
 | `rs-rich-diagram` | independent SemVer | whenever we ship anything           |
+| `rs-rich-data` | independent SemVer | whenever we ship anything              |
 | `rs-rich-macros` | independent SemVer | whenever we ship anything            |
 | `rs-rich-art`  | independent SemVer | whenever we ship anything              |
 | `rs-rich` (PyPI, `crates/rich-py`) | independent SemVer, `python-v…` tags | whenever we ship anything |

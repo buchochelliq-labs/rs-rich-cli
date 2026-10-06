@@ -182,6 +182,12 @@ jobs:
           # flowcharts draw through it; its snapshots are checked from both).
           - crate: rs-rich-diagram
             args: "--all-features"
+          # Tabular adapters, inference and statistics: the CSV/JSONL/serde
+          # default, and the Arrow adapter behind its off-by-default feature.
+          - crate: rs-rich-data
+            args: ""
+          - crate: rs-rich-data
+            args: "--all-features"
           # Every lumis language (its default); the bundles only select fewer.
           - crate: rs-rich-lumis
             args: ""

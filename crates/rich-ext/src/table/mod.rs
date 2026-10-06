@@ -14,6 +14,8 @@
 //!   one core `Table`.
 //! * [`stream`]: [`StreamingTable`], keyed rows for append/update workloads
 //!   under a live display, re-rendering only the rows that changed.
+//! * [`rules`]: conditional styles, rules that style a cell, row or column
+//!   by value ([`TableData::style_rules`]).
 //!
 //! ```
 //! use rich::{Console, Justify};
@@ -44,6 +46,7 @@
 
 pub mod data;
 pub mod group;
+pub mod rules;
 pub mod sort;
 pub mod stream;
 pub mod transform;
@@ -56,6 +59,7 @@ use rich::{ColumnOptions, Console, Justify, Style, Table, Text};
 
 pub use data::TableData;
 pub use group::{Aggregate, Group, GroupBy};
+pub use rules::{ColumnRef, Comparison, ResolvedRules, RuleError, StyleRule, StyleRules, Target};
 pub use sort::{Compare, Order, SortKey};
 pub use stream::{RenderStats, StreamingTable, Window};
 

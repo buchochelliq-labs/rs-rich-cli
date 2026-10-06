@@ -13,7 +13,8 @@
 //!   [`hyperlink`], [`log_handler`] (`RichHandler`, `SpanView`), `adapters`
 //!   (`log` / `tracing` features), [`event`].
 //! - Data and authoring: `data`, `deps` (Cargo dependency trees) and `schema`
-//!   (JSON Schema trees and diffs), all behind the `data` feature;
+//!   (JSON Schema trees and diffs, and the format-neutral schema model), all
+//!   behind the `data` feature;
 //!   [`derive`](mod@derive), [`macros`] (the
 //!   `macros` feature re-exports `richf!` and `#[derive(Rich)]`), [`cli_doc`]
 //!   (`clap` feature for `clap::Command`).
