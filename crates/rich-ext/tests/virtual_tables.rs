@@ -184,3 +184,40 @@ fn custom_sources_can_fetch_ranges_themselves() {
     let text = table.accessible_text(40);
     assert!(text.starts_with("Table with 2 rows, columns: i"), "{text}");
 }
+
+#[test]
+fn the_measurement_covers_the_position_line_and_footnote() {
+    let rows = FnRows::new(Some(1_000_000), |i| Some(vec![Value::from(i % 10)]));
+    let table = VirtualTable::new([Column::new("n")], rows)
+        .offset(500_000)
+        .height(1)
+        .footnote("a footnote longer than the position line");
+    let console = plain(80);
+    let measured = rich::measure::Measurement::get(&console, &console.options(), &table);
+    assert_eq!(
+        measured.maximum,
+        "a footnote longer than the position line".len()
+    );
+    // A fitted panel sizes itself from the measurement: nothing is cut short.
+    let out = console.render_export(&rich::Panel::fit(Box::new(table)));
+    assert!(out.contains("rows 500,001–500,001 of 1,000,000"), "{out}");
+    assert!(
+        out.contains("a footnote longer than the position line"),
+        "{out}"
+    );
+    assert!(!out.contains('…'), "{out}");
+}
+
+#[test]
+fn short_rows_sample_the_null_marker_width() {
+    let rows = vec![
+        vec![Value::from("a")],
+        vec![Value::from("b"), Value::from(2)],
+    ];
+    let table = VirtualTable::new([Column::new("x"), Column::new("y")], rows)
+        .null_marker("NULL")
+        .show_position(false);
+    assert_eq!(table.column_widths(), [1, 4]);
+    let out = plain(30).render_export(&table);
+    assert!(out.contains("│ a │ NULL │"), "{out}");
+}

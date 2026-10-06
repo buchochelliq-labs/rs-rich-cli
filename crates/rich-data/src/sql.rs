@@ -295,7 +295,9 @@ impl<S: VirtualRows> Renderable for ResultSet<S> {
     }
 
     fn measure(&self, console: &Console, options: &ConsoleOptions) -> rich::measure::Measurement {
-        self.to_virtual_table().measure(console, options)
+        self.to_virtual_table()
+            .footnote(self.footer(console.ascii_only()))
+            .measure(console, options)
     }
 }
 
@@ -383,6 +385,16 @@ mod tests {
         assert_eq!(result.footer(false), "(6+ rows)");
         let out = render(&result, 30);
         assert!(out.ends_with("rows 1–5 of 6+\n(6+ rows)\n"), "{out}");
+    }
+
+    #[test]
+    fn the_measurement_covers_the_footer() {
+        let mut rows = Rows::new(["n"]);
+        rows.push([Value::Int(1)]);
+        let result = ResultSet::new(rows).elapsed(Duration::from_millis(12));
+        let console = Console::builder().width(40).build();
+        let measured = rich::measure::Measurement::get(&console, &console.options(), &result);
+        assert_eq!(measured.maximum, "(1 row, 12ms)".len());
     }
 
     #[test]
