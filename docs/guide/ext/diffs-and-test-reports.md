@@ -197,9 +197,13 @@ file's, and with colour off every side line keeps its marker: `<` ours, `|`
 base, `>` theirs. The `diff.conflict.ours`, `diff.conflict.base`,
 `diff.conflict.theirs` and `diff.conflict.label` theme keys style it.
 
-Parsing follows git's rule for a marker: exactly seven characters at the
-start of a line, then whitespace or the end of the line. Eight `<` is text,
-which is how git writes a conflict nested inside another, and outside a
+Parsing follows git's rule for a marker: seven characters at the start of a
+line, then whitespace or the end of the line. A conflict's markers all share
+the opening marker's length, so a longer marker inside one is text, which is
+how git writes a conflict nested inside another. A path with a larger
+`conflict-marker-size` attribute gets longer markers throughout: a longer
+opening marker counts when a separator and a closing marker of its length
+follow it. Outside a
 conflict only `<<<<<<<` counts, so a Markdown heading underlined with
 `=======` stays text. Markers out of order, a second `<<<<<<<` and a conflict
 that is never closed return a `ConflictError` naming the line. Input is

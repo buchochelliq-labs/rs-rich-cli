@@ -86,8 +86,9 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   by path.
 - `rs-rich-ext` 0.0.14: `diff::ConflictFile` and `diff::ConflictView`
   (#339): a parser for merge-conflict markers, diff3's `|||||||` base and
-  labels included, CRLF-safe, that reads markers as git does (exactly seven
-  characters, so nested `<<<<<<<<` is text) and returns a `ConflictError`
+  labels included, CRLF-safe, that reads markers as git does (seven characters,
+  or a longer `conflict-marker-size` when the whole conflict uses it, so a
+  nested `<<<<<<<<` is text) and returns a `ConflictError`
   naming the line for markers out of order, nested or never closed, with
   `MAX_CONFLICT_SOURCE` (16 MiB) and `MAX_CONFLICTS` (10,000) limits. The
   view numbers each conflict, keeps context lines, and shows ours, base and

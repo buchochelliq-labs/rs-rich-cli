@@ -427,3 +427,47 @@ fn a_large_file_renders_its_conflicts_plain() {
         "{out}"
     );
 }
+
+#[test]
+fn a_longer_conflict_marker_size_is_honoured() {
+    // `conflict-marker-size=10` in .gitattributes: git writes ten.
+    let text = "\
+a
+<<<<<<<<<< HEAD
+b
+<<<<<<< not a marker at this size
+==========
+c
+>>>>>>>>>> topic
+d
+";
+    let file = ConflictFile::parse(text).unwrap();
+    let [conflict] = file.conflicts() else {
+        panic!("one conflict: {:?}", file.conflicts());
+    };
+    assert_eq!(conflict.ours.label.as_deref(), Some("HEAD"));
+    assert_eq!(
+        file.text(&conflict.ours),
+        "b\n<<<<<<< not a marker at this size"
+    );
+    assert_eq!(file.text(&conflict.theirs), "c");
+    assert_eq!((conflict.start_line(), conflict.end_line), (2, 7));
+}
+
+#[test]
+fn forced_columns_fall_back_to_stacked_when_too_narrow() {
+    for width in 6..=40 {
+        let view = ConflictView::parse(DIFF3)
+            .unwrap()
+            .layout(ConflictLayout::SideBySide);
+        let out = plain(&view, width);
+        assert_clean(&out, width);
+    }
+}
+
+#[test]
+fn a_huge_context_shows_the_rest_of_the_file() {
+    let view = ConflictView::parse(MERGE).unwrap().context(usize::MAX);
+    let out = plain(&view, 60);
+    assert!(out.contains("println!"), "{out}");
+}

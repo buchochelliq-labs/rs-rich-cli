@@ -13,10 +13,14 @@
 //! >>>>>>> feature
 //! ```
 //!
-//! A marker is exactly seven marker characters at the start of a line,
-//! followed by the end of the line or whitespace and an optional label, as
-//! git's own `rerere` reads them. A line of eight `<` is text, which is how
-//! git nests a conflict inside another (it lengthens the inner markers).
+//! A marker is seven marker characters at the start of a line, followed by
+//! the end of the line or whitespace and an optional label, as git's own
+//! `rerere` reads them. Inside a conflict every marker has the opening
+//! marker's length, so a longer one is text, which is how git nests a
+//! conflict inside another (it lengthens the inner markers). A path's
+//! `conflict-marker-size` attribute makes git write longer markers
+//! throughout; a longer opening marker opens a conflict when a separator and
+//! a closing marker of the same length follow it, and is text otherwise.
 //! Outside a conflict only `<<<<<<<` means anything, so a Markdown heading
 //! underlined with `=======` is just text. Inside one, markers out of order,
 //! a second `<<<<<<<`, and a conflict the input never closes are errors that
@@ -183,30 +187,63 @@ pub struct ConflictFile {
     crlf: bool,
 }
 
-/// A marker on `line`: its character and label, when the line is one.
-fn marker(line: &str) -> Option<(char, Option<&str>)> {
+/// A marker on `line`: its character, its length and its label, when the
+/// line is one. git writes [`MARKER_SIZE`] characters unless a path's
+/// `conflict-marker-size` attribute asks for more, so any run of at least
+/// that many counts; [`ConflictFile::parse`] holds a conflict's markers to
+/// the length its opening marker has.
+fn marker(line: &str) -> Option<(char, usize, Option<&str>)> {
     let first = line.chars().next()?;
     if !matches!(first, '<' | '|' | '=' | '>') {
         return None;
     }
-    let bytes = line.as_bytes();
-    if bytes.len() < MARKER_SIZE || bytes[..MARKER_SIZE].iter().any(|&b| b != first as u8) {
+    let length = line.bytes().take_while(|&b| b == first as u8).count();
+    if length < MARKER_SIZE {
         return None;
     }
-    let rest = &line[MARKER_SIZE..];
+    let rest = &line[length..];
     match rest.chars().next() {
-        None => Some((first, None)),
+        None => Some((first, length, None)),
         Some(c) if c.is_whitespace() => {
             let label = rest.trim();
             match (first, label.is_empty()) {
-                (_, true) => Some((first, None)),
+                (_, true) => Some((first, length, None)),
                 // git writes the separator bare; text after one is content.
                 ('=', false) => None,
-                (_, false) => Some((first, Some(label))),
+                (_, false) => Some((first, length, Some(label))),
             }
         }
         Some(_) => None,
     }
+}
+
+/// Whether the opening marker of `length` at `open` is followed by a
+/// separator and then a closing marker of the same length, before another
+/// opening marker of that length. `unclosed` remembers, per length, the
+/// line from which none closes.
+fn closes(
+    lines: &[String],
+    open: usize,
+    length: usize,
+    unclosed: &mut std::collections::HashMap<usize, usize>,
+) -> bool {
+    if unclosed.get(&length).is_some_and(|&from| open >= from) {
+        return false;
+    }
+    let mut separated = false;
+    for line in &lines[open + 1..] {
+        match marker(line) {
+            Some((kind, n, _)) if n == length => match kind {
+                '<' => return false,
+                '=' => separated = true,
+                '>' if separated => return true,
+                _ => {}
+            },
+            _ => {}
+        }
+    }
+    unclosed.insert(length, open);
+    false
 }
 
 enum State {
@@ -260,11 +297,33 @@ impl ConflictFile {
 
         let mut conflicts = Vec::new();
         let mut state = State::Outside;
+        // The length of the open conflict's markers: a marker of any other
+        // length inside it is content.
+        let mut size = MARKER_SIZE;
+        // Per marker length, the line from which no conflict of that length
+        // closes, so look-alike lines are not each scanned to the end.
+        let mut unclosed = std::collections::HashMap::new();
         for (index, line) in lines.iter().enumerate() {
             let number = index + 1;
-            let Some((kind, label)) = marker(line) else {
+            let Some((kind, length, label)) = marker(line) else {
                 continue;
             };
+            match state {
+                // git's own size opens a conflict as before. A longer one
+                // (a `conflict-marker-size` attribute) is a conflict only
+                // when a separator and a closing marker of the same length
+                // follow; otherwise the line is text.
+                State::Outside if kind == '<' && length != MARKER_SIZE => {
+                    if !closes(&lines, index, length, &mut unclosed) {
+                        continue;
+                    }
+                    size = length;
+                }
+                State::Outside if kind == '<' => size = length,
+                State::Outside => {}
+                _ if length != size => continue,
+                _ => {}
+            }
             let label = label.map(str::to_string);
             state = match (state, kind) {
                 (State::Outside, '<') => {
@@ -601,7 +660,7 @@ impl ConflictView {
             let limit = conflicts
                 .get(i + 1)
                 .map_or(self.file.lines.len(), |next| next.span().start);
-            let after = span.end..(span.end + self.context).min(limit);
+            let after = span.end..span.end.saturating_add(self.context).min(limit);
             shown_until = after.end;
             out.push(Shown { before, after });
         }
@@ -689,20 +748,22 @@ impl ConflictView {
     }
 
     fn side_by_side(&self, width: usize) -> bool {
+        if self.layout == ConflictLayout::Stacked {
+            return false;
+        }
+        let columns = self
+            .file
+            .conflicts()
+            .iter()
+            .map(|c| self.sides_shown(c).len())
+            .max()
+            .unwrap_or(2);
+        let per_column = width.saturating_sub(3 * (columns - 1)) / columns;
         match self.layout {
-            ConflictLayout::SideBySide => true,
-            ConflictLayout::Stacked => false,
-            ConflictLayout::Auto => {
-                let columns = self
-                    .file
-                    .conflicts()
-                    .iter()
-                    .map(|c| self.sides_shown(c).len())
-                    .max()
-                    .unwrap_or(2);
-                let inner = width.saturating_sub(3 * (columns - 1));
-                inner / columns >= self.gutter_width() + SIDE_BY_SIDE_MIN
-            }
+            // Forced columns still fall back to stacked when the dividers,
+            // gutters and one cell of text do not fit in `width`.
+            ConflictLayout::SideBySide => per_column > self.gutter_width(),
+            _ => per_column >= self.gutter_width() + SIDE_BY_SIDE_MIN,
         }
     }
 
@@ -964,18 +1025,20 @@ mod tests {
     use super::*;
 
     #[test]
-    fn markers_need_exactly_seven_characters() {
-        assert_eq!(marker("<<<<<<< HEAD"), Some(('<', Some("HEAD"))));
-        assert_eq!(marker("<<<<<<<"), Some(('<', None)));
-        assert_eq!(marker("<<<<<<<< HEAD"), None);
+    fn markers_need_seven_or_more_characters() {
+        assert_eq!(marker("<<<<<<< HEAD"), Some(('<', 7, Some("HEAD"))));
+        assert_eq!(marker("<<<<<<<"), Some(('<', 7, None)));
+        // Longer runs are markers of that length (`conflict-marker-size`);
+        // parsing decides whether one opens a conflict.
+        assert_eq!(marker("<<<<<<<< HEAD"), Some(('<', 8, Some("HEAD"))));
         assert_eq!(marker("<<<<<<"), None);
         assert_eq!(marker("<<<<<<<x"), None);
-        assert_eq!(marker("======="), Some(('=', None)));
-        assert_eq!(marker("=======  "), Some(('=', None)));
+        assert_eq!(marker("======="), Some(('=', 7, None)));
+        assert_eq!(marker("=======  "), Some(('=', 7, None)));
         assert_eq!(marker("======= x"), None);
         assert_eq!(
             marker("||||||| merged common ancestors"),
-            Some(('|', Some("merged common ancestors")))
+            Some(('|', 7, Some("merged common ancestors")))
         );
         assert_eq!(marker("x<<<<<<<"), None);
         assert_eq!(marker(""), None);
