@@ -63,10 +63,12 @@ mod diff;
 pub mod json;
 pub mod model;
 pub mod sql;
+mod timeline;
 
 pub use model::{
     Composition, Constraint, DataType, Field, FieldKind, ForeignKey, Literal, Schema, Unexpanded,
 };
+pub use timeline::SchemaTimeline;
 
 /// Theme keys for schema trees and diffs, with the styles used when a theme
 /// lacks them.
