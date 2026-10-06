@@ -1,0 +1,18 @@
+16 crates under 7 licences: 1 copyleft, 1 licence file only, 1 no licence
+
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━┓
+┃ Licence                          ┃ Crates ┃ Which                            ┃ Note              ┃
+┡━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━┩
+│ Apache-2.0 OR MIT                │      9 │ cc v1.1.28, log v0.4.22,         │                   │
+│                                  │        │ proc-macro2 v1.0.86, quote       │                   │
+│                                  │        │ v1.0.37, serde v1.0.210,         │                   │
+│                                  │        │ serde_derive v1.0.210, and 3     │                   │
+│                                  │        │ more                             │                   │
+│ Apache-2.0                       │      2 │ insta v1.40.0, similar v2.6.0    │                   │
+│ (Apache-2.0 OR MIT) AND          │      1 │ unicode-ident v1.0.13            │                   │
+│ Unicode-DFS-2016                 │        │                                  │                   │
+│ (licence file)                   │      1 │ demo-core v0.3.0                 │ licence file only │
+│ (none)                           │      1 │ thiserror-impl v1.0.64           │ no licence        │
+│ GPL-3.0-or-later                 │      1 │ demo-app v0.3.0                  │ copyleft          │
+│ MIT                              │      1 │ strum_macros v0.25.3             │                   │
+└──────────────────────────────────┴────────┴──────────────────────────────────┴───────────────────┘

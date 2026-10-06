@@ -104,6 +104,11 @@ fn command_options(name: &str) -> Vec<ArgSpec> {
             "depth",
             "duplicates",
             "no-dev",
+            "features",
+            "package",
+            "timings",
+            "audit",
+            "licenses",
             "width",
         ],
         "schema" => &["width"],
@@ -567,12 +572,47 @@ fn mode_options() -> Vec<ArgSpec> {
             "duplicates",
             SOURCES,
             "With `rich deps`, keep only the branches that lead to a crate resolved at more than \
-             one version",
+             one version, and add a consolidation summary: who pulls each version, and which \
+             version most of them could share",
         ),
         flag(
             "no-dev",
             SOURCES,
             "With `rich deps`, leave dev-dependencies out",
+        ),
+        flag(
+            "features",
+            SOURCES,
+            "With `rich deps`, show the features Cargo resolved for each crate: what each turns \
+             on, and which dependents asked for them; every crate with a feature, or only \
+             --package's",
+        ),
+        option(
+            "package",
+            "CRATE",
+            SOURCES,
+            "With `rich deps --features`, show only CRATE, as `name` or `name@version`",
+        ),
+        option(
+            "timings",
+            "FILE",
+            SOURCES,
+            "With `rich deps`, show a `cargo build --timings` report (the HTML file, or \
+             timing-info JSON lines; `-` for stdin): the slowest units as bars and a table; \
+             runs nothing",
+        ),
+        option(
+            "audit",
+            "FILE",
+            SOURCES,
+            "With `rich deps`, show `cargo audit --json` output from FILE (`-` for stdin) grouped \
+             by severity; exits 5 when it lists a vulnerability. Runs no scanner",
+        ),
+        flag(
+            "licenses",
+            SOURCES,
+            "With `rich deps`, group the crates by licence, marking copyleft, unknown and missing \
+             licences",
         ),
         option(
             "kind",
@@ -1443,7 +1483,8 @@ pub(crate) fn spec() -> CommandSpec {
         CommandSpec::new("deps")
             .about(
                 "A Cargo dependency tree from `cargo metadata`, crates resolved at several \
-                 versions marked; --why CRATE for what pulls a crate in, --graph to draw it",
+                 versions marked; --why CRATE for what pulls a crate in, --graph to draw it; \
+                 --features, --licenses, --timings FILE and --audit FILE for supply-chain reports",
             )
             .usage("deps [OPTIONS] [MANIFEST]")
             .arg(ArgSpec::positional("manifest").value(ValueHint::Path).help(

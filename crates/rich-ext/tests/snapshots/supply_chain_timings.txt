@@ -1,0 +1,31 @@
+12 units: 24.82s of compile time, 16.50s wall clock
+
+syn v2.0.79                    ████████████████████████████████████████ 6.84
+syn v1.0.109                   ██████████████████████████████           5.12
+serde_derive                   ██████████████████████▉                  3.91
+serde                          █████████████▏                           2.25
+strum_macros                   █████████▋                               1.64
+proc-macro2                    ████████                                 1.37
+thiserror-impl                 ██████▉                                  1.18
+demo-app demo "bin"            █████▌                                   0.94
+quote                          ███▉                                     0.66
+proc-macro2 build-script       ██▍                                      0.41
+unicode-ident                  ██▎                                      0.38
+proc-macro2 build-script (run) ▊                                        0.12
+
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━┳━━━━━━━┳━━━━━━━━━━┳━━━━━━━━━┓
+┃ Unit                           ┃ Version  ┃  Time ┃ Frontend ┃ Codegen ┃
+┡━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━╇━━━━━━━╇━━━━━━━━━━╇━━━━━━━━━┩
+│ syn                            │ v2.0.79  │ 6.84s │    3.95s │   2.89s │
+│ syn                            │ v1.0.109 │ 5.12s │    2.90s │   2.22s │
+│ serde_derive                   │ v1.0.210 │ 3.91s │    1.73s │   2.18s │
+│ serde                          │ v1.0.210 │ 2.25s │    1.60s │   0.65s │
+│ strum_macros                   │ v0.25.3  │ 1.64s │    0.88s │   0.76s │
+│ proc-macro2                    │ v1.0.86  │ 1.37s │    0.92s │   0.45s │
+│ thiserror-impl                 │ v1.0.64  │ 1.18s │        – │       – │
+│ demo-app demo "bin"            │ v0.3.0   │ 0.94s │        – │       – │
+│ quote                          │ v1.0.37  │ 0.66s │    0.40s │   0.26s │
+│ proc-macro2 build-script       │ v1.0.86  │ 0.41s │        – │       – │
+│ unicode-ident                  │ v1.0.13  │ 0.38s │    0.21s │   0.17s │
+│ proc-macro2 build-script (run) │ v1.0.86  │ 0.12s │        – │       – │
+└────────────────────────────────┴──────────┴───────┴──────────┴─────────┘
