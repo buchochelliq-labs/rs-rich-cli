@@ -336,6 +336,8 @@ fn shape_name(shape: Shape) -> &'static str {
         Shape::ParallelogramAlt => "parallelogram_alt",
         Shape::Trapezoid => "trapezoid",
         Shape::TrapezoidAlt => "trapezoid_alt",
+        // rs-rich-diagram's ER shape; no Mermaid source produces it.
+        Shape::Table => "table",
     }
 }
 
