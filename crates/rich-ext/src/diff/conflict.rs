@@ -217,32 +217,29 @@ fn marker(line: &str) -> Option<(char, usize, Option<&str>)> {
     }
 }
 
+/// The markers of each length other than git's own: per length, the `<`,
+/// `=` and `>` markers in file order, as `(line index, kind)`.
+type LongerMarkers = std::collections::HashMap<usize, Vec<(usize, char)>>;
+
 /// Whether the opening marker of `length` at `open` is followed by a
 /// separator and then a closing marker of the same length, before another
-/// opening marker of that length. `unclosed` remembers, per length, the
-/// line from which none closes.
-fn closes(
-    lines: &[String],
-    open: usize,
-    length: usize,
-    unclosed: &mut std::collections::HashMap<usize, usize>,
-) -> bool {
-    if unclosed.get(&length).is_some_and(|&from| open >= from) {
+/// opening marker of that length. Only the markers of that length are
+/// walked, and the walk stops at the next opening one, so the walks from
+/// all the opening markers of a length cover its markers once between them.
+fn closes(longer: &LongerMarkers, open: usize, length: usize) -> bool {
+    let Some(markers) = longer.get(&length) else {
         return false;
-    }
+    };
+    let after = markers.partition_point(|&(line, _)| line <= open);
     let mut separated = false;
-    for line in &lines[open + 1..] {
-        match marker(line) {
-            Some((kind, n, _)) if n == length => match kind {
-                '<' => return false,
-                '=' => separated = true,
-                '>' if separated => return true,
-                _ => {}
-            },
+    for &(_, kind) in &markers[after..] {
+        match kind {
+            '<' => return false,
+            '=' => separated = true,
+            '>' if separated => return true,
             _ => {}
         }
     }
-    unclosed.insert(length, open);
     false
 }
 
@@ -295,17 +292,27 @@ impl ConflictFile {
             lines.pop();
         }
 
+        // Every line is measured once, and the markers of other lengths
+        // are indexed by length for `closes`.
+        let markers: Vec<Option<(char, usize, Option<&str>)>> =
+            lines.iter().map(|line| marker(line)).collect();
+        let mut longer = LongerMarkers::new();
+        for (index, found) in markers.iter().enumerate() {
+            if let Some((kind @ ('<' | '=' | '>'), length, _)) = *found {
+                if length != MARKER_SIZE {
+                    longer.entry(length).or_default().push((index, kind));
+                }
+            }
+        }
+
         let mut conflicts = Vec::new();
         let mut state = State::Outside;
         // The length of the open conflict's markers: a marker of any other
         // length inside it is content.
         let mut size = MARKER_SIZE;
-        // Per marker length, the line from which no conflict of that length
-        // closes, so look-alike lines are not each scanned to the end.
-        let mut unclosed = std::collections::HashMap::new();
-        for (index, line) in lines.iter().enumerate() {
+        for (index, found) in markers.iter().enumerate() {
             let number = index + 1;
-            let Some((kind, length, label)) = marker(line) else {
+            let Some((kind, length, label)) = *found else {
                 continue;
             };
             match state {
@@ -314,7 +321,7 @@ impl ConflictFile {
                 // when a separator and a closing marker of the same length
                 // follow; otherwise the line is text.
                 State::Outside if kind == '<' && length != MARKER_SIZE => {
-                    if !closes(&lines, index, length, &mut unclosed) {
+                    if !closes(&longer, index, length) {
                         continue;
                     }
                     size = length;
