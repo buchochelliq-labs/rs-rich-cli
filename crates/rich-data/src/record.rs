@@ -15,6 +15,10 @@ pub const MAX_DEPTH: usize = 32;
 /// schema, unless told otherwise.
 pub const DEFAULT_SAMPLE: usize = 1000;
 
+/// How many keys seen after the sample a source names in
+/// [`RecordSource::unknown_keys`].
+pub const MAX_UNKNOWN_KEYS: usize = 100;
+
 /// Rows from a stream of JSON records.
 ///
 /// The source reads the first `sample` records ahead: their keys, in the
@@ -28,8 +32,10 @@ pub const DEFAULT_SAMPLE: usize = 1000;
 ///
 /// Keys first seen after the sample have no column; their values are
 /// dropped and their names kept in [`unknown_keys`](Self::unknown_keys), so
-/// a caller can say so. Read everything at once (the adapters' `read`) to
-/// sample every record.
+/// a caller can say so: the first [`MAX_UNKNOWN_KEYS`] of them, so a stream
+/// whose every record has a new key stays bounded
+/// ([`more_unknown_keys`](Self::more_unknown_keys) says there were more).
+/// Read everything at once (the adapters' `read`) to sample every record.
 #[derive(Debug)]
 pub struct RecordSource<I> {
     records: I,
@@ -39,6 +45,7 @@ pub struct RecordSource<I> {
     names: HashSet<String>,
     schema: Schema,
     unknown: BTreeSet<String>,
+    more_unknown: bool,
 }
 
 impl<I> RecordSource<I>
@@ -92,18 +99,30 @@ where
             columns: fields.iter().map(|f| f.name().to_string()).collect(),
             schema: Schema::new(fields),
             unknown: BTreeSet::new(),
+            more_unknown: false,
         })
     }
 
-    /// Keys seen after the sample, which have no column (so far).
+    /// Keys seen after the sample, which have no column (so far): the first
+    /// [`MAX_UNKNOWN_KEYS`] seen, sorted.
     pub fn unknown_keys(&self) -> impl Iterator<Item = &str> {
         self.unknown.iter().map(String::as_str)
+    }
+
+    /// Whether more keys than [`unknown_keys`](Self::unknown_keys) holds were
+    /// seen after the sample.
+    pub fn more_unknown_keys(&self) -> bool {
+        self.more_unknown
     }
 
     fn row(&mut self, record: Map<String, Json>) -> Row {
         for key in record.keys() {
             if !self.names.contains(key) && !self.unknown.contains(key) {
-                self.unknown.insert(key.clone());
+                if self.unknown.len() < MAX_UNKNOWN_KEYS {
+                    self.unknown.insert(key.clone());
+                } else {
+                    self.more_unknown = true;
+                }
             }
         }
         self.columns

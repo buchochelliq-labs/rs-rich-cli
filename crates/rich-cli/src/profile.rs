@@ -165,7 +165,10 @@ pub(crate) fn profile(cli: &Cli) -> Result<Profile, Failure> {
         Format::JsonLines => {
             let mut source = jsonl::source(reader).map_err(data_error)?;
             let mut profile = run(name, &mut source, options)?;
-            let late: Vec<String> = source.unknown_keys().map(controls::shown).collect();
+            let mut late: Vec<String> = source.unknown_keys().map(controls::shown).collect();
+            if source.more_unknown_keys() {
+                late.push("…".into());
+            }
             if !late.is_empty() {
                 profile.note(format!(
                     "keys first seen after record {} are not profiled: {}",

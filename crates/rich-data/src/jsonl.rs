@@ -24,7 +24,7 @@ use serde_json::Value as Json;
 
 use crate::{DataError, RecordSource, RowSource, Rows};
 
-pub use crate::record::{DEFAULT_SAMPLE, MAX_DEPTH};
+pub use crate::record::{DEFAULT_SAMPLE, MAX_DEPTH, MAX_UNKNOWN_KEYS};
 
 /// The longest line read, in bytes (64 MiB).
 pub const MAX_LINE: usize = 64 << 20;
@@ -166,5 +166,23 @@ mod tests {
             "took {:?}",
             started.elapsed()
         );
+    }
+
+    /// A stream whose every record past the sample has a new key keeps only
+    /// the first `MAX_UNKNOWN_KEYS` names: it used to keep them all, so the
+    /// memory grew with the input and `rich profile` printed every one.
+    #[test]
+    fn keys_after_the_sample_are_named_up_to_a_bound() {
+        let text: String = (0..MAX_UNKNOWN_KEYS + 50)
+            .map(|i| format!("{{\"id\": {i}, \"k{i:04}\": 1}}\n"))
+            .collect();
+        let mut source = source_with_sample(text.as_bytes(), 1).unwrap();
+        while let Some(row) = source.next_row() {
+            row.unwrap();
+        }
+        let names: Vec<&str> = source.unknown_keys().collect();
+        assert_eq!(names.len(), MAX_UNKNOWN_KEYS);
+        assert_eq!(names[0], "k0001");
+        assert!(source.more_unknown_keys());
     }
 }
