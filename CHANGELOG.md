@@ -150,6 +150,45 @@ From integration feedback on `rs-rich-record` 0.0.3 as a library:
   its keys, an edge per foreign key, `N:1` or `1:1`); `er::from_sql` reads
   DDL straight to an `ErDiagram`.
 
+### Large and SQL-shaped tables (0.0.16 workstream 2)
+
+[Plan](docs/plans/0.0.16.md), #235, #260.
+
+- `rs-rich-ext` `table::virtualized`: `VirtualTable` renders one window
+  (an offset and a height) of a `VirtualRows` source and fetches nothing
+  else, so a ten-million-row source renders in constant memory. A source
+  fetches rows by index (`row`), optionally knows its `row_count`, and may
+  fetch a range at once (`rows`); `Vec`s and slices of rows, references,
+  `Box`, `Arc` and closures (`FnRows`) implement it. Column widths are
+  fixed by the caller (`widths`, or a column's `ColumnOptions::width`) or
+  sampled once from the header and the first 100 rows (`sample`, at most
+  10,000), capped at 40 cells (`max_column_width`), so scrolling never
+  moves a column; cells end in `…` rather than wrap unless `wrap(true)`,
+  and `fit_window(true)` widens sampled columns to fit a window rendered
+  once. A position line reads `rows 1,001–1,040 of 1,000,000`, or `of
+  1,041+` when the source cannot count. For a viewport: `page()`,
+  `set_offset`, `scroll_by` (stopping at both ends), `set_height` (at most
+  10,000 rows), `max_offset` and `chrome_lines`. Also `row_numbers`, a
+  `null_marker` and a `footnote`. Ragged rows are padded with nulls or cut.
+  New theme keys `table.position`, `table.null` and `table.row_number`.
+  Interactive scrolling stays with `rs-rich-interact`'s viewport.
+- `rs-rich-data` `window`: `Rows` implements `VirtualRows`, and `RowWindow`
+  reads one pass of any `RowSource` (CSV, JSON Lines, serde, Arrow),
+  keeping only the window, the first rows for the width sample and the
+  count; an offset past the end gives the last full window, and
+  `count(false)` stops one row past the window.
+- `rs-rich-data` `sql`: `ResultSet` shows a query result the way a
+  database shell does, through `VirtualTable`: typed alignment from the
+  schema (integers, floats and decimals right, booleans centred, the rest
+  left; a column with no type by its sampled cells), `NULL` in
+  `table.null` apart from empty text, which stays empty, and a footer —
+  `(3 rows)`, `(1 row)`, `(1,001+ rows)`, with the elapsed time when given
+  (`(3 rows, 12ms)`). `limit` (default 1,000) and `offset` window a large
+  result, which then shows its position above the count. No database
+  connection: rows come from `Rows`, a `RowWindow`, or any `VirtualRows`
+  (`from_parts`). `typed_columns` and `alignment` are public for other
+  renderers.
+
 ### Records and conflicts (0.0.16 workstream 5)
 
 - `rs-rich-ext` 0.0.14: `data::RecordView` (#270), the record inspector:

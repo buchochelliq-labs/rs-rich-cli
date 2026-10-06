@@ -8,8 +8,13 @@ operations upstream leaves to you, and a table for rows that keep changing:
   multi-column sort, grouping with per-group aggregates, and a totals row.
 - **`StreamingTable`**: rows under stable keys for append/update workloads
   under a live display. A frame re-renders only the rows that changed.
+- **`VirtualTable`**: one window of a source too large to hold, with column
+  widths that stay put while it scrolls.
 - **`sort`** and **`group`**: the same operations as functions over plain
   rows, for building a core `Table` yourself.
+
+`rs-rich-data` adds a SQL-shaped result set on top (see
+[SQL result sets](#sql-result-sets)).
 
 Every view here *builds* core tables; none has its own table renderer. So the
 output looks exactly like a core `Table`, box styles, column options, ASCII
@@ -212,6 +217,182 @@ Gotchas:
 - `to_data()` takes a snapshot of the rows in display order as a `TableData`,
   for grouping and aggregates.
 
+## Virtualised tables
+
+`VirtualTable<S>` renders the rows `offset..offset + height` of a source and
+fetches nothing else, so a million-row source costs one window of memory.
+The source implements `VirtualRows`:
+
+| Method | Required | What it does |
+|---|---|---|
+| `row(index)` | yes | The row at a 0-based index, or `None` past the end |
+| `row_count()` | no | The number of rows, when the source knows |
+| `rows(start, len)` | no | A range at once, for sources that fetch ranges cheaply (the default calls `row`) |
+
+`Vec<Vec<Value>>`, slices of rows, references, `Box` and `Arc` implement it,
+and `FnRows` wraps a closure:
+
+```rust
+use rich::{Console, Justify};
+use rich_ext::table::{Column, FnRows, Value, VirtualTable};
+
+// Ten million rows, computed on demand.
+let rows = FnRows::new(Some(10_000_000), |i| {
+    Some(vec![Value::Int(i as i64 + 1), format!("item {i}").into()])
+});
+let table = VirtualTable::new(
+    [Column::new("id").justify(Justify::Right), Column::new("name")],
+    rows,
+)
+.widths([8, 10])
+.offset(1_000)
+.height(3);
+Console::new().print(&table);
+```
+
+```text
+┏━━━━━━━━━━┳━━━━━━━━━━━━┓
+┃       id ┃ name       ┃
+┡━━━━━━━━━━╇━━━━━━━━━━━━┩
+│     1001 │ item 1000  │
+│     1002 │ item 1001  │
+│     1003 │ item 1002  │
+└──────────┴────────────┘
+rows 1,001–1,003 of 10,000,000
+```
+
+### Column widths
+
+Widths don't follow the window, so columns never jump while you scroll. Each
+column's width comes from the first of these that is set:
+
+1. `widths([…])`, in column order (`None` skips a column).
+2. The column's own `ColumnOptions::width`.
+3. A sample: the header and the first `sample(n)` rows (default 100, at most
+   10,000), capped at `max_column_width` (default 40). The sample is taken
+   once and cached; `resample()` takes it again.
+
+Cells don't wrap, so a row is one line and longer text ends in `…`.
+`wrap(true)` wraps instead. `fit_window(true)` also widens sampled columns
+to fit the rows shown, for a window rendered once rather than scrolled.
+
+### The position line
+
+Under the table, a `table.position` line says where the window is:
+
+| Source | Line |
+|---|---|
+| Knows its count | `rows 1,001–1,040 of 1,000,000` |
+| Can't count, more rows follow | `rows 1–40 of 41+` |
+| Can't count, end reached | `rows 961–1,000 of 1,000` |
+| Empty | `no rows` |
+
+An offset past the end of a counted source shows the last full window.
+`show_position(false)` hides the line, and `footnote(text)` adds one more
+line below it. `row_numbers(true)` adds a `#` column, and
+`null_marker("NULL")` shows null cells as a dim italic `NULL` instead of
+empty, the way an empty string shows.
+
+### In a viewport
+
+`VirtualTable` is a static renderer. Interactive scrolling belongs to
+`rs-rich-interact`'s viewport, which drives the window through these methods:
+
+| Method | Effect |
+|---|---|
+| `set_offset(n)` / `scroll_by(±n)` | Moves the window. `scroll_by` stops at the top and at the last full window |
+| `set_height(n)` | Shows `n` rows (at most 10,000) |
+| `max_offset()` | The offset of the last full window, when the count is known |
+| `page()` | The rows the window shows, its start, the total and whether more follow |
+| `chrome_lines(console, width)` | The lines around the rows: title, edges, header, position and footnote |
+
+A viewport of `lines` lines holds `lines - chrome_lines(…)` rows:
+
+```rust
+use rich::Console;
+use rich_ext::table::{Column, FnRows, Value, VirtualTable};
+
+let rows = FnRows::new(Some(1_000), |i| Some(vec![Value::from(i)]));
+let mut table = VirtualTable::new([Column::new("i")], rows);
+let console = Console::builder().width(30).build();
+table.set_height(12 - table.chrome_lines(&console, 30));
+assert_eq!(console.render_export(&table).lines().count(), 12);
+```
+
+### Rows from data files
+
+With `rs-rich-data`, `Rows` implements `VirtualRows`. A forward-only
+`RowSource` (a CSV or JSON Lines reader, an Arrow batch stream) can't fetch
+by index, so `rich_data::window::RowWindow` reads it once. It keeps the
+window, the first rows (for the width sample) and the count:
+
+```rust
+use rich_data::window::RowWindow;
+
+let window = RowWindow::reader()
+    .offset(50_000)
+    .len(40)
+    .count(true) // read to the end for the total (the default)
+    .read(source)?;
+console.print(&window.to_virtual_table());
+```
+
+With `count(false)`, reading stops one row past the window, and the position
+line reads `of 50,041+`.
+
+## SQL result sets
+
+`rich_data::sql::ResultSet` shows a query result the way a database shell
+does. It renders through `VirtualTable` and needs no database connection:
+rows come from `Rows`, a `RowWindow` of any adapter, or any `VirtualRows`
+(`ResultSet::from_parts(columns, schema, source)`).
+
+- **Typed alignment.** Each column's type comes from the schema (by name,
+  else by position). Integers, floats and decimals are right-justified,
+  booleans centred, and text, dates and timestamps left. A column without a
+  type is right-justified when every sampled non-null cell is a number.
+- **NULL.** A null cell reads `NULL` in `table.null` (dim italic). An empty
+  string stays empty. `null_marker` changes the text.
+- **The row count.** `(3 rows)`, `(1 row)`, or `(1,001+ rows)` when the source
+  can't count, with the elapsed time if you give one: `(3 rows, 12ms)`.
+- **Large results.** `limit` (default 1,000, at most 10,000) and `offset`
+  choose the window. A windowed result shows its position line above the
+  count.
+
+```rust
+use std::time::Duration;
+
+use rich_data::sql::ResultSet;
+use rich_data::{DataType, Field, Rows, Schema, Value};
+
+let schema = Schema::new([
+    Field::new("id", DataType::Integer),
+    Field::new("name", DataType::String),
+    Field::new("active", DataType::Boolean),
+    Field::new("balance", DataType::decimal()),
+]);
+let mut rows = Rows::new(["id", "name", "active", "balance"]).with_schema(schema);
+rows.push([Value::Int(1), "ada".into(), "true".into(), Value::Float(12.5)]);
+rows.push([Value::Int(2), "".into(), "false".into(), Value::Null]);
+rows.push([Value::Int(10), Value::Null, "true".into(), Value::Float(-3.0)]);
+console.print(&ResultSet::new(rows).elapsed(Duration::from_millis(12)));
+```
+
+```text
+┏━━━━┳━━━━━━┳━━━━━━━━┳━━━━━━━━━┓
+┃ id ┃ name ┃ active ┃ balance ┃
+┡━━━━╇━━━━━━╇━━━━━━━━╇━━━━━━━━━┩
+│  1 │ ada  │  true  │    12.5 │
+│  2 │      │ false  │    NULL │
+│ 10 │ NULL │  true  │      -3 │
+└────┴──────┴────────┴─────────┘
+(3 rows, 12ms)
+```
+
+For a file, `ResultSet::read(source, offset, limit)` reads one pass of any
+`RowSource`. Run `infer::Inferrer` over CSV rows first so their columns get
+types.
+
 ## Styles
 
 | Key | Default | Used for |
@@ -220,6 +401,9 @@ Gotchas:
 | `table.aggregate` | `italic` | Summary and totals rows |
 | `table.sort_indicator` | `cyan` | `▲`/`▼` in headers |
 | `table.more` | `dim` | The window's `… N more rows` line |
+| `table.position` | `dim` | A virtualised table's position line and footnote |
+| `table.null` | `dim italic` | The `NULL` marker |
+| `table.row_number` | `dim` | The `#` column of a virtualised table |
 
 These keys are listed in `table::STYLES` and included in `extended_theme()`.
 If a theme lacks a key, the renderers fall back to the default in this table.
@@ -229,6 +413,7 @@ without colour.
 
 ## Accessibility
 
-`TableData` and `StreamingTable` implement `a11y::AccessibleText` through
-their core `Table`. The result is the same `Table with N rows, columns: …`
+`TableData`, `StreamingTable` and `VirtualTable` implement
+`a11y::AccessibleText` through their core `Table` (for `VirtualTable`, the
+rows of the window). The result is the same `Table with N rows, columns: …`
 summary that a core table produces.
