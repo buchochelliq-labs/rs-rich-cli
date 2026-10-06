@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import io
 import json
+import os
+import sys
 
 import pytest
 
@@ -103,6 +105,27 @@ def test_files_by_extension_and_by_content(tmp_path):
         data.read_file(tmp_path / "missing.csv")
     with pytest.raises(ValueError):
         data.read_file(csv, format="xlsx")
+
+
+def non_utf8_file(directory, text: str):
+    """A file whose name holds a byte that is not UTF-8, or skip where the
+    platform or filesystem has no such names."""
+    if sys.platform == "win32":
+        pytest.skip("Windows paths are UTF-16")
+    path = directory / os.fsdecode(b"bad\xff.csv")
+    try:
+        path.write_text(text, encoding="utf-8")
+    except (OSError, UnicodeError):
+        pytest.skip("the filesystem refuses non-UTF-8 names")
+    return path
+
+
+def test_files_with_non_utf8_names(tmp_path):
+    path = non_utf8_file(tmp_path, SERVICES)
+    assert data.read_file(path).columns == ["service", "p99", "up"]
+    profile = data.Profile.from_path(path)
+    assert profile.rows == 3
+    assert profile.name.endswith("bad\ufffd.csv")
 
 
 def test_rows_from_python_pad_and_cut():
