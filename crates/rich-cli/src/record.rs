@@ -253,23 +253,22 @@ pub(super) fn dispatch(args: &[String]) -> ExitCode {
         if let Some(keys) = args.key_overlay {
             presentation.key_overlay = keys;
         }
-        let formats = recording.formats(args.formats);
-        match recorder::write(
+        match recorder::write_selected(
             &recording,
             &dir,
             &stem,
-            formats,
+            args.formats,
             &fonts,
             &options.theme,
             Some((path, &source)),
         ) {
             Ok(written) => {
-                for file in written {
+                for file in &written.paths {
                     eprintln!("  {}", file.display());
                 }
-                if formats.mp4 && !rich_record::render::video::ffmpeg_available() {
-                    let mp4 = recording.output_path(tape::Format::Mp4, &stem);
-                    eprintln!("  ffmpeg not found: skipped {mp4}");
+                for skipped in &written.skipped {
+                    let file = skipped.path.strip_prefix(&dir).unwrap_or(&skipped.path);
+                    eprintln!("  {}: skipped {}", skipped.reason, file.display());
                 }
             }
             Err(error) => {

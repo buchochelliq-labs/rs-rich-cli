@@ -652,10 +652,88 @@ fn check_pixels(
     Ok(())
 }
 
+/// What [`write_selected`] produced.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Written {
+    /// The formats written: the tape's `Output` formats that the caller also
+    /// allowed (see [`Recording::formats`]).
+    pub formats: Formats,
+    /// The files written.
+    pub paths: Vec<PathBuf>,
+    /// Files those formats called for that could not be made.
+    pub skipped: Vec<Skipped>,
+}
+
+impl Written {
+    /// Whether every file the selected formats called for was written.
+    pub fn is_complete(&self) -> bool {
+        self.skipped.is_empty()
+    }
+}
+
+/// A file [`write_selected`] could not make, and why.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Skipped {
+    /// Its format.
+    pub format: Format,
+    /// Where it would have been written.
+    pub path: PathBuf,
+    /// Why it was not.
+    pub reason: String,
+}
+
+/// Write the files the tape asks for: [`write`] with the tape's `Output`
+/// formats that `allowed` also permits ([`Recording::formats`]), so a tape
+/// that names `Output demo.png` writes a PNG and not every format. Pass
+/// [`Formats::ALL`] to honour the tape alone.
+///
+/// An MP4 needs FFmpeg. When the selected formats include one and FFmpeg is
+/// not installed, nothing fails: the MP4 is listed in [`Written::skipped`],
+/// so a caller that needs the video can check [`Written::is_complete`]
+/// rather than equate a successful write with a produced file.
+pub fn write_selected(
+    recording: &Recording,
+    dir: &Path,
+    stem: &str,
+    allowed: Formats,
+    fonts: &raster::Fonts,
+    theme: &Theme,
+    provenance: Option<(&Path, &[u8])>,
+) -> std::io::Result<Written> {
+    let formats = recording.formats(allowed);
+    // Without FFmpeg no MP4 is encoded, so none is validated either: a
+    // recording too long or too large for video still writes the rest and
+    // reports the MP4 skipped.
+    let encode = Formats {
+        mp4: formats.mp4 && video::ffmpeg_available(),
+        ..formats
+    };
+    let paths = write(recording, dir, stem, encode, fonts, theme, provenance)?;
+    let mut skipped = Vec::new();
+    if formats.mp4 {
+        let path = dir.join(recording.output_path(Format::Mp4, stem));
+        if !paths.contains(&path) {
+            skipped.push(Skipped {
+                format: Format::Mp4,
+                path,
+                reason: "ffmpeg not found".into(),
+            });
+        }
+    }
+    Ok(Written {
+        formats,
+        paths,
+        skipped,
+    })
+}
+
 /// Write the recording's files into `dir`, removing screenshots the last
 /// write listed that this recording no longer takes. With `provenance`, the
 /// written `provenance.json` lists the screenshots for the next write.
 /// Returns the paths written.
+///
+/// `formats` is used as given: a tape's `Output` lines are not applied here.
+/// [`write_selected`] applies them, and reports a skipped MP4.
 ///
 /// Refused before anything is written: a `stem` that [`stem_allowed`]
 /// refuses, a GIF, MP4 or HTML page of a recording longer than
@@ -1030,6 +1108,100 @@ mod tests {
         .unwrap();
         assert!(dir.join("pages/t.html").exists(), "{written:?}");
         assert!(dir.join("shot.txt").exists());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn without_ffmpeg_a_long_recording_reports_the_video_skipped() {
+        let mut recording = recording();
+        recording.timeline.truncated = true;
+        recording.outputs = crate::tape::parse("Output mp4\n").unwrap().outputs;
+        let dir = scratch("selected-long");
+        let result = write_selected(
+            &recording,
+            &dir,
+            "s",
+            Formats::ALL,
+            &raster::Fonts::embedded(),
+            &Theme::default(),
+            None,
+        );
+        if video::ffmpeg_available() {
+            let error = result.unwrap_err();
+            assert!(error.to_string().contains("too long for video"), "{error}");
+        } else {
+            let written = result.unwrap();
+            assert!(written.formats.mp4, "{written:?}");
+            assert_eq!(written.skipped.len(), 1, "{written:?}");
+            assert_eq!(written.skipped[0].reason, "ffmpeg not found");
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn write_selected_honours_the_tape_and_reports_a_skipped_video() {
+        let mut recording = recording();
+        recording.outputs = crate::tape::parse("Output png\n").unwrap().outputs;
+        let dir = scratch("selected");
+        let fonts = raster::Fonts::embedded();
+        let written = write_selected(
+            &recording,
+            &dir,
+            "s",
+            Formats::ALL,
+            &fonts,
+            &Theme::default(),
+            None,
+        )
+        .unwrap();
+        // The tape names a PNG, so ALL does not add the other formats.
+        assert!(written.formats.png && !written.formats.svg && !written.formats.gif);
+        assert!(dir.join("shot.png").exists() && !dir.join("shot.svg").exists());
+        assert!(!dir.join("s.cast").exists());
+        assert!(written.is_complete(), "{written:?}");
+        let _ = std::fs::remove_dir_all(&dir);
+
+        recording.outputs = crate::tape::parse("Output mp4\n").unwrap().outputs;
+        let dir = scratch("selected-mp4");
+        let written = write_selected(
+            &recording,
+            &dir,
+            "s",
+            Formats::ALL,
+            &fonts,
+            &Theme::default(),
+            None,
+        )
+        .unwrap();
+        let mp4 = dir.join("s.mp4");
+        if video::ffmpeg_available() {
+            assert!(
+                written.is_complete() && written.paths.contains(&mp4),
+                "{written:?}"
+            );
+        } else {
+            assert_eq!(
+                written.skipped,
+                [Skipped {
+                    format: Format::Mp4,
+                    path: mp4.clone(),
+                    reason: "ffmpeg not found".into(),
+                }]
+            );
+            assert!(!written.is_complete() && !mp4.exists());
+        }
+        // Allowing no video drops the MP4 rather than reporting it skipped.
+        let written = write_selected(
+            &recording,
+            &dir,
+            "s",
+            Formats::NO_VIDEO,
+            &fonts,
+            &Theme::default(),
+            None,
+        )
+        .unwrap();
+        assert!(!written.formats.mp4 && written.is_complete());
         let _ = std::fs::remove_dir_all(&dir);
     }
 
