@@ -31,6 +31,7 @@ rich dot services.dot                                   # a DOT (Graphviz) graph
 rich deps --why syn                                     # Cargo dependency tree; what pulls a crate in
 rich schema order-v1.json order-v2.json                 # a JSON Schema as a tree, or what changed
 rich chart sales.csv --kind bar --x month --y revenue   # a chart from CSV, JSON or stdin
+rich profile orders.csv --columns region,amount        # types, nulls, statistics, distributions
 rich diff old.rs new.rs --side-by-side                  # text diff; `git diff | rich diff -` for patches
 rich view src/main.rs --search todo                     # any file, rendered or highlighted, paged
 rich hex firmware.bin --offset 0x200 --length 64        # hex dump (alias: hexdump)
@@ -170,6 +171,15 @@ Charts
   positions or labels and `--y COLUMN`, repeatable, the series; columns go
   by header or 1-based number. A missing column, or a value that is not a
   number, is refused with its row and column (exit 4).
+
+Profiles
+: `rich profile [FILE]` profiles CSV, TSV or JSON Lines (from a file, a URL
+  or stdin): each column's type, nulls, distinct values, statistics and a
+  histogram or its most common values, and a map of where the nulls are.
+  Input is streamed; past `--sample N` rows (10,000) the statistics describe
+  a uniform sample and the heading prints its size. `--columns a,b` and
+  `--top N` choose what is shown, and `--report json` writes the profile as
+  JSON to stdout.
 
 Filter and highlight
 : `--filter PATTERN` keeps only what matches, and `--highlight PATTERN` marks

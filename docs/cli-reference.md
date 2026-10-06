@@ -135,6 +135,14 @@ Choose at most one; the default auto-detects .md/.rst/.json/.csv/.tsv/.ipynb, .m
 | `--x <COLUMN>` | With `rich chart`, the column of x positions (line, scatter) or labels (bar, heatmap), by header or 1-based number (default: the row number; for labels, the first column that is not all numbers) |
 | `--y <COLUMN>...` | With `rich chart`, a column to draw, by header or 1-based number; repeatable, one series each (default: every numeric column but --x) |
 
+### Profile
+
+| Option | Description |
+| --- | --- |
+| `--sample <N>` | With `rich profile`, the most rows kept for types, statistics and distributions (default 10000): a longer input is sampled uniformly, the sample size is printed, and nulls still count every row. |
+| `--columns <COLUMN[,COLUMN...]>...` | With `rich profile`, profile only these columns, by header, in this order; repeatable. |
+| `--top <N>` | With `rich profile`, the most common values shown for a column that is not numeric (default 5) |
+
 ### Image
 
 | Option | Description |
@@ -314,6 +322,7 @@ Self-contained examples; ignores config; accepts --no-color.
 | `deps` | A Cargo dependency tree from `cargo metadata`, crates resolved at several versions marked; --why CRATE for what pulls a crate in, --graph to draw it; --features, --licenses, --timings FILE and --audit FILE for supply-chain reports |
 | `schema` | A JSON Schema as a tree: types, required markers, constraints, $refs resolved; with two schemas, what changed between them and which changes break |
 | `chart` | A chart from CSV, JSON or stdin: a sparkline, bars, lines, points or a heatmap; --x and --y pick the columns, a missing column or a value that is not a number is refused with its row and column |
+| `profile` | A profile of CSV, TSV or JSON Lines: each column's type, nulls, distinct values, statistics and distribution, and a map of where the nulls are; a long input is sampled. --report json writes the profile as JSON to stdout |
 | `config` | Show, validate, explain or document configuration |
 | `choose` | Pick from ITEMs with a fuzzy-filtered list and print the choice; exits 1 when cancelled |
 | `filter` | Type to filter ITEMs and print the choice; without a terminal, print the lines that match --value |
@@ -976,6 +985,42 @@ rich chart [OPTIONS] [FILE]
 | Argument | Description |
 | --- | --- |
 | `[FILE]` | CSV, TSV, JSON, JSON Lines or whitespace-separated numbers, an http(s) URL, or `-` for stdin (the default) |
+
+### rich profile
+
+A profile of CSV, TSV or JSON Lines: each column's type, nulls, distinct values, statistics and distribution, and a map of where the nulls are; a long input is sampled. --report json writes the profile as JSON to stdout
+
+#### Usage
+
+```text
+rich profile [OPTIONS] [FILE]
+```
+
+#### Profile
+
+| Option | Description |
+| --- | --- |
+| `--sample <N>` | With `rich profile`, the most rows kept for types, statistics and distributions (default 10000): a longer input is sampled uniformly, the sample size is printed, and nulls still count every row. |
+| `--columns <COLUMN[,COLUMN...]>...` | With `rich profile`, profile only these columns, by header, in this order; repeatable. |
+| `--top <N>` | With `rich profile`, the most common values shown for a column that is not numeric (default 5) |
+
+#### Output & reports
+
+| Option | Description |
+| --- | --- |
+| `--report <F>` | Emit a result/error envelope on stderr. Default: `human`. Possible values: `human`, `json`. |
+
+#### Layout
+
+| Option | Description |
+| --- | --- |
+| `-w`, `--width <N>` | Render the output N columns wide (the console keeps its own width, so --left/--center/--right still use it) |
+
+#### Arguments
+
+| Argument | Description |
+| --- | --- |
+| `[FILE]` | CSV, TSV or JSON Lines (by extension, else by the first character), an http(s) URL, or `-` for stdin (the default) |
 
 ### rich config
 

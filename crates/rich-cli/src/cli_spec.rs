@@ -25,6 +25,7 @@ const DIFF: &str = "Diff & ANSI";
 const VIEWERS: &str = "Viewers";
 const SOURCES: &str = "Diagram sources";
 const CHART: &str = "Chart";
+const PROFILE: &str = "Profile";
 const EXPORT: &str = "Export";
 const PAGING: &str = "Paging";
 const WATCH: &str = "Watch";
@@ -113,6 +114,7 @@ fn command_options(name: &str) -> Vec<ArgSpec> {
         ],
         "schema" => &["width"],
         "chart" => &["kind", "x", "y", "width"],
+        "profile" => &["sample", "columns", "top", "report", "width"],
         "env" => &["show-secrets", "width"],
         "capture" => &["cast", "redact", "redact-pattern", "sanitize", "width"],
         "inspect" => &[
@@ -639,6 +641,29 @@ fn mode_options() -> Vec<ArgSpec> {
              series each (default: every numeric column but --x)",
         )
         .multiple(true),
+        option(
+            "sample",
+            "N",
+            PROFILE,
+            "With `rich profile`, the most rows kept for types, statistics and distributions \
+             (default 10000): a longer input is sampled uniformly, the sample size is printed, \
+             and nulls still count every row",
+        ),
+        option(
+            "columns",
+            "COLUMN[,COLUMN...]",
+            PROFILE,
+            "With `rich profile`, profile only these columns, by header, in this order; \
+             repeatable",
+        )
+        .multiple(true),
+        option(
+            "top",
+            "N",
+            PROFILE,
+            "With `rich profile`, the most common values shown for a column that is not \
+             numeric (default 5)",
+        ),
         option(
             "highlighter",
             "NAME",
@@ -1525,6 +1550,20 @@ pub(crate) fn spec() -> CommandSpec {
             ))
             .args(command_options("chart")),
     );
+    spec = spec.subcommand(
+        CommandSpec::new("profile")
+            .about(
+                "A profile of CSV, TSV or JSON Lines: each column's type, nulls, distinct values, \
+                 statistics and distribution, and a map of where the nulls are; a long input is \
+                 sampled. --report json writes the profile as JSON to stdout",
+            )
+            .usage("profile [OPTIONS] [FILE]")
+            .arg(ArgSpec::positional("file").value(ValueHint::Path).help(
+                "CSV, TSV or JSON Lines (by extension, else by the first character), an http(s) \
+                 URL, or `-` for stdin (the default)",
+            ))
+            .args(command_options("profile")),
+    );
     spec = spec.subcommand(config_command());
     #[cfg(feature = "interact")]
     for command in super::interactive::commands() {
@@ -1753,6 +1792,7 @@ mod tests {
     const VIEWERS: &str = include_str!("viewers.rs");
     const SOURCES_RS: &str = include_str!("sources.rs");
     const CHART_RS: &str = include_str!("chart.rs");
+    const PROFILE_RS: &str = include_str!("profile.rs");
     #[cfg(feature = "interact")]
     const INTERACTIVE: &str = include_str!("interactive.rs");
     #[cfg(feature = "art")]
@@ -1810,6 +1850,7 @@ mod tests {
             item(VIEWERS, "impl ViewerOptions {"),
             item(SOURCES_RS, "impl GraphSourceOptions {"),
             item(CHART_RS, "impl ChartOptions {"),
+            item(PROFILE_RS, "impl ProfileOptions {"),
         ] {
             out.extend(option_literals(source));
         }

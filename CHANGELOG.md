@@ -150,6 +150,57 @@ From integration feedback on `rs-rich-record` 0.0.3 as a library:
   its keys, an edge per foreign key, `N:1` or `1:1`); `er::from_sql` reads
   DDL straight to an `ErDiagram`.
 
+### Profiling and data quality (0.0.16 workstream 3)
+
+[Plan](docs/plans/0.0.16.md), #343, #344, #345, #346, #269.
+
+- `rs-rich-data` `profile`: a `Profile` of any row source. Each column has
+  its inferred type (through `infer`), null count and rate, distinct values,
+  min, max, mean, median and quartiles (through `stats`), and a
+  `Distribution`: histogram bins from `rich_ext::chart::Histogram` for a
+  numeric column (#345), the most common values and the rest for any other.
+  A `MissingMap` (#346) buckets the rows in order and counts each column's
+  nulls per bucket, drawn as a `rich_ext::chart::Heatmap` of the percentage
+  null. The model is `serde` (`to_json` adds `sampled`) and renders as a
+  heading, a column table, each distribution and the map, with
+  `profile.*` theme keys (`profile::STYLES`).
+- Profiles are bounded: `Profiler` reads one row at a time and keeps a
+  uniform reservoir sample (Algorithm R with a fixed seed, so the same input
+  gives the same profile) of `ProfileOptions::sample` rows (10,000 by
+  default); types, distinct values, statistics and distributions describe
+  the sample, and the row count, null counts and the map (at most 20
+  buckets, neighbours merged as rows arrive) count every row. The heading
+  prints the sample size (`sampled 10,000 of 3,000,000 rows`). Null tokens
+  (`infer::DEFAULT_NULL_TOKENS`: empty, `null`, `NULL`, `NA`, `N/A`) are
+  null in every column. A 3,000,000-row, 76 MB CSV profiles in 35 MiB.
+- `csv::CsvReader::source` streams CSV/TSV from any `BufRead` (#343):
+  `CsvSource` sniffs the dialect and header from the first 1,024
+  characters as `read` does, parses a record at a time (quoted fields may
+  span lines, up to `csv::MAX_RECORD`, 64 MiB), pads short rows and counts
+  rows cut to the columns (`longer_rows`). Its rows equal `read`'s for the
+  same text. `csv::Header::UnlessNumeric` is `rich chart`'s header rule
+  (a header unless the first row is all numbers), for input where the
+  sniffer's guess fails on one empty cell. JSON Lines streams through the
+  existing `jsonl::source` (#344).
+- `rs-rich-data` `quality` (#269): a data-quality result model,
+  `CheckResult` (check, column, `Status` pass/warn/fail/error, observed,
+  expected, message, `FailingRows`), and `QualityReport`, rendered like
+  `rich_ext`'s `TestReport`: failures, errors and warnings first with their
+  failing rows as a table, then a table of every check and a summary line,
+  with data shown with its controls made visible and `quality.*` theme
+  keys. `quality::not_null` and `quality::unique` check `Rows`. No check
+  engine.
+- `rs-rich-cli`: `rich profile [FILE]` profiles CSV/TSV or JSON Lines (by
+  extension, else by the first character) from a file, a URL or stdin.
+  Files and stdin are streamed, so a long input is sampled rather than read
+  into memory. `--sample N`, `--columns a,b` and `--top N` choose what is
+  kept and shown; `--report json` writes the profile document to stdout, as
+  `doctor --report json` does, and failures keep the stderr envelope. An
+  unknown column, an unreadable line or empty input is a data error
+  (exit 4); a row with more cells than the header is noted, not refused.
+  In `--help`, completions, `docs/cli.md`, `docs/cli-reference.md` and
+  `docs/PORTING.md`.
+
 ### Records and conflicts (0.0.16 workstream 5)
 
 - `rs-rich-ext` 0.0.14: `data::RecordView` (#270), the record inspector:
