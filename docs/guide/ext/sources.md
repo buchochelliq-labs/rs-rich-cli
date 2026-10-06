@@ -231,9 +231,9 @@ deep. Past a limit, or on malformed input, the reader returns an error, and
 `--duplicates` keeps only the branches that lead to a duplicated crate, as
 before, and now adds `Consolidation` under the tree: for each crate resolved
 at more than one version, every version with what depends on it, and the
-version most dependents already use (the newest on a tie). Every other version
-is marked with the version its dependents could move to; moving them leaves
-one copy. `DepGraph::consolidation(kinds)` returns the same as data
+version most dependents already use (the newest by SemVer, on a tie). It does
+not say the others could move onto it: that depends on their version
+requirements, which the resolved graph does not record. `DepGraph::consolidation(kinds)` returns the same as data
 (`Duplicate::shared_version`, `Duplicate::to_move`), and
 `DepTree::consolidation(true)` adds it under a tree. Without `--duplicates`,
 `rich deps` prints what it always did.
@@ -244,7 +244,7 @@ duplicate: syn v1.0.109, v2.0.79
 consolidation: 1 crate at several versions
 syn: 2 versions, 3 dependents; 2 use v2.0.79 (newest)
 ├── v2.0.79 ← serde_derive v1.0.210, thiserror-impl v1.0.64
-└── v1.0.109 ← strum_macros v0.25.3 (could move to v2.0.79)
+└── v1.0.109 ← strum_macros v0.25.3
 ```
 
 ### Feature trees

@@ -573,7 +573,7 @@ fn mode_options() -> Vec<ArgSpec> {
             SOURCES,
             "With `rich deps`, keep only the branches that lead to a crate resolved at more than \
              one version, and add a consolidation summary: who pulls each version, and which \
-             version most of them could share",
+             version most of them already use",
         ),
         flag(
             "no-dev",

@@ -1,13 +1,14 @@
 //! Consolidating duplicates (#420): the crates resolved at more than one
-//! version, who pulls each version in, and which version most of them could
-//! share.
+//! version, who pulls each version in, and which version most of them
+//! already use.
 //!
 //! [`DepGraph::duplicates`] says *which* crates are duplicated;
 //! [`DepGraph::consolidation`] says what it would take to undo it. For each
 //! duplicated crate it lists every version with the packages that depend on
-//! it, and names the version the most dependents already use (the newest,
-//! on a tie): moving the others onto it leaves one copy. [`Consolidation`]
-//! draws that as a tree.
+//! it, and names the version the most dependents already use (the newest by
+//! SemVer, on a tie). Whether the others can move onto it depends on their
+//! version requirements, which the resolved graph does not record, so it is
+//! not claimed. [`Consolidation`] draws that as a tree.
 //!
 //! ```
 //! use rich::Console;
@@ -38,7 +39,7 @@
 //!     "consolidation: 1 crate at several versions\n\
 //!      log: 2 versions, 2 dependents; 1 uses v0.4.0 (newest)\n\
 //!      ├── v0.4.0 ← app v0.1.0\n\
-//!      └── v0.3.0 ← old v1.0.0 (could move to v0.4.0)"
+//!      └── v0.3.0 ← old v1.0.0"
 //! );
 //! ```
 
@@ -69,12 +70,12 @@ pub struct Duplicate {
     /// Every version, newest first.
     pub versions: Vec<DuplicateVersion>,
     /// Which of [`versions`](Self::versions) the most dependents use (the
-    /// newest on a tie): the one the others could move to.
+    /// newest on a tie).
     pub shared: usize,
 }
 
 impl Duplicate {
-    /// The version most dependents could share.
+    /// The version the most dependents use.
     pub fn shared_version(&self) -> &DuplicateVersion {
         &self.versions[self.shared]
     }
@@ -91,17 +92,16 @@ impl Duplicate {
         all.len()
     }
 
-    /// The dependents on another version than the shared one: what would
-    /// have to move.
+    /// The dependents on another version than the most-used one: what
+    /// would have to change to leave one copy. A package that depends on
+    /// both versions (through a renamed dependency) is among them.
     pub fn to_move(&self) -> Vec<usize> {
-        let shared = &self.shared_version().dependents;
         let mut moving: Vec<usize> = self
             .versions
             .iter()
             .enumerate()
             .filter(|(index, _)| *index != self.shared)
             .flat_map(|(_, v)| v.dependents.iter().copied())
-            .filter(|d| !shared.contains(d))
             .collect();
         moving.sort_unstable();
         moving.dedup();
@@ -172,9 +172,8 @@ impl DepGraph {
 }
 
 /// The consolidation summary as a tree per duplicated crate: its versions,
-/// newest first, each with what depends on it, the version most dependents
-/// share named in the heading, and every other version marked with the
-/// version its dependents could move to. See the [module docs](self).
+/// newest first, each with what depends on it, and the version the most
+/// dependents use named in the heading. See the [module docs](self).
 #[derive(Clone, Debug)]
 pub struct Consolidation {
     graph: DepGraph,
@@ -239,7 +238,7 @@ impl Consolidation {
             None,
         );
         let mut tree = Tree::new(label);
-        for (index, version) in duplicate.versions.iter().enumerate() {
+        for version in &duplicate.versions {
             let mut text = Text::new("");
             text.append(
                 &format!("v{}", version.version),
@@ -261,12 +260,6 @@ impl Consolidation {
                         Some(theme_style(console, "deps.section").into()),
                     );
                 }
-            }
-            if index != duplicate.shared {
-                text.append(
-                    &format!(" (could move to v{})", shared.version),
-                    Some(theme_style(console, "deps.section").into()),
-                );
             }
             tree.add(text);
         }
@@ -376,8 +369,45 @@ mod tests {
             "consolidation: 1 crate at several versions\n\
              syn: 2 versions, 4 dependents; 2 use v2.0.0 (newest)\n\
              ├── v2.0.0 ← a v1.0.0, b v1.0.0\n\
-             └── v1.0.109 ← c v1.0.0, t v1.0.0 (could move to v2.0.0)"
+             └── v1.0.109 ← c v1.0.0, t v1.0.0"
         );
+    }
+
+    #[test]
+    fn a_dependent_on_both_versions_still_has_to_move() {
+        // `a` also depends on syn 1 (through a renamed dependency).
+        let mut metadata: serde_json::Value = serde_json::from_str(&metadata()).unwrap();
+        metadata["resolve"]["nodes"][1]["deps"]
+            .as_array_mut()
+            .unwrap()
+            .push(serde_json::json!({"name": "syn1", "pkg": "syn 1.0.109",
+                "dep_kinds": [{"kind": null, "target": null}]}));
+        let graph = DepGraph::from_json(&metadata.to_string()).unwrap();
+        let all = graph.consolidation(&[DepKind::Normal, DepKind::Build, DepKind::Dev]);
+        let syn = &all[0];
+        assert_eq!(syn.shared_version().version, "1.0.109");
+        let moving: Vec<String> = syn.to_move().iter().map(|&p| graph.display(p)).collect();
+        assert_eq!(moving, ["a v1.0.0", "b v1.0.0"]);
+    }
+
+    #[test]
+    fn a_release_is_newer_than_its_pre_release() {
+        let mut metadata: serde_json::Value = serde_json::from_str(&metadata()).unwrap();
+        for package in metadata["packages"].as_array_mut().unwrap() {
+            if package["id"] == "syn 1.0.109" {
+                package["id"] = "syn 2.0.0-alpha".into();
+                package["version"] = "2.0.0-alpha".into();
+            }
+        }
+        let text = metadata
+            .to_string()
+            .replace("syn 1.0.109", "syn 2.0.0-alpha");
+        let graph = DepGraph::from_json(&text).unwrap();
+        let all = graph.consolidation(&[DepKind::Normal, DepKind::Build, DepKind::Dev]);
+        let versions: Vec<&str> = all[0].versions.iter().map(|v| v.version.as_str()).collect();
+        // Two dependents each: the tie goes to the release, not the pre-release.
+        assert_eq!(versions, ["2.0.0", "2.0.0-alpha"]);
+        assert_eq!(all[0].shared_version().version, "2.0.0");
     }
 
     #[test]

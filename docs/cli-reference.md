@@ -119,7 +119,7 @@ Choose at most one; the default auto-detects .md/.rst/.json/.csv/.tsv/.ipynb, .m
 | `--why <CRATE>` | With `rich deps`, show what pulls CRATE (`name` or `name@version`) in: every path from the workspace to it. |
 | `--graph` | With `rich deps`, draw the dependencies (or --why's paths) as a diagram instead of a tree. |
 | `--depth <N>` | With `rich deps`, show at most N levels below each workspace member. |
-| `--duplicates` | With `rich deps`, keep only the branches that lead to a crate resolved at more than one version, and add a consolidation summary: who pulls each version, and which version most of them could share. |
+| `--duplicates` | With `rich deps`, keep only the branches that lead to a crate resolved at more than one version, and add a consolidation summary: who pulls each version, and which version most of them already use. |
 | `--no-dev` | With `rich deps`, leave dev-dependencies out. |
 | `--features` | With `rich deps`, show the features Cargo resolved for each crate: what each turns on, and which dependents asked for them; every crate with a feature, or only --package's. |
 | `--package <CRATE>` | With `rich deps --features`, show only CRATE, as `name` or `name@version`. |
@@ -904,7 +904,7 @@ rich deps [OPTIONS] [MANIFEST]
 | `--why <CRATE>` | With `rich deps`, show what pulls CRATE (`name` or `name@version`) in: every path from the workspace to it. |
 | `--graph` | With `rich deps`, draw the dependencies (or --why's paths) as a diagram instead of a tree. |
 | `--depth <N>` | With `rich deps`, show at most N levels below each workspace member. |
-| `--duplicates` | With `rich deps`, keep only the branches that lead to a crate resolved at more than one version, and add a consolidation summary: who pulls each version, and which version most of them could share. |
+| `--duplicates` | With `rich deps`, keep only the branches that lead to a crate resolved at more than one version, and add a consolidation summary: who pulls each version, and which version most of them already use. |
 | `--no-dev` | With `rich deps`, leave dev-dependencies out. |
 | `--features` | With `rich deps`, show the features Cargo resolved for each crate: what each turns on, and which dependents asked for them; every crate with a feature, or only --package's. |
 | `--package <CRATE>` | With `rich deps --features`, show only CRATE, as `name` or `name@version`. |

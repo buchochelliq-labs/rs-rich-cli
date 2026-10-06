@@ -23,7 +23,7 @@
 //!
 //! - [`duplicates`]: a consolidation summary for the crates resolved at
 //!   several versions: who pulls each version, and which one most of them
-//!   could share ([`DepTree::consolidation`] adds it under the tree).
+//!   already use ([`DepTree::consolidation`] adds it under the tree).
 //! - [`features`]: the features `cargo metadata` resolved for each crate,
 //!   what each turns on, and which dependents asked for them.
 //! - [`timings`]: `cargo build --timings` reports, as bars and a table.
@@ -542,14 +542,49 @@ impl DepGraph {
     }
 }
 
-/// Compare dotted versions numerically where they are numbers.
+/// Compare versions by SemVer precedence: the dotted core numerically where
+/// its parts are numbers, then a release above any of its pre-releases, then
+/// pre-release identifiers (numeric ones numerically and below alphanumeric
+/// ones). Build metadata takes no part, except to break a tie, so the order
+/// stays total.
 pub(crate) fn compare_versions(a: &str, b: &str) -> std::cmp::Ordering {
-    let parts = |v: &str| -> Vec<(u64, String)> {
-        v.split(['.', '-', '+'])
+    use std::cmp::Ordering;
+    let split = |v: &str| -> (Vec<(u64, String)>, Option<String>) {
+        let v = v.split_once('+').map_or(v, |(v, _)| v);
+        let (core, pre) = match v.split_once('-') {
+            Some((core, pre)) => (core, Some(pre.to_string())),
+            None => (v, None),
+        };
+        let core = core
+            .split('.')
             .map(|part| (part.parse().unwrap_or(u64::MAX), part.to_string()))
-            .collect()
+            .collect();
+        (core, pre)
     };
-    parts(a).cmp(&parts(b))
+    let identifier = |x: &str, y: &str| match (x.parse::<u64>(), y.parse::<u64>()) {
+        (Ok(x), Ok(y)) => x.cmp(&y),
+        (Ok(_), Err(_)) => Ordering::Less,
+        (Err(_), Ok(_)) => Ordering::Greater,
+        (Err(_), Err(_)) => x.cmp(y),
+    };
+    let ((a_core, a_pre), (b_core, b_pre)) = (split(a), split(b));
+    a_core
+        .cmp(&b_core)
+        .then_with(|| match (&a_pre, &b_pre) {
+            (None, None) => Ordering::Equal,
+            (None, Some(_)) => Ordering::Greater,
+            (Some(_), None) => Ordering::Less,
+            (Some(x), Some(y)) => {
+                let (x, y): (Vec<&str>, Vec<&str>) =
+                    (x.split('.').collect(), y.split('.').collect());
+                x.iter()
+                    .zip(&y)
+                    .map(|(x, y)| identifier(x, y))
+                    .find(|o| o.is_ne())
+                    .unwrap_or_else(|| x.len().cmp(&y.len()))
+            }
+        })
+        .then_with(|| a.cmp(b))
 }
 
 /// The deepest a [`DepTree`] or [`WhyTree`] is drawn: below it, a branch
@@ -1037,6 +1072,19 @@ impl Renderable for WhyTree {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn versions_order_by_semver_precedence() {
+        use std::cmp::Ordering::*;
+        assert_eq!(compare_versions("1.0.0-alpha", "1.0.0"), Less);
+        assert_eq!(compare_versions("1.0.0-alpha", "1.0.0-alpha.1"), Less);
+        assert_eq!(compare_versions("1.0.0-alpha.1", "1.0.0-alpha.beta"), Less);
+        assert_eq!(compare_versions("1.0.0-beta.2", "1.0.0-beta.11"), Less);
+        assert_eq!(compare_versions("1.0.0-rc.1", "1.0.0"), Less);
+        assert_eq!(compare_versions("1.10.0", "1.9.0"), Greater);
+        assert_eq!(compare_versions("1.0.0", "1.0.0"), Equal);
+        assert_ne!(compare_versions("1.0.0+a", "1.0.0+b"), Equal);
+    }
 
     fn metadata() -> String {
         let pkg = |name: &str, version: &str, source: Option<&str>| {

@@ -75,10 +75,7 @@ fn duplicates_add_the_consolidation_summary() {
         ),
         "{out}"
     );
-    assert!(
-        out.contains("└── v1.0.109 ← strum_macros v0.25.3 (could move to v2.0.79)"),
-        "{out}"
-    );
+    assert!(out.contains("└── v1.0.109 ← strum_macros v0.25.3"), "{out}");
     // Without --duplicates the tree ends with the one-line summary, as before.
     let out = stdout(&run(&["deps", "--metadata", &metadata]));
     assert!(out.ends_with("duplicate: syn v1.0.109, v2.0.79\n"), "{out}");

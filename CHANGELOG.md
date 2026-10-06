@@ -117,7 +117,7 @@ its tools already wrote; none runs a scanner or reaches the network
 
 - `rs-rich-ext` `deps::duplicates`: `DepGraph::consolidation` and the
   `Consolidation` renderable: each crate resolved at several versions, who
-  pulls each version, and the version most dependents share (the newest on
+  pulls each version, and the version most dependents use (the newest by SemVer on
   a tie); `DepTree::consolidation(true)` adds it under a tree.
 - `deps::features`: `FeatureGraph` reads `cargo metadata`'s resolved
   features, `[features]` tables and declared dependencies (renames matched

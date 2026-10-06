@@ -1,4 +1,4 @@
 consolidation: 1 crate at several versions
 syn: 2 versions, 3 dependents; 2 use v2.0.79 (newest)
 ├── v2.0.79 ← serde_derive v1.0.210, thiserror-impl v1.0.64
-└── v1.0.109 ← strum_macros v0.25.3 (could move to v2.0.79)
+└── v1.0.109 ← strum_macros v0.25.3
