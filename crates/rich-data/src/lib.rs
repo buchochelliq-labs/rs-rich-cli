@@ -19,6 +19,11 @@
 //!   nulls, text) with the evidence for each, on request.
 //! - [`stats`]: per-column count, nulls, distinct values, min, max, mean,
 //!   median, quantiles and top values, as a table or under each heading.
+//! - [`profile`]: a bounded profile of any row source (types, nulls,
+//!   distinct values, statistics, histograms or top values, and a
+//!   missing-value map), sampled when the input is long, as JSON or drawn.
+//! - [`quality`]: data quality check results (pass, warn, fail, error, with
+//!   observed and expected values and failing rows) as a report.
 //!
 //! Conditional styles for the tables these rows become are
 //! `rich_ext::table::rules`.
@@ -48,6 +53,8 @@ pub mod csv;
 pub mod er;
 pub mod infer;
 pub mod jsonl;
+pub mod profile;
+pub mod quality;
 mod record;
 pub mod serialize;
 pub mod stats;

@@ -1,0 +1,23 @@
+FAIL not_null › amount
+  observed 4 nulls · expected 0
+  ┏━━━━━┳━━━━━━━━━━┳━━━━━━━━┳━━━━━━━━┳━━━━━━━━━┳━━━━━━━━━━━━┳━━━━━━━━━┓
+  ┃ row ┃ order_id ┃ region ┃ amount ┃ status  ┃ placed     ┃ express ┃
+  ┡━━━━━╇━━━━━━━━━━╇━━━━━━━━╇━━━━━━━━╇━━━━━━━━━╇━━━━━━━━━━━━╇━━━━━━━━━┩
+  │ 3   │ 1003     │ eu     │        │ pending │ 2026-09-02 │ false   │
+  │ 10  │ 1010     │ latam  │        │ pending │ 2026-09-05 │         │
+  │ 16  │ 1016     │ NA     │        │ pending │ 2026-09-08 │         │
+  │ 23  │ 1023     │ eu     │        │ pending │ 2026-09-12 │         │
+  └─────┴──────────┴────────┴────────┴─────────┴────────────┴─────────┘
+
+WARN accepted_values › status
+  observed returned (2) · expected shipped, pending, cancelled
+
+┏━━━━━━━━┳━━━━━━━━━━━━━━━━━┳━━━━━━━━━━┳━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ status ┃ check           ┃ column   ┃ observed     ┃ expected                ┃
+┡━━━━━━━━╇━━━━━━━━━━━━━━━━━╇━━━━━━━━━━╇━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━┩
+│ PASS   │ unique          │ order_id │ 0 duplicates │ 0                       │
+│ FAIL   │ not_null        │ amount   │ 4 nulls      │ 0                       │
+│ WARN   │ accepted_values │ status   │ returned (2) │ shipped, pending,       │
+│        │                 │          │              │ cancelled               │
+└────────┴─────────────────┴──────────┴──────────────┴─────────────────────────┘
+1 passed, 1 warned, 1 failed

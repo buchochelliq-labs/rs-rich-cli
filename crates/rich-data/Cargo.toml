@@ -45,7 +45,7 @@ rich.workspace = true
 # `table::Value`, `TableData` and the `schema` model (behind ext's `data`).
 rich-ext = { workspace = true, features = ["data"] }
 rich-diagram = { workspace = true, optional = true }
-serde = "1"
+serde = { version = "1", features = ["derive"] }
 serde_json.workspace = true
 arrow-array = { version = "60", default-features = false, optional = true }
 arrow-schema = { version = "60", default-features = false, optional = true }

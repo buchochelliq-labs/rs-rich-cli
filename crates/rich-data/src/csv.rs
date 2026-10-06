@@ -26,8 +26,10 @@
 //! ```
 
 use std::borrow::Cow;
+use std::collections::VecDeque;
+use std::io::{BufRead, Read};
 
-use crate::{DataError, Rows, Value};
+use crate::{DataError, Row, RowSource, Rows, Value};
 
 /// The delimiters [`CsvReader`] (and `rich --csv`) lets the sniffer choose
 /// from: rich-cli's `",\t|;"`.
@@ -48,6 +50,11 @@ pub enum Header {
     Yes,
     /// There is no header; columns are named `1`, `2`, …
     No,
+    /// The first row is a header unless every cell in it is a number (or
+    /// empty), as `rich chart` and `rich profile` decide. Python's sniffer
+    /// says "no header" whenever every column is ragged in length or type,
+    /// which one empty cell can make it.
+    UnlessNumeric,
 }
 
 /// Reads CSV or TSV text into [`Rows`]. See the [module docs](self).
@@ -119,6 +126,16 @@ impl CsvReader {
             Header::Yes => true,
             Header::No => false,
             Header::Sniff => has_header(&sample).unwrap_or(true),
+            Header::UnlessNumeric => {
+                let first = read_rows(&sample, &dialect)
+                    .into_iter()
+                    .find(|row| !row.is_empty())
+                    .unwrap_or_default();
+                first.iter().any(|cell| {
+                    let cell = cell.trim();
+                    !cell.is_empty() && cell.parse::<f64>().is_err()
+                })
+            }
         };
         Some((dialect, header))
     }
@@ -154,6 +171,264 @@ impl CsvReader {
             rows.push(record.into_iter().map(Value::Str));
         }
         Ok(rows)
+    }
+}
+
+impl CsvReader {
+    /// Stream rows from `reader` instead of reading the text whole, so an
+    /// input larger than memory can be read (a [profile](crate::profile)
+    /// samples it).
+    ///
+    /// The dialect and header are decided from the first [`SAMPLE_CHARS`]
+    /// characters, as [`read`](Self::read) decides them, and records are
+    /// parsed one at a time: a quoted field may span lines, up to
+    /// [`MAX_RECORD`] bytes. The columns are decided from the rows the
+    /// sniffer read, as [`read`](Self::read) decides them from every row (a
+    /// row longer than the header adds columns named by position); a later
+    /// row is padded with nulls or cut to fit, and
+    /// [`longer_rows`](CsvSource::longer_rows) counts the cut ones. Bytes
+    /// that are not UTF-8 are replaced.
+    ///
+    /// ```
+    /// use rich_data::csv::CsvReader;
+    /// use rich_data::{RowSource, Value};
+    ///
+    /// let text = "name,note\nweb,\"two\nlines\"\napi,ok\n";
+    /// let mut source = CsvReader::new().source(text.as_bytes()).unwrap();
+    /// assert_eq!(source.columns(), ["name", "note"]);
+    /// let first = source.next_row().unwrap().unwrap();
+    /// assert_eq!(first[1], Value::from("two\nlines"));
+    /// source.next_row().unwrap().unwrap();
+    /// assert!(source.next_row().is_none());
+    /// ```
+    pub fn source<R: BufRead>(&self, reader: R) -> Result<CsvSource<R>, DataError> {
+        let mut source = CsvSource {
+            reader,
+            dialect: Dialect::excel(','),
+            columns: Vec::new(),
+            pending: VecDeque::new(),
+            record: String::new(),
+            state: State::StartRecord,
+            line: 0,
+            done: false,
+            longer: 0,
+        };
+        // Whole lines until the sniffer has its sample.
+        let mut prefix = String::new();
+        while prefix.chars().count() < SAMPLE_CHARS {
+            match source.read_line()? {
+                Some(line) => prefix.push_str(&line),
+                None => break,
+            }
+        }
+        let prefix = universal_newlines(&prefix);
+        let prefix = prefix.strip_prefix('\u{feff}').unwrap_or(&prefix);
+        let (dialect, header) = self
+            .detect(prefix)
+            .ok_or_else(|| DataError::new("Could not determine delimiter"))?;
+        source.dialect = dialect;
+        source.feed(prefix)?;
+        // The sample may end inside a quoted field: finish that record.
+        if !matches!(source.state, State::StartRecord) {
+            source.fill_record()?;
+        }
+        if source.done {
+            source.flush_record();
+        }
+        let names = if header {
+            source.pending.pop_front().unwrap_or_default()
+        } else {
+            Vec::new()
+        };
+        let width = source
+            .pending
+            .iter()
+            .map(Vec::len)
+            .max()
+            .unwrap_or(0)
+            .max(names.len());
+        source.columns = (0..width)
+            .map(|i| names.get(i).cloned().unwrap_or_else(|| (i + 1).to_string()))
+            .collect();
+        Ok(source)
+    }
+}
+
+/// The longest record a [`CsvSource`] holds, in bytes (64 MiB): a line, or
+/// a quoted field still open, past it is refused rather than read into
+/// memory.
+pub const MAX_RECORD: usize = 64 << 20;
+
+/// A streaming CSV or TSV [`RowSource`], from [`CsvReader::source`]. Every
+/// cell is [`Value::Str`] as written.
+#[derive(Debug)]
+pub struct CsvSource<R> {
+    reader: R,
+    dialect: Dialect,
+    columns: Vec<String>,
+    /// Records parsed and not yet yielded.
+    pending: VecDeque<Vec<String>>,
+    /// The record being read, while a quoted field spans lines.
+    record: String,
+    /// Where `record` ends in the reader's state machine.
+    state: State,
+    line: usize,
+    done: bool,
+    longer: usize,
+}
+
+impl<R: BufRead> CsvSource<R> {
+    /// The dialect in use.
+    pub fn dialect(&self) -> Dialect {
+        self.dialect
+    }
+
+    /// How many rows so far had more cells than there are columns (their
+    /// extra cells are dropped).
+    pub fn longer_rows(&self) -> usize {
+        self.longer
+    }
+
+    /// The next line, its `\n` included; `None` at the end.
+    fn read_line(&mut self) -> Result<Option<String>, DataError> {
+        if self.done {
+            return Ok(None);
+        }
+        let mut buffer = Vec::new();
+        let read = (&mut self.reader)
+            .take(MAX_RECORD as u64 + 1)
+            .read_until(b'\n', &mut buffer)
+            .map_err(|e| {
+                self.done = true;
+                DataError::at(self.line + 1, e.to_string())
+            })?;
+        if read == 0 {
+            self.done = true;
+            return Ok(None);
+        }
+        self.line += 1;
+        if buffer.len() > MAX_RECORD {
+            self.done = true;
+            return Err(DataError::at(
+                self.line,
+                format!("longer than {MAX_RECORD} bytes"),
+            ));
+        }
+        Ok(Some(String::from_utf8_lossy(&buffer).into_owned()))
+    }
+
+    /// Add `text` (universal newlines applied) to the record being read,
+    /// parsing each record it completes.
+    fn feed(&mut self, text: &str) -> Result<(), DataError> {
+        for c in text.chars() {
+            self.state = advance(self.state, c, &self.dialect);
+            self.record.push(c);
+            if matches!(self.state, State::StartRecord) {
+                self.flush_record();
+            }
+        }
+        if self.record.len() > MAX_RECORD {
+            self.done = true;
+            return Err(DataError::at(
+                self.line,
+                format!("a quoted field runs past {MAX_RECORD} bytes"),
+            ));
+        }
+        Ok(())
+    }
+
+    /// Read lines until the record being read ends, or the input does.
+    fn fill_record(&mut self) -> Result<(), DataError> {
+        while let Some(line) = self.read_line()? {
+            self.feed(&universal_newlines(&line))?;
+            if matches!(self.state, State::StartRecord) {
+                break;
+            }
+        }
+        Ok(())
+    }
+
+    /// Parse the record being read into `pending`, dropping blank lines.
+    fn flush_record(&mut self) {
+        if self.record.is_empty() {
+            return;
+        }
+        let text = std::mem::take(&mut self.record);
+        self.state = State::StartRecord;
+        self.pending.extend(
+            read_rows(&text, &self.dialect)
+                .into_iter()
+                .filter(|row| !row.is_empty()),
+        );
+    }
+}
+
+impl<R: BufRead> RowSource for CsvSource<R> {
+    fn columns(&self) -> &[String] {
+        &self.columns
+    }
+
+    fn next_row(&mut self) -> Option<Result<Row, DataError>> {
+        while self.pending.is_empty() {
+            if self.done {
+                // A last record without a newline, or a quoted field the
+                // input never closed.
+                self.flush_record();
+                if self.pending.is_empty() {
+                    return None;
+                }
+                break;
+            }
+            if let Err(error) = self.fill_record() {
+                return Some(Err(error));
+            }
+        }
+        let record = self.pending.pop_front()?;
+        let width = self.columns.len();
+        if record.len() > width {
+            self.longer += 1;
+        }
+        let mut row: Row = record.into_iter().take(width).map(Value::Str).collect();
+        row.resize(width, Value::Null);
+        Some(Ok(row))
+    }
+}
+
+/// One step of [`read_rows`]'s state machine without collecting fields: just
+/// enough to know where a record ends.
+fn advance(state: State, c: char, dialect: &Dialect) -> State {
+    match state {
+        State::StartRecord | State::StartField => {
+            if c == '\n' {
+                State::StartRecord
+            } else if c == dialect.quotechar {
+                State::InQuotedField
+            } else if c == dialect.delimiter || (c == ' ' && dialect.skipinitialspace) {
+                State::StartField
+            } else {
+                State::InField
+            }
+        }
+        State::InField => match c {
+            '\n' => State::StartRecord,
+            c if c == dialect.delimiter => State::StartField,
+            _ => State::InField,
+        },
+        State::InQuotedField => {
+            if c != dialect.quotechar {
+                State::InQuotedField
+            } else if dialect.doublequote {
+                State::QuoteInQuotedField
+            } else {
+                State::InField
+            }
+        }
+        State::QuoteInQuotedField => match c {
+            c if c == dialect.quotechar => State::InQuotedField,
+            c if c == dialect.delimiter => State::StartField,
+            '\n' => State::StartRecord,
+            _ => State::InField,
+        },
     }
 }
 
@@ -763,6 +1038,7 @@ fn is_imaginary_literal(value: &str) -> bool {
 
 /// Where [`read_rows`] is within a record. Port of `_csv.c`'s reader states
 /// (its `EAT_CRNL` is unreachable here: universal newlines ran first).
+#[derive(Clone, Copy, Debug)]
 enum State {
     StartRecord,
     StartField,
