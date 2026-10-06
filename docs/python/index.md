@@ -79,6 +79,7 @@ Your own classes render as they do with Rich, through `__rich__`,
 | `rs-rich-ext`'s charts (sparklines, bars, line charts, gauges, heatmaps, status matrices, KPI cards, timelines) | `rs_rich.chart` | [Charts](chart.md) |
 | `rs-rich-diagram` (graphs, their layout, DOT) | `rs_rich.diagram` | [Diagrams](diagram.md) |
 | `rs-rich-mermaid` | `rs_rich.mermaid` | [Mermaid](mermaid.md) |
+| `rs-rich-data` (rows from CSV, TSV and JSON Lines, inference, statistics, profiles, quality reports, result sets) and the 0.0.16 schema, conflict and record views | `rs_rich.data` | [Data, schemas and developer views](data.md) |
 | `rs-rich-micro` (emoji-sized inline images written `:micro:name:`) | `rs_rich.micro` | [Micro assets](micro.md) |
 | `rs-rich-plugin-api` and the extension registry | `rs_rich.plugins` | [Plugins](plugins.md) |
 | `rs-rich-cli` (the `rich` command) | `python -m rs_rich`, the `rich-rs` script, `rs_rich.cli.main` | [The command line](cli.md) |

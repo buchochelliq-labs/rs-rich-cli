@@ -124,6 +124,7 @@ nav:
       - Charts: chart.md
       - Diagrams (graphs, DOT): diagram.md
       - Mermaid: mermaid.md
+  - Data, schemas and developer views: data.md
   - Micro assets: micro.md
   - Plugins: plugins.md
   - The command line: cli.md
