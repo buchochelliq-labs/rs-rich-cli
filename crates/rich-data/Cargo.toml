@@ -11,7 +11,7 @@
 [package]
 name = "rs-rich-data"
 version = "0.0.1"
-description = "Tabular data for rs-rich: CSV, TSV, JSONL, serde and Arrow row sources, type inference and column statistics"
+description = "Tabular data for rs-rich: CSV, TSV, JSONL, serde and Arrow row sources, type inference, column statistics, profiles and data-quality reports"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
@@ -45,7 +45,7 @@ rich.workspace = true
 # `table::Value`, `TableData` and the `schema` model (behind ext's `data`).
 rich-ext = { workspace = true, features = ["data"] }
 rich-diagram = { workspace = true, optional = true }
-serde = "1"
+serde = { version = "1", features = ["derive"] }
 serde_json.workspace = true
 arrow-array = { version = "60", default-features = false, optional = true }
 arrow-schema = { version = "60", default-features = false, optional = true }
