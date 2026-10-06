@@ -138,4 +138,33 @@ mod tests {
         assert_eq!(count, 3);
         assert_eq!(source.unknown_keys().collect::<Vec<_>>(), ["b", "value"]);
     }
+
+    /// A record of many keys, at the top level or nested, is read in time
+    /// linear in its keys: each key used to be looked up by scanning every
+    /// column, so 40,000 keys (1.7 MB) took 16 s and a 64 MiB line days.
+    #[test]
+    fn a_record_of_many_keys_reads_in_linear_time() {
+        let keys = 200_000;
+        let object: String = (0..keys)
+            .map(|i| format!("\"k{i}\":{i}"))
+            .collect::<Vec<_>>()
+            .join(",");
+        let text = format!("{{{object}}}\n{{\"nested\":{{{object}}}}}\n{{{object}}}\n");
+        let started = std::time::Instant::now();
+        let mut source = source(text.as_bytes()).unwrap();
+        assert_eq!(source.columns().len(), keys + 1);
+        let mut rows = 0;
+        while let Some(row) = source.next_row() {
+            assert_eq!(row.unwrap().len(), keys + 1);
+            rows += 1;
+        }
+        assert_eq!(rows, 3);
+        // Every key is absent from the nested record, so nullable.
+        assert!(source.schema().unwrap().fields()[0].is_nullable());
+        assert!(
+            started.elapsed() < std::time::Duration::from_secs(30),
+            "took {:?}",
+            started.elapsed()
+        );
+    }
 }
