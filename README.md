@@ -216,8 +216,8 @@ scripts (`rich choose`, `filter`, `input`, `confirm` and `pager`) and
 and `rich micro`. 0.0.15 draws data and structure: `rich chart` (CSV, JSON or
 stdin as a sparkline, bars, lines, points or a heatmap), `rich dot` and
 ```` ```dot ```` fences (DOT drawn natively), `rich deps` (Cargo dependency
-trees and graphs) and `rich schema` (a JSON Schema as a tree, or what changed
-between two). See the [CLI guide](docs/guide/cli/walkthrough.md),
+trees and graphs) and `rich schema` (a JSON Schema, SQL DDL or Arrow schema as
+a tree, what changed between two, or an ER diagram with `--er`). See the [CLI guide](docs/guide/cli/walkthrough.md),
 [Charts](docs/guide/ext/charts.md), [Diagrams](docs/guide/diagram/index.md)
 and the [CLI reference](docs/cli-reference.md).
 

@@ -1,0 +1,28 @@
+❯ rich diff --conflicts merge.rs
+conflict 1 of 2, lines 4-13
+ 1   use std::time::Duration;
+ 2
+ 3   pub fn retry_policy() -> (u32, Duration) {
+   ours: HEAD                    │    base: base                   │    theirs: feature/backoff
+ 5 <     let attempts = 5;       │  8 |     let attempts = 3;      │ 11 >     let attempts = 3;
+ 6 <     let delay = ms(250);    │  9 |     let delay = ms(100);   │ 12 >     let delay = secs(1);
+14       (attempts, delay)
+15   }
+16
+conflict 2 of 2, lines 18-22
+17   pub fn label() -> &'static str {
+   ours: HEAD                                     │    theirs: feature/backoff
+19 <     "retry"                                  │ 21 >     "retry with backoff"
+23   }
+24
+25   fn ms(n: u64) -> Duration {
+merge.rs: 2 conflicts (1 with a base)
+❯
+
+
+
+
+
+
+
+

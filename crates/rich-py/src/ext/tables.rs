@@ -28,7 +28,7 @@ use crate::text::Text;
 
 /// A Python cell value: `None`, `int`, `float`, `str` or `Text` (anything
 /// else becomes its `str`).
-fn value(v: &Bound<'_, PyAny>) -> PyResult<Value> {
+pub(crate) fn value(v: &Bound<'_, PyAny>) -> PyResult<Value> {
     if v.is_none() {
         return Ok(Value::Null);
     }
@@ -53,7 +53,7 @@ fn value(v: &Bound<'_, PyAny>) -> PyResult<Value> {
     Ok(Value::Str(v.str()?.to_string()))
 }
 
-fn value_to_py(py: Python<'_>, v: &Value) -> PyResult<Py<PyAny>> {
+pub(crate) fn value_to_py(py: Python<'_>, v: &Value) -> PyResult<Py<PyAny>> {
     Ok(match v {
         Value::Null => py.None(),
         Value::Int(n) => n.into_pyobject(py)?.into_any().unbind(),

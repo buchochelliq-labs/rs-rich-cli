@@ -112,7 +112,7 @@ fn command_options(name: &str) -> Vec<ArgSpec> {
             "licenses",
             "width",
         ],
-        "schema" => &["width"],
+        "schema" => &["er", "width"],
         "chart" => &["kind", "x", "y", "width"],
         "profile" => &["sample", "columns", "top", "report", "width"],
         "env" => &["show-secrets", "width"],
@@ -496,6 +496,13 @@ fn source_options() -> Vec<ArgSpec> {
             SOURCE,
             "Crop long lines of source instead of wrapping them; with --print, don't wrap text",
         ),
+        flag(
+            "infer",
+            SOURCE,
+            "With --csv (or a .csv/.tsv file), infer each column's type (integer, float, \
+             boolean, date, timestamp, text) and show it under the heading; number columns \
+             right-align even with null tokens such as NA. Without it the table is rich-cli's",
+        ),
     ]
 }
 
@@ -615,6 +622,12 @@ fn mode_options() -> Vec<ArgSpec> {
             SOURCES,
             "With `rich deps`, group the crates by licence, marking copyleft, unknown and missing \
              licences",
+        ),
+        flag(
+            "er",
+            SOURCES,
+            "With `rich schema`, draw the schema as an ER diagram: a box per table with its \
+             columns and keys, an edge per foreign key",
         ),
         option(
             "kind",
@@ -1520,15 +1533,16 @@ pub(crate) fn spec() -> CommandSpec {
     spec = spec.subcommand(
         CommandSpec::new("schema")
             .about(
-                "A JSON Schema as a tree: types, required markers, constraints, $refs resolved; \
-                 with two schemas, what changed between them and which changes break",
+                "A JSON Schema, SQL DDL or Arrow schema as a tree: types, required markers, \
+                 constraints, keys, $refs resolved; with two schemas (of any of these formats), \
+                 what changed between them and which changes break; --er draws an ER diagram",
             )
             .usage("schema [OPTIONS] SCHEMA [NEW_SCHEMA]")
-            .arg(
-                ArgSpec::positional("schema")
-                    .value(ValueHint::Path)
-                    .help("A JSON Schema file, an http(s) URL, or `-` for stdin"),
-            )
+            .arg(ArgSpec::positional("schema").value(ValueHint::Path).help(
+                "A JSON Schema, SQL DDL (.sql, .ddl, or text starting with CREATE) or \
+                         Arrow IPC file (.arrow, .feather, .arrows, .ipc; the `arrow` feature), \
+                         an http(s) URL, or `-` for stdin",
+            ))
             .arg(
                 ArgSpec::positional("new_schema")
                     .value(ValueHint::Path)
@@ -1849,6 +1863,7 @@ mod tests {
             item(TOOLS, "impl ToolOptions {"),
             item(VIEWERS, "impl ViewerOptions {"),
             item(SOURCES_RS, "impl GraphSourceOptions {"),
+            item(SOURCES_RS, "impl SchemaOptions {"),
             item(CHART_RS, "impl ChartOptions {"),
             item(PROFILE_RS, "impl ProfileOptions {"),
         ] {

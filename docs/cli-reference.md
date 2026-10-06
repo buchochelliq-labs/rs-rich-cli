@@ -96,6 +96,7 @@ Choose at most one; the default auto-detects .md/.rst/.json/.csv/.tsv/.ipynb, .m
 | `-g`, `--guides` | Draw indentation guides in source. |
 | `--lexer <LEXER>` | Highlight source as LEXER instead of guessing from the file name; with --rst, highlight code blocks that name no language as LEXER. |
 | `--no-wrap` | Crop long lines of source instead of wrapping them; with --print, don't wrap text. |
+| `--infer` | With --csv (or a .csv/.tsv file), infer each column's type (integer, float, boolean, date, timestamp, text) and show it under the heading; number columns right-align even with null tokens such as NA. Without it the table is rich-cli's. |
 
 ### Mode options
 
@@ -126,6 +127,7 @@ Choose at most one; the default auto-detects .md/.rst/.json/.csv/.tsv/.ipynb, .m
 | `--timings <FILE>` | With `rich deps`, show a `cargo build --timings` report (the HTML file, or timing-info JSON lines; `-` for stdin): the slowest units as bars and a table; runs nothing. |
 | `--audit <FILE>` | With `rich deps`, show `cargo audit --json` output from FILE (`-` for stdin) grouped by severity; exits 5 when it lists a vulnerability. Runs no scanner. |
 | `--licenses` | With `rich deps`, group the crates by licence, marking copyleft, unknown and missing licences. |
+| `--er` | With `rich schema`, draw the schema as an ER diagram: a box per table with its columns and keys, an edge per foreign key. |
 
 ### Chart
 
@@ -320,7 +322,7 @@ Self-contained examples; ignores config; accepts --no-color.
 | `mermaid`, `mmd` | Draw a Mermaid diagram: flowcharts as text, every type through mmdc where built in (.mmd and .mermaid files are detected) |
 | `dot`, `graphviz` | Draw a DOT (Graphviz) graph as text (.dot and .gv files are detected); what the native parser does not support is refused with its line |
 | `deps` | A Cargo dependency tree from `cargo metadata`, crates resolved at several versions marked; --why CRATE for what pulls a crate in, --graph to draw it; --features, --licenses, --timings FILE and --audit FILE for supply-chain reports |
-| `schema` | A JSON Schema as a tree: types, required markers, constraints, $refs resolved; with two schemas, what changed between them and which changes break |
+| `schema` | A JSON Schema, SQL DDL or Arrow schema as a tree: types, required markers, constraints, keys, $refs resolved; with two schemas (of any of these formats), what changed between them and which changes break; --er draws an ER diagram |
 | `chart` | A chart from CSV, JSON or stdin: a sparkline, bars, lines, points or a heatmap; --x and --y pick the columns, a missing column or a value that is not a number is refused with its row and column |
 | `profile` | A profile of CSV, TSV or JSON Lines: each column's type, nulls, distinct values, statistics and distribution, and a map of where the nulls are; a long input is sampled. --report json writes the profile as JSON to stdout |
 | `config` | Show, validate, explain or document configuration |
@@ -935,13 +937,19 @@ rich deps [OPTIONS] [MANIFEST]
 
 ### rich schema
 
-A JSON Schema as a tree: types, required markers, constraints, $refs resolved; with two schemas, what changed between them and which changes break
+A JSON Schema, SQL DDL or Arrow schema as a tree: types, required markers, constraints, keys, $refs resolved; with two schemas (of any of these formats), what changed between them and which changes break; --er draws an ER diagram
 
 #### Usage
 
 ```text
 rich schema [OPTIONS] SCHEMA [NEW_SCHEMA]
 ```
+
+#### Diagram sources
+
+| Option | Description |
+| --- | --- |
+| `--er` | With `rich schema`, draw the schema as an ER diagram: a box per table with its columns and keys, an edge per foreign key. |
 
 #### Layout
 
@@ -953,7 +961,7 @@ rich schema [OPTIONS] SCHEMA [NEW_SCHEMA]
 
 | Argument | Description |
 | --- | --- |
-| `[SCHEMA]` | A JSON Schema file, an http(s) URL, or `-` for stdin. |
+| `[SCHEMA]` | A JSON Schema, SQL DDL (.sql, .ddl, or text starting with CREATE) or Arrow IPC file (.arrow, .feather, .arrows, .ipc; the `arrow` feature), an http(s) URL, or `-` for stdin. |
 | `[NEW_SCHEMA]` | A second version: show what changed from SCHEMA to it. |
 
 ### rich chart

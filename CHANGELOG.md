@@ -240,6 +240,80 @@ From integration feedback on `rs-rich-record` 0.0.3 as a library:
   In `--help`, completions, `docs/cli.md`, `docs/cli-reference.md` and
   `docs/PORTING.md`.
 
+### The CLI, Python and docs (0.0.16 workstream 7)
+
+[Plan](docs/plans/0.0.16.md), #247, #342.
+
+- `rs-rich-cli`: `rich schema` reads SQL DDL and Arrow as well as JSON
+  Schema. DDL is known by its `.sql` or `.ddl` extension, or by text (on
+  stdin, say) starting with `CREATE` or a SQL comment, and is read through
+  `rich_ext::schema::sql`: the tree is titled with the file, and what the
+  reader skipped (`CHECK` constraints, indexes, other statements) is listed
+  dimmed under it with its file and line. DDL that cannot be read is a data
+  error (exit 4) naming the line. Arrow IPC files and streams (`.arrow`,
+  `.feather`, `.arrows`, `.ipc`, or an Arrow file's `ARROW1` magic) are
+  read behind the CLI's new off-by-default `arrow` feature; without it an
+  Arrow input is a usage error (exit 2) naming the feature. JSON Schema
+  output is byte-identical.
+- `rich schema OLD NEW` compares any two of the formats through
+  `SchemaDiff::models` (two JSON Schemas still follow their `$ref`s through
+  `SchemaDiff::new`, unchanged). A JSON Schema or Arrow file against DDL of
+  a single table compares with that table.
+- `rich schema --er FILE` draws the schema as an ER diagram through
+  `rs-rich-data`'s `er` feature, now on in the CLI: a box per table with
+  `PK`, `FK` and `UQ` markers and an edge per foreign key with its
+  cardinality; a schema without tables is one box. `--er` takes one schema
+  and only applies to `rich schema`.
+- `--infer` on `--csv` tables (and `rich FILE.csv`/`.tsv`): each column's
+  type from `rich_data::infer` under its heading (on a second, dim line),
+  number columns right-aligned even with null tokens such as `NA`. Opt-in:
+  without it the table is rich-cli 1.8.1's, byte for byte, and with another
+  mode it is a usage error.
+- `rs-rich-data`: `arrow::read_schema` reads the schema of an Arrow IPC
+  file or stream (from any `Read + Seek`) without reading its batches,
+  through `arrow-ipc` 60 (no compression codecs) behind the existing
+  `arrow` feature; anything else is a `DataError`, not a panic.
+- Tapes for `rich profile`, `rich schema --er`, `rich deps --features` and
+  `rich diff --conflicts`, with their fixtures under
+  `docs/tapes/fixtures/data`, recorded into `docs/media/tapes` and added to
+  the recordings page and the gallery.
+- In `--help`, completions, `docs/cli.md`, the regenerated
+  `docs/cli-reference.md`, `docs/PORTING.md` and the CLI README. No core
+  change.
+
+- Python (`rs-rich` 0.0.5 on PyPI, already bumped): `rs_rich.data` binds
+  `rs-rich-data` (with its `er` feature) and the 0.0.16 views.
+  `read_csv`, `read_tsv`, `read_jsonl` and `read_file` (format by
+  extension, then by the first character) read into `Rows`, which renders
+  as a table and becomes an `rs_rich.ext.table.TableData`; `infer` returns
+  an `Inference` (each column's type, evidence and summary; `apply`
+  converts the cells and sets the schema); `Stats` the column statistics;
+  `Profile` profiles rows, text (`from_text`) or a streamed file
+  (`from_path`), with `to_json`/`to_dict`; `CheckResult`, `QualityReport`
+  (`from_json` reads another tool's results) and `check_not_null` /
+  `check_unique`; `ResultSet` and `VirtualTable` (`offset`, `height`,
+  `scroll_by`, `fit_window`). The schema views: `Schema.from_json_schema`
+  and `Schema.from_sql` (the model, with `SchemaField`s, tables and the
+  reader's notes), `SchemaTree`, `SchemaDiff` (`SchemaChange`s, breaking
+  count), `SchemaTimeline` and `ErDiagram` (also `from_sql`), each taking
+  a `Schema` or a JSON Schema as a `dict` or JSON text. `ConflictView`
+  (`MergeConflict`s) and `RecordView` are also in `rs_rich.ext.diff` and
+  `rs_rich.ext.data`. Errors carry `line`: `DataSourceError` (`DataError`
+  in `rs_rich.data`), `SchemaError`, `ConflictError`. Type stubs, tests
+  against the crates' doc examples, a
+  [Data, schemas and developer views](docs/python/data.md) page whose
+  examples the tests run, and its API reference page. No Rust library
+  change: the bindings use the crates' public API.
+- Docs: a [tabular data guide](docs/guide/data/index.md) (adapters,
+  inference, statistics, conditional styles, profiles, quality reports,
+  virtualised tables and result sets), a [schema guide](docs/guide/data/schemas.md)
+  (the model, JSON Schema, SQL DDL and Arrow readers, tree, diff, timeline
+  and ER diagrams) and a [developer-views](docs/guide/data/developer-views.md)
+  landing page (merge conflicts, the record inspector, Cargo supply-chain
+  reports, schema diffs), linking to the detailed sections in the tables,
+  sources, diffs and structured-data pages rather than repeating them; in
+  the site's nav and the guide index.
+
 ### Records and conflicts (0.0.16 workstream 5)
 
 - `rs-rich-ext` 0.0.14: `data::RecordView` (#270), the record inspector:

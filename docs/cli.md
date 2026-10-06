@@ -6,7 +6,8 @@ patches. It also explores structured data (`inspect`), shows any file (`view`),
 looks inside bytes, characters and escape sequences (`hex`, `unicode`,
 `ansi explain`), lists the environment (`env`) and captures a command's output
 (`capture`). It draws charts and diagrams (`chart`, `mermaid`, `dot`, `deps`,
-`schema`), profiles data files (`profile`), asks questions in scripts
+`schema`, which also reads SQL DDL and Arrow and draws ER diagrams),
+profiles data files (`profile`), asks questions in scripts
 (`choose`, `input`, `confirm`, ...) and shows micro assets (`micro`). This
 page is organised by what you are trying to do. For the complete list of
 options, see the
@@ -286,6 +287,31 @@ rich --csv team.csv --title "Team"
 The delimiter and whether row 1 is a header are **detected**, not assumed, so
 semicolon- and tab-separated exports work without a flag. Numeric columns are
 right-aligned automatically.
+
+### Show each column's type (0.0.16)
+
+`--infer` types each column from its cells (integer, float, boolean, date,
+timestamp, text, or null when every cell is empty) and shows the type under
+its heading. A number column right-aligns even when some cells are null
+tokens (`NA`, `N/A`, `null`, empty), which without `--infer` make it text:
+
+```text
+$ rich --csv orders.csv --infer
+┏━━━━━━━━━┳━━━━━━━━┳━━━━━━━━┳━━━━━━━━━━━━┓
+┃      id ┃ amount ┃ region ┃ when       ┃
+┃ integer ┃  float ┃ text   ┃ date       ┃
+┡━━━━━━━━━╇━━━━━━━━╇━━━━━━━━╇━━━━━━━━━━━━┩
+│       1 │    4.5 │ eu     │ 2026-10-01 │
+│       2 │     NA │ us     │ 2026-10-02 │
+│       3 │     12 │ eu     │ 2026-10-03 │
+└─────────┴────────┴────────┴────────────┘
+```
+
+It applies wherever a file is drawn as a table: `--csv`, and `rich FILE.csv`
+or `FILE.tsv`. `--head`/`--tail` cut the rows first, so the types describe
+the rows shown. Inference is opt-in: without `--infer` the table is exactly
+rich-cli 1.8.1's, and with any other mode `--infer` is a usage error. For the
+evidence behind each type, use `rich profile`.
 
 ## Profile a data file (0.0.16)
 
@@ -958,6 +984,8 @@ rich deps --graph --depth 1         # the dependencies as a diagram
 rich deps --features --package syn  # which features a crate has, and who asked
 rich deps --audit audit.json        # `cargo audit --json` output; exit 5 on a vulnerability
 rich schema order-v1.json order-v2.json   # what changed between two JSON Schemas
+rich schema shop.sql                      # SQL DDL as a tree of tables (0.0.16)
+rich schema --er shop.sql                 # the same tables as an ER diagram (0.0.16)
 ```
 
 `.mmd`, `.mermaid`, `.dot` and `.gv` files are detected, so `rich FILE`
@@ -968,6 +996,56 @@ Mermaid's or Graphviz's own tools where they are installed; like plugins, a
 project's `./rich.toml` cannot turn them on. `--mermaid-backend off` and
 `--dot-backend off` leave the fences as code blocks, as upstream renders
 them.
+
+### Schemas: JSON Schema, SQL DDL and Arrow (0.0.16)
+
+`rich schema` reads three formats into one model, so each draws the same
+tree and any two compare:
+
+- **JSON Schema** (`.json`, or text that is not SQL), as before; its output
+  did not change.
+- **SQL DDL**, by its `.sql` or `.ddl` extension, or text (on stdin, say)
+  that starts with `CREATE` or a SQL comment. A `CREATE TABLE` subset is
+  read: columns and types as written, `NOT NULL`, `DEFAULT`, `PRIMARY KEY`,
+  `UNIQUE` and `REFERENCES`, on a column or on the table. What the reader
+  skips (`CHECK` constraints, indexes, other statements) is listed dimmed
+  under the drawing, each with its file and line, so nothing is dropped
+  silently. DDL it cannot read (an unclosed parenthesis, say) is a data
+  error, exit 4, naming the line.
+- **Arrow** IPC files and streams (Feather v2), by their `.arrow`,
+  `.feather`, `.arrows` or `.ipc` extension or an Arrow file's magic bytes.
+  Only the schema is read, never the record batches. Reading Arrow needs the
+  off-by-default `arrow` feature (`cargo install rs-rich-cli --features
+  arrow`); without it an Arrow file is a usage error (exit 2) that names the
+  feature. Arrow is read from a file, not a URL or stdin.
+
+```text
+$ rich schema shop.sql
+shop.sql  2 tables
+├── customers  table
+│   ├── id (required)  BIGINT  primary key
+│   ├── email (required)  VARCHAR(255)  unique
+│   └── name  TEXT
+└── orders  table
+    ├── id (required)  BIGINT  primary key
+    ├── customer_id (required)  BIGINT  → customers.id
+    └── total  NUMERIC(10, 2)
+
+shop.sql: line 10: orders.total: CHECK constraint skipped
+shop.sql: line 12: CREATE INDEX statement skipped
+```
+
+Two schemas of any of these formats compare: `rich schema v1.sql v2.sql`,
+`rich schema events.arrow events.json`. Two JSON Schemas still compare with
+their `$ref`s followed, exactly as before. A JSON Schema or an Arrow file
+against DDL holding a single table compares with that table.
+
+`--er` draws the schema as an entity-relationship diagram instead: a box
+per table with its columns, types and `PK`, `FK` and `UQ` markers, and an
+edge per foreign key labelled with its columns and cardinality (`N:1`, or
+`1:1` when the key is the table's primary key or a unique column). A schema
+without tables (a JSON Schema, an Arrow file) is one box. `--er` takes one
+schema.
 
 See [Charts](guide/ext/charts.md#from-the-shell-rich-chart),
 [Diagrams](guide/diagram/index.md) and

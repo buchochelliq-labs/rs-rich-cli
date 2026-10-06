@@ -34,6 +34,7 @@ from .._native import (
     SelectError,
     DATA_FORMATS,
     SECRET_KEYS,
+    RecordView,
 )
 
 # The Rust names, where the flat native module needed a longer one.
@@ -83,4 +84,5 @@ __all__ = [
     "Change",
     "json",
     "FORMATS",
+    "RecordView",
 ]

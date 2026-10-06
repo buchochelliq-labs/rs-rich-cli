@@ -25,6 +25,7 @@ The guides in the other sections explain how to use them.
 - [`rs_rich.console`](rs_rich/console.md)
 - [`rs_rich.constrain`](rs_rich/constrain.md)
 - [`rs_rich.containers`](rs_rich/containers.md)
+- [`rs_rich.data`](rs_rich/data.md)
 - [`rs_rich.diagram`](rs_rich/diagram.md)
 - [`rs_rich.emoji`](rs_rich/emoji.md)
 - [`rs_rich.errors`](rs_rich/errors.md)

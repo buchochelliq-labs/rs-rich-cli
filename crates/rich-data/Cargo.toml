@@ -34,9 +34,10 @@ name = "rich_data"
 workspace = true
 
 [features]
-# Arrow `RecordBatch` rows and schemas. Off by default: it compiles the Arrow
-# array crates.
-arrow = ["dep:arrow-array", "dep:arrow-schema"]
+# Arrow `RecordBatch` rows and schemas, and the schema of an Arrow IPC file
+# or stream (`arrow::read_schema`). Off by default: it compiles the Arrow
+# array and IPC crates.
+arrow = ["dep:arrow-array", "dep:arrow-schema", "dep:arrow-ipc"]
 # ER diagrams of a schema (`er`), through rs-rich-diagram. Off by default.
 er = ["dep:rich-diagram"]
 
@@ -49,6 +50,8 @@ serde = { version = "1", features = ["derive"] }
 serde_json.workspace = true
 arrow-array = { version = "60", default-features = false, optional = true }
 arrow-schema = { version = "60", default-features = false, optional = true }
+# Only the schema message is read (no compression codecs).
+arrow-ipc = { version = "60", default-features = false, optional = true }
 
 [dev-dependencies]
 serde = { version = "1", features = ["derive"] }
