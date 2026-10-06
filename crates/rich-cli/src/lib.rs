@@ -75,6 +75,7 @@ use rich::{
     DEFAULT_TERMINAL_THEME,
 };
 use rich_data::csv::{has_header, read_rows, sniff, Dialect};
+use rich_data::infer::{InferredType, Inferrer};
 use rich_ext::cli::CliExtensions;
 use rich_ext::encoding::{has_utf16_bom, Encoding};
 use rich_ext::sanitize_terminal_controls;
@@ -139,7 +140,8 @@ enum Mode {
     Dot,
     /// `deps`: a Cargo dependency tree from `cargo metadata` (`sources.rs`).
     Deps,
-    /// `schema`: a JSON Schema as a tree, or two compared (`sources.rs`).
+    /// `schema`: a JSON Schema, SQL DDL or Arrow schema as a tree, two
+    /// compared, or an ER diagram (`sources.rs`).
     Schema,
     /// `chart`: a chart from CSV, JSON or stdin (`chart.rs`).
     Chart,
@@ -434,6 +436,10 @@ struct SourceOptions {
     lexer: Option<String>,
     /// `--no-wrap`: crop long source lines, and don't wrap `--print` text.
     no_wrap: bool,
+    /// `--infer`: a `--csv` table's column types, inferred from its cells
+    /// (`rich_data::infer`), under each heading and aligning the numbers.
+    /// Not upstream; without it the table is rich-cli 1.8.1's.
+    infer: bool,
 }
 
 impl SourceOptions {
@@ -563,6 +569,8 @@ struct Cli {
     graph_sources: sources::GraphSourceOptions,
     /// `rich chart` options: `--kind`, `--x`, `--y`.
     chart: chart::ChartOptions,
+    /// `rich schema` options: `--er`.
+    schema: sources::SchemaOptions,
     /// `rich profile` options: `--sample`, `--columns`, `--top`.
     profile: profile::ProfileOptions,
     /// `--highlighter NAME`: the console-wide code highlighter.
@@ -1837,6 +1845,7 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
     let mut dot_backend = None;
     let mut graph_sources = sources::GraphSourceOptions::default();
     let mut chart = chart::ChartOptions::default();
+    let mut schema_options = sources::SchemaOptions::default();
     let mut profile_options = profile::ProfileOptions::default();
     let mut highlighter: Option<String> = None;
     let mut plugins: Vec<String> = Vec::new();
@@ -1924,6 +1933,9 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
             continue;
         }
         if chart.parse_option(arg, &mut iter)? {
+            continue;
+        }
+        if schema_options.parse_option(arg) {
             continue;
         }
         if profile_options.parse_option(arg, &mut iter)? {
@@ -2202,6 +2214,7 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
                 source.lexer = Some(iter.next().ok_or("--lexer requires a LEXER")?.clone());
             }
             "--no-wrap" => source.no_wrap = true,
+            "--infer" => source.infer = true,
             "--emoji" => emoji = true,
             "--soft" => soft = true,
             "-W" | "--max-width" => {
@@ -2443,6 +2456,7 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
         .into_iter()
         .chain(graph_sources.given())
         .chain(chart.given())
+        .chain(schema_options.given())
         .chain(profile_options.given())
     {
         if !commands.contains(&mode_name(mode)) {
@@ -2617,6 +2631,12 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
             source.head.is_some() || source.tail.is_some(),
             "--syntax, --csv or --ipynb",
             source_mode || effective_mode == Mode::Csv,
+        ),
+        (
+            "--infer",
+            source.infer,
+            "--csv",
+            effective_mode == Mode::Csv,
         ),
         (
             "--line-numbers",
@@ -2915,6 +2935,7 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
         dot_backend,
         graph_sources,
         chart,
+        schema: schema_options,
         profile: profile_options,
         highlighter,
         code_theme,
@@ -4708,6 +4729,7 @@ fn run_once_with_fetch(mut cli: Cli, prefetched: Option<(String, Option<String>)
                 cli.title.as_deref(),
                 cli.caption.as_deref(),
                 (cli.source.head, cli.source.tail),
+                cli.source.infer,
             ) {
                 Some(table) => table,
                 // Upstream's `on_error(str(error))`. The message is CPython's,
@@ -5139,12 +5161,17 @@ fn is_number(value: &str) -> bool {
 /// fabricated one-column table at exit 0 instead is the worst possible
 /// outcome: `rich --csv "$f" && publish` proceeds on a file nothing could
 /// parse, with empty stderr to say so.
+///
+/// `infer` (`--infer`, not upstream) types each column with
+/// `rich_data::infer` after `--head`/`--tail` cut the rows; see
+/// [`render_csv`].
 fn build_csv_table(
     content: &str,
     fallback_delimiter: Option<char>,
     title: Option<&str>,
     caption: Option<&str>,
     window: (Option<usize>, Option<usize>),
+    infer: bool,
 ) -> Option<Table> {
     // The sniffer sees only the first 1024 *characters* — upstream's
     // `csv_data[:1024]` — however long the file is.
@@ -5173,7 +5200,32 @@ fn build_csv_table(
         }
         rows = header_row.into_iter().chain(data).collect();
     }
-    Some(render_csv(rows, header, title, caption))
+    let types = infer.then(|| infer_csv_types(&rows, header));
+    Some(render_csv(rows, header, title, caption, types))
+}
+
+/// Each column's inferred type, for `--infer`: the data rows (blank lines
+/// skipped, as the table skips them) read by `rich_data::infer`, a missing
+/// cell in a short row counting as null.
+fn infer_csv_types(rows: &[Vec<String>], has_header: bool) -> Vec<InferredType> {
+    let width = rows.iter().map(Vec::len).max().unwrap_or(0);
+    let mut data = rich_data::Rows::new((0..width).map(|index| index.to_string()));
+    for row in rows
+        .iter()
+        .skip(usize::from(has_header))
+        .filter(|row| !row.is_empty())
+    {
+        data.push(
+            (0..width)
+                .map(|index| rich_data::Value::from(row.get(index).map_or("", String::as_str))),
+        );
+    }
+    Inferrer::new()
+        .infer(&data)
+        .columns()
+        .iter()
+        .map(|column| column.data_type())
+        .collect()
 }
 
 /// The dialect upstream falls back to when `csv.Sniffer` cannot read
@@ -5197,15 +5249,21 @@ fn csv_fallback_delimiter(resource: Option<&str>) -> Option<char> {
 /// blue border, `HEAVY_HEAD` when the sniffer found a header and `SQUARE` when
 /// it did not, and any all-numeric column right-justified with bold-green body
 /// and header cells.
+///
+/// With `types` (`--infer`), a column is numeric when its inferred type is
+/// an integer or a float, so null tokens (`NA`, `null`, …) no longer make a
+/// number column text, and each heading shows its type on a second, dim
+/// line; a table without a header row then shows a heading of types alone.
 fn render_csv(
     rows: Vec<Vec<String>>,
     has_header: bool,
     title: Option<&str>,
     caption: Option<&str>,
+    types: Option<Vec<InferredType>>,
 ) -> Table {
     let mut table = Table::new()
         .border_style(Style::parse("blue").expect("valid style"))
-        .show_header(has_header)
+        .show_header(has_header || types.is_some())
         .box_set(if has_header { HEAVY_HEAD } else { SQUARE });
     if let Some(title) = title {
         table = table.title(title);
@@ -5238,17 +5296,40 @@ fn render_csv(
         // row too SHORT to reach the column disqualifies it (upstream's
         // `except Exception: break`), while an empty cell does not; and an
         // empty data set counts as numeric, as upstream's `for … else` does.
-        let numeric = data.iter().all(|row| match row.get(index) {
-            Some(value) => value.is_empty() || is_number(value),
-            None => false,
-        });
+        let inferred = types
+            .as_ref()
+            .map(|types| types.get(index).copied().unwrap_or(InferredType::Null));
+        let numeric = match inferred {
+            Some(inferred) => matches!(inferred, InferredType::Integer | InferredType::Float),
+            None => data.iter().all(|row| match row.get(index) {
+                Some(value) => value.is_empty() || is_number(value),
+                None => false,
+            }),
+        };
         let name = header.get(index).map(String::as_str).unwrap_or("");
-        if numeric {
+        if let Some(inferred) = inferred {
+            let mut heading = Text::new(name);
+            if !name.is_empty() {
+                heading.append("\n", None);
+            }
+            heading.append(
+                inferred.name(),
+                Some(Style::parse("dim").expect("valid style").into()),
+            );
+            let justify = if numeric {
+                Justify::Right
+            } else {
+                Justify::Left
+            };
+            table.add_column_text(heading, justify);
+        } else if numeric {
             table.add_column_justify(name, Justify::Right);
-            table.column_style(Style::parse("bold green").expect("valid style"));
-            table.column_header_fill(Style::parse("bold green").expect("valid style"));
         } else {
             table.add_column(name);
+        }
+        if numeric {
+            table.column_style(Style::parse("bold green").expect("valid style"));
+            table.column_header_fill(Style::parse("bold green").expect("valid style"));
         }
     }
     // Measurement/style inference is complete. Move the parsed cells into the
@@ -6621,7 +6702,7 @@ fn run_demo(no_color: bool, delay: std::time::Duration) -> Console {
     // CSV rendered as a table (blue border, numeric columns bold-green + right).
     demo::section(&console, delay, "csv");
     let csv = "Product,Qty,Price\nWidget,3,9.99\nGadget,12,19.50\nGizmo,1,4.25";
-    if let Some(table) = build_csv_table(csv, Some(','), None, None, (None, None)) {
+    if let Some(table) = build_csv_table(csv, Some(','), None, None, (None, None), false) {
         console.print(&table);
     }
 
@@ -7291,6 +7372,7 @@ mod tests {
             None,
             None,
             (None, None),
+            false,
         )
         .expect("the sniffer reads this one");
         let out = Console::builder()

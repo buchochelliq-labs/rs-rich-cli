@@ -1,0 +1,30 @@
+❯ rich schema --er shop.sql
+                                                        ┌───────────────────────────┐
+                                                        │         products          │
+                                                        ├───────────────────────────┤
+                                                        │ sku    VARCHAR(32)     PK │
+                                 ┌───sku → sku (N:1)───►│ title  TEXT               │
+┌──────────────────────────────┐ │                      │ price  NUMERIC(10, 2)     │
+│         order_lines          │ │                      └───────────────────────────┘
+├──────────────────────────────┤ │
+│ order_id  BIGINT       PK FK ├─┘                      ┌───────────────────────────────────────────┐
+│ sku       VARCHAR(32)  PK FK ├─┐                      │                  orders                   │                           ┌─────────────────────────┐
+│ quantity  INT                │ │                      ├───────────────────────────────────────────┤                           │        customers        │
+└──────────────────────────────┘ │                      │ id           BIGINT                    PK │                           ├─────────────────────────┤
+                                 └─order_id → id (N:1)─►│ customer_id  BIGINT                    FK ├─┐                         │ id     BIGINT        PK │
+                                                        │ status       VARCHAR(16)?                 │ └─customer_id → id (N:1)─►│ email  VARCHAR(255)  UQ │
+                                                        │ placed_at    TIMESTAMP WITH TIME ZONE     │                           │ name   TEXT?            │
+                                                        └───────────────────────────────────────────┘                           └─────────────────────────┘
+
+shop.sql: line 11: products.price: CHECK constraint skipped
+shop.sql: line 28: CREATE INDEX statement skipped
+❯
+
+
+
+
+
+
+
+
+

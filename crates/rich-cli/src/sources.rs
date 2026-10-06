@@ -1,16 +1,19 @@
 //! `rich dot`, `rich deps` and `rich schema`: diagrams from real sources
-//! (0.0.15 workstream 4). Not upstream: binary-boundary conveniences that
-//! compose rs-rich-diagram (the DOT parser, the layout) and rs-rich-ext (the
-//! dependency and schema trees); see `docs/PORTING.md`.
+//! (0.0.15 workstream 4; SQL DDL, Arrow and `--er` in 0.0.16 workstream 7).
+//! Not upstream: binary-boundary conveniences that compose rs-rich-diagram
+//! (the DOT parser, the layout), rs-rich-ext (the dependency and schema
+//! trees) and rs-rich-data (Arrow schemas, ER diagrams); see
+//! `docs/PORTING.md`.
 use super::*;
 
+use rich::containers::Renderables;
 use rich_diagram::{Diagram, Direction, Graph, Node, Shape, Stroke};
 use rich_ext::deps::audit::{AdvisoryKind, AdvisoryReport};
 use rich_ext::deps::features::{FeatureGraph, FeatureTree};
 use rich_ext::deps::licenses::LicenseReport;
 use rich_ext::deps::timings::{Timings, TimingsReport};
 use rich_ext::deps::{DepGraph, DepKind, DepTree, WhyTree};
-use rich_ext::schema::{SchemaDiff, SchemaTree};
+use rich_ext::schema::{Schema, SchemaDiff, SchemaTree};
 
 /// `--dot-backend`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -129,6 +132,34 @@ impl GraphSourceOptions {
 }
 
 type Failure = (ExitClass, String);
+
+/// The options of `rich schema`.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub(crate) struct SchemaOptions {
+    /// `--er`: draw the schema as an ER diagram.
+    er: bool,
+}
+
+impl SchemaOptions {
+    /// Consume one of these options; anything else stays with the main parser.
+    pub(crate) fn parse_option(&mut self, arg: &str) -> bool {
+        match arg {
+            "--er" => self.er = true,
+            _ => return false,
+        }
+        true
+    }
+
+    /// Each option given with the commands it applies to, for the "only has
+    /// an effect" check.
+    pub(crate) fn given(&self) -> Vec<(&'static str, &'static [&'static str])> {
+        [("--er", self.er)]
+            .into_iter()
+            .filter(|(_, given)| *given)
+            .map(|(flag, _)| (flag, &["schema"][..]))
+            .collect()
+    }
+}
 
 /// What `rich deps` shows, and the gate it failed, if any: `--audit` with a
 /// vulnerability in the report exits 5 once the report is shown.
@@ -518,8 +549,97 @@ fn why_diagram(why: &WhyTree, kinds: &[DepKind]) -> Graph {
     diagram
 }
 
-/// A schema file (or URL, or `-`) read and parsed.
-fn schema_file(cli: &Cli, resource: &str) -> Result<serde_json::Value, Failure> {
+/// How a schema is written.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SchemaFormat {
+    /// JSON Schema.
+    Json,
+    /// SQL DDL: `CREATE TABLE` statements.
+    Sql,
+    /// An Arrow IPC file or stream (Feather v2).
+    Arrow,
+}
+
+/// The format a resource's extension names, if it names one.
+fn schema_format_by_name(resource: &str) -> Option<SchemaFormat> {
+    let path = resource.split(['?', '#']).next().unwrap_or(resource);
+    let extension = path
+        .rsplit(['/', '\\'])
+        .next()
+        .and_then(|name| name.rsplit_once('.'))
+        .map(|(_, extension)| extension.to_ascii_lowercase());
+    match extension.as_deref() {
+        Some("json") => Some(SchemaFormat::Json),
+        Some("sql" | "ddl") => Some(SchemaFormat::Sql),
+        Some("arrow" | "feather" | "arrows" | "ipc") => Some(SchemaFormat::Arrow),
+        _ => None,
+    }
+}
+
+/// Whether a local file starts with an Arrow IPC file's magic bytes.
+fn has_arrow_magic(resource: &str) -> bool {
+    use std::io::Read;
+    let mut magic = [0u8; 6];
+    std::fs::File::open(fs_path(resource))
+        .and_then(|mut file| file.read_exact(&mut magic))
+        .is_ok_and(|()| &magic == b"ARROW1")
+}
+
+/// Whether text with no telling extension is SQL rather than JSON: it
+/// starts with a SQL comment or with `CREATE`, which JSON never does.
+fn looks_like_sql(content: &str) -> bool {
+    let text = content.trim_start_matches('\u{feff}').trim_start();
+    text.starts_with("--")
+        || text.starts_with("/*")
+        || text
+            .get(..6)
+            .is_some_and(|word| word.eq_ignore_ascii_case("create"))
+}
+
+/// A schema read: JSON Schema stays JSON (its views follow `$ref`s), every
+/// other format is in the model.
+enum LoadedSchema {
+    Json(serde_json::Value),
+    Model(Schema),
+}
+
+impl LoadedSchema {
+    fn into_model(self) -> Schema {
+        match self {
+            LoadedSchema::Json(value) => rich_ext::schema::json::to_model(&value),
+            LoadedSchema::Model(model) => model,
+        }
+    }
+}
+
+/// Where a schema came from, and the reader's notes on what it skipped.
+struct SchemaSource {
+    name: String,
+    notes: Vec<String>,
+}
+
+/// A schema file (or URL, or `-`) read and parsed: by extension (`.json`;
+/// `.sql`, `.ddl`; `.arrow`, `.feather`, `.arrows`, `.ipc`), else an Arrow
+/// file by its magic bytes, else SQL when the text starts like SQL, else
+/// JSON Schema.
+fn schema_file(cli: &Cli, resource: &str) -> Result<(LoadedSchema, SchemaSource), Failure> {
+    let name = shown_name(resource);
+    let local = !is_url(resource) && resource != "-";
+    let mut format = schema_format_by_name(resource);
+    if format.is_none() && local && has_arrow_magic(resource) {
+        format = Some(SchemaFormat::Arrow);
+    }
+    if format == Some(SchemaFormat::Arrow) {
+        if !local {
+            return Err((
+                ExitClass::Usage,
+                format!("{name}: an Arrow schema is read from a file, not a URL or stdin"),
+            ));
+        }
+        let schema = LoadedSchema::Model(arrow_schema(resource)?);
+        let notes = Vec::new();
+        return Ok((schema, SchemaSource { name, notes }));
+    }
     let content = if is_url(resource) {
         fetch_url(resource, cli.extensions.encoding)
             .map(|(content, _)| content)
@@ -530,18 +650,132 @@ fn schema_file(cli: &Cli, resource: &str) -> Result<serde_json::Value, Failure> 
             (ExitClass::Input, format!("cannot read {name}: {err}"))
         })?
     };
-    rich_ext::schema::parse(&content).map_err(|err| (ExitClass::Data, format!("{resource}: {err}")))
+    let sql = match format {
+        Some(format) => format == SchemaFormat::Sql,
+        None => looks_like_sql(&content),
+    };
+    if sql {
+        let parsed = rich_ext::schema::sql::parse(&content)
+            .map_err(|err| (ExitClass::Data, format!("{resource}: {err}")))?;
+        let notes = parsed.notes.iter().map(ToString::to_string).collect();
+        let schema = LoadedSchema::Model(parsed.schema);
+        return Ok((schema, SchemaSource { name, notes }));
+    }
+    let value = rich_ext::schema::parse(&content)
+        .map_err(|err| (ExitClass::Data, format!("{resource}: {err}")))?;
+    let notes = Vec::new();
+    Ok((LoadedSchema::Json(value), SchemaSource { name, notes }))
 }
 
-/// `rich schema FILE`: the tree; `rich schema OLD NEW`: what changed.
+/// An Arrow IPC file's schema, in the model.
+#[cfg(feature = "arrow")]
+fn arrow_schema(resource: &str) -> Result<Schema, Failure> {
+    let file = std::fs::File::open(fs_path(resource))
+        .map_err(|err| (ExitClass::Input, format!("cannot read {resource}: {err}")))?;
+    let schema = rich_data::arrow::read_schema(std::io::BufReader::new(file))
+        .map_err(|err| (ExitClass::Data, format!("{resource}: {err}")))?;
+    Ok(rich_data::arrow::schema(&schema))
+}
+
+/// Without the `arrow` feature an Arrow schema cannot be read: a usage
+/// error that names the feature, rather than a JSON parse error.
+#[cfg(not(feature = "arrow"))]
+fn arrow_schema(resource: &str) -> Result<Schema, Failure> {
+    Err((
+        ExitClass::Usage,
+        format!(
+            "{}: reading an Arrow schema needs rich built with the `arrow` feature \
+             (cargo install rs-rich-cli --features arrow)",
+            shown_name(resource)
+        ),
+    ))
+}
+
+/// The view, then each reader note (what DDL the reader skipped), dimmed,
+/// under a blank line.
+fn with_notes(
+    view: impl Renderable + Send + Sync + 'static,
+    inputs: &[&SchemaSource],
+) -> Box<dyn Renderable> {
+    let notes: Vec<String> = inputs
+        .iter()
+        .flat_map(|input| {
+            input
+                .notes
+                .iter()
+                .map(move |note| format!("{}: {note}", input.name))
+        })
+        .collect();
+    if notes.is_empty() {
+        return Box::new(view);
+    }
+    let mut text = Text::new("");
+    text.append(
+        &notes.join("\n"),
+        Some(Style::parse("dim").expect("valid style").into()),
+    );
+    Box::new(Renderables::new(vec![
+        std::sync::Arc::new(view),
+        std::sync::Arc::new(Text::new("")),
+        std::sync::Arc::new(text),
+    ]))
+}
+
+/// Two models compared: when one is a schema of tables with a single table
+/// and the other has no tables (a JSON Schema or an Arrow file against one
+/// `CREATE TABLE`), that table is what is compared.
+fn comparable(old: Schema, new: Schema) -> (Schema, Schema) {
+    let single = |schema: &Schema| match schema.tables() {
+        [one] => Some(one.clone()),
+        _ => None,
+    };
+    match (old.tables().is_empty(), new.tables().is_empty()) {
+        (true, false) => match single(&new) {
+            Some(table) => (old, table),
+            None => (old, new),
+        },
+        (false, true) => match single(&old) {
+            Some(table) => (table, new),
+            None => (old, new),
+        },
+        _ => (old, new),
+    }
+}
+
+/// `rich schema FILE`: the tree; `rich schema OLD NEW`: what changed;
+/// `rich schema --er FILE`: the ER diagram.
 pub(crate) fn schema(cli: &Cli) -> Result<Box<dyn Renderable>, Failure> {
     let resources: Vec<String> = if cli.resources.is_empty() {
         vec!["-".into()]
     } else {
         cli.resources.clone()
     };
+    if cli.schema.er && resources.len() != 1 {
+        return Err((
+            ExitClass::Usage,
+            "--er draws one schema: rich schema --er FILE".into(),
+        ));
+    }
     match resources.as_slice() {
-        [one] => Ok(Box::new(SchemaTree::new(schema_file(cli, one)?))),
+        [one] => {
+            let (schema, input) = schema_file(cli, one)?;
+            if cli.schema.er {
+                let model = rich_data::er::model(&schema.into_model());
+                return Ok(with_notes(rich_diagram::ErDiagram::new(model), &[&input]));
+            }
+            match schema {
+                // JSON Schema keeps its own tree (and its title): unchanged.
+                LoadedSchema::Json(value) => Ok(Box::new(SchemaTree::new(value))),
+                // DDL and Arrow are titled with the file they came from.
+                LoadedSchema::Model(model) => {
+                    let mut tree = SchemaTree::from_model(model);
+                    if one != "-" {
+                        tree = tree.title(input.name.clone());
+                    }
+                    Ok(with_notes(tree, &[&input]))
+                }
+            }
+        }
         [old, new] => {
             if old == "-" && new == "-" {
                 return Err((
@@ -549,9 +783,15 @@ pub(crate) fn schema(cli: &Cli) -> Result<Box<dyn Renderable>, Failure> {
                     "only one schema can come from stdin".into(),
                 ));
             }
-            let diff = SchemaDiff::new(&schema_file(cli, old)?, &schema_file(cli, new)?)
-                .names(shown_name(old), shown_name(new));
-            Ok(Box::new(diff))
+            let (old_schema, old_input) = schema_file(cli, old)?;
+            let (new_schema, new_input) = schema_file(cli, new)?;
+            let names = (shown_name(old), shown_name(new));
+            if let (LoadedSchema::Json(a), LoadedSchema::Json(b)) = (&old_schema, &new_schema) {
+                return Ok(Box::new(SchemaDiff::new(a, b).names(names.0, names.1)));
+            }
+            let (a, b) = comparable(old_schema.into_model(), new_schema.into_model());
+            let diff = SchemaDiff::models(&a, &b).names(names.0, names.1);
+            Ok(with_notes(diff, &[&old_input, &new_input]))
         }
         _ => Err((
             ExitClass::Usage,

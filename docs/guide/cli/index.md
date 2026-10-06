@@ -120,7 +120,7 @@ records exactly which parts are upstream and which are additions.
 | `mermaid`, `mmd` | — | Draw a Mermaid flowchart as text | [From Mermaid](../diagram/index.md#from-mermaid) |
 | `dot`, `graphviz` | — | Draw a DOT (Graphviz) graph as text | [Diagrams](../diagram/index.md#dot-graphviz) |
 | `deps` | — | A Cargo dependency tree or graph; `--why CRATE`; feature, build-time, advisory and licence reports | [Dependency graphs](../ext/sources.md#cargo-dependency-graphs), [supply-chain reports](../ext/sources.md#supply-chain-reports) |
-| `schema` | — | A JSON Schema as a tree, or what changed between two | [JSON Schemas](../ext/sources.md) |
+| `schema` | — | A JSON Schema, SQL DDL or Arrow schema as a tree, what changed between two, or an ER diagram (`--er`) | [JSON Schemas](../ext/sources.md) |
 | `choose`, `filter`, `input`, `confirm`, `pager` | — | Ask in a script: answer on stdout, exit 1 when cancelled | [Ask in a script](../../cli.md#ask-in-a-script) |
 | `write`, `file`, `color`, `asset` | — | A text area, a file, colour or asset picker | [Ask in a script](../../cli.md#ask-in-a-script) |
 | `explore` | — | Explore JSON, YAML, TOML, XML, INI or `.env` interactively | [Explore it interactively](../../cli.md#explore-it-interactively) |

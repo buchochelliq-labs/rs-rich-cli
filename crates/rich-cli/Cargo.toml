@@ -72,6 +72,11 @@ lumis = ["dep:rich-lumis"]
 # limits). See docs/PLUGINS.md.
 dylib-plugins = ["rich-ext/dylib-plugins"]
 wasm-plugins = ["rich-ext/wasm-plugins"]
+# `rich schema` reading Arrow IPC files (`.arrow`, `.feather`, `.arrows`,
+# `.ipc`) through rs-rich-data's Arrow adapter. Off by default: it compiles
+# the Arrow array and IPC crates. Without it an Arrow input is a usage error
+# that names this feature.
+arrow = ["rich-data/arrow"]
 
 [dependencies]
 rich = { workspace = true, features = ["syntax", "markdown"] }
@@ -84,8 +89,9 @@ rich-mermaid = { workspace = true, optional = true }
 # `rich dot` and ```dot fences (the DOT plugin), `rich deps --graph`, and
 # Graphviz's own SVG for `--dot-backend graphviz --export-svg`.
 rich-diagram = { workspace = true, features = ["plugin", "graphviz"] }
-# The CSV/TSV sniffer and reader behind `--csv` and `rich chart`.
-rich-data.workspace = true
+# The CSV/TSV sniffer and reader behind `--csv` and `rich chart`, `--infer`,
+# `rich profile`, and the ER diagrams of `rich schema --er`.
+rich-data = { workspace = true, features = ["er"] }
 rich-record = { workspace = true, optional = true }
 rich-interact = { workspace = true, optional = true, features = ["data"] }
 rich-lumis = { workspace = true, optional = true }

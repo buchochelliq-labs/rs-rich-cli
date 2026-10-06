@@ -29,6 +29,10 @@ motion turned on in your system settings the cards stay still.
 [![The command palette over a file list](media/tapes/palette/palette.png){ data-gif="palette.gif" loading=lazy }<span class="tape-card-title">Overlays and chrome</span>](#overlays-and-chrome){ .tape-card }
 [![A CSV file drawn as a line chart by rich chart](media/tapes/chart/lines.png){ data-gif="chart.gif" loading=lazy }<span class="tape-card-title">Charts from data</span>](#charts-from-data){ .tape-card }
 [![rich deps drawing a dependency graph](media/tapes/deps/graph.png){ data-gif="deps.gif" loading=lazy }<span class="tape-card-title">Dependency trees</span>](#dependency-trees){ .tape-card }
+[![rich profile describing each column of a CSV file](media/tapes/profile/profile.png){ data-gif="profile.gif" loading=lazy }<span class="tape-card-title">Profile a data file</span>](#profile-a-data-file){ .tape-card }
+[![rich schema --er drawing SQL tables as an ER diagram](media/tapes/schema/er.png){ data-gif="schema.gif" loading=lazy }<span class="tape-card-title">Schemas and ER diagrams</span>](#schemas-and-er-diagrams){ .tape-card }
+[![rich deps --features showing what turned syn's features on](media/tapes/deps-features/features.png){ data-gif="deps-features.gif" loading=lazy }<span class="tape-card-title">Crate features</span>](#crate-features){ .tape-card }
+[![rich diff --conflicts showing ours, base and theirs side by side](media/tapes/conflicts/conflicts.png){ data-gif="conflicts.gif" loading=lazy }<span class="tape-card-title">Merge conflicts</span>](#merge-conflicts){ .tape-card }
 [![A DOT fence drawn in a Markdown document](media/tapes/dot-fence/drawn.png){ data-gif="dot-fence.gif" loading=lazy }<span class="tape-card-title">DOT in Markdown</span>](#dot-in-markdown){ .tape-card }
 [![fun/heart previewed, its frames magnified](media/tapes/micro-modes/modes.png){ data-gif="micro-modes.gif" loading=lazy }<span class="tape-card-title">Micro assets</span>](#micro-assets){ .tape-card }
 [![The guided tour, inspecting structured data](media/tapes/tour/inspect.png){ data-gif="tour.gif" loading=lazy }<span class="tape-card-title">The guided tour</span>](demos.md#run-the-suite-in-your-terminal){ .tape-card }
@@ -246,6 +250,71 @@ crates resolved at several versions, `--why` for what pulls a crate in, and
 | ![rich deps --depth 2](media/tapes/deps/tree.png) | ![rich deps --why syn](media/tapes/deps/why.png) | ![rich deps --graph --depth 1](media/tapes/deps/graph.png) |
 
 [Tape](tapes/deps.tape) · [Cast](media/tapes/deps/deps.cast) · [GIF](media/tapes/deps/deps.gif) · [Page](media/tapes/deps/deps.html)
+
+## Crate features
+
+`rich deps --features` shows which features each crate has enabled, what
+each one turns on (other features, optional dependencies, features of
+dependencies), and which crates asked for them (0.0.16). `--package` picks
+one crate; here `syn`, resolved at two versions.
+
+<div class="tape-player" data-cast="../media/tapes/deps-features/deps-features.cast" data-poster="npt:0:3">
+  <img src="../media/tapes/deps-features/deps-features.gif" alt="rich deps --features --package syn listing both versions' features and who requested them">
+</div>
+
+![rich deps --features --package syn](media/tapes/deps-features/features.png)
+
+[Tape](tapes/deps-features.tape) · [Cast](media/tapes/deps-features/deps-features.cast) · [GIF](media/tapes/deps-features/deps-features.gif) · [Page](media/tapes/deps-features/deps-features.html)
+
+## Profile a data file
+
+`rich profile` says what each column of a CSV file holds: its type, nulls,
+distinct values, statistics and distribution, and a map of where the nulls
+are (0.0.16). `rich FILE.csv --infer` puts the same types on the table
+itself. See [Profile a data file](cli.md#profile-a-data-file-0016).
+
+<div class="tape-player" data-cast="../media/tapes/profile/profile.cast" data-poster="npt:0:4">
+  <img src="../media/tapes/profile/profile.gif" alt="rich profile describing three columns of orders.csv, then the table with inferred types">
+</div>
+
+| Profile | `--infer` |
+|---|---|
+| ![rich profile orders.csv --columns region,amount,express](media/tapes/profile/profile.png) | ![rich orders.csv --infer --head 8](media/tapes/profile/infer.png) |
+
+[Tape](tapes/profile.tape) · [Cast](media/tapes/profile/profile.cast) · [GIF](media/tapes/profile/profile.gif) · [Page](media/tapes/profile/profile.html)
+
+## Schemas and ER diagrams
+
+`rich schema` reads SQL DDL as well as JSON Schema (and Arrow, with the
+`arrow` feature): the tables as a tree, with what the reader skipped noted
+under it, then `--er` for the same tables as an ER diagram, keys marked and
+an edge per foreign key (0.0.16). See
+[Schemas](cli.md#schemas-json-schema-sql-ddl-and-arrow-0016).
+
+<div class="tape-player" data-cast="../media/tapes/schema/schema.cast" data-poster="npt:0:4">
+  <img src="../media/tapes/schema/schema.gif" alt="rich schema drawing shop.sql as a tree of tables, then as an ER diagram">
+</div>
+
+| Tree | `--er` |
+|---|---|
+| ![rich schema shop.sql](media/tapes/schema/tree.png) | ![rich schema --er shop.sql](media/tapes/schema/er.png) |
+
+[Tape](tapes/schema.tape) · [Cast](media/tapes/schema/schema.cast) · [GIF](media/tapes/schema/schema.gif) · [Page](media/tapes/schema/schema.html)
+
+## Merge conflicts
+
+`rich diff --conflicts` shows a file's merge conflicts: ours, the base (for
+a diff3-style conflict) and theirs side by side, with the lines around them
+and a count at the end (0.0.16). See
+[Merge conflicts](cli.md#merge-conflicts).
+
+<div class="tape-player" data-cast="../media/tapes/conflicts/conflicts.cast" data-poster="npt:0:3">
+  <img src="../media/tapes/conflicts/conflicts.gif" alt="rich diff --conflicts merge.rs showing two conflicts">
+</div>
+
+![rich diff --conflicts merge.rs](media/tapes/conflicts/conflicts.png)
+
+[Tape](tapes/conflicts.tape) · [Cast](media/tapes/conflicts/conflicts.cast) · [GIF](media/tapes/conflicts/conflicts.gif) · [Page](media/tapes/conflicts/conflicts.html)
 
 ## DOT in Markdown
 

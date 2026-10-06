@@ -1,0 +1,11 @@
+{
+  "tape": "docs/tapes/deps-features.tape",
+  "tape_fnv1a64": "8e5cb9ab964adfc4",
+  "recorder": "rs-rich-record 0.0.4",
+  "rich": null,
+  "commit": "723b38b184c7ad9513f9b0b245f6424ea852a737",
+  "screenshots": [
+    "features"
+  ],
+  "note": "Every frame is real output of the program under test on a PTY."
+}
