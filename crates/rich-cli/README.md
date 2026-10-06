@@ -30,6 +30,7 @@ rich mermaid flow.mmd                                   # a Mermaid flowchart, d
 rich dot services.dot                                   # a DOT (Graphviz) graph, drawn as text
 rich deps --why syn                                     # Cargo dependency tree; what pulls a crate in
 rich schema order-v1.json order-v2.json                 # a JSON Schema as a tree, or what changed
+rich schema --er shop.sql                               # SQL DDL (or Arrow) as an ER diagram
 rich chart sales.csv --kind bar --x month --y revenue   # a chart from CSV, JSON or stdin
 rich profile orders.csv --columns region,amount        # types, nulls, statistics, distributions
 rich diff old.rs new.rs --side-by-side                  # text diff; `git diff | rich diff -` for patches
@@ -181,6 +182,13 @@ Profiles
   `--top N` choose what is shown, and `--report json` writes the profile as
   JSON to stdout.
 
+Schemas and inferred types
+: `rich schema` reads JSON Schema, SQL DDL (`.sql`, `.ddl`, or text starting
+  with `CREATE`) and, with the `arrow` feature, Arrow IPC files; any two
+  compare, and `--er` draws an ER diagram. `--infer` shows each `--csv`
+  column's inferred type under its heading; without it the table is
+  rich-cli's.
+
 Filter and highlight
 : `--filter PATTERN` keeps only what matches, and `--highlight PATTERN` marks
   matches in reverse video. For text, `--print` and `--syntax` the pattern is a
@@ -247,6 +255,7 @@ Off by default:
 
 - **`lumis`** — the tree-sitter highlighter (`--highlighter lumis`), via [`rs-rich-lumis`](https://crates.io/crates/rs-rich-lumis). It compiles many grammars, so the binary is much larger, and it needs Rust 1.91.
 - **`mmdc`** — the `mmdc` Mermaid backend. It starts Mermaid's CLI, which must be installed separately.
+- **`arrow`** — `rich schema` reading Arrow IPC files and streams (`.arrow`, `.feather`, `.arrows`, `.ipc`), via [`rs-rich-data`](https://crates.io/crates/rs-rich-data)'s Arrow adapter. It compiles the Arrow array and IPC crates.
 - **`dylib-plugins`**, **`wasm-plugins`** — runtime plugins loaded with `--plugin PATH` or from a trusted config: native libraries, or sandboxed WASM modules.
 
 ```bash

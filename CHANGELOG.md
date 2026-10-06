@@ -240,6 +240,47 @@ From integration feedback on `rs-rich-record` 0.0.3 as a library:
   In `--help`, completions, `docs/cli.md`, `docs/cli-reference.md` and
   `docs/PORTING.md`.
 
+### The CLI, Python and docs (0.0.16 workstream 7)
+
+[Plan](docs/plans/0.0.16.md), #247, #342.
+
+- `rs-rich-cli`: `rich schema` reads SQL DDL and Arrow as well as JSON
+  Schema. DDL is known by its `.sql` or `.ddl` extension, or by text (on
+  stdin, say) starting with `CREATE` or a SQL comment, and is read through
+  `rich_ext::schema::sql`: the tree is titled with the file, and what the
+  reader skipped (`CHECK` constraints, indexes, other statements) is listed
+  dimmed under it with its file and line. DDL that cannot be read is a data
+  error (exit 4) naming the line. Arrow IPC files and streams (`.arrow`,
+  `.feather`, `.arrows`, `.ipc`, or an Arrow file's `ARROW1` magic) are
+  read behind the CLI's new off-by-default `arrow` feature; without it an
+  Arrow input is a usage error (exit 2) naming the feature. JSON Schema
+  output is byte-identical.
+- `rich schema OLD NEW` compares any two of the formats through
+  `SchemaDiff::models` (two JSON Schemas still follow their `$ref`s through
+  `SchemaDiff::new`, unchanged). A JSON Schema or Arrow file against DDL of
+  a single table compares with that table.
+- `rich schema --er FILE` draws the schema as an ER diagram through
+  `rs-rich-data`'s `er` feature, now on in the CLI: a box per table with
+  `PK`, `FK` and `UQ` markers and an edge per foreign key with its
+  cardinality; a schema without tables is one box. `--er` takes one schema
+  and only applies to `rich schema`.
+- `--infer` on `--csv` tables (and `rich FILE.csv`/`.tsv`): each column's
+  type from `rich_data::infer` under its heading (on a second, dim line),
+  number columns right-aligned even with null tokens such as `NA`. Opt-in:
+  without it the table is rich-cli 1.8.1's, byte for byte, and with another
+  mode it is a usage error.
+- `rs-rich-data`: `arrow::read_schema` reads the schema of an Arrow IPC
+  file or stream (from any `Read + Seek`) without reading its batches,
+  through `arrow-ipc` 60 (no compression codecs) behind the existing
+  `arrow` feature; anything else is a `DataError`, not a panic.
+- Tapes for `rich profile`, `rich schema --er`, `rich deps --features` and
+  `rich diff --conflicts`, with their fixtures under
+  `docs/tapes/fixtures/data`, recorded into `docs/media/tapes` and added to
+  the recordings page and the gallery.
+- In `--help`, completions, `docs/cli.md`, the regenerated
+  `docs/cli-reference.md`, `docs/PORTING.md` and the CLI README. No core
+  change.
+
 ### Records and conflicts (0.0.16 workstream 5)
 
 - `rs-rich-ext` 0.0.14: `data::RecordView` (#270), the record inspector:
