@@ -19,6 +19,11 @@
 //!   nulls, text) with the evidence for each, on request.
 //! - [`stats`]: per-column count, nulls, distinct values, min, max, mean,
 //!   median, quantiles and top values, as a table or under each heading.
+//! - [`window`]: rows for `rich_ext`'s virtualised tables: [`Rows`] by
+//!   index, and [`RowWindow`](window::RowWindow), one window of a
+//!   forward-only source read in constant memory.
+//! - [`sql`]: a query result set ([`ResultSet`](sql::ResultSet)) with typed
+//!   alignment, `NULL` marked apart from empty text, and a row count.
 //!
 //! Conditional styles for the tables these rows become are
 //! `rich_ext::table::rules`.
@@ -50,7 +55,9 @@ pub mod infer;
 pub mod jsonl;
 mod record;
 pub mod serialize;
+pub mod sql;
 pub mod stats;
+pub mod window;
 
 #[cfg(feature = "arrow")]
 pub mod arrow;
