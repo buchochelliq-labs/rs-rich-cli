@@ -240,6 +240,43 @@ From integration feedback on `rs-rich-record` 0.0.3 as a library:
   In `--help`, completions, `docs/cli.md`, `docs/cli-reference.md` and
   `docs/PORTING.md`.
 
+### The CLI, Python and docs (0.0.16 workstream 7)
+
+[Plan](docs/plans/0.0.16.md).
+
+- Python (`rs-rich` 0.0.5 on PyPI, already bumped): `rs_rich.data` binds
+  `rs-rich-data` (with its `er` feature) and the 0.0.16 views.
+  `read_csv`, `read_tsv`, `read_jsonl` and `read_file` (format by
+  extension, then by the first character) read into `Rows`, which renders
+  as a table and becomes an `rs_rich.ext.table.TableData`; `infer` returns
+  an `Inference` (each column's type, evidence and summary; `apply`
+  converts the cells and sets the schema); `Stats` the column statistics;
+  `Profile` profiles rows, text (`from_text`) or a streamed file
+  (`from_path`), with `to_json`/`to_dict`; `CheckResult`, `QualityReport`
+  (`from_json` reads another tool's results) and `check_not_null` /
+  `check_unique`; `ResultSet` and `VirtualTable` (`offset`, `height`,
+  `scroll_by`, `fit_window`). The schema views: `Schema.from_json_schema`
+  and `Schema.from_sql` (the model, with `SchemaField`s, tables and the
+  reader's notes), `SchemaTree`, `SchemaDiff` (`SchemaChange`s, breaking
+  count), `SchemaTimeline` and `ErDiagram` (also `from_sql`), each taking
+  a `Schema` or a JSON Schema as a `dict` or JSON text. `ConflictView`
+  (`MergeConflict`s) and `RecordView` are also in `rs_rich.ext.diff` and
+  `rs_rich.ext.data`. Errors carry `line`: `DataSourceError` (`DataError`
+  in `rs_rich.data`), `SchemaError`, `ConflictError`. Type stubs, tests
+  against the crates' doc examples, a
+  [Data, schemas and developer views](docs/python/data.md) page whose
+  examples the tests run, and its API reference page. No Rust library
+  change: the bindings use the crates' public API.
+- Docs: a [tabular data guide](docs/guide/data/index.md) (adapters,
+  inference, statistics, conditional styles, profiles, quality reports,
+  virtualised tables and result sets), a [schema guide](docs/guide/data/schemas.md)
+  (the model, JSON Schema, SQL DDL and Arrow readers, tree, diff, timeline
+  and ER diagrams) and a [developer-views](docs/guide/data/developer-views.md)
+  landing page (merge conflicts, the record inspector, Cargo supply-chain
+  reports, schema diffs), linking to the detailed sections in the tables,
+  sources, diffs and structured-data pages rather than repeating them; in
+  the site's nav and the guide index.
+
 ### Records and conflicts (0.0.16 workstream 5)
 
 - `rs-rich-ext` 0.0.14: `data::RecordView` (#270), the record inspector:
