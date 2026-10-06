@@ -37,7 +37,7 @@
 //!
 //! [`Dot`] renders a source: the drawing, or the error and the source.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::sync::OnceLock;
 
@@ -450,6 +450,8 @@ struct Parser<'a> {
     depth: usize,
     scopes: Vec<Scope>,
     clusters: Vec<Cluster>,
+    /// Each cluster's nodes, to find one without a search.
+    cluster_nodes: Vec<HashSet<usize>>,
     /// `rank=same` subgraphs' nodes.
     same_rank: Vec<Vec<usize>>,
     /// `rank` settings not applied, as `rank=…`, each once.
@@ -579,6 +581,7 @@ impl<'a> Parser<'a> {
     /// Statements up to and including the closing `}`.
     fn statements(&mut self) -> Result<Vec<usize>, DotError> {
         let mut members = Vec::new();
+        let mut seen = HashSet::new();
         loop {
             let line = self.here()?;
             match self.peek()? {
@@ -590,12 +593,16 @@ impl<'a> Parser<'a> {
                 Some(Tok::Semi) => {
                     self.take()?;
                 }
-                _ => self.statement(&mut members)?,
+                _ => self.statement(&mut members, &mut seen)?,
             }
         }
     }
 
-    fn statement(&mut self, members: &mut Vec<usize>) -> Result<(), DotError> {
+    fn statement(
+        &mut self,
+        members: &mut Vec<usize>,
+        seen: &mut HashSet<usize>,
+    ) -> Result<(), DotError> {
         let line = self.here()?;
         for (word, which) in [("node", 0), ("edge", 1), ("graph", 2)] {
             if self.keyword(word)? {
@@ -662,14 +669,19 @@ impl<'a> Parser<'a> {
             lines.push(op_line);
         }
         let attrs = self.attr_lists(false)?;
-        for group in &groups {
+        for (group, subgraph) in &groups {
             for &node in group {
-                if !members.contains(&node) {
+                if seen.insert(node) {
                     members.push(node);
                 }
-                self.note_member(node);
+                // A subgraph's nodes are already members of every cluster
+                // open around it.
+                if !subgraph {
+                    self.note_member(node);
+                }
             }
         }
+        let groups: Vec<Vec<usize>> = groups.into_iter().map(|(group, _)| group).collect();
         if groups.len() == 1 {
             // A node statement (or a bare subgraph): its attributes apply to
             // each node.
@@ -737,13 +749,14 @@ impl<'a> Parser<'a> {
         Ok(())
     }
 
-    /// One end of an edge: a node, or a subgraph's nodes.
-    fn endpoint(&mut self) -> Result<Vec<usize>, DotError> {
+    /// One end of an edge: a node, or a subgraph's nodes; and whether it
+    /// is a subgraph.
+    fn endpoint(&mut self) -> Result<(Vec<usize>, bool), DotError> {
         let line = self.here()?;
         if matches!(self.peek()?, Some(Tok::LBrace))
             || matches!(self.peek()?, Some(Tok::Id(text, false)) if text.eq_ignore_ascii_case("subgraph"))
         {
-            return self.subgraph();
+            return Ok((self.subgraph()?, true));
         }
         let id = self.id("a node, `subgraph` or `{`")?;
         if self.peek()? == Some(&Tok::Colon) {
@@ -753,7 +766,7 @@ impl<'a> Parser<'a> {
                 "connect the node itself",
             ));
         }
-        Ok(vec![self.node(&id, line)?])
+        Ok((vec![self.node(&id, line)?], false))
     }
 
     fn subgraph(&mut self) -> Result<Vec<usize>, DotError> {
@@ -784,6 +797,7 @@ impl<'a> Parser<'a> {
                         nodes: Vec::new(),
                         parent,
                     });
+                    self.cluster_nodes.push(HashSet::new());
                     Some(self.clusters.len() - 1)
                 }
             }
@@ -839,10 +853,9 @@ impl<'a> Parser<'a> {
 
     /// Record `node` as a member of every cluster open around it.
     fn note_member(&mut self, node: usize) {
-        for index in self.open.iter().flatten() {
-            let cluster = &mut self.clusters[*index];
-            if !cluster.nodes.contains(&node) {
-                cluster.nodes.push(node);
+        for &index in self.open.iter().flatten() {
+            if self.cluster_nodes[index].insert(node) {
+                self.clusters[index].nodes.push(node);
             }
         }
     }
@@ -1074,6 +1087,7 @@ pub fn parse(source: &str) -> Result<DotGraph, DotError> {
         depth: 0,
         scopes: Vec::new(),
         clusters: Vec::new(),
+        cluster_nodes: Vec::new(),
         same_rank: Vec::new(),
         rank_ignored: Vec::new(),
         open: Vec::new(),
@@ -1491,6 +1505,33 @@ mod tests {
         assert_eq!((edge.start, edge.end), (Head::None, Head::None));
         assert_eq!(parsed.graph.clusters(), parsed.clusters);
         assert!(parsed.notes.is_empty(), "{:?}", parsed.notes);
+    }
+
+    /// Every mention of a node searched each open cluster's nodes, and each
+    /// enclosing subgraph searched them again for every node inside it: a
+    /// small source nesting clusters deep took seconds.
+    #[test]
+    fn deep_clusters_note_their_nodes_in_linear_time() {
+        let mut source = String::from("digraph {\n");
+        for depth in 0..MAX_NESTING - 1 {
+            source.push_str(&format!("subgraph cluster{depth} {{"));
+        }
+        for n in 0..MAX_NODES - 1 {
+            source.push_str(&format!("n{n} "));
+        }
+        // The last node, mentioned again and again.
+        while source.len() < MAX_SOURCE - 2 * MAX_NESTING {
+            source.push_str("z ");
+        }
+        source.push_str(&"}".repeat(MAX_NESTING));
+        let started = std::time::Instant::now();
+        let parsed = parse(&source).unwrap();
+        assert!(started.elapsed() < std::time::Duration::from_secs(2));
+        assert_eq!(parsed.clusters.len(), MAX_NESTING - 1);
+        let all: Vec<usize> = (0..MAX_NODES).collect();
+        for cluster in &parsed.clusters {
+            assert_eq!(cluster.nodes, all);
+        }
     }
 
     #[test]

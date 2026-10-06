@@ -36,6 +36,8 @@
 //! assert!(out.contains("users") && out.contains("author"));
 //! ```
 
+use std::collections::{HashMap, HashSet};
+
 use rich_diagram::er::{Cardinality, Column, Entity, Relationship};
 use rich_diagram::{ErDiagram, ErModel};
 use rich_ext::schema::sql::{self, Note, SqlError};
@@ -58,20 +60,18 @@ pub fn model(schema: &Schema) -> ErModel {
             })
             .collect()
     };
-    let names: Vec<&str> = tables.iter().map(|(name, _)| name.as_str()).collect();
+    let names = Names::new(tables.iter().map(|(name, _)| name.as_str()));
     let mut er = ErModel::new();
     for (name, table) in &tables {
-        let primary = table.primary_key();
         let keys = table.foreign_keys();
+        // Looked up by name, so wide tables with many keys stay linear.
+        let marks = Marks::new(table, &keys);
         let entity = Entity::new(name.as_str()).columns(table.fields().iter().map(|field| {
             let mut column = Column::new(field.name()).data_type(field.type_label());
-            if primary.contains(&field.name()) {
+            if marks.primary.contains(field.name()) {
                 column = column.primary_key();
             }
-            if keys
-                .iter()
-                .any(|key| key.columns.iter().any(|c| c == field.name()))
-            {
+            if marks.foreign.contains(field.name()) {
                 column = column.foreign_key();
             }
             if field.is_unique() {
@@ -84,7 +84,7 @@ pub fn model(schema: &Schema) -> ErModel {
         }));
         er = er.entity(entity);
         for key in &keys {
-            er = er.relationship(relationship(name, table, key, &names));
+            er = er.relationship(relationship(name, &marks, key, &names));
         }
     }
     er
@@ -97,18 +97,45 @@ pub fn from_sql(ddl: &str) -> Result<(ErDiagram, Vec<Note>), SqlError> {
     Ok((ErDiagram::new(model(&parsed.schema)), parsed.notes))
 }
 
-/// The edge for one foreign key of table `from`.
-fn relationship(from: &str, table: &Schema, key: &ForeignKey, names: &[&str]) -> Relationship {
-    let to = resolve(&key.table, names);
-    let primary = table.primary_key();
-    let one = (!primary.is_empty()
-        && primary.len() == key.columns.len()
-        && key.columns.iter().all(|c| primary.contains(&c.as_str())))
-        || (key.columns.len() == 1
-            && table
+/// A table's primary key, foreign-key and unique columns, by name.
+struct Marks<'a> {
+    /// The primary key's columns, in order (a name may repeat).
+    key: Vec<&'a str>,
+    primary: HashSet<&'a str>,
+    foreign: HashSet<&'a str>,
+    unique: HashSet<&'a str>,
+}
+
+impl<'a> Marks<'a> {
+    fn new(table: &'a Schema, keys: &'a [ForeignKey]) -> Self {
+        let key = table.primary_key();
+        Marks {
+            primary: key.iter().copied().collect(),
+            key,
+            foreign: keys
+                .iter()
+                .flat_map(|k| k.columns.iter().map(String::as_str))
+                .collect(),
+            unique: table
                 .fields()
                 .iter()
-                .any(|f| f.name() == key.columns[0] && f.is_unique()));
+                .filter(|f| f.is_unique())
+                .map(|f| f.name())
+                .collect(),
+        }
+    }
+}
+
+/// The edge for one foreign key of table `from`.
+fn relationship(from: &str, marks: &Marks, key: &ForeignKey, names: &Names) -> Relationship {
+    let to = names.resolve(&key.table);
+    let one = (!marks.key.is_empty()
+        && marks.key.len() == key.columns.len()
+        && key
+            .columns
+            .iter()
+            .all(|c| marks.primary.contains(c.as_str())))
+        || (key.columns.len() == 1 && marks.unique.contains(key.columns[0].as_str()));
     let mut edge = Relationship::new(from, to).cardinality(if one {
         Cardinality::OneToOne
     } else {
@@ -120,19 +147,42 @@ fn relationship(from: &str, table: &Schema, key: &ForeignKey, names: &[&str]) ->
     edge
 }
 
-/// The table a key names: as written when a table has that name, else the
-/// one table whose last dotted part matches it, else as written (and the
-/// diagram notes that it is missing).
-fn resolve(name: &str, names: &[&str]) -> String {
-    if names.contains(&name) {
-        return name.to_string();
+/// The tables' names, to resolve the table a key names without a search.
+struct Names<'a> {
+    all: HashSet<&'a str>,
+    /// By last dotted part: the one table, or `None` when several share it.
+    last: HashMap<&'a str, Option<&'a str>>,
+}
+
+/// `users` of `public.users`.
+fn last_part(name: &str) -> &str {
+    name.rsplit('.').next().unwrap_or(name)
+}
+
+impl<'a> Names<'a> {
+    fn new(names: impl IntoIterator<Item = &'a str>) -> Self {
+        let mut all = HashSet::new();
+        let mut last: HashMap<&str, Option<&str>> = HashMap::new();
+        for name in names {
+            all.insert(name);
+            last.entry(last_part(name))
+                .and_modify(|only| *only = None)
+                .or_insert(Some(name));
+        }
+        Names { all, last }
     }
-    let last = |n: &str| n.rsplit('.').next().unwrap_or(n).to_string();
-    let wanted = last(name);
-    let mut matches = names.iter().filter(|n| last(n) == wanted);
-    match (matches.next(), matches.next()) {
-        (Some(only), None) => (*only).to_string(),
-        _ => name.to_string(),
+
+    /// The table a key names: as written when a table has that name, else
+    /// the one table whose last dotted part matches it, else as written (and
+    /// the diagram notes that it is missing).
+    fn resolve(&self, name: &str) -> String {
+        if self.all.contains(name) {
+            return name.to_string();
+        }
+        match self.last.get(last_part(name)) {
+            Some(Some(only)) => (*only).to_string(),
+            _ => name.to_string(),
+        }
     }
 }
 
@@ -185,10 +235,53 @@ mod tests {
         assert!(er.relationships.is_empty());
     }
 
+    /// Each foreign key's table was looked up among all the tables' names,
+    /// split anew each time: 50,000 keys to a missing table took minutes.
+    #[test]
+    fn many_keys_resolve_in_linear_time() {
+        let mut ddl = String::new();
+        for i in 0..50_000 {
+            ddl.push_str(&format!("CREATE TABLE s.t{i} (a INT REFERENCES ghost);\n"));
+        }
+        ddl.push_str("CREATE TABLE u (b INT REFERENCES t7);");
+        let schema = sql::parse(&ddl).unwrap().schema;
+        let started = std::time::Instant::now();
+        let er = model(&schema);
+        assert!(started.elapsed() < std::time::Duration::from_secs(20));
+        assert_eq!(er.relationships.len(), 50_001);
+        assert_eq!(er.relationships[0].to, "ghost");
+        assert_eq!(er.relationships[50_000].to, "s.t7");
+    }
+
+    /// Every column searched every foreign key, and every key the table's
+    /// fields: tables of 2,000 columns and 2,000 keys took 16 s (debug).
+    #[test]
+    fn wide_tables_with_many_keys_are_linear() {
+        let columns: Vec<String> = (0..2_000).map(|i| format!("c{i} INT UNIQUE")).collect();
+        let keys: Vec<String> = (0..2_000)
+            .map(|i| format!("FOREIGN KEY (c{i}) REFERENCES t{}", i % 7))
+            .collect();
+        let table = format!("({}, {})", columns.join(", "), keys.join(", "));
+        let mut ddl = String::new();
+        for t in 0..100 {
+            ddl.push_str(&format!("CREATE TABLE t{t} {table};\n"));
+        }
+        let schema = sql::parse(&ddl).unwrap().schema;
+        let started = std::time::Instant::now();
+        let er = model(&schema);
+        assert!(started.elapsed() < std::time::Duration::from_secs(5));
+        assert_eq!(er.relationships.len(), 200_000);
+        assert_eq!(er.relationships[0].cardinality, Some(Cardinality::OneToOne));
+        let column = &er.entities[99].columns[1_999];
+        assert!(column.foreign_key && column.unique && column.nullable);
+    }
+
     #[test]
     fn an_ambiguous_or_missing_table_is_kept_as_written() {
+        let resolve = |name: &str, names: &[&str]| Names::new(names.iter().copied()).resolve(name);
         assert_eq!(resolve("users", &["a.users", "b.users"]), "users");
         assert_eq!(resolve("ghost", &["users"]), "ghost");
         assert_eq!(resolve("users", &["users", "a.users"]), "users");
+        assert_eq!(resolve("x.users", &["a.users"]), "a.users");
     }
 }

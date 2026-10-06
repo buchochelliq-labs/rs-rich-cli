@@ -515,11 +515,13 @@ types (quoted or not, with parameters, several words such as
 `DOUBLE PRECISION`, and arrays), `NOT NULL`, `DEFAULT`, `PRIMARY KEY`,
 `UNIQUE` and `REFERENCES` on a column or for several columns on the table,
 `CONSTRAINT name`, MySQL's `ENUM(…)` and `COMMENT`, `--` and `/* */`
-comments, and any number of statements. `CHECK` constraints, indexes and
-every statement but `CREATE TABLE` are skipped, each with a note giving its
-line; text it cannot read (an unclosed string or parenthesis, a table with
-no column list) is an error with its line. Input is bounded: 16 MiB, 100,000
-statements, 4,096 columns a table and parentheses 64 deep.
+comments, PostgreSQL's `$$ … $$` strings, and any number of statements.
+`CHECK` constraints, indexes and every statement but `CREATE TABLE` are
+skipped, each with a note giving its line; text it cannot read (an unclosed
+string or parenthesis, a table with no column list) is an error with its
+line. Input is bounded: 16 MiB, 100,000 statements, 1,000,000 tokens a
+statement, 4,096 columns a table or a key and parentheses 64 deep;
+statements are read one at a time.
 
 ```rust
 use rich::Console;

@@ -576,11 +576,17 @@ fn schema_format_by_name(resource: &str) -> Option<SchemaFormat> {
     }
 }
 
-/// Whether a local file starts with an Arrow IPC file's magic bytes.
+/// Whether a local file starts with an Arrow IPC file's magic bytes. Only a
+/// regular file is looked at: reading a pipe (`/dev/stdin`, `<(…)`) would
+/// take its first bytes from the text read next.
 fn has_arrow_magic(resource: &str) -> bool {
     use std::io::Read;
+    let path = fs_path(resource);
+    if !std::fs::metadata(&path).is_ok_and(|meta| meta.is_file()) {
+        return false;
+    }
     let mut magic = [0u8; 6];
-    std::fs::File::open(fs_path(resource))
+    std::fs::File::open(path)
         .and_then(|mut file| file.read_exact(&mut magic))
         .is_ok_and(|()| &magic == b"ARROW1")
 }
@@ -654,17 +660,49 @@ fn schema_file(cli: &Cli, resource: &str) -> Result<(LoadedSchema, SchemaSource)
         Some(format) => format == SchemaFormat::Sql,
         None => looks_like_sql(&content),
     };
+    // `--sanitize`: the name, and the text's names and strings, show
+    // terminal controls as inert text.
+    let name = if cli.sanitize {
+        sanitize_terminal_controls(&name)
+    } else {
+        name
+    };
     if sql {
+        let content = if cli.sanitize {
+            // A line break stays one (CR would show as `␍` in a name).
+            sanitize_terminal_controls(&content.replace("\r\n", "\n"))
+        } else {
+            content
+        };
         let parsed = rich_ext::schema::sql::parse(&content)
             .map_err(|err| (ExitClass::Data, format!("{resource}: {err}")))?;
         let notes = parsed.notes.iter().map(ToString::to_string).collect();
         let schema = LoadedSchema::Model(parsed.schema);
         return Ok((schema, SchemaSource { name, notes }));
     }
-    let value = rich_ext::schema::parse(&content)
+    let mut value = rich_ext::schema::parse(&content)
         .map_err(|err| (ExitClass::Data, format!("{resource}: {err}")))?;
+    if cli.sanitize {
+        sanitize_json_schema(&mut value);
+    }
     let notes = Vec::new();
     Ok((LoadedSchema::Json(value), SchemaSource { name, notes }))
+}
+
+/// Terminal controls in a JSON Schema's strings and keys (property names)
+/// as inert text, for `--sanitize`.
+fn sanitize_json_schema(value: &mut serde_json::Value) {
+    match value {
+        serde_json::Value::String(text) => *text = sanitize_terminal_controls(text),
+        serde_json::Value::Array(values) => values.iter_mut().for_each(sanitize_json_schema),
+        serde_json::Value::Object(map) => {
+            for (key, mut value) in std::mem::take(map) {
+                sanitize_json_schema(&mut value);
+                map.insert(sanitize_terminal_controls(&key), value);
+            }
+        }
+        _ => {}
+    }
 }
 
 /// An Arrow IPC file's schema, in the model.
