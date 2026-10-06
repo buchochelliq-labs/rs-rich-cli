@@ -202,7 +202,7 @@ pub(crate) fn measure(blocks: &[Block], options: &Options) -> (usize, usize) {
     }
 }
 
-fn pad_to(mut row: Vec<Segment>, width: usize) -> Vec<Segment> {
+pub(crate) fn pad_to(mut row: Vec<Segment>, width: usize) -> Vec<Segment> {
     let len: usize = row.iter().map(Segment::cell_length).sum();
     if len < width {
         row.push(Segment::new(" ".repeat(width - len), None));

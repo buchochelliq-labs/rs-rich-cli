@@ -52,6 +52,13 @@ draws its subtree with `rich_ext::data::Explorer`.
 | Alt+Y | `explore.copy-value` | Copy its value: a string as it is, a container as indented JSON (`rich_ext::data::copy_text`) |
 | Enter | `select.pick` | Finish with the node's `rich_ext::data::Path` |
 
+To open a branch from code, before or between runs, use
+`rich_ext::data::OpenBranch`: `explorer.open_branch(&path)` opens the
+container at `path` and every one above it, as Right would, and
+`close_branch` folds it. Both return `false` when `path` is not a non-empty
+container. `rich_ext::data::RecordView` implements the same trait, so one
+"open this branch" action drives both the record inspector and the explorer.
+
 `json_path` writes a `Path` as `--select` reads it: `$`, `$.servers[0].name`,
 `$["odd key"]`. The runnable example is
 [`crates/rich-interact/examples/explore.rs`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/crates/rich-interact/examples/explore.rs):
