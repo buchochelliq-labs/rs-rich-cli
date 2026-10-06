@@ -18,8 +18,21 @@
 //!   inverted tree `cargo tree -i` prints, which is every path that pulls it
 //!   in.
 //!
-//! Running `cargo` is the caller's business; this module only reads its
-//! output.
+//! Five supply-chain reports sit beside them, each reading what Cargo or
+//! its tools already wrote (0.0.16 workstream 6):
+//!
+//! - [`duplicates`]: a consolidation summary for the crates resolved at
+//!   several versions: who pulls each version, and which one most of them
+//!   already use ([`DepTree::consolidation`] adds it under the tree).
+//! - [`features`]: the features `cargo metadata` resolved for each crate,
+//!   what each turns on, and which dependents asked for them.
+//! - [`timings`]: `cargo build --timings` reports, as bars and a table.
+//! - [`audit`]: a generic advisory model, read from `cargo audit --json`.
+//! - [`licenses`]: licences from `cargo metadata`, grouped, with unknown and
+//!   copyleft licences marked.
+//!
+//! Running `cargo` (or `cargo audit`) is the caller's business; this module
+//! only reads its output, and reaches no network.
 //!
 //! ```
 //! use rich::Console;
@@ -52,6 +65,23 @@ use std::fmt;
 use rich::{Console, ConsoleOptions, Renderable, Segment, Style, Text, Tree};
 use serde_json::Value;
 
+pub mod audit;
+pub mod duplicates;
+pub mod features;
+pub mod licenses;
+pub mod timings;
+
+/// The largest input the supply-chain readers ([`timings`], [`audit`])
+/// accept, in bytes: far past any real report, and a bound on what a
+/// hostile file can make them hold.
+pub const MAX_INPUT: usize = 64 * 1024 * 1024;
+
+/// The most records (packages, timing units, advisories) a supply-chain
+/// reader takes from one input; more is refused rather than truncated.
+/// JSON nesting is bounded separately, by `serde_json`'s recursion limit
+/// (128 levels).
+pub const MAX_RECORDS: usize = 100_000;
+
 /// Theme keys for dependency trees, with the styles used when a theme lacks
 /// them.
 pub const STYLES: &[(&str, &str)] = &[
@@ -62,9 +92,18 @@ pub const STYLES: &[(&str, &str)] = &[
     ("deps.source", "dim"),
     ("deps.repeat", "dim"),
     ("deps.section", "dim italic"),
+    ("deps.feature", "green"),
+    ("deps.off", "dim"),
+    ("deps.copyleft", "bold yellow"),
+    ("deps.unknown", "bold red"),
+    ("deps.critical", "bold red"),
+    ("deps.high", "red"),
+    ("deps.medium", "yellow"),
+    ("deps.low", "cyan"),
+    ("deps.info", "dim"),
 ];
 
-fn theme_style(console: &Console, key: &str) -> Style {
+pub(crate) fn theme_style(console: &Console, key: &str) -> Style {
     if let Some(style) = console.theme().get(key) {
         return style.clone();
     }
@@ -78,6 +117,74 @@ fn theme_style(console: &Console, key: &str) -> Style {
 /// Why metadata could not be read.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DepsError(String);
+
+impl DepsError {
+    pub(crate) fn new(message: impl Into<String>) -> Self {
+        DepsError(message.into())
+    }
+}
+
+/// Refuse an input larger than [`MAX_INPUT`].
+pub(crate) fn check_size(input: &str, what: &str) -> Result<(), DepsError> {
+    if input.len() > MAX_INPUT {
+        return Err(DepsError(format!(
+            "{what} is {} bytes, more than the {MAX_INPUT} read",
+            input.len()
+        )));
+    }
+    Ok(())
+}
+
+/// Refuse more than [`MAX_RECORDS`] records.
+pub(crate) fn check_count(count: usize, what: &str) -> Result<(), DepsError> {
+    if count > MAX_RECORDS {
+        return Err(DepsError(format!(
+            "{count} {what}, more than the {MAX_RECORDS} read"
+        )));
+    }
+    Ok(())
+}
+
+/// Render `parts` one under the other, each starting on a new line, with a
+/// blank line between them.
+pub(crate) fn stack(
+    parts: &[&dyn Renderable],
+    console: &Console,
+    options: &ConsoleOptions,
+) -> Vec<Segment> {
+    let mut segments: Vec<Segment> = Vec::new();
+    for (index, part) in parts.iter().enumerate() {
+        if index > 0 {
+            if segments
+                .iter()
+                .rev()
+                .find(|segment| !segment.text.is_empty())
+                .is_some_and(|segment| !segment.text.ends_with('\n'))
+            {
+                segments.push(Segment::line());
+            }
+            segments.push(Segment::line());
+        }
+        segments.extend(part.rich_render(console, options));
+    }
+    segments
+}
+
+/// The measurement of [`stack`]ed parts: the widest of them.
+pub(crate) fn stack_measure(
+    parts: &[&dyn Renderable],
+    console: &Console,
+    options: &ConsoleOptions,
+) -> rich::measure::Measurement {
+    let mut minimum = 0;
+    let mut maximum = 0;
+    for part in parts {
+        let measured = part.measure(console, options);
+        minimum = minimum.max(measured.minimum);
+        maximum = maximum.max(measured.maximum);
+    }
+    rich::measure::Measurement::new(minimum, maximum)
+}
 
 impl fmt::Display for DepsError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -435,14 +542,49 @@ impl DepGraph {
     }
 }
 
-/// Compare dotted versions numerically where they are numbers.
-fn compare_versions(a: &str, b: &str) -> std::cmp::Ordering {
-    let parts = |v: &str| -> Vec<(u64, String)> {
-        v.split(['.', '-', '+'])
+/// Compare versions by SemVer precedence: the dotted core numerically where
+/// its parts are numbers, then a release above any of its pre-releases, then
+/// pre-release identifiers (numeric ones numerically and below alphanumeric
+/// ones). Build metadata takes no part, except to break a tie, so the order
+/// stays total.
+pub(crate) fn compare_versions(a: &str, b: &str) -> std::cmp::Ordering {
+    use std::cmp::Ordering;
+    let split = |v: &str| -> (Vec<(u64, String)>, Option<String>) {
+        let v = v.split_once('+').map_or(v, |(v, _)| v);
+        let (core, pre) = match v.split_once('-') {
+            Some((core, pre)) => (core, Some(pre.to_string())),
+            None => (v, None),
+        };
+        let core = core
+            .split('.')
             .map(|part| (part.parse().unwrap_or(u64::MAX), part.to_string()))
-            .collect()
+            .collect();
+        (core, pre)
     };
-    parts(a).cmp(&parts(b))
+    let identifier = |x: &str, y: &str| match (x.parse::<u64>(), y.parse::<u64>()) {
+        (Ok(x), Ok(y)) => x.cmp(&y),
+        (Ok(_), Err(_)) => Ordering::Less,
+        (Err(_), Ok(_)) => Ordering::Greater,
+        (Err(_), Err(_)) => x.cmp(y),
+    };
+    let ((a_core, a_pre), (b_core, b_pre)) = (split(a), split(b));
+    a_core
+        .cmp(&b_core)
+        .then_with(|| match (&a_pre, &b_pre) {
+            (None, None) => Ordering::Equal,
+            (None, Some(_)) => Ordering::Greater,
+            (Some(_), None) => Ordering::Less,
+            (Some(x), Some(y)) => {
+                let (x, y): (Vec<&str>, Vec<&str>) =
+                    (x.split('.').collect(), y.split('.').collect());
+                x.iter()
+                    .zip(&y)
+                    .map(|(x, y)| identifier(x, y))
+                    .find(|o| o.is_ne())
+                    .unwrap_or_else(|| x.len().cmp(&y.len()))
+            }
+        })
+        .then_with(|| a.cmp(b))
 }
 
 /// The deepest a [`DepTree`] or [`WhyTree`] is drawn: below it, a branch
@@ -515,6 +657,7 @@ pub struct DepTree {
     kinds: Vec<DepKind>,
     duplicates_only: bool,
     summary: bool,
+    consolidation: bool,
 }
 
 impl DepTree {
@@ -525,7 +668,27 @@ impl DepTree {
             kinds: vec![DepKind::Normal, DepKind::Build, DepKind::Dev],
             duplicates_only: false,
             summary: false,
+            consolidation: false,
         }
+    }
+
+    /// Under the tree (and the [`summary`](Self::summary)), after a blank
+    /// line, the [`duplicates::Consolidation`] of the crates resolved at
+    /// several versions, through the same kinds. Nothing is added when
+    /// there are none.
+    pub fn consolidation(mut self, consolidation: bool) -> Self {
+        self.consolidation = consolidation;
+        self
+    }
+
+    /// The consolidation summary, when asked for and there is something to
+    /// consolidate.
+    fn consolidation_view(&self) -> Option<duplicates::Consolidation> {
+        if !self.consolidation {
+            return None;
+        }
+        let view = duplicates::Consolidation::new(&self.graph).kinds(&self.kinds);
+        (!view.duplicates().is_empty()).then_some(view)
     }
 
     /// Under the tree, list each crate resolved at several versions
@@ -733,19 +896,38 @@ impl Renderable for DepTree {
             }
             segments.extend(self.summary_text(console).rich_render(console, options));
         }
+        if let Some(view) = self.consolidation_view() {
+            segments = stack(&[&Prerendered(segments), &view], console, options);
+        }
         segments
     }
 
     fn measure(&self, console: &Console, options: &ConsoleOptions) -> rich::measure::Measurement {
-        let tree = self.tree(console).measure(console, options);
-        if !self.summary {
-            return tree;
+        let mut measured = self.tree(console).measure(console, options);
+        if self.summary {
+            let summary = self.summary_text(console).measure(console, options);
+            measured = rich::measure::Measurement::new(
+                measured.minimum.max(summary.minimum),
+                measured.maximum.max(summary.maximum),
+            );
         }
-        let summary = self.summary_text(console).measure(console, options);
-        rich::measure::Measurement::new(
-            tree.minimum.max(summary.minimum),
-            tree.maximum.max(summary.maximum),
-        )
+        if let Some(view) = self.consolidation_view() {
+            let view = view.measure(console, options);
+            measured = rich::measure::Measurement::new(
+                measured.minimum.max(view.minimum),
+                measured.maximum.max(view.maximum),
+            );
+        }
+        measured
+    }
+}
+
+/// Segments already rendered, for [`stack`].
+struct Prerendered(Vec<Segment>);
+
+impl Renderable for Prerendered {
+    fn rich_render(&self, _console: &Console, _options: &ConsoleOptions) -> Vec<Segment> {
+        self.0.clone()
     }
 }
 
@@ -890,6 +1072,19 @@ impl Renderable for WhyTree {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn versions_order_by_semver_precedence() {
+        use std::cmp::Ordering::*;
+        assert_eq!(compare_versions("1.0.0-alpha", "1.0.0"), Less);
+        assert_eq!(compare_versions("1.0.0-alpha", "1.0.0-alpha.1"), Less);
+        assert_eq!(compare_versions("1.0.0-alpha.1", "1.0.0-alpha.beta"), Less);
+        assert_eq!(compare_versions("1.0.0-beta.2", "1.0.0-beta.11"), Less);
+        assert_eq!(compare_versions("1.0.0-rc.1", "1.0.0"), Less);
+        assert_eq!(compare_versions("1.10.0", "1.9.0"), Greater);
+        assert_eq!(compare_versions("1.0.0", "1.0.0"), Equal);
+        assert_ne!(compare_versions("1.0.0+a", "1.0.0+b"), Equal);
+    }
 
     fn metadata() -> String {
         let pkg = |name: &str, version: &str, source: Option<&str>| {

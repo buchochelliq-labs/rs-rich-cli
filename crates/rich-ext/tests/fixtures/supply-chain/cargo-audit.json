@@ -1,0 +1,152 @@
+{
+  "database": {
+    "advisory-count": 912,
+    "last-commit": "0f4c5a1d2e3b4c5d6e7f8091a2b3c4d5e6f70812",
+    "last-updated": "2026-10-01T12:00:00Z"
+  },
+  "lockfile": {
+    "dependency-count": 16
+  },
+  "settings": {
+    "target_arch": [],
+    "target_os": [],
+    "severity": null,
+    "ignore": [],
+    "informational_warnings": ["unmaintained", "unsound", "yanked"]
+  },
+  "vulnerabilities": {
+    "found": true,
+    "count": 2,
+    "list": [
+      {
+        "advisory": {
+          "id": "RUSTSEC-2099-0001",
+          "package": "similar",
+          "title": "Unbounded recursion when diffing deeply nested input",
+          "description": "A fixture advisory: diffing input nested past a few thousand levels overflows the stack.",
+          "date": "2099-01-15",
+          "aliases": ["CVE-2099-12345", "GHSA-xxxx-yyyy-zzzz"],
+          "related": [],
+          "collection": "crates",
+          "categories": ["denial-of-service"],
+          "keywords": ["stack-overflow"],
+          "cvss": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H",
+          "informational": null,
+          "references": [],
+          "source": null,
+          "url": "https://example.invalid/advisories/RUSTSEC-2099-0001",
+          "withdrawn": null,
+          "license": "CC0-1.0"
+        },
+        "versions": {
+          "patched": [">=2.6.1"],
+          "unaffected": ["<2.0.0"]
+        },
+        "affected": {
+          "arch": [],
+          "os": [],
+          "functions": {
+            "similar::TextDiff::from_lines": ["<2.6.1"]
+          }
+        },
+        "package": {
+          "name": "similar",
+          "version": "2.6.0",
+          "source": "registry+https://github.com/rust-lang/crates.io-index",
+          "checksum": "1de1d4f81173b03af4c0cbed3c898f6bff5b870e4a7f5d6f4057d62a7a4b686e",
+          "dependencies": [],
+          "replace": null
+        }
+      },
+      {
+        "advisory": {
+          "id": "RUSTSEC-2099-0002",
+          "package": "log",
+          "title": "Format string handling may read uninitialised memory",
+          "description": "A fixture advisory with no CVSS vector.",
+          "date": "2099-02-01",
+          "aliases": [],
+          "related": [],
+          "collection": "crates",
+          "categories": ["memory-exposure"],
+          "keywords": [],
+          "cvss": null,
+          "informational": null,
+          "references": [],
+          "source": null,
+          "url": null,
+          "withdrawn": null,
+          "license": "CC0-1.0"
+        },
+        "versions": {
+          "patched": [],
+          "unaffected": []
+        },
+        "affected": null,
+        "package": {
+          "name": "log",
+          "version": "0.4.22",
+          "source": "registry+https://github.com/rust-lang/crates.io-index",
+          "checksum": "a7a70ba024b9dc04c27ea2f0c0548feb474ec5c54bba33a7f72f873a39d07b24",
+          "dependencies": [],
+          "replace": null
+        }
+      }
+    ]
+  },
+  "warnings": {
+    "unmaintained": [
+      {
+        "kind": "unmaintained",
+        "package": {
+          "name": "strum_macros",
+          "version": "0.25.3",
+          "source": "registry+https://github.com/rust-lang/crates.io-index",
+          "checksum": "23dc1fa9ac9c169a78ba62f0b841814b7abae11bdd047b9c58f893439e309ea0",
+          "dependencies": [],
+          "replace": null
+        },
+        "advisory": {
+          "id": "RUSTSEC-2099-0003",
+          "package": "strum_macros",
+          "title": "strum_macros 0.25 is no longer maintained",
+          "description": "A fixture advisory.",
+          "date": "2099-03-01",
+          "aliases": [],
+          "related": [],
+          "collection": "crates",
+          "categories": [],
+          "keywords": [],
+          "cvss": null,
+          "informational": "unmaintained",
+          "references": [],
+          "source": null,
+          "url": null,
+          "withdrawn": null,
+          "license": "CC0-1.0"
+        },
+        "affected": null,
+        "versions": {
+          "patched": [],
+          "unaffected": []
+        }
+      }
+    ],
+    "yanked": [
+      {
+        "kind": "yanked",
+        "package": {
+          "name": "cc",
+          "version": "1.1.28",
+          "source": "registry+https://github.com/rust-lang/crates.io-index",
+          "checksum": "2e80e3b6a3ab07840e1cae9b0666a63970dc28e8ed5ffbcdacbfc760c281bfc1",
+          "dependencies": [],
+          "replace": null
+        },
+        "advisory": null,
+        "affected": null,
+        "versions": null
+      }
+    ]
+  }
+}

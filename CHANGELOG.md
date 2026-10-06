@@ -108,6 +108,51 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   the explorer guide, `docs/cli.md`, the CLI reference and `docs/PORTING.md`.
   Nothing under `crates/rich/src` changes.
 
+### Cargo and the supply chain (0.0.16 workstream 6)
+
+`rich deps` gains five reports beside the tree, each reading what Cargo or
+its tools already wrote; none runs a scanner or reaches the network
+(#420, #419, #421, #330, #418, #331). See
+[Supply-chain reports](docs/guide/ext/sources.md#supply-chain-reports).
+
+- `rs-rich-ext` `deps::duplicates`: `DepGraph::consolidation` and the
+  `Consolidation` renderable: each crate resolved at several versions, who
+  pulls each version, and the version most dependents use (the newest by SemVer on
+  a tie); `DepTree::consolidation(true)` adds it under a tree.
+- `deps::features`: `FeatureGraph` reads `cargo metadata`'s resolved
+  features, `[features]` tables and declared dependencies (renames matched
+  through the resolve graph); `FeatureTree` draws each enabled feature's
+  definition (`dep:`, `name/feature`, weak `name?/feature`, entries Cargo
+  did not act on marked `(off)`) and which dependents asked for what.
+- `deps::timings`: `Timings::parse` reads the `cargo build --timings` HTML
+  report's `UNIT_DATA`, the array alone, or `timing-info` JSON lines;
+  frontend (rmeta) and codegen times come from Cargo's `sections`, else
+  `rmeta_time`. `TimingsReport` draws the slowest units as bars and a table.
+- `deps::audit`: a generic `Advisory` model (id, kind, package and version,
+  patched and unaffected ranges, severity, CVSS score, title, link, aliases,
+  date), `AdvisoryReport::from_cargo_audit` for `cargo audit --json` (the
+  warning table and the older list), CVSS 3.x base scores
+  (`audit::cvss3_score`), and a report grouped by severity with counts.
+- `deps::licenses`: an SPDX expression reader (`AND`, `OR`, `WITH`,
+  parentheses, the old `/`) that classifies an expression as permissive,
+  weak copyleft, copyleft, unrecognised or invalid, and `LicenseReport`,
+  grouping packages by canonical expression with copyleft, unknown, file-only
+  and missing licences marked.
+- Every reader is bounded (`deps::MAX_INPUT`, 64 MiB; `deps::MAX_RECORDS`,
+  100,000 records; serde_json's 128-level nesting limit; licence expressions
+  at most 1,024 bytes and 32 parentheses deep) and returns an error, never
+  panics, on malformed input. New theme keys: `deps.feature`, `deps.off`,
+  `deps.copyleft`, `deps.unknown`, `deps.critical`, `deps.high`,
+  `deps.medium`, `deps.low`, `deps.info`.
+- `rs-rich-cli`: `rich deps --duplicates` adds the consolidation summary
+  after the existing output (without `--duplicates` the output is
+  unchanged); `--features [--package CRATE]`, `--licenses` (honours
+  `--no-dev`), `--timings FILE` and `--audit FILE` (`-` for stdin; neither
+  runs Cargo). `--audit` exits 5, the gate class, when the report lists a
+  vulnerability, after showing it, with one `"code": "gate"` envelope under
+  `--report json`; warnings alone exit 0. Only one report at a time, and an
+  option that does not apply to it is refused with exit 2.
+
 ## 0.0.15 cohort — published 2026-10-05
 
 Diagram 0.0.1 (new crate) / mermaid 0.0.4 / ext 0.0.13 / micro 0.0.2 /

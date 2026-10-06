@@ -119,7 +119,7 @@ records exactly which parts are upstream and which are additions.
 | `chart` | — | Draw CSV, JSON or stdin as a sparkline, bars, lines, points or a heatmap | [Charts](../ext/charts.md#from-the-shell-rich-chart) |
 | `mermaid`, `mmd` | — | Draw a Mermaid flowchart as text | [From Mermaid](../diagram/index.md#from-mermaid) |
 | `dot`, `graphviz` | — | Draw a DOT (Graphviz) graph as text | [Diagrams](../diagram/index.md#dot-graphviz) |
-| `deps` | — | A Cargo dependency tree or graph; `--why CRATE` | [Dependency graphs](../ext/sources.md#cargo-dependency-graphs) |
+| `deps` | — | A Cargo dependency tree or graph; `--why CRATE`; feature, build-time, advisory and licence reports | [Dependency graphs](../ext/sources.md#cargo-dependency-graphs), [supply-chain reports](../ext/sources.md#supply-chain-reports) |
 | `schema` | — | A JSON Schema as a tree, or what changed between two | [JSON Schemas](../ext/sources.md) |
 | `choose`, `filter`, `input`, `confirm`, `pager` | — | Ask in a script: answer on stdout, exit 1 when cancelled | [Ask in a script](../../cli.md#ask-in-a-script) |
 | `write`, `file`, `color`, `asset` | — | A text area, a file, colour or asset picker | [Ask in a script](../../cli.md#ask-in-a-script) |
@@ -147,7 +147,7 @@ records exactly which parts are upstream and which are additions.
 | `2` | Usage or configuration error |
 | `3` | Input, read or write error |
 | `4` | Parse or render error in the data |
-| `5` | A threshold or gate failed (`diff --threshold`, `bench compare`) |
+| `5` | A threshold or gate failed (`diff --threshold`, `bench compare`, a vulnerability in `deps --audit`) |
 | `130` | A batch, or an interactive command, was interrupted with Ctrl+C |
 
 `rich capture` is the exception: it exits with the captured command's own

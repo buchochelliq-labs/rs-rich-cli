@@ -1,0 +1,17 @@
+2 vulnerabilities, 2 warnings in 16 dependencies
+1 high · 1 unknown · 2 informational
+
+┏━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ Severity     ┃ ID                ┃ Crate                ┃ Patched ┃ Title                        ┃
+┡━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
+│ high 7.5     │ RUSTSEC-2099-0001 │ similar v2.6.0       │ >=2.6.1 │ Unbounded recursion when     │
+│              │                   │                      │         │ diffing deeply nested input  │
+├──────────────┼───────────────────┼──────────────────────┼─────────┼──────────────────────────────┤
+│ unknown      │ RUSTSEC-2099-0002 │ log v0.4.22          │ no fix  │ Format string handling may   │
+│              │                   │                      │         │ read uninitialised memory    │
+├──────────────┼───────────────────┼──────────────────────┼─────────┼──────────────────────────────┤
+│ unmaintained │ RUSTSEC-2099-0003 │ strum_macros v0.25.3 │ no fix  │ strum_macros 0.25 is no      │
+│              │                   │                      │         │ longer maintained            │
+│ yanked       │ –                 │ cc v1.1.28           │ no fix  │ this version was yanked from │
+│              │                   │                      │         │ its registry                 │
+└──────────────┴───────────────────┴──────────────────────┴─────────┴──────────────────────────────┘

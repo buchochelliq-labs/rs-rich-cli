@@ -5,6 +5,10 @@
 use super::*;
 
 use rich_diagram::{Diagram, Direction, Graph, Node, Shape, Stroke};
+use rich_ext::deps::audit::{AdvisoryKind, AdvisoryReport};
+use rich_ext::deps::features::{FeatureGraph, FeatureTree};
+use rich_ext::deps::licenses::LicenseReport;
+use rich_ext::deps::timings::{Timings, TimingsReport};
 use rich_ext::deps::{DepGraph, DepKind, DepTree, WhyTree};
 use rich_ext::schema::{SchemaDiff, SchemaTree};
 
@@ -48,6 +52,16 @@ pub(crate) struct GraphSourceOptions {
     duplicates: bool,
     /// `--no-dev`: leave dev dependencies out.
     no_dev: bool,
+    /// `--features`: the resolved features instead of the tree.
+    features: bool,
+    /// `--package CRATE`: with `--features`, whose.
+    package: Option<String>,
+    /// `--timings FILE`: a `cargo build --timings` report.
+    timings: Option<String>,
+    /// `--audit FILE`: `cargo audit --json` output.
+    audit: Option<String>,
+    /// `--licenses`: the licences, grouped.
+    licenses: bool,
 }
 
 impl GraphSourceOptions {
@@ -75,6 +89,17 @@ impl GraphSourceOptions {
             }
             "--duplicates" => self.duplicates = true,
             "--no-dev" => self.no_dev = true,
+            "--features" => self.features = true,
+            "--package" => {
+                self.package = Some(rest.next().ok_or("--package requires a CRATE")?.clone());
+            }
+            "--timings" => {
+                self.timings = Some(rest.next().ok_or("--timings requires a FILE")?.clone());
+            }
+            "--audit" => {
+                self.audit = Some(rest.next().ok_or("--audit requires a FILE")?.clone());
+            }
+            "--licenses" => self.licenses = true,
             _ => return Ok(false),
         }
         Ok(true)
@@ -90,6 +115,11 @@ impl GraphSourceOptions {
             ("--depth", self.depth.is_some()),
             ("--duplicates", self.duplicates),
             ("--no-dev", self.no_dev),
+            ("--features", self.features),
+            ("--package", self.package.is_some()),
+            ("--timings", self.timings.is_some()),
+            ("--audit", self.audit.is_some()),
+            ("--licenses", self.licenses),
         ]
         .into_iter()
         .filter(|(_, given)| *given)
@@ -99,6 +129,74 @@ impl GraphSourceOptions {
 }
 
 type Failure = (ExitClass, String);
+
+/// What `rich deps` shows, and the gate it failed, if any: `--audit` with a
+/// vulnerability in the report exits 5 once the report is shown.
+pub(crate) struct DepsView {
+    pub(crate) view: Box<dyn Renderable>,
+    pub(crate) gate: Option<String>,
+}
+
+impl DepsView {
+    fn shown(view: impl Renderable + 'static) -> Self {
+        DepsView {
+            view: Box::new(view),
+            gate: None,
+        }
+    }
+}
+
+impl GraphSourceOptions {
+    /// At most one report instead of the tree, and none of the options
+    /// that do not apply to it: those are refused rather than ignored.
+    fn check_combination(&self, cli: &Cli) -> Result<(), Failure> {
+        let usage = |message: String| Err((ExitClass::Usage, message));
+        let reports: Vec<&str> = [
+            ("--why", self.why.is_some()),
+            ("--features", self.features),
+            ("--timings", self.timings.is_some()),
+            ("--audit", self.audit.is_some()),
+            ("--licenses", self.licenses),
+        ]
+        .into_iter()
+        .filter(|(_, given)| *given)
+        .map(|(flag, _)| flag)
+        .collect();
+        if reports.len() > 1 {
+            return usage(format!("give one of {} at a time", reports.join(", ")));
+        }
+        if self.package.is_some() && !self.features {
+            return usage("--package only has an effect with --features".into());
+        }
+        let Some(report) = reports.first().filter(|r| **r != "--why") else {
+            return Ok(());
+        };
+        let reads_file = matches!(*report, "--timings" | "--audit");
+        for (flag, given) in [
+            ("--graph", self.graph),
+            ("--depth", self.depth.is_some()),
+            ("--duplicates", self.duplicates),
+            ("--no-dev", self.no_dev && *report != "--licenses"),
+            ("--metadata", self.metadata.is_some() && reads_file),
+            ("a manifest", cli.resource.is_some() && reads_file),
+        ] {
+            if given {
+                return usage(format!("{flag} has no effect with {report}"));
+            }
+        }
+        Ok(())
+    }
+}
+
+/// A report file for `--timings` or `--audit` (`-` for stdin), read up to
+/// `rich_ext::deps::MAX_INPUT` bytes.
+fn report_file(cli: &Cli, file: &str) -> Result<String, Failure> {
+    let limit = rich_ext::deps::MAX_INPUT as u64;
+    read_resource_limited(Some(file), cli.extensions.encoding, Some(limit)).map_err(|err| {
+        let name = if file == "-" { "<stdin>" } else { file };
+        (ExitClass::Input, format!("cannot read {name}: {err}"))
+    })
+}
 
 /// `cargo metadata` output: from `--metadata FILE` (`-` for stdin), else by
 /// running `cargo metadata --format-version 1` for the manifest the resource
@@ -171,14 +269,63 @@ fn metadata(cli: &Cli) -> Result<String, Failure> {
 }
 
 /// `rich deps`: the dependency tree, `--why CRATE`'s inverted tree, or with
-/// `--graph` either drawn through the layout.
-pub(crate) fn deps(cli: &Cli) -> Result<Box<dyn Renderable>, Failure> {
+/// `--graph` either drawn through the layout; or one of the supply-chain
+/// reports (`--features`, `--timings FILE`, `--audit FILE`, `--licenses`),
+/// which read what Cargo and its tools wrote and run no scanner.
+pub(crate) fn deps(cli: &Cli) -> Result<DepsView, Failure> {
     let options = &cli.graph_sources;
+    options.check_combination(cli)?;
+    let data = |err: rich_ext::deps::DepsError| (ExitClass::Data, err.to_string());
+    if let Some(file) = &options.timings {
+        let timings = Timings::parse(&report_file(cli, file)?).map_err(data)?;
+        return Ok(DepsView::shown(TimingsReport::new(timings)));
+    }
+    if let Some(file) = &options.audit {
+        let report = AdvisoryReport::from_cargo_audit(&report_file(cli, file)?).map_err(data)?;
+        let vulnerabilities = report.vulnerabilities();
+        let gate = (vulnerabilities > 0).then(|| {
+            let ids: Vec<&str> = report
+                .sorted()
+                .into_iter()
+                .filter(|a| a.kind == AdvisoryKind::Vulnerability)
+                .map(|a| a.id.as_str())
+                .collect();
+            format!(
+                "{vulnerabilities} vulnerabilit{} found: {}",
+                if vulnerabilities == 1 { "y" } else { "ies" },
+                ids.join(", ")
+            )
+        });
+        return Ok(DepsView {
+            view: Box::new(report),
+            gate,
+        });
+    }
     let json = metadata(cli)?;
-    let graph = DepGraph::from_json(&json).map_err(|err| (ExitClass::Data, err.to_string()))?;
+    if options.features {
+        let graph = FeatureGraph::from_json(&json).map_err(data)?;
+        let tree = FeatureTree::new(graph, options.package.as_deref()).map_err(data)?;
+        return Ok(DepsView::shown(tree));
+    }
+    let graph = DepGraph::from_json(&json).map_err(data)?;
     let mut kinds = vec![DepKind::Normal, DepKind::Build, DepKind::Dev];
     if options.no_dev {
         kinds.pop();
+    }
+    if options.licenses {
+        // The packages the kinds reach: with --no-dev, not the dev-only ones.
+        let reachable = graph.reachable(&kinds);
+        let ids: std::collections::HashSet<&str> = graph
+            .packages()
+            .iter()
+            .zip(&reachable)
+            .filter(|(_, reached)| **reached)
+            .map(|(package, _)| package.id.as_str())
+            .collect();
+        let report = LicenseReport::from_json(&json)
+            .map_err(data)?
+            .retain(|package| ids.contains(package.id.as_str()));
+        return Ok(DepsView::shown(report));
     }
     if let Some(spec) = &options.why {
         let reachable = graph.reachable(&[DepKind::Normal, DepKind::Build, DepKind::Dev]);
@@ -195,26 +342,28 @@ pub(crate) fn deps(cli: &Cli) -> Result<Box<dyn Renderable>, Failure> {
             return Err((ExitClass::Data, message));
         }
         if options.graph {
-            return Ok(Box::new(Diagram::new(why_diagram(&why, &kinds))));
+            return Ok(DepsView::shown(Diagram::new(why_diagram(&why, &kinds))));
         }
-        return Ok(Box::new(why));
+        return Ok(DepsView::shown(why));
     }
     if options.graph {
-        return Ok(Box::new(Diagram::new(deps_diagram(
+        return Ok(DepsView::shown(Diagram::new(deps_diagram(
             &graph,
             &kinds,
             options.depth,
             options.duplicates,
         ))));
     }
+    // With --duplicates, the consolidation summary follows the tree.
     let mut tree = DepTree::new(graph)
         .kinds(&kinds)
         .duplicates_only(options.duplicates)
-        .summary(true);
+        .summary(true)
+        .consolidation(options.duplicates);
     if let Some(depth) = options.depth {
         tree = tree.max_depth(depth);
     }
-    Ok(Box::new(tree))
+    Ok(DepsView::shown(tree))
 }
 
 /// A package as a diagram node: workspace members rounded, crates resolved

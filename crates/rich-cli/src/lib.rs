@@ -1063,6 +1063,9 @@ const VALUE_OPTIONS: &[&str] = &[
     "--dot-backend",
     "--metadata",
     "--why",
+    "--package",
+    "--timings",
+    "--audit",
     "--depth",
     "--kind",
     "--x",
@@ -4343,16 +4346,23 @@ fn run_once_with_fetch(mut cli: Cli, prefetched: Option<(String, Option<String>)
     }
     if matches!(mode, Mode::Deps | Mode::Schema | Mode::Chart) {
         let view = match mode {
-            Mode::Deps => sources::deps(&cli),
-            Mode::Schema => sources::schema(&cli),
-            _ => chart::chart(&cli),
+            Mode::Deps => sources::deps(&cli).map(|deps| (deps.view, deps.gate)),
+            Mode::Schema => sources::schema(&cli).map(|view| (view, None)),
+            _ => chart::chart(&cli).map(|view| (view, None)),
         };
-        let view = match view {
+        let (view, gate) = match view {
             Ok(view) => view,
             Err((class, err)) => return fail(&cli, class, err),
         };
         let fit = view.measure(&console, &console.options()).maximum;
-        return decorate_and_emit(&cli, &console, &export, view, Some(fit));
+        // A failed gate (`rich deps --audit` with a vulnerability) exits 5
+        // once the report is shown, with one report envelope.
+        return decorate_and_emit_with(&cli, &console, &export, view, Some(fit), |cli, shown| {
+            match gate {
+                Some(message) if shown.is_ok() => fail(cli, ExitClass::Gate, message),
+                _ => emit_exit_code(cli, shown),
+            }
+        });
     }
     if matches!(mode, Mode::Hex | Mode::Unicode) {
         // Only the bytes shown are read: an explicit `--length`, else up to

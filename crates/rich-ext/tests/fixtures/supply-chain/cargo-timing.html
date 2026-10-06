@@ -1,0 +1,177 @@
+<html>
+<head>
+  <title>Cargo Build Timings — demo-app 0.3.0</title>
+  <meta charset="utf-8">
+</head>
+<body>
+<h1>Cargo Build Timings</h1>
+<!-- Trimmed from a `cargo build --timings` report: the summary table and the
+     charts' script are left out; UNIT_DATA is as Cargo writes it. -->
+<table class="my-table summary-table">
+<tr><td>Targets:</td><td>demo-app 0.3.0 (lib, bin "demo")</td></tr>
+<tr><td>Total units:</td><td>12</td></tr>
+</table>
+<script>
+const UNIT_DATA = [
+  {
+    "i": 0,
+    "name": "proc-macro2",
+    "version": "1.0.86",
+    "mode": "todo",
+    "target": " build-script",
+    "features": ["default", "proc-macro"],
+    "start": 0.0,
+    "duration": 0.41,
+    "unblocked_units": [1],
+    "unblocked_rmeta_units": [],
+    "sections": null
+  },
+  {
+    "i": 1,
+    "name": "proc-macro2",
+    "version": "1.0.86",
+    "mode": "run-custom-build",
+    "target": " build-script (run)",
+    "features": ["default", "proc-macro"],
+    "start": 0.41,
+    "duration": 0.12,
+    "unblocked_units": [2],
+    "unblocked_rmeta_units": [],
+    "sections": null
+  },
+  {
+    "i": 2,
+    "name": "unicode-ident",
+    "version": "1.0.13",
+    "mode": "todo",
+    "target": "",
+    "features": [],
+    "start": 0.0,
+    "duration": 0.38,
+    "unblocked_units": [],
+    "unblocked_rmeta_units": [3],
+    "sections": [["frontend", {"start": 0.0, "end": 0.21}], ["codegen", {"start": 0.21, "end": 0.38}]]
+  },
+  {
+    "i": 3,
+    "name": "proc-macro2",
+    "version": "1.0.86",
+    "mode": "todo",
+    "target": "",
+    "features": ["default", "proc-macro"],
+    "start": 0.53,
+    "duration": 1.37,
+    "unblocked_units": [4],
+    "unblocked_rmeta_units": [],
+    "sections": [["frontend", {"start": 0.0, "end": 0.92}], ["codegen", {"start": 0.92, "end": 1.37}]]
+  },
+  {
+    "i": 4,
+    "name": "quote",
+    "version": "1.0.37",
+    "mode": "todo",
+    "target": "",
+    "features": ["default", "proc-macro"],
+    "start": 1.9,
+    "duration": 0.66,
+    "unblocked_units": [5, 6],
+    "unblocked_rmeta_units": [],
+    "rmeta_time": 0.4
+  },
+  {
+    "i": 5,
+    "name": "syn",
+    "version": "2.0.79",
+    "mode": "todo",
+    "target": "",
+    "features": ["default", "derive", "parsing", "printing", "proc-macro"],
+    "start": 2.56,
+    "duration": 6.84,
+    "unblocked_units": [7, 8],
+    "unblocked_rmeta_units": [],
+    "sections": [["frontend", {"start": 0.0, "end": 3.95}], ["codegen", {"start": 3.95, "end": 6.84}]]
+  },
+  {
+    "i": 6,
+    "name": "syn",
+    "version": "1.0.109",
+    "mode": "todo",
+    "target": "",
+    "features": ["default", "derive", "parsing", "printing", "proc-macro", "quote"],
+    "start": 2.56,
+    "duration": 5.12,
+    "unblocked_units": [9],
+    "unblocked_rmeta_units": [],
+    "sections": [["frontend", {"start": 0.0, "end": 2.9}], ["codegen", {"start": 2.9, "end": 5.12}]]
+  },
+  {
+    "i": 7,
+    "name": "serde_derive",
+    "version": "1.0.210",
+    "mode": "todo",
+    "target": "",
+    "features": ["default"],
+    "start": 9.4,
+    "duration": 3.91,
+    "unblocked_units": [10],
+    "unblocked_rmeta_units": [],
+    "sections": [["frontend", {"start": 0.0, "end": 1.73}], ["codegen", {"start": 1.73, "end": 3.91}]]
+  },
+  {
+    "i": 8,
+    "name": "thiserror-impl",
+    "version": "1.0.64",
+    "mode": "todo",
+    "target": "",
+    "features": [],
+    "start": 9.4,
+    "duration": 1.18,
+    "unblocked_units": [],
+    "unblocked_rmeta_units": [],
+    "sections": null
+  },
+  {
+    "i": 9,
+    "name": "strum_macros",
+    "version": "0.25.3",
+    "mode": "todo",
+    "target": "",
+    "features": [],
+    "start": 7.68,
+    "duration": 1.64,
+    "unblocked_units": [],
+    "unblocked_rmeta_units": [],
+    "rmeta_time": 0.88
+  },
+  {
+    "i": 10,
+    "name": "serde",
+    "version": "1.0.210",
+    "mode": "todo",
+    "target": "",
+    "features": ["default", "derive", "serde_derive", "std"],
+    "start": 13.31,
+    "duration": 2.25,
+    "unblocked_units": [11],
+    "unblocked_rmeta_units": [],
+    "sections": [["frontend", {"start": 0.0, "end": 1.6}], ["codegen", {"start": 1.6, "end": 2.25}]]
+  },
+  {
+    "i": 11,
+    "name": "demo-app",
+    "version": "0.3.0",
+    "mode": "todo",
+    "target": " demo \"bin\"",
+    "features": ["cli", "default"],
+    "start": 15.56,
+    "duration": 0.94,
+    "unblocked_units": [],
+    "unblocked_rmeta_units": [],
+    "sections": null
+  }
+];
+const CONCURRENCY_DATA = [];
+const CPU_USAGE = [];
+</script>
+</body>
+</html>
