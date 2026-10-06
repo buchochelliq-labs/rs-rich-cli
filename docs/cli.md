@@ -861,6 +861,8 @@ rich dot services.dot               # a DOT (Graphviz) graph, natively (alias gr
 rich README.md                      # ```mermaid and ```dot fences draw too
 rich deps --why syn                 # what pulls a crate into this Cargo workspace
 rich deps --graph --depth 1         # the dependencies as a diagram
+rich deps --features --package syn  # which features a crate has, and who asked
+rich deps --audit audit.json        # `cargo audit --json` output; exit 5 on a vulnerability
 rich schema order-v1.json order-v2.json   # what changed between two JSON Schemas
 ```
 
@@ -998,7 +1000,7 @@ Exit codes are stable by failure class:
 | `2` | Usage/config error, such as an invalid flag or unsupported combination. |
 | `3` | Input/read/write error, such as a missing file or failed output write. |
 | `4` | Parse/render data error, such as malformed JSON or JSONL. |
-| `5` | Threshold/gate failure, such as `--diff --threshold` exceeded. |
+| `5` | Threshold/gate failure, such as `--diff --threshold` exceeded or a vulnerability in `rich deps --audit FILE`. |
 | `130` | Batch interrupted with Ctrl+C. Started workers are stopped and reaped. |
 
 `rich capture -- CMD` is the exception: once its output is shown and exported

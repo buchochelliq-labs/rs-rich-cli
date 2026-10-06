@@ -1,7 +1,9 @@
 # Dependency graphs and JSON Schemas
 
 Two sources the terminal is often asked about, drawn as trees (0.0.15):
-Cargo's resolved dependency graph and JSON Schemas. Both live in `rs-rich-ext`
+Cargo's resolved dependency graph and JSON Schemas; beside the graph, the
+[supply-chain reports](#supply-chain-reports) (0.0.16) read feature,
+build-time, advisory and licence data Cargo and its tools already wrote. Both live in `rs-rich-ext`
 behind its `data` feature, as `rich_ext::deps` and `rich_ext::schema`; the
 `rich` CLI shows them with `rich deps` and `rich schema`. Neither reads
 colour alone: markers and words carry the meaning, and colour repeats it.
@@ -193,6 +195,203 @@ rich deps --why syn@1.0.109 --graph
     ╱───────────────╲
     │ syn v1.0.109  │
     ╲───────────────╱
+```
+
+## Supply-chain reports
+
+Five reports sit beside the tree (0.0.16), in `rich_ext::deps`'s submodules
+`duplicates`, `features`, `timings`, `audit` and `licenses`. Each reads what
+Cargo or its tools already wrote: `cargo metadata`, a `cargo build
+--timings` report or `cargo audit --json` output. None runs a scanner or
+reaches the network, and `--timings` and `--audit` do not run Cargo at all.
+The examples use the fixtures in `crates/rich-ext/tests/fixtures/supply-chain`.
+
+| Flag | Reads | Shows |
+|---|---|---|
+| `--duplicates` | `cargo metadata` | the duplicated branches, then a consolidation summary |
+| `--features [--package CRATE]` | `cargo metadata` | each crate's enabled features, what they turn on, who asked |
+| `--licenses` | `cargo metadata` | crates grouped by licence; copyleft, unknown and missing marked |
+| `--timings FILE` | `cargo build --timings` | the slowest units as bars and a table |
+| `--audit FILE` | `cargo audit --json` | advisories grouped by severity; exit 5 on a vulnerability |
+
+Give one report at a time. An option that does not apply to it (`--graph`,
+`--depth` or `--duplicates` with any of them, `--no-dev` with anything but
+`--licenses`, `--metadata` or a manifest with `--timings` and `--audit`) is
+refused with exit 2 rather than ignored.
+
+The parsers are bounded: `--timings` and `--audit` read at most 64 MiB
+(`deps::MAX_INPUT`), every reader takes at most 100,000 packages, units or
+advisories (`deps::MAX_RECORDS`), JSON nests at most 128 levels (serde_json's
+limit), and a licence expression is at most 1,024 bytes and 32 parentheses
+deep. Past a limit, or on malformed input, the reader returns an error, and
+`rich deps` exits 4 naming it.
+
+### Consolidating duplicates
+
+`--duplicates` keeps only the branches that lead to a duplicated crate, as
+before, and now adds `Consolidation` under the tree: for each crate resolved
+at more than one version, every version with what depends on it, and the
+version most dependents already use (the newest on a tie). Every other version
+is marked with the version its dependents could move to; moving them leaves
+one copy. `DepGraph::consolidation(kinds)` returns the same as data
+(`Duplicate::shared_version`, `Duplicate::to_move`), and
+`DepTree::consolidation(true)` adds it under a tree. Without `--duplicates`,
+`rich deps` prints what it always did.
+
+```text
+duplicate: syn v1.0.109, v2.0.79
+
+consolidation: 1 crate at several versions
+syn: 2 versions, 3 dependents; 2 use v2.0.79 (newest)
+├── v2.0.79 ← serde_derive v1.0.210, thiserror-impl v1.0.64
+└── v1.0.109 ← strum_macros v0.25.3 (could move to v2.0.79)
+```
+
+### Feature trees
+
+`--features` reads the features Cargo resolved (`resolve.nodes[].features`,
+unified across the build), each package's `[features]` table and the
+features its dependents ask for. `FeatureTree` draws a crate: each enabled
+feature with its definition underneath (another feature, an optional
+dependency `dep:name` and the package it resolved to, or a dependency's
+feature `name/feature`, with `name?/feature` applying only when that
+dependency is on for another reason), and under "requested by" each
+dependent with the features its manifest names and the features of its own
+that turn on more. An entry Cargo did not act on is marked `(off)`.
+
+Without `--package`, every crate with a feature enabled is shown, the
+workspace members first, and the rest are counted.
+
+```bash
+rich deps --features --package syn@2.0.79
+```
+
+```text
+syn v2.0.79  5 features enabled
+├── default
+│   ├── derive
+│   ├── parsing
+│   ├── printing
+│   └── proc-macro
+├── derive
+├── parsing
+├── printing
+│   └── dep:quote → quote v1.0.37
+├── proc-macro
+│   ├── proc-macro2/proc-macro → proc-macro2 v1.0.86
+│   └── quote?/proc-macro → quote v1.0.37
+└── requested by
+    ├── serde_derive v1.0.210: derive, parsing, printing, proc-macro
+    └── thiserror-impl v1.0.64: default features
+```
+
+### Build times
+
+`--timings FILE` reads the report `cargo build --timings` writes to
+`target/cargo-timings/cargo-timing.html` (its script holds every unit as
+JSON), that `UNIT_DATA` array on its own, or the `timing-info` JSON lines
+older nightly toolchains wrote with `--timings=json -Zunstable-options`.
+`TimingsReport` shows the totals, the 20 slowest units as bars
+(`TimingsReport::limit` changes the number) and a table that splits each
+unit's time into the frontend (until its `.rmeta` was ready, which lets
+dependents start) and codegen. A crate built at two versions has the version
+in its bar's label. Artifact sizes are not in the report and are not shown.
+
+```bash
+cargo build --timings
+rich deps --timings target/cargo-timings/cargo-timing.html
+```
+
+```text
+12 units: 24.82s of compile time, 16.50s wall clock
+
+syn v2.0.79                    ████████████████████████████████████████ 6.84
+syn v1.0.109                   ██████████████████████████████           5.12
+serde_derive                   ██████████████████████▉                  3.91
+…
+
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━┳━━━━━━━┳━━━━━━━━━━┳━━━━━━━━━┓
+┃ Unit                           ┃ Version  ┃  Time ┃ Frontend ┃ Codegen ┃
+┡━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━╇━━━━━━━╇━━━━━━━━━━╇━━━━━━━━━┩
+│ syn                            │ v2.0.79  │ 6.84s │    3.95s │   2.89s │
+│ syn                            │ v1.0.109 │ 5.12s │    2.90s │   2.22s │
+…
+```
+
+### Advisories
+
+`audit::Advisory` is a generic model of one finding: id, kind
+(vulnerability, unsound, unmaintained, yanked or notice), package and the
+version in use, the patched and unaffected version requirements, severity
+and CVSS score, title, link, aliases and date. `AdvisoryReport::from_cargo_audit`
+reads `cargo audit --json`; a plugin reading another scanner builds the same
+values and passes them to `AdvisoryReport::new`. `cargo audit` gives a CVSS
+vector rather than a severity: a CVSS 3.x vector is scored with the
+specification's formula (`audit::cvss3_score`) and banded as CVSS does; a
+vulnerability without one (or with a CVSS 4 vector) is `unknown`, and a
+warning without one is `informational`.
+
+The report lists the counts, then a table grouped by severity, most severe
+first. The ID links to the advisory in a terminal that shows links.
+
+```bash
+cargo audit --json > audit.json
+rich deps --audit audit.json
+```
+
+```text
+2 vulnerabilities, 2 warnings in 16 dependencies
+1 high · 1 unknown · 2 informational
+
+┏━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ Severity     ┃ ID                ┃ Crate                ┃ Patched ┃ Title                        ┃
+┡━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
+│ high 7.5     │ RUSTSEC-2099-0001 │ similar v2.6.0       │ >=2.6.1 │ Unbounded recursion when     │
+│              │                   │                      │         │ diffing deeply nested input  │
+├──────────────┼───────────────────┼──────────────────────┼─────────┼──────────────────────────────┤
+│ unknown      │ RUSTSEC-2099-0002 │ log v0.4.22          │ no fix  │ Format string handling may   │
+│              │                   │                      │         │ read uninitialised memory    │
+├──────────────┼───────────────────┼──────────────────────┼─────────┼──────────────────────────────┤
+│ unmaintained │ RUSTSEC-2099-0003 │ strum_macros v0.25.3 │ no fix  │ strum_macros 0.25 is no      │
+│              │                   │                      │         │ longer maintained            │
+│ yanked       │ –                 │ cc v1.1.28           │ no fix  │ this version was yanked from │
+│              │                   │                      │         │ its registry                 │
+└──────────────┴───────────────────┴──────────────────────┴─────────┴──────────────────────────────┘
+rich: 2 vulnerabilities found: RUSTSEC-2099-0001, RUSTSEC-2099-0002
+```
+
+**Exit code.** Like `cargo audit` itself, and like the CLI's other gates
+(`diff --threshold`, `bench compare`), `rich deps --audit` exits 5 when the
+report lists a vulnerability, after showing it in full; with `--report json`
+the one envelope on stderr has `"code": "gate"`. Warnings alone (unmaintained,
+unsound, yanked) exit 0. A file that is not `cargo audit` JSON exits 4.
+
+### Licences
+
+`--licenses` groups the packages the tree reaches (`--no-dev` leaves out
+those only dev dependencies pull in) by their `license` expression, or notes
+a `license-file` or no licence at all. `licenses::classify` reads SPDX
+expressions (`AND`, `OR`, `WITH`, parentheses, and the old `MIT/Apache-2.0`
+form): an `OR` is as permissive as its most permissive choice, an `AND` as
+strict as its strictest part. Weak copyleft (LGPL, MPL, EPL, CDDL, …),
+copyleft (GPL, AGPL, EUPL, OSL, SSPL, CC-BY-SA), unknown identifiers,
+unreadable expressions, licence files and missing licences are marked; the
+operands of an expression are sorted, so `MIT OR Apache-2.0` and
+`Apache-2.0 OR MIT` are one group. It is a reading aid, not legal advice.
+
+```text
+16 crates under 7 licences: 1 copyleft, 1 licence file only, 1 no licence
+
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━┓
+┃ Licence                          ┃ Crates ┃ Which                            ┃ Note              ┃
+┡━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━┩
+│ Apache-2.0 OR MIT                │      9 │ cc v1.1.28, log v0.4.22,         │                   │
+…
+│ (licence file)                   │      1 │ demo-core v0.3.0                 │ licence file only │
+│ (none)                           │      1 │ thiserror-impl v1.0.64           │ no licence        │
+│ GPL-3.0-or-later                 │      1 │ demo-app v0.3.0                  │ copyleft          │
+│ MIT                              │      1 │ strum_macros v0.25.3             │                   │
+└──────────────────────────────────┴────────┴──────────────────────────────────┴───────────────────┘
 ```
 
 ## JSON Schema

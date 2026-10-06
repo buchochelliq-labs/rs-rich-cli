@@ -119,8 +119,13 @@ Choose at most one; the default auto-detects .md/.rst/.json/.csv/.tsv/.ipynb, .m
 | `--why <CRATE>` | With `rich deps`, show what pulls CRATE (`name` or `name@version`) in: every path from the workspace to it. |
 | `--graph` | With `rich deps`, draw the dependencies (or --why's paths) as a diagram instead of a tree. |
 | `--depth <N>` | With `rich deps`, show at most N levels below each workspace member. |
-| `--duplicates` | With `rich deps`, keep only the branches that lead to a crate resolved at more than one version. |
+| `--duplicates` | With `rich deps`, keep only the branches that lead to a crate resolved at more than one version, and add a consolidation summary: who pulls each version, and which version most of them could share. |
 | `--no-dev` | With `rich deps`, leave dev-dependencies out. |
+| `--features` | With `rich deps`, show the features Cargo resolved for each crate: what each turns on, and which dependents asked for them; every crate with a feature, or only --package's. |
+| `--package <CRATE>` | With `rich deps --features`, show only CRATE, as `name` or `name@version`. |
+| `--timings <FILE>` | With `rich deps`, show a `cargo build --timings` report (the HTML file, or timing-info JSON lines; `-` for stdin): the slowest units as bars and a table; runs nothing. |
+| `--audit <FILE>` | With `rich deps`, show `cargo audit --json` output from FILE (`-` for stdin) grouped by severity; exits 5 when it lists a vulnerability. Runs no scanner. |
+| `--licenses` | With `rich deps`, group the crates by licence, marking copyleft, unknown and missing licences. |
 
 ### Chart
 
@@ -305,7 +310,7 @@ Self-contained examples; ignores config; accepts --no-color.
 | `capture` | Run `rich capture -- COMMAND ARGS…` and show or export its output (--cast FILE records it, --redact masks secrets), then exit with the command's status |
 | `mermaid`, `mmd` | Draw a Mermaid diagram: flowcharts as text, every type through mmdc where built in (.mmd and .mermaid files are detected) |
 | `dot`, `graphviz` | Draw a DOT (Graphviz) graph as text (.dot and .gv files are detected); what the native parser does not support is refused with its line |
-| `deps` | A Cargo dependency tree from `cargo metadata`, crates resolved at several versions marked; --why CRATE for what pulls a crate in, --graph to draw it |
+| `deps` | A Cargo dependency tree from `cargo metadata`, crates resolved at several versions marked; --why CRATE for what pulls a crate in, --graph to draw it; --features, --licenses, --timings FILE and --audit FILE for supply-chain reports |
 | `schema` | A JSON Schema as a tree: types, required markers, constraints, $refs resolved; with two schemas, what changed between them and which changes break |
 | `chart` | A chart from CSV, JSON or stdin: a sparkline, bars, lines, points or a heatmap; --x and --y pick the columns, a missing column or a value that is not a number is refused with its row and column |
 | `config` | Show, validate, explain or document configuration |
@@ -881,7 +886,7 @@ rich dot [OPTIONS] [RESOURCE]
 
 ### rich deps
 
-A Cargo dependency tree from `cargo metadata`, crates resolved at several versions marked; --why CRATE for what pulls a crate in, --graph to draw it
+A Cargo dependency tree from `cargo metadata`, crates resolved at several versions marked; --why CRATE for what pulls a crate in, --graph to draw it; --features, --licenses, --timings FILE and --audit FILE for supply-chain reports
 
 #### Usage
 
@@ -897,8 +902,13 @@ rich deps [OPTIONS] [MANIFEST]
 | `--why <CRATE>` | With `rich deps`, show what pulls CRATE (`name` or `name@version`) in: every path from the workspace to it. |
 | `--graph` | With `rich deps`, draw the dependencies (or --why's paths) as a diagram instead of a tree. |
 | `--depth <N>` | With `rich deps`, show at most N levels below each workspace member. |
-| `--duplicates` | With `rich deps`, keep only the branches that lead to a crate resolved at more than one version. |
+| `--duplicates` | With `rich deps`, keep only the branches that lead to a crate resolved at more than one version, and add a consolidation summary: who pulls each version, and which version most of them could share. |
 | `--no-dev` | With `rich deps`, leave dev-dependencies out. |
+| `--features` | With `rich deps`, show the features Cargo resolved for each crate: what each turns on, and which dependents asked for them; every crate with a feature, or only --package's. |
+| `--package <CRATE>` | With `rich deps --features`, show only CRATE, as `name` or `name@version`. |
+| `--timings <FILE>` | With `rich deps`, show a `cargo build --timings` report (the HTML file, or timing-info JSON lines; `-` for stdin): the slowest units as bars and a table; runs nothing. |
+| `--audit <FILE>` | With `rich deps`, show `cargo audit --json` output from FILE (`-` for stdin) grouped by severity; exits 5 when it lists a vulnerability. Runs no scanner. |
+| `--licenses` | With `rich deps`, group the crates by licence, marking copyleft, unknown and missing licences. |
 
 #### Layout
 
