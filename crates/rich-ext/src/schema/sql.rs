@@ -13,7 +13,8 @@
 //!   or, for one or several columns, on the table (`PRIMARY KEY (a, b)`,
 //!   `UNIQUE (a, b)`, `FOREIGN KEY (a) REFERENCES t (x)`), named with
 //!   `CONSTRAINT name` or not, and MySQL's `ENUM('a', 'b')` and `COMMENT`;
-//! - `--` and `/* … */` comments, and any number of statements.
+//! - `--` and `/* … */` comments, PostgreSQL's dollar-quoted strings
+//!   (`$$ … $$`, a function body's), and any number of statements.
 //!
 //! `CHECK` constraints, indexes, generated columns and other clauses are
 //! skipped, as is every statement but `CREATE TABLE` (`CREATE INDEX`,
@@ -321,6 +322,32 @@ impl Lexer {
                     value,
                     line: start.1,
                 });
+            } else if let Some(len) = dollar_tag(chars, i) {
+                // PostgreSQL's dollar-quoted string (`$$ … $$`, `$body$ …
+                // $body$`), a function body most often: its `;` and quotes
+                // are its own.
+                let start = (i, line);
+                let tag = &chars[i..i + len];
+                i += len;
+                loop {
+                    if i >= chars.len() {
+                        return Err(SqlError::new(start.1, "a string is not closed"));
+                    }
+                    if chars[i..].starts_with(tag) {
+                        i += len;
+                        break;
+                    }
+                    if chars[i] == '\n' {
+                        line += 1;
+                    }
+                    i += 1;
+                }
+                break Some(Token {
+                    kind: Kind::Str,
+                    text: take(start.0, i),
+                    value: take(start.0 + len, i - len),
+                    line: start.1,
+                });
             } else if c.is_alphabetic() || c == '_' {
                 let start = i;
                 while i < chars.len()
@@ -371,6 +398,24 @@ impl Lexer {
         self.line = line;
         Ok(token)
     }
+}
+
+/// The length of the dollar quote (`$$`, `$tag$`) at `i`, if one starts
+/// there; `$1` is a parameter.
+fn dollar_tag(chars: &[char], i: usize) -> Option<usize> {
+    if chars.get(i) != Some(&'$') {
+        return None;
+    }
+    let mut j = i + 1;
+    if chars.get(j).is_some_and(|c| c.is_alphabetic() || *c == '_') {
+        while chars
+            .get(j)
+            .is_some_and(|c| c.is_alphanumeric() || *c == '_')
+        {
+            j += 1;
+        }
+    }
+    (chars.get(j) == Some(&'$')).then_some(j + 1 - i)
 }
 
 /// Check the whole text before reading any statement: every string, quoted
@@ -1516,6 +1561,46 @@ mod tests {
                 .unwrap_err()
                 .to_string(),
             "line 2: a `)` closes nothing"
+        );
+    }
+
+    /// PostgreSQL's dollar-quoted strings (a pg_dump's function bodies) were
+    /// read as SQL: a body's `CREATE TABLE` became a table, its `;` split the
+    /// function, and an apostrophe in it failed the whole file.
+    #[test]
+    fn dollar_quoted_bodies_are_strings() {
+        let parsed = parse(
+            "CREATE TABLE users (id INT PRIMARY KEY);\n\
+             CREATE FUNCTION audit() RETURNS trigger AS $$\n\
+             BEGIN\n\
+                 CREATE TEMP TABLE scratch (n INT);\n\
+                 RETURN NEW;\n\
+             END;\n\
+             $$ LANGUAGE plpgsql;\n\
+             CREATE FUNCTION q() RETURNS text AS $body$ SELECT $q$don't$q$; $body$;\n\
+             CREATE TABLE posts (id INT, author INT DEFAULT $1);",
+        )
+        .unwrap();
+        let tables: Vec<&str> = parsed
+            .schema
+            .tables()
+            .iter()
+            .filter_map(Schema::name)
+            .collect();
+        assert_eq!(tables, ["users", "posts"]);
+        assert_eq!(
+            notes(&parsed),
+            [
+                "line 2: CREATE FUNCTION statement skipped",
+                "line 8: CREATE FUNCTION statement skipped",
+            ]
+        );
+        // `$1` is a parameter, not a quote.
+        let author = parsed.schema.tables()[1].field("author").unwrap();
+        assert!(author.default_value().is_some());
+        assert_eq!(
+            parse("SELECT $tag$ never closed").unwrap_err().to_string(),
+            "line 1: a string is not closed"
         );
     }
 
