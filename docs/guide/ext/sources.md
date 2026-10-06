@@ -551,7 +551,7 @@ shop  2 tables
 (nested ones by path, a list's items as `field[]`), then tables by name. It
 reports the same kinds of change as the JSON Schema diff, plus keys and
 metadata, with the same `breaking` rule: a new requirement (a `NOT NULL`, a
-non-nullable Arrow field), a changed type, a new key or reference, a tighter
+non-nullable Arrow field), a field no longer nullable, a changed type, a new key or reference, a tighter
 bound, a removed enum value, and a removed field or table (rows that have it
 no longer fit). A changed default or metadata entry is informational. Types
 are compared by the source's own name, ignoring case, so `INT → BIGINT` and
