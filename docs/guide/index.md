@@ -22,6 +22,7 @@ real output, exported to SVG by the library itself.
 | `rs-rich-lumis` (new in 0.0.12) | `rich_lumis` | The lumis syntax highlighter (tree-sitter, over 100 languages, 250+ Neovim themes, plus `ansi_dark`/`ansi_light`), for `Syntax`, Markdown or the plugin host. | [Plugins](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/docs/PLUGINS.md) |
 | `rs-rich-mermaid` (new in 0.0.12) | `rich_mermaid` | Mermaid diagrams: flowcharts drawn as text in every direction (through `rs-rich-diagram`'s layout), every diagram type through `mmdc` (optional), and ```` ```mermaid ```` fences in Markdown. | [Plugins](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/docs/PLUGINS.md) |
 | `rs-rich-diagram` (new in 0.0.15) | `rich_diagram` | Graph diagrams: a graph model with a chaining builder, the layered layout Mermaid's flowcharts draw through, and a `Diagram` renderable in box drawing or ASCII that crops to the width it is given; DOT (Graphviz) sources parsed natively, a `dot` fence plugin (`plugin` feature) and Graphviz's own SVG (`graphviz` feature). | [Diagrams](diagram/index.md) |
+| `rs-rich-data` (new in 0.0.16) | `rich_data` | Tabular data: CSV, TSV, JSON Lines, serde and Arrow row sources, type inference, column statistics, bounded profiles, data-quality reports, SQL result sets and windows over long inputs, and ER diagrams of a schema. | [Tabular data](data/index.md), [Schemas](data/schemas.md), [Developer views](data/developer-views.md) |
 | [`rs-rich-macros`](https://crates.io/crates/rs-rich-macros) | through `rich_ext` | Compile-time checked markup (`richf!`), `#[derive(Rich)]` and print macros. Enabled by ext's `macros` feature. | [Macros](ext/macros.md) |
 | [`rs-rich-art`](https://crates.io/crates/rs-rich-art) | `rich_art` | FIGlet banners, images as ASCII, Braille, blocks, quadrants or Sixel, animated GIFs, perceptual image diffs. | [Art](art/index.md) |
 | `rs-rich-interact` (new in 0.0.13) | `rich_interact` | Interactive components: fuzzy pickers, input, confirm, forms, pagers, a text area, file, colour and asset pickers and data explorers, composable with containers, overlays and a keymap. | [Interactive](interact/index.md) |
@@ -104,6 +105,8 @@ images all rely on that.
 - **Drawing data or structure:** [Charts](ext/charts.md),
   [Diagrams](diagram/index.md) and
   [Dependency graphs and JSON Schemas](ext/sources.md).
+- **Tables from data files, profiles and schemas:** [Tabular data](data/index.md),
+  [Schemas](data/schemas.md) and [Developer views](data/developer-views.md).
 - **Writing a CLI:** [CLI authoring](ext/cli-authoring.md) for help, errors,
   completions and man pages, with or without clap.
 - **Testing terminal output:** [Diffs and test reports](ext/diffs-and-test-reports.md)
