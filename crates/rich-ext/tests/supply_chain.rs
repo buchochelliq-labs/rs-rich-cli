@@ -160,3 +160,55 @@ fn licences_group_and_mark_copyleft_and_missing() {
     assert_eq!(counts[&LicenseClass::Missing], 1);
     check("licenses", &plain(100, &report), 100);
 }
+
+/// `cargo metadata` for `count` workspace members, each with one feature
+/// enabled and a dependency on the next, so every crate is a root, a
+/// member, a dependent and a feature tree.
+fn wide_workspace(count: usize) -> String {
+    let id = |i: usize| format!("p{i} 1.0.0");
+    let mut packages = Vec::new();
+    let mut nodes = Vec::new();
+    for i in 0..count {
+        let next = (i + 1) % count;
+        packages.push(serde_json::json!({
+            "id": id(i), "name": format!("p{i}"), "version": "1.0.0", "source": null,
+            "features": {"f": []},
+            "dependencies": [{"name": format!("p{next}"), "features": ["f"]}]
+        }));
+        nodes.push(serde_json::json!({
+            "id": id(i), "features": ["f"],
+            "deps": [{"name": format!("p{next}"), "pkg": id(next),
+                      "dep_kinds": [{"kind": null, "target": null}]}]
+        }));
+    }
+    let members: Vec<String> = (0..count).map(id).collect();
+    serde_json::json!({
+        "packages": packages, "workspace_members": members,
+        "resolve": {"root": null, "nodes": nodes}
+    })
+    .to_string()
+}
+
+#[test]
+fn a_wide_workspace_is_read_in_near_linear_time() {
+    // Root, member and dependent lookups were linear scans inside loops
+    // over every package: 100,000 members took minutes. 30,000 is enough
+    // to tell quadratic from linear.
+    let json = wide_workspace(30_000);
+    let started = std::time::Instant::now();
+    let graph = DepGraph::from_json(&json).unwrap();
+    assert!(graph.duplicates().is_empty());
+    assert!(graph.consolidation(&[DepKind::Normal]).is_empty());
+    let features = FeatureGraph::from_json(&json).unwrap();
+    let tree = FeatureTree::new(features, None).unwrap();
+    assert_eq!(tree.targets().len(), 30_000);
+    // What drawing every tree asks of the graph: each crate's requests.
+    for package in 0..30_000 {
+        assert_eq!(tree.graph().requests(package).len(), 1);
+    }
+    let elapsed = started.elapsed();
+    assert!(
+        elapsed < std::time::Duration::from_secs(10),
+        "took {elapsed:?}"
+    );
+}

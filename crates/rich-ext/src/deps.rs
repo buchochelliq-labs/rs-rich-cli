@@ -258,6 +258,22 @@ pub struct DepGraph {
     deps: Vec<Vec<Dep>>,
     roots: Vec<usize>,
     members: Vec<usize>,
+    /// Per package, whether it is one of `roots` / `members`: the walks
+    /// ask for every package, and a scan of the lists each time is
+    /// quadratic in a large workspace.
+    is_root: Vec<bool>,
+    is_member: Vec<bool>,
+}
+
+/// `indices` as one flag per package.
+fn flags(count: usize, indices: &[usize]) -> Vec<bool> {
+    let mut flags = vec![false; count];
+    for &index in indices {
+        if let Some(flag) = flags.get_mut(index) {
+            *flag = true;
+        }
+    }
+    flags
 }
 
 impl DepGraph {
@@ -370,6 +386,8 @@ impl DepGraph {
             }
         };
         Ok(DepGraph {
+            is_root: flags(packages.len(), &roots),
+            is_member: flags(packages.len(), &members),
             packages,
             deps,
             roots,
@@ -395,11 +413,17 @@ impl DepGraph {
 
     /// Whether `package` is a workspace member.
     pub fn is_member(&self, package: usize) -> bool {
-        self.members.contains(&package)
+        self.is_member.get(package).copied().unwrap_or(false)
+    }
+
+    /// Whether `package` is one of the [`roots`](Self::roots).
+    pub fn is_root(&self, package: usize) -> bool {
+        self.is_root.get(package).copied().unwrap_or(false)
     }
 
     /// Show these packages as the roots instead.
     pub fn set_roots(&mut self, roots: Vec<usize>) {
+        self.is_root = flags(self.packages.len(), &roots);
         self.roots = roots;
     }
 
@@ -414,7 +438,7 @@ impl DepGraph {
             if std::mem::replace(&mut seen[package], true) {
                 continue;
             }
-            let root = self.roots.contains(&package);
+            let root = self.is_root(package);
             for dep in &self.deps[package] {
                 if self.follows(dep, root, kinds) {
                     stack.push(dep.package);
@@ -486,7 +510,7 @@ impl DepGraph {
             if !reachable[from] {
                 continue;
             }
-            let root = self.roots.contains(&from);
+            let root = self.is_root(from);
             for dep in deps {
                 let used: Vec<DepKind> = dep
                     .kinds
@@ -518,7 +542,7 @@ impl DepGraph {
                 break;
             }
             let top = *path.last().expect("paths are never empty");
-            if self.roots.contains(&top) {
+            if self.is_root(top) {
                 let mut found = path.clone();
                 found.reverse();
                 paths.push(found);
@@ -790,7 +814,7 @@ impl DepTree {
         let count = self.graph.packages.len();
         let mut dependents: Vec<Vec<usize>> = vec![Vec::new(); count];
         for (from, deps) in self.graph.deps.iter().enumerate() {
-            let root = self.graph.roots.contains(&from);
+            let root = self.graph.is_root(from);
             for dep in deps {
                 if self.graph.follows(dep, root, &self.kinds) {
                     dependents[dep.package].push(from);
@@ -1019,7 +1043,7 @@ impl WhyTree {
         console: &Console,
     ) -> Tree {
         let parents = &dependents[package];
-        let root = self.graph.roots.contains(&package);
+        let root = self.graph.is_root(package);
         let repeated = !parents.is_empty() && !root && !shown.insert(package);
         let mut text = label(&self.graph, package, duplicates, repeated, console);
         if let Some(kinds) = via.filter(|kinds| !kinds.contains(&DepKind::Normal)) {

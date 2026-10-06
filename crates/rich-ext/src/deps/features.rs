@@ -152,6 +152,11 @@ pub struct FeatureRequest {
 pub struct FeatureGraph {
     crates: Vec<CrateFeatures>,
     members: Vec<usize>,
+    /// Per crate, whether it is a member: sorting and drawing ask for each.
+    is_member: Vec<bool>,
+    /// Per crate, the crates that resolved to it, in index order: what
+    /// [`requests`](Self::requests) reads instead of scanning every crate.
+    dependents: Vec<Vec<usize>>,
 }
 
 fn strings(value: Option<&Value>) -> Vec<String> {
@@ -282,7 +287,26 @@ impl FeatureGraph {
             crates[at].enabled = enabled;
             crates[at].resolved = resolved;
         }
-        Ok(FeatureGraph { crates, members })
+        let mut is_member = vec![false; crates.len()];
+        for &member in &members {
+            is_member[member] = true;
+        }
+        let mut dependents: Vec<Vec<usize>> = vec![Vec::new(); crates.len()];
+        for (dependent, krate) in crates.iter().enumerate() {
+            for &(_, package) in &krate.resolved {
+                // Dependents are visited in order, so one that resolves to
+                // `package` twice (renamed) would be the last pushed.
+                if dependents[package].last() != Some(&dependent) {
+                    dependents[package].push(dependent);
+                }
+            }
+        }
+        Ok(FeatureGraph {
+            crates,
+            members,
+            is_member,
+            dependents,
+        })
     }
 
     /// Every crate, in `cargo metadata`'s order.
@@ -317,7 +341,8 @@ impl FeatureGraph {
     pub fn requests(&self, package: usize) -> Vec<FeatureRequest> {
         let target = &self.crates[package];
         let mut requests = Vec::new();
-        for (dependent, krate) in self.crates.iter().enumerate() {
+        for &dependent in &self.dependents[package] {
+            let krate = &self.crates[dependent];
             let names: BTreeSet<&str> = krate
                 .resolved
                 .iter()
@@ -398,8 +423,8 @@ impl FeatureTree {
                 let featureless = graph.crates.len() - targets.len();
                 targets.sort_by(|&a, &b| {
                     let (x, y) = (&graph.crates[a], &graph.crates[b]);
-                    (!graph.members.contains(&a), &x.name)
-                        .cmp(&(!graph.members.contains(&b), &y.name))
+                    (!graph.is_member[a], &x.name)
+                        .cmp(&(!graph.is_member[b], &y.name))
                         .then_with(|| compare_versions(&x.version, &y.version))
                 });
                 (targets, featureless)
@@ -425,7 +450,7 @@ impl FeatureTree {
     pub fn tree(&self, package: usize, console: &Console) -> Tree {
         let krate = &self.graph.crates[package];
         let mut label = Text::new("");
-        let name_style = if self.graph.members.contains(&package) {
+        let name_style = if self.graph.is_member[package] {
             theme_style(console, "deps.root")
         } else {
             theme_style(console, "deps.name")
