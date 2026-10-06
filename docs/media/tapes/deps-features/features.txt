@@ -1,0 +1,44 @@
+❯ rich deps --metadata metadata.json --features --package syn
+syn v1.0.109  7 features enabled
+├── default
+│   ├── derive
+│   ├── parsing
+│   ├── printing
+│   ├── proc-macro
+│   └── quote
+├── derive
+├── extra-traits
+├── parsing
+├── printing
+│   └── quote
+├── proc-macro
+│   ├── proc-macro2/proc-macro → proc-macro2 v1.0.86
+│   └── quote/proc-macro → quote v1.0.37
+├── quote
+│   └── dep:quote → quote v1.0.37
+└── requested by
+    └── strum_macros v0.25.3: default features, extra-traits, parsing
+
+syn v2.0.79  5 features enabled
+├── default
+│   ├── derive
+│   ├── parsing
+│   ├── printing
+│   └── proc-macro
+├── derive
+├── parsing
+├── printing
+│   └── dep:quote → quote v1.0.37
+├── proc-macro
+│   ├── proc-macro2/proc-macro → proc-macro2 v1.0.86
+│   └── quote?/proc-macro → quote v1.0.37
+└── requested by
+    ├── serde_derive v1.0.210: derive, parsing, printing, proc-macro
+    └── thiserror-impl v1.0.64: default features
+❯
+
+
+
+
+
+

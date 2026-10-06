@@ -142,6 +142,14 @@ code.
 
 [Charts guide](guide/ext/charts.md) · [`rich chart` recording](recordings.md#charts-from-data)
 
+### Data and schemas
+
+![rich profile describing each column of a CSV file](media/tapes/profile/profile.png)
+
+![rich schema --er drawing SQL tables as an ER diagram](media/tapes/schema/er.png)
+
+[`rich profile`](recordings.md#profile-a-data-file) and [`rich schema --er`](recordings.md#schemas-and-er-diagrams) recordings
+
 ### Diagrams
 
 ![A service graph drawn as text](media/guide/guide_diagram-services.svg)
@@ -150,7 +158,11 @@ code.
 
 ![rich deps drawing a dependency graph](media/tapes/deps/graph.png)
 
-[Diagrams guide](guide/diagram/index.md) · [Dependencies and schemas](guide/ext/sources.md) · [`rich deps`](recordings.md#dependency-trees) and [DOT in Markdown](recordings.md#dot-in-markdown) recordings
+![rich deps --features showing who turned a crate's features on](media/tapes/deps-features/features.png)
+
+![rich diff --conflicts showing ours, base and theirs side by side](media/tapes/conflicts/conflicts.png)
+
+[Diagrams guide](guide/diagram/index.md) · [Dependencies and schemas](guide/ext/sources.md) · [`rich deps`](recordings.md#dependency-trees), [`rich deps --features`](recordings.md#crate-features), [`rich diff --conflicts`](recordings.md#merge-conflicts) and [DOT in Markdown](recordings.md#dot-in-markdown) recordings
 
 ### Images
 

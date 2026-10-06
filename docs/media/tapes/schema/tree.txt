@@ -1,0 +1,30 @@
+❯ rich schema shop.sql
+shop.sql  4 tables
+├── customers  table
+│   ├── id (required)  BIGINT  primary key
+│   ├── email (required)  VARCHAR(255)  unique
+│   └── name  TEXT
+├── products  table
+│   ├── sku (required)  VARCHAR(32)  primary key
+│   ├── title (required)  TEXT
+│   └── price (required)  NUMERIC(10, 2)
+├── orders  table
+│   ├── id (required)  BIGINT  primary key
+│   ├── customer_id (required)  BIGINT  → customers.id
+│   ├── status  VARCHAR(16)  default='new'
+│   └── placed_at (required)  TIMESTAMP WITH TIME ZONE
+└── order_lines  table  primary key (order_id, sku)
+    ├── order_id (required)  BIGINT  → orders.id
+    ├── sku (required)  VARCHAR(32)  → products.sku
+    └── quantity (required)  INT  default=1
+
+shop.sql: line 11: products.price: CHECK constraint skipped
+shop.sql: line 28: CREATE INDEX statement skipped
+❯
+
+
+
+
+
+
+
