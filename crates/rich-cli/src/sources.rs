@@ -660,17 +660,49 @@ fn schema_file(cli: &Cli, resource: &str) -> Result<(LoadedSchema, SchemaSource)
         Some(format) => format == SchemaFormat::Sql,
         None => looks_like_sql(&content),
     };
+    // `--sanitize`: the name, and the text's names and strings, show
+    // terminal controls as inert text.
+    let name = if cli.sanitize {
+        sanitize_terminal_controls(&name)
+    } else {
+        name
+    };
     if sql {
+        let content = if cli.sanitize {
+            // A line break stays one (CR would show as `␍` in a name).
+            sanitize_terminal_controls(&content.replace("\r\n", "\n"))
+        } else {
+            content
+        };
         let parsed = rich_ext::schema::sql::parse(&content)
             .map_err(|err| (ExitClass::Data, format!("{resource}: {err}")))?;
         let notes = parsed.notes.iter().map(ToString::to_string).collect();
         let schema = LoadedSchema::Model(parsed.schema);
         return Ok((schema, SchemaSource { name, notes }));
     }
-    let value = rich_ext::schema::parse(&content)
+    let mut value = rich_ext::schema::parse(&content)
         .map_err(|err| (ExitClass::Data, format!("{resource}: {err}")))?;
+    if cli.sanitize {
+        sanitize_json_schema(&mut value);
+    }
     let notes = Vec::new();
     Ok((LoadedSchema::Json(value), SchemaSource { name, notes }))
+}
+
+/// Terminal controls in a JSON Schema's strings and keys (property names)
+/// as inert text, for `--sanitize`.
+fn sanitize_json_schema(value: &mut serde_json::Value) {
+    match value {
+        serde_json::Value::String(text) => *text = sanitize_terminal_controls(text),
+        serde_json::Value::Array(values) => values.iter_mut().for_each(sanitize_json_schema),
+        serde_json::Value::Object(map) => {
+            for (key, mut value) in std::mem::take(map) {
+                sanitize_json_schema(&mut value);
+                map.insert(sanitize_terminal_controls(&key), value);
+            }
+        }
+        _ => {}
+    }
 }
 
 /// An Arrow IPC file's schema, in the model.

@@ -144,6 +144,51 @@ fn a_pipe_named_as_a_file_is_read_whole() {
     assert!(out.contains("customer_id (required)  BIGINT"), "{out}");
 }
 
+/// `--sanitize` covers file text, but `rich schema` reads its files itself
+/// and skipped it: a name's escapes reached the terminal.
+#[test]
+fn sanitize_covers_schema_files() {
+    let dir = dir();
+    let write = |name: &str, text: &str| std::fs::write(dir.path().join(name), text).unwrap();
+    write(
+        "evil.sql",
+        "CREATE TABLE \"t\x1b[2J\" (\"c\x1b]0;title\x07\" INT REFERENCES \"t\x1b[2J\");\r\n",
+    );
+    write("evil2.sql", "CREATE TABLE \"t\x1b[2J\" (d INT);\r\n");
+    write(
+        "evil.json",
+        r#"{"title": "s\u001b[2J", "properties": {"k\u001b]0;x\u0007": {"type": "string", "description": "d\u001b[31m"}}}"#,
+    );
+    write(
+        "evil2.json",
+        r#"{"title": "s\u001b[2J", "properties": {"k\u001b]0;x\u0007": {"type": "integer"}}}"#,
+    );
+    for args in [
+        &["--sanitize", "schema", "evil.sql"][..],
+        &["--sanitize", "schema", "evil.sql", "evil2.sql"],
+        &["--sanitize", "schema", "evil.json"],
+        &["--sanitize", "schema", "evil.json", "evil2.json"],
+        &["--sanitize", "schema", "evil.json", "evil.sql"],
+    ] {
+        let out = stdout(&run_in(dir.path(), args, ""));
+        assert!(
+            !out.contains('\x1b') && !out.contains('\x07'),
+            "{args:?}: {out:?}"
+        );
+        assert!(out.contains('␛'), "{args:?}: {out}");
+    }
+    let out = stdout(&run_in(
+        dir.path(),
+        &["--sanitize", "schema", "evil.sql"],
+        "",
+    ));
+    assert!(out.contains("t␛[2J  table"), "{out}");
+    assert!(out.contains("c␛]0;title␇  INT  → t␛[2J"), "{out}");
+    // Without it, the upstream-like default keeps them, as for any file.
+    let out = stdout(&run_in(dir.path(), &["schema", "evil.sql"], ""));
+    assert!(out.contains("t\x1b[2J"), "{out:?}");
+}
+
 #[test]
 fn unreadable_ddl_exits_4_with_its_line() {
     let dir = dir();
