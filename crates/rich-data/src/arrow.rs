@@ -2,11 +2,20 @@
 //! format-neutral model (the `arrow` feature).
 //!
 //! [`schema`] maps an Arrow schema into [`Schema`]: integers of every width
-//! are `integer`, `Decimal*(p, s)` is `decimal(p,s)`, dictionaries take
-//! their value type, lists, structs and maps nest, and each field keeps
-//! Arrow's own type name as its [native type](Field::native_type). Types the
-//! model has no name for (times, durations, intervals, unions) are
-//! `unknown`, with the native type saying what they are.
+//! are `integer`, `Decimal*(p, s)` is `decimal(p,s)`, timestamps keep their
+//! time zone, dictionaries (and run-end encoded arrays) take their value
+//! type, and lists, structs and maps nest. Each field keeps Arrow's own
+//! type name as its [native type](Field::native_type) (`Int32`,
+//! `Timestamp(ms, "UTC")`, `Dictionary(Int32, Utf8)`; `List`, `Struct` and
+//! `Map` for nested types, whose children say the rest), is
+//! [required](Field::is_required) when it is not nullable, and carries its
+//! metadata, sorted by key. Types the model has no name for (times,
+//! durations, intervals, unions) are `unknown`, with the native type saying
+//! what they are.
+//!
+//! The schema explorer (#342): [`tree`] draws an Arrow schema as a
+//! [`SchemaTree`], and [`diff`] compares two as a [`SchemaDiff`], fields
+//! added, removed and changed with breaking changes marked.
 //!
 //! [`rows`] reads one batch, and [`BatchSource`] streams many. Cells are
 //! [`Value::Int`] and [`Value::Float`] for numbers (a `UInt64` past
@@ -46,19 +55,119 @@ use arrow_array::{Array, RecordBatch};
 use arrow_schema::{DataType as Arrow, Field as ArrowField, TimeUnit};
 use serde_json::{Map, Value as Json};
 
+use rich_ext::schema::{SchemaDiff, SchemaTree};
+
 use crate::record::MAX_DEPTH;
 use crate::{DataError, DataType, Field, Row, RowSource, Rows, Schema, Value};
 
-/// An Arrow schema in the format-neutral model.
+/// An Arrow schema in the format-neutral model, with its metadata.
 pub fn schema(schema: &arrow_schema::Schema) -> Schema {
-    Schema::new(schema.fields().iter().map(|f| field(f, 0)))
+    let mut model = Schema::new(schema.fields().iter().map(|f| field(f, 0)));
+    for (key, value) in sorted(schema.metadata()) {
+        model = model.with_metadata(key, value);
+    }
+    model
 }
 
 /// One Arrow field in the model.
 pub fn field(field: &ArrowField, depth: usize) -> Field {
-    Field::new(field.name().clone(), data_type(field.data_type(), depth))
+    let mut model = Field::new(field.name().clone(), data_type(field.data_type(), depth))
         .nullable(field.is_nullable())
-        .with_native_type(field.data_type().to_string())
+        .required(!field.is_nullable())
+        .with_native_type(native_type(field.data_type()));
+    for (key, value) in sorted(field.metadata()) {
+        model = model.with_metadata(key, value);
+    }
+    model
+}
+
+/// Metadata in key order, so the model (and what draws it) is the same
+/// every time.
+fn sorted<'a>(
+    metadata: impl IntoIterator<Item = (&'a String, &'a String)>,
+) -> Vec<(&'a String, &'a String)> {
+    let mut entries: Vec<(&String, &String)> = metadata.into_iter().collect();
+    entries.sort();
+    entries
+}
+
+/// Arrow's name for a type: its own for scalars, and only the kind for
+/// nested types (`List`, `FixedSizeList(3)`, `Struct`, `Map`), whose
+/// children are fields of their own.
+pub fn native_type(arrow: &Arrow) -> String {
+    match arrow {
+        Arrow::List(_) => "List".into(),
+        Arrow::LargeList(_) => "LargeList".into(),
+        Arrow::ListView(_) => "ListView".into(),
+        Arrow::LargeListView(_) => "LargeListView".into(),
+        Arrow::FixedSizeList(_, size) => format!("FixedSizeList({size})"),
+        Arrow::Struct(_) => "Struct".into(),
+        Arrow::Map(_, sorted) if *sorted => "Map(sorted)".into(),
+        Arrow::Map(..) => "Map".into(),
+        Arrow::Dictionary(key, values) if values.is_nested() => {
+            format!("Dictionary({key}, {})", native_type(values))
+        }
+        Arrow::RunEndEncoded(ends, values) if values.data_type().is_nested() => format!(
+            "RunEndEncoded({}, {})",
+            ends.data_type(),
+            native_type(values.data_type())
+        ),
+        other => other.to_string(),
+    }
+}
+
+/// An Arrow schema drawn as a tree: each field with its Arrow type,
+/// `(required)` when it is not nullable, and its metadata; nested fields
+/// under their parents.
+///
+/// ```
+/// use arrow_schema::{DataType, Field, Schema, TimeUnit};
+/// use rich::Console;
+///
+/// let schema = Schema::new(vec![
+///     Field::new("id", DataType::Int64, false),
+///     Field::new("at", DataType::Timestamp(TimeUnit::Millisecond, Some("UTC".into())), true),
+///     Field::new("tags", DataType::new_list(DataType::Utf8, true), true),
+/// ]);
+/// let console = Console::builder().width(60).color_system(None).build();
+/// assert_eq!(
+///     console.render_to_string(&rich_data::arrow::tree(&schema)),
+///     "schema  3 fields\n\
+///      ├── id (required)  Int64\n\
+///      ├── at  Timestamp(ms, \"UTC\")\n\
+///      └── tags  List\n    \
+///          └── item  Utf8"
+/// );
+/// ```
+pub fn tree(arrow: &arrow_schema::Schema) -> SchemaTree {
+    SchemaTree::from_model(schema(arrow))
+}
+
+/// What changed between two Arrow schemas: fields added and removed, type
+/// changes, fields that became (or stopped being) nullable, and metadata,
+/// with breaking changes marked.
+///
+/// ```
+/// use arrow_schema::{DataType, Field, Schema};
+///
+/// let old = Schema::new(vec![Field::new("id", DataType::Int32, true)]);
+/// let new = Schema::new(vec![
+///     Field::new("id", DataType::Int64, false),
+///     Field::new("name", DataType::Utf8, true),
+/// ]);
+/// let diff = rich_data::arrow::diff(&old, &new);
+/// let lines: Vec<String> = diff
+///     .changes()
+///     .iter()
+///     .map(|c| format!("{} {} {}{}", c.kind.marker(), c.path, c.detail, if c.breaking { " !" } else { "" }))
+///     .collect();
+/// assert_eq!(
+///     lines,
+///     ["~ id became required !", "~ id type Int32 → Int64 !", "+ name field added (Utf8)"]
+/// );
+/// ```
+pub fn diff(old: &arrow_schema::Schema, new: &arrow_schema::Schema) -> SchemaDiff {
+    SchemaDiff::models(&schema(old), &schema(new))
 }
 
 /// One Arrow type in the model.
