@@ -48,6 +48,50 @@ assert!(problems.is_empty(), "{problems:?}");
 # Ok::<(), Box<dyn std::error::Error>>(())
 ```
 
+## Using the recorder without the CLI
+
+The `rich record` command ships with `rs-rich-cli`; this crate is the library
+behind it, and needs nothing else. A program that records a tape and writes
+the files its `Output` lines ask for:
+
+```toml
+[dependencies]
+rs-rich-record = "0.0.4"
+```
+
+```rust,no_run
+use rich_record::record::{self, Formats, Options};
+use rich_record::render::raster::Fonts;
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let tape = rich_record::tape::parse(&std::fs::read_to_string("demo.tape")?)?;
+    let recording = record::record(&tape, "demo", &Options::default())?;
+    // The tape's `Output` formats (all of them if it has none); `Formats::ALL`
+    // adds no further limit. `record::write` instead takes formats as given.
+    let written = record::write_selected(
+        &recording,
+        "media/demo".as_ref(),
+        "demo",
+        Formats::ALL,
+        &Fonts::embedded(),
+        &Default::default(),
+        None,
+    )?;
+    for path in &written.paths {
+        println!("wrote {}", path.display());
+    }
+    // An MP4 needs FFmpeg: without it the write succeeds and lists the video
+    // here, so check before relying on it.
+    if !written.is_complete() {
+        for skipped in &written.skipped {
+            eprintln!("skipped {}: {}", skipped.path.display(), skipped.reason);
+        }
+        std::process::exit(1);
+    }
+    Ok(())
+}
+```
+
 From the shell, the `rich` CLI (`rs-rich-cli`) has `rich record TAPE…`.
 
 Linux and macOS are supported. Windows builds through ConPTY but needs `bash`

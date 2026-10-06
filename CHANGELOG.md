@@ -9,6 +9,23 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Recorder: write what the tape asks for, and say what was skipped
+
+From integration feedback on `rs-rich-record` 0.0.3 as a library:
+
+- `rs-rich-record`: `record::write_selected` writes the files a tape's
+  `Output` lines ask for (`Recording::formats` applied for you), so
+  passing `Formats::ALL` honours `Output png` instead of writing every
+  format. It returns `Written` (`formats`, `paths`, `skipped`, and
+  `is_complete()`): an MP4 the selection calls for but FFmpeg is missing
+  for is listed in `skipped` rather than silently absent. `record::write`
+  is unchanged and now says that it takes formats as given.
+- The crate docs' example used `Formats::ALL` with `write`, the mistake
+  above; it now uses `write_selected`. The README gains a standalone
+  `Cargo.toml` and `main.rs` for using the recorder without the CLI.
+- `rich record` writes through `write_selected`; its output, including
+  "ffmpeg not found: skipped …", is unchanged.
+
 ### Tabular foundation (0.0.16 workstream 1)
 
 [Plan](docs/plans/0.0.16.md), #214, #215, #261, #267.
