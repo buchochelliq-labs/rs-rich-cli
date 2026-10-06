@@ -128,6 +128,7 @@ fn command_options(name: &str) -> Vec<ArgSpec> {
         "ansi" => &["ansi-inline", "escapes-only"],
         "diff" => &[
             "side-by-side",
+            "conflicts",
             "context",
             "language",
             "threshold",
@@ -216,6 +217,13 @@ fn diff_options() -> Vec<ArgSpec> {
             "side-by-side",
             DIFF,
             "With a text --diff, show old and new in two columns",
+        ),
+        flag(
+            "conflicts",
+            DIFF,
+            "With --diff, show the merge conflicts left in one FILE: numbered, ours, base \
+             and theirs side by side when the width allows, with context; exits 0 either way \
+             and 4 when the markers do not parse",
         ),
         option(
             "context",

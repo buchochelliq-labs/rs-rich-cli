@@ -175,6 +175,7 @@ Choose at most one; the default auto-detects .md/.rst/.json/.csv/.tsv/.ipynb, .m
 | Option | Description |
 | --- | --- |
 | `--side-by-side` | With a text --diff, show old and new in two columns. |
+| `--conflicts` | With --diff, show the merge conflicts left in one FILE: numbered, ours, base and theirs side by side when the width allows, with context; exits 0 either way and 4 when the markers do not parse. |
 | `--context <N>` | With a text --diff, unchanged lines around each change. Default: `3`. |
 | `--language <NAME>` | With a text --diff, highlight as this language instead of guessing from the file name. |
 | `--ansi-inline` | With --ansi-explain, mark escapes inline in the text instead of a table. |
@@ -525,6 +526,7 @@ rich diff [OPTIONS] [RESOURCE]
 | Option | Description |
 | --- | --- |
 | `--side-by-side` | With a text --diff, show old and new in two columns. |
+| `--conflicts` | With --diff, show the merge conflicts left in one FILE: numbered, ours, base and theirs side by side when the width allows, with context; exits 0 either way and 4 when the markers do not parse. |
 | `--context <N>` | With a text --diff, unchanged lines around each change. Default: `3`. |
 | `--language <NAME>` | With a text --diff, highlight as this language instead of guessing from the file name. |
 

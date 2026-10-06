@@ -35,6 +35,30 @@ fn the_explorer_starts_folded_below_the_root() {
 }
 
 #[test]
+fn the_branch_hook_opens_a_nested_value_by_path() {
+    use rich_ext::data::OpenBranch;
+
+    let mut explorer = explorer();
+    let path = |s: &str| s.parse().unwrap();
+    // `users[1]` opens with `users` above it.
+    assert!(explorer.open_branch(&path("users[1]")));
+    assert!(!explorer.open_branch(&path("debug")), "a scalar");
+    assert!(!explorer.open_branch(&path("users[9]")), "missing");
+    let (_, record) = headless::run(explorer, Script::new().keys("escape"), 60, 14);
+    let first = &record.frames[0];
+    assert!(first.contains("▾ users: […] 2 items"), "{first}");
+    assert!(first.contains("name: \"grace\""), "{first}");
+    assert!(!first.contains("name: \"ada\""), "{first}");
+    assert!(!first.contains("host"), "still folded: {first}");
+
+    let mut explorer = self::explorer();
+    assert!(explorer.open_branch(&path("server")));
+    assert!(explorer.close_branch(&path("server")));
+    let (_, record) = headless::run(explorer, Script::new().keys("escape"), 60, 14);
+    assert!(!record.frames[0].contains("host"), "{}", record.frames[0]);
+}
+
+#[test]
 fn right_expands_and_the_breadcrumbs_follow_the_cursor() {
     let script = Script::new().keys("down right down down enter");
     let (outcome, record) = headless::run(explorer(), script, 60, 14);

@@ -10,7 +10,9 @@ use std::time::Duration;
 
 use rich::measure::Measurement;
 use rich::{Console, ConsoleOptions, Renderable, Segment};
-use rich_ext::data::{copy_text, display_value, Explorer, Node, Path, PathSegment, Value};
+use rich_ext::data::{
+    copy_text, display_value, Explorer, Node, OpenBranch, Path, PathSegment, Value,
+};
 
 use crate::clipboard;
 use crate::component::{Component, Context, Flow, View};
@@ -93,6 +95,29 @@ impl Shape {
 
     fn path(&self, index: usize) -> Path {
         self.node(index).0
+    }
+
+    /// The index of the node at `path`, stepping down from the root. A
+    /// node's children follow it in the list, so each step scans forward
+    /// from its parent.
+    fn index_of(&self, path: &Path) -> Option<usize> {
+        let mut index = 0;
+        let mut node: &Node = &self.root;
+        for segment in path.segments() {
+            let (position, child) = match (&node.value, segment) {
+                (Value::Seq(items), PathSegment::Index(i)) => (*i, items.get(*i)?),
+                (Value::Map(entries), PathSegment::Key(key)) => entries
+                    .iter()
+                    .enumerate()
+                    .find(|(_, (k, _))| k == key)
+                    .map(|(i, (_, child))| (i, child))?,
+                _ => return None,
+            };
+            index = (index + 1..self.parents.len())
+                .find(|&j| self.parents[j] == Some(index) && self.positions[j] == position)?;
+            node = child;
+        }
+        Some(index)
     }
 }
 
@@ -338,6 +363,52 @@ impl DataExplorer {
         let result = clipboard::copy(copy_text(self.shape.node(index).1));
         self.tree
             .set_status(Some(clipboard::report("value", &result)));
+    }
+}
+
+/// The drill-down hook shared with [`rich_ext::data::RecordView`]: open or
+/// fold a branch by its path, as if the user had pressed Right or Left on
+/// it. Opening a branch opens every container above it too.
+///
+/// ```
+/// use rich_ext::data::{parse, Format, OpenBranch};
+/// use rich_interact::components::DataExplorer;
+///
+/// let node = parse(Format::Json, r#"{"a": {"b": {"c": 1}}}"#).unwrap();
+/// let mut explorer = DataExplorer::new("doc", node);
+/// assert!(explorer.open_branch(&"a.b".parse().unwrap()));
+/// assert!(!explorer.open_branch(&"a.b.c".parse().unwrap()));
+/// ```
+impl OpenBranch for DataExplorer {
+    fn open_branch(&mut self, path: &Path) -> bool {
+        let Some(index) = self.branch_index(path) else {
+            return false;
+        };
+        let mut at = Some(index);
+        while let Some(index) = at {
+            self.tree.set_collapsed(index, false);
+            at = self.shape.parents[index];
+        }
+        true
+    }
+
+    fn close_branch(&mut self, path: &Path) -> bool {
+        let Some(index) = self.branch_index(path) else {
+            return false;
+        };
+        self.tree.set_collapsed(index, true);
+        true
+    }
+}
+
+impl DataExplorer {
+    /// The index of the non-empty container at `path`.
+    fn branch_index(&self, path: &Path) -> Option<usize> {
+        self.shape
+            .root
+            .at(path)
+            .filter(|node| node.is_container() && !node.is_empty())?;
+        self.shape.index_of(path)
     }
 }
 
