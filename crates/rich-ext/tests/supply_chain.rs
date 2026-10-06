@@ -161,6 +161,86 @@ fn licences_group_and_mark_copyleft_and_missing() {
     check("licenses", &plain(100, &report), 100);
 }
 
+/// Rendered in colour with links, so a control sequence smuggled into a
+/// link shows as well as one in the text.
+fn coloured(renderable: &dyn Renderable) -> String {
+    Console::builder()
+        .width(160)
+        .color_system(Some(rich::ColorSystem::Truecolor))
+        .build()
+        .render_to_string(renderable)
+}
+
+/// Whether `out` holds an escape sequence other than the SGR colours and
+/// the OSC 8 links the console writes itself.
+fn smuggled(out: &str) -> Option<String> {
+    let mut rest = out;
+    while let Some(at) = rest.find('\u{1b}') {
+        let tail = &rest[at..];
+        let sgr = tail.strip_prefix("\u{1b}[").and_then(|t| {
+            let end = t.find(|c: char| !(c.is_ascii_digit() || c == ';'))?;
+            (t[end..].starts_with('m')).then_some(2 + end + 1)
+        });
+        let link = tail.strip_prefix("\u{1b}]8;").and_then(|t| {
+            // `ESC ] 8 ; params ; URL ESC \`: the URL may hold no control.
+            let end = t.find("\u{1b}\\")?;
+            (!t[..end].contains(|c: char| c.is_control())).then_some(4 + end + 2)
+        });
+        match sgr.or(link) {
+            Some(skip) => rest = &tail[skip..],
+            None => return Some(tail.chars().take(24).collect()),
+        }
+    }
+    out.contains(['\u{7}', '\u{9b}'])
+        .then(|| "a BEL or CSI".to_string())
+}
+
+#[test]
+fn hostile_report_text_cannot_reach_the_terminal() {
+    // An advisory's id, title, package and link, a timing unit's name and
+    // target, and a licence expression are text from a file; each carries
+    // a title change (OSC 0), a screen clear, and a link that closes early.
+    let evil = r"\u001b]0;pwned\u0007\u001b[2J\u009b31m";
+    let audit = format!(
+        r#"{{"vulnerabilities": {{"list": [{{
+            "advisory": {{"id": "RUSTSEC-1{evil}", "title": "t{evil}",
+              "url": "https://x/\u001b\\\u001b]0;evil\u0007", "aliases": ["CVE{evil}"]}},
+            "versions": {{"patched": [">=1{evil}"]}},
+            "package": {{"name": "p{evil}", "version": "1{evil}"}}}}]}},
+          "warnings": {{}}}}"#
+    );
+    let report = AdvisoryReport::from_cargo_audit(&audit).unwrap();
+    let timings = Timings::parse(&format!(
+        r#"[{{"name": "n{evil}", "version": "1{evil}", "target": "t{evil}", "duration": 1.0}}]"#
+    ))
+    .unwrap();
+    let metadata = format!(
+        r#"{{"packages": [
+            {{"id": "a 1.0.0", "name": "a{evil}", "version": "1.0.0{evil}",
+              "license": "MIT AND {evil}", "source": null,
+              "features": {{"f{evil}": ["dep:b{evil}"]}}, "dependencies": []}}],
+          "workspace_members": ["a 1.0.0"],
+          "resolve": {{"root": null, "nodes": [
+            {{"id": "a 1.0.0", "features": ["f{evil}"], "deps": []}}]}}}}"#
+    );
+    let licenses = LicenseReport::from_json(&metadata).unwrap();
+    let features = FeatureTree::new(FeatureGraph::from_json(&metadata).unwrap(), None).unwrap();
+    let tree = DepTree::new(DepGraph::from_json(&metadata).unwrap());
+    let renderables: [(&str, &dyn Renderable); 5] = [
+        ("audit", &report),
+        ("timings", &TimingsReport::new(timings)),
+        ("licenses", &licenses),
+        ("features", &features),
+        ("tree", &tree),
+    ];
+    for (name, renderable) in renderables {
+        let out = coloured(renderable);
+        assert_eq!(smuggled(&out), None, "{name}: {out:?}");
+        // What was there still shows, as visible text.
+        assert!(out.contains('␛'), "{name}: {out:?}");
+    }
+}
+
 /// `cargo metadata` for `count` workspace members, each with one feature
 /// enabled and a dependency on the next, so every crate is a root, a
 /// member, a dependent and a feature tree.

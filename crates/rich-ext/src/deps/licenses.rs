@@ -35,7 +35,7 @@ use rich::table::Table;
 use rich::{Console, ConsoleOptions, Justify, Renderable, Segment, Text};
 use serde_json::Value;
 
-use super::{check_count, compare_versions, stack, stack_measure, theme_style, DepsError};
+use super::{check_count, clean, compare_versions, stack, stack_measure, theme_style, DepsError};
 
 /// The longest licence expression read, in bytes; longer is
 /// [`LicenseClass::Invalid`].
@@ -356,7 +356,7 @@ impl LicensedPackage {
 
     /// `name v1.2.3`.
     pub fn display(&self) -> String {
-        format!("{} v{}", self.name, self.version)
+        format!("{} v{}", clean(&self.name), clean(&self.version))
     }
 }
 
@@ -523,7 +523,7 @@ impl LicenseReport {
             }
             let style = theme_style(console, group.class.style_key());
             table.add_row_text(vec![
-                Text::styled(group.license.clone(), style.clone()),
+                Text::styled(clean(&group.license).into_owned(), style.clone()),
                 Text::new(group.packages.len().to_string()),
                 Text::new(names.join(", ")),
                 Text::styled(group.class.note(), style),

@@ -66,7 +66,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 use rich::{Console, ConsoleOptions, Renderable, Segment, Text, Tree};
 use serde_json::Value;
 
-use super::{check_count, compare_versions, stack, stack_measure, theme_style, DepsError};
+use super::{check_count, clean, compare_versions, stack, stack_measure, theme_style, DepsError};
 
 /// A dependency as a package's `Cargo.toml` declares it.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -116,7 +116,7 @@ pub struct CrateFeatures {
 impl CrateFeatures {
     /// `name v1.2.3`.
     pub fn display(&self) -> String {
-        format!("{} v{}", self.name, self.version)
+        format!("{} v{}", clean(&self.name), clean(&self.version))
     }
 
     fn is_enabled(&self, feature: &str) -> bool {
@@ -455,10 +455,10 @@ impl FeatureTree {
         } else {
             theme_style(console, "deps.name")
         };
-        label.append(&krate.name, Some(name_style.into()));
+        label.append(&clean(&krate.name), Some(name_style.into()));
         label.append(" ", None);
         label.append(
-            &format!("v{}", krate.version),
+            &format!("v{}", clean(&krate.version)),
             Some(theme_style(console, "deps.version").into()),
         );
         let count = krate.enabled.len();
@@ -471,7 +471,7 @@ impl FeatureTree {
         let mut tree = Tree::new(label);
         for feature in &krate.enabled {
             let mut node = Tree::new(Text::styled(
-                feature.clone(),
+                clean(feature).into_owned(),
                 theme_style(console, "deps.feature"),
             ));
             match krate.definitions.get(feature) {
@@ -520,7 +520,7 @@ impl FeatureTree {
         };
         let mut text = Text::new("");
         if let Some(key) = entry.strip_prefix("dep:") {
-            text.append(entry, None);
+            text.append(&clean(entry), None);
             match krate.resolved_dep(key) {
                 Some(package) => arrow(&mut text, package),
                 None => off(&mut text),
@@ -528,8 +528,11 @@ impl FeatureTree {
         } else if let Some((key, feature)) = entry.split_once('/') {
             let weak = key.ends_with('?');
             let key = key.trim_end_matches('?');
-            text.append(&format!("{key}{}/", if weak { "?" } else { "" }), None);
-            text.append(feature, Some(feature_style.into()));
+            text.append(
+                &format!("{}{}/", clean(key), if weak { "?" } else { "" }),
+                None,
+            );
+            text.append(&clean(feature), Some(feature_style.into()));
             match krate.resolved_dep(key) {
                 Some(package) if self.graph.crates[package].is_enabled(feature) => {
                     arrow(&mut text, package)
@@ -537,13 +540,13 @@ impl FeatureTree {
                 _ => off(&mut text),
             }
         } else if krate.definitions.contains_key(entry) {
-            text.append(entry, Some(feature_style.into()));
+            text.append(&clean(entry), Some(feature_style.into()));
             if !krate.is_enabled(entry) {
                 off(&mut text);
             }
         } else {
             // A plain name that is no feature: an optional dependency.
-            text.append(entry, None);
+            text.append(&clean(entry), None);
             match krate.resolved_dep(entry) {
                 Some(package) => arrow(&mut text, package),
                 None => off(&mut text),
@@ -558,7 +561,7 @@ impl FeatureTree {
         if request.default_features && krate.definitions.contains_key("default") {
             asks.push("default features".into());
         }
-        asks.extend(request.features.iter().cloned());
+        asks.extend(request.features.iter().map(|f| clean(f).into_owned()));
         if !asks.is_empty() {
             text.append(": ", None);
             text.append(
@@ -573,11 +576,11 @@ impl FeatureTree {
         }
         for (theirs, ours) in by_feature {
             let mut text = Text::styled(
-                format!("its feature {theirs}: "),
+                format!("its feature {}: ", clean(theirs)),
                 theme_style(console, "deps.section"),
             );
             text.append(
-                &ours.join(", "),
+                &clean(&ours.join(", ")),
                 Some(theme_style(console, "deps.feature").into()),
             );
             tree.add(text);

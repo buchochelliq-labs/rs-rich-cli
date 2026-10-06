@@ -47,7 +47,7 @@ use std::collections::BTreeMap;
 
 use rich::{Console, ConsoleOptions, Renderable, Segment, Text, Tree};
 
-use super::{compare_versions, theme_style, DepGraph, DepKind};
+use super::{clean, compare_versions, theme_style, DepGraph, DepKind};
 
 /// The most dependents listed beside one version; the rest are counted.
 pub const MAX_LISTED: usize = 8;
@@ -214,7 +214,7 @@ impl Consolidation {
         let dependents = duplicate.dependent_count();
         let mut label = Text::new("");
         label.append(
-            &duplicate.name,
+            &clean(&duplicate.name),
             Some(theme_style(console, "deps.duplicate").into()),
         );
         let newest = if duplicate.shared == 0 {
@@ -233,7 +233,7 @@ impl Consolidation {
                 } else {
                     ""
                 },
-                shared.version,
+                clean(&shared.version),
             ),
             None,
         );
@@ -241,7 +241,7 @@ impl Consolidation {
         for version in &duplicate.versions {
             let mut text = Text::new("");
             text.append(
-                &format!("v{}", version.version),
+                &format!("v{}", clean(&version.version)),
                 Some(theme_style(console, "deps.version").into()),
             );
             let names: Vec<String> = version

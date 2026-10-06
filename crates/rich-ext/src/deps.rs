@@ -124,6 +124,19 @@ impl DepsError {
     }
 }
 
+/// `text` with terminal controls made visible
+/// ([`sanitize_terminal_controls`](crate::sanitize_terminal_controls)).
+/// The reports draw text read from files (an advisory's title, a licence
+/// expression, a crate's name in `--metadata FILE`), which must not retitle
+/// the terminal, clear it, or end a link early.
+pub(crate) fn clean(text: &str) -> std::borrow::Cow<'_, str> {
+    if text.contains(|c: char| c.is_control() && c != '\n' && c != '\t') {
+        std::borrow::Cow::Owned(crate::sanitize_terminal_controls(text))
+    } else {
+        std::borrow::Cow::Borrowed(text)
+    }
+}
+
 /// Refuse an input larger than [`MAX_INPUT`].
 pub(crate) fn check_size(input: &str, what: &str) -> Result<(), DepsError> {
     if input.len() > MAX_INPUT {
@@ -562,7 +575,7 @@ impl DepGraph {
     /// `name v1.2.3`.
     pub fn display(&self, package: usize) -> String {
         let package = &self.packages[package];
-        format!("{} v{}", package.name, package.version)
+        format!("{} v{}", clean(&package.name), clean(&package.version))
     }
 }
 
@@ -642,14 +655,17 @@ fn label(
     } else {
         theme_style(console, "deps.name")
     };
-    text.append(&info.name, Some(name_style.into()));
+    text.append(&clean(&info.name), Some(name_style.into()));
     text.append(" ", None);
     let version_style = if duplicate {
         theme_style(console, "deps.duplicate")
     } else {
         theme_style(console, "deps.version")
     };
-    text.append(&format!("v{}", info.version), Some(version_style.into()));
+    text.append(
+        &format!("v{}", clean(&info.version)),
+        Some(version_style.into()),
+    );
     if let Some(origin) = info.origin() {
         if !(origin == "(path)" && graph.is_member(package)) {
             text.append(" ", None);
@@ -738,12 +754,12 @@ impl DepTree {
             if index > 0 {
                 text.append("\n", None);
             }
-            let versions: Vec<String> = versions.iter().map(|v| format!("v{v}")).collect();
+            let versions: Vec<String> = versions.iter().map(|v| format!("v{}", clean(v))).collect();
             text.append(
                 "duplicate: ",
                 Some(theme_style(console, "deps.section").into()),
             );
-            text.append(name, Some(style.clone().into()));
+            text.append(&clean(name), Some(style.clone().into()));
             text.append(&format!(" {}", versions.join(", ")), None);
         }
         text

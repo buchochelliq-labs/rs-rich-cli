@@ -41,7 +41,7 @@ use rich::table::Table;
 use rich::{Console, ConsoleOptions, Justify, Renderable, Segment, Text};
 use serde_json::Value;
 
-use super::{check_count, check_size, stack, stack_measure, theme_style, DepsError};
+use super::{check_count, check_size, clean, stack, stack_measure, theme_style, DepsError};
 use crate::chart::{BarChart, ValueFormat};
 
 /// The slowest units [`TimingsReport`] shows by default.
@@ -360,7 +360,7 @@ impl TimingsReport {
             } else {
                 u.label()
             };
-            (label, u.duration)
+            (clean(&label).into_owned(), u.duration)
         }))
         .format(ValueFormat::Fixed(2))
     }
@@ -375,9 +375,9 @@ impl TimingsReport {
         let none = || Text::styled("–", theme_style(console, "deps.off"));
         for unit in shown {
             table.add_row_text(vec![
-                Text::new(unit.label()),
+                Text::new(clean(&unit.label()).into_owned()),
                 Text::styled(
-                    format!("v{}", unit.version),
+                    format!("v{}", clean(&unit.version)),
                     theme_style(console, "deps.version"),
                 ),
                 Text::new(secs(unit.duration)),
