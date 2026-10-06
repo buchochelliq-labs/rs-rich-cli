@@ -86,6 +86,10 @@ pub(crate) trait Node: Sized {
     fn nullable(&self) -> Option<bool> {
         None
     }
+    /// Whether a value must be present, for a node that knows it itself.
+    fn required_flag(&self) -> Option<bool> {
+        None
+    }
     /// Metadata entries.
     fn metadata(&self) -> Vec<(String, String)> {
         Vec::new()
@@ -245,6 +249,19 @@ impl Differ {
                 !widened,
             );
         }
+        // Nullability, where the type in words does not carry it (model
+        // fields; JSON Schema writes `| null` in the type). A field that also
+        // became (or stopped being) required is listed once, as that.
+        if let (Some(x), Some(y)) = (old.nullable(), new.nullable()) {
+            if x != y && old.required_flag() == new.required_flag() {
+                let detail = if y {
+                    "became nullable"
+                } else {
+                    "no longer nullable"
+                };
+                self.push(ChangeKind::Changed, path, detail.into(), !y);
+            }
+        }
         let (old_constraints, new_constraints) = (old.constraints(), new.constraints());
         self.compare_enum(&old_constraints, &new_constraints, path);
         self.compare_constraints(old, new, &old_constraints, &new_constraints, path, depth);
@@ -253,19 +270,7 @@ impl Differ {
         // Items.
         let at = format!("{path}[]");
         match (old.items(), new.items()) {
-            (Items::One(a), Items::One(b)) => {
-                if let (Some(x), Some(y)) = (a.nullable(), b.nullable()) {
-                    if x != y {
-                        let detail = if y {
-                            "became nullable"
-                        } else {
-                            "no longer nullable"
-                        };
-                        self.push(ChangeKind::Changed, &at, detail.into(), !y);
-                    }
-                }
-                self.compare(&a, &b, &at, depth + 1)
-            }
+            (Items::One(a), Items::One(b)) => self.compare(&a, &b, &at, depth + 1),
             (Items::None, Items::One(b)) => self.push(
                 ChangeKind::Added,
                 &at,
@@ -653,6 +658,10 @@ impl Node for FieldNode<'_> {
         Some(self.0.is_nullable())
     }
 
+    fn required_flag(&self) -> Option<bool> {
+        Some(self.0.is_required())
+    }
+
     fn metadata(&self) -> Vec<(String, String)> {
         self.0.metadata().to_vec()
     }
@@ -755,6 +764,43 @@ mod tests {
             ]
         );
         assert!(lines(&old, &old).is_empty());
+    }
+
+    #[test]
+    fn nullability_is_compared_for_every_field() {
+        let schema = |nullable: bool| {
+            Schema::new([
+                Field::new("x", DataType::String).nullable(nullable),
+                Field::new(
+                    "s",
+                    DataType::Struct(vec![Field::new("y", DataType::Integer).nullable(nullable)]),
+                ),
+                Field::new("m", DataType::map(DataType::String, DataType::Float))
+                    .nullable(nullable),
+            ])
+        };
+        assert_eq!(
+            lines(&schema(true), &schema(false)),
+            [
+                "~ x no longer nullable !",
+                "~ s.y no longer nullable !",
+                "~ m no longer nullable !",
+            ]
+        );
+        assert_eq!(
+            lines(&schema(false), &schema(true)),
+            [
+                "~ x became nullable",
+                "~ s.y became nullable",
+                "~ m became nullable"
+            ]
+        );
+        // A field that also became required says so once, as required.
+        let old = Schema::new([Field::new("x", DataType::String)]);
+        let new = Schema::new([Field::new("x", DataType::String)
+            .nullable(false)
+            .required(true)]);
+        assert_eq!(lines(&old, &new), ["~ x became required !"]);
     }
 
     #[test]

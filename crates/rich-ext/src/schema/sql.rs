@@ -927,7 +927,9 @@ fn skip_reference(tokens: &[Token], at: usize) -> usize {
         if token.is("NOT") && tokens.get(at + 1).is_some_and(|t| t.is("NULL")) {
             break;
         }
-        if token.is("NULL") && !tokens.get(at.wrapping_sub(1)).is_some_and(|t| t.is("SET")) {
+        // So are a `NULL` and a `DEFAULT` that do not follow `SET`.
+        let after_set = tokens.get(at.wrapping_sub(1)).is_some_and(|t| t.is("SET"));
+        if (token.is("NULL") || token.is("DEFAULT")) && !after_set {
             break;
         }
         if options.iter().any(|w| token.is(w)) {
@@ -1132,6 +1134,26 @@ mod tests {
                 "→ (line, code) → lines.(n, c)",
             ]
         );
+    }
+
+    #[test]
+    fn a_default_after_a_reference_is_the_columns() {
+        let parsed = parse(
+            "CREATE TABLE t (\
+             a INT REFERENCES p (id) DEFAULT 0, \
+             b INT REFERENCES p (id) ON DELETE SET DEFAULT DEFAULT 1 NOT NULL, \
+             c INT REFERENCES p ON UPDATE SET NULL NULL);",
+        )
+        .unwrap();
+        let t = &parsed.schema.tables()[0];
+        let a = t.field("a").unwrap();
+        assert_eq!(a.default_value().unwrap().as_str(), "0");
+        assert_eq!(a.references().unwrap().to_string(), "p.id");
+        let b = t.field("b").unwrap();
+        assert_eq!(b.default_value().unwrap().as_str(), "1");
+        assert!(b.is_required());
+        let c = t.field("c").unwrap();
+        assert!(c.default_value().is_none() && c.is_nullable());
     }
 
     #[test]

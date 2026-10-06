@@ -210,7 +210,13 @@ impl SchemaTree {
     pub fn root(&self) -> (Field, bool) {
         match &self.source {
             Source::Json(value) => json::to_field(value, self.title.as_deref(), self.max_depth),
-            Source::Model(schema) => (model_root(schema, self.title.as_deref()), false),
+            Source::Model(schema) => {
+                let mut root = model_root(schema, self.title.as_deref());
+                // The root is the first entry, as in the JSON Schema walk.
+                let mut budget = MAX_ENTRIES - 1;
+                let cut = limit(&mut root, &mut budget);
+                (root, cut)
+            }
         }
     }
 
@@ -247,6 +253,54 @@ fn model_root(schema: &Schema, title: Option<&str>) -> Field {
         }
     }
     root
+}
+
+/// Cut a model tree to the entries `budget` allows below `field` (which is
+/// already counted), as the JSON Schema walk stops at [`MAX_ENTRIES`]: a
+/// struct keeps the fields that fit, and a list or map whose children do
+/// not all fit is elided. Whether anything was cut.
+fn limit(field: &mut Field, budget: &mut usize) -> bool {
+    let mut cut = false;
+    let mut elide = false;
+    match field.data_type_mut() {
+        DataType::Struct(children) => {
+            let mut keep = 0;
+            for child in children.iter_mut() {
+                if *budget == 0 {
+                    cut = true;
+                    break;
+                }
+                *budget -= 1;
+                keep += 1;
+                cut |= limit(child, budget);
+            }
+            children.truncate(keep);
+        }
+        DataType::List(item) => {
+            if *budget == 0 {
+                elide = true;
+            } else {
+                *budget -= 1;
+                cut |= limit(item, budget);
+            }
+        }
+        DataType::Map { key, value } => {
+            if *budget < 2 {
+                elide = true;
+            } else {
+                *budget -= 2;
+                cut |= limit(key, budget);
+                cut |= limit(value, budget);
+            }
+        }
+        _ => {}
+    }
+    if elide {
+        let taken = std::mem::replace(field, Field::new("", DataType::Any));
+        *field = taken.elided(true);
+        return true;
+    }
+    cut
 }
 
 /// One field's line, as the tree writes it.
@@ -883,6 +937,34 @@ mod tests {
         assert!(parse("[1]").is_err());
         assert!(parse("{").is_err());
         assert!(parse("true").is_ok());
+    }
+
+    #[test]
+    fn model_trees_stop_at_max_entries() {
+        let wide = Schema::new(
+            (0..MAX_ENTRIES + 5).map(|i| Field::new(format!("f{i}"), DataType::Integer)),
+        );
+        let (_, truncated) = SchemaTree::from_model(wide.clone()).root();
+        assert!(truncated);
+        let out = render(&SchemaTree::from_model(wide), 60);
+        // The root and MAX_ENTRIES - 1 fields, then the note.
+        assert_eq!(out.lines().count(), MAX_ENTRIES + 1);
+        assert!(
+            out.ends_with("… (the tree stops at 10000 entries)"),
+            "{}",
+            &out[out.len() - 80..]
+        );
+        // Under the limit nothing is cut.
+        let small = Schema::new([Field::new("a", DataType::list(DataType::Integer))]);
+        assert!(!SchemaTree::from_model(small).root().1);
+        // A list whose item does not fit is elided, not dropped.
+        let deep = Schema::new(
+            (0..MAX_ENTRIES - 1)
+                .map(|i| Field::new(format!("f{i}"), DataType::list(DataType::Integer))),
+        );
+        let (root, truncated) = SchemaTree::from_model(deep).root();
+        assert!(truncated);
+        assert!(root.children().last().unwrap().is_elided());
     }
 
     #[test]

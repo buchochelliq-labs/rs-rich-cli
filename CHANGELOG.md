@@ -127,7 +127,7 @@ From integration feedback on `rs-rich-record` 0.0.3 as a library:
   line. Bounded by `MAX_INPUT` (16 MiB), `MAX_STATEMENTS`, `MAX_COLUMNS`,
   `MAX_NESTING` and `MAX_NOTES`.
 - Schema diff for any two schemas (#268): `SchemaDiff::models(&old, &new)`
-  compares model schemas (fields by path, tables by name, keys and
+  compares model schemas (fields by path, tables by name, nullability, keys and
   metadata), with breaking changes marked, so DDL and Arrow versions diff
   like JSON Schema. It is the same `SchemaDiff` type and rendering;
   `SchemaDiff::summary()` is now public.
