@@ -3,7 +3,9 @@
 //! A tape scripts a session: type, press keys, wait for text on the screen,
 //! take screenshots. [`record::record`] runs it in `bash` on a real PTY with a
 //! pinned environment, follows the screen with a VT emulator, and returns the
-//! screenshots and a timeline. [`record::write`] turns them into files:
+//! screenshots and a timeline. [`record::write_selected`] turns them into the
+//! files the tape's `Output` lines ask for ([`record::write`] takes the
+//! formats as given):
 //!
 //! - per screenshot, a PNG in a window frame, an SVG with selectable text
 //!   (drawn by rich-ext's frame exporter, [`rich_ext::frame::Frame::to_svg`]),
@@ -25,8 +27,12 @@
 //! let tape = tape::parse(&source)?;
 //! let recording = record::record(&tape, "demo", &record::Options::default())?;
 //! let fonts = rich_record::render::raster::Fonts::embedded();
-//! record::write(&recording, "media/demo".as_ref(), "demo", record::Formats::ALL,
-//!               &fonts, &Default::default(), None)?;
+//! // The tape's `Output` formats; `Formats::ALL` puts no further limit on them.
+//! let written = record::write_selected(&recording, "media/demo".as_ref(), "demo",
+//!                                      record::Formats::ALL, &fonts, &Default::default(), None)?;
+//! for skipped in &written.skipped {
+//!     eprintln!("skipped {}: {}", skipped.path.display(), skipped.reason);
+//! }
 //! # Ok::<(), Box<dyn std::error::Error>>(())
 //! ```
 //!
@@ -40,6 +46,6 @@ pub mod session;
 pub mod tape;
 pub mod terminal;
 
-pub use record::{Formats, Options, Presentation, Problem, Recording};
+pub use record::{Formats, Options, Presentation, Problem, Recording, Skipped, Written};
 pub use screen::{Snapshot, Theme};
 pub use tape::{Format, Output, Tape, TapeError};
