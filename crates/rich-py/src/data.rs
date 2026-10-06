@@ -13,6 +13,7 @@
 
 use std::fs::File;
 use std::io::{BufRead, BufReader};
+use std::path::{Path, PathBuf};
 
 use pyo3::create_exception;
 use pyo3::exceptions::{PyException, PyKeyError, PyValueError};
@@ -112,12 +113,12 @@ fn format_arg(name: &str) -> PyResult<Format> {
     }
 }
 
-/// The format by a path's extension, as `rich profile` reads it.
-fn format_by_name(path: &str) -> Option<Format> {
-    let extension = path
-        .rsplit(['/', '\\'])
-        .next()
-        .and_then(|name| name.rsplit_once('.'))
+/// The format by a path's extension, as `rich profile` reads it. Only the
+/// file name is read as text (lossily); the path itself stays as given.
+fn format_by_name(path: &Path) -> Option<Format> {
+    let name = path.file_name()?.to_string_lossy();
+    let extension = name
+        .rsplit_once('.')
         .map(|(_, ext)| ext.to_ascii_lowercase());
     match extension.as_deref() {
         Some("jsonl" | "ndjson") => Some(Format::JsonLines),
@@ -200,13 +201,13 @@ fn drain(source: &mut dyn RowSource, mut push: impl FnMut(Row)) -> Result<(), Co
 
 /// Open `path` and run `f` over its rows as a source.
 fn with_file_source<T>(
-    path: &str,
+    path: &Path,
     format: Option<&str>,
     header: Header,
     f: impl FnOnce(&mut dyn RowSource) -> PyResult<T>,
 ) -> PyResult<T> {
     let file = File::open(path).map_err(|err| {
-        pyo3::exceptions::PyOSError::new_err(format!("cannot read {path}: {err}"))
+        pyo3::exceptions::PyOSError::new_err(format!("cannot read {}: {err}", path.display()))
     })?;
     let mut reader = BufReader::new(file);
     let format = match format {
@@ -313,12 +314,11 @@ fn read_jsonl(text: &str) -> PyResult<Rows> {
 #[pyo3(signature = (path, *, format=None, header=None))]
 fn read_file(
     py: Python<'_>,
-    path: std::path::PathBuf,
+    path: PathBuf,
     format: Option<&str>,
     header: Option<&Bound<'_, PyAny>>,
 ) -> PyResult<Rows> {
     let header = header_mode(header)?;
-    let path = path.to_string_lossy().into_owned();
     let format = format.map(str::to_string);
     py.detach(move || with_file_source(&path, format.as_deref(), header, collect))
         .map(Rows::from)
@@ -807,7 +807,7 @@ impl Profile {
     #[allow(clippy::too_many_arguments)]
     fn from_path(
         py: Python<'_>,
-        path: std::path::PathBuf,
+        path: PathBuf,
         format: Option<String>,
         sample: usize,
         top: usize,
@@ -817,14 +817,15 @@ impl Profile {
         nulls: Option<&Bound<'_, PyAny>>,
     ) -> PyResult<Self> {
         let options = profile_options(sample, top, bins, buckets, columns, nulls)?;
-        let path = path.to_string_lossy().into_owned();
         let inner = py.detach(|| {
             with_file_source(&path, format.as_deref(), Header::UnlessNumeric, |source| {
                 profile_source(source, options)
             })
         })?;
         Ok(Profile {
-            inner: inner.with_name(path),
+            // The name is for the heading only; the file was opened by its
+            // own path, whatever bytes it holds.
+            inner: inner.with_name(path.to_string_lossy()),
         })
     }
 
