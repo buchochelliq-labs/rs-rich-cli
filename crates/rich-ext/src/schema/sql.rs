@@ -14,7 +14,9 @@
 //!   `UNIQUE (a, b)`, `FOREIGN KEY (a) REFERENCES t (x)`), named with
 //!   `CONSTRAINT name` or not, and MySQL's `ENUM('a', 'b')` and `COMMENT`;
 //! - `--` and `/* … */` comments, PostgreSQL's dollar-quoted strings
-//!   (`$$ … $$`, a function body's), and any number of statements.
+//!   (`$$ … $$`, a function body's), and any number of statements, each
+//!   ended by `;` or, in a script that leaves it out, by a `GO` line or the
+//!   `CREATE` that starts the next.
 //!
 //! `CHECK` constraints, indexes, generated columns and other clauses are
 //! skipped, as is every statement but `CREATE TABLE` (`CREATE INDEX`,
@@ -492,19 +494,28 @@ impl Start {
 const OTHER_TOKENS: usize = 8;
 
 /// The statements of a [`check`]ed text, one at a time: the tokens up to
-/// each `;` outside parentheses. A `CREATE TABLE` statement keeps every
-/// token, up to [`MAX_TOKENS`]; any other keeps its first few.
+/// each `;` outside parentheses. A statement also ends, for scripts that
+/// leave the `;` out, at a `GO` line (SQL Server's batch separator) and
+/// before a `CREATE` that starts a line or follows a `)`. A `CREATE TABLE`
+/// statement keeps every token, up to [`MAX_TOKENS`]; any other keeps its
+/// first few.
 struct Statements {
     lexer: Lexer,
     /// The line of the last token read.
     last_line: usize,
+    /// Whether the last token read was a `)`.
+    after_close: bool,
+    /// A `CREATE` read past the end of the statement before it.
+    pending: Option<Token>,
 }
 
 impl Statements {
     fn new(text: &str) -> Self {
         Statements {
             lexer: Lexer::new(text),
-            last_line: 1,
+            last_line: 0,
+            after_close: false,
+            pending: None,
         }
     }
 
@@ -512,16 +523,32 @@ impl Statements {
         let mut tokens: Vec<Token> = Vec::new();
         let mut depth = 0usize;
         let mut start = Start::Empty;
-        while let Some(token) = self.lexer.next()? {
+        loop {
+            let token = match self.pending.take() {
+                Some(token) => token,
+                None => match self.lexer.next()? {
+                    Some(token) => token,
+                    None => break,
+                },
+            };
+            let starts_line = token.line > self.last_line;
+            let after_close = std::mem::replace(&mut self.after_close, token.is_symbol(")"));
             self.last_line = token.line;
             if token.is_symbol("(") {
                 depth += 1;
             } else if token.is_symbol(")") {
                 depth = depth.saturating_sub(1);
-            } else if token.is_symbol(";") && depth == 0 {
+            } else if depth == 0 && (token.is_symbol(";") || (token.is("GO") && starts_line)) {
                 if tokens.is_empty() {
                     continue;
                 }
+                return Ok(Some(tokens));
+            } else if depth == 0
+                && token.is("CREATE")
+                && (starts_line || after_close)
+                && !tokens.is_empty()
+            {
+                self.pending = Some(token);
                 return Ok(Some(tokens));
             }
             if start != Start::Other {
@@ -817,7 +844,11 @@ impl Reader {
             let word = |at: usize, w: &str| part.get(at).is_some_and(|t| t.is(w));
             let open = |at: usize| part.get(at).is_some_and(|t| t.is_symbol("("));
             if head.is("PRIMARY") && word(at + 1, "KEY") {
-                let open_at = at + 2;
+                // `PRIMARY KEY [CLUSTERED] (columns)`.
+                let mut open_at = at + 2;
+                while part.get(open_at).is_some_and(|t| t.kind == Kind::Word) {
+                    open_at += 1;
+                }
                 if !open(open_at) {
                     return Err(SqlError::new(
                         head.line,
@@ -1602,6 +1633,32 @@ mod tests {
             parse("SELECT $tag$ never closed").unwrap_err().to_string(),
             "line 1: a string is not closed"
         );
+    }
+
+    /// SQL Server scripts end statements with `GO` lines, not `;`: every
+    /// table after the first was read as the first one's options and
+    /// dropped without a note. And their keys say `CLUSTERED`, which failed
+    /// the file.
+    #[test]
+    fn statements_without_semicolons_and_clustered_keys() {
+        let parsed = parse(
+            "SET ANSI_NULLS ON\nGO\n\
+             CREATE TABLE [dbo].[a] ([id] INT NOT NULL,\n\
+               CONSTRAINT [PK_a] PRIMARY KEY CLUSTERED ([id] ASC) WITH (PAD_INDEX = OFF)\n\
+             ) ON [PRIMARY]\nGO\n\
+             CREATE TABLE [dbo].[b] ([a_id] INT REFERENCES [dbo].[a] ([id]))\n\
+             CREATE TABLE c (x INT)",
+        )
+        .unwrap();
+        let tables: Vec<&str> = parsed
+            .schema
+            .tables()
+            .iter()
+            .filter_map(Schema::name)
+            .collect();
+        assert_eq!(tables, ["dbo.a", "dbo.b", "c"]);
+        assert_eq!(parsed.schema.tables()[0].primary_key(), ["id"]);
+        assert_eq!(notes(&parsed), ["line 1: SET statement skipped"]);
     }
 
     #[test]
