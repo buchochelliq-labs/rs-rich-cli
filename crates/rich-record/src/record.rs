@@ -701,7 +701,14 @@ pub fn write_selected(
     provenance: Option<(&Path, &[u8])>,
 ) -> std::io::Result<Written> {
     let formats = recording.formats(allowed);
-    let paths = write(recording, dir, stem, formats, fonts, theme, provenance)?;
+    // Without FFmpeg no MP4 is encoded, so none is validated either: a
+    // recording too long or too large for video still writes the rest and
+    // reports the MP4 skipped.
+    let encode = Formats {
+        mp4: formats.mp4 && video::ffmpeg_available(),
+        ..formats
+    };
+    let paths = write(recording, dir, stem, encode, fonts, theme, provenance)?;
     let mut skipped = Vec::new();
     if formats.mp4 {
         let path = dir.join(recording.output_path(Format::Mp4, stem));
@@ -1101,6 +1108,33 @@ mod tests {
         .unwrap();
         assert!(dir.join("pages/t.html").exists(), "{written:?}");
         assert!(dir.join("shot.txt").exists());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn without_ffmpeg_a_long_recording_reports_the_video_skipped() {
+        let mut recording = recording();
+        recording.timeline.truncated = true;
+        recording.outputs = crate::tape::parse("Output mp4\n").unwrap().outputs;
+        let dir = scratch("selected-long");
+        let result = write_selected(
+            &recording,
+            &dir,
+            "s",
+            Formats::ALL,
+            &raster::Fonts::embedded(),
+            &Theme::default(),
+            None,
+        );
+        if video::ffmpeg_available() {
+            let error = result.unwrap_err();
+            assert!(error.to_string().contains("too long for video"), "{error}");
+        } else {
+            let written = result.unwrap();
+            assert!(written.formats.mp4, "{written:?}");
+            assert_eq!(written.skipped.len(), 1, "{written:?}");
+            assert_eq!(written.skipped[0].reason, "ffmpeg not found");
+        }
         let _ = std::fs::remove_dir_all(&dir);
     }
 

@@ -18,7 +18,8 @@ From integration feedback on `rs-rich-record` 0.0.3 as a library:
   passing `Formats::ALL` honours `Output png` instead of writing every
   format. It returns `Written` (`formats`, `paths`, `skipped`, and
   `is_complete()`): an MP4 the selection calls for but FFmpeg is missing
-  for is listed in `skipped` rather than silently absent. `record::write`
+  for is listed in `skipped` rather than silently absent, even when the
+  recording is too long or too large for video. `record::write`
   is unchanged and now says that it takes formats as given.
 - The crate docs' example used `Formats::ALL` with `write`, the mistake
   above; it now uses `write_selected`. The README gains a standalone
