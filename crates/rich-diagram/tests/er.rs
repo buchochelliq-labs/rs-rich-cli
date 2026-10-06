@@ -164,6 +164,43 @@ fn labels_and_cardinality_alone() {
 }
 
 #[test]
+fn a_self_reference_keeps_its_label() {
+    // `parent_id REFERENCES categories(id)`: the layout marks a self-edge
+    // with `↻` and has nowhere to put its label, so it is a note instead.
+    let model = ErModel::new()
+        .entity(
+            Entity::new("categories")
+                .column(Column::new("id").data_type("int").primary_key())
+                .column(
+                    Column::new("parent_id")
+                        .data_type("int")
+                        .foreign_key()
+                        .nullable(),
+                ),
+        )
+        .relationship(
+            Relationship::new("categories", "categories")
+                .columns(["parent_id"], ["id"])
+                .cardinality(Cardinality::ManyToOne),
+        );
+    assert_eq!(
+        render(ErDiagram::new(model.clone()), 60),
+        "┌─────────────────────┐\n\
+         │     categories      │\n\
+         ├─────────────────────┤\n\
+         │ id         int   PK │↻\n\
+         │ parent_id  int?  FK │\n\
+         └─────────────────────┘\n\
+         ER: categories refers to itself: parent_id → id (N:1)\n"
+    );
+    let ascii = render(ErDiagram::new(model).ascii(true), 60);
+    assert!(
+        ascii.ends_with("ER: categories refers to itself: parent_id -> id (N:1)\n"),
+        "{ascii}"
+    );
+}
+
+#[test]
 fn it_crops_and_says_so() {
     let out = render(ErDiagram::new(shop()), 40);
     assert!(out.lines().all(|line| cell_len(line) <= 40), "{out}");

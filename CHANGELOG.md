@@ -268,8 +268,9 @@ and [ER diagrams](docs/guide/diagram/index.md#er-diagrams).
   it. `ErDiagram` draws it (left to right by default): each entity a box
   with its name ruled off from aligned `name  type  keys` rows (`PK`, `FK`,
   `UQ`, `?` for nullable), each relationship an edge labelled with its
-  columns and cardinality, each group a cluster frame, and a dim `ER:` note
-  for anything it cannot draw. New `Shape::Table` draws those boxes.
+  columns and cardinality (a self-reference is marked `↻`, its label in a
+  note), each group a cluster frame, and a dim `ER:` note for anything it
+  cannot draw. New `Shape::Table` draws those boxes.
 - **Byte-identical without them.** A graph with no clusters and no
   same-rank groups lays out exactly as before: every existing snapshot,
   Mermaid's included, is unchanged, and a corpus of 600 random graphs in

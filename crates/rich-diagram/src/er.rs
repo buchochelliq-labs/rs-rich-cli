@@ -10,7 +10,9 @@
 //!   from one row per [`Column`] (`name  type  keys`, aligned);
 //! - each [`Relationship`] as an edge from the referencing entity to the
 //!   referenced one, an arrow at the referenced end, labelled with its
-//!   columns (`user_id → id`) and [`Cardinality`] (`N:1`);
+//!   columns (`user_id → id`) and [`Cardinality`] (`N:1`); a relationship
+//!   from an entity to itself is marked `↻` beside its box, its label in a
+//!   note under the drawing;
 //! - each [`Group`] as a cluster frame around its entities.
 //!
 //! In a column row, `PK`, `FK` and `UQ` mark a primary key, a foreign key and
@@ -327,7 +329,10 @@ impl ErModel {
     /// thing it could not include: a repeated entity name (the first is
     /// drawn), and a relationship, group member or relationship column that
     /// names something that does not exist (the relationship and the member
-    /// are left out; an unknown column is drawn as given). With `ascii`,
+    /// are left out; an unknown column is drawn as given). A self-reference
+    /// (`parent_id → id` on one table) is a self-edge, which the layout marks
+    /// `↻` beside the box without a label, so its label is a note too
+    /// (`categories refers to itself: parent_id → id (N:1)`). With `ascii`,
     /// relationship labels use `->` for `→`.
     pub fn to_graph(&self, direction: Direction, ascii: bool) -> (Graph, Vec<String>) {
         let mut notes = Vec::new();
@@ -379,6 +384,11 @@ impl ErModel {
             }
             let mut edge = Edge::new(from, to);
             edge.label = relationship.text(ascii);
+            // The layout marks a self-edge `↻` beside the box and draws no
+            // label, so a self-reference's label becomes a note.
+            if let (true, Some(label)) = (from == to, &edge.label) {
+                notes.push(format!("{} refers to itself: {label}", drawn[from].name));
+            }
             edge.start = Head::None;
             edge.end = Head::Arrow;
             edges.push(edge);
