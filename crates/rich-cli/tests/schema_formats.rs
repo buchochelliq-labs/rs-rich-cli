@@ -132,6 +132,18 @@ fn ddl_on_stdin_is_recognised_by_its_first_word() {
     assert!(stderr(&out).contains("not JSON"), "{}", stderr(&out));
 }
 
+/// A pipe named as a file (`/dev/stdin`, `<(…)`): looking for Arrow's magic
+/// bytes read its first six bytes, so `CREATE` was gone before the text was
+/// read and the rest failed as JSON.
+#[cfg(target_os = "linux")]
+#[test]
+fn a_pipe_named_as_a_file_is_read_whole() {
+    let dir = dir();
+    let out = stdout(&run_in(dir.path(), &["schema", "/dev/stdin"], SHOP));
+    assert!(out.starts_with("stdin  2 tables\n"), "{out}");
+    assert!(out.contains("customer_id (required)  BIGINT"), "{out}");
+}
+
 #[test]
 fn unreadable_ddl_exits_4_with_its_line() {
     let dir = dir();

@@ -576,11 +576,17 @@ fn schema_format_by_name(resource: &str) -> Option<SchemaFormat> {
     }
 }
 
-/// Whether a local file starts with an Arrow IPC file's magic bytes.
+/// Whether a local file starts with an Arrow IPC file's magic bytes. Only a
+/// regular file is looked at: reading a pipe (`/dev/stdin`, `<(…)`) would
+/// take its first bytes from the text read next.
 fn has_arrow_magic(resource: &str) -> bool {
     use std::io::Read;
+    let path = fs_path(resource);
+    if !std::fs::metadata(&path).is_ok_and(|meta| meta.is_file()) {
+        return false;
+    }
     let mut magic = [0u8; 6];
-    std::fs::File::open(fs_path(resource))
+    std::fs::File::open(path)
         .and_then(|mut file| file.read_exact(&mut magic))
         .is_ok_and(|()| &magic == b"ARROW1")
 }
