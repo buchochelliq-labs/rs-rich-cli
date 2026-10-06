@@ -205,3 +205,49 @@ fn anything_else_is_an_error_not_a_panic() {
         );
     }
 }
+
+/// An IPC file whose footer lists a dictionary batch with a negative body
+/// length: `FileReader` unwraps that length and panics, so the schema is read
+/// from the file's leading schema message instead (#audit-0.0.16).
+#[test]
+fn a_hostile_ipc_file_footer_is_an_error_or_ignored_not_a_panic() {
+    use arrow_array::types::Int32Type;
+    use arrow_array::{Array, DictionaryArray, RecordBatch};
+    use std::io::Cursor;
+
+    let dictionary: DictionaryArray<Int32Type> = vec!["a", "b", "a"].into_iter().collect();
+    let schema = Arc::new(Schema::new(vec![Field::new(
+        "kind",
+        dictionary.data_type().clone(),
+        true,
+    )]));
+    let batch = RecordBatch::try_new(schema.clone(), vec![Arc::new(dictionary)]).unwrap();
+    let mut bytes = Vec::new();
+    let mut writer = arrow_ipc::writer::FileWriter::try_new(&mut bytes, &schema).unwrap();
+    writer.write(&batch).unwrap();
+    writer.finish().unwrap();
+    drop(writer);
+
+    // Find the footer's dictionary block and give it a body length of -1.
+    let trailer = bytes.len() - 10;
+    let footer_len =
+        arrow_ipc::reader::read_footer_length(bytes[trailer..].try_into().unwrap()).unwrap();
+    let footer_start = trailer - footer_len;
+    let footer = arrow_ipc::root_as_footer(&bytes[footer_start..trailer]).unwrap();
+    let block = footer.dictionaries().unwrap().get(0);
+    let mut pattern = Vec::new();
+    pattern.extend_from_slice(&block.offset().to_le_bytes());
+    pattern.extend_from_slice(&block.metaDataLength().to_le_bytes());
+    pattern.extend_from_slice(&[0; 4]);
+    pattern.extend_from_slice(&block.bodyLength().to_le_bytes());
+    let at = footer_start
+        + bytes[footer_start..trailer]
+            .windows(pattern.len())
+            .position(|w| w == pattern)
+            .expect("the block is in the footer");
+    bytes[at + 16..at + 24].copy_from_slice(&(-1i64).to_le_bytes());
+
+    let read = rich_data::arrow::read_schema(Cursor::new(bytes)).unwrap();
+    assert_eq!(read.fields().len(), 1);
+    assert_eq!(read.field(0).name(), "kind");
+}

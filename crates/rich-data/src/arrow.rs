@@ -178,8 +178,9 @@ const FILE_MAGIC: &[u8; 6] = b"ARROW1";
 
 /// The schema of an Arrow IPC file (`ARROW1`…, Feather v2) or stream,
 /// whichever `reader` holds: the file's footer, or the stream's first
-/// message. Record batches are not read. A file with dictionaries reads
-/// them too, since the footer names them before any batch.
+/// message. Neither record batches nor dictionary batches are read: only
+/// the footer's schema, its length checked against the input's, so a
+/// hostile footer is an error rather than a panic or a large allocation.
 ///
 /// ```
 /// use std::io::Cursor;
@@ -211,19 +212,52 @@ pub fn read_schema<R: std::io::Read + std::io::Seek>(
     let not_arrow = |err: arrow_schema::ArrowError| {
         DataError::new(format!("not an Arrow IPC file or stream: {err}"))
     };
-    let schema = if &magic == FILE_MAGIC {
-        arrow_ipc::reader::FileReader::try_new(reader, None)
-            .map_err(not_arrow)?
-            .schema()
+    if &magic == FILE_MAGIC {
+        file_schema(reader, start).map_err(not_arrow)
     } else {
-        arrow_ipc::reader::StreamReader::try_new(reader, None)
-            .map_err(not_arrow)?
-            .schema()
-    };
-    Ok(schema.as_ref().clone())
+        let stream = arrow_ipc::reader::StreamReader::try_new(reader, None).map_err(not_arrow)?;
+        Ok(stream.schema().as_ref().clone())
+    }
 }
 
 /// Fill as much of `buf` as `reader` has, returning how much that was.
+/// The schema in an IPC file's footer: `FileReader::try_new` without the
+/// dictionary batches it also reads, whose block lengths come from the file
+/// and which it unwraps (a negative one panics).
+fn file_schema<R: std::io::Read + std::io::Seek>(
+    mut reader: R,
+    start: u64,
+) -> Result<arrow_schema::Schema, arrow_schema::ArrowError> {
+    use arrow_schema::ArrowError;
+    use std::io::SeekFrom;
+    // The leading magic and its padding, then the trailing length and magic.
+    const FRAME: u64 = 8 + 10;
+    let len = reader.seek(SeekFrom::End(0))?.saturating_sub(start);
+    if len < FRAME {
+        return Err(ArrowError::ParseError(
+            "Arrow file does not contain correct footer".into(),
+        ));
+    }
+    let mut trailer = [0u8; 10];
+    reader.seek(SeekFrom::End(-10))?;
+    reader.read_exact(&mut trailer)?;
+    let footer_len = arrow_ipc::reader::read_footer_length(trailer)?;
+    if footer_len as u64 > len - FRAME {
+        return Err(ArrowError::ParseError(format!(
+            "Invalid footer length: {footer_len}"
+        )));
+    }
+    let mut footer = vec![0; footer_len];
+    reader.seek(SeekFrom::End(-10 - footer_len as i64))?;
+    reader.read_exact(&mut footer)?;
+    let footer = arrow_ipc::root_as_footer(&footer)
+        .map_err(|err| ArrowError::ParseError(format!("Unable to get root as footer: {err:?}")))?;
+    let schema = footer
+        .schema()
+        .ok_or_else(|| ArrowError::ParseError("Unable to get schema from IPC Footer".into()))?;
+    arrow_ipc::convert::try_fb_to_schema(schema)
+}
+
 fn read_up_to(reader: &mut impl std::io::Read, buf: &mut [u8]) -> std::io::Result<usize> {
     let mut filled = 0;
     while filled < buf.len() {
