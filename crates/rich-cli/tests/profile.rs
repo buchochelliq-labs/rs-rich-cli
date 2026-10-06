@@ -223,6 +223,27 @@ fn bad_input_and_options_are_refused() {
 }
 
 #[test]
+fn json_lines_after_a_long_run_of_blank_lines_is_still_json_lines() {
+    // More whitespace than one read buffer holds (8 KiB) before the first
+    // record: the format is decided by the first byte that is not.
+    let input = format!("{}{EVENTS}", "\n".repeat(20_000));
+    let out = stdout(&run_with(&[], &input, &["profile"]));
+    assert!(out.starts_with("<stdin>: 12 rows, 5 columns\n"), "{out}");
+    let out = stdout(&run_with(&[("events", &input)], "", &["profile", "events"]));
+    assert!(out.starts_with("events: 12 rows, 5 columns\n"), "{out}");
+    assert!(out.contains("ts · timestamp"), "{out}");
+    // Whitespace before CSV reaches the reader unchanged: blank lines give
+    // no rows (the sniffer, like `--csv`'s, reads the first 1,024
+    // characters, so they must leave it some data).
+    let csv = format!("{}{ORDERS}", "\n".repeat(200));
+    let out = stdout(&run_with(&[], &csv, &["profile"]));
+    assert!(out.starts_with("<stdin>: 24 rows, 6 columns\n"), "{out}");
+    let out = stdout(&run_with(&[], ORDERS, &["profile"]));
+    let blank = stdout(&run_with(&[], &csv, &["profile"]));
+    assert_eq!(out, blank);
+}
+
+#[test]
 fn colour_goes_through_the_profile_theme() {
     let out = stdout(&run(&["profile", "orders.csv", "--force-terminal"]));
     // Under the bold heading, `profile.type` is cyan and `profile.null` yellow.

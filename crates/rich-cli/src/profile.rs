@@ -150,10 +150,10 @@ pub(crate) fn profile(cli: &Cli) -> Result<Profile, Failure> {
     let format = match format_by_name(resource) {
         Some(format) => format,
         None => {
-            // The first character that is not whitespace or a byte-order mark.
-            let head = reader.fill_buf().map_err(input_error)?;
-            let head = head.strip_prefix("\u{feff}".as_bytes()).unwrap_or(head);
-            match head.iter().find(|b| !b.is_ascii_whitespace()) {
+            let (first, prefix) = first_byte(&mut reader).map_err(input_error)?;
+            // The bytes read to find it go back in front, unchanged.
+            reader = Box::new(BufReader::new(std::io::Cursor::new(prefix).chain(reader)));
+            match first {
                 Some(b'{' | b'[') => Format::JsonLines,
                 _ => Format::Csv(None),
             }
@@ -201,6 +201,46 @@ pub(crate) fn profile(cli: &Cli) -> Result<Profile, Failure> {
     Ok(profile.with_name(controls::shown(name)))
 }
 
+/// The most leading whitespace read while looking for the first character
+/// (`rich_data::csv::MAX_RECORD`, 64 MiB); input that is only whitespace up
+/// to it is read as CSV.
+const MAX_LEADING_WHITESPACE: usize = rich_data::csv::MAX_RECORD;
+
+/// The first byte of `reader` that is not whitespace or a leading
+/// byte-order mark, read across as many buffer refills as the whitespace
+/// takes (up to [`MAX_LEADING_WHITESPACE`]), with every byte read on the
+/// way so the caller can put them back.
+fn first_byte(reader: &mut dyn BufRead) -> std::io::Result<(Option<u8>, Vec<u8>)> {
+    const BOM: &[u8] = "\u{feff}".as_bytes();
+    let mut prefix: Vec<u8> = Vec::new();
+    // Bytes already known to be whitespace (or the mark).
+    let mut scanned = 0;
+    loop {
+        let chunk = reader.fill_buf()?;
+        if chunk.is_empty() {
+            return Ok((None, prefix));
+        }
+        let len = chunk.len();
+        prefix.extend_from_slice(chunk);
+        reader.consume(len);
+        if scanned == 0 {
+            // A byte-order mark is only skipped once all of it is read.
+            if prefix.starts_with(BOM) {
+                scanned = BOM.len();
+            } else if BOM.starts_with(&prefix) {
+                continue;
+            }
+        }
+        if let Some(&b) = prefix[scanned..].iter().find(|b| !b.is_ascii_whitespace()) {
+            return Ok((Some(b), prefix));
+        }
+        scanned = prefix.len();
+        if prefix.len() > MAX_LEADING_WHITESPACE {
+            return Ok((None, prefix));
+        }
+    }
+}
+
 /// Profile `source`, a column `--columns` names that is not there and a row
 /// that cannot be read being data errors.
 fn run(
@@ -230,6 +270,22 @@ mod tests {
         );
         assert_eq!(format_by_name("data"), None);
         assert_eq!(format_by_name("-"), None);
+    }
+
+    #[test]
+    fn the_first_byte_is_found_past_any_buffer_of_whitespace() {
+        let text = format!("\u{feff}{}{{\"a\": 1}}\n", " \n\t".repeat(10_000));
+        // A 4-byte buffer splits the mark and needs thousands of refills.
+        let mut reader = BufReader::with_capacity(4, text.as_bytes());
+        let (first, prefix) = first_byte(&mut reader).unwrap();
+        assert_eq!(first, Some(b'{'));
+        let mut rest = prefix;
+        reader.read_to_end(&mut rest).unwrap();
+        assert_eq!(rest, text.as_bytes());
+        let (first, prefix) = first_byte(&mut BufReader::new(&b"\n \n"[..])).unwrap();
+        assert_eq!((first, prefix.as_slice()), (None, &b"\n \n"[..]));
+        let (first, _) = first_byte(&mut BufReader::new(&b"\xef\xbb"[..])).unwrap();
+        assert_eq!(first, None);
     }
 
     #[test]
