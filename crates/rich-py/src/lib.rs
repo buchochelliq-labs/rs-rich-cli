@@ -28,6 +28,7 @@
 //! | `art` | `rich-art` and Mermaid |
 //! | `chart` | `rich_ext::chart`: sparklines, bars, line charts, gauges, heatmaps, KPI cards, timelines |
 //! | `diagram` | `rs-rich-diagram`: graphs, their layout, DOT |
+//! | `data` | `rs-rich-data`: rows, inference, statistics, profiles, quality, result sets; schema, conflict and record views |
 //! | `plugins` | the plugin API from Python |
 //! | `cli` | the `rich` CLI from Python |
 
@@ -41,6 +42,7 @@ mod code;
 mod color;
 mod console;
 mod convert;
+mod data;
 mod diagram;
 mod errors;
 mod ext;
@@ -86,6 +88,7 @@ fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     art::register(m)?;
     chart::register(m)?;
     diagram::register(m)?;
+    data::register(m)?;
     micro::register(m)?;
     plugins::register(m)?;
     cli::register(m)?;

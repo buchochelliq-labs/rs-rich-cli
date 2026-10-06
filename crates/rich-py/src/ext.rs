@@ -12,7 +12,7 @@ use pyo3::prelude::*;
 
 mod cli_doc;
 pub(crate) mod common;
-mod data;
+pub(crate) mod data;
 mod diagnostic;
 mod diff;
 mod frame;
@@ -21,7 +21,7 @@ mod layout;
 mod qa;
 mod registry;
 mod status;
-mod tables;
+pub(crate) mod tables;
 mod terminal;
 mod transform;
 mod widgets;

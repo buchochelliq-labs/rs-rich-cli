@@ -1531,6 +1531,7 @@ name = "rs-rich-data"
 version = "0.0.1"
 dependencies = [
  "rs-rich",
+ "rs-rich-diagram",
  "rs-rich-ext",
  "serde",
  "serde_json",
@@ -1623,6 +1624,7 @@ dependencies = [
  "rs-rich",
  "rs-rich-art",
  "rs-rich-cli",
+ "rs-rich-data",
  "rs-rich-diagram",
  "rs-rich-ext",
  "rs-rich-interact",

@@ -29,6 +29,9 @@ from .._native import (
     PatchParseError,
     TestParseError,
     DIFF_STYLES,
+    ConflictView,
+    MergeConflict,
+    ConflictError,
 )
 
 # The Rust names, where the flat native module needed a longer one.
@@ -63,4 +66,7 @@ __all__ = [
     "DIFF_STYLES",
     "STYLES",
     "diff_slices",
+    "ConflictView",
+    "MergeConflict",
+    "ConflictError",
 ]

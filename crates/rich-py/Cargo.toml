@@ -27,6 +27,9 @@ rich-mermaid = { package = "rs-rich-mermaid", path = "../rich-mermaid" }
 # `rs_rich.diagram`: graphs, their layered layout and DOT (0.0.15
 # workstream 5).
 rich-diagram = { package = "rs-rich-diagram", path = "../rich-diagram" }
+# `rs_rich.data`: row sources, inference, statistics, profiles, quality
+# reports, SQL result sets and ER diagrams (0.0.16 workstream 7).
+rich-data = { package = "rs-rich-data", path = "../rich-data", features = ["er"] }
 # `rs_rich.micro`: micro assets, their registry, markup and pipeline
 # (0.0.14 workstream 7).
 rich-micro = { package = "rs-rich-micro", path = "../rich-micro" }
