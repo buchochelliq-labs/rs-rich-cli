@@ -187,7 +187,12 @@ The same feature adds two trees drawn from real sources (0.0.15):
   versions marked `(duplicate)`) and `WhyTree` (what pulls a crate in).
 - `schema`: a JSON Schema as `SchemaTree` (types, `(required)`, constraints,
   local `$ref`s resolved with cycle protection, `oneOf`/`anyOf`/`allOf`), and
-  `SchemaDiff` between two versions, with breaking changes marked.
+  `SchemaDiff` between two versions, with breaking changes marked. Both read
+  the format-neutral model (`Schema`, `Field`, `DataType`, `Constraint`),
+  which JSON Schema (`schema::json`) and a SQL `CREATE TABLE` subset
+  (`schema::sql`) map into: `SchemaTree::from_model` and
+  `SchemaDiff::models` draw and compare any of them, and `SchemaTimeline`
+  lays a series of versions on a timeline with each change marked.
 
 ### CLI authoring
 
