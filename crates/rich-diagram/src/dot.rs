@@ -11,7 +11,11 @@
 //!   `arrowhead`, `arrowtail` and `minlen` on edges, and `rankdir` and
 //!   `label` on the graph), and `node [ … ]`, `edge [ … ]` and `graph [ … ]`
 //!   defaults, scoped to the subgraph they are set in;
-//! - subgraphs; a subgraph named `cluster…` is a [`Cluster`];
+//! - subgraphs; a subgraph named `cluster…` is a [`Cluster`], drawn as a
+//!   labelled frame around its nodes (nested clusters nest their frames);
+//! - `rank=same` in a subgraph, which draws its nodes in one rank where the
+//!   layered layout can (see [`Graph::add_same_rank`]); other `rank` values
+//!   (`min`, `max`, `source`, `sink`) are accepted with a note;
 //! - quoted IDs (with `+` concatenation), numerals, and `//`, `/* */` and
 //!   `#` comments.
 //!
@@ -102,17 +106,11 @@ impl fmt::Display for DotError {
 
 impl std::error::Error for DotError {}
 
-/// A subgraph named `cluster…`: a group of nodes Graphviz frames.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Cluster {
-    /// The subgraph's name, `cluster` prefix included.
-    pub id: String,
-    /// Its `label`, if it has one.
-    pub label: Option<String>,
-    /// Its nodes (nested clusters' included), by index into
-    /// [`Graph::nodes`], in the order they were first mentioned.
-    pub nodes: Vec<usize>,
-}
+/// A subgraph named `cluster…`: a group of nodes framed in the drawing. Its
+/// `id` is the subgraph's name, `cluster` prefix included; its `nodes` are
+/// those of nested clusters too, in the order they were first mentioned; its
+/// `parent` is the cluster it was first opened in.
+pub use crate::graph::Cluster;
 
 /// A parsed DOT source.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -127,10 +125,12 @@ pub struct DotGraph {
     pub name: Option<String>,
     /// The graph's `label`, if it has one.
     pub label: Option<String>,
-    /// The `cluster…` subgraphs, outermost first.
+    /// The `cluster…` subgraphs, outermost first (as in
+    /// [`Graph::clusters`]).
     pub clusters: Vec<Cluster>,
-    /// What was accepted but is not drawn (cluster frames, `rank`
-    /// constraints), one sentence each.
+    /// What was accepted but is not drawn (`rank` constraints other than
+    /// `rank=same`, invisible and outline-free nodes), one sentence each.
+    /// What the layout cannot do is in [`Drawing::notes`] instead.
     pub notes: Vec<String>,
 }
 
@@ -450,7 +450,10 @@ struct Parser<'a> {
     depth: usize,
     scopes: Vec<Scope>,
     clusters: Vec<Cluster>,
-    rank_noted: bool,
+    /// `rank=same` subgraphs' nodes.
+    same_rank: Vec<Vec<usize>>,
+    /// `rank` settings not applied, as `rank=…`, each once.
+    rank_ignored: Vec<String>,
     /// Subgraphs open around the current statement, deepest last: the
     /// clusters' indexes in `clusters` (`None` for other subgraphs).
     open: Vec<Option<usize>>,
@@ -774,10 +777,12 @@ impl<'a> Parser<'a> {
             match self.clusters.iter().position(|c| c.id == name) {
                 Some(index) => Some(index),
                 None => {
+                    let parent = self.open.iter().rev().flatten().next().copied();
                     self.clusters.push(Cluster {
                         id: name.clone(),
                         label: None,
                         nodes: Vec::new(),
+                        parent,
                     });
                     Some(self.clusters.len() - 1)
                 }
@@ -813,6 +818,13 @@ impl<'a> Parser<'a> {
         self.open.pop();
         let scope = self.scopes.pop().unwrap_or_default();
         let members = members?;
+        match get(&scope.graph, "rank") {
+            Some(rank) if rank.eq_ignore_ascii_case("same") => {
+                self.same_rank.push(members.clone());
+            }
+            Some(rank) => self.ignore_rank(&format!("rank={rank}")),
+            None => {}
+        }
         if let Some(index) = index {
             if let Some(label) = get(&scope.graph, "label") {
                 let names = Names {
@@ -869,10 +881,13 @@ impl<'a> Parser<'a> {
         Ok(())
     }
 
-    fn graph_attr(&mut self, key: &str, value: &str) {
-        if key == "rank" {
-            self.rank_noted = true;
+    fn ignore_rank(&mut self, setting: &str) {
+        if !self.rank_ignored.iter().any(|s| s == setting) {
+            self.rank_ignored.push(setting.to_string());
         }
+    }
+
+    fn graph_attr(&mut self, key: &str, value: &str) {
         if let Some(scope) = self.scopes.last_mut() {
             set(&mut scope.graph, key, value);
         }
@@ -1059,7 +1074,8 @@ pub fn parse(source: &str) -> Result<DotGraph, DotError> {
         depth: 0,
         scopes: Vec::new(),
         clusters: Vec::new(),
-        rank_noted: false,
+        same_rank: Vec::new(),
+        rank_ignored: Vec::new(),
         open: Vec::new(),
         anonymous: 0,
     };
@@ -1139,30 +1155,15 @@ pub fn parse(source: &str) -> Result<DotGraph, DotError> {
         })
         .collect();
     let mut notes = Vec::new();
-    if !parser.clusters.is_empty() {
-        let names: Vec<String> = parser
-            .clusters
-            .iter()
-            .map(|cluster| {
-                let members: Vec<&str> = cluster
-                    .nodes
-                    .iter()
-                    .map(|&i| parser.nodes[i].0.as_str())
-                    .collect();
-                format!(
-                    "{} ({})",
-                    cluster.label.as_deref().unwrap_or(&cluster.id),
-                    members.join(", ")
-                )
-            })
-            .collect();
-        notes.push(format!(
-            "clusters are drawn without their frames: {}",
-            names.join("; ")
-        ));
+    // `rank` on the graph itself ranks nothing in Graphviz either.
+    if let Some(rank) = get(&graph_attrs, "rank") {
+        parser.ignore_rank(&format!("rank={rank} (on the whole graph)"));
     }
-    if parser.rank_noted {
-        notes.push("`rank` constraints are not applied".into());
+    if !parser.rank_ignored.is_empty() {
+        notes.push(format!(
+            "only `rank=same` in a subgraph is applied; not applied: {}",
+            parser.rank_ignored.join(", ")
+        ));
     }
     let named = |test: &dyn Fn(&Attrs) -> bool| -> Vec<&str> {
         parser
@@ -1205,8 +1206,15 @@ pub fn parse(source: &str) -> Result<DotGraph, DotError> {
     let label = get(&graph_attrs, "label")
         .map(|raw| label_text(raw, &names))
         .filter(|label| !label.is_empty());
+    let mut graph = Graph::from_parts(direction, nodes, edges);
+    for cluster in &parser.clusters {
+        graph.add_cluster(cluster.clone());
+    }
+    for group in parser.same_rank {
+        graph.add_same_rank(group);
+    }
     Ok(DotGraph {
-        graph: Graph::from_parts(direction, nodes, edges),
+        graph,
         directed,
         strict: parser.strict,
         name,
@@ -1359,6 +1367,7 @@ impl Dot {
             end_line(&mut segments);
         }
         let mut notes = parsed.notes.clone();
+        notes.extend(drawing.notes.iter().cloned());
         if drawing.width > width {
             notes.push(format!("cropped to {width} of {} columns", drawing.width));
         }
@@ -1369,22 +1378,35 @@ impl Dot {
     }
 }
 
-/// A dim note, wrapped to the width, ending its line. With `ascii`, the
-/// notes' own non-ASCII characters (`…`, `×`) are spelled in ASCII.
+/// A dim `DOT:` note, wrapped to the width, ending its line.
 fn note(text: &str, ascii: bool, console: &Console, options: &ConsoleOptions) -> Vec<Segment> {
+    prefixed_note("DOT", text, ascii, console, options)
+}
+
+/// A dim note after `prefix:`, wrapped to the width, ending its line. With
+/// `ascii`, the notes' own non-ASCII characters (`…`, `×`) are spelled in
+/// ASCII.
+pub(crate) fn prefixed_note(
+    prefix: &str,
+    text: &str,
+    ascii: bool,
+    console: &Console,
+    options: &ConsoleOptions,
+) -> Vec<Segment> {
     let mut text: String = text.chars().filter(|c| !c.is_control()).collect();
     if ascii {
         text = text.replace('…', "...").replace('×', "x");
     }
     let style = Style::parse("dim italic").expect("valid style");
-    let mut segments = Text::styled(format!("DOT: {text}"), style).rich_render(console, options);
+    let mut segments =
+        Text::styled(format!("{prefix}: {text}"), style).rich_render(console, options);
     end_line(&mut segments);
     segments
 }
 
 /// Drop the newline that ends the last line: like core's renderables, the
 /// drawing leaves that to `print`, so it is not followed by a blank line.
-fn trim_final_newline(mut segments: Vec<Segment>) -> Vec<Segment> {
+pub(crate) fn trim_final_newline(mut segments: Vec<Segment>) -> Vec<Segment> {
     if let Some(index) = segments
         .iter()
         .rposition(|segment| !segment.text.is_empty())
@@ -1400,7 +1422,7 @@ fn trim_final_newline(mut segments: Vec<Segment>) -> Vec<Segment> {
 }
 
 /// End the last line, so whatever follows starts on a line of its own.
-fn end_line(segments: &mut Vec<Segment>) {
+pub(crate) fn end_line(segments: &mut Vec<Segment>) {
     if segments
         .iter()
         .rev()
@@ -1467,9 +1489,54 @@ mod tests {
         assert_eq!(parsed.clusters[0].nodes, [0, 1]);
         let edge = &parsed.graph.edges()[0];
         assert_eq!((edge.start, edge.end), (Head::None, Head::None));
+        assert_eq!(parsed.graph.clusters(), parsed.clusters);
+        assert!(parsed.notes.is_empty(), "{:?}", parsed.notes);
+    }
+
+    #[test]
+    fn nested_clusters_know_their_parent() {
+        let parsed = parse(
+            "digraph {\n\
+               subgraph cluster_outer { a; subgraph cluster_inner { b; c } }\n\
+               subgraph cluster_outer { d }\n\
+               subgraph cluster_other { e }\n\
+             }",
+        )
+        .unwrap();
+        let shape: Vec<(&str, Option<usize>, &[usize])> = parsed
+            .clusters
+            .iter()
+            .map(|c| (c.id.as_str(), c.parent, c.nodes.as_slice()))
+            .collect();
+        assert_eq!(
+            shape,
+            [
+                ("cluster_outer", None, &[0, 1, 2, 3][..]),
+                ("cluster_inner", Some(0), &[1, 2][..]),
+                ("cluster_other", None, &[4][..]),
+            ]
+        );
+    }
+
+    #[test]
+    fn rank_same_groups_and_ignored_ranks() {
+        let parsed = parse(
+            "digraph {\n\
+               rank=min\n\
+               a -> b -> c; a -> d\n\
+               { rank=same; b; d }\n\
+               subgraph s { rank = max; c }\n\
+               subgraph t { graph [rank=same]; c }\n\
+             }",
+        )
+        .unwrap();
+        assert_eq!(parsed.graph.same_rank_groups(), [vec![1, 3], vec![2]]);
         assert_eq!(
             parsed.notes,
-            ["clusters are drawn without their frames: X (a, b)"]
+            [
+                "only `rank=same` in a subgraph is applied; not applied: rank=max, \
+              rank=min (on the whole graph)"
+            ]
         );
     }
 

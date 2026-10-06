@@ -69,11 +69,10 @@ fn dot_files_draw_through_the_command_its_alias_and_detection() {
         &[file.as_str()],
     ] {
         let out = stdout(&run(args));
-        assert!(out.contains("│ Browser ├─┘"), "{args:?}: {out}");
-        assert!(
-            out.contains("DOT: clusters are drawn without their frames: Backend (api, db)"),
-            "{args:?}: {out}"
-        );
+        assert!(out.contains("│ Browser ├─┐"), "{args:?}: {out}");
+        // The `cluster_backend` subgraph is framed, its label in the border.
+        assert!(out.contains("┆ Backend ╌"), "{args:?}: {out}");
+        assert!(!out.contains("DOT: "), "{args:?}: {out}");
     }
 }
 

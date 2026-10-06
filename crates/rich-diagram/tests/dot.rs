@@ -37,7 +37,7 @@ fn check(name: &str, source: &str, width: usize, ascii: bool) {
 
 #[test]
 fn fixtures_render() {
-    for name in ["services", "pipeline", "undirected"] {
+    for name in ["services", "pipeline", "undirected", "clusters"] {
         let source = fixture(&format!("{name}.dot"));
         check(&format!("dot_{name}"), &source, 80, false);
         check(&format!("dot_{name}_ascii"), &source, 80, true);

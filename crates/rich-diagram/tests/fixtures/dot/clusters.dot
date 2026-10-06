@@ -1,0 +1,18 @@
+// Nested clusters and a rank=same group: a build farm.
+digraph farm {
+  node [shape=box]
+  subgraph cluster_ci {
+    label = "CI"
+    queue [label="Queue"]
+    subgraph cluster_runners {
+      label = "Runners"
+      linux; macos
+    }
+  }
+  { rank = same; linux; macos; cache }
+  queue -> linux
+  queue -> macos
+  linux -> artifacts
+  macos -> artifacts
+  cache -> artifacts [style=dashed]
+}

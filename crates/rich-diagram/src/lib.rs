@@ -36,9 +36,12 @@
 //!   renderer; with the `graphviz` feature, [`graphviz::render_svg`] runs
 //!   Graphviz's own `dot` for SVG.
 //!
-//! Clusters (subgraph frames) are not drawn yet: the layout lays every node
-//! out in one graph.
+//! Groupings: a [`Cluster`] is drawn as a dashed frame around its nodes, its
+//! label in the top border, nested clusters inside it; a same-rank group
+//! ([`Graph::same_rank`]) puts its nodes side by side where the layered
+//! layout can. What a drawing could not show is in [`Drawing::notes`].
 
+mod cluster;
 pub mod diagram;
 pub mod dot;
 pub mod graph;
@@ -51,7 +54,7 @@ pub mod plugin;
 pub use diagram::Diagram;
 pub use dot::{Dot, DotError, DotGraph};
 pub use graph::{
-    Direction, Edge, Graph, Head, Node, Shape, Stroke, MAX_EDGES, MAX_EDGE_LENGTH, MAX_NODES,
-    MAX_SOURCE,
+    Cluster, Direction, Edge, Graph, Head, Node, Shape, Stroke, MAX_EDGES, MAX_EDGE_LENGTH,
+    MAX_NODES, MAX_SOURCE,
 };
 pub use layout::{draw, DrawError, Drawing};
