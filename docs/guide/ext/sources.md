@@ -645,3 +645,31 @@ v1 → v2: 6 changes, 3 breaking
 
 The `rich schema` command still reads JSON Schema only; DDL and Arrow input
 and an ER view come to the CLI later in 0.0.16.
+
+### ER diagrams
+
+`rs-rich-data`'s `er` module (behind its `er` feature) draws a schema as an
+ER diagram through `rs-rich-diagram` (#247): a box per table with its
+columns, types and keys (`PK`, `FK`, `UQ`, `?` for nullable), and an edge
+per foreign key, `N:1`, or `1:1` when the key is the referring table's whole
+primary key or a unique column. `er::model` turns any model schema into an
+`ErModel`; `er::from_sql` reads DDL and returns the `ErDiagram` with the
+reader's notes. A key naming `users` finds `public.users` when that is the
+only table so named.
+
+```rust
+use rich_data::er;
+
+let (diagram, notes) = er::from_sql(DDL).unwrap();
+console.print(&diagram);
+```
+
+```text
+┌────────────────────────────┐                          ┌──────────────────┐
+│           orders           │                          │    customers     │
+├────────────────────────────┤                          ├──────────────────┤
+│ id           INT        PK │                          │ id     INT    PK │
+│ customer_id  INT        FK ├──customer_id → id (N:1)─►│ email  TEXT   UQ │
+│ placed_at    TIMESTAMP     │                          │ name   TEXT?     │
+└────────────────────────────┘                          └──────────────────┘
+```

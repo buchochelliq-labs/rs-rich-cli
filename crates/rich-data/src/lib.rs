@@ -13,6 +13,8 @@
 //!   sniffer and reader that `rich --csv` uses), [`jsonl`] (JSON Lines),
 //!   [`serialize`] (any `serde::Serialize` rows), and `arrow` (Arrow
 //!   `RecordBatch`es, behind the off-by-default `arrow` feature).
+//! - `er`: an ER diagram of a [`Schema`] or of SQL DDL, through
+//!   `rs-rich-diagram`, behind the off-by-default `er` feature.
 //! - [`infer`]: column types (integers, floats, booleans, dates, timestamps,
 //!   nulls, text) with the evidence for each, on request.
 //! - [`stats`]: per-column count, nulls, distinct values, min, max, mean,
@@ -42,6 +44,8 @@
 //! ```
 
 pub mod csv;
+#[cfg(feature = "er")]
+pub mod er;
 pub mod infer;
 pub mod jsonl;
 mod record;

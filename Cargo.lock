@@ -1854,6 +1854,7 @@ dependencies = [
  "arrow-array",
  "arrow-schema",
  "rs-rich",
+ "rs-rich-diagram",
  "rs-rich-ext",
  "serde",
  "serde_json",

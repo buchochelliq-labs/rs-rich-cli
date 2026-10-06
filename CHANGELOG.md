@@ -144,6 +144,11 @@ From integration feedback on `rs-rich-record` 0.0.3 as a library:
   (sorted by key) and names nested types by kind (`List`, `Struct`, `Map`,
   `FixedSizeList(n)`) since their children are fields; `arrow::tree` draws
   an Arrow schema and `arrow::diff` compares two.
+- `rs-rich-data` `er` (behind the new, off-by-default `er` feature, which
+  adds `rs-rich-diagram`): ER diagrams of a schema (#247). `er::model`
+  turns a model schema into `rich_diagram::ErModel` (a box per table with
+  its keys, an edge per foreign key, `N:1` or `1:1`); `er::from_sql` reads
+  DDL straight to an `ErDiagram`.
 
 ### Records and conflicts (0.0.16 workstream 5)
 

@@ -37,11 +37,14 @@ workspace = true
 # Arrow `RecordBatch` rows and schemas. Off by default: it compiles the Arrow
 # array crates.
 arrow = ["dep:arrow-array", "dep:arrow-schema"]
+# ER diagrams of a schema (`er`), through rs-rich-diagram. Off by default.
+er = ["dep:rich-diagram"]
 
 [dependencies]
 rich.workspace = true
 # `table::Value`, `TableData` and the `schema` model (behind ext's `data`).
 rich-ext = { workspace = true, features = ["data"] }
+rich-diagram = { workspace = true, optional = true }
 serde = "1"
 serde_json.workspace = true
 arrow-array = { version = "60", default-features = false, optional = true }
