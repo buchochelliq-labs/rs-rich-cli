@@ -85,11 +85,14 @@ not configurable. See [Limits](cli.md#limits).
 `rich capture` shows the output in a panel, exports SVG or HTML, and records an
 asciicast with `--cast`. There is no PNG export; convert the SVG yourself.
 
-### Diagrams draw subgraph clusters without frames
+### Mermaid subgraphs are drawn without frames; DOT's limits
 
-`rs-rich-diagram` lays every node out in one graph. DOT `cluster…` subgraphs
-and `rank` constraints are accepted, and a note under the drawing names each
-cluster's members, but no frame is drawn around them. Node ports, HTML-like
+`rs-rich-diagram` 0.0.2 frames DOT `cluster…` subgraphs and honours
+`rank=same` where a layered drawing can (a group an edge runs within is
+dropped, with a note); other `rank` values are accepted with a note. Mermaid
+flowcharts do not pass their subgraphs on as clusters yet, so those are
+still drawn without frames, with a note. ER diagrams attach relationship
+edges to an entity's box, not to the column's row. Node ports, HTML-like
 labels, `record` shapes and several graphs in one file are refused with the
 construct and its line (`rich dot` exits 4). For Graphviz's full layout, use
 `--dot-backend graphviz --export-svg` with Graphviz installed. See

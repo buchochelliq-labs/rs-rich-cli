@@ -13,13 +13,37 @@
 //! the finished geometry. Lines are drawn as direction bits per cell, so
 //! crossings and joins pick the right junction character.
 //!
+//! Same-rank groups ([`Graph::add_same_rank`]) are ranked as one node in step
+//! 1; a group that an edge runs within is dropped with a note, since a rank
+//! has no room for an edge.
+//!
+//! Clusters ([`Cluster`](crate::Cluster)) change three steps, and only for a
+//! graph that has them, so a graph without clusters draws exactly as before:
+//! - every point belongs to a cluster: a node to its innermost, a dummy to the
+//!   innermost holding both ends of its edge, and a cluster with no point in a
+//!   rank it spans gets an invisible placeholder there;
+//! - ordering keeps each cluster's points contiguous in every rank, with
+//!   sibling clusters in the same left-to-right order throughout (first
+//!   chosen from an unconstrained ordering), so their frames can be
+//!   rectangles that do not overlap;
+//! - after placement, points move right until each frame clears its
+//!   neighbours, and the gaps between ranks gain rows for the frames' top and
+//!   bottom borders.
+//!
+//! Frames are dashed so they read apart from node boxes, and are drawn last,
+//! in the cells nothing else uses: an edge crossing a frame stays whole. If
+//! the separation does not settle (it is bounded, and should not happen),
+//! the graph is drawn without frames and [`Drawing::notes`] says so.
+//!
 //! The layout takes no width: a drawing is as wide as the graph needs.
 //! [`Drawing::cropped`] fits it to a width by cutting each line at the right
 //! edge, which is what [`Diagram`](crate::Diagram) does.
 
 use std::borrow::Cow;
+use std::collections::{HashMap, HashSet};
 use std::fmt;
 
+use crate::cluster::{Grouping, Tree};
 use crate::graph::{Direction, Graph, Head, Shape, Stroke, MAX_EDGES, MAX_EDGE_LENGTH};
 use rich::cells::{cell_len, char_cell_width, set_cell_size};
 
@@ -29,6 +53,11 @@ pub struct Drawing {
     pub lines: Vec<String>,
     /// The widest line, in cells.
     pub width: usize,
+    /// What the graph asked for but the drawing does not show, one sentence
+    /// each: a same-rank group an edge runs within, a node in clusters that
+    /// do not nest, cluster frames that could not be placed. Empty for a
+    /// graph without clusters or same-rank groups.
+    pub notes: Vec<String>,
 }
 
 impl Drawing {
@@ -136,6 +165,7 @@ pub fn draw(graph: &Graph, ascii: bool) -> Result<Drawing, DrawError> {
         return Ok(Drawing {
             lines: Vec::new(),
             width: 0,
+            notes: Vec::new(),
         });
     }
     let graph = printable(graph);
@@ -156,7 +186,9 @@ pub fn draw(graph: &Graph, ascii: bool) -> Result<Drawing, DrawError> {
             if ascii { "x" } else { "×" }
         )));
     }
-    Ok(render(graph, &geometry, ascii, width, height))
+    let mut drawing = render(graph, &geometry, ascii, width, height);
+    drawing.notes = geometry.notes;
+    Ok(drawing)
 }
 
 /// Whether `c` may be drawn: no control characters but the line break.
@@ -173,27 +205,20 @@ fn printable(graph: &Graph) -> Cow<'_, Graph> {
         || graph
             .edges()
             .iter()
-            .any(|edge| edge.label.as_deref().is_some_and(|label| !clean(label)));
+            .any(|edge| edge.label.as_deref().is_some_and(|label| !clean(label)))
+        || graph
+            .clusters()
+            .iter()
+            .any(|cluster| cluster.label.as_deref().is_some_and(|label| !clean(label)));
     if !dirty {
         return Cow::Borrowed(graph);
     }
-    let scrub = |text: &str| -> String {
+    Cow::Owned(graph.map_text(|text| {
         text.chars()
             .map(|c| if c == '\t' { ' ' } else { c })
             .filter(|&c| drawable(c))
             .collect()
-    };
-    let mut nodes = graph.nodes().to_vec();
-    for node in &mut nodes {
-        node.label = scrub(&node.label);
-    }
-    let mut edges = graph.edges().to_vec();
-    for edge in &mut edges {
-        if let Some(label) = &mut edge.label {
-            *label = scrub(label);
-        }
-    }
-    Cow::Owned(Graph::from_parts(graph.direction(), nodes, edges))
+    }))
 }
 
 // ---------------------------------------------------------------- geometry
@@ -219,12 +244,29 @@ struct EdgeGeo {
     label: Option<(String, i64, i64)>,
 }
 
+/// A cluster's frame: its outline, and the label for its top border.
+#[derive(Clone, Debug)]
+struct FrameGeo {
+    /// The cluster it frames, by index into the graph's clusters.
+    #[cfg_attr(not(test), allow(dead_code))]
+    cluster: usize,
+    x: i64,
+    y: i64,
+    w: i64,
+    h: i64,
+    label: Option<String>,
+}
+
 #[derive(Clone, Debug, Default)]
 struct Geometry {
     boxes: Vec<BoxGeo>,
     edges: Vec<EdgeGeo>,
     /// Self-loop markers.
     loops: Vec<(i64, i64)>,
+    /// Cluster frames, outermost first.
+    frames: Vec<FrameGeo>,
+    /// What the layout could not do, for [`Drawing::notes`].
+    notes: Vec<String>,
 }
 
 impl Geometry {
@@ -252,6 +294,9 @@ impl Geometry {
         }
         for &(x, y) in &self.loops {
             take(x, y, x, y);
+        }
+        for f in &self.frames {
+            take(f.x, f.y, f.x + f.w - 1, f.y + f.h - 1);
         }
         (min_x, min_y, max_x, max_y)
     }
@@ -302,6 +347,13 @@ impl Geometry {
                 point.1 = mirror(point.1);
             }
         }
+        for f in &mut self.frames {
+            if horizontal {
+                f.x = mirror(f.x + f.w - 1);
+            } else {
+                f.y = mirror(f.y + f.h - 1);
+            }
+        }
     }
 
     /// Shift everything so the top-left corner is (0, 0).
@@ -324,6 +376,10 @@ impl Geometry {
         for point in &mut self.loops {
             point.0 -= min_x;
             point.1 -= min_y;
+        }
+        for f in &mut self.frames {
+            f.x -= min_x;
+            f.y -= min_y;
         }
     }
 }
@@ -360,12 +416,28 @@ fn edge_text(label: &str) -> String {
 
 fn layout(graph: &Graph, horizontal: bool) -> Result<Geometry, String> {
     let n = graph.nodes().len();
+    let mut notes = Vec::new();
+
+    // Same-rank groups rank as one node: `rep` maps each node to the node it
+    // ranks with (itself, without groups).
+    let (rep, dropped) = graph.rank_sets();
+    for &group in &dropped {
+        let ids: Vec<&str> = graph.same_rank_groups()[group]
+            .iter()
+            .filter_map(|&v| graph.nodes().get(v))
+            .map(|node| node.id.as_str())
+            .collect();
+        notes.push(format!(
+            "a same-rank group is not applied, as an edge joins two of its nodes: {}",
+            ids.join(", ")
+        ));
+    }
 
     // 1. Break cycles: reverse the edges a DFS finds going back.
     let mut out: Vec<Vec<usize>> = vec![Vec::new(); n];
     for (index, edge) in graph.edges().iter().enumerate() {
         if edge.from != edge.to {
-            out[edge.from].push(index);
+            out[rep[edge.from]].push(index);
         }
     }
     let mut reversed = vec![false; graph.edges().len()];
@@ -379,7 +451,7 @@ fn layout(graph: &Graph, horizontal: bool) -> Result<Geometry, String> {
         while let Some(&mut (v, ref mut next)) = stack.last_mut() {
             if let Some(&edge) = out[v].get(*next) {
                 *next += 1;
-                let to = graph.edges()[edge].to;
+                let to = rep[graph.edges()[edge].to];
                 match state[to] {
                     0 => {
                         state[to] = 1;
@@ -411,11 +483,12 @@ fn layout(graph: &Graph, horizontal: bool) -> Result<Geometry, String> {
         .collect();
 
     // 2. Rank by longest path, then pull sources down next to their targets.
+    // Ranked by representative: a same-rank group is one node here.
     let mut indegree = vec![0usize; n];
     let mut successors: Vec<Vec<(usize, usize)>> = vec![Vec::new(); n];
     for &(u, v, len, _) in &oriented {
-        indegree[v] += 1;
-        successors[u].push((v, len));
+        indegree[rep[v]] += 1;
+        successors[rep[u]].push((rep[v], len));
     }
     let mut order = Vec::with_capacity(n);
     let mut remaining = indegree.clone();
@@ -445,6 +518,7 @@ fn layout(graph: &Graph, horizontal: bool) -> Result<Geometry, String> {
                 .unwrap_or(0);
         }
     }
+    let rank: Vec<usize> = (0..n).map(|v| rank[rep[v]]).collect();
 
     // Refuse before building anything that grows with the ranks crossed.
     let dummies = oriented.iter().fold(0usize, |total, &(u, v, _, _)| {
@@ -469,7 +543,9 @@ fn layout(graph: &Graph, horizontal: bool) -> Result<Geometry, String> {
             } else {
                 0
             };
-            let (mut w, h) = (tw + 4 + extra, th + 2);
+            // A table's header is ruled off from its rows.
+            let rule = i64::from(node.shape == Shape::Table && th > 1);
+            let (mut w, h) = (tw + 4 + extra, th + 2 + rule);
             // An odd width centres the port, so straight runs line up.
             if !horizontal && w % 2 == 0 {
                 w += 1;
@@ -512,6 +588,21 @@ fn layout(graph: &Graph, horizontal: bool) -> Result<Geometry, String> {
         });
     }
 
+    // Clusters: every point's innermost cluster. A node's is its own; a
+    // dummy's, the innermost cluster holding both ends of its edge.
+    let tree = Tree::new(graph, &mut notes);
+    let mut of: Vec<Option<usize>> = Vec::new();
+    if let Some(tree) = &tree {
+        of = vec![None; vertices.len()];
+        of[..n].copy_from_slice(&tree.node);
+        for piece in &pieces {
+            if vertices[piece.to].node.is_none() {
+                let edge = &graph.edges()[piece.edge];
+                of[piece.to] = tree.common(tree.node[edge.from], tree.node[edge.to]);
+            }
+        }
+    }
+
     // Widen nodes so every piece gets its own port.
     let mut ins = vec![0i64; vertices.len()];
     let mut outs = vec![0i64; vertices.len()];
@@ -519,16 +610,39 @@ fn layout(graph: &Graph, horizontal: bool) -> Result<Geometry, String> {
         outs[piece.from] += 1;
         ins[piece.to] += 1;
     }
+    // Left-right, a table's edges keep to its rows, below the header and
+    // rule (`inset` rows).
+    let inset = |node: usize| {
+        let node = &graph.nodes()[node];
+        i64::from(horizontal && node.shape == Shape::Table && node.label.contains('\n')) * 2
+    };
     for (v, vertex) in vertices.iter_mut().enumerate() {
-        if vertex.node.is_some() {
+        if let Some(node) = vertex.node {
             let ports = ins[v].max(outs[v]).max(1);
-            let needed = if horizontal { ports + 2 } else { 2 * ports + 1 };
+            let needed = if horizontal {
+                ports + 2 + inset(node)
+            } else {
+                2 * ports + 1
+            };
             vertex.cross = vertex.cross.max(needed);
             if !horizontal && vertex.cross % 2 == 0 {
                 vertex.cross += 1;
             }
         }
     }
+
+    // A cluster holds a point in every rank it spans, so its frame has a
+    // place in each: an empty rank gets a placeholder, which draws nothing.
+    if let Some(tree) = &tree {
+        fill_spans(tree, &mut vertices, &mut of);
+        if vertices.len() > MAX_VERTICES {
+            return Err(format!(
+                "its clusters and edges cross {} rank positions, more than {MAX_VERTICES}",
+                vertices.len()
+            ));
+        }
+    }
+    let mut grouping = tree.as_ref().map(|tree| Grouping::new(tree, of));
 
     let ranks = vertices.iter().map(|v| v.rank).max().unwrap_or(0) + 1;
     let mut layers: Vec<Vec<usize>> = vec![Vec::new(); ranks];
@@ -542,12 +656,47 @@ fn layout(graph: &Graph, horizontal: bool) -> Result<Geometry, String> {
         succs[piece.from].push(piece.to);
     }
 
-    // 4. Order each rank by barycentre sweeps.
-    order_layers(&mut layers, &preds, &succs, vertices.len());
+    // 4. Order each rank by barycentre sweeps. With clusters, a second round
+    // keeps each cluster's points together, siblings in one order throughout.
+    order_layers(&mut layers, &preds, &succs, vertices.len(), None);
+    if let Some(grouping) = &mut grouping {
+        grouping.order_siblings(&layers);
+        order_layers(&mut layers, &preds, &succs, vertices.len(), Some(grouping));
+    }
 
-    // 5. Positions across the rank.
+    // 5. Positions across the rank, then, with clusters, apart until no
+    // frame overlaps what is outside it.
     let gap = if horizontal { 1 } else { 2 };
-    let position = place(&layers, &vertices, &preds, &succs, gap);
+    let mut position = place(&layers, &vertices, &preds, &succs, gap);
+    // Across the rank, a frame clears its contents by a column top-down; by
+    // no row left-right, where its top border is a row of its own anyway.
+    let pad = if horizontal { 0 } else { 1 };
+    // The label sits in the frame's top border: a corner and a border cell
+    // each side, and a space each side of the text. Top-down the border runs
+    // across the ranks, left-right along them.
+    let label_room: Vec<i64> = graph
+        .clusters()
+        .iter()
+        .map(|cluster| match cluster.label.as_deref() {
+            Some(label) if !label.is_empty() => cell_len(&edge_text(label)) as i64 + 6,
+            _ => 0,
+        })
+        .collect();
+    let mut across = None;
+    if let Some(grouping) = &grouping {
+        let cross: Vec<i64> = vertices.iter().map(|v| v.cross).collect();
+        let min_width = if horizontal {
+            vec![0; label_room.len()]
+        } else {
+            label_room.clone()
+        };
+        across = grouping.separate(&layers, &mut position, &cross, gap, pad, &min_width);
+        if across.is_none() {
+            notes.push("cluster frames are not drawn: they could not be placed apart".into());
+        }
+    }
+    let grouping = grouping.filter(|_| across.is_some());
+    let position = position;
     let center = |v: usize| position[v] + vertices[v].cross / 2;
 
     // Ports: pieces leaving and entering each vertex, spread over its side in
@@ -571,9 +720,10 @@ fn layout(graph: &Graph, horizontal: bool) -> Result<Geometry, String> {
                 }
                 return;
             }
-            let interior = vertices[v].cross - 2;
+            let skip = vertices[v].node.map_or(0, inset);
+            let interior = vertices[v].cross - 2 - skip;
             let span = (k - 1) * spacing + 1;
-            let start = position[v] + 1 + (interior - span).max(0) / 2;
+            let start = position[v] + 1 + skip + (interior - span).max(0) / 2;
             for (i, &p) in list.iter().enumerate() {
                 ports[p] = start + i as i64 * spacing;
             }
@@ -673,10 +823,66 @@ fn layout(graph: &Graph, horizontal: bool) -> Result<Geometry, String> {
             gap_labels[r] = label_ends.len() as i64;
         }
     }
+    // Frames along the flow: before a rank, a border row (a column
+    // left-right) per frame opening there, plus one for the arrowheads; after
+    // it, a row per frame closing there, and left-right as many more as a
+    // label needs. `top[c]` counts the frames opening with `c` at its first
+    // rank, itself and those inside it; `first[c]` and `last[c]` are its
+    // border rows.
+    let count = graph.clusters().len();
+    let mut spans = vec![(0usize, 0usize); count];
+    let mut top = vec![0i64; count];
+    let mut before = vec![0i64; ranks];
+    let mut after = vec![0i64; ranks];
+    let mut closing: Vec<Vec<usize>> = vec![Vec::new(); ranks];
+    if let Some(grouping) = &grouping {
+        for &c in &grouping.tree.deepest_first {
+            let points = &grouping.inside[c];
+            let lo = points.iter().map(|&v| vertices[v].rank).min().unwrap_or(0);
+            let hi = points.iter().map(|&v| vertices[v].rank).max().unwrap_or(0);
+            spans[c] = (lo, hi);
+            top[c] = 1 + grouping.tree.children[c]
+                .iter()
+                .filter(|&&k| spans[k].0 == lo)
+                .map(|&k| top[k])
+                .max()
+                .unwrap_or(0);
+            before[lo] = before[lo].max(1 + top[c]);
+            // Deepest first, so a frame closes after those inside it.
+            closing[hi].push(c);
+        }
+    }
+    let mut first = vec![0i64; count];
+    let mut last = vec![0i64; count];
     let mut layer_start = vec![0i64; ranks];
-    for r in 1..ranks {
-        layer_start[r] =
-            layer_start[r - 1] + thickness[r - 1] + gap_tracks[r - 1] + gap_labels[r - 1] + 2;
+    layer_start[0] = before[0];
+    for r in 0..ranks {
+        if r > 0 {
+            layer_start[r] = layer_start[r - 1]
+                + thickness[r - 1]
+                + after[r - 1]
+                + gap_tracks[r - 1]
+                + gap_labels[r - 1]
+                + 2
+                + before[r];
+        }
+        let end = layer_start[r] + thickness[r] - 1;
+        for &c in &closing[r] {
+            first[c] = layer_start[spans[c].0] - 1 - top[c];
+            let mut border = end + 1;
+            if let Some(grouping) = &grouping {
+                for &k in &grouping.tree.children[c] {
+                    if spans[k].1 == r {
+                        border = border.max(last[k] + 1);
+                    }
+                }
+            }
+            if horizontal {
+                border = border.max(first[c] + label_room[c] - 1);
+            }
+            last[c] = border;
+            after[r] = after[r].max(border - end);
+        }
     }
 
     // 7. Geometry, in (across, along) then mapped to (x, y).
@@ -720,7 +926,7 @@ fn layout(graph: &Graph, horizontal: bool) -> Result<Geometry, String> {
                 layer_start[r]
             };
             let end_along = layer_start[to.rank];
-            let gap_start = layer_start[r] + thickness[r];
+            let gap_start = layer_start[r] + thickness[r] + after[r];
             let (a, b) = (port_from[p], port_to[p]);
             points.push(to_xy(a, start_along));
             if let Some(t) = track[p] {
@@ -755,7 +961,62 @@ fn layout(graph: &Graph, horizontal: bool) -> Result<Geometry, String> {
             label,
         });
     }
+    if let (Some(grouping), Some(across)) = (&grouping, &across) {
+        // Outermost first.
+        for &c in grouping.tree.deepest_first.iter().rev() {
+            let (x0, y0) = to_xy(across[c].0, first[c]);
+            let (x1, y1) = to_xy(across[c].1, last[c]);
+            geometry.frames.push(FrameGeo {
+                cluster: c,
+                x: x0,
+                y: y0,
+                w: x1 - x0 + 1,
+                h: y1 - y0 + 1,
+                label: graph.clusters()[c]
+                    .label
+                    .as_deref()
+                    .map(edge_text)
+                    .filter(|label| !label.is_empty()),
+            });
+        }
+    }
+    geometry.notes = notes;
     Ok(geometry)
+}
+
+/// Give every cluster a point in each rank it spans: a placeholder where it
+/// has none, which counts for the clusters around it too.
+fn fill_spans(tree: &Tree, vertices: &mut Vec<Vertex>, of: &mut Vec<Option<usize>>) {
+    let mut present: HashSet<(usize, usize)> = HashSet::new();
+    let mut spans: HashMap<usize, (usize, usize)> = HashMap::new();
+    for (v, vertex) in vertices.iter().enumerate() {
+        for &c in tree.chain_of(of[v]) {
+            present.insert((c, vertex.rank));
+            let span = spans.entry(c).or_insert((vertex.rank, vertex.rank));
+            span.0 = span.0.min(vertex.rank);
+            span.1 = span.1.max(vertex.rank);
+        }
+    }
+    for &c in &tree.deepest_first {
+        let Some(&(lo, hi)) = spans.get(&c) else {
+            continue;
+        };
+        for rank in lo..=hi {
+            if present.contains(&(c, rank)) {
+                continue;
+            }
+            vertices.push(Vertex {
+                node: None,
+                rank,
+                cross: 1,
+                along: 0,
+            });
+            of.push(Some(c));
+            for &k in tree.chain_of(Some(c)) {
+                present.insert((k, rank));
+            }
+        }
+    }
 }
 
 /// Give each piece that changes position a track (a row, or a column
@@ -834,13 +1095,25 @@ fn assign_tracks(
     occupied.len() as i64
 }
 
-/// Reorder every rank to reduce crossings, keeping the best order seen.
+/// Reorder every rank to reduce crossings, keeping the best order seen. With
+/// a grouping, every order tried keeps each cluster's points together.
 fn order_layers(
     layers: &mut [Vec<usize>],
     preds: &[Vec<usize>],
     succs: &[Vec<usize>],
     count: usize,
+    grouping: Option<&Grouping<'_>>,
 ) {
+    if let Some(grouping) = grouping {
+        for layer in layers.iter_mut() {
+            let items: Vec<(f64, usize)> = layer
+                .iter()
+                .enumerate()
+                .map(|(i, &v)| (i as f64, v))
+                .collect();
+            *layer = grouping.arrange(&items);
+        }
+    }
     let mut index = vec![0usize; count];
     let reindex = |layers: &[Vec<usize>], index: &mut [usize]| {
         for layer in layers {
@@ -877,7 +1150,13 @@ fn order_layers(
                 })
                 .collect();
             keyed.sort_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)));
-            layers[r] = keyed.into_iter().map(|(_, _, v)| v).collect();
+            layers[r] = match grouping {
+                Some(grouping) => {
+                    let items: Vec<(f64, usize)> = keyed.iter().map(|&(k, _, v)| (k, v)).collect();
+                    grouping.arrange(&items)
+                }
+                None => keyed.into_iter().map(|(_, _, v)| v).collect(),
+            };
             for (i, &v) in layers[r].iter().enumerate() {
                 index[v] = i;
             }
@@ -1020,6 +1299,8 @@ enum Cell {
     Glyph(String),
     /// The second cell of a wide character.
     Wide,
+    /// Part of a cluster frame.
+    Frame(char),
 }
 
 struct Canvas {
@@ -1052,7 +1333,7 @@ impl Canvas {
                     }
                 }
                 Cell::Empty => *cell = Cell::Line(bits, stroke),
-                Cell::Glyph(_) | Cell::Wide => {}
+                Cell::Glyph(_) | Cell::Wide | Cell::Frame(_) => {}
             }
         }
     }
@@ -1137,6 +1418,7 @@ impl Canvas {
                         Cell::Line(bits, stroke) => line.push(self.line_char(*bits, *stroke)),
                         Cell::Glyph(text) => line.push_str(text),
                         Cell::Wide => {}
+                        Cell::Frame(c) => line.push(*c),
                     }
                 }
                 line.trim_end().to_string()
@@ -1167,7 +1449,7 @@ fn frame(shape: Shape, ascii: bool) -> Frame {
     };
     let square = [None; 4];
     match shape {
-        Shape::Rect | Shape::Subroutine => Frame {
+        Shape::Rect | Shape::Subroutine | Shape::Table => Frame {
             corners: square,
             sides: [None, None],
         },
@@ -1273,6 +1555,20 @@ fn render(graph: &Graph, geometry: &Geometry, ascii: bool, width: i64, height: i
             }
         }
         let lines: Vec<&str> = node.label.split('\n').collect();
+        if node.shape == Shape::Table && lines.len() > 1 {
+            // The header centred at the top, a rule, the rows left-aligned.
+            let left = x0 + (b.w - cell_len(lines[0]) as i64) / 2;
+            canvas.text(left, y0 + 1, lines[0]);
+            canvas.bits(x0, y0 + 2, N | S | E, Stroke::Solid);
+            canvas.bits(x1, y0 + 2, N | S | W, Stroke::Solid);
+            for x in x0 + 1..x1 {
+                canvas.bits(x, y0 + 2, E | W, Stroke::Solid);
+            }
+            for (i, line) in lines[1..].iter().enumerate() {
+                canvas.text(x0 + 2, y0 + 3 + i as i64, line);
+            }
+            continue;
+        }
         let top = y0 + 1 + (b.h - 2 - lines.len() as i64) / 2;
         for (i, line) in lines.iter().enumerate() {
             let left = x0 + (b.w - cell_len(line) as i64) / 2;
@@ -1334,9 +1630,96 @@ fn render(graph: &Graph, geometry: &Geometry, ascii: bool, width: i64, height: i
         }
     }
 
+    for frame in &geometry.frames {
+        draw_frame(&mut canvas, frame);
+    }
+
     let lines = canvas.lines();
     let width = lines.iter().map(|l| cell_len(l)).max().unwrap_or(0);
-    Drawing { lines, width }
+    Drawing {
+        lines,
+        width,
+        notes: Vec::new(),
+    }
+}
+
+/// Draw a cluster frame in the cells nothing else uses, so the edges that
+/// cross it stay whole, and its label in the top border where no edge
+/// crosses (or the bottom border, or over the top one's edges as a last
+/// resort).
+fn draw_frame(canvas: &mut Canvas, frame: &FrameGeo) {
+    let (x0, y0, x1, y1) = (
+        frame.x,
+        frame.y,
+        frame.x + frame.w - 1,
+        frame.y + frame.h - 1,
+    );
+    let [horizontal, vertical, top_left, top_right, bottom_left, bottom_right] = if canvas.ascii {
+        ['-', ':', '+', '+', '+', '+']
+    } else {
+        ['╌', '╎', '┌', '┐', '└', '┘']
+    };
+    let mut put = |x: i64, y: i64, c: char| {
+        if let Some(cell) = canvas.get(x, y) {
+            if matches!(cell, Cell::Empty) {
+                *cell = Cell::Frame(c);
+            }
+        }
+    };
+    for x in x0 + 1..x1 {
+        put(x, y0, horizontal);
+        put(x, y1, horizontal);
+    }
+    for y in y0 + 1..y1 {
+        put(x0, y, vertical);
+        put(x1, y, vertical);
+    }
+    put(x0, y0, top_left);
+    put(x1, y0, top_right);
+    put(x0, y1, bottom_left);
+    put(x1, y1, bottom_right);
+    let Some(label) = &frame.label else {
+        return;
+    };
+    // ` label ` between the corners, after one border cell when it fits.
+    let room = frame.w - 2;
+    if room < 3 {
+        return;
+    }
+    let text = format!(" {} ", fit(label, (room - 2) as usize, canvas.ascii));
+    let width = cell_len(&text) as i64;
+    let free = |canvas: &mut Canvas, left: i64, y: i64| {
+        (left..left + width).all(|x| matches!(canvas.get(x, y), Some(Cell::Frame(_))))
+    };
+    let first = if width < room { x0 + 2 } else { x0 + 1 };
+    // The top border; the bottom one if edges cross the top everywhere; the
+    // top regardless if they cross both.
+    let (left, y) = [y0, y1]
+        .into_iter()
+        .find_map(|y| {
+            (first..=x1 - width)
+                .find(|&left| free(canvas, left, y))
+                .map(|left| (left, y))
+        })
+        .unwrap_or((first, y0));
+    canvas.text(left, y, &text);
+}
+
+/// `text` cut to `width` cells, ending in an ellipsis when cut.
+fn fit(text: &str, width: usize, ascii: bool) -> String {
+    if cell_len(text) <= width {
+        return text.to_string();
+    }
+    let ellipsis = if ascii { "~" } else { "…" };
+    let mut out = String::new();
+    for c in text.chars() {
+        if cell_len(&out) + char_cell_width(c) + 1 > width {
+            break;
+        }
+        out.push(c);
+    }
+    out.push_str(ellipsis);
+    out
 }
 
 #[cfg(test)]
@@ -1401,6 +1784,118 @@ mod tests {
                 crossings(&layers, &succs, &index),
                 crossings_by_pairs(&layers, &succs, &index)
             );
+        }
+    }
+
+    /// Random graphs with random (nested) clusters and same-rank groups:
+    /// every frame holds its cluster's boxes and clears everything else, and
+    /// every honoured group shares a rank.
+    #[test]
+    fn frames_hold_their_clusters_and_clear_the_rest() {
+        use crate::graph::{Cluster, Edge, Node};
+        let mut seed = 0x51_7cc1_b727_220au64;
+        let mut next = |bound: usize| {
+            seed ^= seed << 13;
+            seed ^= seed >> 7;
+            seed ^= seed << 17;
+            (seed % bound as u64) as usize
+        };
+        let directions = [
+            Direction::TopDown,
+            Direction::LeftRight,
+            Direction::BottomUp,
+            Direction::RightLeft,
+        ];
+        for case in 0..400 {
+            let n = 1 + next(12);
+            let nodes = (0..n)
+                .map(|i| Node::new(format!("n{i}"), "x".repeat(1 + next(6))))
+                .collect();
+            let edges = (0..next(2 * n + 1))
+                .map(|_| {
+                    let mut edge = Edge::new(next(n), next(n));
+                    if next(4) == 0 {
+                        edge.label = Some("label".into());
+                    }
+                    edge.length = 1 + next(2);
+                    edge
+                })
+                .collect();
+            let mut graph = Graph::from_parts(directions[next(4)], nodes, edges);
+            for c in 0..next(4) {
+                let mut cluster = Cluster::new(format!("c{c}"))
+                    .nodes((0..1 + next(3)).map(|_| next(n)).collect::<Vec<_>>());
+                if next(3) == 0 {
+                    cluster = cluster.label("Group name");
+                }
+                if c > 0 && next(2) == 0 {
+                    cluster = cluster.parent(next(c));
+                }
+                graph.add_cluster(cluster);
+            }
+            for _ in 0..next(3) {
+                graph.add_same_rank((0..2).map(|_| next(n)).collect::<Vec<_>>());
+            }
+            let horizontal = graph.direction().is_horizontal();
+            let geometry = layout(&graph, horizontal).unwrap();
+            let mut notes = Vec::new();
+            let Some(tree) = Tree::new(&graph, &mut notes) else {
+                assert!(geometry.frames.is_empty(), "case {case}");
+                continue;
+            };
+            if geometry
+                .notes
+                .iter()
+                .any(|note| note.contains("placed apart"))
+            {
+                panic!("case {case}: {:?}", geometry.notes);
+            }
+            let inside = |c: usize, node: usize| tree.chain_of(tree.node[node]).contains(&c);
+            let rect = |x: i64, y: i64, w: i64, h: i64| (x, y, x + w - 1, y + h - 1);
+            let within = |a: (i64, i64, i64, i64), b: (i64, i64, i64, i64)| {
+                a.0 > b.0 && a.1 > b.1 && a.2 < b.2 && a.3 < b.3
+            };
+            let apart = |a: (i64, i64, i64, i64), b: (i64, i64, i64, i64)| {
+                a.2 < b.0 || b.2 < a.0 || a.3 < b.1 || b.3 < a.1
+            };
+            assert_eq!(
+                geometry.frames.len(),
+                tree.deepest_first.len(),
+                "case {case}"
+            );
+            for frame in &geometry.frames {
+                let f = rect(frame.x, frame.y, frame.w, frame.h);
+                for b in &geometry.boxes {
+                    let r = rect(b.x, b.y, b.w, b.h);
+                    if inside(frame.cluster, b.node) {
+                        assert!(within(r, f), "case {case}: {} outside its frame", b.node);
+                    } else {
+                        assert!(apart(r, f), "case {case}: {} inside a frame", b.node);
+                    }
+                }
+                for other in &geometry.frames {
+                    if other.cluster == frame.cluster {
+                        continue;
+                    }
+                    let o = rect(other.x, other.y, other.w, other.h);
+                    let nested = tree.chain_of(Some(other.cluster)).contains(&frame.cluster);
+                    let outer = tree.chain_of(Some(frame.cluster)).contains(&other.cluster);
+                    if nested {
+                        assert!(within(o, f), "case {case}: a nested frame sticks out");
+                    } else if !outer {
+                        assert!(apart(o, f), "case {case}: frames overlap");
+                    }
+                }
+            }
+            let (rep, _) = graph.rank_sets();
+            for a in &geometry.boxes {
+                for b in &geometry.boxes {
+                    if rep[a.node] == rep[b.node] {
+                        let along = |b: &BoxGeo| if horizontal { b.x } else { b.y };
+                        assert_eq!(along(a), along(b), "case {case}: a same-rank group split");
+                    }
+                }
+            }
         }
     }
 }

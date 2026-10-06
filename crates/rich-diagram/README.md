@@ -99,8 +99,9 @@ untrusted input cannot reach the terminal as an escape sequence.
 `rich_diagram::dot::parse` reads the DOT people write by hand (`graph` and
 `digraph`, `strict`, node and edge statements with chains and `{ … }` groups,
 `label`/`shape`/`style` and the other common attributes, `node`/`edge`/`graph`
-defaults, subgraphs and `cluster…` clusters, quoted IDs, comments) into a
-`Graph`, and the `Dot` renderable draws a source through the layout:
+defaults, subgraphs and `cluster…` clusters, `rank=same`, quoted IDs,
+comments) into a `Graph`, and the `Dot` renderable draws a source through the
+layout:
 
 ```rust
 use rich::Console;
@@ -120,10 +121,66 @@ Features, both off by default:
 - `graphviz`: `graphviz::render_svg`, which runs Graphviz's own `dot -Tsvg`
   (installed separately) with the source on stdin, a timeout and size caps.
 
+## Clusters and same-rank groups
+
+A `Cluster` (a DOT `subgraph cluster_…`, or `Graph::cluster` /
+`Graph::add_cluster` in code) is drawn as a dashed frame around its nodes,
+its label in the top border; nested clusters draw nested frames. The layout
+keeps a cluster's nodes together in every rank and moves what is outside a
+frame clear of it; edges cross frames whole. A same-rank group (DOT
+`{ rank=same; a; b }`, or `Graph::same_rank`) is drawn in one rank, unless an
+edge joins two of its nodes: a layered drawing has no edges within a rank,
+so that group is dropped with a note in `Drawing::notes`. A graph with
+neither draws exactly as before.
+
+```text
+         ┌╌ Backend ╌╌╌╌╌╌┐
+┌─────┐  ╎ ┌─────┐  ┌────┐╎
+│ web ├───►│ api ├─►│ db │╎
+└─────┘  ╎ └─────┘  └────┘╎
+         └╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┘
+```
+
+## ER diagrams
+
+`rich_diagram::er` draws entity-relationship diagrams from an `ErModel`
+built in code: entities with columns (type, `PK`, `FK`, `UQ`, nullable),
+relationships from one entity's columns to another's with an optional
+cardinality, and groups, drawn as frames. The model knows no source format,
+so a schema or SQL DDL reader fills it.
+
+```rust
+use rich::Console;
+use rich_diagram::er::{Cardinality, Column, Entity, ErDiagram, ErModel, Relationship};
+
+let model = ErModel::new()
+    .entity(Entity::new("users")
+        .column(Column::new("id").data_type("int").primary_key())
+        .column(Column::new("email").data_type("text").unique()))
+    .entity(Entity::new("orders")
+        .column(Column::new("id").data_type("int").primary_key())
+        .column(Column::new("user_id").data_type("int").foreign_key())
+        .column(Column::new("note").data_type("text").nullable()))
+    .relationship(Relationship::new("orders", "users")
+        .columns(["user_id"], ["id"])
+        .cardinality(Cardinality::ManyToOne));
+Console::new().print(&ErDiagram::new(model));
+```
+
+```text
+┌────────────────────┐                       ┌─────────────────┐
+│       orders       │                       │      users      │
+├────────────────────┤                       ├─────────────────┤
+│ id       int    PK │ ┌─user_id → id (N:1)─►│ id     int   PK │
+│ user_id  int    FK ├─┘                     │ email  text  UQ │
+│ note     text?     │                       └─────────────────┘
+└────────────────────┘
+```
+
 ## Limits
 
 The layout refuses (`DrawError`; `Diagram` shows a one-line note instead)
 graphs needing more than 5000 points (nodes plus one per rank a long edge
 crosses) and drawings over 2 million cells. An edge spans at most 10 ranks.
-Clusters (subgraph frames) are not drawn yet; DOT clusters are parsed and
-named in a note under the drawing.
+Mermaid's subgraphs are not passed on as clusters yet, so they are drawn
+without frames.

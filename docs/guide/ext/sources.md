@@ -1,7 +1,8 @@
 # Dependency graphs and JSON Schemas
 
 Two sources the terminal is often asked about, drawn as trees (0.0.15):
-Cargo's resolved dependency graph and JSON Schemas; beside the graph, the
+Cargo's resolved dependency graph and JSON Schemas (and, since 0.0.16, SQL
+DDL and Arrow schemas through [the schema model](#the-schema-model)); beside the graph, the
 [supply-chain reports](#supply-chain-reports) (0.0.16) read feature,
 build-time, advisory and licence data Cargo and its tools already wrote. Both live in `rs-rich-ext`
 behind its `data` feature, as `rich_ext::deps` and `rich_ext::schema`; the
@@ -486,3 +487,189 @@ order-v1.schema.json → order-v2.schema.json: 9 changes, 5 breaking
 
 Both read a file, an http(s) URL or `-` (stdin, for one of the two); a file
 that is not a JSON Schema (an object, `true` or `false`) is an error, exit 4.
+
+## The schema model
+
+`SchemaTree` and `SchemaDiff` read a format-neutral model,
+`rich_ext::schema::{Schema, Field, DataType, Constraint}` (0.0.16), so JSON
+Schema, SQL DDL and Arrow schemas draw and compare the same way. A `Schema`
+is a list of `Field`s, optionally named, and (for a SQL file) further named
+tables. A field has a model type (`integer`, `decimal(10,2)`,
+`timestamp[UTC]`, `list<…>`, `struct`, `map<…, …>`), the source's own type
+name as written (`VARCHAR(255)`, `Int32`, `string | null`), which the tree
+shows, whether it may be null and whether a value must be present, and its
+constraints: enum values, bounds, length, pattern, format, a default, primary
+and unique keys and a `ForeignKey` to `table.column`. A key across several
+columns is the table's own constraint.
+
+`schema::json::to_model` maps a JSON Schema into the model; `SchemaTree::new`
+draws a JSON Schema through the same mapping, and the output above is byte
+for byte what it was before the model existed. JSON Schema's own structure
+(pattern-named properties, tuple items, `oneOf` branches, `$ref`s) is kept
+with each child's `FieldKind` and the reference its type came through.
+
+### SQL DDL
+
+`schema::sql::parse` reads a small `CREATE TABLE` subset: column names and
+types (quoted or not, with parameters, several words such as
+`DOUBLE PRECISION`, and arrays), `NOT NULL`, `DEFAULT`, `PRIMARY KEY`,
+`UNIQUE` and `REFERENCES` on a column or for several columns on the table,
+`CONSTRAINT name`, MySQL's `ENUM(…)` and `COMMENT`, `--` and `/* */`
+comments, and any number of statements. `CHECK` constraints, indexes and
+every statement but `CREATE TABLE` are skipped, each with a note giving its
+line; text it cannot read (an unclosed string or parenthesis, a table with
+no column list) is an error with its line. Input is bounded: 16 MiB, 100,000
+statements, 4,096 columns a table and parentheses 64 deep.
+
+```rust
+use rich::Console;
+use rich_ext::schema::{sql, SchemaTree};
+
+let parsed = sql::parse(&std::fs::read_to_string("shop.sql").unwrap()).unwrap();
+for note in &parsed.notes {
+    eprintln!("{note}"); // line 13: orders.total: CHECK constraint skipped
+}
+Console::new().print(&SchemaTree::from_model(parsed.schema).title("shop"));
+```
+
+```text
+shop  2 tables
+├── customers  table
+│   ├── id (required)  BIGINT  primary key
+│   ├── email (required)  VARCHAR(255)  unique
+│   └── name  TEXT
+└── orders  table
+    ├── id (required)  BIGINT  primary key
+    ├── customer_id (required)  BIGINT  → customers.id
+    ├── status  VARCHAR(16)  default='new'
+    └── total  NUMERIC(10, 2)
+```
+
+### Comparing any two schemas
+
+`SchemaDiff::models(&old, &new)` compares two model schemas: fields by name
+(nested ones by path, a list's items as `field[]`), then tables by name. It
+reports the same kinds of change as the JSON Schema diff, plus keys and
+metadata, with the same `breaking` rule: a new requirement (a `NOT NULL`, a
+non-nullable Arrow field), a field no longer nullable, a changed type, a new key or reference, a tighter
+bound, a removed enum value, and a removed field or table (rows that have it
+no longer fit). A changed default or metadata entry is informational. Types
+are compared by the source's own name, ignoring case, so `INT → BIGINT` and
+`Int32 → Int64` are changes; comparing schemas from two formats works, but
+reports every type whose names differ.
+
+```text
+┏━━━┳━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━┓
+┃   ┃ Where            ┃ Change                                 ┃          ┃
+┡━━━╇━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━┩
+│ ~ │ customers.name   │ became required                        │ breaking │
+│ ~ │ customers.email  │ type VARCHAR(255) → VARCHAR(320)       │ breaking │
+│ ~ │ orders.status    │ default 'new' → 'pending'              │          │
+│ ~ │ orders.total     │ type NUMERIC(10, 2) → NUMERIC(12, 2)   │ breaking │
+│ + │ orders.placed_at │ field added (TIMESTAMP WITH TIME ZONE) │          │
+│ + │ order_lines      │ table added (3 fields)                 │          │
+└───┴──────────────────┴────────────────────────────────────────┴──────────┘
+v1 → v2: 6 changes, 3 breaking
+```
+
+`SchemaDiff::new` stays the way to compare two JSON Schemas: it follows
+`$ref`s as it goes, so shared definitions are compared only where they
+differ.
+
+### Arrow schemas
+
+With `rs-rich-data`'s `arrow` feature, `rich_data::arrow::schema` maps an
+Arrow schema into the model: nested structs, lists and maps, dictionaries
+(as their value type), timestamps with their unit and time zone, decimals
+with precision and scale, nullability, and field and schema metadata.
+`arrow::tree` draws it and `arrow::diff` compares two (#342):
+
+```text
+events  8 fields  version=1
+├── id (required)  Int32
+├── at (required)  Timestamp(µs, "Europe/Paris")
+├── kind  Dictionary(Int8, Utf8)  description=kind
+├── amount  Decimal128(12, 2)
+├── tags  List
+│   └── item  Utf8
+├── address  Struct
+│   ├── city (required)  Utf8
+│   └── zip  Utf8
+├── scores  Map
+│   ├── key (required)  Utf8
+│   └── value  Float64
+└── debug  Boolean
+```
+
+### Schema evolution
+
+`SchemaTimeline` lays a series of versions on a `chart::Timeline` (#347): a
+row per field (`table.column` for DDL) spanning the versions it is in, a
+milestone per version with its counts (`v2: +2 ~4, 3 breaking`), and, unless
+`details(false)`, every change listed under it. A span takes the added,
+changed or breaking style in the version its field changed. Versions are at
+their index unless placed with `at`; consecutive JSON Schemas compare as
+JSON Schema, anything else through the model.
+
+```rust
+use rich_ext::schema::{sql, SchemaTimeline};
+
+let timeline = SchemaTimeline::new()
+    .push("v1", sql::parse(V1).unwrap().schema)
+    .push("v2", sql::parse(V2).unwrap().schema);
+```
+
+```text
+customers.id         #############################==============================
+customers.email      #############################==============================
+customers.name       #############################==============================
+orders.id            #############################==============================
+orders.customer_id   #############################==============================
+orders.status        #############################==============================
+orders.total         #############################==============================
+orders.placed_at                                  ##############################
+order_lines.order_id                              ##############################
+order_lines.line                                  ##############################
+order_lines.sku                                   ##############################
+                     * v1                         * v2: +2 ~4, 3 breaking
+                     +----------------------------+----------------------------+
+                     0                            1                            2
+v1 → v2: 6 changes, 3 breaking
+├── ~ customers.name  became required  breaking
+├── ~ customers.email  type VARCHAR(255) → VARCHAR(320)  breaking
+├── ~ orders.status  default 'new' → 'pending'
+├── ~ orders.total  type NUMERIC(10, 2) → NUMERIC(12, 2)  breaking
+├── + orders.placed_at  field added (TIMESTAMP WITH TIME ZONE)
+└── + order_lines  table added (3 fields)
+```
+
+The `rich schema` command still reads JSON Schema only; DDL and Arrow input
+and an ER view come to the CLI later in 0.0.16.
+
+### ER diagrams
+
+`rs-rich-data`'s `er` module (behind its `er` feature) draws a schema as an
+ER diagram through `rs-rich-diagram` (#247): a box per table with its
+columns, types and keys (`PK`, `FK`, `UQ`, `?` for nullable), and an edge
+per foreign key, `N:1`, or `1:1` when the key is the referring table's whole
+primary key or a unique column. `er::model` turns any model schema into an
+`ErModel`; `er::from_sql` reads DDL and returns the `ErDiagram` with the
+reader's notes. A key naming `users` finds `public.users` when that is the
+only table so named.
+
+```rust
+use rich_data::er;
+
+let (diagram, notes) = er::from_sql(DDL).unwrap();
+console.print(&diagram);
+```
+
+```text
+┌────────────────────────────┐                          ┌──────────────────┐
+│           orders           │                          │    customers     │
+├────────────────────────────┤                          ├──────────────────┤
+│ id           INT        PK │                          │ id     INT    PK │
+│ customer_id  INT        FK ├──customer_id → id (N:1)─►│ email  TEXT   UQ │
+│ placed_at    TIMESTAMP     │                          │ name   TEXT?     │
+└────────────────────────────┘                          └──────────────────┘
+```

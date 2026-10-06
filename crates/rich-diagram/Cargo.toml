@@ -8,7 +8,7 @@
 # See AGENTS.md → Versioning.
 [package]
 name = "rs-rich-diagram"
-version = "0.0.1"
+version = "0.0.2"
 description = "Graph diagrams for rs-rich: a graph model, a layered layout, and box-drawing rendering with an ASCII fallback"
 edition.workspace = true
 license.workspace = true

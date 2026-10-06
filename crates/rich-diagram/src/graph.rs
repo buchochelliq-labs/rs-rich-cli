@@ -2,7 +2,9 @@
 //! and heads, and the direction the graph flows.
 //!
 //! Build one in code with the chaining builder on [`Graph`], or from parts
-//! (as a parser does) with [`Graph::from_parts`].
+//! (as a parser does) with [`Graph::from_parts`]. Two kinds of grouping sit
+//! on top of the nodes: [`Cluster`]s, drawn as labelled frames, and
+//! same-rank groups ([`Graph::same_rank`]), drawn side by side.
 
 use std::collections::HashMap;
 
@@ -78,6 +80,10 @@ pub enum Shape {
     Trapezoid,
     /// `\` then `/` (`A[\text/]`).
     TrapezoidAlt,
+    /// A table: the label's first line is a centred header, ruled off from
+    /// the lines below it, which are drawn left-aligned. What
+    /// [`ErDiagram`](crate::er::ErDiagram) draws each entity as.
+    Table,
 }
 
 /// A node.
@@ -171,6 +177,70 @@ impl Edge {
     }
 }
 
+/// A group of nodes drawn inside a labelled frame (a DOT `subgraph
+/// cluster…`, an ER diagram's group).
+///
+/// [`draw`](crate::draw) keeps a cluster's nodes together in each rank and
+/// draws a dashed frame around them, its label in the top border. Clusters
+/// nest: a cluster with a [`parent`](Cluster::parent) is framed inside it, and
+/// its nodes count as the parent's too, listed there or not.
+///
+/// A node listed in two clusters that do not nest is framed in the deeper
+/// one (the first listed, at equal depth), and the drawing notes it. A
+/// cluster with no nodes, nested ones included, is not drawn.
+///
+/// ```
+/// use rich_diagram::{Cluster, Direction, Graph};
+///
+/// let mut graph = Graph::new(Direction::LeftRight).edge("web", "api").edge("api", "db");
+/// let backend = graph.add_cluster(Cluster::new("backend").label("Backend").nodes([1, 2]));
+/// graph.add_cluster(Cluster::new("storage").nodes([2]).parent(backend));
+/// assert_eq!(graph.clusters()[1].parent, Some(0));
+/// ```
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Cluster {
+    /// What it is known by (a DOT subgraph's name, `cluster` prefix
+    /// included).
+    pub id: String,
+    /// The text in the frame's top border; none draws a bare frame.
+    pub label: Option<String>,
+    /// Its nodes, by index into [`Graph::nodes`]. Those of nested clusters
+    /// may be listed too (DOT lists them); they need not be.
+    pub nodes: Vec<usize>,
+    /// The cluster it sits in, by index into [`Graph::clusters`]. A parent
+    /// must come before its children; one that does not is ignored, and the
+    /// cluster is drawn at the top level.
+    pub parent: Option<usize>,
+}
+
+impl Cluster {
+    /// An unlabelled cluster with no nodes.
+    pub fn new(id: impl Into<String>) -> Self {
+        Cluster {
+            id: id.into(),
+            ..Cluster::default()
+        }
+    }
+
+    /// Set the label.
+    pub fn label(mut self, label: impl Into<String>) -> Self {
+        self.label = Some(label.into());
+        self
+    }
+
+    /// Set the nodes, by index.
+    pub fn nodes(mut self, nodes: impl IntoIterator<Item = usize>) -> Self {
+        self.nodes = nodes.into_iter().collect();
+        self
+    }
+
+    /// Nest it in the cluster at `parent`.
+    pub fn parent(mut self, parent: usize) -> Self {
+        self.parent = Some(parent);
+        self
+    }
+}
+
 /// What the last builder call added, for the calls that modify it.
 #[derive(Clone, Copy, Debug)]
 enum Last {
@@ -204,6 +274,8 @@ pub struct Graph {
     direction: Direction,
     nodes: Vec<Node>,
     edges: Vec<Edge>,
+    clusters: Vec<Cluster>,
+    same_rank: Vec<Vec<usize>>,
     ids: HashMap<String, usize>,
     last: Option<Last>,
     last_node: Option<usize>,
@@ -211,9 +283,14 @@ pub struct Graph {
 }
 
 impl PartialEq for Graph {
-    /// Graphs are equal when they draw the same: direction, nodes and edges.
+    /// Graphs are equal when they draw the same: direction, nodes, edges,
+    /// clusters and same-rank groups.
     fn eq(&self, other: &Self) -> bool {
-        self.direction == other.direction && self.nodes == other.nodes && self.edges == other.edges
+        self.direction == other.direction
+            && self.nodes == other.nodes
+            && self.edges == other.edges
+            && self.clusters == other.clusters
+            && self.same_rank == other.same_rank
     }
 }
 
@@ -241,6 +318,8 @@ impl Graph {
             direction,
             nodes,
             edges,
+            clusters: Vec::new(),
+            same_rank: Vec::new(),
             ids,
             last: None,
             last_node: None,
@@ -260,6 +339,35 @@ impl Graph {
     /// Edges, in the order they were added.
     pub fn edges(&self) -> &[Edge] {
         &self.edges
+    }
+
+    /// Clusters, in the order they were added.
+    pub fn clusters(&self) -> &[Cluster] {
+        &self.clusters
+    }
+
+    /// Same-rank groups, by node index, in the order they were added.
+    pub fn same_rank_groups(&self) -> &[Vec<usize>] {
+        &self.same_rank
+    }
+
+    /// Add `cluster` and return its index. Node indexes out of range are
+    /// ignored when drawing.
+    pub fn add_cluster(&mut self, cluster: Cluster) -> usize {
+        self.clusters.push(cluster);
+        self.clusters.len() - 1
+    }
+
+    /// Ask for these nodes, by index, to be drawn in the same rank (DOT's
+    /// `rank=same`). [`draw`](crate::draw) honours a group unless an edge
+    /// joins two of its nodes (directly, or through another group sharing a
+    /// node): a layered drawing has no edges within a rank, so such a group
+    /// is dropped and the drawing notes it. Otherwise ranks follow the edges
+    /// with the group as one node; a cycle through it may reverse an edge
+    /// (drawn pointing back up), as any cycle does. Indexes out of range are
+    /// ignored.
+    pub fn add_same_rank(&mut self, nodes: impl IntoIterator<Item = usize>) {
+        self.same_rank.push(nodes.into_iter().collect());
     }
 
     /// The index of the node with this id.
@@ -397,6 +505,114 @@ impl Graph {
             self.edges[index].length = ranks;
         }
         self
+    }
+
+    /// Frame the nodes `members` (by id, adding any that are new) in a
+    /// top-level cluster labelled `label`. See [`Cluster`] for nesting.
+    ///
+    /// ```
+    /// use rich_diagram::{draw, Direction, Graph};
+    ///
+    /// let graph = Graph::new(Direction::LeftRight)
+    ///     .edge("web", "api")
+    ///     .cluster("backend", "Backend", ["api"]);
+    /// let drawing = draw(&graph, false).unwrap();
+    /// assert!(drawing.lines[0].contains("Backend"), "{:#?}", drawing.lines);
+    /// ```
+    pub fn cluster<I, S>(
+        mut self,
+        id: impl Into<String>,
+        label: impl Into<String>,
+        members: I,
+    ) -> Self
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<str>,
+    {
+        let nodes: Vec<usize> = members
+            .into_iter()
+            .map(|id| self.ensure(id.as_ref()))
+            .collect();
+        self.add_cluster(Cluster::new(id).label(label).nodes(nodes));
+        self
+    }
+
+    /// Draw the nodes `members` (by id, adding any that are new) in the same
+    /// rank. See [`add_same_rank`](Graph::add_same_rank) for when it cannot.
+    pub fn same_rank<I, S>(mut self, members: I) -> Self
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<str>,
+    {
+        let nodes: Vec<usize> = members
+            .into_iter()
+            .map(|id| self.ensure(id.as_ref()))
+            .collect();
+        self.add_same_rank(nodes);
+        self
+    }
+
+    /// Every node, edge and cluster label passed through `f`.
+    pub(crate) fn map_text(&self, f: impl Fn(&str) -> String) -> Graph {
+        let mut graph = self.clone();
+        for node in &mut graph.nodes {
+            node.label = f(&node.label);
+        }
+        for edge in &mut graph.edges {
+            if let Some(label) = &mut edge.label {
+                *label = f(label);
+            }
+        }
+        for cluster in &mut graph.clusters {
+            if let Some(label) = &mut cluster.label {
+                *label = f(label);
+            }
+        }
+        graph
+    }
+
+    /// The node each node is ranked with: itself, or the first node of the
+    /// same-rank groups it shares (transitively). And the groups dropped,
+    /// by index into [`same_rank_groups`](Graph::same_rank_groups), because
+    /// an edge would join two nodes of one rank.
+    pub(crate) fn rank_sets(&self) -> (Vec<usize>, Vec<usize>) {
+        let n = self.nodes.len();
+        let mut parent: Vec<usize> = (0..n).collect();
+        fn find(parent: &mut [usize], mut v: usize) -> usize {
+            while parent[v] != v {
+                parent[v] = parent[parent[v]];
+                v = parent[v];
+            }
+            v
+        }
+        let mut dropped = Vec::new();
+        for (index, group) in self.same_rank.iter().enumerate() {
+            let members: Vec<usize> = group.iter().copied().filter(|&v| v < n).collect();
+            if members.len() < 2 {
+                continue;
+            }
+            let before = parent.clone();
+            for &v in &members[1..] {
+                let (a, b) = (find(&mut parent, members[0]), find(&mut parent, v));
+                if a != b {
+                    // The lower index is the representative, so it is stable.
+                    let (low, high) = (a.min(b), a.max(b));
+                    parent[high] = low;
+                }
+            }
+            let flat = self.edges.iter().any(|edge| {
+                edge.from != edge.to
+                    && edge.from < n
+                    && edge.to < n
+                    && find(&mut parent, edge.from) == find(&mut parent, edge.to)
+            });
+            if flat {
+                parent = before;
+                dropped.push(index);
+            }
+        }
+        let rep = (0..n).map(|v| find(&mut parent, v)).collect();
+        (rep, dropped)
     }
 }
 

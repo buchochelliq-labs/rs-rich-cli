@@ -42,6 +42,7 @@ rich-cli ──▶ rich-art ──▶ rich                     (FIGlet, images, 
 rich-cli ──▶ rich-data ──▶ rich-ext ──▶ rich       (tabular data: row sources; CSV/TSV, the reader `--csv`
                                                  uses; JSONL, serde and Arrow (`arrow` feature) adapters;
                                                  type inference and column statistics)
+                 └──▶ rich-diagram           (optional, the `er` feature: ER diagrams of a schema)
 rich-py  ──▶ rich, rich-ext, rich-art, rich-mermaid, rich-diagram, rich-micro, rich-interact, rich-cli
                            (Python bindings; outside the workspace, released to PyPI only)
 ```

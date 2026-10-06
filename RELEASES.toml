@@ -45,13 +45,13 @@ version = "0.0.12"
 name = "rs-rich-diagram"
 registry = "crates.io"
 manifest = "crates/rich-diagram/Cargo.toml"
-version = "0.0.1"
+version = "0.0.2"
 
 [[package]]
 name = "rs-rich-mermaid"
 registry = "crates.io"
 manifest = "crates/rich-mermaid/Cargo.toml"
-version = "0.0.4"
+version = "0.0.5"
 
 [[package]]
 name = "rs-rich-lumis"
