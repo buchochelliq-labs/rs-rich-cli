@@ -215,6 +215,25 @@ and #499). Delivered:
 - Atkinson dithering, OKLab distance, Sixel/GIF colour modes, alpha backgrounds
   (#498) and `--theme-file` (#499).
 
+## 0.0.16 — data and developer tooling (planned)
+
+The [0.0.16 plan](plans/0.0.16.md) is the first slice of
+[milestone 6](https://github.com/buchochelliq-labs/rs-rich-cli/milestone/6),
+tracked in [#660](https://github.com/buchochelliq-labs/rs-rich-cli/issues/660):
+
+- a new `rs-rich-data` crate with CSV, JSONL, serde and (behind a feature)
+  Arrow adapters, opt-in type inference, column statistics and conditional
+  styles (#214, #267, #261, #215), virtualised and SQL-shaped tables (#260,
+  #235);
+- `rich profile` for CSV and JSONL files (#343–#346, #269);
+- one schema model for JSON Schema, Arrow and SQL DDL, with diffs, a
+  timeline and ER diagrams (#268, #342, #347, #247), and DOT cluster frames;
+- a record inspector (#270), three-way merge conflicts (#339), and Cargo
+  feature, size, build-time, advisory and licence reports (#419–#421, #330,
+  #331, #418).
+
+`rich --csv` and core do not change.
+
 ## 0.0.15 — terminal charts and diagrams (published 2026-10-05)
 
 The [0.0.15 plan](plans/0.0.15.md) is the first slice of

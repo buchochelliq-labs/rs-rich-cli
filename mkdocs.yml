@@ -154,6 +154,7 @@ nav:
   - Troubleshooting: troubleshooting.md
   - Known issues: known-issues.md
   - Development plans:
+      - "Data and developer tooling": plans/0.0.16.md
       - "Terminal charts and diagrams": plans/0.0.15.md
       - "Composable views and micro assets": plans/0.0.14.md
       - "Interactive CLI, first slice": plans/0.0.13.md
