@@ -136,6 +136,32 @@ collected rather than written, and captures nest.
 `build_text(&str)` gives you the styled `Text` that `print_str` would print, so
 you can wrap markup in another renderable.
 
+## Printing to standard error
+
+`Console::new()` writes to standard output and decides colour from it. For
+errors and diagnostics, build a console from standard error's own terminal
+status and write the rendering there yourself. `render_export` includes the
+trailing newline; `render_to_string` does not, so with it the next shell
+prompt would land on the same line.
+
+```rust
+use std::io::{IsTerminal, Write};
+use rich::{Console, Text};
+
+let console = Console::builder()
+    .force_terminal(std::io::stderr().is_terminal())
+    .build();
+let mut line = Text::new("");
+line.append("error: ", Some("bold red".into()));
+line.append(message, None);
+let _ = std::io::stderr().write_all(console.render_export(&line).as_bytes());
+```
+
+With `rs-rich-ext`, `rich_ext::macros::stderr_console()` builds that console
+and `rich_ext::macros::eprint(&renderable)` prints a renderable and a newline
+to standard error; the `rich_eprintln!` macro (its `macros` feature) does the
+same for checked markup. See [Macros](../ext/macros.md).
+
 ## Measuring
 
 A [`Measurement`](https://docs.rs/rs-rich/latest/rich/measure/struct.Measurement.html)
@@ -220,6 +246,10 @@ internally.
 - **Piped output is plain.** When stdout is not a terminal, `Console::new()`
   drops colour and control codes. That is usually right (`> out.txt` gives
   clean text); use `force_terminal(true)` when it is not.
+- **`render_to_string` has no trailing newline.** It returns one renderable
+  as a string to place inside something else; when you write that string to a
+  stream yourself, use `render_export`, or add the newline
+  ([Printing to standard error](#printing-to-standard-error)).
 - **Malformed markup prints raw.** `print_str("[/oops]")` prints the text
   as-is rather than failing, which is friendlier than upstream's exception but
   can hide mistakes. Use `try_print_str` / `try_build_text` for markup that

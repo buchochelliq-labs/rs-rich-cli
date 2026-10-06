@@ -6,9 +6,10 @@ patches. It also explores structured data (`inspect`), shows any file (`view`),
 looks inside bytes, characters and escape sequences (`hex`, `unicode`,
 `ansi explain`), lists the environment (`env`) and captures a command's output
 (`capture`). It draws charts and diagrams (`chart`, `mermaid`, `dot`, `deps`,
-`schema`), asks questions in scripts (`choose`, `input`, `confirm`, ...) and
-shows micro assets (`micro`). This page is organised by what you are trying
-to do. For the complete list of options, see the
+`schema`), profiles data files (`profile`), asks questions in scripts
+(`choose`, `input`, `confirm`, ...) and shows micro assets (`micro`). This
+page is organised by what you are trying to do. For the complete list of
+options, see the
 [CLI reference](cli-reference.md).
 
 **Assumes** you can run commands in a terminal. Examples use real CLI output;
@@ -285,6 +286,70 @@ rich --csv team.csv --title "Team"
 The delimiter and whether row 1 is a header are **detected**, not assumed, so
 semicolon- and tab-separated exports work without a flag. Numeric columns are
 right-aligned automatically.
+
+## Profile a data file (0.0.16)
+
+`rich profile` says what each column of a CSV, TSV or JSON Lines file holds:
+its inferred type, how many cells are null, how many distinct values there
+are, the minimum, maximum and mean, and a distribution (a histogram for a
+numeric column, the most common values for any other), then a map of where
+the nulls are.
+
+```bash
+rich profile orders.csv
+rich profile orders.csv --columns region,amount --top 3
+curl -s https://example.com/events.ndjson | rich profile
+rich profile orders.csv --report json > profile.json
+```
+
+```text
+$ rich profile orders.csv --columns region,amount --top 3 --width 72
+orders.csv: 24 rows, 2 columns
+
+┏━━━━━━━━┳━━━━━━━┳━━━━━━━━━┳━━━━━━━━━━┳━━━━━━┳━━━━━┳━━━━━━━━━┓
+┃ column ┃ type  ┃   nulls ┃ distinct ┃  min ┃ max ┃    mean ┃
+┡━━━━━━━━╇━━━━━━━╇━━━━━━━━━╇━━━━━━━━━━╇━━━━━━╇━━━━━╇━━━━━━━━━┩
+│ region │ text  │  2 (8%) │        4 │ apac │  us │         │
+│ amount │ float │ 4 (17%) │       20 │ 7.25 │ 250 │ 63.3855 │
+└────────┴───────┴─────────┴──────────┴──────┴─────┴─────────┘
+
+region · text · 2 nulls (8%) · 4 distinct
+  eu   ████████████████████████ 9
+  us   ████████████████████████ 9
+  apac ████████                 3
+  + 1 other value (1 cell)
+
+amount · float · 4 nulls (17%) · median 50.95 (p25 21.825, p75 82.95)
+  [0, 25)    ████████████████████████ 6
+  [25, 50)   ████████████████         4
+  ...
+  [225, 250] ████                     1
+
+missing values (% null; rows top to bottom, 2 rows each)
+      region amount
+1-2
+3-4          ▒▒▒▒▒▒▒
+...
+0 [ ░▒▓█] 100
+```
+
+The format comes from the extension (`.csv`, `.tsv`, `.jsonl`, `.ndjson`),
+else from the first character (`{` or `[` is JSON Lines); CSV is sniffed as
+`--csv` sniffs it, and the first row is a header unless every cell in it is
+a number. Empty cells, `null`, `NULL`, `NA` and `N/A` count as null. A file
+or stdin is streamed, not read into memory: past `--sample N` rows (10,000
+by default) the types, statistics and distributions describe a uniform
+sample, the heading prints the sample size (`sampled 10,000 of 3,000,000
+rows`), and the null counts and the map still count every row. A row with
+more cells than the header is noted rather than refused.
+
+`--columns a,b` profiles only those columns, in that order; `--top N` sets
+how many common values are shown (5). `--report json` writes the profile
+itself to stdout (`rows`, `sample`, `sampled`, and per column `type`,
+`nulls`, `null_rate`, `distinct`, the statistics and the `distribution`),
+as `doctor --report json` writes its diagnostics; a failure is the usual
+error envelope on stderr. A column `--columns` names that is not there, or a
+line that is not JSON, is a data error (exit 4).
 
 ## Stream JSONL and logs
 

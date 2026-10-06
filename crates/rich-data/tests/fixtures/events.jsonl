@@ -1,0 +1,13 @@
+{"ts": "2026-10-06T09:00:00Z", "level": "info", "service": "api", "latency_ms": 12, "user": {"id": 1}}
+{"ts": "2026-10-06T09:00:01Z", "level": "info", "service": "web", "latency_ms": 31}
+{"ts": "2026-10-06T09:00:02Z", "level": "warn", "service": "api", "latency_ms": 250, "user": {"id": 2}}
+{"ts": "2026-10-06T09:00:03Z", "level": "info", "service": "db", "latency_ms": 4}
+{"ts": "2026-10-06T09:00:04Z", "level": "error", "service": "api", "latency_ms": null, "user": {"id": 3}}
+
+{"ts": "2026-10-06T09:00:05Z", "level": "info", "service": "web", "latency_ms": 28}
+{"ts": "2026-10-06T09:00:06Z", "level": "info", "service": "api", "latency_ms": 15, "user": {"id": 1}}
+{"ts": "2026-10-06T09:00:07Z", "level": "debug", "service": "worker", "latency_ms": 7}
+{"ts": "2026-10-06T09:00:08Z", "level": "info", "service": "web", "latency_ms": 44, "user": {"id": 4}}
+{"ts": "2026-10-06T09:00:09Z", "level": "warn", "service": "db", "latency_ms": 180}
+{"ts": "2026-10-06T09:00:10Z", "level": "info", "service": "api", "latency_ms": 19, "user": {"id": 2}}
+{"ts": "2026-10-06T09:00:11Z", "level": "info", "service": "web", "latency_ms": 26}

@@ -20,7 +20,8 @@
 //! `--theme-file`, and the tool commands `inspect`, `diff` (images, text and
 //! patches), `view`, `hex`, `unicode`, `env`, `capture`, `ansi explain`,
 //! `doctor`, `bench compare`, `completions`, `docs`, `config` and `plugins`;
-//! the diagram sources `mermaid`, `dot`, `deps` and `schema`, and `chart`;
+//! the diagram sources `mermaid`, `dot`, `deps` and `schema`, `chart` and
+//! `profile`;
 //! the interactive commands (`choose`, `filter`, `input`, `confirm`, `pager`,
 //! `write`, `file`, `color`, `asset`, `explore`); `micro`; and `record`. Each
 //! composes public `rich` / `rich-ext` / `rich-art` / `rich-diagram` /
@@ -48,6 +49,7 @@ mod interactive;
 #[cfg(feature = "art")]
 mod micro;
 mod plugins;
+mod profile;
 #[cfg(feature = "record")]
 mod record;
 mod render_target;
@@ -141,6 +143,8 @@ enum Mode {
     Schema,
     /// `chart`: a chart from CSV, JSON or stdin (`chart.rs`).
     Chart,
+    /// `profile`: a profile of CSV, TSV or JSON Lines (`profile.rs`).
+    Profile,
 }
 
 impl Mode {
@@ -301,6 +305,11 @@ const MODE_SPECS: &[ModeSpec] = &[
         mode: Mode::Chart,
         primary: "chart",
         aliases: &["chart"],
+    },
+    ModeSpec {
+        mode: Mode::Profile,
+        primary: "profile",
+        aliases: &["profile"],
     },
 ];
 
@@ -554,6 +563,8 @@ struct Cli {
     graph_sources: sources::GraphSourceOptions,
     /// `rich chart` options: `--kind`, `--x`, `--y`.
     chart: chart::ChartOptions,
+    /// `rich profile` options: `--sample`, `--columns`, `--top`.
+    profile: profile::ProfileOptions,
     /// `--highlighter NAME`: the console-wide code highlighter.
     highlighter: Option<String>,
     /// `--code-theme NAME`: a theme of the chosen code highlighter.
@@ -1070,6 +1081,9 @@ const VALUE_OPTIONS: &[&str] = &[
     "--kind",
     "--x",
     "--y",
+    "--sample",
+    "--columns",
+    "--top",
     "--highlighter",
     "--code-theme",
     "--plugin",
@@ -1823,6 +1837,7 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
     let mut dot_backend = None;
     let mut graph_sources = sources::GraphSourceOptions::default();
     let mut chart = chart::ChartOptions::default();
+    let mut profile_options = profile::ProfileOptions::default();
     let mut highlighter: Option<String> = None;
     let mut plugins: Vec<String> = Vec::new();
     let mut code_theme: Option<String> = None;
@@ -1909,6 +1924,9 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
             continue;
         }
         if chart.parse_option(arg, &mut iter)? {
+            continue;
+        }
+        if profile_options.parse_option(arg, &mut iter)? {
             continue;
         }
         if matches!(
@@ -2425,6 +2443,7 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
         .into_iter()
         .chain(graph_sources.given())
         .chain(chart.given())
+        .chain(profile_options.given())
     {
         if !commands.contains(&mode_name(mode)) {
             return Err(format!(
@@ -2896,6 +2915,7 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
         dot_backend,
         graph_sources,
         chart,
+        profile: profile_options,
         highlighter,
         code_theme,
         plugins,
@@ -4341,6 +4361,21 @@ fn run_once_with_fetch(mut cli: Cli, prefetched: Option<(String, Option<String>)
     }
     if mode == Mode::Env {
         let view = viewers::env(&cli.viewers, &cli.resources);
+        let fit = view.measure(&console, &console.options()).maximum;
+        return decorate_and_emit(&cli, &console, &export, view, Some(fit));
+    }
+    if mode == Mode::Profile {
+        let profile = match profile::profile(&cli) {
+            Ok(profile) => profile,
+            Err((class, err)) => return fail(&cli, class, err),
+        };
+        // As `doctor --report json`: the profile is the stdout document.
+        if cli.report_format == ReportFormat::Json {
+            let json = serde_json::to_string_pretty(&profile.to_json()).unwrap_or_default();
+            authoring::out(&format!("{json}\n"));
+            return ExitClass::Success.exit_code();
+        }
+        let view: Box<dyn Renderable> = Box::new(profile);
         let fit = view.measure(&console, &console.options()).maximum;
         return decorate_and_emit(&cli, &console, &export, view, Some(fit));
     }

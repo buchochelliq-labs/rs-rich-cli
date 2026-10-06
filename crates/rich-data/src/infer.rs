@@ -240,6 +240,10 @@ impl ColumnInference {
     }
 }
 
+/// The null tokens [`Inferrer::new`] starts with: an empty cell, `null`,
+/// `NULL`, `NA` and `N/A`.
+pub const DEFAULT_NULL_TOKENS: [&str; 5] = ["", "null", "NULL", "NA", "N/A"];
+
 /// Infers column types. See the [module docs](self).
 #[derive(Clone, Debug)]
 pub struct Inferrer {
@@ -250,7 +254,7 @@ pub struct Inferrer {
 impl Default for Inferrer {
     fn default() -> Self {
         Inferrer {
-            nulls: ["", "null", "NULL", "NA", "N/A"].map(String::from).to_vec(),
+            nulls: DEFAULT_NULL_TOKENS.map(String::from).to_vec(),
             overrides: HashMap::new(),
         }
     }

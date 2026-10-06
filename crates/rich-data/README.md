@@ -20,6 +20,13 @@ without hand-written glue. This crate is an rs-rich addition, not a port:
 - **Column statistics**: count, nulls, distinct values, min, max, mean,
   median, quantiles and the most common values, as a table or as a summary
   under each column heading.
+- **Large results** (`window`): `Rows` feed `rich_ext`'s virtualised
+  `VirtualTable`, and `RowWindow` reads one window of any forward-only
+  source in constant memory, with its row count.
+- **SQL result sets** (`sql`): `ResultSet` renders a query result with
+  typed alignment from the schema, `NULL` marked apart from empty text, and
+  a `(3 rows, 12ms)` footer, windowed with `limit` and `offset`. No
+  database connection: rows come from an adapter or the caller.
 
 ```rust
 use rich::Console;
@@ -43,6 +50,62 @@ Conditional styles for these tables (rules that style a cell, row or
 column by value, from Rust predicates or TOML rule tables) are
 `rich_ext::table::rules`.
 
+## Profiling and data quality
+
+A **profile** says what each column of any row source holds: its inferred
+type, null count and rate, distinct values, min, max, mean, median and
+quartiles, and a distribution (a histogram from `rich_ext::chart::Histogram`
+for a numeric column, the most common values for any other), with a
+missing-value map (`rich_ext::chart::Heatmap`) of where the nulls are, rows
+bucketed in order against the columns. `rich profile` draws it.
+
+```rust
+use rich::Console;
+use rich_data::csv::CsvReader;
+use rich_data::profile::{Profile, ProfileOptions};
+
+let file = std::io::BufReader::new(std::fs::File::open("orders.csv")?);
+let source = CsvReader::new().source(file)?; // streamed, not read whole
+let options = ProfileOptions { sample: 10_000, ..Default::default() };
+let profile = Profile::from_source(source, options)?.with_name("orders.csv");
+Console::new().print(&profile);
+println!("{}", profile.to_json()); // the same model, as JSON
+```
+
+Profiles are bounded. A `Profiler` reads one row at a time and keeps a
+uniform reservoir sample (Algorithm R with a fixed seed, so a profile is
+reproducible) of at most `sample` rows, 10,000 by default: types, distinct
+values, statistics and distributions describe the sample, while the row
+count, null counts and the missing-value map (at most 20 buckets, merged as
+rows arrive) count every row. The heading prints the sample size
+(`sampled 10,000 of 3,000,000 rows`), and `Profile::sampled` says whether
+there was one. `CsvReader::source` and `jsonl::source` stream from any
+`BufRead`, so memory is the sample, whatever the input's size.
+
+**Data quality results** are a model, not an engine: a `quality::CheckResult`
+holds a check's name, its column, a status (pass, warn, fail or error),
+what it observed and expected, a message and a sample of the failing rows.
+`QualityReport` draws them as `rich_ext`'s test report draws a test run:
+failures, errors and warnings first with their failing rows, then a table
+of every check and a summary (`3 passed, 1 warned, 2 failed`).
+`quality::not_null` and `quality::unique` are two small checks over `Rows`.
+
+```rust
+use rich_data::quality::{self, CheckResult, QualityReport, Status};
+
+let report = QualityReport::new([
+    quality::not_null(&rows, "email")?,
+    quality::unique(&rows, "id")?,
+    CheckResult::new("row_count", Status::Warn).observed("3").expected(">= 100"),
+]);
+console.print(&report);
+```
+
+Both draw with theme keys a console theme can override: `profile::STYLES`
+(`profile.title`, `profile.column`, `profile.type`, `profile.note`,
+`profile.null`) and `quality::STYLES` (`quality.pass`, `quality.warn`,
+`quality.fail`, `quality.error`, `quality.check`, `quality.dim`).
+
 ## Features
 
 | Feature | Default | What it adds |
@@ -55,6 +118,9 @@ column by value, from Rust predicates or TOML rule tables) are
 JSON Lines refuses a line longer than 64 MiB, and every adapter describes
 nested values to 32 levels. Streaming sources choose their columns from
 the first 1,000 records (configurable) and report keys seen later instead
-of growing new columns.
+of growing new columns. A window holds at most 10,000 rows, and samples at
+most 10,000 rows for its column widths. A streamed CSV record (a line, or a
+quoted field across lines) is refused past 64 MiB, and a profile holds at most
+its sample.
 
 Independent SemVer from 0.0.1; see the repository's `AGENTS.md`.
