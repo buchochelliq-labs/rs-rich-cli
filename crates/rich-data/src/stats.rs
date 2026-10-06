@@ -307,7 +307,13 @@ fn quantile(values: &[f64], q: f64) -> f64 {
         // infinite value is itself rather than `inf - inf`'s NaN.
         return values[below];
     }
-    values[below] + (values[above] - values[below]) * (position - below as f64)
+    let (low, high, t) = (values[below], values[above], position - below as f64);
+    let gap = high - low;
+    if gap.is_infinite() && low.is_finite() && high.is_finite() {
+        // The gap overflows (-1e308 to 1e308); the weighted sum cannot.
+        return low * (1.0 - t) + high * t;
+    }
+    low + gap * t
 }
 
 /// [`quantile`] over sorted, non-empty integers: the interpolation runs on
@@ -397,6 +403,17 @@ mod tests {
         let expected = 2.0 / 3.0 * 1e308 + 1e300 / 3.0;
         assert!((mean / expected - 1.0).abs() < 1e-12, "{mean}");
         assert_eq!(huge.median, Some(1e308));
+    }
+
+    /// Interpolating between finite neighbours whose gap overflows still
+    /// gives a finite quantile: the median of -1e308 and 1e308 is 0, not inf.
+    #[test]
+    fn quantiles_between_far_apart_values_stay_finite() {
+        let values = [-1e308, 1e308];
+        assert_eq!(quantile(&values, 0.5), 0.0);
+        assert_eq!(quantile(&values, 0.25), -5e307);
+        assert_eq!(quantile(&values, 0.75), 5e307);
+        assert_eq!(quantile(&[1.0, 2.0], 0.5), 1.5);
     }
 
     #[test]
