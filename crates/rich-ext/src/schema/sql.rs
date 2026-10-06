@@ -21,8 +21,8 @@
 //! nothing is dropped silently. Text that cannot be read (an unclosed
 //! string, comment or parenthesis, a `CREATE TABLE` without a column list)
 //! is a [`SqlError`] with its line. Input is bounded by [`MAX_INPUT`],
-//! [`MAX_STATEMENTS`], [`MAX_COLUMNS`] and [`MAX_NESTING`], and the reader
-//! never panics.
+//! [`MAX_STATEMENTS`], [`MAX_TOKENS`], [`MAX_COLUMNS`] and [`MAX_NESTING`],
+//! statements are read one at a time, and the reader never panics.
 //!
 //! ```
 //! use rich_ext::schema::{sql, DataType};
@@ -55,6 +55,7 @@
 //! );
 //! ```
 
+use std::collections::HashMap;
 use std::fmt;
 
 use super::model::{Constraint, DataType, Field, ForeignKey, Literal, Schema};
@@ -65,11 +66,16 @@ pub const MAX_INPUT: usize = 16 * 1024 * 1024;
 /// The most statements read.
 pub const MAX_STATEMENTS: usize = 100_000;
 
-/// The most columns (and table constraints) in one table.
+/// The most columns (and table constraints) in one table, and the most
+/// columns one key names.
 pub const MAX_COLUMNS: usize = 4_096;
 
 /// The deepest parentheses nest.
 pub const MAX_NESTING: usize = 64;
+
+/// The most tokens (words, names, values, punctuation) in one statement.
+/// Only a `CREATE TABLE` statement's are kept, one statement at a time.
+pub const MAX_TOKENS: usize = 1_000_000;
 
 /// The most notes kept; past this they are counted in a last one.
 pub const MAX_NOTES: usize = 1_000;
@@ -144,25 +150,27 @@ pub fn parse(text: &str) -> Result<Parsed, SqlError> {
             ),
         ));
     }
-    let tokens = tokenize(text)?;
+    check(text)?;
     let mut reader = Reader {
         schema: Schema::default(),
+        index: HashMap::new(),
         notes: Vec::new(),
         dropped: 0,
     };
-    let mut statements = 0;
-    for statement in statements_of(&tokens)? {
-        statements += 1;
-        if statements > MAX_STATEMENTS {
+    let mut statements = Statements::new(text);
+    let mut count = 0;
+    while let Some(statement) = statements.next()? {
+        count += 1;
+        if count > MAX_STATEMENTS {
             return Err(SqlError::new(
                 statement[0].line,
                 format!("more than {MAX_STATEMENTS} statements"),
             ));
         }
-        reader.statement(statement)?;
+        reader.statement(&statement)?;
     }
     if reader.dropped > 0 {
-        let line = tokens.last().map_or(1, |t| t.line);
+        let line = statements.last_line;
         reader.notes.push(Note {
             line,
             message: format!("… and {} more notes", reader.dropped),
@@ -215,166 +223,278 @@ impl Token {
     }
 }
 
-fn tokenize(text: &str) -> Result<Vec<Token>, SqlError> {
-    let chars: Vec<char> = text.chars().collect();
-    let mut tokens = Vec::new();
-    let mut line = 1;
-    let mut i = 0;
-    let take = |from: usize, to: usize| -> String { chars[from..to].iter().collect() };
-    while i < chars.len() {
-        let c = chars[i];
-        let next = chars.get(i + 1).copied();
-        if c == '\n' {
-            line += 1;
-            i += 1;
-        } else if c.is_whitespace() {
-            i += 1;
-        } else if c == '-' && next == Some('-') {
-            while i < chars.len() && chars[i] != '\n' {
-                i += 1;
-            }
-        } else if c == '/' && next == Some('*') {
-            let start = line;
-            i += 2;
-            loop {
-                match chars.get(i) {
-                    None => return Err(SqlError::new(start, "a /* comment is not closed")),
-                    Some('*') if chars.get(i + 1) == Some(&'/') => {
-                        i += 2;
-                        break;
-                    }
-                    Some('\n') => line += 1,
-                    _ => {}
-                }
-                i += 1;
-            }
-        } else if c == '[' && next.is_some_and(|n| n == ']' || n.is_ascii_digit()) {
-            // An array type's brackets (`INT[]`, `INT[3]`), not a name.
-            let len = if next == Some(']') { 2 } else { 1 };
-            let symbol = take(i, i + len);
-            tokens.push(Token {
-                kind: Kind::Symbol,
-                value: symbol.clone(),
-                text: symbol,
-                line,
-            });
-            i += len;
-        } else if matches!(c, '\'' | '"' | '`' | '[') {
-            let close = if c == '[' { ']' } else { c };
-            let start = (i, line);
-            let mut value = String::new();
-            i += 1;
-            loop {
-                match chars.get(i) {
-                    None => {
-                        let what = if c == '\'' { "string" } else { "quoted name" };
-                        return Err(SqlError::new(start.1, format!("a {what} is not closed")));
-                    }
-                    Some(&ch) if ch == close => {
-                        // A doubled quote is one quote.
-                        if close != ']' && chars.get(i + 1) == Some(&close) {
-                            value.push(ch);
-                            i += 2;
-                            continue;
-                        }
-                        i += 1;
-                        break;
-                    }
-                    Some(&ch) => {
-                        if ch == '\n' {
-                            line += 1;
-                        }
-                        value.push(ch);
-                        i += 1;
-                    }
-                }
-            }
-            let kind = if c == '\'' { Kind::Str } else { Kind::Quoted };
-            tokens.push(Token {
-                kind,
-                text: take(start.0, i),
-                value,
-                line: start.1,
-            });
-        } else if c.is_alphabetic() || c == '_' {
-            let start = i;
-            while i < chars.len() && (chars[i].is_alphanumeric() || matches!(chars[i], '_' | '$')) {
-                i += 1;
-            }
-            let word = take(start, i);
-            tokens.push(Token {
-                kind: Kind::Word,
-                value: word.clone(),
-                text: word,
-                line,
-            });
-        } else if c.is_ascii_digit() || (c == '.' && next.is_some_and(|n| n.is_ascii_digit())) {
-            let start = i;
-            while i < chars.len() {
-                let ch = chars[i];
-                let exponent_sign =
-                    matches!(ch, '+' | '-') && i > start && matches!(chars[i - 1], 'e' | 'E');
-                if ch.is_ascii_digit() || matches!(ch, '.' | 'e' | 'E') || exponent_sign {
-                    i += 1;
-                } else {
-                    break;
-                }
-            }
-            let number = take(start, i);
-            tokens.push(Token {
-                kind: Kind::Number,
-                value: number.clone(),
-                text: number,
-                line,
-            });
-        } else {
-            // `::` (a cast) is one symbol; anything else is one character.
-            let len = if c == ':' && next == Some(':') { 2 } else { 1 };
-            let symbol = take(i, i + len);
-            tokens.push(Token {
-                kind: Kind::Symbol,
-                value: symbol.clone(),
-                text: symbol,
-                line,
-            });
-            i += len;
-        }
-    }
-    Ok(tokens)
+/// Reads the text a token at a time.
+struct Lexer {
+    chars: Vec<char>,
+    i: usize,
+    line: usize,
 }
 
-/// The statements: tokens up to each `;` outside parentheses.
-fn statements_of(tokens: &[Token]) -> Result<Vec<&[Token]>, SqlError> {
-    let mut out = Vec::new();
+impl Lexer {
+    fn new(text: &str) -> Self {
+        Lexer {
+            chars: text.chars().collect(),
+            i: 0,
+            line: 1,
+        }
+    }
+
+    /// The next token, or `None` at the end of the text.
+    fn next(&mut self) -> Result<Option<Token>, SqlError> {
+        let chars = &self.chars;
+        let (mut i, mut line) = (self.i, self.line);
+        let take = |from: usize, to: usize| -> String { chars[from..to].iter().collect() };
+        let token = loop {
+            let Some(&c) = chars.get(i) else {
+                break None;
+            };
+            let next = chars.get(i + 1).copied();
+            if c == '\n' {
+                line += 1;
+                i += 1;
+            } else if c.is_whitespace() {
+                i += 1;
+            } else if c == '-' && next == Some('-') {
+                while i < chars.len() && chars[i] != '\n' {
+                    i += 1;
+                }
+            } else if c == '/' && next == Some('*') {
+                let start = line;
+                i += 2;
+                loop {
+                    match chars.get(i) {
+                        None => return Err(SqlError::new(start, "a /* comment is not closed")),
+                        Some('*') if chars.get(i + 1) == Some(&'/') => {
+                            i += 2;
+                            break;
+                        }
+                        Some('\n') => line += 1,
+                        _ => {}
+                    }
+                    i += 1;
+                }
+            } else if c == '[' && next.is_some_and(|n| n == ']' || n.is_ascii_digit()) {
+                // An array type's brackets (`INT[]`, `INT[3]`), not a name.
+                let len = if next == Some(']') { 2 } else { 1 };
+                let symbol = take(i, i + len);
+                i += len;
+                break Some(Token {
+                    kind: Kind::Symbol,
+                    value: symbol.clone(),
+                    text: symbol,
+                    line,
+                });
+            } else if matches!(c, '\'' | '"' | '`' | '[') {
+                let close = if c == '[' { ']' } else { c };
+                let start = (i, line);
+                let mut value = String::new();
+                i += 1;
+                loop {
+                    match chars.get(i) {
+                        None => {
+                            let what = if c == '\'' { "string" } else { "quoted name" };
+                            return Err(SqlError::new(start.1, format!("a {what} is not closed")));
+                        }
+                        Some(&ch) if ch == close => {
+                            // A doubled quote is one quote.
+                            if close != ']' && chars.get(i + 1) == Some(&close) {
+                                value.push(ch);
+                                i += 2;
+                                continue;
+                            }
+                            i += 1;
+                            break;
+                        }
+                        Some(&ch) => {
+                            if ch == '\n' {
+                                line += 1;
+                            }
+                            value.push(ch);
+                            i += 1;
+                        }
+                    }
+                }
+                let kind = if c == '\'' { Kind::Str } else { Kind::Quoted };
+                break Some(Token {
+                    kind,
+                    text: take(start.0, i),
+                    value,
+                    line: start.1,
+                });
+            } else if c.is_alphabetic() || c == '_' {
+                let start = i;
+                while i < chars.len()
+                    && (chars[i].is_alphanumeric() || matches!(chars[i], '_' | '$'))
+                {
+                    i += 1;
+                }
+                let word = take(start, i);
+                break Some(Token {
+                    kind: Kind::Word,
+                    value: word.clone(),
+                    text: word,
+                    line,
+                });
+            } else if c.is_ascii_digit() || (c == '.' && next.is_some_and(|n| n.is_ascii_digit())) {
+                let start = i;
+                while i < chars.len() {
+                    let ch = chars[i];
+                    let exponent_sign =
+                        matches!(ch, '+' | '-') && i > start && matches!(chars[i - 1], 'e' | 'E');
+                    if ch.is_ascii_digit() || matches!(ch, '.' | 'e' | 'E') || exponent_sign {
+                        i += 1;
+                    } else {
+                        break;
+                    }
+                }
+                let number = take(start, i);
+                break Some(Token {
+                    kind: Kind::Number,
+                    value: number.clone(),
+                    text: number,
+                    line,
+                });
+            } else {
+                // `::` (a cast) is one symbol; anything else is one character.
+                let len = if c == ':' && next == Some(':') { 2 } else { 1 };
+                let symbol = take(i, i + len);
+                i += len;
+                break Some(Token {
+                    kind: Kind::Symbol,
+                    value: symbol.clone(),
+                    text: symbol,
+                    line,
+                });
+            }
+        };
+        self.i = i;
+        self.line = line;
+        Ok(token)
+    }
+}
+
+/// Check the whole text before reading any statement: every string, quoted
+/// name and comment closes (the first that does not is the error), then
+/// every parenthesis is matched, nested at most [`MAX_NESTING`] deep.
+fn check(text: &str) -> Result<(), SqlError> {
+    let mut lexer = Lexer::new(text);
     let mut open: Vec<usize> = Vec::new();
-    let mut start = 0;
-    for (index, token) in tokens.iter().enumerate() {
+    let mut unmatched: Option<SqlError> = None;
+    while let Some(token) = lexer.next()? {
+        if unmatched.is_some() {
+            continue;
+        }
         if token.is_symbol("(") {
             open.push(token.line);
             if open.len() > MAX_NESTING {
-                return Err(SqlError::new(
+                unmatched = Some(SqlError::new(
                     token.line,
                     format!("parentheses nest more than {MAX_NESTING} deep"),
                 ));
             }
-        } else if token.is_symbol(")") {
-            if open.pop().is_none() {
-                return Err(SqlError::new(token.line, "a `)` closes nothing"));
-            }
-        } else if token.is_symbol(";") && open.is_empty() {
-            if index > start {
-                out.push(&tokens[start..index]);
-            }
-            start = index + 1;
+        } else if token.is_symbol(")") && open.pop().is_none() {
+            unmatched = Some(SqlError::new(token.line, "a `)` closes nothing"));
         }
     }
-    if let Some(line) = open.first() {
-        return Err(SqlError::new(*line, "a `(` is not closed"));
+    if let Some(error) = unmatched {
+        return Err(error);
     }
-    if start < tokens.len() {
-        out.push(&tokens[start..]);
+    match open.first() {
+        Some(line) => Err(SqlError::new(*line, "a `(` is not closed")),
+        None => Ok(()),
     }
-    Ok(out)
+}
+
+/// How far the start of a statement is from `CREATE [OR REPLACE]
+/// [TEMPORARY …] TABLE`, as [`Reader::statement`] reads it.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Start {
+    Empty,
+    Create,
+    Or,
+    Modifiers,
+    Table,
+    Other,
+}
+
+/// Words between `CREATE` and `TABLE`.
+const TABLE_MODIFIERS: &[&str] = &[
+    "GLOBAL",
+    "LOCAL",
+    "TEMP",
+    "TEMPORARY",
+    "UNLOGGED",
+    "VIRTUAL",
+];
+
+impl Start {
+    fn then(self, token: &Token) -> Start {
+        let modifier = TABLE_MODIFIERS.iter().any(|w| token.is(w));
+        match self {
+            Start::Empty if token.is("CREATE") => Start::Create,
+            Start::Create if token.is("OR") => Start::Or,
+            Start::Or if token.is("REPLACE") => Start::Modifiers,
+            Start::Create | Start::Modifiers if modifier => Start::Modifiers,
+            Start::Create | Start::Modifiers if token.is("TABLE") => Start::Table,
+            Start::Table => Start::Table,
+            _ => Start::Other,
+        }
+    }
+}
+
+/// The tokens a statement that is not a `CREATE TABLE` keeps: enough for
+/// its note.
+const OTHER_TOKENS: usize = 8;
+
+/// The statements of a [`check`]ed text, one at a time: the tokens up to
+/// each `;` outside parentheses. A `CREATE TABLE` statement keeps every
+/// token, up to [`MAX_TOKENS`]; any other keeps its first few.
+struct Statements {
+    lexer: Lexer,
+    /// The line of the last token read.
+    last_line: usize,
+}
+
+impl Statements {
+    fn new(text: &str) -> Self {
+        Statements {
+            lexer: Lexer::new(text),
+            last_line: 1,
+        }
+    }
+
+    fn next(&mut self) -> Result<Option<Vec<Token>>, SqlError> {
+        let mut tokens: Vec<Token> = Vec::new();
+        let mut depth = 0usize;
+        let mut start = Start::Empty;
+        while let Some(token) = self.lexer.next()? {
+            self.last_line = token.line;
+            if token.is_symbol("(") {
+                depth += 1;
+            } else if token.is_symbol(")") {
+                depth = depth.saturating_sub(1);
+            } else if token.is_symbol(";") && depth == 0 {
+                if tokens.is_empty() {
+                    continue;
+                }
+                return Ok(Some(tokens));
+            }
+            if start != Start::Other {
+                start = start.then(&token);
+            }
+            if start == Start::Other && tokens.len() >= OTHER_TOKENS {
+                continue;
+            }
+            if tokens.len() == MAX_TOKENS {
+                return Err(SqlError::new(
+                    tokens[0].line,
+                    format!("a statement of more than {MAX_TOKENS} tokens"),
+                ));
+            }
+            tokens.push(token);
+        }
+        Ok((!tokens.is_empty()).then_some(tokens))
+    }
 }
 
 /// `tokens` split at commas outside parentheses.
@@ -446,11 +566,24 @@ fn space_before(tokens: &[Token], index: usize) -> bool {
 fn name_list(tokens: &[Token], open: usize) -> (Vec<String>, usize) {
     let end = closing(tokens, open);
     let inner = &tokens[(open + 1).min(end)..end.saturating_sub(1).max(open + 1)];
+    // One past the most a key may have, for the caller to refuse.
     let names = split_commas(inner)
         .into_iter()
         .filter_map(|part| part.iter().find(|t| t.is_name()).map(|t| t.value.clone()))
+        .take(MAX_COLUMNS + 1)
         .collect();
     (names, end)
+}
+
+/// `columns`, unless there are more than a table may have.
+fn bounded(table: &str, line: usize, columns: Vec<String>) -> Result<Vec<String>, SqlError> {
+    if columns.len() > MAX_COLUMNS {
+        return Err(SqlError::new(
+            line,
+            format!("{table}: a key of more than {MAX_COLUMNS} columns"),
+        ));
+    }
+    Ok(columns)
 }
 
 /// A possibly qualified name (`a.b.c`) at `at`, and the index past it.
@@ -472,6 +605,8 @@ fn qualified(tokens: &[Token], mut at: usize) -> Option<(String, usize)> {
 
 struct Reader {
     schema: Schema,
+    /// Each table's index in `schema`, by name.
+    index: HashMap<String, usize>,
     notes: Vec<Note>,
     dropped: usize,
 }
@@ -523,17 +658,7 @@ impl Reader {
         if word(at, "OR") && word(at + 1, "REPLACE") {
             at += 2;
         }
-        while [
-            "GLOBAL",
-            "LOCAL",
-            "TEMP",
-            "TEMPORARY",
-            "UNLOGGED",
-            "VIRTUAL",
-        ]
-        .iter()
-        .any(|w| word(at, w))
-        {
+        while TABLE_MODIFIERS.iter().any(|w| word(at, w)) {
             at += 1;
         }
         if !word(at, "TABLE") {
@@ -608,18 +733,14 @@ impl Reader {
 
     fn add(&mut self, table: Schema, line: usize) {
         let name = table.name().unwrap_or_default().to_string();
-        if let Some(index) = self
-            .schema
-            .tables()
-            .iter()
-            .position(|t| t.name() == Some(&name))
-        {
+        if let Some(&index) = self.index.get(&name) {
             self.note(
                 line,
                 format!("{name}: defined again; the later definition is kept"),
             );
             self.schema.tables_mut()[index] = table;
         } else {
+            self.index.insert(name, self.schema.tables().len());
             self.schema.push_table(table);
         }
     }
@@ -658,7 +779,7 @@ impl Reader {
                         format!("{name}: PRIMARY KEY needs its columns"),
                     ));
                 }
-                let (columns, _) = name_list(part, open_at);
+                let columns = bounded(name, head.line, name_list(part, open_at).0)?;
                 keys.push((head.line, TableKey::Primary(columns)));
             } else if head.is("UNIQUE") {
                 let mut open_at = at + 1;
@@ -671,21 +792,38 @@ impl Reader {
                         format!("{name}: UNIQUE needs its columns"),
                     ));
                 }
-                let (columns, _) = name_list(part, open_at);
+                let columns = bounded(name, head.line, name_list(part, open_at).0)?;
                 keys.push((head.line, TableKey::Unique(columns)));
             } else if head.is("FOREIGN") && word(at + 1, "KEY") {
+                // `FOREIGN KEY [name] (columns) REFERENCES …`.
                 let mut open_at = at + 2;
-                while part.get(open_at).is_some_and(|t| !t.is_symbol("(")) {
+                while part
+                    .get(open_at)
+                    .is_some_and(|t| !t.is_symbol("(") && !t.is("REFERENCES"))
+                {
                     open_at += 1;
                 }
+                if !open(open_at) {
+                    return Err(SqlError::new(
+                        head.line,
+                        format!("{name}: FOREIGN KEY needs its columns"),
+                    ));
+                }
                 let (columns, after) = name_list(part, open_at);
+                let columns = bounded(name, head.line, columns)?;
                 let Some(key) = references(part, after) else {
                     return Err(SqlError::new(
                         head.line,
                         format!("{name}: FOREIGN KEY needs REFERENCES and a table"),
                     ));
                 };
-                keys.push((head.line, TableKey::Foreign(ForeignKey { columns, ..key })));
+                let references = bounded(name, head.line, key.references)?;
+                let key = ForeignKey {
+                    columns,
+                    references,
+                    ..key
+                };
+                keys.push((head.line, TableKey::Foreign(key)));
             } else if head.is("CHECK") {
                 self.note(head.line, format!("{name}: CHECK constraint skipped"));
             } else if [
@@ -693,6 +831,7 @@ impl Reader {
             ]
             .iter()
             .any(|w| head.is(w))
+                && !(at == 0 && named_like_a_clause(part))
             {
                 let what = head.text.to_uppercase();
                 self.note(head.line, format!("{name}: {what} clause skipped"));
@@ -824,7 +963,10 @@ impl Reader {
                 at += if word(1, "KEY") { 2 } else { 1 };
             } else if token.is("REFERENCES") {
                 match references(part, at) {
-                    Some(key) => field = field.with_constraint(Constraint::References(key)),
+                    Some(mut key) => {
+                        key.references = bounded(table, token.line, key.references)?;
+                        field = field.with_constraint(Constraint::References(key));
+                    }
                     None => {
                         return Err(SqlError::new(
                             token.line,
@@ -854,6 +996,17 @@ impl Reader {
             }
         }
         Ok(field)
+    }
+}
+
+/// Whether a table element that starts with a clause's word (`KEY`,
+/// `INDEX`, `PERIOD`, …) is a column of that name: alone, or followed by a
+/// type (`key TEXT`, `index INT NOT NULL`), where a clause is followed by
+/// a name or a parenthesis (`KEY ix (a)`, `INDEX (a)`).
+fn named_like_a_clause(part: &[Token]) -> bool {
+    match part.get(1) {
+        None => true,
+        Some(next) => next.kind == Kind::Word && sql_type(&part[1..2]) != DataType::Unknown,
     }
 }
 
@@ -1246,6 +1399,124 @@ mod tests {
         let parsed = parse(&many).unwrap();
         assert_eq!(parsed.notes.len(), MAX_NOTES + 1);
         assert_eq!(parsed.notes.last().unwrap().message, "… and 200 more notes");
+    }
+
+    #[test]
+    fn a_foreign_key_without_columns_is_an_error() {
+        for ddl in [
+            "CREATE TABLE t (a INT, FOREIGN KEY REFERENCES u)",
+            "CREATE TABLE t (a INT, FOREIGN KEY)",
+            "CREATE TABLE t (a INT, CONSTRAINT f FOREIGN KEY REFERENCES u (id))",
+        ] {
+            let error = parse(ddl).unwrap_err();
+            assert_eq!(
+                error.to_string(),
+                "line 1: t: FOREIGN KEY needs its columns",
+                "{ddl}"
+            );
+        }
+    }
+
+    #[test]
+    fn columns_named_like_index_clauses_are_columns() {
+        let parsed = parse(
+            "CREATE TABLE settings (key TEXT PRIMARY KEY, index INT NOT NULL, \
+             period VARCHAR(10), KEY ix (index), INDEX (period), KEY (key));",
+        )
+        .unwrap();
+        let t = &parsed.schema.tables()[0];
+        let names: Vec<&str> = t.fields().iter().map(Field::name).collect();
+        assert_eq!(names, ["key", "index", "period"]);
+        assert_eq!(t.primary_key(), ["key"]);
+        assert!(t.field("index").unwrap().is_required());
+        assert_eq!(
+            notes(&parsed),
+            [
+                "line 1: settings: KEY clause skipped",
+                "line 1: settings: INDEX clause skipped",
+                "line 1: settings: KEY clause skipped",
+            ]
+        );
+    }
+
+    #[test]
+    fn many_tables_parse_in_linear_time() {
+        // Each table was looked up among all those before it: 100,000
+        // tables took minutes.
+        let mut ddl = String::new();
+        for i in 0..MAX_STATEMENTS - 1 {
+            ddl.push_str(&format!("CREATE TABLE t{i} (a INT);\n"));
+        }
+        ddl.push_str("CREATE TABLE t7 (b INT);");
+        let started = std::time::Instant::now();
+        let parsed = parse(&ddl).unwrap();
+        assert!(started.elapsed() < std::time::Duration::from_secs(30));
+        assert_eq!(parsed.schema.tables().len(), MAX_STATEMENTS - 1);
+        assert_eq!(parsed.schema.tables()[7].fields()[0].name(), "b");
+        assert_eq!(
+            notes(&parsed),
+            [format!(
+                "line {MAX_STATEMENTS}: t7: defined again; the later definition is kept"
+            )]
+        );
+        ddl.push_str("\nCREATE TABLE u (a INT);");
+        let error = parse(&ddl).unwrap_err();
+        assert_eq!(
+            error.message(),
+            format!("more than {MAX_STATEMENTS} statements")
+        );
+    }
+
+    #[test]
+    fn key_column_lists_are_bounded() {
+        // A key may list a column any number of times; each was looked up
+        // among the table's columns.
+        let names = vec!["a"; MAX_COLUMNS + 1].join(", ");
+        for ddl in [
+            format!("CREATE TABLE t (a INT, PRIMARY KEY ({names}));"),
+            format!("CREATE TABLE t (a INT, UNIQUE ({names}));"),
+            format!("CREATE TABLE t (a INT, FOREIGN KEY ({names}) REFERENCES u);"),
+            format!("CREATE TABLE t (a INT, FOREIGN KEY (a) REFERENCES u ({names}));"),
+            format!("CREATE TABLE t (a INT REFERENCES u ({names}));"),
+        ] {
+            let error = parse(&ddl).unwrap_err();
+            assert_eq!(
+                error.to_string(),
+                format!("line 1: t: a key of more than {MAX_COLUMNS} columns"),
+            );
+        }
+    }
+
+    #[test]
+    fn statements_are_read_one_at_a_time() {
+        // Every token of the file was held at once: 16 MB of DDL took over
+        // 2 GB. Now one statement's are, and a statement has a limit.
+        let long = format!("CREATE TABLE t ({});", "1 ".repeat(MAX_TOKENS));
+        assert_eq!(
+            parse(&long).unwrap_err().to_string(),
+            format!("line 1: a statement of more than {MAX_TOKENS} tokens")
+        );
+        let insert = format!(
+            "INSERT INTO t VALUES ({});\nCREATE TABLE u (a INT);",
+            "1, ".repeat(MAX_TOKENS)
+        );
+        let parsed = parse(&insert).unwrap();
+        assert_eq!(notes(&parsed), ["line 1: INSERT statement skipped"]);
+        assert_eq!(parsed.schema.tables()[0].name(), Some("u"));
+        // Errors keep their order: the text's, then the parentheses', then
+        // the statements'.
+        assert_eq!(
+            parse("CREATE TABLE t (a INT));\nSELECT 'oops")
+                .unwrap_err()
+                .to_string(),
+            "line 2: a string is not closed"
+        );
+        assert_eq!(
+            parse("CREATE TABLE t (a INT REFERENCES);\nx)")
+                .unwrap_err()
+                .to_string(),
+            "line 2: a `)` closes nothing"
+        );
     }
 
     #[test]
