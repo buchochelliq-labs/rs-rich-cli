@@ -35,6 +35,9 @@
 //!   [`plugin::DotPlugin`] registers a `dot` fence renderer and source
 //!   renderer; with the `graphviz` feature, [`graphviz::render_svg`] runs
 //!   Graphviz's own `dot` for SVG.
+//! - [`er`]: entity-relationship diagrams. An [`ErModel`] of entities,
+//!   columns and keys, relationships and groups, built in code (a schema
+//!   reader fills it), drawn by the [`ErDiagram`] renderable.
 //!
 //! Groupings: a [`Cluster`] is drawn as a dashed frame around its nodes, its
 //! label in the top border, nested clusters inside it; a same-rank group
@@ -44,6 +47,7 @@
 mod cluster;
 pub mod diagram;
 pub mod dot;
+pub mod er;
 pub mod graph;
 #[cfg(feature = "graphviz")]
 pub mod graphviz;
@@ -53,6 +57,7 @@ pub mod plugin;
 
 pub use diagram::Diagram;
 pub use dot::{Dot, DotError, DotGraph};
+pub use er::{ErDiagram, ErModel};
 pub use graph::{
     Cluster, Direction, Edge, Graph, Head, Node, Shape, Stroke, MAX_EDGES, MAX_EDGE_LENGTH,
     MAX_NODES, MAX_SOURCE,
