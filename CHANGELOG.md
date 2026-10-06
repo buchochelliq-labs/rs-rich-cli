@@ -49,6 +49,11 @@ before its fix. See the [release notes](docs/releases/0.0.16.md#what-the-release
   columns; the summary table now gives way.
 - `rs_rich.data`: a JSON Schema `SchemaError` has `line = None`, as its
   stub says.
+- Review of the release test: `rich schema` sanitizes the file's name in
+  every view and error (two-schema diffs and Arrow files showed it raw),
+  keeps the whitespace the SQL reader splits words by when it sanitizes DDL,
+  and keeps both of two JSON property names that read the same once
+  sanitized (the second is numbered).
 - The `micro-doctor` docs tape waits for the prompt before each command.
 
 ### Recorder: write what the tape asks for, and say what was skipped

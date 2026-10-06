@@ -3,9 +3,7 @@
 //! workstream 7). Not upstream.
 
 use std::io::Write;
-use std::path::Path;
-#[cfg(feature = "arrow")]
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
 
 const SHOP: &str = "\
@@ -88,7 +86,6 @@ fn stderr(out: &Output) -> String {
     String::from_utf8_lossy(&out.stderr).into_owned()
 }
 
-#[cfg(feature = "arrow")]
 fn path(dir: &tempfile::TempDir, name: &str) -> PathBuf {
     dir.path().join(name)
 }
@@ -200,6 +197,67 @@ fn sanitize_covers_schema_files() {
         "",
     ));
     assert!(out.contains("t\x1b[2J"), "{out:?}");
+}
+
+/// A file's own name reached the terminal raw when two schemas were
+/// compared (and from an Arrow file, read before the name was sanitized).
+#[test]
+fn sanitize_covers_the_file_names() {
+    let dir = dir();
+    let evil = "s\x1b]0;title\x07.json";
+    std::fs::write(path(&dir, evil), r#"{"properties": {"a": {}}}"#).unwrap();
+    std::fs::write(path(&dir, "b.json"), r#"{"properties": {"b": {}}}"#).unwrap();
+    std::fs::write(path(&dir, "b.sql"), "CREATE TABLE t (b INT);").unwrap();
+    for args in [&["schema", evil, "b.json"][..], &["schema", evil, "b.sql"]] {
+        let out = stdout(&run_in(dir.path(), args, ""));
+        assert!(!out.contains('\x1b') && !out.contains('\x07'), "{out:?}");
+        assert!(out.contains("s␛]0;title␇.json"), "{out}");
+    }
+    // Errors name the file inertly too.
+    std::fs::write(path(&dir, "bad\x1b[2J.json"), "{").unwrap();
+    let out = run_in(dir.path(), &["schema", "bad\x1b[2J.json"], "");
+    assert!(!stderr(&out).contains('\x1b'), "{:?}", stderr(&out));
+    #[cfg(feature = "arrow")]
+    {
+        let arrow = "e\x1b[2J.arrow";
+        std::fs::copy(arrow_fixture("events-v1.arrow"), path(&dir, arrow)).unwrap();
+        let out = stdout(&run_in(dir.path(), &["schema", arrow], ""));
+        assert!(out.starts_with("e␛[2J.arrow  8 fields\n"), "{out:?}");
+    }
+}
+
+/// Sanitizing DDL before reading it turned whitespace the reader accepts
+/// (a lone CR, form feed, vertical tab, NEL) into symbols, so a statement
+/// separated by one was skipped.
+#[test]
+fn sanitized_ddl_keeps_its_whitespace() {
+    let dir = dir();
+    for (i, gap) in ["\r", "\x0b", "\x0c", "\u{85}"].iter().enumerate() {
+        let name = format!("ws{i}.sql");
+        let ddl = format!("CREATE{gap}TABLE t{gap}(id{gap}INT);");
+        std::fs::write(path(&dir, &name), ddl).unwrap();
+        let out = stdout(&run_in(dir.path(), &["schema", &name], ""));
+        assert!(
+            out.contains("t  table") && out.contains("id  INT"),
+            "{gap:?}: {out}"
+        );
+        assert!(!out.contains("skipped"), "{gap:?}: {out}");
+    }
+}
+
+/// Two property names that sanitize to the same text were merged, losing
+/// one of them.
+#[test]
+fn sanitized_json_keys_that_collide_are_both_kept() {
+    let dir = dir();
+    std::fs::write(
+        path(&dir, "k.json"),
+        r#"{"properties": {"a\u001b": {"type": "string"}, "a␛": {"type": "integer"}}}"#,
+    )
+    .unwrap();
+    let out = stdout(&run_in(dir.path(), &["schema", "k.json"], ""));
+    assert!(!out.contains('\x1b'), "{out:?}");
+    assert!(out.contains("string") && out.contains("integer"), "{out}");
 }
 
 #[test]
