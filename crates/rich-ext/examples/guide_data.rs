@@ -6,9 +6,9 @@ use std::path::PathBuf;
 use rich::{ColorSystem, Console, Justify};
 use rich_ext::data::{
     diff, flatten, parse, parse_ini, print_table_to, print_tree_to, unflatten, ConfigFileView,
-    DataError, DiffView, Explorer, FlatView, Format, JsonPathSelector, Node, Path, Redaction,
-    SearchQuery, SearchResults, SelectError, Selector, SelectorBackend, Selectors, TableOptions,
-    TableView, Value, View,
+    DataError, DiffView, Explorer, FlatView, Format, JsonPathSelector, Node, Path, RecordView,
+    Redaction, SearchQuery, SearchResults, SelectError, Selector, SelectorBackend, Selectors,
+    TableOptions, TableView, Value, View,
 };
 use rich_ext::ConsoleExt;
 
@@ -74,6 +74,24 @@ fn show_table_view(console: &Console) {
     console.print(&Explorer::new(&hosts).view(View::Table));
 }
 // --8<-- [end:explorer-table]
+
+// --8<-- [start:record]
+fn show_record(console: &Console) {
+    let record = parse(
+        Format::Json,
+        r#"{"id": 7, "name": "web", "password": "hunter2",
+            "ports": [80, 443, 8080, 8443],
+            "owner": {"team": "infra", "oncall": {"primary": "ana", "backup": "bo"}}}"#,
+    )
+    .unwrap();
+    let view = RecordView::new(&record)
+        .depth(1) // a nested value's own children show (the default)
+        .expand("owner.oncall".parse().unwrap()) // and this branch, however deep
+        .max_items(3) // then `… N more`
+        .redact(&Redaction::secrets());
+    console.print(&view);
+}
+// --8<-- [end:record]
 
 // --8<-- [start:formats]
 fn show_formats(console: &Console) {
@@ -285,6 +303,7 @@ fn main() {
         show_limits(c, &deploy)
     });
     shots.shot("explorer-table", 60, "Table view", show_table_view);
+    shots.shot("record", 60, "RecordView", show_record);
     shots.shot("formats", 60, "TOML and XML", show_formats);
     shots.shot("serde", 60, "print_table", |c| show_serde(c).unwrap());
     shots.shot("table-options", 60, "TableOptions", |c| {

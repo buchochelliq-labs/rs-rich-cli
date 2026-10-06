@@ -658,9 +658,12 @@ mod pty {
     #[test]
     fn a_required_input_refuses_an_empty_line() {
         let mut pty = Pty::start(
-            r#"x=$(rich input --prompt Project --placeholder rs-rich --required); echo "code=$? got=$x""#,
+            // Not `rs-rich`: `Pty::start` rewrites every `rich ` into the
+            // binary's path, so that placeholder only matched by accident
+            // when the checkout's path happened to contain `rs-rich`.
+            r#"x=$(rich input --prompt Project --placeholder my-project --required); echo "code=$? got=$x""#,
         );
-        pty.wait_for("rs-rich");
+        pty.wait_for("my-project");
         pty.send("\r");
         pty.wait_for("an answer is required");
         pty.send("demo");

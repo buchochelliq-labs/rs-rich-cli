@@ -9,7 +9,7 @@ use rich::{ColorSystem, Console, Text, Theme};
 use rich_ext::diagnostic::Level;
 use rich_ext::diff::git::{parse_unified, Annotation, PatchView, TemplateLinks};
 use rich_ext::diff::test_report::{junit, libtest, TestReport};
-use rich_ext::diff::{DiffView, Layout, SourceDiff, TextDiff};
+use rich_ext::diff::{ConflictFile, ConflictView, DiffView, Layout, SourceDiff, TextDiff};
 use rich_ext::target::{RenderTarget, TargetKind};
 use rich_ext::testing::RenderSnapshot;
 use rich_ext::ConsoleExt;
@@ -149,6 +149,29 @@ fn show_patch(console: &Console) {
 }
 // --8<-- [end:patch]
 
+// --8<-- [start:conflicts]
+const MERGED: &str = "\
+fn timeout() -> u64 {
+<<<<<<< HEAD
+    30
+||||||| merged common ancestors
+    10
+=======
+    env_or(\"TIMEOUT\", 10)
+>>>>>>> feature/env
+}
+";
+
+fn show_conflicts(console: &Console) {
+    let file = ConflictFile::parse(MERGED).expect("well-formed markers");
+    let conflict = &file.conflicts()[0];
+    assert_eq!(file.text(&conflict.ours), "    30");
+    assert_eq!(conflict.theirs.label.as_deref(), Some("feature/env"));
+    // Side by side when every column fits, stacked otherwise.
+    console.print(&ConflictView::new(file).path("src/config.rs"));
+}
+// --8<-- [end:conflicts]
+
 const LIBTEST: &str = r#"     Running unittests src/lib.rs (target/debug/deps/totals-5e1c0a)
 { "type": "suite", "event": "started", "test_count": 3 }
 { "type": "test", "event": "started", "name": "math::adds" }
@@ -227,6 +250,7 @@ fn main() {
     shots.shot("snapshots", 60, "DiffView::snapshots", show_snapshots);
     shots.shot("source", 72, "SourceDiff", show_source);
     shots.shot("patch", 80, "PatchView", show_patch);
+    shots.shot("conflicts", 80, "ConflictView", show_conflicts);
     shots.shot("test-report", 80, "TestReport", show_test_report);
 
     // Keep the expected panic's default report off stderr.

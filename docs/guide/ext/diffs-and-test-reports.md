@@ -170,6 +170,48 @@ works as a provider (local `file://` or editor links). Implement
 On the command line, `git diff | rich diff -` renders a patch this way, and
 `rich diff OLD NEW` compares any two text files.
 
+## Merge conflicts
+
+`ConflictFile::parse` reads the markers a merge leaves in a file: `<<<<<<<`,
+the diff3 base after `|||||||` (with `merge.conflictStyle = diff3` or
+`zdiff3`), `=======` and `>>>>>>>`, each with its label. A `Conflict` has the
+`ours`, optional `base` and `theirs` sides as line ranges, the marker lines
+and a 1-based `number`; `file.text(&side)` joins a side's lines.
+
+```rust
+--8<-- "crates/rich-ext/examples/guide_diff.rs:conflicts"
+```
+
+![A diff3 conflict, ours, base and theirs side by side](../../media/guide/guide_diff-conflicts.svg)
+
+`ConflictView` numbers each conflict, shows a few lines of context around it
+(`context(n)`, default 3) and highlights each side with core's `Syntax` (by
+`language(…)` or the extension of `path(…)`; plain without the `syntax`
+feature). The file is highlighted as three whole versions, so a string or
+comment that spans a marker colours as it would in each (a file over 1 MiB
+is shown plain). `layout` picks
+`ConflictLayout::SideBySide`, `Stacked`, or `Auto` (the default: columns when
+each gets 20 cells of text). `base(false)` hides the base, and
+`line_numbers` and `wrap` work as on `DiffView`. The line numbers are the
+file's, and with colour off every side line keeps its marker: `<` ours, `|`
+base, `>` theirs. The `diff.conflict.ours`, `diff.conflict.base`,
+`diff.conflict.theirs` and `diff.conflict.label` theme keys style it.
+
+Parsing follows git's rule for a marker: seven characters at the start of a
+line, then whitespace or the end of the line. A conflict's markers all share
+the opening marker's length, so a longer marker inside one is text, which is
+how git writes a conflict nested inside another. A path with a larger
+`conflict-marker-size` attribute gets longer markers throughout: a longer
+opening marker counts when a separator and a closing marker of its length
+follow it. Outside a
+conflict only `<<<<<<<` counts, so a Markdown heading underlined with
+`=======` stays text. Markers out of order, a second `<<<<<<<` and a conflict
+that is never closed return a `ConflictError` naming the line. Input is
+capped at `MAX_CONFLICT_SOURCE` (16 MiB) and `MAX_CONFLICTS` (10,000).
+
+On the command line, `rich diff --conflicts FILE` shows a file's conflicts
+this way, with a summary line.
+
 ## Test reports
 
 With the `test-report` feature, `junit::parse` reads JUnit XML (Maven

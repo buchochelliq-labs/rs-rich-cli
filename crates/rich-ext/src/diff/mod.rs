@@ -9,6 +9,9 @@
 //!   ANSI text ([`DiffView::ansi`], which also reports style-only changes) or,
 //!   with the `testing` feature, render snapshots.
 //! - [`SourceDiff`]: a syntax-highlighted source diff with optional line links.
+//! - [`ConflictFile`] and [`ConflictView`]: three-way merge conflicts parsed
+//!   from the markers a merge leaves (diff3's base included) and shown ours,
+//!   base and theirs side by side or stacked.
 //! - [`git`]: a `git diff` parser and [`PatchView`](git::PatchView), a
 //!   review-style renderer with a file tree, annotations and links.
 //! - `test_report` (feature `test-report`): JUnit XML and libtest JSON test
@@ -19,6 +22,7 @@
 //! With colour off every change stays visible: `-`, `+` and `~` (style only)
 //! markers lead each changed line.
 
+mod conflict;
 pub mod engine;
 pub mod git;
 mod render;
@@ -31,6 +35,10 @@ pub mod assert;
 #[cfg(feature = "test-report")]
 pub mod test_report;
 
+pub use conflict::{
+    Conflict, ConflictError, ConflictFile, ConflictLayout, ConflictSide, ConflictView, Pick,
+    MAX_CONFLICTS, MAX_CONFLICT_SOURCE,
+};
 pub use engine::{
     diff_chars, diff_lines, diff_slices, diff_words, group_hunks, hunk_header, tokenize, Hunk, Op,
     TextDiff,
@@ -53,6 +61,10 @@ pub const STYLES: &[(&str, &str)] = &[
     ("diff.header", "bold"),
     ("diff.line_number", "dim"),
     ("diff.context", "none"),
+    ("diff.conflict.ours", "green"),
+    ("diff.conflict.base", "yellow"),
+    ("diff.conflict.theirs", "blue"),
+    ("diff.conflict.label", "bold"),
     ("test.passed", "green"),
     ("test.failed", "bold red"),
     ("test.errored", "bold magenta"),

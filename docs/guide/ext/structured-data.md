@@ -155,6 +155,33 @@ applies here too. Every line is cut to the width: long strings shrink first
 `Explorer::new` takes either `&Node` or an owned `Node`, so a view can own a
 freshly built document.
 
+## The record inspector
+
+`RecordView` shows one record as a `field | type | value` table. Scalars
+show as they are (strings unquoted, cut to `max_string(n)` characters, 200 by
+default, with the full length beside them). A nested map or sequence shows as
+an `Explorer` tree opened `depth(n)` levels (default 1; `0` folds every nested
+value to its summary), with deeper containers folded and long ones cut to
+`max_items(n)` children (default 20) and `… N more`.
+
+```rust
+--8<-- "crates/rich-ext/examples/guide_data.rs:record"
+```
+
+![A record with a redacted field and an expanded branch](../../media/guide/guide_data-record.svg)
+
+`expand(path)` opens one branch, and every container above it, however deep
+it is; `collapse(path)` folds one within the depth. `branch(path)` returns
+the tree of any branch on its own, folded the same way, for a pane that
+drills in, and `branches()` lists the fields there are to open.
+`redact(&Redaction::secrets())` masks the record before anything is drawn. A
+sequence's items are its fields (cut to `max_items`), and a scalar is a
+one-row table.
+
+Opening and folding by path is the `OpenBranch` trait: `RecordView`
+implements it, and so does `rich_interact`'s `DataExplorer`, so code that
+tracks the branch a user opened can apply it to either.
+
 ## Serde values
 
 `print_json`, `print_table` and `print_tree` print any `Serialize` value to

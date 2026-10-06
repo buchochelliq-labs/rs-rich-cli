@@ -74,6 +74,40 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   paths, `docs/BRANCHING.md`, the release skill, `AGENTS.md`'s dependency
   graph and versioning table, and the version tables.
 
+### Records and conflicts (0.0.16 workstream 5)
+
+- `rs-rich-ext` 0.0.14: `data::RecordView` (#270), the record inspector:
+  one record as a `field | type | value` table, nested maps and sequences as
+  `Explorer` trees opened `depth(n)` levels (default 1), `expand(path)` and
+  `collapse(path)` for one branch, `branch(path)` for a branch's tree on its
+  own, strings cut with their length (`max_string`, default 200) and
+  containers with `… N more` (`max_items`, default 20), and `redact` before
+  display. `data::OpenBranch` is the drill-down hook: open or fold a branch
+  by path.
+- `rs-rich-ext` 0.0.14: `diff::ConflictFile` and `diff::ConflictView`
+  (#339): a parser for merge-conflict markers, diff3's `|||||||` base and
+  labels included, CRLF-safe, that reads markers as git does (seven characters,
+  or a longer `conflict-marker-size` when the whole conflict uses it, so a
+  nested `<<<<<<<<` is text) and returns a `ConflictError`
+  naming the line for markers out of order, nested or never closed, with
+  `MAX_CONFLICT_SOURCE` (16 MiB) and `MAX_CONFLICTS` (10,000) limits. The
+  view numbers each conflict, keeps context lines, and shows ours, base and
+  theirs side by side when each column fits (`ConflictLayout::Auto`) or
+  stacked, highlighted through the `SourceDiff` path (plain without the
+  `syntax` feature). New theme keys `diff.conflict.ours`, `.base`, `.theirs`
+  and `.label` in `diff::STYLES`.
+- `rs-rich-interact` (next patch): `DataExplorer` implements
+  `rich_ext::data::OpenBranch`, opening a branch and its ancestors by path.
+- `rs-rich-cli` 0.0.16: `rich diff --conflicts FILE` (or `-` for stdin),
+  with `--side-by-side`, `--context N` and `--language NAME`, and a summary
+  line. It exits 0 with or without conflicts, as text diffs do; markers that
+  do not parse exit 4 naming the line, more or fewer than one file and
+  `--threshold` are usage errors (2).
+- Docs: [Merge conflicts](docs/guide/ext/diffs-and-test-reports.md#merge-conflicts),
+  [The record inspector](docs/guide/ext/structured-data.md#the-record-inspector),
+  the explorer guide, `docs/cli.md`, the CLI reference and `docs/PORTING.md`.
+  Nothing under `crates/rich/src` changes.
+
 ## 0.0.15 cohort — published 2026-10-05
 
 Diagram 0.0.1 (new crate) / mermaid 0.0.4 / ext 0.0.13 / micro 0.0.2 /

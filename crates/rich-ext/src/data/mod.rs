@@ -7,6 +7,8 @@
 //!
 //! - [`Explorer`]: a width-aware tree (or table) with folding and limits
 //! - [`TableView`]: records as a table ([`table`], [`print_table`])
+//! - [`RecordView`]: one record as `field | type | value`, nested values as
+//!   drill-down trees ([`OpenBranch`] opens a branch by path)
 //! - [`FlatView`], [`flatten`] / [`unflatten`]: `path = value` leaves
 //! - [`SearchResults`], [`search`]: key / path / value search with highlights
 //! - [`Selectors`]: pluggable selection expressions (JSONPath with `jsonpath`)
@@ -50,6 +52,7 @@ mod flatten;
 mod helpers;
 mod ini;
 mod json;
+mod record;
 mod redact;
 mod search;
 pub mod select;
@@ -73,6 +76,7 @@ pub use helpers::{
     json, print_json, print_json_to, print_table, print_table_to, print_tree, print_tree_to, table,
     tree,
 };
+pub use record::{OpenBranch, RecordView};
 pub use redact::SECRET_KEYS;
 pub use redact::{Redaction, Redactor};
 pub use search::{search, MatchKind, SearchMatch, SearchQuery, SearchResults};

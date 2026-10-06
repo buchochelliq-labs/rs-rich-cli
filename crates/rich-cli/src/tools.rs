@@ -1,5 +1,5 @@
-//! `rich diff` for text, ANSI captures, source and patches, and
-//! `rich ansi explain`: CLI glue over `rich_ext::diff` and
+//! `rich diff` for text, ANSI captures, source, patches and merge conflicts
+//! (`--conflicts`), and `rich ansi explain`: CLI glue over `rich_ext::diff` and
 //! `rich_ext::ansi_explain`.
 //!
 //! Neither exists upstream (upstream's CLI has no diff; ours compared images
@@ -9,12 +9,13 @@ use rich::measure::Measurement;
 use rich::text::Text;
 use rich::{Console, ConsoleOptions, Renderable, Segment};
 use rich_ext::ansi_explain::{explain, Explanation, ExplanationView, ViewMode};
-use rich_ext::diff::{git, DiffView, Layout, SourceDiff};
+use rich_ext::diff::{git, ConflictLayout, ConflictView, DiffView, Layout, SourceDiff};
 
 /// Options for the text diff and `ansi explain`.
 #[derive(Clone, Debug, Default)]
 pub(crate) struct ToolOptions {
     side_by_side: bool,
+    conflicts: bool,
     context: Option<usize>,
     language: Option<String>,
     ansi_inline: bool,
@@ -30,6 +31,7 @@ impl ToolOptions {
     ) -> Result<bool, String> {
         match arg {
             "--side-by-side" => self.side_by_side = true,
+            "--conflicts" => self.conflicts = true,
             "--context" => {
                 self.context = Some(
                     rest.next()
@@ -51,11 +53,17 @@ impl ToolOptions {
     pub(crate) fn diff_option(&self) -> Option<&'static str> {
         [
             ("--side-by-side", self.side_by_side),
+            ("--conflicts", self.conflicts),
             ("--context", self.context.is_some()),
             ("--language", self.language.is_some()),
         ]
         .into_iter()
         .find_map(|(flag, given)| given.then_some(flag))
+    }
+
+    /// Whether `--conflicts` was given: one file's merge conflicts.
+    pub(crate) fn conflicts(&self) -> bool {
+        self.conflicts
     }
 
     /// The first `ansi explain` option given.
@@ -147,6 +155,12 @@ pub(crate) fn text_diff(
             .collect();
         return text_diff(options, &names, &contents, threshold, false);
     }
+    if options.conflicts {
+        let [content] = contents else {
+            return Err("--conflicts needs exactly one file: rich diff --conflicts FILE".into());
+        };
+        return conflicts(options, &names[0], content);
+    }
     if let [patch] = contents {
         let parsed = git::parse_unified(patch).map_err(|err| {
             format!(
@@ -219,6 +233,48 @@ pub(crate) fn text_diff(
     Ok(TextDiffOutcome {
         renderable: Box::new(Stack(vec![view, Box::new(summary)])),
         failed,
+    })
+}
+
+/// `rich diff --conflicts FILE`: the merge conflicts left in one file,
+/// numbered, with ours, base and theirs side by side when the width allows
+/// (always with `--side-by-side`), and a summary line. Like every other text
+/// diff it succeeds whether or not there are conflicts; markers that do not
+/// parse are a data error naming the line.
+fn conflicts(options: &ToolOptions, name: &str, content: &str) -> Result<TextDiffOutcome, String> {
+    let view = ConflictView::parse(content)
+        .map_err(|err| format!("{name}: {err}"))?
+        .path(name)
+        .layout(if options.side_by_side {
+            ConflictLayout::SideBySide
+        } else {
+            ConflictLayout::Auto
+        })
+        .context(options.context.unwrap_or(3));
+    let view = match &options.language {
+        Some(language) => view.language(language.as_str()),
+        None => view,
+    };
+    let count = view.file().conflicts().len();
+    let with_base = view
+        .file()
+        .conflicts()
+        .iter()
+        .filter(|c| c.base.is_some())
+        .count();
+    let mut summary = format!(
+        "{}: {count} conflict{}",
+        rich::markup::escape(file_name(name)),
+        if count == 1 { "" } else { "s" }
+    );
+    if with_base > 0 {
+        summary.push_str(&format!(" ({with_base} with a base)"));
+    }
+    let summary =
+        Text::from_markup(&format!("[dim]{summary}[/]")).map_err(|err| err.to_string())?;
+    Ok(TextDiffOutcome {
+        renderable: Box::new(Stack(vec![Box::new(view), Box::new(summary)])),
+        failed: false,
     })
 }
 
