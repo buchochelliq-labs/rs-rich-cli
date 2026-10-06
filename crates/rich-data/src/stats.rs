@@ -36,7 +36,7 @@ use std::collections::HashMap;
 
 use rich::{Console, ConsoleOptions, Justify, Renderable, Segment, Table, Text};
 
-use crate::infer::parse_float;
+use crate::infer::{parse_float, parse_int};
 use crate::{Rows, Value};
 
 /// What [`Stats`] computes beyond the counts.
@@ -211,6 +211,9 @@ fn column<'a>(
     let mut nulls = 0;
     let mut counts: HashMap<String, usize> = HashMap::new();
     let mut numbers: Vec<f64> = Vec::new();
+    // Every value as an exact integer while they all are one, so integers
+    // past 2^53 keep their order and their printed min and max.
+    let mut integers: Option<Vec<i64>> = Some(Vec::new());
     let mut numeric = true;
     for value in values {
         if value.is_empty() {
@@ -219,6 +222,15 @@ fn column<'a>(
         }
         let text = value.plain();
         if numeric {
+            let integer = match value {
+                Value::Int(n) => Some(*n),
+                Value::Float(_) => None,
+                _ => parse_int(text.trim()),
+            };
+            match (integer, integers.as_mut()) {
+                (Some(n), Some(exact)) => exact.push(n),
+                _ => integers = None,
+            }
             match value.as_f64().or_else(|| parse_float(text.trim())) {
                 Some(n) if !n.is_nan() => numbers.push(n),
                 _ => numeric = false,
@@ -231,7 +243,21 @@ fn column<'a>(
     ranked.sort_by(|(a, m), (b, n)| n.cmp(m).then_with(|| a.cmp(b)));
     let distinct = ranked.len();
     let numeric = numeric && count > 0;
-    let (min, max, mean, median, quantile_values) = if numeric {
+    let (min, max, mean, median, quantile_values) = if numeric && integers.is_some() {
+        let mut exact = integers.unwrap_or_default();
+        exact.sort_unstable();
+        let sum: i128 = exact.iter().map(|&n| i128::from(n)).sum();
+        (
+            exact.first().map(i64::to_string),
+            exact.last().map(i64::to_string),
+            Some(sum as f64 / exact.len() as f64),
+            Some(integer_quantile(&exact, 0.5)),
+            quantiles
+                .iter()
+                .map(|&q| (q, integer_quantile(&exact, q)))
+                .collect(),
+        )
+    } else if numeric {
         numbers.sort_by(f64::total_cmp);
         let mean = numbers.iter().sum::<f64>() / numbers.len() as f64;
         (
@@ -274,6 +300,16 @@ fn quantile(values: &[f64], q: f64) -> f64 {
     values[below] + (values[above] - values[below]) * (position - below as f64)
 }
 
+/// [`quantile`] over sorted, non-empty integers: the interpolation runs on
+/// the exact neighbours, and only the result becomes a float.
+fn integer_quantile(values: &[i64], q: f64) -> f64 {
+    let position = q * (values.len() - 1) as f64;
+    let below = position.floor() as usize;
+    let above = position.ceil() as usize;
+    let gap = i128::from(values[above]) - i128::from(values[below]);
+    values[below] as f64 + gap as f64 * (position - below as f64)
+}
+
 /// A number for display: whole numbers without a point, others to at most
 /// four decimals, and very small ones in scientific notation.
 pub fn number(n: f64) -> String {
@@ -295,6 +331,24 @@ pub fn number(n: f64) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn integers_past_two_to_the_53_keep_their_min_and_max() {
+        let values = [
+            Value::Int(i64::MAX),
+            Value::Int(i64::MAX - 1),
+            Value::Str("9007199254740993".into()),
+        ];
+        let stats = column("big", values.iter(), &[0.25], 3);
+        assert!(stats.numeric);
+        assert_eq!(stats.min.as_deref(), Some("9007199254740993"));
+        assert_eq!(stats.max.as_deref(), Some("9223372036854775807"));
+        let only = [Value::Int(i64::MAX)];
+        let stats = column("max", only.iter(), &[], 3);
+        assert_eq!(stats.min.as_deref(), Some("9223372036854775807"));
+        assert_eq!(stats.max.as_deref(), Some("9223372036854775807"));
+        assert_eq!(integer_quantile(&[1, 2, 3, 4], 0.5), 2.5);
+    }
 
     #[test]
     fn numbers_print_short() {

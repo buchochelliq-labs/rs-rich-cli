@@ -206,8 +206,36 @@ macro_rules! int {
     };
 }
 
+/// A run-end encoded array's values and the physical index that holds
+/// logical row `index`; `None` for any other array.
+fn run(array: &dyn Array, index: usize) -> Option<(&dyn Array, usize)> {
+    let Arrow::RunEndEncoded(ends, _) = array.data_type() else {
+        return None;
+    };
+    Some(match ends.data_type() {
+        Arrow::Int16 => {
+            let run = array.as_run::<Int16Type>();
+            (run.values().as_ref(), run.get_physical_index(index))
+        }
+        Arrow::Int32 => {
+            let run = array.as_run::<Int32Type>();
+            (run.values().as_ref(), run.get_physical_index(index))
+        }
+        Arrow::Int64 => {
+            let run = array.as_run::<Int64Type>();
+            (run.values().as_ref(), run.get_physical_index(index))
+        }
+        _ => return None,
+    })
+}
+
 /// The cell at `index` of `array`.
 pub fn cell(array: &dyn Array, index: usize) -> Value {
+    // A run-end encoded array keeps its nulls in its values, so it resolves
+    // to the value that holds the row before the null check.
+    if let Some((values, physical)) = run(array, index) {
+        return cell(values, physical);
+    }
     if array.is_null(index) {
         return Value::Null;
     }
@@ -229,6 +257,8 @@ pub fn cell(array: &dyn Array, index: usize) -> Value {
         }),
         Arrow::List(_)
         | Arrow::LargeList(_)
+        | Arrow::ListView(_)
+        | Arrow::LargeListView(_)
         | Arrow::FixedSizeList(..)
         | Arrow::Struct(_)
         | Arrow::Map(..) => Value::Str(json(array, index, 0).to_string()),
@@ -403,6 +433,9 @@ fn hex(bytes: &[u8]) -> String {
 
 /// A value as JSON, for nested cells.
 fn json(array: &dyn Array, index: usize, depth: usize) -> Json {
+    if let Some((values, physical)) = run(array, index) {
+        return json(values, physical, depth);
+    }
     if array.is_null(index) {
         return Json::Null;
     }
@@ -419,6 +452,8 @@ fn json(array: &dyn Array, index: usize, depth: usize) -> Json {
     match array.data_type() {
         Arrow::List(_) => items(array.as_list::<i32>().value(index).as_ref(), depth),
         Arrow::LargeList(_) => items(array.as_list::<i64>().value(index).as_ref(), depth),
+        Arrow::ListView(_) => items(array.as_list_view::<i32>().value(index).as_ref(), depth),
+        Arrow::LargeListView(_) => items(array.as_list_view::<i64>().value(index).as_ref(), depth),
         Arrow::FixedSizeList(..) => items(array.as_fixed_size_list().value(index).as_ref(), depth),
         Arrow::Struct(_) => {
             let array = array.as_struct();
@@ -584,6 +619,32 @@ mod tests {
         assert_eq!(error.line(), Some(3));
         assert!(source.next_row().is_none());
         assert!(BatchSource::new(Vec::<RecordBatch>::new()).is_none());
+    }
+
+    #[test]
+    fn list_views_and_run_end_arrays_decode_to_their_values() {
+        use arrow_array::{Int32Array, ListViewArray, RunArray, StringArray};
+
+        let item = Arc::new(ArrowField::new("item", Arrow::Int32, true));
+        let values = Arc::new(Int32Array::from(vec![1, 2, 3, 4])) as ArrayRef;
+        let views = ListViewArray::new(item, vec![2, 0].into(), vec![2, 1].into(), values, None);
+        assert_eq!(cell(&views, 0), Value::Str("[3,4]".into()));
+        assert_eq!(cell(&views, 1), Value::Str("[1]".into()));
+
+        let ends = Int32Array::from(vec![2, 3, 5]);
+        let runs = StringArray::from(vec![Some("a"), None, Some("b")]);
+        let encoded = RunArray::<Int32Type>::try_new(&ends, &runs).unwrap();
+        let cells: Vec<Value> = (0..5).map(|i| cell(&encoded, i)).collect();
+        assert_eq!(
+            cells,
+            [
+                Value::Str("a".into()),
+                Value::Str("a".into()),
+                Value::Null,
+                Value::Str("b".into()),
+                Value::Str("b".into()),
+            ]
+        );
     }
 
     #[test]
