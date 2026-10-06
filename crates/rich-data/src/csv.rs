@@ -145,10 +145,12 @@ impl CsvReader {
     /// nulls, so no field is lost.
     pub fn read(&self, content: &str) -> Result<Rows, DataError> {
         let content = universal_newlines(content);
+        // Sniffed past a byte-order mark, as `source` sniffs.
+        let content = content.strip_prefix('\u{feff}').unwrap_or(&content);
         let (dialect, header) = self
-            .detect(&content)
+            .detect(content)
             .ok_or_else(|| DataError::new("Could not determine delimiter"))?;
-        let mut records = read_rows(&content, &dialect)
+        let mut records = parse_rows(content, &dialect)
             .into_iter()
             .filter(|row| !row.is_empty());
         let names = if header {
@@ -1285,5 +1287,29 @@ mod tests {
         assert_eq!(streamed.columns(), ["a", "b"]);
         assert_eq!(streamed.rows()[1][0], Value::from("\u{feff}x"));
         assert_eq!(streamed.rows(), read.rows());
+    }
+
+    /// `read` sniffs the text after a leading byte-order mark, as `source`
+    /// does: it sniffed the mark too, so the two could choose different
+    /// dialects (and headers) for the same input.
+    #[test]
+    fn read_and_source_sniff_past_a_byte_order_mark_alike() {
+        for text in [
+            "\u{feff}\r\nx|y;z\tw w\n",
+            "\u{feff}\nname,age\nAda,36\n",
+            "\u{feff}ab,c\nxy,1\nzw,2\n",
+            // Only the first mark is stripped.
+            "\u{feff}\u{feff}ab,c\nxy,1\n",
+        ] {
+            let read = CsvReader::new().fallback(',').read(text).unwrap();
+            let streamed = CsvReader::new()
+                .fallback(',')
+                .source(text.as_bytes())
+                .unwrap()
+                .collect_rows()
+                .unwrap();
+            assert_eq!(streamed.columns(), read.columns(), "{text:?}");
+            assert_eq!(streamed.rows(), read.rows(), "{text:?}");
+        }
     }
 }
