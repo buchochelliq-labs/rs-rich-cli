@@ -456,7 +456,7 @@ fn deps_diagram(
         if depth.is_some_and(|max| here >= max) {
             continue;
         }
-        let root = graph.roots().contains(&package);
+        let root = graph.is_root(package);
         for dep in graph.deps(package) {
             let follows = dep
                 .kinds
@@ -471,7 +471,7 @@ fn deps_diagram(
     // The edges drawn: between packages within `depth`, of the kinds asked.
     let mut edges = Vec::new();
     for &package in &order {
-        let root = graph.roots().contains(&package);
+        let root = graph.is_root(package);
         for dep in graph.deps(package) {
             let kinds: Vec<DepKind> = dep
                 .kinds
@@ -523,7 +523,7 @@ fn why_diagram(why: &WhyTree, kinds: &[DepKind]) -> Graph {
     let mut keep = vec![false; graph.packages().len()];
     let mut stack: Vec<usize> = why.targets().to_vec();
     while let Some(package) = stack.pop() {
-        if std::mem::replace(&mut keep[package], true) || graph.roots().contains(&package) {
+        if std::mem::replace(&mut keep[package], true) || graph.is_root(package) {
             continue;
         }
         stack.extend(dependents[package].iter().map(|(parent, _)| *parent));

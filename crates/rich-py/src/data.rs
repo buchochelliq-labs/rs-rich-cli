@@ -14,6 +14,7 @@
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use pyo3::create_exception;
 use pyo3::exceptions::{PyException, PyKeyError, PyValueError};
@@ -713,6 +714,9 @@ impl Stats {
 // ---------------------------------------------------------------------------
 // Profiles
 
+/// The most histogram bins a profile takes: far past a readable histogram.
+const MAX_BINS: usize = 1000;
+
 fn profile_options(
     sample: usize,
     top: usize,
@@ -725,6 +729,12 @@ fn profile_options(
         return Err(PyValueError::new_err(
             "sample and buckets must be at least 1",
         ));
+    }
+    // Every numeric column's histogram allocates its bins up front.
+    if bins > MAX_BINS {
+        return Err(PyValueError::new_err(format!(
+            "bins must be at most {MAX_BINS}, got {bins}"
+        )));
     }
     let mut options = ProfileOptions {
         sample,
@@ -751,8 +761,9 @@ fn profile_source(source: &mut dyn RowSource, options: ProfileOptions) -> PyResu
 /// A bounded profile of rows (`rich_data::profile::Profile`): each column's
 /// type, nulls, distinct values, statistics and a histogram or its top
 /// values, and a missing-value map. At most `sample` rows (a fixed-seed
-/// reservoir) are kept; the row count and nulls count every row. It
-/// renders as a heading, a table, the distributions and the map.
+/// reservoir) are kept; the row count and nulls count every row. `bins`
+/// is at most 1000. It renders as a heading, a table, the distributions
+/// and the map.
 #[pyclass(name = "Profile", module = "rs_rich.data", frozen)]
 pub(crate) struct Profile {
     inner: CoreProfile,
@@ -1262,7 +1273,8 @@ impl ResultSet {
 /// `scroll_by` moves it.
 #[pyclass(name = "VirtualTable", module = "rs_rich.data")]
 pub(crate) struct VirtualTable {
-    rows: CoreRows,
+    /// Shared with every table `core` builds, so a call copies no rows.
+    rows: Arc<CoreRows>,
     offset: usize,
     height: usize,
     row_numbers: bool,
@@ -1275,10 +1287,10 @@ pub(crate) struct VirtualTable {
 }
 
 impl VirtualTable {
-    fn core(&self) -> CoreVirtualTable<CoreRows> {
+    fn core(&self) -> CoreVirtualTable<Arc<CoreRows>> {
         let sample = &self.rows.rows()[..self.rows.len().min(100)];
         let columns = typed_columns(self.rows.columns(), self.rows.schema(), sample);
-        let mut table = CoreVirtualTable::new(columns, self.rows.clone())
+        let mut table = CoreVirtualTable::new(columns, Arc::clone(&self.rows))
             .offset(self.offset)
             .height(self.height)
             .row_numbers(self.row_numbers)
@@ -1325,7 +1337,7 @@ impl VirtualTable {
         title: Option<String>,
     ) -> Self {
         VirtualTable {
-            rows: rows.inner.clone(),
+            rows: Arc::new(rows.inner.clone()),
             offset,
             height: height.min(rich_ext::table::virtualized::MAX_HEIGHT),
             row_numbers,

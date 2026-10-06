@@ -47,7 +47,7 @@ use std::collections::BTreeMap;
 
 use rich::{Console, ConsoleOptions, Renderable, Segment, Text, Tree};
 
-use super::{compare_versions, theme_style, DepGraph, DepKind};
+use super::{clean, compare_versions, theme_style, DepGraph, DepKind};
 
 /// The most dependents listed beside one version; the rest are counted.
 pub const MAX_LISTED: usize = 8;
@@ -145,9 +145,12 @@ impl DepGraph {
                 let mut versions: Vec<DuplicateVersion> = versions.into_values().collect();
                 versions.sort_by(|a, b| compare_versions(&b.version, &a.version));
                 for version in &mut versions {
+                    // By index last, so a dependent listed twice is
+                    // adjacent even beside another package of the same
+                    // name and version (from another source).
                     version.dependents.sort_by(|&a, &b| {
-                        let (a, b) = (&self.packages[a], &self.packages[b]);
-                        (&a.name, &a.version).cmp(&(&b.name, &b.version))
+                        let (x, y) = (&self.packages[a], &self.packages[b]);
+                        (&x.name, &x.version, a).cmp(&(&y.name, &y.version, b))
                     });
                     version.dependents.dedup();
                 }
@@ -214,7 +217,7 @@ impl Consolidation {
         let dependents = duplicate.dependent_count();
         let mut label = Text::new("");
         label.append(
-            &duplicate.name,
+            &clean(&duplicate.name),
             Some(theme_style(console, "deps.duplicate").into()),
         );
         let newest = if duplicate.shared == 0 {
@@ -233,7 +236,7 @@ impl Consolidation {
                 } else {
                     ""
                 },
-                shared.version,
+                clean(&shared.version),
             ),
             None,
         );
@@ -241,7 +244,7 @@ impl Consolidation {
         for version in &duplicate.versions {
             let mut text = Text::new("");
             text.append(
-                &format!("v{}", version.version),
+                &format!("v{}", clean(&version.version)),
                 Some(theme_style(console, "deps.version").into()),
             );
             let names: Vec<String> = version
@@ -388,6 +391,51 @@ mod tests {
         assert_eq!(syn.shared_version().version, "1.0.109");
         let moving: Vec<String> = syn.to_move().iter().map(|&p| graph.display(p)).collect();
         assert_eq!(moving, ["a v1.0.0", "b v1.0.0"]);
+    }
+
+    #[test]
+    fn a_dependent_is_listed_once_beside_a_namesake() {
+        // syn 2.0.0 also comes from git, and `a 1.0.0` from git too: `a`
+        // depends on both syn 2.0.0s, and the other `a` sits between its
+        // two entries when they are sorted by name and version.
+        let mut metadata: serde_json::Value = serde_json::from_str(&metadata()).unwrap();
+        let git = "git+https://example.com/x";
+        let packages = metadata["packages"].as_array_mut().unwrap();
+        packages.push(serde_json::json!({"id": "syn 2.0.0 (git)", "name": "syn",
+            "version": "2.0.0", "source": git}));
+        packages.push(serde_json::json!({"id": "a 1.0.0 (git)", "name": "a",
+            "version": "1.0.0", "source": git}));
+        let edge = |name: &str, pkg: &str| {
+            serde_json::json!({"name": name, "pkg": pkg,
+                "dep_kinds": [{"kind": null, "target": null}]})
+        };
+        let nodes = metadata["resolve"]["nodes"].as_array_mut().unwrap();
+        nodes[0]["deps"]
+            .as_array_mut()
+            .unwrap()
+            .push(edge("a2", "a 1.0.0 (git)"));
+        nodes[1]["deps"]
+            .as_array_mut()
+            .unwrap()
+            .push(edge("syn_git", "syn 2.0.0 (git)"));
+        nodes.push(serde_json::json!({"id": "syn 2.0.0 (git)", "deps": []}));
+        nodes.push(serde_json::json!({"id": "a 1.0.0 (git)",
+            "deps": [edge("syn", "syn 2.0.0")]}));
+        let graph = DepGraph::from_json(&metadata.to_string()).unwrap();
+        let all = graph.consolidation(&[DepKind::Normal]);
+        let newest = &all[0].versions[0];
+        assert_eq!(newest.version, "2.0.0");
+        assert_eq!(newest.packages.len(), 2);
+        let mut seen = newest.dependents.clone();
+        seen.sort_unstable();
+        seen.dedup();
+        assert_eq!(
+            newest.dependents.len(),
+            seen.len(),
+            "{:?}",
+            newest.dependents
+        );
+        assert_eq!(newest.dependents.len(), 3);
     }
 
     #[test]

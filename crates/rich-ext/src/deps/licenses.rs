@@ -35,7 +35,7 @@ use rich::table::Table;
 use rich::{Console, ConsoleOptions, Justify, Renderable, Segment, Text};
 use serde_json::Value;
 
-use super::{check_count, compare_versions, stack, stack_measure, theme_style, DepsError};
+use super::{check_count, clean, compare_versions, stack, stack_measure, theme_style, DepsError};
 
 /// The longest licence expression read, in bytes; longer is
 /// [`LicenseClass::Invalid`].
@@ -153,13 +153,20 @@ const COPYLEFT: &[&str] = &[
     "CECILL-",
 ];
 
+/// Whether `id` starts with `prefix`, ignoring ASCII case.
+fn starts_with_ignore_case(id: &str, prefix: &str) -> bool {
+    id.get(..prefix.len())
+        .is_some_and(|start| start.eq_ignore_ascii_case(prefix))
+}
+
+/// SPDX matches identifiers without regard to case, so `gpl-3.0` is GPL.
 fn identifier(id: &str) -> LicenseClass {
     let id = id.trim_end_matches('+');
     if PERMISSIVE.iter().any(|p| p.eq_ignore_ascii_case(id)) {
         LicenseClass::Permissive
-    } else if WEAK_COPYLEFT.iter().any(|p| id.starts_with(p)) {
+    } else if WEAK_COPYLEFT.iter().any(|p| starts_with_ignore_case(id, p)) {
         LicenseClass::WeakCopyleft
-    } else if COPYLEFT.iter().any(|p| id.starts_with(p)) {
+    } else if COPYLEFT.iter().any(|p| starts_with_ignore_case(id, p)) {
         LicenseClass::Copyleft
     } else {
         LicenseClass::Unrecognised
@@ -356,7 +363,7 @@ impl LicensedPackage {
 
     /// `name v1.2.3`.
     pub fn display(&self) -> String {
-        format!("{} v{}", self.name, self.version)
+        format!("{} v{}", clean(&self.name), clean(&self.version))
     }
 }
 
@@ -523,7 +530,7 @@ impl LicenseReport {
             }
             let style = theme_style(console, group.class.style_key());
             table.add_row_text(vec![
-                Text::styled(group.license.clone(), style.clone()),
+                Text::styled(clean(&group.license).into_owned(), style.clone()),
                 Text::new(group.packages.len().to_string()),
                 Text::new(names.join(", ")),
                 Text::styled(group.class.note(), style),
@@ -579,6 +586,10 @@ mod tests {
         assert_eq!(classify("GPL-2.0+"), LicenseClass::Copyleft);
         assert_eq!(classify("AGPL-3.0-only AND MIT"), LicenseClass::Copyleft);
         assert_eq!(classify("MPL-2.0 OR GPL-3.0"), LicenseClass::WeakCopyleft);
+        // Identifiers match without case, the copyleft ones too.
+        assert_eq!(classify("gpl-3.0-only"), LicenseClass::Copyleft);
+        assert_eq!(classify("MIT AND lgpl-2.1"), LicenseClass::WeakCopyleft);
+        assert_eq!(classify("Agpl-3.0 OR Foo"), LicenseClass::Copyleft);
         assert_eq!(classify("Foo"), LicenseClass::Unrecognised);
         assert_eq!(classify("MIT OR Foo"), LicenseClass::Permissive);
         for invalid in [

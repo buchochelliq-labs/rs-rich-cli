@@ -63,7 +63,14 @@ fn json_schema(value: &Bound<'_, PyAny>) -> PyResult<serde_json::Value> {
             .call_method1("dumps", (value,))?
             .extract()?
     };
-    core_schema::parse(&text).map_err(|e| SchemaError::new_err(e.to_string()))
+    core_schema::parse(&text).map_err(|e| {
+        // `line` is on every SchemaError; a JSON Schema's error has none.
+        let exception = SchemaError::new_err(e.to_string());
+        let _ = exception
+            .value(value.py())
+            .setattr("line", value.py().None());
+        exception
+    })
 }
 
 // ---------------------------------------------------------------------------

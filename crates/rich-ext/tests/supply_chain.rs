@@ -160,3 +160,135 @@ fn licences_group_and_mark_copyleft_and_missing() {
     assert_eq!(counts[&LicenseClass::Missing], 1);
     check("licenses", &plain(100, &report), 100);
 }
+
+/// Rendered in colour with links, so a control sequence smuggled into a
+/// link shows as well as one in the text.
+fn coloured(renderable: &dyn Renderable) -> String {
+    Console::builder()
+        .width(160)
+        .color_system(Some(rich::ColorSystem::Truecolor))
+        .build()
+        .render_to_string(renderable)
+}
+
+/// Whether `out` holds an escape sequence other than the SGR colours and
+/// the OSC 8 links the console writes itself.
+fn smuggled(out: &str) -> Option<String> {
+    let mut rest = out;
+    while let Some(at) = rest.find('\u{1b}') {
+        let tail = &rest[at..];
+        let sgr = tail.strip_prefix("\u{1b}[").and_then(|t| {
+            let end = t.find(|c: char| !(c.is_ascii_digit() || c == ';'))?;
+            (t[end..].starts_with('m')).then_some(2 + end + 1)
+        });
+        let link = tail.strip_prefix("\u{1b}]8;").and_then(|t| {
+            // `ESC ] 8 ; params ; URL ESC \`: the URL may hold no control.
+            let end = t.find("\u{1b}\\")?;
+            (!t[..end].contains(|c: char| c.is_control())).then_some(4 + end + 2)
+        });
+        match sgr.or(link) {
+            Some(skip) => rest = &tail[skip..],
+            None => return Some(tail.chars().take(24).collect()),
+        }
+    }
+    out.contains(['\u{7}', '\u{9b}'])
+        .then(|| "a BEL or CSI".to_string())
+}
+
+#[test]
+fn hostile_report_text_cannot_reach_the_terminal() {
+    // An advisory's id, title, package and link, a timing unit's name and
+    // target, and a licence expression are text from a file; each carries
+    // a title change (OSC 0), a screen clear, and a link that closes early.
+    let evil = r"\u001b]0;pwned\u0007\u001b[2J\u009b31m";
+    let audit = format!(
+        r#"{{"vulnerabilities": {{"list": [{{
+            "advisory": {{"id": "RUSTSEC-1{evil}", "title": "t{evil}",
+              "url": "https://x/\u001b\\\u001b]0;evil\u0007", "aliases": ["CVE{evil}"]}},
+            "versions": {{"patched": [">=1{evil}"]}},
+            "package": {{"name": "p{evil}", "version": "1{evil}"}}}}]}},
+          "warnings": {{}}}}"#
+    );
+    let report = AdvisoryReport::from_cargo_audit(&audit).unwrap();
+    let timings = Timings::parse(&format!(
+        r#"[{{"name": "n{evil}", "version": "1{evil}", "target": "t{evil}", "duration": 1.0}}]"#
+    ))
+    .unwrap();
+    let metadata = format!(
+        r#"{{"packages": [
+            {{"id": "a 1.0.0", "name": "a{evil}", "version": "1.0.0{evil}",
+              "license": "MIT AND {evil}", "source": null,
+              "features": {{"f{evil}": ["dep:b{evil}"]}}, "dependencies": []}}],
+          "workspace_members": ["a 1.0.0"],
+          "resolve": {{"root": null, "nodes": [
+            {{"id": "a 1.0.0", "features": ["f{evil}"], "deps": []}}]}}}}"#
+    );
+    let licenses = LicenseReport::from_json(&metadata).unwrap();
+    let features = FeatureTree::new(FeatureGraph::from_json(&metadata).unwrap(), None).unwrap();
+    let tree = DepTree::new(DepGraph::from_json(&metadata).unwrap());
+    let renderables: [(&str, &dyn Renderable); 5] = [
+        ("audit", &report),
+        ("timings", &TimingsReport::new(timings)),
+        ("licenses", &licenses),
+        ("features", &features),
+        ("tree", &tree),
+    ];
+    for (name, renderable) in renderables {
+        let out = coloured(renderable);
+        assert_eq!(smuggled(&out), None, "{name}: {out:?}");
+        // What was there still shows, as visible text.
+        assert!(out.contains('␛'), "{name}: {out:?}");
+    }
+}
+
+/// `cargo metadata` for `count` workspace members, each with one feature
+/// enabled and a dependency on the next, so every crate is a root, a
+/// member, a dependent and a feature tree.
+fn wide_workspace(count: usize) -> String {
+    let id = |i: usize| format!("p{i} 1.0.0");
+    let mut packages = Vec::new();
+    let mut nodes = Vec::new();
+    for i in 0..count {
+        let next = (i + 1) % count;
+        packages.push(serde_json::json!({
+            "id": id(i), "name": format!("p{i}"), "version": "1.0.0", "source": null,
+            "features": {"f": []},
+            "dependencies": [{"name": format!("p{next}"), "features": ["f"]}]
+        }));
+        nodes.push(serde_json::json!({
+            "id": id(i), "features": ["f"],
+            "deps": [{"name": format!("p{next}"), "pkg": id(next),
+                      "dep_kinds": [{"kind": null, "target": null}]}]
+        }));
+    }
+    let members: Vec<String> = (0..count).map(id).collect();
+    serde_json::json!({
+        "packages": packages, "workspace_members": members,
+        "resolve": {"root": null, "nodes": nodes}
+    })
+    .to_string()
+}
+
+#[test]
+fn a_wide_workspace_is_read_in_near_linear_time() {
+    // Root, member and dependent lookups were linear scans inside loops
+    // over every package: 100,000 members took minutes. 30,000 is enough
+    // to tell quadratic from linear.
+    let json = wide_workspace(30_000);
+    let started = std::time::Instant::now();
+    let graph = DepGraph::from_json(&json).unwrap();
+    assert!(graph.duplicates().is_empty());
+    assert!(graph.consolidation(&[DepKind::Normal]).is_empty());
+    let features = FeatureGraph::from_json(&json).unwrap();
+    let tree = FeatureTree::new(features, None).unwrap();
+    assert_eq!(tree.targets().len(), 30_000);
+    // What drawing every tree asks of the graph: each crate's requests.
+    for package in 0..30_000 {
+        assert_eq!(tree.graph().requests(package).len(), 1);
+    }
+    let elapsed = started.elapsed();
+    assert!(
+        elapsed < std::time::Duration::from_secs(10),
+        "took {elapsed:?}"
+    );
+}
