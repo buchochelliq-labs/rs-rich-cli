@@ -16,6 +16,9 @@
 //!   under a live display, re-rendering only the rows that changed.
 //! * [`rules`]: conditional styles, rules that style a cell, row or column
 //!   by value ([`TableData::style_rules`]).
+//! * [`virtualized`]: [`VirtualTable`], one window of a large row source
+//!   ([`VirtualRows`]) with fixed or sampled column widths, in constant
+//!   memory.
 //!
 //! ```
 //! use rich::{Console, Justify};
@@ -50,6 +53,7 @@ pub mod rules;
 pub mod sort;
 pub mod stream;
 pub mod transform;
+pub mod virtualized;
 
 use std::fmt;
 use std::sync::Arc;
@@ -62,6 +66,7 @@ pub use group::{Aggregate, Group, GroupBy};
 pub use rules::{ColumnRef, Comparison, ResolvedRules, RuleError, StyleRule, StyleRules, Target};
 pub use sort::{Compare, Order, SortKey};
 pub use stream::{RenderStats, StreamingTable, Window};
+pub use virtualized::{FnRows, Page, VirtualRows, VirtualTable};
 
 /// Theme keys used by this module, with their fallback styles.
 ///
@@ -72,6 +77,9 @@ pub const STYLES: &[(&str, &str)] = &[
     ("table.aggregate", "italic"),
     ("table.sort_indicator", "cyan"),
     ("table.more", "dim"),
+    ("table.position", "dim"),
+    ("table.null", "dim italic"),
+    ("table.row_number", "dim"),
 ];
 
 /// A theme style for `key`, falling back to [`STYLES`].

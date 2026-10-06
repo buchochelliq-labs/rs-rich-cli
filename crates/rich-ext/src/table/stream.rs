@@ -623,7 +623,11 @@ impl<K: Eq + Hash + Clone> StreamingTable<K> {
 }
 
 /// A core table's lines, as it streams them.
-fn table_lines(table: &Table, console: &Console, options: &ConsoleOptions) -> Vec<Vec<Segment>> {
+pub(super) fn table_lines(
+    table: &Table,
+    console: &Console,
+    options: &ConsoleOptions,
+) -> Vec<Vec<Segment>> {
     let mut lines = Vec::new();
     let result: Result<(), Infallible> = table.try_for_each_line(console, options, |line| {
         lines.push(line);
