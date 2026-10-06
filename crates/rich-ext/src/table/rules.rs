@@ -204,7 +204,19 @@ impl Comparison {
 fn order(cell: &Value, operand: &Value) -> Option<Ordering> {
     match operand {
         Value::Null => None,
-        Value::Int(_) | Value::Float(_) => {
+        // Two integers compare exactly: as `f64` they agree past 2^53.
+        Value::Int(right) => {
+            let left = match cell {
+                Value::Int(left) => Some(*left),
+                Value::Str(_) | Value::Text(_) => cell.plain().trim().parse::<i64>().ok(),
+                _ => None,
+            };
+            match left {
+                Some(left) => Some(left.cmp(right)),
+                None => order(cell, &Value::Float(*right as f64)),
+            }
+        }
+        Value::Float(_) => {
             let left = cell
                 .as_f64()
                 .or_else(|| match cell {
@@ -569,6 +581,14 @@ mod tests {
         assert!(!Comparison::Lt.test(&Value::Str("n/a".into()), &Value::Int(1)));
         assert!(!Comparison::Gt.test(&Value::Null, &Value::Int(-1)));
         assert!(Comparison::Ne.test(&Value::Str("n/a".into()), &Value::Int(1)));
+        // Integers past 2^53 are told apart, as cells and as text.
+        let big = 9_007_199_254_740_993_i64;
+        assert!(!Comparison::Eq.test(&Value::Int(big), &Value::Int(big - 1)));
+        assert!(Comparison::Gt.test(&Value::Int(big), &Value::Int(big - 1)));
+        assert!(Comparison::Gt.test(&Value::Str(big.to_string()), &Value::Int(big - 1)));
+        assert!(Comparison::Eq.test(&Value::Str(" 7 ".into()), &Value::Int(7)));
+        assert!(Comparison::Lt.test(&Value::Float(6.5), &Value::Int(7)));
+        assert!(Comparison::Gt.test(&Value::Str("7.5".into()), &Value::Int(7)));
     }
 
     #[test]
