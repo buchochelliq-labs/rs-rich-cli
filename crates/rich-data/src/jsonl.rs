@@ -24,7 +24,7 @@ use serde_json::Value as Json;
 
 use crate::{DataError, RecordSource, RowSource, Rows};
 
-pub use crate::record::{DEFAULT_SAMPLE, MAX_DEPTH};
+pub use crate::record::{DEFAULT_SAMPLE, MAX_DEPTH, MAX_UNKNOWN_KEYS};
 
 /// The longest line read, in bytes (64 MiB).
 pub const MAX_LINE: usize = 64 << 20;
@@ -137,5 +137,52 @@ mod tests {
         }
         assert_eq!(count, 3);
         assert_eq!(source.unknown_keys().collect::<Vec<_>>(), ["b", "value"]);
+    }
+
+    /// A record of many keys, at the top level or nested, is read in time
+    /// linear in its keys: each key used to be looked up by scanning every
+    /// column, so 40,000 keys (1.7 MB) took 16 s and a 64 MiB line days.
+    #[test]
+    fn a_record_of_many_keys_reads_in_linear_time() {
+        let keys = 200_000;
+        let object: String = (0..keys)
+            .map(|i| format!("\"k{i}\":{i}"))
+            .collect::<Vec<_>>()
+            .join(",");
+        let text = format!("{{{object}}}\n{{\"nested\":{{{object}}}}}\n{{{object}}}\n");
+        let started = std::time::Instant::now();
+        let mut source = source(text.as_bytes()).unwrap();
+        assert_eq!(source.columns().len(), keys + 1);
+        let mut rows = 0;
+        while let Some(row) = source.next_row() {
+            assert_eq!(row.unwrap().len(), keys + 1);
+            rows += 1;
+        }
+        assert_eq!(rows, 3);
+        // Every key is absent from the nested record, so nullable.
+        assert!(source.schema().unwrap().fields()[0].is_nullable());
+        assert!(
+            started.elapsed() < std::time::Duration::from_secs(30),
+            "took {:?}",
+            started.elapsed()
+        );
+    }
+
+    /// A stream whose every record past the sample has a new key keeps only
+    /// the first `MAX_UNKNOWN_KEYS` names: it used to keep them all, so the
+    /// memory grew with the input and `rich profile` printed every one.
+    #[test]
+    fn keys_after_the_sample_are_named_up_to_a_bound() {
+        let text: String = (0..MAX_UNKNOWN_KEYS + 50)
+            .map(|i| format!("{{\"id\": {i}, \"k{i:04}\": 1}}\n"))
+            .collect();
+        let mut source = source_with_sample(text.as_bytes(), 1).unwrap();
+        while let Some(row) = source.next_row() {
+            row.unwrap();
+        }
+        let names: Vec<&str> = source.unknown_keys().collect();
+        assert_eq!(names.len(), MAX_UNKNOWN_KEYS);
+        assert_eq!(names[0], "k0001");
+        assert!(source.more_unknown_keys());
     }
 }

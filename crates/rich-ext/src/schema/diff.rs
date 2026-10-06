@@ -8,7 +8,7 @@
 //! Schema implements it over the document, following `$ref`s as it goes so
 //! shared definitions are compared only where they differ.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use serde_json::Value;
@@ -379,17 +379,27 @@ impl Differ {
         depth: usize,
     ) {
         let mut keys: Vec<String> = key_order().map(str::to_string).collect();
+        let mut listed: HashSet<String> = keys.iter().cloned().collect();
+        // Each list's first constraint by key, so a table with thousands of
+        // keys is not searched once per key.
+        let by_key = |list: &'_ [Constraint]| -> HashMap<String, Constraint> {
+            let mut found = HashMap::new();
+            for constraint in list {
+                found
+                    .entry(compare_key(constraint))
+                    .or_insert_with(|| constraint.clone());
+            }
+            found
+        };
+        let (old_by_key, new_by_key) = (by_key(old), by_key(new));
         for constraint in old.iter().chain(new) {
             let key = compare_key(constraint);
-            if key != "enum" && !keys.contains(&key) {
+            if key != "enum" && listed.insert(key.clone()) {
                 keys.push(key);
             }
         }
-        let find = |list: &'_ [Constraint], key: &str| -> Option<Constraint> {
-            list.iter().find(|c| compare_key(c) == key).cloned()
-        };
         for key in keys {
-            let (a, b) = (find(old, &key), find(new, &key));
+            let (a, b) = (old_by_key.get(&key).cloned(), new_by_key.get(&key).cloned());
             match (&a, &b) {
                 (None, None) => continue,
                 (Some(x), Some(y)) if same_constraint(x, y) => continue,
@@ -519,8 +529,15 @@ impl Differ {
         let noun = new.noun();
         let old_props = old.properties();
         let new_props = new.properties();
+        // By name (the first of a name), so wide tables are not searched once
+        // per field.
+        let mut old_index: HashMap<&str, usize> = HashMap::new();
+        for (index, (name, _)) in old_props.iter().enumerate() {
+            old_index.entry(name.as_str()).or_insert(index);
+        }
+        let new_names: HashSet<&str> = new_props.iter().map(|(n, _)| n.as_str()).collect();
         for (name, schema) in &old_props {
-            if !new_props.iter().any(|(n, _)| n == name) {
+            if !new_names.contains(name.as_str()) {
                 self.push(
                     ChangeKind::Removed,
                     &join(path, name),
@@ -530,7 +547,7 @@ impl Differ {
             }
         }
         for (name, schema) in &new_props {
-            match old_props.iter().find(|(n, _)| n == name) {
+            match old_index.get(name.as_str()).map(|&i| &old_props[i]) {
                 Some((_, before)) => self.compare(before, schema, &join(path, name), depth + 1),
                 None => self.push(
                     ChangeKind::Added,
@@ -683,6 +700,18 @@ pub(crate) fn record(schema: &Schema, name: &str) -> Field {
     field
 }
 
+/// A schema's tables by name (the first of a name, as [`Schema::table`]
+/// finds), so thousands of tables are not searched once per table.
+fn tables_by_name(schema: &Schema) -> HashMap<&str, &Schema> {
+    let mut tables = HashMap::new();
+    for table in schema.tables() {
+        if let Some(name) = table.name() {
+            tables.entry(name).or_insert(table);
+        }
+    }
+    tables
+}
+
 /// Compare two model schemas: their fields, then their tables by name.
 pub(crate) fn compare_schemas(differ: &mut Differ, old: &Schema, new: &Schema) {
     let (a, b) = (record(old, ""), record(new, ""));
@@ -691,9 +720,10 @@ pub(crate) fn compare_schemas(differ: &mut Differ, old: &Schema, new: &Schema) {
         let n = table.len();
         format!("{n} field{}", if n == 1 { "" } else { "s" })
     };
+    let (old_tables, new_tables) = (tables_by_name(old), tables_by_name(new));
     for table in old.tables() {
         let name = table.name().unwrap_or_default();
-        if new.table(name).is_none() {
+        if !new_tables.contains_key(name) {
             differ.push(
                 ChangeKind::Removed,
                 &join("", name),
@@ -704,7 +734,7 @@ pub(crate) fn compare_schemas(differ: &mut Differ, old: &Schema, new: &Schema) {
     }
     for table in new.tables() {
         let name = table.name().unwrap_or_default();
-        match old.table(name) {
+        match old_tables.get(name) {
             Some(before) => {
                 let (a, b) = (record(before, name), record(table, name));
                 differ.compare(&FieldNode(&a), &FieldNode(&b), &join("", name), 1);
@@ -829,6 +859,52 @@ mod tests {
                 "+ fresh table added (1 field)",
             ]
         );
+    }
+
+    /// Tables, fields and keys were each looked up among all the others:
+    /// these took minutes.
+    #[test]
+    fn large_schemas_compare_in_linear_time() {
+        use std::time::{Duration, Instant};
+        let compare = |old: &Schema, new: &Schema| {
+            let started = Instant::now();
+            let mut differ = Differ::new();
+            compare_schemas(&mut differ, old, new);
+            assert!(started.elapsed() < Duration::from_secs(20));
+            differ
+        };
+        let tables =
+            |data_type: DataType| {
+                Schema::of_tables((0..100_000).map(|i| {
+                    Schema::new([Field::new("a", data_type.clone())]).named(format!("t{i}"))
+                }))
+            };
+        let differ = compare(&tables(DataType::Integer), &tables(DataType::Float));
+        assert!(differ.truncated);
+        assert_eq!(differ.changes.len(), MAX_CHANGES);
+
+        let wide = |data_type: DataType| {
+            Schema::of_tables((0..100).map(|t| {
+                Schema::new((0..4_000).map(|i| Field::new(format!("c{i}"), data_type.clone())))
+                    .named(format!("t{t}"))
+            }))
+        };
+        let differ = compare(&wide(DataType::Integer), &wide(DataType::Float));
+        assert_eq!(differ.changes[0].path, "t0.c0");
+
+        let keys = |turn: bool| {
+            let mut table =
+                Schema::new((0..2_000).map(|i| Field::new(format!("c{i}"), DataType::Integer)));
+            for i in 0..2_000 {
+                let (a, b) = (format!("c{i}"), format!("c{}", (i + 1) % 2_000));
+                let columns = if turn { vec![b, a] } else { vec![a, b] };
+                table.constraints_mut().push(Constraint::Unique(columns));
+            }
+            Schema::of_tables([table.named("t")])
+        };
+        let differ = compare(&keys(false), &keys(true));
+        assert_eq!(differ.changes.len(), 4_000);
+        assert_eq!(differ.changes[0].detail, "unique (c0, c1) removed");
     }
 
     #[test]

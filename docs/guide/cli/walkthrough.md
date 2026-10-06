@@ -556,8 +556,8 @@ text rows from the table.
 
 Related: `--sanitize` replaces control characters in *any* input with visible,
 inert symbols (`ESC[2J` becomes `␛[2J`). Use it for files you do not trust.
-`rich view` and the text `rich diff` do this by default; `--no-sanitize` turns
-it off there.
+`rich view`, `rich schema` and the text `rich diff` do this by default;
+`--no-sanitize` turns it off there.
 
 ## Charts and diagrams
 

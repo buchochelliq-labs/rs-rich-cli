@@ -217,6 +217,36 @@ def test_profile_options_and_files(tmp_path):
         data.Profile(rows, sample=0)
 
 
+def test_a_virtual_table_window_costs_one_viewport():
+    # Every call copied all the rows into a fresh table: 150 calls over
+    # 300,000 rows took about 25 seconds.
+    import time
+
+    rows = data.read_csv("id,name\n" + "".join(f"{i},item {i}\n" for i in range(300_000)))
+    table = data.VirtualTable(rows, offset=1000, height=5)
+    started = time.monotonic()
+    for _ in range(50):
+        table.scroll_by(1)
+        table.window()
+        table.position()
+    assert time.monotonic() - started < 5
+    assert table.window() == (1050, 1055)
+    assert "rows 1,051–1,055 of 300,000" in drawn(table, width=60)
+
+
+def test_profile_bins_are_bounded():
+    # Each histogram allocates its bins: a billion hung the interpreter
+    # (and could abort it out of memory) instead of raising.
+    rows = data.Rows(["n"], [[1], [2]])
+    assert data.Profile(rows, bins=1000).rows == 2
+    for build in (
+        lambda: data.Profile(rows, bins=10**9),
+        lambda: data.Profile.from_text("n\n1\n2\n", bins=1001),
+    ):
+        with pytest.raises(ValueError, match="bins"):
+            build()
+
+
 def test_quality_checks_and_the_report():
     rows = services()
     report = data.QualityReport(
@@ -320,6 +350,15 @@ def test_the_schema_tree_matches_the_crate_example():
         data.SchemaTree("[1, 2]")
     with pytest.raises(TypeError):
         data.SchemaTree(42)
+
+
+def test_a_json_schema_error_has_no_line():
+    # The stub promises `line` on every SchemaError; JSON Schema errors
+    # carry no line, so it is None rather than missing.
+    for read in (data.Schema.from_json_schema, data.SchemaTree):
+        with pytest.raises(data.SchemaError) as error:
+            read("{")
+        assert error.value.line is None
 
 
 def test_schema_diffs_of_json_schemas_and_of_ddl():

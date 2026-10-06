@@ -456,7 +456,7 @@ fn deps_diagram(
         if depth.is_some_and(|max| here >= max) {
             continue;
         }
-        let root = graph.roots().contains(&package);
+        let root = graph.is_root(package);
         for dep in graph.deps(package) {
             let follows = dep
                 .kinds
@@ -471,7 +471,7 @@ fn deps_diagram(
     // The edges drawn: between packages within `depth`, of the kinds asked.
     let mut edges = Vec::new();
     for &package in &order {
-        let root = graph.roots().contains(&package);
+        let root = graph.is_root(package);
         for dep in graph.deps(package) {
             let kinds: Vec<DepKind> = dep
                 .kinds
@@ -523,7 +523,7 @@ fn why_diagram(why: &WhyTree, kinds: &[DepKind]) -> Graph {
     let mut keep = vec![false; graph.packages().len()];
     let mut stack: Vec<usize> = why.targets().to_vec();
     while let Some(package) = stack.pop() {
-        if std::mem::replace(&mut keep[package], true) || graph.roots().contains(&package) {
+        if std::mem::replace(&mut keep[package], true) || graph.is_root(package) {
             continue;
         }
         stack.extend(dependents[package].iter().map(|(parent, _)| *parent));
@@ -576,11 +576,17 @@ fn schema_format_by_name(resource: &str) -> Option<SchemaFormat> {
     }
 }
 
-/// Whether a local file starts with an Arrow IPC file's magic bytes.
+/// Whether a local file starts with an Arrow IPC file's magic bytes. Only a
+/// regular file is looked at: reading a pipe (`/dev/stdin`, `<(…)`) would
+/// take its first bytes from the text read next.
 fn has_arrow_magic(resource: &str) -> bool {
     use std::io::Read;
+    let path = fs_path(resource);
+    if !std::fs::metadata(&path).is_ok_and(|meta| meta.is_file()) {
+        return false;
+    }
     let mut magic = [0u8; 6];
-    std::fs::File::open(fs_path(resource))
+    std::fs::File::open(path)
         .and_then(|mut file| file.read_exact(&mut magic))
         .is_ok_and(|()| &magic == b"ARROW1")
 }
@@ -623,7 +629,17 @@ struct SchemaSource {
 /// file by its magic bytes, else SQL when the text starts like SQL, else
 /// JSON Schema.
 fn schema_file(cli: &Cli, resource: &str) -> Result<(LoadedSchema, SchemaSource), Failure> {
-    let name = shown_name(resource);
+    // `--sanitize`: the file's name, in the view and in errors, shows
+    // terminal controls as inert text, whatever the format.
+    let inert = |text: &str| {
+        if cli.sanitize {
+            sanitize_terminal_controls(text)
+        } else {
+            text.to_string()
+        }
+    };
+    let name = inert(&shown_name(resource));
+    let label = inert(resource);
     let local = !is_url(resource) && resource != "-";
     let mut format = schema_format_by_name(resource);
     if format.is_none() && local && has_arrow_magic(resource) {
@@ -636,7 +652,7 @@ fn schema_file(cli: &Cli, resource: &str) -> Result<(LoadedSchema, SchemaSource)
                 format!("{name}: an Arrow schema is read from a file, not a URL or stdin"),
             ));
         }
-        let schema = LoadedSchema::Model(arrow_schema(resource)?);
+        let schema = LoadedSchema::Model(arrow_schema(resource, &label)?);
         let notes = Vec::new();
         return Ok((schema, SchemaSource { name, notes }));
     }
@@ -646,7 +662,7 @@ fn schema_file(cli: &Cli, resource: &str) -> Result<(LoadedSchema, SchemaSource)
             .map_err(|err| (ExitClass::Input, err))?
     } else {
         read_resource(Some(resource), cli.extensions.encoding).map_err(|err| {
-            let name = if resource == "-" { "<stdin>" } else { resource };
+            let name = if resource == "-" { "<stdin>" } else { &label };
             (ExitClass::Input, format!("cannot read {name}: {err}"))
         })?
     };
@@ -655,38 +671,92 @@ fn schema_file(cli: &Cli, resource: &str) -> Result<(LoadedSchema, SchemaSource)
         None => looks_like_sql(&content),
     };
     if sql {
+        // The text's names and strings show terminal controls as inert
+        // text; the whitespace the reader separates words by stays
+        // whitespace, or a statement split by it would be skipped.
+        let content = if cli.sanitize {
+            sanitize_terminal_controls(&sql_whitespace_as_spaces(&content))
+        } else {
+            content
+        };
         let parsed = rich_ext::schema::sql::parse(&content)
-            .map_err(|err| (ExitClass::Data, format!("{resource}: {err}")))?;
+            .map_err(|err| (ExitClass::Data, format!("{label}: {err}")))?;
         let notes = parsed.notes.iter().map(ToString::to_string).collect();
         let schema = LoadedSchema::Model(parsed.schema);
         return Ok((schema, SchemaSource { name, notes }));
     }
-    let value = rich_ext::schema::parse(&content)
-        .map_err(|err| (ExitClass::Data, format!("{resource}: {err}")))?;
+    let mut value = rich_ext::schema::parse(&content)
+        .map_err(|err| (ExitClass::Data, format!("{label}: {err}")))?;
+    if cli.sanitize {
+        sanitize_json_schema(&mut value);
+    }
     let notes = Vec::new();
     Ok((LoadedSchema::Json(value), SchemaSource { name, notes }))
 }
 
+/// Terminal controls in a JSON Schema's strings and keys (property names)
+/// as inert text, for `--sanitize`.
+fn sanitize_json_schema(value: &mut serde_json::Value) {
+    match value {
+        serde_json::Value::String(text) => *text = sanitize_terminal_controls(text),
+        serde_json::Value::Array(values) => values.iter_mut().for_each(sanitize_json_schema),
+        serde_json::Value::Object(map) => {
+            let entries = std::mem::take(map);
+            // Keys already inert keep their names, so a renamed key never
+            // takes the place of one written that way.
+            let taken: std::collections::HashSet<String> = entries
+                .keys()
+                .filter(|key| sanitize_terminal_controls(key) == **key)
+                .cloned()
+                .collect();
+            for (key, mut value) in entries {
+                sanitize_json_schema(&mut value);
+                let mut shown = sanitize_terminal_controls(&key);
+                if shown != key {
+                    // Two keys that read the same once sanitized are both
+                    // kept: the later one numbered.
+                    let base = shown.clone();
+                    let mut n = 2;
+                    while taken.contains(&shown) || map.contains_key(&shown) {
+                        shown = format!("{base} ({n})");
+                        n += 1;
+                    }
+                }
+                map.insert(shown, value);
+            }
+        }
+        _ => {}
+    }
+}
+
+/// DDL with the control characters the SQL reader takes as whitespace (CR,
+/// vertical tab, form feed, NEL) as spaces, and CRLF as LF, so that
+/// sanitizing the text leaves its words apart.
+fn sql_whitespace_as_spaces(content: &str) -> String {
+    content
+        .replace("\r\n", "\n")
+        .replace(['\r', '\x0b', '\x0c', '\u{85}'], " ")
+}
+
 /// An Arrow IPC file's schema, in the model.
 #[cfg(feature = "arrow")]
-fn arrow_schema(resource: &str) -> Result<Schema, Failure> {
+fn arrow_schema(resource: &str, label: &str) -> Result<Schema, Failure> {
     let file = std::fs::File::open(fs_path(resource))
-        .map_err(|err| (ExitClass::Input, format!("cannot read {resource}: {err}")))?;
+        .map_err(|err| (ExitClass::Input, format!("cannot read {label}: {err}")))?;
     let schema = rich_data::arrow::read_schema(std::io::BufReader::new(file))
-        .map_err(|err| (ExitClass::Data, format!("{resource}: {err}")))?;
+        .map_err(|err| (ExitClass::Data, format!("{label}: {err}")))?;
     Ok(rich_data::arrow::schema(&schema))
 }
 
 /// Without the `arrow` feature an Arrow schema cannot be read: a usage
 /// error that names the feature, rather than a JSON parse error.
 #[cfg(not(feature = "arrow"))]
-fn arrow_schema(resource: &str) -> Result<Schema, Failure> {
+fn arrow_schema(_resource: &str, label: &str) -> Result<Schema, Failure> {
     Err((
         ExitClass::Usage,
         format!(
-            "{}: reading an Arrow schema needs rich built with the `arrow` feature \
+            "{label}: reading an Arrow schema needs rich built with the `arrow` feature \
              (cargo install rs-rich-cli --features arrow)",
-            shown_name(resource)
         ),
     ))
 }
@@ -785,7 +855,7 @@ pub(crate) fn schema(cli: &Cli) -> Result<Box<dyn Renderable>, Failure> {
             }
             let (old_schema, old_input) = schema_file(cli, old)?;
             let (new_schema, new_input) = schema_file(cli, new)?;
-            let names = (shown_name(old), shown_name(new));
+            let names = (old_input.name.clone(), new_input.name.clone());
             if let (LoadedSchema::Json(a), LoadedSchema::Json(b)) = (&old_schema, &new_schema) {
                 return Ok(Box::new(SchemaDiff::new(a, b).names(names.0, names.1)));
             }

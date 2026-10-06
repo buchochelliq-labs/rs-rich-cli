@@ -145,10 +145,12 @@ impl CsvReader {
     /// nulls, so no field is lost.
     pub fn read(&self, content: &str) -> Result<Rows, DataError> {
         let content = universal_newlines(content);
+        // Sniffed past a byte-order mark, as `source` sniffs.
+        let content = content.strip_prefix('\u{feff}').unwrap_or(&content);
         let (dialect, header) = self
-            .detect(&content)
+            .detect(content)
             .ok_or_else(|| DataError::new("Could not determine delimiter"))?;
-        let mut records = read_rows(&content, &dialect)
+        let mut records = parse_rows(content, &dialect)
             .into_iter()
             .filter(|row| !row.is_empty());
         let names = if header {
@@ -356,7 +358,7 @@ impl<R: BufRead> CsvSource<R> {
         let text = std::mem::take(&mut self.record);
         self.state = State::StartRecord;
         self.pending.extend(
-            read_rows(&text, &self.dialect)
+            parse_rows(&text, &self.dialect)
                 .into_iter()
                 .filter(|row| !row.is_empty()),
         );
@@ -1057,7 +1059,12 @@ enum State {
 /// applied Python's universal newlines.
 pub fn read_rows(content: &str, dialect: &Dialect) -> Vec<Vec<String>> {
     // Strip a leading UTF-8 BOM so it doesn't cling to the first header cell.
-    let content = content.strip_prefix('\u{feff}').unwrap_or(content);
+    parse_rows(content.strip_prefix('\u{feff}').unwrap_or(content), dialect)
+}
+
+/// [`read_rows`] without stripping a byte-order mark: a [`CsvSource`] parses
+/// each record alone, and only the input's first may lose one.
+fn parse_rows(content: &str, dialect: &Dialect) -> Vec<Vec<String>> {
     let mut rows: Vec<Vec<String>> = Vec::new();
     let mut row: Vec<String> = Vec::new();
     let mut field = String::new();
@@ -1262,5 +1269,47 @@ mod tests {
         assert_eq!(rows.len(), 1);
         let rows = CsvReader::tsv().read("x\ty\n1\t2\n").unwrap();
         assert_eq!(rows.columns(), ["x", "y"]);
+    }
+
+    /// A byte-order mark is stripped from the start of the input only:
+    /// streaming used to strip one from the start of every record, so a
+    /// cell after a lone `\r` lost it where `read` kept it.
+    #[test]
+    fn streaming_strips_only_a_leading_byte_order_mark() {
+        let text = "\u{feff}a,b\n1,2\r\u{feff}x,y\n\u{feff}3,4\n";
+        let read = CsvReader::new().header(true).read(text).unwrap();
+        let streamed = CsvReader::new()
+            .header(true)
+            .source(text.as_bytes())
+            .unwrap()
+            .collect_rows()
+            .unwrap();
+        assert_eq!(streamed.columns(), ["a", "b"]);
+        assert_eq!(streamed.rows()[1][0], Value::from("\u{feff}x"));
+        assert_eq!(streamed.rows(), read.rows());
+    }
+
+    /// `read` sniffs the text after a leading byte-order mark, as `source`
+    /// does: it sniffed the mark too, so the two could choose different
+    /// dialects (and headers) for the same input.
+    #[test]
+    fn read_and_source_sniff_past_a_byte_order_mark_alike() {
+        for text in [
+            "\u{feff}\r\nx|y;z\tw w\n",
+            "\u{feff}\nname,age\nAda,36\n",
+            "\u{feff}ab,c\nxy,1\nzw,2\n",
+            // Only the first mark is stripped.
+            "\u{feff}\u{feff}ab,c\nxy,1\n",
+        ] {
+            let read = CsvReader::new().fallback(',').read(text).unwrap();
+            let streamed = CsvReader::new()
+                .fallback(',')
+                .source(text.as_bytes())
+                .unwrap()
+                .collect_rows()
+                .unwrap();
+            assert_eq!(streamed.columns(), read.columns(), "{text:?}");
+            assert_eq!(streamed.rows(), read.rows(), "{text:?}");
+        }
     }
 }

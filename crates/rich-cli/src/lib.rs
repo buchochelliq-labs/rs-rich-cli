@@ -2886,11 +2886,13 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
     if !mode.accepts_multiple_resources() && resources.len() > 1 && !batch && !watch {
         return Err("only one resource may be given (except with --gif or --watch)".into());
     }
-    // `view` and the text diff are new here, with no upstream output to keep:
-    // like `less`, they show terminal controls in what they display instead
-    // of letting them act, unless `--no-sanitize` says otherwise.
+    // `view`, `schema` and the text diff are new here, with no upstream
+    // output to keep: like `less`, they show terminal controls in what they
+    // display instead of letting them act, unless `--no-sanitize` says
+    // otherwise.
     let sanitize = sanitize.unwrap_or_else(|| {
         mode == Mode::View
+            || mode == Mode::Schema
             || (mode == Mode::Diff
                 && !(resources.len() == 2 && resources.iter().all(|r| looks_like_image(r))))
     });

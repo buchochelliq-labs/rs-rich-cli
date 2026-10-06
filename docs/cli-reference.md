@@ -272,7 +272,7 @@ Choose at most one; the default auto-detects .md/.rst/.json/.csv/.tsv/.ipynb, .m
 | --- | --- |
 | `--no-color` | Disable colored output (as does a non-empty NO_COLOR) Environment: `NO_COLOR`. Config: `no_color`. |
 | `--color` | Override a config no_color setting (pipes remain plain) |
-| `--sanitize`, `--no-sanitize` | Replace input terminal controls, JSON/notebook strings, titles and captions with visible inert text. On by default for `rich view` and text `rich diff`; --no-sanitize turns it off there. Config: `sanitize`. |
+| `--sanitize`, `--no-sanitize` | Replace input terminal controls, JSON/notebook strings, titles and captions with visible inert text. On by default for `rich view`, `rich schema` and text `rich diff`; --no-sanitize turns it off there. Config: `sanitize`. |
 | `--report <F>` | Emit a result/error envelope on stderr. Default: `human`. Possible values: `human`, `json`. |
 | `--machine-json` | Alias for --report json. |
 
@@ -556,7 +556,7 @@ rich diff [OPTIONS] [RESOURCE]
 
 | Option | Description |
 | --- | --- |
-| `--sanitize`, `--no-sanitize` | Replace input terminal controls, JSON/notebook strings, titles and captions with visible inert text. On by default for `rich view` and text `rich diff`; --no-sanitize turns it off there. |
+| `--sanitize`, `--no-sanitize` | Replace input terminal controls, JSON/notebook strings, titles and captions with visible inert text. On by default for `rich view`, `rich schema` and text `rich diff`; --no-sanitize turns it off there. |
 
 #### Arguments
 
@@ -679,7 +679,7 @@ rich view [OPTIONS] [RESOURCE]
 
 | Option | Description |
 | --- | --- |
-| `--sanitize`, `--no-sanitize` | Replace input terminal controls, JSON/notebook strings, titles and captions with visible inert text. On by default for `rich view` and text `rich diff`; --no-sanitize turns it off there. |
+| `--sanitize`, `--no-sanitize` | Replace input terminal controls, JSON/notebook strings, titles and captions with visible inert text. On by default for `rich view`, `rich schema` and text `rich diff`; --no-sanitize turns it off there. |
 
 #### Paging
 
@@ -821,7 +821,7 @@ rich capture [OPTIONS] [RESOURCE]
 
 | Option | Description |
 | --- | --- |
-| `--sanitize`, `--no-sanitize` | Replace input terminal controls, JSON/notebook strings, titles and captions with visible inert text. On by default for `rich view` and text `rich diff`; --no-sanitize turns it off there. |
+| `--sanitize`, `--no-sanitize` | Replace input terminal controls, JSON/notebook strings, titles and captions with visible inert text. On by default for `rich view`, `rich schema` and text `rich diff`; --no-sanitize turns it off there. |
 
 #### Layout
 
@@ -2016,7 +2016,7 @@ Settings are read from these sources, lowest precedence first; a later source ov
 | `plugins` | list of paths | | | `--plugin` | Load a runtime plugin: a WASM module (.wasm, sandboxed) or a native library (.so, .dylib, .dll, which runs its own code), in a build with the wasm-plugins or dylib-plugins feature; repeatable. `rich plugins list` shows what is loaded |
 | `micro_project` | bool | | | `--micro-project` | Load micro assets from the project's .rich/micro/ (off by default: a project's assets load only when you trust it; ./rich.toml cannot turn this on) |
 | `no_color` | bool | | `NO_COLOR` | `--no-color` | Disable colored output (as does a non-empty NO_COLOR) |
-| `sanitize` | bool | | | `--sanitize` | Replace input terminal controls, JSON/notebook strings, titles and captions with visible inert text. On by default for `rich view` and text `rich diff`; --no-sanitize turns it off there |
+| `sanitize` | bool | | | `--sanitize` | Replace input terminal controls, JSON/notebook strings, titles and captions with visible inert text. On by default for `rich view`, `rich schema` and text `rich diff`; --no-sanitize turns it off there |
 
 `rich` writes diagnostics to stderr and rendered output to stdout, so
 `rich --csv data.csv > table.txt` keeps the two apart.

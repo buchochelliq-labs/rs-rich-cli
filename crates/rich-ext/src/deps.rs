@@ -124,6 +124,19 @@ impl DepsError {
     }
 }
 
+/// `text` with terminal controls made visible
+/// ([`sanitize_terminal_controls`](crate::sanitize_terminal_controls)).
+/// The reports draw text read from files (an advisory's title, a licence
+/// expression, a crate's name in `--metadata FILE`), which must not retitle
+/// the terminal, clear it, or end a link early.
+pub(crate) fn clean(text: &str) -> std::borrow::Cow<'_, str> {
+    if text.contains(|c: char| c.is_control() && c != '\n' && c != '\t') {
+        std::borrow::Cow::Owned(crate::sanitize_terminal_controls(text))
+    } else {
+        std::borrow::Cow::Borrowed(text)
+    }
+}
+
 /// Refuse an input larger than [`MAX_INPUT`].
 pub(crate) fn check_size(input: &str, what: &str) -> Result<(), DepsError> {
     if input.len() > MAX_INPUT {
@@ -258,6 +271,22 @@ pub struct DepGraph {
     deps: Vec<Vec<Dep>>,
     roots: Vec<usize>,
     members: Vec<usize>,
+    /// Per package, whether it is one of `roots` / `members`: the walks
+    /// ask for every package, and a scan of the lists each time is
+    /// quadratic in a large workspace.
+    is_root: Vec<bool>,
+    is_member: Vec<bool>,
+}
+
+/// `indices` as one flag per package.
+fn flags(count: usize, indices: &[usize]) -> Vec<bool> {
+    let mut flags = vec![false; count];
+    for &index in indices {
+        if let Some(flag) = flags.get_mut(index) {
+            *flag = true;
+        }
+    }
+    flags
 }
 
 impl DepGraph {
@@ -370,6 +399,8 @@ impl DepGraph {
             }
         };
         Ok(DepGraph {
+            is_root: flags(packages.len(), &roots),
+            is_member: flags(packages.len(), &members),
             packages,
             deps,
             roots,
@@ -395,11 +426,17 @@ impl DepGraph {
 
     /// Whether `package` is a workspace member.
     pub fn is_member(&self, package: usize) -> bool {
-        self.members.contains(&package)
+        self.is_member.get(package).copied().unwrap_or(false)
+    }
+
+    /// Whether `package` is one of the [`roots`](Self::roots).
+    pub fn is_root(&self, package: usize) -> bool {
+        self.is_root.get(package).copied().unwrap_or(false)
     }
 
     /// Show these packages as the roots instead.
     pub fn set_roots(&mut self, roots: Vec<usize>) {
+        self.is_root = flags(self.packages.len(), &roots);
         self.roots = roots;
     }
 
@@ -414,7 +451,7 @@ impl DepGraph {
             if std::mem::replace(&mut seen[package], true) {
                 continue;
             }
-            let root = self.roots.contains(&package);
+            let root = self.is_root(package);
             for dep in &self.deps[package] {
                 if self.follows(dep, root, kinds) {
                     stack.push(dep.package);
@@ -486,7 +523,7 @@ impl DepGraph {
             if !reachable[from] {
                 continue;
             }
-            let root = self.roots.contains(&from);
+            let root = self.is_root(from);
             for dep in deps {
                 let used: Vec<DepKind> = dep
                     .kinds
@@ -518,7 +555,7 @@ impl DepGraph {
                 break;
             }
             let top = *path.last().expect("paths are never empty");
-            if self.roots.contains(&top) {
+            if self.is_root(top) {
                 let mut found = path.clone();
                 found.reverse();
                 paths.push(found);
@@ -538,7 +575,7 @@ impl DepGraph {
     /// `name v1.2.3`.
     pub fn display(&self, package: usize) -> String {
         let package = &self.packages[package];
-        format!("{} v{}", package.name, package.version)
+        format!("{} v{}", clean(&package.name), clean(&package.version))
     }
 }
 
@@ -618,14 +655,17 @@ fn label(
     } else {
         theme_style(console, "deps.name")
     };
-    text.append(&info.name, Some(name_style.into()));
+    text.append(&clean(&info.name), Some(name_style.into()));
     text.append(" ", None);
     let version_style = if duplicate {
         theme_style(console, "deps.duplicate")
     } else {
         theme_style(console, "deps.version")
     };
-    text.append(&format!("v{}", info.version), Some(version_style.into()));
+    text.append(
+        &format!("v{}", clean(&info.version)),
+        Some(version_style.into()),
+    );
     if let Some(origin) = info.origin() {
         if !(origin == "(path)" && graph.is_member(package)) {
             text.append(" ", None);
@@ -714,12 +754,12 @@ impl DepTree {
             if index > 0 {
                 text.append("\n", None);
             }
-            let versions: Vec<String> = versions.iter().map(|v| format!("v{v}")).collect();
+            let versions: Vec<String> = versions.iter().map(|v| format!("v{}", clean(v))).collect();
             text.append(
                 "duplicate: ",
                 Some(theme_style(console, "deps.section").into()),
             );
-            text.append(name, Some(style.clone().into()));
+            text.append(&clean(name), Some(style.clone().into()));
             text.append(&format!(" {}", versions.join(", ")), None);
         }
         text
@@ -790,7 +830,7 @@ impl DepTree {
         let count = self.graph.packages.len();
         let mut dependents: Vec<Vec<usize>> = vec![Vec::new(); count];
         for (from, deps) in self.graph.deps.iter().enumerate() {
-            let root = self.graph.roots.contains(&from);
+            let root = self.graph.is_root(from);
             for dep in deps {
                 if self.graph.follows(dep, root, &self.kinds) {
                     dependents[dep.package].push(from);
@@ -1019,7 +1059,7 @@ impl WhyTree {
         console: &Console,
     ) -> Tree {
         let parents = &dependents[package];
-        let root = self.graph.roots.contains(&package);
+        let root = self.graph.is_root(package);
         let repeated = !parents.is_empty() && !root && !shown.insert(package);
         let mut text = label(&self.graph, package, duplicates, repeated, console);
         if let Some(kinds) = via.filter(|kinds| !kinds.contains(&DepKind::Normal)) {

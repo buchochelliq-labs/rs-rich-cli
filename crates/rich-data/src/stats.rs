@@ -259,7 +259,12 @@ fn column<'a>(
         )
     } else if numeric {
         numbers.sort_by(f64::total_cmp);
-        let mean = numbers.iter().sum::<f64>() / numbers.len() as f64;
+        let n = numbers.len() as f64;
+        let mut mean = numbers.iter().sum::<f64>() / n;
+        if !mean.is_finite() && numbers.iter().all(|x| x.is_finite()) {
+            // The sum overflowed; scaled first, it cannot.
+            mean = numbers.iter().map(|x| x / n).sum();
+        }
         (
             numbers.first().map(|n| number(*n)),
             numbers.last().map(|n| number(*n)),
@@ -297,7 +302,18 @@ fn quantile(values: &[f64], q: f64) -> f64 {
     let position = q * (values.len() - 1) as f64;
     let below = position.floor() as usize;
     let above = position.ceil() as usize;
-    values[below] + (values[above] - values[below]) * (position - below as f64)
+    if values[below] == values[above] {
+        // An exact rank, or equal neighbours: no interpolation, so an
+        // infinite value is itself rather than `inf - inf`'s NaN.
+        return values[below];
+    }
+    let (low, high, t) = (values[below], values[above], position - below as f64);
+    let gap = high - low;
+    if gap.is_infinite() && low.is_finite() && high.is_finite() {
+        // The gap overflows (-1e308 to 1e308); the weighted sum cannot.
+        return low * (1.0 - t) + high * t;
+    }
+    low + gap * t
 }
 
 /// [`quantile`] over sorted, non-empty integers: the interpolation runs on
@@ -366,6 +382,38 @@ mod tests {
         assert_eq!(quantile(&values, 0.25), 1.75);
         assert_eq!(quantile(&values, 0.5), 2.5);
         assert_eq!(quantile(&values, 1.0), 4.0);
+    }
+
+    /// An infinite value (text such as `1e999` parses as one) at an exact
+    /// rank is that value, not `inf - inf`'s NaN; and finite values whose
+    /// sum overflows still have a finite mean.
+    #[test]
+    fn infinities_and_huge_values_keep_their_statistics() {
+        let mut rows = Rows::new(["inf", "huge"]);
+        for (a, b) in [("1", "1e308"), ("1e999", "1e308"), ("1e999", "1e300")] {
+            rows.push([a.into(), b.into()]);
+        }
+        let stats = Stats::of(&rows);
+        let inf = &stats.columns()[0];
+        assert_eq!(inf.median, Some(f64::INFINITY));
+        assert_eq!(inf.quantiles[1], (0.75, f64::INFINITY));
+        assert_eq!(inf.mean, Some(f64::INFINITY));
+        let huge = &stats.columns()[1];
+        let mean = huge.mean.unwrap();
+        let expected = 2.0 / 3.0 * 1e308 + 1e300 / 3.0;
+        assert!((mean / expected - 1.0).abs() < 1e-12, "{mean}");
+        assert_eq!(huge.median, Some(1e308));
+    }
+
+    /// Interpolating between finite neighbours whose gap overflows still
+    /// gives a finite quantile: the median of -1e308 and 1e308 is 0, not inf.
+    #[test]
+    fn quantiles_between_far_apart_values_stay_finite() {
+        let values = [-1e308, 1e308];
+        assert_eq!(quantile(&values, 0.5), 0.0);
+        assert_eq!(quantile(&values, 0.25), -5e307);
+        assert_eq!(quantile(&values, 0.75), 5e307);
+        assert_eq!(quantile(&[1.0, 2.0], 0.5), 1.5);
     }
 
     #[test]

@@ -205,6 +205,27 @@ fn audit_groups_by_severity_and_gates_on_vulnerabilities() {
 }
 
 #[test]
+fn audit_text_and_the_gate_message_show_controls_visibly() {
+    // The id reaches both the table (stdout) and the gate message (stderr).
+    let hostile = r#"{"vulnerabilities": {"list": [{
+        "advisory": {"id": "RUSTSEC-1\u001b]0;pwned\u0007", "title": "t\u001b[2J",
+          "url": "https://x/\u001b\\\u001b]0;evil\u0007"},
+        "package": {"name": "p", "version": "1"}}]}, "warnings": {}}"#;
+    let out = run_with(&["deps", "--audit", "-", "--force-terminal"], hostile);
+    assert_eq!(out.status.code(), Some(5), "{}", stderr(&out));
+    let shown = String::from_utf8_lossy(&out.stdout).into_owned();
+    for (stream, text) in [("stdout", shown), ("stderr", stderr(&out))] {
+        assert!(!text.contains("\u{1b}]0;"), "{stream}: {text:?}");
+        assert!(!text.contains("\u{1b}[2J"), "{stream}: {text:?}");
+    }
+    assert!(
+        stderr(&out).contains("RUSTSEC-1␛]0;pwned␇"),
+        "{}",
+        stderr(&out)
+    );
+}
+
+#[test]
 fn licenses_group_and_mark_and_honour_no_dev() {
     let metadata = fixture("cargo-metadata.json");
     let out = stdout(&run(&["deps", "--metadata", &metadata, "--licenses"]));

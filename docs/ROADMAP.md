@@ -215,11 +215,13 @@ and #499). Delivered:
 - Atkinson dithering, OKLab distance, Sixel/GIF colour modes, alpha backgrounds
   (#498) and `--theme-file` (#499).
 
-## 0.0.16 — data and developer tooling (planned)
+## 0.0.16 — data and developer tooling (release test passed)
 
 The [0.0.16 plan](plans/0.0.16.md) is the first slice of
 [milestone 6](https://github.com/buchochelliq-labs/rs-rich-cli/milestone/6),
-tracked in [#660](https://github.com/buchochelliq-labs/rs-rich-cli/issues/660):
+tracked in [#660](https://github.com/buchochelliq-labs/rs-rich-cli/issues/660).
+Every workstream is merged and the release test passed; see the
+[0.0.16 release notes](releases/0.0.16.md). It delivers:
 
 - a new `rs-rich-data` crate with CSV, JSONL, serde and (behind a feature)
   Arrow adapters, opt-in type inference, column statistics and conditional

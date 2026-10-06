@@ -209,6 +209,30 @@ fn input_size_and_conflict_count_are_capped() {
 }
 
 #[test]
+fn many_longer_marker_sizes_parse_in_linear_time() {
+    // Each `<<<<<<<<…` of a new length that never closes used to scan, and
+    // re-measure, every line after it: about a thousand lengths over a
+    // million lines took minutes. Each length is now indexed once.
+    let mut text = String::new();
+    for length in 8..1008 {
+        text.push_str(&"<".repeat(length));
+        text.push('\n');
+    }
+    text.push_str(&"x\n".repeat(1_000_000));
+    // And one that does close, after all of them.
+    text.push_str("<<<<<<<<<<<< HEAD\nours\n============\ntheirs\n>>>>>>>>>>>> topic\n");
+    let started = std::time::Instant::now();
+    let file = ConflictFile::parse(&text).unwrap();
+    let elapsed = started.elapsed();
+    assert_eq!(file.conflicts().len(), 1);
+    assert_eq!(file.text(&file.conflicts()[0].ours), "ours");
+    assert!(
+        elapsed < std::time::Duration::from_secs(5),
+        "parsing took {elapsed:?}"
+    );
+}
+
+#[test]
 fn parsing_garbage_never_panics() {
     // Every prefix of a tricky input, cut at every character boundary.
     let text = "é\r\n<<<<<<< ü\r\n|||||||\n=======\r\n>>>>>>> \u{1b}[31m\n<<<<<<<";

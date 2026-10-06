@@ -145,6 +145,61 @@ fn a_large_input_is_sampled_and_says_so() {
     assert_eq!(profile.missing().bucket_rows, 16_384);
 }
 
+/// Every line of a profile fits a narrow width: the summary table kept its
+/// name column at least as wide as the names (up to 16), so at 40 to 50
+/// columns it drew wider than the width it was given.
+#[test]
+fn a_narrow_profile_fits_its_width() {
+    let long = "a_long_column_name,b\nx,1\n,2\ny,3\n";
+    let narrow = "1e999null中\nx\n";
+    // Measured to fit at 80, but drawn two columns wider.
+    let measured = "é|true11inf\u{1b}[31m\r\nnan \"a\":1]{";
+    for (name, profile) in [
+        ("orders", orders()),
+        ("events", events()),
+        (
+            "long",
+            Profile::from_source(
+                CsvReader::new().source(long.as_bytes()).unwrap(),
+                ProfileOptions::default(),
+            )
+            .unwrap(),
+        ),
+        (
+            "narrow",
+            Profile::from_source(
+                CsvReader::new()
+                    .fallback(',')
+                    .source(narrow.as_bytes())
+                    .unwrap(),
+                ProfileOptions::default(),
+            )
+            .unwrap(),
+        ),
+        (
+            "measured",
+            Profile::from_source(
+                CsvReader::new()
+                    .fallback(',')
+                    .source(measured.as_bytes())
+                    .unwrap(),
+                ProfileOptions::default(),
+            )
+            .unwrap(),
+        ),
+    ] {
+        for width in [40, 44, 50, 80] {
+            let console = Console::builder().width(width).color_system(None).build();
+            let segments = console.render(&profile, None);
+            for line in rich::Segment::split_lines(&segments) {
+                let cells: usize = line.iter().map(rich::Segment::cell_length).sum();
+                let text: String = line.iter().map(|s| s.text.to_string()).collect();
+                assert!(cells <= width, "{name} at {width}: {text:?}");
+            }
+        }
+    }
+}
+
 #[test]
 fn odd_csv_never_panics() {
     for text in [

@@ -515,11 +515,13 @@ types (quoted or not, with parameters, several words such as
 `DOUBLE PRECISION`, and arrays), `NOT NULL`, `DEFAULT`, `PRIMARY KEY`,
 `UNIQUE` and `REFERENCES` on a column or for several columns on the table,
 `CONSTRAINT name`, MySQL's `ENUM(…)` and `COMMENT`, `--` and `/* */`
-comments, and any number of statements. `CHECK` constraints, indexes and
-every statement but `CREATE TABLE` are skipped, each with a note giving its
-line; text it cannot read (an unclosed string or parenthesis, a table with
-no column list) is an error with its line. Input is bounded: 16 MiB, 100,000
-statements, 4,096 columns a table and parentheses 64 deep.
+comments, PostgreSQL's `$$ … $$` strings, and any number of statements.
+`CHECK` constraints, indexes and every statement but `CREATE TABLE` are
+skipped, each with a note giving its line; text it cannot read (an unclosed
+string or parenthesis, a table with no column list) is an error with its
+line. Input is bounded: 16 MiB, 100,000 statements, 1,000,000 tokens a
+statement, 4,096 columns a table or a key and parentheses 64 deep;
+statements are read one at a time.
 
 ```rust
 use rich::Console;
@@ -643,8 +645,9 @@ v1 → v2: 6 changes, 3 breaking
 └── + order_lines  table added (3 fields)
 ```
 
-The `rich schema` command still reads JSON Schema only; DDL and Arrow input
-and an ER view come to the CLI later in 0.0.16.
+From the command line, `rich schema` reads JSON Schema, SQL DDL (`.sql`,
+`.ddl`) and Arrow IPC files (with the CLI's `arrow` feature), compares any two,
+and draws an ER diagram with `--er`; see [the CLI docs](../../cli.md).
 
 ### ER diagrams
 

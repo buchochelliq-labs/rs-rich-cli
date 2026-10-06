@@ -43,11 +43,12 @@
 use std::collections::BTreeMap;
 use std::fmt;
 
+use rich::cells::cell_len;
 use rich::table::Table;
 use rich::{ColumnOptions, Console, ConsoleOptions, Renderable, Segment, Style, Text};
 use serde_json::Value;
 
-use super::{check_count, check_size, stack, stack_measure, theme_style, DepsError};
+use super::{check_count, check_size, clean, stack, stack_measure, theme_style, DepsError};
 
 /// What an advisory is about.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -232,15 +233,22 @@ impl Advisory {
 
 /// The CVSS 3.0 or 3.1 base score of a vector
 /// (`CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H` scores 9.8), from the
-/// specification's formula; `None` for another version or a vector missing
-/// a base metric.
+/// specification's formula; `None` for another version, a vector missing
+/// a base metric, or one that gives a metric twice (which the
+/// specification calls invalid, and which could otherwise lower a score by
+/// restating a metric after the scored one).
 pub fn cvss3_score(vector: &str) -> Option<f64> {
     let mut parts = vector.trim().split('/');
     let version = parts.next()?;
     if version != "CVSS:3.0" && version != "CVSS:3.1" {
         return None;
     }
-    let metrics: BTreeMap<&str, &str> = parts.filter_map(|part| part.split_once(':')).collect();
+    let mut metrics: BTreeMap<&str, &str> = BTreeMap::new();
+    for (metric, value) in parts.filter_map(|part| part.split_once(':')) {
+        if metrics.insert(metric, value).is_some() {
+            return None;
+        }
+    }
     let get = |key: &str| metrics.get(key).copied();
     let changed = match get("S")? {
         "U" => false,
@@ -551,7 +559,7 @@ impl AdvisoryReport {
             Text::new("Severity"),
             fixed(widest(&|a| severity_label(a).len())),
         );
-        table.add_column_with(Text::new("ID"), fixed(widest(&|a| a.id.len())));
+        table.add_column_with(Text::new("ID"), fixed(widest(&|a| cell_len(&clean(&a.id)))));
         table.add_column("Crate");
         table.add_column("Patched");
         table.add_column("Title");
@@ -562,23 +570,27 @@ impl AdvisoryReport {
             }
             previous = Some(advisory.severity);
             let severity = Text::styled(severity_label(advisory), advisory.severity.style(console));
+            // A link with a control in it could end the link early and
+            // write the rest to the terminal: none is better.
             let id_style = match &advisory.url {
-                Some(url) => Style::default().with_link(url.clone()),
-                None => Style::default(),
+                Some(url) if !url.contains(char::is_control) => {
+                    Style::default().with_link(url.clone())
+                }
+                _ => Style::default(),
             };
             let id = if advisory.id.is_empty() {
                 Text::styled("–", theme_style(console, "deps.off"))
             } else {
-                Text::styled(advisory.id.clone(), id_style)
+                Text::styled(clean(&advisory.id).into_owned(), id_style)
             };
             let patched = if advisory.patched.is_empty() {
                 Text::styled("no fix", theme_style(console, "deps.unknown"))
             } else {
-                Text::new(advisory.patched.join(", "))
+                Text::new(clean(&advisory.patched.join(", ")).into_owned())
             };
-            let mut krate = Text::new(advisory.package.clone());
+            let mut krate = Text::new(clean(&advisory.package).into_owned());
             krate.append(
-                &format!(" v{}", advisory.version),
+                &format!(" v{}", clean(&advisory.version)),
                 Some(theme_style(console, "deps.version").into()),
             );
             table.add_row_text(vec![
@@ -586,7 +598,7 @@ impl AdvisoryReport {
                 id,
                 krate,
                 patched,
-                Text::new(advisory.title.clone()),
+                Text::new(clean(&advisory.title).into_owned()),
             ]);
         }
         Some(table)
@@ -626,6 +638,11 @@ mod tests {
         assert_eq!(score("CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:N"), 0.0);
         assert_eq!(cvss3_score("CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N"), None);
         assert_eq!(cvss3_score("CVSS:3.1/AV:N"), None);
+        // A metric given twice is invalid, not "the last one wins".
+        assert_eq!(
+            cvss3_score("CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H/AV:P"),
+            None
+        );
         assert_eq!(cvss3_score(""), None);
     }
 

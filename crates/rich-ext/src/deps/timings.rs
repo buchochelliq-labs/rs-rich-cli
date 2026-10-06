@@ -41,7 +41,7 @@ use rich::table::Table;
 use rich::{Console, ConsoleOptions, Justify, Renderable, Segment, Text};
 use serde_json::Value;
 
-use super::{check_count, check_size, stack, stack_measure, theme_style, DepsError};
+use super::{check_count, check_size, clean, stack, stack_measure, theme_style, DepsError};
 use crate::chart::{BarChart, ValueFormat};
 
 /// The slowest units [`TimingsReport`] shows by default.
@@ -84,10 +84,14 @@ pub struct Timings {
     units: Vec<Unit>,
 }
 
+/// The most seconds a time in a report may be (about 31 years): a larger
+/// one is not a build's, and summing a few of them overflows to infinity.
+pub const MAX_SECONDS: f64 = 1e9;
+
 fn seconds(value: Option<&Value>) -> Option<f64> {
     value
         .and_then(Value::as_f64)
-        .filter(|s| s.is_finite() && *s >= 0.0)
+        .filter(|s| (0.0..=MAX_SECONDS).contains(s))
 }
 
 impl Timings {
@@ -360,7 +364,7 @@ impl TimingsReport {
             } else {
                 u.label()
             };
-            (label, u.duration)
+            (clean(&label).into_owned(), u.duration)
         }))
         .format(ValueFormat::Fixed(2))
     }
@@ -375,9 +379,9 @@ impl TimingsReport {
         let none = || Text::styled("–", theme_style(console, "deps.off"));
         for unit in shown {
             table.add_row_text(vec![
-                Text::new(unit.label()),
+                Text::new(clean(&unit.label()).into_owned()),
                 Text::styled(
-                    format!("v{}", unit.version),
+                    format!("v{}", clean(&unit.version)),
                     theme_style(console, "deps.version"),
                 ),
                 Text::new(secs(unit.duration)),
@@ -485,6 +489,13 @@ mod tests {
         assert!(Timings::parse("{\"reason\": \"timing-info\"}").is_err());
         let deep = format!("[{}{}]", "[".repeat(1000), "]".repeat(1000));
         assert!(Timings::parse(&deep).is_err());
+        // Times past MAX_SECONDS are not a build's: two of 1e308 summed
+        // to an infinite total, drawn as `infs`.
+        let huge = r#"[{"name": "a", "version": "1", "duration": 1e308}]"#;
+        assert!(Timings::parse(huge).is_err());
+        let late = r#"[{"name": "a", "version": "1", "duration": 1, "start": 1e308}]"#;
+        let late = Timings::parse(late).unwrap();
+        assert_eq!((late.units()[0].start, late.wall_clock()), (None, None));
     }
 
     #[test]

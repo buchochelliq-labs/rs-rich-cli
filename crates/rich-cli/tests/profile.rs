@@ -223,6 +223,30 @@ fn bad_input_and_options_are_refused() {
 }
 
 #[test]
+fn keys_first_seen_after_the_sample_are_noted_up_to_a_bound() {
+    // Every record past the first 1,000 has a key of its own: the note
+    // names the first 100 and ends `…`, not all 2,000 of them.
+    let input: String = (0..3_000)
+        .map(|i| {
+            if i < 1_000 {
+                format!("{{\"id\": {i}}}\n")
+            } else {
+                format!("{{\"id\": {i}, \"k{i}\": 1}}\n")
+            }
+        })
+        .collect();
+    let out = stdout(&run_with(&[], &input, &["profile", "--report", "json"]));
+    let json: serde_json::Value = serde_json::from_str(&out).unwrap();
+    let note = json["notes"][0].as_str().unwrap();
+    assert!(
+        note.starts_with("keys first seen after record 1000 are not profiled: k1000, "),
+        "{note}"
+    );
+    assert!(note.ends_with(", k1099, …"), "{note}");
+    assert_eq!(note.matches(", ").count(), 100, "{note}");
+}
+
+#[test]
 fn json_lines_after_a_long_run_of_blank_lines_is_still_json_lines() {
     // More whitespace than one read buffer holds (8 KiB) before the first
     // record: the format is decided by the first byte that is not.

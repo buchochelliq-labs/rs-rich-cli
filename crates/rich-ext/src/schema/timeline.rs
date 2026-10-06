@@ -162,7 +162,8 @@ impl SchemaTimeline {
     }
 
     /// The [`Timeline`] drawn, its styles resolved through `console`'s
-    /// theme.
+    /// theme: at most [`MAX_ROWS`] rows (rendering counts the rest on a
+    /// line under it).
     pub fn timeline(&self, console: &Console) -> Timeline {
         let mut timeline = Timeline::new()
             .durations(false)
@@ -183,17 +184,7 @@ impl SchemaTimeline {
         };
         let models: Vec<Schema> = self.versions.iter().map(Version::model).collect();
         let changes = self.changes();
-        // Rows, in the order fields first appear.
-        let mut rows: Vec<String> = Vec::new();
-        for model in &models {
-            for row in row_names(model) {
-                if !rows.contains(&row) {
-                    rows.push(row);
-                }
-            }
-        }
-        let hidden = rows.len().saturating_sub(MAX_ROWS);
-        rows.truncate(MAX_ROWS);
+        let (rows, _) = rows(&models);
         let n = self.versions.len();
         let step = if n > 1 {
             ((self.position(n - 1) - self.position(0)) / (n - 1) as f64).max(f64::EPSILON)
@@ -227,9 +218,6 @@ impl SchemaTimeline {
                 timeline = timeline.push(span);
             }
         }
-        if hidden > 0 {
-            timeline = timeline.milestone(format!("… {hidden} more fields"), self.position(0));
-        }
         for (index, version) in self.versions.iter().enumerate() {
             let label = match index.checked_sub(1) {
                 None => version.label.clone(),
@@ -238,6 +226,19 @@ impl SchemaTimeline {
             timeline = timeline.milestone(label, self.position(index));
         }
         timeline
+    }
+
+    /// `… N more fields` under the timeline, when there are more rows than
+    /// it draws.
+    fn hidden_note(&self, console: &Console) -> Option<Text> {
+        let models: Vec<Schema> = self.versions.iter().map(Version::model).collect();
+        let (_, hidden) = rows(&models);
+        (hidden > 0).then(|| {
+            Text::styled(
+                format!("… {hidden} more fields"),
+                theme_style(console, "schema.description"),
+            )
+        })
     }
 
     /// The change list drawn under the timeline.
@@ -272,6 +273,23 @@ impl SchemaTimeline {
         }
         trees
     }
+}
+
+/// The rows drawn, in the order fields first appear, and how many more
+/// there are past [`MAX_ROWS`].
+fn rows(models: &[Schema]) -> (Vec<String>, usize) {
+    let mut rows: Vec<String> = Vec::new();
+    let mut listed: std::collections::HashSet<String> = std::collections::HashSet::new();
+    for model in models {
+        for row in row_names(model) {
+            if listed.insert(row.clone()) {
+                rows.push(row);
+            }
+        }
+    }
+    let hidden = rows.len().saturating_sub(MAX_ROWS);
+    rows.truncate(MAX_ROWS);
+    (rows, hidden)
 }
 
 /// The rows a schema has: its fields, then each table's as `table.column`.
@@ -349,6 +367,12 @@ fn counts(diff: &SchemaDiff) -> String {
 impl Renderable for SchemaTimeline {
     fn rich_render(&self, console: &Console, options: &ConsoleOptions) -> Vec<Segment> {
         let mut segments = self.timeline(console).rich_render(console, options);
+        if let Some(note) = self.hidden_note(console) {
+            if !segments.last().is_some_and(|s| s.text.ends_with('\n')) {
+                segments.push(Segment::line());
+            }
+            segments.extend(note.rich_render(console, options));
+        }
         if self.details {
             for tree in self.listing(console) {
                 if !segments.last().is_some_and(|s| s.text.ends_with('\n')) {
@@ -362,6 +386,13 @@ impl Renderable for SchemaTimeline {
 
     fn measure(&self, console: &Console, options: &ConsoleOptions) -> rich::measure::Measurement {
         let mut measurement = self.timeline(console).measure(console, options);
+        if let Some(note) = self.hidden_note(console) {
+            let m = note.measure(console, options);
+            measurement = rich::measure::Measurement::new(
+                measurement.minimum.max(m.minimum),
+                measurement.maximum.max(m.maximum),
+            );
+        }
         if self.details {
             for tree in self.listing(console) {
                 let m = tree.measure(console, options);
@@ -372,5 +403,56 @@ impl Renderable for SchemaTimeline {
             }
         }
         measurement
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::schema::{DataType, Field};
+
+    /// Each row was looked up among all those before it: 200,000 columns
+    /// took minutes.
+    #[test]
+    fn many_rows_are_gathered_in_linear_time() {
+        let schema = Schema::of_tables((0..50).map(|t| {
+            Schema::new((0..4_000).map(|i| Field::new(format!("c{i}"), DataType::Integer)))
+                .named(format!("t{t}"))
+        }));
+        let timeline = SchemaTimeline::new()
+            .push("v1", schema.clone())
+            .push("v2", schema)
+            .details(false)
+            .charset(Charset::Ascii);
+        let console = Console::builder().width(60).color_system(None).build();
+        let started = std::time::Instant::now();
+        let out = console.render_to_string(&timeline);
+        assert!(started.elapsed() < std::time::Duration::from_secs(20));
+        assert!(out.starts_with("t0.c0 "), "{out}");
+        assert!(
+            out.ends_with(
+                "
+… 199800 more fields"
+            ),
+            "{out}"
+        );
+    }
+
+    /// The rows past [`MAX_ROWS`] were counted in a milestone at the first
+    /// version's place, which its label always took: never shown.
+    #[test]
+    fn rows_not_drawn_are_counted() {
+        let schema =
+            Schema::new((0..MAX_ROWS + 5).map(|i| Field::new(format!("f{i}"), DataType::Integer)));
+        let timeline = SchemaTimeline::new()
+            .push("v1", schema)
+            .charset(Charset::Ascii);
+        let console = Console::builder().width(40).color_system(None).build();
+        let out = console.render_to_string(&timeline);
+        let lines: Vec<&str> = out.lines().collect();
+        assert_eq!(lines.len(), MAX_ROWS + 4, "{out}");
+        assert!(lines[MAX_ROWS - 1].starts_with("f199 "));
+        assert!(lines[MAX_ROWS].contains("* v1"));
+        assert_eq!(lines[MAX_ROWS + 3], "… 5 more fields");
     }
 }

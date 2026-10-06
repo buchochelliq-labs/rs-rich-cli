@@ -3,9 +3,7 @@
 //! workstream 7). Not upstream.
 
 use std::io::Write;
-use std::path::Path;
-#[cfg(feature = "arrow")]
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
 
 const SHOP: &str = "\
@@ -88,7 +86,6 @@ fn stderr(out: &Output) -> String {
     String::from_utf8_lossy(&out.stderr).into_owned()
 }
 
-#[cfg(feature = "arrow")]
 fn path(dir: &tempfile::TempDir, name: &str) -> PathBuf {
     dir.path().join(name)
 }
@@ -130,6 +127,137 @@ fn ddl_on_stdin_is_recognised_by_its_first_word() {
     let out = run_in(dir.path(), &["schema", "-"], "digraph { a -> b }");
     assert_eq!(out.status.code(), Some(4));
     assert!(stderr(&out).contains("not JSON"), "{}", stderr(&out));
+}
+
+/// A pipe named as a file (`/dev/stdin`, `<(…)`): looking for Arrow's magic
+/// bytes read its first six bytes, so `CREATE` was gone before the text was
+/// read and the rest failed as JSON.
+#[cfg(target_os = "linux")]
+#[test]
+fn a_pipe_named_as_a_file_is_read_whole() {
+    let dir = dir();
+    let out = stdout(&run_in(dir.path(), &["schema", "/dev/stdin"], SHOP));
+    assert!(out.starts_with("stdin  2 tables\n"), "{out}");
+    assert!(out.contains("customer_id (required)  BIGINT"), "{out}");
+}
+
+/// `--sanitize` covers file text, but `rich schema` reads its files itself
+/// and skipped it: a name's escapes reached the terminal.
+#[test]
+fn sanitize_covers_schema_files() {
+    let dir = dir();
+    let write = |name: &str, text: &str| std::fs::write(dir.path().join(name), text).unwrap();
+    write(
+        "evil.sql",
+        "CREATE TABLE \"t\x1b[2J\" (\"c\x1b]0;title\x07\" INT REFERENCES \"t\x1b[2J\");\r\n",
+    );
+    write("evil2.sql", "CREATE TABLE \"t\x1b[2J\" (d INT);\r\n");
+    write(
+        "evil.json",
+        r#"{"title": "s\u001b[2J", "properties": {"k\u001b]0;x\u0007": {"type": "string", "description": "d\u001b[31m"}}}"#,
+    );
+    write(
+        "evil2.json",
+        r#"{"title": "s\u001b[2J", "properties": {"k\u001b]0;x\u0007": {"type": "integer"}}}"#,
+    );
+    for args in [
+        &["--sanitize", "schema", "evil.sql"][..],
+        &["--sanitize", "schema", "evil.sql", "evil2.sql"],
+        &["--sanitize", "schema", "evil.json"],
+        &["--sanitize", "schema", "evil.json", "evil2.json"],
+        &["--sanitize", "schema", "evil.json", "evil.sql"],
+    ] {
+        let out = stdout(&run_in(dir.path(), args, ""));
+        assert!(
+            !out.contains('\x1b') && !out.contains('\x07'),
+            "{args:?}: {out:?}"
+        );
+        assert!(out.contains('␛'), "{args:?}: {out}");
+    }
+    let out = stdout(&run_in(
+        dir.path(),
+        &["--sanitize", "schema", "evil.sql"],
+        "",
+    ));
+    assert!(out.contains("t␛[2J  table"), "{out}");
+    assert!(out.contains("c␛]0;title␇  INT  → t␛[2J"), "{out}");
+    // `rich schema` has no upstream output to keep, so, like `view` and the
+    // text diff, it sanitizes by default; `--no-sanitize` lets them through.
+    let out = stdout(&run_in(dir.path(), &["schema", "evil.sql"], ""));
+    assert!(!out.contains('\x1b') && out.contains("t␛[2J"), "{out:?}");
+    let out = stdout(&run_in(
+        dir.path(),
+        &["schema", "evil.json", "evil2.json"],
+        "",
+    ));
+    assert!(!out.contains('\x1b'), "{out:?}");
+    let out = stdout(&run_in(
+        dir.path(),
+        &["--no-sanitize", "schema", "evil.sql"],
+        "",
+    ));
+    assert!(out.contains("t\x1b[2J"), "{out:?}");
+}
+
+/// A file's own name reached the terminal raw when two schemas were
+/// compared (and from an Arrow file, read before the name was sanitized).
+#[test]
+fn sanitize_covers_the_file_names() {
+    let dir = dir();
+    let evil = "s\x1b]0;title\x07.json";
+    std::fs::write(path(&dir, evil), r#"{"properties": {"a": {}}}"#).unwrap();
+    std::fs::write(path(&dir, "b.json"), r#"{"properties": {"b": {}}}"#).unwrap();
+    std::fs::write(path(&dir, "b.sql"), "CREATE TABLE t (b INT);").unwrap();
+    for args in [&["schema", evil, "b.json"][..], &["schema", evil, "b.sql"]] {
+        let out = stdout(&run_in(dir.path(), args, ""));
+        assert!(!out.contains('\x1b') && !out.contains('\x07'), "{out:?}");
+        assert!(out.contains("s␛]0;title␇.json"), "{out}");
+    }
+    // Errors name the file inertly too.
+    std::fs::write(path(&dir, "bad\x1b[2J.json"), "{").unwrap();
+    let out = run_in(dir.path(), &["schema", "bad\x1b[2J.json"], "");
+    assert!(!stderr(&out).contains('\x1b'), "{:?}", stderr(&out));
+    #[cfg(feature = "arrow")]
+    {
+        let arrow = "e\x1b[2J.arrow";
+        std::fs::copy(arrow_fixture("events-v1.arrow"), path(&dir, arrow)).unwrap();
+        let out = stdout(&run_in(dir.path(), &["schema", arrow], ""));
+        assert!(out.starts_with("e␛[2J.arrow  8 fields\n"), "{out:?}");
+    }
+}
+
+/// Sanitizing DDL before reading it turned whitespace the reader accepts
+/// (a lone CR, form feed, vertical tab, NEL) into symbols, so a statement
+/// separated by one was skipped.
+#[test]
+fn sanitized_ddl_keeps_its_whitespace() {
+    let dir = dir();
+    for (i, gap) in ["\r", "\x0b", "\x0c", "\u{85}"].iter().enumerate() {
+        let name = format!("ws{i}.sql");
+        let ddl = format!("CREATE{gap}TABLE t{gap}(id{gap}INT);");
+        std::fs::write(path(&dir, &name), ddl).unwrap();
+        let out = stdout(&run_in(dir.path(), &["schema", &name], ""));
+        assert!(
+            out.contains("t  table") && out.contains("id  INT"),
+            "{gap:?}: {out}"
+        );
+        assert!(!out.contains("skipped"), "{gap:?}: {out}");
+    }
+}
+
+/// Two property names that sanitize to the same text were merged, losing
+/// one of them.
+#[test]
+fn sanitized_json_keys_that_collide_are_both_kept() {
+    let dir = dir();
+    std::fs::write(
+        path(&dir, "k.json"),
+        r#"{"properties": {"a\u001b": {"type": "string"}, "a␛": {"type": "integer"}}}"#,
+    )
+    .unwrap();
+    let out = stdout(&run_in(dir.path(), &["schema", "k.json"], ""));
+    assert!(!out.contains('\x1b'), "{out:?}");
+    assert!(out.contains("string") && out.contains("integer"), "{out}");
 }
 
 #[test]

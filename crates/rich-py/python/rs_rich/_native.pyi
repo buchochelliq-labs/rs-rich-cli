@@ -4544,8 +4544,8 @@ class DataSourceError(Exception):
     reason: str
 
 class SchemaError(Exception):
-    """A JSON Schema or SQL DDL could not be read; ``line`` for DDL."""
-    line: int
+    """A JSON Schema or SQL DDL could not be read; ``line`` for DDL, else ``None``."""
+    line: Optional[int]
 
 class ConflictError(Exception):
     """Conflict markers out of order, or a conflict never closed."""
@@ -4639,6 +4639,7 @@ class Stats:
     def headers(self) -> List[str]: ...
 
 class Profile:
+    # ``bins`` is at most 1000 (ValueError above).
     def __init__(
         self,
         rows: Rows,

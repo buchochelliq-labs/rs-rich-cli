@@ -352,6 +352,12 @@ impl Profile {
     /// median and quartiles are in the model and under each numeric
     /// column's heading).
     pub fn to_table(&self) -> Table {
+        self.table(true)
+    }
+
+    /// [`to_table`](Self::to_table), its name column held at the names'
+    /// width (up to 16) when `names_first`.
+    fn table(&self, names_first: bool) -> Table {
         let mut table = Table::new();
         // Names give way last.
         let widest = self
@@ -363,7 +369,7 @@ impl Profile {
         table.add_column_with(
             Text::new("column"),
             ColumnOptions {
-                min_width: Some(widest.clamp(6, 16)),
+                min_width: names_first.then(|| widest.clamp(6, 16)),
                 ..ColumnOptions::default()
             },
         );
@@ -480,7 +486,17 @@ impl Renderable for Profile {
             return join(lines);
         }
         lines.push(Vec::new());
-        block(console, &options, &self.to_table(), 0, &mut lines);
+        // A name column held wide can push the table past a narrow width;
+        // then the names give way too.
+        let mut table = self.to_table();
+        let drawn = console.render(&table, Some(&options));
+        if Segment::split_lines(&drawn)
+            .iter()
+            .any(|line| line.iter().map(Segment::cell_length).sum::<usize>() > options.max_width)
+        {
+            table = self.table(false);
+        }
+        block(console, &options, &table, 0, &mut lines);
 
         for c in &self.columns {
             lines.push(Vec::new());

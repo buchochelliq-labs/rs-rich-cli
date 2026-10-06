@@ -1,7 +1,7 @@
 //! JSON records as rows, shared by the [`jsonl`](crate::jsonl) and
 //! [`serialize`](crate::serialize) adapters.
 
-use std::collections::{BTreeSet, VecDeque};
+use std::collections::{BTreeSet, HashMap, HashSet, VecDeque};
 
 use serde_json::{Map, Value as Json};
 
@@ -14,6 +14,10 @@ pub const MAX_DEPTH: usize = 32;
 /// How many records a streaming source reads ahead to choose its columns and
 /// schema, unless told otherwise.
 pub const DEFAULT_SAMPLE: usize = 1000;
+
+/// How many keys seen after the sample a source names in
+/// [`RecordSource::unknown_keys`].
+pub const MAX_UNKNOWN_KEYS: usize = 100;
 
 /// Rows from a stream of JSON records.
 ///
@@ -28,15 +32,20 @@ pub const DEFAULT_SAMPLE: usize = 1000;
 ///
 /// Keys first seen after the sample have no column; their values are
 /// dropped and their names kept in [`unknown_keys`](Self::unknown_keys), so
-/// a caller can say so. Read everything at once (the adapters' `read`) to
-/// sample every record.
+/// a caller can say so: the first [`MAX_UNKNOWN_KEYS`] of them, so a stream
+/// whose every record has a new key stays bounded
+/// ([`more_unknown_keys`](Self::more_unknown_keys) says there were more).
+/// Read everything at once (the adapters' `read`) to sample every record.
 #[derive(Debug)]
 pub struct RecordSource<I> {
     records: I,
     buffer: VecDeque<Map<String, Json>>,
     columns: Vec<String>,
+    /// `columns`, to look keys up in.
+    names: HashSet<String>,
     schema: Schema,
     unknown: BTreeSet<String>,
+    more_unknown: bool,
 }
 
 impl<I> RecordSource<I>
@@ -47,45 +56,73 @@ where
     pub(crate) fn new(mut records: I, sample: usize) -> Result<Self, DataError> {
         let mut buffer = VecDeque::new();
         let mut fields: Vec<Field> = Vec::new();
-        for _ in 0..sample.max(1) {
+        // Each field's position in `fields`, the record it was first seen in
+        // and how many records held it: a hash and counts rather than a scan
+        // of every field per key, which made a record of many keys quadratic.
+        let mut index: HashMap<String, usize> = HashMap::new();
+        let mut first: Vec<usize> = Vec::new();
+        let mut held: Vec<usize> = Vec::new();
+        for number in 0..sample.max(1) {
             let Some(record) = records.next() else {
                 break;
             };
             let record = object(record?);
-            // A column this record lacks may be null.
-            for field in &mut fields {
-                if !record.contains_key(field.name()) {
-                    *field = field.clone().nullable(true);
-                }
-            }
             for (key, value) in &record {
                 let seen = field_of(key, value, 0);
-                match fields.iter_mut().find(|f| f.name() == key) {
-                    Some(field) => *field = merge(field.clone(), seen),
+                match index.get(key) {
+                    Some(&at) => {
+                        fields[at] = merge(fields[at].clone(), seen);
+                        held[at] += 1;
+                    }
                     // Absent from every earlier record.
-                    None => fields.push(seen.nullable(!buffer.is_empty() || value.is_null())),
+                    None => {
+                        index.insert(key.clone(), fields.len());
+                        fields.push(seen.nullable(number > 0 || value.is_null()));
+                        first.push(number);
+                        held.push(1);
+                    }
                 }
             }
             buffer.push_back(record);
         }
+        // A column some record since its first lacks may be null.
+        let read = buffer.len();
+        for ((field, first), held) in fields.iter_mut().zip(first).zip(held) {
+            if held < read - first {
+                *field = field.clone().nullable(true);
+            }
+        }
         Ok(RecordSource {
             records,
             buffer,
+            names: index.into_keys().collect(),
             columns: fields.iter().map(|f| f.name().to_string()).collect(),
             schema: Schema::new(fields),
             unknown: BTreeSet::new(),
+            more_unknown: false,
         })
     }
 
-    /// Keys seen after the sample, which have no column (so far).
+    /// Keys seen after the sample, which have no column (so far): the first
+    /// [`MAX_UNKNOWN_KEYS`] seen, sorted.
     pub fn unknown_keys(&self) -> impl Iterator<Item = &str> {
         self.unknown.iter().map(String::as_str)
     }
 
+    /// Whether more keys than [`unknown_keys`](Self::unknown_keys) holds were
+    /// seen after the sample.
+    pub fn more_unknown_keys(&self) -> bool {
+        self.more_unknown
+    }
+
     fn row(&mut self, record: Map<String, Json>) -> Row {
         for key in record.keys() {
-            if !self.columns.contains(key) && !self.unknown.contains(key) {
-                self.unknown.insert(key.clone());
+            if !self.names.contains(key) && !self.unknown.contains(key) {
+                if self.unknown.len() < MAX_UNKNOWN_KEYS {
+                    self.unknown.insert(key.clone());
+                } else {
+                    self.more_unknown = true;
+                }
             }
         }
         self.columns
@@ -186,18 +223,21 @@ fn merge(a: Field, b: Field) -> Field {
         }
         (DataType::List(x), DataType::List(y)) => DataType::List(Box::new(merge(*x, *y))),
         (DataType::Struct(xs), DataType::Struct(ys)) => {
+            // By name through a hash, not a scan of `ys` per field of `xs`.
+            let at: HashMap<String, usize> = ys
+                .iter()
+                .enumerate()
+                .map(|(i, y)| (y.name().to_string(), i))
+                .collect();
+            let mut ys: Vec<Option<Field>> = ys.into_iter().map(Some).collect();
             let mut fields: Vec<Field> = xs
                 .into_iter()
-                .map(|x| match ys.iter().find(|y| y.name() == x.name()) {
-                    Some(y) => merge(x, y.clone()),
+                .map(|x| match at.get(x.name()).and_then(|&i| ys[i].take()) {
+                    Some(y) => merge(x, y),
                     None => x.nullable(true),
                 })
                 .collect();
-            for y in ys {
-                if !fields.iter().any(|f| f.name() == y.name()) {
-                    fields.push(y.nullable(true));
-                }
-            }
+            fields.extend(ys.into_iter().flatten().map(|y| y.nullable(true)));
             DataType::Struct(fields)
         }
         _ => DataType::Any,

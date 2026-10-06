@@ -9,6 +9,53 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### 0.0.16 release test: fixes from three audits
+
+Three independent audits covered the 0.0.16 delta: `rs-rich-data` with
+`rich profile` and `--infer`; the schema model, SQL DDL, diffs, timeline,
+DOT clusters, ER diagrams and `rich schema`; and the conflict and record
+views, virtualised tables, style rules, the Cargo supply-chain reports,
+`rs-rich-record`'s `write_selected` and `rs_rich.data`. They found 36
+issues; each was reproduced with a test that failed (or hung, or panicked)
+before its fix. See the [release notes](docs/releases/0.0.16.md#what-the-release-test-found-and-fixed).
+
+- Panics on hostile input: an Arrow IPC footer with a negative dictionary
+  length (`arrow::read_schema` now reads only the footer's schema), and a
+  SQL `FOREIGN KEY` with no column list.
+- Time and memory from small inputs, now linear or bounded: JSON Lines
+  records with many keys, keys first seen after the sample (now at most 100
+  named), long runs of mismatched conflict markers, very wide workspaces in
+  `rich deps`, SQL DDL with many tables, tokens or key columns (a 16 MB file
+  peaked at 2.3 GB; now 183 MB, with a `MAX_TOKENS` limit), `SchemaDiff`
+  and `SchemaTimeline` over large schemas, nested DOT clusters, and ER key
+  resolution. `rs_rich.data.Profile` refuses more than 1,000 bins, and
+  `VirtualTable` shares its rows instead of copying them on every call.
+- Terminal controls: text from `cargo audit`, `--timings`, licence and
+  metadata files is sanitized when the supply-chain reports draw it, and
+  `rich schema` now sanitizes by default (like `rich view` and the text
+  `rich diff`; `--no-sanitize` turns it off) and honours `--sanitize`.
+- Wrong results: SQL columns named `key`, `index` or `period` were dropped;
+  PostgreSQL `$$` bodies were read as SQL; DDL without semicolons (`GO`
+  scripts) lost every table after the first; `PRIMARY KEY CLUSTERED`
+  failed; `rich schema /dev/stdin` lost its first six bytes to the Arrow
+  check; NaN or infinite statistics from huge or infinite floats; streamed
+  CSV stripped a mark from every record and could sniff BOM input
+  differently from `read`; a CVSS vector repeating a metric was scored;
+  timings summed to infinity; lower-case SPDX copyleft ids went
+  unrecognised; integer style rules compared through `f64`; a
+  consolidation dependent could be listed twice; and the timeline's
+  "N more fields" count never showed.
+- `rich profile` drew wider than its width between about 40 and 80
+  columns; the summary table now gives way.
+- `rs_rich.data`: a JSON Schema `SchemaError` has `line = None`, as its
+  stub says.
+- Review of the release test: `rich schema` sanitizes the file's name in
+  every view and error (two-schema diffs and Arrow files showed it raw),
+  keeps the whitespace the SQL reader splits words by when it sanitizes DDL,
+  and keeps both of two JSON property names that read the same once
+  sanitized (the second is numbered).
+- The `micro-doctor` docs tape waits for the prompt before each command.
+
 ### Recorder: write what the tape asks for, and say what was skipped
 
 From integration feedback on `rs-rich-record` 0.0.3 as a library:
