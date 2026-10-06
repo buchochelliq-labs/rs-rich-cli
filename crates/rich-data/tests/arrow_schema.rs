@@ -156,3 +156,52 @@ fn the_explorer_draws_a_diff() {
     );
     assert!(rich_data::arrow::diff(&events(true), &events(true)).is_empty());
 }
+
+fn ipc_file(schema: &Schema) -> Vec<u8> {
+    let mut bytes = Vec::new();
+    let mut writer = arrow_ipc::writer::FileWriter::try_new(&mut bytes, schema).unwrap();
+    writer.finish().unwrap();
+    drop(writer);
+    bytes
+}
+
+fn ipc_stream(schema: &Schema) -> Vec<u8> {
+    let mut bytes = Vec::new();
+    let mut writer = arrow_ipc::writer::StreamWriter::try_new(&mut bytes, schema).unwrap();
+    writer.finish().unwrap();
+    drop(writer);
+    bytes
+}
+
+#[test]
+fn an_ipc_file_or_stream_gives_its_schema() {
+    use std::io::Cursor;
+    let schema = events(false);
+    for bytes in [ipc_file(&schema), ipc_stream(&schema)] {
+        let read = rich_data::arrow::read_schema(Cursor::new(bytes)).unwrap();
+        assert_eq!(
+            rich_data::arrow::schema(&read),
+            rich_data::arrow::schema(&schema)
+        );
+    }
+}
+
+#[test]
+fn anything_else_is_an_error_not_a_panic() {
+    use std::io::Cursor;
+    let err = rich_data::arrow::read_schema(Cursor::new(Vec::new())).unwrap_err();
+    assert_eq!(
+        err.to_string(),
+        "empty input: not an Arrow IPC file or stream"
+    );
+    let mut truncated = ipc_file(&events(false));
+    truncated.truncate(truncated.len() / 2);
+    for bytes in [b"id,name\n1,ada\n".to_vec(), b"ARROW1".to_vec(), truncated] {
+        let err = rich_data::arrow::read_schema(Cursor::new(bytes)).unwrap_err();
+        assert!(
+            err.to_string()
+                .starts_with("not an Arrow IPC file or stream: "),
+            "{err}"
+        );
+    }
+}

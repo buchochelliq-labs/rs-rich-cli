@@ -17,6 +17,9 @@
 //! [`SchemaTree`], and [`diff`] compares two as a [`SchemaDiff`], fields
 //! added, removed and changed with breaking changes marked.
 //!
+//! [`read_schema`] reads the schema of an Arrow IPC file (Feather v2,
+//! `.arrow`) or stream (`.arrows`) without reading its record batches.
+//!
 //! [`rows`] reads one batch, and [`BatchSource`] streams many. Cells are
 //! [`Value::Int`] and [`Value::Float`] for numbers (a `UInt64` past
 //! `i64::MAX` becomes a float), [`Value::Null`] for nulls, and text for the
@@ -168,6 +171,70 @@ pub fn tree(arrow: &arrow_schema::Schema) -> SchemaTree {
 /// ```
 pub fn diff(old: &arrow_schema::Schema, new: &arrow_schema::Schema) -> SchemaDiff {
     SchemaDiff::models(&schema(old), &schema(new))
+}
+
+/// The magic bytes an Arrow IPC file starts (and ends) with.
+const FILE_MAGIC: &[u8; 6] = b"ARROW1";
+
+/// The schema of an Arrow IPC file (`ARROW1`…, Feather v2) or stream,
+/// whichever `reader` holds: the file's footer, or the stream's first
+/// message. Record batches are not read. A file with dictionaries reads
+/// them too, since the footer names them before any batch.
+///
+/// ```
+/// use std::io::Cursor;
+/// use arrow_schema::{DataType, Field, Schema};
+///
+/// let schema = Schema::new(vec![Field::new("id", DataType::Int64, false)]);
+/// let mut bytes = Vec::new();
+/// arrow_ipc::writer::FileWriter::try_new(&mut bytes, &schema)
+///     .unwrap()
+///     .finish()
+///     .unwrap();
+/// let read = rich_data::arrow::read_schema(Cursor::new(bytes)).unwrap();
+/// assert_eq!(read.field(0).name(), "id");
+/// ```
+pub fn read_schema<R: std::io::Read + std::io::Seek>(
+    mut reader: R,
+) -> Result<arrow_schema::Schema, DataError> {
+    use std::io::SeekFrom;
+    let io = |err: std::io::Error| DataError::new(err.to_string());
+    let start = reader.stream_position().map_err(io)?;
+    let mut magic = [0u8; 6];
+    let read = read_up_to(&mut reader, &mut magic).map_err(io)?;
+    reader.seek(SeekFrom::Start(start)).map_err(io)?;
+    if read == 0 {
+        return Err(DataError::new(
+            "empty input: not an Arrow IPC file or stream",
+        ));
+    }
+    let not_arrow = |err: arrow_schema::ArrowError| {
+        DataError::new(format!("not an Arrow IPC file or stream: {err}"))
+    };
+    let schema = if &magic == FILE_MAGIC {
+        arrow_ipc::reader::FileReader::try_new(reader, None)
+            .map_err(not_arrow)?
+            .schema()
+    } else {
+        arrow_ipc::reader::StreamReader::try_new(reader, None)
+            .map_err(not_arrow)?
+            .schema()
+    };
+    Ok(schema.as_ref().clone())
+}
+
+/// Fill as much of `buf` as `reader` has, returning how much that was.
+fn read_up_to(reader: &mut impl std::io::Read, buf: &mut [u8]) -> std::io::Result<usize> {
+    let mut filled = 0;
+    while filled < buf.len() {
+        match reader.read(&mut buf[filled..]) {
+            Ok(0) => break,
+            Ok(n) => filled += n,
+            Err(err) if err.kind() == std::io::ErrorKind::Interrupted => {}
+            Err(err) => return Err(err),
+        }
+    }
+    Ok(filled)
 }
 
 /// One Arrow type in the model.

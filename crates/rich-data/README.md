@@ -13,7 +13,8 @@ without hand-written glue. This crate is an rs-rich addition, not a port:
   becomes a `rich_ext::table::TableData` to sort, group, total or style.
 - **Adapters.** CSV and TSV through the port of Python's `csv` sniffer and
   reader that `rich --csv` uses, JSON Lines, any `serde::Serialize` rows,
-  and Arrow `RecordBatch`es behind the off-by-default `arrow` feature.
+  and Arrow `RecordBatch`es (and the schema of an Arrow IPC file or stream,
+  `arrow::read_schema`) behind the off-by-default `arrow` feature.
 - **Type inference**, on request: integers, floats, booleans, dates,
   timestamps, nulls and text per column, with the evidence (how many cells
   parsed as each type) and per-column overrides.
