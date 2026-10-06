@@ -20,6 +20,13 @@ without hand-written glue. This crate is an rs-rich addition, not a port:
 - **Column statistics**: count, nulls, distinct values, min, max, mean,
   median, quantiles and the most common values, as a table or as a summary
   under each column heading.
+- **Large results** (`window`): `Rows` feed `rich_ext`'s virtualised
+  `VirtualTable`, and `RowWindow` reads one window of any forward-only
+  source in constant memory, with its row count.
+- **SQL result sets** (`sql`): `ResultSet` renders a query result with
+  typed alignment from the schema, `NULL` marked apart from empty text, and
+  a `(3 rows, 12ms)` footer, windowed with `limit` and `offset`. No
+  database connection: rows come from an adapter or the caller.
 
 ```rust
 use rich::Console;
@@ -55,6 +62,7 @@ column by value, from Rust predicates or TOML rule tables) are
 JSON Lines refuses a line longer than 64 MiB, and every adapter describes
 nested values to 32 levels. Streaming sources choose their columns from
 the first 1,000 records (configurable) and report keys seen later instead
-of growing new columns.
+of growing new columns. A window holds at most 10,000 rows, and samples at
+most 10,000 rows for its column widths.
 
 Independent SemVer from 0.0.1; see the repository's `AGENTS.md`.
