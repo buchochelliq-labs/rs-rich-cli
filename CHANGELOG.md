@@ -171,6 +171,57 @@ its tools already wrote; none runs a scanner or reaches the network
   `--report json`; warnings alone exit 0. Only one report at a time, and an
   option that does not apply to it is refused with exit 2.
 
+### Diagrams: cluster frames and ER (0.0.16 workstream 4)
+
+`rs-rich-diagram` 0.0.2 frames clusters, honours `rank=same`, and draws
+entity-relationship diagrams (#240, #247). See
+[Clusters and same-rank groups](docs/guide/diagram/index.md#clusters-and-same-rank-groups)
+and [ER diagrams](docs/guide/diagram/index.md#er-diagrams).
+
+- **Cluster frames.** The graph model gains `Cluster` (an id, a label, its
+  nodes and an optional parent), added with `Graph::cluster` or
+  `Graph::add_cluster`. The layered layout draws each as a dashed frame
+  (`╌`/`╎`; `-`/`:` in ASCII) around its nodes, the label in the top border
+  (the bottom one when edges cross the top everywhere), nested clusters as
+  nested frames. Ordering keeps a cluster's points together in every rank,
+  with sibling clusters in one left-to-right order throughout; ranks a
+  cluster spans without a node of its own get an invisible placeholder; and
+  after placement points move right until each frame clears its
+  neighbours. Edges cross frames whole. A node listed in clusters that do
+  not nest is framed in the deeper one, with a note; the separation is
+  bounded, and a graph it cannot settle is drawn without frames, with a
+  note.
+- **`rank=same`.** `Graph::same_rank` / `add_same_rank` groups nodes into one
+  rank; the layout ranks the group as one node. A group an edge runs within
+  cannot be drawn in one rank and is dropped, with a note.
+- `Drawing::notes` (new field) carries what the layout could not do. The
+  `Dot` renderable prints it under the drawing.
+- **DOT.** `subgraph cluster_…` subgraphs are now framed (their old "drawn
+  without their frames" note is gone), a cluster opened inside another
+  records it as its parent, and `{ rank=same; … }` in a subgraph is
+  honoured. Other `rank` values, and `rank` on the whole graph, are noted as
+  not applied. `dot::Cluster` is now `rich_diagram::Cluster` (it gains
+  `parent`).
+- **ER diagrams.** New `rich_diagram::er`: an `ErModel` of `Entity`s and
+  `Column`s (type, primary key, foreign key, unique, nullable),
+  `Relationship`s from one entity's columns to another's with an optional
+  `Cardinality`, and `Group`s, all plain public structs with chaining
+  constructors so a schema or SQL DDL reader outside this crate can fill
+  it. `ErDiagram` draws it (left to right by default): each entity a box
+  with its name ruled off from aligned `name  type  keys` rows (`PK`, `FK`,
+  `UQ`, `?` for nullable), each relationship an edge labelled with its
+  columns and cardinality, each group a cluster frame, and a dim `ER:` note
+  for anything it cannot draw. New `Shape::Table` draws those boxes.
+- **Byte-identical without them.** A graph with no clusters and no
+  same-rank groups lays out exactly as before: every existing snapshot,
+  Mermaid's included, is unchanged, and a corpus of 600 random graphs in
+  every direction was compared before and after. The DOT `services`
+  fixture's snapshot changes because its cluster is now framed.
+- Mermaid's subgraphs are not passed to the layout as clusters yet, so
+  they are still drawn without frames; `rs-rich-mermaid` moves to 0.0.5
+  only because it requires `rs-rich-diagram` 0.0.2. Nothing under
+  `crates/rich/src` changes.
+
 ## 0.0.15 cohort — published 2026-10-05
 
 Diagram 0.0.1 (new crate) / mermaid 0.0.4 / ext 0.0.13 / micro 0.0.2 /

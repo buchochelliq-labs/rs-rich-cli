@@ -84,7 +84,7 @@ parse_dot(source) -> DotGraph
 
 `Dot` draws a DOT source with the same layout: `digraph` and `graph`,
 `rankdir`, node shapes and labels, edge styles and labels, chains, and
-clusters (drawn without their frames, with a note). What the parser does not
+clusters (drawn as frames around their nodes), and `rank=same`. What the parser does not
 support (a node port, an HTML-like label, the `record` shape, ...) is shown
 as the source under a note naming it and its line. `parse_dot` raises
 `DotError` instead, with `line` and `construct` (`None` for a syntax error).

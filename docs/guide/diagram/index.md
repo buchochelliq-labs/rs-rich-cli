@@ -3,7 +3,9 @@
 `rs-rich-diagram` (`rich_diagram`, new in 0.0.15) draws graphs in the
 terminal: a graph model, a layered layout, and a `Diagram` renderable that
 draws the result with box-drawing characters, or ASCII. It also reads DOT
-(Graphviz) sources natively ([below](#dot-graphviz)). `rich` draws no
+(Graphviz) sources natively ([below](#dot-graphviz)), frames clusters
+([below](#clusters-and-same-rank-groups)), and draws entity-relationship
+diagrams ([below](#er-diagrams)). `rich` draws no
 graphs, so this crate is an rs-rich addition, not a port; it depends on core
 `rs-rich` only, and core is unchanged.
 
@@ -85,21 +87,135 @@ In Python the same graph is built with [`rs_rich.diagram`](https://buchochelliq-
   `Round`, `Stadium`, `Subroutine`, `Cylinder`, `Circle`, `DoubleCircle`,
   `Asymmetric` (a flag), `Rhombus` (a decision diamond), `Hexagon`,
   `Parallelogram`, `ParallelogramAlt`, `Trapezoid` and `TrapezoidAlt`. Each
-  is a box whose corners and sides suggest the shape.
+  is a box whose corners and sides suggest the shape. `Table` (0.0.2) centres
+  the label's first line as a header and rules it off from the lines below,
+  drawn left-aligned: what ER diagrams draw entities as.
 - **Edges**: a source and a target, an optional label, a `Stroke` (`Solid`,
   `Thick`, `Dotted`, or `Invisible`: laid out but not drawn), a `Head` at each
   end (`None`, `Arrow`, `Circle`, `Cross`), and a minimum number of ranks to
   span (at most 10). `edge` adds an arrow; `link` adds an undirected edge,
   with no heads; `heads(Head::Arrow, Head::Arrow)` makes it two-way.
 
-Clusters (subgraph frames) are not drawn yet: the layout lays every node out
-in one graph, as Mermaid's subgraphs always have been. DOT clusters are
-parsed and listed in a note under the drawing.
+- **Clusters** (0.0.2): a `Cluster` has an id, an optional label, its nodes
+  and an optional parent cluster; it is drawn as a frame around its nodes.
+  See [below](#clusters-and-same-rank-groups).
+- **Same-rank groups** (0.0.2): nodes to draw side by side in one rank.
 
 Two more sources draw through this layout from the CLI: `rich deps --graph`
 (Cargo dependencies) and DOT. See
 [Dependency graphs and JSON Schemas](../ext/sources.md) for `rich deps` and
 `rich schema`.
+
+## Clusters and same-rank groups
+
+A cluster is drawn as a dashed frame around its nodes (`╌`, `╎` and square
+corners; `-`, `:` and `+` in ASCII), its label in the top border. Clusters
+nest: a cluster with a parent is framed inside it, and its nodes count as the
+parent's too. `Graph::cluster(id, label, members)` adds a top-level one by
+node id; `Graph::add_cluster(Cluster::new(id).label(..).nodes(..).parent(..))`
+adds any, by node index.
+
+```rust
+use rich_diagram::{draw, Direction, Graph};
+
+let graph = Graph::new(Direction::LeftRight)
+    .edge("web", "api")
+    .edge("api", "db")
+    .cluster("backend", "Backend", ["api", "db"]);
+println!("{}", draw(&graph, false).unwrap().lines.join("\n"));
+```
+
+```text
+         ┌╌ Backend ╌╌╌╌╌╌┐
+┌─────┐  ╎ ┌─────┐  ┌────┐╎
+│ web ├───►│ api ├─►│ db │╎
+└─────┘  ╎ └─────┘  └────┘╎
+         └╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┘
+```
+
+How the layout keeps frames apart:
+
+- every point belongs to a cluster: a node to its innermost one, a long
+  edge's dummy points to the innermost cluster holding both its ends, and a
+  cluster with no point in a rank it spans gets an invisible placeholder
+  there, so its frame has a place in every rank;
+- each rank keeps a cluster's points together, and clusters with the same
+  parent in the same left-to-right order in every rank, so frames are
+  rectangles that cannot interleave;
+- after placement, points move right until each frame clears whatever is
+  outside it by a cell, and the gaps between ranks gain a row (a column,
+  left to right) for each frame border.
+
+Edges cross frames: a frame is drawn last, in the cells nothing else uses,
+so a crossing edge stays whole. The label goes where no edge crosses the top
+border, or in the bottom border when edges cross the top everywhere.
+Top-down, a frame is made wide enough for its label; left to right, the
+frame is made long enough along the ranks.
+
+**When a frame cannot be drawn as asked.** A node listed in two clusters
+that do not nest is framed in the deeper one (the first listed, at equal
+depth), and `Drawing::notes` says so. A cluster with no nodes is not drawn,
+and a parent that comes after its child is ignored (the child is framed at
+the top level). The separation is bounded; should it not settle, the graph
+is drawn without frames and a note says so.
+
+**Same-rank groups.** `Graph::same_rank(ids)` (or `add_same_rank` by index)
+asks for nodes to share a rank; the layout ranks the group as one node. A
+layered drawing has no edges within a rank, so a group that an edge joins
+(directly, or through another group sharing a node) is dropped, with a note
+in `Drawing::notes`. A cycle through a group is broken like any other cycle:
+one of its edges is drawn pointing back.
+
+In DOT, `subgraph cluster_…` is a cluster (nested subgraphs nest) and
+`{ rank=same; a; b }` a same-rank group. This build farm
+(`crates/rich-diagram/tests/fixtures/dot/clusters.dot`):
+
+```dot
+// Nested clusters and a rank=same group: a build farm.
+digraph farm {
+  node [shape=box]
+  subgraph cluster_ci {
+    label = "CI"
+    queue [label="Queue"]
+    subgraph cluster_runners {
+      label = "Runners"
+      linux; macos
+    }
+  }
+  { rank = same; linux; macos; cache }
+  queue -> linux
+  queue -> macos
+  linux -> artifacts
+  macos -> artifacts
+  cache -> artifacts [style=dashed]
+}
+```
+
+draws as:
+
+```text
+┌╌ CI ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┐
+╎                          ╎
+╎         ┌───────┐        ╎
+╎         │ Queue │        ╎
+╎         └──┬─┬──┘        ╎
+╎            │ │           ╎
+╎       ┌────┘ └───┐       ╎
+╎       │          │       ╎
+╎ ┌╌╌╌╌╌│ Runners ╌│╌╌╌╌╌┐ ╎
+╎ ╎     ▼          ▼     ╎ ╎
+╎ ╎ ┌───────┐  ┌───────┐ ╎ ╎ ┌───────┐
+╎ ╎ │ linux │  │ macos │ ╎ ╎ │ cache │
+╎ ╎ └───┬───┘  └───┬───┘ ╎ ╎ └───┬───┘
+╎ └╌╌╌╌╌│╌╌╌╌╌╌╌╌╌╌│╌╌╌╌╌┘ ╎     ┆
+└╌╌╌╌╌╌╌│╌╌╌╌╌╌╌╌╌╌│╌╌╌╌╌╌╌┘     ┆
+        │          │             ┆
+        └────────┐ │ ┌┄┄┄┄┄┄┄┄┄┄┄┘
+                 ▼ ▼ ▼
+             ┌───────────┐
+             │ artifacts │
+             └───────────┘
+```
 
 ## The layout
 
@@ -114,6 +230,10 @@ and their width. The layout is layered (Sugiyama-style):
 4. nodes are placed along the rank by averaging their neighbours' centres;
 5. every edge is routed orthogonally, with its own port on a node and its own
    track in the gap between two ranks.
+
+Same-rank groups rank as one node in step 1, and clusters change steps 3 and
+4 ([below](#clusters-and-same-rank-groups)); a graph with neither draws
+exactly as it did in 0.0.1.
 
 A self-loop is marked `↻` (`@` in ASCII). The layout refuses, before any
 layout work, graphs of more than 2000 edges (`rich_diagram::MAX_EDGES`) or
@@ -206,7 +326,9 @@ was accepted but is not drawn.
   thick, `invis` laid out but not drawn),
   `dir`, `arrowhead`, `arrowtail` and `minlen`; the graph takes `rankdir`
   (`TB`, `LR`, `BT`, `RL`) and `label`, drawn under the graph;
-- subgraphs; one named `cluster…` is a cluster, with its `label`;
+- subgraphs; one named `cluster…` is a cluster, framed with its `label`
+  (a cluster opened inside another nests in it), and `rank=same` in a
+  subgraph puts its nodes in one rank;
 - quoted IDs (with `+` concatenation), numerals (lexed as Graphviz lexes
   them: `1.2.3` is `1.2` then `.3`, and a `.` without a digit is an error),
   and `//`, `/* */` and `#` comments, anywhere between tokens.
@@ -235,10 +357,12 @@ line 3: a node port (`a:…`) is not supported (connect the node itself)
 The `Dot` renderable shows that message under a dim `DOT:` note, with the
 source; `rich dot` prints it as an error and exits 4.
 
-**Accepted but not drawn:** cluster frames (the nodes are laid out with the
-rest, and a note names each cluster's members) and `rank` constraints. Both
-come with a note under the drawing. **Drawn differently, with a note naming
-the nodes:** invisible nodes (`style=invis`) are drawn, and nodes without an
+**Clusters and ranks:** `cluster…` subgraphs are framed and `rank=same` in
+a subgraph is honoured where the layout can
+([above](#clusters-and-same-rank-groups)); other `rank` values (`min`,
+`max`, `source`, `sink`, or `rank` on the whole graph) are accepted with a
+note under the drawing, as is anything the layout could not do. **Drawn
+differently, with a note naming the nodes:** invisible nodes (`style=invis`) are drawn, and nodes without an
 outline (`shape=plaintext`, `plain`, `none`) are drawn in a box: the layout
 has no borderless shape. With ASCII, the notes are ASCII too (`...` for
 `…`).
@@ -270,13 +394,17 @@ digraph services {
 draws as:
 
 ```text
-                               ╱────────╲
-                     ┌─────┐ ┌►< Cache? >━┐        ╭──────────╮
-╭─────────╮ ┌─HTTPS─►│ API ├┄┘ ╲────────╱ └━miss━━►│ Postgres │
-│ Browser ├─┘        │     ├─┐            ┌─reads─►│          │
-╰─────────╯          └─────┘ └────────────┘        ╰──────────╯
+                                 ╱────────╲
+                               ┌►< Cache? >━┐
+╭─────────╮                    ┆ ╲────────╱ ┃
+│ Browser ├─┐                  ┆            ┃
+╰─────────╯ │        ┌╌╌╌╌╌╌╌╌╌┆ Backend ╌╌╌┃╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┐
+            │        ╎ ┌─────┐ ┆            ┃        ╭──────────╮╎
+            └─HTTPS───►│ API ├┄┘            └━miss━━►│ Postgres │╎
+                     ╎ │     ├─┐            ┌─reads─►│          │╎
+                     ╎ └─────┘ └────────────┘        ╰──────────╯╎
+                     └╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┘
 Request path
-DOT: clusters are drawn without their frames: Backend (api, db)
 ```
 
 ### The plugin and the CLI
@@ -326,6 +454,101 @@ such a file can name, but the rest is Cargo's behaviour (see
 trust, use `cargo metadata` output you made yourself, with `--metadata
 FILE`, which runs nothing.
 
+## ER diagrams
+
+`rich_diagram::er` (0.0.2, #247) draws entity-relationship diagrams. Its
+model, `ErModel`, is built in code and knows no source format, so a reader of
+SQL DDL or of another schema model fills it (the `rich-ext` schema model and
+a `CREATE TABLE` reader are bridged to it outside this crate, which depends
+on core only):
+
+- `Entity`: a name and its `Column`s; a column has a name, an optional
+  type, and `primary_key`, `foreign_key`, `unique` and `nullable` flags;
+- `Relationship`: from one entity's columns to another's (a foreign key reads
+  from the referencing table to the referenced one), with an optional
+  `Cardinality` (`1:1`, `1:N`, `N:1`, `N:M`) and an optional label;
+- `Group`: entities drawn in one frame (a cluster).
+
+All are plain public structs with chaining constructors. `ErDiagram` draws a
+model, left to right by default (`.direction(..)` changes it): each entity a
+`Shape::Table` box, its name ruled off from one aligned `name  type  keys`
+row per column (`PK`, `FK`, `UQ`, and `?` after the type for a nullable
+column); each relationship an edge to the referenced entity, labelled with
+its columns and cardinality; each group a cluster frame. Edges attach to an
+entity's box, below its header, not to the column's own row: the label names
+the columns.
+
+```rust
+use rich::Console;
+use rich_diagram::er::{Cardinality, Column, Entity, ErDiagram, ErModel, Group, Relationship};
+use rich_diagram::Direction;
+
+let model = ErModel::new()
+    .entity(Entity::new("customers")
+        .column(Column::new("id").data_type("int").primary_key())
+        .column(Column::new("email").data_type("text").unique())
+        .column(Column::new("name").data_type("text").nullable()))
+    .entity(Entity::new("orders")
+        .column(Column::new("id").data_type("int").primary_key())
+        .column(Column::new("customer_id").data_type("int").foreign_key())
+        .column(Column::new("placed_at").data_type("timestamp")))
+    .entity(Entity::new("order_lines")
+        .column(Column::new("order_id").data_type("int").primary_key().foreign_key())
+        .column(Column::new("product_id").data_type("int").primary_key().foreign_key())
+        .column(Column::new("quantity").data_type("int")))
+    .entity(Entity::new("products")
+        .column(Column::new("id").data_type("int").primary_key())
+        .column(Column::new("sku").data_type("varchar(32)").unique()))
+    .relationship(Relationship::new("orders", "customers")
+        .columns(["customer_id"], ["id"])
+        .cardinality(Cardinality::ManyToOne))
+    .relationship(Relationship::new("order_lines", "orders").columns(["order_id"], ["id"]))
+    .relationship(Relationship::new("order_lines", "products").columns(["product_id"], ["id"]))
+    .group(Group::new("Sales", ["orders", "order_lines"]));
+
+Console::new().print(&ErDiagram::new(model).direction(Direction::TopDown));
+```
+
+```text
+┌╌ Sales ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┐
+╎                                              ╎
+╎                  ┌─────────────────────────┐ ╎
+╎                  │       order_lines       │ ╎
+╎                  ├─────────────────────────┤ ╎
+╎                  │ order_id    int  PK FK  │ ╎
+╎                  │ product_id  int  PK FK  │ ╎
+╎                  │ quantity    int         │ ╎
+╎                  └───────────┬─┬───────────┘ ╎
+╎                              │ │             ╎
+╎                ┌─────────────┘ └───────────────────────────┐
+╎          order_id → id                       ╎      product_id → id
+╎                ▼                             ╎             ▼
+╎ ┌─────────────────────────────┐              ╎ ┌───────────────────────┐
+╎ │           orders            │              ╎ │       products        │
+╎ ├─────────────────────────────┤              ╎ ├───────────────────────┤
+╎ │ id           int        PK  │              ╎ │ id   int          PK  │
+╎ │ customer_id  int        FK  │              ╎ │ sku  varchar(32)  UQ  │
+╎ │ placed_at    timestamp      │              ╎ └───────────────────────┘
+╎ └──────────────┬──────────────┘              ╎
+└╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌│╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┘
+                 │
+      customer_id → id (N:1)
+                 ▼
+       ┌───────────────────┐
+       │     customers     │
+       ├───────────────────┤
+       │ id     int    PK  │
+       │ email  text   UQ  │
+       │ name   text?      │
+       └───────────────────┘
+```
+
+What it cannot draw is a dim `ER:` note under the drawing: a relationship
+naming an entity that does not exist (left out), a column an entity does not
+have (drawn as given), a repeated entity name (the first is drawn), a group
+member that does not exist. `ErModel::to_graph` gives the `Graph` and those
+notes, for drawing it another way.
+
 ## From Mermaid
 
 The Mermaid source for the first graph draws the same lines:
@@ -340,7 +563,8 @@ graph TD
 ```
 
 `rich_mermaid::Flowchart::to_graph` gives the `Graph` a parsed flowchart
-draws through. Mermaid's tests check both directions: its snapshots built
+draws through. It does not pass Mermaid's subgraphs on as clusters yet, so
+they are still drawn without frames (with a note). Mermaid's tests check both directions: its snapshots built
 with the builder, and random graphs written both ways.
 
 From the shell, `rich mermaid flow.mmd` (alias `mmd`; `.mmd` and `.mermaid`
