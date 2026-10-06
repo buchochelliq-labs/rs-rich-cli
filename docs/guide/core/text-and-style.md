@@ -122,6 +122,28 @@ theme of the console doing the rendering.
     indices. For ASCII they are the same; for other text, compute offsets with
     `str::find` or `char_indices` ([divergence #3](../../DIVERGENCES.md)).
 
+### A base style covers everything appended
+
+`Text::styled(s, style)` sets the text's **base style**, which applies to the
+whole `Text`, including anything appended later. To style only a prefix, start
+from an empty `Text` and style the run instead:
+
+```rust
+use rich::Text;
+
+// The whole line is bold red, the message included.
+let mut whole = Text::styled("error: ", "bold red");
+whole.append(message, None);
+
+// Only "error: " is bold red; the message keeps the default style.
+let mut prefix = Text::new("");
+prefix.append("error: ", Some("bold red".into()));
+prefix.append(message, None);
+```
+
+Either way the message stays literal: `Text` never parses markup, so a file
+name like `[red].txt` prints as written.
+
 ### Justify, overflow and wrapping
 
 `Justify` decides where spare cells go on each line: `Left`, `Center`,
