@@ -584,6 +584,35 @@ git diff | rich diff -
 git show HEAD | rich diff - --side-by-side
 ```
 
+### Merge conflicts
+
+`--conflicts` reads one file with the markers a merge left in it, and shows
+each conflict numbered, with a few lines of context and ours, the diff3 base
+(when the markers have one) and theirs side by side when the width allows,
+stacked otherwise:
+
+```bash
+rich diff --conflicts src/config.rs
+git diff --name-only --diff-filter=U | xargs -n1 rich diff --conflicts
+```
+
+```text
+conflict 1 of 1, lines 2-8
+1   fn timeout() -> u64 {
+  ours: HEAD              │   base: merged common an… │   theirs: feature/env
+3 <     30                │ 5 |     10                │ 7 >     env_or("TIMEOUT"
+                          │                           │     , 10)
+9   }
+config.rs: 1 conflict (1 with a base)
+```
+
+- The sides are syntax-highlighted by file name (or `--language NAME`);
+  `--context N` sets the lines kept around each conflict (default 3), and
+  `--side-by-side` keeps the columns however narrow the terminal is.
+- Like every other text diff it exits `0` whether or not there are conflicts.
+  Markers that do not parse (out of order, nested, or never closed) exit `4`
+  with the line named; `--threshold` does not apply.
+
 ## Compare benchmark runs
 
 ```bash

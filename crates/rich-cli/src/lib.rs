@@ -2471,6 +2471,16 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
             "--diff needs two images or files to compare, or one patch: --diff before after".into(),
         );
     }
+    // `--conflicts` reads the merge conflicts left in one file; there is no
+    // percentage of it to gate on.
+    if mode == Mode::Diff && tool_options.conflicts() {
+        if resources.len() != 1 {
+            return Err("--conflicts needs exactly one file: rich diff --conflicts FILE".into());
+        }
+        if diff_threshold.is_some() {
+            return Err("--threshold cannot be combined with --conflicts".into());
+        }
+    }
     if mode == Mode::Image {
         if resources.is_empty() {
             return Err(
