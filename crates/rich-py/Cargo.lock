@@ -1510,6 +1510,7 @@ dependencies = [
  "notify",
  "rs-rich",
  "rs-rich-art",
+ "rs-rich-data",
  "rs-rich-diagram",
  "rs-rich-ext",
  "rs-rich-interact",
@@ -1523,6 +1524,16 @@ dependencies = [
  "toml",
  "ureq",
  "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "rs-rich-data"
+version = "0.0.1"
+dependencies = [
+ "rs-rich",
+ "rs-rich-ext",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

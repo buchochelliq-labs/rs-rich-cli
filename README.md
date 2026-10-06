@@ -82,6 +82,7 @@ in the release notes; the crates.io links show available packages.
 | [`rs-rich-interact`](https://crates.io/crates/rs-rich-interact) | `0.0.3` |
 | [`rs-rich-micro`](https://crates.io/crates/rs-rich-micro) | `0.0.2` |
 | [`rs-rich-diagram`](https://crates.io/crates/rs-rich-diagram) | `0.0.1` |
+| [`rs-rich-data`](https://crates.io/crates/rs-rich-data) | `0.0.1` |
 <!-- END MANIFEST VERSIONS -->
 
 | Package | Role | Import / installed name |
@@ -94,6 +95,7 @@ in the release notes; the crates.io links show available packages.
 | `rs-rich-plugin-api` | the plugin contract: highlighters, themes, boxes, renderers, fence renderers, components | `use rich_plugin_api` |
 | `rs-rich-mermaid` | Mermaid flowcharts drawn as text, ```` ```mermaid ```` fences | `use rich_mermaid` |
 | `rs-rich-diagram` | graph model, layered layout and `Diagram` renderable; DOT (Graphviz) sources and ```` ```dot ```` fences | `use rich_diagram` |
+| `rs-rich-data` | tabular data: CSV/TSV, JSONL, serde and Arrow row sources, type inference and column statistics | `use rich_data` |
 | `rs-rich-lumis` | the lumis (tree-sitter) code highlighter | `use rich_lumis` |
 | `rs-rich-record` | scripted terminal recordings (`rich record`) | `use rich_record` |
 | `rs-rich-interact` | interactive components: pickers, input, forms, pagers, explorers | `use rich_interact` |

@@ -1,0 +1,51 @@
+# crates/rich-data — tabular data for rs-rich: a row source contract, CSV/TSV,
+# JSONL, serde and Arrow adapters, type inference and column statistics
+# (0.0.16 workstream 1, #214, #261, #267).
+#
+# Not a port of anything upstream: an rs-rich addition. A separate crate so
+# rs-rich-ext stays light (heavy optional formats such as Arrow live here),
+# building only on ext's public API and never touching core. The CSV reader is
+# the CLI's port of Python's `csv` sniffer and reader, moved here so `rich
+# --csv`, `rich chart` and every adapter share one. Independent SemVer from
+# 0.0.1. See AGENTS.md → Versioning.
+[package]
+name = "rs-rich-data"
+version = "0.0.1"
+description = "Tabular data for rs-rich: CSV, TSV, JSONL, serde and Arrow row sources, type inference and column statistics"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+readme = "README.md"
+documentation = "https://docs.rs/rs-rich-data"
+keywords = ["terminal", "csv", "table", "statistics", "rich"]
+categories = ["command-line-interface", "parser-implementations"]
+include = ["src/**/*", "README.md", "LICENSE", "Cargo.toml"]
+
+[package.metadata.docs.rs]
+all-features = true
+
+[lib]
+name = "rich_data"
+
+[lints]
+workspace = true
+
+[features]
+# Arrow `RecordBatch` rows and schemas. Off by default: it compiles the Arrow
+# array crates.
+arrow = ["dep:arrow-array", "dep:arrow-schema"]
+
+[dependencies]
+rich.workspace = true
+# `table::Value`, `TableData` and the `schema` model (behind ext's `data`).
+rich-ext = { workspace = true, features = ["data"] }
+serde = "1"
+serde_json.workspace = true
+arrow-array = { version = "60", default-features = false, optional = true }
+arrow-schema = { version = "60", default-features = false, optional = true }
+
+[dev-dependencies]
+serde = { version = "1", features = ["derive"] }

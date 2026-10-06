@@ -3,9 +3,9 @@
 //! see `docs/PORTING.md`.
 //!
 //! Reading the data into columns lives here rather than in `rich-ext`: CSV
-//! goes through the CLI's own port of Python's `csv` sniffer and reader (the
-//! one `--csv` uses), and picking the columns from `--x` and `--y` is command
-//! routing. The charts themselves are `rich_ext::chart`'s, unchanged.
+//! goes through `rs-rich-data`'s port of Python's `csv` sniffer and reader
+//! (the one `--csv` uses), and picking the columns from `--x` and `--y` is
+//! command routing. The charts themselves are `rich_ext::chart`'s, unchanged.
 use super::*;
 
 use rich::table::Cell as TableCell;
@@ -300,7 +300,7 @@ fn parse_csv(content: &str, fallback: Option<char>) -> Result<Data, String> {
     let sample: String = content.chars().take(1024).collect();
     let dialect = sniff(&sample, Some(&[',', '\t', '|', ';']))
         .unwrap_or_else(|| Dialect::excel(fallback.unwrap_or(',')));
-    let mut rows: Vec<Vec<String>> = read_csv_rows(content, &dialect)
+    let mut rows: Vec<Vec<String>> = read_rows(content, &dialect)
         .into_iter()
         .filter(|row| !row.is_empty() && !(row.len() == 1 && row[0].trim().is_empty()))
         .collect();

@@ -1,6 +1,6 @@
 # Architecture
 
-A twelve-crate Cargo workspace, plus the Python bindings beside it, with a
+A thirteen-crate Cargo workspace, plus the Python bindings beside it, with a
 strict, one-directional dependency rule.
 Each crate versions independently. The [manifest-version table](index.md#versions-in-this-checkout)
 tracks this checkout; registry badges show published versions.
@@ -30,7 +30,7 @@ tracks this checkout; registry badges show published versions.
 The diagram shows the original crates. The others follow the same rule:
 `rich-mermaid` → `rich-diagram` → `rich` (with `rich-plugin-api` behind
 features), `rich-lumis` → `rich-plugin-api`, and `rich-record`,
-`rich-interact` and `rich-micro` → `rich-ext`. The full graph is in
+`rich-interact`, `rich-micro` and `rich-data` → `rich-ext`. The full graph is in
 [AGENTS.md](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/AGENTS.md).
 
 - **`crates/rich`** — the faithful port of the Python `rich` *library*. Mirrors
@@ -54,6 +54,14 @@ features), `rich-lumis` → `rich-plugin-api`, and `rich-record`,
   `dot` program. Depends on `rich` (and `rich-plugin-api` for `plugin`),
   never on `rich-ext`. The CLI uses it for `rich dot`, ```` ```dot ````
   fences and `rich deps --graph`. Independent SemVer.
+- **`crates/rich-data`** — tabular data: a row source contract (column
+  names, an optional schema in `rich_ext::schema`'s model, rows of
+  `rich_ext::table::Value`), CSV/TSV (the port of Python's `csv` sniffer and
+  reader that `rich --csv` and `rich chart` use), JSON Lines and serde
+  adapters, Arrow `RecordBatch`es behind its off-by-default `arrow` feature,
+  opt-in type inference with evidence, and column statistics. Depends on
+  `rich` and `rich-ext`'s public API, never on core internals. Independent
+  SemVer.
 - **`crates/rich-mermaid`** — Mermaid diagrams as a plugin: flowcharts drawn
   as text through `rich-diagram`'s layout, every diagram type through
   Mermaid's CLI (`mmdc`) behind its `mmdc` feature. Depends on `rich`,
