@@ -233,15 +233,22 @@ impl Advisory {
 
 /// The CVSS 3.0 or 3.1 base score of a vector
 /// (`CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H` scores 9.8), from the
-/// specification's formula; `None` for another version or a vector missing
-/// a base metric.
+/// specification's formula; `None` for another version, a vector missing
+/// a base metric, or one that gives a metric twice (which the
+/// specification calls invalid, and which could otherwise lower a score by
+/// restating a metric after the scored one).
 pub fn cvss3_score(vector: &str) -> Option<f64> {
     let mut parts = vector.trim().split('/');
     let version = parts.next()?;
     if version != "CVSS:3.0" && version != "CVSS:3.1" {
         return None;
     }
-    let metrics: BTreeMap<&str, &str> = parts.filter_map(|part| part.split_once(':')).collect();
+    let mut metrics: BTreeMap<&str, &str> = BTreeMap::new();
+    for (metric, value) in parts.filter_map(|part| part.split_once(':')) {
+        if metrics.insert(metric, value).is_some() {
+            return None;
+        }
+    }
     let get = |key: &str| metrics.get(key).copied();
     let changed = match get("S")? {
         "U" => false,
@@ -631,6 +638,11 @@ mod tests {
         assert_eq!(score("CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:N"), 0.0);
         assert_eq!(cvss3_score("CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N"), None);
         assert_eq!(cvss3_score("CVSS:3.1/AV:N"), None);
+        // A metric given twice is invalid, not "the last one wins".
+        assert_eq!(
+            cvss3_score("CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H/AV:P"),
+            None
+        );
         assert_eq!(cvss3_score(""), None);
     }
 
