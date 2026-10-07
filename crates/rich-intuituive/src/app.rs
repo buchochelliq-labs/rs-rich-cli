@@ -561,8 +561,8 @@ pub struct App {
     pointer: Option<(u16, u16)>,
     /// Where the pointer last was, for widgets that ask.
     last_pointer: Option<(u16, u16)>,
-    /// The widgets that asked about hover or the pointer.
-    watchers: crate::widget::Watchers,
+    /// The node last told it has the focus, on whichever screen.
+    focused: Option<NodeId>,
     /// Focus, hover and resize events waiting to be told to their widgets.
     lifecycle: Vec<(NodeId, WidgetEvent)>,
     /// Whether text selected with the mouse can be copied, and what was
@@ -640,7 +640,7 @@ impl App {
             capture: None,
             motion: (false, false),
             last_pointer: None,
-            watchers: Default::default(),
+            focused: None,
             lifecycle: Vec::new(),
             clipboard: false,
             copies: Vec::new(),
@@ -1041,7 +1041,7 @@ impl App {
             focus_path: self.focus_path,
             hover_path: self.hover_path,
             wants_hover: std::cell::Cell::new(false),
-            watchers: &self.watchers,
+            watchers: &self.runtime.watchers,
             pointer: self.last_pointer,
             shift: (0, 0),
             resized: Vec::new(),
@@ -1102,10 +1102,12 @@ impl App {
         }
         for id in std::mem::take(&mut frame.resized) {
             let mut size = (0, 0);
-            with_node(&self.top().root, id, &mut |node| {
-                let rect = node.rect();
-                size = (rect.width, rect.height);
-            });
+            for layer in &self.layers[base..] {
+                with_node(&layer.root, id, &mut |node| {
+                    let rect = node.rect();
+                    size = (rect.width, rect.height);
+                });
+            }
             self.lifecycle.push((
                 id,
                 WidgetEvent::Resize {
@@ -1452,12 +1454,16 @@ impl App {
     }
 
     fn set_focus(&mut self, id: Option<NodeId>) {
-        let old = self.top().focus;
+        // Against the node last told, whichever screen it is on: opening a
+        // modal takes the focus from the screen below, and closing it gives
+        // the focus back.
+        let old = self.focused;
         if old != id {
             self.lifecycle
                 .extend(old.map(|old| (old, WidgetEvent::Focus(false))));
             self.lifecycle
                 .extend(id.map(|id| (id, WidgetEvent::Focus(true))));
+            self.focused = id;
         }
         self.top_mut().focus = id;
         let path = id.map(|id| self.path_to(id)).unwrap_or_default();
@@ -1566,9 +1572,11 @@ impl App {
             }
             for (id, event) in events {
                 let mut shift = (0, 0);
-                for (hit, at) in crate::node::shifts(&self.top().root) {
-                    if hit == id {
-                        shift = at;
+                for layer in &self.layers {
+                    for (hit, at) in crate::node::shifts(&layer.root) {
+                        if hit == id {
+                            shift = at;
+                        }
                     }
                 }
                 if let Some(true) = self.give_to_widget_at(id, shift, &event) {
@@ -1591,7 +1599,7 @@ impl App {
         self.last_pointer = Some((mouse.column, mouse.row));
         // Widgets that read the pointer draw again when it moves over them
         // or leaves them.
-        for id in self.watchers.pointer.borrow().iter() {
+        for id in self.runtime.watchers.pointer.borrow().iter() {
             if old.contains(id) || path.contains(id) {
                 self.runtime.mark_dirty(*id);
             }
@@ -1608,7 +1616,7 @@ impl App {
                 .copied()
                 .collect();
             for id in left.iter().chain(&came) {
-                if self.watchers.hover.borrow().contains(id) {
+                if self.runtime.watchers.hover.borrow().contains(id) {
                     self.runtime.mark_dirty(*id);
                 }
             }
@@ -1767,21 +1775,28 @@ impl App {
         let focused = self.focus() == Some(id);
         let runtime = self.runtime.clone();
         runtime.enter(|| {
-            with_node(&self.top().root, id, &mut |node| {
-                let rect = node.rect();
-                let mut ecx = crate::widget::EventCx {
-                    ctx: &mut cx,
-                    console,
-                    size: (rect.width, rect.height),
-                    rect: crate::node::translate(rect, (-shift.0, -shift.1)),
-                    focused,
-                    redraw: false,
-                    capture: None,
-                };
-                used = node.body.borrow_mut().widget.event(&mut ecx, event) == Used::Yes;
-                redraw = ecx.redraw;
-                capture = ecx.capture;
-            });
+            let mut found = false;
+            for layer in self.layers.iter().rev() {
+                if found {
+                    break;
+                }
+                with_node(&layer.root, id, &mut |node| {
+                    found = true;
+                    let rect = node.rect();
+                    let mut ecx = crate::widget::EventCx {
+                        ctx: &mut cx,
+                        console,
+                        size: (rect.width, rect.height),
+                        rect: crate::node::translate(rect, (-shift.0, -shift.1)),
+                        focused,
+                        redraw: false,
+                        capture: None,
+                    };
+                    used = node.body.borrow_mut().widget.event(&mut ecx, event) == Used::Yes;
+                    redraw = ecx.redraw;
+                    capture = ecx.capture;
+                });
+            }
         });
         if redraw {
             self.runtime.mark_dirty(id);
@@ -1880,7 +1895,7 @@ impl Driver {
                 }
             }
         });
-        if app.apply(cx) || app.tell_lifecycle() {
+        if app.apply(cx) {
             self.done = true;
             return;
         }
@@ -1904,31 +1919,51 @@ impl Driver {
     }
 
     /// Draw what changed and return the bytes that show it (they may be
-    /// empty); `None` when nothing changed.
+    /// empty); `None` when nothing changed. Then tell widgets of focus,
+    /// hover and size changes, now that they are laid out.
     pub fn render(&mut self) -> Option<String> {
-        if self.done || !self.needs_render() {
+        if self.done {
             return None;
         }
-        let mut out = String::new();
-        if !self.started {
-            self.started = true;
-            out.push_str("\x1b[?25l");
+        let out = self.needs_render().then(|| {
+            let mut out = String::new();
+            if !self.started {
+                self.started = true;
+                out.push_str("\x1b[?25l");
+            }
+            out.push_str(&self.paint(self.first));
+            self.first = false;
+            // A frame can leave nodes to draw again (a scroll that moved to
+            // keep the focus in view, pointer readers inside it): once more,
+            // so what is sent is settled.
+            if self.app.runtime.has_dirty() {
+                out.push_str(&self.paint(false));
+            }
+            // Keyed children exist once drawn: focus is chosen after a
+            // frame, and chosen again if the focused node has gone.
+            self.app.keep_focus();
+            out
+        });
+        // Focus, hover and resize events, once what they are about is laid
+        // out: a widget told it has the focus knows where it is.
+        if self.app.tell_lifecycle() {
+            self.done = true;
         }
-        out.push_str(&self.paint(self.first));
-        self.first = false;
-        // Keyed children exist once drawn: focus is chosen after a frame,
-        // and chosen again if the focused node has gone.
-        self.app.keep_focus();
-        Some(out)
+        out
     }
 
     /// How long the loop may wait for an event before calling
-    /// [`update`](Self::update) again: until the next timer, a frame's
-    /// time while something animates, until the next toast goes, and at
-    /// most 50 ms (results from other threads and theme files are picked up
-    /// by `update`).
+    /// [`update`](Self::update) again: not at all while a frame or a
+    /// widget's event waits; else until the next timer, a frame's time
+    /// while something animates, until the next toast goes, and at most
+    /// 50 ms (results from other threads and theme files are picked up by
+    /// `update`).
     pub fn timeout(&self, now: Duration) -> Duration {
         let app = &self.app;
+        if self.needs_render() || !app.lifecycle.is_empty() {
+            // Something is waiting to be drawn or told: no waiting.
+            return Duration::ZERO;
+        }
         app.layers
             .iter()
             .flat_map(|layer| &layer.timers)
@@ -2241,4 +2276,52 @@ fn modal_rect(console: &Console, root: &Node, area: Rect, width: Size, height: S
         w,
         h,
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use std::time::Duration;
+
+    use rich_interact::{Event, Key, Mouse, MouseKind};
+
+    use crate::prelude::*;
+    use crate::widget::{widget, Canvas, DrawCx, Widget};
+
+    struct Hoverable;
+
+    impl Widget for Hoverable {
+        fn draw(&mut self, cx: &mut DrawCx, _canvas: &mut Canvas) {
+            cx.hovered();
+            cx.pointer();
+        }
+    }
+
+    #[test]
+    fn widgets_that_left_the_tree_stop_being_watched() {
+        let rows = std::rc::Rc::new(std::cell::Cell::new(None));
+        let set = rows.clone();
+        let app = App::new(move || {
+            let keys = signal((0..10).collect::<Vec<u32>>());
+            set.set(Some(keys));
+            each(move || keys.get(), |_| widget(Hoverable))
+        });
+        let mut driver = app.driver(10, 10);
+        driver.update(Duration::ZERO);
+        let _ = driver.render();
+        let watched = |driver: &crate::Driver| {
+            let watchers = &driver.app.runtime.watchers;
+            (
+                watchers.hover.borrow().len(),
+                watchers.pointer.borrow().len(),
+            )
+        };
+        assert_eq!(watched(&driver), (10, 10));
+        let keys = rows.get().expect("the app was built");
+        driver.app.runtime.enter(|| keys.set(vec![0, 1]));
+        driver.event(Event::Mouse(Mouse::new(MouseKind::Moved, 0, 0)));
+        driver.update(Duration::ZERO);
+        let _ = driver.render();
+        assert_eq!(watched(&driver), (2, 2));
+        driver.event(Event::Key(Key::ctrl('c')));
+    }
 }

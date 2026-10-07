@@ -248,7 +248,8 @@ impl Node {
     /// While this node has the focus, draw it in `style` over its own: a
     /// style (`"reverse"`, `"on grey23"`) or a theme style name
     /// (`"accent"`). Its whole rectangle takes the style, so a list shows
-    /// which row is selected. The node is also made
+    /// which row is selected; a container's children draw over it, so it
+    /// shows only between them. The node is also made
     /// [focusable](Self::focusable).
     pub fn focus_style(mut self, style: &str) -> Node {
         self.focus_style = Some(style.to_string());
@@ -582,19 +583,24 @@ impl Node {
             buffer: Screen::new(0, 0),
             shown: None,
         });
+        let previous = view.shown;
         let mut force = relaid;
         let size = view.buffer.area();
         if (size.width, size.height) != content {
             view.buffer = Screen::new(content.0, content.1);
             force = true;
+        } else if relaid {
+            // The children moved: what they leave between them (gaps,
+            // padding) must not keep old cells.
+            view.buffer.clear(size);
         }
         if force {
             view.shown = None;
         }
         // Inside, the screen's coordinates are shifted by the window and
-        // the scroll.
+        // the scroll, as they were last shown.
         let outer = frame.shift;
-        if let Some((window, offset)) = view.shown {
+        if let Some((window, offset)) = previous {
             frame.shift = (
                 outer.0 - window.x as i32 + offset.0 as i32,
                 outer.1 - window.y as i32 + offset.1 as i32,
@@ -635,6 +641,20 @@ impl Node {
             offset.0.min(content.0.saturating_sub(window.width)),
             offset.1.min(content.1.saturating_sub(window.height)),
         );
+        if previous != Some((window, offset)) {
+            // Widgets inside that read the pointer drew with the old
+            // scroll: they draw again with the new one.
+            let watchers = frame.watchers.pointer.borrow();
+            if !watchers.is_empty() {
+                for child in widget.children() {
+                    child.walk(&mut |node, _| {
+                        if watchers.contains(&node.id) {
+                            frame.runtime.mark_dirty(node.id);
+                        }
+                    });
+                }
+            }
+        }
         (window, offset, inner)
     }
 

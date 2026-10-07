@@ -395,11 +395,15 @@ impl<K: Clone + Eq + Hash + 'static, F: Fn(K) -> Node> Each<K, F> {
             return;
         }
         let mut old: HashMap<K, Node> = self.order.drain(..).zip(self.children.drain(..)).collect();
+        let runtime = Runtime::current();
         for key in &keys {
-            let node = old.remove(key).unwrap_or_else(|| (self.build)(key.clone()));
+            // Built untracked: what a new row reads is the row's, not the
+            // list's.
+            let node = old
+                .remove(key)
+                .unwrap_or_else(|| runtime.untracked(|| (self.build)(key.clone())));
             self.children.push(node);
         }
-        let runtime = Runtime::current();
         for (_, gone) in old {
             gone.forget(&runtime);
         }

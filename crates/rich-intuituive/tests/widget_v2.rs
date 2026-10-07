@@ -420,3 +420,99 @@ fn built_in_nodes_are_widgets_too() {
     assert_eq!(rows[3], "│line 4    │");
     assert_eq!(rows[5], "item 0     ┃");
 }
+
+#[test]
+fn a_modal_takes_the_focus_from_the_screen_below_and_gives_it_back() {
+    let seen = log();
+    let (a, b) = (Watch::new("a", &seen), seen.clone());
+    let app = App::new(move || {
+        widget(a)
+            .on_key("o", move |cx| {
+                let b = Watch::new("b", &b);
+                cx.modal(Size::Fixed(6), Size::Fixed(3), move || {
+                    widget(b).on_key("x", |cx| cx.pop())
+                })
+            })
+            .on_key("q", |cx| cx.quit())
+    });
+    run(app, Script::new().keys("o x q"), 20, 6);
+    let events: Vec<String> = seen
+        .borrow()
+        .iter()
+        .filter(|line| line.contains("focus"))
+        .cloned()
+        .collect();
+    assert_eq!(
+        events,
+        [
+            "a focus true",
+            "a focus false",
+            "b focus true",
+            "a focus true"
+        ]
+    );
+}
+
+/// Notes its rectangle when it gets the focus.
+struct Placed(Rc<RefCell<Option<Rect>>>);
+
+impl Widget for Placed {
+    fn draw(&mut self, _cx: &mut DrawCx, _canvas: &mut Canvas) {}
+
+    fn event(&mut self, cx: &mut EventCx, event: &WidgetEvent) -> Used {
+        if *event == WidgetEvent::Focus(true) {
+            *self.0.borrow_mut() = Some(cx.rect());
+        }
+        Used::No
+    }
+
+    fn focusable(&self) -> bool {
+        true
+    }
+}
+
+#[test]
+fn a_widget_told_it_has_the_focus_is_already_laid_out() {
+    let at = Rc::new(RefCell::new(None));
+    let seen = at.clone();
+    let app = App::new(move || {
+        column([label("top").fixed(1), widget(Placed(seen)).fixed(2)]).on_key("q", |cx| cx.quit())
+    });
+    run(app, Script::new().keys("q"), 10, 4);
+    assert_eq!(*at.borrow(), Some(Rect::new(0, 1, 10, 2)));
+}
+
+/// Ten rows; the one under the pointer is marked.
+struct Rows;
+
+impl Widget for Rows {
+    fn measure(&mut self, _cx: &MeasureCx, axis: Axis, width: u16, _height: u16) -> u16 {
+        match axis {
+            Axis::Vertical => 10,
+            Axis::Horizontal => width,
+        }
+    }
+
+    fn draw(&mut self, cx: &mut DrawCx, canvas: &mut Canvas) {
+        let under = cx.pointer().map(|(_, y)| y);
+        for y in 0..canvas.height() {
+            let mark = if under == Some(y) { ">" } else { " " };
+            canvas.print(0, y, &format!("{mark}row{y}"), None);
+        }
+    }
+}
+
+#[test]
+fn the_pointer_inside_a_scroll_follows_the_scroll() {
+    let app = App::new(|| {
+        column([label("head").fixed(1), scroll(widget(Rows))]).on_key("q", |cx| cx.quit())
+    });
+    let script = Script::new()
+        .mouse(MouseKind::Moved, 1, 3)
+        .scroll(true, 1, 3)
+        .keys("q");
+    let rows = screen(&run(app, script, 12, 6));
+    // Scrolled three rows down, the pointer is over row 5.
+    assert_eq!(rows[3], ">row5      ┃", "{rows:?}");
+    assert!(!rows.iter().any(|r| r.starts_with(">row2")), "{rows:?}");
+}

@@ -77,6 +77,9 @@ pub(crate) struct Runtime {
     /// Each watch's step: read its source, and call back if it changed.
     watches: RefCell<HashMap<usize, WatchStep>>,
     next_watch: Cell<usize>,
+    /// The nodes that asked about hover or the pointer; a node leaves when
+    /// it is forgotten.
+    pub(crate) watchers: crate::widget::Watchers,
 }
 
 thread_local! {
@@ -99,6 +102,7 @@ impl Runtime {
                 tasks: Arc::new(AtomicUsize::new(0)),
                 watches: RefCell::new(HashMap::new()),
                 next_watch: Cell::new(0),
+                watchers: Default::default(),
             });
             all.push(Some(runtime.clone()));
             runtime
@@ -297,6 +301,8 @@ impl Runtime {
         let mut graph = self.graph.borrow_mut();
         Runtime::unsubscribe(&mut graph, Observer::Node(node));
         graph.dirty.remove(&node);
+        self.watchers.hover.borrow_mut().remove(&node);
+        self.watchers.pointer.borrow_mut().remove(&node);
     }
 
     /// Run the closures other threads sent; whether there were any.

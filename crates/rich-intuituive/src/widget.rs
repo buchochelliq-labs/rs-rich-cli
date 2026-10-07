@@ -85,7 +85,9 @@ pub enum WidgetEvent {
     Mouse(Mouse),
     /// Pasted text, while the focus is on the widget or inside it.
     Paste(String),
-    /// The focus came to this widget (`true`) or left it (`false`).
+    /// The focus came to this widget (`true`) or left it (`false`),
+    /// including when a modal opens over it or closes. Told after the
+    /// frame that lays out the change, so the widget knows where it is.
     Focus(bool),
     /// The pointer came over this widget or a node inside it (`true`), or
     /// left (`false`).
