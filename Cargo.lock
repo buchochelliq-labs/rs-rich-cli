@@ -2682,6 +2682,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "rs-rich-ratatui"
+version = "0.0.1"
+dependencies = [
+ "ratatui-core",
+ "ratatui-widgets",
+ "rs-rich",
+ "rs-rich-interact",
+]
+
+[[package]]
 name = "rs-rich-record"
 version = "0.0.4"
 dependencies = [

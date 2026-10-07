@@ -188,6 +188,13 @@ jobs:
             args: ""
           - crate: rs-rich-data
             args: "--all-features"
+          # ratatui interop: rich renderables as ratatui widgets and the
+          # buffer conversions (rich + ratatui-core only), and with the
+          # off-by-default `interact` feature's `RatatuiComponent`.
+          - crate: rs-rich-ratatui
+            args: ""
+          - crate: rs-rich-ratatui
+            args: "--all-features"
           # Every lumis language (its default); the bundles only select fewer.
           - crate: rs-rich-lumis
             args: ""

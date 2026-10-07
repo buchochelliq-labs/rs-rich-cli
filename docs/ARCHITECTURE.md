@@ -1,6 +1,6 @@
 # Architecture
 
-A thirteen-crate Cargo workspace, plus the Python bindings beside it, with a
+A fourteen-crate Cargo workspace, plus the Python bindings beside it, with a
 strict, one-directional dependency rule.
 Each crate versions independently. The [manifest-version table](index.md#versions-in-this-checkout)
 tracks this checkout; registry badges show published versions.
@@ -30,7 +30,8 @@ tracks this checkout; registry badges show published versions.
 The diagram shows the original crates. The others follow the same rule:
 `rich-mermaid` → `rich-diagram` → `rich` (with `rich-plugin-api` behind
 features), `rich-lumis` → `rich-plugin-api`, and `rich-record`,
-`rich-interact`, `rich-micro` and `rich-data` → `rich-ext`. The full graph is in
+`rich-interact`, `rich-micro` and `rich-data` → `rich-ext`, and
+`rich-ratatui` → `rich` (with `rich-interact` behind a feature). The full graph is in
 [AGENTS.md](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/AGENTS.md).
 
 - **`crates/rich`** — the faithful port of the Python `rich` *library*. Mirrors
@@ -62,6 +63,14 @@ features), `rich-lumis` → `rich-plugin-api`, and `rich-record`,
   opt-in type inference with evidence, and column statistics. Depends on
   `rich` and `rich-ext`'s public API, never on core internals. Independent
   SemVer.
+- **`crates/rich-ratatui`** — ratatui interop, both ways: `RichWidget` draws
+  any rich renderable as a ratatui widget, the `style` and `buffer` modules
+  convert styles, colours, rich lines and buffer cells, and behind its
+  off-by-default `interact` feature `RatatuiComponent` runs ratatui widgets
+  as a `rich-interact` component. Depends on `rich` and `ratatui-core` (and
+  `rich-interact` for `interact`); nothing in the workspace depends on it, so
+  ratatui stays out of every other crate's tree. Independent SemVer. See
+  [Using rich with ratatui](guide/ratatui.md).
 - **`crates/rich-mermaid`** — Mermaid diagrams as a plugin: flowcharts drawn
   as text through `rich-diagram`'s layout, every diagram type through
   Mermaid's CLI (`mmdc`) behind its `mmdc` feature. Depends on `rich`,

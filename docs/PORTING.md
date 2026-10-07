@@ -226,3 +226,13 @@ The expanded 0.0.9 still-image flags compose public `rich-art` transform and dit
 builders at the CLI boundary. Transform order is rotation, H/V flips, optional
 composite/grayscale, fit/anchor, sampling, palette processing and glyph selection.
 They are not upstream behavior and do not change core renderers or goldens.
+
+### ratatui interop (rs-rich-ratatui, not upstream)
+
+`rs-rich-ratatui` (`crates/rich-ratatui`, 0.0.1) has no upstream module to
+port: Python `rich` has no ratatui. It composes core `rich`'s public API
+(`Renderable`, `Console::render_lines`, `Segment`, `Style`, `Color`) with
+`ratatui-core`, and `rs-rich-interact` behind its `interact` feature. Core is
+unchanged and no golden fixture covers it; its own tests check that a rich
+`Panel` drawn into a ratatui buffer and read back has the same text and SGR
+codes as rich's rendering. See [Using rich with ratatui](guide/ratatui.md).
