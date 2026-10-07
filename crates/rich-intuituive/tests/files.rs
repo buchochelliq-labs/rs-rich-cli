@@ -33,17 +33,14 @@ fn app(root: &Path) -> App {
     files_app(root.to_path_buf()).wait_for_tasks(true)
 }
 
-/// The middle column: rows between the header and the status line.
+/// The names in the middle column (a table): rows between its header row
+/// and the status line, without the size column.
 fn middle(rows: &[String], from: usize, to: usize) -> Vec<String> {
-    rows[1..rows.len() - 1]
+    rows[2..rows.len() - 1]
         .iter()
         .map(|r| {
-            r.chars()
-                .skip(from)
-                .take(to - from)
-                .collect::<String>()
-                .trim_end()
-                .to_string()
+            let cell: String = r.chars().skip(from).take(to - from).collect();
+            cell.split("  ").next().unwrap_or("").trim_end().to_string()
         })
         .collect()
 }
@@ -102,8 +99,9 @@ fn a_long_path_keeps_the_header_to_one_row() {
         rows[0].ends_with("however-deep-") || rows[0].contains("however-deep"),
         "{rows:?}"
     );
-    // The listing starts on the second row.
-    assert!(rows[1].contains("alpha/"), "{rows:?}");
+    // The listing starts on the second row, under the table's header.
+    assert!(rows[1].contains("Name"), "{rows:?}");
+    assert!(rows[2].contains("alpha/"), "{rows:?}");
 }
 
 #[test]
@@ -128,4 +126,53 @@ fn hidden_files_sorting_and_filtering() {
     assert_eq!(current[0], "notes.md", "{rows:?}");
     assert!(current[1].is_empty(), "{rows:?}");
     assert!(rows.last().unwrap().contains("filter “not”"), "{rows:?}");
+}
+
+#[test]
+fn tabs_open_switch_and_close() {
+    let root = tree("tabs");
+    // A tab in alpha: the strip shows both, numbered.
+    let rows = screen(&run(app(&root), Script::new().keys("t l q"), 80, 10));
+    assert!(
+        rows[1].contains("1 ") && rows[1].contains("2 alpha"),
+        "{rows:?}"
+    );
+    assert!(rows[0].ends_with("/alpha"), "{rows:?}");
+    // Back to the first tab: its own directory.
+    let rows = screen(&run(app(&root), Script::new().keys("t l 1 q"), 80, 10));
+    assert!(!rows[0].ends_with("/alpha"), "{rows:?}");
+    // Closing the second leaves one tab and no strip.
+    let rows = screen(&run(app(&root), Script::new().keys("t l ctrl+w q"), 80, 10));
+    assert!(!rows[0].ends_with("/alpha"), "{rows:?}");
+    assert!(rows[1].contains("Name"), "no strip: {rows:?}");
+}
+
+#[test]
+fn the_preview_scrolls_and_the_filter_opens_above_the_status_line() {
+    let root = tree("scrolling");
+    let long: String = (0..60).map(|i| format!("line {i}\n")).collect();
+    std::fs::write(root.join("z.txt"), long).unwrap();
+    // z.txt is last: select it, then scroll its preview by 5 twice.
+    let rows = screen(&run(app(&root), Script::new().keys("G J J q"), 80, 10));
+    assert!(row_of(&rows, "line 10").is_some(), "{rows:?}");
+    assert!(row_of(&rows, "line 0 ").is_none(), "{rows:?}");
+
+    let rows = screen(&common::run_open(
+        app(&root),
+        Script::new().keys("/"),
+        80,
+        10,
+    ));
+    // The filter box ends on the row above the status line.
+    assert!(rows[8].contains('╰'), "{rows:?}");
+    assert!(rows[6].contains("Filter"), "{rows:?}");
+}
+
+#[test]
+fn a_click_selects_a_row() {
+    let root = tree("click");
+    // Rows: header 0, table header 1, alpha 2, beta 3, data.bin 4.
+    let script = Script::new().click(20, 4).keys("q");
+    let rows = screen(&run(app(&root), script, 80, 10));
+    assert!(rows.last().unwrap().contains("3/5"), "{rows:?}");
 }

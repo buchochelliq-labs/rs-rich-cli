@@ -40,7 +40,7 @@ Or add the crate to a project of your own:
 
 ```toml
 [dependencies]
-rs-rich-intuituive = "0.0.1"
+rs-rich-intuituive = "0.0.2"
 ```
 
 One dependency is enough: `intuituive::rich` is rs-rich (renderables,

@@ -10,7 +10,7 @@ move it to intuiTUIve. You do not have to move all of it at once:
 | **3. Port fully** | Everything | A new major version, or a small app |
 
 Paths 2 and 3 are the same work done at different speeds, so the recipe below
-covers both. Two complete ports show where it leads:
+covers both. Three complete ports show where it leads:
 
 - **An ops dashboard**, written both ways in
   [`tests/versus_ratatui.rs`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/crates/rich-intuituive/tests/versus_ratatui.rs):
@@ -23,6 +23,13 @@ covers both. Two complete ports show where it leads:
   (parent, current, preview), vim keys, previews loaded and highlighted in
   the background, hidden files, sorting and filtering. See
   [the walkthrough](#worked-example-a-yazi-style-file-manager) below.
+- **An oscilloscope.** [scope-tui](https://github.com/alemidev/scope-tui)
+  draws audio as an oscilloscope, a vectorscope and a spectroscope, twenty
+  or more times a second. It is rebuilt in
+  [`examples/scope.rs`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/crates/rich-intuituive/examples/scope.rs)
+  (`cargo run -p rs-rich-intuituive --example scope`), with its keys,
+  options, trigger, averaging and Braille plots. See
+  [the walkthrough](#worked-example-scope-tui-an-oscilloscope) below.
 
 ## What changes, in one table
 
@@ -39,14 +46,17 @@ covers both. Two complete ports show where it leads:
 | `Block::bordered().title(t)` | `.panel(t)`; `.padding(v, h)` for space |
 | `Paragraph`, `Line`, `Span` | `text!("…{signal}…")`, `label("…")`, console markup |
 | `List` + `ListState` | `list(items, selected)` (scrolls, highlights, binds ↑↓ jk) |
-| `Table` + `TableState` | `renderable(\|\| table)` with a rich `Table`, or `each` rows |
-| `Tabs` | `switch(\|\| tab.get(), build)` plus a label |
-| `Gauge`, `Sparkline`, `BarChart`, `Chart` | `rich_ext::chart` (`Gauge`, `Sparkline`, `BarChart`, `LineChart`) via `renderable` |
+| `Table` + `TableState` | `table(columns, rows, selected)` (sized columns, a sticky header, keys, clicks); `virtual_table` for huge ones |
+| `Tabs` | `tabs(titles, selected)` with `switch(\|\| tab.get(), build)` for the content |
+| `Scrollbar` and a scroll offset | `scroll(child)`: a viewport with keys, the wheel and a scrollbar |
+| `Chart`, `Canvas` | `rich_ext::chart::{Chart, Canvas}` (laid out as ratatui's) via `renderable` |
+| `Gauge`, `Sparkline`, `BarChart` | `rich_ext::chart` (`Gauge`, `Sparkline`, `BarChart`) via `renderable` |
 | `Clear` + a centred popup | `cx.modal(width, height, build)` |
-| `Canvas` / a custom `Widget` | `leaf(\|console, w, h\| lines)`, or keep the widget (path 2) |
+| A popup placed next to a widget | `cx.popup(anchor, Placement::Below, width, height, build)` |
+| A custom `Widget` | `impl Widget` and `widget(w)` (cells, events, children, focus); `leaf` for drawing only; or keep the widget (path 2) |
 | `crossterm::event::read()` + `match` | `.on_key("q", …)` on the node that owns the key; keys bubble |
 | A focus enum and Tab handling | `.focusable()` / `.focus_style(..)`; Tab and Shift+Tab are built in |
-| Mouse hit-testing against stored `Rect`s | `.on_click(…)` |
+| Mouse hit-testing against stored `Rect`s | `.on_click(…)`, `.on_mouse(…)`; events arrive in the node's own coordinates and bubble |
 | A tick rate in the loop | `every(interval, …)` |
 | Threads and channels into the loop | `spawn(work, done)`, `resource(fetch)`, `Proxy::run` |
 | "When X changes, do Y" in the loop | `watch(\|\| x.get(), \|x, cx\| …)` |
@@ -74,7 +84,7 @@ tree. The widget can read signals: when they change, it draws again.
 
 ```toml
 [dependencies]
-rs-rich-intuituive = "0.0.1"
+rs-rich-intuituive = "0.0.2"
 rs-rich-ratatui = { version = "0.0.1", features = ["interact"] }
 ratatui = "0.30"
 ```
@@ -249,25 +259,34 @@ inside it reads a signal it does not need.
 ## Worked example: a Yazi-style file manager
 
 [`examples/files.rs`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/crates/rich-intuituive/examples/files.rs)
-reproduces Yazi's core behaviour in about 420 lines, including its helpers.
+reproduces Yazi's core behaviour in about 550 lines, including its helpers.
 Its tests are in `tests/files.rs`. It does not reuse any of Yazi's code: it
 is a rebuild of the behaviour, showing how a large ratatui app's ideas map.
+
+!!! note "Credit"
+    Ported from [Yazi](https://github.com/sxyazi/yazi), by sxyazi and its
+    contributors (MIT licence). Its three-column design, keys and behaviour
+    are theirs.
 
 ![The file manager: parent, current directory and a highlighted preview](../../media/tapes/files/files.png)
 
 | Yazi does | The rebuild uses |
 |---|---|
 | Three columns: parent, current, preview | `row([parent, current, preview]).gap(1)` with `.flex(1)`, `.flex(4)`, `.flex(3)` |
-| A selectable, scrolling file list | `list(move \|\| rows, selected)` |
+| A selectable, scrolling file list with sizes | `table(columns, rows, selected)`: a name and a size column; keys, clicks and the wheel move the selection |
 | The parent column marks the current directory | a second `list(..)` with `.no_focus()`, its selection kept in step by a `watch` |
 | Previews loaded and highlighted off the UI thread | a `watch` on the selection starts a `spawn`; a generation counter drops stale results |
 | Remembers where you were when you go up | `h` selects the directory you came from |
 | Hidden files, sort order, filter | signals read by one `memo` of the directory listing |
-| Filter prompt | `cx.modal(..)` holding an `Input` component |
+| Filter prompt | `cx.popup(status, Placement::Above, ..)` holding an `Input` component, just above the status line |
+| A preview that J and K scroll | `scroll_with(preview, offset)`; J/K move the offset, and the wheel scrolls it too |
+| Tabs (`t`, 1–9, close) | a signal of directories, `tabs(titles, active)` shown once there are two |
 | Help overlay | `cx.modal(Size::Auto, Size::Auto, help)` |
 | Watches the disk | `every(2s)` re-reads; the listing is a memo, so an unchanged directory draws nothing |
 
 ![The help overlay, a modal sized to its content](../../media/tapes/files/files-help.png)
+
+![Two tabs, and the filter prompt opened just above the status line](../../media/tapes/files/files-filter.png)
 
 Two things the port shows:
 
@@ -276,9 +295,67 @@ Two things the port shows:
    second in a debug build. The preview worker therefore highlights the text
    too, at the pane's size, and the app's thread only copies the finished
    lines onto the screen. Yazi does this for the same reason.
-2. **The listing is data, the list is a view.** One memo holds the filtered,
-   sorted entries. The list, the status bar and the preview `watch` all read
-   it, and each updates only when the part it read changes.
+2. **The listing is data, the table is a view.** One memo holds the
+   filtered, sorted entries. The table, the status bar and the preview
+   `watch` all read it, and each updates only when the part it read
+   changes.
+
+## Worked example: scope-tui, an oscilloscope
+
+[`examples/scope.rs`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/crates/rich-intuituive/examples/scope.rs)
+rebuilds [scope-tui](https://github.com/alemidev/scope-tui) in about 1,100
+lines. Its tests are in `tests/scope.rs`. Like the file manager, it reuses
+none of the original's code. Where the file manager redraws when you press
+a key, this app redraws whenever a new buffer of audio arrives.
+
+!!! note "Credit"
+    Ported from [scope-tui](https://github.com/alemidev/scope-tui) 0.3.5, by
+    alemi (MIT licence). Its design, keys, options and display layout are
+    alemi's.
+
+![The oscilloscope: two channels and the zero line, paused](../../media/tapes/scope/oscilloscope.png)
+
+| scope-tui does | The rebuild uses |
+|---|---|
+| A loop that blocks on the audio source, then draws | `every(buffer period)` pulls the source's newest buffer into a `frame` signal |
+| Audio from PulseAudio or cpal | raw PCM from a file or stdin (audio piped from `parec`), read on its own thread; a built-in test signal |
+| Three `DisplayMode` trait objects, mutated by key handlers | one signal per mode's settings, and one per shared setting (`Graph`) |
+| The header, a `Table` with percentage columns | a `row` of `text` cells with `.percent(…)` and `.gap(1)` |
+| `Chart` with Braille `Dataset`s, axis titles and a legend | rs-rich-ext's `Chart`, laid out as ratatui's, with the same `Dataset`s; the spectroscope's frequencies on a log `Axis` |
+| `rustfft` for the spectrum | a 40-line radix-2 FFT in the example |
+| Shift ×10, Ctrl ×5, Alt ×⅕ on every step | the same bindings, made in a loop over the modifiers |
+| `h` hides the interface | `switch` on the `show_ui` setting |
+
+![The vectorscope: left against right, a Lissajous figure](../../media/tapes/scope/vectorscope.png)
+
+What the port shows:
+
+1. **Redraw follows what changed.** The plot reads the frame, so it draws
+   once per buffer. Each header cell reads only its own value. The fps cell
+   draws once a second, and the other cells draw only when a key changes
+   them. While the scope is paused nothing draws at all, and identical
+   buffers (the `--still` test signal) draw nothing either.
+2. **Take the newest frame from a stream rather than queueing them.** A
+   reader thread keeps only the latest buffer. When the terminal falls
+   behind, the app skips old buffers rather than drawing a backlog.
+
+It differs from scope-tui in four small ways:
+
+- The trigger threshold is in the same -1 to 1 units as the samples.
+- The spectrum is padded to a power of two.
+- The header says when the input ends.
+- It has no audio-device backends: pipe audio in instead.
+
+![The spectroscope: each channel's spectrum on a log frequency axis](../../media/tapes/scope/spectroscope.png)
+
+## Credit for ports
+
+Every app ported into this repository names where it came from, who made
+it and its licence: in the example's header comment, in its section of
+this guide, and in the recordings gallery. A port that copies code from the
+original must also keep the original's copyright and licence notice with
+that code, as MIT and Apache-2.0 require. The ports here reuse none, so
+the credit is all they carry. Port your own app the same way.
 
 ## Common questions
 

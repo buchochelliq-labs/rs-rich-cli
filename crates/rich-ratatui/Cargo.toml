@@ -10,7 +10,7 @@
 # Versioning.
 [package]
 name = "rs-rich-ratatui"
-version = "0.0.1"
+version = "0.0.2"
 description = "ratatui interop for rs-rich: rich renderables as ratatui widgets, buffers as rich lines, and ratatui widgets as rs-rich-interact components"
 edition.workspace = true
 license.workspace = true

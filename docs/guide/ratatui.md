@@ -25,7 +25,7 @@ app across, see [Porting a ratatui app](intuituive/porting.md).
 ```toml
 [dependencies]
 rs-rich = "0.0.9"
-rs-rich-ratatui = "0.0.1"
+rs-rich-ratatui = "0.0.2"
 # For RatatuiComponent, ratatui widgets inside rich-interact:
 # rs-rich-ratatui = { version = "0.0.1", features = ["interact"] }
 ```

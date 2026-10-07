@@ -1,22 +1,22 @@
 ~/project/src
-src/          event_loop.rs                                          //! orbit: watch a queue, run its jobs, r
-tests/        lib.rs
-Cargo.toml    main.rs                                                mod event_loop;
-README.md     render.rs                                              mod render;
-                                     ╭─ Keys ───────────────────────────╮
-                                     │ j k ↑ ↓   move                   │ain() {
-                                     │ l → ⏎     open                   │let workers = std::env::args()
-                                     │ h ←       up                     │    .skip_while(|arg| arg != "--worke
-                                     │ g G       first, last            │    .nth(1)
-                                     │ .         hidden files           │    .and_then(|n| n.parse().ok())
-                                     │ s         sort by name or size   │    .unwrap_or(4);
-                                     │ /         filter · esc clears it │event_loop::run(workers);
-                                     │ ~         home                   │
-                                     │ q         quit                   │
-                                     ╰──────────────────────────────────╯
-
-
-
-
-
+src/          Name                                              Size //! orbit: watch a queue, run its jobs, ┃
+tests/        event_loop.rs                                     611B                                         │
+Cargo.toml    lib.rs                                            225B mod event_loop;                         │
+README.md     main.rs         ╭─ Keys ────────────────────────────────────────╮;                             │
+              render.rs       │ j k ↑ ↓   move                                │                              │
+                              │ l → ⏎     open                                │{                             │
+                              │ h ←       up                                  │rkers = std::env::args()      │
+                              │ g G       first, last                         │kip_while(|arg| arg != "--work│
+                              │ J K       scroll the preview                  │th(1)                         │
+                              │ .         hidden files                        │nd_then(|n| n.parse().ok())   │
+                              │ s         sort by name or size                │nwrap_or(4);                  │
+                              │ /         filter · esc clears it              │loop::run(workers);           │
+                              │ t         new tab · 1–9 switch · ctrl+w close │                              │
+                              │ ~         home                                │                              │
+                              │ q         quit                                │                              │
+                              ╰───────────────────────────────────────────────╯                              │
+                                                                                                             │
+                                                                                                             │
+                                                                                                             │
+                                                                                                             │
 3/4 · 289B · sort name  ? keys

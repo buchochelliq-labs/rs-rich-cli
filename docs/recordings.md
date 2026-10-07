@@ -29,6 +29,7 @@ motion turned on in your system settings the cards stay still.
 [![The command palette over a file list](media/tapes/palette/palette.png){ data-gif="palette.gif" loading=lazy }<span class="tape-card-title">Overlays and chrome</span>](#overlays-and-chrome){ .tape-card }
 [![The to-do app with the inspector docked on the right](media/tapes/intuituive/inspector.png){ data-gif="intuituive.gif" loading=lazy }<span class="tape-card-title">Terminal apps</span>](#terminal-apps){ .tape-card }
 [![A Yazi-style file manager previewing a Rust file](media/tapes/files/files.png){ data-gif="files.gif" loading=lazy }<span class="tape-card-title">A file manager</span>](#a-file-manager){ .tape-card }
+[![scope-tui rebuilt on intuiTUIve: a Lissajous figure in the vectorscope](media/tapes/scope/vectorscope.png){ data-gif="scope.gif" loading=lazy }<span class="tape-card-title">An oscilloscope</span>](#an-oscilloscope){ .tape-card }
 [![A CSV file drawn as a line chart by rich chart](media/tapes/chart/lines.png){ data-gif="chart.gif" loading=lazy }<span class="tape-card-title">Charts from data</span>](#charts-from-data){ .tape-card }
 [![rich deps drawing a dependency graph](media/tapes/deps/graph.png){ data-gif="deps.gif" loading=lazy }<span class="tape-card-title">Dependency trees</span>](#dependency-trees){ .tape-card }
 [![rich profile describing each column of a CSV file](media/tapes/profile/profile.png){ data-gif="profile.gif" loading=lazy }<span class="tape-card-title">Profile a data file</span>](#profile-a-data-file){ .tape-card }
@@ -241,9 +242,12 @@ scrollback above it kept. See [Terminal apps](guide/intuituive/index.md).
 
 ## A file manager
 
-`rs-rich-intuituive`'s `files` example, a rebuild of Yazi's behaviour, in
-the fixture project: the parent directory, the current one and a preview
-highlighted on a worker thread, then the help overlay. See
+`rs-rich-intuituive`'s `files` example, a rebuild of the behaviour of
+[Yazi](https://github.com/sxyazi/yazi) by sxyazi and contributors (MIT), in
+the fixture project: the parent directory, the current one (a table with
+sizes) and a preview highlighted on a worker thread, then the help
+overlay, a second tab, and the filter prompt opened just above the status
+line. See
 [Porting a ratatui app](guide/intuituive/porting.md#worked-example-a-yazi-style-file-manager).
 
 <div class="tape-player" data-cast="../media/tapes/files/files.cast" data-poster="npt:0:3">
@@ -253,8 +257,31 @@ highlighted on a worker thread, then the help overlay. See
 | Browsing | Help |
 |---|---|
 | ![A Rust file previewed](media/tapes/files/files.png) | ![The help overlay](media/tapes/files/files-help.png) |
+| **Tabs** | **Filter** |
+| ![Two tabs](media/tapes/files/files-tabs.png) | ![The filter prompt above the status line](media/tapes/files/files-filter.png) |
 
 [Tape](tapes/files.tape) · [Cast](media/tapes/files/files.cast) · [GIF](media/tapes/files/files.gif) · [Page](media/tapes/files/files.html)
+
+## An oscilloscope
+
+`rs-rich-intuituive`'s `scope` example, a rebuild of
+[scope-tui](https://github.com/alemidev/scope-tui) by alemi (MIT). It shows its test
+signal moving in the oscilloscope, the vectorscope and the spectroscope,
+then held still and paused in each for the screenshots, and finally its
+keys. See
+[Porting a ratatui app](guide/intuituive/porting.md#worked-example-scope-tui-an-oscilloscope).
+
+<div class="tape-player" data-cast="../media/tapes/scope/scope.cast" data-poster="npt:0:3">
+  <img src="../media/tapes/scope/scope.gif" alt="scope-tui rebuilt on intuiTUIve, cycling through its three scopes">
+</div>
+
+| Oscilloscope | Vectorscope |
+|---|---|
+| ![Two channels against time](media/tapes/scope/oscilloscope.png) | ![Left against right](media/tapes/scope/vectorscope.png) |
+| **Spectroscope** | **Keys** |
+| ![Each channel's spectrum](media/tapes/scope/spectroscope.png) | ![The keys, over the spectroscope](media/tapes/scope/keys.png) |
+
+[Tape](tapes/scope.tape) · [Cast](media/tapes/scope/scope.cast) · [GIF](media/tapes/scope/scope.gif) · [Page](media/tapes/scope/scope.html)
 
 ## Charts from data
 

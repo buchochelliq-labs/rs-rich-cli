@@ -6,7 +6,7 @@
 # components. See docs/design/intuituive.md. Independent SemVer from 0.0.1.
 [package]
 name = "rs-rich-intuituive"
-version = "0.0.1"
+version = "0.0.2"
 description = "intuiTUIve: a reactive, retained terminal UI framework built on rs-rich"
 edition.workspace = true
 license.workspace = true

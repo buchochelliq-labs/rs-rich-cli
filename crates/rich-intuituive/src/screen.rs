@@ -207,6 +207,48 @@ impl Screen {
         }
     }
 
+    /// Lay `style` over the cell at `x`, `y` (a selection's highlight).
+    pub fn restyle(&mut self, x: u16, y: u16, style: &Style) {
+        if x >= self.width || y >= self.height {
+            return;
+        }
+        let own = self.styles.get(self.cell(x, y).style).cloned();
+        let combined = match own {
+            Some(own) => own.combine(style),
+            None => style.clone(),
+        };
+        let id = self.styles.intern(Some(&combined));
+        self.cell_mut(x, y).style = id;
+    }
+
+    /// Copy the cells of `from` in `source` to this screen at `x`, `y`,
+    /// clipped to this screen. A wide character cut by either edge of
+    /// `from` becomes a space.
+    pub fn blit(&mut self, source: &Screen, from: Rect, x: u16, y: u16) {
+        let from = from.intersection(source.area());
+        for row in 0..from.height {
+            let ty = y.saturating_add(row);
+            if ty >= self.height {
+                break;
+            }
+            for column in 0..from.width {
+                let tx = x.saturating_add(column);
+                if tx >= self.width {
+                    break;
+                }
+                let cell = source.cell(from.x + column, from.y + row);
+                let cut = cell.is_continuation() && column == 0
+                    || cell.width >= 2 && column + 1 >= from.width;
+                let id = self.styles.intern(source.style(cell.style));
+                if cut {
+                    self.cell_mut(tx, ty).set(" ", 1, id);
+                } else {
+                    self.cell_mut(tx, ty).set(&cell.text, cell.width, id);
+                }
+            }
+        }
+    }
+
     /// Move the rows of `rect` up by `rows`, dropping the top ones; the
     /// rows that open at the bottom are cleared.
     pub fn scroll_up(&mut self, rect: Rect, rows: u16) {

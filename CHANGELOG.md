@@ -9,6 +9,120 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### intuiTUIve widgets: rs-rich-intuituive 0.0.2
+
+The components the two example ports showed were missing, built from
+`docs/design/intuituive-widgets.md`:
+
+- **`Widget`** (`intuituive::widget`): a public trait for controls written
+  outside the crate, with the powers built-in nodes have. A widget:
+  - sizes itself and lays out child nodes;
+  - draws cells on a clipped `Canvas`;
+  - takes keys and mouse events in its own coordinates;
+  - holds the focus and places the caret;
+  - asks to `redraw()` or to `capture_mouse()`.
+
+  `widget(w)` makes a node of one.
+- **The mouse:**
+  - Every event (press, release, drag, movement, the wheel) goes to the
+    deepest node under the pointer and bubbles up.
+  - `Node::on_mouse` handles any event; drags can be captured.
+  - Hover is state that a widget reads. The terminal's movement reports
+    are turned on only when something asks.
+  - A press focuses the deepest focusable node under the pointer.
+- **`scroll(child)` and `scroll_with(child, offset)`:**
+  - a viewport onto a child laid out at its full height;
+  - scrolled by keys, the wheel and a scrollbar, and the focus moving
+    inside scrolls its node into view;
+  - drawn offscreen with its own damage;
+  - clicks and the caret are translated through it.
+- **`widgets::table` and `widgets::virtual_table`:** sized columns, a
+  sticky header, and a row selection that keys, clicks and the wheel move.
+  The virtual one asks only for the rows in view.
+- **`widgets::tabs`**, a tab strip. Both it and the tables are built on
+  the public trait.
+- **`Ctx::popup(anchor, Placement, width, height, build)`:** a modal placed
+  next to a node, flipped when there is no room, and closed by Esc or a
+  press outside it.
+- **`Signal::update` no longer holds the runtime's value table while its
+  closure runs**, so the closure can read other signals. That read used to
+  panic with a borrow error.
+- **Both examples are rebuilt on these:**
+  - `examples/files.rs`: the current directory is a `table` with a size
+    column, the preview is a `scroll` (J/K and the wheel), the filter prompt
+    is a `popup` above the status line, and Yazi-style tabs come from
+    `tabs` (`t`, 1–9, Ctrl+W).
+  - `examples/scope.rs` draws with rs-rich-ext's new `Chart` instead of its
+    own plot code, and the spectroscope uses a log axis.
+
+  Tests are in `tests/widgets.rs`, `tests/components.rs`, `tests/files.rs`
+  and `tests/scope.rs`, and the tapes are re-recorded.
+
+### intuiTUIve: more components and features (rs-rich-intuituive 0.0.2)
+
+Components and features that other terminal frameworks, ratatui above all,
+leave to each app:
+
+- **`widgets::tree`** and `tree_with`: nested items that expand and
+  collapse, with the selection as a path.
+- **`widgets::hsplit` / `vsplit`** and `split_with`: two panes with a
+  divider that the mouse drags and Alt+arrows nudge.
+- **`widgets::calendar`** and `calendar_with`: a month grid over a `Date`
+  signal, with the date arithmetic in `Date`.
+- **`widgets::virtual_list`**: a list that asks only for the rows in view.
+- **The command palette and help** (`Ctx::command_palette`, `Ctx::help`,
+  `App::palette_key`, `App::help_key`) list every binding made with a
+  description on the focus path, so commands are declared once.
+- **`menu`**: `menu_bar`, drop-down menus (`open_menu`) and
+  `context_menu` at the pointer.
+- **Pop-ups anchor to a node or a `Rect`** (`Anchor`), and
+  `EventCx::rect()` and `Ctx::pointer()` give the places to anchor to.
+- **Toasts**: `Ctx::toast` and `toast_for`.
+- **Animations**: `Ctx::animate` eases a `Signal<f64>` to a value with an
+  `Easing`, driven by the app's clock.
+- **Text selection with the mouse captured**: a drag where nothing uses
+  the press selects text and copies it with OSC 52;
+  `App::selectable(false)` turns it off.
+- The palette and help group bindings by the node's name only, not by the
+  builder that made it.
+
+Tests are in `tests/widgets_more.rs` and `tests/features.rs`. The design
+note records the gaps building these found in the `Widget` trait, and
+designs for accessibility and serving an app to a browser, which are not
+built.
+
+### Charts: rs-rich-ext 0.0.15
+
+- **`chart::Chart`**, laid out as ratatui's `Chart`, so a ported app looks
+  the same:
+  - `Axis`: bounds, a title, labels (`None`, `Auto`, `Values` or `Text`), a
+    linear or log `AxisScale`, styles;
+  - `Dataset`: a name, a `GraphType` (scatter, line or bar), a `Marker` and
+    a style;
+  - a legend box in any corner, hidden when it would cover too much of the
+    plot.
+- **`chart::Canvas`**, ratatui's `Canvas`: shapes in world coordinates
+  (points, line, polyline, rect, circle, text) on Braille, half-block,
+  block, dot or ASCII markers, in layers, clipped to the bounds.
+- `LineChart` and the other charts are unchanged.
+
+### Version bumps
+
+`rs-rich-ext` 0.0.15 and `rs-rich-intuituive` 0.0.2 change packaged code, and
+a 0.0.x requirement matches one version. So each crate that depends on them
+moves too, with its requirement:
+
+| Crate | Version |
+|---|---|
+| `rs-rich-interact` | 0.0.5 |
+| `rs-rich-micro` | 0.0.4 |
+| `rs-rich-record` | 0.0.5 |
+| `rs-rich-data` | 0.0.2 |
+| `rs-rich-ratatui` | 0.0.2 |
+| `rs-rich-cli` | 0.0.17 |
+
+No code in these crates changed.
+
 ### intuiTUIve: rs-rich-intuituive 0.0.1 (new crate)
 
 `rs-rich-intuituive` (`intuituive`) is a framework for full-screen terminal
@@ -80,6 +194,13 @@ blocking and headless drivers and every existing component carry over),
   sorting, filtering), with tests over a temporary tree; and a porting guide
   for ratatui apps (`docs/guide/intuituive/porting.md`), whose "keep your
   widgets" step is tested in `tests/ratatui_widgets.rs`.
+- `examples/scope.rs`: a rebuild of scope-tui, an oscilloscope,
+  vectorscope and spectroscope. It has scope-tui's keys and options, a
+  debounced trigger, spectrum averaging with a Hann window, and Braille
+  plots drawn on rs-rich-ext's `DotCanvas`. It reads raw PCM from a file
+  or stdin, or plays a built-in test signal. Tests are in `tests/scope.rs`,
+  recordings in `docs/tapes/scope.tape`, and the porting guide has a
+  walkthrough.
 - A panel whose focus state changes redraws only its border's edges, not
   its contents, and a focus move elsewhere leaves it alone.
 - `intuituive::rich` and `intuituive::interact` re-export rs-rich and

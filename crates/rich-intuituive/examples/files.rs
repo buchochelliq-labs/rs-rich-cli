@@ -3,11 +3,21 @@
 //! directory, the current one, and a preview of the selection, loaded in
 //! the background.
 //!
+//! Ported from Yazi (<https://github.com/sxyazi/yazi>), by sxyazi and its
+//! contributors, MIT licence. Its three-column design, keys and behaviour
+//! are theirs; this rebuild reuses none of its code.
+//!
 //!     cargo run -p rs-rich-intuituive --example files [-- DIR]
 //!
-//! j/k or ↑/↓ move · l, → or Enter opens · h or ← goes up · . shows hidden
-//! files · s sorts by name or size · / filters · Esc clears the filter ·
-//! ~ goes home · ? shows the keys · q quits.
+//! j/k or ↑/↓ move · l, → or Enter opens · h or ← goes up · J/K scroll the
+//! preview · . shows hidden files · s sorts by name or size · / filters ·
+//! Esc clears the filter · t opens a tab, 1–9 switch, Ctrl+W closes · ~ goes
+//! home · ? shows the keys · q quits. The mouse selects, and its wheel moves
+//! the selection or scrolls the preview.
+//!
+//! Built on the framework's components: the current directory is a
+//! `table`, the preview a `scroll`, the filter prompt a `popup` anchored to
+//! the status line, and the tab strip `tabs`.
 
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU16, Ordering};
@@ -18,6 +28,8 @@ use intuituive::interact::Input;
 use intuituive::prelude::*;
 use intuituive::rich::markup::escape;
 use intuituive::rich::{Console, Segment, Syntax};
+use intuituive::widgets::{table, tabs, Column};
+use intuituive::Placement;
 
 /// One entry of a directory.
 #[derive(Clone, Debug, PartialEq)]
@@ -163,17 +175,12 @@ pub fn load_preview(path: &Path, width: u16, height: u16) -> Preview {
     Preview::Code(console.render_lines(&Syntax::new(shown, language.as_str()), &options, false))
 }
 
-/// Draw `preview` in `width` x `height`.
-fn draw_preview(
-    preview: &Preview,
-    console: &Console,
-    width: u16,
-    height: u16,
-) -> Vec<Vec<Segment>> {
-    let options = console
-        .options()
-        .update_width(width.max(1) as usize)
-        .update_height(height.max(1) as usize);
+/// The most lines a preview shows (it scrolls).
+const PREVIEW_LINES: u16 = 500;
+
+/// Draw `preview` `width` wide, every line of it (the pane scrolls).
+fn draw_preview(preview: &Preview, console: &Console, width: u16) -> Vec<Vec<Segment>> {
+    let options = console.options().update_width(width.max(1) as usize);
     let markup = |m: &str| {
         let text = intuituive::rich::Text::from_markup(m)
             .unwrap_or_else(|_| intuituive::rich::Text::new(m.to_string()));
@@ -188,7 +195,7 @@ fn draw_preview(
         Preview::Dir(entries) => {
             let rows: Vec<String> = entries
                 .iter()
-                .take(height as usize)
+                .take(PREVIEW_LINES as usize)
                 .map(entry_row)
                 .collect();
             markup(&rows.join("\n"))
@@ -203,10 +210,32 @@ fn position(entries: &[Entry], name: Option<&str>) -> usize {
         .unwrap_or(0)
 }
 
+/// What the size column shows: a file's size, nothing for a directory.
+fn size_cell(entry: &Entry) -> String {
+    if entry.dir {
+        String::new()
+    } else {
+        format!("[muted]{}[/]", human(entry.size))
+    }
+}
+
 /// The app, starting in `start`.
 pub fn files_app(start: PathBuf) -> App {
     App::new(move || {
-        let cwd = signal(start.canonicalize().unwrap_or(start));
+        // Tabs, as Yazi's: each has its directory; `active` is the one shown.
+        let tab_dirs = signal(vec![start.canonicalize().unwrap_or(start)]);
+        let active = signal(0usize);
+        let cwd =
+            memo(move || tab_dirs.with(|dirs| dirs[active.get().min(dirs.len() - 1)].clone()));
+        let set_cwd = move |dir: PathBuf| {
+            // Read before the update: a signal can't be read while another
+            // is being written.
+            let i = active.get_untracked();
+            tab_dirs.update(|dirs| {
+                let i = i.min(dirs.len() - 1);
+                dirs[i] = dir;
+            })
+        };
         let hidden = signal(false);
         let sort = signal(Sort::Name);
         let filter = signal(String::new());
@@ -240,29 +269,37 @@ pub fn files_app(start: PathBuf) -> App {
                 parent_selected.set(position(&parent, name.as_deref()));
             },
         );
+        // Another tab: its listing from the top, unfiltered.
+        watch(
+            move || active.get(),
+            move |_, _| {
+                filter.set(String::new());
+                selected.set(0);
+            },
+        );
 
         // The preview loads off the app's thread whenever the selection
-        // moves; a result for an earlier selection is dropped.
+        // moves; a result for an earlier selection is dropped. It is laid
+        // out in a scroll, so J and K (and the wheel) scroll it, as Yazi's.
         let preview = signal(Preview::Nothing);
+        let preview_top = signal(0u16);
         let generation = signal(0u64);
-        // The pane's size when it last drew, for the worker to highlight at.
-        let pane = Arc::new((AtomicU16::new(40), AtomicU16::new(20)));
+        // The pane's width when it last drew, for the worker to highlight at.
+        let pane = Arc::new(AtomicU16::new(40));
         let size = pane.clone();
         watch(
             move || current.get().map(|e| cwd.with(|dir| dir.join(&e.name))),
             move |path, _| {
                 generation.update(|g| *g += 1);
+                preview_top.set(0);
                 let mine = generation.get_untracked();
                 match path {
                     None => preview.set(Preview::Nothing),
                     Some(path) => {
                         preview.set(Preview::Loading);
-                        let (width, height) = (
-                            size.0.load(Ordering::Relaxed),
-                            size.1.load(Ordering::Relaxed),
-                        );
+                        let width = size.load(Ordering::Relaxed);
                         spawn(
-                            move || load_preview(&path, width, height),
+                            move || load_preview(&path, width, PREVIEW_LINES),
                             move |loaded, _| {
                                 if generation.get_untracked() == mine {
                                     preview.set(loaded);
@@ -277,7 +314,7 @@ pub fn files_app(start: PathBuf) -> App {
         // Change directory, selecting `name` there (or the first entry).
         let go = move |dir: PathBuf, name: Option<String>| {
             filter.set(String::new());
-            cwd.set(dir);
+            set_cwd(dir);
             selected.set(entries.with_untracked(|e| position(e, name.as_deref())));
         };
         // Re-sort or re-filter, keeping the same entry selected.
@@ -314,6 +351,31 @@ pub fn files_app(start: PathBuf) -> App {
         })
         .fixed(1);
 
+        // The tab strip shows once there is more than one tab.
+        let tab_strip = switch(
+            move || tab_dirs.with(|dirs| dirs.len() > 1),
+            move |many| {
+                if !many {
+                    return column([]);
+                }
+                let titles = move || {
+                    tab_dirs.with(|dirs| {
+                        dirs.iter()
+                            .enumerate()
+                            .map(|(i, dir)| {
+                                let name = dir
+                                    .file_name()
+                                    .map_or("/".into(), |n| n.to_string_lossy().into_owned());
+                                format!("{} {}", i + 1, escape(&name))
+                            })
+                            .collect()
+                    })
+                };
+                tabs(titles, active).no_focus().fixed(1)
+            },
+        )
+        .auto();
+
         let status = text(move || {
             let count = entries.with(Vec::len);
             let at = if count == 0 { 0 } else { selected.get() + 1 };
@@ -339,6 +401,7 @@ pub fn files_app(start: PathBuf) -> App {
             format!("[muted]{}[/]  [dim]? keys[/]", parts.join(" · "))
         })
         .auto();
+        let status_id = status.id();
 
         let parent_list = list(
             move || parent.with(|p| p.iter().map(entry_row).collect()),
@@ -346,23 +409,33 @@ pub fn files_app(start: PathBuf) -> App {
         )
         .no_focus()
         .flex(1);
-        let current_list = list(
-            move || entries.with(|e| e.iter().map(entry_row).collect()),
+        let current_table = table(
+            vec![
+                Column::new("Name", Size::Flex(1)),
+                Column::new("Size", Size::Auto),
+            ],
+            move || {
+                entries.with(|e| {
+                    e.iter()
+                        .map(|entry| vec![entry_row(entry), size_cell(entry)])
+                        .collect()
+                })
+            },
             selected,
         )
         .name("current")
         .flex(4);
-        let preview_pane = leaf(move |console, width, height| {
-            pane.0.store(width, Ordering::Relaxed);
-            pane.1.store(height, Ordering::Relaxed);
-            preview.with(|p| draw_preview(p, console, width, height))
+        let preview_text = leaf(move |console, width, _| {
+            pane.store(width, Ordering::Relaxed);
+            preview.with(|p| draw_preview(p, console, width))
         })
-        .name("preview")
-        .flex(3);
+        .name("preview");
+        let preview_pane = scroll_with(preview_text, preview_top).no_focus().flex(3);
 
-        column([
+        let mut root = column([
             header,
-            row([parent_list, current_list, preview_pane]).gap(1),
+            tab_strip,
+            row([parent_list, current_table, preview_pane]).gap(1),
             status,
         ])
         .on_key("l right enter", move |_| {
@@ -393,20 +466,56 @@ pub fn files_app(start: PathBuf) -> App {
                 })
             })
         })
+        .on_key("J", move |_| {
+            preview_top.update(|t| *t = t.saturating_add(5))
+        })
+        .on_key("K", move |_| {
+            preview_top.update(|t| *t = t.saturating_sub(5))
+        })
+        // Tabs: a new one in this directory, close this one, switch.
+        .on_key("t", move |_| {
+            let here = cwd.get_untracked();
+            tab_dirs.update(|dirs| dirs.push(here));
+            active.set(tab_dirs.with_untracked(Vec::len) - 1);
+        })
+        .on_key("ctrl+w", move |_| {
+            if tab_dirs.with_untracked(Vec::len) > 1 {
+                let i = active.get_untracked();
+                tab_dirs.update(|dirs| {
+                    dirs.remove(i);
+                });
+                active.set(i.min(tab_dirs.with_untracked(Vec::len) - 1));
+            }
+        })
         .on_key("/", move |cx| {
-            cx.modal(Size::Percent(50), Size::Fixed(3), move || {
-                component(Input::new("Filter"), move |text: String, cx| {
-                    filter.set(text);
-                    selected.set(0);
-                    cx.pop();
-                })
-                .on_cancel(|cx| cx.pop())
-                .panel("Filter")
-            })
+            // The prompt opens just above the status line it filters for.
+            cx.popup(
+                status_id,
+                Placement::Above,
+                Size::Percent(50),
+                Size::Fixed(3),
+                move || {
+                    component(Input::new("Filter"), move |text: String, cx| {
+                        filter.set(text);
+                        selected.set(0);
+                        cx.pop();
+                    })
+                    .on_cancel(|cx| cx.pop())
+                    .panel("Filter")
+                },
+            )
         })
         .on_key("esc", move |_| keep(&|| filter.set(String::new())))
         .on_key("?", |cx| cx.modal(Size::Auto, Size::Auto, help))
-        .on_key("q", |cx| cx.quit())
+        .on_key("q", |cx| cx.quit());
+        for n in 1..=9usize {
+            root = root.on_key(&n.to_string(), move |_| {
+                if n <= tab_dirs.with_untracked(Vec::len) {
+                    active.set(n - 1);
+                }
+            });
+        }
+        root
     })
 }
 
@@ -417,9 +526,11 @@ fn help() -> Node {
          [b]l → ⏎[/]     open\n\
          [b]h ←[/]       up\n\
          [b]g G[/]       first, last\n\
+         [b]J K[/]       scroll the preview\n\
          [b].[/]         hidden files\n\
          [b]s[/]         sort by name or size\n\
          [b]/[/]         filter · [b]esc[/] clears it\n\
+         [b]t[/]         new tab · [b]1–9[/] switch · [b]ctrl+w[/] close\n\
          [b]~[/]         home\n\
          [b]q[/]         quit",
     )

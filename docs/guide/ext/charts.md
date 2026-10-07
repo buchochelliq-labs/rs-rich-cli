@@ -224,6 +224,90 @@ character above U+007F:
 Labels with characters above U+007F are written with `?` in their place, as
 [`fidelity::ascii_text`](capabilities.md) does.
 
+## ratatui-style charts and canvases
+
+`LineChart` decides its own scales, labels and legend. For a chart laid
+out exactly as ratatui's `Chart` (so a ported app looks the same) or one
+whose every part you set, use `Chart`:
+
+```rust
+use rich_ext::chart::{Axis, AxisScale, Chart, Dataset, GraphType, Labels, Marker};
+
+let cpu = Dataset::new([(0.0, 0.0), (5.0, 4.0), (10.0, 1.0)])
+    .name("cpu")
+    .graph_type(GraphType::Line)
+    .marker(Marker::Ascii('*'));
+let chart = Chart::new(vec![cpu])
+    .x_axis(Axis::default().bounds(0.0, 10.0).title("t").labels(Labels::Auto(3)))
+    .y_axis(Axis::default().bounds(0.0, 4.0).title("%").labels(Labels::Auto(3)))
+    .hidden_legend_fraction(0.5, 0.5)
+    .height(8);
+```
+
+```text
+4│%        ***     ┌───┐
+ │       **   **** │cpu│
+ │     **         *└───┘
+2│   **               **
+ │ **
+0│*                    t
+ └──────────────────────
+  0         5         10
+```
+
+- **`Axis`**:
+  - bounds (or the data's extent);
+  - a title and its style;
+  - labels: `None` (no axis line), `Auto(n)`, `Values` at given values, or
+    `Text` spread evenly;
+  - a scale: `Linear` or `Log`, where log labels fall on powers of ten;
+  - a style.
+
+  An axis with an empty `Values` list draws its line and takes no room
+  for labels, as scope-tui's do.
+- **`Dataset`**:
+  - points;
+  - a name for the legend;
+  - a graph type: `Scatter`, `Line`, or `Bar` (a line down to zero);
+  - a marker: `Braille` (2×4 dots a cell), `HalfBlock`, `Block`, `Dot`, or
+    `Ascii(c)`;
+  - a style.
+
+  Later datasets win a cell.
+- **The legend** is a box in a corner (`LegendPosition`). It hides itself
+  when it would cover more than `hidden_legend_fraction` of the plot.
+- **The layout** is ratatui's:
+  - the y labels sit left of a `│` line and the x labels under a `─` line,
+    meeting at `└`;
+  - the y title sits at the top of the plot, and the x title at the right
+    of its last row;
+  - a short or narrow chart gives up parts in ratatui's order.
+
+`Canvas` draws shapes in world coordinates, as ratatui's `Canvas` does:
+
+```rust
+use rich_ext::chart::{Canvas, Marker};
+
+let canvas = Canvas::new()
+    .x_bounds(-1.0, 1.0)
+    .y_bounds(-1.0, 1.0)
+    .height(10)
+    .marker(Marker::Braille)
+    .paint(|p| {
+        p.circle(0.0, 0.0, 0.8, "cyan");
+        p.line(-1.0, -1.0, 1.0, 1.0, "red");
+        p.layer();
+        p.print(-0.2, 0.0, "hi", "bold");
+    });
+```
+
+`points`, `line`, `polyline`, `rect`, `circle` and `print` are clipped to
+the bounds; `layer()` starts a layer drawn over the ones before, and text
+is drawn last. Both are renderables: print them, put them in a table or a
+panel, or show them in an [intuiTUIve](../intuituive/index.md) app with
+`renderable(move || chart(...))`, which draws again when the signals it
+reads change.
+
 ## In tables and panels
 
 A sparkline measures to one cell per value and a bar chart to its label, bar

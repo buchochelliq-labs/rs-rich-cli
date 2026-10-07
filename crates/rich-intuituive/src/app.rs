@@ -39,6 +39,7 @@ use crate::layout::Size;
 use crate::node::{with_node, Axis, FrameState, Node};
 use crate::reactive::{signal, NodeId, Proxy, Runtime, Signal};
 use crate::screen::{Painter, Rect, Screen};
+use crate::widget::{Used, WidgetEvent};
 
 /// What a key or click handler can do.
 pub struct Ctx {
@@ -47,6 +48,54 @@ pub struct Ctx {
     proxy: Proxy,
     nav: Vec<Nav>,
     theme: Option<Theme>,
+    toasts: Vec<(String, Duration)>,
+    animations: Vec<(Signal<f64>, f64, Duration, Easing)>,
+    /// Where the mouse event being handled happened, on the screen.
+    pub(crate) pointer: Option<(u16, u16)>,
+}
+
+/// What a [pop-up](Ctx::popup) is placed next to: a node (by its
+/// [`id`](crate::Node::id)) or a rectangle of the screen.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Anchor {
+    Node(NodeId),
+    Rect(Rect),
+}
+
+impl From<NodeId> for Anchor {
+    fn from(id: NodeId) -> Anchor {
+        Anchor::Node(id)
+    }
+}
+
+impl From<Rect> for Anchor {
+    fn from(rect: Rect) -> Anchor {
+        Anchor::Rect(rect)
+    }
+}
+
+/// How an [animation](Ctx::animate) moves between its two values.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Easing {
+    Linear,
+    EaseIn,
+    EaseOut,
+    #[default]
+    EaseInOut,
+}
+
+impl Easing {
+    /// The share of the way at time `t` (0 to 1).
+    pub fn at(self, t: f64) -> f64 {
+        let t = t.clamp(0.0, 1.0);
+        match self {
+            Easing::Linear => t,
+            Easing::EaseIn => t * t * t,
+            Easing::EaseOut => 1.0 - (1.0 - t).powi(3),
+            Easing::EaseInOut if t < 0.5 => 4.0 * t * t * t,
+            Easing::EaseInOut => 1.0 - (-2.0 * t + 2.0).powi(3) / 2.0,
+        }
+    }
 }
 
 enum FocusMove {
@@ -57,18 +106,37 @@ enum FocusMove {
 
 type Build = Box<dyn FnOnce() -> Node>;
 
+/// Where a [pop-up](Ctx::popup) goes, next to its anchor. It flips to the
+/// other side when there is no room.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Placement {
+    Below,
+    Above,
+    Right,
+    Left,
+}
+
 /// A change to the stack of screens.
 enum Nav {
     Push(Build),
     Modal(Size, Size, Build),
+    Popup(Anchor, Placement, Size, Size, Build),
     Pop,
     Replace(Build),
+    /// The command palette, or the help, from the focused node's bindings.
+    Palette,
+    Help,
+    /// Run binding `index` of node `id`, as its key would.
+    Run(NodeId, usize),
 }
 
 impl Ctx {
     pub(crate) fn new(proxy: Proxy) -> Ctx {
         Ctx {
             quit: false,
+            toasts: Vec::new(),
+            animations: Vec::new(),
+            pointer: None,
             focus: None,
             proxy,
             nav: Vec::new(),
@@ -92,6 +160,66 @@ impl Ctx {
     /// for a border, and bind Esc to [`pop`](Self::pop) to close it.
     pub fn modal(&mut self, width: Size, height: Size, build: impl FnOnce() -> Node + 'static) {
         self.nav.push(Nav::Modal(width, height, Box::new(build)));
+    }
+
+    /// Open a pop-up: `build`'s node in a box `width` x `height` next to the
+    /// node `anchor` (a dropdown under a field, a menu beside a button),
+    /// flipped to the other side when it would leave the screen. It takes
+    /// the keys like a modal; Esc that nothing used, or a press outside it,
+    /// closes it.
+    pub fn popup(
+        &mut self,
+        anchor: impl Into<Anchor>,
+        placement: Placement,
+        width: Size,
+        height: Size,
+        build: impl FnOnce() -> Node + 'static,
+    ) {
+        self.nav.push(Nav::Popup(
+            anchor.into(),
+            placement,
+            width,
+            height,
+            Box::new(build),
+        ));
+    }
+
+    /// Open the command palette: every binding made with
+    /// [`bind`](crate::Node::bind) (with a description) on the focused node
+    /// and its ancestors, searched by name; the one picked runs as its key
+    /// would. [`App::palette_key`] opens it from a key.
+    pub fn command_palette(&mut self) {
+        self.nav.push(Nav::Palette);
+    }
+
+    /// Open the help: the same bindings, with their keys, searchable.
+    /// [`App::help_key`] opens it from a key.
+    pub fn help(&mut self) {
+        self.nav.push(Nav::Help);
+    }
+
+    /// Show `markup` in a toast at the bottom right for three seconds.
+    pub fn toast(&mut self, markup: impl Into<String>) {
+        self.toast_for(markup, Duration::from_secs(3));
+    }
+
+    /// Show `markup` in a toast for `duration`.
+    pub fn toast_for(&mut self, markup: impl Into<String>, duration: Duration) {
+        self.toasts.push((markup.into(), duration));
+    }
+
+    /// Move `value` to `to` over `duration`, eased: the signal is set on
+    /// every frame until it gets there, so whatever reads it moves. A new
+    /// animation of the same signal takes over from where it is.
+    pub fn animate(&mut self, value: Signal<f64>, to: f64, duration: Duration, easing: Easing) {
+        self.animations.push((value, to, duration, easing));
+    }
+
+    /// Where the mouse event being handled happened, on the screen: for a
+    /// context menu or a pop-up at the pointer. `None` outside a mouse
+    /// handler.
+    pub fn pointer(&self) -> Option<(u16, u16)> {
+        self.pointer
     }
 
     /// Close the top screen or modal, going back to the one below with the
@@ -307,6 +435,16 @@ impl Timer {
     }
 }
 
+/// An animation running (see [`Ctx::animate`]).
+struct Animation {
+    value: Signal<f64>,
+    from: f64,
+    to: f64,
+    start: Duration,
+    duration: Duration,
+    easing: Easing,
+}
+
 /// One screen of the stack.
 struct Layer {
     root: Node,
@@ -315,6 +453,8 @@ struct Layer {
     modal: Option<(Size, Size)>,
     /// Where a modal was last drawn.
     drawn: Option<Rect>,
+    /// For a pop-up: what it is next to, and on which side.
+    anchor: Option<(Anchor, Placement)>,
     timers: Vec<Timer>,
     /// Its [watches](crate::watch), stopped when it closes.
     watches: Vec<usize>,
@@ -398,6 +538,27 @@ pub struct App {
     /// The backend's clock at the top of this turn of the loop.
     now: Duration,
     focus_path: Signal<Vec<NodeId>>,
+    /// The nodes under the mouse pointer, outermost first.
+    hover_path: Signal<Vec<NodeId>>,
+    /// The node that captured the mouse (a drag in progress).
+    capture: Option<(NodeId, (i32, i32))>,
+    /// Pointer movement reports: (wanted by a widget, turned on).
+    motion: (bool, bool),
+    /// Toasts showing, with when each goes.
+    toasts: Vec<(String, Duration)>,
+    /// Animations running: the signal, from, to, start, length, easing.
+    animations: Vec<Animation>,
+    /// Keys that open the command palette and the help, if any.
+    palette_key: Vec<Key>,
+    help_key: Vec<Key>,
+    /// Selecting text with the mouse (on unless turned off): where the
+    /// press was and where the drag is now.
+    selectable: bool,
+    selection: Option<((u16, u16), (u16, u16))>,
+    /// A drag is selecting.
+    selecting: bool,
+    /// Where the mouse event being routed happened.
+    pointer: Option<(u16, u16)>,
     theme: Theme,
     console: Option<Console>,
     /// The console the last frame used, for components handling events.
@@ -440,9 +601,10 @@ impl App {
         let runtime = Runtime::new();
         BUILDING.with(|building| *building.borrow_mut() = Some(Vec::new()));
         WATCHES.with(|watches| *watches.borrow_mut() = Some(Vec::new()));
-        let (root, focus_path) = runtime.enter(|| {
+        let (root, focus_path, hover_path) = runtime.enter(|| {
             let focus_path = signal(Vec::new());
-            (build(), focus_path)
+            let hover_path = signal(Vec::new());
+            (build(), focus_path, hover_path)
         });
         let timers = BUILDING
             .with(|building| building.borrow_mut().take())
@@ -457,12 +619,24 @@ impl App {
                 focus: None,
                 modal: None,
                 drawn: None,
+                anchor: None,
                 timers,
                 watches,
             }],
             restack: false,
             now: Duration::ZERO,
             focus_path,
+            hover_path,
+            capture: None,
+            motion: (false, false),
+            toasts: Vec::new(),
+            animations: Vec::new(),
+            palette_key: Vec::new(),
+            help_key: Vec::new(),
+            selectable: true,
+            selection: None,
+            selecting: false,
+            pointer: None,
             theme: Theme::default(),
             console: None,
             last_console: None,
@@ -572,6 +746,29 @@ impl App {
         self.stats
     }
 
+    /// Open the [command palette](Ctx::command_palette) with `keys` (say
+    /// `"ctrl+p"`), when no binding of the app used them.
+    pub fn palette_key(mut self, keys: &str) -> App {
+        self.palette_key = rich_interact::keymap::keys(keys);
+        self
+    }
+
+    /// Open the [help](Ctx::help) with `keys` (say `"f1"`), when no binding
+    /// of the app used them.
+    pub fn help_key(mut self, keys: &str) -> App {
+        self.help_key = rich_interact::keymap::keys(keys);
+        self
+    }
+
+    /// Whether a drag with the mouse that no node uses selects text, which
+    /// is copied to the clipboard when the button is released (on by
+    /// default). With the mouse captured, the terminal cannot select by
+    /// itself.
+    pub fn selectable(mut self, on: bool) -> App {
+        self.selectable = on;
+        self
+    }
+
     /// Run in the terminal, on the alternate screen (or
     /// [inline](Self::inline)), until a handler calls [`Ctx::quit`] or
     /// Ctrl+C is pressed.
@@ -674,6 +871,16 @@ impl App {
                         }
                     }
                 }
+                // Animations: each one's value for now; finished ones go.
+                self.animations.retain(|a| {
+                    let t = if a.duration.is_zero() {
+                        1.0
+                    } else {
+                        now.saturating_sub(a.start).as_secs_f64() / a.duration.as_secs_f64()
+                    };
+                    a.value.set(a.from + (a.to - a.from) * a.easing.at(t));
+                    t < 1.0
+                });
                 // Results from other threads, then the watches they (or the
                 // last event) set off. Waiting for tasks, this repeats until
                 // none is in flight: a watch may start one, and its result
@@ -692,6 +899,12 @@ impl App {
             });
             if self.apply(cx) {
                 break;
+            }
+            // Toasts that are over: what was under them draws again.
+            let shown = self.toasts.len();
+            self.toasts.retain(|(_, until)| *until > self.now);
+            if self.toasts.len() != shown {
+                self.restack = true;
             }
             if self.restyled {
                 self.restyled = false;
@@ -714,7 +927,21 @@ impl App {
                 .map(|t| t.next.saturating_sub(backend.elapsed()))
                 .min()
                 .unwrap_or(Duration::from_millis(50))
-                .min(Duration::from_millis(50));
+                .min(Duration::from_millis(50))
+                // A frame every 16 ms while something animates; wake for
+                // the next toast to go.
+                .min(if self.animations.is_empty() {
+                    Duration::MAX
+                } else {
+                    Duration::from_millis(16)
+                })
+                .min(
+                    self.toasts
+                        .iter()
+                        .map(|(_, until)| until.saturating_sub(backend.elapsed()))
+                        .min()
+                        .unwrap_or(Duration::MAX),
+                );
             let Some(event) = backend.read(Some(wait))? else {
                 continue;
             };
@@ -751,11 +978,28 @@ impl App {
                     } else {
                         0
                     };
-                    if let (MouseKind::Down(button), Some(row)) =
-                        (mouse.kind, mouse.row.checked_sub(top))
-                    {
-                        if self.click(mouse.column, row, button) {
-                            break;
+                    if let Some(row) = mouse.row.checked_sub(top) {
+                        let mouse = rich_interact::Mouse::new(mouse.kind, mouse.column, row);
+                        if self.selecting && self.select(mouse, &screen, backend) {
+                            continue;
+                        }
+                        self.pointer = Some((mouse.column, row));
+                        let routed = self.mouse(mouse);
+                        self.pointer = None;
+                        match routed {
+                            Some(true) => break,
+                            Some(false) => {}
+                            // Nothing used a press: it may start a selection.
+                            None => {
+                                if self.selection.take().is_some() {
+                                    self.restack = true;
+                                }
+                                if self.selectable && mouse.kind == MouseKind::Down(Button::Left) {
+                                    let at = (mouse.column, row);
+                                    self.selection = Some((at, at));
+                                    self.selecting = true;
+                                }
+                            }
                         }
                     }
                 }
@@ -779,8 +1023,21 @@ impl App {
         screen: &mut Screen,
         full: bool,
     ) -> io::Result<()> {
-        let damage = self.frame(console, screen, full);
+        let mut damage = self.frame(console, screen, full);
+        if let Some((start, end)) = self.selection {
+            let style = Style::parse("reverse").expect("a built-in style parses");
+            for (x, y) in selected_cells(screen.area(), start, end) {
+                screen.restyle(x, y, &style);
+            }
+            damage.push(screen.area());
+        }
         let mut out = painter.paint(screen, &damage);
+        if self.motion.0 && !self.motion.1 && self.inline.is_none() {
+            // A widget reads hover: report the pointer's movement too. The
+            // session turns it off with the rest of the mouse on the way out.
+            out.push_str("\x1b[?1003h");
+            self.motion.1 = true;
+        }
         out.push_str(&self.caret(painter));
         self.stats.bytes = out.len();
         if !out.is_empty() {
@@ -807,7 +1064,16 @@ impl App {
     fn caret(&mut self, painter: &mut Painter) -> String {
         let caret = self.focus().and_then(|id| {
             let mut caret = None;
-            with_node(&self.top().root, id, &mut |node| caret = node.caret.get());
+            // Inside a scroll, a node's coordinates are its own: move the
+            // caret onto the screen, and hide it when scrolled out of view.
+            crate::node::walk_screen(&self.top().root, &mut |node, _, shift, clip| {
+                if node.id() == id {
+                    caret = node.caret.get().and_then(|(x, y)| {
+                        let at = crate::node::translate(Rect::new(x, y, 1, 1), shift);
+                        clip.contains(at.x, at.y).then_some((at.x, at.y))
+                    });
+                }
+            });
             caret
         });
         let out = match caret {
@@ -843,9 +1109,25 @@ impl App {
         let rects: Vec<Rect> = runtime.enter(|| {
             self.layers[base..]
                 .iter()
-                .map(|layer| match layer.modal {
-                    None => area,
-                    Some((width, height)) => modal_rect(console, &layer.root, area, width, height),
+                .enumerate()
+                .map(|(i, layer)| match (layer.modal, layer.anchor) {
+                    (None, _) => area,
+                    (Some((width, height)), Some((anchor, placement))) => {
+                        // The anchor is on a screen below this one.
+                        let below = &self.layers[..base + i];
+                        let at = match anchor {
+                            Anchor::Rect(rect) => rect,
+                            Anchor::Node(id) => below
+                                .iter()
+                                .rev()
+                                .find_map(|layer| anchor_rect(&layer.root, id))
+                                .unwrap_or_default(),
+                        };
+                        popup_rect(console, &layer.root, area, at, placement, width, height)
+                    }
+                    (Some((width, height)), None) => {
+                        modal_rect(console, &layer.root, area, width, height)
+                    }
                 })
                 .collect()
         });
@@ -862,6 +1144,8 @@ impl App {
             dirty: self.runtime.take_dirty(),
             damage: Vec::new(),
             focus_path: self.focus_path,
+            hover_path: self.hover_path,
+            wants_hover: std::cell::Cell::new(false),
             theme: &self.theme,
             drawn: 0,
             drawn_ids: panel.map(|_| Vec::new()),
@@ -893,6 +1177,30 @@ impl App {
             }
         });
         self.stats.drawn = frame.drawn;
+        // Toasts, newest at the bottom right, over everything.
+        let mut bottom = area.bottom();
+        for (markup, _) in self.toasts.iter().rev() {
+            let text =
+                rich::Text::from_markup(markup).unwrap_or_else(|_| rich::Text::new(markup.clone()));
+            let w = (text.cell_len() as u16 + 4).min(area.width.saturating_sub(2));
+            if w < 5 || bottom < area.y + 3 {
+                break;
+            }
+            let rect = Rect::new(area.right().saturating_sub(w + 1), bottom - 3, w, 3);
+            let style = self.theme.border(false);
+            let lines = crate::node::border("", &style, &style, rect);
+            screen.write_lines(rect, &lines);
+            let mut options = console.options().update_width(rect.width as usize - 4);
+            options.no_wrap = Some(true);
+            options.overflow = Some(rich::Overflow::Ellipsis);
+            let inner = console.render_lines(&text, &options, false);
+            screen.write_lines(Rect::new(rect.x + 2, rect.y + 1, rect.width - 4, 1), &inner);
+            frame.damage.push(rect);
+            bottom -= 3;
+        }
+        if frame.wants_hover.get() {
+            self.motion.0 = true;
+        }
         let mut damage = frame.damage;
         if let (Some(panel), Some(drawn)) = (panel, frame.drawn_ids) {
             let inspector = self.inspector.as_mut().expect("a panel means an inspector");
@@ -918,13 +1226,33 @@ impl App {
     }
 
     fn ctx(&self) -> Ctx {
-        Ctx::new(self.runtime.proxy())
+        let mut cx = Ctx::new(self.runtime.proxy());
+        cx.pointer = self.pointer;
+        cx
     }
 
     /// Apply what a handler asked for; whether to quit.
     fn apply(&mut self, cx: Ctx) -> bool {
+        let mut quit = cx.quit;
+        for (markup, duration) in cx.toasts {
+            self.toasts.push((markup, self.now + duration));
+            self.poke = true;
+        }
+        for (value, to, duration, easing) in cx.animations {
+            // A new animation of a signal replaces the one running.
+            self.animations.retain(|a| a.value != value);
+            let from = self.runtime.enter(|| value.get_untracked());
+            self.animations.push(Animation {
+                value,
+                from,
+                to,
+                start: self.now,
+                duration,
+                easing,
+            });
+        }
         for nav in cx.nav {
-            self.navigate(nav);
+            quit |= self.navigate(nav);
         }
         if let Some(theme) = cx.theme {
             self.theme_base = theme;
@@ -936,13 +1264,18 @@ impl App {
             Some(FocusMove::To(id)) => self.set_focus(Some(id)),
             None => {}
         }
-        cx.quit
+        quit
     }
 
-    fn navigate(&mut self, nav: Nav) {
+    /// Whether to quit (a command run from the palette may quit).
+    fn navigate(&mut self, nav: Nav) -> bool {
         match nav {
             Nav::Push(build) => self.open(build, None),
             Nav::Modal(width, height, build) => self.open(build, Some((width, height))),
+            Nav::Popup(anchor, placement, width, height, build) => {
+                self.open(build, Some((width, height)));
+                self.top_mut().anchor = Some((anchor, placement));
+            }
             Nav::Pop => {
                 if self.layers.len() > 1 {
                     self.close();
@@ -951,10 +1284,11 @@ impl App {
                 }
             }
             Nav::Replace(build) => {
-                let modal = self.top().modal;
+                let (modal, anchor) = (self.top().modal, self.top().anchor);
                 if self.layers.len() > 1 {
                     self.close();
                     self.open(build, modal);
+                    self.top_mut().anchor = anchor;
                 } else {
                     // The first screen: its timers go with it.
                     let old = self.layers.pop().expect("an app always has a screen");
@@ -965,7 +1299,94 @@ impl App {
                     self.open(build, None);
                 }
             }
+            Nav::Palette => self.open_palette(false),
+            Nav::Help => self.open_palette(true),
+            Nav::Run(id, index) => return self.run_binding(id, index),
         }
+        false
+    }
+
+    /// The described bindings of the focused node and its ancestors,
+    /// innermost first, each with its node and index.
+    fn bindings(&self) -> Vec<(NodeId, usize, rich_interact::keymap::Binding)> {
+        let path = self
+            .focus()
+            .map(|id| self.path_to(id))
+            .filter(|p| !p.is_empty())
+            .unwrap_or_else(|| vec![self.top().root.id()]);
+        let mut out = Vec::new();
+        for &id in path.iter().rev() {
+            with_node(&self.top().root, id, &mut |node| {
+                let context = node.label();
+                for (index, (keys, description, _)) in node.keys.borrow().iter().enumerate() {
+                    if description.is_empty() {
+                        continue;
+                    }
+                    let binding = rich_interact::keymap::Binding::new(
+                        context.clone(),
+                        format!("{id}:{index}"),
+                        keys.clone(),
+                        description.clone(),
+                    );
+                    out.push((id, index, binding));
+                }
+            });
+        }
+        out
+    }
+
+    /// The command palette (or the help, if `help`) over the top screen.
+    fn open_palette(&mut self, help: bool) {
+        let bindings = self.bindings();
+        if help {
+            let all: Vec<_> = bindings.into_iter().map(|(_, _, b)| b).collect();
+            self.open(
+                Box::new(move || {
+                    let help = rich_interact::overlay::Help::from_bindings(all);
+                    crate::node::component(help, |_, cx| cx.pop())
+                        .on_cancel(|cx| cx.pop())
+                        .panel("Help")
+                }),
+                Some((Size::Percent(70), Size::Percent(70))),
+            );
+            return;
+        }
+        let commands: Vec<rich_interact::overlay::Command> = bindings
+            .iter()
+            .map(|(_, _, binding)| rich_interact::overlay::Command::from_binding(binding))
+            .collect();
+        let targets: Vec<(String, NodeId, usize)> = bindings
+            .iter()
+            .map(|(id, index, binding)| (binding.id(), *id, *index))
+            .collect();
+        self.open(
+            Box::new(move || {
+                let palette = rich_interact::overlay::Palette::new(commands);
+                crate::node::component(palette, move |command, cx| {
+                    cx.pop();
+                    if let Some((_, id, index)) = targets.iter().find(|t| t.0 == command.id) {
+                        cx.nav.push(Nav::Run(*id, *index));
+                    }
+                })
+                .on_cancel(|cx| cx.pop())
+                .panel("Commands")
+            }),
+            Some((Size::Percent(60), Size::Percent(60))),
+        );
+    }
+
+    /// Run binding `index` of node `id` on the top screen; whether to quit.
+    fn run_binding(&mut self, id: NodeId, index: usize) -> bool {
+        let mut cx = self.ctx();
+        let runtime = self.runtime.clone();
+        runtime.enter(|| {
+            with_node(&self.top().root, id, &mut |node| {
+                if let Some((_, _, handler)) = node.keys.borrow_mut().get_mut(index) {
+                    handler(&mut cx);
+                }
+            });
+        });
+        self.apply(cx)
     }
 
     /// Build a screen and put it on top, focusing its first focusable node.
@@ -989,6 +1410,7 @@ impl App {
             focus: None,
             modal,
             drawn: None,
+            anchor: None,
             timers,
             watches,
         });
@@ -1158,6 +1580,9 @@ impl App {
             _ => vec![self.top().root.id],
         };
         for &id in path.iter().rev() {
+            if let Some(quit) = self.give_to_widget(id, &WidgetEvent::Key(key)) {
+                return quit;
+            }
             let mut cx = self.ctx();
             let mut used = false;
             let runtime = self.runtime.clone();
@@ -1176,9 +1601,16 @@ impl App {
                 return self.apply(cx);
             }
         }
+        if self.palette_key.contains(&key) {
+            return self.navigate(Nav::Palette);
+        }
+        if self.help_key.contains(&key) {
+            return self.navigate(Nav::Help);
+        }
         match key.code {
             KeyCode::Tab => self.move_focus(true),
             KeyCode::BackTab => self.move_focus(false),
+            KeyCode::Escape if self.top().anchor.is_some() => return self.navigate(Nav::Pop),
             _ => {}
         }
         false
@@ -1201,10 +1633,7 @@ impl App {
                         width: rect.width as usize,
                         height: rect.height as usize,
                     };
-                    used = matches!(
-                        host.handle(event, &context, &mut cx),
-                        crate::node::Used::Yes
-                    );
+                    used = matches!(host.handle(event, &context, &mut cx), Used::Yes);
                 }
             });
         });
@@ -1215,43 +1644,318 @@ impl App {
         Some(self.apply(cx))
     }
 
-    /// Route a button press to the deepest node under the pointer that
-    /// takes it: a component gets every button, in its own coordinates; an
-    /// [`on_click`](crate::Node::on_click) handler only the left one.
-    fn click(&mut self, column: u16, row: u16, button: Button) -> bool {
-        let left = button == Button::Left;
-        let mut target = None;
-        self.top().root.walk(&mut |node, _| {
-            let host = matches!(&*node.kind.borrow(), crate::node::Kind::Host(_));
-            let clickable = left && node.click.borrow().is_some();
-            if (host || clickable) && node.rect().contains(column, row) {
-                target = Some((node.id, node.rect()));
+    /// Route a mouse event. Movement updates what is hovered; a captured
+    /// mouse goes to the node that captured it; anything else goes to the
+    /// deepest node under the pointer and bubbles up through its ancestors
+    /// until one uses it. A press first focuses the deepest focusable node
+    /// under the pointer. Whether to quit.
+    fn mouse(&mut self, mouse: rich_interact::Mouse) -> Option<bool> {
+        let hits = crate::node::hit_path(&self.top().root, mouse.column, mouse.row);
+        let path: Vec<NodeId> = hits.iter().map(|(id, _)| *id).collect();
+        if self.hover_path.get_untracked() != path {
+            let runtime = self.runtime.clone();
+            let hover = self.hover_path;
+            let path = path.clone();
+            runtime.enter(|| hover.set(path));
+        }
+        if let Some((id, shift)) = self.capture {
+            if matches!(mouse.kind, MouseKind::Drag(_) | MouseKind::Up(_)) {
+                if matches!(mouse.kind, MouseKind::Up(_)) {
+                    self.capture = None;
+                }
+                return Some(self.send_mouse(id, shift, mouse).unwrap_or(false));
             }
-        });
-        let Some((id, rect)) = target else {
+        }
+        if matches!(mouse.kind, MouseKind::Down(_))
+            && self.top().anchor.is_some()
+            && !self
+                .top()
+                .drawn
+                .is_some_and(|r| r.contains(mouse.column, mouse.row))
+        {
+            // A press outside a pop-up closes it.
+            return Some(self.navigate(Nav::Pop));
+        }
+        if matches!(mouse.kind, MouseKind::Down(_)) {
+            let focusable = path.iter().rev().copied().find(|id| {
+                let mut yes = false;
+                with_node(&self.top().root, *id, &mut |node| yes = node.focusable);
+                yes
+            });
+            if let Some(id) = focusable {
+                self.set_focus(Some(id));
+            }
+        }
+        for &(id, shift) in hits.iter().rev() {
+            if let Some(quit) = self.send_mouse(id, shift, mouse) {
+                return Some(quit);
+            }
+        }
+        None
+    }
+
+    /// A drag selecting text: move its end, and on release copy what it
+    /// covers. Whether the event was the selection's.
+    fn select(
+        &mut self,
+        mouse: rich_interact::Mouse,
+        screen: &Screen,
+        backend: &mut impl Backend,
+    ) -> bool {
+        let Some((start, _)) = self.selection else {
+            self.selecting = false;
             return false;
         };
-        self.set_focus(Some(id));
-        // A component gets the click in its own coordinates.
-        let local =
-            rich_interact::Mouse::new(MouseKind::Down(button), column - rect.x, row - rect.y);
-        if let Some(quit) = self.give_to_host(&Event::Mouse(local)) {
-            return quit;
+        let at = (mouse.column, mouse.row);
+        match mouse.kind {
+            MouseKind::Drag(Button::Left) => {
+                self.selection = Some((start, at));
+                self.restack = true;
+                true
+            }
+            MouseKind::Up(Button::Left) => {
+                self.selecting = false;
+                self.selection = Some((start, at));
+                if start == at {
+                    // A click, not a drag.
+                    self.selection = None;
+                    return true;
+                }
+                let text = selected_text(screen, start, at);
+                if !text.is_empty() && backend.clipboard().is_ok() && backend.copy(&text).is_ok() {
+                    let n = text.chars().count();
+                    self.toasts.push((
+                        format!("Copied {n} character{}", if n == 1 { "" } else { "s" }),
+                        self.now + Duration::from_secs(2),
+                    ));
+                }
+                self.restack = true;
+                true
+            }
+            _ => false,
         }
-        if !left {
-            return false;
+    }
+
+    /// Offer `mouse` (in screen coordinates) to node `id`, in its own
+    /// coordinates: a component gets every button, a widget and an
+    /// [`on_mouse`](crate::Node::on_mouse) handler every event, and an
+    /// [`on_click`](crate::Node::on_click) handler a left press. `Some`
+    /// (whether to quit) if one used it.
+    fn send_mouse(
+        &mut self,
+        id: NodeId,
+        shift: (i32, i32),
+        mouse: rich_interact::Mouse,
+    ) -> Option<bool> {
+        let mut rect = Rect::default();
+        let mut host = false;
+        with_node(&self.top().root, id, &mut |node| {
+            rect = node.rect();
+            host = matches!(&*node.kind.borrow(), crate::node::Kind::Host(_));
+        });
+        // Into the node's coordinates (they differ inside a scroll), then
+        // relative to its rectangle.
+        let at = |value: u16, by: i32, from: u16| {
+            (value as i32 + by - from as i32).clamp(0, u16::MAX as i32) as u16
+        };
+        let local = rich_interact::Mouse::new(
+            mouse.kind,
+            at(mouse.column, shift.0, rect.x),
+            at(mouse.row, shift.1, rect.y),
+        );
+        if host && self.focus() == Some(id) {
+            if let Some(quit) = self.give_to_host(&Event::Mouse(local)) {
+                return Some(quit);
+            }
+        }
+        if let Some(quit) = self.give_to_widget_at(id, shift, &WidgetEvent::Mouse(local)) {
+            return Some(quit);
         }
         let mut cx = self.ctx();
+        let mut used = false;
         let runtime = self.runtime.clone();
         runtime.enter(|| {
             with_node(&self.top().root, id, &mut |node| {
-                if let Some(handler) = node.click.borrow_mut().as_mut() {
-                    handler(&mut cx);
+                if let Some(handler) = node.mouse.borrow_mut().as_mut() {
+                    used = handler(&mut cx, local);
+                }
+                if !used && mouse.kind == MouseKind::Down(Button::Left) {
+                    if let Some(handler) = node.click.borrow_mut().as_mut() {
+                        handler(&mut cx);
+                        used = true;
+                    }
                 }
             });
         });
-        self.apply(cx)
+        used.then(|| self.apply(cx))
     }
+
+    /// Offer `event` to node `id` if it is a [widget](crate::widget). `Some`
+    /// (whether to quit) if it used it.
+    fn give_to_widget(&mut self, id: NodeId, event: &WidgetEvent) -> Option<bool> {
+        self.give_to_widget_at(id, (0, 0), event)
+    }
+
+    fn give_to_widget_at(
+        &mut self,
+        id: NodeId,
+        shift: (i32, i32),
+        event: &WidgetEvent,
+    ) -> Option<bool> {
+        let mut cx = self.ctx();
+        let mut used = false;
+        let mut redraw = false;
+        let mut capture = None;
+        let runtime = self.runtime.clone();
+        runtime.enter(|| {
+            with_node(&self.top().root, id, &mut |node| {
+                if let crate::node::Kind::Custom { widget, .. } = &mut *node.kind.borrow_mut() {
+                    let rect = node.rect();
+                    let mut ecx = crate::widget::EventCx {
+                        ctx: &mut cx,
+                        size: (rect.width, rect.height),
+                        rect: crate::node::translate(rect, (-shift.0, -shift.1)),
+                        redraw: false,
+                        capture: None,
+                    };
+                    used = widget.event(&mut ecx, event) == Used::Yes;
+                    redraw = ecx.redraw;
+                    capture = ecx.capture;
+                }
+            });
+        });
+        if redraw {
+            self.runtime.mark_dirty(id);
+        }
+        match capture {
+            Some(true) => self.capture = Some((id, shift)),
+            Some(false) if self.capture.is_some_and(|(c, _)| c == id) => self.capture = None,
+            _ => {}
+        }
+        used.then(|| self.apply(cx))
+    }
+}
+
+/// The cells between `start` and `end` in reading order: the rest of the
+/// first row, the rows between, and the last row up to the end.
+fn selected_cells(area: Rect, start: (u16, u16), end: (u16, u16)) -> Vec<(u16, u16)> {
+    let (a, b) = if (start.1, start.0) <= (end.1, end.0) {
+        (start, end)
+    } else {
+        (end, start)
+    };
+    let mut cells = Vec::new();
+    for y in a.1..=b.1.min(area.bottom().saturating_sub(1)) {
+        let from = if y == a.1 { a.0 } else { 0 };
+        let to = if y == b.1 {
+            b.0
+        } else {
+            area.right().saturating_sub(1)
+        };
+        for x in from..=to.min(area.right().saturating_sub(1)) {
+            cells.push((x, y));
+        }
+    }
+    cells
+}
+
+/// The text of the cells between `start` and `end`, rows joined by
+/// newlines and each row's trailing spaces dropped.
+fn selected_text(screen: &Screen, start: (u16, u16), end: (u16, u16)) -> String {
+    let mut rows: Vec<String> = Vec::new();
+    let mut row = None;
+    for (x, y) in selected_cells(screen.area(), start, end) {
+        if row != Some(y) {
+            rows.push(String::new());
+            row = Some(y);
+        }
+        let cell = screen.cell(x, y);
+        if !cell.is_continuation() {
+            rows.last_mut().expect("a row").push_str(&cell.text);
+        }
+    }
+    rows.iter()
+        .map(|r| r.trim_end())
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// Where node `id` is on the screen, if it is in `root`'s tree and shown.
+fn anchor_rect(root: &Node, id: NodeId) -> Option<Rect> {
+    let mut found = None;
+    crate::node::walk_screen(root, &mut |node, _, shift, clip| {
+        if node.id() == id {
+            found = Some(crate::node::translate(node.rect(), shift).intersection(clip));
+        }
+    });
+    found.filter(|r| !r.is_empty())
+}
+
+/// Where a pop-up `width` x `height` goes: on the `placement` side of
+/// `anchor`, or the other side when that has more room, kept inside
+/// `area`.
+fn popup_rect(
+    console: &Console,
+    root: &Node,
+    area: Rect,
+    anchor: Rect,
+    placement: Placement,
+    width: Size,
+    height: Size,
+) -> Rect {
+    let resolve = |size: Size, total: u16, measure: &dyn Fn() -> u16| -> u16 {
+        match size {
+            Size::Fixed(n) => n,
+            Size::Percent(p) => (total as u32 * p.min(100) as u32 / 100) as u16,
+            Size::Auto => measure(),
+            Size::Flex(_) => total,
+        }
+        .min(total)
+    };
+    let w = resolve(width, area.width, &|| {
+        root.measure(console, Axis::Horizontal, area.width, area.height)
+    });
+    let h = resolve(height, area.height, &|| {
+        root.measure(console, Axis::Vertical, w, 0)
+    });
+    let (above, below) = (
+        anchor.y.saturating_sub(area.y),
+        area.bottom().saturating_sub(anchor.bottom()),
+    );
+    let (left, right) = (
+        anchor.x.saturating_sub(area.x),
+        area.right().saturating_sub(anchor.right()),
+    );
+    let (x, y) = match placement {
+        Placement::Below | Placement::Above => {
+            let down = match placement {
+                Placement::Below => below >= h || below >= above,
+                _ => !(above >= h || above >= below),
+            };
+            let y = if down {
+                anchor.bottom()
+            } else {
+                anchor.y.saturating_sub(h)
+            };
+            (anchor.x, y)
+        }
+        Placement::Right | Placement::Left => {
+            let to_right = match placement {
+                Placement::Right => right >= w || right >= left,
+                _ => !(left >= w || left >= right),
+            };
+            let x = if to_right {
+                anchor.right()
+            } else {
+                anchor.x.saturating_sub(w)
+            };
+            (x, anchor.y)
+        }
+    };
+    // Inside the area, sliding back from its right and bottom edges.
+    let x = x.min(area.right().saturating_sub(w)).max(area.x);
+    let y = y.min(area.bottom().saturating_sub(h)).max(area.y);
+    Rect::new(x, y, w, h)
 }
 
 /// Where a modal `width` x `height` goes: centred in `area`.
