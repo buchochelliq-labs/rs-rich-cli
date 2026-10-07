@@ -253,6 +253,8 @@ reproduces Yazi's core behaviour in about 420 lines, including its helpers.
 Its tests are in `tests/files.rs`. It does not reuse any of Yazi's code: it
 is a rebuild of the behaviour, showing how a large ratatui app's ideas map.
 
+![The file manager: parent, current directory and a highlighted preview](../../media/tapes/files/files.png)
+
 | Yazi does | The rebuild uses |
 |---|---|
 | Three columns: parent, current, preview | `row([parent, current, preview]).gap(1)` with `.flex(1)`, `.flex(4)`, `.flex(3)` |
@@ -264,6 +266,8 @@ is a rebuild of the behaviour, showing how a large ratatui app's ideas map.
 | Filter prompt | `cx.modal(..)` holding an `Input` component |
 | Help overlay | `cx.modal(Size::Auto, Size::Auto, help)` |
 | Watches the disk | `every(2s)` re-reads; the listing is a memo, so an unchanged directory draws nothing |
+
+![The help overlay, a modal sized to its content](../../media/tapes/files/files-help.png)
 
 Two things the port shows:
 

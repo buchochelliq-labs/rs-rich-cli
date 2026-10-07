@@ -1,0 +1,31 @@
+# A Yazi-style file manager rebuilt on intuiTUIve (examples/files.rs), in
+# the fixture project docs/tapes/fixtures/project: the parent, current and
+# preview columns, a highlighted source preview loaded in the background,
+# and the keys overlay.
+Set Title "files · a Yazi-style file manager on intuiTUIve"
+Set Size 110x22
+Set TypingDelay 40ms
+Hide
+Exec "mkdir -p bin && ln -sf \"$(dirname \"$(command -v rich)\")/examples/files\" bin/files"
+Exec "mkdir -p .home/project && cp -r $REPO/docs/tapes/fixtures/project/. .home/project/"
+Type "export PATH=\"$PWD/bin:$PATH\"; cd ~/project; clear"
+Enter
+Wait /❯\s*$/
+Show
+Type "files"
+Enter
+Wait /keys/
+Enter
+Wait /main\.rs/
+Down
+Down
+Wait /fn /
+Sleep 500ms
+Screenshot files
+Type "?"
+Wait /Keys/
+Sleep 300ms
+Screenshot files-help
+Escape
+Type "q"
+Wait /❯\s*$/

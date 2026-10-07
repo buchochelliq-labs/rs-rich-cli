@@ -210,6 +210,8 @@ than redrawing every row, which is ratatui's approach.
 
 ## Screens and modals
 
+![A modal asking whether to quit, over the screens example](../../media/tapes/intuituive/modal.png)
+
 An app is a stack of screens. A handler opens one with `cx.push`, and
 `cx.pop` goes back:
 
@@ -331,6 +333,8 @@ format without watching.
 
 ## Inline apps
 
+![An inline app finishing under the prompt, with the scrollback above it kept](../../media/tapes/intuituive/inline.png)
+
 ```rust
 App::new(|| progress_view()).inline(3).run()
 ```
@@ -357,6 +361,8 @@ backend. `App::wait_for_tasks(true)` waits for background tasks before each
 scripted event, so a test sees a task's result however fast the machine is.
 
 ## Inspector
+
+![The to-do app with the inspector docked on the right](../../media/tapes/intuituive/inspector.png)
 
 ```bash
 INTUITUIVE_INSPECT=1 cargo run      # any app, no code change

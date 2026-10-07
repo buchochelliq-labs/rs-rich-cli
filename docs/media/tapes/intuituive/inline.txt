@@ -1,0 +1,22 @@
+❯ echo 'an inline app keeps the scrollback'
+an inline app keeps the scrollback
+❯ inline
+━━━━━━━━━━━━━━━━━━━━ 20/20
+✓ finished
+❯
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

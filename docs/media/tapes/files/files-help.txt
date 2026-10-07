@@ -1,0 +1,22 @@
+~/project/src
+src/          event_loop.rs                                          //! orbit: watch a queue, run its jobs, r
+tests/        lib.rs
+Cargo.toml    main.rs                                                mod event_loop;
+README.md     render.rs                                              mod render;
+                                     ╭─ Keys ───────────────────────────╮
+                                     │ j k ↑ ↓   move                   │ain() {
+                                     │ l → ⏎     open                   │let workers = std::env::args()
+                                     │ h ←       up                     │    .skip_while(|arg| arg != "--worke
+                                     │ g G       first, last            │    .nth(1)
+                                     │ .         hidden files           │    .and_then(|n| n.parse().ok())
+                                     │ s         sort by name or size   │    .unwrap_or(4);
+                                     │ /         filter · esc clears it │event_loop::run(workers);
+                                     │ ~         home                   │
+                                     │ q         quit                   │
+                                     ╰──────────────────────────────────╯
+
+
+
+
+
+3/4 · 289B · sort name  ? keys

@@ -27,6 +27,8 @@ motion turned on in your system settings the cards stay still.
 [![rich explore searching a YAML document](media/tapes/explore/search.png){ data-gif="explore.gif" loading=lazy }<span class="tape-card-title">Explore a document</span>](#explore-a-document){ .tape-card }
 [![A Markdown file paged in a viewport](media/tapes/viewport/paged.png){ data-gif="viewport.gif" loading=lazy }<span class="tape-card-title">An interactive component</span>](#an-interactive-component){ .tape-card }
 [![The command palette over a file list](media/tapes/palette/palette.png){ data-gif="palette.gif" loading=lazy }<span class="tape-card-title">Overlays and chrome</span>](#overlays-and-chrome){ .tape-card }
+[![The to-do app with the inspector docked on the right](media/tapes/intuituive/inspector.png){ data-gif="intuituive.gif" loading=lazy }<span class="tape-card-title">Terminal apps</span>](#terminal-apps){ .tape-card }
+[![A Yazi-style file manager previewing a Rust file](media/tapes/files/files.png){ data-gif="files.gif" loading=lazy }<span class="tape-card-title">A file manager</span>](#a-file-manager){ .tape-card }
 [![A CSV file drawn as a line chart by rich chart](media/tapes/chart/lines.png){ data-gif="chart.gif" loading=lazy }<span class="tape-card-title">Charts from data</span>](#charts-from-data){ .tape-card }
 [![rich deps drawing a dependency graph](media/tapes/deps/graph.png){ data-gif="deps.gif" loading=lazy }<span class="tape-card-title">Dependency trees</span>](#dependency-trees){ .tape-card }
 [![rich profile describing each column of a CSV file](media/tapes/profile/profile.png){ data-gif="profile.gif" loading=lazy }<span class="tape-card-title">Profile a data file</span>](#profile-a-data-file){ .tape-card }
@@ -215,6 +217,44 @@ region's actions in a modal. See
 | ![A badge, a spinner and key hints under the list](media/tapes/statusbar/status.png) | ![The region's actions in a modal](media/tapes/statusbar/actions.png) | ![The note changed by the command](media/tapes/statusbar/refreshed.png) |
 
 [Tape](tapes/statusbar.tape) · [Cast](media/tapes/statusbar/statusbar.cast) · [GIF](media/tapes/statusbar/statusbar.gif) · [Page](media/tapes/statusbar/statusbar.html)
+
+## Terminal apps
+
+`rs-rich-intuituive`'s examples: the to-do app from the
+[tutorial](guide/intuituive/tutorial.md), with a to-do added and one ticked
+off; the same app with the inspector docked on the right, showing which
+nodes drew; the `screens` example asking before it quits, in a modal; and
+the `inline` example finishing in a few rows under the prompt, with the
+scrollback above it kept. See [Terminal apps](guide/intuituive/index.md).
+
+<div class="tape-player" data-cast="../media/tapes/intuituive/intuituive.cast" data-poster="npt:0:3">
+  <img src="../media/tapes/intuituive/intuituive.gif" alt="intuiTUIve's to-do, screens and inline examples">
+</div>
+
+| To-do | Inspector |
+|---|---|
+| ![A to-do added and one ticked off](media/tapes/intuituive/todo.png) | ![The inspector docked on the right](media/tapes/intuituive/inspector.png) |
+| **Modal** | **Inline** |
+| ![A modal asking whether to quit](media/tapes/intuituive/modal.png) | ![An inline app under the prompt](media/tapes/intuituive/inline.png) |
+
+[Tape](tapes/intuituive.tape) · [Cast](media/tapes/intuituive/intuituive.cast) · [GIF](media/tapes/intuituive/intuituive.gif) · [Page](media/tapes/intuituive/intuituive.html)
+
+## A file manager
+
+`rs-rich-intuituive`'s `files` example, a rebuild of Yazi's behaviour, in
+the fixture project: the parent directory, the current one and a preview
+highlighted on a worker thread, then the help overlay. See
+[Porting a ratatui app](guide/intuituive/porting.md#worked-example-a-yazi-style-file-manager).
+
+<div class="tape-player" data-cast="../media/tapes/files/files.cast" data-poster="npt:0:3">
+  <img src="../media/tapes/files/files.gif" alt="A Yazi-style file manager browsing the fixture project">
+</div>
+
+| Browsing | Help |
+|---|---|
+| ![A Rust file previewed](media/tapes/files/files.png) | ![The help overlay](media/tapes/files/files-help.png) |
+
+[Tape](tapes/files.tape) · [Cast](media/tapes/files/files.cast) · [GIF](media/tapes/files/files.gif) · [Page](media/tapes/files/files.html)
 
 ## Charts from data
 
@@ -470,7 +510,7 @@ recordings that match.
 Regenerate everything, or check it as CI does:
 
 ```bash
-cargo build -p rs-rich-cli -p rs-rich-interact --bins --examples
+cargo build -p rs-rich-cli -p rs-rich-interact -p rs-rich-intuituive --bins --examples
 rich=target/debug/rich
 $rich record --bin-dir target/debug --output docs/media/tapes docs/tapes/*.tape
 $rich record --check --bin-dir target/debug --output docs/media/tapes docs/tapes/*.tape
