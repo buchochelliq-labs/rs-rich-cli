@@ -600,7 +600,8 @@ pub fn spectroscope(g: &Graph, s: &Spectroscope, history: &[VecDeque<Vec<f64>>])
 pub fn spectroscope_header(g: &Graph, s: &Spectroscope) -> String {
     let window = if s.window { "-|-" } else { "---" };
     let samples = (g.width * s.average.max(1)).max(1) as f64;
-    let bins = g.rate as f64 / samples;
+    // The FFT pads to a power of two, so its bins are that much narrower.
+    let bins = g.rate as f64 / (samples as usize).next_power_of_two() as f64;
     if s.average <= 1 {
         format!("live  {window}  {bins:.3}Hz bins")
     } else {
@@ -1033,7 +1034,9 @@ fn page(
             osc.update(|o| o.threshold = nudge(o.threshold, 0.01 * sign, magnitude, (-1.0, 1.0)))
         }
         Mode::Spectroscope => {
-            spec.update(|s| s.average = nudge(s.average as f64, sign, 1.0, (1.0, 65535.0)) as u32)
+            // Whole steps, as scope-tui's: alt's ×⅕ of 1 rounds to nothing.
+            let step = sign as i64 * magnitude as i64;
+            spec.update(|s| s.average = (s.average as i64 + step).clamp(1, 65535) as u32)
         }
         Mode::Vectorscope => {}
     }

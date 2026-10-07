@@ -234,11 +234,38 @@ fn the_spectroscope_averages_and_windows() {
     // A wide screen: the header's second cell is a quarter of it.
     let rows = after_at("tab tab pageup pageup w l", 160);
     assert!(
-        rows[0].contains("3x avg (0.1s)  -|-  7.812Hz bins"),
+        rows[0].contains("3x avg (0.1s)  -|-  5.859Hz bins"),
         "{:?}",
         rows[0]
     );
     assert!(rows[1].starts_with("| amplitude"), "linear: {:?}", rows[1]);
+    // Shift steps the averaging by 10, ctrl by 5; alt's fifth of a step is
+    // nothing.
+    let rows = after_at(
+        "tab tab shift+pageup ctrl+pageup alt+pageup ctrl+pagedown",
+        160,
+    );
+    assert!(rows[0].contains("11x avg"), "{:?}", rows[0]);
+}
+
+#[test]
+fn the_header_reports_the_padded_bin_width() {
+    // -t A4: 109 samples, padded to 128 for the FFT: 375 Hz bins at 48 kHz.
+    let g = Graph {
+        width: 109,
+        samples: 109,
+        ..graph()
+    };
+    let header = spectroscope_header(&g, &Spectroscope::default());
+    assert_eq!(header, "live  ---  375.000Hz bins");
+    let g = Graph {
+        references: false,
+        ..g
+    };
+    let tone: Vec<f64> = (0..109).map(|i| (i as f64 * 0.3).sin()).collect();
+    let plot = spectroscope(&g, &Spectroscope::default(), &[VecDeque::from([tone])]);
+    // The first bin plotted is one bin width up.
+    assert!((plot.sets[0].points[0].0.exp() - 375.0).abs() < 1e-6);
 }
 
 #[test]
