@@ -62,6 +62,14 @@ struct Graph {
     memos: HashMap<usize, MemoDef>,
     /// Watches whose source changed, to run between frames.
     pending: Vec<usize>,
+    /// Readers of each slot in other apps' runtimes (an app reading a
+    /// signal another app made).
+    foreign: HashMap<usize, HashSet<(u32, Observer)>>,
+    /// The slots of other runtimes each observer read last time.
+    foreign_reads: HashMap<Observer, Vec<(u32, usize)>>,
+    /// Nodes whose own writes while they draw no longer draw them again:
+    /// they kept doing it, frame after frame (see `Driver::render`).
+    quiet: HashSet<NodeId>,
 }
 
 /// One app's reactive state.
@@ -77,6 +85,11 @@ pub(crate) struct Runtime {
     /// Each watch's step: read its source, and call back if it changed.
     watches: RefCell<HashMap<usize, WatchStep>>,
     next_watch: Cell<usize>,
+    /// How deep in [`Signal::update`]s (or passing changes on) this is;
+    /// changes made meanwhile wait in `queued`, so no reader computes
+    /// while a signal's value is out of its slot.
+    batch: Cell<usize>,
+    queued: RefCell<Vec<usize>>,
     /// The nodes that asked about hover or the pointer; a node leaves when
     /// it is forgotten.
     pub(crate) watchers: crate::widget::Watchers,
@@ -102,6 +115,8 @@ impl Runtime {
                 tasks: Arc::new(AtomicUsize::new(0)),
                 watches: RefCell::new(HashMap::new()),
                 next_watch: Cell::new(0),
+                batch: Cell::new(0),
+                queued: RefCell::new(Vec::new()),
                 watchers: Default::default(),
             });
             all.push(Some(runtime.clone()));
@@ -118,12 +133,25 @@ impl Runtime {
         })
     }
 
+    /// Runtime `id`, if its app is still there.
+    fn try_get(id: u32) -> Option<Rc<Runtime>> {
+        RUNTIMES.with(|all| all.borrow().get(id as usize).and_then(Clone::clone))
+    }
+
     pub(crate) fn current() -> Rc<Runtime> {
+        Runtime::current_for("this")
+    }
+
+    /// The current runtime, or a panic that names `what` was called
+    /// outside an app.
+    pub(crate) fn current_for(what: &str) -> Rc<Runtime> {
         CURRENT.with(|current| {
-            current.borrow().last().cloned().expect(
-                "signal() and memo() are called while an app is built or running: \
-                 inside App::new's closure, a node's closure or an event handler",
-            )
+            current.borrow().last().cloned().unwrap_or_else(|| {
+                panic!(
+                    "{what} is called while an app is built or running: inside \
+                     App::new's closure, a node's closure or an event handler"
+                )
+            })
         })
     }
 
@@ -152,6 +180,29 @@ impl Runtime {
     }
 
     fn subscribe(&self, slot: usize) {
+        // Read from another app (a signal shared by two apps of one
+        // program): that app's reader is recorded here, and told when the
+        // value changes.
+        let reader = CURRENT.with(|current| current.borrow().last().cloned());
+        if let Some(reader) = reader.filter(|r| r.id != self.id) {
+            let observer = reader.graph.borrow().observing.last().copied();
+            if let Some(observer) = observer.filter(|o| *o != Observer::Untracked) {
+                let mut graph = self.graph.borrow_mut();
+                graph
+                    .foreign
+                    .entry(slot)
+                    .or_default()
+                    .insert((reader.id, observer));
+                drop(graph);
+                let mut graph = reader.graph.borrow_mut();
+                graph
+                    .foreign_reads
+                    .entry(observer)
+                    .or_default()
+                    .push((self.id, slot));
+            }
+            return;
+        }
         let mut graph = self.graph.borrow_mut();
         if let Some(&observer) = graph.observing.last() {
             if observer == Observer::Untracked {
@@ -162,10 +213,21 @@ impl Runtime {
         }
     }
 
-    fn unsubscribe(graph: &mut Graph, observer: Observer) {
+    /// Unsubscribe `observer`, of the runtime `id` whose graph this is,
+    /// from all it read, here and in other apps.
+    fn unsubscribe(graph: &mut Graph, id: u32, observer: Observer) {
         if let Some(old) = graph.reads.remove(&observer) {
             for slot in old {
                 graph.subscribers[slot].remove(&observer);
+            }
+        }
+        if let Some(old) = graph.foreign_reads.remove(&observer) {
+            for (other, slot) in old {
+                if let Some(other) = Runtime::try_get(other) {
+                    if let Some(readers) = other.graph.borrow_mut().foreign.get_mut(&slot) {
+                        readers.remove(&(id, observer));
+                    }
+                }
             }
         }
     }
@@ -175,7 +237,7 @@ impl Runtime {
     fn observe<R>(&self, observer: Observer, f: impl FnOnce() -> R) -> R {
         {
             let mut graph = self.graph.borrow_mut();
-            Runtime::unsubscribe(&mut graph, observer);
+            Runtime::unsubscribe(&mut graph, self.id, observer);
             graph.observing.push(observer);
         }
         let result = f();
@@ -206,32 +268,87 @@ impl Runtime {
 
     /// Slot `slot` changed: mark its node readers dirty and bring its memo
     /// readers up to date, following on from the memos whose value changed.
+    /// Inside an update the change waits until the outermost one is done,
+    /// so no reader computes while a signal's value is out of its slot.
     fn changed(&self, slot: usize) {
-        let mut pending = vec![slot];
-        while let Some(slot) = pending.pop() {
+        self.queued.borrow_mut().push(slot);
+        if self.batch.get() > 0 {
+            return;
+        }
+        self.batch.set(1);
+        loop {
+            let next = self.queued.borrow_mut().pop();
+            let Some(slot) = next else { break };
             let readers: Vec<Observer> = self.graph.borrow().subscribers[slot]
                 .iter()
                 .copied()
                 .collect();
             for reader in readers {
-                match reader {
-                    Observer::Node(node) => {
-                        self.graph.borrow_mut().dirty.insert(node);
-                    }
-                    Observer::Memo(memo) => {
-                        if self.recompute(memo) {
-                            pending.push(memo);
-                        }
-                    }
-                    Observer::Watch(watch) => {
-                        let mut graph = self.graph.borrow_mut();
-                        if !graph.pending.contains(&watch) {
-                            graph.pending.push(watch);
-                        }
-                    }
-                    Observer::Untracked => {}
+                self.reached(reader);
+            }
+            // Readers in other apps, each in its own runtime.
+            let foreign: Vec<(u32, Observer)> = self
+                .graph
+                .borrow()
+                .foreign
+                .get(&slot)
+                .map(|readers| readers.iter().copied().collect())
+                .unwrap_or_default();
+            for (other, reader) in foreign {
+                if let Some(other) = Runtime::try_get(other) {
+                    other.enter(|| other.reached(reader));
                 }
             }
+        }
+        self.batch.set(0);
+    }
+
+    /// A value `reader` read changed.
+    fn reached(&self, reader: Observer) {
+        match reader {
+            Observer::Node(node) => {
+                let mut graph = self.graph.borrow_mut();
+                // A node that kept changing what it reads while it draws
+                // is not drawn again for its own writes.
+                let drawing = graph.observing.contains(&reader);
+                if !(drawing && graph.quiet.contains(&node)) {
+                    graph.dirty.insert(node);
+                }
+            }
+            Observer::Memo(memo) => {
+                if self.recompute(memo) {
+                    self.changed(memo);
+                }
+            }
+            Observer::Watch(watch) => {
+                let mut graph = self.graph.borrow_mut();
+                if !graph.pending.contains(&watch) {
+                    graph.pending.push(watch);
+                }
+            }
+            Observer::Untracked => {}
+        }
+    }
+
+    /// Writing a signal is not for a memo: it computes a value from others,
+    /// and is recomputed whenever they change, so a write there would set
+    /// it off again without end.
+    fn check_write(&self) {
+        let computing = |runtime: &Runtime| {
+            runtime
+                .graph
+                .borrow()
+                .observing
+                .iter()
+                .any(|o| matches!(o, Observer::Memo(_)))
+        };
+        let current = CURRENT.with(|current| current.borrow().last().cloned());
+        if computing(self) || current.is_some_and(|c| computing(&c)) {
+            panic!(
+                "a signal was written while a memo computes: a memo (or a watch's \
+                 source) only computes a value from others. Write signals in an \
+                 event handler, a watch's callback or a task"
+            );
         }
     }
 
@@ -256,8 +373,22 @@ impl Runtime {
     pub(crate) fn run_watches(&self, cx: &mut Ctx) -> bool {
         let mut ran = false;
         // A watch that keeps setting itself off stops after this many
-        // rounds, so a cycle cannot hang the app.
-        for _ in 0..100 {
+        // rounds, so a cycle cannot hang the app; what is still pending is
+        // dropped (not run next time), and a toast says so.
+        for round in 0..=WATCH_ROUNDS {
+            if round == WATCH_ROUNDS {
+                let stuck = std::mem::take(&mut self.graph.borrow_mut().pending);
+                if !stuck.is_empty() {
+                    cx.toast_for(
+                        format!(
+                            "[bold red]A watch kept setting itself off[/]: stopped after \
+                             {WATCH_ROUNDS} rounds. Its callback changes what its source reads."
+                        ),
+                        std::time::Duration::from_secs(8),
+                    );
+                }
+                break;
+            }
             let pending = std::mem::take(&mut self.graph.borrow_mut().pending);
             if pending.is_empty() {
                 break;
@@ -278,7 +409,7 @@ impl Runtime {
     pub(crate) fn drop_watch(&self, id: usize) {
         self.watches.borrow_mut().remove(&id);
         let mut graph = self.graph.borrow_mut();
-        Runtime::unsubscribe(&mut graph, Observer::Watch(id));
+        Runtime::unsubscribe(&mut graph, self.id, Observer::Watch(id));
         graph.pending.retain(|w| *w != id);
     }
 
@@ -296,10 +427,23 @@ impl Runtime {
         self.graph.borrow_mut().dirty.insert(node);
     }
 
+    /// The nodes dirty now.
+    pub(crate) fn dirty_now(&self) -> Vec<NodeId> {
+        self.graph.borrow().dirty.iter().copied().collect()
+    }
+
+    /// Stop drawing `node` again for its own writes while it draws.
+    pub(crate) fn quiet(&self, node: NodeId) {
+        let mut graph = self.graph.borrow_mut();
+        graph.dirty.remove(&node);
+        graph.quiet.insert(node);
+    }
+
     /// Forget a node that left the tree.
     pub(crate) fn forget(&self, node: NodeId) {
         let mut graph = self.graph.borrow_mut();
-        Runtime::unsubscribe(&mut graph, Observer::Node(node));
+        Runtime::unsubscribe(&mut graph, self.id, Observer::Node(node));
+        graph.quiet.remove(&node);
         graph.dirty.remove(&node);
         self.watchers.hover.borrow_mut().remove(&node);
         self.watchers.pointer.borrow_mut().remove(&node);
@@ -356,7 +500,7 @@ impl<T> std::fmt::Debug for Signal<T> {
 
 /// A new signal holding `value`, in the current app.
 pub fn signal<T: 'static>(value: T) -> Signal<T> {
-    let runtime = Runtime::current();
+    let runtime = Runtime::current_for("signal()");
     Signal {
         runtime: runtime.id,
         slot: runtime.insert(Box::new(value)),
@@ -375,24 +519,26 @@ impl<T: 'static> Signal<T> {
         let runtime = self.runtime();
         runtime.subscribe(self.slot);
         let values = runtime.values.borrow();
-        f(values[self.slot]
-            .downcast_ref::<T>()
-            .expect("a signal read inside its own update"))
+        f(values[self.slot].downcast_ref::<T>().expect(SELF_READ))
     }
 
     /// Read without subscribing.
     pub fn with_untracked<R>(&self, f: impl FnOnce(&T) -> R) -> R {
         let runtime = self.runtime();
         let values = runtime.values.borrow();
-        f(values[self.slot]
-            .downcast_ref::<T>()
-            .expect("a signal read inside its own update"))
+        f(values[self.slot].downcast_ref::<T>().expect(SELF_READ))
     }
 
-    /// Change the value in place; every reader updates. `f` may read other
-    /// signals (not this one, whose value it holds).
+    /// Change the value in place; every reader updates. `f` may read and
+    /// write other signals (not read this one, whose value it holds);
+    /// readers see all the changes once the outermost update is done.
+    ///
+    /// # Panics
+    /// While a memo computes: a memo only computes a value from others.
     pub fn update(&self, f: impl FnOnce(&mut T)) {
         let runtime = self.runtime();
+        runtime.check_write();
+        runtime.batch.set(runtime.batch.get() + 1);
         // Out of the table while `f` runs, so the table is not borrowed.
         let mut value = std::mem::replace(
             &mut runtime.values.borrow_mut()[self.slot],
@@ -400,6 +546,7 @@ impl<T: 'static> Signal<T> {
         );
         f(value.downcast_mut::<T>().expect("signal type"));
         runtime.values.borrow_mut()[self.slot] = value;
+        runtime.batch.set(runtime.batch.get() - 1);
         runtime.changed(self.slot);
     }
 }
@@ -425,6 +572,14 @@ impl<T: PartialEq + 'static> Signal<T> {
     }
 }
 
+/// How many rounds of watches setting off watches run before the rest are
+/// dropped.
+const WATCH_ROUNDS: usize = 100;
+
+/// The panic for a signal read while its own update holds its value.
+const SELF_READ: &str = "a signal was read inside its own update(): read it before \
+     the update, or use the value the update's closure is given";
+
 /// Stands in a signal's slot while [`Signal::update`] holds its value.
 struct Updating;
 
@@ -444,7 +599,7 @@ impl<T> Copy for Memo<T> {}
 
 /// A memo computing `f`, in the current app.
 pub fn memo<T: PartialEq + 'static>(f: impl Fn() -> T + 'static) -> Memo<T> {
-    let runtime = Runtime::current();
+    let runtime = Runtime::current_for("memo()");
     let compute: Compute = Rc::new(move || Box::new(f()) as Box<dyn Any>);
     let equal: Equal = |a, b| a.downcast_ref::<T>() == b.downcast_ref::<T>();
     // Compute first with a placeholder slot, so the memo's reads are
@@ -499,7 +654,7 @@ pub fn watch<T: PartialEq + Clone + 'static>(
     source: impl Fn() -> T + 'static,
     mut on_change: impl FnMut(T, &mut Ctx) + 'static,
 ) {
-    let runtime = Runtime::current();
+    let runtime = Runtime::current_for("watch()");
     let value = memo(source);
     let id = runtime.next_watch.get();
     runtime.next_watch.set(id + 1);

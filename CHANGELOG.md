@@ -17,6 +17,44 @@ core 0.0.9, macros 0.0.3, plugin API 0.0.3, art 0.0.12, diagram 0.0.2,
 mermaid 0.0.5, lumis 0.0.3, Python 0.0.5. See
 [the release notes](docs/releases/0.0.17.md).
 
+### intuiTUIve: sharp edges fixed (rs-rich-intuituive 0.0.2, rs-rich-interact 0.0.5)
+
+Found by probing the framework the way a new user would; each has a test
+in `crates/rich-intuituive/tests/sharp_edges.rs`.
+
+- A memo that wrote a signal it read overflowed the stack and aborted the
+  process. Writing a signal while a memo (or a watch's source) computes now
+  panics with a message that says what to do instead.
+- Writing another signal inside `Signal::update` panicked ("a signal read
+  inside its own update") whenever a memo read both. Changes made inside an
+  update now reach readers once the outermost update is done.
+- A node that wrote a signal it read while drawing redrew forever at full
+  CPU. After a few frames in a row its own writes stop drawing it again,
+  and a toast names the node; a write once (a scroll keeping the focus in
+  view) still draws it again.
+- A watch whose callback set its own source ran 100 rounds on every
+  update, without end. What is still pending after 100 rounds is dropped,
+  and a toast says so.
+- Binding Ctrl+C never ran the binding: the app quit first. Ctrl+C now
+  quits only when no node on the focused path binds it.
+- Key names that parsed but could never fire: `"shift+a"` is now `"A"`;
+  `"ctrl+i"`, `"ctrl+m"` and `"ctrl+["` are Tab, Enter and Esc;
+  `"ctrl+\"`, `"ctrl+]"`, `"ctrl+^"` and `"ctrl+_"` are Ctrl+4 to 7, as
+  terminals send them (rs-rich-interact). `"shift+1"`, `"f0"` and `"f99"`
+  are errors, and a binding with no keys (`" "`, `""`) panics, pointing at
+  `"space"`.
+- Deleting the focused row of an `each` sent the focus to the first
+  focusable node; it now goes to the next row, or the one before it if it
+  was last.
+- A signal made by one app and read by another (two panes of one program)
+  showed its value but never redrew the reader; it now does.
+- `watch()` outside an app panicked naming `signal()` and `memo()`; each of
+  `signal()`, `memo()`, `watch()` and `spawn()` now names itself.
+- After a clock jump a timer caught up tick by tick (a day's jump took over
+  a second of busy loop); it now ticks once and keeps to its step.
+- Toasts did not show on screens under three rows tall or too narrow for
+  their box; the newest now shows reversed on the bottom row.
+
 ### intuiTUIve examples show the framework (rs-rich-intuituive 0.0.2)
 
 - **`meters`** (new): a board of meters, each a `Widget` of its own. It

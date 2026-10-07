@@ -275,7 +275,7 @@ impl Node {
         description: &str,
         handler: impl FnMut(&mut Ctx) + 'static,
     ) -> Node {
-        let parsed = rich_interact::keymap::keys(keys);
+        let parsed = parse_keys(keys);
         self.keys
             .borrow_mut()
             .push((parsed, description.to_string(), Box::new(handler)));
@@ -1327,6 +1327,20 @@ pub(crate) fn shifts(root: &Node) -> Vec<(NodeId, (i32, i32))> {
 }
 
 /// Run `f` on the node with `id`.
+/// The keys named in `names`, for a binding.
+///
+/// # Panics
+/// On a name that is not a key, or on no names at all (`""`, or `" "`,
+/// which is a separator: the space key is `space`).
+pub(crate) fn parse_keys(names: &str) -> Vec<Key> {
+    let keys = rich_interact::keymap::keys(names);
+    assert!(
+        !keys.is_empty(),
+        "no keys in {names:?}: name them separated by spaces; the space key is \"space\""
+    );
+    keys
+}
+
 pub(crate) fn with_node(root: &Node, id: NodeId, f: &mut dyn FnMut(&Node)) {
     let mut done = false;
     root.walk(&mut |node, _| {

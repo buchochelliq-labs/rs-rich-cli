@@ -66,7 +66,7 @@ pub fn spawn<T: Send + 'static>(
     work: impl FnOnce() -> T + Send + 'static,
     done: impl FnOnce(T, &mut Ctx) + Send + 'static,
 ) -> Task {
-    let runtime = Runtime::current();
+    let runtime = Runtime::current_for("spawn()");
     let proxy = runtime.proxy();
     let tasks = runtime.tasks.clone();
     let task = Task {

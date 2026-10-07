@@ -146,7 +146,24 @@ let is_first = memo(move || selected.get() == 0);
 - A `memo` derives a value and notifies its readers only when the result
   changes. In a list where each row reads `memo(move || selected.get() == i)`,
   a move redraws two rows, not all of them.
-- Signals are `Copy`: move them into as many closures as you need.
+- Signals are `Copy`: move them into as many closures as you need. Two
+  apps in one program (two panes of a ratatui app, say) can share one: a
+  write redraws the readers in both.
+
+Writing signals, and the cycles the runtime stops:
+
+- **Inside `update`**, the closure may read and write other signals.
+  Readers see every change once the outermost update is done. Reading the
+  signal being updated panics: use the value the closure is given.
+- **A memo only computes.** Writing a signal while a memo (or a watch's
+  source) computes panics with a message that says so: write in a handler,
+  a watch's callback or a task.
+- **A node that writes a signal it reads while it draws** draws again, once
+  (a scroll moving to keep the focus in view does this). One that does it
+  frame after frame would draw forever: after a few frames its own writes
+  stop drawing it again, and a toast names it.
+- **A watch whose callback changes its own source** runs at most 100 rounds
+  in a row; then what is left is dropped and a toast says so.
 
 ## Input and focus
 
@@ -166,7 +183,16 @@ column([
   focuses it. The app remembers where each node was drawn, so you never
   store rectangles yourself.
 - **Key names** are the ones `rs-rich-interact` uses: `"q"`, `"ctrl+s"`,
-  `"up k"` (either key).
+  `"up k"` (either key). Spaces separate names, so the space key is
+  `"space"`; a binding with no keys, or a name that is not a key (`"f99"`,
+  `"ctrl-s"`), panics when the binding is made. Names mean what the
+  terminal sends: `"shift+a"` is `"A"`, and `"ctrl+i"`, `"ctrl+m"` and
+  `"ctrl+["` are Tab, Enter and Esc.
+- **Ctrl+C** quits, unless a node on the focused path binds it: then the
+  binding runs, and quitting is up to you.
+- **When the focused node goes** (a row deleted from an `each`), the focus
+  moves to the next one in the Tab order, or the one before it if it was
+  last.
 - **Out of the Tab order:** `.no_focus()` keeps a list or component you only
   show from taking the focus.
 - **Showing the focus:** panels highlight their border while the focus is
@@ -535,7 +561,8 @@ Name a node (`.name("Editor")`) to group its commands under that name.
 
 - **`cx.toast(markup)`** shows a message at the bottom right for three
   seconds, and `toast_for(markup, duration)` for as long as you say.
-  Toasts stack and do not take the focus.
+  Toasts stack and do not take the focus. On a screen too small for a
+  toast's box, the newest shows reversed on the bottom row.
 - **`cx.animate(signal, to, duration, easing)`** moves a `Signal<f64>` to
   `to` over `duration`, setting it every frame, so whatever reads it moves
   with it: a split's ratio, a gauge, a scroll offset. `Easing` is `Linear`,
@@ -561,7 +588,9 @@ App::new(|| {
 ```
 
 - **Timers:** `every` runs a handler on a schedule. Call it inside
-  `App::new`'s closure (or a screen's), next to the signals it writes.
+  `App::new`'s closure (or a screen's), next to the signals it writes. A
+  timer that fell behind (the clock jumped, the laptop slept) ticks once,
+  not once for every tick it missed, and keeps to its step after that.
 - **Tasks:** `spawn(work, done)` runs `work` on its own thread and `done`
   with the result back on the app's thread, where it can write signals,
   open a screen or quit. `spawn_future` does the same for a future that does
