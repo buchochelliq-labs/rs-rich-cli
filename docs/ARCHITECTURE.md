@@ -1,6 +1,6 @@
 # Architecture
 
-A fourteen-crate Cargo workspace, plus the Python bindings beside it, with a
+A fifteen-crate Cargo workspace, plus the Python bindings beside it, with a
 strict, one-directional dependency rule.
 Each crate versions independently. The [manifest-version table](index.md#versions-in-this-checkout)
 tracks this checkout; registry badges show published versions.
@@ -31,7 +31,8 @@ The diagram shows the original crates. The others follow the same rule:
 `rich-mermaid` → `rich-diagram` → `rich` (with `rich-plugin-api` behind
 features), `rich-lumis` → `rich-plugin-api`, and `rich-record`,
 `rich-interact`, `rich-micro` and `rich-data` → `rich-ext`, and
-`rich-ratatui` → `rich` (with `rich-interact` behind a feature). The full graph is in
+`rich-ratatui` → `rich` (with `rich-interact` behind a feature), and
+`rich-intuituive` → `rich-interact`. The full graph is in
 [AGENTS.md](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/AGENTS.md).
 
 - **`crates/rich`** — the faithful port of the Python `rich` *library*. Mirrors
@@ -71,6 +72,15 @@ features), `rich-lumis` → `rich-plugin-api`, and `rich-record`,
   `rich-interact` for `interact`); nothing in the workspace depends on it, so
   ratatui stays out of every other crate's tree. Independent SemVer. See
   [Using rich with ratatui](guide/ratatui.md).
+- **`crates/rich-intuituive`** — intuiTUIve, the TUI framework: a per-app
+  reactive runtime (signals, memos, timers), a retained tree of nodes drawn
+  into its own cell screen (with hyperlinks) with a damaged diff, focus, key
+  bubbling and clicks hit-tested against the retained layout, and headless
+  testing. Built on `rich-interact` (its root is a `Component`), `rich-ext`
+  and `rich`; ratatui is only a dev-dependency, for the benchmark CI gates
+  it against. Independent SemVer. See
+  [Terminal apps](guide/intuituive/index.md) and the
+  [design note](design/intuituive.md).
 - **`crates/rich-mermaid`** — Mermaid diagrams as a plugin: flowcharts drawn
   as text through `rich-diagram`'s layout, every diagram type through
   Mermaid's CLI (`mmdc`) behind its `mmdc` feature. Depends on `rich`,

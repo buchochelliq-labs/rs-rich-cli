@@ -191,6 +191,10 @@ the architectural problems in ratatui that intuiTUIve is built to avoid:
 redraw-everything frames, state kept apart from widgets, hand-written event
 routing and hit-testing, and per-widget styling.
 
+Coming from ratatui? [Using rich with ratatui](../ratatui.md) covers
+`rs-rich-ratatui`, the interop crate: rich renderables drawn as ratatui
+widgets in an existing app, and ratatui widgets run inside rs-rich-interact.
+
 ## Status
 
 This is an early slice. Still to come:

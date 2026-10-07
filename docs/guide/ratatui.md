@@ -15,6 +15,12 @@ own `Buffer`, `Rect`, `Style` and `Widget` live in. ratatui 0.30 re-exports
 those types, so the buffer a `ratatui` app draws into is the one this crate
 takes, and no other rs-rich crate depends on ratatui.
 
+This crate is the interop layer. For writing a new full-screen app,
+rs-rich has its own framework, [intuiTUIve](intuituive/index.md): a
+retained tree with signals, where only what changed is redrawn and sent.
+[The design note](../design/intuituive.md) records why both exist, the
+benchmarks against ratatui, and the decisions behind this crate.
+
 ```toml
 [dependencies]
 rs-rich = "0.0.9"

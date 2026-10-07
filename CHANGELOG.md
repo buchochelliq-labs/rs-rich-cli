@@ -9,6 +9,42 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### intuiTUIve: rs-rich-intuituive 0.0.1 (new crate)
+
+`rs-rich-intuituive` (`intuituive`) is a framework for full-screen terminal
+apps, built on `rs-rich-interact` (an app is a `Component`, so sessions, the
+blocking and headless drivers and every existing component carry over),
+`rs-rich-ext` and core `rs-rich`. Core is unchanged. See the guide page
+[Terminal apps](docs/guide/intuituive/index.md) and the design note
+[docs/design/intuituive.md](docs/design/intuituive.md).
+
+- A per-app reactive runtime: `signal`s and `memo`s (reading one while
+  drawing subscribes the node; writing one redraws exactly its readers), a
+  `Proxy` that runs a closure on the app's thread from any other, and timers
+  (`every`).
+- Its own retained cell screen, which keeps hyperlinks, and a damaged diff:
+  only the changed cells in the damaged rectangles reach the terminal.
+- A retained tree of nodes: `text!`, `label`, `renderable` (any rich
+  renderable: a `Table`, `Markdown`, `Syntax`, a chart), `column`, `row`,
+  keyed `each`, `Node::panel`, `Log` for appended lines, and `component` for
+  any rich-interact component.
+- Input: focus with Tab, `on_key` bindings that bubble from the focused node
+  up, and `on_click` routed by the layout the last frame kept.
+- Headless testing through rich-interact's driver (`App::render_with`,
+  `App::run_on`).
+- A benchmark gate against ratatui 0.30 (`tests/versus_ratatui.rs`, a new
+  `ratatui-gate` CI job, run in release): the same ops dashboard drawn both
+  ways, failing if intuiTUIve is slower on a status tick or a selection move,
+  more than 1.5 times slower on a log append, or sends more bytes. At 80x24
+  in the run before this entry: a tick 14 µs against ratatui's 92 (18 bytes
+  against 37), a selection move 43 against 112, a log append 46 against 92.
+  ratatui is a dev-dependency only.
+- The crate added to RELEASES.toml (after `rs-rich-ratatui`, so after
+  `rs-rich-ext` and `rs-rich-interact`), the workspace dependency table, the
+  release scripts and their tests, the CI feature matrix, the release
+  workflow and readiness pattern, BRANCHING, the release skill, AGENTS.md,
+  the docs nav and the version tables.
+
 ### ratatui interop: rs-rich-ratatui 0.0.1 (new crate)
 
 `rs-rich-ratatui` (`rich_ratatui`) connects rs-rich and ratatui both ways,

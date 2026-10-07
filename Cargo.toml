@@ -39,6 +39,7 @@ rich-interact = { package = "rs-rich-interact", path = "crates/rich-interact", v
 rich-micro = { package = "rs-rich-micro", path = "crates/rich-micro", version = "0.0.3" }
 rich-data = { package = "rs-rich-data", path = "crates/rich-data", version = "0.0.1" }
 rich-ratatui = { package = "rs-rich-ratatui", path = "crates/rich-ratatui", version = "0.0.1" }
+rich-intuituive = { package = "rs-rich-intuituive", path = "crates/rich-intuituive", version = "0.0.1" }
 # Cargo's default caret requirement treats 0.0.x specially: `version = "0.0.2"`
 # means >=0.0.2,<0.0.3, not >=0.0.2,<0.1.0. Therefore any internal crate bump
 # must also update every direct dependent's workspace requirement.
