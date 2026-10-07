@@ -368,10 +368,13 @@ fn hidden_keyed_rows_redraw_when_shown() {
     let app = App::new(|| {
         let order = signal(vec![0usize, 1, 2]);
         let labels = signal(vec!["a".to_string(), "b".into(), "c".into()]);
-        each(move || order.get(), move |k| text(move || labels.get()[k].clone()))
-            .on_key("x", move |_| labels.update(|l| l[2] = "C".into()))
-            .on_key("r", move |_| order.set(vec![2, 0, 1]))
-            .on_key("q", |cx| cx.quit())
+        each(
+            move || order.get(),
+            move |k| text(move || labels.get()[k].clone()),
+        )
+        .on_key("x", move |_| labels.update(|l| l[2] = "C".into()))
+        .on_key("r", move |_| order.set(vec![2, 0, 1]))
+        .on_key("q", |cx| cx.quit())
     });
     let screen = app.render_with(&["x", "r", "q"], 4, 2).unwrap();
     assert_eq!(screen[0].trim_end(), "C", "{screen:?}");
