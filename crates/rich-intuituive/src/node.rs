@@ -245,7 +245,13 @@ impl Node {
         self
     }
 
-    /// How the inspector shows this node: its name or builder, and what it
+    /// Its name, if it was given one: how the command palette and the help
+    /// group its bindings.
+    pub(crate) fn label(&self) -> String {
+        self.name.clone().unwrap_or_default()
+    }
+
+        /// How the inspector shows this node: its name or builder, and what it
     /// holds.
     pub(crate) fn describe(&self) -> String {
         let base = match &self.name {
@@ -1472,7 +1478,12 @@ impl FrameState<'_> {
 
 /// A rounded border round `rect`, with `title` in the top edge; the inside
 /// is left to the child.
-fn border(title: &str, style: &Style, title_style: &Style, rect: Rect) -> Vec<Vec<Segment>> {
+pub(crate) fn border(
+    title: &str,
+    style: &Style,
+    title_style: &Style,
+    rect: Rect,
+) -> Vec<Vec<Segment>> {
     let (w, h) = (rect.width as usize, rect.height as usize);
     if w < 2 || h < 2 {
         return Vec::new();

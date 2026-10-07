@@ -53,6 +53,7 @@ pub mod app;
 pub mod inspect;
 pub mod layout;
 pub mod log;
+pub mod menu;
 pub mod node;
 pub mod reactive;
 pub mod screen;
@@ -67,7 +68,7 @@ pub use rich;
 /// `interact::Select`, …) and the headless test driver.
 pub use rich_interact as interact;
 
-pub use app::{every, App, Ctx, FrameStats, Placement, Theme};
+pub use app::{every, Anchor, App, Ctx, Easing, FrameStats, Placement, Theme};
 pub use layout::Size;
 pub use log::Log;
 pub use node::{

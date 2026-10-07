@@ -226,6 +226,7 @@ impl DrawCx<'_> {
 pub struct EventCx<'a> {
     pub(crate) ctx: &'a mut Ctx,
     pub(crate) size: (u16, u16),
+    pub(crate) rect: Rect,
     pub(crate) redraw: bool,
     pub(crate) capture: Option<bool>,
 }
@@ -256,6 +257,12 @@ impl EventCx<'_> {
     /// The widget's width and height when it last drew.
     pub fn size(&self) -> (u16, u16) {
         self.size
+    }
+
+    /// Where the widget is on the screen: to place a
+    /// [pop-up](Ctx::popup) next to a part of it.
+    pub fn rect(&self) -> Rect {
+        self.rect
     }
 }
 

@@ -207,6 +207,20 @@ impl Screen {
         }
     }
 
+    /// Lay `style` over the cell at `x`, `y` (a selection's highlight).
+    pub fn restyle(&mut self, x: u16, y: u16, style: &Style) {
+        if x >= self.width || y >= self.height {
+            return;
+        }
+        let own = self.styles.get(self.cell(x, y).style).cloned();
+        let combined = match own {
+            Some(own) => own.combine(style),
+            None => style.clone(),
+        };
+        let id = self.styles.intern(Some(&combined));
+        self.cell_mut(x, y).style = id;
+    }
+
     /// Copy the cells of `from` in `source` to this screen at `x`, `y`,
     /// clipped to this screen. A wide character cut by either edge of
     /// `from` becomes a space.

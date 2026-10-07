@@ -324,6 +324,15 @@ impl<T> Clone for Signal<T> {
 
 impl<T> Copy for Signal<T> {}
 
+impl<T> PartialEq for Signal<T> {
+    /// The same signal.
+    fn eq(&self, other: &Self) -> bool {
+        (self.runtime, self.slot) == (other.runtime, other.slot)
+    }
+}
+
+impl<T> Eq for Signal<T> {}
+
 impl<T> std::fmt::Debug for Signal<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "Signal({}:{})", self.runtime, self.slot)
