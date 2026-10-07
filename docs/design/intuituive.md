@@ -31,10 +31,9 @@ built by CI. Run it with `cargo run --release` from that directory.
 - **Less code for the author:** the same dashboard is 50 lines of author code
   against ratatui's 79. The app holds no draw loop, no layout pass and no
   "what changed" bookkeeping.
-- **Proposed next step:** a first framework slice (runtime, tree, cell screen,
-  ratatui interop crate) in a release of its own. The scope is in
-  [Plan](#plan), and the [decisions](#decisions-for-the-maintainer) are
-  listed for the maintainer.
+- **Decided:** our own cell screen with a ratatui adapter, interop in
+  `rs-rich-ratatui`, and the framework in a new crate (see
+  [Decisions](#decisions-2026-10-07)). The work is in [Plan](#plan).
 
 ## What "better than ratatui" means
 
@@ -241,55 +240,77 @@ These are open, not solved:
 - **Python bindings** for the framework layer.
 - **A real terminal:** every number above is in memory.
 
-## Decisions for the maintainer
+## Decisions (2026-10-07)
 
-1. **The screen type.**
-   - **Option A, adopt `ratatui-core`'s `Buffer`.** It is what the prototype
-     measured. Interop becomes free: ratatui widgets draw straight into it,
-     with a proven diff and encoder. The costs:
-     - a dependency on ratatui's 0.x cadence;
-     - the cell model cannot hold links or rich's extra attributes, and
-       hyperlinks are a rich feature.
-   - **Option B, our own cell buffer** in `rich-ext`, with the same semantics
-     and links. `rich_ext::frame` already has a cell model with links and
-     graphics placements. ratatui widgets then render into a scratch
-     `Buffer` per dirty leaf and convert, costing about 40 ns a cell of that
-     leaf.
-   - **Recommendation:** B, re-measured before the slice ships, with
-     `ratatui-core` behind an off-by-default feature for zero-copy widgets.
-2. **Where the ratatui interop lives.** A new crate, `rs-rich-ratatui`
-   (`rich` + `ratatui-core`, widgets optional). That keeps ratatui out of
-   every crate that does not opt in, and keeps the dependency graph
-   one-directional, per AGENTS.md.
-3. **Where the framework lives.** A new crate on top of `rs-rich-interact`,
-   or `rs-rich-interact` itself behind a feature. The trait and drivers are
-   shared either way. A new crate keeps `rich-interact`'s component API
-   stable while the framework's settles.
-4. **What "better" commits to.** The scorecard above is the proposed public
-   bar, with the benchmark in CI as a regression gate: no worse than ratatui
-   on tick and select, and within 1.2 times on bulk updates.
+The maintainer decided:
+
+1. **Our own cell screen, with a ratatui adapter.** The screen is a cell
+   buffer of our own, which keeps hyperlinks and rich's full attribute set.
+   A ratatui widget draws into a scratch ratatui `Buffer` the size of its
+   rectangle, and an adapter converts those cells into ours. That costs
+   about 40 ns a cell, paid only while the widget is dirty. The prototype
+   measured ratatui's `Buffer`, so the slice re-measures with ours before
+   it ships.
+2. **ratatui interop in its own crate,** `rs-rich-ratatui`. The
+   `rich` → ratatui direction needs only `rich` and `ratatui-core`; the
+   intuiTUIve adapter sits behind a feature. Nothing else in the workspace
+   depends on ratatui.
+3. **The framework in a new crate** on top of `rs-rich-interact`, so the
+   component API stays stable while the framework's settles.
+4. **The scorecard is the public bar,** with the benchmark in CI as a
+   regression gate. "Better" also means **easier to learn and use**, and
+   **free of the architectural problems ratatui apps hit** (next section).
+
+## The architectural problems we design out
+
+These are the structural pain points ratatui apps commonly report. Each is a
+consequence of ratatui's scope (a widget library plus a buffer diff), not a
+bug, and each is a design requirement here.
+
+| ratatui problem | Why it happens | intuiTUIve's answer |
+|---|---|---|
+| **Everything redraws every frame**, so cost grows with the screen, not with what changed. | Immediate mode: the app calls `draw`, and every widget renders into a fresh buffer that is diffed whole. | Retained nodes, signals, damage rectangles: work scales with the change (measured above). |
+| **State lives apart from the widget.** `StatefulWidget` takes its state as a separate argument, and widgets are consumed by value each frame. | Widgets are short-lived values; anything that must survive a frame belongs to the app. | A component owns its state for its whole life, keyed identity keeps it across reorders, and signals make it observable. |
+| **No event routing, focus or hit-testing.** Each app maps keys to panes itself, and must remember last frame's `Rect`s to route a mouse click. | Layout happens inside `draw`, and its results are thrown away. | Layout is retained on the tree. Events bubble from the focused node, clicks hit-test against the retained rectangles, and keymaps are declared (`rich-interact` 0.0.14). |
+| **Every app writes its own event loop,** and async (a background fetch updating the UI) is wired by hand. | The library stops at drawing by design. | A runtime ships the loop, and an async task writes a signal from any thread. The app never calls `draw`. |
+| **Styling is per widget,** with no theme to change an app's look in one place. | `Style`s are values set on each widget. | App-level themes and named styles on the tree, building on rich's theme stack. |
+| **Cells hold a symbol and a style only.** Hyperlinks and images need workarounds outside the cell model. | The `Cell` type has no place for them. | Our cell screen carries links and graphics placements; micro assets and images already ride on them in `rich-interact`. |
+| **Text input, scrolling, forms and lists come from third-party crates** of varying upkeep, each with its own conventions. | Out of a widget library's scope. | Built in, themed, one API, already shipped as `rich-interact` components. |
+| **Tests assert on a buffer,** with no scripted keys, clicks or timing. | `TestBackend` is a buffer. | The headless driver plays scripted keys, clicks, resizes and waits, and `rich record` turns the same script into docs media. |
+| **Lifetimes in text types** (`Line<'a>`, `Span<'a>`) leak into app structs. | Borrowing text avoids copies in a redraw-everything model. | Retained nodes own their content, so authors write owned strings and markup. |
+
+ratatui's strengths are kept: crossterm and other backends, a fast cell diff,
+a stable cell model, and its widget ecosystem, which runs inside intuiTUIve
+through the adapter.
+
+**Easier to learn** is measured too: the dashboard is 50 lines against
+79, and the first tutorial app should need no knowledge of buffers, frames,
+layout passes or event loops.
 
 ## Plan
 
-Proposed, phase by phase. The first phase is sized for one release.
-
-1. **Runtime and screen.**
-   - The per-app reactive runtime, with signals, memos and disposal.
-   - The retained tree, with keyed identity and damage tracking.
-   - The cell screen (decision 1), the damaged diff with merged rectangles,
-     and wide characters at edges.
-   - The 0.0.14 containers, focus and keymaps on the tree.
-   - A streaming leaf for logs.
-   - The dashboard benchmark in CI against ratatui.
-2. **ratatui interop crate:** `RichWidget`, ratatui widgets as leaves, the
-   style mapping, and docs for "use rich in your ratatui app".
-3. **Layout and app shell:**
+1. **This spike.**
+2. **`rs-rich-ratatui`.** The interop crate, made ready for production from
+   `interop.rs`:
+   - `RichWidget`;
+   - the style and cell conversions;
+   - docs for "use rich in your ratatui app";
+   - the intuiTUIve leaf adapter behind a feature.
+3. **intuiTUIve runtime and screen**, the new framework crate:
+   - the per-app reactive runtime, with signals, memos and disposal;
+   - the retained tree, with keyed identity and damage tracking;
+   - our cell screen with links, and the damaged diff with merged rectangles
+     and wide characters at the edges;
+   - the 0.0.14 containers, focus and keymaps on the tree;
+   - a streaming leaf for logs;
+   - the dashboard benchmark in CI against ratatui.
+4. **Layout and app shell:**
    - layout: constraints and grid;
    - screens and navigation;
    - async tasks writing signals;
    - app-level theming.
-4. **Developer experience:**
+5. **Developer experience:**
    - a widget inspector (the tree, dirty nodes and damage, live);
    - hot reload of styles;
-   - a project template and a getting-started guide;
+   - a project template and a tutorial;
    - Python.
