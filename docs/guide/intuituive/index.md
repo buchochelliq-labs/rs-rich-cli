@@ -1,7 +1,7 @@
 # Terminal apps (intuiTUIve)
 
 `rs-rich-intuituive` (`intuituive`, new and early) is a framework for
-full-screen terminal apps. You describe the screen once as a tree of nodes
+terminal apps, full-screen or inline. You describe the screen once as a tree of nodes
 and keep your state in **signals**. When a signal changes, the nodes that
 read it draw again, and only the cells that changed are sent to the
 terminal. You never write a draw loop, a layout pass, or "what changed"
@@ -54,19 +54,67 @@ including Ctrl+C and a panic.
 | `label("…")` | Markup that never changes |
 | `renderable(move \|\| table)` | Any rich renderable, rebuilt when the signals it read change |
 | `column([...])`, `row([...])` | Children laid out down or across |
+| `grid([sizes], [...])` | Children in rows and columns (see [Grids](#grids)) |
 | `each(move \|\| keys, \|key\| node)` | One child per key, kept by key across reorders |
+| `switch(move \|\| key, \|key\| node)` | One child at a time, chosen by key; the others are kept (tabs, wizard steps) |
 | `log.view()` | A streaming [`Log`](#logs) |
 | `component(Input::new("Name"), on_done)` | A `rich-interact` component (see [Components](#components)) |
 
-Sizes along the parent's axis:
+`.panel("Title")` wraps a node in a rounded border that is highlighted
+while the focus is inside it, and `.padding(1, 2)` leaves space round it
+(rows above and below, columns either side).
+
+## Layout
+
+A child's size along its parent's axis:
 
 - `.fixed(3)`: exactly 3 cells;
 - `.percent(40)`: 40% of the parent;
+- `.auto()`: as big as its content (the lines a text wraps to, a panel's
+  content and border, a list's rows). When a signal the content reads
+  changes, the parent lays out again, and the nodes after it move;
 - `.flex(2)`: a weighted share of what is left. A node with no size is
   `flex(1)`.
 
-`.panel("Title")` wraps a node in a rounded border that is highlighted
-while the focus is inside it.
+Any of them can be clamped with `.min_size(n)` and `.max_size(n)`. A
+flexible child that reaches a clamp keeps it, and the others share the rest,
+as CSS flexbox does. When the children ask for more than there is, they
+shrink from the last one, to their minimums first.
+
+```rust
+column([
+    text!("{status}").auto(),                    // as tall as the status
+    row([
+        sidebar.percent(25).min_size(20),
+        main.flex(1),
+    ]),
+    label("[muted]q quits").fixed(1),
+])
+.gap(1)
+```
+
+`.gap(1)` leaves a row (or, in a `row`, a column) between neighbours.
+
+### Grids
+
+```rust
+grid(
+    [Size::Fixed(12), Size::Flex(1), Size::Flex(1)],
+    [
+        label("logo").span(1, 2),     // one column, two rows
+        label("title").span(2, 1),    // two columns
+        cpu.panel("CPU"),
+        memory.panel("Memory"),
+    ],
+)
+.rows([Size::Auto])
+.gap(1)
+```
+
+- Children fill the grid row by row; each takes the first place it fits.
+- Columns are the sizes given. Rows share the height evenly unless
+  `.rows([...])` sizes them, and rows past the last size given take that
+  size, so `.rows([Size::Auto])` makes every row as tall as its content.
 
 ## State
 
@@ -134,7 +182,47 @@ A log renders each line once. On an append it moves the rows already on
 screen up and renders only the new lines. That is why a log tail costs less
 than redrawing every row, which is ratatui's approach.
 
-## Timers and threads
+## Screens and modals
+
+An app is a stack of screens. A handler opens one with `cx.push`, and
+`cx.pop` goes back:
+
+```rust
+fn detail(id: u32) -> Node {
+    let count = signal(0);
+    text!("item {id}: {count}")
+        .on_key("+", move |_| count.update(|c| *c += 1))
+        .on_key("esc", |cx| cx.pop())
+}
+
+label("home").on_key("enter", |cx| cx.push(|| detail(7)))
+```
+
+- The screen below is kept, with its state and its focus, and comes back as
+  it was.
+- A screen's closure can create signals and call `every`; its timers stop
+  when it closes.
+- `cx.replace(build)` swaps the top screen, as a wizard's steps do.
+
+A modal is a screen in a box over the one below, which keeps drawing:
+
+```rust
+.on_key("q", |cx| {
+    cx.modal(Size::Auto, Size::Auto, || {
+        label("Quit? [b]y[/] / [b]n[/]")
+            .padding(0, 1)
+            .panel("Quit")
+            .on_key("y", |cx| cx.quit())
+            .on_key("n esc", |cx| cx.pop())
+    })
+})
+```
+
+Its width and height are cells (`Size::Fixed`), a share of the screen
+(`Size::Percent`), the content's size (`Size::Auto`), or the whole screen
+(`Size::Flex`). Keys and clicks reach only the top screen.
+
+## Timers and background work
 
 ```rust
 App::new(|| {
@@ -145,20 +233,67 @@ App::new(|| {
 ```
 
 - **Timers:** `every` runs a handler on a schedule. Call it inside
-  `App::new`'s closure, next to the signals it writes.
-- **Threads:** signals live on the app's thread. To change state from other
-  work, send a closure through a `Proxy`, which you get from `cx.proxy()` or
-  `app.proxy()`:
+  `App::new`'s closure (or a screen's), next to the signals it writes.
+- **Tasks:** `spawn(work, done)` runs `work` on its own thread and `done`
+  with the result back on the app's thread, where it can write signals,
+  open a screen or quit. `spawn_future` does the same for a future that does
+  not need a particular async runtime. Both return a `Task`, which you can
+  `cancel()` (its result is dropped).
 
 ```rust
-.on_key("r", move |cx| {
-    let proxy = cx.proxy();
-    std::thread::spawn(move || {
-        let body = fetch();                       // slow, off the UI thread
-        proxy.run(move || status.set(body));      // back on the UI thread
+.on_key("r", move |_| {
+    spawn(fetch_report, move |report, cx| {
+        cx.push(move || report_screen(report));
     });
 })
 ```
+
+- **Resources:** `resource(fetch)` loads a value in the background and
+  holds `Load::Loading`, `Load::Ready(value)` or `Load::Failed(error)`. A
+  node that reads it redraws when it arrives; `reload()` fetches again and
+  drops any older result still on its way.
+
+```rust
+let user = resource(|| api::user(42));
+text(move || match user.get() {
+    Load::Loading => "[muted]loading…".into(),
+    Load::Ready(user) => format!("Hello, {}", user.name),
+    Load::Failed(error) => format!("[bad]{error}"),
+})
+.on_key("r", move |_| user.reload())
+```
+
+- **Other threads:** signals live on the app's thread. Work you start
+  yourself (a tokio runtime, a file watcher) sends closures through a
+  `Proxy` from `cx.proxy()` or `app.proxy()`: `proxy.run(move ||
+  status.set(body))`, or `proxy.run_with(|cx| …)` for a `Ctx` too.
+
+## Themes
+
+A `Theme` styles what the framework draws (borders, the focused border,
+panel titles) and names styles for markup. The presets, `Theme::dark()` (the
+default), `Theme::light()` and `Theme::mono()`, each define `accent`,
+`muted`, `good`, `warn` and `bad`:
+
+```rust
+label("[accent]ops[/] · [good]12 up[/] · [bad]1 down[/]")
+```
+
+Add your own with `Theme::dark().style("brand", Style::parse("bold magenta")?)`,
+set it with `App::theme`, and switch at run time with `cx.set_theme(theme)`;
+everything is drawn again in the new theme.
+
+## Inline apps
+
+```rust
+App::new(|| progress_view()).inline(3).run()
+```
+
+`App::inline(rows)` runs in a few rows under the prompt instead of the
+alternate screen, like a command's progress output. Only those rows are
+drawn, with cursor moves relative to them, so the scrollback above is left
+alone. When the app ends, its last frame stays, and the prompt continues
+below it. The mouse is left to the terminal.
 
 ## Testing
 
@@ -172,7 +307,8 @@ assert_eq!(screen[0].trim_end(), "Count: 2");
 
 For more control, such as clicks, resizes, waits on a virtual clock, or the
 exact bytes sent, use `App::run_on` with `rs-rich-interact`'s `Headless`
-backend.
+backend. `App::wait_for_tasks(true)` waits for background tasks before each
+scripted event, so a test sees a task's result however fast the machine is.
 
 ## Against ratatui
 
@@ -182,9 +318,9 @@ bytes.
 
 | 80x24, release | ratatui | intuiTUIve |
 |---|---:|---:|
-| status tick | 92 µs, 37 B | **14 µs, 18 B** |
-| selection move | 112 µs, 184 B | **43 µs, 118 B** |
-| log append | 92 µs, 443 B | **46 µs, 394 B** |
+| status tick | 95 µs, 37 B | **15 µs, 18 B** |
+| selection move | 97 µs, 184 B | **39 µs, 118 B** |
+| log append | 94 µs, 443 B | **47 µs, 428 B** |
 
 [The design note](../../design/intuituive.md) explains why. It also lists
 the architectural problems in ratatui that intuiTUIve is built to avoid:
@@ -197,10 +333,9 @@ widgets in an existing app, and ratatui widgets run inside rs-rich-interact.
 
 ## Status
 
-This is an early slice. Still to come:
+This is an early slice (0.0.x), so the API will change. Still to come:
 
-- inline (non-full-screen) mode;
-- constraint and grid layout;
-- screens and navigation;
-- app-level themes beyond borders;
-- a widget inspector.
+- a widget inspector (the tree, dirty nodes and damage, live);
+- hot reload of styles;
+- a project template and a tutorial;
+- Python.

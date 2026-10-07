@@ -32,6 +32,28 @@ blocking and headless drivers and every existing component carry over),
   up, and `on_click` routed by the layout the last frame kept.
 - Headless testing through rich-interact's driver (`App::render_with`,
   `App::run_on`).
+- Layout: `Size::Auto` (a child as big as its content, measured again when
+  a signal the content reads changes), `min_size` and `max_size` clamps
+  resolved the way CSS flexbox resolves flexible lengths, `gap`,
+  `padding`, a `grid` with column and row tracks and children spanning
+  several, and `switch` (one child shown by key, the others kept with their
+  state: tabs, wizard steps). A container whose layout changes clears its
+  area, so moved children leave nothing stale behind.
+- Screens: `Ctx::push`, `Ctx::modal` (centred over the screen below, which
+  keeps drawing), `Ctx::pop` and `Ctx::replace`. Each screen keeps its own
+  focus and timers; keys and clicks reach the top screen only.
+- Background work: `spawn` (a closure on its own thread), `spawn_future`
+  (any runtime-independent future), and `resource` (a value that loads in
+  the background, with `Load::Loading`, `Ready` and `Failed`, and drops
+  stale results on reload). Results arrive on the app's thread with a
+  `Ctx`; `Proxy::run_with` gives other threads the same. `App::wait_for_tasks`
+  makes headless tests of them deterministic.
+- Themes: `Theme::dark`, `light` and `mono` presets, named styles usable in
+  markup (`[accent]…[/]`, `muted`, `good`, `warn`, `bad`, and the
+  framework's `border`, `border.focused` and `title`), and `Ctx::set_theme`
+  to switch at run time.
+- Inline mode: `App::inline(rows)` runs in a region below the prompt, moving
+  the cursor relative to it, and leaves the last frame in the scrollback.
 - A benchmark gate against ratatui 0.30 (`tests/versus_ratatui.rs`, a new
   `ratatui-gate` CI job, run in release): the same ops dashboard drawn both
   ways, failing if intuiTUIve is slower on a status tick or a selection move,

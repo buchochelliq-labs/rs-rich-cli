@@ -30,8 +30,10 @@ fn main() -> std::io::Result<()> {
   - `text!` and `label` for console markup;
   - `renderable` for any rich renderable (`Table`, `Markdown`, `Syntax`,
     charts);
-  - `column` and `row`, with `fixed`, `percent` and `flex` sizes;
-  - `each` for keyed lists;
+  - `column`, `row` and `grid`, with `fixed`, `percent`, `flex` and
+    content (`auto`) sizes, `min_size`/`max_size`, gaps, padding and
+    spans;
+  - `each` for keyed lists, `switch` for one child of several (tabs);
   - `panel` for a titled border;
   - `Log` for streaming output;
   - `component` for `rs-rich-interact`'s inputs, selectors, forms and
@@ -44,8 +46,15 @@ fn main() -> std::io::Result<()> {
   - Tab moves the focus;
   - `on_click` receives clicks, routed by the layout the last frame kept;
   - a focused component takes keys first and shows its caret.
-- **Timers and threads:** `every(interval, …)` runs a handler on a schedule,
-  and a `Proxy` lets another thread write signals safely.
+- **Screens:** `cx.push`, `cx.modal` and `cx.pop` keep a stack of screens,
+  each with its own state, focus and timers.
+- **Background work:** `every(interval, …)` runs a handler on a schedule;
+  `spawn`, `spawn_future` and `resource` run slow work off the app's thread
+  and write signals with the result; a `Proxy` lets any thread do the same.
+- **Themes:** dark, light and mono presets with named styles for markup
+  (`[accent]…[/]`), switched at run time with `cx.set_theme`.
+- **Inline apps:** `App::inline(rows)` runs in a few rows under the prompt
+  and leaves its last frame in the scrollback.
 - **Testing:** `App::render_with(keys, width, height)` and `App::run_on` with
   `rs-rich-interact`'s headless driver run an app without a terminal.
 
@@ -57,12 +66,12 @@ the bytes sent per frame:
 
 | 80x24 | ratatui | intuiTUIve |
 |---|---:|---:|
-| status tick | 92 µs, 37 B | **14 µs, 18 B** |
-| selection move | 112 µs, 184 B | **43 µs, 118 B** |
-| log append | 92 µs, 443 B | **46 µs, 394 B** |
+| status tick | 95 µs, 37 B | **15 µs, 18 B** |
+| selection move | 97 µs, 184 B | **39 µs, 118 B** |
+| log append | 94 µs, 443 B | **47 µs, 428 B** |
 
-At 200x60 the gap widens: a tick costs 17 µs against 330, a selection move
-53 against 324, and a log append 266 against 334. intuiTUIve's version is 56
+At 200x60 the gap widens: a tick costs 18 µs against 339, a selection move
+50 against 360, and a log append 248 against 333. intuiTUIve's version is 56
 lines of app code against ratatui's 79.
 
 The test asserts this bar, and CI runs it. The design, and the ratatui
@@ -71,8 +80,7 @@ problems it is built to avoid, are in
 
 ## Status
 
-This is an early slice (0.0.x), so the API will change. Inline
-(non-full-screen) mode, constraint and grid layout, and screens with
-navigation come next.
+This is an early slice (0.0.x), so the API will change. A widget inspector,
+hot reload of styles and a tutorial come next.
 
 Licensed under MIT.

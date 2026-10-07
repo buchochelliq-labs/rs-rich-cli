@@ -121,6 +121,7 @@ fn the_focused_panel_is_highlighted_and_moving_focus_redraws_only_borders() {
     .theme(Theme {
         border: rich::Style::parse("blue").unwrap(),
         border_focused: rich::Style::parse("red").unwrap(),
+        ..Theme::default()
     });
     let record = run(app, Script::new().keys("tab q"), 20, 6);
     let paints: Vec<&String> = record
