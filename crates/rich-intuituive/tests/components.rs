@@ -153,7 +153,7 @@ fn tabs_change_with_number_keys_and_clicks() {
     let make = || {
         let tab = signal(0usize);
         column([
-            tabs(vec!["One".into(), "Two".into(), "Three".into()], tab).fixed(1),
+            tabs(|| vec!["One".into(), "Two".into(), "Three".into()], tab).fixed(1),
             text!("tab {tab}").fixed(1),
         ])
         .on_key("q", |cx| cx.quit())

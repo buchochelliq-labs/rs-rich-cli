@@ -298,7 +298,7 @@ impl Widget for Table {
 }
 
 struct Tabs {
-    titles: Vec<String>,
+    titles: Box<dyn Fn() -> Vec<String>>,
     selected: Signal<usize>,
     /// Where each title was drawn: its first column and width.
     spans: RefCell<Vec<(u16, u16)>>,
@@ -306,8 +306,8 @@ struct Tabs {
 
 /// A strip of tab titles with one selected: ←/→ (or h/l) and the number
 /// keys move it while the strip has the focus, and a click selects a
-/// title. Pair it with [`switch`](crate::switch) on the same signal for the
-/// content:
+/// title. `titles` may read signals. Pair it with [`switch`](crate::switch)
+/// on the same signal for the content:
 ///
 /// ```
 /// use intuituive::prelude::*;
@@ -316,7 +316,7 @@ struct Tabs {
 /// let app = App::new(|| {
 ///     let tab = signal(0usize);
 ///     column([
-///         tabs(vec!["Overview".into(), "Logs".into()], tab).fixed(1),
+///         tabs(|| vec!["Overview".into(), "Logs".into()], tab).fixed(1),
 ///         switch(move || tab.get(), |tab| match tab {
 ///             0 => label("All systems go"),
 ///             _ => label("No logs yet"),
@@ -328,9 +328,9 @@ struct Tabs {
 /// assert_eq!(screen[0].trim_end(), " Overview │ Logs");
 /// assert_eq!(screen[1].trim_end(), "No logs yet");
 /// ```
-pub fn tabs(titles: Vec<String>, selected: Signal<usize>) -> Node {
+pub fn tabs(titles: impl Fn() -> Vec<String> + 'static, selected: Signal<usize>) -> Node {
     widget(Tabs {
-        titles,
+        titles: Box::new(titles),
         selected,
         spans: RefCell::new(Vec::new()),
     })
@@ -344,8 +344,7 @@ impl Widget for Tabs {
     fn measure(&mut self, _cx: &MeasureCx, axis: Axis, _width: u16, _height: u16) -> u16 {
         match axis {
             Axis::Vertical => 1,
-            Axis::Horizontal => self
-                .titles
+            Axis::Horizontal => (self.titles)()
                 .iter()
                 .map(|t| markup_width(t) + 3)
                 .sum::<u16>()
@@ -364,7 +363,7 @@ impl Widget for Tabs {
         let console = cx.console();
         let mut spans = Vec::new();
         let mut x = 0u16;
-        for (i, title) in self.titles.iter().enumerate() {
+        for (i, title) in (self.titles)().iter().enumerate() {
             if i > 0 {
                 canvas.print(x, 0, "│", Some(&divider));
                 x += 1;
@@ -384,7 +383,7 @@ impl Widget for Tabs {
     }
 
     fn event(&mut self, _cx: &mut EventCx, event: &WidgetEvent) -> Used {
-        let last = self.titles.len().saturating_sub(1);
+        let last = (self.titles)().len().saturating_sub(1);
         match event {
             WidgetEvent::Key(key) => match key.code {
                 KeyCode::Left | KeyCode::Char('h') => {

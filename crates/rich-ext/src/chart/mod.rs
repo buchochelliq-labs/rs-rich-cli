@@ -61,10 +61,12 @@ mod gauge;
 mod heatmap;
 mod kpi;
 mod line;
+mod plot_canvas;
 mod scale;
 mod sparkline;
 mod status;
 mod timeline;
+mod xy;
 
 pub use bar::{Bar, BarChart, Histogram, Orientation};
 pub use canvas::DotCanvas;
@@ -72,10 +74,12 @@ pub use gauge::{Band, BulletChart, Gauge};
 pub use heatmap::Heatmap;
 pub use kpi::KpiCard;
 pub use line::{LineChart, Series, SeriesKind};
+pub use plot_canvas::{Canvas, CanvasPainter, Marker};
 pub use scale::{Scale, ValueFormat};
 pub use sparkline::Sparkline;
 pub use status::{State, Status, StatusMatrix};
 pub use timeline::{Milestone, Span, Timeline};
+pub use xy::{Axis, AxisScale, Chart, Dataset, GraphType, Labels, LegendPosition};
 
 use rich::cells::char_cell_width;
 use rich::{Console, ConsoleOptions, Segment, Style};

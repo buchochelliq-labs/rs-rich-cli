@@ -33,8 +33,8 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use intuituive::prelude::*;
-use intuituive::rich::{Console, Segment, Style};
-use rich_ext::chart::DotCanvas;
+use intuituive::rich::{Console, Segment};
+use rich_ext::chart::{Axis, AxisScale, Chart, Dataset, GraphType, Labels, LegendPosition, Marker};
 
 /// One buffer of samples, one row per channel, each in -1 to 1.
 pub type Matrix = Vec<Vec<f64>>;
@@ -335,6 +335,8 @@ pub struct Plot {
     pub y: (f64, f64),
     pub x_title: &'static str,
     pub y_title: &'static str,
+    /// A logarithmic x axis (the spectroscope's frequencies).
+    pub x_log: bool,
 }
 
 fn channel_name(index: usize) -> String {
@@ -411,6 +413,7 @@ pub fn oscilloscope(g: &Graph, o: &Oscilloscope, data: &Matrix) -> Plot {
         y: (-g.scale, g.scale),
         x_title: "time -",
         y_title: "| amplitude",
+        x_log: false,
     }
 }
 
@@ -463,6 +466,7 @@ pub fn vectorscope(g: &Graph, data: &Matrix) -> Plot {
         y: (-g.scale, g.scale),
         x_title: "left -",
         y_title: "| right",
+        x_log: false,
     }
 }
 
@@ -514,22 +518,23 @@ pub fn spectroscope(g: &Graph, s: &Spectroscope, history: &[VecDeque<Vec<f64>>])
     let upper = g.scale * 7.5;
     let mut sets = Vec::new();
     if g.references {
+        // scope-tui's zero line runs to `samples` Hz on its log axis.
         sets.push(DataSet::reference(
             g,
-            (0.0, 0.0),
-            ((g.samples.max(1) as f64).ln(), 0.0),
+            (1.0, 0.0),
+            (g.samples.max(1) as f64, 0.0),
         ));
         // A line at every 10, 20 … 90 Hz, 100 … 900 Hz, 1 … 10 kHz, and 20 kHz.
         for decade in [10.0, 100.0, 1000.0] {
             for step in 1..=9 {
                 let hz = decade * step as f64;
                 if hz >= 20.0 {
-                    sets.push(DataSet::reference(g, (hz.ln(), 0.0), (hz.ln(), upper)));
+                    sets.push(DataSet::reference(g, (hz, 0.0), (hz, upper)));
                 }
             }
         }
         for hz in [10000.0f64, 20000.0] {
-            sets.push(DataSet::reference(g, (hz.ln(), 0.0), (hz.ln(), upper)));
+            sets.push(DataSet::reference(g, (hz, 0.0), (hz, upper)));
         }
     }
     let mut phases = Vec::new();
@@ -553,7 +558,7 @@ pub fn spectroscope(g: &Graph, s: &Spectroscope, history: &[VecDeque<Vec<f64>>])
             .map(|(i, (re, im))| {
                 let magnitude = (re * re + im * im).sqrt();
                 let level = if s.log_y { magnitude.ln() } else { magnitude };
-                ((i as f64 * resolution).ln(), level)
+                (i as f64 * resolution, level)
             })
             .collect();
         if s.phase_diff {
@@ -579,7 +584,7 @@ pub fn spectroscope(g: &Graph, s: &Spectroscope, history: &[VecDeque<Vec<f64>>])
             .zip(right)
             .enumerate()
             .skip(1)
-            .map(|(i, (l, r))| ((i as f64 * resolution).ln(), (l - r).abs()))
+            .map(|(i, (l, r))| (i as f64 * resolution, (l - r).abs()))
             .collect();
         sets.insert(
             0,
@@ -589,10 +594,11 @@ pub fn spectroscope(g: &Graph, s: &Spectroscope, history: &[VecDeque<Vec<f64>>])
     let top = (g.samples as f64 / g.width.max(1) as f64 * 20000.0).max(21.0);
     Plot {
         sets,
-        x: (20f64.ln(), top.ln()),
+        x: (20.0, top),
         y: (0.0, upper),
         x_title: "frequency -",
         y_title: if s.log_y { "| level" } else { "| amplitude" },
+        x_log: true,
     }
 }
 
@@ -613,34 +619,63 @@ pub fn spectroscope_header(g: &Graph, s: &Spectroscope) -> String {
     }
 }
 
-/// Clip the segment `a`–`b` to the box `[0, w] × [0, h]` (Liang–Barsky).
-fn clip(a: (f64, f64), b: (f64, f64), w: f64, h: f64) -> Option<((f64, f64), (f64, f64))> {
-    let (dx, dy) = (b.0 - a.0, b.1 - a.1);
-    let (mut t0, mut t1) = (0.0f64, 1.0f64);
-    for (p, q) in [(-dx, a.0), (dx, w - a.0), (-dy, a.1), (dy, h - a.1)] {
-        if p == 0.0 {
-            if q < 0.0 {
-                return None;
-            }
+/// `plot` as a chart laid out as ratatui's `Chart` is, which is what
+/// scope-tui draws with: the y axis's title above its line, the x axis
+/// along the bottom with its title at the right, and the legend at the top
+/// right. Braille dots, 2x4 a cell, or one dot a cell without Braille.
+pub fn chart(plot: &Plot, g: &Graph, width: u16, height: u16) -> Chart {
+    let marker = if g.braille {
+        Marker::Braille
+    } else {
+        Marker::Dot
+    };
+    let datasets = plot.sets.iter().map(|set| {
+        let kind = if set.scatter {
+            GraphType::Scatter
         } else {
-            let r = q / p;
-            if p < 0.0 {
-                t0 = t0.max(r);
-            } else {
-                t1 = t1.min(r);
-            }
+            GraphType::Line
+        };
+        let dataset = Dataset::new(set.points.iter().copied())
+            .graph_type(kind)
+            .marker(marker)
+            .style(set.style.clone());
+        match &set.name {
+            Some(name) => dataset.name(name.clone()),
+            None => dataset,
         }
-    }
-    (t0 <= t1).then_some((
-        (a.0 + t0 * dx, a.1 + t0 * dy),
-        (a.0 + t1 * dx, a.1 + t1 * dy),
-    ))
+    });
+    // Lines but no labels, as scope-tui's axes; titles only with the
+    // interface shown.
+    let axis = |(min, max): (f64, f64), title: &str, scale: AxisScale| {
+        let axis = Axis::default()
+            .bounds(min, max)
+            .scale(scale)
+            .labels(Labels::Values(Vec::new()))
+            .style(g.axis.clone());
+        if g.show_ui {
+            axis.title(title).title_style(g.labels.clone())
+        } else {
+            axis
+        }
+    };
+    let x_scale = if plot.x_log {
+        AxisScale::Log
+    } else {
+        AxisScale::Linear
+    };
+    Chart::new(datasets)
+        .x_axis(axis(plot.x, plot.x_title, x_scale))
+        .y_axis(axis(plot.y, plot.y_title, AxisScale::Linear))
+        .legend(if g.show_ui {
+            LegendPosition::TopRight
+        } else {
+            LegendPosition::None
+        })
+        .width(width as usize)
+        .height(height as usize)
 }
 
-/// Draw `plot` in `width` x `height` cells as ratatui's `Chart` lays one
-/// out: the y axis's title above it, the x axis along the bottom with its
-/// title at the right, and a legend at the top right. Braille dots, 2x4 a
-/// cell, or one dot a cell without Braille.
+/// Draw `plot` in `width` x `height` cells (see [`chart`]).
 pub fn draw(
     plot: &Plot,
     g: &Graph,
@@ -648,156 +683,11 @@ pub fn draw(
     width: u16,
     height: u16,
 ) -> Vec<Vec<Segment>> {
-    let (w, h) = (width as usize, height as usize);
-    if w < 3 || h < 2 {
+    if width < 3 || height < 2 {
         return Vec::new();
     }
-    let mut styles: Vec<Option<Style>> = Vec::new();
-    let mut style_of = |spec: &str| -> usize {
-        styles.push(Style::parse(spec).ok());
-        styles.len() - 1
-    };
-    let mut grid: Vec<Vec<(char, Option<usize>)>> = vec![vec![(' ', None); w]; h];
-    let labels = style_of(&g.labels);
-    let axis = style_of(&g.axis);
-    let top = usize::from(g.show_ui);
-    let bottom = h - 1;
-    // The axes, and their titles.
-    for row in grid.iter_mut().take(bottom).skip(top) {
-        row[0] = ('│', Some(axis));
-    }
-    grid[bottom][0] = ('└', Some(axis));
-    for cell in &mut grid[bottom][1..] {
-        *cell = ('─', Some(axis));
-    }
-    if g.show_ui {
-        for (i, c) in plot.y_title.chars().take(w).enumerate() {
-            grid[0][i] = (c, Some(labels));
-        }
-        let title: Vec<char> = plot.x_title.chars().collect();
-        if title.len() + 2 < w {
-            for (i, c) in title.iter().enumerate() {
-                grid[bottom][w - title.len() + i] = (*c, Some(labels));
-            }
-        }
-    }
-    // The data, on a canvas right of the y axis and above the x axis.
-    let (cw, ch) = (w - 1, bottom - top);
-    if ch > 0 {
-        let (sx, sy) = if g.braille { (2.0, 4.0) } else { (1.0, 1.0) };
-        let (dw, dh) = (cw as f64 * sx - 1.0, ch as f64 * sy - 1.0);
-        let span_x = (plot.x.1 - plot.x.0).max(f64::EPSILON);
-        let span_y = (plot.y.1 - plot.y.0).max(f64::EPSILON);
-        let at = |(x, y): (f64, f64)| ((x - plot.x.0) / span_x * dw, (plot.y.1 - y) / span_y * dh);
-        let mut canvas = DotCanvas::new(cw, ch);
-        let mut cells: Vec<Vec<Option<usize>>> = vec![vec![None; cw]; ch];
-        for set in &plot.sets {
-            let layer = style_of(&set.style);
-            let mut dot = |x: f64, y: f64| {
-                let (x, y) = (x.round() as i64, y.round() as i64);
-                if g.braille {
-                    canvas.set(x, y, layer);
-                } else if (0..cw as i64).contains(&x) && (0..ch as i64).contains(&y) {
-                    cells[y as usize][x as usize] = Some(layer);
-                }
-            };
-            let finite = set
-                .points
-                .iter()
-                .filter(|(x, y)| x.is_finite() && y.is_finite())
-                .map(|p| at(*p));
-            if set.scatter {
-                finite.for_each(|(x, y)| dot(x, y));
-                continue;
-            }
-            let points: Vec<(f64, f64)> = finite.collect();
-            if points.len() == 1 {
-                dot(points[0].0, points[0].1);
-            }
-            for pair in points.windows(2) {
-                let Some((a, b)) = clip(pair[0], pair[1], dw, dh) else {
-                    continue;
-                };
-                let steps = (b.0 - a.0).abs().max((b.1 - a.1).abs()).ceil().max(1.0);
-                for step in 0..=steps as usize {
-                    let t = step as f64 / steps;
-                    dot(a.0 + (b.0 - a.0) * t, a.1 + (b.1 - a.1) * t);
-                }
-            }
-        }
-        for row in 0..ch {
-            for col in 0..cw {
-                let cell = if g.braille {
-                    match canvas.cell(col, row) {
-                        (c, Some(layer)) => Some((c, layer)),
-                        _ => None,
-                    }
-                } else {
-                    cells[row][col].map(|layer| ('•', layer))
-                };
-                if let Some((c, layer)) = cell {
-                    grid[top + row][1 + col] = (c, Some(layer));
-                }
-            }
-        }
-        // The legend: the named sets, boxed, at the top right.
-        let named: Vec<(&str, usize)> = plot
-            .sets
-            .iter()
-            .enumerate()
-            .filter_map(|(i, s)| s.name.as_deref().map(|n| (n, i)))
-            .collect();
-        let inner = named
-            .iter()
-            .map(|(n, _)| n.chars().count())
-            .max()
-            .unwrap_or(0);
-        if g.show_ui && !named.is_empty() && inner + 3 < cw && named.len() + 2 <= ch {
-            let left = w - inner - 2;
-            let set_styles: Vec<usize> = plot.sets.iter().map(|s| style_of(&s.style)).collect();
-            let mut put = |row: usize, col: usize, c: char, style: Option<usize>| {
-                grid[top + row][col] = (c, style)
-            };
-            put(0, left, '┌', Some(axis));
-            put(0, w - 1, '┐', Some(axis));
-            put(named.len() + 1, left, '└', Some(axis));
-            put(named.len() + 1, w - 1, '┘', Some(axis));
-            for col in left + 1..w - 1 {
-                put(0, col, '─', Some(axis));
-                put(named.len() + 1, col, '─', Some(axis));
-            }
-            for (row, (name, set)) in named.iter().enumerate() {
-                put(row + 1, left, '│', Some(axis));
-                put(row + 1, w - 1, '│', Some(axis));
-                let mut chars = name.chars();
-                for col in left + 1..w - 1 {
-                    let c = chars.next().unwrap_or(' ');
-                    put(row + 1, col, c, Some(set_styles[*set]));
-                }
-            }
-        }
-    }
-    let _ = console;
-    grid.into_iter()
-        .map(|row| {
-            let mut line: Vec<Segment> = Vec::new();
-            let mut run = String::new();
-            let mut current: Option<usize> = None;
-            for (c, style) in row {
-                let style = if c == ' ' { None } else { style };
-                if style != current && !run.is_empty() {
-                    line.push(Segment::new(
-                        std::mem::take(&mut run),
-                        current.and_then(|s| styles[s].clone()),
-                    ));
-                }
-                current = style;
-                run.push(c);
-            }
-            line.push(Segment::new(run, current.and_then(|s| styles[s].clone())));
-            line
-        })
-        .collect()
+    let options = console.options().update_width(width as usize);
+    console.render_lines(&chart(plot, g, width, height), &options, false)
 }
 
 /// The options scope-tui takes on its command line.

@@ -46,14 +46,17 @@ covers both. Three complete ports show where it leads:
 | `Block::bordered().title(t)` | `.panel(t)`; `.padding(v, h)` for space |
 | `Paragraph`, `Line`, `Span` | `text!("…{signal}…")`, `label("…")`, console markup |
 | `List` + `ListState` | `list(items, selected)` (scrolls, highlights, binds ↑↓ jk) |
-| `Table` + `TableState` | `renderable(\|\| table)` with a rich `Table`, or `each` rows |
-| `Tabs` | `switch(\|\| tab.get(), build)` plus a label |
-| `Gauge`, `Sparkline`, `BarChart`, `Chart` | `rich_ext::chart` (`Gauge`, `Sparkline`, `BarChart`, `LineChart`) via `renderable` |
+| `Table` + `TableState` | `table(columns, rows, selected)` (sized columns, a sticky header, keys, clicks); `virtual_table` for huge ones |
+| `Tabs` | `tabs(titles, selected)` with `switch(\|\| tab.get(), build)` for the content |
+| `Scrollbar` and a scroll offset | `scroll(child)`: a viewport with keys, the wheel and a scrollbar |
+| `Chart`, `Canvas` | `rich_ext::chart::{Chart, Canvas}` (laid out as ratatui's) via `renderable` |
+| `Gauge`, `Sparkline`, `BarChart` | `rich_ext::chart` (`Gauge`, `Sparkline`, `BarChart`) via `renderable` |
 | `Clear` + a centred popup | `cx.modal(width, height, build)` |
-| `Canvas` / a custom `Widget` | `leaf(\|console, w, h\| lines)`, or keep the widget (path 2) |
+| A popup placed next to a widget | `cx.popup(anchor, Placement::Below, width, height, build)` |
+| A custom `Widget` | `impl Widget` and `widget(w)` (cells, events, children, focus); `leaf` for drawing only; or keep the widget (path 2) |
 | `crossterm::event::read()` + `match` | `.on_key("q", …)` on the node that owns the key; keys bubble |
 | A focus enum and Tab handling | `.focusable()` / `.focus_style(..)`; Tab and Shift+Tab are built in |
-| Mouse hit-testing against stored `Rect`s | `.on_click(…)` |
+| Mouse hit-testing against stored `Rect`s | `.on_click(…)`, `.on_mouse(…)`; events arrive in the node's own coordinates and bubble |
 | A tick rate in the loop | `every(interval, …)` |
 | Threads and channels into the loop | `spawn(work, done)`, `resource(fetch)`, `Proxy::run` |
 | "When X changes, do Y" in the loop | `watch(\|\| x.get(), \|x, cx\| …)` |
@@ -81,7 +84,7 @@ tree. The widget can read signals: when they change, it draws again.
 
 ```toml
 [dependencies]
-rs-rich-intuituive = "0.0.1"
+rs-rich-intuituive = "0.0.2"
 rs-rich-ratatui = { version = "0.0.1", features = ["interact"] }
 ratatui = "0.30"
 ```
@@ -256,7 +259,7 @@ inside it reads a signal it does not need.
 ## Worked example: a Yazi-style file manager
 
 [`examples/files.rs`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/crates/rich-intuituive/examples/files.rs)
-reproduces Yazi's core behaviour in about 420 lines, including its helpers.
+reproduces Yazi's core behaviour in about 550 lines, including its helpers.
 Its tests are in `tests/files.rs`. It does not reuse any of Yazi's code: it
 is a rebuild of the behaviour, showing how a large ratatui app's ideas map.
 
@@ -270,16 +273,20 @@ is a rebuild of the behaviour, showing how a large ratatui app's ideas map.
 | Yazi does | The rebuild uses |
 |---|---|
 | Three columns: parent, current, preview | `row([parent, current, preview]).gap(1)` with `.flex(1)`, `.flex(4)`, `.flex(3)` |
-| A selectable, scrolling file list | `list(move \|\| rows, selected)` |
+| A selectable, scrolling file list with sizes | `table(columns, rows, selected)`: a name and a size column; keys, clicks and the wheel move the selection |
 | The parent column marks the current directory | a second `list(..)` with `.no_focus()`, its selection kept in step by a `watch` |
 | Previews loaded and highlighted off the UI thread | a `watch` on the selection starts a `spawn`; a generation counter drops stale results |
 | Remembers where you were when you go up | `h` selects the directory you came from |
 | Hidden files, sort order, filter | signals read by one `memo` of the directory listing |
-| Filter prompt | `cx.modal(..)` holding an `Input` component |
+| Filter prompt | `cx.popup(status, Placement::Above, ..)` holding an `Input` component, just above the status line |
+| A preview that J and K scroll | `scroll_with(preview, offset)`; J/K move the offset, and the wheel scrolls it too |
+| Tabs (`t`, 1–9, close) | a signal of directories, `tabs(titles, active)` shown once there are two |
 | Help overlay | `cx.modal(Size::Auto, Size::Auto, help)` |
 | Watches the disk | `every(2s)` re-reads; the listing is a memo, so an unchanged directory draws nothing |
 
 ![The help overlay, a modal sized to its content](../../media/tapes/files/files-help.png)
+
+![Two tabs, and the filter prompt opened just above the status line](../../media/tapes/files/files-filter.png)
 
 Two things the port shows:
 
@@ -288,14 +295,15 @@ Two things the port shows:
    second in a debug build. The preview worker therefore highlights the text
    too, at the pane's size, and the app's thread only copies the finished
    lines onto the screen. Yazi does this for the same reason.
-2. **The listing is data, the list is a view.** One memo holds the filtered,
-   sorted entries. The list, the status bar and the preview `watch` all read
-   it, and each updates only when the part it read changes.
+2. **The listing is data, the table is a view.** One memo holds the
+   filtered, sorted entries. The table, the status bar and the preview
+   `watch` all read it, and each updates only when the part it read
+   changes.
 
 ## Worked example: scope-tui, an oscilloscope
 
 [`examples/scope.rs`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/crates/rich-intuituive/examples/scope.rs)
-rebuilds [scope-tui](https://github.com/alemidev/scope-tui) in about 1,200
+rebuilds [scope-tui](https://github.com/alemidev/scope-tui) in about 1,100
 lines. Its tests are in `tests/scope.rs`. Like the file manager, it reuses
 none of the original's code. Where the file manager redraws when you press
 a key, this app redraws whenever a new buffer of audio arrives.
@@ -313,7 +321,7 @@ a key, this app redraws whenever a new buffer of audio arrives.
 | Audio from PulseAudio or cpal | raw PCM from a file or stdin (audio piped from `parec`), read on its own thread; a built-in test signal |
 | Three `DisplayMode` trait objects, mutated by key handlers | one signal per mode's settings, and one per shared setting (`Graph`) |
 | The header, a `Table` with percentage columns | a `row` of `text` cells with `.percent(…)` and `.gap(1)` |
-| `Chart` with Braille `Dataset`s, axis titles and a legend | a `leaf` that draws on rs-rich-ext's `DotCanvas`, laid out as `Chart` is |
+| `Chart` with Braille `Dataset`s, axis titles and a legend | rs-rich-ext's `Chart`, laid out as ratatui's, with the same `Dataset`s; the spectroscope's frequencies on a log `Axis` |
 | `rustfft` for the spectrum | a 40-line radix-2 FFT in the example |
 | Shift ×10, Ctrl ×5, Alt ×⅕ on every step | the same bindings, made in a loop over the modifiers |
 | `h` hides the interface | `switch` on the `show_ui` setting |

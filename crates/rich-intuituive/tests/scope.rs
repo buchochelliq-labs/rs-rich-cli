@@ -120,7 +120,7 @@ fn the_spectroscope_peaks_at_the_test_tones() {
             .copied()
             .max_by(|a, b| a.1.total_cmp(&b.1))
             .unwrap();
-        x.exp().round()
+        x.round()
     };
     // 3 and 2 cycles a buffer of 2048 at 48 kHz.
     assert_eq!(peak(&plot.sets[0]), (3.0 * 48000.0 / 2048.0f64).round());
@@ -185,13 +185,14 @@ fn it_opens_on_the_oscilloscope_with_its_header_and_legend() {
     ] {
         assert!(header.contains(part), "{part:?} in {header:?}");
     }
-    assert!(rows[1].starts_with("| amplitude"), "{:?}", rows[1]);
-    assert!(rows.last().unwrap().ends_with("time -"));
+    assert!(rows[1].starts_with("│| amplitude"), "{:?}", rows[1]);
+    // The x title ends the plot's last row, over the axis line.
+    assert!(rows[rows.len() - 2].ends_with("time -"), "{rows:#?}");
     assert!(rows.last().unwrap().starts_with("└──"));
     // The legend lists R then L, boxed at the top right.
-    assert!(rows[2].trim_end().ends_with('┐'));
-    assert!(rows[3].trim_end().ends_with("│R│"), "{:?}", rows[3]);
-    assert!(rows[4].trim_end().ends_with("│L│"), "{:?}", rows[4]);
+    assert!(rows[1].trim_end().ends_with('┐'));
+    assert!(rows[2].trim_end().ends_with("│R│"), "{:?}", rows[2]);
+    assert!(rows[3].trim_end().ends_with("│L│"), "{:?}", rows[3]);
     assert!(braille(&rows) > 100, "the waveforms are drawn");
 }
 
@@ -199,8 +200,8 @@ fn it_opens_on_the_oscilloscope_with_its_header_and_legend() {
 fn tab_cycles_the_three_scopes() {
     let rows = after("tab");
     assert!(rows[0].contains("vector::scope-tui"));
-    assert!(rows[1].starts_with("| right"));
-    assert!(rows.last().unwrap().ends_with("left -"));
+    assert!(rows[1].starts_with("│| right"));
+    assert!(rows[rows.len() - 2].ends_with("left -"));
     assert!(braille(&rows) > 100);
     let rows = after("tab tab");
     assert!(rows[0].contains("spectro::scope-tui"));
@@ -209,7 +210,7 @@ fn tab_cycles_the_three_scopes() {
         "{:?}",
         rows[0]
     );
-    assert!(rows[1].starts_with("| level"));
+    assert!(rows[1].starts_with("│| level"));
     let rows = after("tab tab tab");
     assert!(rows[0].contains("oscillo::scope-tui"));
 }
@@ -238,7 +239,7 @@ fn the_spectroscope_averages_and_windows() {
         "{:?}",
         rows[0]
     );
-    assert!(rows[1].starts_with("| amplitude"), "linear: {:?}", rows[1]);
+    assert!(rows[1].starts_with("│| amplitude"), "linear: {:?}", rows[1]);
     // Shift steps the averaging by 10, ctrl by 5; alt's fifth of a step is
     // nothing.
     let rows = after_at(
@@ -265,7 +266,7 @@ fn the_header_reports_the_padded_bin_width() {
     let tone: Vec<f64> = (0..109).map(|i| (i as f64 * 0.3).sin()).collect();
     let plot = spectroscope(&g, &Spectroscope::default(), &[VecDeque::from([tone])]);
     // The first bin plotted is one bin width up.
-    assert!((plot.sets[0].points[0].0.exp() - 375.0).abs() < 1e-6);
+    assert!((plot.sets[0].points[0].0 - 375.0).abs() < 1e-6);
 }
 
 #[test]
@@ -286,8 +287,10 @@ fn r_removes_the_reference_line() {
             .max()
             .unwrap()
     };
-    let with = after("p");
-    let without = after("p r");
+    // Not the header or the axis line, which run the full width too.
+    let plot = |rows: Vec<String>| rows[1..rows.len() - 1].to_vec();
+    let with = plot(after("p"));
+    let without = plot(after("p r"));
     assert!(middle(&without) < middle(&with), "{without:#?}");
 }
 

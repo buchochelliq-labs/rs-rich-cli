@@ -10,7 +10,7 @@
 # Independent SemVer from 0.0.1.
 [package]
 name = "rs-rich-micro"
-version = "0.0.3"
+version = "0.0.4"
 description = "Micro assets for rs-rich: emoji-sized inline images, packages, a layered registry and :micro: markup"
 edition.workspace = true
 license.workspace = true

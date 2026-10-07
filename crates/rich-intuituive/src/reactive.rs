@@ -351,23 +351,31 @@ impl<T: 'static> Signal<T> {
         let runtime = self.runtime();
         runtime.subscribe(self.slot);
         let values = runtime.values.borrow();
-        f(values[self.slot].downcast_ref::<T>().expect("signal type"))
+        f(values[self.slot]
+            .downcast_ref::<T>()
+            .expect("a signal read inside its own update"))
     }
 
     /// Read without subscribing.
     pub fn with_untracked<R>(&self, f: impl FnOnce(&T) -> R) -> R {
         let runtime = self.runtime();
         let values = runtime.values.borrow();
-        f(values[self.slot].downcast_ref::<T>().expect("signal type"))
+        f(values[self.slot]
+            .downcast_ref::<T>()
+            .expect("a signal read inside its own update"))
     }
 
-    /// Change the value in place; every reader updates.
+    /// Change the value in place; every reader updates. `f` may read other
+    /// signals (not this one, whose value it holds).
     pub fn update(&self, f: impl FnOnce(&mut T)) {
         let runtime = self.runtime();
-        {
-            let mut values = runtime.values.borrow_mut();
-            f(values[self.slot].downcast_mut::<T>().expect("signal type"));
-        }
+        // Out of the table while `f` runs, so the table is not borrowed.
+        let mut value = std::mem::replace(
+            &mut runtime.values.borrow_mut()[self.slot],
+            Box::new(Updating),
+        );
+        f(value.downcast_mut::<T>().expect("signal type"));
+        runtime.values.borrow_mut()[self.slot] = value;
         runtime.changed(self.slot);
     }
 }
@@ -392,6 +400,9 @@ impl<T: PartialEq + 'static> Signal<T> {
         }
     }
 }
+
+/// Stands in a signal's slot while [`Signal::update`] holds its value.
+struct Updating;
 
 /// A value derived from signals (or other memos), recomputed when they
 /// change. Readers update only when the result is different.
@@ -564,6 +575,20 @@ mod tests {
         let result = runtime.enter(|| f(&runtime));
         runtime.close();
         result
+    }
+
+    #[test]
+    fn an_update_may_read_other_signals() {
+        with_runtime(|_| {
+            let index = signal(1usize);
+            let list = signal(vec![10, 20, 30]);
+            // Reading `index` (and a memo over `list`'s neighbour) while
+            // `list` is being written.
+            list.update(|items| items[index.get()] += 1);
+            index.update(|i| *i = list.with(|items| items.len()) - 1);
+            assert_eq!(list.get(), [10, 21, 30]);
+            assert_eq!(index.get(), 2);
+        });
     }
 
     #[test]

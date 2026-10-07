@@ -1,6 +1,23 @@
 # intuiTUIve widgets: the missing components
 
-**Status:** design note, for discussion. Nothing here is built yet. It
+**Status:** built (rs-rich-intuituive 0.0.2, rs-rich-ext 0.0.15), except
+moving the built-in nodes onto the trait, which stays to do. Where the
+build differs from this note:
+
+- **Scrolling draws offscreen** (option (b) below, not (a)). The scroll's
+  child draws into a persistent offscreen screen with its own damage, and
+  the rows in view are copied out. Only what changed inside draws, so it
+  keeps damage exact without teaching every node about clipping. Clicks
+  and the caret are translated through it.
+- **`scroll` and pop-ups are framework nodes, not widgets**, because they
+  change how a subtree is drawn or layered. `table` and `tabs` are built on
+  the public trait.
+- **The scope re-port removed about 110 lines**, not 200: its own plot
+  (axes, legend box, clipping, cell grid) is now rs-rich-ext's `Chart`.
+- **Chart axes follow ratatui**: `Labels::None` draws no axis line, and an
+  empty `Labels::Values` draws the line with no labels.
+
+The original note follows. Its status was: design note, for discussion. It
 follows [the intuiTUIve design spike](intuituive.md), whose plan is done
 except for Python, and the two ports that tested the framework on real
 apps: the Yazi-style file manager (`examples/files.rs`) and the scope-tui

@@ -10,7 +10,7 @@
 # 0.0.1. See AGENTS.md → Versioning.
 [package]
 name = "rs-rich-data"
-version = "0.0.1"
+version = "0.0.2"
 description = "Tabular data for rs-rich: CSV, TSV, JSONL, serde and Arrow row sources, type inference, column statistics, profiles and data-quality reports"
 edition.workspace = true
 license.workspace = true

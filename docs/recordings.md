@@ -244,8 +244,10 @@ scrollback above it kept. See [Terminal apps](guide/intuituive/index.md).
 
 `rs-rich-intuituive`'s `files` example, a rebuild of the behaviour of
 [Yazi](https://github.com/sxyazi/yazi) by sxyazi and contributors (MIT), in
-the fixture project: the parent directory, the current one and a preview
-highlighted on a worker thread, then the help overlay. See
+the fixture project: the parent directory, the current one (a table with
+sizes) and a preview highlighted on a worker thread, then the help
+overlay, a second tab, and the filter prompt opened just above the status
+line. See
 [Porting a ratatui app](guide/intuituive/porting.md#worked-example-a-yazi-style-file-manager).
 
 <div class="tape-player" data-cast="../media/tapes/files/files.cast" data-poster="npt:0:3">
@@ -255,6 +257,8 @@ highlighted on a worker thread, then the help overlay. See
 | Browsing | Help |
 |---|---|
 | ![A Rust file previewed](media/tapes/files/files.png) | ![The help overlay](media/tapes/files/files-help.png) |
+| **Tabs** | **Filter** |
+| ![Two tabs](media/tapes/files/files-tabs.png) | ![The filter prompt above the status line](media/tapes/files/files-filter.png) |
 
 [Tape](tapes/files.tape) · [Cast](media/tapes/files/files.cast) · [GIF](media/tapes/files/files.gif) · [Page](media/tapes/files/files.html)
 

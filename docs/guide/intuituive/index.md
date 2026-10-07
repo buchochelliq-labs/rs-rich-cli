@@ -13,7 +13,7 @@ app. Any rich renderable (tables, Markdown, syntax, charts) is a node.
 
 ```toml
 [dependencies]
-rs-rich-intuituive = "0.0.1"
+rs-rich-intuituive = "0.0.2"
 ```
 
 One dependency is enough: `intuituive::rich` is rs-rich and
@@ -208,6 +208,124 @@ A log renders each line once. On an append it moves the rows already on
 screen up and renders only the new lines. That is why a log tail costs less
 than redrawing every row, which is ratatui's approach.
 
+## Tables, tabs and scrolling
+
+```rust
+use intuituive::widgets::{table, tabs, Column};
+
+let selected = signal(0usize);
+let tab = signal(0usize);
+column([
+    tabs(|| vec!["Files".into(), "Log".into()], tab).fixed(1),
+    switch(move || tab.get(), move |tab| match tab {
+        0 => table(
+            vec![Column::new("Name", Size::Flex(1)), Column::new("Size", Size::Auto)],
+            move || files.with(|f| f.iter().map(|f| vec![f.name.clone(), f.size()]).collect()),
+            selected,
+        ),
+        _ => scroll(text(move || log.get())),
+    }),
+])
+```
+
+- **`table(columns, rows, selected)`**:
+  - The header row stays in view, and each column is sized like a child
+    in a row (cells, a percentage, a share, or `Size::Auto` to fit what
+    is in view).
+  - One row is selected. ↑/↓ (or k/j), PgUp/PgDn and Home/End move it, a
+    click selects a row, and the wheel moves it.
+  - `virtual_table(columns, len, row, selected)` asks only for the rows in
+    view, so a million rows cost a screenful.
+- **`tabs(titles, selected)`** is a strip of titles. ←/→ and 1–9 move the
+  selection, and so does a click. Pair it with `switch` on the same
+  signal for the content.
+- **`scroll(child)`** is a viewport onto a child laid out at its full
+  height (up to 4000 rows).
+  - The arrow keys, PgUp/PgDn, Home/End and the wheel scroll it, and a
+    scrollbar appears when the child does not fit.
+  - The focus moving to a node inside scrolls that node into view.
+  - The child draws into an offscreen screen with its own damage, so only
+    what changed inside draws, and the rows in view are copied out.
+  - `scroll_with(child, offset)` puts the first row in view in a signal
+    you can read and set.
+
+## The mouse
+
+Every mouse event (press, release, drag, movement, the wheel) goes to the
+deepest node under the pointer, in that node's own coordinates, and
+bubbles up through its ancestors until one uses it.
+
+- **A press** first focuses the deepest focusable node under the pointer.
+- **`.on_click(handler)`** handles a left click.
+- **`.on_mouse(|cx, mouse| …)`** handles every mouse event. It returns
+  whether it used the event.
+- **A drag** can be kept by the widget it started in, even when the
+  pointer leaves it: call `capture_mouse()` from its handler.
+- **Hover** is state. A widget that asks whether it is hovered draws again
+  when the pointer enters or leaves it. The terminal's movement reports
+  are turned on only once something asks.
+
+## Your own widgets
+
+Anything the built-in nodes do, a widget of yours can do too. It
+implements `Widget`, and `widget(w)` makes a node of it, which takes every
+builder (`.flex`, `.panel`, `.on_key`, `.name`):
+
+```rust
+use intuituive::widget::{widget, Canvas, DrawCx, EventCx, MouseExt, Used, Widget, WidgetEvent};
+
+/// A counter that a click or `+` counts up.
+struct Counter(u32);
+
+impl Widget for Counter {
+    fn name(&self) -> &'static str {
+        "counter"
+    }
+
+    fn draw(&mut self, cx: &mut DrawCx, canvas: &mut Canvas) {
+        let style = cx.style("accent", "bold");
+        canvas.print(0, 0, &format!("count {}", self.0), Some(&style));
+    }
+
+    fn event(&mut self, cx: &mut EventCx, event: &WidgetEvent) -> Used {
+        match event {
+            WidgetEvent::Key(key) if *key == Key::char('+') => {}
+            WidgetEvent::Mouse(mouse) if mouse.is_press() => {}
+            _ => return Used::No,
+        }
+        self.0 += 1;
+        cx.redraw();
+        Used::Yes
+    }
+
+    fn focusable(&self) -> bool {
+        true
+    }
+}
+```
+
+What a widget can do:
+
+- **`draw`** writes cells on a `Canvas`. The canvas is the widget's
+  rectangle, cleared, in its own coordinates, and `print`, `set`, `fill`
+  and `lines` (rendered rich segments) write to it. Signals read here make
+  it draw again.
+- **`event`** gets keys while the focus is on it (or inside it) and mouse
+  events over it. What it does not use bubbles on. `cx.redraw()` draws it
+  again after a change to its own state, and `cx.app()` can quit, open a
+  screen or move the focus.
+- **`measure`** says how big it wants to be, for `Size::Auto` and for
+  modals sized to their content.
+- **`children` and `layout`** make it a container. Its children are
+  ordinary nodes, drawn after it, so it can draw chrome round them (a
+  header, a scrollbar).
+- **`caret`** places the text caret while it has the focus.
+
+`table` and `tabs` are built on this trait, as an app's own widget would
+be. `leaf` is still the shortest way to a node that only draws, and
+`component` hosts rs-rich-interact components, which also run outside an
+app.
+
 ## Screens and modals
 
 ![A modal asking whether to quit, over the screens example](../../media/tapes/intuituive/modal.png)
@@ -249,6 +367,24 @@ A modal is a screen in a box over the one below, which keeps drawing:
 Its width and height are cells (`Size::Fixed`), a share of the screen
 (`Size::Percent`), the content's size (`Size::Auto`), or the whole screen
 (`Size::Flex`). Keys and clicks reach only the top screen.
+
+### Pop-ups
+
+`cx.popup(anchor, placement, width, height, build)` opens a box like a
+modal, but next to a node rather than in the middle of the screen: below,
+above, right or left of `anchor` (a node's `id()`), flipped to the other
+side when there is no room. Esc that nothing used, or a press outside it,
+closes it. Dropdowns, menus and autocomplete lists start here.
+
+```rust
+let field = label("Colour: red").focusable();
+let at = field.id();
+field.on_key("enter", move |cx| {
+    cx.popup(at, Placement::Below, Size::Fixed(12), Size::Auto, || {
+        label("red\ngreen\nblue").panel("Pick").on_key("q", |cx| cx.pop())
+    })
+})
+```
 
 ## Timers and background work
 
@@ -409,4 +545,5 @@ widgets in an existing app, and ratatui widgets run inside rs-rich-interact.
 
 This is an early slice (0.0.x), so the API will change. Still to come:
 Python bindings for the framework, as rs-rich-interact's components already
-have.
+have, and the built-in nodes moved onto the `Widget` trait (see
+[the widgets design note](../../design/intuituive-widgets.md)).

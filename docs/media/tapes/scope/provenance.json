@@ -1,9 +1,9 @@
 {
   "tape": "docs/tapes/scope.tape",
   "tape_fnv1a64": "9d3646e94f699b46",
-  "recorder": "rs-rich-record 0.0.4",
+  "recorder": "rs-rich-record 0.0.5",
   "rich": null,
-  "commit": "11a4420f868e8d824f8019e1b4304b43bb10c071",
+  "commit": "e89d04d15fdbd0dc6e53d72d680a68c10511b2db",
   "screenshots": [
     "oscilloscope",
     "vectorscope",
