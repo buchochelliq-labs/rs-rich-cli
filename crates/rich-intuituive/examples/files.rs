@@ -287,7 +287,9 @@ pub fn files_app(start: PathBuf) -> App {
             selected.set(entries.with_untracked(|e| position(e, name.as_deref())));
         };
 
-        let header = text(move || {
+        // One row, as Yazi's: a path too long for it loses its start, not
+        // the directory you are in.
+        let header = leaf(move |console, width, _| {
             let dir = cwd.get();
             let home = std::env::var_os("HOME").map(PathBuf::from);
             let shown = match home.as_ref().and_then(|h| dir.strip_prefix(h).ok()) {
@@ -295,9 +297,22 @@ pub fn files_app(start: PathBuf) -> App {
                 Some(rest) => format!("~/{}", rest.display()),
                 None => dir.display().to_string(),
             };
-            format!("[bold accent]{}[/]", escape(&shown))
+            let room = (width as usize).max(2);
+            let chars: Vec<char> = shown.chars().collect();
+            let shown = if chars.len() > room {
+                let tail: String = chars[chars.len() - (room - 1)..].iter().collect();
+                format!("…{tail}")
+            } else {
+                shown
+            };
+            let markup = format!("[bold accent]{}[/]", escape(&shown));
+            let text = intuituive::rich::Text::from_markup(&markup)
+                .unwrap_or_else(|_| intuituive::rich::Text::new(shown.clone()));
+            let mut options = console.options().update_width(room);
+            options.no_wrap = Some(true);
+            console.render_lines(&text, &options, false)
         })
-        .auto();
+        .fixed(1);
 
         let status = text(move || {
             let count = entries.with(Vec::len);

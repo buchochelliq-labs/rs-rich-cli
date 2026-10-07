@@ -94,6 +94,19 @@ fn opening_and_going_up_keep_the_place() {
 }
 
 #[test]
+fn a_long_path_keeps_the_header_to_one_row() {
+    let root = tree("long-path-to-show-that-the-header-stays-on-one-row-however-deep");
+    let rows = screen(&run(app(&root), Script::new().keys("q"), 40, 8));
+    assert!(rows[0].starts_with('…'), "{rows:?}");
+    assert!(
+        rows[0].ends_with("however-deep-") || rows[0].contains("however-deep"),
+        "{rows:?}"
+    );
+    // The listing starts on the second row.
+    assert!(rows[1].contains("alpha/"), "{rows:?}");
+}
+
+#[test]
 fn hidden_files_sorting_and_filtering() {
     let root = tree("options");
     let rows = screen(&run(app(&root), Script::new().keys(". q"), 80, 10));
