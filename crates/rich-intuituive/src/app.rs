@@ -820,9 +820,21 @@ impl App {
         let text_frames = self.text_frames;
         let mut driver = self.driver(width, height);
         driver.set_clipboard(backend.clipboard().is_ok());
+        // Text a handler copied, or the mouse selected, onto the clipboard:
+        // after every step that runs handlers (timers, tasks and watches in
+        // `update`, lifecycle events in `render`, input in `event`), so a
+        // copy is neither late nor lost to a quit.
+        fn copy_all(driver: &mut Driver, backend: &mut impl Backend) {
+            for text in driver.take_copies() {
+                if backend.copy(&text).is_ok() {
+                    driver.copied(&text);
+                }
+            }
+        }
         let result = (|| -> io::Result<()> {
             loop {
                 driver.update(backend.elapsed());
+                copy_all(&mut driver, backend);
                 if driver.is_done() {
                     return Ok(());
                 }
@@ -834,6 +846,7 @@ impl App {
                         backend.painted(&driver.screen().plain().join("\n"));
                     }
                 }
+                copy_all(&mut driver, backend);
                 let wait = driver.timeout(backend.elapsed());
                 let Some(event) = backend.read(Some(wait))? else {
                     continue;
@@ -842,11 +855,7 @@ impl App {
                     driver.set_origin(backend.origin());
                 }
                 driver.event(event);
-                for text in driver.take_copies() {
-                    if backend.copy(&text).is_ok() {
-                        driver.copied(&text);
-                    }
-                }
+                copy_all(&mut driver, backend);
                 if driver.is_done() {
                     return Ok(());
                 }

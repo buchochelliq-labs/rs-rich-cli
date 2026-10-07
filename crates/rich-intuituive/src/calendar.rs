@@ -260,6 +260,9 @@ impl Widget for Calendar {
                                 return Used::No;
                             }
                         }
+                        // Not a day: another button is used up, so no
+                        // menu speaks for the old date.
+                        _ if button != Button::Left => return Used::Yes,
                         _ => return Used::No,
                     }
                 }

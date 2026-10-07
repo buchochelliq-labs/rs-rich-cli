@@ -300,7 +300,13 @@ impl Widget for Tree {
                 match mouse.kind {
                     MouseKind::Down(button) => {
                         let Some(row) = rows.get(self.first.get() + mouse.row as usize) else {
-                            return Used::No;
+                            // Below the rows: another button is used up, so
+                            // no menu speaks for an old selection.
+                            return if button == Button::Left {
+                                Used::No
+                            } else {
+                                Used::Yes
+                            };
                         };
                         let arrow = 2 * (row.path.len() as u16 - 1);
                         let left = button == Button::Left;

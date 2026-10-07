@@ -337,14 +337,15 @@ impl Widget for Table {
             WidgetEvent::Mouse(mouse) => match mouse.kind {
                 MouseKind::Down(button) if mouse.row >= self.header as u16 => {
                     let row = self.first.get() + (mouse.row - self.header as u16) as usize;
+                    // Another button on a row selects it and leaves the
+                    // press to the node's own handler: a right click's menu
+                    // is about the row it selected. Below the rows it is
+                    // used up, so no menu speaks for an old selection.
                     if row < self.rows.len() {
                         self.selected.set(row);
-                    }
-                    // Another button selects the row and leaves the press
-                    // to the node's own handler: a right click's menu is
-                    // about the row it selected.
-                    if button != Button::Left {
-                        return Used::No;
+                        if button != Button::Left {
+                            return Used::No;
+                        }
                     }
                 }
                 MouseKind::ScrollUp => self.step(-3),

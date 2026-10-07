@@ -214,3 +214,13 @@ fn the_help_is_made_from_the_bindings() {
         assert!(row_of(&rows, line).is_some(), "{line}: {rows:?}");
     }
 }
+
+#[test]
+fn a_right_click_below_the_rows_opens_nothing() {
+    let root = tree("blank");
+    // Five entries fill rows 2 to 6; row 8 is empty.
+    let script = Script::new().mouse(MouseKind::Down(Button::Right), 20, 8);
+    let rows = screen(&run_open(app(&root), script, 80, 14));
+    assert!(row_of(&rows, "Yank path").is_none(), "{rows:?}");
+    assert!(rows.last().unwrap().contains("1/5"), "{rows:?}");
+}

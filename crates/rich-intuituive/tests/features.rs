@@ -238,3 +238,17 @@ fn a_popup_can_anchor_to_a_rectangle_of_the_screen() {
     assert_eq!(row_of(&rows, "Up"), Some(3), "{rows:?}");
     assert_eq!(rows[3].find('│'), Some(10), "{rows:?}");
 }
+
+#[test]
+fn a_copy_from_a_timer_reaches_the_clipboard_before_the_app_quits() {
+    let app = App::new(|| {
+        every(Duration::from_millis(5), |cx| {
+            cx.copy("from a timer");
+            cx.quit();
+        });
+        label("waiting")
+    });
+    // The timer quits in the same turn: no input follows it.
+    let record = run(app, Script::new().wait(Duration::from_millis(20)), 20, 2);
+    assert_eq!(record.copies, ["from a timer"]);
+}
