@@ -33,7 +33,7 @@ use std::hash::Hash;
 use std::rc::Rc;
 
 use rich::{Console, Renderable, Segment, Style};
-use rich_interact::{Component, Context, Event, Flow, Key, View};
+use rich_interact::{Component, Context, Event, Flow, Key, Mouse, View};
 
 use crate::app::Ctx;
 pub use crate::layout::Size;
@@ -49,6 +49,9 @@ pub enum Axis {
 
 type Draw = Box<dyn Fn(&Console, u16, u16) -> Vec<Vec<Segment>>>;
 pub(crate) type Handler = Box<dyn FnMut(&mut Ctx)>;
+/// A mouse handler: the event in the node's coordinates; whether it used
+/// it.
+pub(crate) type MouseHandler = Box<dyn FnMut(&mut Ctx, Mouse) -> bool>;
 
 pub(crate) enum Kind {
     Leaf(Draw),
@@ -72,6 +75,35 @@ pub(crate) enum Kind {
     Switch(Box<dyn Switching>),
     Log(crate::log::LogView),
     Host(Box<dyn Hosted>),
+    /// A [`Widget`](crate::widget::Widget), and where its children were
+    /// laid out last.
+    Custom {
+        widget: Box<dyn crate::widget::Widget>,
+        areas: Vec<Rect>,
+    },
+    Scroll(Box<Scroll>),
+}
+
+/// The most rows a [`scroll`] lays its child out in.
+const MAX_SCROLL_ROWS: u16 = 4000;
+
+/// A viewport onto a child laid out at its full height. The child draws
+/// into an offscreen screen of its own, with its own damage, and the rows
+/// in view are copied out.
+pub(crate) struct Scroll {
+    child: Box<Node>,
+    /// The first row in view.
+    offset: Signal<u16>,
+    buffer: Screen,
+    /// The child's width and height last laid out.
+    width: u16,
+    content: u16,
+    /// The offset last copied out.
+    shown: Option<u16>,
+    /// The focused node inside, when it was last scrolled into view.
+    focus: Option<NodeId>,
+    /// Rows in view and rows of content, for the keys.
+    extent: Rc<Cell<(u16, u16)>>,
 }
 
 /// Children along an axis.
@@ -93,13 +125,7 @@ pub(crate) struct Grid {
     areas: Vec<Rect>,
 }
 
-/// What a hosted component did with an event.
-pub(crate) enum Used {
-    /// It used it (and may look different now).
-    Yes,
-    /// Not for it: the event bubbles to the node's ancestors.
-    No,
-}
+pub(crate) use crate::widget::Used;
 
 /// A `rich-interact` component living in the tree.
 pub(crate) trait Hosted {
@@ -170,6 +196,7 @@ pub struct Node {
     pub(crate) focusable: bool,
     pub(crate) keys: RefCell<Vec<(Vec<Key>, String, Handler)>>,
     pub(crate) click: RefCell<Option<Handler>>,
+    pub(crate) mouse: RefCell<Option<MouseHandler>>,
     /// Where a hosted component wants the text caret, on the screen.
     pub(crate) caret: Cell<Option<(u16, u16)>>,
     /// What the inspector calls it: its [`name`](Node::name), else the
@@ -199,6 +226,7 @@ impl Node {
             focusable: false,
             keys: RefCell::new(Vec::new()),
             click: RefCell::new(None),
+            mouse: RefCell::new(None),
             caret: Cell::new(None),
             name: None,
             what: "node",
@@ -357,6 +385,16 @@ impl Node {
         self
     }
 
+    /// Run `handler` for every mouse event over this node (presses, releases,
+    /// drags, movement, the wheel), in the node's own coordinates, before
+    /// its ancestors see it. It returns whether it used the event; one it
+    /// did not use bubbles up. A press does not focus the node unless it is
+    /// [focusable](Self::focusable).
+    pub fn on_mouse(self, handler: impl FnMut(&mut Ctx, Mouse) -> bool + 'static) -> Node {
+        *self.mouse.borrow_mut() = Some(Box::new(handler));
+        self
+    }
+
     /// For a [`component`] node: run `handler` when the component is
     /// cancelled (Esc). Without one, the cancelling key bubbles to the
     /// node's ancestors like any unused key. Ignored on other nodes.
@@ -431,31 +469,42 @@ impl Node {
     fn walk_inner(&self, path: &mut Vec<NodeId>, f: &mut dyn FnMut(&Node, &[NodeId])) {
         path.push(self.id);
         f(self, path);
+        self.each_child(&mut |child| child.walk_inner(path, f));
+        path.pop();
+    }
+
+    /// Call `f` with each child that is shown.
+    fn each_child(&self, f: &mut dyn FnMut(&Node)) {
         match &*self.kind.borrow() {
             Kind::Leaf(_) | Kind::Log(_) | Kind::Host(_) => {}
+            Kind::Custom { widget, .. } => {
+                for child in widget.children() {
+                    f(child);
+                }
+            }
             Kind::Stack(stack) => {
                 for child in &stack.children {
-                    child.walk_inner(path, f);
+                    f(child);
                 }
             }
             Kind::Grid(grid) => {
                 for child in &grid.children {
-                    child.walk_inner(path, f);
+                    f(child);
                 }
             }
-            Kind::Panel { child, .. } | Kind::Pad { child, .. } => child.walk_inner(path, f),
+            Kind::Panel { child, .. } | Kind::Pad { child, .. } => f(child),
+            Kind::Scroll(scroll) => f(&scroll.child),
             Kind::Each { list, .. } => {
                 for child in list.children() {
-                    child.walk_inner(path, f);
+                    f(child);
                 }
             }
             Kind::Switch(switch) => {
                 if let Some(child) = switch.current() {
-                    child.walk_inner(path, f);
+                    f(child);
                 }
             }
         }
-        path.pop();
     }
 
     /// Not shown this frame: no rectangle (so no clicks reach it or
@@ -496,6 +545,10 @@ impl Node {
         };
         match &mut *self.kind.borrow_mut() {
             Kind::Leaf(draw) => extent(&draw(console, width.max(1), height)),
+            Kind::Custom { widget, .. } => {
+                widget.measure(&crate::widget::MeasureCx { console }, axis, width, height)
+            }
+            Kind::Scroll(scroll) => scroll.child.measure(console, axis, width, height),
             Kind::Stack(stack) => {
                 let gaps = stack
                     .gap
@@ -751,6 +804,57 @@ impl Node {
                 }
             }
             Kind::Log(view) => draw_log(self.id, view, frame, rect, screen, moved || force),
+            Kind::Scroll(scroll) => draw_scroll(
+                self.id,
+                scroll,
+                frame,
+                rect,
+                screen,
+                moved || force || dirty,
+            ),
+            Kind::Custom { widget, areas } => {
+                let redraw = moved || force || dirty;
+                if redraw {
+                    screen.clear(rect);
+                    let (console, theme) = (frame.console, frame.theme);
+                    let (focus_path, hover_path) = (frame.focus_path, frame.hover_path);
+                    let wants_hover = &frame.wants_hover;
+                    let id = self.id;
+                    let (caret, laid) = frame.runtime.observe_node(id, || {
+                        let mut cx = crate::widget::DrawCx {
+                            console,
+                            theme,
+                            id,
+                            focus_path,
+                            hover_path,
+                            wants_hover,
+                        };
+                        let mut canvas = crate::widget::Canvas {
+                            screen: &mut *screen,
+                            rect,
+                        };
+                        widget.draw(&mut cx, &mut canvas);
+                        let laid = if widget.children().is_empty() {
+                            Vec::new()
+                        } else {
+                            widget.layout(&crate::widget::MeasureCx { console }, rect)
+                        };
+                        (widget.caret(), laid)
+                    });
+                    self.caret.set(caret.and_then(|(x, y)| {
+                        (x < rect.width && y < rect.height).then_some((rect.x + x, rect.y + y))
+                    }));
+                    *areas = laid;
+                    frame.damage.push(rect);
+                    frame.drew(self.id);
+                }
+                for (i, child) in widget.children().iter().enumerate() {
+                    match areas.get(i).map(|area| area.intersection(rect)) {
+                        Some(area) if !area.is_empty() => child.draw(frame, area, screen, redraw),
+                        _ => child.hide(),
+                    }
+                }
+            }
             Kind::Each { list, areas } => {
                 let mut force = force || moved;
                 let pending = list.take_pending();
@@ -821,9 +925,11 @@ impl Node {
         runtime.forget(self.id);
         match &*self.kind.borrow() {
             Kind::Leaf(_) | Kind::Log(_) | Kind::Host(_) => {}
+            Kind::Custom { widget, .. } => widget.children().iter().for_each(|c| c.forget(runtime)),
             Kind::Stack(stack) => stack.children.iter().for_each(|c| c.forget(runtime)),
             Kind::Grid(grid) => grid.children.iter().for_each(|c| c.forget(runtime)),
             Kind::Panel { child, .. } | Kind::Pad { child, .. } => child.forget(runtime),
+            Kind::Scroll(scroll) => scroll.child.forget(runtime),
             Kind::Each { list, .. } => list.children().iter().for_each(|c| c.forget(runtime)),
             Kind::Switch(switch) => switch.all().iter().for_each(|c| c.forget(runtime)),
         }
@@ -1156,6 +1262,185 @@ fn draw_log(
         .min(height);
 }
 
+/// Lay out a scroll's child when anything it read changed, draw it into
+/// its own screen, and copy the rows in view out when they changed.
+fn draw_scroll(
+    id: NodeId,
+    scroll: &mut Scroll,
+    frame: &mut FrameState,
+    rect: Rect,
+    screen: &mut Screen,
+    relayout: bool,
+) {
+    let Scroll {
+        child,
+        offset,
+        buffer,
+        width,
+        content,
+        shown,
+        focus,
+        extent,
+    } = scroll;
+    let mut child_force = false;
+    if relayout || buffer.area().is_empty() {
+        let console = frame.console;
+        let focus_path = frame.focus_path;
+        let child_ref: &Node = child;
+        let (w, h, focused) = frame.runtime.observe_node(id, || {
+            // A scrollbar takes the last column when the content is taller.
+            let full = child_ref.measure(console, Axis::Vertical, rect.width, 0);
+            let (w, h) = if full > rect.height && rect.width > 1 {
+                let w = rect.width - 1;
+                (w, child_ref.measure(console, Axis::Vertical, w, 0))
+            } else {
+                (rect.width, full)
+            };
+            offset.get();
+            (
+                w,
+                h.max(rect.height).min(MAX_SCROLL_ROWS),
+                focus_path.with(|p| p.last().copied()),
+            )
+        });
+        if (w, h) != (*width, *content) || buffer.area().is_empty() {
+            *buffer = Screen::new(w, h);
+            (*width, *content) = (w, h);
+            child_force = true;
+        }
+        extent.set((rect.height, h));
+        // Keep a newly focused node inside in view, once it is laid out.
+        if focused != *focus {
+            *focus = focused;
+            child.draw(frame, Rect::new(0, 0, w, h), buffer, child_force);
+            child_force = false;
+            if let Some(target) = focused {
+                let mut area = None;
+                with_node(child, target, &mut |node| area = Some(node.rect()));
+                if let Some(area) = area.filter(|a| !a.is_empty()) {
+                    let top = offset.get_untracked();
+                    let bottom = top.saturating_add(rect.height);
+                    let next = if area.y < top {
+                        area.y
+                    } else if area.bottom() > bottom {
+                        area.bottom().saturating_sub(rect.height)
+                    } else {
+                        top
+                    };
+                    if next != top {
+                        frame.runtime.untracked(|| offset.set(next));
+                    }
+                }
+            }
+        }
+    }
+    let saved = std::mem::take(&mut frame.damage);
+    child.draw(
+        frame,
+        Rect::new(0, 0, *width, *content),
+        buffer,
+        child_force,
+    );
+    let inner = std::mem::replace(&mut frame.damage, saved);
+    let max = content.saturating_sub(rect.height);
+    let top = offset.get_untracked().min(max);
+    if relayout || !inner.is_empty() || *shown != Some(top) {
+        screen.clear(rect);
+        screen.blit(
+            buffer,
+            Rect::new(0, top, *width, rect.height),
+            rect.x,
+            rect.y,
+        );
+        if *width < rect.width && *content > rect.height {
+            let lines = scrollbar(frame.console, rect.height, top, *content);
+            screen.write_lines(Rect::new(rect.right() - 1, rect.y, 1, rect.height), &lines);
+        }
+        frame.damage.push(rect);
+        frame.drew(id);
+        *shown = Some(top);
+    }
+}
+
+/// A one-column scrollbar `rows` tall for content `content` rows tall,
+/// scrolled to `top`.
+fn scrollbar(console: &Console, rows: u16, top: u16, content: u16) -> Vec<Vec<Segment>> {
+    let style = |name: &str, fallback: &str| {
+        console
+            .get_style(&rich::style::StyleType::Name(name.to_string()))
+            .ok()
+            .or_else(|| Style::parse(fallback).ok())
+    };
+    let (track, thumb) = (
+        style("scrollbar", "bright_black"),
+        style("scrollbar.thumb", "white"),
+    );
+    let (rows_f, content_f) = (rows as f64, content.max(1) as f64);
+    let size = (rows_f * rows_f / content_f).round().clamp(1.0, rows_f);
+    let start = (top as f64 * rows_f / content_f).round().min(rows_f - size);
+    (0..rows)
+        .map(|row| {
+            let on = (row as f64) >= start && (row as f64) < start + size;
+            if on {
+                vec![Segment::new("┃", thumb.clone())]
+            } else {
+                vec![Segment::new("│", track.clone())]
+            }
+        })
+        .collect()
+}
+
+/// A visit in [`walk_screen`]: the node, its path, the shift to screen
+/// coordinates and the part of the screen it can show in.
+pub(crate) type ScreenVisit<'a> = dyn FnMut(&Node, &[NodeId], (i32, i32), Rect) + 'a;
+
+/// Visit every node that is shown, with the translation that takes its
+/// coordinates to the screen's and the part of the screen it can show in
+/// (both change inside a [`scroll`]).
+pub(crate) fn walk_screen(root: &Node, f: &mut ScreenVisit) {
+    fn inner(
+        node: &Node,
+        path: &mut Vec<NodeId>,
+        shift: (i32, i32),
+        clip: Rect,
+        f: &mut ScreenVisit,
+    ) {
+        path.push(node.id);
+        f(node, path, shift, clip);
+        let scrolled = match &*node.kind.borrow() {
+            Kind::Scroll(scroll) => {
+                let rect = translate(node.rect(), shift);
+                let top = scroll.shown.unwrap_or(0) as i32;
+                Some((
+                    (rect.x as i32, rect.y as i32 - top),
+                    rect.intersection(clip),
+                ))
+            }
+            _ => None,
+        };
+        let (shift, clip) = scrolled.unwrap_or((shift, clip));
+        node.each_child(&mut |child| inner(child, path, shift, clip, f));
+        path.pop();
+    }
+    let all = Rect::new(0, 0, u16::MAX, u16::MAX);
+    inner(root, &mut Vec::new(), (0, 0), all, f);
+}
+
+/// `rect` moved by `shift`, clamped to the screen.
+pub(crate) fn translate(rect: Rect, (dx, dy): (i32, i32)) -> Rect {
+    let x = rect.x as i32 + dx;
+    let y = rect.y as i32 + dy;
+    let (x0, y0) = (x.max(0), y.max(0));
+    let width = (rect.width as i32 - (x0 - x)).max(0);
+    let height = (rect.height as i32 - (y0 - y)).max(0);
+    Rect::new(
+        x0.min(u16::MAX as i32) as u16,
+        y0.min(u16::MAX as i32) as u16,
+        width.min(u16::MAX as i32) as u16,
+        height.min(u16::MAX as i32) as u16,
+    )
+}
+
 /// What a frame needs while it draws.
 pub(crate) struct FrameState<'a> {
     pub console: &'a Console,
@@ -1163,6 +1448,11 @@ pub(crate) struct FrameState<'a> {
     pub dirty: HashSet<NodeId>,
     pub damage: Vec<Rect>,
     pub focus_path: Signal<Vec<NodeId>>,
+    /// The nodes under the mouse pointer, outermost first.
+    pub hover_path: Signal<Vec<NodeId>>,
+    /// A widget asked whether it is hovered: the app turns on the
+    /// terminal's pointer movement reports.
+    pub wants_hover: Cell<bool>,
     pub theme: &'a crate::app::Theme,
     /// Nodes drawn this frame.
     pub drawn: usize,
@@ -1434,6 +1724,62 @@ pub fn list(items: impl Fn() -> Vec<String> + 'static, selected: Signal<usize>) 
         })
 }
 
+/// A viewport onto `child`, laid out at its full height (up to 4000 rows)
+/// and scrolled with the arrow keys, PgUp/PgDn and Home/End (when nothing
+/// inside used them) and the mouse wheel, with a scrollbar when it does not
+/// fit. Focus moving to a node inside scrolls it into view. Only the nodes
+/// inside that changed draw; the rows in view are copied out.
+pub fn scroll(child: Node) -> Node {
+    scroll_with(child, crate::reactive::signal(0))
+}
+
+/// [`scroll`], with the first row in view in `offset`: read it, or set it
+/// to scroll from code.
+pub fn scroll_with(child: Node, offset: Signal<u16>) -> Node {
+    let extent = Rc::new(Cell::new((1u16, 1u16)));
+    let by = {
+        let extent = extent.clone();
+        move |rows: i32| {
+            let (view, content) = extent.get();
+            let max = content.saturating_sub(view) as i32;
+            offset.update(|o| *o = (*o as i32 + rows).clamp(0, max) as u16);
+        }
+    };
+    let page = {
+        let extent = extent.clone();
+        move || extent.get().0.max(2) as i32 - 1
+    };
+    let node = Node::new(Kind::Scroll(Box::new(Scroll {
+        child: Box::new(child),
+        offset,
+        buffer: Screen::new(0, 0),
+        width: 0,
+        content: 0,
+        shown: None,
+        focus: None,
+        extent,
+    })))
+    .what("scroll")
+    .focusable();
+    let (up, down, pgup, pgdn, wheel) = (by.clone(), by.clone(), by.clone(), by.clone(), by);
+    let (page_up, page_down) = (page.clone(), page);
+    node.on_key("up", move |_| up(-1))
+        .on_key("down", move |_| down(1))
+        .on_key("pageup", move |_| pgup(-page_up()))
+        .on_key("pagedown", move |_| pgdn(page_down()))
+        .on_key("home", move |_| offset.set(0))
+        .on_key("end", move |_| offset.set(MAX_SCROLL_ROWS))
+        .on_mouse(move |_, mouse| {
+            let rows = match mouse.kind {
+                rich_interact::MouseKind::ScrollUp => -3,
+                rich_interact::MouseKind::ScrollDown => 3,
+                _ => return false,
+            };
+            wheel(rows);
+            true
+        })
+}
+
 /// Children one above the other.
 pub fn column(children: impl IntoIterator<Item = Node>) -> Node {
     stack(Axis::Vertical, children).what("column")
@@ -1666,6 +2012,27 @@ where
         pending: false,
     })))
     .what("switch")
+}
+
+/// The nodes under `column`, `row`, outermost first (the path to the
+/// deepest node whose shown rectangle holds the point), each with the
+/// translation from screen coordinates to its own.
+pub(crate) fn hit_path(root: &Node, column: u16, row: u16) -> Vec<(NodeId, (i32, i32))> {
+    let mut found: Vec<(NodeId, (i32, i32))> = Vec::new();
+    let mut shifts: Vec<(i32, i32)> = Vec::new();
+    walk_screen(root, &mut |node, path, shift, clip| {
+        shifts.truncate(path.len() - 1);
+        shifts.push(shift);
+        let shown = translate(node.rect(), shift).intersection(clip);
+        if shown.contains(column, row) && path.len() > found.len() {
+            found = path
+                .iter()
+                .zip(&shifts)
+                .map(|(id, (dx, dy))| (*id, (-dx, -dy)))
+                .collect();
+        }
+    });
+    found
 }
 
 /// Run `f` on the node with `id`.

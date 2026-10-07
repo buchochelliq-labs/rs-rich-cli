@@ -39,6 +39,7 @@ use crate::layout::Size;
 use crate::node::{with_node, Axis, FrameState, Node};
 use crate::reactive::{signal, NodeId, Proxy, Runtime, Signal};
 use crate::screen::{Painter, Rect, Screen};
+use crate::widget::{Used, WidgetEvent};
 
 /// What a key or click handler can do.
 pub struct Ctx {
@@ -57,10 +58,21 @@ enum FocusMove {
 
 type Build = Box<dyn FnOnce() -> Node>;
 
+/// Where a [pop-up](Ctx::popup) goes, next to its anchor. It flips to the
+/// other side when there is no room.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Placement {
+    Below,
+    Above,
+    Right,
+    Left,
+}
+
 /// A change to the stack of screens.
 enum Nav {
     Push(Build),
     Modal(Size, Size, Build),
+    Popup(NodeId, Placement, Size, Size, Build),
     Pop,
     Replace(Build),
 }
@@ -92,6 +104,28 @@ impl Ctx {
     /// for a border, and bind Esc to [`pop`](Self::pop) to close it.
     pub fn modal(&mut self, width: Size, height: Size, build: impl FnOnce() -> Node + 'static) {
         self.nav.push(Nav::Modal(width, height, Box::new(build)));
+    }
+
+    /// Open a pop-up: `build`'s node in a box `width` x `height` next to the
+    /// node `anchor` (a dropdown under a field, a menu beside a button),
+    /// flipped to the other side when it would leave the screen. It takes
+    /// the keys like a modal; Esc that nothing used, or a press outside it,
+    /// closes it.
+    pub fn popup(
+        &mut self,
+        anchor: NodeId,
+        placement: Placement,
+        width: Size,
+        height: Size,
+        build: impl FnOnce() -> Node + 'static,
+    ) {
+        self.nav.push(Nav::Popup(
+            anchor,
+            placement,
+            width,
+            height,
+            Box::new(build),
+        ));
     }
 
     /// Close the top screen or modal, going back to the one below with the
@@ -315,6 +349,8 @@ struct Layer {
     modal: Option<(Size, Size)>,
     /// Where a modal was last drawn.
     drawn: Option<Rect>,
+    /// For a pop-up: the node it is next to, and on which side.
+    anchor: Option<(NodeId, Placement)>,
     timers: Vec<Timer>,
     /// Its [watches](crate::watch), stopped when it closes.
     watches: Vec<usize>,
@@ -398,6 +434,12 @@ pub struct App {
     /// The backend's clock at the top of this turn of the loop.
     now: Duration,
     focus_path: Signal<Vec<NodeId>>,
+    /// The nodes under the mouse pointer, outermost first.
+    hover_path: Signal<Vec<NodeId>>,
+    /// The node that captured the mouse (a drag in progress).
+    capture: Option<(NodeId, (i32, i32))>,
+    /// Pointer movement reports: (wanted by a widget, turned on).
+    motion: (bool, bool),
     theme: Theme,
     console: Option<Console>,
     /// The console the last frame used, for components handling events.
@@ -440,9 +482,10 @@ impl App {
         let runtime = Runtime::new();
         BUILDING.with(|building| *building.borrow_mut() = Some(Vec::new()));
         WATCHES.with(|watches| *watches.borrow_mut() = Some(Vec::new()));
-        let (root, focus_path) = runtime.enter(|| {
+        let (root, focus_path, hover_path) = runtime.enter(|| {
             let focus_path = signal(Vec::new());
-            (build(), focus_path)
+            let hover_path = signal(Vec::new());
+            (build(), focus_path, hover_path)
         });
         let timers = BUILDING
             .with(|building| building.borrow_mut().take())
@@ -457,12 +500,16 @@ impl App {
                 focus: None,
                 modal: None,
                 drawn: None,
+                anchor: None,
                 timers,
                 watches,
             }],
             restack: false,
             now: Duration::ZERO,
             focus_path,
+            hover_path,
+            capture: None,
+            motion: (false, false),
             theme: Theme::default(),
             console: None,
             last_console: None,
@@ -751,10 +798,9 @@ impl App {
                     } else {
                         0
                     };
-                    if let (MouseKind::Down(button), Some(row)) =
-                        (mouse.kind, mouse.row.checked_sub(top))
-                    {
-                        if self.click(mouse.column, row, button) {
+                    if let Some(row) = mouse.row.checked_sub(top) {
+                        let mouse = rich_interact::Mouse::new(mouse.kind, mouse.column, row);
+                        if self.mouse(mouse) {
                             break;
                         }
                     }
@@ -781,6 +827,12 @@ impl App {
     ) -> io::Result<()> {
         let damage = self.frame(console, screen, full);
         let mut out = painter.paint(screen, &damage);
+        if self.motion.0 && !self.motion.1 && self.inline.is_none() {
+            // A widget reads hover: report the pointer's movement too. The
+            // session turns it off with the rest of the mouse on the way out.
+            out.push_str("\x1b[?1003h");
+            self.motion.1 = true;
+        }
         out.push_str(&self.caret(painter));
         self.stats.bytes = out.len();
         if !out.is_empty() {
@@ -807,7 +859,16 @@ impl App {
     fn caret(&mut self, painter: &mut Painter) -> String {
         let caret = self.focus().and_then(|id| {
             let mut caret = None;
-            with_node(&self.top().root, id, &mut |node| caret = node.caret.get());
+            // Inside a scroll, a node's coordinates are its own: move the
+            // caret onto the screen, and hide it when scrolled out of view.
+            crate::node::walk_screen(&self.top().root, &mut |node, _, shift, clip| {
+                if node.id() == id {
+                    caret = node.caret.get().and_then(|(x, y)| {
+                        let at = crate::node::translate(Rect::new(x, y, 1, 1), shift);
+                        clip.contains(at.x, at.y).then_some((at.x, at.y))
+                    });
+                }
+            });
             caret
         });
         let out = match caret {
@@ -843,9 +904,22 @@ impl App {
         let rects: Vec<Rect> = runtime.enter(|| {
             self.layers[base..]
                 .iter()
-                .map(|layer| match layer.modal {
-                    None => area,
-                    Some((width, height)) => modal_rect(console, &layer.root, area, width, height),
+                .enumerate()
+                .map(|(i, layer)| match (layer.modal, layer.anchor) {
+                    (None, _) => area,
+                    (Some((width, height)), Some((anchor, placement))) => {
+                        // The anchor is on a screen below this one.
+                        let below = &self.layers[..base + i];
+                        let at = below
+                            .iter()
+                            .rev()
+                            .find_map(|layer| anchor_rect(&layer.root, anchor))
+                            .unwrap_or_default();
+                        popup_rect(console, &layer.root, area, at, placement, width, height)
+                    }
+                    (Some((width, height)), None) => {
+                        modal_rect(console, &layer.root, area, width, height)
+                    }
                 })
                 .collect()
         });
@@ -862,6 +936,8 @@ impl App {
             dirty: self.runtime.take_dirty(),
             damage: Vec::new(),
             focus_path: self.focus_path,
+            hover_path: self.hover_path,
+            wants_hover: std::cell::Cell::new(false),
             theme: &self.theme,
             drawn: 0,
             drawn_ids: panel.map(|_| Vec::new()),
@@ -893,6 +969,9 @@ impl App {
             }
         });
         self.stats.drawn = frame.drawn;
+        if frame.wants_hover.get() {
+            self.motion.0 = true;
+        }
         let mut damage = frame.damage;
         if let (Some(panel), Some(drawn)) = (panel, frame.drawn_ids) {
             let inspector = self.inspector.as_mut().expect("a panel means an inspector");
@@ -943,6 +1022,10 @@ impl App {
         match nav {
             Nav::Push(build) => self.open(build, None),
             Nav::Modal(width, height, build) => self.open(build, Some((width, height))),
+            Nav::Popup(anchor, placement, width, height, build) => {
+                self.open(build, Some((width, height)));
+                self.top_mut().anchor = Some((anchor, placement));
+            }
             Nav::Pop => {
                 if self.layers.len() > 1 {
                     self.close();
@@ -951,10 +1034,11 @@ impl App {
                 }
             }
             Nav::Replace(build) => {
-                let modal = self.top().modal;
+                let (modal, anchor) = (self.top().modal, self.top().anchor);
                 if self.layers.len() > 1 {
                     self.close();
                     self.open(build, modal);
+                    self.top_mut().anchor = anchor;
                 } else {
                     // The first screen: its timers go with it.
                     let old = self.layers.pop().expect("an app always has a screen");
@@ -989,6 +1073,7 @@ impl App {
             focus: None,
             modal,
             drawn: None,
+            anchor: None,
             timers,
             watches,
         });
@@ -1158,6 +1243,9 @@ impl App {
             _ => vec![self.top().root.id],
         };
         for &id in path.iter().rev() {
+            if let Some(quit) = self.give_to_widget(id, &WidgetEvent::Key(key)) {
+                return quit;
+            }
             let mut cx = self.ctx();
             let mut used = false;
             let runtime = self.runtime.clone();
@@ -1179,6 +1267,7 @@ impl App {
         match key.code {
             KeyCode::Tab => self.move_focus(true),
             KeyCode::BackTab => self.move_focus(false),
+            KeyCode::Escape if self.top().anchor.is_some() => self.navigate(Nav::Pop),
             _ => {}
         }
         false
@@ -1201,10 +1290,7 @@ impl App {
                         width: rect.width as usize,
                         height: rect.height as usize,
                     };
-                    used = matches!(
-                        host.handle(event, &context, &mut cx),
-                        crate::node::Used::Yes
-                    );
+                    used = matches!(host.handle(event, &context, &mut cx), Used::Yes);
                 }
             });
         });
@@ -1215,43 +1301,232 @@ impl App {
         Some(self.apply(cx))
     }
 
-    /// Route a button press to the deepest node under the pointer that
-    /// takes it: a component gets every button, in its own coordinates; an
-    /// [`on_click`](crate::Node::on_click) handler only the left one.
-    fn click(&mut self, column: u16, row: u16, button: Button) -> bool {
-        let left = button == Button::Left;
-        let mut target = None;
-        self.top().root.walk(&mut |node, _| {
-            let host = matches!(&*node.kind.borrow(), crate::node::Kind::Host(_));
-            let clickable = left && node.click.borrow().is_some();
-            if (host || clickable) && node.rect().contains(column, row) {
-                target = Some((node.id, node.rect()));
-            }
-        });
-        let Some((id, rect)) = target else {
-            return false;
-        };
-        self.set_focus(Some(id));
-        // A component gets the click in its own coordinates.
-        let local =
-            rich_interact::Mouse::new(MouseKind::Down(button), column - rect.x, row - rect.y);
-        if let Some(quit) = self.give_to_host(&Event::Mouse(local)) {
-            return quit;
+    /// Route a mouse event. Movement updates what is hovered; a captured
+    /// mouse goes to the node that captured it; anything else goes to the
+    /// deepest node under the pointer and bubbles up through its ancestors
+    /// until one uses it. A press first focuses the deepest focusable node
+    /// under the pointer. Whether to quit.
+    fn mouse(&mut self, mouse: rich_interact::Mouse) -> bool {
+        let hits = crate::node::hit_path(&self.top().root, mouse.column, mouse.row);
+        let path: Vec<NodeId> = hits.iter().map(|(id, _)| *id).collect();
+        if self.hover_path.get_untracked() != path {
+            let runtime = self.runtime.clone();
+            let hover = self.hover_path;
+            let path = path.clone();
+            runtime.enter(|| hover.set(path));
         }
-        if !left {
+        if let Some((id, shift)) = self.capture {
+            if matches!(mouse.kind, MouseKind::Drag(_) | MouseKind::Up(_)) {
+                if matches!(mouse.kind, MouseKind::Up(_)) {
+                    self.capture = None;
+                }
+                return self.send_mouse(id, shift, mouse).unwrap_or(false);
+            }
+        }
+        if matches!(mouse.kind, MouseKind::Down(_))
+            && self.top().anchor.is_some()
+            && !self
+                .top()
+                .drawn
+                .is_some_and(|r| r.contains(mouse.column, mouse.row))
+        {
+            // A press outside a pop-up closes it.
+            self.navigate(Nav::Pop);
             return false;
+        }
+        if matches!(mouse.kind, MouseKind::Down(_)) {
+            let focusable = path.iter().rev().copied().find(|id| {
+                let mut yes = false;
+                with_node(&self.top().root, *id, &mut |node| yes = node.focusable);
+                yes
+            });
+            if let Some(id) = focusable {
+                self.set_focus(Some(id));
+            }
+        }
+        for &(id, shift) in hits.iter().rev() {
+            if let Some(quit) = self.send_mouse(id, shift, mouse) {
+                return quit;
+            }
+        }
+        false
+    }
+
+    /// Offer `mouse` (in screen coordinates) to node `id`, in its own
+    /// coordinates: a component gets every button, a widget and an
+    /// [`on_mouse`](crate::Node::on_mouse) handler every event, and an
+    /// [`on_click`](crate::Node::on_click) handler a left press. `Some`
+    /// (whether to quit) if one used it.
+    fn send_mouse(
+        &mut self,
+        id: NodeId,
+        shift: (i32, i32),
+        mouse: rich_interact::Mouse,
+    ) -> Option<bool> {
+        let mut rect = Rect::default();
+        let mut host = false;
+        with_node(&self.top().root, id, &mut |node| {
+            rect = node.rect();
+            host = matches!(&*node.kind.borrow(), crate::node::Kind::Host(_));
+        });
+        // Into the node's coordinates (they differ inside a scroll), then
+        // relative to its rectangle.
+        let at = |value: u16, by: i32, from: u16| {
+            (value as i32 + by - from as i32).clamp(0, u16::MAX as i32) as u16
+        };
+        let local = rich_interact::Mouse::new(
+            mouse.kind,
+            at(mouse.column, shift.0, rect.x),
+            at(mouse.row, shift.1, rect.y),
+        );
+        if host && self.focus() == Some(id) {
+            if let Some(quit) = self.give_to_host(&Event::Mouse(local)) {
+                return Some(quit);
+            }
+        }
+        if let Some(quit) = self.give_to_widget_at(id, shift, &WidgetEvent::Mouse(local)) {
+            return Some(quit);
         }
         let mut cx = self.ctx();
+        let mut used = false;
         let runtime = self.runtime.clone();
         runtime.enter(|| {
             with_node(&self.top().root, id, &mut |node| {
-                if let Some(handler) = node.click.borrow_mut().as_mut() {
-                    handler(&mut cx);
+                if let Some(handler) = node.mouse.borrow_mut().as_mut() {
+                    used = handler(&mut cx, local);
+                }
+                if !used && mouse.kind == MouseKind::Down(Button::Left) {
+                    if let Some(handler) = node.click.borrow_mut().as_mut() {
+                        handler(&mut cx);
+                        used = true;
+                    }
                 }
             });
         });
-        self.apply(cx)
+        used.then(|| self.apply(cx))
     }
+
+    /// Offer `event` to node `id` if it is a [widget](crate::widget). `Some`
+    /// (whether to quit) if it used it.
+    fn give_to_widget(&mut self, id: NodeId, event: &WidgetEvent) -> Option<bool> {
+        self.give_to_widget_at(id, (0, 0), event)
+    }
+
+    fn give_to_widget_at(
+        &mut self,
+        id: NodeId,
+        shift: (i32, i32),
+        event: &WidgetEvent,
+    ) -> Option<bool> {
+        let mut cx = self.ctx();
+        let mut used = false;
+        let mut redraw = false;
+        let mut capture = None;
+        let runtime = self.runtime.clone();
+        runtime.enter(|| {
+            with_node(&self.top().root, id, &mut |node| {
+                if let crate::node::Kind::Custom { widget, .. } = &mut *node.kind.borrow_mut() {
+                    let rect = node.rect();
+                    let mut ecx = crate::widget::EventCx {
+                        ctx: &mut cx,
+                        size: (rect.width, rect.height),
+                        redraw: false,
+                        capture: None,
+                    };
+                    used = widget.event(&mut ecx, event) == Used::Yes;
+                    redraw = ecx.redraw;
+                    capture = ecx.capture;
+                }
+            });
+        });
+        if redraw {
+            self.runtime.mark_dirty(id);
+        }
+        match capture {
+            Some(true) => self.capture = Some((id, shift)),
+            Some(false) if self.capture.is_some_and(|(c, _)| c == id) => self.capture = None,
+            _ => {}
+        }
+        used.then(|| self.apply(cx))
+    }
+}
+
+/// Where node `id` is on the screen, if it is in `root`'s tree and shown.
+fn anchor_rect(root: &Node, id: NodeId) -> Option<Rect> {
+    let mut found = None;
+    crate::node::walk_screen(root, &mut |node, _, shift, clip| {
+        if node.id() == id {
+            found = Some(crate::node::translate(node.rect(), shift).intersection(clip));
+        }
+    });
+    found.filter(|r| !r.is_empty())
+}
+
+/// Where a pop-up `width` x `height` goes: on the `placement` side of
+/// `anchor`, or the other side when that has more room, kept inside
+/// `area`.
+fn popup_rect(
+    console: &Console,
+    root: &Node,
+    area: Rect,
+    anchor: Rect,
+    placement: Placement,
+    width: Size,
+    height: Size,
+) -> Rect {
+    let resolve = |size: Size, total: u16, measure: &dyn Fn() -> u16| -> u16 {
+        match size {
+            Size::Fixed(n) => n,
+            Size::Percent(p) => (total as u32 * p.min(100) as u32 / 100) as u16,
+            Size::Auto => measure(),
+            Size::Flex(_) => total,
+        }
+        .min(total)
+    };
+    let w = resolve(width, area.width, &|| {
+        root.measure(console, Axis::Horizontal, area.width, area.height)
+    });
+    let h = resolve(height, area.height, &|| {
+        root.measure(console, Axis::Vertical, w, 0)
+    });
+    let (above, below) = (
+        anchor.y.saturating_sub(area.y),
+        area.bottom().saturating_sub(anchor.bottom()),
+    );
+    let (left, right) = (
+        anchor.x.saturating_sub(area.x),
+        area.right().saturating_sub(anchor.right()),
+    );
+    let (x, y) = match placement {
+        Placement::Below | Placement::Above => {
+            let down = match placement {
+                Placement::Below => below >= h || below >= above,
+                _ => !(above >= h || above >= below),
+            };
+            let y = if down {
+                anchor.bottom()
+            } else {
+                anchor.y.saturating_sub(h)
+            };
+            (anchor.x, y)
+        }
+        Placement::Right | Placement::Left => {
+            let to_right = match placement {
+                Placement::Right => right >= w || right >= left,
+                _ => !(left >= w || left >= right),
+            };
+            let x = if to_right {
+                anchor.right()
+            } else {
+                anchor.x.saturating_sub(w)
+            };
+            (x, anchor.y)
+        }
+    };
+    // Inside the area, sliding back from its right and bottom edges.
+    let x = x.min(area.right().saturating_sub(w)).max(area.x);
+    let y = y.min(area.bottom().saturating_sub(h)).max(area.y);
+    Rect::new(x, y, w, h)
 }
 
 /// Where a modal `width` x `height` goes: centred in `area`.

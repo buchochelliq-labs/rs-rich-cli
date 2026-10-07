@@ -57,6 +57,8 @@ pub mod node;
 pub mod reactive;
 pub mod screen;
 pub mod task;
+pub mod widget;
+pub mod widgets;
 
 /// rs-rich, for renderables, styles and markup helpers, so an app needs
 /// only this crate as a dependency.
@@ -65,23 +67,24 @@ pub use rich;
 /// `interact::Select`, …) and the headless test driver.
 pub use rich_interact as interact;
 
-pub use app::{every, App, Ctx, FrameStats, Theme};
+pub use app::{every, App, Ctx, FrameStats, Placement, Theme};
 pub use layout::Size;
 pub use log::Log;
 pub use node::{
-    column, component, each, grid, label, leaf, list, renderable, repeating, row, switch, text,
-    Node,
+    column, component, each, grid, label, leaf, list, renderable, repeating, row, scroll,
+    scroll_with, switch, text, Node,
 };
 pub use reactive::{memo, signal, watch, Memo, Proxy, Signal};
 pub use task::{resource, spawn, spawn_future, Load, Resource, Task};
+pub use widget::{widget, Widget};
 
 /// Everything an app usually needs.
 pub mod prelude {
     // `text` is both the function and the `text!` macro.
     pub use crate::{
         column, component, each, every, grid, label, leaf, list, memo, renderable, repeating,
-        resource, row, signal, spawn, switch, text, watch, App, Ctx, Load, Log, Memo, Node, Proxy,
-        Resource, Signal, Size, Task, Theme,
+        resource, row, scroll, scroll_with, signal, spawn, switch, text, watch, widget, App, Ctx,
+        Load, Log, Memo, Node, Proxy, Resource, Signal, Size, Task, Theme, Widget,
     };
 }
 
