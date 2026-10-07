@@ -1,0 +1,62 @@
+# crates/rich-ratatui — ratatui interoperability for rs-rich, both ways.
+#
+# Not a port of anything upstream: an rs-rich addition. rich renderables draw
+# as ratatui widgets, ratatui buffers convert back into rich lines, and (behind
+# the off-by-default `interact` feature) ratatui widgets run as rs-rich-interact
+# components. The rich → ratatui direction needs only core `rich` and
+# `ratatui-core`, the crate ratatui's own widget libraries build on, so users
+# of `ratatui` and of `ratatui-core` get the same types. Nothing else in the
+# workspace depends on ratatui. Independent SemVer from 0.0.1. See AGENTS.md →
+# Versioning.
+[package]
+name = "rs-rich-ratatui"
+version = "0.0.1"
+description = "ratatui interop for rs-rich: rich renderables as ratatui widgets, buffers as rich lines, and ratatui widgets as rs-rich-interact components"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+readme = "README.md"
+documentation = "https://docs.rs/rs-rich-ratatui"
+keywords = ["terminal", "ratatui", "tui", "widget", "rich"]
+categories = ["command-line-interface"]
+include = ["src/**/*", "examples/**/*", "README.md", "LICENSE", "Cargo.toml"]
+
+[package.metadata.docs.rs]
+all-features = true
+
+[lib]
+name = "rich_ratatui"
+
+[lints]
+workspace = true
+
+[features]
+default = []
+# `RatatuiComponent`: a ratatui drawing closure as a `rich_interact::Component`,
+# so ratatui widgets run inside a rich-interact event loop (and under its
+# headless driver). Off by default: it pulls in rs-rich-interact and crossterm.
+interact = ["dep:rich-interact"]
+
+[dependencies]
+# Core only: `Renderable`, `Console`, `Segment`, `Style`, `Color`.
+rich.workspace = true
+# `Buffer`, `Cell`, `Rect`, `Style`, `Color`, `Modifier` and the `Widget`
+# trait, without the umbrella crate's backends and widgets. ratatui 0.30
+# re-exports these types, so a `ratatui` app passes its own `Buffer` here.
+ratatui-core = "0.1.2"
+rich-interact = { workspace = true, optional = true }
+
+[dev-dependencies]
+# Tables, panels and Markdown in the tests and the example.
+rich = { workspace = true, features = ["markdown"] }
+# The underline colour on, as ratatui's default features turn it on, so the
+# tests prove the conversions compile and behave with it.
+ratatui-core = { version = "0.1.2", features = ["underline-color"] }
+# `Paragraph` and `Block`, the ratatui widgets the tests draw.
+ratatui-widgets = { version = "0.3.2", default-features = false }
+
+[[example]]
+name = "rich_in_ratatui"
