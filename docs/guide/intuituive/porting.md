@@ -344,7 +344,7 @@ It differs from scope-tui in four small ways:
 
 Every app ported into this repository names where it came from, who made
 it and its licence: in the example's header comment, in its section of
-this guide, and in the crate README. A port that copies code from the
+this guide, and in the recordings gallery. A port that copies code from the
 original must also keep the original's copyright and licence notice with
 that code, as MIT and Apache-2.0 require. The ports here reuse none, so
 the credit is all they carry. Port your own app the same way.
