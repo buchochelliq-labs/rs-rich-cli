@@ -158,3 +158,95 @@ fn an_app_runs_inside_a_ratatui_buffer() {
     assert_eq!(row(0), format!("{}╭─ app ────╮", " ".repeat(12)));
     assert_eq!(row(1), format!("{}│count 2   │", " ".repeat(12)));
 }
+
+#[test]
+fn the_copy_toast_waits_for_the_caller_to_say_the_copy_worked() {
+    let app = App::new(|| label("hello world"));
+    let mut driver = app.driver(30, 3);
+    driver.set_clipboard(true);
+    driver.update(Duration::ZERO);
+    let _ = driver.render();
+    let mouse = |kind, column| Event::Mouse(Mouse::new(kind, column, 0));
+    driver.event(mouse(MouseKind::Down(Button::Left), 0));
+    driver.event(mouse(MouseKind::Drag(Button::Left), 4));
+    driver.event(mouse(MouseKind::Up(Button::Left), 4));
+    let shown = |driver: &mut intuituive::Driver| {
+        driver.update(Duration::from_millis(10));
+        let _ = driver.render();
+        driver.screen().plain().join("\n")
+    };
+    // The copy failed: no toast.
+    assert_eq!(driver.take_copies(), ["hello"]);
+    assert!(!shown(&mut driver).contains("Copied"));
+    // It worked.
+    driver.event(mouse(MouseKind::Down(Button::Left), 6));
+    driver.event(mouse(MouseKind::Drag(Button::Left), 10));
+    driver.event(mouse(MouseKind::Up(Button::Left), 10));
+    for text in driver.take_copies() {
+        driver.copied(&text);
+    }
+    assert!(shown(&mut driver).contains("Copied 5 characters"));
+}
+
+#[test]
+fn a_containers_focus_style_goes_over_its_children_and_off_again() {
+    let app = App::new(|| {
+        let n = signal(0);
+        column([
+            row([text!("n{n}"), label("cd")])
+                .focus_style("reverse")
+                .on_key("+", move |_| n.update(|n| *n += 1))
+                .fixed(1),
+            label("other").focus_style("bold").fixed(1),
+        ])
+    });
+    let mut driver = app.driver(10, 2);
+    let reversed = |driver: &intuituive::Driver, x: u16| {
+        let screen = driver.screen();
+        screen
+            .style(screen.cell(x, 0).style)
+            .is_some_and(|style| style.definition().contains("reverse"))
+    };
+    let step = |driver: &mut intuituive::Driver, key: Option<&str>| {
+        if let Some(key) = key {
+            driver.event(press(key));
+        }
+        driver.update(Duration::ZERO);
+        let _ = driver.render();
+    };
+    step(&mut driver, None);
+    assert!(reversed(&driver, 0), "the row has the focus first");
+    assert!(reversed(&driver, 9), "over both children");
+    // A child drawing again keeps the style.
+    step(&mut driver, Some("+"));
+    assert_eq!(driver.screen().plain()[0].trim_end(), "n1   cd");
+    assert!(reversed(&driver, 0) && reversed(&driver, 9));
+    // The focus moves on: the style goes.
+    step(&mut driver, Some("tab"));
+    assert!(!reversed(&driver, 0) && !reversed(&driver, 9));
+}
+
+#[test]
+fn a_full_redraw_keeps_the_focus_style_over_a_containers_gaps() {
+    let app = App::new(|| {
+        column([label("a").fixed(1), label("b").fixed(1)])
+            .gap(1)
+            .focus_style("reverse")
+    });
+    let mut driver = app.driver(6, 4);
+    let reversed = |driver: &intuituive::Driver, y: u16| {
+        let screen = driver.screen();
+        screen
+            .style(screen.cell(3, y).style)
+            .is_some_and(|style| style.definition().contains("reverse"))
+    };
+    driver.update(Duration::ZERO);
+    let _ = driver.render();
+    assert!(reversed(&driver, 1), "the gap between the rows");
+    // A toast redraws the whole screen.
+    driver.copied("x");
+    driver.update(Duration::ZERO);
+    let _ = driver.render();
+    assert!(reversed(&driver, 1), "the gap, after a full redraw");
+    assert!(reversed(&driver, 2) && reversed(&driver, 0));
+}

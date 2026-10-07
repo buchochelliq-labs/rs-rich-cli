@@ -833,7 +833,9 @@ impl App {
                 }
                 driver.event(event);
                 for text in driver.take_copies() {
-                    let _ = backend.copy(&text);
+                    if backend.copy(&text).is_ok() {
+                        driver.copied(&text);
+                    }
                 }
                 if driver.is_done() {
                     return Ok(());
@@ -1511,6 +1513,18 @@ impl App {
                 }
             }
         };
+        // Containers that asked see the key first, outermost first.
+        for &id in &path[..path.len().saturating_sub(1)] {
+            let mut previews = false;
+            with_node(&self.top().root, id, &mut |node| {
+                previews = node.body.borrow().widget.previews_keys();
+            });
+            if previews {
+                if let Some(quit) = self.give_to_widget(id, &WidgetEvent::Preview(key)) {
+                    return quit;
+                }
+            }
+        }
         for &id in path.iter().rev() {
             if let Some(quit) = self.give_to_widget(id, &WidgetEvent::Key(key)) {
                 return quit;
@@ -1571,15 +1585,7 @@ impl App {
                 break;
             }
             for (id, event) in events {
-                let mut shift = (0, 0);
-                for layer in &self.layers {
-                    for (hit, at) in crate::node::shifts(&layer.root) {
-                        if hit == id {
-                            shift = at;
-                        }
-                    }
-                }
-                if let Some(true) = self.give_to_widget_at(id, shift, &event) {
+                if let Some(true) = self.give_to_widget(id, &event) {
                     return true;
                 }
             }
@@ -1689,12 +1695,7 @@ impl App {
                 }
                 let text = selected_text(screen, start, at);
                 if !text.is_empty() && self.clipboard {
-                    self.copies.push(text.clone());
-                    let n = text.chars().count();
-                    self.toasts.push((
-                        format!("Copied {n} character{}", if n == 1 { "" } else { "s" }),
-                        self.now + Duration::from_secs(2),
-                    ));
+                    self.copies.push(text);
                 }
                 self.restack = true;
                 true
@@ -1751,7 +1752,21 @@ impl App {
     /// Offer `event` to node `id` if it is a [widget](crate::widget). `Some`
     /// (whether to quit) if it used it.
     fn give_to_widget(&mut self, id: NodeId, event: &WidgetEvent) -> Option<bool> {
-        self.give_to_widget_at(id, (0, 0), event)
+        let shift = self.shift_of(id);
+        self.give_to_widget_at(id, shift, event)
+    }
+
+    /// How far a node's coordinates are from the screen's: inside a
+    /// scroll, by the scroll.
+    fn shift_of(&self, id: NodeId) -> (i32, i32) {
+        for layer in &self.layers {
+            for (hit, at) in crate::node::shifts(&layer.root) {
+                if hit == id {
+                    return at;
+                }
+            }
+        }
+        (0, 0)
     }
 
     fn give_to_widget_at(
@@ -2078,9 +2093,20 @@ impl Driver {
     }
 
     /// Text selected with the mouse since the last call, for the loop to
-    /// put on the clipboard (with OSC 52, or the system's).
+    /// put on the clipboard (with OSC 52, or the system's); tell
+    /// [`copied`](Self::copied) when it is there.
     pub fn take_copies(&mut self) -> Vec<String> {
         std::mem::take(&mut self.app.copies)
+    }
+
+    /// `text` is on the clipboard: a toast says so.
+    pub fn copied(&mut self, text: &str) {
+        let n = text.chars().count();
+        self.app.toasts.push((
+            format!("Copied {n} character{}", if n == 1 { "" } else { "s" }),
+            self.app.now + Duration::from_secs(2),
+        ));
+        self.app.restack = true;
     }
 
     /// Inline: the terminal row the app's region starts on, for placing

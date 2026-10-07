@@ -113,7 +113,8 @@ for a loop of the caller's:
 - `render()` returns the bytes for what changed;
 - `timeout(now)` says how long the loop may wait;
 - `event(e)` and `resize(w, h)` take input;
-- `take_copies()` returns text selected with the mouse;
+- `take_copies()` returns text selected with the mouse, and `copied(text)`
+  shows the toast once the loop has put it on the clipboard;
 - `finish()` returns the bytes that restore the terminal;
 - `screen()` and `Screen::lines()` give the frame as cells or styled
   segments.

@@ -71,6 +71,8 @@ pub struct Node {
     pub(crate) rect: Cell<Rect>,
     /// Where it last drew; `None` before its first draw, or while hidden.
     drawn: Cell<Option<Rect>>,
+    /// Whether it was last drawn in its focus style.
+    highlit: Cell<bool>,
     pub(crate) focusable: bool,
     pub(crate) keys: RefCell<Vec<(Vec<Key>, String, Handler)>>,
     pub(crate) click: RefCell<Option<Handler>>,
@@ -120,6 +122,7 @@ impl Node {
             }),
             rect: Cell::new(Rect::default()),
             drawn: Cell::new(None),
+            highlit: Cell::new(false),
             focusable: false,
             keys: RefCell::new(Vec::new()),
             click: RefCell::new(None),
@@ -387,6 +390,7 @@ impl Node {
         self.walk(&mut |node, _| {
             node.rect.set(Rect::default());
             node.drawn.set(None);
+            node.highlit.set(false);
         });
     }
 
@@ -439,6 +443,13 @@ impl Node {
         } = &mut *body;
         let viewport = widget.viewport();
         let console = frame.console;
+        let focused = self.focus_style.is_some()
+            && frame
+                .focus_path
+                .with_untracked(|path| path.last() == Some(&id));
+        // Damage from here on is this node's and its children's: where
+        // the focus style goes over what they drew.
+        let mark = frame.damage.len();
         // What the widget wrote, and whether it painted all of its rectangle.
         let mut written: Vec<Rect> = Vec::new();
         let mut repaint = false;
@@ -468,7 +479,9 @@ impl Node {
             // A widget that keeps what it drew is cleared only when its own
             // children moved: when it moved, or was drawn over, whoever did
             // that cleared the area already.
-            cleared = !widget.retained() || self.focus_style.is_some() || (relaid && !viewport);
+            // Gaining or losing the focus style redraws the lot; keeping it
+            // costs only what is drawn again.
+            cleared = !widget.retained() || focused != self.highlit.get() || (relaid && !viewport);
             repaint = moved || force || cleared;
             if cleared {
                 screen.clear(rect);
@@ -482,7 +495,7 @@ impl Node {
         }
         if redraw {
             let focus_path = frame.focus_path;
-            let focus_style = self.focus_style.as_deref();
+            let focus_style = self.focus_style.is_some();
             let caret = {
                 let mut cx = DrawCx {
                     console,
@@ -506,11 +519,8 @@ impl Node {
                     widget.draw(&mut cx, &mut canvas);
                     // Reading the focus subscribes the node, so it draws
                     // again when the focus comes or goes.
-                    if let Some(style) = focus_style {
-                        if focus_path.with(|path| path.last() == Some(&id)) {
-                            let style = cx.style(style, "reverse");
-                            canvas.restyle(0, 0, rect.width, rect.height, &style);
-                        }
+                    if focus_style {
+                        focus_path.with(|path| path.last() == Some(&id));
                     }
                 });
                 widget.caret()
@@ -561,6 +571,30 @@ impl Node {
                 }
             }
         }
+        // The focus style goes over everything drawn inside the node, its
+        // children's cells included, once they have drawn.
+        if let (true, Some(name)) = (focused, self.focus_style.as_deref()) {
+            let style = crate::widget::theme_style(console, name, "reverse");
+            let mut parts: Vec<Rect> = frame.damage[mark..]
+                .iter()
+                .map(|area| area.intersection(rect))
+                .filter(|area| !area.is_empty())
+                .collect();
+            // Newly focused, or drawn in full (a restack clears the whole
+            // screen first, before this node's damage is counted): the
+            // whole rectangle, gaps and padding included.
+            if !self.highlit.get() || repaint {
+                parts = vec![rect];
+            }
+            for area in parts {
+                for row in area.y..area.bottom() {
+                    for column in area.x..area.right() {
+                        screen.restyle(column, row, &style);
+                    }
+                }
+            }
+        }
+        self.highlit.set(focused);
         self.drawn.set(Some(rect));
     }
 
