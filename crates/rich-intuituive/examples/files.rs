@@ -11,24 +11,30 @@
 //!
 //! j/k or ↑/↓ move · l, → or Enter opens · h or ← goes up · J/K scroll the
 //! preview · . shows hidden files · s sorts by name or size · / filters ·
-//! Esc clears the filter · t opens a tab, 1–9 switch, Ctrl+W closes · ~ goes
-//! home · ? shows the keys · q quits. The mouse selects, and its wheel moves
-//! the selection or scrolls the preview.
+//! Esc clears the filter · y yanks the path · t opens a tab, 1–9 switch,
+//! Ctrl+W closes · ~ goes home · ? shows the keys · Ctrl+P finds a command ·
+//! q quits. The mouse selects, its wheel moves the selection or scrolls the
+//! preview, a right click opens a menu, and the dividers between the
+//! columns drag.
 //!
-//! Built on the framework's components: the current directory is a
-//! `table`, the preview a `scroll`, the filter prompt a `popup` anchored to
-//! the status line, and the tab strip `tabs`.
+//! Built on the framework's components: the columns sit in `hsplit` panes,
+//! the current directory is a `table`, the preview a `scroll`, the filter
+//! prompt a `popup` anchored to the status line, and the tab strip `tabs`.
+//! The help and the command palette are made from the key bindings'
+//! descriptions; a right click opens a `context_menu`; yanking copies the
+//! path to the clipboard and a toast says so.
 
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU16, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
-use intuituive::interact::Input;
+use intuituive::interact::{Button, Input, MouseKind};
+use intuituive::menu::{context_menu, MenuItem};
 use intuituive::prelude::*;
 use intuituive::rich::markup::escape;
 use intuituive::rich::{Console, Segment, Syntax};
-use intuituive::widgets::{table, tabs, Column};
+use intuituive::widgets::{hsplit, table, tabs, Column};
 use intuituive::Placement;
 
 /// One entry of a directory.
@@ -324,6 +330,13 @@ pub fn files_app(start: PathBuf) -> App {
             selected.set(entries.with_untracked(|e| position(e, name.as_deref())));
         };
 
+        // A tab in this directory, shown.
+        let new_tab = move || {
+            let here = cwd.get_untracked();
+            tab_dirs.update(|dirs| dirs.push(here));
+            active.set(tab_dirs.with_untracked(Vec::len) - 1);
+        };
+
         // One row, as Yazi's: a path too long for it loses its start, not
         // the directory you are in.
         let header = leaf(move |console, width, _| {
@@ -424,90 +437,130 @@ pub fn files_app(start: PathBuf) -> App {
             selected,
         )
         .name("current")
-        .flex(4);
+        .on_mouse(move |cx, mouse| {
+            if mouse.kind != MouseKind::Down(Button::Right) {
+                return false;
+            }
+            let (dir, entry) = (cwd.get_untracked(), current.get_untracked());
+            let mut items = Vec::new();
+            if let Some(entry) = entry.clone().filter(|e| e.dir) {
+                items.push(
+                    MenuItem::new("Open", move |_| go(dir.join(&entry.name), None)).hint("l"),
+                );
+            }
+            if let Some(entry) = entry {
+                let path = cwd.get_untracked().join(&entry.name);
+                items.push(
+                    MenuItem::new("Yank path", move |cx| cx.copy(path.display().to_string()))
+                        .hint("y"),
+                );
+            }
+            let shown = if hidden.get_untracked() {
+                "Hide"
+            } else {
+                "Show"
+            };
+            items.push(MenuItem::separator());
+            items.push(
+                MenuItem::new(&format!("{shown} hidden files"), move |_| {
+                    keep(&|| hidden.update(|h| *h = !*h))
+                })
+                .hint("."),
+            );
+            items.push(MenuItem::new("New tab here", move |_| new_tab()).hint("t"));
+            context_menu(cx, items);
+            true
+        });
         let preview_text = leaf(move |console, width, _| {
             pane.store(width, Ordering::Relaxed);
             preview.with(|p| draw_preview(p, console, width))
         })
         .name("preview");
-        let preview_pane = scroll_with(preview_text, preview_top).no_focus().flex(3);
+        let preview_pane = scroll_with(preview_text, preview_top).no_focus();
+        // Yazi's 1:4:3 columns, in panes whose dividers drag.
+        let outer = signal(1.0 / 8.0);
+        let inner = signal(4.0 / 7.0);
+        let columns = hsplit(
+            parent_list,
+            hsplit(current_table, preview_pane, inner),
+            outer,
+        );
 
-        let mut root = column([
-            header,
-            tab_strip,
-            row([parent_list, current_table, preview_pane]).gap(1),
-            status,
-        ])
-        .on_key("l right enter", move |_| {
-            if let Some(entry) = current.get_untracked().filter(|e| e.dir) {
-                go(cwd.get_untracked().join(&entry.name), None);
-            }
-        })
-        .on_key("h left", move |_| {
-            let dir = cwd.get_untracked();
-            if let Some(up) = dir.parent() {
-                let came_from = dir.file_name().map(|n| n.to_string_lossy().into_owned());
-                go(up.to_path_buf(), came_from);
-            }
-        })
-        .on_key("~", move |_| {
-            if let Some(home) = std::env::var_os("HOME") {
-                go(PathBuf::from(home), None);
-            }
-        })
-        .on_key(".", move |_| keep(&|| hidden.update(|h| *h = !*h)))
-        .on_key("s", move |_| {
-            keep(&|| {
-                sort.update(|s| {
-                    *s = match s {
-                        Sort::Name => Sort::Size,
-                        Sort::Size => Sort::Name,
-                    }
+        let mut root = column([header, tab_strip, columns.flex(1), status])
+            .bind("l right enter", "open the directory", move |_| {
+                if let Some(entry) = current.get_untracked().filter(|e| e.dir) {
+                    go(cwd.get_untracked().join(&entry.name), None);
+                }
+            })
+            .bind("h left", "go up", move |_| {
+                let dir = cwd.get_untracked();
+                if let Some(up) = dir.parent() {
+                    let came_from = dir.file_name().map(|n| n.to_string_lossy().into_owned());
+                    go(up.to_path_buf(), came_from);
+                }
+            })
+            .bind("~", "go home", move |_| {
+                if let Some(home) = std::env::var_os("HOME") {
+                    go(PathBuf::from(home), None);
+                }
+            })
+            .bind(".", "show or hide hidden files", move |_| {
+                keep(&|| hidden.update(|h| *h = !*h))
+            })
+            .bind("s", "sort by name or size", move |_| {
+                keep(&|| {
+                    sort.update(|s| {
+                        *s = match s {
+                            Sort::Name => Sort::Size,
+                            Sort::Size => Sort::Name,
+                        }
+                    })
                 })
             })
-        })
-        .on_key("J", move |_| {
-            preview_top.update(|t| *t = t.saturating_add(5))
-        })
-        .on_key("K", move |_| {
-            preview_top.update(|t| *t = t.saturating_sub(5))
-        })
-        // Tabs: a new one in this directory, close this one, switch.
-        .on_key("t", move |_| {
-            let here = cwd.get_untracked();
-            tab_dirs.update(|dirs| dirs.push(here));
-            active.set(tab_dirs.with_untracked(Vec::len) - 1);
-        })
-        .on_key("ctrl+w", move |_| {
-            if tab_dirs.with_untracked(Vec::len) > 1 {
-                let i = active.get_untracked();
-                tab_dirs.update(|dirs| {
-                    dirs.remove(i);
-                });
-                active.set(i.min(tab_dirs.with_untracked(Vec::len) - 1));
-            }
-        })
-        .on_key("/", move |cx| {
-            // The prompt opens just above the status line it filters for.
-            cx.popup(
-                status_id,
-                Placement::Above,
-                Size::Percent(50),
-                Size::Fixed(3),
-                move || {
-                    component(Input::new("Filter"), move |text: String, cx| {
-                        filter.set(text);
-                        selected.set(0);
-                        cx.pop();
-                    })
-                    .on_cancel(|cx| cx.pop())
-                    .panel("Filter")
-                },
-            )
-        })
-        .on_key("esc", move |_| keep(&|| filter.set(String::new())))
-        .on_key("?", |cx| cx.modal(Size::Auto, Size::Auto, help))
-        .on_key("q", |cx| cx.quit());
+            .bind("y", "yank the path to the clipboard", move |cx| {
+                if let Some(entry) = current.get_untracked() {
+                    cx.copy(cwd.get_untracked().join(&entry.name).display().to_string());
+                }
+            })
+            .bind("J", "scroll the preview down", move |_| {
+                preview_top.update(|t| *t = t.saturating_add(5))
+            })
+            .bind("K", "scroll the preview up", move |_| {
+                preview_top.update(|t| *t = t.saturating_sub(5))
+            })
+            // Tabs: a new one in this directory, close this one, switch.
+            .bind("t", "open a tab here", move |_| new_tab())
+            .bind("ctrl+w", "close the tab", move |_| {
+                if tab_dirs.with_untracked(Vec::len) > 1 {
+                    let i = active.get_untracked();
+                    tab_dirs.update(|dirs| {
+                        dirs.remove(i);
+                    });
+                    active.set(i.min(tab_dirs.with_untracked(Vec::len) - 1));
+                }
+            })
+            .bind("/", "filter", move |cx| {
+                // The prompt opens just above the status line it filters for.
+                cx.popup(
+                    status_id,
+                    Placement::Above,
+                    Size::Percent(50),
+                    Size::Fixed(3),
+                    move || {
+                        component(Input::new("Filter"), move |text: String, cx| {
+                            filter.set(text);
+                            selected.set(0);
+                            cx.pop();
+                        })
+                        .on_cancel(|cx| cx.pop())
+                        .panel("Filter")
+                    },
+                )
+            })
+            .bind("esc", "clear the filter", move |_| {
+                keep(&|| filter.set(String::new()))
+            })
+            .bind("q", "quit", |cx| cx.quit());
         for n in 1..=9usize {
             root = root.on_key(&n.to_string(), move |_| {
                 if n <= tab_dirs.with_untracked(Vec::len) {
@@ -519,31 +572,11 @@ pub fn files_app(start: PathBuf) -> App {
     })
 }
 
-/// The keys, in a modal.
-fn help() -> Node {
-    label(
-        "[b]j k[/] ↑ ↓   move\n\
-         [b]l → ⏎[/]     open\n\
-         [b]h ←[/]       up\n\
-         [b]g G[/]       first, last\n\
-         [b]J K[/]       scroll the preview\n\
-         [b].[/]         hidden files\n\
-         [b]s[/]         sort by name or size\n\
-         [b]/[/]         filter · [b]esc[/] clears it\n\
-         [b]t[/]         new tab · [b]1–9[/] switch · [b]ctrl+w[/] close\n\
-         [b]~[/]         home\n\
-         [b]q[/]         quit",
-    )
-    .padding(0, 1)
-    .panel("Keys")
-    .on_key("esc ? q", |cx| cx.pop())
-}
-
 #[allow(dead_code)]
 fn main() -> std::io::Result<()> {
     let start = std::env::args()
         .nth(1)
         .map(PathBuf::from)
         .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
-    files_app(start).run()
+    files_app(start).help_key("?").palette_key("ctrl+p").run()
 }

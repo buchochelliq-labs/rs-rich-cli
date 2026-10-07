@@ -10,7 +10,7 @@
 use std::cell::{Cell, RefCell};
 
 use rich::{Console, Segment, Style};
-use rich_interact::{Key, KeyCode, MouseKind};
+use rich_interact::{Button, Key, KeyCode, MouseKind};
 
 use crate::layout::{solve, Size, Track};
 use crate::node::{Axis, Node};
@@ -335,10 +335,16 @@ impl Widget for Table {
                 }
             }
             WidgetEvent::Mouse(mouse) => match mouse.kind {
-                MouseKind::Down(_) if mouse.row >= self.header as u16 => {
+                MouseKind::Down(button) if mouse.row >= self.header as u16 => {
                     let row = self.first.get() + (mouse.row - self.header as u16) as usize;
                     if row < self.rows.len() {
                         self.selected.set(row);
+                    }
+                    // Another button selects the row and leaves the press
+                    // to the node's own handler: a right click's menu is
+                    // about the row it selected.
+                    if button != Button::Left {
+                        return Used::No;
                     }
                 }
                 MouseKind::ScrollUp => self.step(-3),

@@ -76,6 +76,20 @@ maps every concept, and `examples/files.rs` rebuilds the core of
 [Yazi](https://github.com/sxyazi/yazi), the most-starred ratatui app:
 three columns, vim keys, previews highlighted in the background.
 
+More examples (`cargo run -p rs-rich-intuituive --example <name>`):
+
+| Example | Shows |
+|---|---|
+| `todo` | the tutorial's app: signals, a list, an input, a modal |
+| `screens` | screens, a grid of cards and a modal |
+| `inline` | an inline app that keeps the scrollback |
+| `meters` | widgets of your own: retained drawing, focus, resize and pointer events, keys seen first |
+| `planner` | the components together: a menu bar, a tree, split panes, a calendar, a virtual list, the palette |
+| `files` | a Yazi-style file manager: split panes, a table, a preview on a worker, help and palette from the bindings, a right-click menu |
+| `scope` | an oscilloscope ported from scope-tui, on the chart widget |
+| `dashboard` | an ops dashboard: a service list, a detail pane, a streaming log (the benchmark measures it) |
+| `in_ratatui` | an app inside a ratatui program, which owns the loop |
+
 ## Against ratatui
 
 The same ops dashboard is written with ratatui 0.30 and with intuiTUIve in

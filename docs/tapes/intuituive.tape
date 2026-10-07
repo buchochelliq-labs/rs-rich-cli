@@ -1,12 +1,14 @@
 # intuiTUIve, rs-rich's framework for terminal apps, through its examples
 # (cargo build -p rs-rich-intuituive --examples): the tutorial's to-do app,
 # the same app with the inspector docked, a grid of cards with a modal,
-# and an inline app that leaves its last frame in the scrollback.
+# an inline app that leaves its last frame in the scrollback, a board of
+# meters that are widgets of their own, and a planner built from the
+# framework's components (tree, split panes, calendar, virtual list, menus).
 Set Title "rs-rich-intuituive · terminal apps"
 Set Size 100x22
 Set TypingDelay 40ms
 Hide
-Exec "mkdir -p bin && for e in todo screens inline; do ln -sf \"$(dirname \"$(command -v rich)\")/examples/$e\" bin/$e; done"
+Exec "mkdir -p bin && for e in todo screens inline meters planner; do ln -sf \"$(dirname \"$(command -v rich)\")/examples/$e\" bin/$e; done"
 Type "export PATH=\"$PWD/bin:$PATH\"; clear"
 Enter
 Wait /❯\s*$/
@@ -64,3 +66,34 @@ Wait /finished/
 Wait /❯\s*$/
 Sleep 300ms
 Screenshot inline
+Hide
+Type "clear"
+Enter
+Show
+Type "meters --frozen"
+Enter
+Wait /alarm 80%/
+Left
+Wait /alarm 75%/
+Sleep 300ms
+Screenshot meters
+Type "q"
+Wait /❯\s*$/
+Hide
+Type "clear"
+Enter
+Show
+Type "planner"
+Enter
+Wait /log rows/
+Space
+Wait /4 open/
+Sleep 300ms
+Screenshot planner
+Ctrl+P
+Wait /add a task/
+Sleep 300ms
+Screenshot planner-palette
+Escape
+Type "q"
+Wait /❯\s*$/

@@ -250,3 +250,13 @@ fn a_full_redraw_keeps_the_focus_style_over_a_containers_gaps() {
     assert!(reversed(&driver, 1), "the gap, after a full redraw");
     assert!(reversed(&driver, 2) && reversed(&driver, 0));
 }
+
+#[test]
+fn a_handler_copies_text_through_the_same_hand_off() {
+    let app = App::new(|| label("hi").on_key("y", |cx| cx.copy("/home/me/notes.txt")));
+    let mut driver = app.driver(30, 3);
+    driver.update(Duration::ZERO);
+    let _ = driver.render();
+    driver.event(press("y"));
+    assert_eq!(driver.take_copies(), ["/home/me/notes.txt"]);
+}

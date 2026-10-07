@@ -50,6 +50,7 @@ pub struct Ctx {
     theme: Option<Theme>,
     toasts: Vec<(String, Duration)>,
     animations: Vec<(Signal<f64>, f64, Duration, Easing)>,
+    copies: Vec<String>,
     /// Where the mouse event being handled happened, on the screen.
     pub(crate) pointer: Option<(u16, u16)>,
 }
@@ -136,6 +137,7 @@ impl Ctx {
             quit: false,
             toasts: Vec::new(),
             animations: Vec::new(),
+            copies: Vec::new(),
             pointer: None,
             focus: None,
             proxy,
@@ -196,6 +198,14 @@ impl Ctx {
     /// [`App::help_key`] opens it from a key.
     pub fn help(&mut self) {
         self.nav.push(Nav::Help);
+    }
+
+    /// Put `text` on the clipboard, where the terminal lets an app (OSC 52)
+    /// or the system's clipboard is reachable; a toast says so once it is
+    /// there. A loop of your own gets it from
+    /// [`Driver::take_copies`](crate::Driver::take_copies).
+    pub fn copy(&mut self, text: impl Into<String>) {
+        self.copies.push(text.into());
     }
 
     /// Show `markup` in a toast at the bottom right for three seconds.
@@ -1151,6 +1161,7 @@ impl App {
     /// Apply what a handler asked for; whether to quit.
     fn apply(&mut self, cx: Ctx) -> bool {
         let mut quit = cx.quit;
+        self.copies.extend(cx.copies);
         for (markup, duration) in cx.toasts {
             self.toasts.push((markup, self.now + duration));
             self.poke = true;
@@ -2092,8 +2103,9 @@ impl Driver {
         self.app.clipboard = on;
     }
 
-    /// Text selected with the mouse since the last call, for the loop to
-    /// put on the clipboard (with OSC 52, or the system's); tell
+    /// Text selected with the mouse, or [copied](Ctx::copy) by a handler,
+    /// since the last call, for the loop to put on the clipboard (with OSC
+    /// 52, or the system's); tell
     /// [`copied`](Self::copied) when it is there.
     pub fn take_copies(&mut self) -> Vec<String> {
         std::mem::take(&mut self.app.copies)

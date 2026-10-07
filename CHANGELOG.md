@@ -17,6 +17,28 @@ core 0.0.9, macros 0.0.3, plugin API 0.0.3, art 0.0.12, diagram 0.0.2,
 mermaid 0.0.5, lumis 0.0.3, Python 0.0.5. See
 [the release notes](docs/releases/0.0.17.md).
 
+### intuiTUIve examples show the framework (rs-rich-intuituive 0.0.2)
+
+- **`meters`** (new): a board of meters, each a `Widget` of its own. It
+  shows retained drawing (a new sample redraws only a meter's inside
+  rows), `Focus` and `Resize` events, the pointer over a sparkline, a
+  board that sees keys before the focused meter, animations and toasts.
+  `--frozen` stops the clock for screenshots.
+- **`planner`** (new): the components together. A menu bar, a tree of
+  projects, `hsplit`/`vsplit` panes, a calendar for the due date, a
+  virtual list of a hundred thousand log rows, and the help and command
+  palette made from the bindings.
+- **`files`**: the columns are split panes whose dividers drag; every key
+  is a described binding, so `?` and Ctrl+P open the built-in help and
+  palette; `y` yanks the path to the clipboard; a right click opens a menu.
+- **`Ctx::copy(text)`**: a handler puts text on the clipboard, with the
+  same toast and hand-off (`Driver::take_copies`) as a mouse selection.
+- A right click on a table, list, tree or calendar selects what is under
+  it and then reaches the node's own `on_mouse` handler, so a context menu
+  is about the row it selected. Only a left press is used up by them.
+- The examples' tests are in `tests/meters.rs`, `tests/planner.rs` and
+  `tests/files.rs`; the `intuituive` and `files` tapes record them.
+
 ### intuiTUIve widgets: rs-rich-intuituive 0.0.2
 
 The components the two example ports showed were missing, built from

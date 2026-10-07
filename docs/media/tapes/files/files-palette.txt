@@ -1,0 +1,22 @@
+~/project/src
+src/          │Name                                              Size│//! orbit: watch a queue, run its jobs,┃
+tests/        │event_loop.rs                                     611B│                                       │
+Cargo.toml    │lib.rs                                            225B│mod event_loop;                        │
+README.md     │main.rs╭─ Commands ─────────────────────────────────────────────────────╮                     │
+              │render.│? Command ›                                                     │                     │
+              │       │❯  open the directory                                 l/→/enter │                     │
+              │       │   go up                                                    h/← │std::env::args()     │
+              │       │   go home                                                    ~ │e(|arg| arg != "--wor│
+              │       │   show or hide hidden files                                  . │                     │
+              │       │   sort by name or size                                       s │|n| n.parse().ok())  │
+              │       │   yank the path to the clipboard                             y │(4);                 │
+              │       │   scroll the preview down                                    J │n(workers);          │
+              │       │   scroll the preview up                                      K │                     │
+              │       │   open a tab here                                            t │                     │
+              │       │  13/13 · ↑↓ move · enter run · esc close                       │                     │
+              │       ╰────────────────────────────────────────────────────────────────╯                     │
+              │                                                      │                                       │
+              │                                                      │                                       │
+              │                                                      │                                       │
+              │                                                      │                                       │
+3/4 · 289B · sort name  ? keys

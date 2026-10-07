@@ -1,22 +1,22 @@
 ~/project
  1 src │ 2 project
-project/      Name                                              Size event_loop.rs
-              src/                                                   lib.rs
-              tests/                                                 main.rs
-              Cargo.toml                                        181B render.rs
-              README.md                                         1.4K
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+project/      │Name                                              Size│event_loop.rs
+              │src/                                                  │lib.rs
+              │tests/                                                │main.rs
+              │Cargo.toml                                        181B│render.rs
+              │README.md                                         1.4K│
+              │                                                      │
+              │                                                      │
+              │                                                      │
+              │                                                      │
+              │                                                      │
+              │                                                      │
+              │                                                      │
+              │                                                      │
+              │                                                      │
+              │                                                      │
+              │                                                      │
+              │                                                      │
+              │                                                      │
+              │                                                      │
 1/4 · dir · sort name  ? keys

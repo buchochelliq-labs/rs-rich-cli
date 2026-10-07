@@ -284,6 +284,13 @@ hsplit(
 - **`virtual_list(len, row, selected)`** is the list form of
   `virtual_table`: it asks only for the rows in view.
 
+The `planner` example puts them together under a menu bar: projects and
+their tasks in a tree, the selected task's due date on a calendar, and a
+log of a hundred thousand rows, in panes whose dividers drag
+(`cargo run -p rs-rich-intuituive --example planner`).
+
+![A planner: a menu bar, a tree of projects, a calendar and a long log](../../media/tapes/intuituive/planner.png)
+
 ## The mouse
 
 Every mouse event (press, release, drag, movement, the wheel) goes to the
@@ -293,7 +300,9 @@ bubbles up through its ancestors until one uses it.
 - **A press** first focuses the deepest focusable node under the pointer.
 - **`.on_click(handler)`** handles a left click.
 - **`.on_mouse(|cx, mouse| …)`** handles every mouse event. It returns
-  whether it used the event.
+  whether it used the event. On a table, list, tree or calendar, a right
+  click selects what is under it and then reaches this handler, so a
+  `context_menu` it opens is about the row it selected.
 - **A drag** can be kept by the widget it started in, even when the
   pointer leaves it: call `capture_mouse()` from its handler.
 - **Hover** is state. A widget that asks whether it is hovered draws again
@@ -307,6 +316,8 @@ an intuiTUIve app, a drag that starts where nothing uses the press selects
 the text under it, shown reversed, and copies it when the button is let
 go, with OSC 52, so it works over SSH too, in terminals that allow it. A
 toast says how much was copied. `App::selectable(false)` turns this off.
+A handler puts text of its own on the clipboard with `cx.copy(text)` (the
+`files` example yanks a path with `y`), with the same toast.
 
 ## Your own widgets
 
@@ -399,6 +410,16 @@ logs, hosted components and `scroll`, as well as `table`, `tabs`, `tree`,
 the split panes, the calendar and the menus. `leaf` is still the shortest
 way to a node that only draws, and `component` hosts rs-rich-interact
 components, which also run outside an app.
+
+The `meters` example is a whole board of widgets of their own
+(`cargo run -p rs-rich-intuituive --example meters`). Each meter keeps
+what it drew and redraws only its inside rows on a new sample; it redraws
+its border on `Focus`, sizes its sparkline on `Resize`, reads the sample
+under the pointer, and eases its gauge with an animation. The board that
+holds them sees keys first (`previews_keys`), and while it is paused it
+keeps them from the meters.
+
+![Four meters, each a widget of its own](../../media/tapes/intuituive/meters.png)
 
 ## Screens and modals
 

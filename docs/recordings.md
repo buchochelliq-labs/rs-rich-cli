@@ -226,10 +226,15 @@ region's actions in a modal. See
 off; the same app with the inspector docked on the right, showing which
 nodes drew; the `screens` example asking before it quits, in a modal; and
 the `inline` example finishing in a few rows under the prompt, with the
-scrollback above it kept. See [Terminal apps](guide/intuituive/index.md).
+scrollback above it kept. Then two examples of the newer parts: `meters`, a
+board of meters that are widgets of their own (retained drawing, focus and
+resize events, the pointer, a board that sees keys first), and `planner`,
+built from the framework's components (a menu bar, a tree, split panes, a
+calendar and a virtual list of a hundred thousand rows), with a toast and
+then the command palette. See [Terminal apps](guide/intuituive/index.md).
 
 <div class="tape-player" data-cast="../media/tapes/intuituive/intuituive.cast" data-poster="npt:0:3">
-  <img src="../media/tapes/intuituive/intuituive.gif" alt="intuiTUIve's to-do, screens and inline examples">
+  <img src="../media/tapes/intuituive/intuituive.gif" alt="intuiTUIve's to-do, screens, inline, meters and planner examples">
 </div>
 
 | To-do | Inspector |
@@ -237,6 +242,10 @@ scrollback above it kept. See [Terminal apps](guide/intuituive/index.md).
 | ![A to-do added and one ticked off](media/tapes/intuituive/todo.png) | ![The inspector docked on the right](media/tapes/intuituive/inspector.png) |
 | **Modal** | **Inline** |
 | ![A modal asking whether to quit](media/tapes/intuituive/modal.png) | ![An inline app under the prompt](media/tapes/intuituive/inline.png) |
+| **Widgets of your own** | **Components** |
+| ![Four meters, each a custom widget](media/tapes/intuituive/meters.png) | ![A planner: a menu bar, a tree, a calendar and a log](media/tapes/intuituive/planner.png) |
+| **Command palette** | |
+| ![The planner's command palette](media/tapes/intuituive/planner-palette.png) | |
 
 [Tape](tapes/intuituive.tape) · [Cast](media/tapes/intuituive/intuituive.cast) · [GIF](media/tapes/intuituive/intuituive.gif) · [Page](media/tapes/intuituive/intuituive.html)
 
@@ -245,9 +254,10 @@ scrollback above it kept. See [Terminal apps](guide/intuituive/index.md).
 `rs-rich-intuituive`'s `files` example, a rebuild of the behaviour of
 [Yazi](https://github.com/sxyazi/yazi) by sxyazi and contributors (MIT), in
 the fixture project: the parent directory, the current one (a table with
-sizes) and a preview highlighted on a worker thread, then the help
-overlay, a second tab, and the filter prompt opened just above the status
-line. See
+sizes) and a preview highlighted on a worker thread, in panes whose
+dividers drag; then the help and the command palette, both made from the
+key bindings, a second tab, and the filter prompt opened just above the
+status line. See
 [Porting a ratatui app](guide/intuituive/porting.md#worked-example-a-yazi-style-file-manager).
 
 <div class="tape-player" data-cast="../media/tapes/files/files.cast" data-poster="npt:0:3">
@@ -259,6 +269,8 @@ line. See
 | ![A Rust file previewed](media/tapes/files/files.png) | ![The help overlay](media/tapes/files/files-help.png) |
 | **Tabs** | **Filter** |
 | ![Two tabs](media/tapes/files/files-tabs.png) | ![The filter prompt above the status line](media/tapes/files/files-filter.png) |
+| **Command palette** | |
+| ![The command palette](media/tapes/files/files-palette.png) | |
 
 [Tape](tapes/files.tape) · [Cast](media/tapes/files/files.cast) · [GIF](media/tapes/files/files.gif) · [Page](media/tapes/files/files.html)
 

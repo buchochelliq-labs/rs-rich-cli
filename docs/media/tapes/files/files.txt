@@ -1,22 +1,22 @@
 ~/project/src
-src/          Name                                              Size //! orbit: watch a queue, run its jobs, ┃
-tests/        event_loop.rs                                     611B                                         │
-Cargo.toml    lib.rs                                            225B mod event_loop;                         │
-README.md     main.rs                                           289B mod render;                             │
-              render.rs                                         271B                                         │
-                                                                     fn main() {                             │
-                                                                         let workers = std::env::args()      │
-                                                                             .skip_while(|arg| arg != "--work│
-                                                                             .nth(1)                         │
-                                                                             .and_then(|n| n.parse().ok())   │
-                                                                             .unwrap_or(4);                  │
-                                                                         event_loop::run(workers);           │
-                                                                     }                                       │
-                                                                                                             │
-                                                                                                             │
-                                                                                                             │
-                                                                                                             │
-                                                                                                             │
-                                                                                                             │
-                                                                                                             │
+src/          │Name                                              Size│//! orbit: watch a queue, run its jobs,┃
+tests/        │event_loop.rs                                     611B│                                       │
+Cargo.toml    │lib.rs                                            225B│mod event_loop;                        │
+README.md     │main.rs                                           289B│mod render;                            │
+              │render.rs                                         271B│                                       │
+              │                                                      │fn main() {                            │
+              │                                                      │    let workers = std::env::args()     │
+              │                                                      │        .skip_while(|arg| arg != "--wor│
+              │                                                      │        .nth(1)                        │
+              │                                                      │        .and_then(|n| n.parse().ok())  │
+              │                                                      │        .unwrap_or(4);                 │
+              │                                                      │    event_loop::run(workers);          │
+              │                                                      │}                                      │
+              │                                                      │                                       │
+              │                                                      │                                       │
+              │                                                      │                                       │
+              │                                                      │                                       │
+              │                                                      │                                       │
+              │                                                      │                                       │
+              │                                                      │                                       │
 3/4 · 289B · sort name  ? keys

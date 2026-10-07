@@ -9,8 +9,9 @@ mod files;
 
 use std::path::{Path, PathBuf};
 
-use common::{row_of, run, screen};
+use common::{row_of, run, run_open, screen};
 use files::files_app;
+use intuituive::interact::{Button, MouseKind};
 use intuituive::App;
 use rich_interact::headless::Script;
 
@@ -49,8 +50,9 @@ fn middle(rows: &[String], from: usize, to: usize) -> Vec<String> {
 fn it_lists_directories_first_and_previews_the_selection() {
     let root = tree("list");
     let rows = screen(&run(app(&root), Script::new().keys("q"), 80, 10));
-    // Columns: parent 9, gap, current 36, gap, preview 27 (1:4:3 of 78).
-    let current = middle(&rows, 10, 46);
+    // Columns in split panes: parent 10, divider, current 39, divider,
+    // preview 29.
+    let current = middle(&rows, 11, 50);
     assert_eq!(
         &current[..5],
         ["alpha/", "beta/", "data.bin", "notes.md", "z.txt"]
@@ -80,7 +82,7 @@ fn opening_and_going_up_keep_the_place() {
     // Into alpha: the header shows it, the parent column lists root.
     let rows = screen(&run(app(&root), Script::new().keys("l q"), 80, 10));
     assert!(rows[0].ends_with(&format!("{name}/alpha")), "{rows:?}");
-    assert!(middle(&rows, 10, 46)[0].starts_with("a.txt"), "{rows:?}");
+    assert!(middle(&rows, 11, 50)[0].starts_with("a.txt"), "{rows:?}");
     assert!(rows[1].starts_with("alpha/"), "parent column: {rows:?}");
     // Back up: alpha is selected again.
     let rows = screen(&run(app(&root), Script::new().keys("j l h q"), 80, 10));
@@ -113,7 +115,7 @@ fn hidden_files_sorting_and_filtering() {
 
     // By size: z.txt (1200 bytes) before notes.md and data.bin.
     let rows = screen(&run(app(&root), Script::new().keys("s q"), 80, 10));
-    let current = middle(&rows, 10, 46);
+    let current = middle(&rows, 11, 50);
     assert_eq!(
         &current[2..5],
         ["z.txt", "notes.md", "data.bin"],
@@ -122,7 +124,7 @@ fn hidden_files_sorting_and_filtering() {
 
     let script = Script::new().keys("/").text("not").keys("enter q");
     let rows = screen(&run(app(&root), script, 80, 10));
-    let current = middle(&rows, 10, 46);
+    let current = middle(&rows, 11, 50);
     assert_eq!(current[0], "notes.md", "{rows:?}");
     assert!(current[1].is_empty(), "{rows:?}");
     assert!(rows.last().unwrap().contains("filter “not”"), "{rows:?}");
@@ -175,4 +177,40 @@ fn a_click_selects_a_row() {
     let script = Script::new().click(20, 4).keys("q");
     let rows = screen(&run(app(&root), script, 80, 10));
     assert!(rows.last().unwrap().contains("3/5"), "{rows:?}");
+}
+
+#[test]
+fn y_yanks_the_path_and_a_toast_says_so() {
+    let root = tree("yank");
+    let record = run(app(&root), Script::new().keys("y q"), 80, 10);
+    assert_eq!(record.copies, [root.join("alpha").display().to_string()]);
+    let rows = screen(&record);
+    assert!(row_of(&rows, "Copied").is_some(), "{rows:?}");
+}
+
+#[test]
+fn a_right_click_opens_a_menu_of_what_can_be_done_here() {
+    let root = tree("menu");
+    // On beta's row of the current column.
+    let script = Script::new().mouse(MouseKind::Down(Button::Right), 20, 3);
+    let rows = screen(&run_open(app(&root), script, 80, 14));
+    for item in ["Open", "Yank path", "Show hidden files", "New tab here"] {
+        assert!(row_of(&rows, item).is_some(), "{item}: {rows:?}");
+    }
+    // Right-clicking selected the row first.
+    assert!(rows.last().unwrap().contains("2/5"), "{rows:?}");
+}
+
+#[test]
+fn the_help_is_made_from_the_bindings() {
+    let root = tree("help");
+    let app = app(&root).help_key("?");
+    let rows = screen(&run_open(app, Script::new().keys("?"), 80, 24));
+    for line in [
+        "yank the path to the clipboard",
+        "open a tab here",
+        "go home",
+    ] {
+        assert!(row_of(&rows, line).is_some(), "{line}: {rows:?}");
+    }
 }
