@@ -277,9 +277,11 @@ fn button(button: crossterm::event::MouseButton) -> Button {
     }
 }
 
-/// Translate a crossterm event. Key releases and repeats (reported only by
-/// terminals with the kitty protocol) and focus changes are dropped.
-pub(crate) fn from_crossterm(event: crossterm::event::Event) -> Option<Event> {
+/// Translate a crossterm event, for a loop of your own that reads the
+/// terminal with crossterm (or with ratatui, which re-exports it). Key
+/// releases and repeats (reported only by terminals with the kitty
+/// protocol) and focus changes are dropped.
+pub fn from_crossterm(event: crossterm::event::Event) -> Option<Event> {
     use crossterm::event::{Event as E, KeyCode as K, KeyEventKind, MouseEventKind as MK};
     Some(match event {
         E::Key(key) if key.kind == KeyEventKind::Press => {

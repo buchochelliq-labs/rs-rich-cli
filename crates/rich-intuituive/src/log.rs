@@ -20,8 +20,9 @@ use std::collections::VecDeque;
 
 use rich::Segment;
 
-use crate::node::{Kind, Node};
+use crate::node::{Axis, Node};
 use crate::reactive::{signal, Signal};
+use crate::widget::{Canvas, DrawCx, MeasureCx, Widget};
 
 pub(crate) struct LogData {
     pub lines: VecDeque<String>,
@@ -81,8 +82,8 @@ impl Log {
 
     /// A node showing the latest lines, one per row.
     pub fn view(&self) -> Node {
-        Node::new_kind(
-            Kind::Log(LogView {
+        Node::from_widget(
+            Box::new(LogView {
                 log: *self,
                 drawn_total: None,
                 shown: 0,
@@ -100,8 +101,78 @@ pub(crate) struct LogView {
     pub shown: usize,
 }
 
+impl Widget for LogView {
+    fn name(&self) -> &'static str {
+        "log"
+    }
+
+    fn measure(&mut self, _cx: &MeasureCx, axis: Axis, width: u16, _height: u16) -> u16 {
+        match axis {
+            Axis::Vertical => self
+                .log
+                .data
+                .with(|data| data.lines.len())
+                .min(u16::MAX as usize) as u16,
+            Axis::Horizontal => width,
+        }
+    }
+
+    /// Only what arrived since the last frame draws, moving what is on
+    /// screen up, unless the log moved or was drawn over.
+    fn draw(&mut self, cx: &mut DrawCx, canvas: &mut Canvas) {
+        let total = self.log.data.with(|data| data.total);
+        let (width, height) = (canvas.width(), canvas.height() as usize);
+        let full = cx.repaint();
+        let arrived = self
+            .drawn_total
+            .map(|drawn| total.saturating_sub(drawn) as usize);
+        let console = cx.console();
+        let shown = self.shown;
+        self.log.data.with_untracked(|data| {
+            let render = |from: usize| -> Vec<Vec<Segment>> {
+                data.lines
+                    .range(from..)
+                    .map(|line| render_line(console, line, width))
+                    .collect()
+            };
+            let len = data.lines.len();
+            match arrived {
+                Some(0) if !full => {}
+                Some(n) if !full && n < height => {
+                    if len == shown + n && shown + n <= height {
+                        // Room left and nothing dropped: the new lines go
+                        // under the old.
+                        canvas.lines_at(0, shown as u16, width, n as u16, &render(shown));
+                    } else if shown == height && len >= height {
+                        // Full: scroll what is on screen up, and render only
+                        // the new lines into the rows that opened.
+                        canvas.scroll_up(n as u16);
+                        let top = (height - n) as u16;
+                        canvas.lines_at(0, top, width, n as u16, &render(len - n));
+                    } else {
+                        // Lines were dropped from a log shorter than the
+                        // view: draw what it keeps.
+                        canvas.lines(&render(len.saturating_sub(height)));
+                    }
+                }
+                _ => canvas.lines(&render(len.saturating_sub(height))),
+            }
+        });
+        self.drawn_total = Some(total);
+        self.shown = self
+            .log
+            .data
+            .with_untracked(|data| data.lines.len())
+            .min(height);
+    }
+
+    fn retained(&self) -> bool {
+        true
+    }
+}
+
 /// One log line rendered to one row at `width` (cropped, never wrapped).
-pub(crate) fn render_line(console: &rich::Console, markup: &str, width: u16) -> Vec<Segment> {
+fn render_line(console: &rich::Console, markup: &str, width: u16) -> Vec<Segment> {
     let text = rich::Text::from_markup(markup)
         .unwrap_or_else(|_| rich::Text::new(markup))
         .no_wrap(true)

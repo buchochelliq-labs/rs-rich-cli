@@ -183,9 +183,11 @@ impl Widget for Split {
             return;
         }
         let at = self.first(self.ratio.get(), extent);
-        // Asked every time, so the pointer leaving the split redraws it.
-        let hovered = cx.hovered() && self.over.get();
-        let style = if self.dragging || hovered {
+        // The divider lights up while the pointer is on it: the split
+        // follows the pointer's movement itself, and redraws only when it
+        // comes onto the divider or leaves it.
+        cx.report_movement();
+        let style = if self.dragging || self.over.get() {
             cx.style("split.divider.hover", "bold")
         } else {
             cx.style("split.divider", "bright_black")
@@ -246,6 +248,17 @@ impl Widget for Split {
                 }
                 Used::Yes
             }
+            WidgetEvent::Hover(false) => {
+                if self.over.replace(false) {
+                    cx.redraw();
+                }
+                Used::No
+            }
+            _ => Used::No,
         }
+    }
+
+    fn retained(&self) -> bool {
+        true
     }
 }

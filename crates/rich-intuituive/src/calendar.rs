@@ -262,6 +262,7 @@ impl Widget for Calendar {
                 MouseKind::ScrollDown => self.change(|d| d.add_months(1)),
                 _ => return Used::No,
             },
+            _ => return Used::No,
         }
         Used::Yes
     }

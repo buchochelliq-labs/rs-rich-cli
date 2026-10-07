@@ -324,6 +324,7 @@ impl Widget for Tree {
                 }
                 Used::Yes
             }
+            _ => Used::No,
         }
     }
 

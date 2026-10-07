@@ -348,25 +348,53 @@ impl Widget for Counter {
 
 What a widget can do:
 
-- **`draw`** writes cells on a `Canvas`. The canvas is the widget's
-  rectangle, cleared, in its own coordinates, and `print`, `set`, `fill`
-  and `lines` (rendered rich segments) write to it. Signals read here make
-  it draw again.
-- **`event`** gets keys while the focus is on it (or inside it) and mouse
-  events over it. What it does not use bubbles on. `cx.redraw()` draws it
-  again after a change to its own state, and `cx.app()` can quit, open a
-  screen or move the focus.
+- **`draw`** writes cells on a `Canvas`, the widget's rectangle in its own
+  coordinates. It writes with `print`, `set`, `fill`, `clear`, `lines`
+  (rendered rich segments) and `render` (any rich renderable). It can also
+  write one row of markup with `markup`, draw a rounded edge with `border`,
+  lay a style over cells with `restyle`, and move everything up with
+  `scroll_up`. Signals read here make it draw again.
+- **`event`** gets these events:
+  - keys while the focus is on it or inside it (with nothing focused,
+    while the pointer is over it);
+  - mouse events over it, and pasted text;
+  - `Focus`, `Hover` and `Resize` when the focus or the pointer comes or
+    goes, or its size changes.
+
+  Keys, the mouse and paste it does not use bubble on. `cx.redraw()`
+  draws it again after a change to its own state, and `cx.app()` can
+  quit, open a screen or move the focus.
+- **Hover and the pointer:**
+  - `cx.hovered()` in `draw` redraws the widget only when the pointer
+    enters or leaves it.
+  - `cx.pointer()` gives the pointer's cell inside it, for hover effects
+    on a part.
+  - `cx.report_movement()` turns on movement events without redrawing on
+    them.
 - **`measure`** says how big it wants to be, for `Size::Auto` and for
-  modals sized to their content.
+  modals sized to their content. `MeasureCx::measure`, `extent` and
+  `stack` measure and lay out children as the built-in nodes do.
 - **`children` and `layout`** make it a container. Its children are
   ordinary nodes, drawn after it, so it can draw chrome round them (a
-  header, a scrollbar).
+  header, a scrollbar). `layout` runs each time the widget draws, before
+  `draw`, and the signals it reads lay it out again.
+- **`retained`** keeps what it drew. When only its own state changed, the
+  canvas is not cleared, only the cells it writes are sent, and its
+  children redraw only where it drew over them. `cx.repaint()` says when
+  it must draw everything. A border that changes colour on focus, or a
+  log that scrolls, costs a few cells.
+- **`viewport` and `scroll`** show its children through a window. They
+  are laid out at their full size, drawn offscreen with their own damage,
+  and copied out where the widget looks. Clicks and the caret are
+  translated through it.
 - **`caret`** places the text caret while it has the focus.
 
-`table` and `tabs` are built on this trait, as an app's own widget would
-be. `leaf` is still the shortest way to a node that only draws, and
-`component` hosts rs-rich-interact components, which also run outside an
-app.
+Every built-in node is a widget built on this trait: text, labels,
+renderables, columns, rows, grids, panels, padding, `each`, `switch`,
+logs, hosted components and `scroll`, as well as `table`, `tabs`, `tree`,
+the split panes, the calendar and the menus. `leaf` is still the shortest
+way to a node that only draws, and `component` hosts rs-rich-interact
+components, which also run outside an app.
 
 ## Screens and modals
 
@@ -592,6 +620,71 @@ drawn, with cursor moves relative to them, so the scrollback above is left
 alone. When the app ends, its last frame stays, and the prompt continues
 below it. The mouse is left to the terminal.
 
+## Owning the loop
+
+`App::run` owns the loop: it reads the terminal, runs timers and draws.
+To keep a loop of your own (an existing crossterm or termion loop, a game
+loop, a socket, another framework), use `App::driver`. Each turn:
+
+```rust
+use std::time::Instant;
+use intuituive::interact::event::from_crossterm;
+
+let mut driver = app.driver(width, height);
+let start = Instant::now();
+loop {
+    driver.update(start.elapsed()); // timers, animations, task results
+    if driver.is_done() {
+        break;
+    }
+    if let Some(bytes) = driver.render() {
+        out.write_all(bytes.as_bytes())?; // only what changed
+    }
+    if crossterm::event::poll(driver.timeout(start.elapsed()))? {
+        if let Some(event) = from_crossterm(crossterm::event::read()?) {
+            driver.event(event);
+        }
+    }
+    for text in driver.take_copies() {
+        // put text selected with the mouse on the clipboard
+    }
+}
+out.write_all(driver.finish().as_bytes())?;
+```
+
+- **`update(now)`** brings the app up to `now`: the timers that are due,
+  animations, results from other threads, the watches they set off, and
+  toasts that are over. Time is yours, so a test or a replay can run it
+  faster than the clock.
+- **`render()`** draws what changed and returns the escape sequences that
+  show it, or `None` when nothing did.
+- **`timeout(now)`** is how long you may wait for an event: until the next
+  timer, a frame while something animates, at most 50 ms.
+- **`event(e)`** takes a key, mouse event, paste or resize;
+  `resize(w, h)` sets the size directly.
+- **`screen()`** is the frame as cells, and `screen().lines()` as styled
+  rich segments, to draw it somewhere else.
+
+`run` and `run_on` are this loop, written for you, so an app behaves the
+same either way.
+
+### Inside a ratatui app
+
+A ratatui program can host an intuiTUIve app in part of its frame. Give
+the app the pane's size, call `render` for its frame, and copy its lines
+into the ratatui buffer with rs-rich-ratatui's `lines_to_buffer`.
+`examples/in_ratatui.rs` does this, with ratatui drawing the left half and
+owning the loop:
+
+```rust
+terminal.draw(|frame| {
+    let [left, right] = Layout::horizontal([Constraint::Fill(1), Constraint::Percentage(50)])
+        .areas(frame.area());
+    frame.render_widget(Paragraph::new("ratatui").block(Block::bordered()), left);
+    rich_ratatui::lines_to_buffer(&driver.screen().lines(), right, frame.buffer_mut());
+})?;
+```
+
 ## Testing
 
 `render_with` runs an app headless, pressing keys, and returns the last
@@ -656,6 +749,6 @@ widgets in an existing app, and ratatui widgets run inside rs-rich-interact.
 
 This is an early slice (0.0.x), so the API will change. Still to come:
 Python bindings for the framework, as rs-rich-interact's components already
-have, the built-in nodes moved onto the `Widget` trait, and accessibility
-and serving an app to a browser, which are designed but not built (see
-[the widgets design note](../../design/intuituive-widgets.md)).
+have, backends besides crossterm (termion, #677, and termwiz, #678), and
+accessibility and serving an app to a browser, which are designed but not
+built (see [the widgets design note](../../design/intuituive-widgets.md)).

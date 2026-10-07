@@ -51,6 +51,7 @@ impl Widget for Probe {
                 }
                 format!("{:?} {},{}", mouse.kind, mouse.column, mouse.row)
             }
+            _ => return Used::No,
         };
         self.seen.borrow_mut().push(text);
         cx.redraw();

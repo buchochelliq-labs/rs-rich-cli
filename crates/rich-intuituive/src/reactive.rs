@@ -77,6 +77,9 @@ pub(crate) struct Runtime {
     /// Each watch's step: read its source, and call back if it changed.
     watches: RefCell<HashMap<usize, WatchStep>>,
     next_watch: Cell<usize>,
+    /// The nodes that asked about hover or the pointer; a node leaves when
+    /// it is forgotten.
+    pub(crate) watchers: crate::widget::Watchers,
 }
 
 thread_local! {
@@ -99,6 +102,7 @@ impl Runtime {
                 tasks: Arc::new(AtomicUsize::new(0)),
                 watches: RefCell::new(HashMap::new()),
                 next_watch: Cell::new(0),
+                watchers: Default::default(),
             });
             all.push(Some(runtime.clone()));
             runtime
@@ -189,6 +193,15 @@ impl Runtime {
 
     pub(crate) fn observe_node<R>(&self, node: NodeId, f: impl FnOnce() -> R) -> R {
         self.observe(Observer::Node(node), f)
+    }
+
+    /// [`observe_node`](Self::observe_node), adding to what the node
+    /// already reads rather than starting afresh.
+    pub(crate) fn observe_node_more<R>(&self, node: NodeId, f: impl FnOnce() -> R) -> R {
+        self.graph.borrow_mut().observing.push(Observer::Node(node));
+        let result = f();
+        self.graph.borrow_mut().observing.pop();
+        result
     }
 
     /// Slot `slot` changed: mark its node readers dirty and bring its memo
@@ -288,6 +301,8 @@ impl Runtime {
         let mut graph = self.graph.borrow_mut();
         Runtime::unsubscribe(&mut graph, Observer::Node(node));
         graph.dirty.remove(&node);
+        self.watchers.hover.borrow_mut().remove(&node);
+        self.watchers.pointer.borrow_mut().remove(&node);
     }
 
     /// Run the closures other threads sent; whether there were any.

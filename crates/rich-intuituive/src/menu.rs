@@ -255,6 +255,7 @@ impl Widget for MenuList {
                     _ => return Used::No,
                 }
             }
+            _ => return Used::No,
         }
         cx.redraw();
         Used::Yes
@@ -409,6 +410,7 @@ impl Widget for MenuBar {
                 cx.redraw();
                 return self.open(cx, index);
             }
+            _ => return Used::No,
         }
         cx.redraw();
         Used::Yes

@@ -50,6 +50,7 @@
 //! `docs/design/intuituive.md`.
 
 pub mod app;
+mod builtin;
 mod calendar;
 pub mod inspect;
 pub mod layout;
@@ -71,7 +72,7 @@ pub use rich;
 /// `interact::Select`, …) and the headless test driver.
 pub use rich_interact as interact;
 
-pub use app::{every, Anchor, App, Ctx, Easing, FrameStats, Placement, Theme};
+pub use app::{every, Anchor, App, Ctx, Driver, Easing, FrameStats, Placement, Theme};
 pub use layout::Size;
 pub use log::Log;
 pub use node::{

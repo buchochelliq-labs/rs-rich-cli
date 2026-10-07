@@ -1,8 +1,9 @@
 # intuiTUIve widgets: the missing components
 
-**Status:** built (rs-rich-intuituive 0.0.2, rs-rich-ext 0.0.15), except
-moving the built-in nodes onto the trait, which stays to do. Where the
-build differs from this note:
+**Status:** built (rs-rich-intuituive 0.0.2, rs-rich-ext 0.0.15),
+including moving the built-in nodes onto the trait (see
+[Widget trait v2](#widget-trait-v2-every-node-a-widget)). Where the build
+differs from this note:
 
 - **Scrolling draws offscreen** (option (b) below, not (a)). The scroll's
   child draws into a persistent offscreen screen with its own damage, and
@@ -28,7 +29,8 @@ frameworks (ratatui above all) leave out:
 | E | the command palette and help from described bindings; menu bars, drop-downs and context menus; pop-ups anchored to a `Rect`; toasts; `animate` with easing; text selection and copying with the mouse captured | `src/app.rs`, `src/menu.rs` |
 
 All Phase D widgets are built on the public `Widget` trait, which is the
-test that it is enough. Building them found these gaps in it, still open:
+test that it is enough. Building them found these gaps in it, closed in
+[Widget trait v2](#widget-trait-v2-every-node-a-widget):
 
 1. **Hover is per widget, not per cell.** `DrawCx::hovered()` covers the
    whole widget, and asking subscribes it to every change of the hover
@@ -55,6 +57,72 @@ Phase E chose to:
   needed; a binding without a description stays out.
 - **Drive animations from the app clock.** The loop wakes every 16 ms only
   while one runs, and the headless backend's virtual clock tests them.
+
+## Widget trait v2: every node a widget
+
+The built-in nodes moved onto the trait. `Kind`, the enum of node types
+the framework drew itself, is gone: a node is a `Widget` and a place in
+the layout, and one generic routine draws every node. Text and leaves,
+columns, rows, grids, panels, padding, `each`, `switch`, logs, hosted
+components and `scroll` are each a `Widget` in `src/builtin.rs` and
+`src/log.rs`, using only what the trait offers any widget.
+
+What they needed, now in the trait:
+
+| Built-in | Needed | Now |
+|---|---|---|
+| Panel, log, containers | Not clearing on every redraw, damage of only what changed, children left alone | `retained()`; `DrawCx::repaint()`; damage is what the `Canvas` wrote; children redraw only where the widget drew over them |
+| Scroll | Children drawn offscreen and shown through a window | `viewport()` and `scroll(&ScrollCx) -> (window, offset)`; clicks, the caret and the pointer translate through it |
+| Log | Moving rows up instead of drawing them again | `Canvas::scroll_up` |
+| Each, switch | Children that change, and pages kept while hidden | `children()` read after `layout()`; a change of children or areas lays out again; `hidden_children()` |
+| Component host | Paste, the console, its own focus | `WidgetEvent::Paste`; `EventCx::console()`; `EventCx::focused()` |
+| Stack, grid | Measuring children as a stack does | `MeasureCx::measure`, `extent`, `stack` |
+| Panel | A border | `Canvas::border` (edges only) |
+| Any node | Focus style over any node | `.focus_style()` works on every node, not only leaves |
+
+The five gaps found in phase D:
+
+1. **Hover per widget.** `DrawCx::hovered()` no longer subscribes to the
+   whole hover path. The app marks a widget dirty only when the pointer
+   enters or leaves it. `DrawCx::pointer()` gives the pointer's cell
+   inside the widget, redrawing on each move over it.
+   `DrawCx::report_movement()` turns on movement events without
+   redrawing. The split pane uses that and `Hover(false)` instead of
+   asking for hover on every draw.
+2. **Keys with nothing focused** go to the node under the pointer, then
+   its ancestors.
+3. **Layout** runs each time a widget draws, before `draw`, inside the
+   same subscription; this is documented on the trait.
+4. **Focus, hover and resize events**: `WidgetEvent::Focus(bool)`,
+   `Hover(bool)` and `Resize { width, height }`. They are queued and told
+   after the event (or frame) that caused them, so a handler can move the
+   focus without re-entering the app. `WidgetEvent` is `non_exhaustive`.
+5. **Helpers**: `Canvas::markup`, `render`, `border`, `restyle`, `clear`
+   and `scroll_up`; `widget::markup_width` and `markup_line`.
+
+The benchmark gate is unchanged: at 80x24, a tick takes 14.4 µs against
+ratatui's 87 µs, with the same bytes sent as before the move.
+
+## Owning the loop: `Driver`
+
+`App::run` owns the loop. `App::driver(width, height)` returns a `Driver`
+for a loop of the caller's:
+
+- `update(now)` runs timers, animations, task results and watches, and
+  drops toasts, with time given by the caller;
+- `render()` returns the bytes for what changed;
+- `timeout(now)` says how long the loop may wait;
+- `event(e)` and `resize(w, h)` take input;
+- `take_copies()` returns text selected with the mouse;
+- `finish()` returns the bytes that restore the terminal;
+- `screen()` and `Screen::lines()` give the frame as cells or styled
+  segments.
+
+`run_on` is now a loop over a `Driver`, so both paths share one code path.
+`examples/in_ratatui.rs` hosts an app in half of a ratatui frame, with
+ratatui owning the terminal and the loop.
+`rich_interact::event::from_crossterm` is public for such loops. termion
+and termwiz backends for `run` are tracked in #677 and #678.
 
 ### Later: accessibility
 
