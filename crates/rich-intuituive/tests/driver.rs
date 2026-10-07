@@ -225,3 +225,28 @@ fn a_containers_focus_style_goes_over_its_children_and_off_again() {
     step(&mut driver, Some("tab"));
     assert!(!reversed(&driver, 0) && !reversed(&driver, 9));
 }
+
+#[test]
+fn a_full_redraw_keeps_the_focus_style_over_a_containers_gaps() {
+    let app = App::new(|| {
+        column([label("a").fixed(1), label("b").fixed(1)])
+            .gap(1)
+            .focus_style("reverse")
+    });
+    let mut driver = app.driver(6, 4);
+    let reversed = |driver: &intuituive::Driver, y: u16| {
+        let screen = driver.screen();
+        screen
+            .style(screen.cell(3, y).style)
+            .is_some_and(|style| style.definition().contains("reverse"))
+    };
+    driver.update(Duration::ZERO);
+    let _ = driver.render();
+    assert!(reversed(&driver, 1), "the gap between the rows");
+    // A toast redraws the whole screen.
+    driver.copied("x");
+    driver.update(Duration::ZERO);
+    let _ = driver.render();
+    assert!(reversed(&driver, 1), "the gap, after a full redraw");
+    assert!(reversed(&driver, 2) && reversed(&driver, 0));
+}

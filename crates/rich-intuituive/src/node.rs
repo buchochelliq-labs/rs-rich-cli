@@ -580,7 +580,10 @@ impl Node {
                 .map(|area| area.intersection(rect))
                 .filter(|area| !area.is_empty())
                 .collect();
-            if !self.highlit.get() {
+            // Newly focused, or drawn in full (a restack clears the whole
+            // screen first, before this node's damage is counted): the
+            // whole rectangle, gaps and padding included.
+            if !self.highlit.get() || repaint {
                 parts = vec![rect];
             }
             for area in parts {
