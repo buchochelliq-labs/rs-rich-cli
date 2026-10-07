@@ -709,8 +709,7 @@ impl Node {
                     };
                     if !lines.is_empty() {
                         // Only the edges change colour; the inside is left.
-                        for edge in edges(rect) {
-                            let part = crop(&lines, edge, rect);
+                        for (edge, part) in edges(rect).into_iter().zip(edge_lines(&lines)) {
                             screen.write_lines(edge, &part);
                             frame.damage.push(edge);
                         }
@@ -843,29 +842,24 @@ fn edges(rect: Rect) -> [Rect; 4] {
     ]
 }
 
-/// The part of `lines` (drawn at `rect`) that falls in `part`.
-fn crop(lines: &[Vec<Segment>], part: Rect, rect: Rect) -> Vec<Vec<Segment>> {
-    let from = (part.x - rect.x) as usize;
-    lines
-        .iter()
-        .skip((part.y - rect.y) as usize)
-        .take(part.height as usize)
-        .map(|line| {
-            // Split the line's cells at the part's columns.
-            let mut out = Vec::new();
-            let mut at = 0usize;
-            for segment in line {
-                for ch in segment.text.chars() {
-                    let width = rich::cells::cell_len(&ch.to_string());
-                    if at >= from && at < from + part.width as usize {
-                        out.push(Segment::new(ch.to_string(), segment.style.clone()));
-                    }
-                    at += width;
-                }
-            }
-            out
-        })
-        .collect()
+/// A box's lines (from [`border`]) as its four edges, in the order of
+/// [`edges`]: the top and bottom rows whole, and the first and last
+/// segment of each row between them. Whole segments, so a title's
+/// grapheme clusters (an emoji sequence) stay intact.
+fn edge_lines(lines: &[Vec<Segment>]) -> [Vec<Vec<Segment>>; 4] {
+    let middle = &lines[1.min(lines.len())..lines.len().saturating_sub(1).max(1)];
+    let side = |pick: fn(&Vec<Segment>) -> Option<&Segment>| -> Vec<Vec<Segment>> {
+        middle
+            .iter()
+            .map(|line| pick(line).cloned().into_iter().collect())
+            .collect()
+    };
+    [
+        lines.first().cloned().into_iter().collect(),
+        lines.last().cloned().into_iter().collect(),
+        side(|line| line.first()),
+        side(|line| line.last()),
+    ]
 }
 
 /// `lines` with `style` laid over every segment, each row filled out to

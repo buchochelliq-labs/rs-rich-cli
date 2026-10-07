@@ -428,6 +428,8 @@ struct ThemeFile {
     stamp: Option<(std::time::SystemTime, u64)>,
     /// The last contents that parsed.
     good: Option<String>,
+    /// The contents last read, parsed or not.
+    read: Option<String>,
     error: Option<String>,
 }
 
@@ -508,6 +510,7 @@ impl App {
             path: path.into(),
             stamp: None,
             good: None,
+            read: None,
             error: None,
         });
         self
@@ -1027,10 +1030,25 @@ impl App {
             .ok()
             .map(|m| (m.modified().unwrap_or(std::time::UNIX_EPOCH), m.len()));
         if stamp == file.stamp && (stamp.is_some() || file.error.is_some()) {
-            return;
+            // A file system with coarse timestamps can hide a same-length
+            // edit made within one tick: while the file is that fresh, look
+            // at what it says.
+            let fresh = stamp.is_some_and(|(modified, _)| {
+                modified
+                    .elapsed()
+                    .map_or(true, |age| age < Duration::from_secs(2))
+            });
+            if !fresh {
+                return;
+            }
+            let now = std::fs::read_to_string(&file.path).ok();
+            if now.is_none() || now == file.read {
+                return;
+            }
         }
         file.stamp = stamp;
         let read = std::fs::read_to_string(&file.path).map_err(|e| e.to_string());
+        file.read = read.as_ref().ok().cloned();
         match read.and_then(|text| self.theme_base.clone().with_config(&text).map(|_| text)) {
             Ok(text) => {
                 file.good = Some(text);

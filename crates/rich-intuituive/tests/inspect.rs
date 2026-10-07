@@ -109,3 +109,31 @@ fn a_bad_theme_file_keeps_the_last_good_styles_and_says_why() {
     assert!(!out.contains("not-a-colour"));
     std::fs::remove_dir_all(dir).ok();
 }
+
+#[test]
+fn a_same_length_edit_within_one_timestamp_is_still_seen() {
+    let dir = std::env::temp_dir().join(format!("intuituive-tick-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("theme.ini");
+    std::fs::write(&path, "[styles]\naccent = red\n").unwrap();
+    let edit = path.clone();
+    let app = App::new(move || {
+        let edit = edit.clone();
+        label("[accent]hi[/]")
+            .on_key("e", move |_| {
+                // The same length, and the old timestamp put back: what a
+                // file system with a coarse clock shows for a quick edit.
+                let stamp = std::fs::metadata(&edit).unwrap().modified().unwrap();
+                std::fs::write(&edit, "[styles]\naccent = tan\n").unwrap();
+                let file = std::fs::File::options().write(true).open(&edit).unwrap();
+                file.set_modified(stamp).unwrap();
+            })
+            .on_key("q", |cx| cx.quit())
+    })
+    .theme_file(&path);
+    let out = run(app, Script::new().keys("e q"), 10, 1).output();
+    assert!(out.contains("\x1b[0;31mhi"), "first red: {out:?}");
+    // tan is colour 180.
+    assert!(out.contains("38;5;180mhi"), "then tan: {out:?}");
+    std::fs::remove_dir_all(dir).ok();
+}

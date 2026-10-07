@@ -253,3 +253,19 @@ fn a_screens_watches_stop_when_it_closes() {
     run(app, Script::new().keys("o esc + + q"), 20, 2);
     assert_eq!(calls.get(), 1);
 }
+
+#[test]
+fn a_panel_title_keeps_its_emoji_when_the_focus_moves() {
+    let app = App::new(|| {
+        row([
+            label("a").focusable().panel("👨‍👩‍👧 team"),
+            label("b").focusable().panel("other"),
+        ])
+        .on_key("q", |cx| cx.quit())
+    });
+    // The first panel takes the focus, then gives it up: its edges are
+    // redrawn twice without its contents.
+    let rows = screen(&run(app, Script::new().keys("tab q"), 40, 4));
+    assert!(rows[0].contains("👨‍👩‍👧 team"), "{rows:?}");
+    assert!(rows[0].contains("╮╭"), "the border is whole: {rows:?}");
+}
