@@ -58,6 +58,37 @@ The components the two example ports showed were missing, built from
   Tests are in `tests/widgets.rs`, `tests/components.rs`, `tests/files.rs`
   and `tests/scope.rs`, and the tapes are re-recorded.
 
+### intuiTUIve: every node a widget, and loops of your own (rs-rich-intuituive 0.0.2)
+
+- **Every built-in node is a `Widget`.** Text, labels, renderables,
+  columns, rows, grids, panels, padding, `each`, `switch`, logs, hosted
+  components and `scroll` are implementations of the public trait, drawn
+  by one generic node. The benchmark gate is unchanged.
+- **`Widget` trait v2:**
+  - `retained()` widgets keep what they drew and send only what changed;
+  - `viewport()` and `scroll()` show children through a scrolling window;
+  - focus, hover, resize and paste events (`WidgetEvent::Focus`, `Hover`,
+    `Resize`, `Paste`);
+  - `DrawCx::hovered` redraws only on entering and leaving, and
+    `DrawCx::pointer` gives the pointer inside the widget;
+  - with nothing focused, keys go to the node under the pointer;
+  - helpers: `Canvas::markup`, `render`, `border`, `restyle`, `clear` and
+    `scroll_up`; `MeasureCx::measure`, `extent` and `stack`.
+
+  `WidgetEvent` is no longer `Copy`, and is `non_exhaustive`, so a `match`
+  on it needs a `_` arm.
+- **`App::driver`**: run an app from your own loop. You feed time and
+  events, get back the bytes of each frame, and can read the frame as
+  cells (`Screen::lines`). `App::run` and `run_on` are built on it.
+  `examples/in_ratatui.rs` hosts an app inside a ratatui program.
+- **`rich_interact::event::from_crossterm`** is public, for loops that
+  read crossterm (rs-rich-interact 0.0.5).
+- The split pane highlights its divider from its own pointer tracking and
+  redraws only the divider.
+
+Tests are in `tests/widget_v2.rs` and `tests/driver.rs`. termion and
+termwiz backends are tracked in #677 and #678.
+
 ### intuiTUIve: more components and features (rs-rich-intuituive 0.0.2)
 
 Components and features that other terminal frameworks, ratatui above all,

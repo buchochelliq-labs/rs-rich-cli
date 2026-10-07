@@ -42,18 +42,20 @@ fn a_change_sends_only_the_cells_that_changed() {
     });
     let record = run(app, Script::new().keys("+ q"), 60, 12);
     assert_eq!(screen(&record)[11], "tick 1");
-    // The first paint writes the screen; the tick writes one cell.
+    // The first paint (which hides the cursor) writes the screen; the
+    // tick writes one cell.
     let paints: Vec<&String> = record
         .writes
         .iter()
         .filter(|w| w.contains("\x1b["))
         .collect();
+    assert!(paints[0].starts_with("\x1b[?25l"), "{:?}", paints[0]);
     assert!(
-        paints[1].len() > 500,
+        paints[0].len() > 500,
         "the first paint: {:?}",
-        paints[1].len()
+        paints[0].len()
     );
-    let tick = paints[2];
+    let tick = paints[1];
     assert_eq!(tick, "\x1b[12;6H\x1b[0m1", "{tick:?}");
 }
 
@@ -129,12 +131,12 @@ fn the_focused_panel_is_highlighted_and_moving_focus_redraws_only_borders() {
         .iter()
         .filter(|w| w.contains("\x1b["))
         .collect();
-    let first = paints[1];
+    let first = paints[0];
     // Truecolor red for the focused panel, blue for the other.
     assert!(first.contains("\x1b[0;31m╭─"), "{first:?}");
     assert!(first.contains("\x1b[0;34m╭─"), "{first:?}");
     // After Tab both borders swap colour; the labels inside are not sent.
-    let tab = paints[2];
+    let tab = paints[1];
     assert!(tab.contains("31m") && tab.contains("34m"), "{tab:?}");
     assert!(!tab.contains("one") && !tab.contains("two"), "{tab:?}");
 }

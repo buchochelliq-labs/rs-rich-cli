@@ -8,6 +8,7 @@ move it to intuiTUIve. You do not have to move all of it at once:
 | **1. Use rich inside ratatui** | Nothing; you add widgets | You want rich's tables, Markdown, syntax or charts, and nothing else |
 | **2. Host ratatui widgets in intuiTUIve** | The app shell and state | You want the framework now, and to port widgets as you touch them |
 | **3. Port fully** | Everything | A new major version, or a small app |
+| **4. Host intuiTUIve in ratatui** | One pane | ratatui keeps the terminal and the loop, and an intuiTUIve app runs in part of the frame |
 
 Paths 2 and 3 are the same work done at different speeds, so the recipe below
 covers both. Three complete ports show where it leads:
@@ -54,7 +55,7 @@ covers both. Three complete ports show where it leads:
 | `Clear` + a centred popup | `cx.modal(width, height, build)` |
 | A popup placed next to a widget | `cx.popup(anchor, Placement::Below, width, height, build)` |
 | A custom `Widget` | `impl Widget` and `widget(w)` (cells, events, children, focus); `leaf` for drawing only; or keep the widget (path 2) |
-| `crossterm::event::read()` + `match` | `.on_key("q", …)` on the node that owns the key; keys bubble |
+| `crossterm::event::read()` + `match` | `.on_key("q", …)` on the node that owns the key; keys bubble. Or keep your loop and feed an `App::driver` (path 4) |
 | A focus enum and Tab handling | `.focusable()` / `.focus_style(..)`; Tab and Shift+Tab are built in |
 | Mouse hit-testing against stored `Rect`s | `.on_click(…)`, `.on_mouse(…)`; events arrive in the node's own coordinates and bubble |
 | A tick rate in the loop | `every(interval, …)` |
@@ -256,6 +257,22 @@ shows which nodes drew in each frame. A key press should redraw what it
 changed and nothing else. If a whole panel redraws on every tick, a closure
 inside it reads a signal it does not need.
 
+## Path 4: keep your loop
+
+A ratatui program can keep its terminal, its loop and its frame, and give
+part of the screen to an intuiTUIve app. `App::driver(width, height)` runs
+the app without a loop of its own. Each turn, call:
+
+- `update(elapsed)`;
+- `render()`, then copy `driver.screen().lines()` into your buffer with
+  rs-rich-ratatui's `lines_to_buffer`;
+- `event(…)` with the app's events, translated by
+  `rich_interact::event::from_crossterm`.
+
+`examples/in_ratatui.rs` is the whole program, and the guide's
+[Owning the loop](index.md#owning-the-loop) has the details. This is the
+way in for an app too big to port at once: move one pane at a time.
+
 ## Worked example: a Yazi-style file manager
 
 [`examples/files.rs`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/crates/rich-intuituive/examples/files.rs)
@@ -363,9 +380,10 @@ the credit is all they carry. Port your own app the same way.
 rectangle the layout gives them. A `leaf(|console, width, height| …)`
 returning rich segments is the closest thing to a custom `Widget::render`.
 
-**Can I keep my ratatui backend?** intuiTUIve runs on rs-rich-interact's
-terminal session (crossterm) or its headless driver, not on ratatui
-backends.
+**Can I keep my ratatui backend?** `App::run` uses rs-rich-interact's
+terminal session (crossterm). To keep your own terminal and loop, ratatui's
+included, drive the app with `App::driver` (path 4). termion and termwiz
+backends are planned (#677, #678).
 
 **Do I lose performance?** No: [the benchmark](index.md#against-ratatui) has
 intuiTUIve ahead on every scenario it measures, because it redraws and sends

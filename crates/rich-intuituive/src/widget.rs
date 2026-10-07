@@ -315,9 +315,10 @@ impl DrawCx<'_> {
         self.id
     }
 
-    /// Whether the canvas was cleared and everything must be drawn: always
-    /// for a widget that is not [retained](Widget::retained); for one that
-    /// is, when it moved, was drawn over, or drew for the first time.
+    /// Whether everything must be drawn, on a clear canvas: always for a
+    /// widget that is not [retained](Widget::retained); for one that is,
+    /// when it moved, was drawn over, drew for the first time or its
+    /// children moved (the area is clear then, whoever cleared it).
     pub fn repaint(&self) -> bool {
         self.repaint
     }
@@ -341,6 +342,13 @@ impl DrawCx<'_> {
         self.watchers.hover.borrow_mut().insert(self.id);
         self.hover_path
             .with_untracked(|path| path.contains(&self.id))
+    }
+
+    /// Turn on the terminal's reports of pointer movement, so the widget
+    /// gets [`MouseKind::Moved`] events over it, without drawing again
+    /// when the pointer moves (it decides that itself, from the events).
+    pub fn report_movement(&self) {
+        self.wants_hover.set(true);
     }
 
     /// Where the mouse pointer is over this widget, in its own

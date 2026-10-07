@@ -441,6 +441,7 @@ impl Node {
         // What the widget wrote, and whether it painted all of its rectangle.
         let mut written: Vec<Rect> = Vec::new();
         let mut repaint = false;
+        let mut cleared = false;
         let mut relaid = false;
         if redraw {
             if let Some(last) = last.filter(|last| !last.is_empty()) {
@@ -463,12 +464,12 @@ impl Node {
                 (!laid.is_empty() || !areas.is_empty()) && (ids != *laid || new_areas != *areas);
             *areas = new_areas;
             *laid = ids;
-            repaint = moved
-                || force
-                || !widget.retained()
-                || self.focus_style.is_some()
-                || (relaid && !viewport);
-            if repaint {
+            // A widget that keeps what it drew is cleared only when its own
+            // children moved: when it moved, or was drawn over, whoever did
+            // that cleared the area already.
+            cleared = !widget.retained() || self.focus_style.is_some() || (relaid && !viewport);
+            repaint = moved || force || cleared;
+            if cleared {
                 screen.clear(rect);
             }
         }
@@ -516,12 +517,12 @@ impl Node {
             self.caret.set(caret.and_then(|(x, y)| {
                 (x < rect.width && y < rect.height).then_some((rect.x + x, rect.y + y))
             }));
-            if repaint {
+            if cleared {
                 frame.damage.push(rect);
             } else {
                 frame.damage.extend(written.iter().copied());
             }
-            if repaint || !written.is_empty() {
+            if cleared || !written.is_empty() {
                 frame.drew(id);
             }
         }

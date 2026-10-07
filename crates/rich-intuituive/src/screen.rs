@@ -268,6 +268,39 @@ impl Screen {
         self.clear(Rect::new(rect.x, rect.bottom() - rows, rect.width, rows));
     }
 
+    /// Each row as rendered segments, a run of cells in one style per
+    /// segment: what any rich renderer takes, so a frame can be drawn
+    /// somewhere else (into a ratatui buffer with `rs-rich-ratatui`'s
+    /// `lines_to_buffer`, for one).
+    pub fn lines(&self) -> Vec<Vec<Segment>> {
+        (0..self.height)
+            .map(|y| {
+                let mut line: Vec<Segment> = Vec::new();
+                let mut run = String::new();
+                let mut style = None;
+                for x in 0..self.width {
+                    let cell = self.cell(x, y);
+                    if cell.is_continuation() {
+                        continue;
+                    }
+                    if style != Some(cell.style) && !run.is_empty() {
+                        let id = style.expect("a run has a style");
+                        line.push(Segment::new(
+                            std::mem::take(&mut run),
+                            self.style(id).cloned(),
+                        ));
+                    }
+                    style = Some(cell.style);
+                    run.push_str(&cell.text);
+                }
+                if let Some(id) = style.filter(|_| !run.is_empty()) {
+                    line.push(Segment::new(run, self.style(id).cloned()));
+                }
+                line
+            })
+            .collect()
+    }
+
     /// Each row as plain text (continuation cells skipped).
     pub fn plain(&self) -> Vec<String> {
         (0..self.height)
