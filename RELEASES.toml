@@ -84,6 +84,18 @@ manifest = "crates/rich-interact/Cargo.toml"
 version = "0.0.4"
 
 [[package]]
+name = "rs-rich-ratatui"
+registry = "crates.io"
+manifest = "crates/rich-ratatui/Cargo.toml"
+version = "0.0.1"
+
+[[package]]
+name = "rs-rich-intuituive"
+registry = "crates.io"
+manifest = "crates/rich-intuituive/Cargo.toml"
+version = "0.0.1"
+
+[[package]]
 name = "rs-rich-data"
 registry = "crates.io"
 manifest = "crates/rich-data/Cargo.toml"

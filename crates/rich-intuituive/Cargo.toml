@@ -1,0 +1,37 @@
+# crates/rich-intuituive — intuiTUIve, the rs-rich TUI framework (milestone 11).
+#
+# Not a port of anything upstream: an rs-rich addition. A retained tree of
+# nodes with fine-grained reactive state, drawn into a retained cell screen
+# with damage tracking, on top of rs-rich-interact's sessions, drivers and
+# components. See docs/design/intuituive.md. Independent SemVer from 0.0.1.
+[package]
+name = "rs-rich-intuituive"
+version = "0.0.1"
+description = "intuiTUIve: a reactive, retained terminal UI framework built on rs-rich"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+readme = "README.md"
+documentation = "https://docs.rs/rs-rich-intuituive"
+keywords = ["terminal", "tui", "reactive", "framework", "rich"]
+categories = ["command-line-interface"]
+include = ["src/**/*", "README.md", "LICENSE", "Cargo.toml"]
+
+[lib]
+name = "intuituive"
+
+[lints]
+workspace = true
+
+[dependencies]
+rich.workspace = true
+rich-ext.workspace = true
+rich-interact.workspace = true
+
+[dev-dependencies]
+# The benchmark against ratatui (tests/versus_ratatui.rs) draws the same
+# dashboard with it. A dev-dependency only: the framework does not use it.
+ratatui = { version = "0.30", default-features = false, features = ["crossterm", "layout-cache"] }
