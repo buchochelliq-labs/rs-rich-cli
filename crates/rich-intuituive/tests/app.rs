@@ -268,3 +268,44 @@ fn rich_renderables_are_nodes() {
         "{screen}"
     );
 }
+
+#[test]
+fn a_log_appends_under_its_lines_then_scrolls() {
+    let app = App::new(|| {
+        let log = Log::new(100);
+        let n = signal(0u32);
+        log.view()
+            .on_key("a", move |_| {
+                n.update(|n| *n += 1);
+                log.push(format!("line {}", n.get_untracked()));
+            })
+            .on_key("q", |cx| cx.quit())
+    });
+    let mut backend = Headless::new(Script::new().keys("a a a a a q"), 10, 3);
+    let record = backend.record();
+    app.run_on(&mut backend).unwrap();
+    let record = record.borrow();
+    let frames: Vec<Vec<String>> = record
+        .frames
+        .iter()
+        .map(|f| f.lines().map(|l| l.trim_end().to_string()).collect())
+        .collect();
+    assert_eq!(frames[1], ["line 1", "", ""]);
+    assert_eq!(frames[3], ["line 1", "line 2", "line 3"]);
+    assert_eq!(frames[5], ["line 3", "line 4", "line 5"]);
+}
+
+#[test]
+fn a_log_keeps_only_its_capacity() {
+    let app = App::new(|| {
+        let log = Log::new(2);
+        for i in 0..5 {
+            log.push(format!("{i}"));
+        }
+        log.view().on_key("q", |cx| cx.quit())
+    });
+    assert_eq!(
+        app.render_with(&["q"], 4, 3).unwrap(),
+        ["3   ", "4   ", "    "]
+    );
+}

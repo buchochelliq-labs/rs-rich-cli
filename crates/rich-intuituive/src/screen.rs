@@ -207,6 +207,25 @@ impl Screen {
         }
     }
 
+    /// Move the rows of `rect` up by `rows`, dropping the top ones; the
+    /// rows that open at the bottom are cleared.
+    pub fn scroll_up(&mut self, rect: Rect, rows: u16) {
+        let rect = rect.intersection(self.area());
+        if rect.is_empty() {
+            return;
+        }
+        let rows = rows.min(rect.height);
+        let width = self.width as usize;
+        for y in rect.y..rect.bottom() - rows {
+            let (from, to) = ((y + rows) as usize * width, y as usize * width);
+            for x in rect.x as usize..rect.right() as usize {
+                let cell = self.cells[from + x].clone();
+                self.cells[to + x] = cell;
+            }
+        }
+        self.clear(Rect::new(rect.x, rect.bottom() - rows, rect.width, rows));
+    }
+
     /// Each row as plain text (continuation cells skipped).
     pub fn plain(&self) -> Vec<String> {
         (0..self.height)

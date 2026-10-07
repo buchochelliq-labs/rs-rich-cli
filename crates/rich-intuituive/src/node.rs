@@ -59,6 +59,7 @@ pub(crate) enum Kind {
     Stack(Axis, Vec<Node>),
     Panel { title: String, child: Box<Node> },
     Each(Box<dyn Reconcile>),
+    Log(crate::log::LogView),
 }
 
 /// One node of the tree.
@@ -76,6 +77,10 @@ pub struct Node {
 }
 
 impl Node {
+    pub(crate) fn new_kind(kind: Kind) -> Node {
+        Node::new(kind)
+    }
+
     fn new(kind: Kind) -> Node {
         Node {
             id: next_node(),
@@ -188,6 +193,7 @@ impl Node {
                     child.walk_inner(path, f);
                 }
             }
+            Kind::Log(_) => {}
         }
         path.pop();
     }
@@ -237,6 +243,61 @@ impl Node {
                 } else {
                     child.draw(frame, rect.inner(1), screen, false);
                 }
+            }
+            Kind::Log(view) => {
+                let total = frame.runtime.observe_node(self.id, || {
+                    view.log.version.get();
+                    view.log.data.borrow().total
+                });
+                let height = rect.height as usize;
+                let arrived = view
+                    .drawn_total
+                    .map(|drawn| total.saturating_sub(drawn) as usize);
+                let data = view.log.data.borrow();
+                match arrived {
+                    Some(0) if !(resized || force) => {}
+                    Some(n) if !(resized || force) && n < height => {
+                        let len = data.lines.len();
+                        let before = len.saturating_sub(n);
+                        let render = |from: usize| -> Vec<Vec<Segment>> {
+                            data.lines
+                                .range(from..)
+                                .map(|line| {
+                                    crate::log::render_line(frame.console, line, rect.width)
+                                })
+                                .collect()
+                        };
+                        if before >= height {
+                            // Full: scroll what is on screen up, and render
+                            // only the new lines into the rows that opened.
+                            screen.scroll_up(rect, n as u16);
+                            let rows =
+                                Rect::new(rect.x, rect.bottom() - n as u16, rect.width, n as u16);
+                            screen.write_lines(rows, &render(before));
+                            frame.damage.push(rect);
+                        } else {
+                            // Room left: the new lines go under the old.
+                            let rows =
+                                Rect::new(rect.x, rect.y + before as u16, rect.width, n as u16);
+                            screen.write_lines(rows, &render(before));
+                            frame.damage.push(rows);
+                        }
+                        frame.drawn += 1;
+                    }
+                    _ => {
+                        let start = data.lines.len().saturating_sub(height);
+                        let lines: Vec<Vec<Segment>> = data
+                            .lines
+                            .range(start..)
+                            .map(|line| crate::log::render_line(frame.console, line, rect.width))
+                            .collect();
+                        screen.write_lines(rect, &lines);
+                        frame.damage.push(rect);
+                        frame.drawn += 1;
+                    }
+                }
+                drop(data);
+                view.drawn_total = Some(total);
             }
             Kind::Each(list) => {
                 let reshaped = frame
