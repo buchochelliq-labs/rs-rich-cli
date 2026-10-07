@@ -195,6 +195,10 @@ jobs:
             args: ""
           - crate: rs-rich-ratatui
             args: "--all-features"
+          # intuiTUIve, the TUI framework (no features of its own). Its
+          # benchmark against ratatui runs in release in `ratatui-gate`.
+          - crate: rs-rich-intuituive
+            args: "--all-features"
           # Every lumis language (its default); the bundles only select fewer.
           - crate: rs-rich-lumis
             args: ""
@@ -447,9 +451,31 @@ jobs:
           cargo test -p rs-rich-record --locked --test record
           every_shell_records_with_the_same_prompt -- --nocapture
 
+  # intuiTUIve's public bar (docs/design/intuituive.md, decision 4): the same
+  # dashboard drawn by intuiTUIve and by ratatui, in memory, in release. It
+  # fails if intuiTUIve is slower than ratatui on a status tick or a selection
+  # move, more than 1.5x slower on a log append, or sends more bytes.
+  ratatui-gate:
+    name: intuiTUIve vs ratatui benchmark gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.checkout_ref || github.ref }}
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Benchmark against ratatui (release)
+        run: cargo test --release --locked -p rs-rich-intuituive --test versus_ratatui -- --ignored --nocapture
+
   ci-ok:
     name: ci-ok
-    needs: [check, features, macos, msrv, parity, release-tests, windows-pager, packages, mermaid-cli, tapes]
+    needs: [check, features, macos, msrv, parity, release-tests, windows-pager, packages, mermaid-cli, tapes, ratatui-gate]
     # `always()` so this reports failure rather than being skipped when a
     # dependency fails — a skipped required check blocks the PR forever.
     if: always()

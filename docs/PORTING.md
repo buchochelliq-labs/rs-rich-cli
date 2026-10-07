@@ -236,3 +236,12 @@ port: Python `rich` has no ratatui. It composes core `rich`'s public API
 unchanged and no golden fixture covers it; its own tests check that a rich
 `Panel` drawn into a ratatui buffer and read back has the same text and SGR
 codes as rich's rendering. See [Using rich with ratatui](guide/ratatui.md).
+
+### intuiTUIve (rs-rich-intuituive, not upstream)
+
+`rs-rich-intuituive` (`crates/rich-intuituive`, 0.0.1) has no upstream
+module to port: Python `rich` has no application framework (upstream's is
+Textual, a separate project this repository does not mirror). It composes
+`rs-rich-interact`'s sessions and drivers, `rich-ext` and core `rich`'s
+public APIs. Core is unchanged and no golden fixture covers it. See
+[Terminal apps](guide/intuituive/index.md).

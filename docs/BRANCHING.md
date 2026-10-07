@@ -138,7 +138,7 @@ There are two separate decisions here:
    crate does not, by policy alone, require an unrelated crate's version to
    change.
 2. **The tag explicitly selects what ships.** A `vX.Y.Z` tag retains the
-   coordinated workspace meaning: all fourteen manifests and their internal
+   coordinated workspace meaning: all fifteen manifests and their internal
    requirements must agree at `X.Y.Z`. A `<crate>-vX.Y.Z` tag selects only that
    crate, whose manifest must match the tag. Unselected crates keep their own
    versions and are neither published nor verified as if they had changed.
@@ -160,6 +160,7 @@ There are two separate decisions here:
 | `rs-rich-diagram-v0.0.1` | Only `rs-rich-diagram` at `0.0.1` |
 | `rs-rich-data-v0.0.1` | Only `rs-rich-data` at `0.0.1` |
 | `rs-rich-ratatui-v0.0.1` | Only `rs-rich-ratatui` at `0.0.1` |
+| `rs-rich-intuituive-v0.0.1` | Only `rs-rich-intuituive` at `0.0.1` |
 
 The same forms accept SemVer prereleases, for example
 `rs-rich-cli-v0.0.3-rc.1`. Manual dispatch accepts an **existing tag** in one of
@@ -422,7 +423,9 @@ unconditionally (its CSV reader backs `--csv`). `rs-rich-ratatui` 0.0.1
 depends on `rs-rich` and, behind its optional `interact` feature, on
 `rs-rich-interact`: its own `rs-rich-ratatui-v0.0.1` tag goes after both are
 on crates.io. Nothing in the workspace depends on it, so it holds up no other
-tag. By hand, from the tagged commit on `main`:
+tag. `rs-rich-intuituive` 0.0.1 depends on `rs-rich`, `rs-rich-ext` and
+`rs-rich-interact`: its own `rs-rich-intuituive-v0.0.1` tag goes after the
+releases of those it requires are on crates.io; nothing depends on it. By hand, from the tagged commit on `main`:
 
 ```bash
 cargo publish -p rs-rich-macros --locked   # with a maintainer's API token

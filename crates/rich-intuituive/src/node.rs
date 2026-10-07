@@ -8,11 +8,11 @@
 //!
 //! Builders:
 //!
-//! - [`text`] and the [`text!`](crate::text!) macro: console markup that may
+//! - [`text`](fn@text) and the [`text!`](crate::text!) macro: console markup that may
 //!   read signals; [`label`] for markup that never changes;
 //! - [`renderable`]: any rich renderable (a `Table`, `Markdown`, `Syntax`,
 //!   a chart), rebuilt when the signals it read change;
-//! - [`column`] and [`row`]: children laid out along an axis, each sized
+//! - [`column`](fn@column) and [`row`]: children laid out along an axis, each sized
 //!   [`Size::Fixed`], [`Size::Flex`] or [`Size::Percent`];
 //! - [`each`]: one child per key of a list, kept by key;
 //! - [`Node::panel`]: a rounded border with a title, highlighted while the

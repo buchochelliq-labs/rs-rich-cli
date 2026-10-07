@@ -132,6 +132,7 @@ nav:
           - Building your own components: guide/interact/custom-components.md
           - Overlays and chrome: guide/interact/overlays.md
           - Explorers, copying and live lists: guide/interact/explorers.md
+      - Terminal apps (rs-rich-intuituive): guide/intuituive/index.md
       - Using rich with ratatui (rs-rich-ratatui): guide/ratatui.md
       - Diagrams (rs-rich-diagram): guide/diagram/index.md
       - Data and schemas (rs-rich-data):
