@@ -246,6 +246,7 @@ impl Widget for Split {
                 }
                 Used::Yes
             }
+            _ => Used::No,
         }
     }
 }

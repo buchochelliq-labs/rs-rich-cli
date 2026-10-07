@@ -191,6 +191,15 @@ impl Runtime {
         self.observe(Observer::Node(node), f)
     }
 
+    /// [`observe_node`](Self::observe_node), adding to what the node
+    /// already reads rather than starting afresh.
+    pub(crate) fn observe_node_more<R>(&self, node: NodeId, f: impl FnOnce() -> R) -> R {
+        self.graph.borrow_mut().observing.push(Observer::Node(node));
+        let result = f();
+        self.graph.borrow_mut().observing.pop();
+        result
+    }
+
     /// Slot `slot` changed: mark its node readers dirty and bring its memo
     /// readers up to date, following on from the memos whose value changed.
     fn changed(&self, slot: usize) {

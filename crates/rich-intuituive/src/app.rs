@@ -559,6 +559,12 @@ pub struct App {
     selecting: bool,
     /// Where the mouse event being routed happened.
     pointer: Option<(u16, u16)>,
+    /// Where the pointer last was, for widgets that ask.
+    last_pointer: Option<(u16, u16)>,
+    /// The widgets that asked about hover or the pointer.
+    watchers: crate::widget::Watchers,
+    /// Focus, hover and resize events waiting to be told to their widgets.
+    lifecycle: Vec<(NodeId, WidgetEvent)>,
     theme: Theme,
     console: Option<Console>,
     /// The console the last frame used, for components handling events.
@@ -629,6 +635,9 @@ impl App {
             hover_path,
             capture: None,
             motion: (false, false),
+            last_pointer: None,
+            watchers: Default::default(),
+            lifecycle: Vec::new(),
             toasts: Vec::new(),
             animations: Vec::new(),
             palette_key: Vec::new(),
@@ -900,6 +909,9 @@ impl App {
             if self.apply(cx) {
                 break;
             }
+            if self.tell_lifecycle() {
+                break;
+            }
             // Toasts that are over: what was under them draws again.
             let shown = self.toasts.len();
             self.toasts.retain(|(_, until)| *until > self.now);
@@ -963,8 +975,8 @@ impl App {
                         break;
                     }
                 }
-                Event::Paste(_) => {
-                    if let Some(true) = self.give_to_host(&event) {
+                Event::Paste(text) => {
+                    if self.bubble(&WidgetEvent::Paste(text)) {
                         break;
                     }
                 }
@@ -1146,6 +1158,10 @@ impl App {
             focus_path: self.focus_path,
             hover_path: self.hover_path,
             wants_hover: std::cell::Cell::new(false),
+            watchers: &self.watchers,
+            pointer: self.last_pointer,
+            shift: (0, 0),
+            resized: Vec::new(),
             theme: &self.theme,
             drawn: 0,
             drawn_ids: panel.map(|_| Vec::new()),
@@ -1200,6 +1216,20 @@ impl App {
         }
         if frame.wants_hover.get() {
             self.motion.0 = true;
+        }
+        for id in std::mem::take(&mut frame.resized) {
+            let mut size = (0, 0);
+            with_node(&self.top().root, id, &mut |node| {
+                let rect = node.rect();
+                size = (rect.width, rect.height);
+            });
+            self.lifecycle.push((
+                id,
+                WidgetEvent::Resize {
+                    width: size.0,
+                    height: size.1,
+                },
+            ));
         }
         let mut damage = frame.damage;
         if let (Some(panel), Some(drawn)) = (panel, frame.drawn_ids) {
@@ -1539,6 +1569,13 @@ impl App {
     }
 
     fn set_focus(&mut self, id: Option<NodeId>) {
+        let old = self.top().focus;
+        if old != id {
+            self.lifecycle
+                .extend(old.map(|old| (old, WidgetEvent::Focus(false))));
+            self.lifecycle
+                .extend(id.map(|id| (id, WidgetEvent::Focus(true))));
+        }
         self.top_mut().focus = id;
         let path = id.map(|id| self.path_to(id)).unwrap_or_default();
         let runtime = self.runtime.clone();
@@ -1571,13 +1608,19 @@ impl App {
             self.restack = true;
             return false;
         }
-        // A focused component sees the key first.
-        if let Some(quit) = self.give_to_host(&Event::Key(key)) {
-            return quit;
-        }
+        // From the focused node up; with nothing focused, from the node
+        // under the pointer, so a container that cannot take the focus
+        // still gets keys while the mouse is over it.
         let path = match self.focus().map(|id| self.path_to(id)) {
             Some(path) if !path.is_empty() => path,
-            _ => vec![self.top().root.id],
+            _ => {
+                let hovered = self.hover_path.get_untracked();
+                if hovered.first() == Some(&self.top().root.id) {
+                    hovered
+                } else {
+                    vec![self.top().root.id]
+                }
+            }
         };
         for &id in path.iter().rev() {
             if let Some(quit) = self.give_to_widget(id, &WidgetEvent::Key(key)) {
@@ -1616,32 +1659,41 @@ impl App {
         false
     }
 
-    /// Give `event` to the focused node if it hosts a component. `Some`
-    /// (whether to quit) if the component used it.
-    fn give_to_host(&mut self, event: &Event) -> Option<bool> {
-        let id = self.focus()?;
-        let console = self.last_console.clone()?;
-        let mut cx = self.ctx();
-        let mut used = false;
-        let runtime = self.runtime.clone();
-        runtime.enter(|| {
-            with_node(&self.top().root, id, &mut |node| {
-                if let crate::node::Kind::Host(host) = &mut *node.kind.borrow_mut() {
-                    let rect = node.rect();
-                    let context = rich_interact::Context {
-                        console: &console,
-                        width: rect.width as usize,
-                        height: rect.height as usize,
-                    };
-                    used = matches!(host.handle(event, &context, &mut cx), Used::Yes);
-                }
-            });
-        });
-        if !used {
-            return None;
+    /// Offer `event` to the focused node's widget and then its
+    /// ancestors' until one uses it. Whether to quit.
+    fn bubble(&mut self, event: &WidgetEvent) -> bool {
+        let path = self.focus().map(|id| self.path_to(id)).unwrap_or_default();
+        for &id in path.iter().rev() {
+            if let Some(quit) = self.give_to_widget(id, event) {
+                return quit;
+            }
         }
-        self.runtime.mark_dirty(id);
-        Some(self.apply(cx))
+        false
+    }
+
+    /// Tell widgets the focus, hover and resize events waiting for them.
+    /// Whether to quit.
+    fn tell_lifecycle(&mut self) -> bool {
+        // A handler may move the focus again: what that sets off waits for
+        // the next turn, a few rounds at most.
+        for _ in 0..4 {
+            let events = std::mem::take(&mut self.lifecycle);
+            if events.is_empty() {
+                break;
+            }
+            for (id, event) in events {
+                let mut shift = (0, 0);
+                for (hit, at) in crate::node::shifts(&self.top().root) {
+                    if hit == id {
+                        shift = at;
+                    }
+                }
+                if let Some(true) = self.give_to_widget_at(id, shift, &event) {
+                    return true;
+                }
+            }
+        }
+        false
     }
 
     /// Route a mouse event. Movement updates what is hovered; a captured
@@ -1652,7 +1704,35 @@ impl App {
     fn mouse(&mut self, mouse: rich_interact::Mouse) -> Option<bool> {
         let hits = crate::node::hit_path(&self.top().root, mouse.column, mouse.row);
         let path: Vec<NodeId> = hits.iter().map(|(id, _)| *id).collect();
-        if self.hover_path.get_untracked() != path {
+        let old = self.hover_path.get_untracked();
+        self.last_pointer = Some((mouse.column, mouse.row));
+        // Widgets that read the pointer draw again when it moves over them
+        // or leaves them.
+        for id in self.watchers.pointer.borrow().iter() {
+            if old.contains(id) || path.contains(id) {
+                self.runtime.mark_dirty(*id);
+            }
+        }
+        if old != path {
+            let left: Vec<NodeId> = old
+                .iter()
+                .filter(|id| !path.contains(id))
+                .copied()
+                .collect();
+            let came: Vec<NodeId> = path
+                .iter()
+                .filter(|id| !old.contains(id))
+                .copied()
+                .collect();
+            for id in left.iter().chain(&came) {
+                if self.watchers.hover.borrow().contains(id) {
+                    self.runtime.mark_dirty(*id);
+                }
+            }
+            self.lifecycle
+                .extend(left.into_iter().map(|id| (id, WidgetEvent::Hover(false))));
+            self.lifecycle
+                .extend(came.into_iter().map(|id| (id, WidgetEvent::Hover(true))));
             let runtime = self.runtime.clone();
             let hover = self.hover_path;
             let path = path.clone();
@@ -1748,11 +1828,7 @@ impl App {
         mouse: rich_interact::Mouse,
     ) -> Option<bool> {
         let mut rect = Rect::default();
-        let mut host = false;
-        with_node(&self.top().root, id, &mut |node| {
-            rect = node.rect();
-            host = matches!(&*node.kind.borrow(), crate::node::Kind::Host(_));
-        });
+        with_node(&self.top().root, id, &mut |node| rect = node.rect());
         // Into the node's coordinates (they differ inside a scroll), then
         // relative to its rectangle.
         let at = |value: u16, by: i32, from: u16| {
@@ -1763,11 +1839,6 @@ impl App {
             at(mouse.column, shift.0, rect.x),
             at(mouse.row, shift.1, rect.y),
         );
-        if host && self.focus() == Some(id) {
-            if let Some(quit) = self.give_to_host(&Event::Mouse(local)) {
-                return Some(quit);
-            }
-        }
         if let Some(quit) = self.give_to_widget_at(id, shift, &WidgetEvent::Mouse(local)) {
             return Some(quit);
         }
@@ -1806,22 +1877,31 @@ impl App {
         let mut used = false;
         let mut redraw = false;
         let mut capture = None;
+        let fallback;
+        let console = match &self.last_console {
+            Some(console) => console,
+            None => {
+                fallback = Console::builder().build();
+                &fallback
+            }
+        };
+        let focused = self.focus() == Some(id);
         let runtime = self.runtime.clone();
         runtime.enter(|| {
             with_node(&self.top().root, id, &mut |node| {
-                if let crate::node::Kind::Custom { widget, .. } = &mut *node.kind.borrow_mut() {
-                    let rect = node.rect();
-                    let mut ecx = crate::widget::EventCx {
-                        ctx: &mut cx,
-                        size: (rect.width, rect.height),
-                        rect: crate::node::translate(rect, (-shift.0, -shift.1)),
-                        redraw: false,
-                        capture: None,
-                    };
-                    used = widget.event(&mut ecx, event) == Used::Yes;
-                    redraw = ecx.redraw;
-                    capture = ecx.capture;
-                }
+                let rect = node.rect();
+                let mut ecx = crate::widget::EventCx {
+                    ctx: &mut cx,
+                    console,
+                    size: (rect.width, rect.height),
+                    rect: crate::node::translate(rect, (-shift.0, -shift.1)),
+                    focused,
+                    redraw: false,
+                    capture: None,
+                };
+                used = node.body.borrow_mut().widget.event(&mut ecx, event) == Used::Yes;
+                redraw = ecx.redraw;
+                capture = ecx.capture;
             });
         });
         if redraw {

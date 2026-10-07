@@ -345,6 +345,7 @@ impl Widget for Table {
                 MouseKind::ScrollDown => self.step(3),
                 _ => return Used::No,
             },
+            _ => return Used::No,
         }
         let _ = cx;
         Used::Yes
@@ -473,6 +474,7 @@ impl Widget for Tabs {
                     None => return Used::No,
                 }
             }
+            _ => return Used::No,
         }
         Used::Yes
     }

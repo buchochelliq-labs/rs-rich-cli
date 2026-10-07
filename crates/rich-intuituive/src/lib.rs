@@ -50,6 +50,7 @@
 //! `docs/design/intuituive.md`.
 
 pub mod app;
+mod builtin;
 mod calendar;
 pub mod inspect;
 pub mod layout;

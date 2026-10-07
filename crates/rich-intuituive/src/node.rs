@@ -26,6 +26,9 @@
 //! and behaviour: [`Node::on_key`] binds keys (they bubble from the focused
 //! node to its ancestors), [`Node::on_click`] handles clicks, and
 //! [`Node::focusable`] puts a node in the Tab order.
+//!
+//! Every node is a [`Widget`]: the builders above make built-in ones, and
+//! [`widget`](crate::widget()) makes a node of your own.
 
 use std::cell::{Cell, RefCell};
 use std::collections::{HashMap, HashSet};
@@ -33,13 +36,15 @@ use std::hash::Hash;
 use std::rc::Rc;
 
 use rich::{Console, Renderable, Segment, Style};
-use rich_interact::{Component, Context, Event, Flow, Key, Mouse, View};
+use rich_interact::{Component, Key, Mouse};
 
 use crate::app::Ctx;
+use crate::builtin::{Each, Grid, Host, HostWidget, Leaf, Pad, Panel, ScrollView, Stack, Switch};
 pub use crate::layout::Size;
-use crate::layout::{grow_for_span, offsets, place, solve, Track};
+use crate::layout::Track;
 use crate::reactive::{next_node, NodeId, Runtime, Signal};
 use crate::screen::{Rect, Screen};
+use crate::widget::{Canvas, DrawCx, MeasureCx, ScrollCx, Watchers, Widget};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Axis {
@@ -47,148 +52,21 @@ pub enum Axis {
     Horizontal,
 }
 
-type Draw = Box<dyn Fn(&Console, u16, u16) -> Vec<Vec<Segment>>>;
 pub(crate) type Handler = Box<dyn FnMut(&mut Ctx)>;
 /// A mouse handler: the event in the node's coordinates; whether it used
 /// it.
 pub(crate) type MouseHandler = Box<dyn FnMut(&mut Ctx, Mouse) -> bool>;
 
-pub(crate) enum Kind {
-    Leaf(Draw),
-    Stack(Stack),
-    Grid(Grid),
-    Panel {
-        title: String,
-        child: Box<Node>,
-        /// Whether the border was last drawn as focused.
-        shown_focus: Option<bool>,
-    },
-    Pad {
-        child: Box<Node>,
-        /// Top, right, bottom, left.
-        edges: [u16; 4],
-    },
-    Each {
-        list: Box<dyn Reconcile>,
-        areas: Vec<Rect>,
-    },
-    Switch(Box<dyn Switching>),
-    Log(crate::log::LogView),
-    Host(Box<dyn Hosted>),
-    /// A [`Widget`](crate::widget::Widget), and where its children were
-    /// laid out last.
-    Custom {
-        widget: Box<dyn crate::widget::Widget>,
-        areas: Vec<Rect>,
-    },
-    Scroll(Box<Scroll>),
-}
-
-/// The most rows a [`scroll`] lays its child out in.
-const MAX_SCROLL_ROWS: u16 = 4000;
-
-/// A viewport onto a child laid out at its full height. The child draws
-/// into an offscreen screen of its own, with its own damage, and the rows
-/// in view are copied out.
-pub(crate) struct Scroll {
-    child: Box<Node>,
-    /// The first row in view.
-    offset: Signal<u16>,
-    buffer: Screen,
-    /// The child's width and height last laid out.
-    width: u16,
-    content: u16,
-    /// The offset last copied out.
-    shown: Option<u16>,
-    /// The focused node inside, when it was last scrolled into view.
-    focus: Option<NodeId>,
-    /// Rows in view and rows of content, for the keys.
-    extent: Rc<Cell<(u16, u16)>>,
-}
-
-/// Children along an axis.
-pub(crate) struct Stack {
-    axis: Axis,
-    gap: u16,
-    children: Vec<Node>,
-    /// Where the children were laid out last.
-    areas: Vec<Rect>,
-}
-
-/// Children in rows and columns.
-pub(crate) struct Grid {
-    columns: Vec<Size>,
-    rows: Vec<Size>,
-    /// Between rows, and between columns.
-    gap: (u16, u16),
-    children: Vec<Node>,
-    areas: Vec<Rect>,
-}
-
-pub(crate) use crate::widget::Used;
-
-/// A `rich-interact` component living in the tree.
-pub(crate) trait Hosted {
-    fn handle(&mut self, event: &Event, context: &Context<'_>, cx: &mut Ctx) -> Used;
-    fn render(&self, context: &Context<'_>) -> View;
-    fn set_cancel(&mut self, cancel: Handler);
-}
-
-type OnDone<T> = Box<dyn FnMut(T, &mut Ctx)>;
-
-struct Host<C: Component> {
-    component: C,
-    /// Makes a fresh component after each answer ([`repeating`]).
-    make: Option<Box<dyn Fn() -> C>>,
-    on_done: OnDone<C::Output>,
-    on_cancel: Option<Handler>,
-}
-
-impl<C: Component> Hosted for Host<C> {
-    fn handle(&mut self, event: &Event, context: &Context<'_>, cx: &mut Ctx) -> Used {
-        match self.component.handle(event, context) {
-            Flow::Ignored => Used::No,
-            Flow::Continue => Used::Yes,
-            Flow::Done(value) => {
-                if let Some(make) = &self.make {
-                    self.component = make();
-                }
-                (self.on_done)(value, cx);
-                Used::Yes
-            }
-            // With no cancel handler, the key that cancelled (Esc) is the
-            // app's: it bubbles, so an app-wide Esc binding still works.
-            Flow::Cancel => match &mut self.on_cancel {
-                Some(cancel) => {
-                    cancel(cx);
-                    Used::Yes
-                }
-                None => Used::No,
-            },
-            // Handing the terminal to another program is not supported
-            // inside an app yet; the component carries on.
-            Flow::Handoff(_) => Used::Yes,
-        }
-    }
-
-    fn render(&self, context: &Context<'_>) -> View {
-        self.component.render(context)
-    }
-
-    fn set_cancel(&mut self, cancel: Handler) {
-        self.on_cancel = Some(cancel);
-    }
-}
-
-/// One node of the tree.
+/// One node of the tree: a [`Widget`] with a place in the layout, key
+/// bindings and handlers.
 pub struct Node {
     pub(crate) id: NodeId,
     pub(crate) size: Size,
-    min: u16,
-    max: u16,
+    pub(crate) min: u16,
+    pub(crate) max: u16,
     /// Columns and rows it spans in a [`grid`].
-    span: (u16, u16),
-    pub(crate) kind: RefCell<Kind>,
+    pub(crate) span: (u16, u16),
+    pub(crate) body: RefCell<Body>,
     /// Where it was last laid out.
     pub(crate) rect: Cell<Rect>,
     /// Where it last drew; `None` before its first draw, or while hidden.
@@ -197,30 +75,49 @@ pub struct Node {
     pub(crate) keys: RefCell<Vec<(Vec<Key>, String, Handler)>>,
     pub(crate) click: RefCell<Option<Handler>>,
     pub(crate) mouse: RefCell<Option<MouseHandler>>,
-    /// Where a hosted component wants the text caret, on the screen.
+    /// Where the widget wants the text caret, on its surface.
     pub(crate) caret: Cell<Option<(u16, u16)>>,
     /// What the inspector calls it: its [`name`](Node::name), else the
     /// builder that made it.
     name: Option<String>,
     what: &'static str,
-    /// A style (or theme style name) laid over a leaf while it has the
+    /// A style (or theme style name) laid over the node while it has the
     /// focus.
     focus_style: Option<String>,
 }
 
-impl Node {
-    pub(crate) fn new_kind(kind: Kind, what: &'static str) -> Node {
-        Node::new(kind).what(what)
-    }
+/// A node's widget, and what the framework keeps for it between frames.
+pub(crate) struct Body {
+    pub widget: Box<dyn Widget>,
+    /// Where its children were laid out last, and which children.
+    areas: Vec<Rect>,
+    laid: Vec<NodeId>,
+    /// A viewport's content, drawn offscreen, and what of it is shown.
+    view: Option<View>,
+}
 
-    fn new(kind: Kind) -> Node {
+/// A [viewport](Widget::viewport)'s offscreen content.
+struct View {
+    buffer: Screen,
+    /// The window on the widget's surface, and the content's point at its
+    /// top left, when it was last copied out.
+    shown: Option<(Rect, (u16, u16))>,
+}
+
+impl Node {
+    pub(crate) fn from_widget(widget: Box<dyn Widget>, what: &'static str) -> Node {
         Node {
             id: next_node(),
             size: Size::Flex(1),
             min: 0,
             max: u16::MAX,
             span: (1, 1),
-            kind: RefCell::new(kind),
+            body: RefCell::new(Body {
+                widget,
+                areas: Vec::new(),
+                laid: Vec::new(),
+                view: None,
+            }),
             rect: Cell::new(Rect::default()),
             drawn: Cell::new(None),
             focusable: false,
@@ -229,7 +126,7 @@ impl Node {
             mouse: RefCell::new(None),
             caret: Cell::new(None),
             name: None,
-            what: "node",
+            what,
             focus_style: None,
         }
     }
@@ -258,15 +155,17 @@ impl Node {
             Some(name) => format!("{name} ({})", self.what),
             None => self.what.to_string(),
         };
-        match &*self.kind.borrow() {
-            Kind::Panel { title, .. } if !title.is_empty() => format!("{base} \"{title}\""),
-            Kind::Each { list, .. } => format!("{base} [{}]", list.children().len()),
-            Kind::Grid(grid) => format!("{base} {}x{}", grid.columns.len().max(1), {
-                let columns = grid.columns.len().max(1);
-                grid.children.len().div_ceil(columns)
-            }),
-            _ => base,
+        match self.body.borrow().widget.describe() {
+            Some(more) => format!("{base} {more}"),
+            None => base,
         }
+    }
+
+    /// The widget, if it is a `W`.
+    fn widget_mut<W: Widget, R>(&self, f: impl FnOnce(&mut W) -> R) -> Option<R> {
+        let mut body = self.body.borrow_mut();
+        let widget: &mut dyn std::any::Any = &mut *body.widget;
+        widget.downcast_mut::<W>().map(f)
     }
 
     /// Size this node along its parent's axis.
@@ -318,11 +217,8 @@ impl Node {
     /// For a [`column`](fn@column), [`row`] or [`grid`]: leave `cells` empty
     /// between neighbouring children. Ignored on other nodes.
     pub fn gap(self, cells: u16) -> Node {
-        match &mut *self.kind.borrow_mut() {
-            Kind::Stack(stack) => stack.gap = cells,
-            Kind::Grid(grid) => grid.gap = (cells, cells),
-            _ => {}
-        }
+        self.widget_mut(|stack: &mut Stack| stack.gap = cells);
+        self.widget_mut(|grid: &mut Grid| grid.gap = (cells, cells));
         self
     }
 
@@ -331,9 +227,8 @@ impl Node {
     /// content; without any, rows share the height evenly. Ignored on other
     /// nodes.
     pub fn rows(self, rows: impl IntoIterator<Item = Size>) -> Node {
-        if let Kind::Grid(grid) = &mut *self.kind.borrow_mut() {
-            grid.rows = rows.into_iter().collect();
-        }
+        let rows: Vec<Size> = rows.into_iter().collect();
+        self.widget_mut(|grid: &mut Grid| grid.rows = rows);
         self
     }
 
@@ -352,9 +247,9 @@ impl Node {
 
     /// While this node has the focus, draw it in `style` over its own: a
     /// style (`"reverse"`, `"on grey23"`) or a theme style name
-    /// (`"accent"`). The rest of its row is filled in the style too, so a
-    /// list shows which row is selected. For leaves (text, labels,
-    /// renderables); the node is also made [focusable](Self::focusable).
+    /// (`"accent"`). Its whole rectangle takes the style, so a list shows
+    /// which row is selected. The node is also made
+    /// [focusable](Self::focusable).
     pub fn focus_style(mut self, style: &str) -> Node {
         self.focus_style = Some(style.to_string());
         self.focusable = true;
@@ -405,9 +300,7 @@ impl Node {
     /// cancelled (Esc). Without one, the cancelling key bubbles to the
     /// node's ancestors like any unused key. Ignored on other nodes.
     pub fn on_cancel(self, handler: impl FnMut(&mut Ctx) + 'static) -> Node {
-        if let Kind::Host(host) = &mut *self.kind.borrow_mut() {
-            host.set_cancel(Box::new(handler));
-        }
+        self.widget_mut(|host: &mut HostWidget| host.host.set_cancel(Box::new(handler)));
         self
     }
 
@@ -416,31 +309,27 @@ impl Node {
     /// takes the node's size.
     pub fn panel(self, title: &str) -> Node {
         let title = title.to_string();
-        self.wrap(|child| Kind::Panel {
-            title,
-            child,
-            shown_focus: None,
-        })
-        .what("panel")
+        self.wrap(|child| Box::new(Panel::new(title, child)), "panel")
     }
 
     /// Leave `vertical` empty rows above and below this node, and
     /// `horizontal` empty columns either side.
     pub fn padding(self, vertical: u16, horizontal: u16) -> Node {
-        self.what_wrap("padding", |child| Kind::Pad {
-            child,
-            edges: [vertical, horizontal, vertical, horizontal],
-        })
+        self.wrap(
+            |child| {
+                Box::new(Pad {
+                    child,
+                    edges: [vertical, horizontal, vertical, horizontal],
+                })
+            },
+            "padding",
+        )
     }
 
-    fn what_wrap(self, what: &'static str, kind: impl FnOnce(Box<Node>) -> Kind) -> Node {
-        self.wrap(kind).what(what)
-    }
-
-    /// A node of `kind` round this one, taking over its size and span.
-    fn wrap(self, kind: impl FnOnce(Box<Node>) -> Kind) -> Node {
+    /// A node of `widget` round this one, taking over its size and span.
+    fn wrap(self, widget: impl FnOnce(Node) -> Box<dyn Widget>, what: &'static str) -> Node {
         let (size, min, max, span) = (self.size, self.min, self.max, self.span);
-        let mut outer = Node::new(kind(Box::new(self)));
+        let mut outer = Node::from_widget(widget(self), what);
         outer.size = size;
         outer.min = min;
         outer.max = max;
@@ -457,7 +346,12 @@ impl Node {
         self.id
     }
 
-    fn track(&self) -> Track {
+    /// How it asks to be sized along its parent's axis.
+    pub fn size_hint(&self) -> Size {
+        self.size
+    }
+
+    pub(crate) fn track(&self) -> Track {
         Track {
             size: self.size,
             min: self.min,
@@ -481,35 +375,8 @@ impl Node {
 
     /// Call `f` with each child that is shown.
     fn each_child(&self, f: &mut dyn FnMut(&Node)) {
-        match &*self.kind.borrow() {
-            Kind::Leaf(_) | Kind::Log(_) | Kind::Host(_) => {}
-            Kind::Custom { widget, .. } => {
-                for child in widget.children() {
-                    f(child);
-                }
-            }
-            Kind::Stack(stack) => {
-                for child in &stack.children {
-                    f(child);
-                }
-            }
-            Kind::Grid(grid) => {
-                for child in &grid.children {
-                    f(child);
-                }
-            }
-            Kind::Panel { child, .. } | Kind::Pad { child, .. } => f(child),
-            Kind::Scroll(scroll) => f(&scroll.child),
-            Kind::Each { list, .. } => {
-                for child in list.children() {
-                    f(child);
-                }
-            }
-            Kind::Switch(switch) => {
-                if let Some(child) = switch.current() {
-                    f(child);
-                }
-            }
+        for child in self.body.borrow().widget.children() {
+            f(child);
         }
     }
 
@@ -525,127 +392,25 @@ impl Node {
     /// How many cells of `axis` the content needs, given `width` x
     /// `height` to lay out in (a height of 0: as tall as it likes).
     pub(crate) fn measure(&self, console: &Console, axis: Axis, width: u16, height: u16) -> u16 {
-        let extent = |lines: &[Vec<Segment>]| -> u16 {
-            match axis {
-                Axis::Vertical => lines.len(),
-                Axis::Horizontal => lines
-                    .iter()
-                    .map(|line| line.iter().map(Segment::cell_length).sum::<usize>())
-                    .max()
-                    .unwrap_or(0),
-            }
-            .min(u16::MAX as usize) as u16
+        self.body
+            .borrow_mut()
+            .widget
+            .measure(&MeasureCx { console }, axis, width, height)
+    }
+
+    /// Its extent along `axis` as a stack sizes it: its size, within its
+    /// minimum and maximum.
+    pub(crate) fn extent(&self, console: &Console, axis: Axis, width: u16, height: u16) -> u16 {
+        let along = match axis {
+            Axis::Vertical => height,
+            Axis::Horizontal => width,
         };
-        let along = |w: u16, h: u16| match axis {
-            Axis::Vertical => h,
-            Axis::Horizontal => w,
+        let cells = match self.size {
+            Size::Fixed(n) => n,
+            Size::Percent(p) => (along as u32 * p.min(100) as u32 / 100) as u16,
+            Size::Auto | Size::Flex(_) => self.measure(console, axis, width, height),
         };
-        // A child's own extent, as its parent would size it.
-        let sized = |child: &Node, w: u16, h: u16| -> u16 {
-            let cells = match child.size {
-                Size::Fixed(n) => n,
-                Size::Percent(p) => (along(w, h) as u32 * p.min(100) as u32 / 100) as u16,
-                Size::Auto | Size::Flex(_) => child.measure(console, axis, w, h),
-            };
-            cells.min(child.max).max(child.min)
-        };
-        match &mut *self.kind.borrow_mut() {
-            Kind::Leaf(draw) => extent(&draw(console, width.max(1), height)),
-            Kind::Custom { widget, .. } => {
-                widget.measure(&crate::widget::MeasureCx { console }, axis, width, height)
-            }
-            Kind::Scroll(scroll) => scroll.child.measure(console, axis, width, height),
-            Kind::Stack(stack) => {
-                let gaps = stack
-                    .gap
-                    .saturating_mul(stack.children.len().saturating_sub(1) as u16);
-                if stack.axis == axis {
-                    stack.children.iter().fold(gaps, |sum, child| {
-                        sum.saturating_add(sized(child, width, height))
-                    })
-                } else {
-                    stack
-                        .children
-                        .iter()
-                        .map(|child| child.measure(console, axis, width, height))
-                        .max()
-                        .unwrap_or(0)
-                }
-            }
-            Kind::Grid(grid) => {
-                let areas = grid_areas(console, grid, Rect::new(0, 0, width, height), axis);
-                areas
-                    .iter()
-                    .map(|area| match axis {
-                        Axis::Vertical => area.bottom(),
-                        Axis::Horizontal => area.right(),
-                    })
-                    .max()
-                    .unwrap_or(0)
-            }
-            Kind::Panel { child, .. } => child
-                .measure(
-                    console,
-                    axis,
-                    width.saturating_sub(2),
-                    height.saturating_sub(2),
-                )
-                .saturating_add(2),
-            Kind::Pad { child, edges } => {
-                let [top, right, bottom, left] = *edges;
-                let inner = child.measure(
-                    console,
-                    axis,
-                    width.saturating_sub(left + right),
-                    height.saturating_sub(top + bottom),
-                );
-                match axis {
-                    Axis::Vertical => inner.saturating_add(top + bottom),
-                    Axis::Horizontal => inner.saturating_add(left + right),
-                }
-            }
-            Kind::Each { list, .. } => {
-                list.reconcile();
-                match axis {
-                    Axis::Vertical => list.children().iter().fold(0u16, |sum, child| {
-                        sum.saturating_add(row_height(console, child, width))
-                    }),
-                    Axis::Horizontal => list
-                        .children()
-                        .iter()
-                        .map(|child| child.measure(console, axis, width, height))
-                        .max()
-                        .unwrap_or(0),
-                }
-            }
-            Kind::Switch(switch) => {
-                switch.read_key();
-                switch.settle();
-                switch
-                    .current()
-                    .map_or(0, |child| child.measure(console, axis, width, height))
-            }
-            Kind::Log(view) => match axis {
-                Axis::Vertical => view
-                    .log
-                    .data
-                    .with(|data| data.lines.len())
-                    .min(u16::MAX as usize) as u16,
-                Axis::Horizontal => width,
-            },
-            Kind::Host(host) => {
-                let context = Context {
-                    console,
-                    width: width.max(1) as usize,
-                    height: if height == 0 {
-                        u16::MAX as usize
-                    } else {
-                        height as usize
-                    },
-                };
-                extent(&host.render(&context).lines)
-            }
-        }
+        cells.min(self.max).max(self.min)
     }
 
     /// Lay out and draw into `screen`. A node draws if it is dirty, has
@@ -659,292 +424,236 @@ impl Node {
         force: bool,
     ) {
         self.rect.set(rect);
-        let moved = self.drawn.get() != Some(rect);
+        let last = self.drawn.get();
+        let moved = last != Some(rect);
         let dirty = frame.dirty.contains(&self.id);
-        let mut kind = self.kind.borrow_mut();
-        match &mut *kind {
-            Kind::Leaf(draw) => {
-                if moved || force || dirty {
-                    let console = frame.console;
-                    let focus_path = frame.focus_path;
-                    let mut lines = frame.runtime.observe_node(self.id, || {
-                        let lines = draw(console, rect.width, rect.height);
-                        // Reading the focus subscribes the node, so it draws
-                        // again when the focus comes or goes.
-                        let focused = self.focus_style.is_some()
-                            && focus_path.with(|path| path.last() == Some(&self.id));
-                        (lines, focused)
-                    });
-                    if let (true, Some(style)) = (lines.1, &self.focus_style) {
-                        let style = console
-                            .get_style(&rich::style::StyleType::Name(style.clone()))
-                            .unwrap_or_else(|_| Style::parse("reverse").expect("parses"));
-                        lines.0 = highlight(lines.0, &style, rect);
-                    }
-                    let lines = lines.0;
-                    screen.write_lines(rect, &lines);
-                    frame.damage.push(rect);
-                    frame.drew(self.id);
+        let redraw = moved || force || dirty;
+        let id = self.id;
+        let mut body = self.body.borrow_mut();
+        let Body {
+            widget,
+            areas,
+            laid,
+            view,
+        } = &mut *body;
+        let viewport = widget.viewport();
+        let console = frame.console;
+        // What the widget wrote, and whether it painted all of its rectangle.
+        let mut written: Vec<Rect> = Vec::new();
+        let mut repaint = false;
+        let mut relaid = false;
+        if redraw {
+            if let Some(last) = last.filter(|last| !last.is_empty()) {
+                if (last.width, last.height) != (rect.width, rect.height) {
+                    frame.resized.push(id);
                 }
             }
-            Kind::Stack(stack) => {
-                let areas = if moved || force || dirty || stack.areas.len() != stack.children.len()
-                {
-                    let measures = stack.children.iter().any(|c| c.size == Size::Auto);
-                    let console = frame.console;
-                    let lay_out = || stack_areas(console, stack, rect);
-                    if measures {
-                        frame.runtime.observe_node(self.id, lay_out)
-                    } else {
-                        lay_out()
-                    }
-                } else {
-                    stack.areas.clone()
-                };
-                draw_children(
-                    frame,
-                    screen,
-                    rect,
-                    &stack.children,
-                    areas,
-                    &mut stack.areas,
-                    force || moved,
-                );
+            // Lay out first, subscribing to what that reads; a viewport
+            // lays out in its content's coordinates.
+            let space = if viewport {
+                Rect::new(0, 0, rect.width, rect.height)
+            } else {
+                rect
+            };
+            let new_areas = frame
+                .runtime
+                .observe_node(id, || widget.layout(&MeasureCx { console }, space));
+            let ids: Vec<NodeId> = widget.children().iter().map(|c| c.id).collect();
+            relaid =
+                (!laid.is_empty() || !areas.is_empty()) && (ids != *laid || new_areas != *areas);
+            *areas = new_areas;
+            *laid = ids;
+            repaint = moved
+                || force
+                || !widget.retained()
+                || self.focus_style.is_some()
+                || (relaid && !viewport);
+            if repaint {
+                screen.clear(rect);
             }
-            Kind::Grid(grid) => {
-                let areas = if moved || force || dirty || grid.areas.len() != grid.children.len() {
-                    let measures = grid
-                        .columns
-                        .iter()
-                        .chain(&grid.rows)
-                        .any(|s| *s == Size::Auto);
-                    let console = frame.console;
-                    let lay_out = || grid_areas(console, grid, rect, Axis::Vertical);
-                    if measures {
-                        frame.runtime.observe_node(self.id, lay_out)
-                    } else {
-                        lay_out()
-                    }
-                } else {
-                    grid.areas.clone()
-                };
-                draw_children(
-                    frame,
-                    screen,
+        }
+        // A viewport's children draw offscreen before it decides where to
+        // look; it draws itself after, so its scrollbar matches.
+        let mut window = None;
+        if viewport {
+            window = Some(self.draw_view(frame, widget, areas, view, rect, relaid));
+        }
+        if redraw {
+            let focus_path = frame.focus_path;
+            let focus_style = self.focus_style.as_deref();
+            let caret = {
+                let mut cx = DrawCx {
+                    console,
+                    theme: frame.theme,
+                    id,
                     rect,
-                    &grid.children,
-                    areas,
-                    &mut grid.areas,
-                    force || moved,
-                );
-            }
-            Kind::Panel {
-                title,
-                child,
-                shown_focus,
-            } => {
-                // The focus is all a panel reads: when it moves elsewhere
-                // in the app, the panel stays as it is.
-                let focused = frame.runtime.observe_node(self.id, || {
-                    frame.focus_path.with(|path| path.contains(&self.id))
-                });
-                let lines = || {
-                    let style = frame.theme.border(focused);
-                    let title_style = style.combine(&frame.theme.title);
-                    border(title, &style, &title_style, rect)
+                    repaint,
+                    focus_path,
+                    hover_path: frame.hover_path,
+                    pointer: frame.pointer,
+                    shift: frame.shift,
+                    wants_hover: &frame.wants_hover,
+                    watchers: frame.watchers,
                 };
-                if moved || force {
-                    // The whole box, which clears the inside: the child
-                    // draws again.
-                    screen.write_lines(rect, &lines());
-                    frame.damage.push(rect);
-                    frame.drew(self.id);
-                    child.draw(frame, rect.inner(1), screen, true);
-                } else {
-                    let lines = if *shown_focus != Some(focused) {
-                        lines()
-                    } else {
-                        Vec::new()
-                    };
-                    if !lines.is_empty() {
-                        // Only the edges change colour; the inside is left.
-                        for (edge, part) in edges(rect).into_iter().zip(edge_lines(&lines)) {
-                            screen.write_lines(edge, &part);
-                            frame.damage.push(edge);
+                let mut canvas = Canvas {
+                    screen: &mut *screen,
+                    rect,
+                    written: &mut written,
+                };
+                frame.runtime.observe_node_more(id, || {
+                    widget.draw(&mut cx, &mut canvas);
+                    // Reading the focus subscribes the node, so it draws
+                    // again when the focus comes or goes.
+                    if let Some(style) = focus_style {
+                        if focus_path.with(|path| path.last() == Some(&id)) {
+                            let style = cx.style(style, "reverse");
+                            canvas.restyle(0, 0, rect.width, rect.height, &style);
                         }
-                        frame.drew(self.id);
                     }
-                    child.draw(frame, rect.inner(1), screen, false);
-                }
-                *shown_focus = Some(focused);
+                });
+                widget.caret()
+            };
+            self.caret.set(caret.and_then(|(x, y)| {
+                (x < rect.width && y < rect.height).then_some((rect.x + x, rect.y + y))
+            }));
+            if repaint {
+                frame.damage.push(rect);
+            } else {
+                frame.damage.extend(written.iter().copied());
             }
-            Kind::Pad { child, edges } => {
-                let force = force || moved;
-                if force {
-                    screen.clear(rect);
-                    frame.damage.push(rect);
-                }
-                child.draw(frame, inset(rect, *edges), screen, force);
+            if repaint || !written.is_empty() {
+                frame.drew(id);
             }
-            Kind::Host(host) => {
-                if moved || force || dirty {
-                    let context = Context {
-                        console: frame.console,
-                        width: rect.width as usize,
-                        height: rect.height as usize,
-                    };
-                    // A component that reads signals while it renders (a
-                    // ratatui widget drawing app state) draws again when
-                    // they change.
-                    let view = frame
-                        .runtime
-                        .observe_node(self.id, || host.render(&context));
-                    screen.write_lines(rect, &view.lines);
-                    self.caret.set(view.cursor.and_then(|(row, column)| {
-                        let (row, column) = (row as u16, column as u16);
-                        (row < rect.height && column < rect.width)
-                            .then_some((rect.x + column, rect.y + row))
-                    }));
-                    frame.damage.push(rect);
-                    frame.drew(self.id);
+        }
+        match window {
+            Some((window, offset, inner)) => {
+                // The rows in view, copied out when they changed.
+                let shown = view.as_ref().and_then(|v| v.shown);
+                if redraw || inner || shown != Some((window, offset)) {
+                    let view = view.as_mut().expect("a viewport has a view");
+                    screen.clear(window);
+                    screen.blit(
+                        &view.buffer,
+                        Rect::new(offset.0, offset.1, window.width, window.height),
+                        window.x,
+                        window.y,
+                    );
+                    frame.damage.push(window);
+                    if !redraw {
+                        frame.drew(id);
+                    }
+                    view.shown = Some((window, offset));
                 }
             }
-            Kind::Log(view) => draw_log(self.id, view, frame, rect, screen, moved || force),
-            Kind::Scroll(scroll) => draw_scroll(
-                self.id,
-                scroll,
-                frame,
-                rect,
-                screen,
-                moved || force || dirty,
-            ),
-            Kind::Custom { widget, areas } => {
-                let redraw = moved || force || dirty;
-                if redraw {
-                    screen.clear(rect);
-                    let (console, theme) = (frame.console, frame.theme);
-                    let (focus_path, hover_path) = (frame.focus_path, frame.hover_path);
-                    let wants_hover = &frame.wants_hover;
-                    let id = self.id;
-                    let (caret, laid) = frame.runtime.observe_node(id, || {
-                        let mut cx = crate::widget::DrawCx {
-                            console,
-                            theme,
-                            id,
-                            focus_path,
-                            hover_path,
-                            wants_hover,
-                        };
-                        let mut canvas = crate::widget::Canvas {
-                            screen: &mut *screen,
-                            rect,
-                        };
-                        widget.draw(&mut cx, &mut canvas);
-                        let laid = if widget.children().is_empty() {
-                            Vec::new()
-                        } else {
-                            widget.layout(&crate::widget::MeasureCx { console }, rect)
-                        };
-                        (widget.caret(), laid)
-                    });
-                    self.caret.set(caret.and_then(|(x, y)| {
-                        (x < rect.width && y < rect.height).then_some((rect.x + x, rect.y + y))
-                    }));
-                    *areas = laid;
-                    frame.damage.push(rect);
-                    frame.drew(self.id);
-                }
+            None => {
                 for (i, child) in widget.children().iter().enumerate() {
                     match areas.get(i).map(|area| area.intersection(rect)) {
-                        Some(area) if !area.is_empty() => child.draw(frame, area, screen, redraw),
+                        Some(area) if !area.is_empty() => {
+                            // A child draws again where the widget drew over
+                            // it.
+                            let over = written.iter().any(|w| !w.intersection(area).is_empty());
+                            child.draw(frame, area, screen, repaint || over);
+                        }
                         _ => child.hide(),
                     }
-                }
-            }
-            Kind::Each { list, areas } => {
-                let mut force = force || moved;
-                let pending = list.take_pending();
-                if force || dirty || pending || areas.len() != list.children().len() {
-                    let console = frame.console;
-                    let (reshaped, heights) = frame.runtime.observe_node(self.id, || {
-                        let reshaped = list.reconcile() | pending;
-                        list.take_pending();
-                        let heights: Vec<u16> = list
-                            .children()
-                            .iter()
-                            .map(|child| row_height(console, child, rect.width))
-                            .collect();
-                        (reshaped, heights)
-                    });
-                    let mut y = rect.y;
-                    let laid: Vec<Rect> = heights
-                        .into_iter()
-                        .map(|height| {
-                            if y >= rect.bottom() {
-                                return Rect::default();
-                            }
-                            let height = height.min(rect.bottom() - y);
-                            let area = Rect::new(rect.x, y, rect.width, height);
-                            y += height;
-                            area
-                        })
-                        .collect();
-                    force = force || reshaped || laid != *areas;
-                    *areas = laid;
-                }
-                if force {
-                    screen.clear(rect);
-                    frame.damage.push(rect);
-                }
-                for (child, area) in list.children().iter().zip(areas.iter()) {
-                    if area.is_empty() {
-                        // Below the viewport: not drawn, so it draws afresh
-                        // whenever it comes into view.
-                        child.hide();
-                    } else {
-                        child.draw(frame, *area, screen, force);
-                    }
-                }
-            }
-            Kind::Switch(switch) => {
-                if moved || force || dirty || switch.current().is_none() {
-                    frame.runtime.observe_node(self.id, || switch.read_key());
-                    frame.runtime.untracked(|| switch.settle());
-                }
-                let changed = switch.take_pending();
-                let force = force || moved || changed;
-                if force {
-                    screen.clear(rect);
-                    frame.damage.push(rect);
-                }
-                if let Some(child) = switch.current() {
-                    child.draw(frame, rect, screen, force);
                 }
             }
         }
         self.drawn.set(Some(rect));
     }
 
+    /// Draw a viewport's children into its offscreen content and ask it
+    /// where to look: the window on the screen, the content's point at its
+    /// top left, and whether anything inside drew.
+    fn draw_view(
+        &self,
+        frame: &mut FrameState,
+        widget: &mut Box<dyn Widget>,
+        areas: &[Rect],
+        view: &mut Option<View>,
+        rect: Rect,
+        relaid: bool,
+    ) -> (Rect, (u16, u16), bool) {
+        let content = areas.iter().fold((0u16, 0u16), |(w, h), area| {
+            (w.max(area.right()), h.max(area.bottom()))
+        });
+        let view = view.get_or_insert_with(|| View {
+            buffer: Screen::new(0, 0),
+            shown: None,
+        });
+        let mut force = relaid;
+        let size = view.buffer.area();
+        if (size.width, size.height) != content {
+            view.buffer = Screen::new(content.0, content.1);
+            force = true;
+        }
+        if force {
+            view.shown = None;
+        }
+        // Inside, the screen's coordinates are shifted by the window and
+        // the scroll.
+        let outer = frame.shift;
+        if let Some((window, offset)) = view.shown {
+            frame.shift = (
+                outer.0 - window.x as i32 + offset.0 as i32,
+                outer.1 - window.y as i32 + offset.1 as i32,
+            );
+        }
+        let saved = std::mem::take(&mut frame.damage);
+        let all = view.buffer.area();
+        for (i, child) in widget.children().iter().enumerate() {
+            match areas.get(i).map(|area| area.intersection(all)) {
+                Some(area) if !area.is_empty() => child.draw(frame, area, &mut view.buffer, force),
+                _ => child.hide(),
+            }
+        }
+        let inner = !std::mem::replace(&mut frame.damage, saved).is_empty();
+        frame.shift = outer;
+        // Where the focus is inside, for scrolling it into view.
+        let focused = frame.focus_path.with_untracked(|path| {
+            let last = *path.last()?;
+            if !path.contains(&self.id) || last == self.id {
+                return None;
+            }
+            let mut found = None;
+            for child in widget.children() {
+                with_node(child, last, &mut |node| found = Some(node.rect()));
+            }
+            found.map(|area| (last, area))
+        });
+        let cx = ScrollCx { content, focused };
+        let (local, offset) = frame.runtime.untracked(|| widget.scroll(&cx));
+        let window = Rect::new(
+            rect.x.saturating_add(local.x),
+            rect.y.saturating_add(local.y),
+            local.width,
+            local.height,
+        )
+        .intersection(rect);
+        let offset = (
+            offset.0.min(content.0.saturating_sub(window.width)),
+            offset.1.min(content.1.saturating_sub(window.height)),
+        );
+        (window, offset, inner)
+    }
+
     /// Forget this subtree's subscriptions (it left the tree), including
-    /// the nodes a [`switch`] keeps hidden.
+    /// the nodes a widget keeps hidden.
     pub(crate) fn forget(&self, runtime: &Runtime) {
         runtime.forget(self.id);
-        match &*self.kind.borrow() {
-            Kind::Leaf(_) | Kind::Log(_) | Kind::Host(_) => {}
-            Kind::Custom { widget, .. } => widget.children().iter().for_each(|c| c.forget(runtime)),
-            Kind::Stack(stack) => stack.children.iter().for_each(|c| c.forget(runtime)),
-            Kind::Grid(grid) => grid.children.iter().for_each(|c| c.forget(runtime)),
-            Kind::Panel { child, .. } | Kind::Pad { child, .. } => child.forget(runtime),
-            Kind::Scroll(scroll) => scroll.child.forget(runtime),
-            Kind::Each { list, .. } => list.children().iter().for_each(|c| c.forget(runtime)),
-            Kind::Switch(switch) => switch.all().iter().for_each(|c| c.forget(runtime)),
+        let body = self.body.borrow();
+        for child in body.widget.children() {
+            child.forget(runtime);
+        }
+        for child in body.widget.hidden_children() {
+            child.forget(runtime);
         }
     }
 }
 
 /// A box's four edges: top and bottom rows, left and right columns between
 /// them.
-fn edges(rect: Rect) -> [Rect; 4] {
+pub(crate) fn edges(rect: Rect) -> [Rect; 4] {
     let inner = rect.height.saturating_sub(2);
     [
         Rect::new(rect.x, rect.y, rect.width, 1),
@@ -958,7 +667,7 @@ fn edges(rect: Rect) -> [Rect; 4] {
 /// [`edges`]: the top and bottom rows whole, and the first and last
 /// segment of each row between them. Whole segments, so a title's
 /// grapheme clusters (an emoji sequence) stay intact.
-fn edge_lines(lines: &[Vec<Segment>]) -> [Vec<Vec<Segment>>; 4] {
+pub(crate) fn edge_lines(lines: &[Vec<Segment>]) -> [Vec<Vec<Segment>>; 4] {
     let middle = &lines[1.min(lines.len())..lines.len().saturating_sub(1).max(1)];
     let side = |pick: fn(&Vec<Segment>) -> Option<&Segment>| -> Vec<Vec<Segment>> {
         middle
@@ -975,9 +684,9 @@ fn edge_lines(lines: &[Vec<Segment>]) -> [Vec<Vec<Segment>>; 4] {
 }
 
 /// `lines` with `style` laid over every segment, each row filled out to
-/// the rectangle's width and height in it.
+/// the rectangle's width in it.
 fn highlight(lines: Vec<Vec<Segment>>, style: &Style, rect: Rect) -> Vec<Vec<Segment>> {
-    let mut out: Vec<Vec<Segment>> = lines
+    lines
         .into_iter()
         .take(rect.height as usize)
         .map(|line| {
@@ -998,379 +707,12 @@ fn highlight(lines: Vec<Vec<Segment>>, style: &Style, rect: Rect) -> Vec<Vec<Seg
             }
             line
         })
-        .collect();
-    while out.len() < rect.height as usize {
-        out.push(vec![Segment::new(
-            " ".repeat(rect.width as usize),
-            Some(style.clone()),
-        )]);
-    }
-    out
-}
-
-/// A row's height in an [`each`] list: its fixed size, its content for
-/// [`Size::Auto`], otherwise one row.
-fn row_height(console: &Console, child: &Node, width: u16) -> u16 {
-    let height = match child.size {
-        Size::Fixed(n) => n,
-        Size::Auto => child.measure(console, Axis::Vertical, width, 0),
-        _ => 1,
-    };
-    height.min(child.max).max(child.min)
-}
-
-/// Draw `children` into `areas`. When the areas differ from the last
-/// layout (`old`), the container's rectangle is cleared, so gaps and
-/// space no child covers do not keep stale cells, and every child draws.
-fn draw_children(
-    frame: &mut FrameState,
-    screen: &mut Screen,
-    rect: Rect,
-    children: &[Node],
-    areas: Vec<Rect>,
-    old: &mut Vec<Rect>,
-    force: bool,
-) {
-    let relaid = !old.is_empty() && *old != areas;
-    let force = force || relaid;
-    if relaid {
-        screen.clear(rect);
-        frame.damage.push(rect);
-    }
-    for (child, area) in children.iter().zip(&areas) {
-        if area.is_empty() {
-            child.hide();
-        } else {
-            child.draw(frame, *area, screen, force);
-        }
-    }
-    *old = areas;
-}
-
-/// Each child's rectangle in a stack.
-fn stack_areas(console: &Console, stack: &Stack, rect: Rect) -> Vec<Rect> {
-    let tracks: Vec<Track> = stack
-        .children
-        .iter()
-        .map(|child| {
-            let mut track = child.track();
-            if track.size == Size::Auto {
-                // Content is measured in the whole rectangle across the
-                // axis, and unbounded along it.
-                track.content = match stack.axis {
-                    Axis::Vertical => child.measure(console, Axis::Vertical, rect.width, 0),
-                    Axis::Horizontal => {
-                        child.measure(console, Axis::Horizontal, rect.width, rect.height)
-                    }
-                };
-            }
-            track
-        })
-        .collect();
-    let (start, total) = match stack.axis {
-        Axis::Vertical => (rect.y, rect.height),
-        Axis::Horizontal => (rect.x, rect.width),
-    };
-    let sizes = solve(total, stack.gap, &tracks);
-    offsets(start, stack.gap, &sizes)
-        .into_iter()
-        .zip(sizes)
-        .map(|(at, n)| match stack.axis {
-            Axis::Vertical => Rect::new(rect.x, at, rect.width, n),
-            Axis::Horizontal => Rect::new(at, rect.y, n, rect.height),
-        })
         .collect()
-}
-
-/// Each child's rectangle in a grid. Columns are solved first, then rows,
-/// so a row of [`Size::Auto`] knows how wide its children are. `axis`
-/// is [`Axis::Horizontal`] when measuring the grid's own width, which
-/// leaves flexible columns at their content.
-fn grid_areas(console: &Console, grid: &Grid, rect: Rect, axis: Axis) -> Vec<Rect> {
-    let columns = grid.columns.len().max(1);
-    let spans: Vec<(u16, u16)> = grid.children.iter().map(|c| c.span).collect();
-    let (places, rows) = place(columns, &spans);
-    let (row_gap, column_gap) = grid.gap;
-    let span_length = |sizes: &[u16], from: usize, n: usize, gap: u16| -> u16 {
-        sizes[from..(from + n).min(sizes.len())]
-            .iter()
-            .fold(gap.saturating_mul(n.saturating_sub(1) as u16), |sum, s| {
-                sum.saturating_add(*s)
-            })
-    };
-    // Columns.
-    let mut column_tracks: Vec<Track> = (0..columns)
-        .map(|c| {
-            let size = grid.columns.get(c).copied().unwrap_or(Size::Flex(1));
-            let mut track = Track::new(size);
-            let content = matches!(size, Size::Auto)
-                || (axis == Axis::Horizontal && matches!(size, Size::Flex(_)));
-            if content {
-                track.size = Size::Auto;
-                track.content = places
-                    .iter()
-                    .zip(&grid.children)
-                    .filter(|(p, _)| p.column == c && p.columns == 1)
-                    .map(|(_, child)| {
-                        child.measure(console, Axis::Horizontal, rect.width, rect.height)
-                    })
-                    .max()
-                    .unwrap_or(0);
-            }
-            track
-        })
-        .collect();
-    // Children spanning several columns grow the content columns they span.
-    for (p, child) in places.iter().zip(&grid.children) {
-        if p.columns > 1 {
-            let need = child.measure(console, Axis::Horizontal, rect.width, rect.height);
-            grow_for_span(
-                &mut column_tracks,
-                rect.width,
-                column_gap,
-                p.column,
-                p.columns,
-                need,
-            );
-        }
-    }
-    let widths = solve(rect.width, column_gap, &column_tracks);
-    let xs = offsets(rect.x, column_gap, &widths);
-    // Rows.
-    let row_size = |r: usize| match grid.rows.get(r).or(grid.rows.last()) {
-        Some(size) => *size,
-        None => Size::Flex(1),
-    };
-    let mut row_tracks: Vec<Track> = (0..rows)
-        .map(|r| {
-            let size = row_size(r);
-            let mut track = Track::new(size);
-            // A grid measured for its height sizes flexible rows by content.
-            let content =
-                matches!(size, Size::Auto) || (rect.height == 0 && matches!(size, Size::Flex(_)));
-            if content {
-                track.size = Size::Auto;
-                track.content = places
-                    .iter()
-                    .zip(&grid.children)
-                    .filter(|(p, _)| p.row == r && p.rows == 1)
-                    .map(|(p, child)| {
-                        let width = span_length(&widths, p.column, p.columns, column_gap);
-                        child.measure(console, Axis::Vertical, width, 0)
-                    })
-                    .max()
-                    .unwrap_or(0);
-            }
-            track
-        })
-        .collect();
-    for (p, child) in places.iter().zip(&grid.children) {
-        if p.rows > 1 {
-            let width = span_length(&widths, p.column, p.columns, column_gap);
-            let need = child.measure(console, Axis::Vertical, width, 0);
-            grow_for_span(&mut row_tracks, rect.height, row_gap, p.row, p.rows, need);
-        }
-    }
-    let total_height = if rect.height == 0 {
-        u16::MAX
-    } else {
-        rect.height
-    };
-    let heights = solve(total_height, row_gap, &row_tracks);
-    let ys = offsets(rect.y, row_gap, &heights);
-    places
-        .iter()
-        .map(|p| {
-            let width = span_length(&widths, p.column, p.columns, column_gap);
-            let height = span_length(&heights, p.row, p.rows, row_gap);
-            let area = Rect::new(xs[p.column], ys[p.row], width, height);
-            if rect.height == 0 {
-                area
-            } else {
-                area.intersection(rect)
-            }
-        })
-        .collect()
-}
-
-/// `rect` without `edges` (top, right, bottom, left).
-fn inset(rect: Rect, [top, right, bottom, left]: [u16; 4]) -> Rect {
-    Rect::new(
-        rect.x.saturating_add(left),
-        rect.y.saturating_add(top),
-        rect.width.saturating_sub(left.saturating_add(right)),
-        rect.height.saturating_sub(top.saturating_add(bottom)),
-    )
-}
-
-/// A log draws only what arrived since its last frame, moving what is on
-/// screen up, unless it moved or was overwritten.
-fn draw_log(
-    id: NodeId,
-    view: &mut crate::log::LogView,
-    frame: &mut FrameState,
-    rect: Rect,
-    screen: &mut Screen,
-    full: bool,
-) {
-    let total = frame
-        .runtime
-        .observe_node(id, || view.log.data.with(|data| data.total));
-    let height = rect.height as usize;
-    let arrived = view
-        .drawn_total
-        .map(|drawn| total.saturating_sub(drawn) as usize);
-    view.log.data.with_untracked(|data| {
-        let render = |from: usize| -> Vec<Vec<Segment>> {
-            data.lines
-                .range(from..)
-                .map(|line| crate::log::render_line(frame.console, line, rect.width))
-                .collect()
-        };
-        match arrived {
-            Some(0) if !full => {}
-            Some(n) if !full && n < height => {
-                let len = data.lines.len();
-                let shown = view.shown;
-                if len == shown + n && shown + n <= height {
-                    // Room left and nothing dropped: the new lines go under
-                    // the old.
-                    let rows = Rect::new(rect.x, rect.y + shown as u16, rect.width, n as u16);
-                    screen.write_lines(rows, &render(shown));
-                    frame.damage.push(rows);
-                } else if shown == height && len >= height {
-                    // Full: scroll what is on screen up, and render only the
-                    // new lines into the rows that opened.
-                    screen.scroll_up(rect, n as u16);
-                    let rows = Rect::new(rect.x, rect.bottom() - n as u16, rect.width, n as u16);
-                    screen.write_lines(rows, &render(len - n));
-                    frame.damage.push(rect);
-                } else {
-                    // Lines were dropped from a log shorter than the view:
-                    // draw what it keeps.
-                    screen.write_lines(rect, &render(len.saturating_sub(height)));
-                    frame.damage.push(rect);
-                }
-                frame.drew(id);
-            }
-            _ => {
-                screen.write_lines(rect, &render(data.lines.len().saturating_sub(height)));
-                frame.damage.push(rect);
-                frame.drew(id);
-            }
-        }
-    });
-    view.drawn_total = Some(total);
-    view.shown = view
-        .log
-        .data
-        .with_untracked(|data| data.lines.len())
-        .min(height);
-}
-
-/// Lay out a scroll's child when anything it read changed, draw it into
-/// its own screen, and copy the rows in view out when they changed.
-fn draw_scroll(
-    id: NodeId,
-    scroll: &mut Scroll,
-    frame: &mut FrameState,
-    rect: Rect,
-    screen: &mut Screen,
-    relayout: bool,
-) {
-    let Scroll {
-        child,
-        offset,
-        buffer,
-        width,
-        content,
-        shown,
-        focus,
-        extent,
-    } = scroll;
-    let mut child_force = false;
-    if relayout || buffer.area().is_empty() {
-        let console = frame.console;
-        let focus_path = frame.focus_path;
-        let child_ref: &Node = child;
-        let (w, h, focused) = frame.runtime.observe_node(id, || {
-            // A scrollbar takes the last column when the content is taller.
-            let full = child_ref.measure(console, Axis::Vertical, rect.width, 0);
-            let (w, h) = if full > rect.height && rect.width > 1 {
-                let w = rect.width - 1;
-                (w, child_ref.measure(console, Axis::Vertical, w, 0))
-            } else {
-                (rect.width, full)
-            };
-            offset.get();
-            (
-                w,
-                h.max(rect.height).min(MAX_SCROLL_ROWS),
-                focus_path.with(|p| p.last().copied()),
-            )
-        });
-        if (w, h) != (*width, *content) || buffer.area().is_empty() {
-            *buffer = Screen::new(w, h);
-            (*width, *content) = (w, h);
-            child_force = true;
-        }
-        extent.set((rect.height, h));
-        // Keep a newly focused node inside in view, once it is laid out.
-        if focused != *focus {
-            *focus = focused;
-            child.draw(frame, Rect::new(0, 0, w, h), buffer, child_force);
-            child_force = false;
-            if let Some(target) = focused {
-                let mut area = None;
-                with_node(child, target, &mut |node| area = Some(node.rect()));
-                if let Some(area) = area.filter(|a| !a.is_empty()) {
-                    let top = offset.get_untracked();
-                    let bottom = top.saturating_add(rect.height);
-                    let next = if area.y < top {
-                        area.y
-                    } else if area.bottom() > bottom {
-                        area.bottom().saturating_sub(rect.height)
-                    } else {
-                        top
-                    };
-                    if next != top {
-                        frame.runtime.untracked(|| offset.set(next));
-                    }
-                }
-            }
-        }
-    }
-    let saved = std::mem::take(&mut frame.damage);
-    child.draw(
-        frame,
-        Rect::new(0, 0, *width, *content),
-        buffer,
-        child_force,
-    );
-    let inner = std::mem::replace(&mut frame.damage, saved);
-    let max = content.saturating_sub(rect.height);
-    let top = offset.get_untracked().min(max);
-    if relayout || !inner.is_empty() || *shown != Some(top) {
-        screen.clear(rect);
-        screen.blit(
-            buffer,
-            Rect::new(0, top, *width, rect.height),
-            rect.x,
-            rect.y,
-        );
-        if *width < rect.width && *content > rect.height {
-            let lines = scrollbar(frame.console, rect.height, top, *content);
-            screen.write_lines(Rect::new(rect.right() - 1, rect.y, 1, rect.height), &lines);
-        }
-        frame.damage.push(rect);
-        frame.drew(id);
-        *shown = Some(top);
-    }
 }
 
 /// A one-column scrollbar `rows` tall for content `content` rows tall,
 /// scrolled to `top`.
-fn scrollbar(console: &Console, rows: u16, top: u16, content: u16) -> Vec<Vec<Segment>> {
+pub(crate) fn scrollbar(console: &Console, rows: u16, top: u16, content: u16) -> Vec<Vec<Segment>> {
     let style = |name: &str, fallback: &str| {
         console
             .get_style(&rich::style::StyleType::Name(name.to_string()))
@@ -1413,17 +755,17 @@ pub(crate) fn walk_screen(root: &Node, f: &mut ScreenVisit) {
     ) {
         path.push(node.id);
         f(node, path, shift, clip);
-        let scrolled = match &*node.kind.borrow() {
-            Kind::Scroll(scroll) => {
-                let rect = translate(node.rect(), shift);
-                let top = scroll.shown.unwrap_or(0) as i32;
-                Some((
-                    (rect.x as i32, rect.y as i32 - top),
-                    rect.intersection(clip),
-                ))
-            }
-            _ => None,
-        };
+        let scrolled = node.body.borrow().view.as_ref().and_then(|view| {
+            let (window, offset) = view.shown?;
+            let window = translate(window, shift);
+            Some((
+                (
+                    window.x as i32 - offset.0 as i32,
+                    window.y as i32 - offset.1 as i32,
+                ),
+                window.intersection(clip),
+            ))
+        });
         let (shift, clip) = scrolled.unwrap_or((shift, clip));
         node.each_child(&mut |child| inner(child, path, shift, clip, f));
         path.pop();
@@ -1459,6 +801,15 @@ pub(crate) struct FrameState<'a> {
     /// A widget asked whether it is hovered: the app turns on the
     /// terminal's pointer movement reports.
     pub wants_hover: Cell<bool>,
+    /// The nodes that asked about the pointer.
+    pub watchers: &'a Watchers,
+    /// Where the pointer last was, on the screen.
+    pub pointer: Option<(u16, u16)>,
+    /// From the screen to the surface being drawn on (inside a viewport,
+    /// its content).
+    pub shift: (i32, i32),
+    /// Nodes laid out at a new size this frame.
+    pub resized: Vec<NodeId>,
     pub theme: &'a crate::app::Theme,
     /// Nodes drawn this frame.
     pub drawn: usize,
@@ -1527,7 +878,7 @@ pub(crate) fn border(
 /// of 0 asks how tall the node would like to be: a parent laying out a
 /// [`Size::Auto`] child measures it so.
 pub fn leaf(draw: impl Fn(&Console, u16, u16) -> Vec<Vec<Segment>> + 'static) -> Node {
-    Node::new(Kind::Leaf(Box::new(draw))).what("leaf")
+    Node::from_widget(Box::new(Leaf(Box::new(draw))), "leaf")
 }
 
 /// Console markup, from a closure that may read signals:
@@ -1592,12 +943,15 @@ pub fn component<C: Component + 'static>(
     component: C,
     on_done: impl FnMut(C::Output, &mut Ctx) + 'static,
 ) -> Node {
-    let mut node = Node::new(Kind::Host(Box::new(Host {
-        component,
-        make: None,
-        on_done: Box::new(on_done),
-        on_cancel: None,
-    })));
+    let mut node = Node::from_widget(
+        Box::new(HostWidget::new(Box::new(Host {
+            component,
+            make: None,
+            on_done: Box::new(on_done),
+            on_cancel: None,
+        }))),
+        "component",
+    );
     node.focusable = true;
     node.what("component")
 }
@@ -1626,12 +980,15 @@ pub fn repeating<C: Component + 'static>(
     make: impl Fn() -> C + 'static,
     on_done: impl FnMut(C::Output, &mut Ctx) + 'static,
 ) -> Node {
-    let mut node = Node::new(Kind::Host(Box::new(Host {
-        component: make(),
-        make: Some(Box::new(make)),
-        on_done: Box::new(on_done),
-        on_cancel: None,
-    })));
+    let mut node = Node::from_widget(
+        Box::new(HostWidget::new(Box::new(Host {
+            component: make(),
+            make: Some(Box::new(make)),
+            on_done: Box::new(on_done),
+            on_cancel: None,
+        }))),
+        "component",
+    );
     node.focusable = true;
     node.what("component")
 }
@@ -1747,48 +1104,7 @@ pub fn scroll(child: Node) -> Node {
 /// [`scroll`], with the first row in view in `offset`: read it, or set it
 /// to scroll from code.
 pub fn scroll_with(child: Node, offset: Signal<u16>) -> Node {
-    let extent = Rc::new(Cell::new((1u16, 1u16)));
-    let by = {
-        let extent = extent.clone();
-        move |rows: i32| {
-            let (view, content) = extent.get();
-            let max = content.saturating_sub(view) as i32;
-            offset.update(|o| *o = (*o as i32 + rows).clamp(0, max) as u16);
-        }
-    };
-    let page = {
-        let extent = extent.clone();
-        move || extent.get().0.max(2) as i32 - 1
-    };
-    let node = Node::new(Kind::Scroll(Box::new(Scroll {
-        child: Box::new(child),
-        offset,
-        buffer: Screen::new(0, 0),
-        width: 0,
-        content: 0,
-        shown: None,
-        focus: None,
-        extent,
-    })))
-    .what("scroll")
-    .focusable();
-    let (up, down, pgup, pgdn, wheel) = (by.clone(), by.clone(), by.clone(), by.clone(), by);
-    let (page_up, page_down) = (page.clone(), page);
-    node.on_key("up", move |_| up(-1))
-        .on_key("down", move |_| down(1))
-        .on_key("pageup", move |_| pgup(-page_up()))
-        .on_key("pagedown", move |_| pgdn(page_down()))
-        .on_key("home", move |_| offset.set(0))
-        .on_key("end", move |_| offset.set(MAX_SCROLL_ROWS))
-        .on_mouse(move |_, mouse| {
-            let rows = match mouse.kind {
-                rich_interact::MouseKind::ScrollUp => -3,
-                rich_interact::MouseKind::ScrollDown => 3,
-                _ => return false,
-            };
-            wheel(rows);
-            true
-        })
+    Node::from_widget(Box::new(ScrollView::new(child, offset)), "scroll").focusable()
 }
 
 /// Children one above the other.
@@ -1802,12 +1118,14 @@ pub fn row(children: impl IntoIterator<Item = Node>) -> Node {
 }
 
 fn stack(axis: Axis, children: impl IntoIterator<Item = Node>) -> Node {
-    Node::new(Kind::Stack(Stack {
-        axis,
-        gap: 0,
-        children: children.into_iter().collect(),
-        areas: Vec::new(),
-    }))
+    Node::from_widget(
+        Box::new(Stack {
+            axis,
+            gap: 0,
+            children: children.into_iter().collect(),
+        }),
+        "stack",
+    )
 }
 
 /// Children in a grid with `columns`, filled row by row. A child can span
@@ -1838,61 +1156,15 @@ pub fn grid(
     columns: impl IntoIterator<Item = Size>,
     children: impl IntoIterator<Item = Node>,
 ) -> Node {
-    Node::new(Kind::Grid(Grid {
-        columns: columns.into_iter().collect(),
-        rows: Vec::new(),
-        gap: (0, 0),
-        children: children.into_iter().collect(),
-        areas: Vec::new(),
-    }))
-    .what("grid")
-}
-
-/// A keyed list reconciled against its keys.
-pub(crate) trait Reconcile {
-    /// Bring the children in line with the keys; whether the list changed.
-    fn reconcile(&mut self) -> bool;
-    /// Whether a reconcile outside a draw (a parent measuring the list)
-    /// changed it since the list last drew.
-    fn take_pending(&mut self) -> bool;
-    fn children(&self) -> &[Node];
-}
-
-struct Each<K, F> {
-    keys: Rc<dyn Fn() -> Vec<K>>,
-    build: F,
-    order: Vec<K>,
-    children: Vec<Node>,
-    pending: bool,
-}
-
-impl<K: Clone + Eq + Hash + 'static, F: Fn(K) -> Node> Reconcile for Each<K, F> {
-    fn reconcile(&mut self) -> bool {
-        let keys = (self.keys)();
-        if keys == self.order {
-            return false;
-        }
-        let mut old: HashMap<K, Node> = self.order.drain(..).zip(self.children.drain(..)).collect();
-        for key in &keys {
-            let node = old.remove(key).unwrap_or_else(|| (self.build)(key.clone()));
-            self.children.push(node);
-        }
-        let runtime = Runtime::current();
-        for (_, gone) in old {
-            gone.forget(&runtime);
-        }
-        self.order = keys;
-        self.pending = true;
-        true
-    }
-
-    fn take_pending(&mut self) -> bool {
-        std::mem::take(&mut self.pending)
-    }
-
-    fn children(&self) -> &[Node] {
-        &self.children
-    }
+    Node::from_widget(
+        Box::new(Grid {
+            columns: columns.into_iter().collect(),
+            rows: Vec::new(),
+            gap: (0, 0),
+            children: children.into_iter().collect(),
+        }),
+        "grid",
+    )
 }
 
 /// One child per key, top to bottom, each one row tall unless it is
@@ -1915,73 +1187,15 @@ where
     K: Clone + Eq + Hash + 'static,
     F: Fn(K) -> Node + 'static,
 {
-    Node::new(Kind::Each {
-        list: Box::new(Each {
+    Node::from_widget(
+        Box::new(Each {
             keys: Rc::new(keys),
             build,
             order: Vec::new(),
             children: Vec::new(),
-            pending: false,
         }),
-        areas: Vec::new(),
-    })
-    .what("each")
-}
-
-/// One child shown at a time, chosen by a key.
-pub(crate) trait Switching {
-    /// Read the key (the switch subscribes to what it reads); whether it
-    /// changed.
-    fn read_key(&mut self) -> bool;
-    /// Whether a key read outside a draw (a parent measuring the switch)
-    /// changed it since the switch last drew.
-    fn take_pending(&mut self) -> bool;
-    /// Build the child for the key if it is new.
-    fn settle(&mut self);
-    fn current(&self) -> Option<&Node>;
-    /// Every child built, shown or not.
-    fn all(&self) -> Vec<&Node>;
-}
-
-struct Switch<K, F> {
-    key: Box<dyn Fn() -> K>,
-    build: F,
-    built: HashMap<K, Node>,
-    current: Option<K>,
-    pending: bool,
-}
-
-impl<K: Clone + Eq + Hash + 'static, F: Fn(K) -> Node> Switching for Switch<K, F> {
-    fn read_key(&mut self) -> bool {
-        let key = (self.key)();
-        if self.current.as_ref() == Some(&key) {
-            return false;
-        }
-        self.current = Some(key);
-        self.pending = true;
-        true
-    }
-
-    fn take_pending(&mut self) -> bool {
-        std::mem::take(&mut self.pending)
-    }
-
-    fn settle(&mut self) {
-        if let Some(key) = &self.current {
-            if !self.built.contains_key(key) {
-                let node = (self.build)(key.clone());
-                self.built.insert(key.clone(), node);
-            }
-        }
-    }
-
-    fn current(&self) -> Option<&Node> {
-        self.current.as_ref().and_then(|key| self.built.get(key))
-    }
-
-    fn all(&self) -> Vec<&Node> {
-        self.built.values().collect()
-    }
+        "each",
+    )
 }
 
 /// The child for the current `key`, built by `build` the first time the key
@@ -2015,14 +1229,15 @@ where
     K: Clone + Eq + Hash + 'static,
     F: Fn(K) -> Node + 'static,
 {
-    Node::new(Kind::Switch(Box::new(Switch {
-        key: Box::new(key),
-        build,
-        built: HashMap::new(),
-        current: None,
-        pending: false,
-    })))
-    .what("switch")
+    Node::from_widget(
+        Box::new(Switch {
+            key: Box::new(key),
+            build,
+            built: HashMap::new(),
+            current: None,
+        }),
+        "switch",
+    )
 }
 
 /// The nodes under `column`, `row`, outermost first (the path to the
@@ -2044,6 +1259,16 @@ pub(crate) fn hit_path(root: &Node, column: u16, row: u16) -> Vec<(NodeId, (i32,
         }
     });
     found
+}
+
+/// Every node shown, with the translation from screen coordinates to its
+/// own (they differ inside a viewport).
+pub(crate) fn shifts(root: &Node) -> Vec<(NodeId, (i32, i32))> {
+    let mut out = Vec::new();
+    walk_screen(root, &mut |node, _, shift, _| {
+        out.push((node.id, (-shift.0, -shift.1)))
+    });
+    out
 }
 
 /// Run `f` on the node with `id`.
