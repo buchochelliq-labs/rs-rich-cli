@@ -408,7 +408,10 @@ impl Node {
                         _ => 1,
                     };
                     if y >= rect.bottom() {
+                        // Below the viewport: not drawn, so it draws afresh
+                        // whenever it comes into view.
                         child.rect.set(Rect::default());
+                        child.drawn.set(None);
                         continue;
                     }
                     let height = height.min(rect.bottom() - y);
@@ -529,11 +532,17 @@ fn border(title: &str, style: &Style, title_style: &Style, rect: Rect) -> Vec<Ve
     let title = rich::cells::set_cell_size(&title, rich::cells::cell_len(&title).min(room));
     let title_len = rich::cells::cell_len(&title);
     let mut lines = Vec::with_capacity(h);
-    lines.push(vec![
-        edge("╭─".into()),
-        Segment::new(title, Some(title_style.clone())),
-        edge(format!("{}╮", "─".repeat(w - 3 - title_len))),
-    ]);
+    if w < 4 {
+        // Too narrow for a title: a plain box.
+        lines.push(vec![edge(format!("╭{}╮", "─".repeat(w - 2)))]);
+    } else {
+        // `title_len` is at most `w - 4`, so one dash always follows it.
+        lines.push(vec![
+            edge("╭─".into()),
+            Segment::new(title, Some(title_style.clone())),
+            edge(format!("{}╮", "─".repeat(w - 3 - title_len))),
+        ]);
+    }
     for _ in 0..h - 2 {
         lines.push(vec![
             edge("│".into()),

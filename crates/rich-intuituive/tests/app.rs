@@ -350,3 +350,29 @@ fn clicking_a_component_focuses_it() {
     let record = run(app, Script::new().click(5, 1).keys("x enter ctrl+q"), 30, 3);
     assert_eq!(screen(&record)[2], "a= b=x");
 }
+
+/// A border two or three columns wide underflowed its width.
+#[test]
+fn narrow_panels_draw() {
+    for width in 1..6 {
+        let app = App::new(|| label("x").panel("Title").on_key("q", |cx| cx.quit()));
+        let screen = app.render_with(&["q"], width, 3).unwrap();
+        assert_eq!(screen.len(), 3, "{width}: {screen:?}");
+    }
+}
+
+/// Rows below a keyed list's viewport that change while hidden draw their
+/// new value when they come into view.
+#[test]
+fn hidden_keyed_rows_redraw_when_shown() {
+    let app = App::new(|| {
+        let order = signal(vec![0usize, 1, 2]);
+        let labels = signal(vec!["a".to_string(), "b".into(), "c".into()]);
+        each(move || order.get(), move |k| text(move || labels.get()[k].clone()))
+            .on_key("x", move |_| labels.update(|l| l[2] = "C".into()))
+            .on_key("r", move |_| order.set(vec![2, 0, 1]))
+            .on_key("q", |cx| cx.quit())
+    });
+    let screen = app.render_with(&["x", "r", "q"], 4, 2).unwrap();
+    assert_eq!(screen[0].trim_end(), "C", "{screen:?}");
+}
