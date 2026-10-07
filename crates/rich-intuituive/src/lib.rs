@@ -23,7 +23,7 @@
 //! }
 //! ```
 //!
-//! - **Nodes** ([`text`], [`label`], [`renderable`], [`column`], [`row`],
+//! - **Nodes** ([`text`](fn@text), [`label`], [`renderable`], [`column`](fn@column), [`row`],
 //!   [`each`], [`Node::panel`]) are built once and kept. Any rich renderable
 //!   is a node: a `Table`, `Markdown`, `Syntax`, a chart.
 //! - **State** is [`signal`]s and [`memo`]s. Reading one while drawing

@@ -3,7 +3,7 @@
 //! [`App::run`] takes the terminal (the alternate screen, raw mode, the
 //! mouse), and gives it back on every way out, including a panic. Each turn
 //! of the loop it runs work other threads sent through a
-//! [`Proxy`](crate::Proxy), fires due timers, draws what changed and reads
+//! [`Proxy`], fires due timers, draws what changed and reads
 //! one event:
 //!
 //! - **keys** go to the focused node, then bubble to each ancestor until a
