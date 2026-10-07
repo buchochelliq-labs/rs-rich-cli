@@ -1,0 +1,5 @@
+# A cargo-generate template for an intuiTUIve app:
+#
+#     cargo generate --git https://github.com/buchochelliq-labs/rs-rich-cli templates/intuituive-app
+[template]
+cargo_generate_version = ">=0.18"

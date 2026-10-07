@@ -81,11 +81,14 @@ impl Log {
 
     /// A node showing the latest lines, one per row.
     pub fn view(&self) -> Node {
-        Node::new_kind(Kind::Log(LogView {
-            log: *self,
-            drawn_total: None,
-            shown: 0,
-        }))
+        Node::new_kind(
+            Kind::Log(LogView {
+                log: *self,
+                drawn_total: None,
+                shown: 0,
+            }),
+            "log",
+        )
     }
 }
 

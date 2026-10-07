@@ -13,7 +13,16 @@ app. Any rich renderable (tables, Markdown, syntax, charts) is a node.
 
 ```toml
 [dependencies]
-rs-rich-intuituive = "*"
+rs-rich-intuituive = "0.0.1"
+```
+
+One dependency is enough: `intuituive::rich` is rs-rich and
+`intuituive::interact` is rs-rich-interact. New here? The
+[tutorial](tutorial.md) builds a to-do app step by step, and the template
+starts a project with one command:
+
+```bash
+cargo generate --git https://github.com/buchochelliq-labs/rs-rich-cli templates/intuituive-app
 ```
 
 ## A first app
@@ -59,6 +68,7 @@ including Ctrl+C and a panic.
 | `switch(move \|\| key, \|key\| node)` | One child at a time, chosen by key; the others are kept (tabs, wizard steps) |
 | `log.view()` | A streaming [`Log`](#logs) |
 | `component(Input::new("Name"), on_done)` | A `rich-interact` component (see [Components](#components)) |
+| `repeating(\|\| Input::new("Add"), on_done)` | The same, built fresh after each answer (an entry box) |
 
 `.panel("Title")` wraps a node in a rounded border that is highlighted
 while the focus is inside it, and `.padding(1, 2)` leaves space round it
@@ -150,6 +160,10 @@ column([
   store rectangles yourself.
 - **Key names** are the ones `rs-rich-interact` uses: `"q"`, `"ctrl+s"`,
   `"up k"` (either key).
+- **Showing the focus:** panels highlight their border while the focus is
+  inside them. A leaf can show it too: `.focus_style("reverse")` (any style
+  or theme name) restyles it, filled to its full width, while it has the
+  focus, which is how a list shows its selected row.
 
 ## Components
 
@@ -169,6 +183,9 @@ column([
   closure.
 - `.on_cancel(|cx| …)` handles Esc. Without it, Esc bubbles to your own
   bindings.
+- A component answers once and then shows its answer. For an entry box
+  that takes one entry after another, use `repeating(make, on_done)`: it
+  builds a fresh component after each answer.
 
 ## Logs
 
@@ -283,6 +300,26 @@ Add your own with `Theme::dark().style("brand", Style::parse("bold magenta")?)`,
 set it with `App::theme`, and switch at run time with `cx.set_theme(theme)`;
 everything is drawn again in the new theme.
 
+### Theme files, reloaded live
+
+```rust
+app.theme_file("theme.ini").run()
+```
+
+```ini
+[styles]
+accent = bold magenta
+border.focused = bright_green
+```
+
+The file is rich's theme format: a `[styles]` section of `name = style`
+lines. `border`, `border.focused` and `title` restyle the framework's parts,
+and every name works in markup. The app reads the file again whenever it
+changes, so you can tune colours while it runs. A file that does not parse
+leaves the last good styles in place, and the [inspector](#inspector) shows
+the error. `Theme::load(path)` and `theme.with_config(text)` read the same
+format without watching.
+
 ## Inline apps
 
 ```rust
@@ -310,6 +347,28 @@ exact bytes sent, use `App::run_on` with `rs-rich-interact`'s `Headless`
 backend. `App::wait_for_tasks(true)` waits for background tasks before each
 scripted event, so a test sees a task's result however fast the machine is.
 
+## Inspector
+
+```bash
+INTUITUIVE_INSPECT=1 cargo run      # any app, no code change
+```
+
+or `App::inspector(true)` in code. The inspector docks on the right, and
+the app is laid out in the space to its left. F12 shows and hides it. It
+shows:
+
+- the node tree as it is, each node's builder (or its `.name("…")`), what
+  it holds (a panel's title, a list's length, a grid's shape) and its size,
+  or `hidden`;
+- in yellow, the nodes that drew in the last frame; reversed, the focused
+  node;
+- the frame's cost: nodes drawn of those made dirty, damaged rectangles and
+  cells, and the bytes sent;
+- the theme file's state, and its error if the last edit did not parse.
+
+It is the quickest way to see that a change redraws what it should and
+nothing more.
+
 ## Against ratatui
 
 `tests/versus_ratatui.rs` draws the same ops dashboard with ratatui 0.30 and
@@ -334,8 +393,5 @@ widgets in an existing app, and ratatui widgets run inside rs-rich-interact.
 ## Status
 
 This is an early slice (0.0.x), so the API will change. Still to come:
-
-- a widget inspector (the tree, dirty nodes and damage, live);
-- hot reload of styles;
-- a project template and a tutorial;
-- Python.
+Python bindings for the framework, as rs-rich-interact's components already
+have.

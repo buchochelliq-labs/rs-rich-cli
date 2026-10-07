@@ -54,6 +54,26 @@ blocking and headless drivers and every existing component carry over),
   to switch at run time.
 - Inline mode: `App::inline(rows)` runs in a region below the prompt, moving
   the cursor relative to it, and leaves the last frame in the scrollback.
+- An inspector, docked on the right (`App::inspector(true)`, or
+  `INTUITUIVE_INSPECT=1` for any app; F12 toggles it): the node tree with
+  sizes, the nodes that drew in the last frame, the focus, the frame's cost
+  (nodes drawn of those dirty, damage, bytes sent) and the theme file's
+  state. `Node::name` labels nodes for it.
+- Live styles: `App::theme_file(path)` reads rich's theme format and
+  reloads it when the file changes, keeping the last good styles (and
+  showing the error) when an edit does not parse; `Theme::with_config` and
+  `Theme::load` read the same format.
+- `repeating(make, on_done)`: a component built fresh after each answer,
+  for entry boxes; `Node::focus_style(style)` highlights a leaf, such as a
+  list row, while it has the focus.
+- A panel whose focus state changes redraws only its border's edges, not
+  its contents, and a focus move elsewhere leaves it alone.
+- `intuituive::rich` and `intuituive::interact` re-export rs-rich and
+  rs-rich-interact, so an app needs one dependency.
+- A cargo-generate template (`templates/intuituive-app`, compiled and tested
+  against the crate in CI) and a tutorial that builds a to-do app
+  (`docs/guide/intuituive/tutorial.md`, its finished app
+  `examples/todo.rs` with tests).
 - A benchmark gate against ratatui 0.30 (`tests/versus_ratatui.rs`, a new
   `ratatui-gate` CI job, run in release): the same ops dashboard drawn both
   ways, failing if intuiTUIve is slower on a status tick or a selection move,

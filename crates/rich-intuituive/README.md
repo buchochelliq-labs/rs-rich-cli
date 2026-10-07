@@ -57,6 +57,18 @@ fn main() -> std::io::Result<()> {
   and leaves its last frame in the scrollback.
 - **Testing:** `App::render_with(keys, width, height)` and `App::run_on` with
   `rs-rich-interact`'s headless driver run an app without a terminal.
+- **Inspector:** `INTUITUIVE_INSPECT=1` (or `App::inspector(true)`) docks a
+  live view of the node tree, what drew in the last frame, the focus and
+  the frame's cost; F12 toggles it.
+- **Live styles:** `App::theme_file("theme.ini")` reloads its styles while
+  the app runs.
+
+New to it? The
+[tutorial](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/docs/guide/intuituive/tutorial.md)
+builds a to-do app step by step, and
+`cargo generate --git https://github.com/buchochelliq-labs/rs-rich-cli templates/intuituive-app`
+starts a project. `intuituive::rich` and `intuituive::interact` re-export
+rs-rich and rs-rich-interact, so one dependency is enough.
 
 ## Against ratatui
 
@@ -80,7 +92,7 @@ problems it is built to avoid, are in
 
 ## Status
 
-This is an early slice (0.0.x), so the API will change. A widget inspector,
-hot reload of styles and a tutorial come next.
+This is an early slice (0.0.x), so the API will change. Python bindings for
+the framework come next.
 
 Licensed under MIT.

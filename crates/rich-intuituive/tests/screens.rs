@@ -214,3 +214,19 @@ fn a_modal_that_shrinks_leaves_nothing_behind() {
     assert!(rows[3].contains("│modal"), "{rows:?}");
     assert_eq!(rows[5], "");
 }
+
+#[test]
+fn moving_the_focus_redraws_only_panel_edges() {
+    let app = App::new(|| {
+        row([
+            label("left content").focusable().panel("A"),
+            label("right content").focusable().panel("B"),
+        ])
+        .on_key("q", |cx| cx.quit())
+    })
+    .inspector(true);
+    let rows = screen(&run(app, Script::new().keys("tab q"), 100, 12));
+    // Both panels' borders change colour; their labels do not draw again.
+    let text = rows.join("\n");
+    assert!(text.contains("drew 2 of 2 dirty"), "{text}");
+}

@@ -57,6 +57,8 @@ pub(crate) enum Kind {
     Panel {
         title: String,
         child: Box<Node>,
+        /// Whether the border was last drawn as focused.
+        shown_focus: Option<bool>,
     },
     Pad {
         child: Box<Node>,
@@ -110,6 +112,8 @@ type OnDone<T> = Box<dyn FnMut(T, &mut Ctx)>;
 
 struct Host<C: Component> {
     component: C,
+    /// Makes a fresh component after each answer ([`repeating`]).
+    make: Option<Box<dyn Fn() -> C>>,
     on_done: OnDone<C::Output>,
     on_cancel: Option<Handler>,
 }
@@ -120,6 +124,9 @@ impl<C: Component> Hosted for Host<C> {
             Flow::Ignored => Used::No,
             Flow::Continue => Used::Yes,
             Flow::Done(value) => {
+                if let Some(make) = &self.make {
+                    self.component = make();
+                }
                 (self.on_done)(value, cx);
                 Used::Yes
             }
@@ -165,11 +172,18 @@ pub struct Node {
     pub(crate) click: RefCell<Option<Handler>>,
     /// Where a hosted component wants the text caret, on the screen.
     pub(crate) caret: Cell<Option<(u16, u16)>>,
+    /// What the inspector calls it: its [`name`](Node::name), else the
+    /// builder that made it.
+    name: Option<String>,
+    what: &'static str,
+    /// A style (or theme style name) laid over a leaf while it has the
+    /// focus.
+    focus_style: Option<String>,
 }
 
 impl Node {
-    pub(crate) fn new_kind(kind: Kind) -> Node {
-        Node::new(kind)
+    pub(crate) fn new_kind(kind: Kind, what: &'static str) -> Node {
+        Node::new(kind).what(what)
     }
 
     fn new(kind: Kind) -> Node {
@@ -186,6 +200,38 @@ impl Node {
             keys: RefCell::new(Vec::new()),
             click: RefCell::new(None),
             caret: Cell::new(None),
+            name: None,
+            what: "node",
+            focus_style: None,
+        }
+    }
+
+    fn what(mut self, what: &'static str) -> Node {
+        self.what = what;
+        self
+    }
+
+    /// Name this node for the [inspector](crate::App::inspector).
+    pub fn name(mut self, name: &str) -> Node {
+        self.name = Some(name.to_string());
+        self
+    }
+
+    /// How the inspector shows this node: its name or builder, and what it
+    /// holds.
+    pub(crate) fn describe(&self) -> String {
+        let base = match &self.name {
+            Some(name) => format!("{name} ({})", self.what),
+            None => self.what.to_string(),
+        };
+        match &*self.kind.borrow() {
+            Kind::Panel { title, .. } if !title.is_empty() => format!("{base} \"{title}\""),
+            Kind::Each { list, .. } => format!("{base} [{}]", list.children().len()),
+            Kind::Grid(grid) => format!("{base} {}x{}", grid.columns.len().max(1), {
+                let columns = grid.columns.len().max(1);
+                grid.children.len().div_ceil(columns)
+            }),
+            _ => base,
         }
     }
 
@@ -263,6 +309,17 @@ impl Node {
         self
     }
 
+    /// While this node has the focus, draw it in `style` over its own: a
+    /// style (`"reverse"`, `"on grey23"`) or a theme style name
+    /// (`"accent"`). The rest of its row is filled in the style too, so a
+    /// list shows which row is selected. For leaves (text, labels,
+    /// renderables); the node is also made [focusable](Self::focusable).
+    pub fn focus_style(mut self, style: &str) -> Node {
+        self.focus_style = Some(style.to_string());
+        self.focusable = true;
+        self
+    }
+
     /// Run `handler` when one of `keys` (space-separated names: `"q"`,
     /// `"ctrl+s"`, `"up k"`) is pressed while this node or a node inside it
     /// has the focus, and nothing deeper used the key. The binding also
@@ -308,16 +365,25 @@ impl Node {
     /// takes the node's size.
     pub fn panel(self, title: &str) -> Node {
         let title = title.to_string();
-        self.wrap(|child| Kind::Panel { title, child })
+        self.wrap(|child| Kind::Panel {
+            title,
+            child,
+            shown_focus: None,
+        })
+        .what("panel")
     }
 
     /// Leave `vertical` empty rows above and below this node, and
     /// `horizontal` empty columns either side.
     pub fn padding(self, vertical: u16, horizontal: u16) -> Node {
-        self.wrap(|child| Kind::Pad {
+        self.what_wrap("padding", |child| Kind::Pad {
             child,
             edges: [vertical, horizontal, vertical, horizontal],
         })
+    }
+
+    fn what_wrap(self, what: &'static str, kind: impl FnOnce(Box<Node>) -> Kind) -> Node {
+        self.wrap(kind).what(what)
     }
 
     /// A node of `kind` round this one, taking over its size and span.
@@ -534,12 +600,25 @@ impl Node {
             Kind::Leaf(draw) => {
                 if moved || force || dirty {
                     let console = frame.console;
-                    let lines = frame
-                        .runtime
-                        .observe_node(self.id, || draw(console, rect.width, rect.height));
+                    let focus_path = frame.focus_path;
+                    let mut lines = frame.runtime.observe_node(self.id, || {
+                        let lines = draw(console, rect.width, rect.height);
+                        // Reading the focus subscribes the node, so it draws
+                        // again when the focus comes or goes.
+                        let focused = self.focus_style.is_some()
+                            && focus_path.with(|path| path.last() == Some(&self.id));
+                        (lines, focused)
+                    });
+                    if let (true, Some(style)) = (lines.1, &self.focus_style) {
+                        let style = console
+                            .get_style(&rich::style::StyleType::Name(style.clone()))
+                            .unwrap_or_else(|_| Style::parse("reverse").expect("parses"));
+                        lines.0 = highlight(lines.0, &style, rect);
+                    }
+                    let lines = lines.0;
                     screen.write_lines(rect, &lines);
                     frame.damage.push(rect);
-                    frame.drawn += 1;
+                    frame.drew(self.id);
                 }
             }
             Kind::Stack(stack) => {
@@ -593,21 +672,46 @@ impl Node {
                     force || moved,
                 );
             }
-            Kind::Panel { title, child } => {
+            Kind::Panel {
+                title,
+                child,
+                shown_focus,
+            } => {
+                // The focus is all a panel reads: when it moves elsewhere
+                // in the app, the panel stays as it is.
                 let focused = frame.runtime.observe_node(self.id, || {
                     frame.focus_path.with(|path| path.contains(&self.id))
                 });
-                if moved || force || dirty {
+                let lines = || {
                     let style = frame.theme.border(focused);
-                    let title_style = frame.theme.title.clone();
-                    let title_style = style.combine(&title_style);
-                    screen.write_lines(rect, &border(title, &style, &title_style, rect));
+                    let title_style = style.combine(&frame.theme.title);
+                    border(title, &style, &title_style, rect)
+                };
+                if moved || force {
+                    // The whole box, which clears the inside: the child
+                    // draws again.
+                    screen.write_lines(rect, &lines());
                     frame.damage.push(rect);
-                    frame.drawn += 1;
+                    frame.drew(self.id);
                     child.draw(frame, rect.inner(1), screen, true);
                 } else {
+                    let lines = if *shown_focus != Some(focused) {
+                        lines()
+                    } else {
+                        Vec::new()
+                    };
+                    if !lines.is_empty() {
+                        // Only the edges change colour; the inside is left.
+                        for edge in edges(rect) {
+                            let part = crop(&lines, edge, rect);
+                            screen.write_lines(edge, &part);
+                            frame.damage.push(edge);
+                        }
+                        frame.drew(self.id);
+                    }
                     child.draw(frame, rect.inner(1), screen, false);
                 }
+                *shown_focus = Some(focused);
             }
             Kind::Pad { child, edges } => {
                 let force = force || moved;
@@ -632,7 +736,7 @@ impl Node {
                             .then_some((rect.x + column, rect.y + row))
                     }));
                     frame.damage.push(rect);
-                    frame.drawn += 1;
+                    frame.drew(self.id);
                 }
             }
             Kind::Log(view) => draw_log(self.id, view, frame, rect, screen, moved || force),
@@ -713,6 +817,77 @@ impl Node {
             Kind::Switch(switch) => switch.all().iter().for_each(|c| c.forget(runtime)),
         }
     }
+}
+
+/// A box's four edges: top and bottom rows, left and right columns between
+/// them.
+fn edges(rect: Rect) -> [Rect; 4] {
+    let inner = rect.height.saturating_sub(2);
+    [
+        Rect::new(rect.x, rect.y, rect.width, 1),
+        Rect::new(rect.x, rect.bottom().saturating_sub(1), rect.width, 1),
+        Rect::new(rect.x, rect.y + 1, 1, inner),
+        Rect::new(rect.right().saturating_sub(1), rect.y + 1, 1, inner),
+    ]
+}
+
+/// The part of `lines` (drawn at `rect`) that falls in `part`.
+fn crop(lines: &[Vec<Segment>], part: Rect, rect: Rect) -> Vec<Vec<Segment>> {
+    let from = (part.x - rect.x) as usize;
+    lines
+        .iter()
+        .skip((part.y - rect.y) as usize)
+        .take(part.height as usize)
+        .map(|line| {
+            // Split the line's cells at the part's columns.
+            let mut out = Vec::new();
+            let mut at = 0usize;
+            for segment in line {
+                for ch in segment.text.chars() {
+                    let width = rich::cells::cell_len(&ch.to_string());
+                    if at >= from && at < from + part.width as usize {
+                        out.push(Segment::new(ch.to_string(), segment.style.clone()));
+                    }
+                    at += width;
+                }
+            }
+            out
+        })
+        .collect()
+}
+
+/// `lines` with `style` laid over every segment, each row filled out to
+/// the rectangle's width and height in it.
+fn highlight(lines: Vec<Vec<Segment>>, style: &Style, rect: Rect) -> Vec<Vec<Segment>> {
+    let mut out: Vec<Vec<Segment>> = lines
+        .into_iter()
+        .take(rect.height as usize)
+        .map(|line| {
+            let width: usize = line.iter().map(Segment::cell_length).sum();
+            let mut line: Vec<Segment> = line
+                .into_iter()
+                .map(|segment| {
+                    let combined = match &segment.style {
+                        Some(own) => own.combine(style),
+                        None => style.clone(),
+                    };
+                    Segment::new(segment.text, Some(combined))
+                })
+                .collect();
+            let fill = (rect.width as usize).saturating_sub(width);
+            if fill > 0 {
+                line.push(Segment::new(" ".repeat(fill), Some(style.clone())));
+            }
+            line
+        })
+        .collect();
+    while out.len() < rect.height as usize {
+        out.push(vec![Segment::new(
+            " ".repeat(rect.width as usize),
+            Some(style.clone()),
+        )]);
+    }
+    out
 }
 
 /// A row's height in an [`each`] list: its fixed size, its content for
@@ -958,12 +1133,12 @@ fn draw_log(
                     screen.write_lines(rect, &render(len.saturating_sub(height)));
                     frame.damage.push(rect);
                 }
-                frame.drawn += 1;
+                frame.drew(id);
             }
             _ => {
                 screen.write_lines(rect, &render(data.lines.len().saturating_sub(height)));
                 frame.damage.push(rect);
-                frame.drawn += 1;
+                frame.drew(id);
             }
         }
     });
@@ -985,6 +1160,18 @@ pub(crate) struct FrameState<'a> {
     pub theme: &'a crate::app::Theme,
     /// Nodes drawn this frame.
     pub drawn: usize,
+    /// Which, when the inspector is watching.
+    pub drawn_ids: Option<Vec<NodeId>>,
+}
+
+impl FrameState<'_> {
+    /// `id` drew this frame.
+    pub fn drew(&mut self, id: NodeId) {
+        self.drawn += 1;
+        if let Some(ids) = &mut self.drawn_ids {
+            ids.push(id);
+        }
+    }
 }
 
 /// A rounded border round `rect`, with `title` in the top edge; the inside
@@ -1033,14 +1220,14 @@ fn border(title: &str, style: &Style, title_style: &Style, rect: Rect) -> Vec<Ve
 /// of 0 asks how tall the node would like to be: a parent laying out a
 /// [`Size::Auto`] child measures it so.
 pub fn leaf(draw: impl Fn(&Console, u16, u16) -> Vec<Vec<Segment>> + 'static) -> Node {
-    Node::new(Kind::Leaf(Box::new(draw)))
+    Node::new(Kind::Leaf(Box::new(draw))).what("leaf")
 }
 
 /// Console markup, from a closure that may read signals:
 /// `text(move || format!("[b]{}[/] items", count.get()))`. The
 /// [`text!`](crate::text!) macro writes the closure for you.
 pub fn text(markup: impl Fn() -> String + 'static) -> Node {
-    leaf(move |console, width, _| {
+    let node = leaf(move |console, width, _| {
         let markup = markup();
         let text = rich::Text::from_markup(&markup).unwrap_or_else(|_| rich::Text::new(markup));
         console.render_lines(
@@ -1048,13 +1235,14 @@ pub fn text(markup: impl Fn() -> String + 'static) -> Node {
             &console.options().update_width(width.max(1) as usize),
             false,
         )
-    })
+    });
+    node.what("text")
 }
 
 /// Console markup that never changes.
 pub fn label(markup: impl Into<String>) -> Node {
     let markup = markup.into();
-    text(move || markup.clone())
+    text(move || markup.clone()).what("label")
 }
 
 /// Any rich renderable, built by `f` (which may read signals) and rendered
@@ -1070,6 +1258,7 @@ pub fn renderable<R: Renderable + 'static>(f: impl Fn() -> R + 'static) -> Node 
         };
         console.render_lines(&f(), &options, false)
     })
+    .what("renderable")
 }
 
 /// A `rich-interact` component as a node: an `Input`, a `Select`, a
@@ -1098,21 +1287,56 @@ pub fn component<C: Component + 'static>(
 ) -> Node {
     let mut node = Node::new(Kind::Host(Box::new(Host {
         component,
+        make: None,
         on_done: Box::new(on_done),
         on_cancel: None,
     })));
     node.focusable = true;
-    node
+    node.what("component")
+}
+
+/// A [`component`] that starts again after each answer: `make` builds it,
+/// and builds a fresh one each time it is done, so an `Input` clears for
+/// the next entry (a chat box, a to-do entry, a command line).
+///
+/// ```
+/// use intuituive::prelude::*;
+/// use rich_interact::Input;
+///
+/// let app = App::new(|| {
+///     let added = signal(Vec::<String>::new());
+///     column([
+///         repeating(|| Input::new("Add"), move |item, _| added.update(|v| v.push(item))),
+///         text(move || added.get().join(", ")),
+///     ])
+///     .on_key("esc", |cx| cx.quit())
+/// });
+/// let keys = ["a", "enter", "b", "enter", "esc"];
+/// let screen = app.render_with(&keys, 30, 2).unwrap();
+/// assert_eq!(screen[1].trim_end(), "a, b");
+/// ```
+pub fn repeating<C: Component + 'static>(
+    make: impl Fn() -> C + 'static,
+    on_done: impl FnMut(C::Output, &mut Ctx) + 'static,
+) -> Node {
+    let mut node = Node::new(Kind::Host(Box::new(Host {
+        component: make(),
+        make: Some(Box::new(make)),
+        on_done: Box::new(on_done),
+        on_cancel: None,
+    })));
+    node.focusable = true;
+    node.what("component")
 }
 
 /// Children one above the other.
 pub fn column(children: impl IntoIterator<Item = Node>) -> Node {
-    stack(Axis::Vertical, children)
+    stack(Axis::Vertical, children).what("column")
 }
 
 /// Children side by side.
 pub fn row(children: impl IntoIterator<Item = Node>) -> Node {
-    stack(Axis::Horizontal, children)
+    stack(Axis::Horizontal, children).what("row")
 }
 
 fn stack(axis: Axis, children: impl IntoIterator<Item = Node>) -> Node {
@@ -1159,6 +1383,7 @@ pub fn grid(
         children: children.into_iter().collect(),
         areas: Vec::new(),
     }))
+    .what("grid")
 }
 
 /// A keyed list reconciled against its keys.
@@ -1238,6 +1463,7 @@ where
         }),
         areas: Vec::new(),
     })
+    .what("each")
 }
 
 /// One child shown at a time, chosen by a key.
@@ -1334,6 +1560,7 @@ where
         current: None,
         pending: false,
     })))
+    .what("switch")
 }
 
 /// Run `f` on the node with `id`.
