@@ -30,3 +30,8 @@ workspace = true
 rich.workspace = true
 rich-ext.workspace = true
 rich-interact.workspace = true
+
+[dev-dependencies]
+# The benchmark against ratatui (tests/versus_ratatui.rs) draws the same
+# dashboard with it. A dev-dependency only: the framework does not use it.
+ratatui = "0.30"

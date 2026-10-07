@@ -16,9 +16,7 @@
 //! });
 //! ```
 
-use std::cell::RefCell;
 use std::collections::VecDeque;
-use std::rc::Rc;
 
 use rich::Segment;
 
@@ -32,12 +30,11 @@ pub(crate) struct LogData {
     pub total: u64,
 }
 
-/// A bounded log of console-markup lines. `Copy`-cheap to clone: clones
-/// share the same lines.
-#[derive(Clone)]
+/// A bounded log of console-markup lines. A `Copy` handle, like a signal:
+/// move it into as many closures as you like.
+#[derive(Clone, Copy)]
 pub struct Log {
-    pub(crate) data: Rc<RefCell<LogData>>,
-    pub(crate) version: Signal<u64>,
+    pub(crate) data: Signal<LogData>,
 }
 
 impl Log {
@@ -45,38 +42,37 @@ impl Log {
     /// being built (it makes a signal).
     pub fn new(capacity: usize) -> Log {
         Log {
-            data: Rc::new(RefCell::new(LogData {
+            data: signal(LogData {
                 lines: VecDeque::new(),
                 capacity: capacity.max(1),
                 total: 0,
-            })),
-            version: signal(0),
+            }),
         }
     }
 
     /// Add a line (console markup) at the bottom.
     pub fn push(&self, line: impl Into<String>) {
-        {
-            let mut data = self.data.borrow_mut();
+        let line = line.into();
+        self.data.update(|data| {
             if data.lines.len() == data.capacity {
                 data.lines.pop_front();
             }
-            data.lines.push_back(line.into());
+            data.lines.push_back(line);
             data.total += 1;
-        }
-        self.version.update(|v| *v += 1);
+        });
     }
 
     /// Remove every line.
     pub fn clear(&self) {
-        self.data.borrow_mut().lines.clear();
-        // A total that jumps past the view's makes it draw everything.
-        self.data.borrow_mut().total += u32::MAX as u64;
-        self.version.update(|v| *v += 1);
+        self.data.update(|data| {
+            data.lines.clear();
+            // A total that jumps past the view's makes it draw everything.
+            data.total += u32::MAX as u64;
+        });
     }
 
     pub fn len(&self) -> usize {
-        self.data.borrow().lines.len()
+        self.data.with_untracked(|data| data.lines.len())
     }
 
     pub fn is_empty(&self) -> bool {
@@ -86,7 +82,7 @@ impl Log {
     /// A node showing the latest lines, one per row.
     pub fn view(&self) -> Node {
         Node::new_kind(Kind::Log(LogView {
-            log: self.clone(),
+            log: *self,
             drawn_total: None,
         }))
     }

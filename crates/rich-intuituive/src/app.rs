@@ -171,6 +171,9 @@ pub struct App {
     timers: Vec<Timer>,
     console: Option<Console>,
     stats: FrameStats,
+    /// Hand each frame's plain text to the backend (the headless driver
+    /// records it); off in a real terminal, where nobody reads it.
+    text_frames: bool,
 }
 
 impl App {
@@ -195,6 +198,7 @@ impl App {
             timers,
             console: None,
             stats: FrameStats::default(),
+            text_frames: true,
         }
     }
 
@@ -221,6 +225,14 @@ impl App {
         self
     }
 
+    /// Whether to hand each frame's plain text to the backend, as the
+    /// headless driver records it (on by default; [`run`](Self::run) turns
+    /// it off).
+    pub fn text_frames(mut self, on: bool) -> App {
+        self.text_frames = on;
+        self
+    }
+
     /// A handle other threads use to change the app's state.
     pub fn proxy(&self) -> Proxy {
         self.runtime.proxy()
@@ -240,7 +252,9 @@ impl App {
             bracketed_paste: true,
             output: Default::default(),
         })?;
-        self.run_on(&mut session)
+        let mut app = self;
+        app.text_frames = false;
+        app.run_on(&mut session)
     }
 
     /// Run on `backend`: a terminal session, or the headless driver.
@@ -309,7 +323,9 @@ impl App {
                 if !out.is_empty() {
                     backend.write(&out)?;
                 }
-                backend.painted(&screen.plain().join("\n"));
+                if self.text_frames {
+                    backend.painted(&screen.plain().join("\n"));
+                }
                 first = false;
             }
             let wait = self
