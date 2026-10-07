@@ -182,9 +182,9 @@ bytes.
 
 | 80x24, release | ratatui | intuiTUIve |
 |---|---:|---:|
-| status tick | 86 µs, 37 B | **12 µs, 18 B** |
-| selection move | 96 µs, 184 B | **39 µs, 118 B** |
-| log append | 95 µs, 443 B | **46 µs, 394 B** |
+| status tick | 92 µs, 37 B | **14 µs, 18 B** |
+| selection move | 112 µs, 184 B | **43 µs, 118 B** |
+| log append | 92 µs, 443 B | **46 µs, 394 B** |
 
 [The design note](../../design/intuituive.md) explains why. It also lists
 the architectural problems in ratatui that intuiTUIve is built to avoid:

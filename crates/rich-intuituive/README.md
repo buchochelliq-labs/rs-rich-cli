@@ -57,12 +57,12 @@ the bytes sent per frame:
 
 | 80x24 | ratatui | intuiTUIve |
 |---|---:|---:|
-| status tick | 86 µs, 37 B | **12 µs, 18 B** |
-| selection move | 96 µs, 184 B | **39 µs, 118 B** |
-| log append | 95 µs, 443 B | **46 µs, 394 B** |
+| status tick | 92 µs, 37 B | **14 µs, 18 B** |
+| selection move | 112 µs, 184 B | **43 µs, 118 B** |
+| log append | 92 µs, 443 B | **46 µs, 394 B** |
 
-At 200x60 the gap widens: a tick costs 17 µs against 354, a selection move
-46 against 309, and a log append 224 against 362. intuiTUIve's version is 56
+At 200x60 the gap widens: a tick costs 17 µs against 330, a selection move
+53 against 324, and a log append 266 against 334. intuiTUIve's version is 56
 lines of app code against ratatui's 79.
 
 The test asserts this bar, and CI runs it. The design, and the ratatui
