@@ -9,6 +9,14 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## 0.0.17 cohort
+
+ext 0.0.15 / micro 0.0.4 / record 0.0.5 / interact 0.0.5 / ratatui 0.0.2 /
+intuituive 0.0.2 / data 0.0.2 / CLI 0.0.17. Unchanged and already published:
+core 0.0.9, macros 0.0.3, plugin API 0.0.3, art 0.0.12, diagram 0.0.2,
+mermaid 0.0.5, lumis 0.0.3, Python 0.0.5. See
+[the release notes](docs/releases/0.0.17.md).
+
 ### intuiTUIve widgets: rs-rich-intuituive 0.0.2
 
 The components the two example ports showed were missing, built from
@@ -166,6 +174,10 @@ moves too, with its requirement:
 
 No code in these crates changed.
 
+## intuiTUIve 0.0.1 / ratatui 0.0.1 — published 2026-10-07
+
+Two new crates, published from `main` at `d9a929f`.
+
 ### intuiTUIve: rs-rich-intuituive 0.0.1 (new crate)
 
 `rs-rich-intuituive` (`intuituive`) is a framework for full-screen terminal
@@ -296,6 +308,13 @@ the workspace depends on it or on ratatui. Core is unchanged.
   scripts and their tests, the CI feature matrix, the release workflow and
   readiness pattern, BRANCHING, the release skill, AGENTS.md and the version
   tables. Its MSRV is the workspace's 1.90 (ratatui-core needs 1.88).
+
+## 0.0.16 cohort — published 2026-10-06
+
+Data 0.0.1 (new crate) / diagram 0.0.2 / mermaid 0.0.5 / ext 0.0.14 /
+micro 0.0.3 / record 0.0.4 / interact 0.0.4 / CLI 0.0.16 / Python 0.0.5.
+Published from `main` at `c287f1f`; see
+[the release notes](docs/releases/0.0.16.md#publication).
 
 ### 0.0.16 release test: fixes from three audits
 
