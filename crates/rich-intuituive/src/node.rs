@@ -37,7 +37,7 @@ use rich_interact::{Component, Context, Event, Flow, Key, View};
 
 use crate::app::Ctx;
 pub use crate::layout::Size;
-use crate::layout::{offsets, place, solve, Track};
+use crate::layout::{grow_for_span, offsets, place, solve, Track};
 use crate::reactive::{next_node, NodeId, Runtime, Signal};
 use crate::screen::{Rect, Screen};
 
@@ -806,7 +806,7 @@ fn grid_areas(console: &Console, grid: &Grid, rect: Rect, axis: Axis) -> Vec<Rec
             })
     };
     // Columns.
-    let column_tracks: Vec<Track> = (0..columns)
+    let mut column_tracks: Vec<Track> = (0..columns)
         .map(|c| {
             let size = grid.columns.get(c).copied().unwrap_or(Size::Flex(1));
             let mut track = Track::new(size);
@@ -827,6 +827,20 @@ fn grid_areas(console: &Console, grid: &Grid, rect: Rect, axis: Axis) -> Vec<Rec
             track
         })
         .collect();
+    // Children spanning several columns grow the content columns they span.
+    for (p, child) in places.iter().zip(&grid.children) {
+        if p.columns > 1 {
+            let need = child.measure(console, Axis::Horizontal, rect.width, rect.height);
+            grow_for_span(
+                &mut column_tracks,
+                rect.width,
+                column_gap,
+                p.column,
+                p.columns,
+                need,
+            );
+        }
+    }
     let widths = solve(rect.width, column_gap, &column_tracks);
     let xs = offsets(rect.x, column_gap, &widths);
     // Rows.
@@ -834,7 +848,7 @@ fn grid_areas(console: &Console, grid: &Grid, rect: Rect, axis: Axis) -> Vec<Rec
         Some(size) => *size,
         None => Size::Flex(1),
     };
-    let row_tracks: Vec<Track> = (0..rows)
+    let mut row_tracks: Vec<Track> = (0..rows)
         .map(|r| {
             let size = row_size(r);
             let mut track = Track::new(size);
@@ -857,6 +871,13 @@ fn grid_areas(console: &Console, grid: &Grid, rect: Rect, axis: Axis) -> Vec<Rec
             track
         })
         .collect();
+    for (p, child) in places.iter().zip(&grid.children) {
+        if p.rows > 1 {
+            let width = span_length(&widths, p.column, p.columns, column_gap);
+            let need = child.measure(console, Axis::Vertical, width, 0);
+            grow_for_span(&mut row_tracks, rect.height, row_gap, p.row, p.rows, need);
+        }
+    }
     let total_height = if rect.height == 0 {
         u16::MAX
     } else {

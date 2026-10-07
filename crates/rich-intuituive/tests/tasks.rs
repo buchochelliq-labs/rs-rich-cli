@@ -147,3 +147,21 @@ fn a_stale_resource_result_is_dropped() {
     assert_eq!(screen(&record)[0], "Ready(1)");
     assert!(record.frames.iter().all(|f| f.trim_end() != "Ready(0)"));
 }
+
+#[test]
+fn waiting_covers_tasks_that_results_start() {
+    let app = App::new(|| {
+        let status = signal("idle");
+        spawn(
+            || (),
+            move |_, _| {
+                status.set("first");
+                spawn(|| (), move |_, _| status.set("second"));
+            },
+        );
+        text!("{status}").on_key("q", |cx| cx.quit())
+    })
+    .wait_for_tasks(true);
+    let rows = screen(&run(app, Script::new().keys("q"), 10, 1));
+    assert_eq!(rows[0], "second");
+}

@@ -537,14 +537,21 @@ impl App {
         // appear only once drawn; `keep_focus` catches them after it).
         self.focus_first();
         loop {
-            if self.wait_for_tasks {
-                self.settle_tasks();
-            }
             self.now = backend.elapsed();
             let mut cx = self.ctx();
             let runtime = self.runtime.clone();
             runtime.enter(|| {
-                runtime.run_inbox(&mut cx);
+                // Waiting for tasks, wait again for any a result started.
+                loop {
+                    if self.wait_for_tasks {
+                        self.settle_tasks();
+                    }
+                    let ran = runtime.run_inbox(&mut cx);
+                    let busy = runtime.tasks.load(std::sync::atomic::Ordering::SeqCst) > 0;
+                    if !self.wait_for_tasks || !(ran || busy) {
+                        break;
+                    }
+                }
                 let now = self.now;
                 for layer in &mut self.layers {
                     for timer in &mut layer.timers {

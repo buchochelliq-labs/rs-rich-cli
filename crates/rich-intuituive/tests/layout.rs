@@ -193,3 +193,18 @@ fn a_measured_switch_still_redraws_a_tab_it_showed_before() {
     let rows = screen(&run(app, Script::new().keys("tab tab q"), 20, 3));
     assert_eq!(&rows[..2], ["tab 0", "end"]);
 }
+
+#[test]
+fn spanning_children_size_the_content_tracks_they_cover() {
+    let app = App::new(|| {
+        column([
+            grid([Size::Auto], [label("one\ntwo\nthree").span(1, 2)])
+                .rows([Size::Auto])
+                .fixed(3),
+            label("end"),
+        ])
+        .on_key("q", |cx| cx.quit())
+    });
+    let rows = screen(&run(app, Script::new().keys("q"), 20, 4));
+    assert_eq!(&rows[..4], ["one", "two", "three", "end"]);
+}

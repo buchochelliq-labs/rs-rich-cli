@@ -148,6 +148,47 @@ pub(crate) fn solve(total: u16, gap: u16, tracks: &[Track]) -> Vec<u16> {
     sizes.into_iter().map(|s| s as u16).collect()
 }
 
+/// Grow the content ([`Size::Auto`]) tracks among `tracks[from..from + n]`
+/// so that, with the gaps between them, they hold `need` cells: what a
+/// child spanning those tracks needs. The shortfall is shared evenly among
+/// the content tracks it spans (the remainder to the last); a span with
+/// none has its size fixed by the others.
+pub(crate) fn grow_for_span(
+    tracks: &mut [Track],
+    total: u16,
+    gap: u16,
+    from: usize,
+    n: usize,
+    need: u16,
+) {
+    let span = from..(from + n).min(tracks.len());
+    let held: u32 = tracks[span.clone()]
+        .iter()
+        .map(|t| match t.size {
+            Size::Auto => t.content as u32,
+            Size::Fixed(cells) => cells as u32,
+            Size::Percent(p) => total as u32 * p.min(100) as u32 / 100,
+            Size::Flex(_) => 0,
+        })
+        .sum::<u32>()
+        + gap as u32 * (span.len().saturating_sub(1)) as u32;
+    let short = (need as u32).saturating_sub(held);
+    let content: Vec<usize> = span.filter(|&i| tracks[i].size == Size::Auto).collect();
+    if short == 0 || content.is_empty() {
+        return;
+    }
+    let each = short / content.len() as u32;
+    let last = *content.last().expect("not empty");
+    for &i in &content {
+        let extra = if i == last {
+            short - each * (content.len() as u32 - 1)
+        } else {
+            each
+        };
+        tracks[i].content = (tracks[i].content as u32 + extra).min(u16::MAX as u32) as u16;
+    }
+}
+
 /// Where each track starts, from `start`, with `gap` between them.
 pub(crate) fn offsets(start: u16, gap: u16, sizes: &[u16]) -> Vec<u16> {
     let mut at = start;
@@ -268,6 +309,18 @@ mod tests {
         let mut auto = track(Size::Auto);
         auto.content = 3;
         assert_eq!(solve(10, 0, &[auto, track(Size::Flex(1))]), vec![3, 7]);
+    }
+
+    #[test]
+    fn a_span_grows_the_content_tracks_it_covers() {
+        let mut tracks = [track(Size::Auto), track(Size::Fixed(2)), track(Size::Auto)];
+        tracks[0].content = 1;
+        // Holds 1 + 2 + 0 + two gaps = 5; needs 10: 5 more, shared 2 and 3.
+        grow_for_span(&mut tracks, 20, 1, 0, 3, 10);
+        assert_eq!((tracks[0].content, tracks[2].content), (3, 3));
+        // Already enough: nothing changes.
+        grow_for_span(&mut tracks, 20, 1, 0, 2, 4);
+        assert_eq!(tracks[0].content, 3);
     }
 
     #[test]
