@@ -1,0 +1,22 @@
+# The intuiTUIve design spike's prototype (milestone 11). Not a workspace
+# member, never published, not built by CI: it exists to test a design, and
+# the note in ../../intuituive.md records what it found. Run it with
+#
+#     cd docs/design/intuituive/prototype && cargo run --release
+#
+# (from this directory, so .cargo/config.toml keeps the build out of docs/).
+[package]
+name = "intuituive-prototype"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+rich = { package = "rs-rich", path = "../../../../crates/rich" }
+rich-ext = { package = "rs-rich-ext", path = "../../../../crates/rich-ext" }
+rich-interact = { package = "rs-rich-interact", path = "../../../../crates/rich-interact" }
+ratatui = "0.30"
+
+# Its own workspace, so the repository's workspace neither builds nor
+# publishes it.
+[workspace]

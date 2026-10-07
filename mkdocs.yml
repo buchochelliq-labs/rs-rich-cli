@@ -199,3 +199,4 @@ nav:
       - Extending: PLUGINS.md
       - "Design: render tree (#226)": design/render-tree.md
       - "Design: plugin loading (#14, #232)": design/plugin-loading.md
+      - "Design: intuiTUIve spike (milestone 11)": design/intuituive.md
