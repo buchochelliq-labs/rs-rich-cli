@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/rich", "crates/rich-plugin-api", "crates/rich-macros", "crates/rich-ext", "crates/rich-cli", "crates/rich-art", "crates/rich-mermaid", "crates/rich-lumis", "crates/rich-record", "crates/rich-interact", "crates/rich-micro", "crates/rich-diagram", "crates/rich-data"]
+members = ["crates/rich", "crates/rich-plugin-api", "crates/rich-macros", "crates/rich-ext", "crates/rich-cli", "crates/rich-art", "crates/rich-mermaid", "crates/rich-lumis", "crates/rich-record", "crates/rich-interact", "crates/rich-micro", "crates/rich-diagram", "crates/rich-data", "crates/rich-intuituive"]
 # The Python bindings build with maturin and need a Python interpreter; they
 # have their own workspace and CI workflow (`python.yml`).
 exclude = ["crates/rich-py"]

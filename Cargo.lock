@@ -1965,6 +1965,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "rs-rich-intuituive"
+version = "0.0.1"
+dependencies = [
+ "rs-rich",
+ "rs-rich-ext",
+ "rs-rich-interact",
+]
+
+[[package]]
 name = "rs-rich-lumis"
 version = "0.0.3"
 dependencies = [
