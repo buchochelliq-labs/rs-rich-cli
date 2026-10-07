@@ -9,6 +9,38 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### ratatui interop: rs-rich-ratatui 0.0.1 (new crate)
+
+`rs-rich-ratatui` (`rich_ratatui`) connects rs-rich and ratatui both ways,
+productionised from the intuiTUIve design spike's interop prototype. It
+depends on core `rs-rich` and `ratatui-core` 0.1 only (the crate ratatui
+0.30's `Buffer`, `Rect`, `Style` and `Widget` live in), and nothing else in
+the workspace depends on it or on ratatui. Core is unchanged.
+
+- `RichWidget`: any rich renderable (a `Table`, `Panel`, `Markdown`,
+  `Syntax`, markup) as a ratatui `Widget`, by reference or by value, with
+  `RichWidget::markup`, `.console(&console)` and `.fill_height(true)`. Each
+  segment sits at the column rich measured for it, and styles patch the
+  cells beneath, as ratatui's own widgets do.
+- `style`: `to_ratatui_style` / `to_rich_style` and `to_ratatui_color` /
+  `to_rich_color`, lossless for the named, 256-colour and RGB colours, the
+  terminal default and nine attributes (each on, off or unset); what is lost
+  (colour names, `underline2`/`frame`/`encircle`/`overline`, hyperlinks and
+  meta, ratatui's underline colour) is documented on each function.
+- `buffer`: `lines_to_buffer`, `buffer_to_lines`, `buffer_area_to_lines`,
+  and `cells`, a non-allocating walk over a rectangle of a buffer (column,
+  row, symbol, width and a `CellStyle` key per leading cell) with a
+  `StyleCache`, for a consumer converting into its own cell screen.
+- `RatatuiComponent`, behind the off-by-default `interact` feature: a
+  ratatui drawing closure, with optional state and event handler, as a
+  `rich_interact::Component`, under every rich-interact driver.
+- An example (`rich_in_ratatui`) drawing a Table and Markdown in a ratatui
+  frame, the guide page [Using rich with ratatui](docs/guide/ratatui.md), and
+  the crate added to RELEASES.toml (after `rs-rich-interact`), the release
+  scripts and their tests, the CI feature matrix, the release workflow and
+  readiness pattern, BRANCHING, the release skill, AGENTS.md and the version
+  tables. Its MSRV is the workspace's 1.90 (ratatui-core needs 1.88).
+
 ### 0.0.16 release test: fixes from three audits
 
 Three independent audits covered the 0.0.16 delta: `rs-rich-data` with

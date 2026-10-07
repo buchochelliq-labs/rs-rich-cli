@@ -19,7 +19,7 @@ from urllib.request import Request, urlopen
 
 CRATES = ("rs-rich", "rs-rich-plugin-api", "rs-rich-macros", "rs-rich-ext", "rs-rich-cli", "rs-rich-art",
           "rs-rich-mermaid", "rs-rich-lumis", "rs-rich-record", "rs-rich-interact", "rs-rich-micro",
-          "rs-rich-diagram", "rs-rich-data")
+          "rs-rich-diagram", "rs-rich-data", "rs-rich-ratatui")
 NUMBER = r"(?:0|[1-9][0-9]*)"
 PRERELEASE = rf"(?:{NUMBER}|[0-9]*[A-Za-z-][0-9A-Za-z-]*)"
 VERSION = rf"{NUMBER}\.{NUMBER}\.{NUMBER}(?:-{PRERELEASE}(?:\.{PRERELEASE})*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?"
@@ -67,7 +67,7 @@ def select(tag, metadata, root):
     requirements = root["workspace"]["dependencies"]
     for name in ("rs-rich", "rs-rich-plugin-api", "rs-rich-macros", "rs-rich-ext", "rs-rich-art",
                  "rs-rich-mermaid", "rs-rich-lumis", "rs-rich-record", "rs-rich-interact", "rs-rich-micro",
-                 "rs-rich-diagram", "rs-rich-data"):
+                 "rs-rich-diagram", "rs-rich-data", "rs-rich-ratatui"):
         key = name.removeprefix("rs-")
         dependency = requirements.get(key, {})
         expected = packages[name]["version"]
