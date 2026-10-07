@@ -247,6 +247,14 @@ pub struct Painter {
     system: Option<ColorSystem>,
     /// SGR parameters per style id of the screen being painted.
     codes: Vec<Option<String>>,
+    /// Painting an inline region below the cursor, with relative moves,
+    /// rather than the whole screen with absolute ones.
+    inline: bool,
+    /// Inline: where the terminal's cursor is, in the region; `None`
+    /// before the region was made.
+    cursor: Option<(u16, u16)>,
+    /// Inline: the region's height.
+    height: u16,
 }
 
 /// The pen's state while a frame is written.
@@ -265,7 +273,87 @@ impl Painter {
             previous: None,
             system,
             codes: Vec::new(),
+            inline: false,
+            cursor: None,
+            height: 0,
         }
+    }
+
+    /// Paint an inline region that starts on the cursor's row, moving the
+    /// cursor relative to where it is, so the rows above (the shell's
+    /// scrollback) are left alone.
+    pub fn inline(mut self) -> Painter {
+        self.inline = true;
+        self
+    }
+
+    pub fn set_color_system(&mut self, system: Option<ColorSystem>) {
+        if system != self.system {
+            self.system = system;
+            self.codes.clear();
+        }
+    }
+
+    /// Move the cursor to `x`, `y` of the screen.
+    pub fn move_to(&mut self, x: u16, y: u16) -> String {
+        let out = self.goto(self.cursor, x, y);
+        if self.inline {
+            self.cursor = Some((x, y));
+        }
+        out
+    }
+
+    /// What to write when the app ends: inline, the cursor goes to the
+    /// start of the line below the region, so what follows prints under
+    /// the app's last frame.
+    pub fn finish(&mut self) -> String {
+        if !self.inline || self.cursor.is_none() {
+            return String::new();
+        }
+        let out = self.move_to(0, self.height.saturating_sub(1));
+        self.cursor = None;
+        format!("{out}\x1b[0m\r\n")
+    }
+
+    fn goto(&self, from: Option<(u16, u16)>, x: u16, y: u16) -> String {
+        if !self.inline {
+            return format!("\x1b[{};{}H", y + 1, x + 1);
+        }
+        let (_, from_y) = from.unwrap_or((0, 0));
+        let mut out = String::new();
+        if y < from_y {
+            out.push_str(&format!("\x1b[{}A", from_y - y));
+        } else if y > from_y {
+            out.push_str(&format!("\x1b[{}B", y - from_y));
+        }
+        // A carriage return also clears a pending wrap after the last
+        // column, so the column is always counted from the left edge.
+        out.push('\r');
+        if x > 0 {
+            out.push_str(&format!("\x1b[{x}C"));
+        }
+        out
+    }
+
+    /// Inline: go back to the region's first row (if it was made), and
+    /// make room for `height` rows below the cursor, scrolling the
+    /// terminal if the region would pass its bottom, and clear them.
+    fn reserve(&mut self, height: u16) -> String {
+        let mut out = String::from("\x1b[0m");
+        if let Some((_, y)) = self.cursor {
+            if y > 0 {
+                out.push_str(&format!("\x1b[{y}A"));
+            }
+        }
+        out.push('\r');
+        if height > 1 {
+            out.push_str(&"\n".repeat(height as usize - 1));
+            out.push_str(&format!("\x1b[{}A", height - 1));
+        }
+        out.push_str("\x1b[J");
+        self.cursor = Some((0, 0));
+        self.height = height;
+        out
     }
 
     /// Forget what was sent: the next paint writes everything.
@@ -280,7 +368,11 @@ impl Painter {
         let mut out = String::new();
         let full = !matches!(&self.previous, Some(p) if p.width == screen.width && p.height == screen.height);
         let rects: Vec<Rect> = if full {
-            out.push_str("\x1b[0m\x1b[H\x1b[2J");
+            if self.inline {
+                out.push_str(&self.reserve(screen.height));
+            } else {
+                out.push_str("\x1b[0m\x1b[H\x1b[2J");
+            }
             self.previous = None;
             self.codes.clear();
             vec![screen.area()]
@@ -290,7 +382,10 @@ impl Painter {
                 .map(|r| r.intersection(screen.area()))
                 .collect()
         };
-        let mut pen = Pen::default();
+        let mut pen = Pen {
+            at: self.cursor,
+            ..Pen::default()
+        };
         for (y, spans) in row_spans(&rects, screen.height) {
             for (start, end) in spans {
                 self.paint_span(screen, y, start, end, &mut pen, &mut out);
@@ -301,6 +396,9 @@ impl Painter {
         }
         if pen.codes.as_deref().is_some_and(|c| !c.is_empty()) {
             out.push_str("\x1b[0m");
+        }
+        if self.inline {
+            self.cursor = pen.at.or(self.cursor);
         }
         // Bring the copy of what was sent up to date.
         match &mut self.previous {
@@ -355,7 +453,7 @@ impl Painter {
                 x0 -= 1;
             }
             if pen.at != Some((x0, y)) {
-                out.push_str(&format!("\x1b[{};{}H", y + 1, x0 + 1));
+                out.push_str(&self.goto(pen.at, x0, y));
             }
             let cell = screen.cell(x0, y);
             self.set_pen(screen, cell.style, pen, out);

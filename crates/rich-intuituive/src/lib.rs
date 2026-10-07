@@ -24,15 +24,25 @@
 //! ```
 //!
 //! - **Nodes** ([`text`](fn@text), [`label`], [`renderable`], [`column`](fn@column), [`row`],
-//!   [`each`], [`Node::panel`]) are built once and kept. Any rich renderable
-//!   is a node: a `Table`, `Markdown`, `Syntax`, a chart.
+//!   [`grid`], [`each`], [`switch`], [`Node::panel`]) are built once and
+//!   kept. Any rich renderable is a node: a `Table`, `Markdown`, `Syntax`, a
+//!   chart.
+//! - **Layout** sizes children by [`Size`] (fixed, percentage, flexible or
+//!   their content), within minimums and maximums, with gaps and padding.
 //! - **State** is [`signal`]s and [`memo`]s. Reading one while drawing
 //!   subscribes the node; writing one redraws exactly its readers.
 //! - **Input**: [`Node::on_key`] bindings bubble from the focused node up;
 //!   Tab moves the focus; [`Node::on_click`] gets clicks, routed by the
 //!   layout the last frame kept.
-//! - **Threads**: a [`Proxy`] runs a closure on the app's thread, where it
-//!   can write signals.
+//! - **Screens**: [`Ctx::push`], [`Ctx::modal`] and [`Ctx::pop`] keep a
+//!   stack of screens, each with its own state and focus.
+//! - **Background work**: [`spawn`], [`spawn_future`] and [`resource`] run
+//!   slow work off the app's thread and write signals with the result; a
+//!   [`Proxy`] lets any thread do the same.
+//! - **Themes**: [`Theme`] styles the framework's parts and names styles
+//!   for markup; [`Ctx::set_theme`] switches at run time.
+//! - **Inline**: [`App::inline`] runs in a few rows below the prompt
+//!   instead of the alternate screen.
 //! - **Tests**: [`App::render_with`] and [`App::run_on`] with
 //!   `rich-interact`'s headless driver run an app without a terminal.
 //!
@@ -40,22 +50,27 @@
 //! `docs/design/intuituive.md`.
 
 pub mod app;
+pub mod layout;
 pub mod log;
 pub mod node;
 pub mod reactive;
 pub mod screen;
+pub mod task;
 
 pub use app::{every, App, Ctx, FrameStats, Theme};
+pub use layout::Size;
 pub use log::Log;
-pub use node::{column, component, each, label, leaf, renderable, row, text, Node, Size};
+pub use node::{column, component, each, grid, label, leaf, renderable, row, switch, text, Node};
 pub use reactive::{memo, signal, Memo, Proxy, Signal};
+pub use task::{resource, spawn, spawn_future, Load, Resource, Task};
 
 /// Everything an app usually needs.
 pub mod prelude {
     // `text` is both the function and the `text!` macro.
     pub use crate::{
-        column, component, each, every, label, leaf, memo, renderable, row, signal, text, App, Ctx,
-        Log, Memo, Node, Proxy, Signal, Size, Theme,
+        column, component, each, every, grid, label, leaf, memo, renderable, resource, row, signal,
+        spawn, switch, text, App, Ctx, Load, Log, Memo, Node, Proxy, Resource, Signal, Size, Task,
+        Theme,
     };
 }
 

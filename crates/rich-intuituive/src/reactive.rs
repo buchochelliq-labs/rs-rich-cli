@@ -22,7 +22,10 @@ use std::cell::{Cell, RefCell};
 use std::collections::{HashMap, HashSet};
 use std::marker::PhantomData;
 use std::rc::Rc;
-use std::sync::mpsc;
+use std::sync::atomic::AtomicUsize;
+use std::sync::{mpsc, Arc};
+
+use crate::app::Ctx;
 
 /// A node's identity in the tree, as the runtime sees it.
 pub type NodeId = u64;
@@ -32,6 +35,8 @@ pub type NodeId = u64;
 enum Observer {
     Node(NodeId),
     Memo(usize),
+    /// Reads that subscribe nobody.
+    Untracked,
 }
 
 type Compute = Rc<dyn Fn() -> Box<dyn Any>>;
@@ -61,8 +66,10 @@ pub(crate) struct Runtime {
     values: RefCell<Vec<Box<dyn Any>>>,
     graph: RefCell<Graph>,
     /// Closures sent from other threads, run on the app's thread.
-    inbox: mpsc::Receiver<Box<dyn FnOnce() + Send>>,
-    outbox: mpsc::Sender<Box<dyn FnOnce() + Send>>,
+    inbox: mpsc::Receiver<Job>,
+    outbox: mpsc::Sender<Job>,
+    /// Tasks started and not yet delivered.
+    pub(crate) tasks: Arc<AtomicUsize>,
 }
 
 thread_local! {
@@ -82,6 +89,7 @@ impl Runtime {
                 graph: RefCell::new(Graph::default()),
                 inbox,
                 outbox,
+                tasks: Arc::new(AtomicUsize::new(0)),
             });
             all.push(Some(runtime.clone()));
             runtime
@@ -97,7 +105,7 @@ impl Runtime {
         })
     }
 
-    fn current() -> Rc<Runtime> {
+    pub(crate) fn current() -> Rc<Runtime> {
         CURRENT.with(|current| {
             current.borrow().last().cloned().expect(
                 "signal() and memo() are called while an app is built or running: \
@@ -133,6 +141,9 @@ impl Runtime {
     fn subscribe(&self, slot: usize) {
         let mut graph = self.graph.borrow_mut();
         if let Some(&observer) = graph.observing.last() {
+            if observer == Observer::Untracked {
+                return;
+            }
             graph.subscribers[slot].insert(observer);
             graph.reads.entry(observer).or_default().push(slot);
         }
@@ -154,6 +165,14 @@ impl Runtime {
             Runtime::unsubscribe(&mut graph, observer);
             graph.observing.push(observer);
         }
+        let result = f();
+        self.graph.borrow_mut().observing.pop();
+        result
+    }
+
+    /// Run `f` without subscribing anyone to what it reads.
+    pub(crate) fn untracked<R>(&self, f: impl FnOnce() -> R) -> R {
+        self.graph.borrow_mut().observing.push(Observer::Untracked);
         let result = f();
         self.graph.borrow_mut().observing.pop();
         result
@@ -182,6 +201,7 @@ impl Runtime {
                             pending.push(memo);
                         }
                     }
+                    Observer::Untracked => {}
                 }
             }
         }
@@ -225,10 +245,10 @@ impl Runtime {
     }
 
     /// Run the closures other threads sent; whether there were any.
-    pub(crate) fn run_inbox(&self) -> bool {
+    pub(crate) fn run_inbox(&self, cx: &mut Ctx) -> bool {
         let mut ran = false;
         while let Ok(job) = self.inbox.try_recv() {
-            job();
+            job(cx);
             ran = true;
         }
         ran
@@ -392,11 +412,21 @@ impl<T: Clone + 'static> Memo<T> {
 /// });
 /// ```
 #[derive(Clone)]
-pub struct Proxy(mpsc::Sender<Box<dyn FnOnce() + Send>>);
+pub struct Proxy(mpsc::Sender<Job>);
+
+/// A closure another thread sent to run on the app's thread.
+type Job = Box<dyn FnOnce(&mut Ctx) + Send>;
 
 impl Proxy {
     /// Run `f` on the app's thread. Returns `false` if the app has finished.
     pub fn run(&self, f: impl FnOnce() + Send + 'static) -> bool {
+        self.0.send(Box::new(move |_: &mut Ctx| f())).is_ok()
+    }
+
+    /// Run `f` on the app's thread with a [`Ctx`], so it can also move the
+    /// focus, open a screen or quit. Returns `false` if the app has
+    /// finished.
+    pub fn run_with(&self, f: impl FnOnce(&mut Ctx) + Send + 'static) -> bool {
         self.0.send(Box::new(f)).is_ok()
     }
 }
@@ -505,7 +535,7 @@ mod tests {
                 rt.take_dirty().is_empty(),
                 "nothing runs until the app drains"
             );
-            assert!(rt.run_inbox());
+            assert!(rt.run_inbox(&mut crate::app::Ctx::new(rt.proxy())));
             assert_eq!(status.get_untracked(), "fetched");
             assert_eq!(rt.take_dirty(), HashSet::from([7]));
         });

@@ -54,7 +54,7 @@ scorecard is something a reviewer can check:
 | Events, focus, keymaps | app's job | built in: bubbling, Tab focus, keymap registry | **shipped in `rich-interact` 0.0.14** |
 | Components (input, select, pager, forms, palette) | third-party crates of varying upkeep | built in, themed, one API | **shipped (0.0.13 and 0.0.14)** |
 | Rich content in a TUI | spans and paragraphs | Markdown, syntax, tables, trees, tracebacks, charts, diagrams, images, as leaves | available (`rich`, `rich-ext`, `rich-art`) |
-| Layout | constraint solver (`Layout`) | fixed, flex, constraints and grid, declared on the tree | prototype: fixed and flex only |
+| Layout | constraint solver (`Layout`) | fixed, flex, constraints and grid, declared on the tree | **shipped in `rs-rich-intuituive`:** fixed, percent, flex, content-sized, min/max, gaps, padding, grid with spans |
 | Testing | `TestBackend` buffer asserts | headless driver with scripted keys, plus tapes and screenshots | **shipped (headless, `rich record`)** |
 | Pipes, CI, `NO_COLOR`, screen readers | app's job | degradation policy, line I/O fallback | **shipped (`policy`)** |
 | Python | none | the same components from Python | shipped for components; the framework would follow |
@@ -305,11 +305,12 @@ layout passes or event loops.
    - the 0.0.14 containers, focus and keymaps on the tree;
    - a streaming leaf for logs;
    - the dashboard benchmark in CI against ratatui.
-4. **Layout and app shell:**
-   - layout: constraints and grid;
-   - screens and navigation;
+4. **Layout and app shell** (done, with inline mode added):
+   - layout: content sizes, min/max constraints, gaps, padding and grid;
+   - screens, modals and navigation;
    - async tasks writing signals;
-   - app-level theming.
+   - app-level theming;
+   - inline (non-full-screen) apps.
 5. **Developer experience:**
    - a widget inspector (the tree, dirty nodes and damage, live);
    - hot reload of styles;
