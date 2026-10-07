@@ -249,6 +249,40 @@ column([
   - `scroll_with(child, offset)` puts the first row in view in a signal
     you can read and set.
 
+### Trees, split panes, calendars and lists
+
+```rust
+use intuituive::widgets::{calendar, hsplit, tree, virtual_list, Date, TreeItem};
+
+let path = signal(Vec::<usize>::new());
+let ratio = signal(0.3);
+let day = signal(Date::new(2026, 10, 7));
+hsplit(
+    tree(|| vec![TreeItem::new("src").children([TreeItem::new("main.rs")])], path),
+    column([
+        calendar(day).fixed(8),
+        virtual_list(|| 100_000, |i| format!("line {i}"), signal(0usize)),
+    ]),
+    ratio,
+)
+```
+
+- **`tree(items, selected)`** shows nested `TreeItem`s with the selection
+  as a path of indices. ↑/↓ move, → expands, ← collapses or goes to the
+  parent, Enter or Space toggles, and a click on an arrow toggles it. `tree_with` puts the
+  expanded paths in a signal of your own. Keys a leaf does not use (Enter
+  on it, ← at the top) bubble up to your bindings.
+- **`hsplit(first, second, ratio)`** puts two panes side by side, and
+  `vsplit` stacks them. Dragging the divider moves it, and so do Alt+←/→
+  (Alt+↑/↓ when stacked) from inside either pane. `split_with` sets the
+  smallest size of a pane (three cells by default).
+- **`calendar(selected)`** is a month grid of a `Date` signal: the arrows
+  move by day and week, PgUp/PgDn by month, a click picks a day and the
+  wheel changes month. `Date` has the date arithmetic it needs (weekday,
+  adding days and months, month lengths).
+- **`virtual_list(len, row, selected)`** is the list form of
+  `virtual_table`: it asks only for the rows in view.
+
 ## The mouse
 
 Every mouse event (press, release, drag, movement, the wheel) goes to the
@@ -264,6 +298,14 @@ bubbles up through its ancestors until one uses it.
 - **Hover** is state. A widget that asks whether it is hovered draws again
   when the pointer enters or leaves it. The terminal's movement reports
   are turned on only once something asks.
+
+### Selecting and copying text
+
+Turning on the mouse usually costs the terminal's own text selection. In
+an intuiTUIve app, a drag that starts where nothing uses the press selects
+the text under it, shown reversed, and copies it when the button is let
+go, with OSC 52, so it works over SSH too, in terminals that allow it. A
+toast says how much was copied. `App::selectable(false)` turns this off.
 
 ## Your own widgets
 
@@ -383,6 +425,75 @@ field.on_key("enter", move |cx| {
     cx.popup(at, Placement::Below, Size::Fixed(12), Size::Auto, || {
         label("red\ngreen\nblue").panel("Pick").on_key("q", |cx| cx.pop())
     })
+})
+```
+
+The anchor can also be a `Rect` of the screen, for a pop-up at a place
+rather than a node: `EventCx::rect()` gives a widget its own, and
+`Ctx::pointer()` gives where the mouse event being handled happened.
+
+### Menus
+
+```rust
+use intuituive::menu::{context_menu, menu_bar, Menu, MenuItem};
+
+column([
+    menu_bar(vec![
+        Menu::new("File", vec![
+            MenuItem::new("Save", |cx| save(cx)).hint("ctrl+s"),
+            MenuItem::separator(),
+            MenuItem::new("Quit", |cx| cx.quit()),
+        ]),
+    ])
+    .fixed(1),
+    body.on_mouse(|cx, mouse| {
+        if mouse.kind != MouseKind::Down(Button::Right) {
+            return false;
+        }
+        context_menu(cx, vec![MenuItem::new("Copy", copy), MenuItem::new("Paste", paste)]);
+        true
+    }),
+])
+```
+
+- **`menu_bar(menus)`**: ←/→ move between titles while it has the focus,
+  and Enter, ↓ or a click opens a menu below its title.
+- **A menu**: ↑/↓ move past separators, Enter or a click runs an item
+  (the menu closes first, so the item may open a screen), the pointer
+  moves the selection, and Esc or a press outside closes it.
+- **`context_menu(cx, items)`** opens at the pointer from a mouse handler,
+  and **`open_menu(cx, at, placement, items)`** next to a node or a `Rect`.
+
+### The command palette and help
+
+Every binding made with `.bind(keys, description, handler)` is a command.
+`cx.command_palette()` lists the ones on the focused node and its
+ancestors, searched as you type, and runs the one picked as its key would.
+`cx.help()` lists the same bindings with their keys. Keys open either:
+
+```rust
+App::new(build).palette_key("ctrl+p").help_key("?")
+```
+
+Bindings made with `.on_key` have no description and stay out of both.
+Name a node (`.name("Editor")`) to group its commands under that name.
+
+## Toasts and animations
+
+- **`cx.toast(markup)`** shows a message at the bottom right for three
+  seconds, and `toast_for(markup, duration)` for as long as you say.
+  Toasts stack and do not take the focus.
+- **`cx.animate(signal, to, duration, easing)`** moves a `Signal<f64>` to
+  `to` over `duration`, setting it every frame, so whatever reads it moves
+  with it: a split's ratio, a gauge, a scroll offset. `Easing` is `Linear`,
+  `EaseIn`, `EaseOut` or `EaseInOut`. A new animation of the same signal
+  takes over from where it is. While one runs, the app draws at about 60
+  frames a second, and it goes back to waiting for input when they end.
+
+```rust
+let ratio = signal(0.5);
+hsplit(left, right, ratio).on_key("z", move |cx| {
+    cx.animate(ratio, 0.8, Duration::from_millis(200), Easing::EaseOut)
 })
 ```
 
@@ -545,5 +656,6 @@ widgets in an existing app, and ratatui widgets run inside rs-rich-interact.
 
 This is an early slice (0.0.x), so the API will change. Still to come:
 Python bindings for the framework, as rs-rich-interact's components already
-have, and the built-in nodes moved onto the `Widget` trait (see
+have, the built-in nodes moved onto the `Widget` trait, and accessibility
+and serving an app to a browser, which are designed but not built (see
 [the widgets design note](../../design/intuituive-widgets.md)).

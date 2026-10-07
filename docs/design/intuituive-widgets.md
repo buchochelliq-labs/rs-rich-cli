@@ -17,6 +17,78 @@ build differs from this note:
 - **Chart axes follow ratatui**: `Labels::None` draws no axis line, and an
   empty `Labels::Values` draws the line with no labels.
 
+## Phases D and E: built in 0.0.2
+
+The two phases after the plan below, from the list of what other
+frameworks (ratatui above all) leave out:
+
+| Phase | Built | Where |
+|---|---|---|
+| D | `tree`, `hsplit`/`vsplit` with a draggable divider, `calendar` with `Date`, `virtual_list` | `src/tree.rs`, `src/split.rs`, `src/calendar.rs`, `src/widgets.rs` |
+| E | the command palette and help from described bindings; menu bars, drop-downs and context menus; pop-ups anchored to a `Rect`; toasts; `animate` with easing; text selection and copying with the mouse captured | `src/app.rs`, `src/menu.rs` |
+
+All Phase D widgets are built on the public `Widget` trait, which is the
+test that it is enough. Building them found these gaps in it, still open:
+
+1. **Hover is per widget, not per cell.** `DrawCx::hovered()` covers the
+   whole widget, and asking subscribes it to every change of the hover
+   path. The split keeps the last pointer position itself. A "pointer in
+   me" signal, or a leave event, would do better.
+2. **Keys reach only the focus path.** With nothing focused, keys go to
+   the root, so a container that is not focusable and has no focusable
+   child never sees them.
+3. **`layout()` runs when the widget redraws.** A container must read its
+   sizing signals in `layout` or `draw` to be laid out again. This works,
+   but needs documenting.
+4. **No focus, blur or resize events.** Widgets compare state at draw time.
+5. **The drawing helpers are private.** Markup on one line, its width, and
+   combining a style over segments are crate-private; a
+   `Canvas::markup(x, y, width, markup, style)` would cover them.
+
+Phase E chose to:
+
+- **Select text only where nothing uses the press.** A press any node or
+  widget uses never starts a selection, so drags, splits and buttons keep
+  working. Copying goes through OSC 52.
+- **Build the palette and help from bindings.** They reuse
+  rs-rich-interact's `Palette` and `Help`, so no second command registry is
+  needed; a binding without a description stays out.
+- **Drive animations from the app clock.** The loop wakes every 16 ms only
+  while one runs, and the headless backend's virtual clock tests them.
+
+### Later: accessibility
+
+Designed, not built. The retained tree already holds what a screen reader
+needs: each node's kind, label, focus state and the focus order. The plan:
+
+- **A semantic role per node** (`button`, `list`, `listitem`, `tab`,
+  `dialog`, `menu`), set by the built-in nodes and by a `Widget::role()`
+  method with a default.
+- **An accessible text per node**, from its label or a `.describe(text)`
+  builder, and the selected row or day for widgets that have one.
+- **Announcements**: the focus moving, a toast, a modal opening, sent to
+  a sink. The first sink writes them to a side channel (a file or a
+  socket) for a bridge; platform bridges (AT-SPI, UI Automation, the
+  macOS accessibility API) come after, outside this crate.
+- **A text mode** using rs-rich-ext's accessibility profile: no box
+  drawing, no colour-only meaning, a linear reading of the screen.
+
+### Later: serving to a browser
+
+Designed, not built. An app already draws through a backend that only
+needs cells and events, which is what the headless backend implements, so
+a web backend fits the same seam:
+
+- **A WebSocket backend** sends the damaged cells of each frame (or the
+  ANSI rs-rich already produces) to an xterm.js page and turns the page's
+  key and mouse events back into rs-rich-interact events.
+- **A session per connection**, each with its own `App`, since the
+  reactive runtime is per thread; a thread per session to start.
+- **Off by default**, behind a feature in its own crate
+  (`rs-rich-intuituive-web`), so the framework gains no network code. It
+  binds to localhost unless told otherwise and has no authentication of
+  its own, so exposing it is the user's choice, behind a proxy that has.
+
 The original note follows. Its status was: design note, for discussion. It
 follows [the intuiTUIve design spike](intuituive.md), whose plan is done
 except for Python, and the two ports that tested the framework on real

@@ -180,7 +180,9 @@ fn dragging_the_divider_resizes_the_panes() {
         .mouse(MouseKind::Drag(Button::Left), 3, 2)
         .mouse(MouseKind::Up(Button::Left), 3, 2)
         .keys("q");
-    let rows = screen(&run(split_app(Axis::Horizontal), script, 21, 6));
+    // Without text selection, whose toast would cover the last row.
+    let app = split_app(Axis::Horizontal).selectable(false);
+    let rows = screen(&run(app, script, 21, 6));
     assert_eq!(rows[5], "ratio 0.50");
 }
 

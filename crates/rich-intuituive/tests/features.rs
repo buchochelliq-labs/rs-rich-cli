@@ -52,7 +52,9 @@ fn the_help_shows_bindings_with_their_keys_and_esc_closes_it() {
 fn toaster() -> App {
     App::new(|| {
         label("main")
-            .on_key("t", |cx| cx.toast_for("[b]Saved[/]", Duration::from_secs(2)))
+            .on_key("t", |cx| {
+                cx.toast_for("[b]Saved[/]", Duration::from_secs(2))
+            })
             .on_key("q", |cx| cx.quit())
     })
 }
@@ -109,7 +111,12 @@ fn an_animation_moves_a_signal_to_its_target_over_time() {
 
 #[test]
 fn easings_start_at_zero_and_end_at_one() {
-    for easing in [Easing::Linear, Easing::EaseIn, Easing::EaseOut, Easing::EaseInOut] {
+    for easing in [
+        Easing::Linear,
+        Easing::EaseIn,
+        Easing::EaseOut,
+        Easing::EaseInOut,
+    ] {
         assert_eq!(easing.at(0.0), 0.0);
         assert!((easing.at(1.0) - 1.0).abs() < 1e-9);
         assert!(easing.at(0.5) > 0.0 && easing.at(0.5) < 1.0);
@@ -147,12 +154,14 @@ fn selection_can_be_turned_off_and_a_click_selects_nothing() {
 fn menu_app() -> App {
     App::new(|| {
         let picked = signal(String::from("none"));
-        let item = move |name: &'static str| {
-            MenuItem::new(name, move |_| picked.set(name.to_string()))
-        };
+        let item =
+            move |name: &'static str| MenuItem::new(name, move |_| picked.set(name.to_string()));
         column([
             menu_bar(vec![
-                Menu::new("File", vec![item("New"), MenuItem::separator(), item("Open")]),
+                Menu::new(
+                    "File",
+                    vec![item("New"), MenuItem::separator(), item("Open")],
+                ),
                 Menu::new("Edit", vec![item("Copy").hint("ctrl+c"), item("Paste")]),
             ])
             .fixed(1),
@@ -174,13 +183,23 @@ fn menu_app() -> App {
 #[test]
 fn the_menu_bar_opens_a_menu_below_the_title_and_runs_an_item() {
     // " File  Edit ": Edit starts at column 6.
-    let rows = screen(&run_open(menu_app(), Script::new().keys("right enter"), 30, 8));
+    let rows = screen(&run_open(
+        menu_app(),
+        Script::new().keys("right enter"),
+        30,
+        8,
+    ));
     let at = row_of(&rows, "Copy").expect("the Edit menu is open");
     assert_eq!(at, 2, "{rows:?}");
     assert!(rows[at].contains("ctrl+c"), "{rows:?}");
     assert_eq!(rows[at].find('│'), Some(6), "{rows:?}");
 
-    let rows = screen(&run(menu_app(), Script::new().keys("enter down enter q"), 30, 8));
+    let rows = screen(&run(
+        menu_app(),
+        Script::new().keys("enter down enter q"),
+        30,
+        8,
+    ));
     // Down skips the separator.
     assert_eq!(rows[1], "picked Open", "{rows:?}");
 

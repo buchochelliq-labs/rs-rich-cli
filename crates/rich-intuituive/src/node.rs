@@ -251,7 +251,7 @@ impl Node {
         self.name.clone().unwrap_or_default()
     }
 
-        /// How the inspector shows this node: its name or builder, and what it
+    /// How the inspector shows this node: its name or builder, and what it
     /// holds.
     pub(crate) fn describe(&self) -> String {
         let base = match &self.name {

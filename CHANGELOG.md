@@ -58,6 +58,39 @@ The components the two example ports showed were missing, built from
   Tests are in `tests/widgets.rs`, `tests/components.rs`, `tests/files.rs`
   and `tests/scope.rs`, and the tapes are re-recorded.
 
+### intuiTUIve: more components and features (rs-rich-intuituive 0.0.2)
+
+Components and features that other terminal frameworks, ratatui above all,
+leave to each app:
+
+- **`widgets::tree`** and `tree_with`: nested items that expand and
+  collapse, with the selection as a path.
+- **`widgets::hsplit` / `vsplit`** and `split_with`: two panes with a
+  divider that the mouse drags and Alt+arrows nudge.
+- **`widgets::calendar`** and `calendar_with`: a month grid over a `Date`
+  signal, with the date arithmetic in `Date`.
+- **`widgets::virtual_list`**: a list that asks only for the rows in view.
+- **The command palette and help** (`Ctx::command_palette`, `Ctx::help`,
+  `App::palette_key`, `App::help_key`) list every binding made with a
+  description on the focus path, so commands are declared once.
+- **`menu`**: `menu_bar`, drop-down menus (`open_menu`) and
+  `context_menu` at the pointer.
+- **Pop-ups anchor to a node or a `Rect`** (`Anchor`), and
+  `EventCx::rect()` and `Ctx::pointer()` give the places to anchor to.
+- **Toasts**: `Ctx::toast` and `toast_for`.
+- **Animations**: `Ctx::animate` eases a `Signal<f64>` to a value with an
+  `Easing`, driven by the app's clock.
+- **Text selection with the mouse captured**: a drag where nothing uses
+  the press selects text and copies it with OSC 52;
+  `App::selectable(false)` turns it off.
+- The palette and help group bindings by the node's name only, not by the
+  builder that made it.
+
+Tests are in `tests/widgets_more.rs` and `tests/features.rs`. The design
+note records the gaps building these found in the `Widget` trait, and
+designs for accessibility and serving an app to a browser, which are not
+built.
+
 ### Charts: rs-rich-ext 0.0.15
 
 - **`chart::Chart`**, laid out as ratatui's `Chart`, so a ported app looks

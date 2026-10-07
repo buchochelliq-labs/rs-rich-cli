@@ -994,9 +994,7 @@ impl App {
                                 if self.selection.take().is_some() {
                                     self.restack = true;
                                 }
-                                if self.selectable
-                                    && mouse.kind == MouseKind::Down(Button::Left)
-                                {
+                                if self.selectable && mouse.kind == MouseKind::Down(Button::Left) {
                                     let at = (mouse.column, row);
                                     self.selection = Some((at, at));
                                     self.selecting = true;
@@ -1182,8 +1180,8 @@ impl App {
         // Toasts, newest at the bottom right, over everything.
         let mut bottom = area.bottom();
         for (markup, _) in self.toasts.iter().rev() {
-            let text = rich::Text::from_markup(markup)
-                .unwrap_or_else(|_| rich::Text::new(markup.clone()));
+            let text =
+                rich::Text::from_markup(markup).unwrap_or_else(|_| rich::Text::new(markup.clone()));
             let w = (text.cell_len() as u16 + 4).min(area.width.saturating_sub(2));
             if w < 5 || bottom < area.y + 3 {
                 break;
@@ -1724,8 +1722,7 @@ impl App {
                     return true;
                 }
                 let text = selected_text(screen, start, at);
-                if !text.is_empty() && backend.clipboard().is_ok() && backend.copy(&text).is_ok()
-                {
+                if !text.is_empty() && backend.clipboard().is_ok() && backend.copy(&text).is_ok() {
                     let n = text.chars().count();
                     self.toasts.push((
                         format!("Copied {n} character{}", if n == 1 { "" } else { "s" }),

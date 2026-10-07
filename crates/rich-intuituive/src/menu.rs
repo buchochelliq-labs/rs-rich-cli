@@ -178,7 +178,14 @@ impl Widget for MenuList {
             Axis::Horizontal => self
                 .items
                 .iter()
-                .map(|i| width(&i.label) + if i.hint.is_empty() { 0 } else { width(&i.hint) + 2 })
+                .map(|i| {
+                    width(&i.label)
+                        + if i.hint.is_empty() {
+                            0
+                        } else {
+                            width(&i.hint) + 2
+                        }
+                })
                 .max()
                 .unwrap_or(0)
                 .saturating_add(2),
@@ -348,7 +355,11 @@ impl Widget for MenuBar {
         let mut x = 0u16;
         for (i, menu) in self.menus.iter().enumerate() {
             let w = width(&menu.title) + 2;
-            let style = if i == self.selected.get() { &chosen } else { &bar };
+            let style = if i == self.selected.get() {
+                &chosen
+            } else {
+                &bar
+            };
             let mut segments = vec![Segment::new(" ", Some(style.clone()))];
             segments.extend(line(cx, &menu.title, w - 2).into_iter().map(|s| {
                 let combined = match &s.style {
