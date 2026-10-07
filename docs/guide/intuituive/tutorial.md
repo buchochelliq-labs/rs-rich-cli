@@ -23,6 +23,8 @@ first:
 cargo run -p rs-rich-intuituive --example todo
 ```
 
+![The finished to-do app, with one to-do ticked off](../../media/tapes/intuituive/todo.png)
+
 ## 1. A project
 
 Start from the template:
