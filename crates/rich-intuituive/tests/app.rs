@@ -309,3 +309,44 @@ fn a_log_keeps_only_its_capacity() {
         ["3   ", "4   ", "    "]
     );
 }
+
+#[test]
+fn a_focused_component_takes_keys_and_shows_its_caret() {
+    use rich_interact::Input;
+    let app = App::new(|| {
+        let name = signal(String::new());
+        let cancelled = signal(false);
+        column([
+            component(Input::new("Name"), move |value, _| name.set(value))
+                .on_cancel(move |_| cancelled.set(true))
+                .fixed(1),
+            text!("name={name} cancelled={cancelled}"),
+        ])
+        .on_key("ctrl+q", |cx| cx.quit())
+    });
+    let record = run(app, Script::new().keys("A d a enter esc ctrl+q"), 30, 3);
+    assert_eq!(screen(&record)[1], "name=Ada cancelled=true");
+    // While typing, the terminal cursor is shown at the caret.
+    assert!(
+        record.output().contains("\x1b[?25h"),
+        "{:?}",
+        record.output()
+    );
+}
+
+#[test]
+fn clicking_a_component_focuses_it() {
+    use rich_interact::Input;
+    let app = App::new(|| {
+        let a = signal(String::new());
+        let b = signal(String::new());
+        column([
+            component(Input::new("A"), move |v, _| a.set(v)).fixed(1),
+            component(Input::new("B"), move |v, _| b.set(v)).fixed(1),
+            text!("a={a} b={b}"),
+        ])
+        .on_key("ctrl+q", |cx| cx.quit())
+    });
+    let record = run(app, Script::new().click(5, 1).keys("x enter ctrl+q"), 30, 3);
+    assert_eq!(screen(&record)[2], "a= b=x");
+}

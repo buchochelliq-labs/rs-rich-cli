@@ -47,15 +47,15 @@ pub mod screen;
 
 pub use app::{every, App, Ctx, FrameStats, Theme};
 pub use log::Log;
-pub use node::{column, each, label, leaf, renderable, row, text, Node, Size};
+pub use node::{column, component, each, label, leaf, renderable, row, text, Node, Size};
 pub use reactive::{memo, signal, Memo, Proxy, Signal};
 
 /// Everything an app usually needs.
 pub mod prelude {
     // `text` is both the function and the `text!` macro.
     pub use crate::{
-        column, each, every, label, leaf, memo, renderable, row, signal, text, App, Ctx, Log, Memo,
-        Node, Proxy, Signal, Size, Theme,
+        column, component, each, every, label, leaf, memo, renderable, row, signal, text, App, Ctx,
+        Log, Memo, Node, Proxy, Signal, Size, Theme,
     };
 }
 

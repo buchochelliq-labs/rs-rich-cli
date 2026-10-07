@@ -28,7 +28,7 @@ use std::hash::Hash;
 use std::rc::Rc;
 
 use rich::{Console, Renderable, Segment, Style};
-use rich_interact::Key;
+use rich_interact::{Component, Context, Event, Flow, Key, View};
 
 use crate::app::Ctx;
 use crate::reactive::{next_node, NodeId, Runtime, Signal};
@@ -60,6 +60,61 @@ pub(crate) enum Kind {
     Panel { title: String, child: Box<Node> },
     Each(Box<dyn Reconcile>),
     Log(crate::log::LogView),
+    Host(Box<dyn Hosted>),
+}
+
+/// What a hosted component did with an event.
+pub(crate) enum Used {
+    /// It used it (and may look different now).
+    Yes,
+    /// Not for it: the event bubbles to the node's ancestors.
+    No,
+}
+
+/// A `rich-interact` component living in the tree.
+pub(crate) trait Hosted {
+    fn handle(&mut self, event: &Event, context: &Context<'_>, cx: &mut Ctx) -> Used;
+    fn render(&self, context: &Context<'_>) -> View;
+    fn set_cancel(&mut self, cancel: Box<dyn FnMut(&mut Ctx)>);
+}
+
+struct Host<C: Component> {
+    component: C,
+    on_done: Box<dyn FnMut(C::Output, &mut Ctx)>,
+    on_cancel: Option<Box<dyn FnMut(&mut Ctx)>>,
+}
+
+impl<C: Component> Hosted for Host<C> {
+    fn handle(&mut self, event: &Event, context: &Context<'_>, cx: &mut Ctx) -> Used {
+        match self.component.handle(event, context) {
+            Flow::Ignored => Used::No,
+            Flow::Continue => Used::Yes,
+            Flow::Done(value) => {
+                (self.on_done)(value, cx);
+                Used::Yes
+            }
+            // With no cancel handler, the key that cancelled (Esc) is the
+            // app's: it bubbles, so an app-wide Esc binding still works.
+            Flow::Cancel => match &mut self.on_cancel {
+                Some(cancel) => {
+                    cancel(cx);
+                    Used::Yes
+                }
+                None => Used::No,
+            },
+            // Handing the terminal to another program is not supported
+            // inside an app yet; the component carries on.
+            Flow::Handoff(_) => Used::Yes,
+        }
+    }
+
+    fn render(&self, context: &Context<'_>) -> View {
+        self.component.render(context)
+    }
+
+    fn set_cancel(&mut self, cancel: Box<dyn FnMut(&mut Ctx)>) {
+        self.on_cancel = Some(cancel);
+    }
 }
 
 /// One node of the tree.
@@ -74,6 +129,8 @@ pub struct Node {
     pub(crate) focusable: bool,
     pub(crate) keys: RefCell<Vec<(Vec<Key>, String, Handler)>>,
     pub(crate) click: RefCell<Option<Handler>>,
+    /// Where a hosted component wants the text caret, on the screen.
+    pub(crate) caret: Cell<Option<(u16, u16)>>,
 }
 
 impl Node {
@@ -91,6 +148,7 @@ impl Node {
             focusable: false,
             keys: RefCell::new(Vec::new()),
             click: RefCell::new(None),
+            caret: Cell::new(None),
         }
     }
 
@@ -151,6 +209,16 @@ impl Node {
         self
     }
 
+    /// For a [`component`] node: run `handler` when the component is
+    /// cancelled (Esc). Without one, the cancelling key bubbles to the
+    /// node's ancestors like any unused key. Ignored on other nodes.
+    pub fn on_cancel(self, handler: impl FnMut(&mut Ctx) + 'static) -> Node {
+        if let Kind::Host(host) = &mut *self.kind.borrow_mut() {
+            host.set_cancel(Box::new(handler));
+        }
+        self
+    }
+
     /// Wrap this node in a rounded border with `title`. The border is
     /// highlighted while the focus is on the node or inside it.
     pub fn panel(self, title: &str) -> Node {
@@ -193,7 +261,7 @@ impl Node {
                     child.walk_inner(path, f);
                 }
             }
-            Kind::Log(_) => {}
+            Kind::Log(_) | Kind::Host(_) => {}
         }
         path.pop();
     }
@@ -242,6 +310,24 @@ impl Node {
                     child.draw(frame, rect.inner(1), screen, true);
                 } else {
                     child.draw(frame, rect.inner(1), screen, false);
+                }
+            }
+            Kind::Host(host) => {
+                if resized || force || frame.dirty.contains(&self.id) {
+                    let context = Context {
+                        console: frame.console,
+                        width: rect.width as usize,
+                        height: rect.height as usize,
+                    };
+                    let view = host.render(&context);
+                    screen.write_lines(rect, &view.lines);
+                    self.caret.set(view.cursor.and_then(|(row, column)| {
+                        let (row, column) = (row as u16, column as u16);
+                        (row < rect.height && column < rect.width)
+                            .then_some((rect.x + column, rect.y + row))
+                    }));
+                    frame.damage.push(rect);
+                    frame.drawn += 1;
                 }
             }
             Kind::Log(view) => {
@@ -495,6 +581,39 @@ pub fn renderable<R: Renderable + 'static>(f: impl Fn() -> R + 'static) -> Node 
             .update_dimensions(width.max(1) as usize, height.max(1) as usize);
         console.render_lines(&f(), &options, false)
     })
+}
+
+/// A `rich-interact` component as a node: an `Input`, a `Select`, a
+/// `Form`, a `Pager`, or one of your own. It takes keys while it has the
+/// focus (keys it does not use bubble on), shows its text caret, and calls
+/// `on_done` with its answer (Enter in an `Input`, a pick in a `Select`).
+///
+/// ```
+/// use intuituive::prelude::*;
+/// use rich_interact::Input;
+///
+/// let app = App::new(|| {
+///     let name = signal(String::new());
+///     column([
+///         component(Input::new("Name"), move |value, _| name.set(value)),
+///         text!("Hello, {name}"),
+///     ])
+///     .on_key("esc", |cx| cx.quit())
+/// });
+/// let screen = app.render_with(&["A", "d", "a", "enter", "esc"], 30, 3).unwrap();
+/// assert!(screen.iter().any(|l| l.contains("Hello, Ada")), "{screen:?}");
+/// ```
+pub fn component<C: Component + 'static>(
+    component: C,
+    on_done: impl FnMut(C::Output, &mut Ctx) + 'static,
+) -> Node {
+    let mut node = Node::new(Kind::Host(Box::new(Host {
+        component,
+        on_done: Box::new(on_done),
+        on_cancel: None,
+    })));
+    node.focusable = true;
+    node
 }
 
 /// Children one above the other.

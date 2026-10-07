@@ -212,6 +212,11 @@ impl Runtime {
         !self.graph.borrow().dirty.is_empty()
     }
 
+    /// Mark a node dirty by hand (a hosted component handled an event).
+    pub(crate) fn mark_dirty(&self, node: NodeId) {
+        self.graph.borrow_mut().dirty.insert(node);
+    }
+
     /// Forget a node that left the tree.
     pub(crate) fn forget(&self, node: NodeId) {
         let mut graph = self.graph.borrow_mut();

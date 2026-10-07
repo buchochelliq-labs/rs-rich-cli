@@ -170,10 +170,13 @@ pub struct App {
     theme: Theme,
     timers: Vec<Timer>,
     console: Option<Console>,
+    /// The console the last frame used, for components handling events.
+    last_console: Option<Console>,
     stats: FrameStats,
     /// Hand each frame's plain text to the backend (the headless driver
     /// records it); off in a real terminal, where nobody reads it.
     text_frames: bool,
+    caret_shown: bool,
 }
 
 impl App {
@@ -197,8 +200,10 @@ impl App {
             theme: Theme::default(),
             timers,
             console: None,
+            last_console: None,
             stats: FrameStats::default(),
             text_frames: true,
+            caret_shown: false,
         }
     }
 
@@ -293,6 +298,7 @@ impl App {
     fn run_loop(&mut self, backend: &mut impl Backend) -> io::Result<()> {
         let (mut width, mut height) = backend.size();
         let mut console = self.console_for(width);
+        self.last_console = Some(console.clone());
         let mut screen = Screen::new(width, height);
         let mut painter = Painter::new(console.color_system());
         let mut first = true;
@@ -318,7 +324,8 @@ impl App {
             }
             if first || self.runtime.has_dirty() {
                 let damage = self.frame(&console, &mut screen, first);
-                let out = painter.paint(&screen, &damage);
+                let mut out = painter.paint(&screen, &damage);
+                out.push_str(&self.caret());
                 self.stats.bytes = out.len();
                 if !out.is_empty() {
                     backend.write(&out)?;
@@ -343,12 +350,18 @@ impl App {
                 Event::Resize { columns, rows } => {
                     (width, height) = (columns, rows);
                     console = self.console_for(width);
+                    self.last_console = Some(console.clone());
                     screen = Screen::new(width, height);
                     painter.invalidate();
                     first = true;
                 }
                 Event::Key(key) => {
                     if self.key(key) {
+                        return Ok(());
+                    }
+                }
+                Event::Paste(_) => {
+                    if let Some(true) = self.to_host(&event) {
                         return Ok(());
                     }
                 }
@@ -362,6 +375,22 @@ impl App {
                 _ => {}
             }
         }
+    }
+
+    /// Show the focused component's text caret, or keep the cursor hidden.
+    fn caret(&mut self) -> String {
+        let caret = self.focus.and_then(|id| {
+            let mut caret = None;
+            with_node(&self.root, id, &mut |node| caret = node.caret.get());
+            caret
+        });
+        let out = match caret {
+            Some((x, y)) => format!("\x1b[{};{}H\x1b[?25h", y + 1, x + 1),
+            None if self.caret_shown => "\x1b[?25l".to_string(),
+            None => String::new(),
+        };
+        self.caret_shown = caret.is_some();
+        out
     }
 
     /// Draw what changed; returns the damage.
@@ -459,6 +488,10 @@ impl App {
     /// root; Tab and Shift+Tab move the focus if no binding used them.
     /// Whether to quit.
     fn key(&mut self, key: Key) -> bool {
+        // A focused component sees the key first.
+        if let Some(quit) = self.to_host(&Event::Key(key)) {
+            return quit;
+        }
         let path = match self.focus {
             Some(id) => self.path_to(id),
             None => vec![self.root.id],
@@ -490,16 +523,59 @@ impl App {
         false
     }
 
+    /// Give `event` to the focused node if it hosts a component. `Some`
+    /// (whether to quit) if the component used it.
+    fn to_host(&mut self, event: &Event) -> Option<bool> {
+        let id = self.focus?;
+        let console = self.last_console.clone()?;
+        let mut cx = self.ctx();
+        let mut used = false;
+        let runtime = self.runtime.clone();
+        runtime.enter(|| {
+            with_node(&self.root, id, &mut |node| {
+                if let crate::node::Kind::Host(host) = &mut *node.kind.borrow_mut() {
+                    let rect = node.rect();
+                    let context = rich_interact::Context {
+                        console: &console,
+                        width: rect.width as usize,
+                        height: rect.height as usize,
+                    };
+                    used = matches!(
+                        host.handle(event, &context, &mut cx),
+                        crate::node::Used::Yes
+                    );
+                }
+            });
+        });
+        if !used {
+            return None;
+        }
+        self.runtime.mark_dirty(id);
+        Some(self.apply(cx))
+    }
+
     /// Route a click to the deepest clickable node under the pointer.
     fn click(&mut self, column: u16, row: u16) -> bool {
         let mut target = None;
         self.root.walk(&mut |node, _| {
-            if node.click.borrow().is_some() && node.rect().contains(column, row) {
-                target = Some(node.id);
+            let host = matches!(&*node.kind.borrow(), crate::node::Kind::Host(_));
+            if (host || node.click.borrow().is_some()) && node.rect().contains(column, row) {
+                target = Some((node.id, node.rect()));
             }
         });
-        let Some(id) = target else { return false };
+        let Some((id, rect)) = target else {
+            return false;
+        };
         self.set_focus(Some(id));
+        // A component gets the click in its own coordinates.
+        let local = rich_interact::Mouse::new(
+            rich_interact::MouseKind::Down(rich_interact::Button::Left),
+            column - rect.x,
+            row - rect.y,
+        );
+        if let Some(quit) = self.to_host(&Event::Mouse(local)) {
+            return quit;
+        }
         let mut cx = self.ctx();
         let runtime = self.runtime.clone();
         runtime.enter(|| {
