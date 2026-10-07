@@ -34,8 +34,8 @@ pub fn dashboard(ticking: bool) -> App {
         let log = Log::new(500);
         (0..50).for_each(|n| log.push(log_line(n)));
         let add_line = move || {
-            log.push(log_line(log.len() + 50));
             tick.update(|t| *t += 1);
+            log.push(log_line(49 + tick.get_untracked() as usize));
         };
         if ticking {
             every(Duration::from_secs(1), move |_| add_line());
