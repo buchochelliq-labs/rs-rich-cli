@@ -54,6 +54,40 @@ blocking and headless drivers and every existing component carry over),
   to switch at run time.
 - Inline mode: `App::inline(rows)` runs in a region below the prompt, moving
   the cursor relative to it, and leaves the last frame in the scrollback.
+- An inspector, docked on the right (`App::inspector(true)`, or
+  `INTUITUIVE_INSPECT=1` for any app; F12 toggles it): the node tree with
+  sizes, the nodes that drew in the last frame, the focus, the frame's cost
+  (nodes drawn of those dirty, damage, bytes sent) and the theme file's
+  state. `Node::name` labels nodes for it.
+- Live styles: `App::theme_file(path)` reads rich's theme format and
+  reloads it when the file changes, keeping the last good styles (and
+  showing the error) when an edit does not parse; `Theme::with_config` and
+  `Theme::load` read the same format.
+- `repeating(make, on_done)`: a component built fresh after each answer,
+  for entry boxes; `Node::focus_style(style)` highlights a leaf, such as a
+  list row, while it has the focus.
+- `list(items, selected)`: a scrolling list with a selected row (ratatui's
+  `List` and `ListState` in one node), with ↑↓ jk, Home/End and
+  PageUp/PageDown built in, and a `selected` theme style.
+- `watch(source, on_change)`: run a callback, with a `Ctx`, whenever a value
+  derived from signals changes; a screen's watches stop when it closes.
+  `Memo::get_untracked` and `with_untracked`, and `Node::no_focus`.
+- A hosted component (a ratatui widget through rs-rich-ratatui's
+  `RatatuiComponent`) now draws again when the signals it reads change.
+- `wait_for_tasks` also waits for tasks that watches start.
+- `examples/files.rs`: a Yazi-style file manager (parent, current and
+  preview columns, vim keys, background-highlighted previews, hidden files,
+  sorting, filtering), with tests over a temporary tree; and a porting guide
+  for ratatui apps (`docs/guide/intuituive/porting.md`), whose "keep your
+  widgets" step is tested in `tests/ratatui_widgets.rs`.
+- A panel whose focus state changes redraws only its border's edges, not
+  its contents, and a focus move elsewhere leaves it alone.
+- `intuituive::rich` and `intuituive::interact` re-export rs-rich and
+  rs-rich-interact, so an app needs one dependency.
+- A cargo-generate template (`templates/intuituive-app`, compiled and tested
+  against the crate in CI) and a tutorial that builds a to-do app
+  (`docs/guide/intuituive/tutorial.md`, its finished app
+  `examples/todo.rs` with tests).
 - A benchmark gate against ratatui 0.30 (`tests/versus_ratatui.rs`, a new
   `ratatui-gate` CI job, run in release): the same ops dashboard drawn both
   ways, failing if intuiTUIve is slower on a status tick or a selection move,

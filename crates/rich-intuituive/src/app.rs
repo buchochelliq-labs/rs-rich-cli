@@ -34,6 +34,7 @@ use std::time::Duration;
 use rich::{ColorSystem, Console, Style};
 use rich_interact::{Backend, Button, Event, Key, KeyCode, MouseKind, Session, SessionOptions};
 
+use crate::inspect::Inspector;
 use crate::layout::Size;
 use crate::node::{with_node, Axis, FrameState, Node};
 use crate::reactive::{signal, NodeId, Proxy, Runtime, Signal};
@@ -139,7 +140,8 @@ impl Ctx {
 /// the focused border, panel titles), and named styles for markup.
 ///
 /// Every named style works in console markup: `[accent]…[/]`. The presets
-/// define `accent`, `muted`, `good`, `warn` and `bad`, and the framework's
+/// define `accent`, `muted`, `good`, `warn`, `bad` and `selected` (a
+/// [`list`](crate::list)'s selected row), and the framework's
 /// own as `border`, `border.focused` and `title`, so an app restyles by
 /// name and switches themes at run time with [`Ctx::set_theme`].
 #[derive(Clone, Debug)]
@@ -162,7 +164,7 @@ fn style(definition: &str) -> Style {
 }
 
 impl Theme {
-    fn preset(border: &str, focused: &str, names: [(&str, &str); 5]) -> Theme {
+    fn preset(border: &str, focused: &str, names: [(&str, &str); 6]) -> Theme {
         Theme {
             border: style(border),
             border_focused: style(focused),
@@ -185,6 +187,7 @@ impl Theme {
                 ("good", "green"),
                 ("warn", "yellow"),
                 ("bad", "bold red"),
+                ("selected", "reverse"),
             ],
         )
     }
@@ -200,6 +203,7 @@ impl Theme {
                 ("good", "green4"),
                 ("warn", "dark_orange3"),
                 ("bad", "bold red3"),
+                ("selected", "reverse"),
             ],
         )
     }
@@ -215,6 +219,7 @@ impl Theme {
                 ("good", "bold"),
                 ("warn", "underline"),
                 ("bad", "bold reverse"),
+                ("selected", "reverse"),
             ],
         )
     }
@@ -224,6 +229,43 @@ impl Theme {
         self.styles.retain(|(n, _)| n != name);
         self.styles.push((name.to_string(), style));
         self
+    }
+
+    /// This theme with the styles of a theme file's contents over it: rich's
+    /// theme format, a `[styles]` section of `name = style` lines. `border`,
+    /// `border.focused` and `title` set the framework's parts; other names
+    /// are added (or replaced) for markup.
+    ///
+    /// ```
+    /// use intuituive::Theme;
+    ///
+    /// let theme = Theme::dark()
+    ///     .with_config("[styles]\naccent = bold magenta\nborder = green\n")
+    ///     .unwrap();
+    /// assert_eq!(theme.border, rich::Style::parse("green").unwrap());
+    /// assert!(Theme::dark().with_config("[styles]\nbad = not-a-colour\n").is_err());
+    /// ```
+    pub fn with_config(mut self, config: &str) -> Result<Theme, String> {
+        let parsed = rich::Theme::from_file(config, false).map_err(|e| e.to_string())?;
+        let mut names: Vec<&str> = parsed.names().collect();
+        names.sort_unstable();
+        for name in names {
+            let style = parsed.get(name).cloned().unwrap_or_default();
+            match name {
+                "border" => self.border = style,
+                "border.focused" => self.border_focused = style,
+                "title" => self.title = style,
+                _ => self = self.style(name, style),
+            }
+        }
+        Ok(self)
+    }
+
+    /// The dark theme with a theme file's styles over it (see
+    /// [`with_config`](Self::with_config)).
+    pub fn load(path: impl AsRef<std::path::Path>) -> Result<Theme, String> {
+        let text = std::fs::read_to_string(path).map_err(|e| e.to_string())?;
+        Theme::dark().with_config(&text)
     }
 
     pub(crate) fn border(&self, focused: bool) -> Style {
@@ -274,11 +316,24 @@ struct Layer {
     /// Where a modal was last drawn.
     drawn: Option<Rect>,
     timers: Vec<Timer>,
+    /// Its [watches](crate::watch), stopped when it closes.
+    watches: Vec<usize>,
 }
 
 thread_local! {
     /// Timers [`every`] made while an app is being built.
     static BUILDING: std::cell::RefCell<Option<Vec<Timer>>> = const { std::cell::RefCell::new(None) };
+    /// Watches [`watch`](crate::watch) made while a screen is being built.
+    static WATCHES: std::cell::RefCell<Option<Vec<usize>>> = const { std::cell::RefCell::new(None) };
+}
+
+/// Note a watch made while a screen is built, so it stops with the screen.
+pub(crate) fn building_watch(id: usize) {
+    WATCHES.with(|watches| {
+        if let Some(watches) = watches.borrow_mut().as_mut() {
+            watches.push(id);
+        }
+    });
 }
 
 /// Call `tick` every `interval` while the app runs: a clock, a poll, an
@@ -357,6 +412,25 @@ pub struct App {
     /// Rows of an inline region; `None` for the alternate screen.
     inline: Option<u16>,
     wait_for_tasks: bool,
+    /// `Some` when the inspector can be shown (F12 toggles it).
+    inspector: Option<Inspector>,
+    /// The theme set in code, before any theme file's styles.
+    theme_base: Theme,
+    theme_file: Option<ThemeFile>,
+    /// Draw a frame even if no node is dirty (the inspector has news).
+    poke: bool,
+}
+
+/// A theme file the app reloads when it changes.
+struct ThemeFile {
+    path: std::path::PathBuf,
+    /// The modification time and length last read.
+    stamp: Option<(std::time::SystemTime, u64)>,
+    /// The last contents that parsed.
+    good: Option<String>,
+    /// The contents last read, parsed or not.
+    read: Option<String>,
+    error: Option<String>,
 }
 
 impl App {
@@ -365,12 +439,16 @@ impl App {
     pub fn new(build: impl FnOnce() -> Node) -> App {
         let runtime = Runtime::new();
         BUILDING.with(|building| *building.borrow_mut() = Some(Vec::new()));
+        WATCHES.with(|watches| *watches.borrow_mut() = Some(Vec::new()));
         let (root, focus_path) = runtime.enter(|| {
             let focus_path = signal(Vec::new());
             (build(), focus_path)
         });
         let timers = BUILDING
             .with(|building| building.borrow_mut().take())
+            .unwrap_or_default();
+        let watches = WATCHES
+            .with(|watches| watches.borrow_mut().take())
             .unwrap_or_default();
         App {
             runtime,
@@ -380,6 +458,7 @@ impl App {
                 modal: None,
                 drawn: None,
                 timers,
+                watches,
             }],
             restack: false,
             now: Duration::ZERO,
@@ -393,7 +472,48 @@ impl App {
             restyled: false,
             inline: None,
             wait_for_tasks: false,
+            inspector: std::env::var("INTUITUIVE_INSPECT")
+                .ok()
+                .filter(|v| !v.is_empty() && v != "0")
+                .map(|_| Inspector::new(true)),
+            theme_base: Theme::default(),
+            theme_file: None,
+            poke: false,
         }
+    }
+
+    /// Dock the [inspector](crate::inspect) on the right: the node tree,
+    /// what drew in the last frame, the focus and the frame's cost. F12
+    /// shows and hides it. Setting `INTUITUIVE_INSPECT=1` turns it on for
+    /// any app without a code change.
+    pub fn inspector(mut self, on: bool) -> App {
+        self.inspector = on.then(|| Inspector::new(true));
+        self
+    }
+
+    /// Load styles from a theme file, and load them again whenever it
+    /// changes while the app runs: edit a colour, save, and the app redraws
+    /// in it. The file is rich's theme format, a `[styles]` section of
+    /// `name = style` lines; `border`, `border.focused` and `title` restyle
+    /// the framework's parts, and every name works in markup. Its styles go
+    /// over the app's [theme](Self::theme). A file that does not parse (or
+    /// is missing) leaves the last good styles in place; the inspector
+    /// shows why.
+    ///
+    /// ```text
+    /// [styles]
+    /// accent = bold magenta
+    /// border.focused = bright_green
+    /// ```
+    pub fn theme_file(mut self, path: impl Into<std::path::PathBuf>) -> App {
+        self.theme_file = Some(ThemeFile {
+            path: path.into(),
+            stamp: None,
+            good: None,
+            read: None,
+            error: None,
+        });
+        self
     }
 
     /// Call `tick` every `interval` (a clock, a poll, an animation).
@@ -422,6 +542,7 @@ impl App {
 
     /// Use `theme` (see [`Theme`]).
     pub fn theme(mut self, theme: Theme) -> App {
+        self.theme_base = theme.clone();
         self.theme = theme;
         self
     }
@@ -537,21 +658,11 @@ impl App {
         // appear only once drawn; `keep_focus` catches them after it).
         self.focus_first();
         loop {
+            self.reload_theme();
             self.now = backend.elapsed();
             let mut cx = self.ctx();
             let runtime = self.runtime.clone();
             runtime.enter(|| {
-                // Waiting for tasks, wait again for any a result started.
-                loop {
-                    if self.wait_for_tasks {
-                        self.settle_tasks();
-                    }
-                    let ran = runtime.run_inbox(&mut cx);
-                    let busy = runtime.tasks.load(std::sync::atomic::Ordering::SeqCst) > 0;
-                    if !self.wait_for_tasks || !(ran || busy) {
-                        break;
-                    }
-                }
                 let now = self.now;
                 for layer in &mut self.layers {
                     for timer in &mut layer.timers {
@@ -561,6 +672,21 @@ impl App {
                                 timer.next += timer.every;
                             }
                         }
+                    }
+                }
+                // Results from other threads, then the watches they (or the
+                // last event) set off. Waiting for tasks, this repeats until
+                // none is in flight: a watch may start one, and its result
+                // may start another.
+                loop {
+                    if self.wait_for_tasks {
+                        self.settle_tasks();
+                    }
+                    let delivered = runtime.run_inbox(&mut cx);
+                    let watched = runtime.run_watches(&mut cx);
+                    let busy = runtime.tasks.load(std::sync::atomic::Ordering::SeqCst) > 0;
+                    if !self.wait_for_tasks || !(delivered || watched || busy) {
+                        break;
                     }
                 }
             });
@@ -573,7 +699,8 @@ impl App {
                 self.last_console = Some(console.clone());
                 first = true;
             }
-            if first || self.restack || self.runtime.has_dirty() {
+            if first || self.restack || self.poke || self.runtime.has_dirty() {
+                self.poke = false;
                 self.paint(backend, painter, &console, &mut screen, first)?;
                 first = false;
                 // Keyed children exist once drawn: focus is chosen after a
@@ -694,7 +821,17 @@ impl App {
 
     /// Draw what changed; returns the damage.
     fn frame(&mut self, console: &Console, screen: &mut Screen, full: bool) -> Vec<Rect> {
-        let area = screen.area();
+        let whole = screen.area();
+        // The inspector, when shown, takes the right of the screen.
+        let panel = self
+            .inspector
+            .as_ref()
+            .and_then(|inspector| inspector.width(whole.width))
+            .map(|w| Rect::new(whole.right() - w, whole.y, w, whole.height));
+        let area = match panel {
+            Some(panel) => Rect::new(whole.x, whole.y, whole.width - panel.width, whole.height),
+            None => whole,
+        };
         // Draw from the topmost full screen up: the modals over it, each
         // drawn again whenever what is below it changed under it.
         let base = self
@@ -727,11 +864,13 @@ impl App {
             focus_path: self.focus_path,
             theme: &self.theme,
             drawn: 0,
+            drawn_ids: panel.map(|_| Vec::new()),
         };
+        let dirty = frame.dirty.len();
         if full {
             // A screen opened or closed: nothing on screen can be trusted.
-            screen.clear(area);
-            frame.damage.push(area);
+            screen.clear(whole);
+            frame.damage.push(whole);
         }
         runtime.enter(|| {
             for (layer, rect) in self.layers[base..].iter_mut().zip(&rects) {
@@ -754,7 +893,28 @@ impl App {
             }
         });
         self.stats.drawn = frame.drawn;
-        frame.damage
+        let mut damage = frame.damage;
+        if let (Some(panel), Some(drawn)) = (panel, frame.drawn_ids) {
+            let inspector = self.inspector.as_mut().expect("a panel means an inspector");
+            inspector.frames += 1;
+            let report = crate::inspect::Report {
+                layers: self.layers[base..]
+                    .iter()
+                    .map(|layer| (&layer.root, layer.modal.is_some()))
+                    .collect(),
+                drawn: &drawn,
+                dirty,
+                damage: &damage,
+                focus: self.layers.last().and_then(|layer| layer.focus),
+                stats: self.stats,
+                frame: inspector.frames,
+                theme: self.theme_status(),
+            };
+            let lines = crate::inspect::render(console, &report, panel.width, panel.height);
+            screen.write_lines(panel, &lines);
+            damage.push(panel);
+        }
+        damage
     }
 
     fn ctx(&self) -> Ctx {
@@ -767,8 +927,8 @@ impl App {
             self.navigate(nav);
         }
         if let Some(theme) = cx.theme {
-            self.theme = theme;
-            self.restyled = true;
+            self.theme_base = theme;
+            self.retheme();
         }
         match cx.focus {
             Some(FocusMove::Next) => self.move_focus(true),
@@ -799,6 +959,9 @@ impl App {
                     // The first screen: its timers go with it.
                     let old = self.layers.pop().expect("an app always has a screen");
                     old.root.forget(&self.runtime);
+                    for watch in old.watches {
+                        self.runtime.drop_watch(watch);
+                    }
                     self.open(build, None);
                 }
             }
@@ -808,10 +971,14 @@ impl App {
     /// Build a screen and put it on top, focusing its first focusable node.
     fn open(&mut self, build: Build, modal: Option<(Size, Size)>) {
         BUILDING.with(|building| *building.borrow_mut() = Some(Vec::new()));
+        WATCHES.with(|watches| *watches.borrow_mut() = Some(Vec::new()));
         let runtime = self.runtime.clone();
         let root = runtime.enter(build);
         let mut timers = BUILDING
             .with(|building| building.borrow_mut().take())
+            .unwrap_or_default();
+        let watches = WATCHES
+            .with(|watches| watches.borrow_mut().take())
             .unwrap_or_default();
         // A screen's timers start counting when it opens.
         for timer in &mut timers {
@@ -823,6 +990,7 @@ impl App {
             modal,
             drawn: None,
             timers,
+            watches,
         });
         self.restack = true;
         self.set_focus(None);
@@ -833,7 +1001,78 @@ impl App {
     fn close(&mut self) {
         let layer = self.layers.pop().expect("an app always has a screen");
         layer.root.forget(&self.runtime);
+        for watch in layer.watches {
+            self.runtime.drop_watch(watch);
+        }
         self.restack = true;
+    }
+
+    /// The theme in code with the theme file's last good styles over it.
+    fn retheme(&mut self) {
+        let good = self.theme_file.as_ref().and_then(|file| file.good.clone());
+        self.theme = match good {
+            Some(text) => self
+                .theme_base
+                .clone()
+                .with_config(&text)
+                .unwrap_or_else(|_| self.theme_base.clone()),
+            None => self.theme_base.clone(),
+        };
+        self.restyled = true;
+    }
+
+    /// Read the theme file again if it changed since it was last read.
+    fn reload_theme(&mut self) {
+        let Some(file) = &mut self.theme_file else {
+            return;
+        };
+        let stamp = std::fs::metadata(&file.path)
+            .ok()
+            .map(|m| (m.modified().unwrap_or(std::time::UNIX_EPOCH), m.len()));
+        if stamp == file.stamp && (stamp.is_some() || file.error.is_some()) {
+            // A file system with coarse timestamps can hide a same-length
+            // edit made within one tick: while the file is that fresh, look
+            // at what it says.
+            let fresh = stamp.is_some_and(|(modified, _)| {
+                modified
+                    .elapsed()
+                    .map_or(true, |age| age < Duration::from_secs(2))
+            });
+            if !fresh {
+                return;
+            }
+            let now = std::fs::read_to_string(&file.path).ok();
+            if now.is_none() || now == file.read {
+                return;
+            }
+        }
+        file.stamp = stamp;
+        let read = std::fs::read_to_string(&file.path).map_err(|e| e.to_string());
+        file.read = read.as_ref().ok().cloned();
+        match read.and_then(|text| self.theme_base.clone().with_config(&text).map(|_| text)) {
+            Ok(text) => {
+                file.good = Some(text);
+                file.error = None;
+                self.retheme();
+            }
+            Err(error) => {
+                file.error = Some(error);
+                self.poke = true;
+            }
+        }
+    }
+
+    /// The theme file's state, for the inspector.
+    fn theme_status(&self) -> Option<String> {
+        let file = self.theme_file.as_ref()?;
+        let name = file.path.file_name().map_or_else(
+            || file.path.display().to_string(),
+            |n| n.to_string_lossy().into_owned(),
+        );
+        Some(match &file.error {
+            Some(error) => format!("{name}: {error}"),
+            None => format!("{name}: loaded"),
+        })
     }
 
     /// The path from the root to the focused node.
@@ -905,6 +1144,11 @@ impl App {
     /// root; Tab and Shift+Tab move the focus if no binding used them.
     /// Whether to quit.
     fn key(&mut self, key: Key) -> bool {
+        if let (Some(inspector), KeyCode::F(12)) = (&mut self.inspector, key.code) {
+            inspector.open = !inspector.open;
+            self.restack = true;
+            return false;
+        }
         // A focused component sees the key first.
         if let Some(quit) = self.give_to_host(&Event::Key(key)) {
             return quit;

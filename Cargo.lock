@@ -2256,6 +2256,7 @@ dependencies = [
  "rs-rich",
  "rs-rich-ext",
  "rs-rich-interact",
+ "rs-rich-ratatui",
 ]
 
 [[package]]

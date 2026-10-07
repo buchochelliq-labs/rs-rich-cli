@@ -50,6 +50,7 @@
 //! `docs/design/intuituive.md`.
 
 pub mod app;
+pub mod inspect;
 pub mod layout;
 pub mod log;
 pub mod node;
@@ -57,20 +58,30 @@ pub mod reactive;
 pub mod screen;
 pub mod task;
 
+/// rs-rich, for renderables, styles and markup helpers, so an app needs
+/// only this crate as a dependency.
+pub use rich;
+/// rs-rich-interact, for its components (`interact::Input`,
+/// `interact::Select`, …) and the headless test driver.
+pub use rich_interact as interact;
+
 pub use app::{every, App, Ctx, FrameStats, Theme};
 pub use layout::Size;
 pub use log::Log;
-pub use node::{column, component, each, grid, label, leaf, renderable, row, switch, text, Node};
-pub use reactive::{memo, signal, Memo, Proxy, Signal};
+pub use node::{
+    column, component, each, grid, label, leaf, list, renderable, repeating, row, switch, text,
+    Node,
+};
+pub use reactive::{memo, signal, watch, Memo, Proxy, Signal};
 pub use task::{resource, spawn, spawn_future, Load, Resource, Task};
 
 /// Everything an app usually needs.
 pub mod prelude {
     // `text` is both the function and the `text!` macro.
     pub use crate::{
-        column, component, each, every, grid, label, leaf, memo, renderable, resource, row, signal,
-        spawn, switch, text, App, Ctx, Load, Log, Memo, Node, Proxy, Resource, Signal, Size, Task,
-        Theme,
+        column, component, each, every, grid, label, leaf, list, memo, renderable, repeating,
+        resource, row, signal, spawn, switch, text, watch, App, Ctx, Load, Log, Memo, Node, Proxy,
+        Resource, Signal, Size, Task, Theme,
     };
 }
 

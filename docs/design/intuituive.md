@@ -311,8 +311,8 @@ layout passes or event loops.
    - async tasks writing signals;
    - app-level theming;
    - inline (non-full-screen) apps.
-5. **Developer experience:**
+5. **Developer experience** (done but Python):
    - a widget inspector (the tree, dirty nodes and damage, live);
    - hot reload of styles;
    - a project template and a tutorial;
-   - Python.
+   - Python (still to come).

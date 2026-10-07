@@ -35,6 +35,8 @@ pub type NodeId = u64;
 enum Observer {
     Node(NodeId),
     Memo(usize),
+    /// A [`watch`]: its callback runs when what it read changes.
+    Watch(usize),
     /// Reads that subscribe nobody.
     Untracked,
 }
@@ -58,6 +60,8 @@ struct Graph {
     /// Nodes made dirty since the tree last took them.
     dirty: HashSet<NodeId>,
     memos: HashMap<usize, MemoDef>,
+    /// Watches whose source changed, to run between frames.
+    pending: Vec<usize>,
 }
 
 /// One app's reactive state.
@@ -70,6 +74,9 @@ pub(crate) struct Runtime {
     outbox: mpsc::Sender<Job>,
     /// Tasks started and not yet delivered.
     pub(crate) tasks: Arc<AtomicUsize>,
+    /// Each watch's step: read its source, and call back if it changed.
+    watches: RefCell<HashMap<usize, WatchStep>>,
+    next_watch: Cell<usize>,
 }
 
 thread_local! {
@@ -90,6 +97,8 @@ impl Runtime {
                 inbox,
                 outbox,
                 tasks: Arc::new(AtomicUsize::new(0)),
+                watches: RefCell::new(HashMap::new()),
+                next_watch: Cell::new(0),
             });
             all.push(Some(runtime.clone()));
             runtime
@@ -201,6 +210,12 @@ impl Runtime {
                             pending.push(memo);
                         }
                     }
+                    Observer::Watch(watch) => {
+                        let mut graph = self.graph.borrow_mut();
+                        if !graph.pending.contains(&watch) {
+                            graph.pending.push(watch);
+                        }
+                    }
                     Observer::Untracked => {}
                 }
             }
@@ -221,6 +236,37 @@ impl Runtime {
         }
         values[slot] = value;
         true
+    }
+
+    /// Run the watches whose sources changed, and the ones they set off in
+    /// turn; whether any ran.
+    pub(crate) fn run_watches(&self, cx: &mut Ctx) -> bool {
+        let mut ran = false;
+        // A watch that keeps setting itself off stops after this many
+        // rounds, so a cycle cannot hang the app.
+        for _ in 0..100 {
+            let pending = std::mem::take(&mut self.graph.borrow_mut().pending);
+            if pending.is_empty() {
+                break;
+            }
+            for id in pending {
+                let watch = self.watches.borrow_mut().remove(&id);
+                if let Some(mut watch) = watch {
+                    self.observe(Observer::Watch(id), || watch(cx));
+                    self.watches.borrow_mut().insert(id, watch);
+                    ran = true;
+                }
+            }
+        }
+        ran
+    }
+
+    /// Stop the watch `id`.
+    pub(crate) fn drop_watch(&self, id: usize) {
+        self.watches.borrow_mut().remove(&id);
+        let mut graph = self.graph.borrow_mut();
+        Runtime::unsubscribe(&mut graph, Observer::Watch(id));
+        graph.pending.retain(|w| *w != id);
     }
 
     /// Take the nodes made dirty since the last call.
@@ -387,15 +433,77 @@ pub fn memo<T: PartialEq + 'static>(f: impl Fn() -> T + 'static) -> Memo<T> {
     }
 }
 
+/// Call `on_change` with the value of `source` whenever it changes, and
+/// once at the start: load a preview when the selection moves, save when
+/// the document changes, follow a signal with a task. `source` reads
+/// signals (it is tracked like a node's drawing); `on_change` runs on the
+/// app's thread between frames, with a [`Ctx`], and may write signals,
+/// open screens or start tasks.
+///
+/// A watch made while a screen is built (in `App::new`'s closure or a
+/// `push`ed screen's) stops when that screen closes; one made elsewhere
+/// lasts as long as the app.
+///
+/// ```
+/// use intuituive::prelude::*;
+///
+/// let app = App::new(|| {
+///     let count = signal(0);
+///     let parity = signal("even");
+///     watch(move || count.get() % 2, move |odd, _| {
+///         parity.set(if odd == 1 { "odd" } else { "even" })
+///     });
+///     text!("{count} is {parity}")
+///         .on_key("+", move |_| count.update(|c| *c += 1))
+///         .on_key("q", |cx| cx.quit())
+/// });
+/// let screen = app.render_with(&["+", "q"], 20, 1).unwrap();
+/// assert_eq!(screen[0].trim_end(), "1 is odd");
+/// ```
+pub fn watch<T: PartialEq + Clone + 'static>(
+    source: impl Fn() -> T + 'static,
+    mut on_change: impl FnMut(T, &mut Ctx) + 'static,
+) {
+    let runtime = Runtime::current();
+    let value = memo(source);
+    let id = runtime.next_watch.get();
+    runtime.next_watch.set(id + 1);
+    let mut last: Option<T> = None;
+    runtime.watches.borrow_mut().insert(
+        id,
+        Box::new(move |cx: &mut Ctx| {
+            // Reading the memo subscribes the watch to it.
+            let now = value.get();
+            if last.as_ref() != Some(&now) {
+                last = Some(now.clone());
+                on_change(now, cx);
+            }
+        }),
+    );
+    // The first run, with the first value, comes on the app's first turn.
+    runtime.graph.borrow_mut().pending.push(id);
+    crate::app::building_watch(id);
+}
+
 impl<T: 'static> Memo<T> {
     pub fn with<R>(&self, f: impl FnOnce(&T) -> R) -> R {
         self.inner.with(f)
+    }
+
+    /// Read without subscribing (in a handler, say).
+    pub fn with_untracked<R>(&self, f: impl FnOnce(&T) -> R) -> R {
+        self.inner.with_untracked(f)
     }
 }
 
 impl<T: Clone + 'static> Memo<T> {
     pub fn get(&self) -> T {
         self.inner.get()
+    }
+
+    /// The value (a clone), without subscribing.
+    pub fn get_untracked(&self) -> T {
+        self.inner.get_untracked()
     }
 }
 
@@ -413,6 +521,9 @@ impl<T: Clone + 'static> Memo<T> {
 /// ```
 #[derive(Clone)]
 pub struct Proxy(mpsc::Sender<Job>);
+
+/// One run of a watch: read its source, call back if it changed.
+type WatchStep = Box<dyn FnMut(&mut Ctx)>;
 
 /// A closure another thread sent to run on the app's thread.
 type Job = Box<dyn FnOnce(&mut Ctx) + Send>;
