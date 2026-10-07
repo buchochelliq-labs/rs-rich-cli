@@ -516,3 +516,112 @@ fn the_pointer_inside_a_scroll_follows_the_scroll() {
     assert_eq!(rows[3], ">row5      ┃", "{rows:?}");
     assert!(!rows.iter().any(|r| r.starts_with(">row2")), "{rows:?}");
 }
+
+/// Says where it is when a key comes.
+struct KeyRect(Rc<RefCell<Option<Rect>>>);
+
+impl Widget for KeyRect {
+    fn draw(&mut self, _cx: &mut DrawCx, canvas: &mut Canvas) {
+        canvas.print(0, 0, "me", None);
+    }
+
+    fn event(&mut self, cx: &mut EventCx, event: &WidgetEvent) -> Used {
+        if *event == WidgetEvent::Key(Key::parse("x").expect("a key")) {
+            *self.0.borrow_mut() = Some(cx.rect());
+            return Used::Yes;
+        }
+        Used::No
+    }
+
+    fn focusable(&self) -> bool {
+        true
+    }
+}
+
+#[test]
+fn a_key_inside_a_scroll_says_where_the_widget_is_on_screen() {
+    let at = Rc::new(RefCell::new(None));
+    let seen = at.clone();
+    let app = App::new(move || {
+        let mut rows: Vec<Node> = (0..6).map(|i| label(format!("row{i}")).fixed(1)).collect();
+        rows.push(widget(KeyRect(seen)).fixed(1));
+        scroll(column(rows)).on_key("q", |cx| cx.quit())
+    });
+    let rows = screen(&run(app, Script::new().keys("tab x q"), 10, 4));
+    let rect = at.borrow().expect("the key reached the widget");
+    assert!(rect.y < 4, "{rect:?}");
+    assert!(rows[rect.y as usize].starts_with("me"), "{rows:?} {rect:?}");
+}
+
+/// Holds one child and sees its keys first: `x` is its own.
+struct Gate {
+    child: Node,
+    seen: Rc<RefCell<Vec<String>>>,
+}
+
+impl Widget for Gate {
+    fn children(&self) -> &[Node] {
+        std::slice::from_ref(&self.child)
+    }
+
+    fn layout(&mut self, _cx: &MeasureCx, rect: Rect) -> Vec<Rect> {
+        vec![rect]
+    }
+
+    fn draw(&mut self, _cx: &mut DrawCx, _canvas: &mut Canvas) {}
+
+    fn previews_keys(&self) -> bool {
+        true
+    }
+
+    fn event(&mut self, _cx: &mut EventCx, event: &WidgetEvent) -> Used {
+        if let WidgetEvent::Preview(key) = event {
+            self.seen.borrow_mut().push(format!("gate {key:?}"));
+            if *key == Key::parse("x").expect("a key") {
+                return Used::Yes;
+            }
+        }
+        Used::No
+    }
+}
+
+/// Takes every key.
+struct Greedy(Rc<RefCell<Vec<String>>>);
+
+impl Widget for Greedy {
+    fn draw(&mut self, _cx: &mut DrawCx, _canvas: &mut Canvas) {}
+
+    fn event(&mut self, _cx: &mut EventCx, event: &WidgetEvent) -> Used {
+        if let WidgetEvent::Key(key) = event {
+            self.0.borrow_mut().push(format!("child {key:?}"));
+            return Used::Yes;
+        }
+        Used::No
+    }
+
+    fn focusable(&self) -> bool {
+        true
+    }
+}
+
+#[test]
+fn a_container_that_previews_keys_sees_them_before_the_focused_child() {
+    let seen = log();
+    let (gate, child) = (seen.clone(), seen.clone());
+    let app = App::new(move || {
+        widget(Gate {
+            child: widget(Greedy(child)),
+            seen: gate,
+        })
+    });
+    run_open(app, Script::new().keys("x y"), 10, 2);
+    let (x, y) = (Key::parse("x").unwrap(), Key::parse("y").unwrap());
+    assert_eq!(
+        *seen.borrow(),
+        [
+            format!("gate {x:?}"),
+            format!("gate {y:?}"),
+            format!("child {y:?}")
+        ]
+    );
+}

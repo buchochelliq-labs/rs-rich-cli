@@ -170,9 +170,10 @@ column([
 - **Out of the Tab order:** `.no_focus()` keeps a list or component you only
   show from taking the focus.
 - **Showing the focus:** panels highlight their border while the focus is
-  inside them. A leaf can show it too: `.focus_style("reverse")` (any style
-  or theme name) restyles it, filled to its full width, while it has the
-  focus, which is how a list shows its selected row.
+  inside them. Any node can show it too: `.focus_style("reverse")` (any
+  style or theme name) restyles it, filled to its full width and over its
+  children, while it has the focus, which is how a list shows its selected
+  row.
 
 ## Components
 
@@ -359,7 +360,10 @@ What a widget can do:
     while the pointer is over it);
   - mouse events over it, and pasted text;
   - `Focus`, `Hover` and `Resize` when the focus or the pointer comes or
-    goes, or its size changes.
+    goes, or its size changes;
+  - `Preview`: keys on their way to the focused node inside it, first,
+    when its `previews_keys` is true (a container's shortcuts that win
+    over its children's).
 
   Keys, the mouse and paste it does not use bubble on. `cx.redraw()`
   draws it again after a change to its own state, and `cx.app()` can
@@ -646,7 +650,8 @@ loop {
         }
     }
     for text in driver.take_copies() {
-        // put text selected with the mouse on the clipboard
+        // put text selected with the mouse on the clipboard; when that
+        // worked, `driver.copied(&text)` shows a toast saying so
     }
 }
 out.write_all(driver.finish().as_bytes())?;

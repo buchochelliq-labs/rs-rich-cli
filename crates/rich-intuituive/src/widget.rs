@@ -94,6 +94,10 @@ pub enum WidgetEvent {
     Hover(bool),
     /// It was laid out at a new size (after its first layout).
     Resize { width: u16, height: u16 },
+    /// A key on its way to the focused node inside this widget, offered
+    /// first, outermost widget first; using it stops it there. Only to
+    /// widgets whose [`previews_keys`](Widget::previews_keys) is true.
+    Preview(Key),
 }
 
 /// A node's behaviour. Every method but [`draw`](Self::draw) has a default.
@@ -191,6 +195,13 @@ pub trait Widget: Any {
 
     /// Whether Tab stops here (read once, when the node is made).
     fn focusable(&self) -> bool {
+        false
+    }
+
+    /// Whether to see keys before the focused node inside this widget
+    /// does, as [`WidgetEvent::Preview`] (a container's own shortcuts that
+    /// win over its children's).
+    fn previews_keys(&self) -> bool {
         false
     }
 

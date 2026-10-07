@@ -89,6 +89,18 @@ The components the two example ports showed were missing, built from
 Tests are in `tests/widget_v2.rs` and `tests/driver.rs`. termion and
 termwiz backends are tracked in #677 and #678.
 
+Fixed after the first round of use:
+
+- `.focus_style()` on a container goes over its children instead of under
+  them, and a retained widget with a focus style redraws in full only when
+  the focus comes or goes.
+- Containers can see keys before the focused node inside them:
+  `Widget::previews_keys` and `WidgetEvent::Preview`.
+- `EventCx::rect` for keys and paste is on the screen inside a `scroll`,
+  so a popup a key handler anchors there lands in the right place.
+- The "Copied" toast waits for the loop to say the copy worked:
+  `Driver::copied`. `run` tells it only after a successful copy.
+
 ### intuiTUIve: more components and features (rs-rich-intuituive 0.0.2)
 
 Components and features that other terminal frameworks, ratatui above all,
