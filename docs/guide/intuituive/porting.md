@@ -10,7 +10,7 @@ move it to intuiTUIve. You do not have to move all of it at once:
 | **3. Port fully** | Everything | A new major version, or a small app |
 
 Paths 2 and 3 are the same work done at different speeds, so the recipe below
-covers both. Two complete ports show where it leads:
+covers both. Three complete ports show where it leads:
 
 - **An ops dashboard**, written both ways in
   [`tests/versus_ratatui.rs`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/crates/rich-intuituive/tests/versus_ratatui.rs):
@@ -23,6 +23,13 @@ covers both. Two complete ports show where it leads:
   (parent, current, preview), vim keys, previews loaded and highlighted in
   the background, hidden files, sorting and filtering. See
   [the walkthrough](#worked-example-a-yazi-style-file-manager) below.
+- **An oscilloscope.** [scope-tui](https://github.com/alemidev/scope-tui)
+  draws audio as an oscilloscope, a vectorscope and a spectroscope, twenty
+  or more times a second. It is rebuilt in
+  [`examples/scope.rs`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/crates/rich-intuituive/examples/scope.rs)
+  (`cargo run -p rs-rich-intuituive --example scope`), with its keys,
+  options, trigger, averaging and Braille plots. See
+  [the walkthrough](#worked-example-scope-tui-an-oscilloscope) below.
 
 ## What changes, in one table
 
@@ -279,6 +286,49 @@ Two things the port shows:
 2. **The listing is data, the list is a view.** One memo holds the filtered,
    sorted entries. The list, the status bar and the preview `watch` all read
    it, and each updates only when the part it read changes.
+
+## Worked example: scope-tui, an oscilloscope
+
+[`examples/scope.rs`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/crates/rich-intuituive/examples/scope.rs)
+rebuilds [scope-tui](https://github.com/alemidev/scope-tui) in about 1,200
+lines. Its tests are in `tests/scope.rs`. Like the file manager, it reuses
+none of the original's code. Where the file manager redraws when you press
+a key, this app redraws whenever a new buffer of audio arrives.
+
+![The oscilloscope: two channels and the zero line, paused](../../media/tapes/scope/oscilloscope.png)
+
+| scope-tui does | The rebuild uses |
+|---|---|
+| A loop that blocks on the audio source, then draws | `every(buffer period)` pulls the source's newest buffer into a `frame` signal |
+| Audio from PulseAudio or cpal | raw PCM from a file or stdin (audio piped from `parec`), read on its own thread; a built-in test signal |
+| Three `DisplayMode` trait objects, mutated by key handlers | one signal per mode's settings, and one per shared setting (`Graph`) |
+| The header, a `Table` with percentage columns | a `row` of `text` cells with `.percent(…)` and `.gap(1)` |
+| `Chart` with Braille `Dataset`s, axis titles and a legend | a `leaf` that draws on rs-rich-ext's `DotCanvas`, laid out as `Chart` is |
+| `rustfft` for the spectrum | a 40-line radix-2 FFT in the example |
+| Shift ×10, Ctrl ×5, Alt ×⅕ on every step | the same bindings, made in a loop over the modifiers |
+| `h` hides the interface | `switch` on the `show_ui` setting |
+
+![The vectorscope: left against right, a Lissajous figure](../../media/tapes/scope/vectorscope.png)
+
+What the port shows:
+
+1. **Redraw follows what changed.** The plot reads the frame, so it draws
+   once per buffer. Each header cell reads only its own value. The fps cell
+   draws once a second, and the other cells draw only when a key changes
+   them. While the scope is paused nothing draws at all, and identical
+   buffers (the `--still` test signal) draw nothing either.
+2. **Take the newest frame from a stream rather than queueing them.** A
+   reader thread keeps only the latest buffer. When the terminal falls
+   behind, the app skips old buffers rather than drawing a backlog.
+
+It differs from scope-tui in four small ways:
+
+- The trigger threshold is in the same -1 to 1 units as the samples.
+- The spectrum is padded to a power of two.
+- The header says when the input ends.
+- It has no audio-device backends: pipe audio in instead.
+
+![The spectroscope: each channel's spectrum on a log frequency axis](../../media/tapes/scope/spectroscope.png)
 
 ## Common questions
 

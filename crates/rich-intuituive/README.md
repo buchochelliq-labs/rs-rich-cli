@@ -75,6 +75,9 @@ Coming from ratatui? The
 maps every concept, and `examples/files.rs` rebuilds the core of
 [Yazi](https://github.com/sxyazi/yazi), the most-starred ratatui app:
 three columns, vim keys, previews highlighted in the background.
+`examples/scope.rs` rebuilds [scope-tui](https://github.com/alemidev/scope-tui),
+an oscilloscope, vectorscope and spectroscope that redraws with every
+buffer of audio.
 
 ## Against ratatui
 

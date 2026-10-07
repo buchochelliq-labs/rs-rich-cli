@@ -1,0 +1,14 @@
+{
+  "tape": "docs/tapes/scope.tape",
+  "tape_fnv1a64": "9d3646e94f699b46",
+  "recorder": "rs-rich-record 0.0.4",
+  "rich": null,
+  "commit": "11a4420f868e8d824f8019e1b4304b43bb10c071",
+  "screenshots": [
+    "oscilloscope",
+    "vectorscope",
+    "spectroscope",
+    "keys"
+  ],
+  "note": "Every frame is real output of the program under test on a PTY."
+}

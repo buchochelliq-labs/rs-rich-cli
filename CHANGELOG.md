@@ -80,6 +80,13 @@ blocking and headless drivers and every existing component carry over),
   sorting, filtering), with tests over a temporary tree; and a porting guide
   for ratatui apps (`docs/guide/intuituive/porting.md`), whose "keep your
   widgets" step is tested in `tests/ratatui_widgets.rs`.
+- `examples/scope.rs`: a rebuild of scope-tui, an oscilloscope,
+  vectorscope and spectroscope. It has scope-tui's keys and options, a
+  debounced trigger, spectrum averaging with a Hann window, and Braille
+  plots drawn on rs-rich-ext's `DotCanvas`. It reads raw PCM from a file
+  or stdin, or plays a built-in test signal. Tests are in `tests/scope.rs`,
+  recordings in `docs/tapes/scope.tape`, and the porting guide has a
+  walkthrough.
 - A panel whose focus state changes redraws only its border's edges, not
   its contents, and a focus move elsewhere leaves it alone.
 - `intuituive::rich` and `intuituive::interact` re-export rs-rich and
