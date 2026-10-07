@@ -180,6 +180,8 @@ The badges below show the versions currently available on crates.io.
 | [`rs-rich-micro`](https://crates.io/crates/rs-rich-micro) | [![rs-rich-micro](https://img.shields.io/crates/v/rs-rich-micro.svg)](https://crates.io/crates/rs-rich-micro) | [docs.rs](https://docs.rs/rs-rich-micro) | micro assets |
 | [`rs-rich-diagram`](https://crates.io/crates/rs-rich-diagram) | [![rs-rich-diagram](https://img.shields.io/crates/v/rs-rich-diagram.svg)](https://crates.io/crates/rs-rich-diagram) | [docs.rs](https://docs.rs/rs-rich-diagram) | graph diagrams and DOT (new in 0.0.15; published with the cohort) |
 | [`rs-rich-data`](https://crates.io/crates/rs-rich-data) | [![rs-rich-data](https://img.shields.io/crates/v/rs-rich-data.svg)](https://crates.io/crates/rs-rich-data) | [docs.rs](https://docs.rs/rs-rich-data) | tabular data: row sources, inference and statistics (new in 0.0.16) |
+| [`rs-rich-ratatui`](https://crates.io/crates/rs-rich-ratatui) | [![rs-rich-ratatui](https://img.shields.io/crates/v/rs-rich-ratatui.svg)](https://crates.io/crates/rs-rich-ratatui) | [docs.rs](https://docs.rs/rs-rich-ratatui) | ratatui interop: rich renderables as ratatui widgets (new in 0.0.17) |
+| [`rs-rich-intuituive`](https://crates.io/crates/rs-rich-intuituive) | [![rs-rich-intuituive](https://img.shields.io/crates/v/rs-rich-intuituive.svg)](https://crates.io/crates/rs-rich-intuituive) | [docs.rs](https://docs.rs/rs-rich-intuituive) | intuiTUIve: a reactive, retained TUI framework (new in 0.0.17) |
 
 <a id="versions-prepared-in-this-checkout"></a>
 
@@ -204,6 +206,8 @@ Each crate versions independently; see [Branching and releases](BRANCHING.md).
 | [`rs-rich-micro`](https://crates.io/crates/rs-rich-micro) | `0.0.3` |
 | [`rs-rich-diagram`](https://crates.io/crates/rs-rich-diagram) | `0.0.2` |
 | [`rs-rich-data`](https://crates.io/crates/rs-rich-data) | `0.0.1` |
+| [`rs-rich-ratatui`](https://crates.io/crates/rs-rich-ratatui) | `0.0.1` |
+| [`rs-rich-intuituive`](https://crates.io/crates/rs-rich-intuituive) | `0.0.1` |
 <!-- END MANIFEST VERSIONS -->
 
 ## Install
