@@ -125,6 +125,7 @@ impl RatatuiDash {
 }
 // app: end
 
+// app: prototype
 /// The prototype dashboard's state: signals the handlers write.
 #[derive(Clone, Copy)]
 pub struct Signals {
@@ -146,7 +147,6 @@ impl Signals {
     }
 }
 
-// app: prototype
 /// The prototype dashboard: a retained tree whose leaves read signals.
 pub fn prototype() -> (App<()>, Signals) {
     let s = Signals {

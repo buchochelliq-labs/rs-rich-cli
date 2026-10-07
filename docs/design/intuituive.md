@@ -28,8 +28,9 @@ built by CI. Run it with `cargo run --release` from that directory.
   draws as a ratatui widget, and any ratatui widget runs as a
   `rich-interact` component. Styles round-trip losslessly for the common
   subset, and the losses are listed below.
-- **Less code for the author:** the same dashboard is 50 lines of author code
-  against ratatui's 79. The app holds no draw loop, no layout pass and no
+- **Less code for the author:** the same dashboard is 66 lines of author code
+  in the prototype (56 in the framework crate's API) against ratatui's 79,
+  counting each side's state as well as its drawing. The app holds no draw loop, no layout pass and no
   "what changed" bookkeeping.
 - **Decided:** our own cell screen with a ratatui adapter, interop in
   `rs-rich-ratatui`, and the framework in a new crate (see
@@ -283,8 +284,8 @@ ratatui's strengths are kept: crossterm and other backends, a fast cell diff,
 a stable cell model, and its widget ecosystem, which runs inside intuiTUIve
 through the adapter.
 
-**Easier to learn** is measured too: the dashboard is 50 lines against
-79, and the first tutorial app should need no knowledge of buffers, frames,
+**Easier to learn** is measured too: the dashboard is 66 lines against
+79 (state included on both sides), and the first tutorial app should need no knowledge of buffers, frames,
 layout passes or event loops.
 
 ## Plan

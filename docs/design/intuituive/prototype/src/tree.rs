@@ -144,7 +144,12 @@ impl Node {
                 border(title, style, &child.cached(), width, height)
             }
             Kind::Keyed(list) => {
-                let rows: Vec<Lines> = list.children().iter().map(|c| c.cached()).collect();
+                let rows: Vec<Lines> = list
+                    .children()
+                    .iter()
+                    .take(height)
+                    .map(|c| c.cached())
+                    .collect();
                 let mut lines: Vec<Vec<Segment>> =
                     rows.iter().flat_map(|r| r.iter().cloned()).collect();
                 lines.truncate(height);
@@ -190,6 +195,12 @@ impl Node {
                 for child in list.children().iter().take(height) {
                     changed |= child.render(frame, width, 1).1;
                 }
+                // Rows below the viewport are not drawn, so a change to them
+                // would be lost: drop their caches, and they draw afresh when
+                // they come into view.
+                for child in list.children().iter().skip(height) {
+                    child.cache.borrow_mut().take();
+                }
                 changed
             }
         }
@@ -228,9 +239,12 @@ fn split(axis: Axis, children: &[Node], width: usize, height: usize) -> Vec<(usi
         .iter()
         .rposition(|c| matches!(c.size, Size::Flex(_)));
     let mut out = Vec::with_capacity(children.len());
+    // Fixed sizes that add up to more than the parent are cut to what is
+    // left, so no child is laid out over its neighbours.
+    let mut room = total;
     for (i, child) in children.iter().enumerate() {
         let n = match child.size {
-            Size::Fixed(n) => n,
+            Size::Fixed(n) => n.min(room),
             Size::Flex(_) if Some(i) == last_flex => left,
             Size::Flex(w) => {
                 let n = free * w / weights.max(1);
@@ -238,6 +252,8 @@ fn split(axis: Axis, children: &[Node], width: usize, height: usize) -> Vec<(usi
                 n
             }
         };
+        let n = n.min(room);
+        room -= n;
         out.push(if axis == Axis::Vertical {
             (width, n)
         } else {
@@ -277,12 +293,19 @@ fn border(
     let edge = |s: String| Segment::new(s, Some(style.clone()));
     let title = format!(" {title} ");
     let title_len = rich::cells::cell_len(&title).min(width.saturating_sub(4));
-    let mut top = vec![edge("╭─".into())];
-    top.push(Segment::new(
-        rich::cells::set_cell_size(&title, title_len),
-        Some(style.combine(&Style::parse("bold").unwrap())),
-    ));
-    top.push(edge(format!("{}╮", "─".repeat(width - 3 - title_len))));
+    let top = if width < 4 {
+        vec![edge(format!("╭{}╮", "─".repeat(width - 2)))]
+    } else {
+        // `title_len` is at most `width - 4`, so one dash always follows it.
+        vec![
+            edge("╭─".into()),
+            Segment::new(
+                rich::cells::set_cell_size(&title, title_len),
+                Some(style.combine(&Style::parse("bold").unwrap())),
+            ),
+            edge(format!("{}╮", "─".repeat(width - 3 - title_len))),
+        ]
+    };
     let mut lines = vec![top];
     for row in inner.iter().take(height - 2) {
         let mut line = vec![edge("│".into())];
@@ -556,6 +579,9 @@ impl Node {
                     let row = Rect::new(rect.x, rect.y + i as u16, rect.width, 1);
                     child.blit(frame, row, buffer, force, damage);
                 }
+                for child in list.children().iter().skip(rect.height as usize) {
+                    child.cache.borrow_mut().take();
+                }
                 self.mark(rect);
             }
         }
@@ -776,5 +802,65 @@ mod tests {
             "{}",
             record.last_frame()
         );
+    }
+}
+
+#[cfg(test)]
+mod review_tests {
+    use super::*;
+    use crate::reactive::signal;
+
+    fn plain(lines: &Lines) -> Vec<String> {
+        lines
+            .iter()
+            .map(|l| l.iter().map(|s| s.text.as_str()).collect::<String>())
+            .collect()
+    }
+
+    /// A border two or three columns wide underflowed its width.
+    #[test]
+    fn narrow_borders_draw_plain_boxes() {
+        let c = Console::builder().width(10).color_system(None).build();
+        for width in 2..6 {
+            let app: App<()> = App::new(bordered("Title", text(|| "x".into())), |_| Flow::Continue);
+            let lines = app.frame(&c, width, 3);
+            assert!(lines
+                .iter()
+                .all(|l| l.iter().map(Segment::cell_length).sum::<usize>() == width));
+        }
+    }
+
+    /// Fixed sizes adding up to more than the parent are cut, so a child
+    /// never overlaps its neighbour.
+    #[test]
+    fn fixed_sizes_are_clamped_to_the_parent() {
+        let children = vec![
+            text(|| "a".into()).size(Size::Fixed(4)),
+            text(|| "b".into()).size(Size::Fixed(4)),
+            text(|| "c".into()),
+        ];
+        let spans = split(Axis::Horizontal, &children, 6, 1);
+        assert_eq!(spans.iter().map(|s| s.0).collect::<Vec<_>>(), [4, 2, 0]);
+    }
+
+    /// A keyed list longer than its height: rows below the viewport that
+    /// change while hidden draw their new value once they show.
+    #[test]
+    fn hidden_keyed_rows_redraw_when_shown() {
+        let keys = signal(vec![0, 1, 2]);
+        let labels = signal(vec!["a".to_string(), "b".into(), "c".into()]);
+        let app: App<()> = App::new(
+            keyed(keys, move |&k: &i32| {
+                text(move || labels.get()[k as usize].clone())
+            }),
+            |_| Flow::Continue,
+        );
+        let c = Console::builder().width(10).color_system(None).build();
+        app.frame(&c, 4, 2);
+        labels.update(|l| l[2] = "C".into());
+        app.frame(&c, 4, 2);
+        keys.set(vec![2, 0, 1]);
+        let lines = app.frame(&c, 4, 2);
+        assert_eq!(plain(&lines)[0].trim_end(), "C");
     }
 }
