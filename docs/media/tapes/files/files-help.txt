@@ -1,22 +1,22 @@
 ~/project/src
-src/          Name                                              Size //! orbit: watch a queue, run its jobs, ┃
-tests/        event_loop.rs                                     611B                                         │
-Cargo.toml    lib.rs                                            225B mod event_loop;                         │
-README.md     main.rs         ╭─ Keys ────────────────────────────────────────╮;                             │
-              render.rs       │ j k ↑ ↓   move                                │                              │
-                              │ l → ⏎     open                                │{                             │
-                              │ h ←       up                                  │rkers = std::env::args()      │
-                              │ g G       first, last                         │kip_while(|arg| arg != "--work│
-                              │ J K       scroll the preview                  │th(1)                         │
-                              │ .         hidden files                        │nd_then(|n| n.parse().ok())   │
-                              │ s         sort by name or size                │nwrap_or(4);                  │
-                              │ /         filter · esc clears it              │loop::run(workers);           │
-                              │ t         new tab · 1–9 switch · ctrl+w close │                              │
-                              │ ~         home                                │                              │
-                              │ q         quit                                │                              │
-                              ╰───────────────────────────────────────────────╯                              │
-                                                                                                             │
-                                                                                                             │
-                                                                                                             │
-                                                                                                             │
+src/          │Name                                              Size│//! orbit: watch a queue, run its jobs,┃
+tests/        │event_loop.rs                                     611B│                                       │
+Cargo.toml    │l╭─ Help ────────────────────────────────────────────────────────────────────╮                │
+README.md     │m│? Search keys ›                                                            │                │
+              │r│                                                                           │                │
+              │ │  l/→/enter  open the directory                                            │                │
+              │ │  h/←        go up                                                         │env::args()     │
+              │ │  ~          go home                                                       │g| arg != "--wor│
+              │ │  .          show or hide hidden files                                     │                │
+              │ │  s          sort by name or size                                          │.parse().ok())  │
+              │ │  y          yank the path to the clipboard                                │                │
+              │ │  J          scroll the preview down                                       │kers);          │
+              │ │  K          scroll the preview up                                         │                │
+              │ │  t          open a tab here                                               │                │
+              │ │  ctrl+w     close the tab                                                 │                │
+              │ │  13 keys · more below · type to search · ↑↓ scroll · esc close            │                │
+              │ ╰───────────────────────────────────────────────────────────────────────────╯                │
+              │                                                      │                                       │
+              │                                                      │                                       │
+              │                                                      │                                       │
 3/4 · 289B · sort name  ? keys

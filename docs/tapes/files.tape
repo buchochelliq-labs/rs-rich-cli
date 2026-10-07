@@ -24,9 +24,14 @@ Wait /fn /
 Sleep 500ms
 Screenshot files
 Type "?"
-Wait /Keys/
+Wait /Help/
 Sleep 300ms
 Screenshot files-help
+Escape
+Ctrl+P
+Wait /yank/
+Sleep 300ms
+Screenshot files-palette
 Escape
 Type "t"
 Type "h"

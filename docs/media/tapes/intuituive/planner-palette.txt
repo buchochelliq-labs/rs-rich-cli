@@ -1,0 +1,22 @@
+ File  Task  Help
+╭─ Projects ─────────────────────╮│╭─ Due ─────────────────────────────────────────────────────────╮
+│▾ intuiTUIve 1                  │││    October 2026       Examples                                │
+│    ✓ Widget trait v2           │││Mo Tu We Th Fr Sa Su   intuiTUIve                              │
+│    ✓ Owning the lo╭─ Commands ───────────────────────────────────────────────╮                   │
+│    ✓ Examples     │? Command ›                                               │                   │
+│    · Release 0.0.2│❯  mark the task done or open                       space │                   │
+│▾ rs-rich 2        │   add a task to the project                            n │                   │
+│    · Sync upstream│   open the menus                                     f10 │                   │
+│    · Golden fixtur│   quit                                                 q │                   │
+│▾ Home 1           │                                                          │───────────────────╯
+│    · Water the pla│                                                          │────────────────────
+│                   │                                                          │───────────────────╮
+│                   │                                                          │                   │
+│                   │                                                          │                   │
+│                   │  4/4 · ↑↓ move · enter run · esc close                   │                   │
+│                   ╰──────────────────────────────────────────────────────────╯                   │
+│                                │││2026-09-06 09:26 deployed #99998                               │
+│                                │││2026-09-06 10:03 reviewed #99999                               │
+│                                │││Examples done                               ╭─────────────────╮│
+╰────────────────────────────────╯│╰────────────────────────────────────────────│ ✓ Examples done │╯
+4 open · 100001 log rows  ? keys · ctrl+p commands · f10 menu                   ╰─────────────────╯

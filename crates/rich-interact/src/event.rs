@@ -99,11 +99,44 @@ impl Key {
         }
         let mut chars = name.chars();
         let code = match (chars.next(), chars.next()) {
-            (Some(c), None) => KeyCode::Char(if modifiers.ctrl {
-                c.to_ascii_lowercase()
-            } else {
-                c
-            }),
+            // Written as the terminal sends them, so a binding can fire:
+            // Shift with a letter is the capital letter, and some Ctrl
+            // keys arrive as other keys (Ctrl+I is Tab, Ctrl+M Enter,
+            // Ctrl+[ Esc, Ctrl+\ ] ^ _ are Ctrl+4 to 7, Ctrl+@ Ctrl+Space).
+            // Shift with anything else (`shift+1`) depends on the keyboard
+            // layout, and is not a key name.
+            (Some(c), None) if modifiers.shift => {
+                if !c.is_alphabetic() {
+                    return None;
+                }
+                modifiers.shift = false;
+                if modifiers.ctrl {
+                    KeyCode::Char(c.to_ascii_lowercase())
+                } else {
+                    KeyCode::Char(c.to_uppercase().next().unwrap_or(c))
+                }
+            }
+            (Some(c), None) if modifiers.ctrl => match c.to_ascii_lowercase() {
+                'i' => {
+                    modifiers.ctrl = false;
+                    KeyCode::Tab
+                }
+                'm' => {
+                    modifiers.ctrl = false;
+                    KeyCode::Enter
+                }
+                '[' => {
+                    modifiers.ctrl = false;
+                    KeyCode::Escape
+                }
+                '\\' => KeyCode::Char('4'),
+                ']' => KeyCode::Char('5'),
+                '^' => KeyCode::Char('6'),
+                '_' => KeyCode::Char('7'),
+                '@' => KeyCode::Char(' '),
+                c => KeyCode::Char(c),
+            },
+            (Some(c), None) => KeyCode::Char(c),
             _ => match name.to_ascii_lowercase().as_str() {
                 "enter" | "return" => KeyCode::Enter,
                 "tab" if modifiers.shift => {
@@ -125,7 +158,11 @@ impl Key {
                 "end" => KeyCode::End,
                 "pageup" => KeyCode::PageUp,
                 "pagedown" => KeyCode::PageDown,
-                other => KeyCode::F(other.strip_prefix('f')?.parse().ok()?),
+                other => match other.strip_prefix('f')?.parse().ok()? {
+                    // The function keys terminals send.
+                    n @ 1..=24 => KeyCode::F(n),
+                    _ => return None,
+                },
             },
         };
         Some(Key { code, modifiers })
@@ -357,6 +394,26 @@ mod tests {
         assert_eq!(Key::parse("+"), Some(Key::char('+')));
         assert_eq!(Key::parse("hyper+x"), None);
         assert_eq!(Key::parse("fx"), None);
+    }
+
+    #[test]
+    fn names_are_the_keys_terminals_send() {
+        // Shift and a letter is the capital letter; Ctrl drops the Shift.
+        assert_eq!(Key::parse("shift+a"), Some(Key::char('A')));
+        assert_eq!(Key::parse("alt+shift+a"), Key::parse("alt+A"));
+        assert_eq!(Key::parse("ctrl+shift+a"), Some(Key::ctrl('a')));
+        // Shift with a symbol depends on the layout.
+        assert_eq!(Key::parse("shift+1"), None);
+        // Ctrl keys that arrive as other keys.
+        assert_eq!(Key::parse("ctrl+i"), Key::parse("tab"));
+        assert_eq!(Key::parse("ctrl+m"), Key::parse("enter"));
+        assert_eq!(Key::parse("ctrl+["), Key::parse("esc"));
+        assert_eq!(Key::parse("ctrl+]"), Some(Key::ctrl('5')));
+        assert_eq!(Key::parse("ctrl+h"), Some(Key::ctrl('h')));
+        // Function keys terminals have.
+        assert_eq!(Key::parse("f24"), Some(Key::new(KeyCode::F(24))));
+        assert_eq!(Key::parse("f0"), None);
+        assert_eq!(Key::parse("f99"), None);
     }
 
     #[test]

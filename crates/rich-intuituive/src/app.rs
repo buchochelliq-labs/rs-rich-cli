@@ -27,6 +27,7 @@
 //! headless driver, so tests script keys and read frames without a
 //! terminal.
 
+use std::collections::HashMap;
 use std::io;
 use std::rc::Rc;
 use std::time::Duration;
@@ -50,6 +51,7 @@ pub struct Ctx {
     theme: Option<Theme>,
     toasts: Vec<(String, Duration)>,
     animations: Vec<(Signal<f64>, f64, Duration, Easing)>,
+    copies: Vec<String>,
     /// Where the mouse event being handled happened, on the screen.
     pub(crate) pointer: Option<(u16, u16)>,
 }
@@ -136,6 +138,7 @@ impl Ctx {
             quit: false,
             toasts: Vec::new(),
             animations: Vec::new(),
+            copies: Vec::new(),
             pointer: None,
             focus: None,
             proxy,
@@ -196,6 +199,14 @@ impl Ctx {
     /// [`App::help_key`] opens it from a key.
     pub fn help(&mut self) {
         self.nav.push(Nav::Help);
+    }
+
+    /// Put `text` on the clipboard, where the terminal lets an app (OSC 52)
+    /// or the system's clipboard is reachable; a toast says so once it is
+    /// there. A loop of your own gets it from
+    /// [`Driver::take_copies`](crate::Driver::take_copies).
+    pub fn copy(&mut self, text: impl Into<String>) {
+        self.copies.push(text.into());
     }
 
     /// Show `markup` in a toast at the bottom right for three seconds.
@@ -458,6 +469,9 @@ struct Layer {
     timers: Vec<Timer>,
     /// Its [watches](crate::watch), stopped when it closes.
     watches: Vec<usize>,
+    /// Its focusable nodes, in Tab order, at the last frame: where the
+    /// focus goes when the focused node leaves the tree.
+    order: Vec<NodeId>,
 }
 
 thread_local! {
@@ -535,6 +549,9 @@ pub struct App {
     layers: Vec<Layer>,
     /// The stack changed: everything draws again.
     restack: bool,
+    /// Nodes left dirty by their own drawing, and for how many frames in a
+    /// row: one that keeps at it is quietened (see `Driver::render`).
+    restless: HashMap<NodeId, u32>,
     /// The backend's clock at the top of this turn of the loop.
     now: Duration,
     focus_path: Signal<Vec<NodeId>>,
@@ -632,8 +649,10 @@ impl App {
                 anchor: None,
                 timers,
                 watches,
+                order: Vec::new(),
             }],
             restack: false,
+            restless: HashMap::new(),
             now: Duration::ZERO,
             focus_path,
             hover_path,
@@ -764,14 +783,14 @@ impl App {
     /// Open the [command palette](Ctx::command_palette) with `keys` (say
     /// `"ctrl+p"`), when no binding of the app used them.
     pub fn palette_key(mut self, keys: &str) -> App {
-        self.palette_key = rich_interact::keymap::keys(keys);
+        self.palette_key = crate::node::parse_keys(keys);
         self
     }
 
     /// Open the [help](Ctx::help) with `keys` (say `"f1"`), when no binding
     /// of the app used them.
     pub fn help_key(mut self, keys: &str) -> App {
-        self.help_key = rich_interact::keymap::keys(keys);
+        self.help_key = crate::node::parse_keys(keys);
         self
     }
 
@@ -810,9 +829,21 @@ impl App {
         let text_frames = self.text_frames;
         let mut driver = self.driver(width, height);
         driver.set_clipboard(backend.clipboard().is_ok());
+        // Text a handler copied, or the mouse selected, onto the clipboard:
+        // after every step that runs handlers (timers, tasks and watches in
+        // `update`, lifecycle events in `render`, input in `event`), so a
+        // copy is neither late nor lost to a quit.
+        fn copy_all(driver: &mut Driver, backend: &mut impl Backend) {
+            for text in driver.take_copies() {
+                if backend.copy(&text).is_ok() {
+                    driver.copied(&text);
+                }
+            }
+        }
         let result = (|| -> io::Result<()> {
             loop {
                 driver.update(backend.elapsed());
+                copy_all(&mut driver, backend);
                 if driver.is_done() {
                     return Ok(());
                 }
@@ -824,6 +855,7 @@ impl App {
                         backend.painted(&driver.screen().plain().join("\n"));
                     }
                 }
+                copy_all(&mut driver, backend);
                 let wait = driver.timeout(backend.elapsed());
                 let Some(event) = backend.read(Some(wait))? else {
                     continue;
@@ -832,11 +864,7 @@ impl App {
                     driver.set_origin(backend.origin());
                 }
                 driver.event(event);
-                for text in driver.take_copies() {
-                    if backend.copy(&text).is_ok() {
-                        driver.copied(&text);
-                    }
-                }
+                copy_all(&mut driver, backend);
                 if driver.is_done() {
                     return Ok(());
                 }
@@ -1085,6 +1113,21 @@ impl App {
                 rich::Text::from_markup(markup).unwrap_or_else(|_| rich::Text::new(markup.clone()));
             let w = (text.cell_len() as u16 + 4).min(area.width.saturating_sub(2));
             if w < 5 || bottom < area.y + 3 {
+                // No room for a box: the newest toast on the bottom row,
+                // reversed, so it is still seen.
+                if bottom == area.bottom() && area.width > 0 && area.height > 0 {
+                    let rect = Rect::new(area.x, area.bottom() - 1, area.width, 1);
+                    let mut options = console.options().update_width(rect.width as usize);
+                    options.no_wrap = Some(true);
+                    options.overflow = Some(rich::Overflow::Ellipsis);
+                    let line = console.render_lines(&text, &options, false);
+                    let reverse = Style::parse("reverse").unwrap_or_default();
+                    screen.write_lines(rect, &line);
+                    for x in rect.x..rect.right() {
+                        screen.restyle(x, rect.y, &reverse);
+                    }
+                    frame.damage.push(rect);
+                }
                 break;
             }
             let rect = Rect::new(area.right().saturating_sub(w + 1), bottom - 3, w, 3);
@@ -1151,6 +1194,7 @@ impl App {
     /// Apply what a handler asked for; whether to quit.
     fn apply(&mut self, cx: Ctx) -> bool {
         let mut quit = cx.quit;
+        self.copies.extend(cx.copies);
         for (markup, duration) in cx.toasts {
             self.toasts.push((markup, self.now + duration));
             self.poke = true;
@@ -1330,6 +1374,7 @@ impl App {
             anchor: None,
             timers,
             watches,
+            order: Vec::new(),
         });
         self.restack = true;
         self.set_focus(None);
@@ -1435,17 +1480,61 @@ impl App {
         ids
     }
 
-    /// Focus the first focusable node if nothing has the focus, or if the
-    /// focused node left the tree (a keyed child that was removed), so keys
-    /// always have a path to the root.
+    /// Keep a focused node, so keys always have a path to the root. When
+    /// the focused node left the tree (a keyed row that was removed), the
+    /// focus goes to the node after it in the last frame's Tab order, or
+    /// the one before it if it was last; with nothing focused, to the
+    /// first focusable node.
     fn keep_focus(&mut self) {
+        let ids = self.focusable();
         if let Some(id) = self.focus() {
             if self.path_to(id).is_empty() {
-                self.set_focus(None);
+                let order = &self.top().order;
+                let next = order.iter().position(|o| *o == id).and_then(|at| {
+                    order[at + 1..]
+                        .iter()
+                        .chain(order[..at].iter().rev())
+                        .find(|o| ids.contains(o))
+                        .copied()
+                });
+                self.set_focus(next);
             }
         }
         if self.focus().is_none() {
             self.focus_first();
+        }
+        self.top_mut().order = ids;
+    }
+
+    /// Nodes still dirty after a frame were made dirty by their own
+    /// drawing (they wrote a signal they read). Once is fine (a scroll
+    /// that moved to keep the focus in view); a node that does it frame
+    /// after frame would draw forever, so its own writes stop drawing it
+    /// again, and a toast says which node it is.
+    fn calm_restless(&mut self) {
+        let dirty = self.runtime.dirty_now();
+        self.restless.retain(|id, _| dirty.contains(id));
+        for id in dirty {
+            let frames = self.restless.entry(id).or_insert(0);
+            *frames += 1;
+            if *frames < RESTLESS_FRAMES {
+                continue;
+            }
+            self.restless.remove(&id);
+            self.runtime.quiet(id);
+            let mut what = String::from("a node");
+            for layer in &self.layers {
+                with_node(&layer.root, id, &mut |node| what = node.describe());
+            }
+            let what = rich::markup::escape(&what);
+            self.toasts.push((
+                format!(
+                    "[bold red]{what} draws itself again and again[/]: it writes a \
+                     signal it reads while it draws. Write it in a handler or a watch."
+                ),
+                self.now + Duration::from_secs(8),
+            ));
+            self.restack = true;
         }
     }
 
@@ -1493,16 +1582,25 @@ impl App {
     /// Route a key: from the focused node up through its ancestors to the
     /// root; Tab and Shift+Tab move the focus if no binding used them.
     /// Whether to quit.
-    fn key(&mut self, key: Key) -> bool {
-        if let (Some(inspector), KeyCode::F(12)) = (&mut self.inspector, key.code) {
-            inspector.open = !inspector.open;
-            self.restack = true;
-            return false;
+    /// Whether a node on the path keys take binds `key`.
+    fn binds(&self, key: Key) -> bool {
+        let mut bound = false;
+        for id in self.key_path() {
+            with_node(&self.top().root, id, &mut |node| {
+                bound |= node
+                    .keys
+                    .borrow()
+                    .iter()
+                    .any(|(keys, _, _)| keys.contains(&key));
+            });
         }
-        // From the focused node up; with nothing focused, from the node
-        // under the pointer, so a container that cannot take the focus
-        // still gets keys while the mouse is over it.
-        let path = match self.focus().map(|id| self.path_to(id)) {
+        bound
+    }
+
+    /// The nodes a key goes through, root first: to the focused node, or
+    /// with nothing focused, to the node under the pointer.
+    fn key_path(&self) -> Vec<NodeId> {
+        match self.focus().map(|id| self.path_to(id)) {
             Some(path) if !path.is_empty() => path,
             _ => {
                 let hovered = self.hover_path.get_untracked();
@@ -1512,7 +1610,19 @@ impl App {
                     vec![self.top().root.id]
                 }
             }
-        };
+        }
+    }
+
+    fn key(&mut self, key: Key) -> bool {
+        if let (Some(inspector), KeyCode::F(12)) = (&mut self.inspector, key.code) {
+            inspector.open = !inspector.open;
+            self.restack = true;
+            return false;
+        }
+        // From the focused node up; with nothing focused, from the node
+        // under the pointer, so a container that cannot take the focus
+        // still gets keys while the mouse is over it.
+        let path = self.key_path();
         // Containers that asked see the key first, outermost first.
         for &id in &path[..path.len().saturating_sub(1)] {
             let mut previews = false;
@@ -1859,6 +1969,10 @@ pub struct Driver {
     done: bool,
 }
 
+/// How many frames in a row a node may leave itself dirty before its own
+/// writes stop drawing it again.
+const RESTLESS_FRAMES: u32 = 4;
+
 impl Driver {
     /// Bring the app up to `now` (the time since it started): run the
     /// timers that are due, move animations, deliver results from other
@@ -1878,9 +1992,11 @@ impl Driver {
                 for timer in &mut layer.timers {
                     if now >= timer.next {
                         (timer.tick)(&mut cx);
-                        while timer.next <= now {
-                            timer.next += timer.every;
-                        }
+                        // Once, however far behind (the clock jumped, the
+                        // laptop slept), and on to the next tick in step.
+                        let every = timer.every.as_nanos().max(1);
+                        let behind = (now - timer.next).as_nanos() % every;
+                        timer.next = now + Duration::from_nanos((every - behind) as u64);
                     }
                 }
             }
@@ -1954,6 +2070,7 @@ impl Driver {
             if self.app.runtime.has_dirty() {
                 out.push_str(&self.paint(false));
             }
+            self.app.calm_restless();
             // Keyed children exist once drawn: focus is chosen after a
             // frame, and chosen again if the focused node has gone.
             self.app.keep_focus();
@@ -2001,13 +2118,14 @@ impl Driver {
     }
 
     /// Handle an event: a key, the mouse, pasted text, or the terminal's
-    /// new size. Ctrl+C quits.
+    /// new size. Ctrl+C quits, unless a node on the focused path binds it
+    /// ([`on_key`](crate::Node::on_key)); then the binding runs.
     pub fn event(&mut self, event: Event) {
         if self.done {
             return;
         }
         let quit = match event {
-            Event::Key(key) if key == Key::ctrl('c') => true,
+            Event::Key(key) if key == Key::ctrl('c') && !self.app.binds(key) => true,
             Event::Resize { columns, rows } => {
                 self.resize(columns, rows);
                 false
@@ -2092,8 +2210,9 @@ impl Driver {
         self.app.clipboard = on;
     }
 
-    /// Text selected with the mouse since the last call, for the loop to
-    /// put on the clipboard (with OSC 52, or the system's); tell
+    /// Text selected with the mouse, or [copied](Ctx::copy) by a handler,
+    /// since the last call, for the loop to put on the clipboard (with OSC
+    /// 52, or the system's); tell
     /// [`copied`](Self::copied) when it is there.
     pub fn take_copies(&mut self) -> Vec<String> {
         std::mem::take(&mut self.app.copies)

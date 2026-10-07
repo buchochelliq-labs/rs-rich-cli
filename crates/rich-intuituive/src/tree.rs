@@ -4,7 +4,7 @@ use std::cell::Cell;
 use std::collections::HashSet;
 
 use rich::Segment;
-use rich_interact::{Key, KeyCode, MouseKind};
+use rich_interact::{Button, Key, KeyCode, MouseKind};
 
 use crate::node::{Axis, Node};
 use crate::reactive::{signal, Signal};
@@ -298,18 +298,30 @@ impl Widget for Tree {
             WidgetEvent::Mouse(mouse) => {
                 let rows = self.rows();
                 match mouse.kind {
-                    MouseKind::Down(_) => {
+                    MouseKind::Down(button) => {
                         let Some(row) = rows.get(self.first.get() + mouse.row as usize) else {
-                            return Used::No;
+                            // Below the rows: another button is used up, so
+                            // no menu speaks for an old selection.
+                            return if button == Button::Left {
+                                Used::No
+                            } else {
+                                Used::Yes
+                            };
                         };
                         let arrow = 2 * (row.path.len() as u16 - 1);
-                        if row.parent && (arrow..arrow + 2).contains(&mouse.column) {
+                        let left = button == Button::Left;
+                        if left && row.parent && (arrow..arrow + 2).contains(&mouse.column) {
                             let open = !self.is_expanded(&row.path);
                             self.set_expanded(&row.path, open);
                         }
                         // Collapsing may have moved the selection to the
                         // item already.
                         self.select(row);
+                        // Another button selects and leaves the press to
+                        // the node's own handler (a context menu).
+                        if !left {
+                            return Used::No;
+                        }
                     }
                     MouseKind::ScrollUp | MouseKind::ScrollDown if !rows.is_empty() => {
                         let at = self.selected.with_untracked(|s| index_of(&rows, s));

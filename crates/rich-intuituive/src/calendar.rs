@@ -2,7 +2,7 @@
 
 use std::fmt;
 
-use rich_interact::{KeyCode, MouseKind};
+use rich_interact::{Button, KeyCode, MouseKind};
 
 use crate::node::{Axis, Node};
 use crate::reactive::Signal;
@@ -246,15 +246,23 @@ impl Widget for Calendar {
                 }
             }
             WidgetEvent::Mouse(mouse) => match mouse.kind {
-                MouseKind::Down(_) if mouse.row >= 2 && mouse.column < WIDTH => {
+                MouseKind::Down(button) if mouse.row >= 2 && mouse.column < WIDTH => {
                     let selected = self.selected.get_untracked();
                     let at = (mouse.row as u32 - 2) * 7 + mouse.column as u32 / 3;
                     let offset = selected.first_of_month().weekday();
                     let days = Date::days_in_month(selected.year, selected.month);
                     match (at + 1).checked_sub(offset) {
                         Some(day) if (1..=days).contains(&day) => {
-                            self.selected.set(Date { day, ..selected })
+                            self.selected.set(Date { day, ..selected });
+                            // Another button leaves the press to the node's
+                            // own handler, as a table does.
+                            if button != Button::Left {
+                                return Used::No;
+                            }
                         }
+                        // Not a day: another button is used up, so no
+                        // menu speaks for the old date.
+                        _ if button != Button::Left => return Used::Yes,
                         _ => return Used::No,
                     }
                 }

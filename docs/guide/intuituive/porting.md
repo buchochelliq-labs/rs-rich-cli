@@ -289,7 +289,7 @@ is a rebuild of the behaviour, showing how a large ratatui app's ideas map.
 
 | Yazi does | The rebuild uses |
 |---|---|
-| Three columns: parent, current, preview | `row([parent, current, preview]).gap(1)` with `.flex(1)`, `.flex(4)`, `.flex(3)` |
+| Three columns: parent, current, preview, in a 1:4:3 ratio | `hsplit(parent, hsplit(current, preview, inner), outer)`, with dividers the mouse drags |
 | A selectable, scrolling file list with sizes | `table(columns, rows, selected)`: a name and a size column; keys, clicks and the wheel move the selection |
 | The parent column marks the current directory | a second `list(..)` with `.no_focus()`, its selection kept in step by a `watch` |
 | Previews loaded and highlighted off the UI thread | a `watch` on the selection starts a `spawn`; a generation counter drops stale results |
@@ -298,10 +298,14 @@ is a rebuild of the behaviour, showing how a large ratatui app's ideas map.
 | Filter prompt | `cx.popup(status, Placement::Above, ..)` holding an `Input` component, just above the status line |
 | A preview that J and K scroll | `scroll_with(preview, offset)`; J/K move the offset, and the wheel scrolls it too |
 | Tabs (`t`, 1–9, close) | a signal of directories, `tabs(titles, active)` shown once there are two |
-| Help overlay | `cx.modal(Size::Auto, Size::Auto, help)` |
+| Help overlay | `.help_key("?")`: the built-in help, made from each binding's description (`.bind(keys, "what it does", ..)`) |
+| Yank the path (`y`) | `cx.copy(path)`: on the clipboard, and a toast says so |
+| (not in Yazi) a command palette and a right-click menu | `.palette_key("ctrl+p")`, from the same bindings; `context_menu(cx, items)` in the table's `on_mouse` |
 | Watches the disk | `every(2s)` re-reads; the listing is a memo, so an unchanged directory draws nothing |
 
-![The help overlay, a modal sized to its content](../../media/tapes/files/files-help.png)
+![The help, made from the bindings' descriptions](../../media/tapes/files/files-help.png)
+
+![The command palette, from the same bindings](../../media/tapes/files/files-palette.png)
 
 ![Two tabs, and the filter prompt opened just above the status line](../../media/tapes/files/files-filter.png)
 
