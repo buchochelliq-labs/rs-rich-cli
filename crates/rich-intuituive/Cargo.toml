@@ -35,3 +35,7 @@ rich-interact.workspace = true
 # The benchmark against ratatui (tests/versus_ratatui.rs) draws the same
 # dashboard with it. A dev-dependency only: the framework does not use it.
 ratatui = { version = "0.30", default-features = false, features = ["crossterm", "layout-cache"] }
+# The porting guide's claim that ratatui widgets run unchanged inside an
+# app (tests/ratatui_widgets.rs). Path only, so `cargo publish` drops it:
+# a published crate need not wait on its dev-dependencies.
+rich-ratatui = { package = "rs-rich-ratatui", path = "../rich-ratatui", features = ["interact"] }

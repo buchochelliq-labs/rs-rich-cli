@@ -230,3 +230,26 @@ fn moving_the_focus_redraws_only_panel_edges() {
     let text = rows.join("\n");
     assert!(text.contains("drew 2 of 2 dirty"), "{text}");
 }
+
+#[test]
+fn a_screens_watches_stop_when_it_closes() {
+    let calls = Rc::new(Cell::new(0));
+    let seen = calls.clone();
+    let app = App::new(move || {
+        let n = signal(0u32);
+        let seen = seen.clone();
+        label("home")
+            .on_key("o", move |cx| {
+                let seen = seen.clone();
+                cx.push(move || {
+                    watch(move || n.get(), move |_, _| seen.set(seen.get() + 1));
+                    label("watching").on_key("esc", |cx| cx.pop())
+                })
+            })
+            .on_key("+", move |_| n.update(|v| *v += 1))
+            .on_key("q", |cx| cx.quit())
+    });
+    // Open (first run), close, then change n: the watch does not run again.
+    run(app, Script::new().keys("o esc + + q"), 20, 2);
+    assert_eq!(calls.get(), 1);
+}

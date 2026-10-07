@@ -69,18 +69,19 @@ pub use app::{every, App, Ctx, FrameStats, Theme};
 pub use layout::Size;
 pub use log::Log;
 pub use node::{
-    column, component, each, grid, label, leaf, renderable, repeating, row, switch, text, Node,
+    column, component, each, grid, label, leaf, list, renderable, repeating, row, switch, text,
+    Node,
 };
-pub use reactive::{memo, signal, Memo, Proxy, Signal};
+pub use reactive::{memo, signal, watch, Memo, Proxy, Signal};
 pub use task::{resource, spawn, spawn_future, Load, Resource, Task};
 
 /// Everything an app usually needs.
 pub mod prelude {
     // `text` is both the function and the `text!` macro.
     pub use crate::{
-        column, component, each, every, grid, label, leaf, memo, renderable, repeating, resource,
-        row, signal, spawn, switch, text, App, Ctx, Load, Log, Memo, Node, Proxy, Resource, Signal,
-        Size, Task, Theme,
+        column, component, each, every, grid, label, leaf, list, memo, renderable, repeating,
+        resource, row, signal, spawn, switch, text, watch, App, Ctx, Load, Log, Memo, Node, Proxy,
+        Resource, Signal, Size, Task, Theme,
     };
 }
 

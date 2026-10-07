@@ -309,6 +309,13 @@ impl Node {
         self
     }
 
+    /// Take this node out of the Tab order: a [`list`] that only shows, or
+    /// a component you drive yourself.
+    pub fn no_focus(mut self) -> Node {
+        self.focusable = false;
+        self
+    }
+
     /// While this node has the focus, draw it in `style` over its own: a
     /// style (`"reverse"`, `"on grey23"`) or a theme style name
     /// (`"accent"`). The rest of its row is filled in the style too, so a
@@ -728,7 +735,12 @@ impl Node {
                         width: rect.width as usize,
                         height: rect.height as usize,
                     };
-                    let view = host.render(&context);
+                    // A component that reads signals while it renders (a
+                    // ratatui widget drawing app state) draws again when
+                    // they change.
+                    let view = frame
+                        .runtime
+                        .observe_node(self.id, || host.render(&context));
                     screen.write_lines(rect, &view.lines);
                     self.caret.set(view.cursor.and_then(|(row, column)| {
                         let (row, column) = (row as u16, column as u16);
@@ -1327,6 +1339,105 @@ pub fn repeating<C: Component + 'static>(
     })));
     node.focusable = true;
     node.what("component")
+}
+
+/// A scrolling list of markup rows, one selected: ratatui's `List` and
+/// `ListState` in one node. `items` may read signals; `selected` is the
+/// index of the selected row, which you read and write like any signal.
+///
+/// The list keeps the selected row in view, scrolling only as far as it
+/// must, and draws it in the theme's `selected` style, filled to the full
+/// width. It is focusable, and while it has the focus ↑/k, ↓/j, Home/g,
+/// End/G, PageUp and PageDown move the selection; bind Enter (or anything
+/// else) yourself with [`on_key`](Node::on_key).
+///
+/// ```
+/// use intuituive::prelude::*;
+///
+/// let app = App::new(|| {
+///     let selected = signal(0usize);
+///     let items = || (1..=50).map(|n| format!("item {n}")).collect();
+///     list(items, selected).on_key("q", |cx| cx.quit())
+/// });
+/// // Down 7 times in a 5-row list: rows 4-8 (items 4-8) show, item 8 selected.
+/// let keys = ["j", "j", "j", "j", "j", "j", "j", "q"];
+/// let screen = app.render_with(&keys, 20, 5).unwrap();
+/// assert_eq!(screen[0].trim_end(), "item 4");
+/// assert_eq!(screen[4].trim_end(), "item 8");
+/// ```
+pub fn list(items: impl Fn() -> Vec<String> + 'static, selected: Signal<usize>) -> Node {
+    let items = Rc::new(items);
+    // The first row shown, and the height last drawn (for a page's size).
+    let offset = Rc::new(Cell::new(0usize));
+    let rows = Rc::new(Cell::new(1usize));
+    let draw = {
+        let (items, offset, rows) = (items.clone(), offset.clone(), rows.clone());
+        move |console: &Console, width: u16, height: u16| {
+            let items = items();
+            let len = items.len();
+            // Height 0 is a measurement: every row.
+            let height = if height == 0 { len } else { height as usize };
+            rows.set(height.max(1));
+            let selected = selected.get().min(len.saturating_sub(1));
+            let mut first = offset.get().min(len.saturating_sub(height));
+            if selected < first {
+                first = selected;
+            } else if selected >= first + height {
+                first = selected + 1 - height;
+            }
+            offset.set(first);
+            let mut options = console.options().update_width(width.max(1) as usize);
+            options.no_wrap = Some(true);
+            options.overflow = Some(rich::Overflow::Ellipsis);
+            let style = console
+                .get_style(&rich::style::StyleType::Name("selected".into()))
+                .unwrap_or_else(|_| Style::parse("reverse").expect("parses"));
+            items
+                .iter()
+                .enumerate()
+                .skip(first)
+                .take(height)
+                .map(|(i, markup)| {
+                    let text = rich::Text::from_markup(markup)
+                        .unwrap_or_else(|_| rich::Text::new(markup.clone()));
+                    let line = console
+                        .render_lines(&text, &options, false)
+                        .into_iter()
+                        .next()
+                        .unwrap_or_default();
+                    if i == selected {
+                        let row = Rect::new(0, 0, width, 1);
+                        highlight(vec![line], &style, row).remove(0)
+                    } else {
+                        line
+                    }
+                })
+                .collect()
+        }
+    };
+    let len = {
+        let items = items.clone();
+        move || items().len()
+    };
+    let step = move |by: isize| {
+        let len = len();
+        let last = len.saturating_sub(1) as isize;
+        selected.update(|s| *s = (*s as isize + by).clamp(0, last.max(0)) as usize);
+    };
+    let (rows_up, rows_down) = (rows.clone(), rows);
+    let (up, down, pgup, pgdn) = (step.clone(), step.clone(), step.clone(), step);
+    leaf(draw)
+        .what("list")
+        .focusable()
+        .on_key("up k", move |_| up(-1))
+        .on_key("down j", move |_| down(1))
+        .on_key("pageup", move |_| pgup(-(rows_up.get() as isize)))
+        .on_key("pagedown", move |_| pgdn(rows_down.get() as isize))
+        .on_key("home g", move |_| selected.set(0))
+        .on_key("end G", move |_| {
+            let len = items().len();
+            selected.set(len.saturating_sub(1));
+        })
 }
 
 /// Children one above the other.

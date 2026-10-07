@@ -19,7 +19,8 @@ This crate is the interop layer. For writing a new full-screen app,
 rs-rich has its own framework, [intuiTUIve](intuituive/index.md): a
 retained tree with signals, where only what changed is redrawn and sent.
 [The design note](../design/intuituive.md) records why both exist, the
-benchmarks against ratatui, and the decisions behind this crate.
+benchmarks against ratatui, and the decisions behind this crate. To move an
+app across, see [Porting a ratatui app](intuituive/porting.md).
 
 ```toml
 [dependencies]

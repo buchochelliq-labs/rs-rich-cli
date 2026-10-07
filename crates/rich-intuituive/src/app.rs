@@ -140,7 +140,8 @@ impl Ctx {
 /// the focused border, panel titles), and named styles for markup.
 ///
 /// Every named style works in console markup: `[accent]…[/]`. The presets
-/// define `accent`, `muted`, `good`, `warn` and `bad`, and the framework's
+/// define `accent`, `muted`, `good`, `warn`, `bad` and `selected` (a
+/// [`list`](crate::list)'s selected row), and the framework's
 /// own as `border`, `border.focused` and `title`, so an app restyles by
 /// name and switches themes at run time with [`Ctx::set_theme`].
 #[derive(Clone, Debug)]
@@ -163,7 +164,7 @@ fn style(definition: &str) -> Style {
 }
 
 impl Theme {
-    fn preset(border: &str, focused: &str, names: [(&str, &str); 5]) -> Theme {
+    fn preset(border: &str, focused: &str, names: [(&str, &str); 6]) -> Theme {
         Theme {
             border: style(border),
             border_focused: style(focused),
@@ -186,6 +187,7 @@ impl Theme {
                 ("good", "green"),
                 ("warn", "yellow"),
                 ("bad", "bold red"),
+                ("selected", "reverse"),
             ],
         )
     }
@@ -201,6 +203,7 @@ impl Theme {
                 ("good", "green4"),
                 ("warn", "dark_orange3"),
                 ("bad", "bold red3"),
+                ("selected", "reverse"),
             ],
         )
     }
@@ -216,6 +219,7 @@ impl Theme {
                 ("good", "bold"),
                 ("warn", "underline"),
                 ("bad", "bold reverse"),
+                ("selected", "reverse"),
             ],
         )
     }
@@ -312,11 +316,24 @@ struct Layer {
     /// Where a modal was last drawn.
     drawn: Option<Rect>,
     timers: Vec<Timer>,
+    /// Its [watches](crate::watch), stopped when it closes.
+    watches: Vec<usize>,
 }
 
 thread_local! {
     /// Timers [`every`] made while an app is being built.
     static BUILDING: std::cell::RefCell<Option<Vec<Timer>>> = const { std::cell::RefCell::new(None) };
+    /// Watches [`watch`](crate::watch) made while a screen is being built.
+    static WATCHES: std::cell::RefCell<Option<Vec<usize>>> = const { std::cell::RefCell::new(None) };
+}
+
+/// Note a watch made while a screen is built, so it stops with the screen.
+pub(crate) fn building_watch(id: usize) {
+    WATCHES.with(|watches| {
+        if let Some(watches) = watches.borrow_mut().as_mut() {
+            watches.push(id);
+        }
+    });
 }
 
 /// Call `tick` every `interval` while the app runs: a clock, a poll, an
@@ -420,12 +437,16 @@ impl App {
     pub fn new(build: impl FnOnce() -> Node) -> App {
         let runtime = Runtime::new();
         BUILDING.with(|building| *building.borrow_mut() = Some(Vec::new()));
+        WATCHES.with(|watches| *watches.borrow_mut() = Some(Vec::new()));
         let (root, focus_path) = runtime.enter(|| {
             let focus_path = signal(Vec::new());
             (build(), focus_path)
         });
         let timers = BUILDING
             .with(|building| building.borrow_mut().take())
+            .unwrap_or_default();
+        let watches = WATCHES
+            .with(|watches| watches.borrow_mut().take())
             .unwrap_or_default();
         App {
             runtime,
@@ -435,6 +456,7 @@ impl App {
                 modal: None,
                 drawn: None,
                 timers,
+                watches,
             }],
             restack: false,
             now: Duration::ZERO,
@@ -638,17 +660,6 @@ impl App {
             let mut cx = self.ctx();
             let runtime = self.runtime.clone();
             runtime.enter(|| {
-                // Waiting for tasks, wait again for any a result started.
-                loop {
-                    if self.wait_for_tasks {
-                        self.settle_tasks();
-                    }
-                    let ran = runtime.run_inbox(&mut cx);
-                    let busy = runtime.tasks.load(std::sync::atomic::Ordering::SeqCst) > 0;
-                    if !self.wait_for_tasks || !(ran || busy) {
-                        break;
-                    }
-                }
                 let now = self.now;
                 for layer in &mut self.layers {
                     for timer in &mut layer.timers {
@@ -658,6 +669,21 @@ impl App {
                                 timer.next += timer.every;
                             }
                         }
+                    }
+                }
+                // Results from other threads, then the watches they (or the
+                // last event) set off. Waiting for tasks, this repeats until
+                // none is in flight: a watch may start one, and its result
+                // may start another.
+                loop {
+                    if self.wait_for_tasks {
+                        self.settle_tasks();
+                    }
+                    let delivered = runtime.run_inbox(&mut cx);
+                    let watched = runtime.run_watches(&mut cx);
+                    let busy = runtime.tasks.load(std::sync::atomic::Ordering::SeqCst) > 0;
+                    if !self.wait_for_tasks || !(delivered || watched || busy) {
+                        break;
                     }
                 }
             });
@@ -930,6 +956,9 @@ impl App {
                     // The first screen: its timers go with it.
                     let old = self.layers.pop().expect("an app always has a screen");
                     old.root.forget(&self.runtime);
+                    for watch in old.watches {
+                        self.runtime.drop_watch(watch);
+                    }
                     self.open(build, None);
                 }
             }
@@ -939,10 +968,14 @@ impl App {
     /// Build a screen and put it on top, focusing its first focusable node.
     fn open(&mut self, build: Build, modal: Option<(Size, Size)>) {
         BUILDING.with(|building| *building.borrow_mut() = Some(Vec::new()));
+        WATCHES.with(|watches| *watches.borrow_mut() = Some(Vec::new()));
         let runtime = self.runtime.clone();
         let root = runtime.enter(build);
         let mut timers = BUILDING
             .with(|building| building.borrow_mut().take())
+            .unwrap_or_default();
+        let watches = WATCHES
+            .with(|watches| watches.borrow_mut().take())
             .unwrap_or_default();
         // A screen's timers start counting when it opens.
         for timer in &mut timers {
@@ -954,6 +987,7 @@ impl App {
             modal,
             drawn: None,
             timers,
+            watches,
         });
         self.restack = true;
         self.set_focus(None);
@@ -964,6 +998,9 @@ impl App {
     fn close(&mut self) {
         let layer = self.layers.pop().expect("an app always has a screen");
         layer.root.forget(&self.runtime);
+        for watch in layer.watches {
+            self.runtime.drop_watch(watch);
+        }
         self.restack = true;
     }
 

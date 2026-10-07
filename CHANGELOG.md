@@ -66,6 +66,20 @@ blocking and headless drivers and every existing component carry over),
 - `repeating(make, on_done)`: a component built fresh after each answer,
   for entry boxes; `Node::focus_style(style)` highlights a leaf, such as a
   list row, while it has the focus.
+- `list(items, selected)`: a scrolling list with a selected row (ratatui's
+  `List` and `ListState` in one node), with ↑↓ jk, Home/End and
+  PageUp/PageDown built in, and a `selected` theme style.
+- `watch(source, on_change)`: run a callback, with a `Ctx`, whenever a value
+  derived from signals changes; a screen's watches stop when it closes.
+  `Memo::get_untracked` and `with_untracked`, and `Node::no_focus`.
+- A hosted component (a ratatui widget through rs-rich-ratatui's
+  `RatatuiComponent`) now draws again when the signals it reads change.
+- `wait_for_tasks` also waits for tasks that watches start.
+- `examples/files.rs`: a Yazi-style file manager (parent, current and
+  preview columns, vim keys, background-highlighted previews, hidden files,
+  sorting, filtering), with tests over a temporary tree; and a porting guide
+  for ratatui apps (`docs/guide/intuituive/porting.md`), whose "keep your
+  widgets" step is tested in `tests/ratatui_widgets.rs`.
 - A panel whose focus state changes redraws only its border's edges, not
   its contents, and a focus move elsewhere leaves it alone.
 - `intuituive::rich` and `intuituive::interact` re-export rs-rich and

@@ -19,7 +19,9 @@ rs-rich-intuituive = "0.0.1"
 One dependency is enough: `intuituive::rich` is rs-rich and
 `intuituive::interact` is rs-rich-interact. New here? The
 [tutorial](tutorial.md) builds a to-do app step by step, and the template
-starts a project with one command:
+starts a project with one command. Coming from ratatui?
+[Porting a ratatui app](porting.md) maps every concept and walks through a
+Yazi-style file manager rebuilt on intuiTUIve.
 
 ```bash
 cargo generate --git https://github.com/buchochelliq-labs/rs-rich-cli templates/intuituive-app
@@ -66,6 +68,7 @@ including Ctrl+C and a panic.
 | `grid([sizes], [...])` | Children in rows and columns (see [Grids](#grids)) |
 | `each(move \|\| keys, \|key\| node)` | One child per key, kept by key across reorders |
 | `switch(move \|\| key, \|key\| node)` | One child at a time, chosen by key; the others are kept (tabs, wizard steps) |
+| `list(move \|\| rows, selected)` | A scrolling list with a selected row (`selected` is a `Signal<usize>`); ↑↓ jk, Home/End and PageUp/PageDown move it |
 | `log.view()` | A streaming [`Log`](#logs) |
 | `component(Input::new("Name"), on_done)` | A `rich-interact` component (see [Components](#components)) |
 | `repeating(\|\| Input::new("Add"), on_done)` | The same, built fresh after each answer (an entry box) |
@@ -136,6 +139,10 @@ let is_first = memo(move || selected.get() == 0);
 - `get()` reads a value, and `set(v)` or `update(|v| …)` writes it. A node
   that reads a signal while drawing subscribes to it, and a write redraws
   exactly those nodes. `set` with an equal value does nothing.
+- `watch(move || source, move |value, cx| …)` runs a callback when a value
+  changes (and once at the start), between frames, with a `Ctx`: load a
+  preview when the selection moves, save when a document changes. A watch
+  made while a screen is built stops when the screen closes.
 - A `memo` derives a value and notifies its readers only when the result
   changes. In a list where each row reads `memo(move || selected.get() == i)`,
   a move redraws two rows, not all of them.
@@ -160,6 +167,8 @@ column([
   store rectangles yourself.
 - **Key names** are the ones `rs-rich-interact` uses: `"q"`, `"ctrl+s"`,
   `"up k"` (either key).
+- **Out of the Tab order:** `.no_focus()` keeps a list or component you only
+  show from taking the focus.
 - **Showing the focus:** panels highlight their border while the focus is
   inside them. A leaf can show it too: `.focus_style("reverse")` (any style
   or theme name) restyles it, filled to its full width, while it has the
