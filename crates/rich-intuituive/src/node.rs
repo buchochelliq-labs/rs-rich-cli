@@ -75,13 +75,15 @@ pub(crate) enum Used {
 pub(crate) trait Hosted {
     fn handle(&mut self, event: &Event, context: &Context<'_>, cx: &mut Ctx) -> Used;
     fn render(&self, context: &Context<'_>) -> View;
-    fn set_cancel(&mut self, cancel: Box<dyn FnMut(&mut Ctx)>);
+    fn set_cancel(&mut self, cancel: Handler);
 }
+
+type OnDone<T> = Box<dyn FnMut(T, &mut Ctx)>;
 
 struct Host<C: Component> {
     component: C,
-    on_done: Box<dyn FnMut(C::Output, &mut Ctx)>,
-    on_cancel: Option<Box<dyn FnMut(&mut Ctx)>>,
+    on_done: OnDone<C::Output>,
+    on_cancel: Option<Handler>,
 }
 
 impl<C: Component> Hosted for Host<C> {
@@ -112,7 +114,7 @@ impl<C: Component> Hosted for Host<C> {
         self.component.render(context)
     }
 
-    fn set_cancel(&mut self, cancel: Box<dyn FnMut(&mut Ctx)>) {
+    fn set_cancel(&mut self, cancel: Handler) {
         self.on_cancel = Some(cancel);
     }
 }

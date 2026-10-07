@@ -361,7 +361,7 @@ impl App {
                     }
                 }
                 Event::Paste(_) => {
-                    if let Some(true) = self.to_host(&event) {
+                    if let Some(true) = self.give_to_host(&event) {
                         return Ok(());
                     }
                 }
@@ -489,7 +489,7 @@ impl App {
     /// Whether to quit.
     fn key(&mut self, key: Key) -> bool {
         // A focused component sees the key first.
-        if let Some(quit) = self.to_host(&Event::Key(key)) {
+        if let Some(quit) = self.give_to_host(&Event::Key(key)) {
             return quit;
         }
         let path = match self.focus {
@@ -525,7 +525,7 @@ impl App {
 
     /// Give `event` to the focused node if it hosts a component. `Some`
     /// (whether to quit) if the component used it.
-    fn to_host(&mut self, event: &Event) -> Option<bool> {
+    fn give_to_host(&mut self, event: &Event) -> Option<bool> {
         let id = self.focus?;
         let console = self.last_console.clone()?;
         let mut cx = self.ctx();
@@ -573,7 +573,7 @@ impl App {
             column - rect.x,
             row - rect.y,
         );
-        if let Some(quit) = self.to_host(&Event::Mouse(local)) {
+        if let Some(quit) = self.give_to_host(&Event::Mouse(local)) {
             return quit;
         }
         let mut cx = self.ctx();
