@@ -4,6 +4,10 @@
 //! rebuild of the behaviour, showing how an app that redraws twenty or more
 //! times a second maps.
 //!
+//! Ported from scope-tui 0.3.5 (<https://github.com/alemidev/scope-tui>),
+//! by alemi, MIT licence. Its design, keys, options and display layout are
+//! alemi's; the credit for them is theirs.
+//!
 //!     cargo run -p rs-rich-intuituive --example scope              # a test signal
 //!     cargo run -p rs-rich-intuituive --example scope -- file PATH # raw PCM
 //!     parec --format=s16le --rate=48000 --channels=2 \

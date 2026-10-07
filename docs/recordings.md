@@ -242,7 +242,8 @@ scrollback above it kept. See [Terminal apps](guide/intuituive/index.md).
 
 ## A file manager
 
-`rs-rich-intuituive`'s `files` example, a rebuild of Yazi's behaviour, in
+`rs-rich-intuituive`'s `files` example, a rebuild of the behaviour of
+[Yazi](https://github.com/sxyazi/yazi) by sxyazi and contributors (MIT), in
 the fixture project: the parent directory, the current one and a preview
 highlighted on a worker thread, then the help overlay. See
 [Porting a ratatui app](guide/intuituive/porting.md#worked-example-a-yazi-style-file-manager).
@@ -260,7 +261,7 @@ highlighted on a worker thread, then the help overlay. See
 ## An oscilloscope
 
 `rs-rich-intuituive`'s `scope` example, a rebuild of
-[scope-tui](https://github.com/alemidev/scope-tui). It shows its test
+[scope-tui](https://github.com/alemidev/scope-tui) by alemi (MIT). It shows its test
 signal moving in the oscilloscope, the vectorscope and the spectroscope,
 then held still and paused in each for the screenshots, and finally its
 keys. See

@@ -260,6 +260,11 @@ reproduces Yazi's core behaviour in about 420 lines, including its helpers.
 Its tests are in `tests/files.rs`. It does not reuse any of Yazi's code: it
 is a rebuild of the behaviour, showing how a large ratatui app's ideas map.
 
+!!! note "Credit"
+    Ported from [Yazi](https://github.com/sxyazi/yazi), by sxyazi and its
+    contributors (MIT licence). Its three-column design, keys and behaviour
+    are theirs.
+
 ![The file manager: parent, current directory and a highlighted preview](../../media/tapes/files/files.png)
 
 | Yazi does | The rebuild uses |
@@ -295,6 +300,11 @@ lines. Its tests are in `tests/scope.rs`. Like the file manager, it reuses
 none of the original's code. Where the file manager redraws when you press
 a key, this app redraws whenever a new buffer of audio arrives.
 
+!!! note "Credit"
+    Ported from [scope-tui](https://github.com/alemidev/scope-tui) 0.3.5, by
+    alemi (MIT licence). Its design, keys, options and display layout are
+    alemi's.
+
 ![The oscilloscope: two channels and the zero line, paused](../../media/tapes/scope/oscilloscope.png)
 
 | scope-tui does | The rebuild uses |
@@ -329,6 +339,15 @@ It differs from scope-tui in four small ways:
 - It has no audio-device backends: pipe audio in instead.
 
 ![The spectroscope: each channel's spectrum on a log frequency axis](../../media/tapes/scope/spectroscope.png)
+
+## Credit for ports
+
+Every app ported into this repository names where it came from, who made
+it and its licence: in the example's header comment, in its section of
+this guide, and in the crate README. A port that copies code from the
+original must also keep the original's copyright and licence notice with
+that code, as MIT and Apache-2.0 require. The ports here reuse none, so
+the credit is all they carry. Port your own app the same way.
 
 ## Common questions
 

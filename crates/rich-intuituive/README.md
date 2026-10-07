@@ -79,6 +79,16 @@ three columns, vim keys, previews highlighted in the background.
 an oscilloscope, vectorscope and spectroscope that redraws with every
 buffer of audio.
 
+## Credits
+
+The example ports rebuild the behaviour of other people's ratatui apps
+and reuse none of their code; the designs are theirs:
+
+- `examples/files.rs`: [Yazi](https://github.com/sxyazi/yazi), by sxyazi
+  and contributors (MIT).
+- `examples/scope.rs`: [scope-tui](https://github.com/alemidev/scope-tui),
+  by alemi (MIT).
+
 ## Against ratatui
 
 The same ops dashboard is written with ratatui 0.30 and with intuiTUIve in

@@ -3,6 +3,10 @@
 //! directory, the current one, and a preview of the selection, loaded in
 //! the background.
 //!
+//! Ported from Yazi (<https://github.com/sxyazi/yazi>), by sxyazi and its
+//! contributors, MIT licence. Its three-column design, keys and behaviour
+//! are theirs; this rebuild reuses none of its code.
+//!
 //!     cargo run -p rs-rich-intuituive --example files [-- DIR]
 //!
 //! j/k or ↑/↓ move · l, → or Enter opens · h or ← goes up · . shows hidden
