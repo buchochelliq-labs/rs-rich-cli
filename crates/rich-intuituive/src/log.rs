@@ -84,6 +84,7 @@ impl Log {
         Node::new_kind(Kind::Log(LogView {
             log: *self,
             drawn_total: None,
+            shown: 0,
         }))
     }
 }
@@ -92,6 +93,8 @@ pub(crate) struct LogView {
     pub log: Log,
     /// The log's total when the view last drew.
     pub drawn_total: Option<u64>,
+    /// How many lines it showed then (at most its height).
+    pub shown: usize,
 }
 
 /// One log line rendered to one row at `width` (cropped, never wrapped).

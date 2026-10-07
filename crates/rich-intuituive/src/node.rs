@@ -345,7 +345,7 @@ impl Node {
                         Some(0) if !(resized || force) => {}
                         Some(n) if !(resized || force) && n < height => {
                             let len = data.lines.len();
-                            let before = len.saturating_sub(n);
+                            let shown = view.shown;
                             let render = |from: usize| -> Vec<Vec<Segment>> {
                                 data.lines
                                     .range(from..)
@@ -354,7 +354,14 @@ impl Node {
                                     })
                                     .collect()
                             };
-                            if before >= height {
+                            if len == shown + n && shown + n <= height {
+                                // Room left and nothing dropped: the new
+                                // lines go under the old.
+                                let rows =
+                                    Rect::new(rect.x, rect.y + shown as u16, rect.width, n as u16);
+                                screen.write_lines(rows, &render(shown));
+                                frame.damage.push(rows);
+                            } else if shown == height && len >= height {
                                 // Full: scroll what is on screen up, and render
                                 // only the new lines into the rows that opened.
                                 screen.scroll_up(rect, n as u16);
@@ -364,14 +371,14 @@ impl Node {
                                     rect.width,
                                     n as u16,
                                 );
-                                screen.write_lines(rows, &render(before));
+                                screen.write_lines(rows, &render(len - n));
                                 frame.damage.push(rect);
                             } else {
-                                // Room left: the new lines go under the old.
-                                let rows =
-                                    Rect::new(rect.x, rect.y + before as u16, rect.width, n as u16);
-                                screen.write_lines(rows, &render(before));
-                                frame.damage.push(rows);
+                                // Lines were dropped from a log shorter than
+                                // the view: draw what it keeps.
+                                let start = len.saturating_sub(height);
+                                screen.write_lines(rect, &render(start));
+                                frame.damage.push(rect);
                             }
                             frame.drawn += 1;
                         }
@@ -391,6 +398,11 @@ impl Node {
                     }
                 });
                 view.drawn_total = Some(total);
+                view.shown = view
+                    .log
+                    .data
+                    .with_untracked(|data| data.lines.len())
+                    .min(height);
             }
             Kind::Each(list) => {
                 let reshaped = frame

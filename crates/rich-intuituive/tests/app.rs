@@ -379,3 +379,77 @@ fn hidden_keyed_rows_redraw_when_shown() {
     let screen = app.render_with(&["x", "r", "q"], 4, 2).unwrap();
     assert_eq!(screen[0].trim_end(), "C", "{screen:?}");
 }
+
+/// Review findings on #672, each failing before its fix.
+mod review {
+    use super::*;
+    use rich_interact::{Button, Event, Mouse, MouseKind};
+
+    /// A right click is not a left click: `on_click` takes the left button
+    /// only.
+    #[test]
+    fn only_the_left_button_clicks() {
+        let clicks = Rc::new(RefCell::new(0));
+        let c = clicks.clone();
+        let app = App::new(move || {
+            let c = c.clone();
+            label("button")
+                .on_click(move |_| *c.borrow_mut() += 1)
+                .on_key("q", |cx| cx.quit())
+        });
+        let right = Event::Mouse(Mouse::new(MouseKind::Down(Button::Right), 1, 0));
+        run(app, Script::new().event(right).click(1, 0).keys("q"), 10, 1);
+        assert_eq!(*clicks.borrow(), 1);
+    }
+
+    /// Removing the focused row of a keyed list must not strand the keys:
+    /// app-wide bindings keep working.
+    #[test]
+    fn keys_still_reach_the_app_after_the_focused_node_is_removed() {
+        let app = App::new(|| {
+            let rows = signal(vec![1, 2]);
+            each(
+                move || rows.get(),
+                |k| label(format!("row {k}")).focusable(),
+            )
+            .on_key("d", move |_| rows.set(vec![2]))
+            .on_key("q", |cx| cx.quit())
+        });
+        // Focus starts on row 1; "d" removes it; "q" must still quit.
+        let record = run(app, Script::new().keys("d q"), 10, 2);
+        assert_eq!(screen(&record)[0], "row 2");
+    }
+
+    /// A zero interval spun the loop forever; it runs once a millisecond.
+    #[test]
+    fn a_zero_interval_timer_does_not_hang() {
+        let app = App::new(|| {
+            let n = signal(0u32);
+            every(Duration::ZERO, move |_| n.update(|n| *n += 1));
+            text!("{n}").on_key("q", |cx| cx.quit())
+        });
+        let record = run(
+            app,
+            Script::new().wait(Duration::from_millis(5)).keys("q"),
+            10,
+            1,
+        );
+        assert!(!screen(&record)[0].is_empty());
+    }
+
+    /// A log smaller than its view that drops its oldest line shows the
+    /// lines it keeps.
+    #[test]
+    fn a_log_that_evicts_shows_what_it_keeps() {
+        let app = App::new(|| {
+            let log = Log::new(2);
+            log.push("0");
+            log.push("1");
+            log.view()
+                .on_key("a", move |_| log.push("2"))
+                .on_key("q", |cx| cx.quit())
+        });
+        let record = run(app, Script::new().keys("a q"), 4, 3);
+        assert_eq!(screen(&record), ["1", "2", ""]);
+    }
+}

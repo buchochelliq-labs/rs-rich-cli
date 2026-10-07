@@ -22,7 +22,7 @@ use std::rc::Rc;
 use std::time::Duration;
 
 use rich::{ColorSystem, Console, Style};
-use rich_interact::{Backend, Event, Key, KeyCode, MouseKind, Session, SessionOptions};
+use rich_interact::{Backend, Button, Event, Key, KeyCode, MouseKind, Session, SessionOptions};
 
 use crate::node::{with_node, FrameState, Node};
 use crate::reactive::{signal, NodeId, Proxy, Runtime, Signal};
@@ -100,6 +100,19 @@ struct Timer {
     tick: Box<dyn FnMut(&mut Ctx)>,
 }
 
+impl Timer {
+    /// A zero interval would never move the timer on (and spin the loop),
+    /// so the shortest interval is one millisecond.
+    fn new(interval: Duration, tick: impl FnMut(&mut Ctx) + 'static) -> Timer {
+        let every = interval.max(Duration::from_millis(1));
+        Timer {
+            every,
+            next: every,
+            tick: Box::new(tick),
+        }
+    }
+}
+
 thread_local! {
     /// Timers [`every`] made while an app is being built.
     static BUILDING: std::cell::RefCell<Option<Vec<Timer>>> = const { std::cell::RefCell::new(None) };
@@ -128,11 +141,7 @@ pub fn every(interval: Duration, tick: impl FnMut(&mut Ctx) + 'static) {
             .borrow_mut()
             .as_mut()
             .expect("every() is called inside App::new's closure")
-            .push(Timer {
-                every: interval,
-                next: interval,
-                tick: Box::new(tick),
-            })
+            .push(Timer::new(interval, tick))
     });
 }
 
@@ -209,11 +218,7 @@ impl App {
 
     /// Call `tick` every `interval` (a clock, a poll, an animation).
     pub fn every(mut self, interval: Duration, tick: impl FnMut(&mut Ctx) + 'static) -> App {
-        self.timers.push(Timer {
-            every: interval,
-            next: interval,
-            tick: Box::new(tick),
-        });
+        self.timers.push(Timer::new(interval, tick));
         self
     }
 
@@ -303,6 +308,8 @@ impl App {
         let mut painter = Painter::new(console.color_system());
         let mut first = true;
         backend.write("\x1b[?25l")?;
+        // Focus what can be focused before the first frame (keyed children
+        // appear only once drawn; `keep_focus` catches them after it).
         self.focus_first();
         loop {
             let mut cx = self.ctx();
@@ -334,6 +341,9 @@ impl App {
                     backend.painted(&screen.plain().join("\n"));
                 }
                 first = false;
+                // Keyed children exist once drawn: focus is chosen after a
+                // frame, and chosen again if the focused node has gone.
+                self.keep_focus();
             }
             let wait = self
                 .timers
@@ -366,8 +376,8 @@ impl App {
                     }
                 }
                 Event::Mouse(mouse) => {
-                    if let MouseKind::Down(_) = mouse.kind {
-                        if self.click(mouse.column, mouse.row) {
+                    if let MouseKind::Down(button) = mouse.kind {
+                        if self.click(mouse.column, mouse.row, button) {
                             return Ok(());
                         }
                     }
@@ -456,6 +466,20 @@ impl App {
         ids
     }
 
+    /// Focus the first focusable node if nothing has the focus, or if the
+    /// focused node left the tree (a keyed child that was removed), so keys
+    /// always have a path to the root.
+    fn keep_focus(&mut self) {
+        if let Some(id) = self.focus {
+            if self.path_to(id).is_empty() {
+                self.set_focus(None);
+            }
+        }
+        if self.focus.is_none() {
+            self.focus_first();
+        }
+    }
+
     fn focus_first(&mut self) {
         if let Some(&first) = self.focusable().first() {
             self.set_focus(Some(first));
@@ -492,9 +516,9 @@ impl App {
         if let Some(quit) = self.give_to_host(&Event::Key(key)) {
             return quit;
         }
-        let path = match self.focus {
-            Some(id) => self.path_to(id),
-            None => vec![self.root.id],
+        let path = match self.focus.map(|id| self.path_to(id)) {
+            Some(path) if !path.is_empty() => path,
+            _ => vec![self.root.id],
         };
         for &id in path.iter().rev() {
             let mut cx = self.ctx();
@@ -554,12 +578,16 @@ impl App {
         Some(self.apply(cx))
     }
 
-    /// Route a click to the deepest clickable node under the pointer.
-    fn click(&mut self, column: u16, row: u16) -> bool {
+    /// Route a button press to the deepest node under the pointer that
+    /// takes it: a component gets every button, in its own coordinates; an
+    /// [`on_click`](crate::Node::on_click) handler only the left one.
+    fn click(&mut self, column: u16, row: u16, button: Button) -> bool {
+        let left = button == Button::Left;
         let mut target = None;
         self.root.walk(&mut |node, _| {
             let host = matches!(&*node.kind.borrow(), crate::node::Kind::Host(_));
-            if (host || node.click.borrow().is_some()) && node.rect().contains(column, row) {
+            let clickable = left && node.click.borrow().is_some();
+            if (host || clickable) && node.rect().contains(column, row) {
                 target = Some((node.id, node.rect()));
             }
         });
@@ -568,13 +596,13 @@ impl App {
         };
         self.set_focus(Some(id));
         // A component gets the click in its own coordinates.
-        let local = rich_interact::Mouse::new(
-            rich_interact::MouseKind::Down(rich_interact::Button::Left),
-            column - rect.x,
-            row - rect.y,
-        );
+        let local =
+            rich_interact::Mouse::new(MouseKind::Down(button), column - rect.x, row - rect.y);
         if let Some(quit) = self.give_to_host(&Event::Mouse(local)) {
             return quit;
+        }
+        if !left {
+            return false;
         }
         let mut cx = self.ctx();
         let runtime = self.runtime.clone();
