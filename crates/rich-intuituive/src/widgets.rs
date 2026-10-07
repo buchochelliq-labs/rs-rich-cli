@@ -1,6 +1,7 @@
 //! Ready-made widgets, built on the public [`Widget`] trait as an app's own
-//! would be: a [`table`] with a selectable row and sized columns, and a
-//! [`tabs`] strip.
+//! would be: a [`table`] with a selectable row and sized columns, a
+//! [`virtual_list`] of any length, a [`tabs`] strip, a [`tree`], [`split`]
+//! panes and a [`calendar`].
 //!
 //! [`scroll`](crate::scroll) and anchored pop-ups
 //! ([`Ctx::popup`](crate::Ctx::popup)) are part of the framework itself,
@@ -15,6 +16,10 @@ use crate::layout::{solve, Size, Track};
 use crate::node::{Axis, Node};
 use crate::reactive::Signal;
 use crate::widget::{widget, Canvas, DrawCx, EventCx, MeasureCx, Used, Widget, WidgetEvent};
+
+pub use crate::calendar::{calendar, calendar_with, Date};
+pub use crate::split::{hsplit, split, split_with, vsplit};
+pub use crate::tree::{tree, tree_with, TreeItem};
 
 /// A table column: its title and how wide it is (cells, a percentage, a
 /// flexible share, or [`Size::Auto`]: as wide as its title and the cells
@@ -62,9 +67,14 @@ impl Rows {
 }
 
 struct Table {
+    name: &'static str,
     columns: Vec<Column>,
     rows: Rows,
     selected: Signal<usize>,
+    /// Whether the header row is drawn (a list has none).
+    header: bool,
+    /// The theme style of the selection while it does not have the focus.
+    blur: &'static str,
     /// The first row in view, and the rows of the body last drawn.
     first: Cell<usize>,
     body: Cell<usize>,
@@ -118,11 +128,54 @@ pub fn virtual_table(
     table_from(columns, rows, selected)
 }
 
+/// A list of markup rows, one selected, that asks only for the rows in
+/// view: `len` is how many there are and `row` makes one, so a list of a
+/// million rows costs a screenful. The keys, clicks and the wheel move the
+/// selection as in a [`table`]. The selection is highlighted in the theme's
+/// `selected` style while the list has the focus, and `list.selected`
+/// otherwise.
+///
+/// ```
+/// use intuituive::prelude::*;
+/// use intuituive::widgets::virtual_list;
+///
+/// let app = App::new(|| {
+///     let selected = signal(0usize);
+///     virtual_list(|| 1_000_000, |i| format!("row {i}"), selected).on_key("q", |cx| cx.quit())
+/// });
+/// let screen = app.render_with(&["end", "q"], 16, 3).unwrap();
+/// assert_eq!(screen[0].trim_end(), "row 999997");
+/// assert_eq!(screen[2].trim_end(), "row 999999");
+/// ```
+pub fn virtual_list(
+    len: impl Fn() -> usize + 'static,
+    row: impl Fn(usize) -> String + 'static,
+    selected: Signal<usize>,
+) -> Node {
+    let rows = Rows::Lazy {
+        len: Box::new(len),
+        row: Box::new(move |i| vec![row(i)]),
+    };
+    widget(Table {
+        name: "virtual_list",
+        columns: vec![Column::new("", Size::Flex(1))],
+        rows,
+        selected,
+        header: false,
+        blur: "list.selected",
+        first: Cell::new(0),
+        body: Cell::new(1),
+    })
+}
+
 fn table_from(columns: Vec<Column>, rows: Rows, selected: Signal<usize>) -> Node {
     widget(Table {
+        name: "table",
         columns,
         rows,
         selected,
+        header: true,
+        blur: "table.selected",
         first: Cell::new(0),
         body: Cell::new(1),
     })
@@ -130,7 +183,7 @@ fn table_from(columns: Vec<Column>, rows: Rows, selected: Signal<usize>) -> Node
 
 /// `markup` rendered on one line `width` cells wide, padded or cut with an
 /// ellipsis.
-fn cell_line(console: &Console, markup: &str, width: u16) -> Vec<Segment> {
+pub(crate) fn cell_line(console: &Console, markup: &str, width: u16) -> Vec<Segment> {
     if width == 0 {
         return Vec::new();
     }
@@ -152,14 +205,14 @@ fn cell_line(console: &Console, markup: &str, width: u16) -> Vec<Segment> {
 }
 
 /// The cells a cell of markup takes.
-fn markup_width(markup: &str) -> u16 {
+pub(crate) fn markup_width(markup: &str) -> u16 {
     let text =
         rich::Text::from_markup(markup).unwrap_or_else(|_| rich::Text::new(markup.to_string()));
     text.cell_len().min(u16::MAX as usize) as u16
 }
 
 /// `style` laid over every segment of `line`.
-fn over(line: Vec<Segment>, style: &Style) -> Vec<Segment> {
+pub(crate) fn over(line: Vec<Segment>, style: &Style) -> Vec<Segment> {
     line.into_iter()
         .map(|segment| {
             let combined = match &segment.style {
@@ -181,19 +234,22 @@ impl Table {
 
 impl Widget for Table {
     fn name(&self) -> &'static str {
-        "table"
+        self.name
     }
 
     fn measure(&mut self, _cx: &MeasureCx, axis: Axis, width: u16, _height: u16) -> u16 {
         match axis {
-            Axis::Vertical => (self.rows.len() + 1).min(u16::MAX as usize) as u16,
+            Axis::Vertical => {
+                (self.rows.len() + self.header as usize).min(u16::MAX as usize) as u16
+            }
             Axis::Horizontal => width,
         }
     }
 
     fn draw(&mut self, cx: &mut DrawCx, canvas: &mut Canvas) {
         let (width, height) = (canvas.width(), canvas.height());
-        let body = height.saturating_sub(1) as usize;
+        let top = self.header as u16;
+        let body = height.saturating_sub(top) as usize;
         self.body.set(body.max(1));
         let len = self.rows.len();
         let selected = self.selected.get().min(len.saturating_sub(1));
@@ -238,13 +294,15 @@ impl Widget for Table {
             }
             out
         };
-        let header_style = cx.style("table.header", "bold");
-        let header = line(&mut self.columns.iter().map(|c| c.title.as_str()));
-        canvas.lines_at(0, 0, width, 1, &[over(header, &header_style)]);
+        if self.header {
+            let header_style = cx.style("table.header", "bold");
+            let header = line(&mut self.columns.iter().map(|c| c.title.as_str()));
+            canvas.lines_at(0, 0, width, 1, &[over(header, &header_style)]);
+        }
         let highlight = if cx.focused() {
             cx.style("selected", "reverse")
         } else {
-            cx.style("table.selected", "underline")
+            cx.style(self.blur, "underline")
         };
         for (i, row) in rows.iter().enumerate() {
             let mut cells = row.iter().map(String::as_str);
@@ -256,7 +314,7 @@ impl Widget for Table {
                 }
                 segments = over(segments, &highlight);
             }
-            canvas.lines_at(0, 1 + i as u16, width, 1, &[segments]);
+            canvas.lines_at(0, top + i as u16, width, 1, &[segments]);
         }
     }
 
@@ -277,8 +335,8 @@ impl Widget for Table {
                 }
             }
             WidgetEvent::Mouse(mouse) => match mouse.kind {
-                MouseKind::Down(_) if mouse.row >= 1 => {
-                    let row = self.first.get() + mouse.row as usize - 1;
+                MouseKind::Down(_) if mouse.row >= self.header as u16 => {
+                    let row = self.first.get() + (mouse.row - self.header as u16) as usize;
                     if row < self.rows.len() {
                         self.selected.set(row);
                     }

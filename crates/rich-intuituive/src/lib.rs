@@ -50,6 +50,7 @@
 //! `docs/design/intuituive.md`.
 
 pub mod app;
+mod calendar;
 pub mod inspect;
 pub mod layout;
 pub mod log;
@@ -57,7 +58,9 @@ pub mod menu;
 pub mod node;
 pub mod reactive;
 pub mod screen;
+mod split;
 pub mod task;
+mod tree;
 pub mod widget;
 pub mod widgets;
 
