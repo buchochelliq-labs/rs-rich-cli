@@ -1,9 +1,9 @@
 {
   "tape": "docs/tapes/intuituive.tape",
-  "tape_fnv1a64": "5e5312d7f6bdf62c",
+  "tape_fnv1a64": "c9dc7219fe72bf8c",
   "recorder": "rs-rich-record 0.0.5",
   "rich": null,
-  "commit": "31e16bf68af5e54904a0247da772606f2665fc9c",
+  "commit": "8158ab560c4e8d48e4d3b514a84cce8e67c2c38f",
   "screenshots": [
     "todo",
     "inspector",
@@ -11,7 +11,8 @@
     "inline",
     "meters",
     "planner",
-    "planner-palette"
+    "planner-palette",
+    "planner-menu"
   ],
   "note": "Every frame is real output of the program under test on a PTY."
 }

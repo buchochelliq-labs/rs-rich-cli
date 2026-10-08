@@ -1,0 +1,22 @@
+~/project/src
+src/          │Name                                              Size│//! orbit as a library: the scheduler a┃
+tests/        │event_loop.rs                                     611B│                                       │
+Cargo.toml    │lib.rs                                            225B│pub mod scheduler {                    │
+README.md     │main.╭──────────────────────╮                     289B│    /// How many jobs run at once.     │
+              │rende│ Yank path         y  │                     271B│    pub const DEFAULT_WORKERS: usize = │
+              │     │──────────────────────│                         │    /// Tries before a job fails.      │
+              │     │ Show hidden files .  │                         │    pub const RETRIES: u32 = 3;        │
+              │     │ New tab here      t  │                         │}                                      │
+              │     ╰──────────────────────╯                         │                                       │
+              │                                                      │                                       │
+              │                                                      │                                       │
+              │                                                      │                                       │
+              │                                                      │                                       │
+              │                                                      │                                       │
+              │                                                      │                                       │
+              │                                                      │                                       │
+              │                                                      │                                       │
+              │                                                      │                                       │
+              │                                                      │                                       │
+              │                                                      │                                       │
+2/4 · 225B · sort name  ? keys

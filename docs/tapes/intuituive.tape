@@ -95,5 +95,11 @@ Wait /add a task/
 Sleep 300ms
 Screenshot planner-palette
 Escape
+F10
+Enter
+Wait /New task/
+Sleep 300ms
+Screenshot planner-menu
+Escape
 Type "q"
 Wait /❯\s*$/

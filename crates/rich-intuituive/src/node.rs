@@ -86,6 +86,9 @@ pub struct Node {
     /// Whether it was last drawn in its focus style.
     highlit: Cell<bool>,
     pub(crate) focusable: bool,
+    /// Takes the focus when its screen opens, before the first focusable
+    /// node does.
+    pub(crate) autofocus: bool,
     pub(crate) keys: RefCell<Vec<(Vec<Key>, String, Handler)>>,
     pub(crate) click: RefCell<Option<Handler>>,
     pub(crate) mouse: RefCell<Option<MouseHandler>>,
@@ -196,6 +199,7 @@ impl Node {
             drawn: Cell::new(None),
             highlit: Cell::new(false),
             focusable: false,
+            autofocus: false,
             keys: RefCell::new(Vec::new()),
             click: RefCell::new(None),
             mouse: RefCell::new(None),
@@ -382,6 +386,32 @@ impl Node {
     /// Put this node in the Tab order, so it can hold the focus.
     pub fn focusable(mut self) -> Node {
         self.focusable = true;
+        self
+    }
+
+    /// Give this node the focus when its screen opens (and whenever the
+    /// screen has nothing focused), instead of the first focusable node:
+    /// a search box, or the list a screen is about. It also puts the node
+    /// in the Tab order. With several, the first in the Tab order wins.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| {
+    ///     let picked = signal("");
+    ///     column([
+    ///         label("menu").focusable().on_key("x", move |_| picked.set("menu")),
+    ///         label("list").autofocus().on_key("x", move |_| picked.set("list")),
+    ///         text!("{picked}"),
+    ///     ])
+    ///     .on_key("q", |cx| cx.quit())
+    /// });
+    /// let screen = app.render_with(&["x", "q"], 10, 3).unwrap();
+    /// assert_eq!(screen[2].trim_end(), "list");
+    /// ```
+    pub fn autofocus(mut self) -> Node {
+        self.focusable = true;
+        self.autofocus = true;
         self
     }
 
@@ -876,10 +906,14 @@ impl Node {
         let mut relaid = false;
         let mut restyled = false;
         if redraw {
-            if let Some(last) = last.filter(|last| !last.is_empty()) {
-                if (last.width, last.height) != (rect.width, rect.height) {
-                    frame.resized.push(id);
-                }
+            // Told its size the first time it is laid out (or shown again),
+            // and whenever the size changes.
+            let changed = match last.filter(|last| !last.is_empty()) {
+                Some(last) => (last.width, last.height) != (rect.width, rect.height),
+                None => true,
+            };
+            if changed && !rect.is_empty() {
+                frame.resized.push(id);
             }
             // The children's layout from the stylesheet, before they are
             // laid out.
