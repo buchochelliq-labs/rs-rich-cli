@@ -479,8 +479,8 @@ fn a_hidden_node_and_its_subtree_leave_the_tree_but_are_drawn() {
     assert_eq!(
         tree,
         [
+            // The status says its text, so the text inside is left out.
             (Role::Status, "0 loaded".into()),
-            (Role::Text, "0 loaded".into()),
             (Role::Button, "Save".into()),
         ],
         "the logo, the decor and what is in it, and the hidden live line are left out"

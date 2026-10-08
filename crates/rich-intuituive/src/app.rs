@@ -1236,7 +1236,7 @@ impl App {
             started: false,
             origin: 0,
             done: false,
-            written: HashMap::new(),
+            written: Vec::new(),
             written_focus: None,
         }
     }
@@ -1306,12 +1306,13 @@ impl App {
         let hidden = self.hidden_rects();
         let mut out = Vec::new();
         let mut included: Vec<NodeId> = Vec::new();
-        let mut left_out: Vec<NodeId> = Vec::new();
+        // Nodes whose insides are left out: hidden ones, and ones named by
+        // what they show, which says what is inside already (a live row).
+        let mut closed: Vec<NodeId> = Vec::new();
         crate::node::walk_screen(&top.root, &mut |node, path, shift, clip| {
             let id = node.id();
-            // Hidden, with what is inside.
-            if node.is_access_hidden() || path.iter().any(|id| left_out.contains(id)) {
-                left_out.push(id);
+            if node.is_access_hidden() || path.iter().any(|id| closed.contains(id)) {
+                closed.push(id);
                 return;
             }
             let mut role = node.access_role();
@@ -1331,9 +1332,8 @@ impl App {
                 .filter(|id| included.contains(id))
                 .count();
             let shown = || screen_text(screen, rect, &hidden);
-            let name = match label {
-                Some(label) => label,
-                None => match role {
+            let named_by_text = label.is_none()
+                && match role {
                     Role::Text
                     | Role::Button
                     | Role::TextBox
@@ -1344,11 +1344,18 @@ impl App {
                     | Role::MenuItem
                     | Role::TreeItem
                     | Role::CheckBox
-                    | Role::Switch => shown(),
+                    | Role::Switch => true,
                     // A dialog that is one line of text says it.
-                    Role::Dialog if !node.has_children() => shown(),
-                    _ => String::new(),
-                },
+                    Role::Dialog => !node.has_children(),
+                    _ => false,
+                };
+            let name = match label {
+                Some(label) => label,
+                None if named_by_text => {
+                    closed.push(id);
+                    shown()
+                }
+                None => String::new(),
             };
             let value = if role.has_items() {
                 node.cursor().map(|at| {
@@ -1573,9 +1580,12 @@ impl App {
                 frame.damage.push(rect);
             }
         }
-        // Toasts, newest at the bottom right, over everything.
+        // Toasts, newest at the bottom right, over everything. Linear, they
+        // are written as lines instead, and nothing covers the nodes whose
+        // names are read from the screen.
         let mut bottom = area.bottom();
-        for (markup, _) in self.toasts.iter().rev() {
+        let toasts: &[(String, Duration)] = if self.linear { &[] } else { &self.toasts };
+        for (markup, _) in toasts.iter().rev() {
             let text =
                 rich::Text::from_markup(markup).unwrap_or_else(|_| rich::Text::new(markup.clone()));
             let w = (text.cell_len() as u16 + 4).min(area.width.saturating_sub(2));
@@ -1610,7 +1620,7 @@ impl App {
             bottom -= 3;
         }
         // A tooltip, over the toasts too.
-        if let Some(tip) = self.tip.as_ref().filter(|tip| tip.shown) {
+        if let Some(tip) = self.tip.as_ref().filter(|tip| tip.shown && !self.linear) {
             let look = self.theme.named("tooltip", "reverse");
             frame
                 .damage
@@ -2714,9 +2724,9 @@ pub struct Driver {
     /// Inline: the terminal row the region starts on.
     origin: u16,
     done: bool,
-    /// Linear mode: each node's line as last written, and what had the
-    /// focus.
-    written: HashMap<NodeId, String>,
+    /// Linear mode: each node's line as last written, a map for each
+    /// screen on the stack, and what had the focus.
+    written: Vec<HashMap<NodeId, String>>,
     written_focus: Option<NodeId>,
 }
 
@@ -3123,9 +3133,14 @@ impl Driver {
     /// Linear mode: the lines of the nodes whose line changed since they
     /// were last written (all of them the first time), in reading order,
     /// the focus with `→ ` when it moved, then what was announced. Each
-    /// ends with `\r\n`: the terminal is in raw mode.
+    /// ends with `\r\n`: the terminal is in raw mode. A screen that
+    /// closes leaves the one below as it was last written, so going back
+    /// says only what changed there, and where the focus is.
     fn lines(&mut self) -> String {
         let tree = self.app.accessibility(&self.screen);
+        let screens = self.app.layers.len();
+        self.written.resize_with(screens, HashMap::new);
+        let before = &self.written[screens - 1];
         let focus = tree.iter().find(|node| node.focused).map(|node| node.id);
         let moved = focus != self.written_focus;
         let mut lines = Vec::new();
@@ -3135,13 +3150,13 @@ impl Driver {
             if !line.is_empty() {
                 if node.focused && moved {
                     lines.push(format!("→ {line}"));
-                } else if self.written.get(&node.id) != Some(&line) {
+                } else if before.get(&node.id) != Some(&line) {
                     lines.push(line.clone());
                 }
             }
             written.insert(node.id, line);
         }
-        self.written = written;
+        self.written[screens - 1] = written;
         self.written_focus = focus;
         lines.append(&mut self.app.unwritten);
         lines.iter().map(|line| format!("{line}\r\n")).collect()

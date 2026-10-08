@@ -1,11 +1,91 @@
 //! Linear mode: the accessibility tree written as lines of text, then only
 //! what changed, the focus moving, and what was announced.
 
+#[path = "../examples/access.rs"]
+#[allow(dead_code)]
+mod access;
+
 use std::time::Duration;
 
 use intuituive::interact::{Event, Key};
 use intuituive::prelude::*;
 use intuituive::widgets::{tree, TreeItem};
+
+/// The transcript the screen reader guide shows
+/// (docs/guide/intuituive/screen-readers.md): each key, then what is
+/// written.
+#[test]
+fn the_access_example_reads_as_a_transcript() {
+    let mut driver = access::access_app().linear(true).driver(80, 20);
+    let mut transcript = Vec::new();
+    let keys = [
+        "start",
+        "tab",
+        "right",
+        "down",
+        "tab",
+        "down",
+        "s",
+        "shift+tab",
+        "shift+tab",
+        "right",
+        "tab",
+        "space",
+        "d",
+        "n",
+        "r",
+    ];
+    for key in keys {
+        transcript.push(format!("[{key}]"));
+        transcript.extend(step(&mut driver, (key != "start").then_some(key)));
+    }
+    let expected = "\
+[start]
+Notes
+→ Sections, tab list, 1 of 2: Files, selected
+Folders, region
+Folders, tree, 1 of 3: src, selected, collapsed
+Files, region
+Files, list, 1 of 10: notes-1.md, selected
+10 files, loaded once
+Save, button
+Delete, button
+Reload, button
+tab moves · space ticks · s saves · d deletes · r reloads · q quits
+[tab]
+→ Folders, tree, 1 of 3: src, selected, collapsed
+[right]
+Folders, tree, 1 of 5: src, selected, expanded
+[down]
+Folders, tree, 2 of 5: main.rs, selected
+[tab]
+→ Files, list, 1 of 10: notes-1.md, selected
+[down]
+Files, list, 2 of 10: notes-2.md, selected
+[s]
+Saved
+[shift+tab]
+→ Folders, tree, 2 of 5: main.rs, selected
+[shift+tab]
+→ Sections, tab list, 1 of 2: Files, selected
+[right]
+Sections, tab list, 2 of 2: Settings, selected
+Settings, region
+Wrap lines, check box, checked
+Dark theme, switch, not checked
+[tab]
+→ Wrap lines, check box, checked
+[space]
+Wrap lines, check box, not checked
+[d]
+Delete, dialog
+Delete notes-1.md? y / n
+[n]
+→ Wrap lines, check box, not checked
+[r]
+Loading…, busy";
+    assert_eq!(transcript.join("\n"), expected);
+}
 
 fn step(driver: &mut intuituive::Driver, key: Option<&str>) -> Vec<String> {
     if let Some(key) = key {
