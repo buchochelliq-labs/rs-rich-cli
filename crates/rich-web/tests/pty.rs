@@ -123,15 +123,34 @@ fn a_program_is_checked_like_an_app() {
         assert!(page.contains("<script src=\"xterm.js\"></script>"));
     }
 
-    // The WebSocket: token, origin, and the cap.
+    // The WebSocket: token and origin, refused before any program starts.
     assert!(upgrade(addr, "wrong", Some(&own), &host).contains("403"));
     assert!(upgrade(addr, TOKEN, None, &host).contains("403"));
     assert!(upgrade(addr, TOKEN, Some("http://evil.example"), &host).contains("403"));
     let rebound = format!("evil.example:{}", addr.port());
     assert!(upgrade(addr, TOKEN, Some(&format!("http://{rebound}")), &rebound).contains("403"));
-    let _first = connect(addr, 40, 5);
+    assert_eq!(server.sessions(), 0);
+    server.stop();
+
+    // The cap, with a program that runs until its page goes (a test host,
+    // so this runs where `cat` does not).
+    let server = Server::bind_host("127.0.0.1:0", || Box::new(ReplayHost::new()))
+        .unwrap()
+        .token(TOKEN)
+        .max_sessions(1)
+        .spawn()
+        .unwrap();
+    let addr = server.local_addr();
+    let own = format!("http://{addr}");
+    let mut first = connect(addr, 40, 5);
     wait_for("the session to start", || server.sessions() == 1);
-    assert!(upgrade(addr, TOKEN, Some(&own), &host).contains("503"));
+    assert!(upgrade(addr, TOKEN, Some(&own), &addr.to_string()).contains("503"));
+    // Its slot is free again once it ends.
+    first.close(None).unwrap();
+    let _ = read_close_reason(&mut first);
+    wait_for("the session to end", || server.sessions() == 0);
+    let _second = connect(addr, 40, 5);
+    wait_for("another session", || server.sessions() == 1);
     server.stop();
 }
 
