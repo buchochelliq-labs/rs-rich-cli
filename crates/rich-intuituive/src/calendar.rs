@@ -187,6 +187,10 @@ impl Widget for Calendar {
         "calendar"
     }
 
+    fn role(&self) -> crate::a11y::Role {
+        crate::a11y::Role::Grid
+    }
+
     fn measure(&mut self, _cx: &MeasureCx, axis: Axis, _width: u16, _height: u16) -> u16 {
         match axis {
             Axis::Horizontal => WIDTH,

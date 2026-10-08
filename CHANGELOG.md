@@ -9,6 +9,29 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### intuiTUIve: accessibility (rs-rich-intuituive 0.0.3)
+
+0.0.18 workstream 6.
+
+- **`App::accessible(true)`**, on by default with `INTUITUIVE_ACCESSIBLE`
+  or `RICH_A11Y=screen-reader`.
+  - The terminal's cursor sits on what has the focus: the caret, else the
+    selected row, cell, tab or menu entry. Screen readers follow it with
+    no bridge.
+  - Text mode: boxes are drawn as blanks (titles stay), there is no
+    colour, a `>` marks the selected item in lists, tables, trees and tab
+    strips, and animations jump to their end.
+- **Roles and names:**
+  - `Widget::role` (default `Role::Group`) is set by every built-in.
+  - `Widget::cursor` gives the selected item's place.
+  - `Node::role`, `Node::label` (the accessible name) and `Node::live`
+    (announce changes).
+  - `Driver::accessibility()` returns the tree: depth, role, name, value,
+    focus and place.
+- **Announcements:** toasts, a screen or dialog opening, live nodes and
+  `Ctx::announce` go to `App::announcer` and wait in
+  `Driver::take_announcements()`.
+
 ### intuiTUIve: stylesheets (rs-rich-intuituive 0.0.3)
 
 0.0.18 workstream 4.

@@ -210,6 +210,22 @@ pub trait Widget: Any {
     fn caret(&self) -> Option<(u16, u16)> {
         None
     }
+
+    /// What it is, for assistive technology. Layout widgets keep the
+    /// default, [`Role::Group`](crate::a11y::Role::Group).
+    fn role(&self) -> crate::a11y::Role {
+        crate::a11y::Role::Group
+    }
+
+    /// Where its selected item is (a list's row, a table's cell, a tab), in
+    /// its own coordinates: in [accessible](crate::App::accessible) mode
+    /// the terminal's cursor goes to its top left while it has the focus,
+    /// so a screen reader reads it, and the accessibility tree gives what
+    /// it shows as the widget's value. Wider than the widget is fine: it
+    /// is clipped.
+    fn cursor(&self) -> Option<crate::screen::Rect> {
+        None
+    }
 }
 
 /// A node with `widget`'s behaviour.

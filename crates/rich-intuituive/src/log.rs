@@ -106,6 +106,10 @@ impl Widget for LogView {
         "log"
     }
 
+    fn role(&self) -> crate::a11y::Role {
+        crate::a11y::Role::Log
+    }
+
     fn measure(&mut self, _cx: &MeasureCx, axis: Axis, width: u16, _height: u16) -> u16 {
         match axis {
             Axis::Vertical => self

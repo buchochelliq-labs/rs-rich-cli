@@ -290,6 +290,11 @@ impl Panel {
         }
     }
 
+    /// The title it shows.
+    pub fn shown_title(&self) -> String {
+        self.title().to_string()
+    }
+
     /// The title: the one code gave, else the stylesheet's.
     fn title(&self) -> &str {
         match (&self.title[..], &self.look.title) {
@@ -302,6 +307,10 @@ impl Panel {
 impl Widget for Panel {
     fn name(&self) -> &'static str {
         "panel"
+    }
+
+    fn role(&self) -> crate::a11y::Role {
+        crate::a11y::Role::Region
     }
 
     fn describe(&self) -> Option<String> {

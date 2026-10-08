@@ -49,6 +49,7 @@
 //! The design, and how it compares with ratatui, is in
 //! `docs/design/intuituive.md`.
 
+pub mod a11y;
 pub mod app;
 mod builtin;
 mod calendar;
