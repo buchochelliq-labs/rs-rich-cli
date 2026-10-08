@@ -2203,11 +2203,12 @@ impl App {
         let at = |value: u16, by: i32, from: u16| {
             (value as i32 + by - from as i32).clamp(0, u16::MAX as i32) as u16
         };
-        let local = rich_interact::Mouse::new(
-            mouse.kind,
-            at(mouse.column, shift.0, rect.x),
-            at(mouse.row, shift.1, rect.y),
-        );
+        // Keeping its modifiers: Shift+wheel scrolls across.
+        let local = rich_interact::Mouse {
+            column: at(mouse.column, shift.0, rect.x),
+            row: at(mouse.row, shift.1, rect.y),
+            ..mouse
+        };
         if let Some(quit) = self.give_to_widget_at(id, shift, &WidgetEvent::Mouse(local)) {
             return Some(quit);
         }
@@ -2548,7 +2549,7 @@ impl Driver {
         let Some(row) = mouse.row.checked_sub(top) else {
             return false;
         };
-        let mouse = rich_interact::Mouse::new(mouse.kind, mouse.column, row);
+        let mouse = rich_interact::Mouse { row, ..mouse };
         if app.selecting && app.select(mouse, &self.screen) {
             return false;
         }

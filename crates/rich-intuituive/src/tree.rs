@@ -480,12 +480,12 @@ pub fn tree_lazy<E: std::fmt::Display>(
         }
     }
 
-    // Load what an opened item holds, once.
+    // Load what an opened item holds, once: when an item is opened, and
+    // when the roots change under items already open.
     let opened = roots.clone();
     watch(
-        move || expanded.get(),
-        move |open: HashSet<Vec<usize>>, _| {
-            let roots = opened();
+        move || (expanded.get(), opened()),
+        move |(open, roots): (HashSet<Vec<usize>>, Vec<LazyItem>), _| {
             for path in open {
                 let item = loaded.with_untracked(|loaded| find(&roots, loaded, &path));
                 let Some(item) = item.filter(|item| item.has_children) else {
