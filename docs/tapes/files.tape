@@ -33,6 +33,11 @@ Wait /yank/
 Sleep 300ms
 Screenshot files-palette
 Escape
+RightClick 20 3
+Wait /Yank path/
+Sleep 300ms
+Screenshot files-menu
+Escape
 Type "t"
 Type "h"
 Wait /2 project/
