@@ -1,17 +1,22 @@
 //! The PTY harness: run this test binary's `child` test inside a real PTY
-//! under `sh`, then `stty -a` in the same terminal.
+//! under `sh`, then `stty -a` in the same terminal. The child learns its
+//! mode from `INTERACT_CHILD`, and the backend to drive the terminal with
+//! from `INTERACT_BACKEND` (crossterm when unset).
 #![allow(dead_code)]
 
 use std::io::{Read, Write};
+use std::process::Command;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use portable_pty::{native_pty_system, CommandBuilder, PtySize};
+use portable_pty::{native_pty_system, CommandBuilder, MasterPty, PtySize};
 
 pub struct Pty {
     output: Arc<Mutex<Vec<u8>>>,
     writer: Arc<Mutex<Box<dyn Write + Send>>>,
     child: Box<dyn portable_pty::Child + Send + Sync>,
+    /// Open until the child is done, and for resizing the terminal.
+    master: Option<Box<dyn MasterPty + Send>>,
 }
 
 /// The kitty keyboard protocol's query, as crossterm sends it: the flags,
@@ -23,6 +28,24 @@ impl Pty {
     /// query's device attributes only, as xterm does.
     pub fn start(mode: &str) -> Pty {
         Pty::start_as(mode, false)
+    }
+
+    /// [`start`](Pty::start), with the child driving the terminal with
+    /// `backend` (a `BackendKind` name).
+    pub fn start_on(backend: &str, mode: &str) -> Pty {
+        Pty::start_full(mode, false, "", Some(backend))
+    }
+
+    /// [`start_kitty`](Pty::start_kitty), with the child driving the
+    /// terminal with `backend`.
+    pub fn start_kitty_on(backend: &str, mode: &str) -> Pty {
+        Pty::start_full(mode, true, "", Some(backend))
+    }
+
+    /// [`start_kitty_piped`](Pty::start_kitty_piped), with the child
+    /// driving the terminal with `backend`.
+    pub fn start_kitty_piped_on(backend: &str, mode: &str) -> Pty {
+        Pty::start_full(mode, true, " | sed -n l", Some(backend))
     }
 
     /// A terminal with the kitty keyboard protocol: it answers the query
@@ -43,6 +66,10 @@ impl Pty {
     }
 
     fn start_with(mode: &str, kitty: bool, pipe: &str) -> Pty {
+        Pty::start_full(mode, kitty, pipe, None)
+    }
+
+    fn start_full(mode: &str, kitty: bool, pipe: &str, backend: Option<&str>) -> Pty {
         let pty = native_pty_system()
             .openpty(PtySize {
                 rows: 24,
@@ -61,6 +88,9 @@ impl Pty {
         command.env("INTERACT_CHILD", mode);
         command.env("TERM", "xterm-256color");
         command.env("RUST_BACKTRACE", "0");
+        if let Some(backend) = backend {
+            command.env("INTERACT_BACKEND", backend);
+        }
         let child = pty.slave.spawn_command(command).unwrap();
         drop(pty.slave);
         let mut reader = pty.master.try_clone_reader().unwrap();
@@ -96,13 +126,25 @@ impl Pty {
                 }
             }
         });
-        // Keep the master open until the child is done.
-        std::mem::forget(pty.master);
         Pty {
             output,
             writer,
             child,
+            master: Some(pty.master),
         }
+    }
+
+    /// Resize the terminal, as a window would be: the child gets SIGWINCH.
+    pub fn resize(&self, cols: u16, rows: u16) {
+        let master = self.master.as_ref().expect("the terminal is open");
+        master
+            .resize(PtySize {
+                rows,
+                cols,
+                pixel_width: 0,
+                pixel_height: 0,
+            })
+            .unwrap();
     }
 
     pub fn text(&self) -> String {
@@ -137,6 +179,8 @@ impl Pty {
     pub fn finish(mut self) -> (String, vt100::Parser) {
         self.wait_for("STTY-DONE");
         let _ = self.child.wait();
+        // Never closed while the reader thread may still read it.
+        std::mem::forget(self.master.take());
         let bytes = self.output.lock().unwrap().clone();
         let mut parser = vt100::Parser::new(24, 80, 0);
         parser.process(&bytes);
@@ -145,10 +189,11 @@ impl Pty {
 }
 
 /// Raw mode off, the main screen back, the cursor shown, mouse reporting
-/// off, and the kitty keyboard protocol's flags popped as often as pushed.
+/// off, and the kitty keyboard protocol's flags popped as often as pushed
+/// (crossterm pushes flags 1 and 2, termwiz flag 1).
 pub fn assert_restored(output: &str, parser: &vt100::Parser) {
     assert_eq!(
-        output.matches("\x1b[>3u").count(),
+        output.matches("\x1b[>3u").count() + output.matches("\x1b[>1u").count(),
         output.matches("\x1b[<1u").count(),
         "kitty keyboard flags pushed and popped unevenly:\n{output:?}"
     );
@@ -166,4 +211,60 @@ pub fn assert_restored(output: &str, parser: &vt100::Parser) {
         "mouse reporting still on"
     );
     assert!(!screen.bracketed_paste(), "bracketed paste still on");
+}
+
+/// The child's process id, from its view.
+pub fn child_pid(pty: &Pty) -> String {
+    let text = pty.text();
+    let start = text.rfind("pid ").expect("the child shows its pid") + 4;
+    let end = start + text[start..].find('.').expect("pid ends with a dot");
+    text[start..end].to_string()
+}
+
+/// After the suspend: every mode left (so the shell has a normal terminal);
+/// after `SIGCONT`: every mode on again and the view painted anew.
+pub fn suspends_and_resumes(pty: &mut Pty, suspend: impl FnOnce(&mut Pty, &str)) {
+    pty.wait_for("child ready");
+    let pid = child_pid(pty);
+    let before = pty.text().len();
+    suspend(pty, &pid);
+    let end = std::time::Instant::now() + std::time::Duration::from_secs(30);
+    let stopped = loop {
+        let text = pty.text();
+        let after = &text[before..];
+        if ["\x1b[?1049l", "\x1b[?1000l", "\x1b[?2004l", "\x1b[?25h"]
+            .iter()
+            .all(|mode| after.contains(mode))
+        {
+            break after.len();
+        }
+        assert!(std::time::Instant::now() < end, "not restored:\n{after:?}");
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    };
+    // Stopped: `T` in the third field. The session gives the terminal back
+    // before it stops itself, so the state can still read `R` for a moment
+    // after the restore sequences arrive; wait for the stop.
+    let stop_by = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    while let Ok(state) = std::fs::read_to_string(format!("/proc/{pid}/stat")) {
+        let field = state.rsplit(')').next().unwrap().split_whitespace().next();
+        if field == Some("T") {
+            break;
+        }
+        assert!(
+            std::time::Instant::now() < stop_by,
+            "never stopped: {state}"
+        );
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    Command::new("kill").args(["-CONT", &pid]).status().unwrap();
+    let end = std::time::Instant::now() + std::time::Duration::from_secs(30);
+    loop {
+        let text = pty.text();
+        let resumed = &text[before + stopped..];
+        if resumed.contains("\x1b[?1049h") && resumed.contains("child ready") {
+            break;
+        }
+        assert!(std::time::Instant::now() < end, "not resumed:\n{resumed:?}");
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
 }

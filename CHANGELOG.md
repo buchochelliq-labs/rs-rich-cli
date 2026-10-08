@@ -212,6 +212,56 @@ code.
   `CONTRIBUTING.md`, the architecture, branching and porting docs, and the
   README and home-page tables.
 
+### intuiTUIve and interact: termion and termwiz backends (rs-rich-interact 0.0.6)
+
+0.0.18 workstream 5 (#677, #678). rs-rich-intuituive changes with it.
+
+- **Two more backends**, each behind an off-by-default feature of
+  rs-rich-interact: `termion` (Unix only) and `termwiz` (Unix and Windows).
+  `SessionOptions::backend` picks the library a `Session` drives the
+  terminal with, `BackendKind::Crossterm` by default; `BackendKind::ALL`
+  lists the ones the build has, and `BackendKind::from_name` reads one. The
+  library reads keys, the mouse, pastes and resizes, measures the terminal
+  and turns raw mode and the alternate screen on and off; the modes a
+  session turns on, and their return on every way out (finishing, Ctrl+C,
+  a panic, SIGTERM and the rest, a hand-off, Ctrl+Z, SIGTSTP and `fg`), are
+  the same code for all three. `run`, `EventLoop::terminal` and the CLI's
+  components keep crossterm.
+- **Each with its own event conversion:** `event::from_termion`, and
+  `event::from_termwiz` and `event::from_termwiz_kitty`, for loops of your
+  own. Neither library says which button a release is of, so they take
+  the new `HeldButton`. termion's parser wants an event's bytes complete
+  and has no timeout, so the termion session waits on the terminal itself,
+  cuts what it reads into events (pastes, whose markers termion does not
+  know, cut out first), and drops what termion cannot read.
+- **And its own probes.** termwiz's probe (terminfo, `COLORTERM`,
+  `NO_COLOR`) gives the colours `run` paints with
+  (`Session::color_system`) and whether the mouse and bracketed paste are
+  used. The kitty keyboard protocol stays where the library can read it:
+  crossterm as before; termwiz asks the terminal itself and pushes only
+  the protocol's first flag (exact keys, no releases), since it does not
+  read release reports; termion never turns it on, so its keys arrive as a
+  legacy terminal sends them (`Key::matches`), as workstream 2 defines.
+  termion reports no modifiers with the mouse and no movement without a
+  button.
+- **intuiTUIve:** `App::run_with(backend)` runs on the one named, and
+  `App::run` is `run_with(BackendKind::Crossterm)`; the crate's `termion`
+  and `termwiz` features turn on rs-rich-interact's. `App::run_on` now
+  suspends on Ctrl+Z (on a backend that can, unless a node on the focused
+  path binds it) and draws everything again on `fg`, through the new
+  `Driver::suspend`. It also stopped drawing over and over after a SIGTSTP
+  sent from outside: it never took the session's resumed flag, so every
+  read returned another resize.
+- **Tests:** a PTY conformance suite (`tests/pty_backends.rs`) runs against
+  every backend the build has: one table of the bytes a terminal sends and
+  the events they must arrive as (where the library reads them), the kitty
+  protocol's keys, resizes, and the terminal given back after finishing,
+  Ctrl+C, a panic, a hand-off, Ctrl+Z and SIGTSTP. intuiTUIve runs an app
+  on each backend in a PTY too (`tests/backends.rs`). CI builds and tests
+  each feature on Linux and macOS.
+- **Breaking:** `SessionOptions` has a new field (build it with
+  `..SessionOptions::default()`).
+
 ## 0.0.17 cohort
 
 ext 0.0.15 / micro 0.0.4 / record 0.0.5 / interact 0.0.5 / ratatui 0.0.2 /
