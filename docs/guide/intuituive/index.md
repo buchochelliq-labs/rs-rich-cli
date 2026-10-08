@@ -202,6 +202,9 @@ column([
   Ctrl or Alt do.
 - **Ctrl+C** quits, unless a node on the focused path binds it: then the
   binding runs, and quitting is up to you.
+- **Ctrl+Z** suspends the app on Unix, as the shell expects, and `fg`
+  draws it again (inline, in a new region below the shell's lines), unless
+  a node on the focused path binds it: then the binding runs.
 - **When the focused node goes** (a row deleted from an `each`), the focus
   moves to the next one in the Tab order, or the one before it if it was
   last.
@@ -977,6 +980,33 @@ drawn, with cursor moves relative to them, so the scrollback above is left
 alone. When the app ends, its last frame stays, and the prompt continues
 below it. The mouse is left to the terminal.
 
+## Backends
+
+`App::run` drives the terminal with crossterm. `App::run_with` picks the
+library instead: termion (Unix) or termwiz, each behind this crate's
+feature of the same name, off by default.
+
+```toml
+rs-rich-intuituive = { version = "0.0.3", features = ["termion"] }
+```
+
+```rust
+use intuituive::interact::BackendKind;
+
+app.run_with(BackendKind::Termion)?;
+```
+
+The app behaves the same on each: the alternate screen or the inline
+region, the mouse, pastes, Ctrl+Z, and the terminal given back on every way
+out. What differs is what the library reads: termion reads keys as a
+legacy terminal sends them, even in a terminal with the kitty keyboard
+protocol (so `"tab"` and `"ctrl+i"` both fire for Tab), and reports no
+modifiers with the mouse and no movement without a button, so hover does
+not show; termwiz reads the kitty protocol's keys but not their releases,
+so widgets get no `WidgetEvent::KeyUp`. [The interact
+guide](../interact/index.md#backends-crossterm-termion-termwiz) compares
+them.
+
 ## Owning the loop
 
 `App::run` owns the loop: it reads the terminal, runs timers and draws.
@@ -1022,6 +1052,13 @@ out.write_all(driver.finish().as_bytes())?;
   `resize(w, h)` sets the size directly.
 - **`screen()`** is the frame as cells, and `screen().lines()` as styled
   rich segments, to draw it somewhere else.
+- **`suspend()`** returns the bytes to write before you give the terminal
+  away for a while (Ctrl+Z, a command run in it); once it is back, call
+  `resize(w, h)` and the next `render` draws everything again.
+
+Reading termion or termwiz instead of crossterm, translate with
+`event::from_termion` or `event::from_termwiz`, which take a `HeldButton`
+to remember the mouse button between events.
 
 `run` and `run_on` are this loop, written for you, so an app behaves the
 same either way.
@@ -1107,7 +1144,5 @@ widgets in an existing app, and ratatui widgets run inside rs-rich-interact.
 
 This is an early slice (0.0.x), so the API will change. Still to come:
 Python bindings for the framework, as rs-rich-interact's components already
-have, backends besides crossterm (termion, #677, and termwiz, #678), and
-accessibility, which is designed but not built (see
-[the widgets design note](../../design/intuituive-widgets.md)). An app can
+have (see [the widgets design note](../../design/intuituive-widgets.md)). An app can
 already be [served to a browser](web.md), with rs-rich-web.

@@ -14,8 +14,10 @@
 //!
 //! - [`session`]: raw mode, the alternate screen, mouse and paste, restored
 //!   on every way out, including a panic, Ctrl+C and a hand-off to another
-//!   program (#489);
-//! - [`event`]: keys, mouse, resizes and pastes, from `crossterm`;
+//!   program (#489), driven by crossterm, or by termion or termwiz behind
+//!   the features of those names ([`BackendKind`]);
+//! - [`event`]: keys, mouse, resizes and pastes, from whichever drives the
+//!   terminal;
 //! - [`viewport`]: a scrollable window over rendered lines (#495);
 //! - [`item`]: one item model behind every picker (#452);
 //! - [`policy`]: with no terminal, under CI or with `TERM=dumb`, a
@@ -111,7 +113,7 @@ pub use compose::{
     Axis, Column, ComponentExt, Label, Layer, LayerHandle, Layers, Rect, Row, Size, Split, Stack,
     Tabs,
 };
-pub use event::{Button, Event, Key, KeyCode, Modifiers, Mouse, MouseKind};
+pub use event::{Button, Event, HeldButton, Key, KeyCode, Modifiers, Mouse, MouseKind};
 pub use event_loop::{
     degrade, run, run_with_graphics, Error, EventLoop, Handle, LoopOptions, Outcome, RunOptions,
 };
@@ -120,7 +122,7 @@ pub use keymap::{Binding, Keymap};
 pub use overlay::{Command, Help, Menu, Overlays, Palette, Shortcuts};
 pub use plugin::PluginView;
 pub use policy::{Fallback, LineIo, NotInteractive, Policy, Reason};
-pub use session::{Backend, Output, Session, SessionOptions};
+pub use session::{Backend, BackendKind, Output, Session, SessionOptions};
 pub use viewport::Viewport;
 
 /// Forward every [`Component`] method to `(**self)`.
