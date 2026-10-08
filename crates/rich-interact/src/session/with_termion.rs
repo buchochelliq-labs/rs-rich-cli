@@ -88,7 +88,10 @@ fn cut(bytes: &[u8]) -> Cut {
         return whole(utf8_len(bytes[0]));
     }
     match bytes.get(1) {
-        None => Cut::Event(1),
+        // A lone escape may be the start of a sequence split across reads
+        // (Alt+x as `ESC`, then `x`): kept until the rest comes or the
+        // control-sequence wait runs out.
+        None => Cut::Short,
         // SS3: F1 to F4.
         Some(b'O') => whole(3),
         Some(b'[') => match bytes.get(2) {
@@ -220,7 +223,12 @@ impl Reader {
     /// an event cut short is read as far as it goes.
     fn drain(&mut self, last: bool) {
         while !self.pending.is_empty() {
-            let used = match cut(&self.pending) {
+            let cut = match cut(&self.pending) {
+                // Nothing came after it: the Escape key.
+                Cut::Short if last && self.pending == [0x1b] => Cut::Event(1),
+                cut => cut,
+            };
+            let used = match cut {
                 Cut::Event(n) => {
                     if let Some(event) = parse(&self.pending[..n]) {
                         if let Some(event) = from_termion(event, &mut self.held) {
@@ -287,7 +295,7 @@ impl Drop for Reader {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::event::{Key, KeyCode};
+    use crate::event::{Key, KeyCode, Modifiers};
 
     #[test]
     fn input_is_cut_into_events() {
@@ -295,7 +303,7 @@ mod tests {
         assert_eq!(cut("é!".as_bytes()), Cut::Event(2));
         assert_eq!(cut(&"é".as_bytes()[..1]), Cut::Short);
         // Esc alone at the end of a read is the key.
-        assert_eq!(cut(b"\x1b"), Cut::Event(1));
+        assert_eq!(cut(b"\x1b"), Cut::Short);
         assert_eq!(cut(b"\x1bx!"), Cut::Event(2));
         assert_eq!(cut(b"\x1b["), Cut::Short);
         assert_eq!(cut(b"\x1b[1;5"), Cut::Short);
@@ -358,6 +366,30 @@ mod tests {
         assert_eq!(reader.pending, b"\x1b[1;");
         reader.drain(true);
         assert!(reader.pending.is_empty() && reader.events.is_empty());
+        // Alt+x split across reads: the escape waits for its `x`.
+        reader.pending = b"\x1b".to_vec();
+        reader.drain(false);
+        assert_eq!(reader.pending, b"\x1b");
+        assert!(reader.events.is_empty());
+        reader.pending.push(b'x');
+        reader.drain(false);
+        assert_eq!(
+            reader.events.drain(..).collect::<Vec<_>>(),
+            [Event::Key(Key::with(
+                KeyCode::Char('x'),
+                Modifiers {
+                    alt: true,
+                    ..Modifiers::default()
+                }
+            ))]
+        );
+        // A lone escape with nothing after it is the Escape key.
+        reader.pending = b"\x1b".to_vec();
+        reader.drain(true);
+        assert_eq!(
+            reader.events.drain(..).collect::<Vec<_>>(),
+            [Event::Key(Key::new(KeyCode::Escape))]
+        );
     }
 
     #[test]
