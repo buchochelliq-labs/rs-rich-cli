@@ -905,6 +905,29 @@ so widgets get no `WidgetEvent::KeyUp`. [The interact
 guide](../interact/index.md#backends-crossterm-termion-termwiz) compares
 them.
 
+## Synchronized output
+
+Where the terminal has synchronized output (DEC private mode 2026: kitty,
+WezTerm, iTerm2, foot, Alacritty, Ghostty, Windows Terminal and others),
+`App::run` sends each frame as one synchronized update: the terminal holds
+the screen until the whole frame, cursor and all, has arrived, then shows
+it at once. Nothing tears, and a screen reader following the cursor sees
+it move once, to the focus, instead of across every cell that changed. A
+frame that changes nothing sends nothing.
+
+The terminal is asked at start-up, in the same round trip as the kitty
+keyboard query, so detecting it costs no wait. With
+[`legacy_keys(true)`](#input-and-focus) there is no such query, and none is
+sent: synchronized output stays off unless forced. `RICH_SYNC_OUTPUT=1`
+forces it on (for a terminal that has it but does not answer the
+question), `RICH_SYNC_OUTPUT=0` off, and `App::synchronized_output(Some(true))`
+or `Some(false)` does the same from code, over the environment. With the
+termion backend, which asks nothing, it is on only when forced. The
+terminal is never left inside an update: quitting, a panic, Ctrl+Z and a
+signal all end it. Headless, `Headless::synchronized_output` wraps the
+recorded writes, so a test can assert them. [The interact
+guide](../interact/index.md#synchronized-output) has the details.
+
 ## Owning the loop
 
 `App::run` owns the loop: it reads the terminal, runs timers and draws.
