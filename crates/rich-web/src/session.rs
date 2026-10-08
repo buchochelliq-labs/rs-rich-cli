@@ -37,6 +37,9 @@ pub(crate) enum PageMessage {
     Input(Vec<Event>),
     /// The terminal is now this size.
     Resize(u16, u16),
+    /// The page's clipboard took (`true`) or refused the copy it was sent
+    /// this many copies ago, counting from 1.
+    Copied(u64, bool),
     /// Not a message the page sends.
     Unknown,
 }
@@ -50,6 +53,13 @@ pub(crate) fn parse_message(text: &str) -> PageMessage {
     if let Some(size) = text.strip_prefix('r') {
         if let Some((columns, rows)) = parse_size(size) {
             return PageMessage::Resize(columns, rows);
+        }
+    }
+    // `c` and the copy's number, `:1` when the clipboard took it, `:0`
+    // when it did not.
+    if let Some((number, ok)) = text.strip_prefix('c').and_then(|t| t.split_once(':')) {
+        if let (Ok(number), "0" | "1") = (number.parse(), ok) {
+            return PageMessage::Copied(number, ok == "1");
         }
     }
     PageMessage::Unknown
@@ -75,8 +85,10 @@ pub(crate) fn run(
 ) -> io::Result<()> {
     let start = Instant::now();
     let mut driver = app.driver(columns, rows);
-    // Copies go to the page as OSC 52, which it puts on the clipboard.
+    // Copies go to the page as OSC 52, which it puts on the clipboard; it
+    // says whether that worked, and only then does a toast say so.
     driver.set_clipboard(true);
+    let mut copies = Copies::default();
     send(socket, SETUP)?;
     let result = (|| -> io::Result<()> {
         loop {
@@ -84,7 +96,7 @@ pub(crate) fn run(
                 return Ok(());
             }
             driver.update(start.elapsed());
-            copy_all(&mut driver, socket)?;
+            copies.send(&mut driver, socket)?;
             if driver.is_done() {
                 return Ok(());
             }
@@ -93,7 +105,7 @@ pub(crate) fn run(
                     send(socket, &out)?;
                 }
             }
-            copy_all(&mut driver, socket)?;
+            copies.send(&mut driver, socket)?;
             if driver.is_done() {
                 return Ok(());
             }
@@ -129,9 +141,10 @@ pub(crate) fn run(
                     }
                 }
                 PageMessage::Resize(columns, rows) => driver.event(Event::Resize { columns, rows }),
+                PageMessage::Copied(number, ok) => copies.answered(&mut driver, number, ok),
                 PageMessage::Unknown => {}
             }
-            copy_all(&mut driver, socket)?;
+            copies.send(&mut driver, socket)?;
         }
     })();
     // Leave the page's terminal as it was, then say goodbye. Errors here
@@ -157,21 +170,70 @@ fn send(socket: &mut WebSocket<TcpStream>, text: &str) -> io::Result<()> {
     })
 }
 
-/// Put what the app copied on the page's clipboard (OSC 52), and tell the
-/// app it is there.
-fn copy_all(driver: &mut Driver, socket: &mut WebSocket<TcpStream>) -> io::Result<()> {
-    for text in driver.take_copies() {
-        let encoded = data_encoding::BASE64.encode(text.as_bytes());
-        send(socket, &format!("\x1b]52;c;{encoded}\x07"))?;
-        driver.copied(&text);
+/// Copies sent to the page (OSC 52) that it has not answered yet, by
+/// number, from 1.
+#[derive(Default)]
+struct Copies {
+    sent: u64,
+    waiting: std::collections::VecDeque<(u64, String)>,
+}
+
+/// At most this many copies wait for the page's answer; older ones are
+/// forgotten (a page that never answers).
+const COPIES_WAITING: usize = 16;
+
+impl Copies {
+    /// Send what the app copied to the page.
+    fn send(&mut self, driver: &mut Driver, socket: &mut WebSocket<TcpStream>) -> io::Result<()> {
+        for text in driver.take_copies() {
+            let encoded = data_encoding::BASE64.encode(text.as_bytes());
+            send(socket, &format!("\x1b]52;c;{encoded}\x07"))?;
+            self.sent += 1;
+            self.waiting.push_back((self.sent, text));
+            if self.waiting.len() > COPIES_WAITING {
+                self.waiting.pop_front();
+            }
+        }
+        Ok(())
     }
-    Ok(())
+
+    /// The page answered copy `number`: tell the app if it is on the
+    /// clipboard.
+    fn answered(&mut self, driver: &mut Driver, number: u64, ok: bool) {
+        if let Some(at) = self.waiting.iter().position(|(n, _)| *n == number) {
+            let (_, text) = self.waiting.remove(at).expect("found");
+            if ok {
+                driver.copied(&text);
+            }
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use intuituive::interact::Key;
+
+    #[test]
+    fn a_copy_is_copied_only_once_the_page_says_so() {
+        use intuituive::prelude::*;
+        let mut driver = App::new(|| label("x")).driver(30, 4);
+        let toast = |driver: &mut Driver| {
+            driver.update(std::time::Duration::ZERO);
+            let _ = driver.render();
+            driver.screen().plain().join("\n").contains("Copied")
+        };
+        let mut copies = Copies::default();
+        copies.waiting.push_back((1, "abc".into()));
+        copies.waiting.push_back((2, "de".into()));
+        // Refused: no toast; an answer to a copy not sent: nothing.
+        copies.answered(&mut driver, 1, false);
+        copies.answered(&mut driver, 9, true);
+        assert!(!toast(&mut driver));
+        copies.answered(&mut driver, 2, true);
+        assert!(toast(&mut driver));
+        assert!(copies.waiting.is_empty());
+    }
 
     #[test]
     fn messages_parse() {
@@ -189,5 +251,9 @@ mod tests {
         assert_eq!(parse_message("zzz"), PageMessage::Unknown);
         assert_eq!(parse_message(""), PageMessage::Unknown);
         assert_eq!(parse_message("d"), PageMessage::Input(vec![]));
+        assert_eq!(parse_message("c3:1"), PageMessage::Copied(3, true));
+        assert_eq!(parse_message("c3:0"), PageMessage::Copied(3, false));
+        assert_eq!(parse_message("c3:2"), PageMessage::Unknown);
+        assert_eq!(parse_message("cx:1"), PageMessage::Unknown);
     }
 }

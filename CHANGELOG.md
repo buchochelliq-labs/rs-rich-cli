@@ -27,7 +27,8 @@ code.
   vendored unchanged from the npm registry, checked against pinned SHA-256
   hashes by `build.rs`, embedded in the binary and served by the crate. It
   is never fetched from a CDN. The page fills the window, follows its size,
-  and puts text the app copies (OSC 52) on the browser's clipboard.
+  and puts text the app copies (OSC 52) on the browser's clipboard,
+  answering each copy so the app says "Copied" only when it worked.
 - **Input**: `rich_web::input::decode` turns what xterm.js sends (control
   characters, `ESC [`/`ESC O` keys with modifiers, F1 to F20, SGR mouse
   reports, bracketed pastes) into the rs-rich-interact events crossterm

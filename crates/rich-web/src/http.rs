@@ -113,12 +113,17 @@ pub(crate) fn allowed_hosts(local: SocketAddr) -> Option<Vec<String>> {
     if ip.is_unspecified() {
         return None;
     }
-    let mut hosts = vec![match ip {
-        IpAddr::V4(v4) => format!("{v4}:{port}"),
-        IpAddr::V6(v6) => format!("[{v6}]:{port}"),
+    let mut names = vec![match ip {
+        IpAddr::V4(v4) => v4.to_string(),
+        IpAddr::V6(v6) => format!("[{v6}]"),
     }];
     if ip.is_loopback() {
-        hosts.push(format!("localhost:{port}"));
+        names.push("localhost".into());
+    }
+    // Browsers leave HTTP's default port out of `Host` and the origin.
+    let mut hosts: Vec<String> = names.iter().map(|name| format!("{name}:{port}")).collect();
+    if port == 80 {
+        hosts.extend(names);
     }
     Some(hosts)
 }
@@ -281,8 +286,26 @@ mod tests {
             allowed_hosts(v6),
             Some(vec!["[::1]:8080".into(), "localhost:8080".into()])
         );
+        // On port 80 browsers send no port: both forms are this server.
         let lan: SocketAddr = "192.168.1.5:80".parse().unwrap();
-        assert_eq!(allowed_hosts(lan), Some(vec!["192.168.1.5:80".into()]));
+        assert_eq!(
+            allowed_hosts(lan),
+            Some(vec!["192.168.1.5:80".into(), "192.168.1.5".into()])
+        );
+        let local80: SocketAddr = "127.0.0.1:80".parse().unwrap();
+        let hosts = allowed_hosts(local80).unwrap();
+        assert!(origin_allowed(
+            Some("http://127.0.0.1"),
+            Some("127.0.0.1"),
+            Some(hosts.as_slice()),
+            &[]
+        ));
+        assert!(origin_allowed(
+            Some("http://localhost"),
+            Some("localhost"),
+            Some(hosts.as_slice()),
+            &[]
+        ));
         let all: SocketAddr = "0.0.0.0:80".parse().unwrap();
         assert_eq!(allowed_hosts(all), None);
     }

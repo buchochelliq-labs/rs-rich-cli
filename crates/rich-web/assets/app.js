@@ -27,10 +27,18 @@
   term.open(document.getElementById("terminal"));
   fit.fit();
 
-  // OSC 52: text the app copied goes on the browser's clipboard.
+  // OSC 52: text the app copied goes on the browser's clipboard. Each copy
+  // is answered, by its number, with whether the clipboard took it, so the
+  // app says "Copied" only when it did.
+  var copies = 0;
   term.parser.registerOscHandler(52, function (data) {
+    var number = ++copies;
+    var answer = function (ok) {
+      send("c" + number + ":" + (ok ? "1" : "0"));
+    };
     var parts = data.split(";");
     if (parts.length < 2 || !navigator.clipboard) {
+      answer(false);
       return true;
     }
     try {
@@ -39,9 +47,13 @@
       for (var i = 0; i < binary.length; i++) {
         bytes[i] = binary.charCodeAt(i);
       }
-      navigator.clipboard.writeText(new TextDecoder().decode(bytes)).catch(function () {});
+      navigator.clipboard.writeText(new TextDecoder().decode(bytes)).then(
+        function () { answer(true); },
+        function () { answer(false); }
+      );
     } catch (e) {
-      // Not base64: ignore it.
+      // Not base64.
+      answer(false);
     }
     return true;
   });

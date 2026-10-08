@@ -90,6 +90,9 @@ tasks keep drawing while nobody types.
   same in a terminal and in a browser.
 - **Copying**: text the app copies (a mouse selection, `Ctx::copy`) goes to
   the page as OSC 52, and the page puts it on the browser's clipboard.
+  The page answers each copy, and the "Copied" toast shows only when the
+  browser took it: a browser that refuses (no permission, or a plain-HTTP
+  page served to another machine, which has no clipboard API) shows none.
 - **Quitting**: when the app quits (a handler calls `cx.quit()`, or Ctrl+C
   reaches it unbound), the session ends and the page says so. Reloading
   starts a new session.
