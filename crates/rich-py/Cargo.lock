@@ -1500,7 +1500,7 @@ dependencies = [
 
 [[package]]
 name = "rs-rich-cli"
-version = "0.0.16"
+version = "0.0.18"
 dependencies = [
  "cap-fs-ext",
  "cap-std",
@@ -1528,7 +1528,7 @@ dependencies = [
 
 [[package]]
 name = "rs-rich-data"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "rs-rich",
  "rs-rich-diagram",
@@ -1547,7 +1547,7 @@ dependencies = [
 
 [[package]]
 name = "rs-rich-ext"
-version = "0.0.14"
+version = "0.0.15"
 dependencies = [
  "fancy-regex 0.19.2",
  "libc",
@@ -1564,7 +1564,7 @@ dependencies = [
 
 [[package]]
 name = "rs-rich-interact"
-version = "0.0.4"
+version = "0.0.6"
 dependencies = [
  "crossterm",
  "libc",
@@ -1595,7 +1595,7 @@ dependencies = [
 
 [[package]]
 name = "rs-rich-micro"
-version = "0.0.3"
+version = "0.0.4"
 dependencies = [
  "flate2",
  "pulldown-cmark",
@@ -1618,7 +1618,7 @@ dependencies = [
 
 [[package]]
 name = "rs-rich-py"
-version = "0.0.5"
+version = "0.0.6"
 dependencies = [
  "pyo3",
  "rs-rich",
