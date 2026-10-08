@@ -207,6 +207,21 @@ impl Screen {
         }
     }
 
+    /// Lay `style` under the cell at `x`, `y`: it takes what the cell's own
+    /// style leaves unset (a stylesheet's colours, as CSS inherits them).
+    pub fn underlay(&mut self, x: u16, y: u16, style: &Style) {
+        if x >= self.width || y >= self.height {
+            return;
+        }
+        let own = self.styles.get(self.cell(x, y).style).cloned();
+        let combined = match own {
+            Some(own) => style.combine(&own),
+            None => style.clone(),
+        };
+        let id = self.styles.intern(Some(&combined));
+        self.cell_mut(x, y).style = id;
+    }
+
     /// Lay `style` over the cell at `x`, `y` (a selection's highlight).
     pub fn restyle(&mut self, x: u16, y: u16, style: &Style) {
         if x >= self.width || y >= self.height {

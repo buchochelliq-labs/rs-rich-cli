@@ -59,6 +59,7 @@ pub mod menu;
 pub mod node;
 pub mod reactive;
 pub mod screen;
+mod sheet;
 mod split;
 pub mod task;
 mod tree;
@@ -80,6 +81,7 @@ pub use node::{
     scroll_both, scroll_both_with, scroll_with, scroll_x, switch, text, Node,
 };
 pub use reactive::{memo, signal, watch, Memo, Proxy, Signal};
+pub use sheet::{SheetError, Stylesheet};
 pub use task::{resource, spawn, spawn_future, Load, Resource, Task};
 pub use widget::{widget, Widget};
 
