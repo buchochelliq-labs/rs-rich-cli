@@ -191,6 +191,21 @@ impl Widget for Calendar {
         crate::a11y::Role::Grid
     }
 
+    fn cursor(&self) -> Option<crate::screen::Rect> {
+        // The selected day's cell, as `draw` places it.
+        let date = self.selected.get_untracked();
+        let at = date.first_of_month().weekday() + date.day - 1;
+        let (x, y) = ((at % 7) as u16 * 3, 2 + (at / 7) as u16);
+        Some(crate::screen::Rect::new(x, y, 2, 1))
+    }
+
+    fn access_state(&self) -> crate::a11y::AccessState {
+        crate::a11y::AccessState {
+            selected: true,
+            ..Default::default()
+        }
+    }
+
     fn measure(&mut self, _cx: &MeasureCx, axis: Axis, _width: u16, _height: u16) -> u16 {
         match axis {
             Axis::Horizontal => WIDTH,

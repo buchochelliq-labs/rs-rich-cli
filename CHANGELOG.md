@@ -145,6 +145,53 @@ Workstream 1 of the [0.0.18 plan](docs/plans/0.0.18.md).
 - **Announcements:** toasts, a screen or dialog opening, live nodes and
   `Ctx::announce` go to `App::announcer` and wait in
   `Driver::take_announcements()`.
+
+### intuiTUIve: accessibility states and linear mode (rs-rich-intuituive 0.0.3)
+
+0.0.18 workstream 10.
+
+- **States:** every `AccessNode` has an `AccessState`: `expanded`,
+  `checked`, `selected`, `busy` and `position` (the selected item's place,
+  `3 of 10`).
+  - Built-ins set what they know: lists, tables, tabs, menus, the menu
+    bar and the calendar their selection and its place; trees whether the
+    selected item is expanded; `tree_lazy` busy while a level loads.
+  - `Node::expanded_when`, `checked_when` and `busy_when` set them in
+    code, like `selected_when` (which now counts too). `checked_when`
+    makes the role `Role::CheckBox` unless one is set; `Role::Switch` is
+    new too.
+  - `Widget::access_state` is the hook for widgets of your own, and
+    `AccessState::item` builds a widget of items' states.
+  - The states, and whether a node is disabled, are read while it draws,
+    so a signal only they read draws it again when it changes, and linear
+    mode writes the new line.
+  - `AccessNode::aria_attributes()` maps the states to ARIA for a browser.
+- **`Node::access_hidden`** (ARIA's `aria-hidden`): a node and everything
+  inside it leave the accessibility tree, linear mode's lines,
+  announcements and the names of what holds it, and are still drawn.
+  Nothing inside it is in the Tab order or takes the focus when its screen
+  opens; a click still reaches it. In text mode, menu separators and a
+  split's divider are blank.
+- **Linear mode:** `App::linear(true)`, or `INTUITUIVE_ACCESSIBLE=linear`.
+  - No screen is drawn: the tree is written as lines of text in reading
+    order, then only the lines that changed after each event.
+  - The focus moving is written as `→` and the focused node's line, and
+    toasts and `Ctx::announce` as their text.
+  - There is no cursor addressing, alternate screen, mouse or colour.
+  - `AccessNode::describe()` gives the line (`Files, list, 3 of 10:
+    main.rs, selected`). `Driver::render` returns the lines, and
+    `Driver::is_linear` says whether the app is in linear mode.
+- **Less cursor travel:** in the cursor mode the cursor is hidden while a
+  frame is written and shown again once it is parked on the focus. A frame
+  that changes nothing on the screen does not move it.
+- **Names:** an `Input` or `TextArea` is a text box. A node named by the
+  text it shows speaks for its children, which leave the tree. A tree's
+  value is its item's label, without the arrow. A calendar parks the
+  cursor on its selected day.
+- **Testing with screen readers:** a new guide page with an Orca, NVDA and
+  VoiceOver checklist and a results table for the release test, and the
+  `access` example it walks through.
+
 ### intuiTUIve: stylesheets (rs-rich-intuituive 0.0.3)
 
 0.0.18 workstream 4.

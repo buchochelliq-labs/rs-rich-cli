@@ -1,0 +1,243 @@
+//! Linear mode: the accessibility tree written as lines of text, then only
+//! what changed, the focus moving, and what was announced.
+
+#[path = "../examples/access.rs"]
+#[allow(dead_code)]
+mod access;
+
+use std::time::Duration;
+
+use intuituive::interact::{Event, Key};
+use intuituive::prelude::*;
+use intuituive::widgets::{tree, TreeItem};
+
+/// The transcript the screen reader guide shows
+/// (docs/guide/intuituive/screen-readers.md): each key, then what is
+/// written.
+#[test]
+fn the_access_example_reads_as_a_transcript() {
+    let mut driver = access::access_app().linear(true).driver(80, 20);
+    let mut transcript = Vec::new();
+    let keys = [
+        "start",
+        "tab",
+        "right",
+        "down",
+        "tab",
+        "down",
+        "s",
+        "shift+tab",
+        "shift+tab",
+        "right",
+        "tab",
+        "space",
+        "d",
+        "n",
+        "r",
+    ];
+    for key in keys {
+        transcript.push(format!("[{key}]"));
+        transcript.extend(step(&mut driver, (key != "start").then_some(key)));
+    }
+    let expected = "\
+[start]
+Notes
+→ Sections, tab list, 1 of 2: Files, selected
+Folders, region
+Folders, tree, 1 of 3: src, selected, collapsed
+Files, region
+Files, list, 1 of 10: notes-1.md, selected
+10 files, loaded once
+Save, button
+Delete, button
+Reload, button
+tab moves · space ticks · s saves · d deletes · r reloads · q quits
+[tab]
+→ Folders, tree, 1 of 3: src, selected, collapsed
+[right]
+Folders, tree, 1 of 5: src, selected, expanded
+[down]
+Folders, tree, 2 of 5: main.rs, selected
+[tab]
+→ Files, list, 1 of 10: notes-1.md, selected
+[down]
+Files, list, 2 of 10: notes-2.md, selected
+[s]
+Saved
+[shift+tab]
+→ Folders, tree, 2 of 5: main.rs, selected
+[shift+tab]
+→ Sections, tab list, 1 of 2: Files, selected
+[right]
+Sections, tab list, 2 of 2: Settings, selected
+Settings, region
+Wrap lines, check box, checked
+Dark theme, switch, not checked
+[tab]
+→ Wrap lines, check box, checked
+[space]
+Wrap lines, check box, not checked
+[d]
+Delete, dialog
+Delete notes-1.md? y / n
+[n]
+→ Wrap lines, check box, not checked
+[r]
+Loading…, busy";
+    assert_eq!(transcript.join("\n"), expected);
+}
+
+fn step(driver: &mut intuituive::Driver, key: Option<&str>) -> Vec<String> {
+    if let Some(key) = key {
+        driver.event(Event::Key(Key::parse(key).expect("a key")));
+    }
+    driver.update(Duration::ZERO);
+    let out = driver.render().unwrap_or_default();
+    assert!(!out.contains('\x1b'), "no escape sequences: {out:?}");
+    assert!(out.is_empty() || out.ends_with("\r\n"), "{out:?}");
+    out.split_terminator("\r\n").map(str::to_string).collect()
+}
+
+fn app() -> App {
+    App::new(|| {
+        let picked = signal(0usize);
+        let saved = signal(0);
+        column([
+            label("[b]Files[/]").fixed(1),
+            label("~~~~").access_hidden(true).fixed(1),
+            list(|| (1..=10).map(|n| format!("file{n}.rs")).collect(), picked)
+                .label("Files")
+                .fixed(3),
+            text!("{saved} saved").live().fixed(1),
+            label("Save")
+                .on_click(|_| {})
+                .focusable()
+                .on_key("enter", move |cx| {
+                    saved.update(|n| *n += 1);
+                    cx.toast("Saved");
+                })
+                .fixed(1),
+            tree(
+                || vec![TreeItem::new("src").child(TreeItem::new("main.rs"))],
+                signal(vec![0usize]),
+            )
+            .fixed(2),
+        ])
+        .on_key("a", |cx| cx.announce("Two files changed", false))
+    })
+    .linear(true)
+}
+
+#[test]
+fn the_first_frame_is_the_whole_tree_in_reading_order() {
+    let mut driver = app().driver(30, 12);
+    assert!(driver.is_linear());
+    assert_eq!(
+        step(&mut driver, None),
+        [
+            "Files",
+            "→ Files, list, 1 of 10: file1.rs, selected",
+            "0 saved",
+            "Save, button",
+            "tree, 1 of 1: src, selected, collapsed",
+        ]
+    );
+    // Nothing changed: nothing to write.
+    assert_eq!(step(&mut driver, None), Vec::<String>::new());
+}
+
+#[test]
+fn only_what_changed_is_written_with_the_focus_and_announcements() {
+    let mut driver = app().driver(30, 12);
+    step(&mut driver, None);
+    assert_eq!(
+        step(&mut driver, Some("down")),
+        ["Files, list, 2 of 10: file2.rs, selected"]
+    );
+    assert_eq!(step(&mut driver, Some("tab")), ["→ Save, button"]);
+    // The live line changes (written once, not announced again) and the
+    // toast is announced.
+    assert_eq!(step(&mut driver, Some("enter")), ["1 saved", "Saved"]);
+    assert_eq!(step(&mut driver, Some("a")), ["Two files changed"]);
+    assert_eq!(
+        step(&mut driver, Some("tab")),
+        ["→ tree, 1 of 1: src, selected, collapsed"]
+    );
+    assert_eq!(
+        step(&mut driver, Some("right")),
+        ["tree, 1 of 2: src, selected, expanded"]
+    );
+}
+
+#[test]
+fn a_dialog_is_written_and_the_screen_again_when_it_closes() {
+    let app = App::new(|| {
+        label("Delete")
+            .focusable()
+            .on_key("enter", |cx| {
+                cx.modal(Size::Fixed(20), Size::Fixed(3), || {
+                    label("Sure? y/n").focusable().on_key("n", |cx| cx.pop())
+                })
+            })
+            .role(intuituive::a11y::Role::Button)
+    })
+    .linear(true);
+    let mut driver = app.driver(30, 6);
+    assert_eq!(step(&mut driver, None), ["→ Delete, button"]);
+    let opened = step(&mut driver, Some("enter"));
+    assert_eq!(opened, ["→ Sure? y/n, dialog"], "{opened:?}");
+    assert_eq!(step(&mut driver, Some("n")), ["→ Delete, button"]);
+}
+
+#[test]
+fn linear_mode_leaves_nothing_to_put_back() {
+    let mut driver = app().driver(30, 12);
+    step(&mut driver, None);
+    assert_eq!(driver.finish(), "");
+}
+
+#[test]
+fn a_state_read_only_by_its_condition_is_written_when_it_changes() {
+    let app = App::new(|| {
+        let on = signal(false);
+        let busy = signal(false);
+        // The text reads neither signal: only the states do.
+        label("Wrap")
+            .checked_when(move || on.get())
+            .busy_when(move || busy.get())
+            .focusable()
+            .on_key("space", move |_| on.update(|on| *on = !*on))
+            .on_key("b", move |_| busy.update(|busy| *busy = !*busy))
+    })
+    .linear(true);
+    let mut driver = app.driver(20, 2);
+    assert_eq!(step(&mut driver, None), ["→ Wrap, check box, not checked"]);
+    driver.event(Event::Key(Key::char(' ')));
+    driver.update(Duration::ZERO);
+    assert!(driver.needs_render(), "the state changed");
+    assert_eq!(step(&mut driver, None), ["Wrap, check box, checked"]);
+    assert_eq!(
+        step(&mut driver, Some("b")),
+        ["Wrap, check box, checked, busy"]
+    );
+}
+
+#[test]
+fn keys_still_work_in_linear_mode() {
+    let app = App::new(|| {
+        let n = signal(0);
+        text!("count {n}")
+            .on_key("+", move |_| n.update(|n| *n += 1))
+            .on_key("q", |cx| cx.quit())
+    })
+    .linear(true);
+    let mut backend = intuituive::interact::headless::Headless::new(
+        intuituive::interact::headless::Script::new().keys("+ + q"),
+        20,
+        2,
+    );
+    let record = backend.record();
+    app.run_on(&mut backend).expect("the app runs");
+    let written = record.borrow().output();
+    assert_eq!(written, "count 0\r\ncount 1\r\ncount 2\r\n");
+}

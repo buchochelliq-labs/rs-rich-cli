@@ -230,6 +230,15 @@ pub trait Widget: Any {
     fn cursor(&self) -> Option<crate::screen::Rect> {
         None
     }
+
+    /// Its states, for assistive technology: whether its selected item is
+    /// expanded, checked, selected and where it is among the items, and
+    /// whether it is busy. The node's own
+    /// [`expanded_when`](Node::expanded_when) and the like win. Default:
+    /// none.
+    fn access_state(&self) -> crate::a11y::AccessState {
+        crate::a11y::AccessState::default()
+    }
 }
 
 /// A node with `widget`'s behaviour.

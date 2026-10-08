@@ -185,6 +185,15 @@ impl Widget for MenuList {
         ))
     }
 
+    fn access_state(&self) -> crate::a11y::AccessState {
+        // Its place among the items, not counting separators.
+        let items: Vec<usize> = (0..self.items.len())
+            .filter(|&i| !self.items[i].is_separator())
+            .collect();
+        let at = items.iter().position(|&i| i == self.selected.get());
+        crate::a11y::AccessState::item(at.unwrap_or(0), items.len())
+    }
+
     fn measure(&mut self, _cx: &MeasureCx, axis: Axis, _width: u16, _height: u16) -> u16 {
         match axis {
             Axis::Vertical => self.items.len().min(u16::MAX as usize) as u16,
@@ -215,7 +224,9 @@ impl Widget for MenuList {
         for (row, item) in self.items.iter().enumerate() {
             let y = row as u16;
             if item.is_separator() {
-                canvas.print(0, y, &"─".repeat(w as usize), Some(&dim));
+                // Decoration: blank in text mode, so it is not read out.
+                let rule = if crate::a11y::text_mode() { " " } else { "─" };
+                canvas.print(0, y, &rule.repeat(w as usize), Some(&dim));
                 continue;
             }
             // " label   hint ": a space each side, two before the hint.
@@ -359,6 +370,10 @@ impl Widget for MenuBar {
         spans
             .get(self.selected.get())
             .map(|&(x, w)| crate::screen::Rect::new(x, 0, w, 1))
+    }
+
+    fn access_state(&self) -> crate::a11y::AccessState {
+        crate::a11y::AccessState::item(self.selected.get(), self.menus.len())
     }
 
     fn measure(&mut self, _cx: &MeasureCx, axis: Axis, width: u16, _height: u16) -> u16 {

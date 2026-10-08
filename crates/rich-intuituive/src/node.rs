@@ -133,6 +133,13 @@ pub struct Node {
     last_live: RefCell<Option<String>>,
     /// Where its selected item is, for widgets drawn from lines (a list).
     cursor_cell: Option<Rc<Cell<Option<Rect>>>>,
+    /// Left out, with what is inside, for assistive technology; and the
+    /// states code gave it, and its builder's (a list's selected row).
+    access_hidden: bool,
+    expanded_when: Option<Condition>,
+    checked_when: Option<Condition>,
+    busy_when: Option<Condition>,
+    built_state: Option<Box<dyn Fn() -> crate::a11y::AccessState>>,
 }
 
 /// A condition a node's class or state follows.
@@ -232,6 +239,11 @@ impl Node {
             live: false,
             last_live: RefCell::new(None),
             cursor_cell: None,
+            access_hidden: false,
+            expanded_when: None,
+            checked_when: None,
+            busy_when: None,
+            built_state: None,
         }
     }
 
@@ -276,6 +288,95 @@ impl Node {
         self
     }
 
+    /// Leave this node, and everything inside it, out of what assistive
+    /// technology gets (ARIA's `aria-hidden`): the accessibility tree,
+    /// linear mode's lines, announcements and the names of what holds it.
+    /// It is still drawn. Nothing inside it is in the Tab order or takes
+    /// the focus when its screen opens (a click still reaches it). For what
+    /// is only decoration: a divider, a spinner's glyph, a logo.
+    pub fn access_hidden(mut self, hidden: bool) -> Node {
+        self.access_hidden = hidden;
+        self
+    }
+
+    /// Whether it is [hidden](Self::access_hidden) from assistive
+    /// technology.
+    pub(crate) fn is_access_hidden(&self) -> bool {
+        self.access_hidden
+    }
+
+    /// Expanded while `condition` holds, collapsed while it does not (ARIA's
+    /// `aria-expanded`): a section that opens, a disclosure. `condition`
+    /// may read signals.
+    pub fn expanded_when(mut self, condition: impl Fn() -> bool + 'static) -> Node {
+        self.expanded_when = Some(Box::new(condition));
+        self
+    }
+
+    /// Checked while `condition` holds, not checked while it does not
+    /// (ARIA's `aria-checked`). Its role becomes
+    /// [`CheckBox`](crate::a11y::Role::CheckBox) unless set; set
+    /// [`Switch`](crate::a11y::Role::Switch) for a toggle.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| {
+    ///     let on = signal(true);
+    ///     text(move || format!("{} Wrap lines", if on.get() { "☑" } else { "☐" }))
+    ///         .label("Wrap lines")
+    ///         .checked_when(move || on.get())
+    ///         .focusable()
+    ///         .on_key("space", move |_| on.update(|on| *on = !*on))
+    /// });
+    /// ```
+    pub fn checked_when(mut self, condition: impl Fn() -> bool + 'static) -> Node {
+        self.checked_when = Some(Box::new(condition));
+        self
+    }
+
+    /// Busy while `condition` holds (ARIA's `aria-busy`): loading, a task
+    /// running.
+    pub fn busy_when(mut self, condition: impl Fn() -> bool + 'static) -> Node {
+        self.busy_when = Some(Box::new(condition));
+        self
+    }
+
+    /// The states its builder knows (a list's selected row and its place).
+    pub(crate) fn built_state(
+        mut self,
+        state: impl Fn() -> crate::a11y::AccessState + 'static,
+    ) -> Node {
+        self.built_state = Some(Box::new(state));
+        self
+    }
+
+    /// Its states: its widget's, or its builder's, with what code set over
+    /// them ([`selected_when`](Self::selected_when),
+    /// [`expanded_when`](Self::expanded_when) and the like).
+    pub fn access_state(&self) -> crate::a11y::AccessState {
+        self.access_state_of(&*self.body.borrow().widget)
+    }
+
+    /// [`access_state`](Self::access_state), with its widget in hand (while
+    /// it draws, the body is borrowed).
+    fn access_state_of(&self, widget: &dyn Widget) -> crate::a11y::AccessState {
+        let mut state = match &self.built_state {
+            Some(state) => state(),
+            None => widget.access_state(),
+        };
+        let holds = |condition: &Option<Condition>| condition.as_ref().map(|c| c());
+        if let Some(open) = holds(&self.expanded_when) {
+            state.expanded = Some(open);
+        }
+        if let Some(on) = holds(&self.checked_when) {
+            state.checked = Some(on);
+        }
+        state.selected |= holds(&self.selected_when).unwrap_or(false);
+        state.busy |= holds(&self.busy_when).unwrap_or(false);
+        state
+    }
+
     /// What it is: as code said, else as its widget says, else by the
     /// builder that made it (text, a list), a clickable text being a button.
     pub fn access_role(&self) -> crate::a11y::Role {
@@ -285,6 +386,9 @@ impl Node {
         }
         if self.live {
             return Role::Status;
+        }
+        if self.checked_when.is_some() {
+            return Role::CheckBox;
         }
         let role = self.body.borrow().widget.role();
         if role != Role::Group {
@@ -868,14 +972,35 @@ impl Node {
     }
 
     fn walk_inner(&self, path: &mut Vec<NodeId>, f: &mut dyn FnMut(&Node, &[NodeId])) {
-        if self.hidden() {
+        self.walk_some(path, false, f);
+    }
+
+    /// [`walk`](Self::walk), leaving out what is
+    /// [hidden](Self::access_hidden) from assistive technology: the focus
+    /// order.
+    pub(crate) fn walk_accessible(&self, f: &mut dyn FnMut(&Node, &[NodeId])) {
+        self.walk_some(&mut Vec::new(), true, f);
+    }
+
+    fn walk_some(
+        &self,
+        path: &mut Vec<NodeId>,
+        accessible: bool,
+        f: &mut dyn FnMut(&Node, &[NodeId]),
+    ) {
+        if self.hidden() || (accessible && self.access_hidden) {
             // A stylesheet's `display: none`: not shown, nor anything inside.
             return;
         }
         path.push(self.id);
         f(self, path);
-        self.each_child(&mut |child| child.walk_inner(path, f));
+        self.each_child(&mut |child| child.walk_some(path, accessible, f));
         path.pop();
+    }
+
+    /// Whether its widget holds other nodes.
+    pub(crate) fn has_children(&self) -> bool {
+        !self.body.borrow().widget.children().is_empty()
     }
 
     /// Call `f` with each child that is shown.
@@ -952,6 +1077,13 @@ impl Node {
         force: bool,
     ) {
         self.rect.set(rect);
+        // Hidden from assistive technology: nothing inside is announced,
+        // and a live node holding it says what it shows without it.
+        if self.access_hidden {
+            frame.hidden += 1;
+            frame.hidden_rects.push(rect);
+        }
+        let hidden_mark = frame.hidden_rects.len();
         let last = self.drawn.get();
         let moved = last != Some(rect);
         let dirty = frame.dirty.contains(&self.id);
@@ -1035,6 +1167,13 @@ impl Node {
             if styled {
                 restyled = self.restyle(frame);
             }
+            // What assistive technology is told of it (its states, whether
+            // it is disabled): read here, so a change draws it again and
+            // the accessibility tree, linear mode's lines with it, follow.
+            frame.runtime.observe_node_more(id, || {
+                self.access_state_of(&**widget);
+                self.disabled();
+            });
             // A widget that keeps what it drew is cleared only when its own
             // children moved: when it moved, or was drawn over, whoever did
             // that cleared the area already.
@@ -1182,8 +1321,9 @@ impl Node {
             frame.chain.pop();
         }
         // A live node says what it shows when that changed.
-        if self.live && frame.damage.len() > mark {
-            let shown = crate::a11y::screen_text(screen, rect);
+        if self.live && frame.hidden == 0 && frame.damage.len() > mark {
+            let hidden = &frame.hidden_rects[hidden_mark..];
+            let shown = crate::a11y::screen_text(screen, rect, hidden);
             if let Some(text) = self.live_change(shown) {
                 frame.announcements.push(crate::a11y::Announcement {
                     text,
@@ -1242,6 +1382,9 @@ impl Node {
         }
         self.hover_lit.set(hovered);
         self.drawn.set(Some(rect));
+        if self.access_hidden {
+            frame.hidden -= 1;
+        }
     }
 
     /// Read its conditions and states for the stylesheet (subscribing to
@@ -1612,6 +1755,10 @@ pub(crate) struct FrameState<'a> {
     pub chain: Vec<Element>,
     /// What [live](Node::live) nodes now say.
     pub announcements: Vec<crate::a11y::Announcement>,
+    /// How many [hidden](Node::access_hidden) nodes hold the one drawing,
+    /// and where hidden nodes drew this frame.
+    pub hidden: u32,
+    pub hidden_rects: Vec<Rect>,
 }
 
 impl FrameState<'_> {
@@ -1790,7 +1937,7 @@ pub fn component<C: Component + 'static>(
     on_done: impl FnMut(C::Output, &mut Ctx) + 'static,
 ) -> Node {
     let mut node = Node::from_widget(
-        Box::new(HostWidget::new(Box::new(Host {
+        Box::new(HostWidget::new::<C>(Box::new(Host {
             component,
             make: None,
             on_done: Box::new(on_done),
@@ -1827,7 +1974,7 @@ pub fn repeating<C: Component + 'static>(
     on_done: impl FnMut(C::Output, &mut Ctx) + 'static,
 ) -> Node {
     let mut node = Node::from_widget(
-        Box::new(HostWidget::new(Box::new(Host {
+        Box::new(HostWidget::new::<C>(Box::new(Host {
             component: make(),
             make: Some(Box::new(make)),
             on_done: Box::new(on_done),
@@ -1941,7 +2088,12 @@ pub fn list(items: impl Fn() -> Vec<String> + 'static, selected: Signal<usize>) 
     };
     let (rows_up, rows_down) = (rows.clone(), rows);
     let (up, down, pgup, pgdn) = (step.clone(), step.clone(), step.clone(), step);
-    let mut node = leaf(draw);
+    // The selected row, and its place, for assistive technology.
+    let state = {
+        let items = items.clone();
+        move || crate::a11y::AccessState::item(selected.get_untracked(), items().len())
+    };
+    let mut node = leaf(draw).built_state(state);
     node.cursor_cell = Some(cursor);
     node.what("list")
         .focusable()

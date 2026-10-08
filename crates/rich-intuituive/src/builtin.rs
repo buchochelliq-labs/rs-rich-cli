@@ -665,17 +665,37 @@ impl<C: Component> Hosted for Host<C> {
 pub(crate) struct HostWidget {
     pub host: Box<dyn Hosted>,
     caret: Option<(u16, u16)>,
+    role: crate::a11y::Role,
 }
 
 impl HostWidget {
-    pub fn new(host: Box<dyn Hosted>) -> HostWidget {
-        HostWidget { host, caret: None }
+    /// `C` hosted: an `Input` or a `TextArea` is a text box.
+    pub fn new<C: Component + 'static>(host: Box<dyn Hosted>) -> HostWidget {
+        use std::any::TypeId;
+        let text = [
+            TypeId::of::<rich_interact::Input>(),
+            TypeId::of::<rich_interact::TextArea>(),
+        ];
+        let role = if text.contains(&TypeId::of::<C>()) {
+            crate::a11y::Role::TextBox
+        } else {
+            crate::a11y::Role::Group
+        };
+        HostWidget {
+            host,
+            caret: None,
+            role,
+        }
     }
 }
 
 impl Widget for HostWidget {
     fn name(&self) -> &'static str {
         "component"
+    }
+
+    fn role(&self) -> crate::a11y::Role {
+        self.role
     }
 
     fn measure(&mut self, cx: &MeasureCx, axis: Axis, width: u16, height: u16) -> u16 {
