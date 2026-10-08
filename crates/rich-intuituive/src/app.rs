@@ -607,6 +607,8 @@ pub struct App {
     /// Read keys as a legacy terminal sends them, even where the kitty
     /// keyboard protocol could be on.
     legacy_keys: bool,
+    /// Synchronized output forced on or off; `None` detects it.
+    synchronized_output: Option<bool>,
     /// Selecting text with the mouse (on unless turned off): where the
     /// press was and where the drag is now.
     selectable: bool,
@@ -736,6 +738,7 @@ impl App {
             palette_key: Vec::new(),
             help_key: Vec::new(),
             legacy_keys: false,
+            synchronized_output: None,
             selectable: true,
             selection: None,
             selecting: false,
@@ -1040,6 +1043,18 @@ impl App {
         self
     }
 
+    /// Whether [`run`](Self::run) writes each frame as one synchronized
+    /// update (DEC private mode 2026), which the terminal shows whole:
+    /// `Some(true)` always, `Some(false)` never. `None`, the default, leaves
+    /// it to `RICH_SYNC_OUTPUT` (`0` off, `1` on) and then to the terminal,
+    /// asked at start-up with the kitty keyboard query (not asked with
+    /// [`legacy_keys`](Self::legacy_keys)). See
+    /// [`SessionOptions::synchronized_output`].
+    pub fn synchronized_output(mut self, on: Option<bool>) -> App {
+        self.synchronized_output = on;
+        self
+    }
+
     /// Whether a drag with the mouse that no node uses selects text, which
     /// is copied to the clipboard when the button is released (on by
     /// default). With the mouse captured, the terminal cannot select by
@@ -1078,6 +1093,7 @@ impl App {
             output: Default::default(),
             legacy_keys: self.legacy_keys,
             backend,
+            synchronized_output: self.synchronized_output,
         })?;
         let mut app = self;
         app.text_frames = false;
@@ -1117,9 +1133,9 @@ impl App {
                     return Ok(());
                 }
                 if let Some(out) = driver.render() {
-                    if !out.is_empty() {
-                        backend.write(&out)?;
-                    }
+                    // One synchronized update, where the backend writes
+                    // them; nothing for a frame that changed nothing.
+                    backend.write_frame(&out)?;
                     if text_frames {
                         backend.painted(&driver.screen().plain().join("\n"));
                     }
@@ -1140,7 +1156,7 @@ impl App {
                             && backend.can_suspend()
                             && !driver.app.binds(*key) =>
                     {
-                        backend.write(&driver.suspend())?;
+                        backend.write_frame(&driver.suspend())?;
                         backend.suspend()?;
                         let (columns, rows) = backend.size();
                         if inline {
@@ -1167,7 +1183,7 @@ impl App {
                 }
             }
         })();
-        let _ = backend.write(&driver.finish());
+        let _ = backend.write_frame(&driver.finish());
         result
     }
 
