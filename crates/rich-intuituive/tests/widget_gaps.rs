@@ -237,3 +237,39 @@ fn a_lazy_tree_shows_loading_until_children_arrive() {
     let rows = screen(&run_open(app, Script::new().keys("right"), 30, 4));
     assert!(row_of(&rows, "loading…").is_some(), "{rows:?}");
 }
+
+#[test]
+fn the_hover_style_comes_and_goes_with_the_pointer() {
+    use intuituive::interact::{Event, Mouse};
+    use std::time::Duration;
+    let app = App::new(|| {
+        column([
+            row([label("one").fixed(3), label(" x")]).hover_style("reverse"),
+            label("two"),
+        ])
+    });
+    let mut driver = app.driver(10, 2);
+    let mut frame = |driver: &mut intuituive::Driver, event: Option<Event>| {
+        if let Some(event) = event {
+            driver.event(event);
+        }
+        driver.update(Duration::ZERO);
+        driver.render().unwrap_or_default()
+    };
+    frame(&mut driver, None);
+    let over = frame(
+        &mut driver,
+        Some(Event::Mouse(Mouse::new(MouseKind::Moved, 1, 0))),
+    );
+    assert!(over.contains("\x1b[0;7m"), "reversed: {over:?}");
+    let away = frame(
+        &mut driver,
+        Some(Event::Mouse(Mouse::new(MouseKind::Moved, 1, 1))),
+    );
+    assert!(
+        !away.contains("\x1b[0;7m") && away.contains("one"),
+        "plain again: {away:?}"
+    );
+    // The whole row, gap included, is plain again.
+    assert!(driver.screen().plain()[0].starts_with("one x"));
+}

@@ -86,6 +86,10 @@ pub struct Node {
     /// A style (or theme style name) laid over the node while it has the
     /// focus.
     focus_style: Option<String>,
+    /// The same, while the pointer is over it.
+    hover_style: Option<String>,
+    /// Whether it was last drawn in its hover style.
+    hover_lit: Cell<bool>,
 }
 
 /// A node's widget, and what the framework keeps for it between frames.
@@ -131,6 +135,8 @@ impl Node {
             name: None,
             what,
             focus_style: None,
+            hover_style: None,
+            hover_lit: Cell::new(false),
         }
     }
 
@@ -250,13 +256,38 @@ impl Node {
 
     /// While this node has the focus, draw it in `style` over its own: a
     /// style (`"reverse"`, `"on grey23"`) or a theme style name
-    /// (`"accent"`). Its whole rectangle takes the style, so a list shows
-    /// which row is selected; a container's children draw over it, so it
-    /// shows only between them. The node is also made
+    /// (`"accent"`). Its whole rectangle takes the style, its children's
+    /// cells included, so a list shows which row is selected even when a
+    /// row is a [`row`] of several parts. The node is also made
     /// [focusable](Self::focusable).
     pub fn focus_style(mut self, style: &str) -> Node {
         self.focus_style = Some(style.to_string());
         self.focusable = true;
+        self
+    }
+
+    /// While the pointer is over this node (or a node inside it), draw it
+    /// in `style` over its own, as [`focus_style`](Self::focus_style) does
+    /// for the focus. A stylesheet's `:hover` rules do the same from a
+    /// file.
+    ///
+    /// ```
+    /// use std::time::Duration;
+    ///
+    /// use intuituive::interact::{Event, Mouse, MouseKind};
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| column([label("one").hover_style("reverse"), label("two")]));
+    /// let mut driver = app.driver(10, 2);
+    /// driver.update(Duration::ZERO);
+    /// let _ = driver.render();
+    /// driver.event(Event::Mouse(Mouse::new(MouseKind::Moved, 1, 0)));
+    /// driver.update(Duration::ZERO);
+    /// let frame = driver.render().expect("the hover redraws");
+    /// assert!(frame.contains("\x1b[0;7m"), "{frame:?}");
+    /// ```
+    pub fn hover_style(mut self, style: &str) -> Node {
+        self.hover_style = Some(style.to_string());
         self
     }
 
@@ -447,6 +478,8 @@ impl Node {
             && frame
                 .focus_path
                 .with_untracked(|path| path.last() == Some(&id));
+        let hovered = self.hover_style.is_some()
+            && frame.hover_path.with_untracked(|path| path.contains(&id));
         // Damage from here on is this node's and its children's: where
         // the focus style goes over what they drew.
         let mark = frame.damage.len();
@@ -481,7 +514,10 @@ impl Node {
             // that cleared the area already.
             // Gaining or losing the focus style redraws the lot; keeping it
             // costs only what is drawn again.
-            cleared = !widget.retained() || focused != self.highlit.get() || (relaid && !viewport);
+            cleared = !widget.retained()
+                || focused != self.highlit.get()
+                || hovered != self.hover_lit.get()
+                || (relaid && !viewport);
             repaint = moved || force || cleared;
             if cleared {
                 screen.clear(rect);
@@ -496,6 +532,15 @@ impl Node {
         if redraw {
             let focus_path = frame.focus_path;
             let focus_style = self.focus_style.is_some();
+            let hover_path = frame.hover_path;
+            let hover_style = self.hover_style.is_some();
+            if hover_style {
+                // The pointer's movement is reported once something reads
+                // it, and this node draws again when the pointer comes or
+                // goes.
+                frame.wants_hover.set(true);
+                frame.watchers.hover.borrow_mut().insert(id);
+            }
             let caret = {
                 let mut cx = DrawCx {
                     console,
@@ -521,6 +566,9 @@ impl Node {
                     // again when the focus comes or goes.
                     if focus_style {
                         focus_path.with(|path| path.last() == Some(&id));
+                    }
+                    if hover_style {
+                        hover_path.with(|path| path.contains(&id));
                     }
                 });
                 widget.caret()
@@ -592,9 +640,35 @@ impl Node {
                         screen.restyle(column, row, &style);
                     }
                 }
+                // Restyled cells are sent even where nothing drew (a
+                // container's whole rectangle).
+                frame.damage.push(area);
             }
         }
         self.highlit.set(focused);
+        // The hover style, the same way, over the focus style.
+        if let (true, Some(name)) = (hovered, self.hover_style.as_deref()) {
+            let style = crate::widget::theme_style(console, name, "reverse");
+            let mut parts: Vec<Rect> = frame.damage[mark..]
+                .iter()
+                .map(|area| area.intersection(rect))
+                .filter(|area| !area.is_empty())
+                .collect();
+            if !self.hover_lit.get() || repaint {
+                parts = vec![rect];
+            }
+            for area in parts {
+                for row in area.y..area.bottom() {
+                    for column in area.x..area.right() {
+                        screen.restyle(column, row, &style);
+                    }
+                }
+                // Restyled cells are sent even where nothing drew (a
+                // container's whole rectangle).
+                frame.damage.push(area);
+            }
+        }
+        self.hover_lit.set(hovered);
         self.drawn.set(Some(rect));
     }
 
