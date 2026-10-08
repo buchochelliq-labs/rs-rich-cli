@@ -839,8 +839,13 @@ fn run(
 mod tests {
     use super::*;
 
+    /// Held by the tests that start a Chrome that is not there: each makes
+    /// and removes a profile, which would move another's count of them.
+    static STARTS: Mutex<()> = Mutex::new(());
+
     #[test]
     fn a_chrome_that_cannot_start_leaves_no_profile_behind() {
+        let _starts = STARTS.lock().unwrap_or_else(|e| e.into_inner());
         let ours = format!("rich-embed-chrome-{}-", std::process::id());
         let profiles = || {
             std::fs::read_dir(std::env::temp_dir())
@@ -977,6 +982,7 @@ mod tests {
 
     #[test]
     fn a_missing_browser_is_an_error_not_a_hang() {
+        let _starts = STARTS.lock().unwrap_or_else(|e| e.into_inner());
         let mut engine = ChromeEngine::new().binary("/nonexistent/chrome-for-a-test");
         assert!(engine.resize(80, 24).is_err());
     }
