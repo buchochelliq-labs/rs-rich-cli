@@ -3054,6 +3054,15 @@ impl Driver {
         &self.screen
     }
 
+    /// Where the last frame left the terminal's cursor: on the focused text
+    /// box's caret (in [accessible](App::accessible) mode, on whatever has
+    /// the focus), or `None` while it is hidden. A renderer that draws the
+    /// [screen](Self::screen) itself, such as a browser's DOM, draws the
+    /// caret here.
+    pub fn cursor(&self) -> Option<(u16, u16)> {
+        self.app.caret_at
+    }
+
     /// The last frame's numbers.
     pub fn stats(&self) -> FrameStats {
         self.app.stats
