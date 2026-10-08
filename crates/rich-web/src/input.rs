@@ -162,7 +162,7 @@ fn csi(s: &str) -> (Option<Event>, usize) {
         // Focus in and out, and anything else: nothing to deliver.
         _ => return (None, used),
     };
-    (Some(Event::Key(Key { code, modifiers })), used)
+    (Some(Event::Key(Key::with(code, modifiers))), used)
 }
 
 /// The keys sent as `ESC [ n ~`.
@@ -277,9 +277,6 @@ mod tests {
             ("\x08", "ctrl+h"),
             ("\n", "ctrl+j"),
             ("\x00", "ctrl+space"),
-            ("\x1c", "ctrl+\\"),
-            ("\x1d", "ctrl+]"),
-            ("\x1f", "ctrl+_"),
             ("\x1b[A", "up"),
             ("\x1b[B", "down"),
             ("\x1b[C", "right"),
@@ -325,6 +322,19 @@ mod tests {
         ];
         for (bytes, name) in table {
             assert_eq!(decode(bytes), vec![key(name)], "{bytes:?} is {name}");
+        }
+        // These control bytes decode as crossterm does (0x1c is Ctrl+4), and
+        // the legacy matching fires the bindings they stand for.
+        let legacy: &[(&str, &str)] =
+            &[("\x1c", "ctrl+\\"), ("\x1d", "ctrl+]"), ("\x1f", "ctrl+_")];
+        for (bytes, name) in legacy {
+            let binding = Key::parse(name).unwrap();
+            match decode(bytes).as_slice() {
+                [Event::Key(decoded)] => {
+                    assert!(decoded.matches(&binding), "{bytes:?} fires {name}")
+                }
+                other => panic!("{bytes:?} decoded to {other:?}"),
+            }
         }
     }
 
