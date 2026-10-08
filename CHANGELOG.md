@@ -177,7 +177,9 @@ Workstream 1 of the [0.0.18 plan](docs/plans/0.0.18.md).
     order, then only the lines that changed after each event.
   - The focus moving is written as `→` and the focused node's line, and
     toasts and `Ctx::announce` as their text.
-  - There is no cursor addressing, alternate screen, mouse or colour.
+  - There is no cursor addressing, alternate screen, mouse or colour,
+    and no synchronized output (workstream 11), since lines are appended
+    as they come.
   - `AccessNode::describe()` gives the line (`Files, list, 3 of 10:
     main.rs, selected`). `Driver::render` returns the lines, and
     `Driver::is_linear` says whether the app is in linear mode.

@@ -929,8 +929,9 @@ impl App {
     /// transcript, which a screen reader reads as it arrives. The focus
     /// moving is written as `→ ` and the line of what has it; toasts and
     /// [`Ctx::announce`] as their text. There is no cursor addressing, no
-    /// alternate screen, no mouse and no colour; keys work as usual. On by
-    /// default when `INTUITUIVE_ACCESSIBLE` is `linear`.
+    /// alternate screen, no mouse, no colour and no synchronized output;
+    /// keys work as usual. On by default when `INTUITUIVE_ACCESSIBLE` is
+    /// `linear`.
     ///
     /// ```
     /// use intuituive::prelude::*;
@@ -1150,7 +1151,12 @@ impl App {
             output: Default::default(),
             legacy_keys: self.legacy_keys,
             backend,
-            synchronized_output: self.synchronized_output,
+            // Linear, lines are appended as they come: nothing to hold.
+            synchronized_output: if self.linear {
+                Some(false)
+            } else {
+                self.synchronized_output
+            },
         })?;
         if self.linear {
             // The cursor stays at the end of what was written.
