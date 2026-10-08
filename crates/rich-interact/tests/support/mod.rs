@@ -10,12 +10,39 @@ use portable_pty::{native_pty_system, CommandBuilder, PtySize};
 
 pub struct Pty {
     output: Arc<Mutex<Vec<u8>>>,
-    writer: Box<dyn Write + Send>,
+    writer: Arc<Mutex<Box<dyn Write + Send>>>,
     child: Box<dyn portable_pty::Child + Send + Sync>,
 }
 
+/// The kitty keyboard protocol's query, as crossterm sends it: the flags,
+/// then the device attributes.
+const KITTY_QUERY: &[u8] = b"\x1b[?u\x1b[c";
+
 impl Pty {
+    /// A terminal without the kitty keyboard protocol: it answers the
+    /// query's device attributes only, as xterm does.
     pub fn start(mode: &str) -> Pty {
+        Pty::start_as(mode, false)
+    }
+
+    /// A terminal with the kitty keyboard protocol: it answers the query
+    /// with its flags (none pushed yet) before the device attributes.
+    pub fn start_kitty(mode: &str) -> Pty {
+        Pty::start_as(mode, true)
+    }
+
+    /// A terminal with the kitty keyboard protocol, with the child's
+    /// standard output piped through `sed -n l`, which shows its escapes,
+    /// as `answer=$(rich write)` captures it.
+    pub fn start_kitty_piped(mode: &str) -> Pty {
+        Pty::start_with(mode, true, " | sed -n l")
+    }
+
+    fn start_as(mode: &str, kitty: bool) -> Pty {
+        Pty::start_with(mode, kitty, "")
+    }
+
+    fn start_with(mode: &str, kitty: bool, pipe: &str) -> Pty {
         let pty = native_pty_system()
             .openpty(PtySize {
                 rows: 24,
@@ -26,7 +53,7 @@ impl Pty {
             .unwrap();
         let exe = std::env::current_exe().unwrap();
         let script = format!(
-            "'{}' --exact child --nocapture --test-threads=1; stty -a; echo STTY-DONE",
+            "'{}' --exact child --nocapture --test-threads=1{pipe}; stty -a; echo STTY-DONE",
             exe.display()
         );
         let mut command = CommandBuilder::new("sh");
@@ -39,16 +66,36 @@ impl Pty {
         let mut reader = pty.master.try_clone_reader().unwrap();
         let output = Arc::new(Mutex::new(Vec::new()));
         let sink = Arc::clone(&output);
+        let writer: Arc<Mutex<Box<dyn Write + Send>>> =
+            Arc::new(Mutex::new(pty.master.take_writer().unwrap()));
+        let answers = Arc::clone(&writer);
         std::thread::spawn(move || {
             let mut buffer = [0u8; 4096];
+            let mut answered = 0;
             while let Ok(read) = reader.read(&mut buffer) {
                 if read == 0 {
                     break;
                 }
-                sink.lock().unwrap().extend_from_slice(&buffer[..read]);
+                let mut sink = sink.lock().unwrap();
+                sink.extend_from_slice(&buffer[..read]);
+                // Answer each new query, so the session does not wait for
+                // an answer that never comes.
+                let asked = sink
+                    .windows(KITTY_QUERY.len())
+                    .filter(|w| *w == KITTY_QUERY)
+                    .count();
+                while answered < asked {
+                    let answer: &[u8] = if kitty {
+                        b"\x1b[?0u\x1b[?62c"
+                    } else {
+                        b"\x1b[?62c"
+                    };
+                    let mut answers = answers.lock().unwrap();
+                    let _ = answers.write_all(answer).and_then(|()| answers.flush());
+                    answered += 1;
+                }
             }
         });
-        let writer = pty.master.take_writer().unwrap();
         // Keep the master open until the child is done.
         std::mem::forget(pty.master);
         Pty {
@@ -81,8 +128,9 @@ impl Pty {
     /// write to the master fails (EIO) once the terminal's last reader is
     /// gone, where Linux buffers it.
     pub fn try_send(&mut self, bytes: &str) -> std::io::Result<()> {
-        self.writer.write_all(bytes.as_bytes())?;
-        self.writer.flush()
+        let mut writer = self.writer.lock().unwrap();
+        writer.write_all(bytes.as_bytes())?;
+        writer.flush()
     }
 
     /// Finish, and return the whole output and the final screen.
@@ -97,8 +145,13 @@ impl Pty {
 }
 
 /// Raw mode off, the main screen back, the cursor shown, mouse reporting
-/// off.
+/// off, and the kitty keyboard protocol's flags popped as often as pushed.
 pub fn assert_restored(output: &str, parser: &vt100::Parser) {
+    assert_eq!(
+        output.matches("\x1b[>3u").count(),
+        output.matches("\x1b[<1u").count(),
+        "kitty keyboard flags pushed and popped unevenly:\n{output:?}"
+    );
     let stty = &output[output.rfind("speed").expect("stty output")..];
     let flags: Vec<&str> = stty.split_whitespace().collect();
     for flag in ["icanon", "echo", "isig", "icrnl", "opost"] {

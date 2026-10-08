@@ -1,5 +1,6 @@
 //! The terminal session: raw mode, the alternate screen, mouse and paste
-//! modes, and their restoration on every way out (#489).
+//! modes, the kitty keyboard protocol, and their restoration on every way
+//! out (#489).
 //!
 //! Everything a [`Session`] turns on is recorded in a process-wide flag
 //! set, and undone by whichever comes first: [`Session::leave`], dropping
@@ -28,12 +29,28 @@ use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::sync::Once;
 use std::time::{Duration, Instant};
 
-use crate::event::{from_crossterm, Event};
+use crate::event::{from_crossterm, from_crossterm_kitty, Event};
 
 const RAW: u8 = 1;
 const ALTERNATE: u8 = 2;
 const MOUSE: u8 = 4;
 const PASTE: u8 = 8;
+const KITTY: u8 = 16;
+
+/// The kitty keyboard protocol's flags a session pushes: disambiguate the
+/// keys a legacy terminal sends alike (1) and report releases and repeats
+/// (2). Not every key as an escape code (8): typed text would then arrive
+/// as a base key and modifiers rather than the character the layout makes,
+/// so plain text keys, Enter, Tab and Backspace report no release. The
+/// terminal keeps a stack of flags for each screen, so they are pushed
+/// after entering the alternate screen and popped before leaving it.
+const PUSH_KITTY: &str = "\x1b[>3u";
+const POP_KITTY: &str = "\x1b[<1u";
+
+/// Whether the terminal answered the kitty keyboard protocol's query: 0 not
+/// asked yet, 1 no, 2 yes. Asked once a process, since asking can wait for
+/// a terminal that does not answer.
+static KITTY_ANSWER: AtomicU8 = AtomicU8::new(0);
 
 /// What is currently turned on, for the panic hook.
 static ACTIVE: AtomicU8 = AtomicU8::new(0);
@@ -124,6 +141,9 @@ fn restore() -> io::Result<()> {
 /// The sequences that turn off what `active` records.
 fn undo(active: u8) -> String {
     let mut out = String::new();
+    if active & KITTY != 0 {
+        out.push_str(POP_KITTY);
+    }
     if active & MOUSE != 0 {
         out.push_str("\x1b[?1006l\x1b[?1015l\x1b[?1003l\x1b[?1002l\x1b[?1000l");
     }
@@ -230,6 +250,9 @@ fn suspend() {
     if active & ALTERNATE != 0 {
         out.push_str("\x1b[?1049h\x1b[H");
     }
+    if active & KITTY != 0 {
+        out.push_str(PUSH_KITTY);
+    }
     if active & MOUSE != 0 {
         out.push_str("\x1b[?1000h\x1b[?1002h\x1b[?1015h\x1b[?1006h");
     }
@@ -308,6 +331,12 @@ pub struct SessionOptions {
     pub bracketed_paste: bool,
     /// Where to paint.
     pub output: Output,
+    /// Read keys as a legacy terminal sends them, even from a terminal with
+    /// the kitty keyboard protocol. Without it, a terminal that answers the
+    /// protocol's query has it turned on: Ctrl+I and Tab are told apart
+    /// (see [`Key::matches`](crate::Key::matches)), and key releases arrive
+    /// as [`Event::KeyUp`].
+    pub legacy_keys: bool,
 }
 
 /// Where the event loop reads events and writes paints: the terminal, or
@@ -377,6 +406,33 @@ pub struct Session {
     origin: u16,
     /// Whether the terminal takes OSC 52 copies, detected at the start.
     clipboard: rich_ext::clipboard::Clipboard,
+    /// Whether keys are read with the kitty keyboard protocol.
+    kitty: bool,
+}
+
+/// Whether the terminal has the kitty keyboard protocol. Asked with raw
+/// mode on, once a process: a terminal that answers neither this query nor
+/// the device attributes one after it keeps the session waiting (crossterm
+/// gives up after two seconds).
+fn kitty_answered() -> bool {
+    match KITTY_ANSWER.load(Ordering::SeqCst) {
+        0 => {
+            let yes = query_reaches_terminal()
+                && crossterm::terminal::supports_keyboard_enhancement().unwrap_or(false);
+            KITTY_ANSWER.store(if yes { 2 } else { 1 }, Ordering::SeqCst);
+            yes
+        }
+        answer => answer == 2,
+    }
+}
+
+/// Whether crossterm's keyboard query would reach the terminal. It means
+/// to write to `/dev/tty`, but opens it read-only, so the query always goes
+/// to standard output: in `answer=$(rich write)` it would land in the
+/// answer, and the terminal's reply at the shell prompt afterwards.
+fn query_reaches_terminal() -> bool {
+    use std::io::IsTerminal;
+    io::stdout().is_terminal()
 }
 
 impl Session {
@@ -404,6 +460,7 @@ impl Session {
             clipboard: rich_ext::clipboard::Clipboard::detect(
                 &crate::clipboard::SessionEnvironment,
             ),
+            kitty: false,
         };
         session.enter()?;
         Ok(session)
@@ -420,6 +477,11 @@ impl Session {
         if self.options.alternate_screen {
             out.push_str("\x1b[?1049h\x1b[H");
             ACTIVE.fetch_or(ALTERNATE, Ordering::SeqCst);
+        }
+        self.kitty = !self.options.legacy_keys && kitty_answered();
+        if self.kitty {
+            out.push_str(PUSH_KITTY);
+            ACTIVE.fetch_or(KITTY, Ordering::SeqCst);
         }
         if self.options.mouse {
             out.push_str("\x1b[?1000h\x1b[?1002h\x1b[?1015h\x1b[?1006h");
@@ -456,6 +518,13 @@ impl Session {
 
     pub fn options(&self) -> SessionOptions {
         self.options
+    }
+
+    /// Whether keys are read with the kitty keyboard protocol: the terminal
+    /// has it and [`SessionOptions::legacy_keys`] is off. Every key is then
+    /// [`exact`](crate::Key::exact), and releases arrive.
+    pub fn kitty_keys(&self) -> bool {
+        self.kitty
     }
 
     /// A resize to the current size, which repaints the whole view: after a
@@ -504,9 +573,15 @@ impl Backend for Session {
                 }
                 continue;
             }
-            // Events crossterm reports that components do not see (key
-            // releases, focus) are skipped, not returned as a timeout.
-            if let Some(event) = from_crossterm(crossterm::event::read()?) {
+            // Events crossterm reports that components do not see (focus)
+            // are skipped, not returned as a timeout.
+            let event = crossterm::event::read()?;
+            let event = if self.kitty {
+                from_crossterm_kitty(event)
+            } else {
+                from_crossterm(event)
+            };
+            if let Some(event) = event {
                 return Ok(Some(event));
             }
         }
