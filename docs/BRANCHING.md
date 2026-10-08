@@ -162,6 +162,7 @@ There are two separate decisions here:
 | `rs-rich-ratatui-v0.0.1` | Only `rs-rich-ratatui` at `0.0.1` |
 | `rs-rich-intuituive-v0.0.1` | Only `rs-rich-intuituive` at `0.0.1` |
 | `rs-rich-web-v0.0.1` | Only `rs-rich-web` at `0.0.1` |
+| `rs-rich-embed-v0.0.1` | Only `rs-rich-embed` at `0.0.1` |
 
 The same forms accept SemVer prereleases, for example
 `rs-rich-cli-v0.0.3-rc.1`. Manual dispatch accepts an **existing tag** in one of
@@ -426,10 +427,12 @@ depends on `rs-rich` and, behind its optional `interact` feature, on
 on crates.io. Nothing in the workspace depends on it, so it holds up no other
 tag. `rs-rich-intuituive` 0.0.1 depends on `rs-rich`, `rs-rich-ext` and
 `rs-rich-interact`: its own `rs-rich-intuituive-v0.0.1` tag goes after the
-releases of those it requires are on crates.io; nothing depends on it.
-`rs-rich-web` 0.0.1 depends on `rs-rich-intuituive`: its own
-`rs-rich-web-v0.0.1` tag goes after the `rs-rich-intuituive` release it
-requires is on crates.io; nothing depends on it. By hand, from the tagged commit on `main`:
+releases of those it requires are on crates.io. `rs-rich-web` 0.0.1 depends on
+`rs-rich-intuituive`: its own `rs-rich-web-v0.0.1` tag goes after the
+`rs-rich-intuituive` release it requires is on crates.io; nothing depends on it.
+`rs-rich-embed` 0.0.1 depends on `rs-rich`, `rs-rich-intuituive` and
+`rs-rich-record`: its own `rs-rich-embed-v0.0.1` tag goes after the releases of
+those it requires are on crates.io; nothing depends on it. By hand, from the tagged commit on `main`:
 
 ```bash
 cargo publish -p rs-rich-macros --locked   # with a maintainer's API token

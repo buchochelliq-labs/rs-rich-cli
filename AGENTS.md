@@ -53,6 +53,10 @@ rich-cli ──▶ rich-data ──▶ rich-ext ──▶ rich       (tabular da
              rich-web ──▶ rich-intuituive          (serving intuiTUIve apps to a browser: a WebSocket
                                                  session per tab, a vendored xterm.js page; tungstenite,
                                                  no async runtime. Nothing in the workspace depends on it)
+             rich-embed ──▶ rich-intuituive, rich-record   (a terminal pane and a web view: `PtyHost`
+                  └ ─ ▶ tungstenite, image       (portable-pty), `WebEngine`; Chrome over DevTools behind
+                                                 its `chrome` feature, Browsh behind `browsh`. Nothing
+                                                 in the workspace depends on it)
 rich-py  ──▶ rich, rich-ext, rich-art, rich-mermaid, rich-diagram, rich-micro, rich-interact, rich-cli
                            (Python bindings; outside the workspace, released to PyPI only)
 ```
@@ -85,6 +89,7 @@ possible, and keep the boundary free of core back-dependencies.
 | `rs-rich-ratatui` | independent SemVer | whenever we ship anything           |
 | `rs-rich-intuituive` | independent SemVer | whenever we ship anything        |
 | `rs-rich-web`  | independent SemVer | whenever we ship anything              |
+| `rs-rich-embed` | independent SemVer | whenever we ship anything             |
 | `rs-rich-macros` | independent SemVer | whenever we ship anything            |
 | `rs-rich-art`  | independent SemVer | whenever we ship anything              |
 | `rs-rich` (PyPI, `crates/rich-py`) | independent SemVer, `python-v…` tags | whenever we ship anything |
