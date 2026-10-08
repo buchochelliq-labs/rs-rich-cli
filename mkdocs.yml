@@ -136,6 +136,7 @@ nav:
           - guide/intuituive/index.md
           - "Tutorial: a to-do app": guide/intuituive/tutorial.md
           - Porting a ratatui app: guide/intuituive/porting.md
+          - "Embedding programs and pages (rs-rich-embed)": guide/intuituive/embed.md
       - Using rich with ratatui (rs-rich-ratatui): guide/ratatui.md
       - Diagrams (rs-rich-diagram): guide/diagram/index.md
       - Data and schemas (rs-rich-data):

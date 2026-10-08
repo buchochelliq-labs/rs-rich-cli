@@ -19,7 +19,7 @@ Every crate owns its independent SemVer. Choose a tag form explicitly:
 | `<crate>-vX.Y.Z` | Only that package; its manifest must match X.Y.Z |
 
 Supported packages: `rs-rich`, `rs-rich-plugin-api`, `rs-rich-macros`, `rs-rich-ext`,
-`rs-rich-cli`, `rs-rich-art`, `rs-rich-mermaid`, `rs-rich-lumis`, `rs-rich-record`, `rs-rich-interact`, `rs-rich-micro`, `rs-rich-diagram`, `rs-rich-data`, `rs-rich-ratatui`, `rs-rich-intuituive`. Publish `rs-rich-plugin-api` and
+`rs-rich-cli`, `rs-rich-art`, `rs-rich-mermaid`, `rs-rich-lumis`, `rs-rich-record`, `rs-rich-interact`, `rs-rich-micro`, `rs-rich-diagram`, `rs-rich-data`, `rs-rich-ratatui`, `rs-rich-intuituive`, `rs-rich-embed`. Publish `rs-rich-plugin-api` and
 `rs-rich-macros` after `rs-rich` and before `rs-rich-ext`, which depends on both;
 publish `rs-rich-mermaid` after `rs-rich-art`, and `rs-rich-lumis` after
 `rs-rich-plugin-api`, both before `rs-rich-cli`. Publish `rs-rich-record` after
@@ -35,8 +35,10 @@ own tag. Publish `rs-rich-ratatui` after `rs-rich` and after `rs-rich-interact`,
 which its optional `interact` feature depends on; nothing depends on it, and its
 first version (0.0.1) is a new crate and goes up with its own tag. Publish
 `rs-rich-intuituive` after `rs-rich-ext` and `rs-rich-interact`, which it
-depends on; nothing depends on it, and its first version (0.0.1) is a new
-crate and goes up with its own tag.
+depends on, and before `rs-rich-embed`, which depends on it. Publish `rs-rich-embed` after
+`rs-rich-intuituive` and `rs-rich-record`, which it depends on; nothing
+depends on it, and its first version (0.0.1) is a new crate and goes up with
+its own tag.
 Both forms accept prereleases such as `-rc.1`. Manual workflow dispatch takes
 an existing tag, never a branch name.
 

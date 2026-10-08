@@ -11,10 +11,10 @@ in **[AGENTS.md](AGENTS.md)** — please read it first. The short version:
 - The dependency arrow is one-way: `rich-cli → rich-ext → rich` and
   `rich-cli → rich-art → rich`, with `rich-ext → rich-plugin-api → rich` and
   `rich-ext → rich-macros` behind ext's optional `macros` feature, and
-  `rich-cli → rich-mermaid → rich-plugin-api`, and `rich-lumis → rich-plugin-api`, and `rich-cli → rich-record → rich-ext`, and `rich-interact → rich-ext`, and `rich-micro → rich-ext`, and `rich-mermaid → rich-diagram → rich`, and `rich-cli → rich-data → rich-ext`, and `rich-ratatui → rich` (with `rich-interact` behind its `interact` feature), and `rich-intuituive → rich-interact → rich-ext`.
+  `rich-cli → rich-mermaid → rich-plugin-api`, and `rich-lumis → rich-plugin-api`, and `rich-cli → rich-record → rich-ext`, and `rich-interact → rich-ext`, and `rich-micro → rich-ext`, and `rich-mermaid → rich-diagram → rich`, and `rich-cli → rich-data → rich-ext`, and `rich-ratatui → rich` (with `rich-interact` behind its `interact` feature), and `rich-intuituive → rich-interact → rich-ext`, and `rich-embed → rich-intuituive`, `rich-record`.
   Core depends on none of them.
 - Each crate (`rs-rich`, `rs-rich-plugin-api`, `rs-rich-macros`, `rs-rich-ext`,
-  `rs-rich-art`, `rs-rich-mermaid`, `rs-rich-lumis`, `rs-rich-record`, `rs-rich-interact`, `rs-rich-micro`, `rs-rich-diagram`, `rs-rich-data`, `rs-rich-ratatui`, `rs-rich-intuituive`, `rs-rich-cli`) has its **own independent SemVer**, bumped
+  `rs-rich-art`, `rs-rich-mermaid`, `rs-rich-lumis`, `rs-rich-record`, `rs-rich-interact`, `rs-rich-micro`, `rs-rich-diagram`, `rs-rich-data`, `rs-rich-ratatui`, `rs-rich-intuituive`, `rs-rich-embed`, `rs-rich-cli`) has its **own independent SemVer**, bumped
   whenever that crate ships. Which upstream release we track lives in
   `UPSTREAM.toml`, not in a version number — see AGENTS.md → Versioning.
 

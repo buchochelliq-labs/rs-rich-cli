@@ -245,3 +245,12 @@ Textual, a separate project this repository does not mirror). It composes
 `rs-rich-interact`'s sessions and drivers, `rich-ext` and core `rich`'s
 public APIs. Core is unchanged and no golden fixture covers it. See
 [Terminal apps](guide/intuituive/index.md).
+
+### Embedding (rs-rich-embed, not upstream)
+
+`rs-rich-embed` (`crates/rich-embed`, 0.0.1) has no upstream module to
+port: Python `rich` cannot run another program or a web page inside a
+renderable. It composes `rs-rich-intuituive`'s public `Widget` trait,
+`rs-rich-record`'s VT emulator and portable-pty. Core is unchanged and no
+golden fixture covers it. See
+[Embedding programs and pages](guide/intuituive/embed.md).

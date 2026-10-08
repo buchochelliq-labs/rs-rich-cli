@@ -1,6 +1,6 @@
 # Architecture
 
-A fifteen-crate Cargo workspace, plus the Python bindings beside it, with a
+A sixteen-crate Cargo workspace, plus the Python bindings beside it, with a
 strict, one-directional dependency rule.
 Each crate versions independently. The [manifest-version table](index.md#versions-in-this-checkout)
 tracks this checkout; registry badges show published versions.
@@ -32,7 +32,8 @@ The diagram shows the original crates. The others follow the same rule:
 features), `rich-lumis` → `rich-plugin-api`, and `rich-record`,
 `rich-interact`, `rich-micro` and `rich-data` → `rich-ext`, and
 `rich-ratatui` → `rich` (with `rich-interact` behind a feature), and
-`rich-intuituive` → `rich-interact`. The full graph is in
+`rich-intuituive` → `rich-interact`, and `rich-embed` → `rich-intuituive` and
+`rich-record`. The full graph is in
 [AGENTS.md](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/AGENTS.md).
 
 - **`crates/rich`** — the faithful port of the Python `rich` *library*. Mirrors
@@ -81,6 +82,15 @@ features), `rich-lumis` → `rich-plugin-api`, and `rich-record`,
   it against. Independent SemVer. See
   [Terminal apps](guide/intuituive/index.md) and the
   [design note](design/intuituive.md).
+- **`crates/rich-embed`** — other programs and web pages inside an
+  intuiTUIve app: a terminal pane over a `PtyHost` (`LocalPty` through
+  portable-pty, `ReplayHost` for tests), its screen followed by
+  `rich-record`'s VT emulator; and a web view over a `WebEngine`
+  (`ProgramEngine` runs a terminal browser the user installed; a headless
+  Chrome over the DevTools protocol behind the `chrome` feature, Browsh's
+  HTTP mode behind `browsh`). Its own crate so the framework gains no PTY,
+  emulator or browser protocol; nothing in the workspace depends on it.
+  Independent SemVer. See [Embedding programs and pages](guide/intuituive/embed.md).
 - **`crates/rich-mermaid`** — Mermaid diagrams as a plugin: flowcharts drawn
   as text through `rich-diagram`'s layout, every diagram type through
   Mermaid's CLI (`mmdc`) behind its `mmdc` feature. Depends on `rich`,
