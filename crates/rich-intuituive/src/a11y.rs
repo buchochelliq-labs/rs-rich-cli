@@ -154,17 +154,15 @@ pub(crate) fn set_text_mode(on: bool) {
 /// What `rect` of `screen` shows, row by row, trimmed, rows joined with a
 /// space.
 pub(crate) fn screen_text(screen: &Screen, rect: Rect) -> String {
+    // Cell by cell, so wide and many-codepoint graphemes keep to their
+    // cells: a wide one belongs to the rectangle its first cell is in.
     let rect = rect.intersection(screen.area());
-    let rows = screen.plain();
     let mut out: Vec<String> = Vec::new();
     for row in rect.y..rect.bottom() {
-        let Some(line) = rows.get(row as usize) else {
-            break;
-        };
-        let text: String = line
-            .chars()
-            .skip(rect.x as usize)
-            .take(rect.width as usize)
+        let text: String = (rect.x..rect.right())
+            .map(|x| screen.cell(x, row))
+            .filter(|cell| !cell.is_continuation())
+            .map(|cell| cell.text.as_str())
             .collect();
         let text = text.trim();
         if !text.is_empty() {

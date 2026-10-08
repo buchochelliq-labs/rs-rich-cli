@@ -212,3 +212,16 @@ fn roles_and_labels_set_in_code_win() {
         (Role::Status, "status")
     );
 }
+
+#[test]
+fn names_after_a_wide_character_keep_to_their_cells() {
+    let app = App::new(|| row([label("界").fixed(2), label("Save").fixed(4)]));
+    let mut driver = app.driver(6, 1);
+    frame(&mut driver, None);
+    let names: Vec<String> = driver
+        .accessibility()
+        .iter()
+        .map(|n| n.name.clone())
+        .collect();
+    assert_eq!(names, ["界", "Save"], "{names:?}");
+}
