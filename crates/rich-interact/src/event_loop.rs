@@ -228,12 +228,17 @@ impl<'a> EventLoop<'a> {
     /// A loop on the real terminal, starting a [`Session`].
     pub fn terminal(session: SessionOptions, options: LoopOptions) -> io::Result<EventLoop<'a>> {
         let session = Session::start(session)?;
-        let system = options.color_system.unwrap_or_else(|| {
-            Console::builder()
-                .force_terminal(true)
-                .build()
-                .color_system()
-        });
+        // The backend's own probe of the terminal, if it has one, else
+        // rich's detection.
+        let system = options
+            .color_system
+            .or_else(|| session.color_system())
+            .unwrap_or_else(|| {
+                Console::builder()
+                    .force_terminal(true)
+                    .build()
+                    .color_system()
+            });
         Ok(EventLoop::new(
             session,
             LoopOptions {

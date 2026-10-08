@@ -340,6 +340,8 @@ stays on screen. The options can change that:
 - `bracketed_paste: true` delivers a paste as one event;
 - `legacy_keys: true` keeps the kitty keyboard protocol off (see
   [Keys](#keys));
+- `backend: BackendKind::Termion` (or `Termwiz`) drives the terminal with
+  another library (see [Backends](#backends-crossterm-termion-termwiz));
 - `LoopOptions { transient: true, .. }` clears the region at the end;
 - `height` limits how many rows the inline region may take.
 
@@ -437,6 +439,60 @@ unchanged. Mount both components on one `EventLoop` instead.
 
 PTY tests check each of these by running `stty -a` in the same terminal
 afterwards.
+
+## Backends: crossterm, termion, termwiz
+
+A session drives the terminal with one library: crossterm by default, or
+termion or termwiz, each behind an off-by-default feature of the same name.
+`SessionOptions::backend` picks it, and `BackendKind::ALL` lists the ones
+the build has:
+
+```toml
+rs-rich-interact = { version = "0.0.6", features = ["termwiz"] }
+```
+
+```rust
+use rich_interact::{run, BackendKind, RunOptions, SessionOptions};
+
+let options = RunOptions {
+    session: SessionOptions {
+        backend: BackendKind::Termwiz,
+        ..SessionOptions::default()
+    },
+    ..RunOptions::default()
+};
+run(Counter(0), &options)?;
+```
+
+The library reads keys, the mouse, pastes and resizes, measures the
+terminal, and turns raw mode and the alternate screen on and off. The
+rest is the same whichever it is: the modes a session turns on, and their
+return on every way out above (finishing, Ctrl+C, a panic, the signals, a
+hand-off, Ctrl+Z and `fg`).
+
+| | crossterm | termion | termwiz |
+|---|---|---|---|
+| Platforms | Unix, Windows | Unix | Unix, Windows |
+| Kitty keyboard protocol | exact keys and releases | no: keys as a legacy terminal sends them | exact keys, no releases |
+| Mouse | buttons, drags, moves, modifiers | buttons, drags; no modifiers, no moves without a button | buttons, drags, moves, modifiers |
+| Bracketed paste | yes | yes | yes, unless its probe says no |
+| Colours for `run` | rich's detection | rich's detection | termwiz's probe (terminfo, `COLORTERM`, `NO_COLOR`) |
+
+termion has no reader with a timeout, so its session waits on the terminal
+itself and hands termion's parser one event's bytes at a time; a sequence
+termion does not know is dropped, and pastes are cut out before it. termwiz
+reads keys with the kitty protocol's first flag only, since it does not
+read the release reports of the second.
+
+A loop of your own reading one of these libraries translates its events
+with `event::from_termion` and `event::from_termwiz` (or
+`from_termwiz_kitty`). Neither termion nor termwiz says which button a
+release is of, so both take a `HeldButton` that remembers it between
+events.
+
+The same PTY suite runs against every backend the build has: the bytes a
+terminal sends are checked to arrive as the same events (where the library
+reads them at all), and the terminal to be given back after each way out.
 
 ## No terminal, no blocking
 

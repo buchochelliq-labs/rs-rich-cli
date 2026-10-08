@@ -1,9 +1,21 @@
 //! Input events: keys, mouse, resizes, pastes and ticks.
 //!
 //! These are the crate's own types, so a component never sees `crossterm`,
-//! and a test can write `Key::parse("ctrl+c")` instead of building one.
+//! termion or termwiz, and a test can write `Key::parse("ctrl+c")` instead
+//! of building one. Each library's events translate here:
+//! [`from_crossterm`], and behind their features `from_termion` and
+//! `from_termwiz`.
 
 use std::fmt;
+
+#[cfg(all(unix, feature = "termion"))]
+mod via_termion;
+#[cfg(all(unix, feature = "termion"))]
+pub use via_termion::from_termion;
+#[cfg(feature = "termwiz")]
+mod via_termwiz;
+#[cfg(feature = "termwiz")]
+pub use via_termwiz::{from_termwiz, from_termwiz_kitty};
 
 /// Modifier keys held with a key or mouse event.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
@@ -403,6 +415,48 @@ impl From<Key> for Event {
     fn from(key: Key) -> Event {
         Event::Key(key)
     }
+}
+
+/// The mouse button held down, for a library that does not say which
+/// button a release or a drag is of: termion names the button only when it
+/// is pressed, and termwiz reports which buttons are down rather than what
+/// changed. Keep one per terminal, and pass it to each translation.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct HeldButton(Option<Button>);
+
+impl HeldButton {
+    /// The button down, if any.
+    pub fn get(self) -> Option<Button> {
+        self.0
+    }
+}
+
+/// A character as it arrives from a terminal: a control character is the
+/// key that sends it (Enter, Tab, Esc, Backspace, or Ctrl with a letter,
+/// with Space for NUL and with 4 to 7 for the four after Esc). Any other
+/// character is itself.
+#[cfg(any(all(unix, feature = "termion"), feature = "termwiz"))]
+fn char_key(c: char, mut modifiers: Modifiers) -> Key {
+    let code = match c {
+        '\r' | '\n' => KeyCode::Enter,
+        '\t' => KeyCode::Tab,
+        '\x1b' => KeyCode::Escape,
+        '\x7f' => KeyCode::Backspace,
+        '\0' => {
+            modifiers.ctrl = true;
+            KeyCode::Char(' ')
+        }
+        '\x01'..='\x1a' => {
+            modifiers.ctrl = true;
+            KeyCode::Char((c as u8 - 1 + b'a') as char)
+        }
+        '\x1c'..='\x1f' => {
+            modifiers.ctrl = true;
+            KeyCode::Char((c as u8 - 0x1c + b'4') as char)
+        }
+        c => KeyCode::Char(c),
+    };
+    Key::with(code, modifiers)
 }
 
 fn modifiers(state: crossterm::event::KeyModifiers) -> Modifiers {
