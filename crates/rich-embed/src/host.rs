@@ -222,6 +222,10 @@ struct Output {
     buffer: VecDeque<u8>,
     /// The reader reached the end of the output.
     eof: bool,
+    /// The reader is waiting for room ([`LocalPty::backpressure`]).
+    paused: bool,
+    /// The host is gone: a paused reader stops.
+    closed: bool,
     status: Option<ExitStatus>,
     notify: Option<Notify>,
 }
@@ -248,6 +252,8 @@ pub struct LocalPty {
     /// the PTY, and a write would then block the app.
     writer: Option<mpsc::Sender<Vec<u8>>>,
     killer: Option<Box<dyn ChildKiller + Send + Sync>>,
+    /// Hold at most this much unread output, then stop reading.
+    backpressure: Option<usize>,
 }
 
 impl LocalPty {
@@ -258,7 +264,20 @@ impl LocalPty {
             master: None,
             writer: None,
             killer: None,
+            backpressure: None,
         }
+    }
+
+    /// Hold at most about `bytes` of output that has not been
+    /// [read](PtyHost::read) (one read of the PTY more, at most 64 KiB);
+    /// past it, stop reading the program's output until some is read, so
+    /// its writes wait, as they do on a slow terminal. Without this, output
+    /// is never waited for: past 16 MiB unread, the oldest is dropped. For
+    /// a reader that may fall behind and must not lose anything, such as a
+    /// browser at the end of a network (rs-rich-web).
+    pub fn backpressure(mut self, bytes: usize) -> LocalPty {
+        self.backpressure = Some(bytes.max(1));
+        self
     }
 
     fn size(columns: u16, rows: u16) -> PtySize {
@@ -304,9 +323,15 @@ impl PtyHost for LocalPty {
         self.master = Some(pty.master);
 
         let shared = Arc::clone(&self.shared);
+        let limit = self.backpressure;
         thread::spawn(move || {
             let mut chunk = [0u8; 65536];
             loop {
+                if let Some(limit) = limit {
+                    if !wait_for_room(&shared, limit) {
+                        break;
+                    }
+                }
                 let read = match reader.read(&mut chunk) {
                     Ok(0) | Err(_) => break,
                     Ok(read) => read,
@@ -331,10 +356,19 @@ impl PtyHost for LocalPty {
             };
             // What it wrote before exiting is still on its way through the
             // PTY: give the reader a moment to reach the end of it, so the
-            // exit is reported after the last output.
-            for _ in 0..50 {
-                if lock(&shared).eof {
+            // exit is reported after the last output. A reader paused for
+            // room is not reading: its moment waits for it.
+            let mut waited = 0;
+            while waited < 50 {
+                let (eof, paused) = {
+                    let output = lock(&shared);
+                    (output.eof, output.paused)
+                };
+                if eof {
                     break;
+                }
+                if !paused {
+                    waited += 1;
                 }
                 thread::sleep(Duration::from_millis(10));
             }
@@ -402,7 +436,26 @@ impl PtyHost for LocalPty {
 
 impl Drop for LocalPty {
     fn drop(&mut self) {
+        lock(&self.shared).closed = true;
         let _ = self.kill();
+    }
+}
+
+/// Wait until the unread output is under `limit`; `false` once the host
+/// has gone.
+fn wait_for_room(shared: &Mutex<Output>, limit: usize) -> bool {
+    loop {
+        {
+            let mut output = lock(shared);
+            if output.closed {
+                return false;
+            }
+            output.paused = output.buffer.len() >= limit;
+            if !output.paused {
+                return true;
+            }
+        }
+        thread::sleep(Duration::from_millis(5));
     }
 }
 
