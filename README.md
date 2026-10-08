@@ -85,6 +85,7 @@ in the release notes; the crates.io links show available packages.
 | [`rs-rich-data`](https://crates.io/crates/rs-rich-data) | `0.0.2` |
 | [`rs-rich-ratatui`](https://crates.io/crates/rs-rich-ratatui) | `0.0.3` |
 | [`rs-rich-intuituive`](https://crates.io/crates/rs-rich-intuituive) | `0.0.3` |
+| [`rs-rich-web`](https://crates.io/crates/rs-rich-web) | `0.0.1` |
 | [`rs-rich-embed`](https://crates.io/crates/rs-rich-embed) | `0.0.1` |
 <!-- END MANIFEST VERSIONS -->
 
@@ -101,6 +102,7 @@ in the release notes; the crates.io links show available packages.
 | `rs-rich-data` | tabular data: CSV/TSV, JSONL, serde and Arrow row sources, type inference and column statistics | `use rich_data` |
 | `rs-rich-ratatui` | ratatui interop: rich renderables as ratatui widgets, buffer and style conversions, ratatui widgets in rich-interact | `use rich_ratatui` |
 | `rs-rich-intuituive` | intuiTUIve: a reactive, retained terminal UI framework (signals, retained tree, damaged diff) on rich-interact | `use intuituive` |
+| `rs-rich-web` | serving intuiTUIve apps to a web browser over a WebSocket, drawn by a vendored xterm.js | `use rich_web` |
 | `rs-rich-embed` | a terminal pane and a web view for intuiTUIve apps, over swappable PTY and browser backends | `use rich_embed` |
 | `rs-rich-lumis` | the lumis (tree-sitter) code highlighter | `use rich_lumis` |
 | `rs-rich-record` | scripted terminal recordings (`rich record`) | `use rich_record` |

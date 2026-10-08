@@ -44,7 +44,7 @@ do not, [rustup.rs](https://rustup.rs) is the one-line installer.
     `rs-rich-interact` · `rs-rich-record` (new in 0.0.13) ·
     `rs-rich-micro` (new in 0.0.14) · `rs-rich-diagram` (new in 0.0.15) ·
     `rs-rich-data` (new in 0.0.16) · `rs-rich-ratatui` · `rs-rich-intuituive` (both new in 0.0.17) ·
-    `rs-rich-embed` (new in 0.0.18) —
+    `rs-rich-web` · `rs-rich-embed` (both new in 0.0.18) —
     follow the links for current published versions.
     API documentation is on [docs.rs](https://docs.rs/rs-rich).
 

@@ -14,7 +14,7 @@ import release
 
 NAMES = ("rs-rich", "rs-rich-plugin-api", "rs-rich-macros", "rs-rich-ext", "rs-rich-cli", "rs-rich-art",
          "rs-rich-mermaid", "rs-rich-lumis", "rs-rich-record", "rs-rich-interact", "rs-rich-micro",
-         "rs-rich-diagram", "rs-rich-data", "rs-rich-ratatui", "rs-rich-intuituive", "rs-rich-embed")
+         "rs-rich-diagram", "rs-rich-data", "rs-rich-ratatui", "rs-rich-intuituive", "rs-rich-web", "rs-rich-embed")
 
 
 def workspace():
@@ -216,7 +216,7 @@ class PublicationTests(unittest.TestCase):
     def test_library_verification_builds_exact_registry_dependency(self, status):
         for name in ("rs-rich", "rs-rich-plugin-api", "rs-rich-macros", "rs-rich-ext", "rs-rich-art",
                      "rs-rich-mermaid", "rs-rich-lumis", "rs-rich-record", "rs-rich-interact", "rs-rich-micro",
-                     "rs-rich-diagram", "rs-rich-data", "rs-rich-ratatui", "rs-rich-intuituive", "rs-rich-embed"):
+                     "rs-rich-diagram", "rs-rich-data", "rs-rich-ratatui", "rs-rich-intuituive", "rs-rich-web", "rs-rich-embed"):
             def check_consumer(command, **kwargs):
                 self.assertEqual(command, ["cargo", "check"])
                 consumer = Path(kwargs["cwd"])

@@ -144,7 +144,11 @@ needs: each node's kind, label, focus state and the focus order. The plan:
 
 ### Later: serving to a browser
 
-Designed, not built. An app already draws through a backend that only
+Built in 0.0.18 as its own crate, `rs-rich-web` (not
+`rs-rich-intuituive-web`), with a token in the URL and an `Origin` check
+added to the design below; see
+[Serving an app to a browser](../guide/intuituive/web.md). The design as
+written: an app already draws through a backend that only
 needs cells and events, which is what the headless backend implements, so
 a web backend fits the same seam:
 

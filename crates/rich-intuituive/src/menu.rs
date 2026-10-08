@@ -172,6 +172,19 @@ impl Widget for MenuList {
         "menu"
     }
 
+    fn role(&self) -> crate::a11y::Role {
+        crate::a11y::Role::Menu
+    }
+
+    fn cursor(&self) -> Option<crate::screen::Rect> {
+        Some(crate::screen::Rect::new(
+            0,
+            self.selected.get() as u16,
+            u16::MAX,
+            1,
+        ))
+    }
+
     fn measure(&mut self, _cx: &MeasureCx, axis: Axis, _width: u16, _height: u16) -> u16 {
         match axis {
             Axis::Vertical => self.items.len().min(u16::MAX as usize) as u16,
@@ -335,6 +348,17 @@ pub fn menu_bar(menus: Vec<Menu>) -> Node {
 impl Widget for MenuBar {
     fn name(&self) -> &'static str {
         "menu bar"
+    }
+
+    fn role(&self) -> crate::a11y::Role {
+        crate::a11y::Role::MenuBar
+    }
+
+    fn cursor(&self) -> Option<crate::screen::Rect> {
+        let spans = self.spans.borrow();
+        spans
+            .get(self.selected.get())
+            .map(|&(x, w)| crate::screen::Rect::new(x, 0, w, 1))
     }
 
     fn measure(&mut self, _cx: &MeasureCx, axis: Axis, width: u16, _height: u16) -> u16 {

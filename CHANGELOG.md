@@ -81,6 +81,29 @@ Workstream 1 of the [0.0.18 plan](docs/plans/0.0.18.md).
   VT220, the way xterm does by default), so a recorded program that asks
   for the kitty protocol does not wait two seconds for an answer.
 
+
+### intuiTUIve: accessibility (rs-rich-intuituive 0.0.3)
+
+0.0.18 workstream 6.
+
+- **`App::accessible(true)`**, on by default with `INTUITUIVE_ACCESSIBLE`
+  or `RICH_A11Y=screen-reader`.
+  - The terminal's cursor sits on what has the focus: the caret, else the
+    selected row, cell, tab or menu entry. Screen readers follow it with
+    no bridge.
+  - Text mode: boxes are drawn as blanks (titles stay), there is no
+    colour, a `>` marks the selected item in lists, tables, trees and tab
+    strips, and animations jump to their end.
+- **Roles and names:**
+  - `Widget::role` (default `Role::Group`) is set by every built-in.
+  - `Widget::cursor` gives the selected item's place.
+  - `Node::role`, `Node::label` (the accessible name) and `Node::live`
+    (announce changes).
+  - `Driver::accessibility()` returns the tree: depth, role, name, value,
+    focus and place.
+- **Announcements:** toasts, a screen or dialog opening, live nodes and
+  `Ctx::announce` go to `App::announcer` and wait in
+  `Driver::take_announcements()`.
 ### intuiTUIve: stylesheets (rs-rich-intuituive 0.0.3)
 
 0.0.18 workstream 4.
@@ -135,6 +158,59 @@ Workstream 1 of the [0.0.18 plan](docs/plans/0.0.18.md).
   …)`. The type is checked: a target only lights up for, and only takes,
   values of its type. The source is dimmed while a drag lasts, the target
   is drawn in `drop.target`, and Esc cancels.
+
+### Serving intuiTUIve apps to a browser: rs-rich-web 0.0.1 (new)
+
+A new crate, from the 0.0.18 plan's workstream 7, phase 1. Nothing in the
+workspace depends on it, so neither the framework nor the CLI gains network
+code.
+
+- **`rich_web::serve(addr, || app())`** serves an intuiTUIve app. Each
+  browser tab gets its own `App` on its own thread, driven through the
+  framework's `Driver`: its frames go to the page as terminal output over a
+  WebSocket, and timers, animations and background tasks keep drawing
+  while nobody types. `Server` adds options (`max_sessions`, `token`,
+  `title`, `allow_origin`) and `spawn`, which serves in the background and
+  returns a `Handle` that stops it. The framework is re-exported as
+  `rich_web::intuituive`.
+- **The page** is xterm.js 6.0.0 with its fit add-on 0.11.0 (MIT),
+  vendored unchanged from the npm registry, checked against pinned SHA-256
+  hashes by `build.rs`, embedded in the binary and served by the crate. It
+  is never fetched from a CDN. The page fills the window, follows its size,
+  and puts text the app copies (OSC 52) on the browser's clipboard,
+  answering each copy so the app says "Copied" only when it worked.
+- **Input**: `rich_web::input::decode` turns what xterm.js sends (control
+  characters, `ESC [`/`ESC O` keys with modifiers, F1 to F20, SGR mouse
+  reports, bracketed pastes) into the rs-rich-interact events crossterm
+  gives for the same bytes, so key bindings behave the same in a terminal
+  and in a browser.
+- **Security, on by default:** the server listens only where it is told
+  and warns about a non-loopback address. A random 128-bit token from the
+  operating system is part of the printed URL, and the page and the
+  WebSocket both require it. The WebSocket's `Origin` must be the server's
+  own page, sent to a `Host` the server answers to (against DNS rebinding),
+  or an origin allowed with `allow_origin`. Sessions are capped (8 by
+  default, `503` beyond). The page has a content security policy and
+  cannot be framed. There is no other authentication and no TLS; the
+  guide says to put a proxy that has both in front.
+- **Synchronous:** `tungstenite` for the WebSocket and `httparse` (already
+  in its tree) for the few request heads served, with no async runtime.
+  The plan's default was `tiny_http` for HTTP. It was dropped because its
+  upgraded connection is one boxed blocking stream with no read timeout, so
+  a session could not both wait for keys and draw on a timer. The crate
+  adds four packages to the lock file: tungstenite, sha1, data-encoding and
+  chacha20.
+- An example, `cargo run -p rs-rich-web --example serve`, and a guide page,
+  [Serving an app to a browser](docs/guide/intuituive/web.md). The tests
+  cover the token, origin and session-cap checks (accepting and refusing),
+  the input decoding table, and an app driven end to end over a real
+  WebSocket on 127.0.0.1. The page was also tried in headless Chromium:
+  typing, keys, a click, a resize and quitting.
+- Registered like the other crates: the workspace, `RELEASES.toml`, the
+  release scripts and their tests, the release workflow's tags, the
+  release-readiness pattern, the CI feature matrix, `AGENTS.md`,
+  `CONTRIBUTING.md`, the architecture, branching and porting docs, and the
+  README and home-page tables.
 
 ### Embedding: a terminal pane and a web view (rs-rich-embed 0.0.1, new; rs-rich-record)
 

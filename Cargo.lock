@@ -2379,6 +2379,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "rs-rich-web"
+version = "0.0.1"
+dependencies = [
+ "data-encoding",
+ "getrandom 0.4.3",
+ "httparse",
+ "rs-rich-intuituive",
+ "sha2",
+ "tungstenite",
+]
+
+[[package]]
 name = "rustc_version"
 version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
