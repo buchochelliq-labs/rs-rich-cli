@@ -383,6 +383,16 @@ pub fn record(tape: &Tape, stem: &str, options: &Options) -> Result<Recording, T
                     std::thread::sleep(typing.max(Duration::from_millis(120)));
                 }
             }
+            Step::Mouse(mouse) => {
+                for _ in 0..mouse.count {
+                    for (i, report) in mouse.reports().iter().enumerate() {
+                        let label = (i == 0).then(|| mouse.label());
+                        session.send(report, label).map_err(io)?;
+                        std::thread::sleep(Duration::from_millis(30));
+                    }
+                    std::thread::sleep(typing.max(Duration::from_millis(120)));
+                }
+            }
             Step::Sleep(delay) => std::thread::sleep(*delay),
             Step::Wait {
                 pattern,
