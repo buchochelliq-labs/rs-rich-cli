@@ -1,0 +1,50 @@
+# crates/rich-web — serving intuiTUIve apps to a browser.
+#
+# Not a port of anything upstream: an rs-rich addition (0.0.18 plan,
+# workstream 7). One intuiTUIve `App` per WebSocket connection, each on its
+# own thread, drawn by xterm.js in the browser. xterm.js is vendored under
+# `assets/` (pinned, MIT, hashes checked by build.rs) and served by the crate
+# itself: nothing is fetched from a CDN at run time. Synchronous network code
+# only (tungstenite, no async runtime), so neither the framework nor the CLI's
+# default build gains any. Independent SemVer from 0.0.1. See AGENTS.md →
+# Versioning.
+[package]
+name = "rs-rich-web"
+version = "0.0.1"
+description = "Serve rs-rich intuiTUIve terminal apps to a web browser over a WebSocket, drawn by a vendored xterm.js"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+readme = "README.md"
+documentation = "https://docs.rs/rs-rich-web"
+keywords = ["terminal", "tui", "websocket", "browser", "rich"]
+categories = ["command-line-interface", "web-programming::websocket"]
+include = ["src/**/*", "assets/**/*", "examples/**/*", "build.rs", "README.md", "LICENSE", "Cargo.toml"]
+
+[lib]
+name = "rich_web"
+
+[lints]
+workspace = true
+
+[dependencies]
+rich-intuituive.workspace = true
+# The WebSocket protocol. `handshake` brings the accept-key derivation and the
+# client used by the tests; the server reads the HTTP request itself (below).
+tungstenite = { version = "0.30", default-features = false, features = ["handshake"] }
+# Request heads, for the page, its assets and the WebSocket upgrade. Already
+# in the tree through tungstenite's `handshake`. Not tiny_http (the plan's
+# default): its upgraded connection is one boxed blocking stream with no read
+# timeout, so a session could not both wait for keys and draw on a timer.
+httparse = "1"
+# Base64 for OSC 52 clipboard copies. Already in the tree through tungstenite.
+data-encoding = "2"
+# The URL's token, from the operating system's random source.
+getrandom = "0.4"
+
+[build-dependencies]
+# build.rs checks the vendored xterm.js files against their pinned hashes.
+sha2 = "0.11"
