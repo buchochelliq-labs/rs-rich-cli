@@ -81,6 +81,7 @@ Workstream 1 of the [0.0.18 plan](docs/plans/0.0.18.md).
   VT220, the way xterm does by default), so a recorded program that asks
   for the kitty protocol does not wait two seconds for an answer.
 
+
 ### intuiTUIve and interact: termion and termwiz backends (rs-rich-interact 0.0.6)
 
 0.0.18 workstream 5 (#677, #678). rs-rich-intuituive changes with it.
