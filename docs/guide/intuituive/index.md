@@ -776,12 +776,12 @@ condition holds, following the signals the condition reads.
 | | |
 |---|---|
 | `color`, `background` | a colour (`red`, `#ff8800`, `grey23`) or a theme style's colour (`$accent`) |
-| `text-style` | `bold`, `dim`, `italic`, `underline`, `reverse`, `strike`, `blink`, `none` |
-| `border`, `border-title` | `round`, `square`, `heavy`, `double`, `ascii` or `none`, then a colour; a title |
+| `text-style` | `bold`, `dim`, `italic`, `underline`, `reverse`, `strike`, `blink`, `none` (every one off); a later rule's replaces an earlier one's |
+| `border`, `border-title` | `round`, `square`, `heavy`, `double`, `ascii` or `none` (which takes a panel's own border and its cells away), then a colour; a title |
 | `size`, `min-size`, `max-size` | `3`, `50%`, `2fr`, `auto`, along the parent's axis |
 | `padding` | one to four numbers, as in CSS |
 | `gap`, `grid-columns`, `grid-rows` | a stack's or grid's spacing; a grid's tracks |
-| `display` | `none` hides the node and what is inside, and takes it out of the Tab order |
+| `display` | `none` hides the node and what is inside, takes it out of the Tab order, and out of a grid's cells |
 | `dock` | `top` or `bottom` in a column, `left` or `right` in a row: kept at that edge |
 
 **How it applies:**

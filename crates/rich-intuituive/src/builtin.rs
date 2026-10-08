@@ -157,8 +157,27 @@ impl Widget for Grid {
 /// is [`Axis::Horizontal`] when measuring the grid's own width, which
 /// leaves flexible columns at their content.
 fn grid_areas(cx: &MeasureCx, grid: &Grid, rect: Rect, axis: Axis) -> Vec<Rect> {
+    // Children a stylesheet hides take no cell and get an empty rectangle.
+    let children: Vec<&Node> = grid.children.iter().filter(|c| !c.hidden()).collect();
+    let mut shown = shown_areas(cx, grid, &children, rect, axis).into_iter();
+    grid.children
+        .iter()
+        .map(|c| match c.hidden() {
+            true => Rect::default(),
+            false => shown.next().unwrap_or_default(),
+        })
+        .collect()
+}
+
+fn shown_areas(
+    cx: &MeasureCx,
+    grid: &Grid,
+    children: &[&Node],
+    rect: Rect,
+    axis: Axis,
+) -> Vec<Rect> {
     let columns = grid.columns.len().max(1);
-    let spans: Vec<(u16, u16)> = grid.children.iter().map(|c| c.span).collect();
+    let spans: Vec<(u16, u16)> = children.iter().map(|c| c.span).collect();
     let (places, rows) = place(columns, &spans);
     let (row_gap, column_gap) = grid.gap;
     let span_length = |sizes: &[u16], from: usize, n: usize, gap: u16| -> u16 {
@@ -179,7 +198,7 @@ fn grid_areas(cx: &MeasureCx, grid: &Grid, rect: Rect, axis: Axis) -> Vec<Rect> 
                 track.size = Size::Auto;
                 track.content = places
                     .iter()
-                    .zip(&grid.children)
+                    .zip(children)
                     .filter(|(p, _)| p.column == c && p.columns == 1)
                     .map(|(_, child)| cx.measure(child, Axis::Horizontal, rect.width, rect.height))
                     .max()
@@ -189,7 +208,7 @@ fn grid_areas(cx: &MeasureCx, grid: &Grid, rect: Rect, axis: Axis) -> Vec<Rect> 
         })
         .collect();
     // Children spanning several columns grow the content columns they span.
-    for (p, child) in places.iter().zip(&grid.children) {
+    for (p, child) in places.iter().zip(children) {
         if p.columns > 1 {
             let need = cx.measure(child, Axis::Horizontal, rect.width, rect.height);
             grow_for_span(
@@ -220,7 +239,7 @@ fn grid_areas(cx: &MeasureCx, grid: &Grid, rect: Rect, axis: Axis) -> Vec<Rect> 
                 track.size = Size::Auto;
                 track.content = places
                     .iter()
-                    .zip(&grid.children)
+                    .zip(children)
                     .filter(|(p, _)| p.row == r && p.rows == 1)
                     .map(|(p, child)| {
                         let width = span_length(&widths, p.column, p.columns, column_gap);
@@ -232,7 +251,7 @@ fn grid_areas(cx: &MeasureCx, grid: &Grid, rect: Rect, axis: Axis) -> Vec<Rect> 
             track
         })
         .collect();
-    for (p, child) in places.iter().zip(&grid.children) {
+    for (p, child) in places.iter().zip(children) {
         if p.rows > 1 {
             let width = span_length(&widths, p.column, p.columns, column_gap);
             let need = cx.measure(child, Axis::Vertical, width, 0);
@@ -275,12 +294,19 @@ pub(crate) struct Panel {
 #[derive(Clone, Debug, Default)]
 pub(crate) struct PanelLook {
     pub border: Option<(crate::sheet::BoxKind, Style)>,
+    /// `border: none`: no box, and no cells kept for one.
+    pub no_border: bool,
     pub title: Option<String>,
     /// Inside the border: top, right, bottom, left.
     pub padding: [u16; 4],
 }
 
 impl Panel {
+    /// The cells its border takes on each side: none after `border: none`.
+    fn edge(&self) -> u16 {
+        u16::from(!self.look.no_border)
+    }
+
     pub fn new(title: String, child: Node) -> Panel {
         Panel {
             title,
@@ -320,7 +346,8 @@ impl Widget for Panel {
 
     fn measure(&mut self, cx: &MeasureCx, axis: Axis, width: u16, height: u16) -> u16 {
         let [top, right, bottom, left] = self.look.padding;
-        let (across, down) = (left + right + 2, top + bottom + 2);
+        let edges = self.edge() * 2;
+        let (across, down) = (left + right + edges, top + bottom + edges);
         let height = if height == 0 {
             0
         } else {
@@ -338,7 +365,7 @@ impl Widget for Panel {
     }
 
     fn layout(&mut self, _cx: &MeasureCx, rect: Rect) -> Vec<Rect> {
-        let inner = rect.inner(1);
+        let inner = rect.inner(self.edge());
         let [top, right, bottom, left] = self.look.padding;
         vec![Rect::new(
             inner.x.saturating_add(left),
@@ -353,6 +380,9 @@ impl Widget for Panel {
         // app, the panel stays as it is, and only its edges change colour
         // when it comes or goes.
         let focused = cx.focus_within();
+        if self.look.no_border {
+            return;
+        }
         if cx.repaint() || self.shown_focus != Some(focused) {
             // A stylesheet's border sets the box, and the colour while the
             // focus is elsewhere.
@@ -815,8 +845,10 @@ impl Widget for ScrollView {
         // the last column for down, the last row for across.
         let wide = |width: u16| {
             if self.horizontal {
+                // A viewport wider than the cap is the content's width.
                 cx.measure(&self.child, Axis::Horizontal, MAX_SCROLL_COLUMNS, 0)
-                    .clamp(width, MAX_SCROLL_COLUMNS)
+                    .min(MAX_SCROLL_COLUMNS)
+                    .max(width)
             } else {
                 width
             }
