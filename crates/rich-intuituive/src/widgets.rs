@@ -19,7 +19,7 @@ use crate::widget::{widget, Canvas, DrawCx, EventCx, MeasureCx, Used, Widget, Wi
 
 pub use crate::calendar::{calendar, calendar_with, Date};
 pub use crate::split::{hsplit, split, split_with, vsplit};
-pub use crate::tree::{tree, tree_with, TreeItem};
+pub use crate::tree::{tree, tree_lazy, tree_with, LazyItem, TreeItem};
 
 /// A table column: its title and how wide it is (cells, a percentage, a
 /// flexible share, or [`Size::Auto`]: as wide as its title and the cells

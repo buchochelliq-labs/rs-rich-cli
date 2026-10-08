@@ -182,3 +182,58 @@ fn dragging_the_gap_after_a_header_resizes_the_column() {
     let rows = screen(&run_open(app, script, 24, 4));
     assert_eq!(rows[0].trim_end(), "Name       Size");
 }
+
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
+
+use intuituive::widgets::{tree_lazy, LazyItem};
+
+fn dirs() -> Vec<LazyItem> {
+    vec![
+        LazyItem::branch("src", "src"),
+        LazyItem::branch("bad", "bad"),
+    ]
+}
+
+#[test]
+fn a_lazy_tree_loads_a_level_once_when_it_is_first_opened() {
+    let calls = Arc::new(AtomicUsize::new(0));
+    let counted = calls.clone();
+    let app = App::new(move || {
+        let counted = counted.clone();
+        let children = move |key: String| -> Result<Vec<LazyItem>, String> {
+            counted.fetch_add(1, Ordering::SeqCst);
+            if key == "bad" {
+                return Err("permission denied".into());
+            }
+            Ok((0..3)
+                .map(|i| LazyItem::leaf(format!("{key}/{i}"), format!("file {i}")))
+                .collect())
+        };
+        tree_lazy(dirs, children, signal(None))
+    })
+    .wait_for_tasks(true);
+    // Open src, close it, open it again; then open bad.
+    let rows = screen(&run_open(
+        app,
+        Script::new().keys("right left right down down down down right"),
+        30,
+        8,
+    ));
+    assert!(row_of(&rows, "file 2").is_some(), "{rows:?}");
+    assert!(row_of(&rows, "permission denied").is_some(), "{rows:?}");
+    assert_eq!(calls.load(Ordering::SeqCst), 2, "src once, bad once");
+}
+
+#[test]
+fn a_lazy_tree_shows_loading_until_children_arrive() {
+    let app = App::new(|| {
+        let children = |_key: String| -> Result<Vec<LazyItem>, String> {
+            std::thread::sleep(std::time::Duration::from_millis(300));
+            Ok(vec![LazyItem::leaf("x", "late")])
+        };
+        tree_lazy(dirs, children, signal(None))
+    });
+    let rows = screen(&run_open(app, Script::new().keys("right"), 30, 4));
+    assert!(row_of(&rows, "loading…").is_some(), "{rows:?}");
+}

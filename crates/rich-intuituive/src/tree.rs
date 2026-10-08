@@ -373,3 +373,161 @@ mod tests {
         assert_eq!(index_of(&rows, &[7]), 0);
     }
 }
+
+/// An item of a [`tree_lazy`]: what it shows, the key its children are
+/// loaded by (a path, an id), and whether it has children to load.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct LazyItem {
+    pub key: String,
+    pub label: String,
+    pub has_children: bool,
+}
+
+impl LazyItem {
+    /// An item with no children.
+    pub fn leaf(key: impl Into<String>, label: impl Into<String>) -> LazyItem {
+        LazyItem {
+            key: key.into(),
+            label: label.into(),
+            has_children: false,
+        }
+    }
+
+    /// An item whose children are loaded when it is first opened.
+    pub fn branch(key: impl Into<String>, label: impl Into<String>) -> LazyItem {
+        LazyItem {
+            key: key.into(),
+            label: label.into(),
+            has_children: true,
+        }
+    }
+}
+
+/// A [`tree`] whose children are loaded when an item is first opened:
+/// `children(key)` runs on a worker thread, so it may read a disk or a
+/// network, and the item shows `loading…` until it returns (or its error,
+/// if it fails). Each level is loaded once and kept. `roots` may read
+/// signals. `selected` holds the selected item's key.
+///
+/// ```
+/// use intuituive::prelude::*;
+/// use intuituive::widgets::{tree_lazy, LazyItem};
+///
+/// let app = App::new(|| {
+///     let selected = signal(None);
+///     let roots = || vec![LazyItem::branch("/src", "src"), LazyItem::leaf("/a.txt", "a.txt")];
+///     let children = |key: String| -> Result<Vec<LazyItem>, String> {
+///         Ok(vec![LazyItem::leaf(format!("{key}/main.rs"), "main.rs")])
+///     };
+///     let shown = text(move || format!("{:?}", selected.get()));
+///     column([tree_lazy(roots, children, selected).fixed(3), shown])
+///         .on_key("q", |cx| cx.quit())
+/// });
+/// let screen = app.wait_for_tasks(true).render_with(&["right", "down", "q"], 24, 4).unwrap();
+/// assert_eq!(screen[1].trim_end(), "    main.rs");
+/// assert_eq!(screen[3].trim_end(), "Some(\"/src/main.rs\")");
+/// ```
+pub fn tree_lazy<E: std::fmt::Display>(
+    roots: impl Fn() -> Vec<LazyItem> + 'static,
+    children: impl Fn(String) -> Result<Vec<LazyItem>, E> + Send + Sync + 'static,
+    selected: Signal<Option<String>>,
+) -> Node {
+    use std::collections::HashMap;
+    use std::rc::Rc;
+    use std::sync::Arc;
+
+    use crate::reactive::watch;
+    use crate::task::{spawn, Load};
+
+    let loaded: Signal<HashMap<String, Load<Vec<LazyItem>>>> = signal(HashMap::new());
+    let path = signal(Vec::<usize>::new());
+    let expanded = signal(HashSet::<Vec<usize>>::new());
+    let roots: Rc<dyn Fn() -> Vec<LazyItem>> = Rc::new(roots);
+    let children = Arc::new(children);
+
+    // The item at `path` among `roots` and what has loaded.
+    fn find(
+        roots: &[LazyItem],
+        loaded: &HashMap<String, Load<Vec<LazyItem>>>,
+        path: &[usize],
+    ) -> Option<LazyItem> {
+        let (first, rest) = path.split_first()?;
+        let mut item = roots.get(*first)?.clone();
+        for &i in rest {
+            item = match loaded.get(&item.key) {
+                Some(Load::Ready(kids)) => kids.get(i)?.clone(),
+                _ => return None,
+            };
+        }
+        Some(item)
+    }
+
+    // An item with what it has loaded under it, as the tree draws it.
+    fn grow(item: &LazyItem, loaded: &HashMap<String, Load<Vec<LazyItem>>>) -> TreeItem {
+        let label = rich::markup::escape(&item.label);
+        let node = TreeItem::new(label);
+        if !item.has_children {
+            return node;
+        }
+        match loaded.get(&item.key) {
+            Some(Load::Ready(kids)) => node.children(kids.iter().map(|kid| grow(kid, loaded))),
+            Some(Load::Failed(error)) => node.child(TreeItem::new(format!(
+                "[red]{}[/]",
+                rich::markup::escape(error)
+            ))),
+            // Loading, or not asked for yet: a row to show it has children.
+            _ => node.child(TreeItem::new("[dim]loading…[/]")),
+        }
+    }
+
+    // Load what an opened item holds, once.
+    let opened = roots.clone();
+    watch(
+        move || expanded.get(),
+        move |open: HashSet<Vec<usize>>, _| {
+            let roots = opened();
+            for path in open {
+                let item = loaded.with_untracked(|loaded| find(&roots, loaded, &path));
+                let Some(item) = item.filter(|item| item.has_children) else {
+                    continue;
+                };
+                if loaded.with_untracked(|loaded| loaded.contains_key(&item.key)) {
+                    continue;
+                }
+                loaded.update(|loaded| {
+                    loaded.insert(item.key.clone(), Load::Loading);
+                });
+                let (key, children) = (item.key.clone(), children.clone());
+                spawn(
+                    move || children(key).map_err(|error| error.to_string()),
+                    move |result, _| {
+                        loaded.update(|loaded| {
+                            loaded.insert(
+                                item.key.clone(),
+                                match result {
+                                    Ok(kids) => Load::Ready(kids),
+                                    Err(error) => Load::Failed(error),
+                                },
+                            );
+                        })
+                    },
+                );
+            }
+        },
+    );
+    // The selected key follows the selected path.
+    let named = roots.clone();
+    watch(
+        move || {
+            let roots = named();
+            path.with(|path| loaded.with(|loaded| find(&roots, loaded, path)))
+                .map(|item| item.key)
+        },
+        move |key, _| selected.set(key),
+    );
+    let items = move || {
+        let roots = roots();
+        loaded.with(|loaded| roots.iter().map(|item| grow(item, loaded)).collect())
+    };
+    tree_with(items, path, expanded)
+}
