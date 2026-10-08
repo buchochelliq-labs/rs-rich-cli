@@ -336,3 +336,52 @@ fn a_program_engine_shows_the_browser_screen_and_keeps_a_history() {
     // The first started at the page's size: the bar takes a row.
     assert_eq!(handles.borrow()[0].1.started(), Some((30, 3)));
 }
+
+/// An engine with no browser: every call fails at once, and it never
+/// calls its `notify`.
+struct NoBrowser;
+
+impl WebEngine for NoBrowser {
+    fn open(&mut self, _: &str) -> io::Result<()> {
+        Err(io::Error::new(io::ErrorKind::NotFound, "no browser found"))
+    }
+    fn resize(&mut self, _: u16, _: u16) -> io::Result<()> {
+        Err(io::Error::new(io::ErrorKind::NotFound, "no browser found"))
+    }
+    fn input(&mut self, _: WebInput) -> io::Result<()> {
+        Ok(())
+    }
+    fn back(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+    fn forward(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+    fn reload(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+    fn poll(&mut self) -> Option<WebFrame> {
+        None
+    }
+    fn state(&self) -> PageState {
+        PageState::default()
+    }
+    fn set_notify(&mut self, _: Notify) {}
+}
+
+#[test]
+fn a_first_open_that_fails_reaches_the_error_signal() {
+    let app = App::new(|| {
+        let page = web_view_with(NoBrowser, "https://one.example");
+        let h = page.handle();
+        column([
+            page.node(),
+            text(move || format!("error={:?}", h.error().get())).fixed(1),
+        ])
+    });
+    let mut driver = app.driver(40, 5);
+    turn(&mut driver);
+    turn(&mut driver);
+    let last = rows(&driver).last().cloned().unwrap_or_default();
+    assert!(last.contains("no browser found"), "{:?}", rows(&driver));
+}

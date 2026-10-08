@@ -195,15 +195,24 @@ impl ChromeEngine {
             return Err(io::Error::new(ErrorKind::NotFound, message));
         };
         let profile = temporary_profile()?;
-        self.profile = Some(profile.clone());
         // The window's first size; the page is sized to the pane once
         // attached.
-        let mut child = Command::new(&binary)
+        let spawned = Command::new(&binary)
             .args(launch_args(&profile, &self.args, 80, 24, self.cell))
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::piped())
-            .spawn()?;
+            .spawn();
+        // The profile is the engine's to remove only once Chrome runs in
+        // it; a failed start removes it here, so retries leave none behind.
+        let mut child = match spawned {
+            Ok(child) => child,
+            Err(error) => {
+                let _ = std::fs::remove_dir_all(&profile);
+                return Err(error);
+            }
+        };
+        self.profile = Some(profile.clone());
         let stderr = child.stderr.take().expect("piped stderr");
         lock(&self.shared).child = Some(child);
         let (sender, receiver) = mpsc::channel();
@@ -829,6 +838,27 @@ fn run(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_chrome_that_cannot_start_leaves_no_profile_behind() {
+        let ours = format!("rich-embed-chrome-{}-", std::process::id());
+        let profiles = || {
+            std::fs::read_dir(std::env::temp_dir())
+                .map(|dir| {
+                    dir.flatten()
+                        .filter(|e| e.file_name().to_string_lossy().starts_with(&ours))
+                        .count()
+                })
+                .unwrap_or(0)
+        };
+        let before = profiles();
+        let mut engine = ChromeEngine::new().binary("/nonexistent/rich-embed-chrome");
+        for _ in 0..3 {
+            assert!(engine.start().is_err());
+        }
+        assert!(engine.profile.is_none());
+        assert_eq!(profiles(), before);
+    }
 
     #[test]
     fn commands_are_devtools_json() {

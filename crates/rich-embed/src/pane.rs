@@ -207,7 +207,9 @@ impl Widget for PaneWidget {
 
     fn event(&mut self, cx: &mut EventCx, event: &WidgetEvent) -> Used {
         let mut state = self.state.borrow_mut();
-        if state.core.exit.is_some() || !state.core.started() {
+        // No program to give input to: it exited, has not started, or
+        // could not start. Keys go back to the app.
+        if state.core.exit.is_some() || state.core.error.is_some() || !state.core.started() {
             return Used::No;
         }
         match event {

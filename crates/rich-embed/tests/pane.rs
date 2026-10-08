@@ -208,3 +208,48 @@ fn released_keys_go_to_the_app_and_the_program_ends_with_its_pane() {
     assert_eq!(rows(&driver)[0], "");
     assert!(handle.killed());
 }
+
+/// A host whose program cannot start.
+struct Missing;
+
+impl rich_embed::PtyHost for Missing {
+    fn start(&mut self, _: u16, _: u16) -> std::io::Result<()> {
+        Err(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            "no such program",
+        ))
+    }
+    fn write(&mut self, _: &[u8]) -> std::io::Result<()> {
+        Ok(())
+    }
+    fn resize(&mut self, _: u16, _: u16) -> std::io::Result<()> {
+        Ok(())
+    }
+    fn read(&mut self) -> Vec<u8> {
+        Vec::new()
+    }
+    fn set_notify(&mut self, _: rich_embed::Notify) {}
+    fn exit_status(&mut self) -> Option<ExitStatus> {
+        None
+    }
+    fn kill(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+#[test]
+fn a_program_that_cannot_start_leaves_the_keys_to_the_app() {
+    let app = App::new(|| {
+        let quit = signal(false);
+        column([terminal_with(Missing).node(), text!("quit {quit}").fixed(1)])
+            .on_key("q", move |_| quit.set(true))
+    });
+    let mut driver = app.driver(30, 4);
+    turn(&mut driver);
+    key(&mut driver, "q");
+    assert!(
+        rows(&driver).iter().any(|r| r == "quit true"),
+        "{:?}",
+        rows(&driver)
+    );
+}

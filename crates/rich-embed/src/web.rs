@@ -165,6 +165,8 @@ struct ViewState {
     current: String,
     /// The last call to the engine that failed, and why.
     failure: Option<String>,
+    /// The engine's wake-up, kept to bring a failure to the signals.
+    notify: Option<Notify>,
 }
 
 impl ViewState {
@@ -176,6 +178,14 @@ impl ViewState {
             return;
         }
         self.failure = f(self.engine.as_mut()).err().map(|e| e.to_string());
+        // An engine that failed at once may never call `notify`; call it
+        // here, so the next turn copies the failure into the signals (this
+        // may run while the view draws, where signals are not written).
+        if self.failure.is_some() {
+            if let Some(notify) = &self.notify {
+                notify();
+            }
+        }
     }
 
     /// Copy the engine's state into the signals.
@@ -214,6 +224,7 @@ impl ViewState {
 
 impl Fed for ViewState {
     fn install(&mut self, notify: Notify) {
+        self.notify = Some(notify.clone());
         self.engine.set_notify(notify);
     }
 
@@ -283,6 +294,7 @@ pub fn web_view_with(engine: impl WebEngine + 'static, url: impl Into<String>) -
         first: Some(url.clone()),
         current: url.clone(),
         failure: None,
+        notify: None,
     }));
     let handle = WebHandle {
         address: signal(url),
