@@ -1467,6 +1467,11 @@ fn event(value: &CoreEvent) -> Event {
             event.rows = Some(*rows);
         }
         CoreEvent::Tick => {}
+        // Not handed to Python (see `handle`); named for completeness.
+        CoreEvent::KeyUp(key) => {
+            event.kind = "key_up";
+            event.key = Some(key.to_string());
+        }
         CoreEvent::Returned(code) => {
             event.kind = "returned";
             event.code = *code;
@@ -1662,6 +1667,11 @@ impl Component for PyComponent {
         // An exception from `render` (kept for the scope) ends it too.
         if self.stopped() {
             return Flow::Cancel;
+        }
+        // Key releases are not part of the Python component protocol: a
+        // `handle` written for presses would take them for presses.
+        if matches!(value, CoreEvent::KeyUp(_)) {
+            return Flow::Ignored;
         }
         let flow = self.call(
             "handle",

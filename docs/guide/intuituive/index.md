@@ -185,9 +185,15 @@ column([
 - **Key names** are the ones `rs-rich-interact` uses: `"q"`, `"ctrl+s"`,
   `"up k"` (either key). Spaces separate names, so the space key is
   `"space"`; a binding with no keys, or a name that is not a key (`"f99"`,
-  `"ctrl-s"`), panics when the binding is made. Names mean what the
-  terminal sends: `"shift+a"` is `"A"`, and `"ctrl+i"`, `"ctrl+m"` and
-  `"ctrl+["` are Tab, Enter and Esc.
+  `"ctrl-s"`), panics when the binding is made. A name means the key:
+  `"shift+a"` is `"A"`, and `"ctrl+i"` is Ctrl+I, not Tab. A terminal
+  without the kitty keyboard protocol sends some keys alike (Tab and
+  Ctrl+I, Enter and Ctrl+M, Esc and Ctrl+[), so its Tab fires a `"tab"` or
+  a `"ctrl+i"` binding (on one node, `"tab"` wins). With the protocol,
+  which the app turns on when the terminal has it (`.legacy_keys(true)`
+  keeps it off), Tab fires only `"tab"` and Ctrl+I only `"ctrl+i"`.
+- **Key releases** reach widgets as `WidgetEvent::KeyUp`, from a terminal
+  with the kitty protocol; bindings fire on presses (and repeats) only.
 - **Ctrl+C** quits, unless a node on the focused path binds it: then the
   binding runs, and quitting is up to you.
 - **When the focused node goes** (a row deleted from an `each`), the focus
@@ -394,7 +400,8 @@ What a widget can do:
   `scroll_up`. Signals read here make it draw again.
 - **`event`** gets these events:
   - keys while the focus is on it or inside it (with nothing focused,
-    while the pointer is over it);
+    while the pointer is over it), and `KeyUp` when one is let go (from a
+    terminal with the kitty keyboard protocol);
   - mouse events over it, and pasted text;
   - `Focus`, `Hover` and `Resize` when the focus or the pointer comes or
     goes, or its size changes;
@@ -402,7 +409,7 @@ What a widget can do:
     when its `previews_keys` is true (a container's shortcuts that win
     over its children's).
 
-  Keys, the mouse and paste it does not use bubble on. `cx.redraw()`
+  Keys, releases, the mouse and paste it does not use bubble on. `cx.redraw()`
   draws it again after a change to its own state, and `cx.app()` can
   quit, open a screen or move the focus.
 - **Hover and the pointer:**

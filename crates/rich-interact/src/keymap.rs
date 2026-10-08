@@ -277,15 +277,22 @@ impl Keymap {
     }
 
     /// The index of the binding `key` triggers: one whose keys were rebound
-    /// or installed before one declared, then the first.
+    /// or installed before one declared, then the first. A binding that
+    /// names the key wins over one it only [`matches`](Key::matches), so a
+    /// Tab from a legacy terminal does `tab`'s action before `ctrl+i`'s.
     fn find(&self, key: Key) -> Option<usize> {
+        self.find_by(|keys| keys.contains(&key))
+            .or_else(|| self.find_by(|keys| key.matches_any(keys)))
+    }
+
+    fn find_by(&self, fires: impl Fn(&[Key]) -> bool) -> Option<usize> {
         let mut found: Option<(u8, usize)> = None;
         for (index, binding) in self.bindings.iter().enumerate() {
             let (level, _) = self.source(binding);
             if found.is_some_and(|(best, _)| best >= level) {
                 continue;
             }
-            if self.effective(binding).contains(&key) {
+            if fires(&self.effective(binding)) {
                 found = Some((level, index));
             }
         }
@@ -314,7 +321,7 @@ impl Keymap {
 
     /// Whether `key` triggers `action`.
     pub fn is(&self, key: Key, action: &str) -> bool {
-        self.keys(action).contains(&key)
+        key.matches_any(&self.keys(action))
     }
 
     /// The keys that trigger `action` (in any context) now.
@@ -548,6 +555,26 @@ mod tests {
         let listed: Vec<String> = outer.bindings().iter().map(ToString::to_string).collect();
         assert_eq!(listed, ["q  quit", "n  move down"]);
         assert_eq!(outer.lookup(Key::char('n')).unwrap().id(), "inner.down");
+    }
+
+    #[test]
+    fn a_legacy_key_does_the_action_of_any_key_it_could_be() {
+        use crate::KeyCode;
+        let keymap = Keymap::new("legacy-test")
+            .bind("indent", keys("ctrl+i"), "indent")
+            .bind("submit", keys("ctrl+m"), "submit");
+        let tab = Key::new(KeyCode::Tab);
+        assert_eq!(keymap.action(tab), Some("indent"));
+        assert!(keymap.is(tab, "indent"));
+        assert_eq!(keymap.action(Key::new(KeyCode::Enter)), Some("submit"));
+        // With the kitty protocol, Tab is only Tab and Ctrl+I only Ctrl+I.
+        assert_eq!(keymap.action(tab.exact()), None);
+        assert!(!keymap.is(tab.exact(), "indent"));
+        assert_eq!(keymap.action(Key::ctrl('i').exact()), Some("indent"));
+        // A binding that names the key wins over one it could be.
+        let keymap = keymap.bind("next", keys("tab"), "next field");
+        assert_eq!(keymap.action(tab), Some("next"));
+        assert_eq!(keymap.action(Key::ctrl('i')), Some("indent"));
     }
 
     #[test]

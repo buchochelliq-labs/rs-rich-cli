@@ -216,7 +216,7 @@ fn translate(keymap: &Keymap, declared: &[ComponentBinding], key: Key) -> Option
     if keymap
         .declared()
         .iter()
-        .any(|binding| binding.keys.contains(&key))
+        .any(|binding| key.matches_any(&binding.keys))
     {
         return None;
     }
@@ -248,6 +248,8 @@ fn event(value: &Event) -> Option<ComponentEvent> {
         Event::Link(url) => ComponentEvent::Link(url.clone()),
         // A plugin component cannot hand the terminal off.
         Event::Returned(_) => return None,
+        // The plugin protocol has no releases.
+        Event::KeyUp(_) => return None,
     })
 }
 

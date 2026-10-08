@@ -338,8 +338,43 @@ stays on screen. The options can change that:
   output to the answer a script captures (`choice=$(app)`);
 - `mouse: true` reports clicks and the wheel;
 - `bracketed_paste: true` delivers a paste as one event;
+- `legacy_keys: true` keeps the kitty keyboard protocol off (see
+  [Keys](#keys));
 - `LoopOptions { transient: true, .. }` clears the region at the end;
 - `height` limits how many rows the inline region may take.
+
+## Keys
+
+A key name is what `Key::parse`, `keymap::keys` and a configuration file
+read: `q`, `ctrl+s`, `shift+tab`, `pagedown`, `f1` to `f24`, `space`. Shift
+with a letter is the capital letter (`shift+a` is `A`, `ctrl+shift+a` is
+Ctrl and `A`); Shift with anything else (`shift+1`) depends on the
+keyboard layout and is not a name.
+
+A name means the key: `ctrl+i` is Ctrl+I, not Tab. A terminal without the
+kitty keyboard protocol cannot tell some keys apart, because it sends one
+byte for both: Tab and Ctrl+I, Enter and Ctrl+M, Esc and Ctrl+[, Ctrl+4
+to 7 and Ctrl+\ ] ^ _, Ctrl+Space and Ctrl+@, Ctrl+A and Ctrl+Shift+A;
+some send Ctrl+H for Backspace. Bindings are matched with `Key::matches`,
+which reads a key from such a terminal as any key it could be: its Tab
+fires a `tab` or a `ctrl+i` binding, and a binding that names the key
+exactly wins over one it could be.
+
+A session asks the terminal whether it has the kitty protocol, and turns
+it on when it does (kitty, ghostty, foot and Alacritty among others).
+Every key is then exact (`Key::is_exact`): Tab fires only `tab`, Ctrl+I
+only `ctrl+i`. Keys held down repeat as presses, and keys let go arrive as
+`Event::KeyUp`, which no binding fires; a component that wants releases
+matches them itself. `SessionOptions { legacy_keys: true, .. }` keeps the
+protocol off. A loop of your own that reads crossterm uses
+`event::from_crossterm`, or `event::from_crossterm_kitty` after pushing
+the protocol's flags.
+
+The question is asked once per process, and the session waits for the
+answer. Real terminals answer at once; a terminal emulator that answers
+neither the protocol's query nor the device attributes query sent after it
+keeps the session waiting two seconds before it goes on without the
+protocol.
 
 ## Several at once: the event loop
 
@@ -361,7 +396,8 @@ routing on top of it.
 ## The terminal is always given back
 
 A session turns on raw mode and, optionally, the alternate screen, mouse
-reporting and bracketed paste. It undoes all of them on every way out:
+reporting, bracketed paste and the kitty keyboard protocol. It undoes all
+of them on every way out:
 
 - when the component finishes;
 - on an early return or `?`, when the session is dropped;
@@ -493,3 +529,8 @@ let (outcome, record) = headless::run(Counter(0), script, 40, 5);
 assert_eq!(outcome.unwrap(), Outcome::Done(2));
 assert_eq!(record.frames, ["count: 0", "count: 1", "count: 2"]);
 ```
+
+Scripted keys arrive as a terminal without the kitty protocol sends them:
+`ctrl+i` arrives as a Tab, which fires a `tab` or a `ctrl+i` binding. Set
+`Headless::exact_keys` to stand for a terminal with the protocol, where
+every key is only itself; `Script::key_up` lets a key go.

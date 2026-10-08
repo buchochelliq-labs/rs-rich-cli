@@ -9,6 +9,48 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### intuiTUIve and interact: the kitty keyboard protocol (rs-rich-interact 0.0.6)
+
+0.0.18 workstream 2. rs-rich-intuituive changes with it.
+
+- **The kitty keyboard protocol** is turned on when the terminal answers
+  its query (asked once per process), and popped on every way out: exit,
+  a hand-off, Ctrl+Z or SIGTSTP (and pushed again on `fg`), a panic and
+  the signals that restore the terminal. `SessionOptions::legacy_keys`
+  and intuiTUIve's `App::legacy_keys` keep it off; `Session::kitty_keys`
+  says whether it is on.
+- **Key names mean the key.** `"ctrl+i"` parses as Ctrl+I, not Tab;
+  likewise `"ctrl+m"`, `"ctrl+["`, `"ctrl+\"`, `"ctrl+]"`, `"ctrl+^"`,
+  `"ctrl+_"` and `"ctrl+@"`, which 0.0.5 turned into the keys a legacy
+  terminal sends. `"ctrl+shift+a"` is Ctrl and `A`. `"shift+a"` is still
+  `"A"`, F1 to F24 are names, and `"shift+1"` is still an error.
+- **Legacy terminals keep working.** Bindings match with the new
+  `Key::matches`: a key from a terminal without the protocol fires a
+  binding for any key that terminal sends alike (its Tab fires `tab` or
+  `ctrl+i`, its Enter `enter` or `ctrl+m`, its Esc `esc` or `ctrl+[`, its
+  Ctrl+4 to 7 `ctrl+\ ] ^ _`, its Ctrl+Space `ctrl+@`, its Ctrl+H `ctrl+h`
+  or `backspace`), and a binding that names the key wins over one it
+  could be. With the protocol, every key is `Key::exact` and fires only
+  its own binding. `Keymap`, item actions, the action menu, plugin
+  components and intuiTUIve's `on_key`, palette and help keys all match
+  this way. `Key::legacy` gives the key a legacy terminal sends for a
+  name, and `Key::pick` chooses among bindings.
+- **Releases and repeats.** A key let go arrives as the new
+  `Event::KeyUp` (and in intuiTUIve as `WidgetEvent::KeyUp`, offered along
+  the focused path); a repeat arrives as a press. Bindings fire on presses
+  only. `event::from_crossterm` delivers releases too, and the new
+  `event::from_crossterm_kitty` reads keys from a terminal with the
+  protocol pushed. Python components (`rs_rich.interact`) are not handed
+  releases.
+- **Headless:** scripted keys arrive as a legacy terminal sends them, as
+  before; `Headless::exact_keys` stands for a terminal with the protocol,
+  and `Script::key_up` lets a key go. The PTY tests answer the protocol's
+  query, as a terminal with it and as one without.
+- **Breaking:** `Key` has a private field, so it is built with
+  `Key::new`, `Key::with`, `Key::ctrl`, `Key::char` or `Key::parse`, not a
+  struct literal; `Event` has a new variant; `SessionOptions` has a new
+  field (build it with `..SessionOptions::default()`).
+
 ## 0.0.17 cohort
 
 ext 0.0.15 / micro 0.0.4 / record 0.0.5 / interact 0.0.5 / ratatui 0.0.2 /

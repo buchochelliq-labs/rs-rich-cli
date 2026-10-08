@@ -307,7 +307,9 @@ impl<T> Item<T> {
 
     /// The action bound to `key`, if any.
     pub fn action_for(&self, key: Key) -> Option<&Action> {
-        self.actions.iter().find(|action| action.key == Some(key))
+        self.actions
+            .iter()
+            .find(|action| action.key.is_some_and(|k| key.matches(&k)))
     }
 
     /// The same item with its value mapped.

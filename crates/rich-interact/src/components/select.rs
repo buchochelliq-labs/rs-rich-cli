@@ -714,7 +714,10 @@ impl<T> Select<T> {
                 self.menu = Some(ActionMenu::new(actions, key));
                 return None;
             }
-            if let Some(action) = actions.iter().find(|action| action.key == Some(key)) {
+            if let Some(action) = actions
+                .iter()
+                .find(|action| action.key.is_some_and(|k| key.matches(&k)))
+            {
                 let action = action.clone();
                 return self.run_action(index, &action);
             }
