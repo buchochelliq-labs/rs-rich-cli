@@ -75,25 +75,25 @@ version = "0.0.4"
 name = "rs-rich-record"
 registry = "crates.io"
 manifest = "crates/rich-record/Cargo.toml"
-version = "0.0.5"
+version = "0.0.6"
 
 [[package]]
 name = "rs-rich-interact"
 registry = "crates.io"
 manifest = "crates/rich-interact/Cargo.toml"
-version = "0.0.5"
+version = "0.0.6"
 
 [[package]]
 name = "rs-rich-ratatui"
 registry = "crates.io"
 manifest = "crates/rich-ratatui/Cargo.toml"
-version = "0.0.2"
+version = "0.0.3"
 
 [[package]]
 name = "rs-rich-intuituive"
 registry = "crates.io"
 manifest = "crates/rich-intuituive/Cargo.toml"
-version = "0.0.2"
+version = "0.0.3"
 
 [[package]]
 name = "rs-rich-data"
@@ -105,7 +105,7 @@ version = "0.0.2"
 name = "rs-rich-cli"
 registry = "crates.io"
 manifest = "crates/rich-cli/Cargo.toml"
-version = "0.0.17"
+version = "0.0.18"
 
 # The Python bindings: PyPI `rs-rich`, versioned by crates/rich-py/pyproject.toml
 # (its Cargo.toml must agree). Outside the Cargo workspace.
@@ -113,4 +113,4 @@ version = "0.0.17"
 name = "rs-rich"
 registry = "pypi"
 manifest = "crates/rich-py/pyproject.toml"
-version = "0.0.5"
+version = "0.0.6"
