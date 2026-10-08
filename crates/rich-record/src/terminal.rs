@@ -217,13 +217,23 @@ impl Terminal {
     }
 
     /// Answer the CSI query that `last` ends, if it is one a program waits
-    /// on. Only primary device attributes: crossterm asks for them after
-    /// the kitty keyboard query, and would wait two seconds without an
-    /// answer. Not answering the kitty query itself says it is unsupported.
+    /// on. Primary device attributes: a session asks for them after the
+    /// kitty keyboard query, and would wait two seconds without an answer.
+    /// Not answering the kitty query itself says it is unsupported. And
+    /// DECRQM for synchronized output (mode 2026), which the session asks
+    /// first: recognised and reset, so recorded programs write each frame
+    /// as one synchronized update, as on the terminals that have it. vt100
+    /// passes over the mode's set and reset, and a frame arrives in one
+    /// write anyway, so the screen is the same either way. Other modes'
+    /// reports go unanswered, as before.
     fn answer(&mut self, last: u8) {
-        if last == b'c' && matches!(self.csi.as_slice(), b"" | b"0") {
-            // A VT220 with no extensions, as xterm answers by default.
-            self.replies.extend_from_slice(b"\x1b[?62c");
+        match (last, self.csi.as_slice()) {
+            (b'c', b"" | b"0") => {
+                // A VT220 with no extensions, as xterm answers by default.
+                self.replies.extend_from_slice(b"\x1b[?62c");
+            }
+            (b'p', b"?2026$") => self.replies.extend_from_slice(b"\x1b[?2026;2$y"),
+            _ => {}
         }
     }
 
@@ -474,6 +484,27 @@ mod tests {
         terminal.process(b"\x1b[").unwrap();
         terminal.process(b"c").unwrap();
         assert_eq!(terminal.take_replies(), b"\x1b[?62c");
+    }
+
+    #[test]
+    fn synchronized_output_is_reported_and_its_updates_change_nothing() {
+        let mut terminal = Terminal::new(2, 10);
+        // The session's start-up query: DECRQM for mode 2026, the kitty
+        // query, then DA1, answered in that order.
+        terminal.process(b"\x1b[?2026$p\x1b[?u\x1b[c").unwrap();
+        assert_eq!(terminal.take_replies(), b"\x1b[?2026;2$y\x1b[?62c");
+        // Other modes' reports, and an ANSI-mode DECRQM, are not answered.
+        terminal.process(b"\x1b[?2004$p\x1b[2026$p").unwrap();
+        assert!(terminal.take_replies().is_empty());
+        // An update shows what it holds, as it would without one.
+        let (plain, _) = screen("ab", 10);
+        terminal.process(b"\x1b[?2026hab\x1b[?2026l").unwrap();
+        assert_eq!(terminal.contents(), plain.contents());
+        // Split across reads, and inside an update.
+        terminal.process(b"\x1b[?2026h\x1b[?20").unwrap();
+        terminal.process(b"26$p\x1b[?2026l").unwrap();
+        assert_eq!(terminal.take_replies(), b"\x1b[?2026;2$y");
+        assert_eq!(terminal.contents(), plain.contents());
     }
 
     #[test]
