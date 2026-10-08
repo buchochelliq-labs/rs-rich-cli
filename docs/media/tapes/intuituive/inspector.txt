@@ -1,8 +1,8 @@
 ╭─ New ────────────────────────────────────────────────────╮╭──────────────────────────────────────╮
 │? Add ›                                                   ││inspector · F12 hides                 │
 ╰──────────────────────────────────────────────────────────╯│frame 3 · drew 2 of 4 dirty           │
-╭─ To do ──────────────────────────────────────────────────╮│damage 2 rects, 118 cells             │
-│✓ Read the intuiTUIve tutorial                            ││sent 1415 B last frame                │
+╭─ To do ──────────────────────────────────────────────────╮│damage 3 rects, 176 cells             │
+│✓ Read the intuiTUIve tutorial                            ││sent 1409 B last frame                │
 │• Build an app                                            ││                                      │
 │                                                          ││screen 1                              │
 │                                                          ││  column 60x22                        │
