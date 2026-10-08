@@ -660,3 +660,60 @@ fn autofocus_wins_over_the_first_focusable_node_on_every_screen() {
     assert_eq!(focus, ["b focus true", "b focus false", "b focus true"]);
     assert!(entries(&seen, "a focus").is_empty());
 }
+
+#[test]
+fn an_autofocus_node_built_lazily_takes_the_focus_from_the_fallback() {
+    let seen = log();
+    let (first, lazy) = (seen.clone(), seen.clone());
+    let app = App::new(move || {
+        let (first, lazy) = (first.clone(), lazy.clone());
+        column([
+            label("first")
+                .focusable()
+                .on_key("x", move |_| first.borrow_mut().push("first".into())),
+            each(
+                || vec![0],
+                move |_| {
+                    let lazy = lazy.clone();
+                    label("lazy")
+                        .autofocus()
+                        .on_key("x", move |_| lazy.borrow_mut().push("lazy".into()))
+                },
+            ),
+        ])
+        .on_key("q", |cx| cx.quit())
+    });
+    run(app, Script::new().keys("x q"), 20, 4);
+    assert_eq!(*seen.borrow(), ["lazy"]);
+}
+
+#[test]
+fn a_lazy_autofocus_node_leaves_a_focus_the_user_chose() {
+    let seen = log();
+    let (first, lazy) = (seen.clone(), seen.clone());
+    let app = App::new(move || {
+        let (first, lazy) = (first.clone(), lazy.clone());
+        let shown = signal(false);
+        column([
+            label("first")
+                .focusable()
+                .on_key("x", move |_| first.borrow_mut().push("first".into())),
+            label("second").focusable(),
+            each(
+                move || if shown.get() { vec![0] } else { Vec::new() },
+                move |_| {
+                    let lazy = lazy.clone();
+                    label("lazy")
+                        .autofocus()
+                        .on_key("x", move |_| lazy.borrow_mut().push("lazy".into()))
+                },
+            ),
+        ])
+        .on_key("s", move |_| shown.set(true))
+        .on_key("q", |cx| cx.quit())
+    });
+    // Tab there and back: the user chose `first`, so the row shown later
+    // does not take the focus.
+    run(app, Script::new().keys("tab shift+tab s x q"), 20, 4);
+    assert_eq!(*seen.borrow(), ["first"]);
+}

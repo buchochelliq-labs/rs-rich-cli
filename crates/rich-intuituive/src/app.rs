@@ -478,6 +478,9 @@ struct Layer {
     /// Its focusable nodes, in Tab order, at the last frame: where the
     /// focus goes when the focused node leaves the tree.
     order: Vec<NodeId>,
+    /// The focus went to the first focusable node because no node asked
+    /// for it; an `autofocus` node built later takes it over.
+    fallback: bool,
 }
 
 thread_local! {
@@ -656,6 +659,7 @@ impl App {
                 timers,
                 watches,
                 order: Vec::new(),
+                fallback: false,
             }],
             restack: false,
             restless: HashMap::new(),
@@ -1381,6 +1385,7 @@ impl App {
             timers,
             watches,
             order: Vec::new(),
+            fallback: false,
         });
         self.restack = true;
         self.set_focus(None);
@@ -1508,6 +1513,13 @@ impl App {
         }
         if self.focus().is_none() {
             self.focus_first();
+        } else if self.top().fallback {
+            // An `autofocus` node that a lazy `each` or `switch` built
+            // after the first frame still takes the focus, as long as
+            // only the fallback has held it.
+            if let Some(id) = self.autofocused() {
+                self.set_focus(Some(id));
+            }
         }
         self.top_mut().order = ids;
     }
@@ -1547,15 +1559,22 @@ impl App {
     /// Focus the screen's first node that asked for it with
     /// [`autofocus`](crate::Node::autofocus), else its first focusable one.
     fn focus_first(&mut self) {
+        let chosen = self.autofocused();
+        if let Some(first) = chosen.or_else(|| self.focusable().first().copied()) {
+            self.set_focus(Some(first));
+            self.top_mut().fallback = chosen.is_none();
+        }
+    }
+
+    /// The screen's first node that asked for the focus.
+    fn autofocused(&self) -> Option<NodeId> {
         let mut chosen = None;
         self.top().root.walk(&mut |node, _| {
             if node.autofocus && chosen.is_none() {
                 chosen = Some(node.id);
             }
         });
-        if let Some(first) = chosen.or_else(|| self.focusable().first().copied()) {
-            self.set_focus(Some(first));
-        }
+        chosen
     }
 
     fn set_focus(&mut self, id: Option<NodeId>) {
@@ -1570,7 +1589,9 @@ impl App {
                 .extend(id.map(|id| (id, WidgetEvent::Focus(true))));
             self.focused = id;
         }
-        self.top_mut().focus = id;
+        let top = self.top_mut();
+        top.focus = id;
+        top.fallback = false;
         let path = id.map(|id| self.path_to(id)).unwrap_or_default();
         let runtime = self.runtime.clone();
         runtime.enter(|| self.focus_path.set(path));
