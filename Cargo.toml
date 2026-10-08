@@ -34,12 +34,12 @@ rich-art = { package = "rs-rich-art", path = "crates/rich-art", version = "0.0.1
 rich-diagram = { package = "rs-rich-diagram", path = "crates/rich-diagram", version = "0.0.2" }
 rich-mermaid = { package = "rs-rich-mermaid", path = "crates/rich-mermaid", version = "0.0.5" }
 rich-lumis = { package = "rs-rich-lumis", path = "crates/rich-lumis", version = "0.0.3" }
-rich-record = { package = "rs-rich-record", path = "crates/rich-record", version = "0.0.5" }
-rich-interact = { package = "rs-rich-interact", path = "crates/rich-interact", version = "0.0.5" }
+rich-record = { package = "rs-rich-record", path = "crates/rich-record", version = "0.0.6" }
+rich-interact = { package = "rs-rich-interact", path = "crates/rich-interact", version = "0.0.6" }
 rich-micro = { package = "rs-rich-micro", path = "crates/rich-micro", version = "0.0.4" }
 rich-data = { package = "rs-rich-data", path = "crates/rich-data", version = "0.0.2" }
-rich-ratatui = { package = "rs-rich-ratatui", path = "crates/rich-ratatui", version = "0.0.2" }
-rich-intuituive = { package = "rs-rich-intuituive", path = "crates/rich-intuituive", version = "0.0.2" }
+rich-ratatui = { package = "rs-rich-ratatui", path = "crates/rich-ratatui", version = "0.0.3" }
+rich-intuituive = { package = "rs-rich-intuituive", path = "crates/rich-intuituive", version = "0.0.3" }
 rich-embed = { package = "rs-rich-embed", path = "crates/rich-embed", version = "0.0.1" }
 # Cargo's default caret requirement treats 0.0.x specially: `version = "0.0.2"`
 # means >=0.0.2,<0.0.3, not >=0.0.2,<0.1.0. Therefore any internal crate bump
