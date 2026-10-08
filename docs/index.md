@@ -198,17 +198,17 @@ Each crate versions independently; see [Branching and releases](BRANCHING.md).
 | [`rs-rich-plugin-api`](https://crates.io/crates/rs-rich-plugin-api) | `0.0.3` |
 | [`rs-rich-macros`](https://crates.io/crates/rs-rich-macros) | `0.0.3` |
 | [`rs-rich-ext`](https://crates.io/crates/rs-rich-ext) | `0.0.15` |
-| [`rs-rich-cli`](https://crates.io/crates/rs-rich-cli) | `0.0.17` |
+| [`rs-rich-cli`](https://crates.io/crates/rs-rich-cli) | `0.0.18` |
 | [`rs-rich-art`](https://crates.io/crates/rs-rich-art) | `0.0.12` |
 | [`rs-rich-mermaid`](https://crates.io/crates/rs-rich-mermaid) | `0.0.5` |
 | [`rs-rich-lumis`](https://crates.io/crates/rs-rich-lumis) | `0.0.3` |
-| [`rs-rich-record`](https://crates.io/crates/rs-rich-record) | `0.0.5` |
-| [`rs-rich-interact`](https://crates.io/crates/rs-rich-interact) | `0.0.5` |
+| [`rs-rich-record`](https://crates.io/crates/rs-rich-record) | `0.0.6` |
+| [`rs-rich-interact`](https://crates.io/crates/rs-rich-interact) | `0.0.6` |
 | [`rs-rich-micro`](https://crates.io/crates/rs-rich-micro) | `0.0.4` |
 | [`rs-rich-diagram`](https://crates.io/crates/rs-rich-diagram) | `0.0.2` |
 | [`rs-rich-data`](https://crates.io/crates/rs-rich-data) | `0.0.2` |
-| [`rs-rich-ratatui`](https://crates.io/crates/rs-rich-ratatui) | `0.0.2` |
-| [`rs-rich-intuituive`](https://crates.io/crates/rs-rich-intuituive) | `0.0.2` |
+| [`rs-rich-ratatui`](https://crates.io/crates/rs-rich-ratatui) | `0.0.3` |
+| [`rs-rich-intuituive`](https://crates.io/crates/rs-rich-intuituive) | `0.0.3` |
 | [`rs-rich-web`](https://crates.io/crates/rs-rich-web) | `0.0.1` |
 <!-- END MANIFEST VERSIONS -->
 
