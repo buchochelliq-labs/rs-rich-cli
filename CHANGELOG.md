@@ -18,7 +18,9 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   a hand-off, Ctrl+Z or SIGTSTP (and pushed again on `fg`), a panic and
   the signals that restore the terminal. `SessionOptions::legacy_keys`
   and intuiTUIve's `App::legacy_keys` keep it off; `Session::kitty_keys`
-  says whether it is on.
+  says whether it is on. It is only asked when standard output is the
+  terminal: crossterm writes the query there, so in
+  `answer=$(rich write)` it would land in the answer.
 - **Key names mean the key.** `"ctrl+i"` parses as Ctrl+I, not Tab;
   likewise `"ctrl+m"`, `"ctrl+["`, `"ctrl+\"`, `"ctrl+]"`, `"ctrl+^"`,
   `"ctrl+_"` and `"ctrl+@"`, which 0.0.5 turned into the keys a legacy
@@ -50,6 +52,9 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   `Key::new`, `Key::with`, `Key::ctrl`, `Key::char` or `Key::parse`, not a
   struct literal; `Event` has a new variant; `SessionOptions` has a new
   field (build it with `..SessionOptions::default()`).
+- **rs-rich-record** answers a program's device-attributes query (as a
+  VT220, the way xterm does by default), so a recorded program that asks
+  for the kitty protocol does not wait two seconds for an answer.
 
 ## 0.0.17 cohort
 

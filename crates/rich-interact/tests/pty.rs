@@ -16,7 +16,7 @@ use std::process::Command;
 
 use rich_interact::policy::Policy;
 use rich_interact::{
-    run, Component, Context, Event, Flow, KeyCode, RunOptions, SessionOptions, View,
+    run, Component, Context, Event, Flow, KeyCode, Output, RunOptions, SessionOptions, View,
 };
 use support::{assert_restored, Pty};
 
@@ -107,7 +107,11 @@ fn child() {
         nested: None,
         released: None,
     };
-    let outcome = run(child, &child_options());
+    let mut options = child_options();
+    if std::env::var_os("INTERACT_CHILD").is_some_and(|mode| mode == "piped") {
+        options.session.output = Output::Stderr;
+    }
+    let outcome = run(child, &options);
     println!("OUTCOME {outcome:?}");
 }
 
@@ -226,6 +230,24 @@ fn the_kitty_protocol_is_popped_on_every_way_out() {
     let handed = output.find("handed-off").expect("the command ran");
     assert!(output[..handed].contains("\x1b[<1u"), "{output:?}");
     assert!(output[handed..].contains("\x1b[>3u"), "{output:?}");
+    assert_restored(&output, &parser);
+}
+
+/// With standard output piped, as in `answer=$(rich write)`, the kitty
+/// query is not asked: crossterm would write it to standard output, into
+/// the answer, and the terminal's reply would reach the shell afterwards.
+#[test]
+fn a_piped_answer_holds_no_kitty_query() {
+    let mut pty = Pty::start_kitty_piped("piped");
+    pty.wait_for("child ready");
+    pty.send("\r");
+    let (output, parser) = pty.finish();
+    assert!(
+        output.contains("OUTCOME Ok(Done(\"finished\"))$"),
+        "{output}"
+    );
+    assert!(!output.contains("\\033[?u"), "{output:?}");
+    assert!(!output.contains("\x1b[?u"), "{output:?}");
     assert_restored(&output, &parser);
 }
 

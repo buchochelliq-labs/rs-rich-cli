@@ -31,7 +31,18 @@ impl Pty {
         Pty::start_as(mode, true)
     }
 
+    /// A terminal with the kitty keyboard protocol, with the child's
+    /// standard output piped through `sed -n l`, which shows its escapes,
+    /// as `answer=$(rich write)` captures it.
+    pub fn start_kitty_piped(mode: &str) -> Pty {
+        Pty::start_with(mode, true, " | sed -n l")
+    }
+
     fn start_as(mode: &str, kitty: bool) -> Pty {
+        Pty::start_with(mode, kitty, "")
+    }
+
+    fn start_with(mode: &str, kitty: bool, pipe: &str) -> Pty {
         let pty = native_pty_system()
             .openpty(PtySize {
                 rows: 24,
@@ -42,7 +53,7 @@ impl Pty {
             .unwrap();
         let exe = std::env::current_exe().unwrap();
         let script = format!(
-            "'{}' --exact child --nocapture --test-threads=1; stty -a; echo STTY-DONE",
+            "'{}' --exact child --nocapture --test-threads=1{pipe}; stty -a; echo STTY-DONE",
             exe.display()
         );
         let mut command = CommandBuilder::new("sh");

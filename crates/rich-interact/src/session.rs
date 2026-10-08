@@ -414,12 +414,22 @@ pub struct Session {
 fn kitty_answered() -> bool {
     match KITTY_ANSWER.load(Ordering::SeqCst) {
         0 => {
-            let yes = crossterm::terminal::supports_keyboard_enhancement().unwrap_or(false);
+            let yes = query_reaches_terminal()
+                && crossterm::terminal::supports_keyboard_enhancement().unwrap_or(false);
             KITTY_ANSWER.store(if yes { 2 } else { 1 }, Ordering::SeqCst);
             yes
         }
         answer => answer == 2,
     }
+}
+
+/// Whether crossterm's keyboard query would reach the terminal. It means
+/// to write to `/dev/tty`, but opens it read-only, so the query always goes
+/// to standard output: in `answer=$(rich write)` it would land in the
+/// answer, and the terminal's reply at the shell prompt afterwards.
+fn query_reaches_terminal() -> bool {
+    use std::io::IsTerminal;
+    io::stdout().is_terminal()
 }
 
 impl Session {
