@@ -452,6 +452,10 @@ impl Widget for Table {
         })
     }
 
+    fn access_state(&self) -> crate::a11y::AccessState {
+        crate::a11y::AccessState::item(self.selected.get_untracked(), self.rows.len())
+    }
+
     fn measure(&mut self, _cx: &MeasureCx, axis: Axis, width: u16, _height: u16) -> u16 {
         match axis {
             Axis::Vertical => {
@@ -732,6 +736,10 @@ impl Widget for Tabs {
         spans
             .get(self.selected.get_untracked())
             .map(|&(x, w)| crate::screen::Rect::new(x, 0, w, 1))
+    }
+
+    fn access_state(&self) -> crate::a11y::AccessState {
+        crate::a11y::AccessState::item(self.selected.get_untracked(), (self.titles)().len())
     }
 
     fn measure(&mut self, _cx: &MeasureCx, axis: Axis, _width: u16, _height: u16) -> u16 {

@@ -254,12 +254,28 @@ impl Widget for Tree {
         let rows = self.rows();
         let at = index_of(&rows, &self.selected.get_untracked());
         let row = at.checked_sub(self.first.get())?;
+        // The label, after the indent and the arrow (and the marker, in
+        // text mode): what is selected is the item, not its arrow.
+        let depth = rows.get(at).map_or(1, |row| row.path.len());
+        let marker = if crate::a11y::text_mode() { 2 } else { 0 };
+        let x = (marker + 2 * depth).min(u16::MAX as usize) as u16;
         (row < self.height.get().max(1)).then_some(crate::screen::Rect::new(
-            0,
+            x,
             row as u16,
             u16::MAX,
             1,
         ))
+    }
+
+    fn access_state(&self) -> crate::a11y::AccessState {
+        let rows = self.rows();
+        let at = index_of(&rows, &self.selected.get_untracked());
+        let mut state = crate::a11y::AccessState::item(at, rows.len());
+        state.expanded = rows
+            .get(at)
+            .filter(|row| row.parent)
+            .map(|row| self.is_expanded(&row.path));
+        state
     }
 
     fn measure(&mut self, _cx: &MeasureCx, axis: Axis, width: u16, _height: u16) -> u16 {
@@ -549,5 +565,9 @@ pub fn tree_lazy<E: std::fmt::Display>(
         let roots = roots();
         loaded.with(|loaded| roots.iter().map(|item| grow(item, loaded)).collect())
     };
-    tree_with(items, path, expanded)
+    // Busy, for assistive technology, while a level loads.
+    let loading = move || {
+        loaded.with_untracked(|loaded| loaded.values().any(|load| matches!(load, Load::Loading)))
+    };
+    tree_with(items, path, expanded).busy_when(loading)
 }

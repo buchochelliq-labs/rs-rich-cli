@@ -192,13 +192,18 @@ impl Widget for Split {
         } else {
             cx.style("split.divider", "bright_black")
         };
+        // Decoration: blank in text mode, so it is not read out.
+        let text = crate::a11y::text_mode();
         match self.axis {
             Axis::Horizontal => {
                 for y in 0..height {
-                    canvas.set(at, y, '│', Some(&style));
+                    canvas.set(at, y, if text { ' ' } else { '│' }, Some(&style));
                 }
             }
-            Axis::Vertical => canvas.print(0, at, &"─".repeat(width as usize), Some(&style)),
+            Axis::Vertical => {
+                let rule = if text { " " } else { "─" };
+                canvas.print(0, at, &rule.repeat(width as usize), Some(&style))
+            }
         }
     }
 

@@ -645,13 +645,18 @@ pub struct App {
     theme_base: Theme,
     theme_file: Option<ThemeFile>,
     sheet: Option<SheetSource>,
-    /// For assistive technology: whether to draw for it, where
-    /// announcements go, those not yet taken, and whether a screen just
+    /// For assistive technology: whether to draw for it, or write lines
+    /// for it (linear mode), where announcements go, those not yet taken,
+    /// those linear mode has still to write, and whether a screen just
     /// opened.
     accessible: bool,
+    linear: bool,
     announcer: Option<Box<dyn crate::a11y::Announcer>>,
     announcements: Vec<crate::a11y::Announcement>,
+    unwritten: Vec<String>,
     opened: bool,
+    /// Accessible: where the cursor was parked by the last frame.
+    caret_at: Option<(u16, u16)>,
     /// Draw a frame even if no node is dirty (the inspector has news).
     poke: bool,
 }
@@ -700,6 +705,7 @@ impl App {
         let watches = WATCHES
             .with(|watches| watches.borrow_mut().take())
             .unwrap_or_default();
+        let (accessible, linear) = crate::a11y::from_env();
         App {
             runtime,
             layers: vec![Layer {
@@ -752,10 +758,13 @@ impl App {
             theme_base: Theme::default(),
             theme_file: None,
             sheet: None,
-            accessible: crate::a11y::from_env(),
+            accessible,
+            linear,
             announcer: None,
             announcements: Vec::new(),
+            unwritten: Vec::new(),
             opened: false,
+            caret_at: None,
             poke: false,
         }
     }
@@ -855,17 +864,25 @@ impl App {
             .unwrap_or_else(|_| markup.clone());
         self.toasts.push((markup, until));
         self.poke = true;
-        self.announce(crate::a11y::Announcement {
-            text,
-            urgent: false,
-        });
+        self.announce(
+            crate::a11y::Announcement {
+                text,
+                urgent: false,
+            },
+            true,
+        );
     }
 
     /// Hand `announcement` to the announcer and keep it for
-    /// [`Driver::take_announcements`] (the last 64).
-    fn announce(&mut self, announcement: crate::a11y::Announcement) {
+    /// [`Driver::take_announcements`] (the last 64). In linear mode it is
+    /// also written, if `write`: a live node's change and a screen opening
+    /// are not, as their lines say the same.
+    fn announce(&mut self, announcement: crate::a11y::Announcement, write: bool) {
         if let Some(announcer) = &mut self.announcer {
             announcer.announce(&announcement);
+        }
+        if self.linear && write && !announcement.text.is_empty() {
+            self.unwritten.push(announcement.text.clone());
         }
         if self.announcements.len() >= 64 {
             self.announcements.remove(0);
@@ -875,9 +892,12 @@ impl App {
 
     /// Draw for assistive technology: the terminal's cursor on what has the
     /// focus (its caret, else its selected item, else its corner), boxes
-    /// as blanks, no colour, a `>` on selected items, no animation. On by
-    /// default when `INTUITUIVE_ACCESSIBLE` is set (to anything but `0`),
-    /// or rs-rich's `RICH_A11Y` names `screen-reader`.
+    /// as blanks, no colour, a `>` on selected items, no animation. The
+    /// cursor is hidden while a frame is written and shown once it is back
+    /// on the focus; a frame that changes nothing does not move it. On by
+    /// default when `INTUITUIVE_ACCESSIBLE` is set (to anything but `0`;
+    /// `linear` turns on [linear mode](Self::linear) instead), or rs-rich's
+    /// `RICH_A11Y` names `screen-reader`.
     ///
     /// ```
     /// use intuituive::prelude::*;
@@ -893,6 +913,42 @@ impl App {
     pub fn accessible(mut self, on: bool) -> App {
         self.accessible = on;
         self
+    }
+
+    /// Linear mode, for screen reader users: no screen is drawn. The
+    /// accessibility tree is written as lines of plain text, in reading
+    /// order ([`AccessNode::describe`](crate::a11y::AccessNode::describe)),
+    /// and after each event only the lines of what changed, like a
+    /// transcript, which a screen reader reads as it arrives. The focus
+    /// moving is written as `→ ` and the line of what has it; toasts and
+    /// [`Ctx::announce`] as their text. There is no cursor addressing, no
+    /// alternate screen, no mouse and no colour; keys work as usual. On by
+    /// default when `INTUITUIVE_ACCESSIBLE` is `linear`.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| {
+    ///     let picked = signal(0usize);
+    ///     list(|| vec!["one".into(), "two".into()], picked)
+    ///         .label("Numbers")
+    ///         .on_key("q", |cx| cx.quit())
+    /// })
+    /// .linear(true);
+    /// let mut driver = app.driver(20, 4);
+    /// driver.update(std::time::Duration::ZERO);
+    /// let out = driver.render().unwrap();
+    /// assert_eq!(out, "→ Numbers, list, 1 of 2: one, selected\r\n");
+    /// ```
+    pub fn linear(mut self, on: bool) -> App {
+        self.linear = on;
+        self
+    }
+
+    /// Whether frames are drawn as text for assistive technology: no boxes,
+    /// no colour, markers on selected items, no animation.
+    fn text_mode(&self) -> bool {
+        self.accessible || self.linear
     }
 
     /// Where announcements go as they happen: toasts, a screen or dialog
@@ -1049,7 +1105,8 @@ impl App {
     /// [inline](Self::inline)), until a handler calls [`Ctx::quit`] or
     /// Ctrl+C is pressed.
     pub fn run(self) -> io::Result<()> {
-        let full = self.inline.is_none();
+        // Linear, lines are written where the terminal's cursor is.
+        let full = self.inline.is_none() && !self.linear;
         let mut session = Session::start(SessionOptions {
             alternate_screen: full,
             mouse: full,
@@ -1057,6 +1114,10 @@ impl App {
             output: Default::default(),
             legacy_keys: self.legacy_keys,
         })?;
+        if self.linear {
+            // The cursor stays at the end of what was written.
+            session.write("\x1b[?25h")?;
+        }
         let mut app = self;
         app.text_frames = false;
         app.run_on(&mut session)
@@ -1156,7 +1217,7 @@ impl App {
             painter = painter.inline();
         }
         // Accessible: no colour, so no meaning rests on it.
-        painter.set_color_system(if self.accessible {
+        painter.set_color_system(if self.text_mode() {
             None
         } else {
             console.color_system()
@@ -1175,6 +1236,8 @@ impl App {
             started: false,
             origin: 0,
             done: false,
+            written: HashMap::new(),
+            written_focus: None,
         }
     }
 
@@ -1239,10 +1302,18 @@ impl App {
         use crate::a11y::{screen_text, AccessNode, Role};
         let focus = self.focus();
         let top = self.top();
+        let text_mode = self.text_mode();
+        let hidden = self.hidden_rects();
         let mut out = Vec::new();
         let mut included: Vec<NodeId> = Vec::new();
+        let mut left_out: Vec<NodeId> = Vec::new();
         crate::node::walk_screen(&top.root, &mut |node, path, shift, clip| {
             let id = node.id();
+            // Hidden, with what is inside.
+            if node.is_access_hidden() || path.iter().any(|id| left_out.contains(id)) {
+                left_out.push(id);
+                return;
+            }
             let mut role = node.access_role();
             if id == top.root.id() && top.modal.is_some() {
                 role = Role::Dialog;
@@ -1259,7 +1330,7 @@ impl App {
                 .iter()
                 .filter(|id| included.contains(id))
                 .count();
-            let shown = || screen_text(screen, rect);
+            let shown = || screen_text(screen, rect, &hidden);
             let name = match label {
                 Some(label) => label,
                 None => match role {
@@ -1271,7 +1342,11 @@ impl App {
                     | Role::ListItem
                     | Role::Tab
                     | Role::MenuItem
-                    | Role::TreeItem => shown(),
+                    | Role::TreeItem
+                    | Role::CheckBox
+                    | Role::Switch => shown(),
+                    // A dialog that is one line of text says it.
+                    Role::Dialog if !node.has_children() => shown(),
                     _ => String::new(),
                 },
             };
@@ -1284,7 +1359,12 @@ impl App {
                         at.width,
                         at.height,
                     );
-                    screen_text(screen, item.intersection(rect))
+                    let text = screen_text(screen, item.intersection(rect), &hidden);
+                    // In text mode, without the marker on the selection.
+                    match text.strip_prefix('>').filter(|_| text_mode) {
+                        Some(rest) => rest.trim_start().to_string(),
+                        None => text,
+                    }
                 })
             } else if role == Role::TextBox {
                 Some(shown())
@@ -1300,8 +1380,21 @@ impl App {
                 value,
                 focused: focus == Some(id),
                 disabled: node.disabled(),
+                state: node.access_state(),
                 rect,
             });
+        });
+        out
+    }
+
+    /// Where the top screen's [hidden](crate::Node::access_hidden) nodes
+    /// are, on the screen.
+    fn hidden_rects(&self) -> Vec<Rect> {
+        let mut out = Vec::new();
+        crate::node::walk_screen(&self.top().root, &mut |node, _, shift, clip| {
+            if node.is_access_hidden() {
+                out.push(crate::node::translate(node.rect(), shift).intersection(clip));
+            }
         });
         out
     }
@@ -1331,18 +1424,23 @@ impl App {
             });
             caret
         });
+        // Accessible, a cursor already shown where it goes stays put: a
+        // screen reader following it reads nothing new.
+        let parked = accessible && self.caret_shown && caret == self.caret_at;
         let out = match caret {
+            Some(_) if parked => String::new(),
             Some((x, y)) => format!("{}\x1b[?25h", painter.move_to(x, y)),
             None if self.caret_shown => "\x1b[?25l".to_string(),
             None => String::new(),
         };
         self.caret_shown = caret.is_some();
+        self.caret_at = caret;
         out
     }
 
     /// Draw what changed; returns the damage.
     fn frame(&mut self, console: &Console, screen: &mut Screen, full: bool) -> Vec<Rect> {
-        crate::a11y::set_text_mode(self.accessible);
+        crate::a11y::set_text_mode(self.text_mode());
         let whole = screen.area();
         // The inspector, when shown, takes the right of the screen.
         let panel = self
@@ -1430,6 +1528,8 @@ impl App {
             }),
             chain: Vec::new(),
             announcements: Vec::new(),
+            hidden: 0,
+            hidden_rects: Vec::new(),
         };
         let dirty = frame.dirty.len();
         if full {
@@ -1558,12 +1658,13 @@ impl App {
             damage.push(panel);
         }
         for announcement in live {
-            self.announce(announcement);
+            self.announce(announcement, false);
         }
         // A screen or dialog that opened says what it shows, once drawn.
         if std::mem::take(&mut self.opened) && self.top().anchor.is_none() {
             let rect = self.top().drawn.unwrap_or(whole);
-            let mut text = crate::a11y::screen_text(screen, rect);
+            let hidden = self.hidden_rects();
+            let mut text = crate::a11y::screen_text(screen, rect, &hidden);
             if text.chars().count() > 200 {
                 text = text.chars().take(200).collect::<String>() + "…";
             }
@@ -1571,7 +1672,7 @@ impl App {
                 Some(_) => format!("Dialog: {text}"),
                 None => text,
             };
-            self.announce(crate::a11y::Announcement { text, urgent: true });
+            self.announce(crate::a11y::Announcement { text, urgent: true }, false);
         }
         damage
     }
@@ -1590,14 +1691,14 @@ impl App {
             self.push_toast(markup, self.now + duration);
         }
         for announcement in cx.announcements {
-            self.announce(announcement);
+            self.announce(announcement, true);
         }
         for (value, to, duration, easing) in cx.animations {
             // A new animation of a signal replaces the one running.
             self.animations.retain(|a| a.value != value);
             let from = self.runtime.enter(|| value.get_untracked());
             // Accessible: no motion, the value goes straight to its end.
-            let duration = if self.accessible {
+            let duration = if self.text_mode() {
                 Duration::ZERO
             } else {
                 duration
@@ -2613,6 +2714,10 @@ pub struct Driver {
     /// Inline: the terminal row the region starts on.
     origin: u16,
     done: bool,
+    /// Linear mode: each node's line as last written, and what had the
+    /// focus.
+    written: HashMap<NodeId, String>,
+    written_focus: Option<NodeId>,
 }
 
 /// How many frames in a row a node may leave itself dirty before its own
@@ -2699,7 +2804,11 @@ impl Driver {
 
     /// Whether anything changed since the last frame.
     pub fn needs_render(&self) -> bool {
-        self.first || self.app.restack || self.app.poke || self.app.runtime.has_dirty()
+        self.first
+            || self.app.restack
+            || self.app.poke
+            || self.app.runtime.has_dirty()
+            || !self.app.unwritten.is_empty()
     }
 
     /// Draw what changed and return the bytes that show it (they may be
@@ -2713,7 +2822,10 @@ impl Driver {
             let mut out = String::new();
             if !self.started {
                 self.started = true;
-                out.push_str("\x1b[?25l");
+                // Linear, only text is written.
+                if !self.app.linear {
+                    out.push_str("\x1b[?25l");
+                }
             }
             out.push_str(&self.paint(self.first));
             self.first = false;
@@ -2883,7 +2995,9 @@ impl Driver {
     /// What the app shows, for assistive technology: the nodes on the top
     /// screen with a role other than layout (or a
     /// [label](crate::Node::label)), outermost first, each with its depth,
-    /// its name and what is selected in it. A screen reader bridge or a
+    /// its name, what is selected in it and its states; nodes
+    /// [hidden](crate::Node::access_hidden) from assistive technology, and
+    /// what is inside them, are left out. A screen reader bridge or a
     /// browser's DOM renders this.
     ///
     /// ```
@@ -2923,6 +3037,12 @@ impl Driver {
         self.app.accessible
     }
 
+    /// Whether the app writes lines of text instead of drawing
+    /// ([`App::linear`]): [`render`](Self::render) then returns them.
+    pub fn is_linear(&self) -> bool {
+        self.app.linear
+    }
+
     /// `text` is on the clipboard: a toast says so.
     pub fn copied(&mut self, text: &str) {
         let n = text.chars().count();
@@ -2945,6 +3065,11 @@ impl Driver {
     /// region, where the shell's prompt follows the app's last frame).
     pub fn finish(mut self) -> String {
         let mut out = String::new();
+        if self.app.linear {
+            // Nothing was drawn, so there is nothing to put back.
+            self.app.runtime.close();
+            return out;
+        }
         // Inline, the last frame stays in the scrollback: show what the
         // last handler changed before leaving.
         if self.app.inline.is_some() && (self.app.restack || self.app.runtime.has_dirty()) {
@@ -2962,6 +3087,11 @@ impl Driver {
         app.poke = false;
         let screen = &mut self.screen;
         let mut damage = app.frame(&self.console, screen, full);
+        if app.linear {
+            let out = self.lines();
+            self.app.stats.bytes = out.len();
+            return out;
+        }
         if let Some((start, end)) = app.selection {
             let style = Style::parse("reverse").expect("a built-in style parses");
             for (x, y) in selected_cells(screen.area(), start, end) {
@@ -2969,7 +3099,16 @@ impl Driver {
             }
             damage.push(screen.area());
         }
-        let mut out = self.painter.paint(screen, &damage);
+        let painted = self.painter.paint(screen, &damage);
+        let mut out = String::new();
+        // Accessible: the cursor is hidden while the frame is written, so a
+        // screen reader following it reads none of the cells it passes, and
+        // shown again once parked on the focus.
+        if app.accessible && app.caret_shown && !painted.is_empty() {
+            out.push_str("\x1b[?25l");
+            app.caret_shown = false;
+        }
+        out.push_str(&painted);
         if app.motion.0 && !app.motion.1 && app.inline.is_none() {
             // A widget reads hover: report the pointer's movement too. The
             // session turns it off with the rest of the mouse on the way out.
@@ -2979,6 +3118,33 @@ impl Driver {
         out.push_str(&app.caret(&mut self.painter));
         app.stats.bytes = out.len();
         out
+    }
+
+    /// Linear mode: the lines of the nodes whose line changed since they
+    /// were last written (all of them the first time), in reading order,
+    /// the focus with `→ ` when it moved, then what was announced. Each
+    /// ends with `\r\n`: the terminal is in raw mode.
+    fn lines(&mut self) -> String {
+        let tree = self.app.accessibility(&self.screen);
+        let focus = tree.iter().find(|node| node.focused).map(|node| node.id);
+        let moved = focus != self.written_focus;
+        let mut lines = Vec::new();
+        let mut written = HashMap::new();
+        for node in &tree {
+            let line = node.describe();
+            if !line.is_empty() {
+                if node.focused && moved {
+                    lines.push(format!("→ {line}"));
+                } else if self.written.get(&node.id) != Some(&line) {
+                    lines.push(line.clone());
+                }
+            }
+            written.insert(node.id, line);
+        }
+        self.written = written;
+        self.written_focus = focus;
+        lines.append(&mut self.app.unwritten);
+        lines.iter().map(|line| format!("{line}\r\n")).collect()
     }
 }
 
