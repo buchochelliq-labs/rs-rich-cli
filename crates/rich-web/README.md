@@ -1,7 +1,7 @@
 # rs-rich-web
 
-Serve [intuiTUIve](https://crates.io/crates/rs-rich-intuituive) terminal apps
-to a web browser. It is part of
+Serve [intuiTUIve](https://crates.io/crates/rs-rich-intuituive) terminal apps,
+or any terminal program, to a web browser. It is part of
 [rs-rich](https://github.com/buchochelliq-labs/rs-rich-cli), an addition
 rather than a port.
 
@@ -35,6 +35,36 @@ origins a proxy serves the page from, and `spawn` to run in the background.
 cargo run -p rs-rich-web --example serve
 ```
 
+## Any terminal program
+
+`serve_command` runs a program on a pseudo-terminal per tab instead (a PTY
+on Unix, ConPTY on Windows, through
+[rs-rich-embed](https://crates.io/crates/rs-rich-embed)'s `LocalPty`) and
+streams it to the same page. Keys, pastes and resizes go to the program;
+its exit ends the session and the page shows its status. `rich serve --
+PROGRAM` in [rs-rich-cli](https://crates.io/crates/rs-rich-cli) (behind its
+`serve` feature) does this from the command line.
+
+```rust,no_run
+fn main() -> std::io::Result<()> {
+    rich_web::serve_command("127.0.0.1:8080", ["htop"])
+}
+```
+
+A page that falls behind holds the program back instead of the server
+buffering without end: at most `max_buffered` bytes (1 MiB by default) wait
+for the page, then the program's writes wait. `Server::bind_host` takes any
+other `PtyHost`.
+
+## A DOM renderer
+
+`Renderer::Dom`, or `&renderer=dom` in the page's address, draws an app as
+a grid of styled spans instead of xterm.js, and carries its accessibility
+tree as ARIA: roles, names and states, the focused node focused in the
+page, and announcements in a live region, so a browser's screen reader
+reads the app. The page's script is small and the crate's own; the wire
+protocol is versioned and described in the `dom` module.
+
 ## Security
 
 - It listens only where it is told. Use a loopback address to keep it on
@@ -45,6 +75,7 @@ cargo run -p rs-rich-web --example serve
   allowed with `allow_origin`. Without this check, any website could open
   a WebSocket to a localhost port.
 - Sessions are capped (8 by default).
+- A program's session holds a bounded amount of output for its page.
 
 There is no other authentication and no TLS. To expose an app beyond this
 computer, put it behind a reverse proxy that provides both.

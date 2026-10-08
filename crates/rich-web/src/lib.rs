@@ -1,4 +1,4 @@
-//! Serve intuiTUIve apps to a web browser.
+//! Serve intuiTUIve apps, and any terminal program, to a web browser.
 //!
 //! [`serve`] listens on an address and runs one [`App`] per browser tab,
 //! each on its own thread. The page is [xterm.js](https://xtermjs.org),
@@ -31,10 +31,39 @@
 //! page's title, origins a proxy serves the page from, and
 //! [`spawn`](Server::spawn) to run in the background.
 //!
+//! # Any terminal program
+//!
+//! [`serve_command`] runs a program on a pseudo-terminal per tab instead
+//! (a PTY on Unix, ConPTY on Windows, through rs-rich-embed's
+//! [`LocalPty`]) and streams it to the same page: keys, pastes and resizes
+//! go to the program, its output to the page, and its exit ends the session
+//! with its status shown. [`Server::bind_host`] takes any other
+//! [`PtyHost`] (an SSH session, a container, a test host).
+//!
+//! ```no_run
+//! fn main() -> std::io::Result<()> {
+//!     rich_web::serve_command("127.0.0.1:8080", ["htop"])
+//! }
+//! ```
+//!
+//! A page that falls behind holds the program back rather than the server
+//! buffering without end: at most [`Server::max_buffered`] bytes of output
+//! wait for the page, and past that the program's writes wait, as they do
+//! on a slow terminal.
+//!
+//! # A DOM renderer
+//!
+//! [`Renderer::Dom`] (or `&renderer=dom` in the page's address) draws an
+//! app as a grid of styled spans instead of xterm.js, and carries its
+//! [accessibility tree](intuituive::Driver::accessibility) as ARIA: roles,
+//! names and states, the focused node focused in the page, and
+//! announcements in a live region, so a browser's screen reader reads the
+//! app. Its messages are described in [`dom`].
+//!
 //! # Security
 //!
-//! Anyone who can open a session can do whatever the app lets them, so the
-//! server is closed by default:
+//! Anyone who can open a session can do whatever the app (or the program)
+//! lets them, so the server is closed by default:
 //!
 //! - **It listens where it is told.** Give it a loopback address
 //!   (`127.0.0.1`, `[::1]`, `localhost`) to keep it on this computer, as
@@ -59,6 +88,10 @@
 // only this crate.
 pub extern crate rich_intuituive as intuituive;
 
+/// What a program runs on: the PTY host trait and the local implementation,
+/// from rs-rich-embed.
+pub use rich_embed::{Command, ExitStatus, LocalPty, PtyHost};
+
 use std::io::{self, Write};
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, TcpListener, TcpStream, ToSocketAddrs};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
@@ -70,8 +103,10 @@ use intuituive::App;
 use tungstenite::protocol::{Role, WebSocketConfig};
 use tungstenite::WebSocket;
 
+pub mod dom;
 mod http;
 pub mod input;
+mod pty;
 mod session;
 
 use http::Head;
@@ -81,6 +116,10 @@ pub const XTERM_VERSION: &str = "6.0.0";
 
 /// The sessions a server runs at once unless told otherwise.
 pub const DEFAULT_MAX_SESSIONS: usize = 8;
+
+/// The output a program's session holds for its page unless told
+/// otherwise ([`Server::max_buffered`]): 1 MiB.
+pub const DEFAULT_MAX_BUFFERED: usize = 1 << 20;
 
 /// Connections still sending their request at once; more are closed.
 const MAX_PENDING: usize = 64;
@@ -93,6 +132,8 @@ const MAX_MESSAGE: usize = 1 << 20;
 
 const PAGE: &str = include_str!("../assets/index.html");
 const PAGE_JS: &str = include_str!("../assets/app.js");
+const DOM_PAGE: &str = include_str!("../assets/dom.html");
+const DOM_JS: &str = include_str!("../assets/dom.js");
 const XTERM_JS: &str = include_str!("../assets/xterm/xterm.js");
 const XTERM_CSS: &str = include_str!("../assets/xterm/xterm.css");
 const FIT_JS: &str = include_str!("../assets/xterm/addon-fit.js");
@@ -111,6 +152,61 @@ where
     Server::bind(addr, app)?.run()
 }
 
+/// Serve `command` at `addr`: print the URL to open (with its token), then
+/// run the program on a pseudo-terminal of its own for each browser tab
+/// that opens it, until the process ends. [`Server::bind_command`] and
+/// [`Server::run`] with the defaults.
+///
+/// A string is a program name; an array or a vector is the program and its
+/// arguments; a [`Command`] also sets its environment and directory.
+pub fn serve_command<A>(addr: A, command: impl Into<Command>) -> io::Result<()>
+where
+    A: ToSocketAddrs,
+{
+    Server::bind_command(addr, command)?.run()
+}
+
+/// How an app's page draws it.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub enum Renderer {
+    /// A terminal: xterm.js, fed the app's frames as terminal output.
+    #[default]
+    Xterm,
+    /// The page's own DOM: a grid of styled spans, with the app's
+    /// accessibility tree as ARIA for a browser's screen reader. Apps only:
+    /// a program on a PTY has no tree, and is always drawn by xterm.js.
+    Dom,
+}
+
+impl Renderer {
+    /// `"xterm"` or `"dom"`, as the page's address names it.
+    pub fn name(self) -> &'static str {
+        match self {
+            Renderer::Xterm => "xterm",
+            Renderer::Dom => "dom",
+        }
+    }
+
+    /// The renderer called `name` (`"xterm"`, `"dom"`).
+    pub fn parse(name: &str) -> Option<Renderer> {
+        match name {
+            "xterm" => Some(Renderer::Xterm),
+            "dom" => Some(Renderer::Dom),
+            _ => None,
+        }
+    }
+}
+
+/// What each session runs.
+enum Mode {
+    App(Box<dyn Fn() -> App + Send + Sync>),
+    /// A program on a [`LocalPty`], held back by the page's pace.
+    Command(Command),
+    /// A program on another host.
+    Host(Box<dyn Fn() -> Box<dyn PtyHost> + Send + Sync>),
+}
+
 /// A server that is bound and ready to [`run`](Self::run) or
 /// [`spawn`](Self::spawn), with its options.
 pub struct Server {
@@ -120,9 +216,11 @@ pub struct Server {
 
 /// What every connection's thread reads.
 struct Shared {
-    app: Box<dyn Fn() -> App + Send + Sync>,
+    mode: Mode,
     token: String,
     max_sessions: usize,
+    max_buffered: usize,
+    renderer: Renderer,
     origins: Vec<String>,
     title: String,
     /// The `Host` values the server answers to (`None`: any).
@@ -142,16 +240,48 @@ impl Server {
         A: ToSocketAddrs,
         F: Fn() -> App + Send + Sync + 'static,
     {
+        Server::with_mode(addr, Mode::App(Box::new(app)), "intuiTUIve".into())
+    }
+
+    /// Listen on `addr` with a fresh random token, to run `command` on a
+    /// pseudo-terminal of its own for each tab (through [`LocalPty`]). The
+    /// page's title is the program's name unless set.
+    pub fn bind_command<A>(addr: A, command: impl Into<Command>) -> io::Result<Server>
+    where
+        A: ToSocketAddrs,
+    {
+        let command = command.into();
+        let title = command.program().to_string_lossy().into_owned();
+        Server::with_mode(addr, Mode::Command(command), title)
+    }
+
+    /// Listen on `addr` with a fresh random token, to run a program on the
+    /// [`PtyHost`] `host` makes for each tab: an SSH session, a container's
+    /// exec stream, or a test host. It is made, started and dropped on the
+    /// session's own thread. [`max_buffered`](Self::max_buffered) bounds
+    /// only what the session holds: a host that reads ahead buffers on its
+    /// own terms.
+    pub fn bind_host<A, F>(addr: A, host: F) -> io::Result<Server>
+    where
+        A: ToSocketAddrs,
+        F: Fn() -> Box<dyn PtyHost> + Send + Sync + 'static,
+    {
+        Server::with_mode(addr, Mode::Host(Box::new(host)), "terminal".into())
+    }
+
+    fn with_mode<A: ToSocketAddrs>(addr: A, mode: Mode, title: String) -> io::Result<Server> {
         let listener = TcpListener::bind(addr)?;
         let hosts = http::allowed_hosts(listener.local_addr()?);
         Ok(Server {
             listener,
             shared: Shared {
-                app: Box::new(app),
+                mode,
                 token: random_token()?,
                 max_sessions: DEFAULT_MAX_SESSIONS,
+                max_buffered: DEFAULT_MAX_BUFFERED,
+                renderer: Renderer::Xterm,
                 origins: Vec::new(),
-                title: "intuiTUIve".to_string(),
+                title,
                 hosts,
                 sessions: AtomicUsize::new(0),
                 pending: AtomicUsize::new(0),
@@ -164,6 +294,27 @@ impl Server {
     /// opens one more is refused until one ends.
     pub fn max_sessions(mut self, n: usize) -> Server {
         self.shared.max_sessions = n;
+        self
+    }
+
+    /// For a program: hold at most about `bytes` of its output for a page
+    /// that has not shown it yet (1 MiB by default). Half is output sent
+    /// and not yet acknowledged by the page, half is output read from the
+    /// program and not yet sent; past that, the program's writes wait until
+    /// the page catches up, as on a slow terminal, so nothing is dropped
+    /// and memory stays bounded however fast it writes. Apps send whole
+    /// frames and are not affected.
+    pub fn max_buffered(mut self, bytes: usize) -> Server {
+        self.shared.max_buffered = bytes.max(2);
+        self
+    }
+
+    /// How an app's page draws it: [`Renderer::Xterm`] (the default) or
+    /// [`Renderer::Dom`]. A page's address can ask for either with
+    /// `&renderer=xterm` or `&renderer=dom`. A program is always drawn by
+    /// xterm.js.
+    pub fn renderer(mut self, renderer: Renderer) -> Server {
+        self.shared.renderer = renderer;
         self
     }
 
@@ -195,7 +346,8 @@ impl Server {
         self
     }
 
-    /// The page's title (`intuiTUIve` by default).
+    /// The page's title (`intuiTUIve` for an app, the program's name for a
+    /// command, by default).
     pub fn title(mut self, title: impl Into<String>) -> Server {
         self.shared.title = title.into();
         self
@@ -227,9 +379,13 @@ impl Server {
         out.flush()?;
         drop(out);
         if !local.ip().is_loopback() {
+            let what = match self.shared.mode {
+                Mode::App(_) => "the app",
+                Mode::Command(_) | Mode::Host(_) => "the program",
+            };
             eprintln!(
                 "warning: listening on {local}, beyond this computer. Anyone who can reach it \
-                 with the token can use the app: there is no other authentication and no TLS. \
+                 with the token can use {what}: there is no other authentication and no TLS. \
                  Put it behind a reverse proxy that has both."
             );
         }
@@ -285,7 +441,7 @@ impl Handle {
     }
 
     /// Stop: no more connections, and every session ends (within one turn
-    /// of its loop, at most 50 ms).
+    /// of its loop, at most 50 ms); a program's session ends its program.
     pub fn stop(mut self) {
         self.shutdown();
     }
@@ -420,6 +576,7 @@ fn connection(mut stream: TcpStream, pending: Pending) {
             return;
         }
         "/app.js" => (js, PAGE_JS),
+        "/dom.js" => (js, DOM_JS),
         "/xterm.js" => (js, XTERM_JS),
         "/addon-fit.js" => (js, FIT_JS),
         "/xterm.css" => ("text/css; charset=utf-8", XTERM_CSS),
@@ -429,6 +586,18 @@ fn connection(mut stream: TcpStream, pending: Pending) {
         }
     };
     let _ = http::respond(&mut stream, "200 OK", asset.0, &[], asset.1.as_bytes());
+}
+
+/// The renderer a request asks for: its `renderer` parameter, else the
+/// server's. A program is always drawn by xterm.js.
+fn renderer_for(head: &Head, shared: &Shared) -> Renderer {
+    match shared.mode {
+        Mode::App(_) => head
+            .param("renderer")
+            .and_then(Renderer::parse)
+            .unwrap_or(shared.renderer),
+        Mode::Command(_) | Mode::Host(_) => Renderer::Xterm,
+    }
 }
 
 /// The page, for a request with the token.
@@ -458,7 +627,17 @@ fn page(stream: &mut TcpStream, head: &Head, shared: &Shared) {
          img-src 'self' data:; font-src 'self' data:; connect-src {connect}; \
          frame-ancestors 'none'; base-uri 'none'; form-action 'none'"
     );
-    let body = PAGE.replace("{{title}}", &http::escape_html(&shared.title));
+    let template = match renderer_for(head, shared) {
+        Renderer::Xterm => PAGE,
+        Renderer::Dom => DOM_PAGE,
+    };
+    let mode = match shared.mode {
+        Mode::App(_) => "app",
+        Mode::Command(_) | Mode::Host(_) => "program",
+    };
+    let body = template
+        .replace("{{title}}", &http::escape_html(&shared.title))
+        .replace("{{mode}}", mode);
     let _ = http::respond(
         stream,
         "200 OK",
@@ -529,8 +708,22 @@ fn websocket(mut stream: TcpStream, head: &Head, shared: &Arc<Shared>, pending: 
         .max_message_size(Some(MAX_MESSAGE))
         .max_frame_size(Some(MAX_MESSAGE));
     let mut socket = WebSocket::from_raw_socket(stream, Role::Server, Some(config));
-    let app = (shared.app)();
-    let _ = session::run(&mut socket, app, columns, rows, &shared.stopping);
+    let stopping = &shared.stopping;
+    let _ = match &shared.mode {
+        Mode::App(app) => {
+            let renderer = renderer_for(head, shared);
+            session::run(&mut socket, app(), columns, rows, stopping, renderer)
+        }
+        Mode::Command(command) => {
+            let (window, held) = pty::split(shared.max_buffered);
+            let host = LocalPty::new(command.clone()).backpressure(held);
+            pty::run(&mut socket, Box::new(host), columns, rows, stopping, window)
+        }
+        Mode::Host(host) => {
+            let (window, _) = pty::split(shared.max_buffered);
+            pty::run(&mut socket, host(), columns, rows, stopping, window)
+        }
+    };
 }
 
 #[cfg(test)]
@@ -569,5 +762,21 @@ mod tests {
         let _ = Server::bind("127.0.0.1:0", || App::new(|| intuituive::label("x")))
             .unwrap()
             .token("has space");
+    }
+
+    #[test]
+    fn renderers_have_names() {
+        for renderer in [Renderer::Xterm, Renderer::Dom] {
+            assert_eq!(Renderer::parse(renderer.name()), Some(renderer));
+        }
+        assert_eq!(Renderer::parse("canvas"), None);
+        assert_eq!(Renderer::default(), Renderer::Xterm);
+    }
+
+    #[test]
+    fn a_command_is_titled_by_its_program() {
+        let server = Server::bind_command("127.0.0.1:0", ["htop", "-d", "10"]).unwrap();
+        assert_eq!(server.shared.title, "htop");
+        assert_eq!(server.shared.max_buffered, DEFAULT_MAX_BUFFERED);
     }
 }

@@ -50,13 +50,14 @@ rich-cli ──▶ rich-data ──▶ rich-ext ──▶ rich       (tabular da
              rich-intuituive ──▶ rich-interact ──▶ rich-ext ──▶ rich   (intuiTUIve, the TUI framework:
                                                  signals, retained tree, cell screen; ratatui only as a
                                                  dev-dependency, for its benchmark gate)
-             rich-web ──▶ rich-intuituive          (serving intuiTUIve apps to a browser: a WebSocket
-                                                 session per tab, a vendored xterm.js page; tungstenite,
-                                                 no async runtime. Nothing in the workspace depends on it)
              rich-embed ──▶ rich-intuituive, rich-record   (a terminal pane and a web view: `PtyHost`
                   └ ─ ▶ tungstenite, image       (portable-pty), `WebEngine`; Chrome over DevTools behind
-                                                 its `chrome` feature, Browsh behind `browsh`. Nothing
-                                                 in the workspace depends on it)
+                                                 its `chrome` feature, Browsh behind `browsh`)
+rich-cli ─ ─ ▶ rich-web ──▶ rich-intuituive, rich-embed   (serving to a browser: a WebSocket session per
+                                                 tab, an app or a program on a PTY (rs-rich-embed's
+                                                 `PtyHost`), a vendored xterm.js page or a DOM renderer
+                                                 with ARIA; tungstenite, no async runtime. The CLI's
+                                                 `rich serve`, behind its off-by-default `serve` feature)
 rich-py  ──▶ rich, rich-ext, rich-art, rich-mermaid, rich-diagram, rich-micro, rich-interact, rich-cli
                            (Python bindings; outside the workspace, released to PyPI only)
 ```
