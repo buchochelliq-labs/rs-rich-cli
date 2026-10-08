@@ -287,6 +287,41 @@ column([
     what changed inside draws, and the rows in view are copied out.
   - `scroll_with(child, offset)` puts the first row in view in a signal
     you can read and set.
+- **`scroll_x(child)`** scrolls across instead, for content wider than
+  the view (up to 2000 columns), and **`scroll_both(child)`** both ways,
+  with a bar along the bottom too. ←/→, Shift+wheel and Shift+PgUp/PgDn
+  move across. `scroll_both_with(child, x, y, across, down)` puts both
+  offsets in signals.
+
+#### Sorting, resizing and a cell cursor
+
+`table_with(columns, rows, selected, options)` takes the rest as
+`TableOptions`:
+
+```rust
+use intuituive::widgets::{table_with, Order, TableOptions};
+
+let sort = signal(Some((1, Order::Descending)));
+let cell = signal(0usize);
+table_with(
+    columns,
+    move || files.get(),
+    selected,
+    TableOptions::default().sort_rows(sort).cells(cell).resizable(),
+)
+```
+
+- **`.sort(signal)`** puts the sort column and order in a signal. A click
+  on a header sorts by it, a second click reverses the order, and `s`
+  sorts by the cell cursor's column. The header shows ▲ or ▼. Your rows
+  closure reads the signal and sorts, so `selected` stays an index into
+  your own rows.
+- **`.sort_rows(signal)`** sorts plain string rows for you instead.
+  Numbers compare as numbers; everything else compares as lowercase text.
+- **`.cells(signal)`** adds a cell cursor. ←/→ move it, a click puts it on
+  the cell, and the theme's `selected.cell` style draws it.
+- **`.resizable()`** lets the columns be resized by dragging the gap after
+  a header.
 
 ### Trees, split panes, calendars and lists
 
@@ -321,6 +356,12 @@ hsplit(
   adding days and months, month lengths).
 - **`virtual_list(len, row, selected)`** is the list form of
   `virtual_table`: it asks only for the rows in view.
+- **`tree_lazy(roots, children, selected)`** loads each level when it is
+  opened. `children(key)` runs on another thread, so it can read a
+  directory or ask a server, and returns the level's `LazyItem`s
+  (`LazyItem::leaf` or `LazyItem::branch`). The tree shows
+  "loading…" until they arrive, and shows an error in red if loading
+  fails. `selected` holds the key of the selected item.
 
 The `planner` example puts them together under a menu bar: projects and
 their tasks in a tree, the selected task's due date on a calendar, and a
@@ -346,6 +387,42 @@ bubbles up through its ancestors until one uses it.
 - **Hover** is state. A widget that asks whether it is hovered draws again
   when the pointer enters or leaves it. The terminal's movement reports
   are turned on only once something asks.
+- **`.hover_style(style)`** lays a style over a node while the pointer is
+  over it, the way `.focus_style(style)` does for the focus. It works on
+  containers too.
+
+### Tooltips
+
+`.tooltip(markup)` shows a small box by the pointer once the pointer has
+rested on the node for 600 ms. F1 shows the focused node's tooltip below
+the node at once, unless a binding takes F1. A key, a click or moving to
+another node hides it.
+
+The box draws over everything, in the theme's `tooltip` style (reverse
+unless the theme sets it). It wraps to fit the screen and goes above the
+pointer when there is no room below.
+
+### Drag-and-drop
+
+```rust
+let done = signal(Vec::<Task>::new());
+column([
+    each(move || todo.get(), |task| label(task.title.clone()).draggable(task)),
+    text(move || format!("{} done", done.with(Vec::len)))
+        .on_drop(move |task: &Task, _| done.update(|d| d.push(task.clone()))),
+])
+```
+
+- **`.draggable(value)`** lets a node be dragged with the left button,
+  carrying `value`. A press still focuses and clicks as before; the drag
+  starts once the pointer moves a cell.
+- **`.on_drop(|value: &T, cx| …)`** takes values of type `T`. A drag
+  carrying another type passes the node by: it is not highlighted, and
+  nothing drops.
+- While a drag lasts, its source is dimmed and the target under the
+  pointer is lit in the theme's `drop.target` style (reverse unless set).
+- Letting go over a target drops the value there; anywhere else, nothing
+  happens. Esc cancels.
 
 ### Selecting and copying text
 

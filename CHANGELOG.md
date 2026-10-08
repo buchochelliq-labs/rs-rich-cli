@@ -81,6 +81,38 @@ Workstream 1 of the [0.0.18 plan](docs/plans/0.0.18.md).
   VT220, the way xterm does by default), so a recorded program that asks
   for the kitty protocol does not wait two seconds for an answer.
 
+### intuiTUIve: the widget gaps (rs-rich-intuituive 0.0.3)
+
+0.0.18 workstream 3.
+
+- **Scrolling across:** `scroll_x` and `scroll_both` (and
+  `scroll_both_with`, with both offsets in signals) for content wider
+  than the view, with a bar along the bottom. ←/→, Shift+wheel and
+  Shift+PgUp/PgDn move across, and a focused node far to the right is
+  scrolled into view.
+- **Tables:** `table_with(columns, rows, selected, TableOptions)`.
+  - `.sort(signal)`: a header click sorts by that column and a second
+    click reverses; `s` sorts by the cursor's column; the header shows ▲
+    or ▼.
+  - `.sort_rows(signal)`: sorts plain rows itself, numbers as numbers.
+  - `.cells(signal)`: a cell cursor, moved with ←/→ (or h/l) and clicks,
+    in the `selected.cell` style.
+  - `.resizable()`: drag the gap after a header to resize a column.
+- **`tree_lazy(roots, children, selected)`** loads each level on another
+  thread when it is opened, showing "loading…" until it arrives and an
+  error in red if it fails. `LazyItem::leaf` and `LazyItem::branch` make
+  its items.
+- **`.hover_style(style)`** lays a style over a node while the pointer is
+  over it. That style, and `.focus_style` on a container, now cover the
+  container's whole area, gaps included.
+- **`.tooltip(markup)`** shows after the pointer rests on a node for
+  600 ms, or below the focused node with F1. A key, a click or moving
+  away hides it. It uses the theme's `tooltip` style.
+- **Drag-and-drop:** `.draggable(value)` and `.on_drop(|value: &T, cx|
+  …)`. The type is checked: a target only lights up for, and only takes,
+  values of its type. The source is dimmed while a drag lasts, the target
+  is drawn in `drop.target`, and Esc cancels.
+
 ### Serving intuiTUIve apps to a browser: rs-rich-web 0.0.1 (new)
 
 A new crate, from the 0.0.18 plan's workstream 7, phase 1. Nothing in the

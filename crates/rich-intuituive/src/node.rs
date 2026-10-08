@@ -30,6 +30,7 @@
 //! Every node is a [`Widget`]: the builders above make built-in ones, and
 //! [`widget`](crate::widget()) makes a node of your own.
 
+use std::any::Any;
 use std::cell::{Cell, RefCell};
 use std::collections::{HashMap, HashSet};
 use std::hash::Hash;
@@ -56,6 +57,16 @@ pub(crate) type Handler = Box<dyn FnMut(&mut Ctx)>;
 /// A mouse handler: the event in the node's coordinates; whether it used
 /// it.
 pub(crate) type MouseHandler = Box<dyn FnMut(&mut Ctx, Mouse) -> bool>;
+
+/// What a drop target does with a value dropped on it.
+pub(crate) type DropHandler = Box<dyn FnMut(&dyn Any, &mut Ctx)>;
+
+/// What a node takes when something is dropped on it: the type it accepts,
+/// and what it does with the value.
+pub(crate) struct DropTarget {
+    pub accepts: fn(&dyn Any) -> bool,
+    pub handler: RefCell<DropHandler>,
+}
 
 /// One node of the tree: a [`Widget`] with a place in the layout, key
 /// bindings and handlers.
@@ -89,6 +100,16 @@ pub struct Node {
     /// A style (or theme style name) laid over the node while it has the
     /// focus.
     focus_style: Option<String>,
+    /// The same, while the pointer is over it.
+    hover_style: Option<String>,
+    /// Whether it was last drawn in its hover style.
+    hover_lit: Cell<bool>,
+    /// Markup shown when the pointer rests on it, or F1 is pressed while it
+    /// has the focus.
+    pub(crate) tooltip: Option<String>,
+    /// The value a drag from this node carries.
+    pub(crate) drag: Option<Rc<dyn Any>>,
+    pub(crate) drop: Option<DropTarget>,
 }
 
 /// A node's widget, and what the framework keeps for it between frames.
@@ -135,6 +156,11 @@ impl Node {
             name: None,
             what,
             focus_style: None,
+            hover_style: None,
+            hover_lit: Cell::new(false),
+            tooltip: None,
+            drag: None,
+            drop: None,
         }
     }
 
@@ -280,13 +306,118 @@ impl Node {
 
     /// While this node has the focus, draw it in `style` over its own: a
     /// style (`"reverse"`, `"on grey23"`) or a theme style name
-    /// (`"accent"`). Its whole rectangle takes the style, so a list shows
-    /// which row is selected; a container's children draw over it, so it
-    /// shows only between them. The node is also made
+    /// (`"accent"`). Its whole rectangle takes the style, its children's
+    /// cells included, so a list shows which row is selected even when a
+    /// row is a [`row`] of several parts. The node is also made
     /// [focusable](Self::focusable).
     pub fn focus_style(mut self, style: &str) -> Node {
         self.focus_style = Some(style.to_string());
         self.focusable = true;
+        self
+    }
+
+    /// While the pointer is over this node (or a node inside it), draw it
+    /// in `style` over its own, as [`focus_style`](Self::focus_style) does
+    /// for the focus.
+    ///
+    /// ```
+    /// use std::time::Duration;
+    ///
+    /// use intuituive::interact::{Event, Mouse, MouseKind};
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| column([label("one").hover_style("reverse"), label("two")]));
+    /// let mut driver = app.driver(10, 2);
+    /// driver.update(Duration::ZERO);
+    /// let _ = driver.render();
+    /// driver.event(Event::Mouse(Mouse::new(MouseKind::Moved, 1, 0)));
+    /// driver.update(Duration::ZERO);
+    /// let frame = driver.render().expect("the hover redraws");
+    /// assert!(frame.contains("\x1b[0;7m"), "{frame:?}");
+    /// ```
+    pub fn hover_style(mut self, style: &str) -> Node {
+        self.hover_style = Some(style.to_string());
+        self
+    }
+
+    /// Show `markup` in a small box by the pointer once it has rested on
+    /// this node (or a node inside it without a tooltip of its own) for
+    /// 600 ms, or below the node at once when F1 is pressed while it has
+    /// the focus and nothing binds F1. A key, a click, or the pointer
+    /// moving to another node hides it.
+    ///
+    /// ```
+    /// use std::time::Duration;
+    ///
+    /// use intuituive::interact::{Event, Mouse, MouseKind};
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| label("save").tooltip("Write the file to disk"));
+    /// let mut driver = app.driver(30, 3);
+    /// driver.update(Duration::ZERO);
+    /// let _ = driver.render();
+    /// driver.event(Event::Mouse(Mouse::new(MouseKind::Moved, 1, 0)));
+    /// driver.update(Duration::from_millis(700));
+    /// let _ = driver.render();
+    /// assert!(driver.screen().plain()[1].contains("Write the file to disk"));
+    /// ```
+    pub fn tooltip(mut self, markup: impl Into<String>) -> Node {
+        self.tooltip = Some(markup.into());
+        self
+    }
+
+    /// Let this node be dragged with the left button, carrying `value` to
+    /// a node that takes it with [`on_drop`](Self::on_drop). A press still
+    /// focuses and clicks as before; the drag starts once the pointer moves
+    /// a cell. While it lasts the node is dimmed and the drop target under
+    /// the pointer is highlighted (the theme's `drop.target` style, reverse
+    /// unless set); Esc cancels it.
+    ///
+    /// ```
+    /// use std::time::Duration;
+    ///
+    /// use intuituive::interact::{Button, Event, Mouse, MouseKind};
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| {
+    ///     let done = signal(Vec::<String>::new());
+    ///     column([
+    ///         label("task").draggable("task".to_string()),
+    ///         text(move || format!("done: {}", done.get().join(", ")))
+    ///             .on_drop(move |task: &String, _| done.update(|d| d.push(task.clone()))),
+    ///     ])
+    /// });
+    /// let mut driver = app.driver(20, 2);
+    /// driver.update(Duration::ZERO);
+    /// let _ = driver.render();
+    /// let mut send = |kind, row| {
+    ///     driver.event(Event::Mouse(Mouse::new(kind, 1, row)));
+    ///     driver.update(Duration::ZERO);
+    ///     let _ = driver.render();
+    /// };
+    /// send(MouseKind::Down(Button::Left), 0);
+    /// send(MouseKind::Drag(Button::Left), 1);
+    /// send(MouseKind::Up(Button::Left), 1);
+    /// assert_eq!(driver.screen().plain()[1].trim_end(), "done: task");
+    /// ```
+    pub fn draggable<T: 'static>(mut self, value: T) -> Node {
+        self.drag = Some(Rc::new(value));
+        self
+    }
+
+    /// Take values of type `T` dropped on this node (or on a node inside
+    /// it that does not take them itself): `handler` gets the value a
+    /// [`draggable`](Self::draggable) node carried. A drag carrying another
+    /// type passes this node by: it is not highlighted, and nothing drops.
+    pub fn on_drop<T: 'static>(mut self, mut handler: impl FnMut(&T, &mut Ctx) + 'static) -> Node {
+        self.drop = Some(DropTarget {
+            accepts: |value| value.is::<T>(),
+            handler: RefCell::new(Box::new(move |value, cx| {
+                if let Some(value) = value.downcast_ref::<T>() {
+                    handler(value, cx);
+                }
+            })),
+        });
         self
     }
 
@@ -477,6 +608,8 @@ impl Node {
             && frame
                 .focus_path
                 .with_untracked(|path| path.last() == Some(&id));
+        let hovered = self.hover_style.is_some()
+            && frame.hover_path.with_untracked(|path| path.contains(&id));
         // Damage from here on is this node's and its children's: where
         // the focus style goes over what they drew.
         let mark = frame.damage.len();
@@ -515,7 +648,10 @@ impl Node {
             // that cleared the area already.
             // Gaining or losing the focus style redraws the lot; keeping it
             // costs only what is drawn again.
-            cleared = !widget.retained() || focused != self.highlit.get() || (relaid && !viewport);
+            cleared = !widget.retained()
+                || focused != self.highlit.get()
+                || hovered != self.hover_lit.get()
+                || (relaid && !viewport);
             repaint = moved || force || cleared;
             if cleared {
                 screen.clear(rect);
@@ -530,6 +666,20 @@ impl Node {
         if redraw {
             let focus_path = frame.focus_path;
             let focus_style = self.focus_style.is_some();
+            let hover_path = frame.hover_path;
+            let hover_style = self.hover_style.is_some();
+            if self.tooltip.is_some() {
+                // A tooltip waits for the pointer to rest: its movement
+                // must be reported.
+                frame.wants_hover.set(true);
+            }
+            if hover_style {
+                // The pointer's movement is reported once something reads
+                // it, and this node draws again when the pointer comes or
+                // goes.
+                frame.wants_hover.set(true);
+                frame.watchers.hover.borrow_mut().insert(id);
+            }
             let caret = {
                 let mut cx = DrawCx {
                     console,
@@ -555,6 +705,9 @@ impl Node {
                     // again when the focus comes or goes.
                     if focus_style {
                         focus_path.with(|path| path.last() == Some(&id));
+                    }
+                    if hover_style {
+                        hover_path.with(|path| path.contains(&id));
                     }
                 });
                 widget.caret()
@@ -626,9 +779,35 @@ impl Node {
                         screen.restyle(column, row, &style);
                     }
                 }
+                // Restyled cells are sent even where nothing drew (a
+                // container's whole rectangle).
+                frame.damage.push(area);
             }
         }
         self.highlit.set(focused);
+        // The hover style, the same way, over the focus style.
+        if let (true, Some(name)) = (hovered, self.hover_style.as_deref()) {
+            let style = crate::widget::theme_style(console, name, "reverse");
+            let mut parts: Vec<Rect> = frame.damage[mark..]
+                .iter()
+                .map(|area| area.intersection(rect))
+                .filter(|area| !area.is_empty())
+                .collect();
+            if !self.hover_lit.get() || repaint {
+                parts = vec![rect];
+            }
+            for area in parts {
+                for row in area.y..area.bottom() {
+                    for column in area.x..area.right() {
+                        screen.restyle(column, row, &style);
+                    }
+                }
+                // Restyled cells are sent even where nothing drew (a
+                // container's whole rectangle).
+                frame.damage.push(area);
+            }
+        }
+        self.hover_lit.set(hovered);
         self.drawn.set(Some(rect));
     }
 
@@ -822,6 +1001,43 @@ pub(crate) fn scrollbar(console: &Console, rows: u16, top: u16, content: u16) ->
                 vec![Segment::new("┃", thumb.clone())]
             } else {
                 vec![Segment::new("│", track.clone())]
+            }
+        })
+        .collect()
+}
+
+/// A scrollbar along the bottom of a view `columns` wide, showing
+/// `left..left + columns` of `content` columns.
+pub(crate) fn scrollbar_across(
+    console: &Console,
+    columns: u16,
+    left: u16,
+    content: u16,
+) -> Vec<Segment> {
+    let style = |name: &str, fallback: &str| {
+        console
+            .get_style(&rich::style::StyleType::Name(name.to_string()))
+            .ok()
+            .or_else(|| Style::parse(fallback).ok())
+    };
+    let (track, thumb) = (
+        style("scrollbar", "bright_black"),
+        style("scrollbar.thumb", "white"),
+    );
+    let (columns_f, content_f) = (columns as f64, content.max(1) as f64);
+    let size = (columns_f * columns_f / content_f)
+        .round()
+        .clamp(1.0, columns_f);
+    let start = (left as f64 * columns_f / content_f)
+        .round()
+        .min(columns_f - size);
+    (0..columns)
+        .map(|column| {
+            let on = (column as f64) >= start && (column as f64) < start + size;
+            if on {
+                Segment::new("━", thumb.clone())
+            } else {
+                Segment::new("─", track.clone())
             }
         })
         .collect()
@@ -1194,6 +1410,55 @@ pub fn scroll(child: Node) -> Node {
 /// to scroll from code.
 pub fn scroll_with(child: Node, offset: Signal<u16>) -> Node {
     Node::from_widget(Box::new(ScrollView::new(child, offset)), "scroll").focusable()
+}
+
+/// `child` in a view that scrolls across: the content is as wide as it
+/// asks for (lines are not wrapped to the view) and as tall as the view.
+/// ←/→, Shift+PgUp/PgDn, the wheel and Home/End scroll it, and a bar
+/// along the bottom shows where it is.
+///
+/// ```
+/// use intuituive::prelude::*;
+///
+/// let app = App::new(|| {
+///     scroll_x(label("0123456789abcdefghij")).on_key("q", |cx| cx.quit())
+/// });
+/// let screen = app.render_with(&["right", "right", "q"], 8, 2).unwrap();
+/// assert_eq!(screen[0], "23456789");
+/// ```
+pub fn scroll_x(child: Node) -> Node {
+    scroll_both_with(
+        child,
+        crate::reactive::signal(0),
+        crate::reactive::signal(0),
+        true,
+        false,
+    )
+}
+
+/// `child` in a view that scrolls down and across, with a bar for each
+/// way it overflows. Shift with the wheel scrolls across.
+pub fn scroll_both(child: Node) -> Node {
+    scroll_both_with(
+        child,
+        crate::reactive::signal(0),
+        crate::reactive::signal(0),
+        true,
+        true,
+    )
+}
+
+/// A scrolling view with its first column and row in view in `x` and `y`,
+/// scrolling across, down, or both.
+pub fn scroll_both_with(
+    child: Node,
+    x: Signal<u16>,
+    y: Signal<u16>,
+    across: bool,
+    down: bool,
+) -> Node {
+    let view = ScrollView::both(child, x, y, across, down);
+    Node::from_widget(Box::new(view), "scroll").focusable()
 }
 
 /// Children one above the other.
