@@ -145,7 +145,8 @@ impl TerminalPane {
     /// are not sent to the program but go on to the app's bindings: a way
     /// out of the pane, such as `"ctrl+q f10"`.
     pub fn release_keys(mut self, keys: &str) -> TerminalPane {
-        self.release.extend(keys.split_whitespace().filter_map(Key::parse));
+        self.release
+            .extend(keys.split_whitespace().filter_map(Key::parse));
         self
     }
 
@@ -242,9 +243,11 @@ impl Widget for PaneWidget {
                     return Used::No;
                 }
                 if state.core.wants_mouse() {
-                    if mouse.kind == rich_intuituive::interact::MouseKind::Down(
-                        rich_intuituive::interact::Button::Left,
-                    ) {
+                    if mouse.kind
+                        == rich_intuituive::interact::MouseKind::Down(
+                            rich_intuituive::interact::Button::Left,
+                        )
+                    {
                         cx.capture_mouse();
                     }
                 } else {

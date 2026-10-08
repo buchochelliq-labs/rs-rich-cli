@@ -49,7 +49,7 @@
 //! a node's.
 
 #[cfg(feature = "browsh")]
-mod browsh;
+pub mod browsh;
 #[cfg(feature = "chrome")]
 pub mod chrome;
 mod host;
@@ -69,4 +69,6 @@ pub use host::{Command, ExitStatus, LocalPty, Notify, PtyHost, ReplayHandle, Rep
 pub use pane::{terminal, terminal_with, TerminalPane, DEFAULT_SCROLLBACK};
 pub use pixels::{half_blocks, Pixels};
 pub use program::{ProgramEngine, BROWSER_VARIABLE, KNOWN_BROWSERS};
-pub use web::{web_view, web_view_with, PageState, WebEngine, WebFrame, WebHandle, WebInput, WebView};
+pub use web::{
+    web_view, web_view_with, PageState, WebEngine, WebFrame, WebHandle, WebInput, WebView,
+};

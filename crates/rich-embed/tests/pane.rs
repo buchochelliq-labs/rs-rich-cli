@@ -70,7 +70,10 @@ fn keys_and_pastes_reach_the_program_as_terminal_bytes() {
     for name in ["l", "s", "enter", "up", "ctrl+c", "tab", "alt+b", "f5"] {
         key(&mut driver, name);
     }
-    assert_eq!(handle.take_written(), b"ls\r\x1b[A\x03\t\x1bb\x1b[15~".to_vec());
+    assert_eq!(
+        handle.take_written(),
+        b"ls\r\x1b[A\x03\t\x1bb\x1b[15~".to_vec()
+    );
     // A program that turned on application cursor keys and bracketed
     // paste gets those.
     handle.feed("\x1b[?1h\x1b[?2004h");
@@ -89,32 +92,32 @@ fn the_mouse_reaches_a_program_that_asked_for_it() {
     let (mut driver, handle) = pane(ReplayHost::new(), 20, 4);
     // Not asked for: nothing is sent (the press is left to the app, whose
     // selection may take it).
-    driver.event(Event::Mouse(Mouse::new(MouseKind::Down(Button::Left), 3, 1)));
+    driver.event(Event::Mouse(Mouse::new(
+        MouseKind::Down(Button::Left),
+        3,
+        1,
+    )));
     driver.event(Event::Mouse(Mouse::new(MouseKind::Up(Button::Left), 3, 1)));
     turn(&mut driver);
     assert!(handle.take_written().is_empty());
     // SGR reports of presses and releases.
     handle.feed("\x1b[?1000h\x1b[?1006h");
     turn(&mut driver);
-    driver.event(Event::Mouse(Mouse::new(MouseKind::Down(Button::Left), 3, 1)));
+    driver.event(Event::Mouse(Mouse::new(
+        MouseKind::Down(Button::Left),
+        3,
+        1,
+    )));
     driver.event(Event::Mouse(Mouse::new(MouseKind::Up(Button::Left), 3, 1)));
     turn(&mut driver);
-    assert_eq!(
-        handle.take_written(),
-        b"\x1b[<0;4;2M\x1b[<0;4;2m".to_vec()
-    );
+    assert_eq!(handle.take_written(), b"\x1b[<0;4;2M\x1b[<0;4;2m".to_vec());
 }
 
 #[test]
 fn a_resize_reaches_the_host() {
     let host = ReplayHost::new().output("x");
     let handle = host.handle();
-    let app = App::new(move || {
-        row([
-            terminal_with(host).node(),
-            label("side").fixed(4),
-        ])
-    });
+    let app = App::new(move || row([terminal_with(host).node(), label("side").fixed(4)]));
     let mut driver = app.driver(24, 5);
     turn(&mut driver);
     assert_eq!(handle.started(), Some((20, 5)));
@@ -166,7 +169,11 @@ fn the_view_scrolls_back() {
     let (mut driver, handle) = pane(ReplayHost::new().output(lines), 12, 3);
     assert_eq!(rows(&driver)[0], "line 9");
     key(&mut driver, "shift+pageup");
-    assert!(rows(&driver)[0].starts_with("line 6"), "{:?}", rows(&driver));
+    assert!(
+        rows(&driver)[0].starts_with("line 6"),
+        "{:?}",
+        rows(&driver)
+    );
     // The wheel scrolls back down; nothing is sent to the program.
     driver.event(Event::Mouse(Mouse::new(MouseKind::ScrollDown, 0, 0)));
     turn(&mut driver);

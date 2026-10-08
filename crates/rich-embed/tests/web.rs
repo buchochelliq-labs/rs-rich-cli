@@ -66,14 +66,19 @@ impl WebEngine for FakeEngine {
     }
 
     fn resize(&mut self, columns: u16, rows: u16) -> io::Result<()> {
-        self.0.borrow_mut().calls.push(format!("resize {columns}x{rows}"));
+        self.0
+            .borrow_mut()
+            .calls
+            .push(format!("resize {columns}x{rows}"));
         Ok(())
     }
 
     fn input(&mut self, input: WebInput) -> io::Result<()> {
         let call = match input {
             WebInput::Key(key) => format!("key {key}"),
-            WebInput::Mouse(mouse) => format!("mouse {:?} {},{}", mouse.kind, mouse.column, mouse.row),
+            WebInput::Mouse(mouse) => {
+                format!("mouse {:?} {},{}", mouse.kind, mouse.column, mouse.row)
+            }
             WebInput::Paste(text) => format!("paste {text}"),
         };
         self.0.borrow_mut().calls.push(call);
@@ -218,7 +223,11 @@ fn the_page_state_is_signals_and_the_bar_drives_it() {
     );
 
     // Back and forward, from the bar's arrows and from the keys.
-    driver.event(Event::Mouse(Mouse::new(MouseKind::Down(Button::Left), 1, 0)));
+    driver.event(Event::Mouse(Mouse::new(
+        MouseKind::Down(Button::Left),
+        1,
+        0,
+    )));
     turn(&mut driver);
     assert_eq!(engine.calls(), ["back"]);
     assert!(rows(&driver)[5].starts_with("https://one.example back=false fwd=true"));
@@ -253,7 +262,11 @@ fn input_goes_to_the_page_in_its_own_cells() {
     let (mut driver, _) = view(engine.clone(), 40, 6);
     engine.calls();
     key(&mut driver, "j");
-    driver.event(Event::Mouse(Mouse::new(MouseKind::Down(Button::Left), 5, 3)));
+    driver.event(Event::Mouse(Mouse::new(
+        MouseKind::Down(Button::Left),
+        5,
+        3,
+    )));
     driver.event(Event::Paste("text".into()));
     turn(&mut driver);
     assert_eq!(
@@ -282,7 +295,11 @@ fn a_pixel_frame_draws_as_half_blocks() {
         assert_eq!(style.bgcolor(), Some(&bottom));
     };
     check(0, Color::from_rgb(255, 0, 0), Color::from_rgb(0, 0, 255));
-    check(1, Color::from_rgb(0, 255, 0), Color::from_rgb(255, 255, 255));
+    check(
+        1,
+        Color::from_rgb(0, 255, 0),
+        Color::from_rgb(255, 255, 255),
+    );
 }
 
 /// A ProgramEngine whose "browser" for each address is a replayed host.

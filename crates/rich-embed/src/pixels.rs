@@ -5,6 +5,9 @@
 
 use rich::{Color, Segment, Style};
 
+/// A pixel's red, green and blue.
+type Rgb = (u8, u8, u8);
+
 /// A frame of pixels: `width` x `height`, three bytes (red, green, blue)
 /// per pixel, rows top to bottom.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -68,7 +71,7 @@ pub fn half_blocks(pixels: &Pixels, columns: u16, rows: u16) -> Vec<Vec<Segment>
         let (bottom0, bottom1) = span(row * 2 + 1, rows * 2, pixels.height);
         let mut line: Vec<Segment> = Vec::new();
         let mut run = 0usize;
-        let mut current: Option<((u8, u8, u8), (u8, u8, u8))> = None;
+        let mut current: Option<(Rgb, Rgb)> = None;
         for &(x0, x1) in &xs {
             let colours = (
                 pixels.average(x0, x1, top0, top1),
@@ -89,7 +92,7 @@ pub fn half_blocks(pixels: &Pixels, columns: u16, rows: u16) -> Vec<Vec<Segment>
     lines
 }
 
-fn block(run: usize, (top, bottom): ((u8, u8, u8), (u8, u8, u8))) -> Segment {
+fn block(run: usize, (top, bottom): (Rgb, Rgb)) -> Segment {
     let style = Style::from_color(
         Some(Color::from_rgb(top.0, top.1, top.2)),
         Some(Color::from_rgb(bottom.0, bottom.1, bottom.2)),

@@ -192,7 +192,9 @@ impl ViewState {
         handle.loading.set(state.loading);
         handle.can_go_back.set(state.can_go_back);
         handle.can_go_forward.set(state.can_go_forward);
-        handle.error.set(state.error.or_else(|| self.failure.clone()));
+        handle
+            .error
+            .set(state.error.or_else(|| self.failure.clone()));
     }
 
     /// The page's area changed to `columns` x `rows`: tell the engine, and
@@ -338,7 +340,8 @@ impl WebView {
     /// Keys (space-separated names, as [`Node::on_key`] takes them) that
     /// are not sent to the page but go on to the app's bindings.
     pub fn release_keys(mut self, keys: &str) -> WebView {
-        self.release.extend(keys.split_whitespace().filter_map(Key::parse));
+        self.release
+            .extend(keys.split_whitespace().filter_map(Key::parse));
         self
     }
 

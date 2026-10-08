@@ -68,7 +68,7 @@ pub fn key_bytes(key: Key, application_cursor: bool) -> Vec<u8> {
                     out.extend_from_slice(c.encode_utf8(&mut buffer).as_bytes());
                 }
             }
-            return out;
+            out
         }
         KeyCode::Enter | KeyCode::Tab | KeyCode::Backspace | KeyCode::Escape => {
             if alt {
@@ -81,9 +81,9 @@ pub fn key_bytes(key: Key, application_cursor: bool) -> Vec<u8> {
                 KeyCode::Backspace => 0x7f,
                 _ => 0x1b,
             });
-            return out;
+            out
         }
-        KeyCode::BackTab => return b"\x1b[Z".to_vec(),
+        KeyCode::BackTab => b"\x1b[Z".to_vec(),
         KeyCode::Up => cursor_key(key, 'A', application_cursor),
         KeyCode::Down => cursor_key(key, 'B', application_cursor),
         KeyCode::Right => cursor_key(key, 'C', application_cursor),

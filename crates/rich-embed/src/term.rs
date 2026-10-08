@@ -11,6 +11,9 @@ use rich_record::terminal::Terminal;
 use crate::host::{ExitStatus, Notify, PtyHost};
 use crate::keys;
 
+/// A cell's foreground, background and attributes, as one key.
+type StyleKey = (u32, u32, u8);
+
 /// What changed when the host was read.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub(crate) struct Pumped {
@@ -31,7 +34,7 @@ pub(crate) struct TermCore {
     pub exit: Option<ExitStatus>,
     /// Why the program could not start, or the emulator failed.
     pub error: Option<String>,
-    styles: HashMap<(u32, u32, u8), Style>,
+    styles: HashMap<StyleKey, Style>,
 }
 
 impl TermCore {
@@ -199,11 +202,11 @@ impl TermCore {
     pub fn lines(&mut self) -> Vec<Vec<Segment>> {
         let screen = self.terminal.screen();
         let (rows, columns) = screen.size();
-        let mut runs: Vec<Vec<(String, (u32, u32, u8))>> = Vec::with_capacity(rows as usize);
+        let mut runs: Vec<Vec<(String, StyleKey)>> = Vec::with_capacity(rows as usize);
         for y in 0..rows {
             let mut line = Vec::new();
             let mut run = String::new();
-            let mut style_key: Option<(u32, u32, u8)> = None;
+            let mut style_key: Option<StyleKey> = None;
             // Filler cells still owed to the cluster before them.
             let mut owed = 0usize;
             for x in 0..columns {
@@ -261,7 +264,7 @@ impl TermCore {
             .collect()
     }
 
-    fn style(&mut self, key: (u32, u32, u8)) -> Style {
+    fn style(&mut self, key: StyleKey) -> Style {
         self.styles
             .entry(key)
             .or_insert_with(|| make_style(key))
@@ -289,7 +292,11 @@ fn color_of(key: u32) -> Option<Color> {
     if key == 0 {
         None
     } else if key & 0x0100_0000 != 0 {
-        Some(Color::from_rgb((key >> 16) as u8, (key >> 8) as u8, key as u8))
+        Some(Color::from_rgb(
+            (key >> 16) as u8,
+            (key >> 8) as u8,
+            key as u8,
+        ))
     } else {
         Some(Color::from_ansi(key as u8))
     }
@@ -301,7 +308,7 @@ const ITALIC: u8 = 4;
 const UNDERLINE: u8 = 8;
 const REVERSE: u8 = 16;
 
-fn style_key_of(cell: &vt100::Cell) -> (u32, u32, u8) {
+fn style_key_of(cell: &vt100::Cell) -> StyleKey {
     let attrs = BOLD * cell.bold() as u8
         + DIM * cell.dim() as u8
         + ITALIC * cell.italic() as u8
@@ -310,7 +317,7 @@ fn style_key_of(cell: &vt100::Cell) -> (u32, u32, u8) {
     (color_key(cell.fgcolor()), color_key(cell.bgcolor()), attrs)
 }
 
-fn make_style((fg, bg, attrs): (u32, u32, u8)) -> Style {
+fn make_style((fg, bg, attrs): StyleKey) -> Style {
     let names: Vec<&str> = [
         (BOLD, "bold"),
         (DIM, "dim"),
