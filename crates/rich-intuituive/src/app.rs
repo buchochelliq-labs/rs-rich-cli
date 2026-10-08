@@ -1,7 +1,9 @@
 //! The app: the tree, its runtime, and the loop that runs them.
 //!
 //! [`App::run`] takes the terminal (the alternate screen, raw mode, the
-//! mouse), and gives it back on every way out, including a panic. Each turn
+//! mouse), and gives it back on every way out, including a panic. It drives
+//! the terminal with crossterm; [`App::run_with`] picks termion or termwiz
+//! instead, behind the crate's features of those names. Each turn
 //! of the loop it runs work other threads sent through a
 //! [`Proxy`], fires due timers, draws what changed and reads
 //! one event:
@@ -33,7 +35,9 @@ use std::rc::Rc;
 use std::time::Duration;
 
 use rich::{ColorSystem, Console, Style};
-use rich_interact::{Backend, Button, Event, Key, KeyCode, MouseKind, Session, SessionOptions};
+use rich_interact::{
+    Backend, BackendKind, Button, Event, Key, KeyCode, MouseKind, Session, SessionOptions,
+};
 
 use crate::inspect::Inspector;
 use crate::layout::Size;
@@ -818,8 +822,25 @@ impl App {
 
     /// Run in the terminal, on the alternate screen (or
     /// [inline](Self::inline)), until a handler calls [`Ctx::quit`] or
-    /// Ctrl+C is pressed.
+    /// Ctrl+C is pressed. The terminal is driven with crossterm; see
+    /// [`run_with`](Self::run_with) for the others.
     pub fn run(self) -> io::Result<()> {
+        self.run_with(BackendKind::default())
+    }
+
+    /// [`run`](Self::run), with the terminal driven by `backend`: crossterm
+    /// (what `run` uses), or termion or termwiz with this crate's features
+    /// of those names.
+    ///
+    /// ```no_run
+    /// use intuituive::interact::BackendKind;
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| label("hello").on_key("q", |cx| cx.quit()));
+    /// app.run_with(BackendKind::Crossterm)?;
+    /// # Ok::<(), std::io::Error>(())
+    /// ```
+    pub fn run_with(self, backend: BackendKind) -> io::Result<()> {
         let full = self.inline.is_none();
         let mut session = Session::start(SessionOptions {
             alternate_screen: full,
@@ -827,6 +848,7 @@ impl App {
             bracketed_paste: true,
             output: Default::default(),
             legacy_keys: self.legacy_keys,
+            backend,
         })?;
         let mut app = self;
         app.text_frames = false;
@@ -837,6 +859,10 @@ impl App {
     /// app owns the loop: it waits for events, runs timers and draws. To
     /// own the loop yourself, use [`driver`](Self::driver), which this is
     /// built on.
+    ///
+    /// On a backend that [can suspend](Backend::can_suspend) (a terminal
+    /// on Unix), Ctrl+Z that no binding on the focused path uses suspends
+    /// the app as the shell expects, and `fg` draws it again.
     pub fn run_on(self, backend: &mut impl Backend) -> io::Result<()> {
         let (width, height) = backend.size();
         let inline = self.inline.is_some();
@@ -874,6 +900,34 @@ impl App {
                 let Some(event) = backend.read(Some(wait))? else {
                     continue;
                 };
+                match &event {
+                    // Raw mode turns off the terminal's own Ctrl+Z, so it
+                    // arrives as a key: suspend as the terminal would have,
+                    // unless the app binds it. On `fg` everything draws
+                    // again (inline, in a new region below the shell's
+                    // lines).
+                    Event::Key(key)
+                        if *key == Key::ctrl('z')
+                            && backend.can_suspend()
+                            && !driver.app.binds(*key) =>
+                    {
+                        backend.write(&driver.suspend())?;
+                        backend.suspend()?;
+                        let (columns, rows) = backend.size();
+                        if inline {
+                            driver.set_origin(backend.origin());
+                        }
+                        driver.resize(columns, rows);
+                        continue;
+                    }
+                    // Back from a suspend started outside (SIGTSTP): what
+                    // is on the screen is the shell's, so the resize this
+                    // is draws everything, in a new region when inline.
+                    Event::Resize { .. } if backend.take_resumed() => {
+                        let _ = driver.suspend();
+                    }
+                    _ => {}
+                }
                 if inline {
                     driver.set_origin(backend.origin());
                 }
@@ -2255,6 +2309,25 @@ impl Driver {
             self.app.now + Duration::from_secs(2),
         ));
         self.app.restack = true;
+    }
+
+    /// The terminal is about to be given back for a while (Ctrl+Z, a
+    /// command run in it): the bytes that end the frame (inline, the cursor
+    /// goes below the region). Once the terminal is back, call
+    /// [`resize`](Self::resize) with its size, and the next
+    /// [`render`](Self::render) draws everything again (inline, in a new
+    /// region where the cursor is then).
+    pub fn suspend(&mut self) -> String {
+        let mut out = self.painter.finish();
+        out.push_str("\x1b[0m\x1b[?25h");
+        self.painter.invalidate();
+        self.first = true;
+        self.started = false;
+        // The terminal's modes come back without pointer movement reports:
+        // asked for again once drawn.
+        self.app.motion.1 = false;
+        self.app.caret_shown = false;
+        out
     }
 
     /// Inline: the terminal row the app's region starts on, for placing

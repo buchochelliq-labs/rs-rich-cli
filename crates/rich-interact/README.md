@@ -114,6 +114,10 @@ What else is in the box:
   screen, mouse and bracketed paste are undone on every way out: finishing,
   `?`, Ctrl+C and a panic. `Flow::Handoff(command)` gives the terminal to
   `$EDITOR` or a pager and takes it back.
+- **Three backends.** crossterm drives the terminal by default; the
+  `termion` (Unix) and `termwiz` features add those libraries, picked with
+  `SessionOptions::backend`, each with its own event conversion
+  (`event::from_termion`, `event::from_termwiz`) and the same restoration.
 - **A viewport**: a scrollable window over rendered lines, and a minimal pager
   on its own.
 - **One item model** (`Item<T>`: label, description, metadata, preview,

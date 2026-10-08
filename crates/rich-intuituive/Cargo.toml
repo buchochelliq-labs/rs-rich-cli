@@ -26,12 +26,24 @@ name = "intuituive"
 [lints]
 workspace = true
 
+[features]
+# `App::run_with(BackendKind::Termion)`: the termion backend of
+# rs-rich-interact (Unix only).
+termion = ["rich-interact/termion"]
+# `App::run_with(BackendKind::Termwiz)`: the termwiz backend of
+# rs-rich-interact.
+termwiz = ["rich-interact/termwiz"]
+
 [dependencies]
 rich.workspace = true
 rich-ext.workspace = true
 rich-interact.workspace = true
 
 [dev-dependencies]
+# PTY tests: an app run on every backend gives the terminal back
+# (tests/backends.rs).
+portable-pty = "0.9"
+vt100 = "0.16"
 # The benchmark against ratatui (tests/versus_ratatui.rs) draws the same
 # dashboard with it. A dev-dependency only: the framework does not use it.
 ratatui = { version = "0.30", default-features = false, features = ["crossterm", "layout-cache"] }

@@ -138,3 +138,33 @@ fn releases_reach_widgets_and_never_bindings() {
     driver.event(Event::Key(key("q").exact()));
     assert_eq!(*fired.borrow(), 1);
 }
+
+/// Ctrl+Z suspends an app on a backend that can suspend, unless a binding
+/// on the focused path takes it; elsewhere it reaches the app as a key.
+#[test]
+fn ctrl_z_suspends_unless_bound() {
+    let run = |bound: bool, suspendable: bool| {
+        let app = App::new(move || {
+            let last = signal(String::from("-"));
+            let node = text!("{last}").on_key("x", move |_| last.set("x".into()));
+            if bound {
+                node.on_key("ctrl+z", move |_| last.set("undo".into()))
+            } else {
+                node
+            }
+        });
+        let mut backend = Headless::new(Script::new().keys("ctrl+z ctrl+c"), 20, 1);
+        backend.suspendable = suspendable;
+        let record = backend.record();
+        app.run_on(&mut backend).expect("the app runs");
+        let record = record.borrow();
+        (record.suspends, record.last_frame().trim_end().to_string())
+    };
+    // Suspended, then drawn again: the frame after it is whole.
+    assert_eq!(run(false, true), (1, "-".to_string()));
+    // Bound, the binding runs instead.
+    assert_eq!(run(true, true), (0, "undo".to_string()));
+    // A backend that cannot suspend hands it to the app.
+    assert_eq!(run(true, false), (0, "undo".to_string()));
+    assert_eq!(run(false, false), (0, "-".to_string()));
+}
