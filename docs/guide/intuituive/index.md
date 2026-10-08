@@ -194,6 +194,9 @@ column([
   keeps it off), Tab fires only `"tab"` and Ctrl+I only `"ctrl+i"`.
 - **Key releases** reach widgets as `WidgetEvent::KeyUp`, from a terminal
   with the kitty protocol; bindings fire on presses (and repeats) only.
+  Typed text stays text, so a plain letter or digit (or Enter, Tab and
+  Backspace) has no release: Escape, arrows, function keys and keys with
+  Ctrl or Alt do.
 - **Ctrl+C** quits, unless a node on the focused path binds it: then the
   binding runs, and quitting is up to you.
 - **Ctrl+Z** suspends the app on Unix, as the shell expects, and `fg`
@@ -404,7 +407,8 @@ What a widget can do:
 - **`event`** gets these events:
   - keys while the focus is on it or inside it (with nothing focused,
     while the pointer is over it), and `KeyUp` when one is let go (from a
-    terminal with the kitty keyboard protocol);
+    terminal with the kitty keyboard protocol, for keys other than plain
+    text, Enter, Tab and Backspace);
   - mouse events over it, and pasted text;
   - `Focus`, `Hover` and `Resize` when the focus or the pointer comes or
     goes, or its size changes;

@@ -40,7 +40,9 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 - **Releases and repeats.** A key let go arrives as the new
   `Event::KeyUp` (and in intuiTUIve as `WidgetEvent::KeyUp`, offered along
   the focused path); a repeat arrives as a press. Bindings fire on presses
-  only. `event::from_crossterm` delivers releases too, and the new
+  only. Plain text keys, Enter, Tab and Backspace have no release: the session does not ask for
+  every key as an escape code (flag 8), which would cost typed text its
+  shifted and layout forms. `event::from_crossterm` delivers releases too, and the new
   `event::from_crossterm_kitty` reads keys from a terminal with the
   protocol pushed. Python components (`rs_rich.interact`) are not handed
   releases.

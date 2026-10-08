@@ -1312,12 +1312,8 @@ impl ActionMenu {
             KeyCode::Down | KeyCode::Tab => self.focus = (self.focus + 1) % count.max(1),
             KeyCode::Enter => return MenuReply::Run(self.actions[self.focus].clone()),
             _ => {
-                if let Some(action) = self
-                    .actions
-                    .iter()
-                    .find(|a| a.key.is_some_and(|k| key.matches(&k)))
-                {
-                    return MenuReply::Run(action.clone());
+                if let Some(at) = key.pick(self.actions.iter().map(|a| a.key.as_slice())) {
+                    return MenuReply::Run(self.actions[at].clone());
                 }
             }
         }

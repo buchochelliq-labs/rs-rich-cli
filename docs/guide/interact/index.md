@@ -367,7 +367,11 @@ it on when it does (kitty, ghostty, foot and Alacritty among others).
 Every key is then exact (`Key::is_exact`): Tab fires only `tab`, Ctrl+I
 only `ctrl+i`. Keys held down repeat as presses, and keys let go arrive as
 `Event::KeyUp`, which no binding fires; a component that wants releases
-matches them itself. `SessionOptions { legacy_keys: true, .. }` keeps the
+matches them itself. The session asks for releases without asking for
+every key as an escape code (kitty's flag 8), so that typed text keeps
+its shifted and layout forms: a terminal reports the release of Escape,
+arrows, function keys and keys with Ctrl or Alt, and not of a plain
+letter, digit, Enter, Tab or Backspace. `SessionOptions { legacy_keys: true, .. }` keeps the
 protocol off. A loop of your own that reads crossterm uses
 `event::from_crossterm`, or `event::from_crossterm_kitty` after pushing
 the protocol's flags.
