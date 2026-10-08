@@ -156,7 +156,6 @@ impl WebEngine for ProgramEngine {
     fn open(&mut self, url: &str) -> io::Result<()> {
         if !self.history.is_empty() {
             self.history.truncate(self.at + 1);
-            self.at = self.history.len();
         }
         self.history.push(url.to_string());
         self.at = self.history.len() - 1;

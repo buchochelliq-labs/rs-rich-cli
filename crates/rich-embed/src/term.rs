@@ -55,6 +55,14 @@ impl TermCore {
         self.host.set_notify(notify);
     }
 
+    /// Keep up to `rows` rows of scrollback: before the program starts.
+    pub fn set_scrollback(&mut self, rows: usize) {
+        if !self.started() {
+            self.scrollback = rows;
+            self.terminal = Terminal::with_scrollback(24, 80, rows);
+        }
+    }
+
     pub fn started(&self) -> bool {
         self.size.is_some()
     }

@@ -128,16 +128,7 @@ impl TerminalPane {
     /// Keep up to `rows` rows that scrolled off the top (default
     /// [`DEFAULT_SCROLLBACK`]). Before the pane is first laid out.
     pub fn scrollback(self, rows: usize) -> TerminalPane {
-        {
-            let mut state = self.state.borrow_mut();
-            if !state.core.started() {
-                let host = std::mem::replace(
-                    &mut state.core.host,
-                    Box::new(crate::host::ReplayHost::new()),
-                );
-                state.core = TermCore::new(host, rows);
-            }
-        }
+        self.state.borrow_mut().core.set_scrollback(rows);
         self
     }
 

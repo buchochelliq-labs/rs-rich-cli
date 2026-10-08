@@ -15,7 +15,7 @@ use std::ffi::OsString;
 use std::fmt;
 use std::io::{self, Read, Write};
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
+use std::sync::{mpsc, Arc, Mutex, MutexGuard, PoisonError};
 use std::thread;
 use std::time::Duration;
 
@@ -244,7 +244,9 @@ pub struct LocalPty {
     command: Command,
     shared: Arc<Mutex<Output>>,
     master: Option<Box<dyn MasterPty + Send>>,
-    writer: Option<Box<dyn Write + Send>>,
+    /// To the writer thread: a program that stops reading its input fills
+    /// the PTY, and a write would then block the app.
+    writer: Option<mpsc::Sender<Vec<u8>>>,
     killer: Option<Box<dyn ChildKiller + Send + Sync>>,
 }
 
@@ -284,7 +286,20 @@ impl PtyHost for LocalPty {
         // The child holds the only other end: its exit ends the output.
         drop(pty.slave);
         let mut reader = pty.master.try_clone_reader().map_err(io::Error::other)?;
-        self.writer = Some(pty.master.take_writer().map_err(io::Error::other)?);
+        let mut writer = pty.master.take_writer().map_err(io::Error::other)?;
+        let (input, keys) = mpsc::channel::<Vec<u8>>();
+        thread::spawn(move || {
+            for bytes in keys {
+                if writer
+                    .write_all(&bytes)
+                    .and_then(|()| writer.flush())
+                    .is_err()
+                {
+                    break;
+                }
+            }
+        });
+        self.writer = Some(input);
         self.killer = Some(child.clone_killer());
         self.master = Some(pty.master);
 
@@ -330,11 +345,10 @@ impl PtyHost for LocalPty {
     }
 
     fn write(&mut self, bytes: &[u8]) -> io::Result<()> {
-        match &mut self.writer {
-            Some(writer) => {
-                writer.write_all(bytes)?;
-                writer.flush()
-            }
+        match &self.writer {
+            Some(writer) => writer
+                .send(bytes.to_vec())
+                .map_err(|_| io::Error::new(io::ErrorKind::BrokenPipe, "the program has gone")),
             None => Err(io::Error::new(
                 io::ErrorKind::NotConnected,
                 "the program has not started",
