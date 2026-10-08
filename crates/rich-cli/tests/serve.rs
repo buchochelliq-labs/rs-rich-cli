@@ -5,6 +5,13 @@
 
 use std::process::{Command, Stdio};
 
+/// Whether `--help` lists a `serve` command (its row starts with the word).
+fn lists_serve(help: &[u8]) -> bool {
+    String::from_utf8_lossy(help)
+        .lines()
+        .any(|line| line.trim_start().starts_with("serve "))
+}
+
 fn rich() -> Command {
     let mut command = Command::new(env!("CARGO_BIN_EXE_rich"));
     command.env("NO_COLOR", "1").env("COLUMNS", "100");
@@ -16,8 +23,7 @@ fn rich() -> Command {
 fn a_default_build_has_no_serve() {
     let help = rich().arg("--help").output().unwrap();
     assert!(help.status.success());
-    let help = String::from_utf8_lossy(&help.stdout);
-    assert!(!help.contains("serve"), "{help}");
+    assert!(!lists_serve(&help.stdout));
     // The word is not a command: nothing is served.
     let run = rich()
         .args(["serve", "--", "true"])
@@ -44,7 +50,7 @@ fn serve_has_help_and_usage_errors() {
         assert!(text.contains(flag), "{flag} in {text}");
     }
     let root = rich().arg("--help").output().unwrap();
-    assert!(String::from_utf8_lossy(&root.stdout).contains("serve"));
+    assert!(lists_serve(&root.stdout));
 
     for args in [
         &["serve"][..],
