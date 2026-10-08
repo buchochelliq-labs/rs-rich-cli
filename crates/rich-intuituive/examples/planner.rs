@@ -200,13 +200,10 @@ pub fn planner_app() -> App {
                 "Help",
                 vec![
                     MenuItem::new("Keys", |cx| cx.help()).hint("?"),
-                    MenuItem::new("Commands", |cx| cx.command_palette()).hint("ctrl+p"),
+                    MenuItem::new("Commands", |cx| cx.palette()).hint("ctrl+p"),
                 ],
             ),
         ]);
-        // Out of the Tab order: F10 or the mouse reaches it, as in most
-        // apps with menus.
-        let bar = bar.no_focus();
         let bar_id = bar.id();
 
         let items = move || {
@@ -227,7 +224,11 @@ pub fn planner_app() -> App {
                     .collect()
             })
         };
-        let projects_tree = tree_with(items, selected, expanded).panel("Projects");
+        // The tree has the focus when the planner opens, not the menu bar
+        // above it.
+        let projects_tree = tree_with(items, selected, expanded)
+            .autofocus()
+            .panel("Projects");
 
         let details = text(move || {
             let (p, t) = at(&selected.get());
