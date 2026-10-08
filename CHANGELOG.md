@@ -127,7 +127,6 @@ Workstream 1 of the [0.0.18 plan](docs/plans/0.0.18.md).
   the Tab order (a focused one gives the focus to the next node), and its
   widget, click and key handlers see no input. The inspector
   shows classes.
-
 ### intuiTUIve: the widget gaps (rs-rich-intuituive 0.0.3)
 
 0.0.18 workstream 3.
