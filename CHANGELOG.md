@@ -81,6 +81,29 @@ Workstream 1 of the [0.0.18 plan](docs/plans/0.0.18.md).
   VT220, the way xterm does by default), so a recorded program that asks
   for the kitty protocol does not wait two seconds for an answer.
 
+
+### intuiTUIve: accessibility (rs-rich-intuituive 0.0.3)
+
+0.0.18 workstream 6.
+
+- **`App::accessible(true)`**, on by default with `INTUITUIVE_ACCESSIBLE`
+  or `RICH_A11Y=screen-reader`.
+  - The terminal's cursor sits on what has the focus: the caret, else the
+    selected row, cell, tab or menu entry. Screen readers follow it with
+    no bridge.
+  - Text mode: boxes are drawn as blanks (titles stay), there is no
+    colour, a `>` marks the selected item in lists, tables, trees and tab
+    strips, and animations jump to their end.
+- **Roles and names:**
+  - `Widget::role` (default `Role::Group`) is set by every built-in.
+  - `Widget::cursor` gives the selected item's place.
+  - `Node::role`, `Node::label` (the accessible name) and `Node::live`
+    (announce changes).
+  - `Driver::accessibility()` returns the tree: depth, role, name, value,
+    focus and place.
+- **Announcements:** toasts, a screen or dialog opening, live nodes and
+  `Ctx::announce` go to `App::announcer` and wait in
+  `Driver::take_announcements()`.
 ### intuiTUIve: stylesheets (rs-rich-intuituive 0.0.3)
 
 0.0.18 workstream 4.

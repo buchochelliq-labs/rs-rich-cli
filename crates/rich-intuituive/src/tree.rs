@@ -246,6 +246,22 @@ impl Widget for Tree {
         "tree"
     }
 
+    fn role(&self) -> crate::a11y::Role {
+        crate::a11y::Role::Tree
+    }
+
+    fn cursor(&self) -> Option<crate::screen::Rect> {
+        let rows = self.rows();
+        let at = index_of(&rows, &self.selected.get_untracked());
+        let row = at.checked_sub(self.first.get())?;
+        (row < self.height.get().max(1)).then_some(crate::screen::Rect::new(
+            0,
+            row as u16,
+            u16::MAX,
+            1,
+        ))
+    }
+
     fn measure(&mut self, _cx: &MeasureCx, axis: Axis, width: u16, _height: u16) -> u16 {
         match axis {
             Axis::Vertical => self.rows().len().min(u16::MAX as usize) as u16,
@@ -281,7 +297,11 @@ impl Widget for Tree {
                 (true, true) => "▾ ",
                 (true, false) => "▸ ",
             };
-            let prefix = format!("{}{marker}", "  ".repeat(row.path.len() - 1));
+            let mut prefix = format!("{}{marker}", "  ".repeat(row.path.len() - 1));
+            if crate::a11y::text_mode() {
+                // A marker on the selected row, not only a style.
+                prefix.insert_str(0, if i == selected { "> " } else { "  " });
+            }
             let used = rich::cells::cell_len(&prefix).min(width as usize) as u16;
             let mut line = vec![Segment::new(prefix, None)];
             line.extend(cell_line(console, &row.label, width - used));

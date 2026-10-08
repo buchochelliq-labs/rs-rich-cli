@@ -820,6 +820,47 @@ condition holds, following the signals the condition reads.
   is worked out only when it draws. An app without a sheet does none of
   it.
 
+## Accessibility
+
+`App::accessible(true)` draws for assistive technology. It is on by
+default when `INTUITUIVE_ACCESSIBLE` is set (to anything but `0`), or when
+rs-rich's `RICH_A11Y` names `screen-reader`.
+
+- **The cursor is on what has the focus.** The terminal's real cursor sits
+  on the focused item: an input's caret, a list's or table's selected row,
+  a table's cell, the selected tab, the menu entry. NVDA, VoiceOver and
+  Orca read the line the cursor is on, so they follow the app with no
+  bridge.
+- **Text mode:**
+  - Boxes are drawn as blanks (titles stay), so no line characters are
+    read out.
+  - There is no colour, so no meaning rests on it.
+  - The selected item in a list, table, tree or tab strip is marked with
+    `>`.
+  - Animations jump to their end.
+- **Roles and names.** Every node has a role (`Widget::role`, set by every
+  built-in: `list`, `table`, `tree`, `tablist`, `menu`, `region` for a
+  panel, `button` for a clickable label, …) and a name: `.label("Save")`,
+  else the text it shows, else a panel's title. `.role(Role::MenuBar)`
+  sets a role in code. `Driver::accessibility()` returns the tree: depth,
+  role, name, what is selected in it, focus and place. A browser's DOM
+  renderer or a screen reader bridge renders it.
+- **Announcements.** Toasts, a screen or dialog opening, `.live()` nodes
+  whose text changes (a status line), and `cx.announce(text, urgent)` go to
+  the app's `App::announcer(…)` as they happen, and wait in
+  `Driver::take_announcements()` for a loop that reads them (browser
+  serving puts them in an ARIA live region).
+
+```rust
+App::new(|| {
+    column([
+        text!("{done} of {total} done").live(),
+        list(move || tasks.get(), selected).label("Tasks"),
+    ])
+})
+.announcer(|a: &Announcement| eprintln!("say: {}", a.text))
+```
+
 ## Inline apps
 
 ![An inline app finishing under the prompt, with the scrollback above it kept](../../media/tapes/intuituive/inline.png)
