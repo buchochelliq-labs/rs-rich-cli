@@ -2489,7 +2489,7 @@ dependencies = [
 
 [[package]]
 name = "rs-rich-cli"
-version = "0.0.17"
+version = "0.0.18"
 dependencies = [
  "cap-fs-ext",
  "cap-std",
@@ -2572,7 +2572,7 @@ dependencies = [
 
 [[package]]
 name = "rs-rich-interact"
-version = "0.0.5"
+version = "0.0.6"
 dependencies = [
  "crossterm",
  "filedescriptor",
@@ -2591,7 +2591,7 @@ dependencies = [
 
 [[package]]
 name = "rs-rich-intuituive"
-version = "0.0.2"
+version = "0.0.3"
 dependencies = [
  "portable-pty",
  "ratatui",
@@ -2661,7 +2661,7 @@ dependencies = [
 
 [[package]]
 name = "rs-rich-ratatui"
-version = "0.0.2"
+version = "0.0.3"
 dependencies = [
  "ratatui-core",
  "ratatui-widgets",
@@ -2671,7 +2671,7 @@ dependencies = [
 
 [[package]]
 name = "rs-rich-record"
-version = "0.0.5"
+version = "0.0.6"
 dependencies = [
  "color_quant 2.0.0",
  "fancy-regex 0.19.2",
