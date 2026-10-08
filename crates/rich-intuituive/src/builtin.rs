@@ -21,6 +21,8 @@ pub(crate) type Draw = Box<dyn Fn(&Console, u16, u16) -> Vec<Vec<Segment>>>;
 
 /// The most rows a [`scroll`](crate::scroll) lays its child out in.
 pub(crate) const MAX_SCROLL_ROWS: u16 = 4000;
+/// The widest content a view that scrolls across lays out.
+pub(crate) const MAX_SCROLL_COLUMNS: u16 = 2000;
 
 /// How far rendered `lines` reach along `axis`.
 fn extent(lines: &[Vec<Segment>], axis: Axis) -> u16 {
@@ -664,35 +666,78 @@ pub(crate) struct ScrollView {
     pub child: Node,
     /// The first row in view.
     pub offset: Signal<u16>,
-    /// The content's width (less the scrollbar's column) and height.
+    /// The first column in view.
+    pub x_offset: Signal<u16>,
+    /// Which ways it scrolls: down (the content is as wide as the view and
+    /// as tall as it needs) and across (as wide as it needs).
+    vertical: bool,
+    horizontal: bool,
+    /// The content's width and height.
     content: (u16, u16),
-    /// Rows in view.
-    rows: u16,
+    /// The view's columns and rows, less the scrollbars.
+    view: (u16, u16),
     /// The focused node inside when it was last scrolled into view.
     focus: Option<NodeId>,
 }
 
 impl ScrollView {
     pub fn new(child: Node, offset: Signal<u16>) -> ScrollView {
+        ScrollView::both(child, crate::reactive::signal(0), offset, false, true)
+    }
+
+    pub fn both(
+        child: Node,
+        x_offset: Signal<u16>,
+        offset: Signal<u16>,
+        horizontal: bool,
+        vertical: bool,
+    ) -> ScrollView {
         ScrollView {
             child,
             offset,
+            x_offset,
+            vertical,
+            horizontal,
             content: (0, 0),
-            rows: 1,
+            view: (1, 1),
             focus: None,
         }
     }
 
     fn by(&self, rows: i32) {
-        let max = self.content.1.saturating_sub(self.rows) as i32;
+        let max = self.content.1.saturating_sub(self.view.1) as i32;
         self.offset
             .update(|o| *o = (*o as i32 + rows).clamp(0, max.max(0)) as u16);
+    }
+
+    fn across(&self, columns: i32) {
+        let max = self.content.0.saturating_sub(self.view.0) as i32;
+        self.x_offset
+            .update(|o| *o = (*o as i32 + columns).clamp(0, max.max(0)) as u16);
     }
 
     fn top(&self) -> u16 {
         self.offset
             .get_untracked()
-            .min(self.content.1.saturating_sub(self.rows))
+            .min(self.content.1.saturating_sub(self.view.1))
+    }
+
+    fn left(&self) -> u16 {
+        self.x_offset
+            .get_untracked()
+            .min(self.content.0.saturating_sub(self.view.0))
+    }
+}
+
+/// The first of `start..start + len` to show so that `from..to` is in
+/// view: unchanged if it already is.
+fn into_view(start: u16, len: u16, from: u16, to: u16) -> u16 {
+    if from < start {
+        from
+    } else if to > start.saturating_add(len) {
+        to.saturating_sub(len)
+    } else {
+        start
     }
 }
 
@@ -714,17 +759,51 @@ impl Widget for ScrollView {
     }
 
     fn layout(&mut self, cx: &MeasureCx, rect: Rect) -> Vec<Rect> {
-        // A scrollbar takes the last column when the content is taller.
-        let full = cx.measure(&self.child, Axis::Vertical, rect.width, 0);
-        let (w, h) = if full > rect.height && rect.width > 1 {
-            let w = rect.width - 1;
-            (w, cx.measure(&self.child, Axis::Vertical, w, 0))
-        } else {
-            (rect.width, full)
+        // Across, the content is as wide as it asks (at most
+        // MAX_SCROLL_COLUMNS); down, as tall as it needs at that width.
+        // Each scrollbar takes a line when the content overflows that way:
+        // the last column for down, the last row for across.
+        let wide = |width: u16| {
+            if self.horizontal {
+                cx.measure(&self.child, Axis::Horizontal, MAX_SCROLL_COLUMNS, 0)
+                    .clamp(width, MAX_SCROLL_COLUMNS)
+            } else {
+                width
+            }
         };
+        let tall = |width: u16| {
+            if self.vertical {
+                cx.measure(&self.child, Axis::Vertical, width, 0)
+            } else {
+                rect.height
+            }
+        };
+        let (mut view_w, mut view_h) = (rect.width, rect.height);
+        let mut w = wide(view_w);
+        let mut h = tall(w);
+        // The two bars can each make room the other needs: settle in two
+        // passes.
+        for _ in 0..2 {
+            if self.vertical && h > view_h && rect.width > 1 {
+                view_w = rect.width - 1;
+            }
+            if self.horizontal && w > view_w && rect.height > 1 {
+                view_h = rect.height - 1;
+            }
+            w = wide(view_w);
+            h = tall(w);
+        }
         self.offset.get();
-        self.rows = rect.height;
-        self.content = (w, h.max(rect.height).min(MAX_SCROLL_ROWS));
+        self.x_offset.get();
+        self.view = (view_w, view_h);
+        self.content = (
+            w.max(view_w),
+            if self.vertical {
+                h.max(view_h).min(MAX_SCROLL_ROWS)
+            } else {
+                view_h
+            },
+        );
         vec![Rect::new(0, 0, self.content.0, self.content.1)]
     }
 
@@ -734,52 +813,83 @@ impl Widget for ScrollView {
         if focused.map(|(id, _)| id) != self.focus {
             self.focus = focused.map(|(id, _)| id);
             if let Some((_, area)) = focused.filter(|(_, area)| !area.is_empty()) {
-                let top = self.top();
-                let bottom = top.saturating_add(self.rows);
-                let next = if area.y < top {
-                    area.y
-                } else if area.bottom() > bottom {
-                    area.bottom().saturating_sub(self.rows)
-                } else {
-                    top
-                };
-                if next != top {
-                    Runtime::current().untracked(|| self.offset.set(next));
+                let (left, top) = (self.left(), self.top());
+                let next_top = into_view(top, self.view.1, area.y, area.bottom());
+                let next_left = into_view(left, self.view.0, area.x, area.right());
+                if self.vertical && next_top != top {
+                    Runtime::current().untracked(|| self.offset.set(next_top));
+                }
+                if self.horizontal && next_left != left {
+                    Runtime::current().untracked(|| self.x_offset.set(next_left));
                 }
             }
         }
-        (Rect::new(0, 0, self.content.0, self.rows), (0, self.top()))
+        (
+            Rect::new(0, 0, self.view.0, self.view.1),
+            (self.left(), self.top()),
+        )
     }
 
     fn draw(&mut self, cx: &mut DrawCx, canvas: &mut Canvas) {
         // The focus moving inside may scroll the view.
         cx.focus_within();
-        let (width, content) = self.content;
-        if width < canvas.width() && content > self.rows {
-            let lines = crate::node::scrollbar(cx.console(), self.rows, self.top(), content);
-            canvas.lines_at(canvas.width() - 1, 0, 1, self.rows, &lines);
+        let (content_w, content_h) = self.content;
+        let (view_w, view_h) = self.view;
+        if view_w < canvas.width() && content_h > view_h {
+            let lines = crate::node::scrollbar(cx.console(), view_h, self.top(), content_h);
+            canvas.lines_at(canvas.width() - 1, 0, 1, view_h, &lines);
+        }
+        if view_h < canvas.height() && content_w > view_w {
+            let line = crate::node::scrollbar_across(cx.console(), view_w, self.left(), content_w);
+            canvas.lines_at(0, canvas.height() - 1, view_w, 1, &[line]);
         }
     }
 
     fn event(&mut self, _cx: &mut EventCx, event: &WidgetEvent) -> Used {
-        let page = self.rows.max(2) as i32 - 1;
+        let page = self.view.1.max(2) as i32 - 1;
+        let page_across = self.view.0.max(2) as i32 - 1;
         match event {
             WidgetEvent::Key(key) if key.modifiers == rich_interact::Modifiers::NONE => {
                 match key.code {
-                    KeyCode::Up => self.by(-1),
-                    KeyCode::Down => self.by(1),
-                    KeyCode::PageUp => self.by(-page),
-                    KeyCode::PageDown => self.by(page),
-                    KeyCode::Home => self.offset.set(0),
-                    KeyCode::End => self.offset.set(MAX_SCROLL_ROWS),
+                    KeyCode::Up if self.vertical => self.by(-1),
+                    KeyCode::Down if self.vertical => self.by(1),
+                    KeyCode::PageUp if self.vertical => self.by(-page),
+                    KeyCode::PageDown if self.vertical => self.by(page),
+                    KeyCode::Left if self.horizontal => self.across(-1),
+                    KeyCode::Right if self.horizontal => self.across(1),
+                    KeyCode::Home => {
+                        self.offset.set(0);
+                        self.x_offset.set(0);
+                    }
+                    KeyCode::End if self.vertical => self.offset.set(MAX_SCROLL_ROWS),
+                    KeyCode::End => self.x_offset.set(MAX_SCROLL_COLUMNS),
                     _ => return Used::No,
                 }
             }
-            WidgetEvent::Mouse(mouse) => match mouse.kind {
-                MouseKind::ScrollUp => self.by(-3),
-                MouseKind::ScrollDown => self.by(3),
-                _ => return Used::No,
-            },
+            WidgetEvent::Key(key)
+                if key.modifiers.shift
+                    && !key.modifiers.ctrl
+                    && !key.modifiers.alt
+                    && self.horizontal =>
+            {
+                match key.code {
+                    KeyCode::PageUp => self.across(-page_across),
+                    KeyCode::PageDown => self.across(page_across),
+                    _ => return Used::No,
+                }
+            }
+            WidgetEvent::Mouse(mouse) => {
+                // Shift with the wheel, or the wheel in a view that only
+                // scrolls across, scrolls across.
+                let across = self.horizontal && (mouse.modifiers.shift || !self.vertical);
+                match (mouse.kind, across) {
+                    (MouseKind::ScrollUp, false) => self.by(-3),
+                    (MouseKind::ScrollDown, false) => self.by(3),
+                    (MouseKind::ScrollUp, true) => self.across(-6),
+                    (MouseKind::ScrollDown, true) => self.across(6),
+                    _ => return Used::No,
+                }
+            }
             _ => return Used::No,
         }
         Used::Yes

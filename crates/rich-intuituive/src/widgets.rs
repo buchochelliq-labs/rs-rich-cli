@@ -78,6 +78,70 @@ struct Table {
     /// The first row in view, and the rows of the body last drawn.
     first: Cell<usize>,
     body: Cell<usize>,
+    options: TableOptions,
+    /// Widths the user dragged a column to, by column.
+    dragged: RefCell<Vec<Option<u16>>>,
+    /// Where each column was last drawn: its first column and width.
+    spans: RefCell<Vec<(u16, u16)>>,
+    /// The column whose right edge is being dragged, and where the drag
+    /// started.
+    resizing: Cell<Option<(usize, u16)>>,
+}
+
+/// Which way a table's column is sorted.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Order {
+    Ascending,
+    Descending,
+}
+
+/// What a [`table_with`] adds to a [`table`]. Every field is off by default.
+#[derive(Default)]
+pub struct TableOptions {
+    /// The column and order rows are sorted by, which a click on a header
+    /// (or `s`) sets and the header shows with an arrow. The rows closure
+    /// reads it and sorts, so the selection stays an index into the app's
+    /// own order; set [`sort_rows`](Self::sort_rows) to have the table sort
+    /// plain rows itself.
+    pub sort: Option<Signal<Option<(usize, Order)>>>,
+    /// Sort the rows by [`sort`](Self::sort) in the table: by number where
+    /// both cells are numbers, else by text without case. The selection is
+    /// then an index into the sorted rows. Not for a [`virtual_table`],
+    /// whose rows are never all in hand.
+    pub sort_rows: bool,
+    /// A cell cursor: the selected column, moved by ←/→ (or h/l) and
+    /// clicks, and drawn in the theme's `selected.cell` style over the
+    /// selected row.
+    pub column: Option<Signal<usize>>,
+    /// Columns resize by dragging the gap after a header.
+    pub resizable: bool,
+}
+
+impl TableOptions {
+    /// Sorting by `sort`, which the app's rows closure reads.
+    pub fn sort(mut self, sort: Signal<Option<(usize, Order)>>) -> TableOptions {
+        self.sort = Some(sort);
+        self
+    }
+
+    /// Sorting by `sort`, done by the table on plain rows.
+    pub fn sort_rows(mut self, sort: Signal<Option<(usize, Order)>>) -> TableOptions {
+        self.sort = Some(sort);
+        self.sort_rows = true;
+        self
+    }
+
+    /// A cell cursor in `column`.
+    pub fn cells(mut self, column: Signal<usize>) -> TableOptions {
+        self.column = Some(column);
+        self
+    }
+
+    /// Columns the mouse resizes.
+    pub fn resizable(mut self) -> TableOptions {
+        self.resizable = true;
+        self
+    }
 }
 
 /// A table of markup cells under a header row that stays in view, with one
@@ -165,10 +229,59 @@ pub fn virtual_list(
         blur: "list.selected",
         first: Cell::new(0),
         body: Cell::new(1),
+        options: TableOptions::default(),
+        dragged: RefCell::new(vec![None]),
+        spans: RefCell::new(Vec::new()),
+        resizing: Cell::new(None),
     })
 }
 
 fn table_from(columns: Vec<Column>, rows: Rows, selected: Signal<usize>) -> Node {
+    table_options(columns, rows, selected, TableOptions::default())
+}
+
+/// A [`table`] with sorting, a cell cursor or resizable columns, as
+/// `options` asks.
+///
+/// ```
+/// use intuituive::prelude::*;
+/// use intuituive::widgets::{table_with, Column, Order, TableOptions};
+///
+/// let app = App::new(|| {
+///     let sort = signal(None);
+///     let rows = || {
+///         vec![
+///             vec!["b.txt".into(), "20".into()],
+///             vec!["a.txt".into(), "100".into()],
+///             vec!["c.txt".into(), "3".into()],
+///         ]
+///     };
+///     let columns = vec![Column::new("Name", Size::Auto), Column::new("Size", Size::Auto)];
+///     table_with(columns, rows, signal(0), TableOptions::default().sort_rows(sort))
+///         .on_key("q", |cx| cx.quit())
+/// });
+/// // `s` (or a click on a title) sorts by the first column.
+/// let screen = app.render_with(&["s", "q"], 16, 4).unwrap();
+/// assert_eq!(screen[0].trim_end(), "Name ▲ Size");
+/// assert_eq!(screen[1].trim_end(), "a.txt  100");
+/// assert_eq!(screen[3].trim_end(), "c.txt  3");
+/// ```
+pub fn table_with(
+    columns: Vec<Column>,
+    rows: impl Fn() -> Vec<Vec<String>> + 'static,
+    selected: Signal<usize>,
+    options: TableOptions,
+) -> Node {
+    table_options(columns, Rows::All(Box::new(rows)), selected, options)
+}
+
+fn table_options(
+    columns: Vec<Column>,
+    rows: Rows,
+    selected: Signal<usize>,
+    options: TableOptions,
+) -> Node {
+    let count = columns.len();
     widget(Table {
         name: "table",
         columns,
@@ -178,7 +291,26 @@ fn table_from(columns: Vec<Column>, rows: Rows, selected: Signal<usize>) -> Node
         blur: "table.selected",
         first: Cell::new(0),
         body: Cell::new(1),
+        options,
+        dragged: RefCell::new(vec![None; count]),
+        spans: RefCell::new(Vec::new()),
+        resizing: Cell::new(None),
     })
+}
+
+/// How two cells compare when a table sorts its rows: as numbers when both
+/// are, else as text without case or markup.
+fn compare_cells(a: &str, b: &str) -> std::cmp::Ordering {
+    let plain = |markup: &str| {
+        rich::Text::from_markup(markup)
+            .map(|text| text.plain().to_string())
+            .unwrap_or_else(|_| markup.to_string())
+    };
+    let (a, b) = (plain(a), plain(b));
+    match (a.trim().parse::<f64>(), b.trim().parse::<f64>()) {
+        (Ok(x), Ok(y)) => x.partial_cmp(&y).unwrap_or(std::cmp::Ordering::Equal),
+        _ => a.to_lowercase().cmp(&b.to_lowercase()),
+    }
 }
 
 /// `markup` rendered on one line `width` cells wide, padded or cut with an
@@ -230,6 +362,61 @@ impl Table {
         self.selected
             .update(|s| *s = (*s as isize + by).clamp(0, last.max(0)) as usize);
     }
+
+    /// Rows `from..from + count` in the order shown: sorted here when the
+    /// table sorts its own rows.
+    fn shown(&self, from: usize, count: usize) -> Vec<Vec<String>> {
+        let order = self.options.sort.filter(|_| self.options.sort_rows);
+        match (&self.rows, order.and_then(|sort| sort.get())) {
+            (Rows::All(rows), Some((column, order))) => {
+                let mut all = rows();
+                all.sort_by(|a, b| {
+                    let (a, b) = (a.get(column), b.get(column));
+                    let by = compare_cells(a.map_or("", |s| s), b.map_or("", |s| s));
+                    match order {
+                        Order::Ascending => by,
+                        Order::Descending => by.reverse(),
+                    }
+                });
+                all.into_iter().skip(from).take(count).collect()
+            }
+            _ => self.rows.window(from, count),
+        }
+    }
+
+    /// Sort by `column`: ascending first, then the other way on the same
+    /// column.
+    fn sort_by(&self, column: usize) {
+        if let Some(sort) = self.options.sort {
+            sort.update(|sort| {
+                *sort = match *sort {
+                    Some((c, Order::Ascending)) if c == column => Some((c, Order::Descending)),
+                    _ => Some((column, Order::Ascending)),
+                }
+            });
+        }
+    }
+
+    fn move_column(&self, by: isize) {
+        if let Some(column) = self.options.column {
+            let last = self.columns.len().saturating_sub(1) as isize;
+            column.update(|c| *c = (*c as isize + by).clamp(0, last.max(0)) as usize);
+        }
+    }
+
+    /// The column drawn at `x`, if any.
+    fn column_at(&self, x: u16) -> Option<usize> {
+        self.spans
+            .borrow()
+            .iter()
+            .position(|(start, width)| (*start..start + width).contains(&x))
+    }
+
+    /// The column whose right edge (the gap after it) is at `x`.
+    fn edge_at(&self, x: u16) -> Option<usize> {
+        let spans = self.spans.borrow();
+        (0..spans.len().saturating_sub(1)).find(|&i| spans[i].0 + spans[i].1 == x)
+    }
 }
 
 impl Widget for Table {
@@ -261,21 +448,38 @@ impl Widget for Table {
             first = selected + 1 - body;
         }
         self.first.set(first);
-        let rows = self.rows.window(first, body);
+        let rows = self.shown(first, body);
+        let sort = self.options.sort.and_then(|sort| sort.get());
+        // A sorted column's title ends with an arrow.
+        let titles: Vec<String> = self
+            .columns
+            .iter()
+            .enumerate()
+            .map(|(i, column)| match sort {
+                Some((c, Order::Ascending)) if c == i => format!("{} ▲", column.title),
+                Some((c, Order::Descending)) if c == i => format!("{} ▼", column.title),
+                _ => column.title.clone(),
+            })
+            .collect();
+        let dragged = self.dragged.borrow().clone();
         // Column widths: content columns fit their title and the rows in
-        // view.
+        // view; a column the user dragged keeps that width.
         let tracks: Vec<Track> = self
             .columns
             .iter()
             .enumerate()
             .map(|(i, column)| {
-                let mut track = Track::new(column.size);
-                if column.size == Size::Auto {
+                let size = match dragged.get(i).copied().flatten() {
+                    Some(width) => Size::Fixed(width),
+                    None => column.size,
+                };
+                let mut track = Track::new(size);
+                if size == Size::Auto {
                     track.content = rows
                         .iter()
                         .filter_map(|row| row.get(i))
                         .map(|cell| markup_width(cell))
-                        .chain([markup_width(&column.title)])
+                        .chain([markup_width(&titles[i])])
                         .max()
                         .unwrap_or(0);
                 }
@@ -283,6 +487,16 @@ impl Widget for Table {
             })
             .collect();
         let widths = solve(width, 1, &tracks);
+        {
+            let mut spans = self.spans.borrow_mut();
+            spans.clear();
+            let mut x = 0;
+            for w in &widths {
+                spans.push((x, *w));
+                x += w + 1;
+            }
+        }
+        let cell = self.options.column.map(|column| column.get());
         let console = cx.console();
         let line = |cells: &mut dyn Iterator<Item = &str>| -> Vec<Segment> {
             let mut out = Vec::new();
@@ -296,7 +510,7 @@ impl Widget for Table {
         };
         if self.header {
             let header_style = cx.style("table.header", "bold");
-            let header = line(&mut self.columns.iter().map(|c| c.title.as_str()));
+            let header = line(&mut titles.iter().map(String::as_str));
             canvas.lines_at(0, 0, width, 1, &[over(header, &header_style)]);
         }
         let highlight = if cx.focused() {
@@ -315,6 +529,13 @@ impl Widget for Table {
                 segments = over(segments, &highlight);
             }
             canvas.lines_at(0, top + i as u16, width, 1, &[segments]);
+            // The cell cursor, over the selected row's cell.
+            if let (true, Some(column)) = (first + i == selected, cell) {
+                if let Some(&(x, w)) = self.spans.borrow().get(column) {
+                    let style = cx.style("selected.cell", "reverse bold");
+                    canvas.restyle(x, top + i as u16, w, 1, &style);
+                }
+            }
         }
     }
 
@@ -331,11 +552,72 @@ impl Widget for Table {
                     (KeyCode::Home, true) | (KeyCode::Char('g'), true) => self.selected.set(0),
                     (KeyCode::End, true) => self.selected.set(len.saturating_sub(1)),
                     _ if *key == Key::char('G') => self.selected.set(len.saturating_sub(1)),
+                    (KeyCode::Left, true) | (KeyCode::Char('h'), true)
+                        if self.options.column.is_some() =>
+                    {
+                        self.move_column(-1)
+                    }
+                    (KeyCode::Right, true) | (KeyCode::Char('l'), true)
+                        if self.options.column.is_some() =>
+                    {
+                        self.move_column(1)
+                    }
+                    // `s` sorts by the cursor's column, or the next one.
+                    (KeyCode::Char('s'), true) if self.options.sort.is_some() => {
+                        let column = match (self.options.column, self.options.sort) {
+                            (Some(column), _) => column.get_untracked(),
+                            (None, Some(sort)) => match sort.get_untracked() {
+                                Some((c, Order::Descending)) => (c + 1) % self.columns.len().max(1),
+                                Some((c, Order::Ascending)) => c,
+                                None => 0,
+                            },
+                            (None, None) => 0,
+                        };
+                        self.sort_by(column);
+                    }
                     _ => return Used::No,
                 }
             }
+            WidgetEvent::Mouse(mouse) if self.resizing.get().is_some() => match mouse.kind {
+                MouseKind::Drag(Button::Left) => {
+                    let (column, _) = self.resizing.get().expect("resizing");
+                    let start = self.spans.borrow().get(column).map_or(0, |s| s.0);
+                    let width = mouse.column.saturating_sub(start).max(1);
+                    if let Some(slot) = self.dragged.borrow_mut().get_mut(column) {
+                        *slot = Some(width);
+                    }
+                    cx.redraw();
+                }
+                MouseKind::Up(_) => {
+                    self.resizing.set(None);
+                    cx.release_mouse();
+                }
+                _ => return Used::No,
+            },
+            WidgetEvent::Mouse(mouse) if self.header && mouse.row == 0 => match mouse.kind {
+                MouseKind::Down(Button::Left) => {
+                    if let Some(edge) = self
+                        .edge_at(mouse.column)
+                        .filter(|_| self.options.resizable)
+                    {
+                        self.resizing.set(Some((edge, mouse.column)));
+                        cx.capture_mouse();
+                    } else if let Some(column) = self.column_at(mouse.column) {
+                        self.sort_by(column);
+                        if let Some(cursor) = self.options.column {
+                            cursor.set(column);
+                        }
+                    }
+                }
+                _ => return Used::No,
+            },
             WidgetEvent::Mouse(mouse) => match mouse.kind {
                 MouseKind::Down(button) if mouse.row >= self.header as u16 => {
+                    if let (Some(cursor), Some(column)) =
+                        (self.options.column, self.column_at(mouse.column))
+                    {
+                        cursor.set(column);
+                    }
                     let row = self.first.get() + (mouse.row - self.header as u16) as usize;
                     // Another button on a row selects it and leaves the
                     // press to the node's own handler: a right click's menu
@@ -354,7 +636,6 @@ impl Widget for Table {
             },
             _ => return Used::No,
         }
-        let _ = cx;
         Used::Yes
     }
 

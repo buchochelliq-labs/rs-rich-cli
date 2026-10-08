@@ -793,6 +793,43 @@ pub(crate) fn scrollbar(console: &Console, rows: u16, top: u16, content: u16) ->
         .collect()
 }
 
+/// A scrollbar along the bottom of a view `columns` wide, showing
+/// `left..left + columns` of `content` columns.
+pub(crate) fn scrollbar_across(
+    console: &Console,
+    columns: u16,
+    left: u16,
+    content: u16,
+) -> Vec<Segment> {
+    let style = |name: &str, fallback: &str| {
+        console
+            .get_style(&rich::style::StyleType::Name(name.to_string()))
+            .ok()
+            .or_else(|| Style::parse(fallback).ok())
+    };
+    let (track, thumb) = (
+        style("scrollbar", "bright_black"),
+        style("scrollbar.thumb", "white"),
+    );
+    let (columns_f, content_f) = (columns as f64, content.max(1) as f64);
+    let size = (columns_f * columns_f / content_f)
+        .round()
+        .clamp(1.0, columns_f);
+    let start = (left as f64 * columns_f / content_f)
+        .round()
+        .min(columns_f - size);
+    (0..columns)
+        .map(|column| {
+            let on = (column as f64) >= start && (column as f64) < start + size;
+            if on {
+                Segment::new("━", thumb.clone())
+            } else {
+                Segment::new("─", track.clone())
+            }
+        })
+        .collect()
+}
+
 /// A visit in [`walk_screen`]: the node, its path, the shift to screen
 /// coordinates and the part of the screen it can show in.
 pub(crate) type ScreenVisit<'a> = dyn FnMut(&Node, &[NodeId], (i32, i32), Rect) + 'a;
@@ -1160,6 +1197,55 @@ pub fn scroll(child: Node) -> Node {
 /// to scroll from code.
 pub fn scroll_with(child: Node, offset: Signal<u16>) -> Node {
     Node::from_widget(Box::new(ScrollView::new(child, offset)), "scroll").focusable()
+}
+
+/// `child` in a view that scrolls across: the content is as wide as it
+/// asks for (lines are not wrapped to the view) and as tall as the view.
+/// ←/→, Shift+PgUp/PgDn, the wheel and Home/End scroll it, and a bar
+/// along the bottom shows where it is.
+///
+/// ```
+/// use intuituive::prelude::*;
+///
+/// let app = App::new(|| {
+///     scroll_x(label("0123456789abcdefghij")).on_key("q", |cx| cx.quit())
+/// });
+/// let screen = app.render_with(&["right", "right", "q"], 8, 2).unwrap();
+/// assert_eq!(screen[0], "23456789");
+/// ```
+pub fn scroll_x(child: Node) -> Node {
+    scroll_both_with(
+        child,
+        crate::reactive::signal(0),
+        crate::reactive::signal(0),
+        true,
+        false,
+    )
+}
+
+/// `child` in a view that scrolls down and across, with a bar for each
+/// way it overflows. Shift with the wheel scrolls across.
+pub fn scroll_both(child: Node) -> Node {
+    scroll_both_with(
+        child,
+        crate::reactive::signal(0),
+        crate::reactive::signal(0),
+        true,
+        true,
+    )
+}
+
+/// A scrolling view with its first column and row in view in `x` and `y`,
+/// scrolling across, down, or both.
+pub fn scroll_both_with(
+    child: Node,
+    x: Signal<u16>,
+    y: Signal<u16>,
+    across: bool,
+    down: bool,
+) -> Node {
+    let view = ScrollView::both(child, x, y, across, down);
+    Node::from_widget(Box::new(view), "scroll").focusable()
 }
 
 /// Children one above the other.
