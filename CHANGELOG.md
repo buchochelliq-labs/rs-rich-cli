@@ -81,6 +81,7 @@ Workstream 1 of the [0.0.18 plan](docs/plans/0.0.18.md).
   VT220, the way xterm does by default), so a recorded program that asks
   for the kitty protocol does not wait two seconds for an answer.
 
+
 ### intuiTUIve: accessibility (rs-rich-intuituive 0.0.3)
 
 0.0.18 workstream 6.
@@ -103,7 +104,6 @@ Workstream 1 of the [0.0.18 plan](docs/plans/0.0.18.md).
 - **Announcements:** toasts, a screen or dialog opening, live nodes and
   `Ctx::announce` go to `App::announcer` and wait in
   `Driver::take_announcements()`.
-
 ### intuiTUIve: stylesheets (rs-rich-intuituive 0.0.3)
 
 0.0.18 workstream 4.
