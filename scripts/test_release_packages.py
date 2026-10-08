@@ -71,7 +71,7 @@ class StagedCargoTests(unittest.TestCase):
             root = Path(directory)
             target = root / "target"
             (root / "Cargo.toml").write_text(
-                '[workspace]\nresolver="2"\nmembers=["core","plugin-api","macros","ext","art","diagram","mermaid","lumis","record","interact","micro","data","ratatui","intuituive","cli"]\n')
+                '[workspace]\nresolver="2"\nmembers=["core","plugin-api","macros","ext","art","diagram","mermaid","lumis","record","interact","micro","data","ratatui","intuituive","web","cli"]\n')
             for folder, name in [("core", "rs-rich"), ("plugin-api", "rs-rich-plugin-api"),
                                  ("macros", "rs-rich-macros"),
                                  ("ext", "rs-rich-ext"), ("art", "rs-rich-art"),
@@ -82,6 +82,7 @@ class StagedCargoTests(unittest.TestCase):
                                  ("data", "rs-rich-data"),
                                  ("ratatui", "rs-rich-ratatui"),
                                  ("intuituive", "rs-rich-intuituive"),
+                                 ("web", "rs-rich-web"),
                                  ("cli", "rs-rich-cli")]:
                 crate = root / folder
                 (crate / "src").mkdir(parents=True)
@@ -133,7 +134,7 @@ class StagedCargoTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="restage-regression-") as directory:
             root = Path(directory)
             (root / "Cargo.toml").write_text(
-                '[workspace]\nresolver="2"\nmembers=["core","plugin-api","macros","ext","art","diagram","mermaid","lumis","record","interact","micro","data","ratatui","intuituive","cli"]\n')
+                '[workspace]\nresolver="2"\nmembers=["core","plugin-api","macros","ext","art","diagram","mermaid","lumis","record","interact","micro","data","ratatui","intuituive","web","cli"]\n')
             for folder, name, dependency in [("core", "rs-rich", None),
                                              ("plugin-api", "rs-rich-plugin-api", None),
                                              ("macros", "rs-rich-macros", None),
@@ -148,6 +149,7 @@ class StagedCargoTests(unittest.TestCase):
                                              ("data", "rs-rich-data", None),
                                              ("ratatui", "rs-rich-ratatui", None),
                                              ("intuituive", "rs-rich-intuituive", None),
+                                             ("web", "rs-rich-web", None),
                                              ("cli", "rs-rich-cli", ("rs-rich-ext", "ext"))]:
                 crate = root / folder
                 (crate / "src").mkdir(parents=True)

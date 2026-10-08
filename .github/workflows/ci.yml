@@ -201,6 +201,11 @@ jobs:
           # `ratatui-gate`.
           - crate: rs-rich-intuituive
             args: "--all-features"
+          # Serving intuiTUIve apps to a browser (no features of its own):
+          # its tests open real sockets on 127.0.0.1, and build.rs checks the
+          # vendored xterm.js against its pinned hashes.
+          - crate: rs-rich-web
+            args: "--all-features"
           # Every lumis language (its default); the bundles only select fewer.
           - crate: rs-rich-lumis
             args: ""

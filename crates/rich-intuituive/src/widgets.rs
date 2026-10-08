@@ -424,6 +424,34 @@ impl Widget for Table {
         self.name
     }
 
+    fn role(&self) -> crate::a11y::Role {
+        if self.header {
+            crate::a11y::Role::Table
+        } else {
+            crate::a11y::Role::List
+        }
+    }
+
+    fn cursor(&self) -> Option<crate::screen::Rect> {
+        let row = self
+            .selected
+            .get_untracked()
+            .checked_sub(self.first.get())?;
+        if row >= self.body.get().max(1) {
+            return None;
+        }
+        let y = row as u16 + u16::from(self.header);
+        // With a cell cursor, the cell; else the row.
+        let cell = self.options.column.and_then(|column| {
+            let spans = self.spans.borrow();
+            spans.get(column.get_untracked()).copied()
+        });
+        Some(match cell {
+            Some((x, w)) => crate::screen::Rect::new(x, y, w, 1),
+            None => crate::screen::Rect::new(0, y, u16::MAX, 1),
+        })
+    }
+
     fn measure(&mut self, _cx: &MeasureCx, axis: Axis, width: u16, _height: u16) -> u16 {
         match axis {
             Axis::Vertical => {
@@ -486,11 +514,15 @@ impl Widget for Table {
                 track
             })
             .collect();
-        let widths = solve(width, 1, &tracks);
+        // In text mode every row starts with a marker column: `>` on the
+        // selected row.
+        let marked = crate::a11y::text_mode();
+        let indent: u16 = if marked { 2 } else { 0 };
+        let widths = solve(width.saturating_sub(indent), 1, &tracks);
         {
             let mut spans = self.spans.borrow_mut();
             spans.clear();
-            let mut x = 0;
+            let mut x = indent;
             for w in &widths {
                 spans.push((x, *w));
                 x += w + 1;
@@ -498,8 +530,11 @@ impl Widget for Table {
         }
         let cell = self.options.column.map(|column| column.get());
         let console = cx.console();
-        let line = |cells: &mut dyn Iterator<Item = &str>| -> Vec<Segment> {
+        let line = |cells: &mut dyn Iterator<Item = &str>, mark: bool| -> Vec<Segment> {
             let mut out = Vec::new();
+            if marked {
+                out.push(Segment::new(if mark { "> " } else { "  " }, None));
+            }
             for (i, w) in widths.iter().enumerate() {
                 if i > 0 {
                     out.push(Segment::new(" ", None));
@@ -510,7 +545,7 @@ impl Widget for Table {
         };
         if self.header {
             let header_style = cx.style("table.header", "bold");
-            let header = line(&mut titles.iter().map(String::as_str));
+            let header = line(&mut titles.iter().map(String::as_str), false);
             canvas.lines_at(0, 0, width, 1, &[over(header, &header_style)]);
         }
         let highlight = if cx.focused() {
@@ -520,7 +555,7 @@ impl Widget for Table {
         };
         for (i, row) in rows.iter().enumerate() {
             let mut cells = row.iter().map(String::as_str);
-            let mut segments = line(&mut cells);
+            let mut segments = line(&mut cells, first + i == selected);
             if first + i == selected {
                 let used: usize = segments.iter().map(Segment::cell_length).sum();
                 if used < width as usize {
@@ -688,6 +723,17 @@ impl Widget for Tabs {
         "tabs"
     }
 
+    fn role(&self) -> crate::a11y::Role {
+        crate::a11y::Role::TabList
+    }
+
+    fn cursor(&self) -> Option<crate::screen::Rect> {
+        let spans = self.spans.borrow();
+        spans
+            .get(self.selected.get_untracked())
+            .map(|&(x, w)| crate::screen::Rect::new(x, 0, w, 1))
+    }
+
     fn measure(&mut self, _cx: &MeasureCx, axis: Axis, _width: u16, _height: u16) -> u16 {
         match axis {
             Axis::Vertical => 1,
@@ -712,11 +758,18 @@ impl Widget for Tabs {
         let mut x = 0u16;
         for (i, title) in (self.titles)().iter().enumerate() {
             if i > 0 {
-                canvas.print(x, 0, "│", Some(&divider));
+                let line = if crate::a11y::text_mode() { " " } else { "│" };
+                canvas.print(x, 0, line, Some(&divider));
                 x += 1;
             }
             let w = markup_width(title) + 2;
-            let line = cell_line(console, &format!(" {title} "), w);
+            // In text mode the selected title is marked, not only styled.
+            let mark = if crate::a11y::text_mode() && i == selected {
+                ">"
+            } else {
+                " "
+            };
+            let line = cell_line(console, &format!("{mark}{title} "), w);
             let line = if i == selected {
                 over(line, &chosen)
             } else {

@@ -245,3 +245,12 @@ Textual, a separate project this repository does not mirror). It composes
 `rs-rich-interact`'s sessions and drivers, `rich-ext` and core `rich`'s
 public APIs. Core is unchanged and no golden fixture covers it. See
 [Terminal apps](guide/intuituive/index.md).
+
+### Serving to a browser (rs-rich-web, not upstream)
+
+`rs-rich-web` (`crates/rich-web`, 0.0.1) has no upstream module to port
+either: Python `rich` does not serve to a browser (Textual's `textual serve`
+is again a separate project). It drives intuiTUIve apps through the
+framework's public `Driver` and decodes the page's input into
+rs-rich-interact events. Core is unchanged and no golden fixture covers it.
+See [Serving an app to a browser](guide/intuituive/web.md).

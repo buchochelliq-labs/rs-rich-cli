@@ -56,6 +56,7 @@ pub struct Ctx {
     toasts: Vec<(String, Duration)>,
     animations: Vec<(Signal<f64>, f64, Duration, Easing)>,
     copies: Vec<String>,
+    announcements: Vec<crate::a11y::Announcement>,
     /// Where the mouse event being handled happened, on the screen.
     pub(crate) pointer: Option<(u16, u16)>,
 }
@@ -143,6 +144,7 @@ impl Ctx {
             toasts: Vec::new(),
             animations: Vec::new(),
             copies: Vec::new(),
+            announcements: Vec::new(),
             pointer: None,
             focus: None,
             proxy,
@@ -227,6 +229,17 @@ impl Ctx {
     /// Show `markup` in a toast for `duration`.
     pub fn toast_for(&mut self, markup: impl Into<String>, duration: Duration) {
         self.toasts.push((markup.into(), duration));
+    }
+
+    /// Say `text` to assistive technology (a screen reader through the
+    /// app's [`Announcer`](crate::a11y::Announcer), a browser's live
+    /// region) without showing anything: when it is idle, or at once if
+    /// `urgent`. Toasts are announced already.
+    pub fn announce(&mut self, text: impl Into<String>, urgent: bool) {
+        self.announcements.push(crate::a11y::Announcement {
+            text: text.into(),
+            urgent,
+        });
     }
 
     /// Move `value` to `to` over `duration`, eased: the signal is set on
@@ -636,6 +649,13 @@ pub struct App {
     theme_base: Theme,
     theme_file: Option<ThemeFile>,
     sheet: Option<SheetSource>,
+    /// For assistive technology: whether to draw for it, where
+    /// announcements go, those not yet taken, and whether a screen just
+    /// opened.
+    accessible: bool,
+    announcer: Option<Box<dyn crate::a11y::Announcer>>,
+    announcements: Vec<crate::a11y::Announcement>,
+    opened: bool,
     /// Draw a frame even if no node is dirty (the inspector has news).
     poke: bool,
 }
@@ -736,6 +756,10 @@ impl App {
             theme_base: Theme::default(),
             theme_file: None,
             sheet: None,
+            accessible: crate::a11y::from_env(),
+            announcer: None,
+            announcements: Vec::new(),
+            opened: false,
             poke: false,
         }
     }
@@ -825,9 +849,62 @@ impl App {
     /// Say in a toast that the stylesheet does not parse.
     fn sheet_error(&mut self, error: &str) {
         let markup = format!("[bad]stylesheet:[/] {}", rich::markup::escape(error));
-        self.toasts
-            .push((markup, self.now + Duration::from_secs(6)));
+        self.push_toast(markup, self.now + Duration::from_secs(6));
+    }
+
+    /// Show a toast until `until`, and announce it.
+    fn push_toast(&mut self, markup: String, until: Duration) {
+        let text = rich::Text::from_markup(&markup)
+            .map(|text| text.plain().to_string())
+            .unwrap_or_else(|_| markup.clone());
+        self.toasts.push((markup, until));
         self.poke = true;
+        self.announce(crate::a11y::Announcement {
+            text,
+            urgent: false,
+        });
+    }
+
+    /// Hand `announcement` to the announcer and keep it for
+    /// [`Driver::take_announcements`] (the last 64).
+    fn announce(&mut self, announcement: crate::a11y::Announcement) {
+        if let Some(announcer) = &mut self.announcer {
+            announcer.announce(&announcement);
+        }
+        if self.announcements.len() >= 64 {
+            self.announcements.remove(0);
+        }
+        self.announcements.push(announcement);
+    }
+
+    /// Draw for assistive technology: the terminal's cursor on what has the
+    /// focus (its caret, else its selected item, else its corner), boxes
+    /// as blanks, no colour, a `>` on selected items, no animation. On by
+    /// default when `INTUITUIVE_ACCESSIBLE` is set (to anything but `0`),
+    /// or rs-rich's `RICH_A11Y` names `screen-reader`.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| {
+    ///     let picked = signal(1usize);
+    ///     list(|| vec!["one".into(), "two".into()], picked).on_key("q", |cx| cx.quit())
+    /// })
+    /// .accessible(true);
+    /// let screen = app.render_with(&["q"], 10, 2).unwrap();
+    /// assert_eq!(screen[1].trim_end(), "> two");
+    /// ```
+    pub fn accessible(mut self, on: bool) -> App {
+        self.accessible = on;
+        self
+    }
+
+    /// Where announcements go as they happen: toasts, a screen or dialog
+    /// opening, [live](crate::Node::live) nodes changing, and
+    /// [`Ctx::announce`]. [`Driver::take_announcements`] has them too.
+    pub fn announcer(mut self, announcer: impl crate::a11y::Announcer + 'static) -> App {
+        self.announcer = Some(Box::new(announcer));
+        self
     }
 
     /// Read the stylesheet file again if it changed since it was last read.
@@ -1132,7 +1209,12 @@ impl App {
         if self.inline.is_some() {
             painter = painter.inline();
         }
-        painter.set_color_system(console.color_system());
+        // Accessible: no colour, so no meaning rests on it.
+        painter.set_color_system(if self.accessible {
+            None
+        } else {
+            console.color_system()
+        });
         let screen = Screen::new(width, self.region(height));
         // Focus what can be focused before the first frame (keyed children
         // appear only once drawn; `keep_focus` catches them after it).
@@ -1205,15 +1287,97 @@ impl App {
         }
     }
 
+    /// The accessibility tree of the top screen (see
+    /// [`Driver::accessibility`]).
+    fn accessibility(&self, screen: &Screen) -> Vec<crate::a11y::AccessNode> {
+        use crate::a11y::{screen_text, AccessNode, Role};
+        let focus = self.focus();
+        let top = self.top();
+        let mut out = Vec::new();
+        let mut included: Vec<NodeId> = Vec::new();
+        crate::node::walk_screen(&top.root, &mut |node, path, shift, clip| {
+            let id = node.id();
+            let mut role = node.access_role();
+            if id == top.root.id() && top.modal.is_some() {
+                role = Role::Dialog;
+            }
+            let label = node.access_label();
+            if role == Role::Group && label.is_none() {
+                return;
+            }
+            let rect = crate::node::translate(node.rect(), shift).intersection(clip);
+            if rect.is_empty() {
+                return;
+            }
+            let depth = path[..path.len() - 1]
+                .iter()
+                .filter(|id| included.contains(id))
+                .count();
+            let shown = || screen_text(screen, rect);
+            let name = match label {
+                Some(label) => label,
+                None => match role {
+                    Role::Text
+                    | Role::Button
+                    | Role::TextBox
+                    | Role::Status
+                    | Role::Cell
+                    | Role::ListItem
+                    | Role::Tab
+                    | Role::MenuItem
+                    | Role::TreeItem => shown(),
+                    _ => String::new(),
+                },
+            };
+            let value = if role.has_items() {
+                node.cursor().map(|at| {
+                    let inner = crate::node::translate(node.inner.get(), shift);
+                    let item = Rect::new(
+                        inner.x.saturating_add(at.x),
+                        inner.y.saturating_add(at.y),
+                        at.width,
+                        at.height,
+                    );
+                    screen_text(screen, item.intersection(rect))
+                })
+            } else if role == Role::TextBox {
+                Some(shown())
+            } else {
+                None
+            };
+            included.push(id);
+            out.push(AccessNode {
+                depth,
+                id,
+                role,
+                name,
+                value,
+                focused: focus == Some(id),
+                disabled: node.disabled(),
+                rect,
+            });
+        });
+        out
+    }
+
     /// Show the focused component's text caret, or keep the cursor hidden.
+    /// Accessible, the cursor goes on whatever has the focus.
     fn caret(&mut self, painter: &mut Painter) -> String {
+        let accessible = self.accessible;
         let caret = self.focus().and_then(|id| {
             let mut caret = None;
             // Inside a scroll, a node's coordinates are its own: move the
             // caret onto the screen, and hide it when scrolled out of view.
             crate::node::walk_screen(&self.top().root, &mut |node, _, shift, clip| {
                 if node.id() == id {
-                    caret = node.caret.get().and_then(|(x, y)| {
+                    let point = node.caret.get().or_else(|| {
+                        accessible.then(|| {
+                            let inner = node.inner.get();
+                            let at = node.cursor().unwrap_or_default();
+                            (inner.x.saturating_add(at.x), inner.y.saturating_add(at.y))
+                        })
+                    });
+                    caret = point.and_then(|(x, y)| {
                         let at = crate::node::translate(Rect::new(x, y, 1, 1), shift);
                         clip.contains(at.x, at.y).then_some((at.x, at.y))
                     });
@@ -1232,6 +1396,7 @@ impl App {
 
     /// Draw what changed; returns the damage.
     fn frame(&mut self, console: &Console, screen: &mut Screen, full: bool) -> Vec<Rect> {
+        crate::a11y::set_text_mode(self.accessible);
         let whole = screen.area();
         // The inspector, when shown, takes the right of the screen.
         let panel = self
@@ -1318,6 +1483,7 @@ impl App {
                 vars: &vars,
             }),
             chain: Vec::new(),
+            announcements: Vec::new(),
         };
         let dirty = frame.dirty.len();
         if full {
@@ -1407,6 +1573,7 @@ impl App {
         if frame.wants_hover.get() {
             self.motion.0 = true;
         }
+        let live = std::mem::take(&mut frame.announcements);
         for id in std::mem::take(&mut frame.resized) {
             let mut size = (0, 0);
             for layer in &self.layers[base..] {
@@ -1444,6 +1611,22 @@ impl App {
             screen.write_lines(panel, &lines);
             damage.push(panel);
         }
+        for announcement in live {
+            self.announce(announcement);
+        }
+        // A screen or dialog that opened says what it shows, once drawn.
+        if std::mem::take(&mut self.opened) && self.top().anchor.is_none() {
+            let rect = self.top().drawn.unwrap_or(whole);
+            let mut text = crate::a11y::screen_text(screen, rect);
+            if text.chars().count() > 200 {
+                text = text.chars().take(200).collect::<String>() + "…";
+            }
+            let text = match self.top().modal {
+                Some(_) => format!("Dialog: {text}"),
+                None => text,
+            };
+            self.announce(crate::a11y::Announcement { text, urgent: true });
+        }
         damage
     }
 
@@ -1458,13 +1641,21 @@ impl App {
         let mut quit = cx.quit;
         self.copies.extend(cx.copies);
         for (markup, duration) in cx.toasts {
-            self.toasts.push((markup, self.now + duration));
-            self.poke = true;
+            self.push_toast(markup, self.now + duration);
+        }
+        for announcement in cx.announcements {
+            self.announce(announcement);
         }
         for (value, to, duration, easing) in cx.animations {
             // A new animation of a signal replaces the one running.
             self.animations.retain(|a| a.value != value);
             let from = self.runtime.enter(|| value.get_untracked());
+            // Accessible: no motion, the value goes straight to its end.
+            let duration = if self.accessible {
+                Duration::ZERO
+            } else {
+                duration
+            };
             self.animations.push(Animation {
                 value,
                 from,
@@ -1540,7 +1731,7 @@ impl App {
         let mut out = Vec::new();
         for &id in path.iter().rev() {
             with_node(&self.top().root, id, &mut |node| {
-                let context = node.label();
+                let context = node.group_name();
                 for (index, (keys, description, _)) in node.keys.borrow().iter().enumerate() {
                     if description.is_empty() {
                         continue;
@@ -1640,6 +1831,8 @@ impl App {
             fallback: false,
         });
         self.restack = true;
+        // Once drawn, what opened is announced.
+        self.opened = true;
         self.set_focus(None);
         self.focus_first();
     }
@@ -2741,13 +2934,57 @@ impl Driver {
         std::mem::take(&mut self.app.copies)
     }
 
+    /// What the app shows, for assistive technology: the nodes on the top
+    /// screen with a role other than layout (or a
+    /// [label](crate::Node::label)), outermost first, each with its depth,
+    /// its name and what is selected in it. A screen reader bridge or a
+    /// browser's DOM renders this.
+    ///
+    /// ```
+    /// use std::time::Duration;
+    ///
+    /// use intuituive::a11y::Role;
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| {
+    ///     column([
+    ///         label("Files").label("Heading"),
+    ///         list(|| vec!["a.txt".into(), "b.txt".into()], signal(1)),
+    ///     ])
+    /// });
+    /// let mut driver = app.driver(20, 3);
+    /// driver.update(Duration::ZERO);
+    /// let _ = driver.render();
+    /// let tree = driver.accessibility();
+    /// assert_eq!((tree[0].role, tree[0].name.as_str()), (Role::Text, "Heading"));
+    /// assert_eq!((tree[1].role, tree[1].value.as_deref()), (Role::List, Some("b.txt")));
+    /// assert!(tree[1].focused);
+    /// ```
+    pub fn accessibility(&self) -> Vec<crate::a11y::AccessNode> {
+        self.app.accessibility(&self.screen)
+    }
+
+    /// The announcements since the last call (the last 64): toasts, a
+    /// screen or dialog opening, [live](crate::Node::live) nodes changing,
+    /// [`Ctx::announce`]. A browser puts them in an ARIA live region.
+    pub fn take_announcements(&mut self) -> Vec<crate::a11y::Announcement> {
+        std::mem::take(&mut self.app.announcements)
+    }
+
+    /// Whether the app draws for assistive technology
+    /// ([`App::accessible`]).
+    pub fn is_accessible(&self) -> bool {
+        self.app.accessible
+    }
+
     /// `text` is on the clipboard: a toast says so.
     pub fn copied(&mut self, text: &str) {
         let n = text.chars().count();
-        self.app.toasts.push((
+        let until = self.app.now + Duration::from_secs(2);
+        self.app.push_toast(
             format!("Copied {n} character{}", if n == 1 { "" } else { "s" }),
-            self.app.now + Duration::from_secs(2),
-        ));
+            until,
+        );
         self.app.restack = true;
     }
 

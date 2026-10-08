@@ -125,6 +125,14 @@ pub struct Node {
     /// Where its widget lays out and draws: its rectangle less the
     /// stylesheet's border and padding.
     pub(crate) inner: Cell<Rect>,
+    /// For assistive technology: its role and name when code gave them,
+    /// whether its changes are announced, and what it showed last.
+    role: Option<crate::a11y::Role>,
+    access_label: Option<String>,
+    live: bool,
+    last_live: RefCell<Option<String>>,
+    /// Where its selected item is, for widgets drawn from lines (a list).
+    cursor_cell: Option<Rc<Cell<Option<Rect>>>>,
 }
 
 /// A condition a node's class or state follows.
@@ -219,6 +227,11 @@ impl Node {
             disabled_when: None,
             sheet: RefCell::new(SheetNode::default()),
             inner: Cell::new(Rect::default()),
+            role: None,
+            access_label: None,
+            live: false,
+            last_live: RefCell::new(None),
+            cursor_cell: None,
         }
     }
 
@@ -235,8 +248,88 @@ impl Node {
 
     /// Its name, if it was given one: how the command palette and the help
     /// group its bindings.
-    pub(crate) fn label(&self) -> String {
+    pub(crate) fn group_name(&self) -> String {
         self.name.clone().unwrap_or_default()
+    }
+
+    /// Say what this node is, for assistive technology, when its widget
+    /// does not (a [`label`](fn@label) that acts as a button, a `row` that
+    /// is a toolbar).
+    pub fn role(mut self, role: crate::a11y::Role) -> Node {
+        self.role = Some(role);
+        self
+    }
+
+    /// Its accessible name: what a screen reader calls it. Without one, a
+    /// node is named by the text it shows (text, buttons, text boxes) or
+    /// its title (a panel).
+    pub fn label(mut self, name: impl Into<String>) -> Node {
+        self.access_label = Some(name.into());
+        self
+    }
+
+    /// Announce what this node shows whenever it changes (a status line, a
+    /// counter): its role becomes [`Status`](crate::a11y::Role::Status)
+    /// unless set.
+    pub fn live(mut self) -> Node {
+        self.live = true;
+        self
+    }
+
+    /// What it is: as code said, else as its widget says, else by the
+    /// builder that made it (text, a list), a clickable text being a button.
+    pub fn access_role(&self) -> crate::a11y::Role {
+        use crate::a11y::Role;
+        if let Some(role) = self.role {
+            return role;
+        }
+        if self.live {
+            return Role::Status;
+        }
+        let role = self.body.borrow().widget.role();
+        if role != Role::Group {
+            return role;
+        }
+        let clickable = self.click.borrow().is_some();
+        match self.what {
+            "text" | "label" | "renderable" | "leaf" if clickable => Role::Button,
+            "text" | "label" | "renderable" => Role::Text,
+            "list" => Role::List,
+            _ => Role::Group,
+        }
+    }
+
+    /// Its accessible name, if code gave one; a panel's is its title.
+    pub(crate) fn access_label(&self) -> Option<String> {
+        self.access_label.clone().or_else(|| {
+            self.widget_mut(|panel: &mut Panel| panel.shown_title())
+                .filter(|title| !title.is_empty())
+        })
+    }
+
+    /// Where its selected item is, on its widget's surface.
+    pub(crate) fn cursor(&self) -> Option<Rect> {
+        self.body
+            .borrow()
+            .widget
+            .cursor()
+            .or_else(|| self.cursor_cell.as_ref().and_then(|c| c.get()))
+    }
+
+    /// For a [live](Self::live) node: what it shows now, when that changed
+    /// since it was last asked.
+    pub(crate) fn live_change(&self, shown: String) -> Option<String> {
+        if !self.live {
+            return None;
+        }
+        let mut last = self.last_live.borrow_mut();
+        let first = last.is_none();
+        if last.as_deref() == Some(shown.as_str()) {
+            return None;
+        }
+        *last = Some(shown.clone());
+        // Its first text is not a change.
+        (!first && !shown.is_empty()).then_some(shown)
     }
 
     /// How the inspector shows this node: its name or builder, and what it
@@ -1088,6 +1181,16 @@ impl Node {
         if styled {
             frame.chain.pop();
         }
+        // A live node says what it shows when that changed.
+        if self.live && frame.damage.len() > mark {
+            let shown = crate::a11y::screen_text(screen, rect);
+            if let Some(text) = self.live_change(shown) {
+                frame.announcements.push(crate::a11y::Announcement {
+                    text,
+                    urgent: false,
+                });
+            }
+        }
         // The focus style goes over everything drawn inside the node, its
         // children's cells included, once they have drawn.
         if let (true, Some(name)) = (focused, self.focus_style.as_deref()) {
@@ -1507,6 +1610,8 @@ pub(crate) struct FrameState<'a> {
     pub sheet: Option<SheetCx<'a>>,
     /// The nodes being drawn, outermost first, as selectors see them.
     pub chain: Vec<Element>,
+    /// What [live](Node::live) nodes now say.
+    pub announcements: Vec<crate::a11y::Announcement>,
 }
 
 impl FrameState<'_> {
@@ -1538,7 +1643,14 @@ pub(crate) fn border_box(
     title_style: &Style,
     rect: Rect,
 ) -> Vec<Vec<Segment>> {
-    let [top_left, across, top_right, side, bottom_left, bottom_right] = kind.chars();
+    // In text mode a box is blank: a screen reader reads no lines, and the
+    // title stays.
+    let [top_left, across, top_right, side, bottom_left, bottom_right] = if crate::a11y::text_mode()
+    {
+        [" "; 6]
+    } else {
+        kind.chars()
+    };
     let (w, h) = (rect.width as usize, rect.height as usize);
     if w < 2 || h < 2 {
         return Vec::new();
@@ -1756,11 +1868,15 @@ pub fn list(items: impl Fn() -> Vec<String> + 'static, selected: Signal<usize>) 
     // The first row shown, and the height last drawn (for a page's size).
     let offset = Rc::new(Cell::new(0usize));
     let rows = Rc::new(Cell::new(1usize));
+    // Where the selected row is, for the cursor in accessible mode.
+    let cursor = Rc::new(Cell::new(None));
     let draw = {
-        let (items, offset, rows) = (items.clone(), offset.clone(), rows.clone());
+        let (items, offset, rows, cursor) =
+            (items.clone(), offset.clone(), rows.clone(), cursor.clone());
         move |console: &Console, width: u16, height: u16| {
             let items = items();
             let len = items.len();
+            let measuring = height == 0;
             // Height 0 is a measurement: every row.
             let height = if height == 0 { len } else { height as usize };
             rows.set(height.max(1));
@@ -1772,7 +1888,16 @@ pub fn list(items: impl Fn() -> Vec<String> + 'static, selected: Signal<usize>) 
                 first = selected + 1 - height;
             }
             offset.set(first);
-            let mut options = console.options().update_width(width.max(1) as usize);
+            if !measuring {
+                let row = (selected - first) as u16;
+                cursor.set((len > 0).then(|| Rect::new(0, row, width, 1)));
+            }
+            // In text mode the selected row is marked, not only reversed.
+            let marked = crate::a11y::text_mode();
+            let indent = if marked { 2 } else { 0 };
+            let mut options = console
+                .options()
+                .update_width(width.saturating_sub(indent).max(1) as usize);
             options.no_wrap = Some(true);
             options.overflow = Some(rich::Overflow::Ellipsis);
             let style = console
@@ -1786,11 +1911,15 @@ pub fn list(items: impl Fn() -> Vec<String> + 'static, selected: Signal<usize>) 
                 .map(|(i, markup)| {
                     let text = rich::Text::from_markup(markup)
                         .unwrap_or_else(|_| rich::Text::new(markup.clone()));
-                    let line = console
+                    let mut line = console
                         .render_lines(&text, &options, false)
                         .into_iter()
                         .next()
                         .unwrap_or_default();
+                    if marked {
+                        let marker = if i == selected { "> " } else { "  " };
+                        line.insert(0, Segment::new(marker, None));
+                    }
                     if i == selected {
                         let row = Rect::new(0, 0, width, 1);
                         highlight(vec![line], &style, row).remove(0)
@@ -1812,8 +1941,9 @@ pub fn list(items: impl Fn() -> Vec<String> + 'static, selected: Signal<usize>) 
     };
     let (rows_up, rows_down) = (rows.clone(), rows);
     let (up, down, pgup, pgdn) = (step.clone(), step.clone(), step.clone(), step);
-    leaf(draw)
-        .what("list")
+    let mut node = leaf(draw);
+    node.cursor_cell = Some(cursor);
+    node.what("list")
         .focusable()
         .on_key("up k", move |_| up(-1))
         .on_key("down j", move |_| down(1))
