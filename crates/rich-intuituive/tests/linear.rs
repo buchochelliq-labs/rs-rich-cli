@@ -197,6 +197,32 @@ fn linear_mode_leaves_nothing_to_put_back() {
 }
 
 #[test]
+fn a_state_read_only_by_its_condition_is_written_when_it_changes() {
+    let app = App::new(|| {
+        let on = signal(false);
+        let busy = signal(false);
+        // The text reads neither signal: only the states do.
+        label("Wrap")
+            .checked_when(move || on.get())
+            .busy_when(move || busy.get())
+            .focusable()
+            .on_key("space", move |_| on.update(|on| *on = !*on))
+            .on_key("b", move |_| busy.update(|busy| *busy = !*busy))
+    })
+    .linear(true);
+    let mut driver = app.driver(20, 2);
+    assert_eq!(step(&mut driver, None), ["→ Wrap, check box, not checked"]);
+    driver.event(Event::Key(Key::char(' ')));
+    driver.update(Duration::ZERO);
+    assert!(driver.needs_render(), "the state changed");
+    assert_eq!(step(&mut driver, None), ["Wrap, check box, checked"]);
+    assert_eq!(
+        step(&mut driver, Some("b")),
+        ["Wrap, check box, checked, busy"]
+    );
+}
+
+#[test]
 fn keys_still_work_in_linear_mode() {
     let app = App::new(|| {
         let n = signal(0);

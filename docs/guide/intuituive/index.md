@@ -882,8 +882,10 @@ is in [Testing with screen readers](screen-readers.md).
     `aria-disabled`, `aria-posinset`, `aria-setsize`) for a browser.
 - **Hidden from assistive technology.** `.access_hidden(true)` (ARIA's
   `aria-hidden`) leaves a node, and everything inside it, out of the tree,
-  linear mode's lines, announcements and the names of what holds it. It is
-  still drawn. Use it for decoration: a divider, a spinner's glyph, a logo.
+  linear mode's lines, announcements and the names of what holds it, and
+  out of the Tab order and the focus a screen gives when it opens (a click
+  still reaches it). It is still drawn. Use it for decoration: a divider, a
+  spinner's glyph, a logo.
 - **Announcements.** Toasts, a screen or dialog opening, `.live()` nodes
   whose text changes (a status line), and `cx.announce(text, urgent)` go to
   the app's `App::announcer(…)` as they happen, and wait in

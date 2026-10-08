@@ -538,3 +538,32 @@ fn frames_that_are_not_accessible_leave_the_cursor_alone() {
     let out = frame(&mut driver, press("t"));
     assert!(!out.contains("\x1b[?25"), "{out:?}");
 }
+
+#[test]
+fn what_is_hidden_from_assistive_technology_takes_no_focus() {
+    let app = App::new(|| {
+        column([
+            row([label("logo").focusable().autofocus().fixed(4)])
+                .access_hidden(true)
+                .fixed(1),
+            label("A").focusable().fixed(1),
+            label("B").focusable().fixed(1),
+        ])
+    });
+    let mut driver = app.driver(10, 3);
+    let focused = |driver: &intuituive::Driver| {
+        driver
+            .accessibility()
+            .into_iter()
+            .find(|n| n.focused)
+            .map(|n| n.name)
+    };
+    frame(&mut driver, None);
+    assert_eq!(focused(&driver).as_deref(), Some("A"), "not autofocused");
+    frame(&mut driver, press("tab"));
+    assert_eq!(focused(&driver).as_deref(), Some("B"));
+    frame(&mut driver, press("tab"));
+    assert_eq!(focused(&driver).as_deref(), Some("A"), "Tab skips it");
+    frame(&mut driver, press("shift+tab"));
+    assert_eq!(focused(&driver).as_deref(), Some("B"), "so does Shift+Tab");
+}

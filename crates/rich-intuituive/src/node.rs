@@ -291,8 +291,9 @@ impl Node {
     /// Leave this node, and everything inside it, out of what assistive
     /// technology gets (ARIA's `aria-hidden`): the accessibility tree,
     /// linear mode's lines, announcements and the names of what holds it.
-    /// It is still drawn. For what is only decoration: a divider, a
-    /// spinner's glyph, a logo.
+    /// It is still drawn. Nothing inside it is in the Tab order or takes
+    /// the focus when its screen opens (a click still reaches it). For what
+    /// is only decoration: a divider, a spinner's glyph, a logo.
     pub fn access_hidden(mut self, hidden: bool) -> Node {
         self.access_hidden = hidden;
         self
@@ -354,9 +355,15 @@ impl Node {
     /// them ([`selected_when`](Self::selected_when),
     /// [`expanded_when`](Self::expanded_when) and the like).
     pub fn access_state(&self) -> crate::a11y::AccessState {
+        self.access_state_of(&*self.body.borrow().widget)
+    }
+
+    /// [`access_state`](Self::access_state), with its widget in hand (while
+    /// it draws, the body is borrowed).
+    fn access_state_of(&self, widget: &dyn Widget) -> crate::a11y::AccessState {
         let mut state = match &self.built_state {
             Some(state) => state(),
-            None => self.body.borrow().widget.access_state(),
+            None => widget.access_state(),
         };
         let holds = |condition: &Option<Condition>| condition.as_ref().map(|c| c());
         if let Some(open) = holds(&self.expanded_when) {
@@ -965,13 +972,29 @@ impl Node {
     }
 
     fn walk_inner(&self, path: &mut Vec<NodeId>, f: &mut dyn FnMut(&Node, &[NodeId])) {
-        if self.hidden() {
+        self.walk_some(path, false, f);
+    }
+
+    /// [`walk`](Self::walk), leaving out what is
+    /// [hidden](Self::access_hidden) from assistive technology: the focus
+    /// order.
+    pub(crate) fn walk_accessible(&self, f: &mut dyn FnMut(&Node, &[NodeId])) {
+        self.walk_some(&mut Vec::new(), true, f);
+    }
+
+    fn walk_some(
+        &self,
+        path: &mut Vec<NodeId>,
+        accessible: bool,
+        f: &mut dyn FnMut(&Node, &[NodeId]),
+    ) {
+        if self.hidden() || (accessible && self.access_hidden) {
             // A stylesheet's `display: none`: not shown, nor anything inside.
             return;
         }
         path.push(self.id);
         f(self, path);
-        self.each_child(&mut |child| child.walk_inner(path, f));
+        self.each_child(&mut |child| child.walk_some(path, accessible, f));
         path.pop();
     }
 
@@ -1144,6 +1167,13 @@ impl Node {
             if styled {
                 restyled = self.restyle(frame);
             }
+            // What assistive technology is told of it (its states, whether
+            // it is disabled): read here, so a change draws it again and
+            // the accessibility tree, linear mode's lines with it, follow.
+            frame.runtime.observe_node_more(id, || {
+                self.access_state_of(&**widget);
+                self.disabled();
+            });
             // A widget that keeps what it drew is cleared only when its own
             // children moved: when it moved, or was drawn over, whoever did
             // that cleared the area already.

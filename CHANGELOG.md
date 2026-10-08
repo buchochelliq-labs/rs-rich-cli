@@ -121,11 +121,16 @@ Workstream 1 of the [0.0.18 plan](docs/plans/0.0.18.md).
     new too.
   - `Widget::access_state` is the hook for widgets of your own, and
     `AccessState::item` builds a widget of items' states.
+  - The states, and whether a node is disabled, are read while it draws,
+    so a signal only they read draws it again when it changes, and linear
+    mode writes the new line.
   - `AccessNode::aria_attributes()` maps the states to ARIA for a browser.
 - **`Node::access_hidden`** (ARIA's `aria-hidden`): a node and everything
   inside it leave the accessibility tree, linear mode's lines,
-  announcements and the names of what holds it, and are still drawn. In
-  text mode, menu separators and a split's divider are blank.
+  announcements and the names of what holds it, and are still drawn.
+  Nothing inside it is in the Tab order or takes the focus when its screen
+  opens; a click still reaches it. In text mode, menu separators and a
+  split's divider are blank.
 - **Linear mode:** `App::linear(true)`, or `INTUITUIVE_ACCESSIBLE=linear`.
   - No screen is drawn: the tree is written as lines of text in reading
     order, then only the lines that changed after each event.

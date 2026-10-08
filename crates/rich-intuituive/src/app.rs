@@ -1987,9 +1987,11 @@ impl App {
         found
     }
 
+    /// The Tab order: nodes that can take the focus, less those
+    /// [hidden](crate::Node::access_hidden) from assistive technology.
     fn focusable(&self) -> Vec<NodeId> {
         let mut ids = Vec::new();
-        self.top().root.walk(&mut |node, _| {
+        self.top().root.walk_accessible(&mut |node, _| {
             if node.takes_focus() {
                 ids.push(node.id);
             }
@@ -2075,11 +2077,12 @@ impl App {
         }
     }
 
-    /// The screen's first node that asked for the focus and is not
-    /// [disabled](crate::Node::disabled_when).
+    /// The screen's first node that asked for the focus and is neither
+    /// [disabled](crate::Node::disabled_when) nor
+    /// [hidden](crate::Node::access_hidden) from assistive technology.
     fn autofocused(&self) -> Option<NodeId> {
         let mut chosen = None;
-        self.top().root.walk(&mut |node, _| {
+        self.top().root.walk_accessible(&mut |node, _| {
             if node.autofocus && chosen.is_none() && !node.disabled() {
                 chosen = Some(node.id);
             }
