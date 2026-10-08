@@ -70,6 +70,30 @@ impl Pty {
     }
 
     fn start_full(mode: &str, kitty: bool, pipe: &str, backend: Option<&str>) -> Pty {
+        Pty::start_answering(mode, kitty, false, pipe, backend, &[])
+    }
+
+    /// A terminal that knows synchronized output (it answers DECRQM for
+    /// mode 2026, reset) and, with `kitty`, the kitty keyboard protocol,
+    /// with the child driving it with `backend` and `env` set.
+    pub fn start_sync_on(backend: &str, mode: &str, kitty: bool, env: &[(&str, &str)]) -> Pty {
+        Pty::start_answering(mode, kitty, true, "", Some(backend), env)
+    }
+
+    /// A terminal without synchronized output or the kitty keyboard
+    /// protocol, with the child driving it with `backend` and `env` set.
+    pub fn start_env_on(backend: &str, mode: &str, env: &[(&str, &str)]) -> Pty {
+        Pty::start_answering(mode, false, false, "", Some(backend), env)
+    }
+
+    fn start_answering(
+        mode: &str,
+        kitty: bool,
+        sync: bool,
+        pipe: &str,
+        backend: Option<&str>,
+        env: &[(&str, &str)],
+    ) -> Pty {
         let pty = native_pty_system()
             .openpty(PtySize {
                 rows: 24,
@@ -90,6 +114,11 @@ impl Pty {
         command.env("RUST_BACKTRACE", "0");
         if let Some(backend) = backend {
             command.env("INTERACT_BACKEND", backend);
+        }
+        // Detected unless a test forces it.
+        command.env_remove("RICH_SYNC_OUTPUT");
+        for (name, value) in env {
+            command.env(name, value);
         }
         let child = pty.slave.spawn_command(command).unwrap();
         drop(pty.slave);
@@ -115,13 +144,18 @@ impl Pty {
                     .filter(|w| *w == KITTY_QUERY)
                     .count();
                 while answered < asked {
-                    let answer: &[u8] = if kitty {
-                        b"\x1b[?0u\x1b[?62c"
-                    } else {
-                        b"\x1b[?62c"
-                    };
+                    // In the order asked: synchronized output (DECRQM)
+                    // first, when the query has it.
+                    let mut answer = Vec::new();
+                    if sync {
+                        answer.extend_from_slice(b"\x1b[?2026;2$y");
+                    }
+                    if kitty {
+                        answer.extend_from_slice(b"\x1b[?0u");
+                    }
+                    answer.extend_from_slice(b"\x1b[?62c");
                     let mut answers = answers.lock().unwrap();
-                    let _ = answers.write_all(answer).and_then(|()| answers.flush());
+                    let _ = answers.write_all(&answer).and_then(|()| answers.flush());
                     answered += 1;
                 }
             }
@@ -190,13 +224,20 @@ impl Pty {
 
 /// Raw mode off, the main screen back, the cursor shown, mouse reporting
 /// off, and the kitty keyboard protocol's flags popped as often as pushed
-/// (crossterm pushes flags 1 and 2, termwiz flag 1).
+/// (crossterm pushes flags 1 and 2, termwiz flag 1), and no synchronized
+/// update left open.
 pub fn assert_restored(output: &str, parser: &vt100::Parser) {
     assert_eq!(
         output.matches("\x1b[>3u").count() + output.matches("\x1b[>1u").count(),
         output.matches("\x1b[<1u").count(),
         "kitty keyboard flags pushed and popped unevenly:\n{output:?}"
     );
+    if let Some(last) = output.rfind("\x1b[?2026h") {
+        assert!(
+            output[last..].contains("\x1b[?2026l"),
+            "a synchronized update left open:\n{output:?}"
+        );
+    }
     let stty = &output[output.rfind("speed").expect("stty output")..];
     let flags: Vec<&str> = stty.split_whitespace().collect();
     for flag in ["icanon", "echo", "isig", "icrnl", "opost"] {

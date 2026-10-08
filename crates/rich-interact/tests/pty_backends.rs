@@ -97,6 +97,9 @@ fn child() {
     if std::env::var_os("INTERACT_CHILD").is_some_and(|mode| mode == "piped") {
         options.session.output = Output::Stderr;
     }
+    if std::env::var_os("INTERACT_CHILD").is_some_and(|mode| mode == "legacy") {
+        options.session.legacy_keys = true;
+    }
     let outcome = run(Child::default(), &options);
     println!("OUTCOME {outcome:?}");
 }
@@ -402,5 +405,129 @@ fn every_backend_paints_on_standard_error() {
         assert!(!output.contains("\\033[?u"), "{backend}: {output:?}");
         assert!(!output.contains("\x1b[?u"), "{backend}: {output:?}");
         assert_restored(&output, &parser);
+    }
+}
+
+const BEGIN_SYNC: &str = "\x1b[?2026h";
+const END_SYNC: &str = "\x1b[?2026l";
+/// DECRQM for mode 2026, in the start-up query.
+const ASK_SYNC: &str = "\x1b[?2026$p";
+
+/// Whether the child's first frame went out as one synchronized update:
+/// begun before the view's text and ended after it.
+fn first_frame_synchronized(text: &str) -> bool {
+    let Some(view) = text.find("child ready") else {
+        return false;
+    };
+    text[..view].contains(BEGIN_SYNC) && text[view..].contains(END_SYNC)
+}
+
+/// A terminal that answers DECRQM for mode 2026 has every frame written as
+/// one synchronized update, by every backend that asks it: the question
+/// rides on the kitty keyboard query, which termion does not ask, so
+/// termion leaves it off. Ctrl+Z ends any update left open before giving
+/// the terminal back.
+#[test]
+fn every_backend_that_asks_wraps_frames_in_synchronized_updates() {
+    for backend in backends() {
+        for kitty in [false, true] {
+            let mut pty = Pty::start_sync_on(backend, "events", kitty, &[]);
+            pty.wait_for("child ready");
+            let text = pty.text();
+            let asks = backend != "termion";
+            assert_eq!(text.contains(ASK_SYNC), asks, "{backend}: {text:?}");
+            assert_eq!(
+                first_frame_synchronized(&text),
+                asks,
+                "{backend} kitty {kitty}: {text:?}"
+            );
+            if asks {
+                let before = pty.text().len();
+                suspends_and_resumes(&mut pty, |pty, _| pty.send("\x1a"));
+                let after = pty.text()[before..].to_string();
+                // The restore ends an update once more, whatever the last
+                // frame left, before it turns the mouse off; `fg` paints
+                // anew inside one.
+                let given_back = after.find("\x1b[?1006l").expect("the mouse turned off");
+                let restoring = &after[..given_back];
+                assert_eq!(
+                    restoring.matches(END_SYNC).count(),
+                    restoring.matches(BEGIN_SYNC).count() + 1,
+                    "{backend}: {after:?}"
+                );
+                assert!(
+                    after[given_back..].contains(BEGIN_SYNC),
+                    "{backend}: {after:?}"
+                );
+            }
+            // Keys arrive as ever: the answers were no keys.
+            let expected = if kitty && asks { exact("a") } else { key("a") };
+            assert_eq!(
+                event_for(&mut pty, "a"),
+                format!("{expected:?}"),
+                "{backend}"
+            );
+            finish(pty, backend);
+        }
+    }
+}
+
+/// `RICH_SYNC_OUTPUT=0` keeps synchronized output off on a terminal that
+/// has it; `=1` turns it on for one that does not answer, on every
+/// backend, termion among them.
+#[test]
+fn the_environment_forces_synchronized_output_either_way() {
+    for backend in backends() {
+        let pty = Pty::start_sync_on(backend, "events", false, &[("RICH_SYNC_OUTPUT", "0")]);
+        pty.wait_for("child ready");
+        let text = pty.text();
+        assert!(!text.contains(BEGIN_SYNC), "{backend}: {text:?}");
+        finish(pty, backend);
+
+        let pty = Pty::start_env_on(backend, "events", &[("RICH_SYNC_OUTPUT", "1")]);
+        pty.wait_for("child ready");
+        let text = pty.text();
+        assert!(first_frame_synchronized(&text), "{backend}: {text:?}");
+        finish(pty, backend);
+    }
+}
+
+/// With legacy keys there is no kitty keyboard query to ride on, so
+/// nothing is asked at all: synchronized output stays off unless forced.
+#[test]
+fn a_legacy_keys_session_asks_nothing() {
+    for backend in backends() {
+        let pty = Pty::start_sync_on(backend, "legacy", true, &[]);
+        pty.wait_for("child ready");
+        let text = pty.text();
+        for query in [ASK_SYNC, "\x1b[?u", "\x1b[c"] {
+            assert!(!text.contains(query), "{backend}: {query:?} in {text:?}");
+        }
+        assert!(!text.contains(BEGIN_SYNC), "{backend}: {text:?}");
+        finish(pty, backend);
+
+        let pty = Pty::start_sync_on(backend, "legacy", true, &[("RICH_SYNC_OUTPUT", "1")]);
+        pty.wait_for("child ready");
+        let text = pty.text();
+        assert!(!text.contains(ASK_SYNC), "{backend}: {text:?}");
+        assert!(first_frame_synchronized(&text), "{backend}: {text:?}");
+        finish(pty, backend);
+    }
+}
+
+/// An answer that comes after the session stopped waiting for it reaches
+/// the backend's reader, which takes it for no key: crossterm reads the
+/// DECRQM report and the device attributes after it as one answer of its
+/// own, and termion cuts each out whole. termwiz's parser knows no such
+/// answers and would read one as typed characters, so with termwiz only
+/// the session's own read of the start-up query takes them.
+#[test]
+fn a_late_answer_is_no_key() {
+    for backend in backends().filter(|backend| *backend != "termwiz") {
+        let mut pty = Pty::start_on(backend, "events");
+        pty.wait_for("child ready");
+        let key = event_for(&mut pty, "\x1b[?2026;2$y\x1b[?62ca");
+        assert_eq!(key, format!("{:?}", self::key("a")), "{backend}");
+        finish(pty, backend);
     }
 }

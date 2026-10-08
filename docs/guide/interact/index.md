@@ -340,6 +340,9 @@ stays on screen. The options can change that:
 - `bracketed_paste: true` delivers a paste as one event;
 - `legacy_keys: true` keeps the kitty keyboard protocol off (see
   [Keys](#keys));
+- `synchronized_output: Some(true)` (or `Some(false)`) forces synchronized
+  output on (or off) rather than asking the terminal (see
+  [Synchronized output](#synchronized-output));
 - `backend: BackendKind::Termion` (or `Termwiz`) drives the terminal with
   another library (see [Backends](#backends-crossterm-termion-termwiz));
 - `LoopOptions { transient: true, .. }` clears the region at the end;
@@ -382,6 +385,47 @@ neither the protocol's query nor the device attributes query sent after it
 keeps the session waiting two seconds before it goes on without the
 protocol.
 
+## Synchronized output
+
+A terminal with synchronized output (DEC private mode 2026: kitty,
+WezTerm, iTerm2, foot, Alacritty, Ghostty, Windows Terminal, Contour,
+recent VTE and xterm.js, among others) holds the screen while an update is
+written between `CSI ? 2026 h` and `CSI ? 2026 l`, and shows it in one go.
+Where the terminal has it, the session writes every frame that way: the
+changed cells, then the cursor placed and shown or hidden, all inside one
+update and one write. Nothing tears, and a screen reader that follows the
+cursor sees it land once, on the focus, rather than jump across every
+changed region. A frame with nothing to paint writes nothing, not an empty
+update.
+
+The session asks the terminal in the same round trip as the kitty keyboard
+query: `CSI ? 2026 $ p` (DECRQM), the kitty query, then the device
+attributes query, which every terminal answers last, so detecting it adds
+no wait. A report of the mode as set or reset means the terminal has it;
+not recognised, permanently reset, or no report means it does not. The
+answers are read by the session before any key is, and never reach a
+component.
+
+There is nothing to ask with when there is no kitty query: with
+`legacy_keys: true`, with the termion backend (which does not read the
+kitty protocol), or when standard output is not the terminal, the session
+sends no query at all, and synchronized output stays off unless it is
+forced. Forcing it:
+
+- `RICH_SYNC_OUTPUT=1` turns it on, for a terminal that has it but does not
+  answer DECRQM (crossterm on Windows reads no answers, so Windows Terminal
+  needs this too); `RICH_SYNC_OUTPUT=0` turns it off;
+- `SessionOptions::synchronized_output` (`Some(true)` or `Some(false)`)
+  does the same from code, and wins over the environment.
+
+`Session::synchronized_output` says whether it is on. A `Backend` writes
+painted frames through `Backend::write_frame`, which wraps them when
+`Backend::synchronized_output` is on; `Headless::synchronized_output`
+turns it on in the headless driver, so tests see the exact bytes, and
+`synchronized_update` wraps a frame for a loop of your own. On every way
+out (see below) the session ends any update left open before it restores
+the other modes.
+
 ## Several at once: the event loop
 
 `EventLoop` runs several mounted components together:
@@ -403,7 +447,7 @@ routing on top of it.
 
 A session turns on raw mode and, optionally, the alternate screen, mouse
 reporting, bracketed paste and the kitty keyboard protocol. It undoes all
-of them on every way out:
+of them on every way out, ending any synchronized update first:
 
 - when the component finishes;
 - on an early return or `?`, when the session is dropped;
@@ -477,6 +521,7 @@ hand-off, Ctrl+Z and `fg`).
 | Mouse | buttons, drags, moves, modifiers | buttons, drags; no modifiers, no moves without a button | buttons, drags, moves, modifiers |
 | Bracketed paste | yes | yes | yes, unless its probe says no |
 | Colours for `run` | rich's detection | rich's detection | termwiz's probe (terminfo, `COLORTERM`, `NO_COLOR`) |
+| Synchronized output | asked (Unix) | only when forced | asked (Unix) |
 
 termion has no reader with a timeout, so its session waits on the terminal
 itself and hands termion's parser one event's bytes at a time; a sequence

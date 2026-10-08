@@ -383,3 +383,26 @@ fn degrades_by_policy() {
         Err(Error::NotInteractive(NotInteractive::NoDefault(Reason::Ci)))
     ));
 }
+
+/// With synchronized output, each paint is one update, byte for byte, and
+/// a paint with nothing to write writes nothing: no empty update.
+#[test]
+fn synchronized_output_wraps_each_frame_and_nothing_else() {
+    let mut backend = Headless::new(Script::new().keys("down up enter"), 30, 5);
+    backend.synchronized_output = true;
+    let record = backend.record();
+    let mut event_loop = EventLoop::new(backend, LoopOptions::default());
+    let handle = event_loop.mount(Counter::default());
+    event_loop.run().unwrap();
+    assert_eq!(handle.take(), Some(Outcome::Done(1)));
+    let record = record.borrow();
+    // The first paint, `down` (nothing), `up`, then the finish.
+    assert_eq!(
+        record.writes,
+        [
+            "\x1b[?2026h\rcount 0 ticks 0\x1b[?2026l",
+            "\x1b[?2026h\r\x1b[6C1\x1b[?2026l",
+            "\x1b[?2026h\r\r\n\x1b[?25h\x1b[?2026l",
+        ],
+    );
+}

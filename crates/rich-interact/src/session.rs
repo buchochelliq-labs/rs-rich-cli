@@ -1,6 +1,6 @@
 //! The terminal session: raw mode, the alternate screen, mouse and paste
-//! modes, the kitty keyboard protocol, and their restoration on every way
-//! out (#489).
+//! modes, the kitty keyboard protocol, synchronized output, and their
+//! restoration on every way out (#489).
 //!
 //! Everything a [`Session`] turns on is recorded in a process-wide flag
 //! set, and undone by whichever comes first: [`Session::leave`], dropping
@@ -22,6 +22,15 @@
 //! resizes, measures the terminal, and turns raw mode and the alternate
 //! screen on and off; what is turned on, and how it is given back on every
 //! way out above, is the same whichever it is.
+//!
+//! Where the terminal has synchronized output (DEC private mode 2026), each
+//! frame is written as one synchronized update: between `CSI ? 2026 h` and
+//! `CSI ? 2026 l`, so the terminal shows it whole, without tearing, and a
+//! screen reader that follows the cursor does not see it jump across each
+//! changed region. The terminal is asked in the start-up query that asks
+//! for the kitty keyboard protocol, so detecting it costs no extra wait;
+//! `RICH_SYNC_OUTPUT` and [`SessionOptions::synchronized_output`] override
+//! what it answers.
 //!
 //! The terminal's modes are process-wide, so only one session exists at a
 //! time: starting a second while the first is alive (a component that
@@ -49,6 +58,9 @@ const ALTERNATE: u8 = 2;
 const MOUSE: u8 = 4;
 const PASTE: u8 = 8;
 const KITTY: u8 = 16;
+/// Frames are written as synchronized updates: the restore ends one a write
+/// cut short left open.
+const SYNC: u8 = 32;
 
 /// The kitty keyboard protocol's flags a session pushes: disambiguate the
 /// keys a legacy terminal sends alike (1) and report releases and repeats
@@ -64,10 +76,55 @@ const PUSH_KITTY: &str = "\x1b[>3u";
 const PUSH_KITTY_KEYS: &str = "\x1b[>1u";
 const POP_KITTY: &str = "\x1b[<1u";
 
-/// Whether the terminal answered the kitty keyboard protocol's query: 0 not
-/// asked yet, 1 no, 2 yes. Asked once a process, since asking can wait for
-/// a terminal that does not answer.
-static KITTY_ANSWER: AtomicU8 = AtomicU8::new(0);
+/// What the terminal answered the start-up query ([`Answers::encode`]): 0
+/// not asked yet. Asked once a process, since asking can wait for a
+/// terminal that does not answer.
+static ANSWERS: AtomicU8 = AtomicU8::new(0);
+
+/// Begins a synchronized update (DEC private mode 2026): the terminal holds
+/// the screen until [`END_SYNCHRONIZED_UPDATE`].
+pub const BEGIN_SYNCHRONIZED_UPDATE: &str = "\x1b[?2026h";
+/// Ends a synchronized update: the terminal shows what was written since
+/// [`BEGIN_SYNCHRONIZED_UPDATE`] in one go.
+pub const END_SYNCHRONIZED_UPDATE: &str = "\x1b[?2026l";
+/// Asks whether the terminal knows mode 2026 (DECRQM). Sent first, before
+/// the kitty query and the device attributes: a reply arriving after the
+/// session stopped waiting then runs into theirs, which crossterm's parser
+/// reads as one answer of its own, never as keys.
+#[cfg(unix)]
+const ASK_SYNC: &str = "\x1b[?2026$p";
+/// The environment variable that turns synchronized output off (`0`) or on
+/// (`1`) whatever the terminal answers.
+pub const SYNC_OUTPUT_ENV: &str = "RICH_SYNC_OUTPUT";
+
+/// `frame` as one synchronized update; nothing for an empty frame.
+pub fn synchronized_update(frame: &str) -> String {
+    if frame.is_empty() {
+        return String::new();
+    }
+    let mut out = String::with_capacity(
+        BEGIN_SYNCHRONIZED_UPDATE.len() + frame.len() + END_SYNCHRONIZED_UPDATE.len(),
+    );
+    out.push_str(BEGIN_SYNCHRONIZED_UPDATE);
+    out.push_str(frame);
+    out.push_str(END_SYNCHRONIZED_UPDATE);
+    out
+}
+
+/// What `RICH_SYNC_OUTPUT`'s `value` forces: `0` off, `1` on; anything else,
+/// or unset, leaves it to the terminal's answer.
+fn sync_override(value: Option<&str>) -> Option<bool> {
+    match value.map(str::trim) {
+        Some("0") => Some(false),
+        Some("1") => Some(true),
+        _ => None,
+    }
+}
+
+/// What the environment forces synchronized output to, if anything.
+fn sync_from_env() -> Option<bool> {
+    sync_override(std::env::var(SYNC_OUTPUT_ENV).ok().as_deref())
+}
 
 /// What is currently turned on, for the panic hook.
 static ACTIVE: AtomicU8 = AtomicU8::new(0);
@@ -333,9 +390,14 @@ fn restore(wait: bool) -> io::Result<()> {
 }
 
 /// The sequences that turn off what `active` records: all of it, but for
-/// the alternate screen of a library that leaves it itself.
+/// the alternate screen of a library that leaves it itself. A synchronized
+/// update first, so a frame cut short (a panic, a signal mid-write) is
+/// shown and the rest are not held.
 fn undo(active: u8, library: BackendKind) -> String {
     let mut out = String::new();
+    if active & SYNC != 0 {
+        out.push_str(END_SYNCHRONIZED_UPDATE);
+    }
     if active & KITTY != 0 {
         out.push_str(POP_KITTY);
     }
@@ -509,7 +571,7 @@ fn lock<T>(mutex: &std::sync::Mutex<T>, wait: bool) -> io::Result<std::sync::Mut
 /// the answer is complete, for two seconds at most (a terminal that does
 /// not answer). `None` when it does not answer in time. Keys typed while it
 /// waits are lost.
-#[cfg(all(unix, any(feature = "termion", feature = "termwiz")))]
+#[cfg(unix)]
 fn ask_terminal(query: &str, done: impl Fn(&[u8]) -> bool) -> Option<Vec<u8>> {
     use std::io::Read;
     use std::os::unix::io::AsRawFd;
@@ -549,40 +611,111 @@ fn ask_terminal(query: &str, done: impl Fn(&[u8]) -> bool) -> Option<Vec<u8>> {
     Some(answer)
 }
 
-/// The final byte of each complete `ESC [ ? <digits and ;> <final>` in
-/// `bytes`, in order: the shape of the device attributes answer (`c`) and
-/// of the kitty flags one (`u`).
-#[cfg(all(unix, feature = "termwiz"))]
-fn private_answers(bytes: &[u8]) -> impl Iterator<Item = u8> + '_ {
+/// One complete `ESC [ ? <parameters> <intermediates> <final>` in what the
+/// terminal answered: the shape of the device attributes answer (`c`), the
+/// kitty flags one (`u`) and DECRQM's (`$ y`).
+#[cfg(any(unix, test))]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct PrivateAnswer<'a> {
+    parameters: &'a [u8],
+    intermediates: &'a [u8],
+    last: u8,
+}
+
+/// Each complete private answer in `bytes`, in order. Anything else (keys
+/// typed meanwhile, an answer cut short) is passed over.
+#[cfg(any(unix, test))]
+fn private_answers(bytes: &[u8]) -> impl Iterator<Item = PrivateAnswer<'_>> + '_ {
     let mut at = 0;
     std::iter::from_fn(move || {
         while at + 3 <= bytes.len() {
-            if bytes[at..].starts_with(b"\x1b[?") {
-                let mut end = at + 3;
-                while end < bytes.len() && (bytes[end].is_ascii_digit() || bytes[end] == b';') {
-                    end += 1;
-                }
-                if end < bytes.len() {
-                    at = end + 1;
-                    return Some(bytes[end]);
-                }
-                return None;
+            if !bytes[at..].starts_with(b"\x1b[?") {
+                at += 1;
+                continue;
             }
-            at += 1;
+            let start = at + 3;
+            let mut end = start;
+            while end < bytes.len() && (0x30..=0x3f).contains(&bytes[end]) {
+                end += 1;
+            }
+            let middle = end;
+            while end < bytes.len() && (0x20..=0x2f).contains(&bytes[end]) {
+                end += 1;
+            }
+            match bytes.get(end) {
+                None => return None,
+                Some(&last @ 0x40..=0x7e) => {
+                    at = end + 1;
+                    return Some(PrivateAnswer {
+                        parameters: &bytes[start..middle],
+                        intermediates: &bytes[middle..end],
+                        last,
+                    });
+                }
+                // Not an answer: look again from the byte that broke it.
+                Some(_) => at = end,
+            }
         }
         None
     })
 }
 
-/// Whether the terminal has the kitty keyboard protocol, asked directly:
-/// its flags, then the device attributes, which every terminal answers, so
-/// a terminal without the protocol answers only the second.
-#[cfg(all(unix, feature = "termwiz"))]
-fn ask_kitty() -> bool {
-    let answer = ask_terminal("\x1b[?u\x1b[c", |bytes| {
-        private_answers(bytes).any(|last| last == b'c')
-    });
-    answer.is_some_and(|bytes| private_answers(&bytes).any(|last| last == b'u'))
+/// What the terminal answered the start-up query.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+struct Answers {
+    /// It has the kitty keyboard protocol.
+    kitty: bool,
+    /// It knows synchronized output (mode 2026).
+    sync: bool,
+}
+
+impl Answers {
+    /// For [`ANSWERS`]: never 0.
+    fn encode(self) -> u8 {
+        1 | (u8::from(self.kitty) << 1) | (u8::from(self.sync) << 2)
+    }
+
+    fn decode(bits: u8) -> Answers {
+        Answers {
+            kitty: bits & 2 != 0,
+            sync: bits & 4 != 0,
+        }
+    }
+
+    /// The answers in `bytes`, once the device attributes, which every
+    /// terminal answers last, have come; `None` before. A DECRQM report of
+    /// mode 2026 set, reset or permanently set (1, 2, 3) means the terminal
+    /// knows it; not recognised (0) or permanently reset (4), or no report,
+    /// means it does not.
+    #[cfg(any(unix, test))]
+    fn read(bytes: &[u8]) -> Option<Answers> {
+        let mut answers = Answers::default();
+        for answer in private_answers(bytes) {
+            match (answer.last, answer.intermediates) {
+                (b'c', b"") => return Some(answers),
+                (b'u', b"") => answers.kitty = true,
+                (b'y', b"$") => {
+                    if let Some(state) = answer.parameters.strip_prefix(b"2026;") {
+                        answers.sync = matches!(state, b"1" | b"2" | b"3");
+                    }
+                }
+                _ => {}
+            }
+        }
+        None
+    }
+}
+
+/// The start-up query, asked directly: synchronized output, the kitty
+/// keyboard protocol's flags, then the device attributes, which every
+/// terminal answers, so a terminal without the others answers only the
+/// last. One round trip for both questions.
+#[cfg(unix)]
+fn ask_start() -> Answers {
+    let query = format!("{ASK_SYNC}\x1b[?u\x1b[c");
+    ask_terminal(&query, |bytes| Answers::read(bytes).is_some())
+        .and_then(|bytes| Answers::read(&bytes))
+        .unwrap_or_default()
 }
 
 /// The cursor's row (0-based), asked directly (`CSI 6 n`).
@@ -652,6 +785,14 @@ pub struct SessionOptions {
     /// The library that drives the terminal: crossterm unless this says
     /// otherwise.
     pub backend: BackendKind,
+    /// Write each frame as one synchronized update (DEC private mode 2026):
+    /// `Some(true)` always, `Some(false)` never. `None`, the default, leaves
+    /// it to `RICH_SYNC_OUTPUT` (`0` off, `1` on) and then to the terminal,
+    /// which is asked in the kitty keyboard protocol's start-up query. A
+    /// session that asks nothing ([`legacy_keys`](Self::legacy_keys), the
+    /// termion backend, standard output not a terminal) leaves it off
+    /// unless this or the environment turns it on.
+    pub synchronized_output: Option<bool>,
 }
 
 /// Where the event loop reads events and writes paints: the terminal, or
@@ -664,6 +805,23 @@ pub trait Backend {
     fn read(&mut self, timeout: Option<Duration>) -> io::Result<Option<Event>>;
     /// Write and flush.
     fn write(&mut self, text: &str) -> io::Result<()>;
+    /// Whether [`write_frame`](Backend::write_frame) writes each frame as
+    /// one synchronized update. The default: no.
+    fn synchronized_output(&self) -> bool {
+        false
+    }
+    /// Write a frame the painter made: nothing at all when it is empty,
+    /// and with [`synchronized_output`](Backend::synchronized_output)
+    /// between `CSI ? 2026 h` and `CSI ? 2026 l`, in the one write.
+    fn write_frame(&mut self, frame: &str) -> io::Result<()> {
+        if frame.is_empty() {
+            Ok(())
+        } else if self.synchronized_output() {
+            self.write(&synchronized_update(frame))
+        } else {
+            self.write(frame)
+        }
+    }
     /// Time since the backend started (virtual in the headless driver).
     fn elapsed(&self) -> Duration;
     /// Run `command` with the terminal as it was before the session, then
@@ -753,31 +911,38 @@ pub struct Session {
     clipboard: rich_ext::clipboard::Clipboard,
     /// Whether keys are read with the kitty keyboard protocol.
     kitty: bool,
+    /// Whether frames are written as synchronized updates.
+    sync: bool,
     /// `None` until the first `enter`.
     input: Option<Input>,
 }
 
-/// Whether the terminal has the kitty keyboard protocol, asked once a
-/// process with `ask` (with raw mode on): a terminal that answers neither
-/// the protocol's query nor the device attributes one after it keeps the
-/// session waiting (two seconds).
-fn kitty_answered(ask: impl FnOnce() -> bool) -> bool {
-    match KITTY_ANSWER.load(Ordering::SeqCst) {
+/// What the terminal answered the start-up query, asked once a process
+/// with `ask` (with raw mode on): a terminal that answers none of it, not
+/// even the device attributes query at its end, keeps the session waiting
+/// (two seconds).
+fn answered(ask: impl FnOnce() -> Answers) -> Answers {
+    match ANSWERS.load(Ordering::SeqCst) {
         0 => {
-            let yes = query_reaches_terminal() && ask();
-            KITTY_ANSWER.store(if yes { 2 } else { 1 }, Ordering::SeqCst);
-            yes
+            let answers = if query_reaches_terminal() {
+                ask()
+            } else {
+                Answers::default()
+            };
+            ANSWERS.store(answers.encode(), Ordering::SeqCst);
+            answers
         }
-        answer => answer == 2,
+        bits => Answers::decode(bits),
     }
 }
 
-/// Whether crossterm's keyboard query would reach the terminal. It means
-/// to write to `/dev/tty`, but opens it read-only, so the query always goes
-/// to standard output: in `answer=$(rich write)` it would land in the
+/// Whether the start-up query is asked. crossterm's own keyboard query
+/// meant to write to `/dev/tty`, but opened it read-only, so it went to
+/// standard output: in `answer=$(rich write)` it would have landed in the
 /// answer, and the terminal's reply at the shell prompt afterwards. The
-/// other backends ask the same way, so a terminal is asked or not
-/// whichever drives it.
+/// session asks directly now, but still only with standard output a
+/// terminal, so a captured answer starts as it did; every backend asks the
+/// same way, so a terminal is asked or not whichever drives it.
 fn query_reaches_terminal() -> bool {
     use std::io::IsTerminal;
     io::stdout().is_terminal()
@@ -809,6 +974,7 @@ impl Session {
                 &crate::clipboard::SessionEnvironment,
             ),
             kitty: false,
+            sync: false,
             input: None,
         };
         session.enter()?;
@@ -836,10 +1002,27 @@ impl Session {
             }
             out.push_str("\x1b[H");
         }
-        self.kitty = !self.options.legacy_keys && self.kitty_answered();
+        // The start-up query asks for the kitty keyboard protocol and
+        // synchronized output in one round trip. With nothing to read the
+        // protocol's keys (legacy keys, termion), it is not asked at all:
+        // synchronized output then waits on being forced.
+        let answers = if self.options.legacy_keys {
+            Answers::default()
+        } else {
+            self.answered()
+        };
+        self.kitty = answers.kitty;
         if self.kitty {
             out.push_str(library.kitty_push());
             ACTIVE.fetch_or(KITTY, Ordering::SeqCst);
+        }
+        self.sync = self
+            .options
+            .synchronized_output
+            .or_else(sync_from_env)
+            .unwrap_or(answers.sync);
+        if self.sync {
+            ACTIVE.fetch_or(SYNC, Ordering::SeqCst);
         }
         let (mouse, paste) = self.capable();
         if self.options.mouse && mouse {
@@ -864,20 +1047,26 @@ impl Session {
         Ok(())
     }
 
-    /// Whether the library reads the kitty keyboard protocol's keys, and
-    /// the terminal has it.
-    fn kitty_answered(&self) -> bool {
+    /// What the terminal answered the start-up query, for a library that
+    /// reads the kitty keyboard protocol's keys; nothing asked for one that
+    /// does not.
+    fn answered(&self) -> Answers {
         match self.options.backend {
-            BackendKind::Crossterm => kitty_answered(|| {
-                crossterm::terminal::supports_keyboard_enhancement().unwrap_or(false)
+            #[cfg(unix)]
+            BackendKind::Crossterm => answered(ask_start),
+            // Windows: crossterm's own answer, which reads no reply.
+            #[cfg(not(unix))]
+            BackendKind::Crossterm => answered(|| Answers {
+                kitty: crossterm::terminal::supports_keyboard_enhancement().unwrap_or(false),
+                sync: false,
             }),
             // termion's reader does not know the protocol's keys.
             #[cfg(all(unix, feature = "termion"))]
-            BackendKind::Termion => false,
+            BackendKind::Termion => Answers::default(),
             #[cfg(all(unix, feature = "termwiz"))]
-            BackendKind::Termwiz => kitty_answered(ask_kitty),
+            BackendKind::Termwiz => answered(ask_start),
             #[cfg(all(not(unix), feature = "termwiz"))]
-            BackendKind::Termwiz => false,
+            BackendKind::Termwiz => Answers::default(),
         }
     }
 
@@ -968,6 +1157,13 @@ impl Session {
         self.kitty
     }
 
+    /// Whether frames are written as synchronized updates: forced by
+    /// [`SessionOptions::synchronized_output`] or `RICH_SYNC_OUTPUT`, or
+    /// the terminal answered that it knows mode 2026.
+    pub fn synchronized_output(&self) -> bool {
+        self.sync
+    }
+
     /// The colours the backend's own probe of the terminal found, when it
     /// has one (termwiz's: terminfo and `COLORTERM`); `None` to leave it to
     /// rich's detection. `Some(None)` is no colour.
@@ -1035,6 +1231,10 @@ impl Backend for Session {
 
     fn write(&mut self, text: &str) -> io::Result<()> {
         self.options.output.write(text)
+    }
+
+    fn synchronized_output(&self) -> bool {
+        self.sync
     }
 
     fn clipboard(&self) -> Result<(), String> {
@@ -1129,11 +1329,97 @@ mod tests {
         }
     }
 
-    #[cfg(all(unix, feature = "termwiz"))]
     #[test]
     fn private_answers_are_found() {
-        let answers: Vec<u8> = private_answers(b"x\x1b[?0u\x1b[?62;22c").collect();
-        assert_eq!(answers, b"uc");
-        assert_eq!(private_answers(b"\x1b[?62").count(), 0);
+        let lasts = |bytes: &[u8]| -> Vec<u8> { private_answers(bytes).map(|a| a.last).collect() };
+        assert_eq!(lasts(b"x\x1b[?0u\x1b[?62;22c"), b"uc");
+        assert_eq!(lasts(b"\x1b[?62"), b"");
+        let decrqm: Vec<_> = private_answers(b"\x1b[?2026;2$y").collect();
+        assert_eq!(
+            decrqm,
+            [PrivateAnswer {
+                parameters: b"2026;2",
+                intermediates: b"$",
+                last: b'y',
+            }]
+        );
+        // An answer broken off by another sequence is passed over, and the
+        // next one still read.
+        assert_eq!(lasts(b"\x1b[?2026\x1b[?62c"), b"c");
+    }
+
+    #[test]
+    fn the_start_up_answers_are_read() {
+        let read = |bytes: &[u8]| Answers::read(bytes);
+        let both = Answers {
+            kitty: true,
+            sync: true,
+        };
+        let sync = Answers {
+            kitty: false,
+            sync: true,
+        };
+        // Supported: set or reset (recognised), or permanently set.
+        assert_eq!(read(b"\x1b[?2026;2$y\x1b[?0u\x1b[?62;22c"), Some(both));
+        assert_eq!(read(b"\x1b[?2026;1$y\x1b[?62c"), Some(sync));
+        assert_eq!(read(b"\x1b[?2026;3$y\x1b[?62c"), Some(sync));
+        // Not recognised, or permanently reset: not supported.
+        assert_eq!(read(b"\x1b[?2026;0$y\x1b[?62c"), Some(Answers::default()));
+        assert_eq!(read(b"\x1b[?2026;4$y\x1b[?62c"), Some(Answers::default()));
+        // No report at all (a terminal that does not know DECRQM).
+        assert_eq!(
+            read(b"\x1b[?1u\x1b[?62c"),
+            Some(Answers {
+                kitty: true,
+                sync: false,
+            })
+        );
+        // Another mode's report says nothing about 2026.
+        assert_eq!(read(b"\x1b[?2004;1$y\x1b[?62c"), Some(Answers::default()));
+        // Until the device attributes come, the answer is not complete:
+        // the session waits, then goes on with neither.
+        assert_eq!(read(b""), None);
+        assert_eq!(read(b"\x1b[?2026;2$y\x1b[?0u"), None);
+        assert_eq!(read(b"\x1b[?2026;2$y\x1b[?6"), None);
+        // Keys typed while it waits, between and inside the answers' runs,
+        // are passed over.
+        assert_eq!(
+            read(b"j\x1b[A\x1b[?2026;2$yk\x1b[?0u\r\x1b[?62;22c"),
+            Some(both)
+        );
+        for answers in [Answers::default(), sync, both] {
+            assert_ne!(answers.encode(), 0);
+            assert_eq!(Answers::decode(answers.encode()), answers);
+        }
+    }
+
+    #[test]
+    fn the_environment_forces_synchronized_output() {
+        assert_eq!(sync_override(Some("0")), Some(false));
+        assert_eq!(sync_override(Some("1")), Some(true));
+        assert_eq!(sync_override(Some(" 1\n")), Some(true));
+        assert_eq!(sync_override(None), None);
+        assert_eq!(sync_override(Some("")), None);
+        assert_eq!(sync_override(Some("auto")), None);
+    }
+
+    #[test]
+    fn a_frame_is_one_synchronized_update_and_an_empty_one_nothing() {
+        assert_eq!(
+            synchronized_update("\x1b[2;1Hhi\x1b[?25l"),
+            "\x1b[?2026h\x1b[2;1Hhi\x1b[?25l\x1b[?2026l"
+        );
+        assert_eq!(synchronized_update(""), "");
+    }
+
+    #[test]
+    fn the_restore_ends_a_synchronized_update_first() {
+        for kind in BackendKind::ALL {
+            let out = undo(RAW | SYNC | MOUSE, *kind);
+            assert!(out.starts_with("\x1b[?2026l\x1b[?1006l"), "{kind}: {out:?}");
+            assert_eq!(out.matches("2026").count(), 1);
+            // Off, nothing about it.
+            assert!(!undo(RAW | MOUSE, *kind).contains("2026"));
+        }
     }
 }
