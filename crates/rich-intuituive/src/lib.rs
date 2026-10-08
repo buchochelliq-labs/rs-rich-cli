@@ -77,7 +77,7 @@ pub use layout::Size;
 pub use log::Log;
 pub use node::{
     column, component, each, grid, label, leaf, list, renderable, repeating, row, scroll,
-    scroll_with, switch, text, Node,
+    scroll_both, scroll_both_with, scroll_with, scroll_x, switch, text, Node,
 };
 pub use reactive::{memo, signal, watch, Memo, Proxy, Signal};
 pub use task::{resource, spawn, spawn_future, Load, Resource, Task};
@@ -88,8 +88,9 @@ pub mod prelude {
     // `text` is both the function and the `text!` macro.
     pub use crate::{
         column, component, each, every, grid, label, leaf, list, memo, renderable, repeating,
-        resource, row, scroll, scroll_with, signal, spawn, switch, text, watch, widget, App, Ctx,
-        Load, Log, Memo, Node, Proxy, Resource, Signal, Size, Task, Theme, Widget,
+        resource, row, scroll, scroll_both, scroll_with, scroll_x, signal, spawn, switch, text,
+        watch, widget, App, Ctx, Load, Log, Memo, Node, Proxy, Resource, Signal, Size, Task, Theme,
+        Widget,
     };
 }
 
