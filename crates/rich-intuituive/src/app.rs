@@ -635,11 +635,26 @@ pub struct App {
     /// The theme set in code, before any theme file's styles.
     theme_base: Theme,
     theme_file: Option<ThemeFile>,
+    sheet: Option<SheetSource>,
     /// Draw a frame even if no node is dirty (the inspector has news).
     poke: bool,
 }
 
 /// A theme file the app reloads when it changes.
+/// The app's stylesheet, and the file it comes from when it is read live.
+struct SheetSource {
+    sheet: crate::Stylesheet,
+    /// A new number each time it changes, so nodes match it again.
+    generation: u64,
+    file: Option<ThemeFile>,
+}
+
+/// A number no stylesheet had before.
+fn sheet_generation() -> u64 {
+    static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+    NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+}
+
 struct ThemeFile {
     path: std::path::PathBuf,
     /// The modification time and length last read.
@@ -720,6 +735,7 @@ impl App {
                 .map(|_| Inspector::new(true)),
             theme_base: Theme::default(),
             theme_file: None,
+            sheet: None,
             poke: false,
         }
     }
@@ -756,6 +772,116 @@ impl App {
             error: None,
         });
         self
+    }
+
+    /// Style and lay out the app's nodes with a stylesheet: a CSS subset
+    /// (see [`Stylesheet`](crate::Stylesheet)). Builders in code win over
+    /// it, as an inline style beats CSS. A sheet that does not parse is
+    /// reported in a toast, and the app runs without it.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| {
+    ///     column([label("Status").name("bar"), label("body")]).on_key("q", |cx| cx.quit())
+    /// })
+    /// .stylesheet("#bar { dock: bottom; size: 1; }");
+    /// let screen = app.render_with(&["q"], 10, 3).unwrap();
+    /// assert_eq!(screen[2].trim_end(), "Status");
+    /// ```
+    pub fn stylesheet(mut self, css: &str) -> App {
+        match crate::Stylesheet::parse(css) {
+            Ok(sheet) => {
+                self.sheet = Some(SheetSource {
+                    sheet,
+                    generation: sheet_generation(),
+                    file: None,
+                })
+            }
+            Err(error) => self.sheet_error(&error.to_string()),
+        }
+        self
+    }
+
+    /// [`stylesheet`](Self::stylesheet) from a file, read again whenever it
+    /// changes while the app runs. A change that does not parse is
+    /// reported in a toast, and the last good sheet stays.
+    pub fn stylesheet_file(mut self, path: impl Into<std::path::PathBuf>) -> App {
+        self.sheet = Some(SheetSource {
+            sheet: crate::Stylesheet::default(),
+            generation: sheet_generation(),
+            file: Some(ThemeFile {
+                path: path.into(),
+                stamp: None,
+                good: None,
+                read: None,
+                error: None,
+            }),
+        });
+        self.reload_sheet();
+        self
+    }
+
+    /// Say in a toast that the stylesheet does not parse.
+    fn sheet_error(&mut self, error: &str) {
+        let markup = format!("[bad]stylesheet:[/] {}", rich::markup::escape(error));
+        self.toasts
+            .push((markup, self.now + Duration::from_secs(6)));
+        self.poke = true;
+    }
+
+    /// Read the stylesheet file again if it changed since it was last read.
+    fn reload_sheet(&mut self) {
+        let Some(SheetSource {
+            file: Some(file), ..
+        }) = &mut self.sheet
+        else {
+            return;
+        };
+        let stamp = std::fs::metadata(&file.path)
+            .ok()
+            .map(|m| (m.modified().unwrap_or(std::time::UNIX_EPOCH), m.len()));
+        if stamp == file.stamp && (stamp.is_some() || file.error.is_some()) {
+            // As for the theme file: a fresh file is looked at, in case a
+            // same-length edit landed within one tick.
+            let fresh = stamp.is_some_and(|(modified, _)| {
+                modified
+                    .elapsed()
+                    .map_or(true, |age| age < Duration::from_secs(2))
+            });
+            if !fresh {
+                return;
+            }
+            let now = std::fs::read_to_string(&file.path).ok();
+            if now.is_none() || now == file.read {
+                return;
+            }
+        }
+        file.stamp = stamp;
+        let read = std::fs::read_to_string(&file.path).map_err(|e| e.to_string());
+        file.read = read.as_ref().ok().cloned();
+        let parsed = read.and_then(|text| {
+            crate::Stylesheet::parse(&text)
+                .map(|sheet| (sheet, text))
+                .map_err(|e| e.to_string())
+        });
+        match parsed {
+            Ok((sheet, text)) => {
+                file.good = Some(text);
+                file.error = None;
+                let source = self.sheet.as_mut().expect("a stylesheet");
+                source.sheet = sheet;
+                source.generation = sheet_generation();
+                self.restack = true;
+            }
+            Err(error) => {
+                let repeated = file.error.as_ref() == Some(&error);
+                file.error = Some(error.clone());
+                if !repeated {
+                    self.sheet_error(&error);
+                }
+            }
+        }
     }
 
     /// Call `tick` every `interval` (a clock, a poll, an animation).
@@ -1157,6 +1283,20 @@ impl App {
             .zip(&rects)
             .any(|(layer, rect)| layer.modal.is_some() && layer.drawn.is_some_and(|d| d != *rect));
         let full = full || moved || std::mem::take(&mut self.restack);
+        // `$name` in the stylesheet: the theme's style of that name.
+        let theme = &self.theme;
+        let vars = |name: &str| -> Option<Style> {
+            match name {
+                "border" => Some(theme.border.clone()),
+                "border-focused" | "border.focused" => Some(theme.border_focused.clone()),
+                "title" => Some(theme.title.clone()),
+                _ => theme
+                    .styles
+                    .iter()
+                    .find(|(n, _)| n == name)
+                    .map(|(_, style)| style.clone()),
+            }
+        };
         let mut frame = FrameState {
             console,
             runtime: &self.runtime,
@@ -1172,6 +1312,12 @@ impl App {
             theme: &self.theme,
             drawn: 0,
             drawn_ids: panel.map(|_| Vec::new()),
+            sheet: self.sheet.as_ref().map(|source| crate::node::SheetCx {
+                sheet: &source.sheet,
+                generation: source.generation,
+                vars: &vars,
+            }),
+            chain: Vec::new(),
         };
         let dirty = frame.dirty.len();
         if full {
@@ -1195,6 +1341,9 @@ impl App {
                         full || under
                     }
                 };
+                if let Some(sheet) = &frame.sheet {
+                    layer.root.resolve(sheet, &mut frame.chain);
+                }
                 layer.root.draw(&mut frame, *rect, screen, force);
                 layer.drawn = Some(*rect);
             }
@@ -1507,6 +1656,10 @@ impl App {
 
     /// The theme in code with the theme file's last good styles over it.
     fn retheme(&mut self) {
+        // `$name` in the stylesheet means the new theme's styles now.
+        if let Some(source) = &mut self.sheet {
+            source.generation = sheet_generation();
+        }
         let good = self.theme_file.as_ref().and_then(|file| file.good.clone());
         self.theme = match good {
             Some(text) => self
@@ -1587,7 +1740,7 @@ impl App {
     fn focusable(&self) -> Vec<NodeId> {
         let mut ids = Vec::new();
         self.top().root.walk(&mut |node, _| {
-            if node.focusable {
+            if node.takes_focus() {
                 ids.push(node.id);
             }
         });
@@ -1602,7 +1755,10 @@ impl App {
     fn keep_focus(&mut self) {
         let ids = self.focusable();
         if let Some(id) = self.focus() {
-            if self.path_to(id).is_empty() {
+            // A node that was disabled lets the focus go as one that left.
+            let mut disabled = false;
+            with_node(&self.top().root, id, &mut |node| disabled = node.disabled());
+            if disabled || self.path_to(id).is_empty() {
                 let order = &self.top().order;
                 let next = order.iter().position(|o| *o == id).and_then(|at| {
                     order[at + 1..]
@@ -1669,11 +1825,12 @@ impl App {
         }
     }
 
-    /// The screen's first node that asked for the focus.
+    /// The screen's first node that asked for the focus and is not
+    /// [disabled](crate::Node::disabled_when).
     fn autofocused(&self) -> Option<NodeId> {
         let mut chosen = None;
         self.top().root.walk(&mut |node, _| {
-            if node.autofocus && chosen.is_none() {
+            if node.autofocus && chosen.is_none() && !node.disabled() {
                 chosen = Some(node.id);
             }
         });
@@ -1764,15 +1921,25 @@ impl App {
             self.restack = true;
             return false;
         }
+        // A focused node disabled since the last frame (nothing need have
+        // drawn since) gives the focus up before the key is routed.
+        if let Some(id) = self.focus() {
+            let mut disabled = false;
+            with_node(&self.top().root, id, &mut |node| disabled = node.disabled());
+            if disabled {
+                self.keep_focus();
+            }
+        }
         // From the focused node up; with nothing focused, from the node
         // under the pointer, so a container that cannot take the focus
         // still gets keys while the mouse is over it.
         let path = self.key_path();
-        // Containers that asked see the key first, outermost first.
+        // Containers that asked see the key first, outermost first. A
+        // disabled node sees none: neither its widget nor its handlers.
         for &id in &path[..path.len().saturating_sub(1)] {
             let mut previews = false;
             with_node(&self.top().root, id, &mut |node| {
-                previews = node.body.borrow().widget.previews_keys();
+                previews = !node.disabled() && node.body.borrow().widget.previews_keys();
             });
             if previews {
                 if let Some(quit) = self.give_to_widget(id, &WidgetEvent::Preview(key)) {
@@ -1781,6 +1948,11 @@ impl App {
             }
         }
         for &id in path.iter().rev() {
+            let mut disabled = false;
+            with_node(&self.top().root, id, &mut |node| disabled = node.disabled());
+            if disabled {
+                continue;
+            }
             if let Some(quit) = self.give_to_widget(id, &WidgetEvent::Key(key)) {
                 return quit;
             }
@@ -1789,6 +1961,9 @@ impl App {
             let runtime = self.runtime.clone();
             runtime.enter(|| {
                 with_node(&self.top().root, id, &mut |node| {
+                    if node.disabled() {
+                        return;
+                    }
                     let mut keys = node.keys.borrow_mut();
                     // A binding that names the key before one it could be
                     // (a Tab from a legacy terminal: `tab`, then `ctrl+i`).
@@ -1998,7 +2173,7 @@ impl App {
         if matches!(mouse.kind, MouseKind::Down(_)) {
             let focusable = path.iter().rev().copied().find(|id| {
                 let mut yes = false;
-                with_node(&self.top().root, *id, &mut |node| yes = node.focusable);
+                with_node(&self.top().root, *id, &mut |node| yes = node.takes_focus());
                 yes
             });
             if let Some(id) = focusable {
@@ -2147,8 +2322,17 @@ impl App {
         shift: (i32, i32),
         mouse: rich_interact::Mouse,
     ) -> Option<bool> {
+        // Relative to where its widget draws, inside a stylesheet's border
+        // and padding.
         let mut rect = Rect::default();
-        with_node(&self.top().root, id, &mut |node| rect = node.rect());
+        let mut disabled = false;
+        with_node(&self.top().root, id, &mut |node| {
+            rect = node.inner.get();
+            disabled = node.disabled();
+        });
+        if disabled {
+            return None;
+        }
         // Into the node's coordinates (they differ inside a scroll), then
         // relative to its rectangle.
         let at = |value: u16, by: i32, from: u16| {
@@ -2307,6 +2491,7 @@ impl Driver {
         }
         let app = &mut self.app;
         app.reload_theme();
+        app.reload_sheet();
         app.now = now;
         let mut cx = app.ctx();
         let runtime = app.runtime.clone();

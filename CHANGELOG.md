@@ -81,6 +81,29 @@ Workstream 1 of the [0.0.18 plan](docs/plans/0.0.18.md).
   VT220, the way xterm does by default), so a recorded program that asks
   for the kitty protocol does not wait two seconds for an answer.
 
+### intuiTUIve: stylesheets (rs-rich-intuituive 0.0.3)
+
+0.0.18 workstream 4.
+
+- **`App::stylesheet(css)` and `App::stylesheet_file(path)`** style and
+  lay out nodes with a CSS subset. A file is read again when it changes;
+  a sheet that does not parse is reported in a toast with its line and
+  column, and the last good one stays. `Stylesheet::parse` checks one.
+- **Selectors:** kinds (`label`, `table`, `panel`…), `#name`, `.class`,
+  `:focus`, `:focus-within`, `:hover`, `:selected`, `:disabled`, and
+  descendants. CSS specificity, then order, decides.
+- **Properties:** `color`, `background` and `text-style` (with `$name`
+  for a theme style's colour); `border` and `border-title`; `size`,
+  `min-size`, `max-size`, `padding`, `gap`, `grid-columns`, `grid-rows`,
+  `display: none` and `dock`.
+- **Colours inherit** under what a node draws. **Code wins** over the
+  sheet. States and `class_when` restyle; layout follows kinds, names and
+  fixed classes.
+- **New builders:** `Node::class`, `Node::class_when`,
+  `Node::selected_when` and `Node::disabled_when`. A disabled node leaves
+  the Tab order (a focused one gives the focus to the next node), and its
+  widget, click and key handlers see no input. The inspector
+  shows classes.
 ### intuiTUIve: the widget gaps (rs-rich-intuituive 0.0.3)
 
 0.0.18 workstream 3.

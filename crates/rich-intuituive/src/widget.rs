@@ -257,7 +257,20 @@ impl MeasureCx<'_> {
     /// [`column`](crate::column) or [`row`](crate::row) does: each by its
     /// [`Size`], the flexible ones sharing what is left.
     pub fn stack(&self, axis: Axis, gap: u16, children: &[Node], rect: Rect) -> Vec<Rect> {
-        let tracks: Vec<_> = children
+        // Docked children go first or last; hidden ones take no room and
+        // no gap.
+        use crate::sheet::Dock;
+        let rank = |child: &Node| match (child.dock(), axis) {
+            (Some(Dock::Top), Axis::Vertical) | (Some(Dock::Left), Axis::Horizontal) => 0,
+            (Some(Dock::Bottom), Axis::Vertical) | (Some(Dock::Right), Axis::Horizontal) => 2,
+            _ => 1,
+        };
+        let mut order: Vec<usize> = (0..children.len())
+            .filter(|&i| !children[i].hidden())
+            .collect();
+        order.sort_by_key(|&i| rank(&children[i]));
+        let placed: Vec<&Node> = order.iter().map(|&i| &children[i]).collect();
+        let tracks: Vec<_> = placed
             .iter()
             .map(|child| {
                 let mut track = child.track();
@@ -279,14 +292,28 @@ impl MeasureCx<'_> {
             Axis::Horizontal => (rect.x, rect.width),
         };
         let sizes = solve(total, gap, &tracks);
-        offsets(start, gap, &sizes)
-            .into_iter()
-            .zip(sizes)
-            .map(|(at, n)| match axis {
+        let mut at = offsets(start, gap, &sizes);
+        // Children docked to the far edge keep to it when the rest leave
+        // room over.
+        let tail = order.iter().filter(|&&i| rank(&children[i]) == 2).count();
+        if tail > 0 {
+            let first = sizes.len() - tail;
+            let length: u32 = sizes[first..].iter().map(|&n| n as u32).sum::<u32>()
+                + gap as u32 * (tail as u32 - 1);
+            let from = (start as u32 + total as u32).saturating_sub(length) as u16;
+            let from = from.max(at[first]);
+            for (k, offset) in offsets(from, gap, &sizes[first..]).into_iter().enumerate() {
+                at[first + k] = offset;
+            }
+        }
+        let mut areas = vec![Rect::default(); children.len()];
+        for ((at, n), &i) in at.into_iter().zip(sizes).zip(&order) {
+            areas[i] = match axis {
                 Axis::Vertical => Rect::new(rect.x, at, rect.width, n),
                 Axis::Horizontal => Rect::new(at, rect.y, n, rect.height),
-            })
-            .collect()
+            };
+        }
+        areas
     }
 }
 
@@ -630,19 +657,19 @@ impl Canvas<'_> {
     /// A rounded border on the canvas's edges, with `title` in the top
     /// one; the inside is left as it is.
     pub fn border(&mut self, title: &str, style: &Style, title_style: &Style) {
-        let lines = crate::node::border(title, style, title_style, self.rect);
-        if lines.is_empty() {
-            return;
-        }
-        for (edge, part) in crate::node::edges(self.rect)
-            .into_iter()
-            .zip(crate::node::edge_lines(&lines))
-        {
-            if !edge.is_empty() {
-                self.screen.write_lines(edge, &part);
-                self.written.push(edge);
-            }
-        }
+        self.border_box(crate::sheet::BoxKind::Round, title, style, title_style);
+    }
+
+    /// [`border`](Self::border) with a stylesheet's kind of box.
+    pub(crate) fn border_box(
+        &mut self,
+        kind: crate::sheet::BoxKind,
+        title: &str,
+        style: &Style,
+        title_style: &Style,
+    ) {
+        let edges = crate::node::draw_box(self.screen, kind, title, style, title_style, self.rect);
+        self.written.extend(edges);
     }
 
     /// The screen rectangle for a part of the canvas, clipped; `None` if
