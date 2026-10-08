@@ -1,13 +1,14 @@
 {
   "tape": "docs/tapes/files.tape",
-  "tape_fnv1a64": "918b444a9713dff4",
+  "tape_fnv1a64": "db4a6bba7677a282",
   "recorder": "rs-rich-record 0.0.5",
   "rich": null,
-  "commit": "348ea41bf4ea4cb1e3184bc232291f203f661eef",
+  "commit": "8158ab560c4e8d48e4d3b514a84cce8e67c2c38f",
   "screenshots": [
     "files",
     "files-help",
     "files-palette",
+    "files-menu",
     "files-tabs",
     "files-filter"
   ],

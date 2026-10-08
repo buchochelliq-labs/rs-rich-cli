@@ -625,3 +625,38 @@ fn a_container_that_previews_keys_sees_them_before_the_focused_child() {
         ]
     );
 }
+
+#[test]
+fn a_widget_is_told_its_size_after_its_first_frame_and_on_every_change() {
+    let seen = log();
+    let a = Watch::new("a", &seen);
+    let app = App::new(move || column([widget(a).fixed(2)]).on_key("q", |cx| cx.quit()));
+    run(app, Script::new().resize(12, 4).keys("q"), 10, 4);
+    let sizes: Vec<String> = entries(&seen, "a resize");
+    assert_eq!(sizes, ["a resize 10x2", "a resize 12x2"]);
+}
+
+#[test]
+fn autofocus_wins_over_the_first_focusable_node_on_every_screen() {
+    let seen = log();
+    let (a, mut b) = (Watch::new("a", &seen), Watch::new("b", &seen));
+    b.focusable = true;
+    let app = App::new(move || {
+        column([widget(a).fixed(1), widget(b).autofocus().fixed(1)])
+            .on_key("m", |cx| {
+                cx.modal(Size::Auto, Size::Auto, || {
+                    column([
+                        label("first").focusable(),
+                        label("chosen").autofocus().on_key("x", |cx| cx.pop()),
+                    ])
+                })
+            })
+            .on_key("q", |cx| cx.quit())
+    });
+    // b has the focus first; the modal's chosen row takes it and gives it
+    // back when it closes.
+    run(app, Script::new().keys("m x q"), 20, 6);
+    let focus = entries(&seen, "b focus");
+    assert_eq!(focus, ["b focus true", "b focus false", "b focus true"]);
+    assert!(entries(&seen, "a focus").is_empty());
+}

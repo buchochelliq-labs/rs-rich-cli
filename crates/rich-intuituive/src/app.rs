@@ -191,8 +191,14 @@ impl Ctx {
     /// [`bind`](crate::Node::bind) (with a description) on the focused node
     /// and its ancestors, searched by name; the one picked runs as its key
     /// would. [`App::palette_key`] opens it from a key.
-    pub fn command_palette(&mut self) {
+    pub fn palette(&mut self) {
         self.nav.push(Nav::Palette);
+    }
+
+    /// The old name of [`palette`](Self::palette).
+    #[deprecated(since = "0.0.3", note = "renamed to `palette`, to pair with `help`")]
+    pub fn command_palette(&mut self) {
+        self.palette();
     }
 
     /// Open the help: the same bindings, with their keys, searchable.
@@ -1538,8 +1544,16 @@ impl App {
         }
     }
 
+    /// Focus the screen's first node that asked for it with
+    /// [`autofocus`](crate::Node::autofocus), else its first focusable one.
     fn focus_first(&mut self) {
-        if let Some(&first) = self.focusable().first() {
+        let mut chosen = None;
+        self.top().root.walk(&mut |node, _| {
+            if node.autofocus && chosen.is_none() {
+                chosen = Some(node.id);
+            }
+        });
+        if let Some(first) = chosen.or_else(|| self.focusable().first().copied()) {
             self.set_focus(Some(first));
         }
     }

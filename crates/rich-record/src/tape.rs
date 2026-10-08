@@ -80,8 +80,17 @@ pub enum Key {
     End,
     PageUp,
     PageDown,
+    /// `Shift+Tab`.
+    ShiftTab,
+    Delete,
+    Insert,
+    /// A function key, `F1` to `F24`.
+    F(u8),
     /// `Ctrl+` a letter or one of `@[\]^_`.
     Ctrl(char),
+    /// `Alt+` a printable character: Esc, then the character, as terminals
+    /// send it.
+    Alt(char),
 }
 
 impl Key {
@@ -100,6 +109,20 @@ impl Key {
             "End" => Key::End,
             "PageUp" => Key::PageUp,
             "PageDown" => Key::PageDown,
+            "Shift+Tab" => Key::ShiftTab,
+            "Delete" => Key::Delete,
+            "Insert" => Key::Insert,
+            _ if name.starts_with('F') => match name[1..].parse() {
+                Ok(n @ 1..=24) => Key::F(n),
+                _ => return None,
+            },
+            _ if name.starts_with("Alt+") => {
+                let mut chars = name["Alt+".len()..].chars();
+                match (chars.next(), chars.next()) {
+                    (Some(c), None) if !c.is_control() => Key::Alt(c),
+                    _ => return None,
+                }
+            }
             _ => {
                 let rest = name.strip_prefix("Ctrl+")?;
                 let mut chars = rest.chars();
@@ -128,7 +151,12 @@ impl Key {
             Key::End => "\x1b[F".into(),
             Key::PageUp => "\x1b[5~".into(),
             Key::PageDown => "\x1b[6~".into(),
+            Key::ShiftTab => "\x1b[Z".into(),
+            Key::Delete => "\x1b[3~".into(),
+            Key::Insert => "\x1b[2~".into(),
+            Key::F(n) => function_key(n),
             Key::Ctrl(letter) => char::from(letter as u8 - b'@').to_string(),
+            Key::Alt(c) => format!("\x1b{c}"),
         }
     }
 
@@ -148,8 +176,133 @@ impl Key {
             Key::End => "End".into(),
             Key::PageUp => "PgUp".into(),
             Key::PageDown => "PgDn".into(),
+            Key::ShiftTab => "⇤".into(),
+            Key::Delete => "Del".into(),
+            Key::Insert => "Ins".into(),
+            Key::F(n) => format!("F{n}"),
             Key::Ctrl(letter) => format!("Ctrl+{letter}"),
+            Key::Alt(c) => format!("Alt+{c}"),
         }
+    }
+}
+
+/// The bytes of function key `n` (1 to 24). F1 to F20 are the sequences
+/// xterm sends; F21 to F24 have none there, so they go as the kitty
+/// keyboard protocol's codes, which an app reads once it has turned that
+/// protocol on.
+fn function_key(n: u8) -> String {
+    match n {
+        1..=4 => format!("\x1bO{}", char::from(b'P' + n - 1)),
+        5..=20 => {
+            const CODES: [u8; 16] = [
+                15, 17, 18, 19, 20, 21, 23, 24, 25, 26, 28, 29, 31, 32, 33, 34,
+            ];
+            format!("\x1b[{}~", CODES[usize::from(n - 5)])
+        }
+        _ => format!("\x1b[{}u", 57_363 + u32::from(n)),
+    }
+}
+
+/// A mouse button a tape presses.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Button {
+    Left,
+    Middle,
+    Right,
+}
+
+impl Button {
+    /// Its number in an SGR mouse report.
+    fn code(self) -> u16 {
+        match self {
+            Button::Left => 0,
+            Button::Middle => 1,
+            Button::Right => 2,
+        }
+    }
+}
+
+/// What a mouse step does, at a cell (column, row, from 0 at the top left).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MouseAction {
+    /// `Click`, `RightClick` or `MiddleClick`: a press and a release.
+    Click(Button),
+    /// `DoubleClick`: two left clicks in quick succession.
+    DoubleClick,
+    /// `Drag`: press the left button, move to `to` a cell at a time, release.
+    Drag { to: (u16, u16) },
+    /// `ScrollUp` or `ScrollDown`: one turn of the wheel.
+    Scroll { up: bool },
+    /// `MouseMove`: the pointer moves there with no button held.
+    Move,
+}
+
+/// A mouse step: what, where, and how many times.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Mouse {
+    pub action: MouseAction,
+    pub at: (u16, u16),
+    pub count: u32,
+}
+
+impl Mouse {
+    /// The reports to send, in order, as SGR mouse sequences (the format
+    /// terminals use with mouse reporting on, and crossterm reads).
+    pub fn reports(&self) -> Vec<String> {
+        let sgr = |code: u16, (x, y): (u16, u16), press: bool| {
+            format!(
+                "\x1b[<{code};{};{}{}",
+                x + 1,
+                y + 1,
+                if press { 'M' } else { 'm' }
+            )
+        };
+        let click =
+            |button: Button, at| vec![sgr(button.code(), at, true), sgr(button.code(), at, false)];
+        match self.action {
+            MouseAction::Click(button) => click(button, self.at),
+            MouseAction::DoubleClick => {
+                let mut reports = click(Button::Left, self.at);
+                reports.extend(click(Button::Left, self.at));
+                reports
+            }
+            MouseAction::Drag { to } => {
+                let mut reports = vec![sgr(0, self.at, true)];
+                let (mut x, mut y) = self.at;
+                while (x, y) != to {
+                    x = step_towards(x, to.0);
+                    y = step_towards(y, to.1);
+                    reports.push(sgr(32, (x, y), true));
+                }
+                reports.push(sgr(0, to, false));
+                reports
+            }
+            MouseAction::Scroll { up } => vec![sgr(if up { 64 } else { 65 }, self.at, true)],
+            MouseAction::Move => vec![sgr(35, self.at, true)],
+        }
+    }
+
+    /// How the key overlay shows it.
+    pub fn label(&self) -> String {
+        let what = match self.action {
+            MouseAction::Click(Button::Left) => "Click",
+            MouseAction::Click(Button::Right) => "Right click",
+            MouseAction::Click(Button::Middle) => "Middle click",
+            MouseAction::DoubleClick => "Double click",
+            MouseAction::Drag { .. } => "Drag",
+            MouseAction::Scroll { up: true } => "Scroll ↑",
+            MouseAction::Scroll { up: false } => "Scroll ↓",
+            MouseAction::Move => "Move",
+        };
+        format!("🖱 {what}")
+    }
+}
+
+fn step_towards(from: u16, to: u16) -> u16 {
+    match from.cmp(&to) {
+        std::cmp::Ordering::Less => from + 1,
+        std::cmp::Ordering::Greater => from - 1,
+        std::cmp::Ordering::Equal => from,
     }
 }
 
@@ -266,6 +419,7 @@ pub enum Step {
         content: String,
     },
     Exec(String),
+    Mouse(Mouse),
 }
 
 /// The shell a tape runs in (`Set Shell`). Each starts without the user's
@@ -696,6 +850,39 @@ pub fn parse(source: &str) -> Result<Tape, TapeError> {
                 }
                 continue;
             }
+            "Click" | "RightClick" | "MiddleClick" | "DoubleClick" | "Drag" | "ScrollUp"
+            | "ScrollDown" | "MouseMove" => {
+                let cell = |at: usize| -> Result<u16, TapeError> {
+                    let text = arg(at)?;
+                    text.parse()
+                        .map_err(|_| error(format!("bad cell {text:?} (a column or row from 0)")))
+                };
+                let at = (cell(0)?, cell(1)?);
+                let (action, extra) = match command.as_str() {
+                    "Click" => (MouseAction::Click(Button::Left), 2),
+                    "RightClick" => (MouseAction::Click(Button::Right), 2),
+                    "MiddleClick" => (MouseAction::Click(Button::Middle), 2),
+                    "DoubleClick" => (MouseAction::DoubleClick, 2),
+                    "Drag" => (
+                        MouseAction::Drag {
+                            to: (cell(2)?, cell(3)?),
+                        },
+                        4,
+                    ),
+                    "ScrollUp" => (MouseAction::Scroll { up: true }, 2),
+                    "ScrollDown" => (MouseAction::Scroll { up: false }, 2),
+                    _ => (MouseAction::Move, 2),
+                };
+                let count = match args.get(extra) {
+                    Some(count) => count
+                        .parse()
+                        .ok()
+                        .filter(|&n| n > 0)
+                        .ok_or_else(|| error(format!("bad count {count:?}")))?,
+                    None => 1,
+                };
+                Step::Mouse(Mouse { action, at, count })
+            }
             name => match Key::parse(name) {
                 Some(key) => {
                     let count = match args.first() {
@@ -719,6 +906,49 @@ pub fn parse(source: &str) -> Result<Tape, TapeError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn parses_the_mouse_and_more_keys() {
+        let tape = parse(
+            "Click 3 1\nRightClick 0 0\nDoubleClick 5 2\nDrag 1 1 3 2\nScrollDown 4 4 3\n\
+             MouseMove 9 9\nF1\nF13\nF24\nShift+Tab\nAlt+x\nDelete\n",
+        )
+        .unwrap();
+        let mouse = |i: usize| match tape.steps[i].1 {
+            Step::Mouse(mouse) => mouse,
+            ref other => panic!("{other:?}"),
+        };
+        // Cells count from 0; SGR reports from 1.
+        assert_eq!(mouse(0).reports(), ["\x1b[<0;4;2M", "\x1b[<0;4;2m"]);
+        assert_eq!(mouse(1).reports()[0], "\x1b[<2;1;1M");
+        assert_eq!(mouse(2).reports().len(), 4);
+        // A drag moves a cell at a time, with the button held.
+        assert_eq!(
+            mouse(3).reports(),
+            [
+                "\x1b[<0;2;2M",
+                "\x1b[<32;3;3M",
+                "\x1b[<32;4;3M",
+                "\x1b[<0;4;3m"
+            ]
+        );
+        assert_eq!(mouse(4).count, 3);
+        assert_eq!(mouse(4).reports(), ["\x1b[<65;5;5M"]);
+        assert_eq!(mouse(5).reports(), ["\x1b[<35;10;10M"]);
+        let key = |i: usize| match tape.steps[i].1 {
+            Step::Key { key, .. } => key.bytes(),
+            ref other => panic!("{other:?}"),
+        };
+        assert_eq!(key(6), "\x1bOP");
+        assert_eq!(key(7), "\x1b[25~");
+        assert_eq!(key(8), "\x1b[57387u");
+        assert_eq!(key(9), "\x1b[Z");
+        assert_eq!(key(10), "\x1bx");
+        assert_eq!(key(11), "\x1b[3~");
+        assert!(parse("F25\n").is_err());
+        assert!(parse("Click 3\n").is_err());
+        assert!(parse("Drag 1 1 2\n").is_err());
+    }
 
     #[test]
     fn parses_every_step() {
