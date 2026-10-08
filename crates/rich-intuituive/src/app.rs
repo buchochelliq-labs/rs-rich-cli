@@ -1757,11 +1757,12 @@ impl App {
         }
     }
 
-    /// The screen's first node that asked for the focus.
+    /// The screen's first node that asked for the focus and is not
+    /// [disabled](crate::Node::disabled_when).
     fn autofocused(&self) -> Option<NodeId> {
         let mut chosen = None;
         self.top().root.walk(&mut |node, _| {
-            if node.autofocus && chosen.is_none() {
+            if node.autofocus && chosen.is_none() && !node.disabled() {
                 chosen = Some(node.id);
             }
         });
