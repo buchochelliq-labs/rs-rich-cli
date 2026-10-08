@@ -206,6 +206,14 @@ jobs:
           # vendored xterm.js against its pinned hashes.
           - crate: rs-rich-web
             args: "--all-features"
+          # The terminal pane and the web view: the pane, ProgramEngine and
+          # the test hosts by default; with the Chrome (DevTools) and Browsh
+          # engines behind their off-by-default features. The test against a
+          # real Chrome runs only when RICH_EMBED_CHROME names one.
+          - crate: rs-rich-embed
+            args: ""
+          - crate: rs-rich-embed
+            args: "--all-features"
           # Every lumis language (its default); the bundles only select fewer.
           - crate: rs-rich-lumis
             args: ""

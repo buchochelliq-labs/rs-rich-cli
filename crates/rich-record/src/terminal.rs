@@ -111,8 +111,14 @@ fn panic_message(payload: &(dyn std::any::Any + Send)) -> String {
 
 impl Terminal {
     pub fn new(rows: u16, columns: u16) -> Terminal {
+        Terminal::with_scrollback(rows, columns, 0)
+    }
+
+    /// A terminal that keeps up to `scrollback` rows that scrolled off its
+    /// top, for [`set_scrollback`](Self::set_scrollback) to show again.
+    pub fn with_scrollback(rows: u16, columns: u16, scrollback: usize) -> Terminal {
         Terminal {
-            parser: vt100::Parser::new(rows, columns, 0),
+            parser: vt100::Parser::new(rows, columns, scrollback),
             mode: Mode::Ground,
             partial: Vec::new(),
             out: Vec::new(),
@@ -395,6 +401,29 @@ impl Terminal {
         self.parser.screen()
     }
 
+    /// Show the screen `rows` rows back into the scrollback (0: the live
+    /// screen), as far as the scrollback goes: [`screen`](Self::screen)'s
+    /// cells are then read from there.
+    pub fn set_scrollback(&mut self, rows: usize) {
+        self.parser.screen_mut().set_scrollback(rows);
+    }
+
+    /// The text of a cell of [`screen`](Self::screen) whose contents are
+    /// `contents`, as rich prints it: a cluster's cell gives the whole
+    /// cluster (as wide as rich measures it), and a filler cell that pads a
+    /// cluster to that width gives `None`.
+    pub fn cell_text<'a>(&self, contents: &'a str) -> Option<Cow<'a, str>> {
+        if let Some(id) = contents.chars().find_map(marker) {
+            return Some(Cow::Owned(
+                self.clusters.get(id).cloned().unwrap_or_default(),
+            ));
+        }
+        if contents.contains(FILLER) {
+            return None;
+        }
+        Some(Cow::Borrowed(contents))
+    }
+
     /// The screen's text, rows joined by line breaks.
     pub fn contents(&self) -> String {
         let text = self.parser.screen().contents();
@@ -643,6 +672,26 @@ mod tests {
         );
         assert!(terminal.contents().starts_with("a\u{301}"));
         assert!(terminal.contents().ends_with('b'));
+    }
+
+    #[test]
+    fn cells_read_back_as_rich_prints_them() {
+        let mut terminal = Terminal::with_scrollback(2, 10, 10);
+        terminal
+            .process("a👩\u{200d}👧b\r\nl2\r\nl3".as_bytes())
+            .unwrap();
+        // The first line scrolled off the top; the scrollback shows it.
+        terminal.set_scrollback(1);
+        let text = |column| {
+            let cell = terminal.screen().cell(0, column).unwrap();
+            terminal.cell_text(cell.contents()).map(Cow::into_owned)
+        };
+        assert_eq!(text(0).as_deref(), Some("a"));
+        assert_eq!(text(1).as_deref(), Some("👩\u{200d}👧"));
+        assert_eq!(text(3).as_deref(), Some("b"));
+        terminal.set_scrollback(0);
+        assert_eq!(terminal.contents(), "l2\nl3");
+        assert_eq!(terminal.cell_text(&FILLER.to_string()), None);
     }
 
     #[test]
