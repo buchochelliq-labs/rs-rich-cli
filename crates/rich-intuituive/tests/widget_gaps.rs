@@ -249,7 +249,7 @@ fn the_hover_style_comes_and_goes_with_the_pointer() {
         ])
     });
     let mut driver = app.driver(10, 2);
-    let mut frame = |driver: &mut intuituive::Driver, event: Option<Event>| {
+    let frame = |driver: &mut intuituive::Driver, event: Option<Event>| {
         if let Some(event) = event {
             driver.event(event);
         }
@@ -272,4 +272,140 @@ fn the_hover_style_comes_and_goes_with_the_pointer() {
     );
     // The whole row, gap included, is plain again.
     assert!(driver.screen().plain()[0].starts_with("one x"));
+}
+
+// Tooltips.
+
+mod tips {
+    use std::time::Duration;
+
+    use super::common::row_of;
+    use intuituive::interact::{Event, Key, Mouse, MouseKind};
+    use intuituive::prelude::*;
+
+    fn at(ms: u64, driver: &mut intuituive::Driver, event: Option<Event>) -> Vec<String> {
+        if let Some(event) = event {
+            driver.event(event);
+        }
+        driver.update(Duration::from_millis(ms));
+        let _ = driver.render();
+        driver.screen().plain()
+    }
+
+    fn moved(column: u16, row: u16) -> Option<Event> {
+        Some(Event::Mouse(Mouse::new(MouseKind::Moved, column, row)))
+    }
+
+    fn app() -> App {
+        App::new(|| {
+            column([
+                label("save").tooltip("Write it to disk").focusable(),
+                label("open").tooltip("Read a file"),
+                label("plain"),
+                label(""),
+            ])
+        })
+    }
+
+    #[test]
+    fn a_tooltip_shows_after_the_pointer_rests_and_hides_when_it_leaves() {
+        let mut driver = app().driver(30, 4);
+        at(0, &mut driver, None);
+        let rows = at(100, &mut driver, moved(1, 0));
+        assert!(row_of(&rows, "Write it").is_none(), "not yet: {rows:?}");
+        // The loop is told to wake when it is due.
+        assert_eq!(
+            driver.timeout(Duration::from_millis(100)),
+            Duration::from_millis(50)
+        );
+        assert!(driver.timeout(Duration::from_millis(650)) <= Duration::from_millis(50));
+        let rows = at(700, &mut driver, None);
+        assert_eq!(row_of(&rows, "Write it to disk"), Some(1), "{rows:?}");
+        // To a node without one: gone, and the row under it is back.
+        let rows = at(800, &mut driver, moved(1, 2));
+        assert!(row_of(&rows, "Write it").is_none(), "{rows:?}");
+        assert_eq!(rows[1].trim_end(), "open");
+    }
+
+    #[test]
+    fn moving_to_another_node_starts_its_own_wait() {
+        let mut driver = app().driver(30, 4);
+        at(0, &mut driver, None);
+        at(0, &mut driver, moved(1, 0));
+        // An event happens at the time of the update before it.
+        at(500, &mut driver, None);
+        let rows = at(500, &mut driver, moved(1, 1));
+        let rows_later = at(700, &mut driver, None);
+        assert!(row_of(&rows, "Read a file").is_none(), "{rows:?}");
+        assert!(row_of(&rows_later, "Read a file").is_none(), "{rows_later:?}");
+        let rows = at(1200, &mut driver, None);
+        assert_eq!(row_of(&rows, "Read a file"), Some(2), "{rows:?}");
+    }
+
+    #[test]
+    fn a_key_or_a_click_hides_it_and_f1_shows_the_focused_one() {
+        let mut driver = app().driver(30, 4);
+        at(0, &mut driver, None);
+        at(0, &mut driver, moved(1, 1));
+        let rows = at(700, &mut driver, None);
+        assert!(row_of(&rows, "Read a file").is_some(), "{rows:?}");
+        let rows = at(
+            710,
+            &mut driver,
+            Some(Event::Key(Key::parse("x").expect("a key"))),
+        );
+        assert!(row_of(&rows, "Read a file").is_none(), "{rows:?}");
+        // F1: the focused node's, below it, at once.
+        let rows = at(
+            720,
+            &mut driver,
+            Some(Event::Key(Key::parse("f1").expect("a key"))),
+        );
+        assert_eq!(row_of(&rows, "Write it to disk"), Some(1), "{rows:?}");
+        let rows = at(
+            730,
+            &mut driver,
+            Some(Event::Mouse(Mouse::new(
+                MouseKind::Down(intuituive::interact::Button::Left),
+                20,
+                3,
+            ))),
+        );
+        assert!(row_of(&rows, "Write it").is_none(), "{rows:?}");
+    }
+
+    #[test]
+    fn a_tooltip_at_the_bottom_goes_above_the_pointer_and_stays_on_screen() {
+        let app = App::new(|| {
+            column([label(""), label(""), label("edge").tooltip("A long tooltip text")])
+        });
+        let mut driver = app.driver(16, 3);
+        at(0, &mut driver, None);
+        at(0, &mut driver, moved(2, 2));
+        let rows = at(700, &mut driver, None);
+        let row = row_of(&rows, "A long").expect("shown");
+        assert_eq!(row, 0, "above the pointer: {rows:?}");
+        // Wrapped to the screen's width, within it.
+        assert!(rows[0].chars().count() <= 16);
+    }
+
+    #[test]
+    fn f1_is_left_to_a_binding_for_it() {
+        let app = App::new(|| {
+            let pressed = signal(false);
+            column([
+                label("save").tooltip("Write it").focusable().on_key("f1", move |_| pressed.set(true)),
+                text(move || format!("pressed {}", pressed.get())),
+            ])
+        });
+        let mut driver = app.driver(30, 3);
+        at(0, &mut driver, None);
+        let rows = at(
+            10,
+            &mut driver,
+            Some(Event::Key(Key::parse("f1").expect("a key"))),
+        );
+        assert!(row_of(&rows, "pressed true").is_some(), "{rows:?}");
+        assert!(row_of(&rows, "Write it").is_none(), "{rows:?}");
+    }
 }

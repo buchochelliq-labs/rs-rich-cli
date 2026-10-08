@@ -90,6 +90,9 @@ pub struct Node {
     hover_style: Option<String>,
     /// Whether it was last drawn in its hover style.
     hover_lit: Cell<bool>,
+    /// Markup shown when the pointer rests on it, or F1 is pressed while it
+    /// has the focus.
+    pub(crate) tooltip: Option<String>,
 }
 
 /// A node's widget, and what the framework keeps for it between frames.
@@ -137,6 +140,7 @@ impl Node {
             focus_style: None,
             hover_style: None,
             hover_lit: Cell::new(false),
+            tooltip: None,
         }
     }
 
@@ -268,8 +272,7 @@ impl Node {
 
     /// While the pointer is over this node (or a node inside it), draw it
     /// in `style` over its own, as [`focus_style`](Self::focus_style) does
-    /// for the focus. A stylesheet's `:hover` rules do the same from a
-    /// file.
+    /// for the focus.
     ///
     /// ```
     /// use std::time::Duration;
@@ -288,6 +291,32 @@ impl Node {
     /// ```
     pub fn hover_style(mut self, style: &str) -> Node {
         self.hover_style = Some(style.to_string());
+        self
+    }
+
+    /// Show `markup` in a small box by the pointer once it has rested on
+    /// this node (or a node inside it without a tooltip of its own) for
+    /// 600 ms, or below the node at once when F1 is pressed while it has
+    /// the focus and nothing binds F1. A key, a click, or the pointer
+    /// moving to another node hides it.
+    ///
+    /// ```
+    /// use std::time::Duration;
+    ///
+    /// use intuituive::interact::{Event, Mouse, MouseKind};
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| label("save").tooltip("Write the file to disk"));
+    /// let mut driver = app.driver(30, 3);
+    /// driver.update(Duration::ZERO);
+    /// let _ = driver.render();
+    /// driver.event(Event::Mouse(Mouse::new(MouseKind::Moved, 1, 0)));
+    /// driver.update(Duration::from_millis(700));
+    /// let _ = driver.render();
+    /// assert!(driver.screen().plain()[1].contains("Write the file to disk"));
+    /// ```
+    pub fn tooltip(mut self, markup: impl Into<String>) -> Node {
+        self.tooltip = Some(markup.into());
         self
     }
 
@@ -534,6 +563,11 @@ impl Node {
             let focus_style = self.focus_style.is_some();
             let hover_path = frame.hover_path;
             let hover_style = self.hover_style.is_some();
+            if self.tooltip.is_some() {
+                // A tooltip waits for the pointer to rest: its movement
+                // must be reported.
+                frame.wants_hover.set(true);
+            }
             if hover_style {
                 // The pointer's movement is reported once something reads
                 // it, and this node draws again when the pointer comes or

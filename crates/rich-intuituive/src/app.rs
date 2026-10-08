@@ -281,7 +281,8 @@ impl Ctx {
 /// Every named style works in console markup: `[accent]…[/]`. The presets
 /// define `accent`, `muted`, `good`, `warn`, `bad` and `selected` (a
 /// [`list`](crate::list)'s selected row), and the framework's
-/// own as `border`, `border.focused` and `title`, so an app restyles by
+/// own as `border`, `border.focused` and `title` (and `tooltip`, reverse
+/// unless a theme sets it), so an app restyles by
 /// name and switches themes at run time with [`Ctx::set_theme`].
 #[derive(Clone, Debug)]
 pub struct Theme {
@@ -578,6 +579,8 @@ pub struct App {
     pointer: Option<(u16, u16)>,
     /// Where the pointer last was, for widgets that ask.
     last_pointer: Option<(u16, u16)>,
+    /// The tooltip waiting for the pointer to rest, or showing.
+    tip: Option<Tip>,
     /// The node last told it has the focus, on whichever screen.
     focused: Option<NodeId>,
     /// Focus, hover and resize events waiting to be told to their widgets.
@@ -659,6 +662,7 @@ impl App {
             capture: None,
             motion: (false, false),
             last_pointer: None,
+            tip: None,
             focused: None,
             lifecycle: Vec::new(),
             clipboard: false,
@@ -1142,6 +1146,17 @@ impl App {
             frame.damage.push(rect);
             bottom -= 3;
         }
+        // A tooltip, over the toasts too.
+        if let Some(tip) = self.tip.as_ref().filter(|tip| tip.shown) {
+            let look = self
+                .theme
+                .styles
+                .iter()
+                .find(|(name, _)| name == "tooltip")
+                .map(|(_, look)| look.clone())
+                .unwrap_or_else(|| style("reverse"));
+            frame.damage.push(draw_tip(console, screen, area, tip, &look));
+        }
         if frame.wants_hover.get() {
             self.motion.0 = true;
         }
@@ -1614,6 +1629,7 @@ impl App {
     }
 
     fn key(&mut self, key: Key) -> bool {
+        self.hide_tip();
         if let (Some(inspector), KeyCode::F(12)) = (&mut self.inspector, key.code) {
             inspector.open = !inspector.open;
             self.restack = true;
@@ -1656,6 +1672,9 @@ impl App {
             if used {
                 return self.apply(cx);
             }
+        }
+        if key == Key::new(KeyCode::F(1)) && self.show_focus_tip() {
+            return false;
         }
         if self.palette_key.contains(&key) {
             return self.navigate(Nav::Palette);
@@ -1703,6 +1722,73 @@ impl App {
         false
     }
 
+    /// The tooltip of the deepest node in `path` that has one.
+    fn tip_of(&self, path: &[NodeId]) -> Option<(NodeId, String)> {
+        path.iter().rev().find_map(|&id| {
+            let mut tip = None;
+            with_node(&self.top().root, id, &mut |node| tip = node.tooltip.clone());
+            tip.map(|markup| (id, markup))
+        })
+    }
+
+    /// Hide the tooltip; what was under it draws again.
+    fn hide_tip(&mut self) {
+        if self.tip.take().is_some_and(|tip| tip.shown) {
+            self.restack = true;
+        }
+    }
+
+    /// Follow the pointer for tooltips: resting on a node with one starts
+    /// its wait (moving on it starts the wait again), going to another node
+    /// or pressing a button hides it.
+    fn track_tip(&mut self, path: &[NodeId], mouse: rich_interact::Mouse) {
+        let owner = match mouse.kind {
+            MouseKind::Moved => self.tip_of(path),
+            _ => None,
+        };
+        match (owner, &mut self.tip) {
+            (Some((id, _)), Some(tip)) if tip.node == id && tip.shown => {}
+            (Some((id, _)), Some(tip)) if tip.node == id => {
+                tip.at = (mouse.column, mouse.row.saturating_add(1));
+                tip.above = mouse.row;
+                tip.since = self.now;
+            }
+            (owner, _) => {
+                self.hide_tip();
+                self.tip = owner.map(|(node, markup)| Tip {
+                    node,
+                    markup,
+                    at: (mouse.column, mouse.row.saturating_add(1)),
+                    above: mouse.row,
+                    since: self.now,
+                    shown: false,
+                });
+            }
+        }
+    }
+
+    /// Show the focused node's tooltip (or its nearest ancestor's) below
+    /// it, at once. Whether there was one.
+    fn show_focus_tip(&mut self) -> bool {
+        let path = self.focus().map(|id| self.path_to(id)).unwrap_or_default();
+        let Some((node, markup)) = self.tip_of(&path) else {
+            return false;
+        };
+        let Some(rect) = anchor_rect(&self.top().root, node) else {
+            return false;
+        };
+        self.tip = Some(Tip {
+            node,
+            markup,
+            at: (rect.x, rect.bottom()),
+            above: rect.y,
+            since: self.now,
+            shown: true,
+        });
+        self.restack = true;
+        true
+    }
+
     /// Route a mouse event. Movement updates what is hovered; a captured
     /// mouse goes to the node that captured it; anything else goes to the
     /// deepest node under the pointer and bubbles up through its ancestors
@@ -1745,6 +1831,7 @@ impl App {
             let path = path.clone();
             runtime.enter(|| hover.set(path));
         }
+        self.track_tip(&path, mouse);
         if let Some((id, shift)) = self.capture {
             if matches!(mouse.kind, MouseKind::Drag(_) | MouseKind::Up(_)) {
                 if matches!(mouse.kind, MouseKind::Up(_)) {
@@ -2036,6 +2123,12 @@ impl Driver {
         if app.toasts.len() != shown {
             app.restack = true;
         }
+        if let Some(tip) = app.tip.as_mut().filter(|tip| !tip.shown) {
+            if now >= tip.since + TOOLTIP_DELAY {
+                tip.shown = true;
+                app.restack = true;
+            }
+        }
         if app.restyled {
             app.restyled = false;
             self.console = app.console_for(self.screen.area().width);
@@ -2087,9 +2180,9 @@ impl Driver {
     /// How long the loop may wait for an event before calling
     /// [`update`](Self::update) again: not at all while a frame or a
     /// widget's event waits; else until the next timer, a frame's time
-    /// while something animates, until the next toast goes, and at most
-    /// 50 ms (results from other threads and theme files are picked up by
-    /// `update`).
+    /// while something animates, until the next toast goes or a tooltip
+    /// shows, and at most 50 ms (results from other threads and theme
+    /// files are picked up by `update`).
     pub fn timeout(&self, now: Duration) -> Duration {
         let app = &self.app;
         if self.needs_render() || !app.lifecycle.is_empty() {
@@ -2113,6 +2206,13 @@ impl Driver {
                     .iter()
                     .map(|(_, until)| until.saturating_sub(now))
                     .min()
+                    .unwrap_or(Duration::MAX),
+            )
+            .min(
+                app.tip
+                    .as_ref()
+                    .filter(|tip| !tip.shown)
+                    .map(|tip| (tip.since + TOOLTIP_DELAY).saturating_sub(now))
                     .unwrap_or(Duration::MAX),
             )
     }
@@ -2318,6 +2418,60 @@ fn selected_text(screen: &Screen, start: (u16, u16), end: (u16, u16)) -> String 
         .map(|r| r.trim_end())
         .collect::<Vec<_>>()
         .join("\n")
+}
+
+/// How long the pointer rests on a node before its tooltip shows.
+const TOOLTIP_DELAY: Duration = Duration::from_millis(600);
+
+/// A node's tooltip, waiting or showing.
+struct Tip {
+    node: NodeId,
+    markup: String,
+    /// The box's top left, and the row its bottom goes above when there is
+    /// no room below.
+    at: (u16, u16),
+    above: u16,
+    /// When the pointer came to rest.
+    since: Duration,
+    shown: bool,
+}
+
+/// Draw `tip` in `area`, by where it asked to be; where it went.
+fn draw_tip(console: &Console, screen: &mut Screen, area: Rect, tip: &Tip, style: &Style) -> Rect {
+    if area.width < 3 || area.height == 0 {
+        return Rect::default();
+    }
+    let text =
+        rich::Text::from_markup(&tip.markup).unwrap_or_else(|_| rich::Text::new(tip.markup.clone()));
+    let widest = text
+        .split("\n", false, true)
+        .iter()
+        .map(|line| line.cell_len())
+        .max()
+        .unwrap_or(0) as u16;
+    let inner = widest.clamp(1, area.width.saturating_sub(2).min(48));
+    let options = console.options().update_width(inner as usize);
+    let lines = console.render_lines(&text, &options, false);
+    let height = (lines.len() as u16).clamp(1, area.height);
+    let width = inner + 2;
+    let y = if tip.at.1.saturating_add(height) <= area.bottom() {
+        tip.at.1
+    } else {
+        tip.above.saturating_sub(height).max(area.y)
+    };
+    let x = tip.at.0.min(area.right().saturating_sub(width)).max(area.x);
+    let rect = Rect::new(x, y, width, height);
+    screen.clear(rect);
+    screen.write_lines(
+        Rect::new(x + 1, y, inner, height),
+        &lines[..height as usize],
+    );
+    for row in rect.y..rect.bottom() {
+        for column in rect.x..rect.right() {
+            screen.restyle(column, row, style);
+        }
+    }
+    rect
 }
 
 /// Where node `id` is on the screen, if it is in `root`'s tree and shown.
