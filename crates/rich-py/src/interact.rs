@@ -793,6 +793,7 @@ fn interact_run(
             mouse,
             bracketed_paste: true,
             output: self::output(output)?,
+            ..SessionOptions::default()
         },
         paint,
     };

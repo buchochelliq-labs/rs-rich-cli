@@ -47,7 +47,7 @@ use rich::{Segment, Style};
 use crate::chrome::{key_hint, keys_hint, Breadcrumbs, StatusBar};
 use crate::component::{Component, Context, Flow, View};
 use crate::compose::{ComponentExt, Layer, LayerHandle, Layers, Rect};
-use crate::event::{Event, Key, KeyCode, Modifiers, MouseKind};
+use crate::event::{Event, Key, KeyCode, MouseKind};
 use crate::item::{Action, ActionTarget, Actions, TargetKind};
 use crate::keymap::{keys, Binding, Keymap};
 use crate::kit::{self, ActionMenu, FilterState, ListState, MenuReply, ScrollState, Theme};
@@ -1249,13 +1249,8 @@ impl<'a, M: 'a> Overlays<'a, M> {
     fn overlay_for(&self, key: Key) -> Option<String> {
         let action = self.keymap.action(key).or_else(|| match key.code {
             KeyCode::Char(c) if key.modifiers.shift && !c.is_alphabetic() => {
-                let plain = Key {
-                    modifiers: Modifiers {
-                        shift: false,
-                        ..key.modifiers
-                    },
-                    ..key
-                };
+                let mut plain = key;
+                plain.modifiers.shift = false;
                 self.keymap.action(plain)
             }
             _ => None,

@@ -172,10 +172,16 @@ fn key_names_that_could_never_fire_now_do_or_fail_loudly() {
     });
     let mut driver = app.driver(20, 1);
     frame(&mut driver, Duration::ZERO);
-    // What the terminal sends for them.
+    // What a legacy terminal sends for them.
     driver.event(Event::Key(Key::char('A')));
     assert_eq!(frame(&mut driver, Duration::ZERO)[0].trim_end(), "shift+a");
     driver.event(press("tab"));
+    assert_eq!(frame(&mut driver, Duration::ZERO)[0].trim_end(), "ctrl+i");
+    // A terminal with the kitty protocol tells Ctrl+I from Tab.
+    driver.event(Event::Key(Key::char('A').exact()));
+    driver.event(Event::Key(Key::parse("tab").expect("a key").exact()));
+    assert_eq!(frame(&mut driver, Duration::ZERO)[0].trim_end(), "shift+a");
+    driver.event(Event::Key(Key::parse("ctrl+i").expect("a key").exact()));
     assert_eq!(frame(&mut driver, Duration::ZERO)[0].trim_end(), "ctrl+i");
 
     let message = panic_of(|| {
