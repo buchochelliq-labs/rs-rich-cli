@@ -577,6 +577,9 @@ pub struct App {
     /// Keys that open the command palette and the help, if any.
     palette_key: Vec<Key>,
     help_key: Vec<Key>,
+    /// Read keys as a legacy terminal sends them, even where the kitty
+    /// keyboard protocol could be on.
+    legacy_keys: bool,
     /// Selecting text with the mouse (on unless turned off): where the
     /// press was and where the drag is now.
     selectable: bool,
@@ -677,6 +680,7 @@ impl App {
             animations: Vec::new(),
             palette_key: Vec::new(),
             help_key: Vec::new(),
+            legacy_keys: false,
             selectable: true,
             selection: None,
             selecting: false,
@@ -804,6 +808,15 @@ impl App {
         self
     }
 
+    /// Whether [`run`](Self::run) reads keys as a legacy terminal sends
+    /// them (off by default). Off, a terminal with the kitty keyboard
+    /// protocol has it turned on: Tab and Ctrl+I are told apart, and widgets
+    /// get [`WidgetEvent::KeyUp`].
+    pub fn legacy_keys(mut self, on: bool) -> App {
+        self.legacy_keys = on;
+        self
+    }
+
     /// Whether a drag with the mouse that no node uses selects text, which
     /// is copied to the clipboard when the button is released (on by
     /// default). With the mouse captured, the terminal cannot select by
@@ -823,6 +836,7 @@ impl App {
             mouse: full,
             bracketed_paste: true,
             output: Default::default(),
+            legacy_keys: self.legacy_keys,
         })?;
         let mut app = self;
         app.text_frames = false;
@@ -1626,7 +1640,7 @@ impl App {
                     .keys
                     .borrow()
                     .iter()
-                    .any(|(keys, _, _)| keys.contains(&key));
+                    .any(|(keys, _, _)| key.matches_any(keys));
             });
         }
         bound
@@ -1680,9 +1694,10 @@ impl App {
             runtime.enter(|| {
                 with_node(&self.top().root, id, &mut |node| {
                     let mut keys = node.keys.borrow_mut();
-                    if let Some((_, _, handler)) =
-                        keys.iter_mut().find(|(keys, _, _)| keys.contains(&key))
-                    {
+                    // A binding that names the key before one it could be
+                    // (a Tab from a legacy terminal: `tab`, then `ctrl+i`).
+                    let picked = key.pick(keys.iter().map(|(keys, _, _)| keys.as_slice()));
+                    if let Some((_, _, handler)) = picked.and_then(|index| keys.get_mut(index)) {
                         handler(&mut cx);
                         used = true;
                     }
@@ -1692,10 +1707,10 @@ impl App {
                 return self.apply(cx);
             }
         }
-        if self.palette_key.contains(&key) {
+        if key.matches_any(&self.palette_key) {
             return self.navigate(Nav::Palette);
         }
-        if self.help_key.contains(&key) {
+        if key.matches_any(&self.help_key) {
             return self.navigate(Nav::Help);
         }
         match key.code {
@@ -1703,6 +1718,18 @@ impl App {
             KeyCode::BackTab => self.move_focus(false),
             KeyCode::Escape if self.top().anchor.is_some() => return self.navigate(Nav::Pop),
             _ => {}
+        }
+        false
+    }
+
+    /// Route a key's release to the widgets a press goes to, focused node
+    /// first, until one uses it. Bindings are for presses only. Whether to
+    /// quit.
+    fn key_up(&mut self, key: Key) -> bool {
+        for id in self.key_path().into_iter().rev() {
+            if let Some(quit) = self.give_to_widget(id, &WidgetEvent::KeyUp(key)) {
+                return quit;
+            }
         }
         false
     }
@@ -2152,9 +2179,10 @@ impl Driver {
             )
     }
 
-    /// Handle an event: a key, the mouse, pasted text, or the terminal's
-    /// new size. Ctrl+C quits, unless a node on the focused path binds it
-    /// ([`on_key`](crate::Node::on_key)); then the binding runs.
+    /// Handle an event: a key pressed or let go, the mouse, pasted text, or
+    /// the terminal's new size. Ctrl+C quits, unless a node on the focused
+    /// path binds it ([`on_key`](crate::Node::on_key)); then the binding
+    /// runs.
     pub fn event(&mut self, event: Event) {
         if self.done {
             return;
@@ -2166,6 +2194,7 @@ impl Driver {
                 false
             }
             Event::Key(key) => self.app.key(key),
+            Event::KeyUp(key) => self.app.key_up(key),
             Event::Paste(text) => self.app.bubble(&WidgetEvent::Paste(text)),
             Event::Mouse(mouse) => self.mouse(mouse),
             _ => false,

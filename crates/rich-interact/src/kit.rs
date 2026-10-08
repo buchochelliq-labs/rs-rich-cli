@@ -1307,13 +1307,13 @@ impl ActionMenu {
         };
         match key.code {
             KeyCode::Escape => return MenuReply::Close,
-            _ if key == self.key => return MenuReply::Close,
+            _ if key.matches(&self.key) => return MenuReply::Close,
             KeyCode::Up => self.focus = (self.focus + count - 1) % count.max(1),
             KeyCode::Down | KeyCode::Tab => self.focus = (self.focus + 1) % count.max(1),
             KeyCode::Enter => return MenuReply::Run(self.actions[self.focus].clone()),
             _ => {
-                if let Some(action) = self.actions.iter().find(|a| a.key == Some(key)) {
-                    return MenuReply::Run(action.clone());
+                if let Some(at) = key.pick(self.actions.iter().map(|a| a.key.as_slice())) {
+                    return MenuReply::Run(self.actions[at].clone());
                 }
             }
         }

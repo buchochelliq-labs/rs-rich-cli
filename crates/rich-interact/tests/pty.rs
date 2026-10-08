@@ -16,7 +16,7 @@ use std::process::Command;
 
 use rich_interact::policy::Policy;
 use rich_interact::{
-    run, Component, Context, Event, Flow, KeyCode, RunOptions, SessionOptions, View,
+    run, Component, Context, Event, Flow, KeyCode, Output, RunOptions, SessionOptions, View,
 };
 use support::{assert_restored, Pty};
 
@@ -26,6 +26,8 @@ use support::{assert_restored, Pty};
 struct Child {
     returned: Option<Option<i32>>,
     nested: Option<String>,
+    /// The last key let go, from a terminal with the kitty protocol.
+    released: Option<String>,
 }
 
 fn child_options() -> RunOptions {
@@ -50,6 +52,7 @@ impl Component for Child {
     fn handle(&mut self, event: &Event, _: &Context<'_>) -> Flow<String> {
         match event {
             Event::Returned(code) => self.returned = Some(*code),
+            Event::KeyUp(key) => self.released = Some(key.to_string()),
             Event::Key(key) => match key.code {
                 // `d` too: typed while the process is stopped, in cooked
                 // mode, Enter arrives as `\n` (Ctrl+J in raw mode).
@@ -59,6 +62,7 @@ impl Component for Child {
                     let inner = Child {
                         returned: None,
                         nested: None,
+                        released: None,
                     };
                     let kind = run(inner, &child_options()).map_err(|error| match error {
                         rich_interact::Error::Io(error) => format!("{:?}", error.kind()),
@@ -85,6 +89,10 @@ impl Component for Child {
             (None, Some(code)) => format!("back from handoff {code:?}"),
             (None, None) => format!("child ready pid {}.", std::process::id()),
         };
+        let text = match &self.released {
+            Some(key) => format!("{text} released {key}!"),
+            None => text,
+        };
         View::new(context.markup(&text))
     }
 }
@@ -97,8 +105,13 @@ fn child() {
     let child = Child {
         returned: None,
         nested: None,
+        released: None,
     };
-    let outcome = run(child, &child_options());
+    let mut options = child_options();
+    if std::env::var_os("INTERACT_CHILD").is_some_and(|mode| mode == "piped") {
+        options.session.output = Output::Stderr;
+    }
+    let outcome = run(child, &options);
     println!("OUTCOME {outcome:?}");
 }
 
@@ -170,6 +183,104 @@ fn a_session_inside_a_session_is_refused() {
         output.contains("OUTCOME Ok(Done(\"finished\"))"),
         "{output}"
     );
+    assert_restored(&output, &parser);
+}
+
+/// In a terminal with the kitty keyboard protocol, the session pushes its
+/// flags on the alternate screen and pops them before leaving it, on every
+/// way out. Keys come in the protocol's encoding.
+#[test]
+fn the_kitty_protocol_is_popped_on_every_way_out() {
+    let mut pty = Pty::start_kitty("kitty-done");
+    pty.wait_for("child ready");
+    let text = pty.text();
+    let pushed = text.find("\x1b[>3u").expect("the flags are pushed");
+    assert!(text[..pushed].contains("\x1b[?1049h"), "{text:?}");
+    pty.send("\r");
+    let (output, parser) = pty.finish();
+    assert!(
+        output.contains("OUTCOME Ok(Done(\"finished\"))"),
+        "{output}"
+    );
+    let popped = output.rfind("\x1b[<1u").expect("the flags are popped");
+    assert!(output[popped..].contains("\x1b[?1049l"), "{output:?}");
+    assert_restored(&output, &parser);
+
+    // Ctrl+C as the protocol sends it, and a panic.
+    for (mode, key, outcome) in [
+        ("kitty-interrupt", "\x1b[99;5u", "OUTCOME Ok(Interrupted)"),
+        ("kitty-panic", "p", "child panics on purpose"),
+    ] {
+        let mut pty = Pty::start_kitty(mode);
+        pty.wait_for("child ready");
+        pty.send(key);
+        let (output, parser) = pty.finish();
+        assert!(output.contains(outcome), "{mode}: {output}");
+        assert!(output.contains("\x1b[<1u"), "{mode}: {output:?}");
+        assert_restored(&output, &parser);
+    }
+
+    // Given back for a hand-off and taken again.
+    let mut pty = Pty::start_kitty("kitty-handoff");
+    pty.wait_for("child ready");
+    pty.send("e");
+    pty.wait_for("back from handoff Some(0)");
+    pty.send("\r");
+    let (output, parser) = pty.finish();
+    let handed = output.find("handed-off").expect("the command ran");
+    assert!(output[..handed].contains("\x1b[<1u"), "{output:?}");
+    assert!(output[handed..].contains("\x1b[>3u"), "{output:?}");
+    assert_restored(&output, &parser);
+}
+
+/// With standard output piped, as in `answer=$(rich write)`, the kitty
+/// query is not asked: crossterm would write it to standard output, into
+/// the answer, and the terminal's reply would reach the shell afterwards.
+#[test]
+fn a_piped_answer_holds_no_kitty_query() {
+    let mut pty = Pty::start_kitty_piped("piped");
+    pty.wait_for("child ready");
+    pty.send("\r");
+    let (output, parser) = pty.finish();
+    assert!(
+        output.contains("OUTCOME Ok(Done(\"finished\"))$"),
+        "{output}"
+    );
+    assert!(!output.contains("\\033[?u"), "{output:?}");
+    assert!(!output.contains("\x1b[?u"), "{output:?}");
+    assert_restored(&output, &parser);
+}
+
+#[test]
+fn kitty_releases_reach_the_component_and_repeats_press() {
+    let mut pty = Pty::start_kitty("kitty-release");
+    pty.wait_for("child ready");
+    // Ctrl+X let go, then Ctrl+D held down until it repeats: with flags 1
+    // and 2 a terminal reports both for keys with Ctrl (plain text keys
+    // stay text, with no release).
+    pty.send("\x1b[120;5:3u");
+    pty.wait_for("released ctrl+x!");
+    pty.send("\x1b[100;5:2u");
+    let (output, parser) = pty.finish();
+    assert!(
+        output.contains("OUTCOME Ok(Done(\"finished\"))"),
+        "{output}"
+    );
+    assert_restored(&output, &parser);
+}
+
+#[test]
+fn ctrl_z_pops_the_kitty_protocol_and_fg_pushes_it_again() {
+    let mut pty = Pty::start_kitty("kitty-ctrl-z");
+    suspends_and_resumes(&mut pty, |pty, _| pty.send("\x1b[122;5u"));
+    pty.send("\r");
+    let (output, parser) = pty.finish();
+    assert!(
+        output.contains("OUTCOME Ok(Done(\"finished\"))"),
+        "{output}"
+    );
+    // Pushed at the start and again on `fg`.
+    assert_eq!(output.matches("\x1b[>3u").count(), 2, "{output:?}");
     assert_restored(&output, &parser);
 }
 

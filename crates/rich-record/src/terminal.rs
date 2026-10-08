@@ -94,6 +94,10 @@ pub struct Terminal {
     capacity: usize,
     /// Why vt100 panicked, once it has: the terminal takes no more input.
     broken: Option<String>,
+    /// The CSI sequence being read, after `ESC [`.
+    csi: Vec<u8>,
+    /// Answers to the program's queries, not yet sent to it.
+    replies: Vec<u8>,
 }
 
 /// The message a caught panic carried.
@@ -123,6 +127,8 @@ impl Terminal {
             ids: HashMap::new(),
             capacity: MARKERS,
             broken: None,
+            csi: Vec::new(),
+            replies: Vec::new(),
         }
     }
 
@@ -163,7 +169,10 @@ impl Terminal {
                 Mode::Ground => self.ground(byte),
                 Mode::Escape => {
                     self.mode = match byte {
-                        b'[' => Mode::Csi,
+                        b'[' => {
+                            self.csi.clear();
+                            Mode::Csi
+                        }
                         b']' | b'P' | b'X' | b'^' | b'_' => Mode::Text,
                         0x20..=0x2f => Mode::EscapeIntermediate,
                         0x1b => Mode::Escape,
@@ -185,6 +194,10 @@ impl Terminal {
                 Mode::Csi => {
                     if (0x40..=0x7e).contains(&byte) {
                         self.mode = Mode::Ground;
+                        self.answer(byte);
+                        self.csi.clear();
+                    } else {
+                        self.csi.push(byte);
                     }
                     self.out.push(byte);
                 }
@@ -207,6 +220,22 @@ impl Terminal {
             }
         }
         self.flush();
+    }
+
+    /// Answer the CSI query that `last` ends, if it is one a program waits
+    /// on. Only primary device attributes: crossterm asks for them after
+    /// the kitty keyboard query, and would wait two seconds without an
+    /// answer. Not answering the kitty query itself says it is unsupported.
+    fn answer(&mut self, last: u8) {
+        if last == b'c' && matches!(self.csi.as_slice(), b"" | b"0") {
+            // A VT220 with no extensions, as xterm answers by default.
+            self.replies.extend_from_slice(b"\x1b[?62c");
+        }
+    }
+
+    /// The answers to queries the program made, to send back to it.
+    pub fn take_replies(&mut self) -> Vec<u8> {
+        std::mem::take(&mut self.replies)
     }
 
     fn flush(&mut self) {
@@ -459,6 +488,21 @@ mod tests {
             .filter(|cell| !cell.is_continuation())
             .map(|cell| (cell.text.as_str(), cell.width))
             .collect()
+    }
+
+    #[test]
+    fn device_attribute_queries_are_answered_and_nothing_else() {
+        let mut terminal = Terminal::new(2, 10);
+        // crossterm's kitty keyboard probe: the kitty query, then DA1.
+        terminal.process(b"\x1b[?u\x1b[c").unwrap();
+        assert_eq!(terminal.take_replies(), b"\x1b[?62c");
+        assert!(terminal.take_replies().is_empty());
+        terminal.process(b"\x1b[0c\x1b[>c\x1b[6n\x1b[31mx").unwrap();
+        assert_eq!(terminal.take_replies(), b"\x1b[?62c");
+        // Split across reads.
+        terminal.process(b"\x1b[").unwrap();
+        terminal.process(b"c").unwrap();
+        assert_eq!(terminal.take_replies(), b"\x1b[?62c");
     }
 
     #[test]
