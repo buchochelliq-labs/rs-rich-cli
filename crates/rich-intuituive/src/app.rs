@@ -1676,7 +1676,10 @@ impl App {
     fn keep_focus(&mut self) {
         let ids = self.focusable();
         if let Some(id) = self.focus() {
-            if self.path_to(id).is_empty() {
+            // A node that was disabled lets the focus go as one that left.
+            let mut disabled = false;
+            with_node(&self.top().root, id, &mut |node| disabled = node.disabled());
+            if disabled || self.path_to(id).is_empty() {
                 let order = &self.top().order;
                 let next = order.iter().position(|o| *o == id).and_then(|at| {
                     order[at + 1..]
@@ -1814,15 +1817,25 @@ impl App {
             self.restack = true;
             return false;
         }
+        // A focused node disabled since the last frame (nothing need have
+        // drawn since) gives the focus up before the key is routed.
+        if let Some(id) = self.focus() {
+            let mut disabled = false;
+            with_node(&self.top().root, id, &mut |node| disabled = node.disabled());
+            if disabled {
+                self.keep_focus();
+            }
+        }
         // From the focused node up; with nothing focused, from the node
         // under the pointer, so a container that cannot take the focus
         // still gets keys while the mouse is over it.
         let path = self.key_path();
-        // Containers that asked see the key first, outermost first.
+        // Containers that asked see the key first, outermost first. A
+        // disabled node sees none: neither its widget nor its handlers.
         for &id in &path[..path.len().saturating_sub(1)] {
             let mut previews = false;
             with_node(&self.top().root, id, &mut |node| {
-                previews = node.body.borrow().widget.previews_keys();
+                previews = !node.disabled() && node.body.borrow().widget.previews_keys();
             });
             if previews {
                 if let Some(quit) = self.give_to_widget(id, &WidgetEvent::Preview(key)) {
@@ -1831,6 +1844,11 @@ impl App {
             }
         }
         for &id in path.iter().rev() {
+            let mut disabled = false;
+            with_node(&self.top().root, id, &mut |node| disabled = node.disabled());
+            if disabled {
+                continue;
+            }
             if let Some(quit) = self.give_to_widget(id, &WidgetEvent::Key(key)) {
                 return quit;
             }

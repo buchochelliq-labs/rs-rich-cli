@@ -323,3 +323,106 @@ fn without_a_sheet_nothing_changes() {
         .unwrap();
     assert_eq!(plain, sheet);
 }
+
+/// A widget that takes `x`, counting them.
+struct Counter(std::rc::Rc<std::cell::Cell<u32>>);
+
+impl intuituive::widget::Widget for Counter {
+    fn draw(
+        &mut self,
+        _cx: &mut intuituive::widget::DrawCx,
+        _canvas: &mut intuituive::widget::Canvas,
+    ) {
+    }
+
+    fn event(
+        &mut self,
+        _cx: &mut intuituive::widget::EventCx,
+        event: &intuituive::widget::WidgetEvent,
+    ) -> intuituive::widget::Used {
+        if matches!(event, intuituive::widget::WidgetEvent::Key(key) if *key == Key::char('x')) {
+            self.0.set(self.0.get() + 1);
+            return intuituive::widget::Used::Yes;
+        }
+        intuituive::widget::Used::No
+    }
+
+    fn focusable(&self) -> bool {
+        true
+    }
+}
+
+#[test]
+fn a_focused_node_that_is_disabled_lets_go_of_the_focus_and_its_keys() {
+    let keys = std::rc::Rc::new(std::cell::Cell::new(0));
+    let counted = keys.clone();
+    let app = App::new(move || {
+        let off = signal(false);
+        let picked = signal("");
+        column([
+            widget(Counter(counted.clone()))
+                .fixed(1)
+                .disabled_when(move || off.get()),
+            label("other")
+                .focusable()
+                .on_key("x", move |_| picked.set("other")),
+            text!("picked {picked}"),
+        ])
+        .on_key("ctrl+d", move |_| off.set(true))
+    });
+    let mut driver = app.driver(20, 3);
+    frame(&mut driver, None);
+    frame(&mut driver, press("x"));
+    assert_eq!(keys.get(), 1);
+    // Disabled while focused: the widget sees no more keys, and the focus
+    // moves on to the next node.
+    frame(&mut driver, press("ctrl+d"));
+    let rows = frame(&mut driver, press("x"));
+    assert_eq!(keys.get(), 1);
+    assert!(row_of(&rows, "picked other").is_some(), "{rows:?}");
+}
+
+#[test]
+fn a_hidden_grid_child_takes_no_cell() {
+    let app = App::new(|| {
+        grid(
+            [Size::Fixed(3), Size::Fixed(3)],
+            [
+                label("aa"),
+                label("bb").class("gone"),
+                label("cc"),
+                label("dd"),
+            ],
+        )
+    })
+    .stylesheet(".gone { display: none; }");
+    let mut driver = app.driver(6, 2);
+    let rows = frame(&mut driver, None);
+    assert_eq!(rows[0].trim_end(), "aa cc");
+    assert_eq!(rows[1].trim_end(), "dd");
+}
+
+#[test]
+fn border_none_takes_a_panels_border_away() {
+    let app = App::new(|| label("inside").panel("title")).stylesheet("panel { border: none; }");
+    let mut driver = app.driver(10, 3);
+    let rows = frame(&mut driver, None);
+    assert_eq!(rows[0].trim_end(), "inside", "{rows:?}");
+}
+
+#[test]
+fn a_later_text_style_replaces_an_earlier_one() {
+    let app = App::new(|| label("x").class("base").name("item"))
+        .stylesheet(".base { text-style: bold; } #item { text-style: italic; }");
+    let mut driver = app.driver(4, 1);
+    frame(&mut driver, None);
+    assert_eq!(style_at(&driver, 0, 0), style("italic"));
+    let app = App::new(|| label("x").class("base").name("item"))
+        .stylesheet(".base { text-style: bold; } #item { text-style: none; }");
+    let mut driver = app.driver(4, 1);
+    frame(&mut driver, None);
+    assert_eq!(
+        style_at(&driver, 0, 0),
+        style("not bold not dim not italic not underline not reverse not strike not blink")
+    );
+}

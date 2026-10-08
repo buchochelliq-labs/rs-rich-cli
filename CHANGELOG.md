@@ -29,7 +29,8 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   fixed classes.
 - **New builders:** `Node::class`, `Node::class_when`,
   `Node::selected_when` and `Node::disabled_when`. A disabled node leaves
-  the Tab order, and its click and key handlers do not run. The inspector
+  the Tab order (a focused one gives the focus to the next node), and its
+  widget, click and key handlers see no input. The inspector
   shows classes.
 
 ### intuiTUIve: the widget gaps (rs-rich-intuituive 0.0.3)

@@ -699,6 +699,7 @@ impl Node {
             .widget_mut(|panel: &mut Panel| {
                 panel.look = crate::builtin::PanelLook {
                     border: layout.border.clone(),
+                    no_border: layout.no_border,
                     title: layout.border_title.clone(),
                     padding: layout.padding,
                 };

@@ -149,6 +149,8 @@ pub(crate) struct Layout {
     /// Top, right, bottom, left.
     pub padding: [u16; 4],
     pub border: Option<(BoxKind, Style)>,
+    /// `border: none` was said, which takes a panel's own border away.
+    pub no_border: bool,
     pub border_title: Option<String>,
     pub hidden: bool,
     pub dock: Option<Dock>,
@@ -277,6 +279,7 @@ impl Stylesheet {
                 out.grid_rows = d.grid_rows.clone();
             }
         }
+        out.no_border = matches!(border, Some(None));
         out.border = border.flatten().map(|(kind, paint)| {
             let style = paint
                 .and_then(|paint| paint_style(&paint, vars))
@@ -307,11 +310,9 @@ impl Stylesheet {
                 background = paint_style(paint, vars).map(|(c, _)| c).or(background);
                 any = true;
             }
+            // A later rule's text style replaces an earlier one's.
             if let Some(style) = &d.text_style {
-                text = Some(match text {
-                    Some(text) => text.combine(style),
-                    None => style.clone(),
-                });
+                text = Some(style.clone());
                 any = true;
             }
         }
@@ -650,9 +651,14 @@ fn declare(decls: &mut Decls, property: &str, value: &str) -> Result<(), String>
                     return Err(format!("`{word}` is not a text style"));
                 }
             }
+            // `none` turns every attribute off, so it clears what the
+            // node would otherwise take from around it.
             let words: Vec<&str> = words.into_iter().filter(|w| *w != "none").collect();
             decls.text_style = Some(if words.is_empty() {
-                Style::new()
+                Style::parse(
+                    "not bold not dim not italic not underline not reverse not strike not blink",
+                )
+                .map_err(|e| e.to_string())?
             } else {
                 Style::parse(&words.join(" ")).map_err(|e| e.to_string())?
             });
