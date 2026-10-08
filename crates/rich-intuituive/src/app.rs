@@ -281,8 +281,8 @@ impl Ctx {
 /// Every named style works in console markup: `[accent]…[/]`. The presets
 /// define `accent`, `muted`, `good`, `warn`, `bad` and `selected` (a
 /// [`list`](crate::list)'s selected row), and the framework's
-/// own as `border`, `border.focused` and `title` (and `tooltip`, reverse
-/// unless a theme sets it), so an app restyles by
+/// own as `border`, `border.focused` and `title` (and `tooltip` and
+/// `drop.target`, reverse unless a theme sets them), so an app restyles by
 /// name and switches themes at run time with [`Ctx::set_theme`].
 #[derive(Clone, Debug)]
 pub struct Theme {
@@ -406,6 +406,15 @@ impl Theme {
     pub fn load(path: impl AsRef<std::path::Path>) -> Result<Theme, String> {
         let text = std::fs::read_to_string(path).map_err(|e| e.to_string())?;
         Theme::dark().with_config(&text)
+    }
+
+    /// The named style `name`, or `fallback` when the theme has none.
+    pub(crate) fn named(&self, name: &str, fallback: &str) -> Style {
+        self.styles
+            .iter()
+            .find(|(n, _)| n == name)
+            .map(|(_, style)| style.clone())
+            .unwrap_or_else(|| style(fallback))
     }
 
     pub(crate) fn border(&self, focused: bool) -> Style {
@@ -581,6 +590,8 @@ pub struct App {
     last_pointer: Option<(u16, u16)>,
     /// The tooltip waiting for the pointer to rest, or showing.
     tip: Option<Tip>,
+    /// A press on a draggable node, or the drag it became.
+    drag: Option<Drag>,
     /// The node last told it has the focus, on whichever screen.
     focused: Option<NodeId>,
     /// Focus, hover and resize events waiting to be told to their widgets.
@@ -663,6 +674,7 @@ impl App {
             motion: (false, false),
             last_pointer: None,
             tip: None,
+            drag: None,
             focused: None,
             lifecycle: Vec::new(),
             clipboard: false,
@@ -1110,6 +1122,18 @@ impl App {
             }
         });
         self.stats.drawn = frame.drawn;
+        // A drag: its source dimmed, the drop target under the pointer lit.
+        if let Some(drag) = self.drag.as_ref().filter(|drag| drag.active) {
+            let root = &self.top().root;
+            if let Some(rect) = anchor_rect(root, drag.source) {
+                restyle_rect(screen, rect, &style("dim"));
+                frame.damage.push(rect);
+            }
+            if let Some(rect) = drag.target.and_then(|id| anchor_rect(root, id)) {
+                restyle_rect(screen, rect, &self.theme.named("drop.target", "reverse"));
+                frame.damage.push(rect);
+            }
+        }
         // Toasts, newest at the bottom right, over everything.
         let mut bottom = area.bottom();
         for (markup, _) in self.toasts.iter().rev() {
@@ -1148,14 +1172,10 @@ impl App {
         }
         // A tooltip, over the toasts too.
         if let Some(tip) = self.tip.as_ref().filter(|tip| tip.shown) {
-            let look = self
-                .theme
-                .styles
-                .iter()
-                .find(|(name, _)| name == "tooltip")
-                .map(|(_, look)| look.clone())
-                .unwrap_or_else(|| style("reverse"));
-            frame.damage.push(draw_tip(console, screen, area, tip, &look));
+            let look = self.theme.named("tooltip", "reverse");
+            frame
+                .damage
+                .push(draw_tip(console, screen, area, tip, &look));
         }
         if frame.wants_hover.get() {
             self.motion.0 = true;
@@ -1630,6 +1650,12 @@ impl App {
 
     fn key(&mut self, key: Key) -> bool {
         self.hide_tip();
+        if key.code == KeyCode::Escape && self.drag.as_ref().is_some_and(|drag| drag.active) {
+            // Esc cancels a drag.
+            self.drag = None;
+            self.restack = true;
+            return false;
+        }
         if let (Some(inspector), KeyCode::F(12)) = (&mut self.inspector, key.code) {
             inspector.open = !inspector.open;
             self.restack = true;
@@ -1832,6 +1858,9 @@ impl App {
             runtime.enter(|| hover.set(path));
         }
         self.track_tip(&path, mouse);
+        if let Some(quit) = self.drag_mouse(&path, mouse) {
+            return Some(quit);
+        }
         if let Some((id, shift)) = self.capture {
             if matches!(mouse.kind, MouseKind::Drag(_) | MouseKind::Up(_)) {
                 if matches!(mouse.kind, MouseKind::Up(_)) {
@@ -1865,7 +1894,97 @@ impl App {
                 return Some(quit);
             }
         }
-        None
+        // A press that may start a drag is used: it starts no selection.
+        (self.drag.is_some() && matches!(mouse.kind, MouseKind::Down(_))).then_some(false)
+    }
+
+    /// The deepest node in `path` with a value to drag.
+    fn drag_source(&self, path: &[NodeId]) -> Option<(NodeId, std::rc::Rc<dyn std::any::Any>)> {
+        path.iter().rev().find_map(|&id| {
+            let mut value = None;
+            with_node(&self.top().root, id, &mut |node| value = node.drag.clone());
+            value.map(|value| (id, value))
+        })
+    }
+
+    /// The deepest node in `path`, other than the drag's source, that takes
+    /// what it carries.
+    fn drop_target(&self, path: &[NodeId], drag: &Drag) -> Option<NodeId> {
+        path.iter().rev().copied().find(|&id| {
+            let mut takes = false;
+            if id != drag.source {
+                with_node(&self.top().root, id, &mut |node| {
+                    takes = node
+                        .drop
+                        .as_ref()
+                        .is_some_and(|drop| (drop.accepts)(&*drag.value));
+                });
+            }
+            takes
+        })
+    }
+
+    /// Drag-and-drop: a left press on a draggable node arms a drag, moving
+    /// a cell starts it, letting go drops it on the target under the
+    /// pointer. `Some` (whether to quit) when the event was the drag's.
+    fn drag_mouse(&mut self, path: &[NodeId], mouse: rich_interact::Mouse) -> Option<bool> {
+        if self.capture.is_some() {
+            // A widget took the mouse: no drag.
+            self.drag = None;
+            return None;
+        }
+        let at = (mouse.column, mouse.row);
+        match mouse.kind {
+            MouseKind::Down(Button::Left) => {
+                if self.drag.take().is_some_and(|drag| drag.active) {
+                    self.restack = true;
+                }
+                self.drag = self.drag_source(path).map(|(source, value)| Drag {
+                    source,
+                    value,
+                    from: at,
+                    active: false,
+                    target: None,
+                });
+                None
+            }
+            MouseKind::Drag(Button::Left) => {
+                let drag = self.drag.as_ref()?;
+                if !drag.active && at == drag.from {
+                    return Some(false);
+                }
+                let target = self.drop_target(path, drag);
+                let drag = self.drag.as_mut()?;
+                if !drag.active || drag.target != target {
+                    self.restack = true;
+                }
+                drag.active = true;
+                drag.target = target;
+                Some(false)
+            }
+            MouseKind::Up(Button::Left) => {
+                if !self.drag.as_ref()?.active {
+                    self.drag = None;
+                    return None;
+                }
+                let drag = self.drag.take()?;
+                self.restack = true;
+                let Some(target) = self.drop_target(path, &drag) else {
+                    return Some(false);
+                };
+                let mut cx = self.ctx();
+                let runtime = self.runtime.clone();
+                runtime.enter(|| {
+                    with_node(&self.top().root, target, &mut |node| {
+                        if let Some(drop) = &node.drop {
+                            (drop.handler.borrow_mut())(&*drag.value, &mut cx);
+                        }
+                    });
+                });
+                Some(self.apply(cx))
+            }
+            _ => None,
+        }
     }
 
     /// A drag selecting text: move its end, and on release copy what it
@@ -2436,13 +2555,33 @@ struct Tip {
     shown: bool,
 }
 
+/// A drag from a [`draggable`](crate::Node::draggable) node.
+struct Drag {
+    source: NodeId,
+    value: std::rc::Rc<dyn std::any::Any>,
+    /// Where the press was: the drag starts once the pointer leaves it.
+    from: (u16, u16),
+    active: bool,
+    /// The drop target under the pointer that takes the value.
+    target: Option<NodeId>,
+}
+
+/// Lay `style` over every cell of `rect`.
+fn restyle_rect(screen: &mut Screen, rect: Rect, style: &Style) {
+    for row in rect.y..rect.bottom() {
+        for column in rect.x..rect.right() {
+            screen.restyle(column, row, style);
+        }
+    }
+}
+
 /// Draw `tip` in `area`, by where it asked to be; where it went.
 fn draw_tip(console: &Console, screen: &mut Screen, area: Rect, tip: &Tip, style: &Style) -> Rect {
     if area.width < 3 || area.height == 0 {
         return Rect::default();
     }
-    let text =
-        rich::Text::from_markup(&tip.markup).unwrap_or_else(|_| rich::Text::new(tip.markup.clone()));
+    let text = rich::Text::from_markup(&tip.markup)
+        .unwrap_or_else(|_| rich::Text::new(tip.markup.clone()));
     let widest = text
         .split("\n", false, true)
         .iter()
@@ -2466,11 +2605,7 @@ fn draw_tip(console: &Console, screen: &mut Screen, area: Rect, tip: &Tip, style
         Rect::new(x + 1, y, inner, height),
         &lines[..height as usize],
     );
-    for row in rect.y..rect.bottom() {
-        for column in rect.x..rect.right() {
-            screen.restyle(column, row, style);
-        }
-    }
+    restyle_rect(screen, rect, style);
     rect
 }
 

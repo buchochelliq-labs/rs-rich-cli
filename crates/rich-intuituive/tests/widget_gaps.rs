@@ -337,7 +337,10 @@ mod tips {
         let rows = at(500, &mut driver, moved(1, 1));
         let rows_later = at(700, &mut driver, None);
         assert!(row_of(&rows, "Read a file").is_none(), "{rows:?}");
-        assert!(row_of(&rows_later, "Read a file").is_none(), "{rows_later:?}");
+        assert!(
+            row_of(&rows_later, "Read a file").is_none(),
+            "{rows_later:?}"
+        );
         let rows = at(1200, &mut driver, None);
         assert_eq!(row_of(&rows, "Read a file"), Some(2), "{rows:?}");
     }
@@ -377,7 +380,11 @@ mod tips {
     #[test]
     fn a_tooltip_at_the_bottom_goes_above_the_pointer_and_stays_on_screen() {
         let app = App::new(|| {
-            column([label(""), label(""), label("edge").tooltip("A long tooltip text")])
+            column([
+                label(""),
+                label(""),
+                label("edge").tooltip("A long tooltip text"),
+            ])
         });
         let mut driver = app.driver(16, 3);
         at(0, &mut driver, None);
@@ -394,7 +401,10 @@ mod tips {
         let app = App::new(|| {
             let pressed = signal(false);
             column([
-                label("save").tooltip("Write it").focusable().on_key("f1", move |_| pressed.set(true)),
+                label("save")
+                    .tooltip("Write it")
+                    .focusable()
+                    .on_key("f1", move |_| pressed.set(true)),
                 text(move || format!("pressed {}", pressed.get())),
             ])
         });
@@ -407,5 +417,126 @@ mod tips {
         );
         assert!(row_of(&rows, "pressed true").is_some(), "{rows:?}");
         assert!(row_of(&rows, "Write it").is_none(), "{rows:?}");
+    }
+}
+
+// Drag-and-drop.
+
+mod drag {
+    use std::time::Duration;
+
+    use intuituive::interact::{Button, Event, Key, Mouse, MouseKind};
+    use intuituive::prelude::*;
+
+    fn send(driver: &mut intuituive::Driver, kind: MouseKind, column: u16, row: u16) -> String {
+        driver.event(Event::Mouse(Mouse::new(kind, column, row)));
+        driver.update(Duration::ZERO);
+        driver.render().unwrap_or_default()
+    }
+
+    /// Two cards and two lanes: the first takes strings, the second
+    /// numbers.
+    fn board() -> App {
+        App::new(|| {
+            let words = signal(Vec::<String>::new());
+            let numbers = signal(Vec::<u32>::new());
+            let clicked = signal(0);
+            column([
+                label("card").draggable("card".to_string()),
+                label("seven")
+                    .draggable(7u32)
+                    .on_click(move |_| clicked.update(|n| *n += 1)),
+                text(move || format!("words: {}", words.get().join(",")))
+                    .on_drop(move |w: &String, _| words.update(|v| v.push(w.clone()))),
+                text(move || format!("numbers: {:?}", numbers.get()))
+                    .on_drop(move |n: &u32, _| numbers.update(|v| v.push(*n))),
+                text(move || format!("clicked {}", clicked.get())),
+            ])
+        })
+    }
+
+    fn rows(driver: &intuituive::Driver) -> Vec<String> {
+        driver
+            .screen()
+            .plain()
+            .into_iter()
+            .map(|r| r.trim_end().to_string())
+            .collect()
+    }
+
+    #[test]
+    fn a_value_drops_on_a_target_of_its_type_only() {
+        let mut driver = board().driver(30, 5);
+        driver.update(Duration::ZERO);
+        let _ = driver.render();
+        send(&mut driver, MouseKind::Down(Button::Left), 1, 0);
+        // Over the numbers lane: a string is not taken there.
+        let frame = send(&mut driver, MouseKind::Drag(Button::Left), 1, 3);
+        assert!(!frame.contains("\x1b[0;7m"), "no highlight: {frame:?}");
+        send(&mut driver, MouseKind::Up(Button::Left), 1, 3);
+        assert_eq!(rows(&driver)[3], "numbers: []");
+        // Over the words lane: lit, and dropped there.
+        send(&mut driver, MouseKind::Down(Button::Left), 1, 0);
+        let frame = send(&mut driver, MouseKind::Drag(Button::Left), 1, 2);
+        assert!(frame.contains("\x1b[0;7m"), "the target is lit: {frame:?}");
+        send(&mut driver, MouseKind::Up(Button::Left), 1, 2);
+        assert_eq!(rows(&driver)[2], "words: card");
+        // The number goes to its own lane.
+        send(&mut driver, MouseKind::Down(Button::Left), 1, 1);
+        send(&mut driver, MouseKind::Drag(Button::Left), 2, 3);
+        send(&mut driver, MouseKind::Up(Button::Left), 2, 3);
+        assert_eq!(rows(&driver)[3], "numbers: [7]");
+    }
+
+    #[test]
+    fn a_press_without_moving_still_clicks_and_drops_nothing() {
+        let mut driver = board().driver(30, 5);
+        driver.update(Duration::ZERO);
+        let _ = driver.render();
+        send(&mut driver, MouseKind::Down(Button::Left), 1, 1);
+        send(&mut driver, MouseKind::Up(Button::Left), 1, 1);
+        let rows = rows(&driver);
+        assert_eq!(rows[4], "clicked 1");
+        assert_eq!(rows[3], "numbers: []");
+    }
+
+    #[test]
+    fn esc_cancels_a_drag() {
+        let mut driver = board().driver(30, 5);
+        driver.update(Duration::ZERO);
+        let _ = driver.render();
+        send(&mut driver, MouseKind::Down(Button::Left), 1, 0);
+        send(&mut driver, MouseKind::Drag(Button::Left), 1, 2);
+        driver.event(Event::Key(Key::parse("esc").expect("a key")));
+        driver.update(Duration::ZERO);
+        let frame = driver.render().unwrap_or_default();
+        assert!(!frame.contains("\x1b[0;7m"), "unlit: {frame:?}");
+        assert!(!driver.is_done(), "Esc went to the drag, not the app");
+        send(&mut driver, MouseKind::Up(Button::Left), 1, 2);
+        assert_eq!(rows(&driver)[2], "words:");
+    }
+
+    #[test]
+    fn a_drop_inside_a_target_reaches_it() {
+        let app = App::new(|| {
+            let got = signal(String::new());
+            column([
+                label("item").draggable(1u8),
+                column([label("inside"), text!("got {got}")])
+                    .panel("box")
+                    .on_drop(move |n: &u8, _| got.set(format!("{n}"))),
+            ])
+        });
+        let mut driver = app.driver(20, 5);
+        driver.update(Duration::ZERO);
+        let _ = driver.render();
+        send(&mut driver, MouseKind::Down(Button::Left), 1, 0);
+        send(&mut driver, MouseKind::Drag(Button::Left), 2, 2);
+        send(&mut driver, MouseKind::Up(Button::Left), 2, 2);
+        assert!(
+            rows(&driver).iter().any(|r| r.contains("got 1")),
+            "{:?}",
+            rows(&driver)
+        );
     }
 }

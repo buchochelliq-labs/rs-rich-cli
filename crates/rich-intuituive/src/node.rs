@@ -30,6 +30,7 @@
 //! Every node is a [`Widget`]: the builders above make built-in ones, and
 //! [`widget`](crate::widget()) makes a node of your own.
 
+use std::any::Any;
 use std::cell::{Cell, RefCell};
 use std::collections::{HashMap, HashSet};
 use std::hash::Hash;
@@ -56,6 +57,16 @@ pub(crate) type Handler = Box<dyn FnMut(&mut Ctx)>;
 /// A mouse handler: the event in the node's coordinates; whether it used
 /// it.
 pub(crate) type MouseHandler = Box<dyn FnMut(&mut Ctx, Mouse) -> bool>;
+
+/// What a drop target does with a value dropped on it.
+pub(crate) type DropHandler = Box<dyn FnMut(&dyn Any, &mut Ctx)>;
+
+/// What a node takes when something is dropped on it: the type it accepts,
+/// and what it does with the value.
+pub(crate) struct DropTarget {
+    pub accepts: fn(&dyn Any) -> bool,
+    pub handler: RefCell<DropHandler>,
+}
 
 /// One node of the tree: a [`Widget`] with a place in the layout, key
 /// bindings and handlers.
@@ -93,6 +104,9 @@ pub struct Node {
     /// Markup shown when the pointer rests on it, or F1 is pressed while it
     /// has the focus.
     pub(crate) tooltip: Option<String>,
+    /// The value a drag from this node carries.
+    pub(crate) drag: Option<Rc<dyn Any>>,
+    pub(crate) drop: Option<DropTarget>,
 }
 
 /// A node's widget, and what the framework keeps for it between frames.
@@ -141,6 +155,8 @@ impl Node {
             hover_style: None,
             hover_lit: Cell::new(false),
             tooltip: None,
+            drag: None,
+            drop: None,
         }
     }
 
@@ -317,6 +333,61 @@ impl Node {
     /// ```
     pub fn tooltip(mut self, markup: impl Into<String>) -> Node {
         self.tooltip = Some(markup.into());
+        self
+    }
+
+    /// Let this node be dragged with the left button, carrying `value` to
+    /// a node that takes it with [`on_drop`](Self::on_drop). A press still
+    /// focuses and clicks as before; the drag starts once the pointer moves
+    /// a cell. While it lasts the node is dimmed and the drop target under
+    /// the pointer is highlighted (the theme's `drop.target` style, reverse
+    /// unless set); Esc cancels it.
+    ///
+    /// ```
+    /// use std::time::Duration;
+    ///
+    /// use intuituive::interact::{Button, Event, Mouse, MouseKind};
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| {
+    ///     let done = signal(Vec::<String>::new());
+    ///     column([
+    ///         label("task").draggable("task".to_string()),
+    ///         text(move || format!("done: {}", done.get().join(", ")))
+    ///             .on_drop(move |task: &String, _| done.update(|d| d.push(task.clone()))),
+    ///     ])
+    /// });
+    /// let mut driver = app.driver(20, 2);
+    /// driver.update(Duration::ZERO);
+    /// let _ = driver.render();
+    /// let mut send = |kind, row| {
+    ///     driver.event(Event::Mouse(Mouse::new(kind, 1, row)));
+    ///     driver.update(Duration::ZERO);
+    ///     let _ = driver.render();
+    /// };
+    /// send(MouseKind::Down(Button::Left), 0);
+    /// send(MouseKind::Drag(Button::Left), 1);
+    /// send(MouseKind::Up(Button::Left), 1);
+    /// assert_eq!(driver.screen().plain()[1].trim_end(), "done: task");
+    /// ```
+    pub fn draggable<T: 'static>(mut self, value: T) -> Node {
+        self.drag = Some(Rc::new(value));
+        self
+    }
+
+    /// Take values of type `T` dropped on this node (or on a node inside
+    /// it that does not take them itself): `handler` gets the value a
+    /// [`draggable`](Self::draggable) node carried. A drag carrying another
+    /// type passes this node by: it is not highlighted, and nothing drops.
+    pub fn on_drop<T: 'static>(mut self, mut handler: impl FnMut(&T, &mut Ctx) + 'static) -> Node {
+        self.drop = Some(DropTarget {
+            accepts: |value| value.is::<T>(),
+            handler: RefCell::new(Box::new(move |value, cx| {
+                if let Some(value) = value.downcast_ref::<T>() {
+                    handler(value, cx);
+                }
+            })),
+        });
         self
     }
 
