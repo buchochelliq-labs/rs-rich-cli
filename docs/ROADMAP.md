@@ -215,6 +215,25 @@ and #499). Delivered:
 - Atkinson dithering, OKLab distance, Sixel/GIF colour modes, alpha backgrounds
   (#498) and `--theme-file` (#499).
 
+## 0.0.18 — intuiTUIve grows up (planned)
+
+The [0.0.18 plan](plans/0.0.18.md) takes the terminal-app framework from a
+working slice to something others can build on, after the 0.0.17 cohort
+(rs-rich-intuituive 0.0.2):
+
+- the gap assessment's rough spots and widget gaps: starting focus,
+  horizontal scrolling, sortable tables with a cell cursor, a virtual tree,
+  tooltips, drag-and-drop and hover styles, and the kitty keyboard protocol;
+- a stylesheet with selectors and states that sets layout as well as style;
+- termion and termwiz backends (#677, #678);
+- accessibility: cursor tracking for screen readers, a text mode, and a
+  role and name per node;
+- serving to a browser in a new `rs-rich-web` crate, intuiTUIve apps first
+  and then any terminal program (`rich serve`);
+- a full Python binding, `rs_rich.tui`.
+
+Core does not change.
+
 ## 0.0.16 — data and developer tooling (release test passed)
 
 The [0.0.16 plan](plans/0.0.16.md) is the first slice of
