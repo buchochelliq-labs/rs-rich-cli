@@ -140,7 +140,8 @@ impl Widget for Meter {
             self.border = false;
         }
         let inner = width - 2;
-        // `Resize` comes when the size changes after the first layout.
+        // `Resize` comes once the first frame is drawn; for that frame, the
+        // canvas says the size.
         if self.window == 0 {
             self.window = inner as usize;
         }

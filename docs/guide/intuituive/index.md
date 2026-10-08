@@ -179,6 +179,9 @@ column([
   ancestors until a binding uses them.
 - **Tab** and **Shift+Tab** move the focus through focusable nodes. A
   handler can move it too, with `cx.focus_next()` or `cx.focus(id)`.
+- **Which node has the focus first:** the first focusable one, unless a
+  node asks with `.autofocus()` (a search box, the list a screen is
+  about).
 - **Clicks:** `.on_click(|cx| …)` gets the clicks inside the node and
   focuses it. The app remembers where each node was drawn, so you never
   store rectangles yourself.
@@ -397,7 +400,9 @@ What a widget can do:
     while the pointer is over it);
   - mouse events over it, and pasted text;
   - `Focus`, `Hover` and `Resize` when the focus or the pointer comes or
-    goes, or its size changes;
+    goes, or its size: after the frame it is first laid out in, and
+    whenever its size changes (a widget drawing that first frame reads its
+    size from the canvas);
   - `Preview`: keys on their way to the focused node inside it, first,
     when its `previews_keys` is true (a container's shortcuts that win
     over its children's).
@@ -546,7 +551,7 @@ column([
 ### The command palette and help
 
 Every binding made with `.bind(keys, description, handler)` is a command.
-`cx.command_palette()` lists the ones on the focused node and its
+`cx.palette()` lists the ones on the focused node and its
 ancestors, searched as you type, and runs the one picked as its key would.
 `cx.help()` lists the same bindings with their keys. Keys open either:
 
