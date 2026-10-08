@@ -255,10 +255,12 @@ fn a_piped_answer_holds_no_kitty_query() {
 fn kitty_releases_reach_the_component_and_repeats_press() {
     let mut pty = Pty::start_kitty("kitty-release");
     pty.wait_for("child ready");
-    // `x` let go, then `d` held down until it repeats.
-    pty.send("\x1b[120;1:3u");
-    pty.wait_for("released x!");
-    pty.send("\x1b[100;1:2u");
+    // Ctrl+X let go, then Ctrl+D held down until it repeats: with flags 1
+    // and 2 a terminal reports both for keys with Ctrl (plain text keys
+    // stay text, with no release).
+    pty.send("\x1b[120;5:3u");
+    pty.wait_for("released ctrl+x!");
+    pty.send("\x1b[100;5:2u");
     let (output, parser) = pty.finish();
     assert!(
         output.contains("OUTCOME Ok(Done(\"finished\"))"),

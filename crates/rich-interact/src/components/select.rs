@@ -714,11 +714,8 @@ impl<T> Select<T> {
                 self.menu = Some(ActionMenu::new(actions, key));
                 return None;
             }
-            if let Some(action) = actions
-                .iter()
-                .find(|action| action.key.is_some_and(|k| key.matches(&k)))
-            {
-                let action = action.clone();
+            if let Some(at) = key.pick(actions.iter().map(|action| action.key.as_slice())) {
+                let action = actions[at].clone();
                 return self.run_action(index, &action);
             }
         }

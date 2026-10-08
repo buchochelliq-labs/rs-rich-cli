@@ -39,8 +39,11 @@ const KITTY: u8 = 16;
 
 /// The kitty keyboard protocol's flags a session pushes: disambiguate the
 /// keys a legacy terminal sends alike (1) and report releases and repeats
-/// (2). The terminal keeps a stack of them for each screen, so they are
-/// pushed after entering the alternate screen and popped before leaving it.
+/// (2). Not every key as an escape code (8): typed text would then arrive
+/// as a base key and modifiers rather than the character the layout makes,
+/// so plain text keys, Enter, Tab and Backspace report no release. The
+/// terminal keeps a stack of flags for each screen, so they are pushed
+/// after entering the alternate screen and popped before leaving it.
 const PUSH_KITTY: &str = "\x1b[>3u";
 const POP_KITTY: &str = "\x1b[<1u";
 
