@@ -309,6 +309,66 @@ code.
 - **Breaking:** `SessionOptions` has a new field (build it with
   `..SessionOptions::default()`).
 
+### Embedding: a terminal pane and a web view (rs-rich-embed 0.0.1, new; rs-rich-record)
+
+Workstream 9 of the 0.0.18 plan. A new crate, `rs-rich-embed`
+(`rich_embed`), puts other programs and web pages inside an intuiTUIve
+app. Each pane sits on a trait, as the framework's terminals sit on
+`Backend`, so what runs behind it can be swapped, including for one an app
+writes itself. See `docs/guide/intuituive/embed.md`.
+
+- **`terminal(cmd)`, a terminal pane:**
+  - runs any program: a shell, `htop`, an editor, a terminal browser;
+  - keys go to it as an xterm sends them (cursor key modes, modifiers,
+    F1 to F24, Alt as Esc), Ctrl+C and Tab included; pastes go bracketed
+    when it asked; the mouse goes in the reports it asked for (X10, UTF-8
+    or SGR); resizes reach it;
+  - its screen is followed by rs-rich-record's `Terminal` (vt100 with
+    rich's character widths) and drawn in the pane, with scrollback
+    (Shift+PgUp/PgDn, and the wheel when the program does not want the
+    mouse);
+  - its exit is a signal (`status()`) and a callback (`on_exit`);
+  - `release_keys` names keys that go to the app instead, and the program
+    is ended when its pane leaves the tree.
+- **`PtyHost`**, behind the pane: start, write, resize, read, notify,
+  exit status, kill. `LocalPty` runs a program through portable-pty (a
+  PTY on Unix, ConPTY on Windows); `ReplayHost` plays bytes back, and its
+  `ReplayHandle` feeds output from any thread and reads back what was
+  sent. Output arriving on a host's thread wakes the app through its
+  `Proxy`, and is read on the app's thread between frames.
+- **`web_view(url)`, a web page in a pane,** with an address bar (back,
+  forward, reload, the address, a loading mark; Ctrl+L to type an
+  address), and the address, title, loading state, back, forward and
+  errors as signals on a `Copy` `WebHandle`. Setting the address opens it.
+  Keys, the mouse and pastes go to the page, and its size to the engine.
+- **`WebEngine`**, behind the view: frames of cells (drawn as they are)
+  or pixels (drawn as coloured half blocks; the kitty, sixel and iTerm2
+  protocols are not used yet, since intuiTUIve diffs a grid of cells).
+  - **`ProgramEngine`** (default): a terminal browser the app names, or the
+    first of Carbonyl, Chawan, Browsh, w3m and lynx on `PATH`
+    (`RICH_EMBED_BROWSER` overrides), run in a pane.
+  - **`ChromeEngine`** (feature `chrome`, off by default): a headless
+    Chrome or Chromium the user installs, driven over the DevTools
+    protocol with tungstenite on a thread of its own, no async runtime.
+    The sandbox stays on (`--no-sandbox` is dropped), the profile is a
+    temporary directory removed with the engine, and downloads are
+    denied. Screencast frames, `Input.dispatchKeyEvent`,
+    `dispatchMouseEvent` and `insertText`.
+  - **`BrowshEngine`** (feature `browsh`, off by default): Browsh's HTTP
+    server mode, a page as plain text, read-only.
+  - No browser is a dependency, ships with the crate, or is downloaded.
+- **rs-rich-record:** `Terminal::with_scrollback`, `set_scrollback` and
+  `cell_text` (a cell's text as rich prints it, clusters whole), for the
+  pane's scrollback and drawing.
+- **Tests:** the pane against `ReplayHost` (output, keys, the mouse,
+  pastes, resizes, scrollback, the exit, released keys, the program ended
+  with its pane); `sh -c 'printf hi; exit 3'` on a real PTY (Unix); the
+  web view against a fake engine (the signals, the bar, input, cells and a
+  pixel frame as half blocks) and `ProgramEngine` over replayed hosts; the
+  DevTools message encoding without a browser. `tests/chrome.rs` runs
+  against a real Chrome only when `RICH_EMBED_CHROME` names one.
+- **`examples/embed.rs`:** a shell pane beside a w3m web view.
+
 ## 0.0.17 cohort
 
 ext 0.0.15 / micro 0.0.4 / record 0.0.5 / interact 0.0.5 / ratatui 0.0.2 /

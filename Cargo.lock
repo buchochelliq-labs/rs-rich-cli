@@ -2563,6 +2563,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "rs-rich-embed"
+version = "0.0.1"
+dependencies = [
+ "image",
+ "portable-pty",
+ "rs-rich",
+ "rs-rich-intuituive",
+ "rs-rich-record",
+ "serde_json",
+ "tungstenite",
+ "vt100",
+]
+
+[[package]]
 name = "rs-rich-ext"
 version = "0.0.15"
 dependencies = [

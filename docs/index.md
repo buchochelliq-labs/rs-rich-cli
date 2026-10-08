@@ -183,6 +183,7 @@ The badges below show the versions currently available on crates.io.
 | [`rs-rich-ratatui`](https://crates.io/crates/rs-rich-ratatui) | [![rs-rich-ratatui](https://img.shields.io/crates/v/rs-rich-ratatui.svg)](https://crates.io/crates/rs-rich-ratatui) | [docs.rs](https://docs.rs/rs-rich-ratatui) | ratatui interop: rich renderables as ratatui widgets (new in 0.0.17) |
 | [`rs-rich-intuituive`](https://crates.io/crates/rs-rich-intuituive) | [![rs-rich-intuituive](https://img.shields.io/crates/v/rs-rich-intuituive.svg)](https://crates.io/crates/rs-rich-intuituive) | [docs.rs](https://docs.rs/rs-rich-intuituive) | intuiTUIve: a reactive, retained TUI framework (new in 0.0.17) |
 | [`rs-rich-web`](https://crates.io/crates/rs-rich-web) | [![rs-rich-web](https://img.shields.io/crates/v/rs-rich-web.svg)](https://crates.io/crates/rs-rich-web) | [docs.rs](https://docs.rs/rs-rich-web) | serving intuiTUIve apps to a browser (new in 0.0.18) |
+| [`rs-rich-embed`](https://crates.io/crates/rs-rich-embed) | [![rs-rich-embed](https://img.shields.io/crates/v/rs-rich-embed.svg)](https://crates.io/crates/rs-rich-embed) | [docs.rs](https://docs.rs/rs-rich-embed) | a terminal pane and a web view for intuiTUIve apps (new in 0.0.18) |
 
 <a id="versions-prepared-in-this-checkout"></a>
 
@@ -210,6 +211,7 @@ Each crate versions independently; see [Branching and releases](BRANCHING.md).
 | [`rs-rich-ratatui`](https://crates.io/crates/rs-rich-ratatui) | `0.0.3` |
 | [`rs-rich-intuituive`](https://crates.io/crates/rs-rich-intuituive) | `0.0.3` |
 | [`rs-rich-web`](https://crates.io/crates/rs-rich-web) | `0.0.1` |
+| [`rs-rich-embed`](https://crates.io/crates/rs-rich-embed) | `0.0.1` |
 <!-- END MANIFEST VERSIONS -->
 
 ## Install

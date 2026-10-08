@@ -254,3 +254,12 @@ is again a separate project). It drives intuiTUIve apps through the
 framework's public `Driver` and decodes the page's input into
 rs-rich-interact events. Core is unchanged and no golden fixture covers it.
 See [Serving an app to a browser](guide/intuituive/web.md).
+
+### Embedding (rs-rich-embed, not upstream)
+
+`rs-rich-embed` (`crates/rich-embed`, 0.0.1) has no upstream module to
+port: Python `rich` cannot run another program or a web page inside a
+renderable. It composes `rs-rich-intuituive`'s public `Widget` trait,
+`rs-rich-record`'s VT emulator and portable-pty. Core is unchanged and no
+golden fixture covers it. See
+[Embedding programs and pages](guide/intuituive/embed.md).

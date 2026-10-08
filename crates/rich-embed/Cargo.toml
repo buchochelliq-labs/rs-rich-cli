@@ -1,0 +1,51 @@
+# crates/rich-embed — other programs and web pages inside an intuiTUIve app.
+#
+# Not a port of anything upstream: an rs-rich addition (0.0.18 plan,
+# workstream 9). A terminal pane that runs any program over a `PtyHost`, and
+# a web view over a `WebEngine`, each behind a trait an app can implement
+# itself. Its own crate, so the framework does not depend on a PTY, a VT
+# emulator or a browser protocol. Independent SemVer from 0.0.1.
+[package]
+name = "rs-rich-embed"
+version = "0.0.1"
+description = "A terminal pane and a web view for intuiTUIve apps, over swappable PTY and browser backends"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+readme = "README.md"
+documentation = "https://docs.rs/rs-rich-embed"
+keywords = ["terminal", "tui", "pty", "browser", "rich"]
+categories = ["command-line-interface"]
+include = ["src/**/*", "README.md", "LICENSE", "Cargo.toml"]
+
+[lib]
+name = "rich_embed"
+
+[lints]
+workspace = true
+
+[features]
+default = []
+# Headless Chrome or Chromium, which the user installs, driven over the
+# DevTools protocol: tungstenite directly, no async runtime.
+chrome = ["dep:tungstenite", "dep:serde_json", "dep:image"]
+# Browsh's HTTP server mode: a page as text, read-only. Plain HTTP over a
+# local socket, no extra dependencies.
+browsh = []
+
+[dependencies]
+rich.workspace = true
+rich-intuituive.workspace = true
+# Its VT emulator (`Terminal`: vt100 with rich's character widths).
+rich-record.workspace = true
+# A PTY on Unix and ConPTY on Windows, as rs-rich-record uses.
+portable-pty = "0.9"
+# The emulator's screen type, and its mouse and cursor modes.
+vt100 = "0.16"
+tungstenite = { version = "0.30", default-features = false, features = ["handshake"], optional = true }
+serde_json = { workspace = true, optional = true }
+# Decoding the screencast's JPEG frames.
+image = { workspace = true, optional = true }
