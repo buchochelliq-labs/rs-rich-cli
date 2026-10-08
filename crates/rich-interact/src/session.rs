@@ -316,16 +316,20 @@ fn restore(wait: bool) -> io::Result<()> {
     }
     let library = BackendKind::live();
     let out = undo(active, library);
+    // Every step is tried, so a failed one leaves no other on; the first
+    // error is the one returned.
     let written = Output::live().write(&out);
-    if active & ALTERNATE != 0 {
-        if let Some(left) = library.alternate_screen(false, wait) {
-            left?;
-        }
-    }
-    if active & RAW != 0 {
-        library.raw_mode(false, wait)?;
-    }
-    written
+    let left = if active & ALTERNATE != 0 {
+        library.alternate_screen(false, wait).unwrap_or(Ok(()))
+    } else {
+        Ok(())
+    };
+    let raw = if active & RAW != 0 {
+        library.raw_mode(false, wait)
+    } else {
+        Ok(())
+    };
+    written.and(left).and(raw)
 }
 
 /// The sequences that turn off what `active` records: all of it, but for
