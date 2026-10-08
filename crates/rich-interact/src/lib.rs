@@ -15,7 +15,8 @@
 //! - [`session`]: raw mode, the alternate screen, mouse and paste, restored
 //!   on every way out, including a panic, Ctrl+C and a hand-off to another
 //!   program (#489), driven by crossterm, or by termion or termwiz behind
-//!   the features of those names ([`BackendKind`]);
+//!   the features of those names ([`BackendKind`]), and each frame written
+//!   as one synchronized update where the terminal has it;
 //! - [`event`]: keys, mouse, resizes and pastes, from whichever drives the
 //!   terminal;
 //! - [`viewport`]: a scrollable window over rendered lines (#495);
@@ -122,7 +123,7 @@ pub use keymap::{Binding, Keymap};
 pub use overlay::{Command, Help, Menu, Overlays, Palette, Shortcuts};
 pub use plugin::PluginView;
 pub use policy::{Fallback, LineIo, NotInteractive, Policy, Reason};
-pub use session::{Backend, BackendKind, Output, Session, SessionOptions};
+pub use session::{synchronized_update, Backend, BackendKind, Output, Session, SessionOptions};
 pub use viewport::Viewport;
 
 /// Forward every [`Component`] method to `(**self)`.

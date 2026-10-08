@@ -9,6 +9,47 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Synchronized output (rs-rich-interact 0.0.6, rs-rich-intuituive 0.0.3)
+
+0.0.18 workstream 11. rs-rich-record changes with it.
+
+- **Each frame is one synchronized update** (DEC private mode 2026) on a
+  terminal that has it: the painter's bytes for a frame, the final cursor
+  placement and show or hide included, go out between `CSI ? 2026 h` and
+  `CSI ? 2026 l` in one write, so the terminal shows the frame whole. No
+  tearing, and a screen reader following the cursor no longer sees it jump
+  across each changed region. A frame with nothing to paint writes nothing
+  at all. Inline and on the alternate screen, with crossterm, termion and
+  termwiz, from the event loop and from intuiTUIve's `App::run_on`.
+- **Detected without a wait.** The session asks DECRQM
+  (`CSI ? 2026 $ p`) in the kitty keyboard protocol's start-up round trip,
+  ahead of the kitty query and the device attributes query that ends it,
+  and reads the answers itself: the mode reported set or reset means yes;
+  not recognised, permanently reset or no report, no. Asked once per
+  process, on Unix, only when the kitty query is: a `legacy_keys` session,
+  a termion session or one whose standard output is not the terminal asks
+  nothing. The session now sends the kitty query itself on every backend
+  (crossterm's own query is no longer used on Unix).
+- **Forcing it:** `RICH_SYNC_OUTPUT=0` turns it off and `=1` on (for a
+  terminal that has it but does not answer, and for Windows, where nothing
+  reads the answer); `SessionOptions::synchronized_output: Option<bool>`
+  and intuiTUIve's `App::synchronized_output(Option<bool>)` force it from
+  code, over the environment. `Session::synchronized_output` says whether
+  it is on.
+- **Never left open.** Exit, a hand-off, Ctrl+Z or SIGTSTP, a panic and the
+  signals that restore the terminal end any update a cut-short write left
+  open, before the other modes.
+- **API:** `Backend::synchronized_output` and `Backend::write_frame` (both
+  with defaults; the event loop and intuiTUIve write frames through
+  `write_frame`), `Headless::synchronized_output` for tests that assert the
+  wrapped bytes, and `synchronized_update` with the
+  `BEGIN_SYNCHRONIZED_UPDATE` and `END_SYNCHRONIZED_UPDATE` constants for a
+  loop of your own. **Breaking:** `SessionOptions` has a new field (build it
+  with `..SessionOptions::default()`).
+- **rs-rich-record** answers DECRQM for mode 2026 (recognised, reset), so
+  programs in tapes write synchronized updates; its VT emulator passes over
+  the mode, so tapes show the same screens.
+
 ### intuiTUIve: rough spots (rs-rich-intuituive 0.0.3, rs-rich-record 0.0.6)
 
 Workstream 1 of the [0.0.18 plan](docs/plans/0.0.18.md).

@@ -60,6 +60,33 @@ fn a_change_sends_only_the_cells_that_changed() {
 }
 
 #[test]
+fn synchronized_output_sends_each_frame_as_one_update() {
+    let app = App::new(|| {
+        let tick = signal(0u32);
+        column([label("ops").fixed(1), text!("tick {tick}").fixed(1)])
+            .on_key("+", move |_| tick.update(|t| *t += 1))
+            .on_key("q", |cx| cx.quit())
+    });
+    // `x` changes nothing.
+    let mut backend = Headless::new(Script::new().keys("x + q"), 20, 2);
+    backend.synchronized_output = true;
+    let record = backend.record();
+    app.run_on(&mut backend).unwrap();
+    let record = record.borrow();
+    // Every write is one whole update, and none is empty: the first paint,
+    // the tick, and the finish.
+    assert_eq!(record.writes.len(), 3, "{:?}", record.writes);
+    for write in &record.writes {
+        assert!(write.starts_with("\x1b[?2026h"), "{write:?}");
+        assert!(write.ends_with("\x1b[?2026l"), "{write:?}");
+        assert_eq!(write.matches("2026").count(), 2, "{write:?}");
+        assert_ne!(write, "\x1b[?2026h\x1b[?2026l");
+    }
+    assert!(record.writes[0].starts_with("\x1b[?2026h\x1b[?25l"));
+    assert_eq!(record.writes[1], "\x1b[?2026h\x1b[2;6H\x1b[0m1\x1b[?2026l");
+}
+
+#[test]
 fn only_the_nodes_that_read_a_signal_draw_again() {
     let draws = Rc::new(RefCell::new(Vec::<&'static str>::new()));
     let log = |name: &'static str, draws: &Rc<RefCell<Vec<&'static str>>>| {
