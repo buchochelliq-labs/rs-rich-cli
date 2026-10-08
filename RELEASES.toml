@@ -102,6 +102,12 @@ manifest = "crates/rich-web/Cargo.toml"
 version = "0.0.1"
 
 [[package]]
+name = "rs-rich-embed"
+registry = "crates.io"
+manifest = "crates/rich-embed/Cargo.toml"
+version = "0.0.1"
+
+[[package]]
 name = "rs-rich-data"
 registry = "crates.io"
 manifest = "crates/rich-data/Cargo.toml"
