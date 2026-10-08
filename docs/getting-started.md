@@ -43,7 +43,8 @@ do not, [rustup.rs](https://rustup.rs) is the one-line installer.
     `rs-rich-plugin-api` · `rs-rich-mermaid` · `rs-rich-lumis` (new in 0.0.12) ·
     `rs-rich-interact` · `rs-rich-record` (new in 0.0.13) ·
     `rs-rich-micro` (new in 0.0.14) · `rs-rich-diagram` (new in 0.0.15) ·
-    `rs-rich-data` (new in 0.0.16) · `rs-rich-ratatui` · `rs-rich-intuituive` (both new in 0.0.17) —
+    `rs-rich-data` (new in 0.0.16) · `rs-rich-ratatui` · `rs-rich-intuituive` (both new in 0.0.17) ·
+    `rs-rich-web` (new in 0.0.18) —
     follow the links for current published versions.
     API documentation is on [docs.rs](https://docs.rs/rs-rich).
 
