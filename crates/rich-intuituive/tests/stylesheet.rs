@@ -426,3 +426,24 @@ fn a_later_text_style_replaces_an_earlier_one() {
         style("not bold not dim not italic not underline not reverse not strike not blink")
     );
 }
+
+#[test]
+fn a_disabled_autofocus_node_does_not_take_the_focus() {
+    let app = App::new(|| {
+        let picked = signal("");
+        column([
+            label("first")
+                .focusable()
+                .on_key("x", move |_| picked.set("first")),
+            label("chosen")
+                .autofocus()
+                .disabled_when(|| true)
+                .on_key("x", move |_| picked.set("chosen")),
+            text!("picked {picked}"),
+        ])
+    });
+    let mut driver = app.driver(20, 3);
+    frame(&mut driver, None);
+    let rows = frame(&mut driver, press("x"));
+    assert!(row_of(&rows, "picked first").is_some(), "{rows:?}");
+}
