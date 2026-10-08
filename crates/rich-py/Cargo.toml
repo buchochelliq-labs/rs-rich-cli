@@ -37,6 +37,12 @@ rich-plugin-api = { package = "rs-rich-plugin-api", path = "../rich-plugin-api" 
 # `rs_rich.interact`: the interactive components, their headless driver and
 # the fuzzy matcher (0.0.13 workstream 5).
 rich-interact = { package = "rs-rich-interact", path = "../rich-interact", features = ["micro"] }
+# `rs_rich.tui`: intuiTUIve, the TUI framework, with browser serving
+# (rs-rich-web) and the terminal pane and web view (rs-rich-embed) (0.0.18
+# workstream 8).
+rich-intuituive = { package = "rs-rich-intuituive", path = "../rich-intuituive" }
+rich-web = { package = "rs-rich-web", path = "../rich-web" }
+rich-embed = { package = "rs-rich-embed", path = "../rich-embed" }
 # The `rich` command line, run in-process by `python -m rs_rich`: the default
 # features except `record`, whose PTY recorder runs the `rich` binaries beside
 # the running executable (here, Python) and has no place in a wheel.

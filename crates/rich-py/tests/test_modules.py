@@ -88,7 +88,7 @@ def test_the_stub_file_has_a_section_per_area():
         line for line in (PACKAGE / "_native.pyi").read_text(encoding="utf-8").splitlines()
         if line.startswith("# --- area: ")
     ]
-    for area in ["text-style", "renderables", "code", "live", "ext", "art", "chart", "diagram", "data", "plugins", "cli"]:
+    for area in ["text-style", "renderables", "code", "live", "ext", "art", "chart", "diagram", "data", "tui", "plugins", "cli"]:
         assert any(line.startswith(f"# --- area: {area} ") for line in sections), area
 
 

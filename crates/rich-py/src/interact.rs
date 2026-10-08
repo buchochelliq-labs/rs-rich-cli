@@ -44,7 +44,7 @@ use rich_interact::{
 };
 
 mod components;
-mod compose;
+pub(crate) mod compose;
 mod keymap;
 mod pickers;
 
@@ -256,7 +256,7 @@ impl Script {
     }
 }
 
-fn script_arg(value: Option<&Bound<'_, PyAny>>) -> PyResult<CoreScript> {
+pub(crate) fn script_arg(value: Option<&Bound<'_, PyAny>>) -> PyResult<CoreScript> {
     let Some(value) = value.filter(|value| !value.is_none()) else {
         return Ok(CoreScript::new());
     };
