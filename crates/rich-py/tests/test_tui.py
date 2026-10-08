@@ -978,6 +978,25 @@ def test_themes():
     assert run(App(build).theme(theme), "t q", width=5, height=1).finished
 
 
+def test_inline_apps_and_theme_files(tmp_path):
+    theme = tmp_path / "theme.ini"
+    theme.write_text("[styles]\naccent = bold magenta\n")
+    assert Theme.load(theme).styles
+
+    def build():
+        done = signal(0)
+        every(0.1, lambda cx: done.update(lambda d: d + 1) or (cx.quit() if done.get_untracked() >= 3 else None))
+        return text(lambda: f"[accent]{'━' * done.get()}[/] {done.get()}/3").fixed(1)
+
+    app = App(build).inline(2).theme_file(theme)
+    ran = run(app, Script().wait(1.0), width=20, height=10)
+    assert ran.finished
+    # The last tick quits: its change goes out as the app finishes.
+    assert ran.screen[0].rstrip() == "━━ 2/3"
+    assert "3/3" in ran.writes[-1]
+    assert "1;35m" in ran.output
+
+
 # ---------------------------------------------------------------------------
 # The stylesheet
 
@@ -1193,6 +1212,26 @@ def test_an_exception_anywhere_is_raised_from_run(where):
     with pytest.raises(KeyError, match=where):
         app = App(build).wait_for_tasks()
         run(app, Script().wait(0.05).keys("x x x"), width=10, height=2)
+
+
+def test_an_exception_in_a_hosted_component_stops_the_app():
+    from rs_rich.interact import Component
+
+    class Broken(Component):
+        def render(self, context):
+            raise LookupError("in render")
+
+    calls = []
+
+    def build():
+        return column([
+            component(Broken(), lambda value, cx: None),
+            label("x").on_key("c", lambda cx: calls.append("c")),
+        ])
+
+    with pytest.raises(LookupError, match="in render"):
+        run(App(build), "c c c")
+    assert len(calls) <= 1
 
 
 def test_a_driver_raises_from_the_call_that_ran_the_callback():

@@ -991,7 +991,10 @@ impl PyDriver {
         let guard = self.driver.try_borrow().map_err(|_| {
             PyRuntimeError::new_err("the driver is in use by the call that called this")
         })?;
-        guard.as_ref().map(f).ok_or_else(finished)
+        let value = guard.as_ref().map(f).ok_or_else(finished)?;
+        // Reading the tree runs conditions (`checked_when`), which may raise.
+        self.shared.check()?;
+        Ok(value)
     }
 
     fn send(&self, py: Python<'_>, events: Vec<Event>) -> PyResult<()> {
