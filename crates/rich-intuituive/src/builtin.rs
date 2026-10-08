@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use std::hash::Hash;
 use std::rc::Rc;
 
-use rich::{Console, Segment};
+use rich::{Console, Segment, Style};
 use rich_interact::{Component, Context, Event, Flow, KeyCode, MouseKind};
 
 use crate::app::Ctx;
@@ -72,9 +72,8 @@ impl Widget for Stack {
     }
 
     fn measure(&mut self, cx: &MeasureCx, axis: Axis, width: u16, height: u16) -> u16 {
-        let gaps = self
-            .gap
-            .saturating_mul(self.children.len().saturating_sub(1) as u16);
+        let shown = self.children.iter().filter(|c| !c.hidden()).count();
+        let gaps = self.gap.saturating_mul(shown.saturating_sub(1) as u16);
         if self.axis == axis {
             self.children.iter().fold(gaps, |sum, child| {
                 sum.saturating_add(cx.extent(child, axis, width, height))
@@ -106,6 +105,8 @@ impl Widget for Stack {
 /// Children in rows and columns: [`grid`](crate::grid).
 pub(crate) struct Grid {
     pub columns: Vec<Size>,
+    /// Whether code gave the columns (else a stylesheet may).
+    pub code_columns: bool,
     pub rows: Vec<Size>,
     /// Between rows, and between columns.
     pub gap: (u16, u16),
@@ -156,8 +157,27 @@ impl Widget for Grid {
 /// is [`Axis::Horizontal`] when measuring the grid's own width, which
 /// leaves flexible columns at their content.
 fn grid_areas(cx: &MeasureCx, grid: &Grid, rect: Rect, axis: Axis) -> Vec<Rect> {
+    // Children a stylesheet hides take no cell and get an empty rectangle.
+    let children: Vec<&Node> = grid.children.iter().filter(|c| !c.hidden()).collect();
+    let mut shown = shown_areas(cx, grid, &children, rect, axis).into_iter();
+    grid.children
+        .iter()
+        .map(|c| match c.hidden() {
+            true => Rect::default(),
+            false => shown.next().unwrap_or_default(),
+        })
+        .collect()
+}
+
+fn shown_areas(
+    cx: &MeasureCx,
+    grid: &Grid,
+    children: &[&Node],
+    rect: Rect,
+    axis: Axis,
+) -> Vec<Rect> {
     let columns = grid.columns.len().max(1);
-    let spans: Vec<(u16, u16)> = grid.children.iter().map(|c| c.span).collect();
+    let spans: Vec<(u16, u16)> = children.iter().map(|c| c.span).collect();
     let (places, rows) = place(columns, &spans);
     let (row_gap, column_gap) = grid.gap;
     let span_length = |sizes: &[u16], from: usize, n: usize, gap: u16| -> u16 {
@@ -178,7 +198,7 @@ fn grid_areas(cx: &MeasureCx, grid: &Grid, rect: Rect, axis: Axis) -> Vec<Rect> 
                 track.size = Size::Auto;
                 track.content = places
                     .iter()
-                    .zip(&grid.children)
+                    .zip(children)
                     .filter(|(p, _)| p.column == c && p.columns == 1)
                     .map(|(_, child)| cx.measure(child, Axis::Horizontal, rect.width, rect.height))
                     .max()
@@ -188,7 +208,7 @@ fn grid_areas(cx: &MeasureCx, grid: &Grid, rect: Rect, axis: Axis) -> Vec<Rect> 
         })
         .collect();
     // Children spanning several columns grow the content columns they span.
-    for (p, child) in places.iter().zip(&grid.children) {
+    for (p, child) in places.iter().zip(children) {
         if p.columns > 1 {
             let need = cx.measure(child, Axis::Horizontal, rect.width, rect.height);
             grow_for_span(
@@ -219,7 +239,7 @@ fn grid_areas(cx: &MeasureCx, grid: &Grid, rect: Rect, axis: Axis) -> Vec<Rect> 
                 track.size = Size::Auto;
                 track.content = places
                     .iter()
-                    .zip(&grid.children)
+                    .zip(children)
                     .filter(|(p, _)| p.row == r && p.rows == 1)
                     .map(|(p, child)| {
                         let width = span_length(&widths, p.column, p.columns, column_gap);
@@ -231,7 +251,7 @@ fn grid_areas(cx: &MeasureCx, grid: &Grid, rect: Rect, axis: Axis) -> Vec<Rect> 
             track
         })
         .collect();
-    for (p, child) in places.iter().zip(&grid.children) {
+    for (p, child) in places.iter().zip(children) {
         if p.rows > 1 {
             let width = span_length(&widths, p.column, p.columns, column_gap);
             let need = cx.measure(child, Axis::Vertical, width, 0);
@@ -266,14 +286,41 @@ pub(crate) struct Panel {
     pub child: Node,
     /// Whether the border was last drawn as focused.
     shown_focus: Option<bool>,
+    /// What a stylesheet says about it.
+    pub look: PanelLook,
+}
+
+/// A stylesheet's border, title and padding for a [`Panel`].
+#[derive(Clone, Debug, Default)]
+pub(crate) struct PanelLook {
+    pub border: Option<(crate::sheet::BoxKind, Style)>,
+    /// `border: none`: no box, and no cells kept for one.
+    pub no_border: bool,
+    pub title: Option<String>,
+    /// Inside the border: top, right, bottom, left.
+    pub padding: [u16; 4],
 }
 
 impl Panel {
+    /// The cells its border takes on each side: none after `border: none`.
+    fn edge(&self) -> u16 {
+        u16::from(!self.look.no_border)
+    }
+
     pub fn new(title: String, child: Node) -> Panel {
         Panel {
             title,
             child,
             shown_focus: None,
+            look: PanelLook::default(),
+        }
+    }
+
+    /// The title: the one code gave, else the stylesheet's.
+    fn title(&self) -> &str {
+        match (&self.title[..], &self.look.title) {
+            ("", Some(title)) => title,
+            (title, _) => title,
         }
     }
 }
@@ -284,17 +331,24 @@ impl Widget for Panel {
     }
 
     fn describe(&self) -> Option<String> {
-        (!self.title.is_empty()).then(|| format!("\"{}\"", self.title))
+        let title = self.title();
+        (!title.is_empty()).then(|| format!("\"{title}\""))
     }
 
     fn measure(&mut self, cx: &MeasureCx, axis: Axis, width: u16, height: u16) -> u16 {
-        cx.measure(
-            &self.child,
-            axis,
-            width.saturating_sub(2),
-            height.saturating_sub(2),
-        )
-        .saturating_add(2)
+        let [top, right, bottom, left] = self.look.padding;
+        let edges = self.edge() * 2;
+        let (across, down) = (left + right + edges, top + bottom + edges);
+        let height = if height == 0 {
+            0
+        } else {
+            height.saturating_sub(down)
+        };
+        cx.measure(&self.child, axis, width.saturating_sub(across), height)
+            .saturating_add(match axis {
+                Axis::Vertical => down,
+                Axis::Horizontal => across,
+            })
     }
 
     fn children(&self) -> &[Node] {
@@ -302,7 +356,14 @@ impl Widget for Panel {
     }
 
     fn layout(&mut self, _cx: &MeasureCx, rect: Rect) -> Vec<Rect> {
-        vec![rect.inner(1)]
+        let inner = rect.inner(self.edge());
+        let [top, right, bottom, left] = self.look.padding;
+        vec![Rect::new(
+            inner.x.saturating_add(left),
+            inner.y.saturating_add(top),
+            inner.width.saturating_sub(left + right),
+            inner.height.saturating_sub(top + bottom),
+        )]
     }
 
     fn draw(&mut self, cx: &mut DrawCx, canvas: &mut Canvas) {
@@ -310,10 +371,20 @@ impl Widget for Panel {
         // app, the panel stays as it is, and only its edges change colour
         // when it comes or goes.
         let focused = cx.focus_within();
+        if self.look.no_border {
+            return;
+        }
         if cx.repaint() || self.shown_focus != Some(focused) {
-            let style = cx.theme().border(focused);
+            // A stylesheet's border sets the box, and the colour while the
+            // focus is elsewhere.
+            let (kind, style) = match &self.look.border {
+                Some((kind, style)) if !focused && !style.is_null() => (*kind, style.clone()),
+                Some((kind, _)) => (*kind, cx.theme().border(focused)),
+                None => (crate::sheet::BoxKind::Round, cx.theme().border(focused)),
+            };
             let title_style = style.combine(&cx.theme().title);
-            canvas.border(&self.title, &style, &title_style);
+            let title = self.title().to_string();
+            canvas.border_box(kind, &title, &style, &title_style);
         }
         self.shown_focus = Some(focused);
     }
