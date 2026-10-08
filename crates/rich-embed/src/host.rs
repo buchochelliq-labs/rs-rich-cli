@@ -271,8 +271,10 @@ impl LocalPty {
     /// Hold at most about `bytes` of output that has not been
     /// [read](PtyHost::read) (one read of the PTY more, at most 64 KiB);
     /// past it, stop reading the program's output until some is read, so
-    /// its writes wait, as they do on a slow terminal. Without this, output
-    /// is never waited for: past 16 MiB unread, the oldest is dropped. For
+    /// its writes wait, as they do on a slow terminal. Nothing is dropped,
+    /// at any limit (16 MiB's or more included): memory is bounded by the
+    /// limit itself. Without this, output is never waited for: past 16 MiB
+    /// unread, the oldest is dropped. For
     /// a reader that may fall behind and must not lose anything, such as a
     /// browser at the end of a network (rs-rich-web).
     pub fn backpressure(mut self, bytes: usize) -> LocalPty {
@@ -336,12 +338,7 @@ impl PtyHost for LocalPty {
                     Ok(0) | Err(_) => break,
                     Ok(read) => read,
                 };
-                {
-                    let mut output = lock(&shared);
-                    output.buffer.extend(&chunk[..read]);
-                    let over = output.buffer.len().saturating_sub(MAX_BUFFERED);
-                    output.buffer.drain(..over);
-                }
+                keep(&mut lock(&shared), &chunk[..read], limit.is_none());
                 notify(&shared);
             }
             lock(&shared).eof = true;
@@ -438,6 +435,18 @@ impl Drop for LocalPty {
     fn drop(&mut self) {
         lock(&self.shared).closed = true;
         let _ = self.kill();
+    }
+}
+
+/// Add `bytes` to the unread output. Without backpressure (`drop_oldest`),
+/// past [`MAX_BUFFERED`] the oldest goes; with it, nothing is ever dropped:
+/// the reader waits for room before reading more, so the buffer stays
+/// within the limit and one read, whatever the limit.
+fn keep(output: &mut Output, bytes: &[u8], drop_oldest: bool) {
+    output.buffer.extend(bytes);
+    if drop_oldest {
+        let over = output.buffer.len().saturating_sub(MAX_BUFFERED);
+        output.buffer.drain(..over);
     }
 }
 
@@ -644,5 +653,27 @@ impl PtyHost for ReplayHost {
             state.status = Some(ExitStatus::with_signal("Killed"));
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn backpressure_never_drops_output_past_the_legacy_limit() {
+        let chunk = vec![b'x'; 1 << 20];
+        // With backpressure (here above 16 MiB), every byte is kept.
+        let mut held = Output::default();
+        for _ in 0..(MAX_BUFFERED / chunk.len() + 4) {
+            keep(&mut held, &chunk, false);
+        }
+        assert_eq!(held.buffer.len(), MAX_BUFFERED + 4 * chunk.len());
+        // Without it, the oldest go past 16 MiB, as before.
+        let mut dropped = Output::default();
+        for _ in 0..(MAX_BUFFERED / chunk.len() + 4) {
+            keep(&mut dropped, &chunk, true);
+        }
+        assert_eq!(dropped.buffer.len(), MAX_BUFFERED);
     }
 }

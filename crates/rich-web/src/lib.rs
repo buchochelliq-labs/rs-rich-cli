@@ -302,8 +302,10 @@ impl Server {
     /// and not yet acknowledged by the page, half is output read from the
     /// program and not yet sent; past that, the program's writes wait until
     /// the page catches up, as on a slow terminal, so nothing is dropped
-    /// and memory stays bounded however fast it writes. Apps send whole
-    /// frames and are not affected.
+    /// and memory stays bounded however fast it writes, at any size (a
+    /// [`LocalPty`] with backpressure never drops output, even past its
+    /// own 16 MiB limit without it). Apps send whole frames and are not
+    /// affected.
     pub fn max_buffered(mut self, bytes: usize) -> Server {
         self.shared.max_buffered = bytes.max(2);
         self

@@ -249,6 +249,8 @@
   socket.onopen = function () {
     open = true;
     say("");
+    // The size may have changed while connecting.
+    send("r" + size[0] + "," + size[1]);
     root.focus({ preventScroll: true });
   };
   socket.onmessage = function (event) {

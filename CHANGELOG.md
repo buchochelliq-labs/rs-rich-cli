@@ -475,8 +475,9 @@ writes itself. See `docs/guide/intuituive/embed.md`.
   pane's scrollback and drawing.
 - **`LocalPty::backpressure(bytes)`:** past that much unread output, stop
   reading the program, so its writes wait instead of the oldest output
-  being dropped (past 16 MiB, without it). The exit is still reported
-  after the last output. rs-rich-web's program sessions use it.
+  being dropped (past 16 MiB, without it); with it, nothing is dropped at
+  any limit, 16 MiB or more. The exit is still reported after the last
+  output. rs-rich-web's program sessions use it.
 - **Tests:** the pane against `ReplayHost` (output, keys, the mouse,
   pastes, resizes, scrollback, the exit, released keys, the program ended
   with its pane); `sh -c 'printf hi; exit 3'` on a real PTY (Unix); the
