@@ -244,8 +244,8 @@ then the command palette. See [Terminal apps](guide/intuituive/index.md).
 | ![A modal asking whether to quit](media/tapes/intuituive/modal.png) | ![An inline app under the prompt](media/tapes/intuituive/inline.png) |
 | **Widgets of your own** | **Components** |
 | ![Four meters, each a custom widget](media/tapes/intuituive/meters.png) | ![A planner: a menu bar, a tree, a calendar and a log](media/tapes/intuituive/planner.png) |
-| **Command palette** | |
-| ![The planner's command palette](media/tapes/intuituive/planner-palette.png) | |
+| **Command palette** | **Menu bar** |
+| ![The planner's command palette](media/tapes/intuituive/planner-palette.png) | ![The planner's File menu, opened with F10](media/tapes/intuituive/planner-menu.png) |
 
 [Tape](tapes/intuituive.tape) · [Cast](media/tapes/intuituive/intuituive.cast) · [GIF](media/tapes/intuituive/intuituive.gif) · [Page](media/tapes/intuituive/intuituive.html)
 
@@ -269,8 +269,8 @@ status line. See
 | ![A Rust file previewed](media/tapes/files/files.png) | ![The help overlay](media/tapes/files/files-help.png) |
 | **Tabs** | **Filter** |
 | ![Two tabs](media/tapes/files/files-tabs.png) | ![The filter prompt above the status line](media/tapes/files/files-filter.png) |
-| **Command palette** | |
-| ![The command palette](media/tapes/files/files-palette.png) | |
+| **Command palette** | **Right-click menu** |
+| ![The command palette](media/tapes/files/files-palette.png) | ![The menu a right click opens on a row](media/tapes/files/files-menu.png) |
 
 [Tape](tapes/files.tape) · [Cast](media/tapes/files/files.cast) · [GIF](media/tapes/files/files.gif) · [Page](media/tapes/files/files.html)
 
@@ -521,7 +521,8 @@ wide as rich measures it, so the columns after it line up.
 | `Set Shell zsh` | Run in `bash` (the default), `zsh`, `fish` or `sh`, each without your profile or rc files and with the same `❯` prompt. CI records in all four |
 | `Write FILE "text"`, `Exec "command"` | Prepare or change files, outside the terminal |
 | `Type "text"` | Type into the terminal, one character at a time |
-| `Enter`, `Tab`, `Space`, `Backspace`, `Escape`, arrows, `Home`, `End`, `PageUp`, `PageDown`, `Ctrl+C` | Press a key; a number after it repeats it |
+| `Enter`, `Tab`, `Shift+Tab`, `Space`, `Backspace`, `Delete`, `Insert`, `Escape`, arrows, `Home`, `End`, `PageUp`, `PageDown`, `F1` to `F24`, `Ctrl+C`, `Alt+x`, and the arrows, `Home`, `End`, `PageUp`, `PageDown`, `Delete`, `Insert` and function keys after any of `Shift+`, `Alt+` and `Ctrl+` (`Alt+Left`, `Ctrl+Shift+PageDown`) | Press a key; a number after it repeats it. Modified keys go in xterm's form, `CSI 1;3D` for `Alt+Left`. F1 to F20 are sent as xterm sends them; F21 to F24 have no xterm form, so they go as the kitty keyboard protocol's codes, which an app reads once it has turned that protocol on |
+| `Click 10 4`, `RightClick`, `MiddleClick`, `DoubleClick`, `MouseMove 10 4`, `ScrollUp 10 4 3`, `ScrollDown`, `Drag 2 4 20 4` | Use the mouse at a cell (column and row, from 0 at the top left), as SGR mouse reports; a number after a click or scroll repeats it. `Drag` moves a cell at a time with the left button held. The app needs mouse reporting on, as intuiTUIve apps have |
 | `Wait "text"`, `Wait /regex/` | Wait until the screen shows it, or has since the previous step began (so fast output that scrolls past is not missed) |
 | `Sleep 500ms` | Pause the recording |
 | `Screenshot NAME` | Save the screen |

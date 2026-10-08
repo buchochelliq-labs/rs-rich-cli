@@ -9,6 +9,29 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### intuiTUIve: rough spots (rs-rich-intuituive 0.0.3, rs-rich-record 0.0.6)
+
+Workstream 1 of the [0.0.18 plan](docs/plans/0.0.18.md).
+
+- **`.autofocus()`**: a node that takes the focus when its screen opens
+  (and whenever the screen has nothing focused), before the first
+  focusable node. One that `each` or `switch` builds after the first frame
+  still takes the focus, unless the user has moved it. The `planner` example's tree uses it instead of taking
+  the menu bar out of the Tab order.
+- **`Resize` after the first frame**: a widget is told its size once it
+  has first been laid out, not only when the size later changes.
+- **`Ctx::palette()`**, to pair with `Ctx::help()`; `command_palette()`
+  is a deprecated alias for one release.
+- **Tapes use the mouse and every key** (rs-rich-record): `Click`,
+  `RightClick`, `MiddleClick`, `DoubleClick`, `Drag`, `ScrollUp`,
+  `ScrollDown` and `MouseMove` at a cell, sent as SGR mouse reports; and
+  `F1` to `F24`, `Shift+Tab`, `Delete`, `Insert` and `Alt+x`, and the
+  arrows, `Home`, `End`, `PageUp`, `PageDown`, `Delete`, `Insert` and
+  function keys after `Shift+`, `Alt+` and `Ctrl+` (`Alt+Left`,
+  `Ctrl+PageDown`). A cell too large for an SGR report is an error. The
+  `intuituive` tape records the planner's menu bar and the `files` tape
+  its right-click menu.
+
 ### intuiTUIve: accessibility (rs-rich-intuituive 0.0.3)
 
 0.0.18 workstream 6.
