@@ -214,7 +214,7 @@ impl State {
 pub struct Session {
     state: Arc<Mutex<State>>,
     master: Box<dyn MasterPty + Send>,
-    writer: Box<dyn Write + Send>,
+    writer: Arc<Mutex<Box<dyn Write + Send>>>,
     child: Box<dyn Child + Send + Sync>,
     /// Whether the child has been killed and waited for.
     reaped: bool,
@@ -279,8 +279,10 @@ impl Session {
             .try_clone_reader()
             .map_err(std::io::Error::other)?;
         let writer = pty.master.take_writer().map_err(std::io::Error::other)?;
+        let writer = Arc::new(Mutex::new(writer));
         let state = Arc::new(Mutex::new(State::new(rows, columns, theme)));
         let shared = Arc::clone(&state);
+        let answers = Arc::clone(&writer);
         thread::spawn(move || {
             let mut buffer = [0u8; 65536];
             loop {
@@ -298,6 +300,13 @@ impl Session {
                 if !state.hidden {
                     let t = state.now();
                     state.output(t, &buffer[..read]);
+                }
+                let replies = state.terminal.take_replies();
+                drop(state);
+                if !replies.is_empty() {
+                    // Answers are not typing: they stay off the timeline.
+                    let mut writer = answers.lock().unwrap_or_else(|e| e.into_inner());
+                    let _ = writer.write_all(&replies).and_then(|()| writer.flush());
                 }
             }
             lock(&shared).alive = false;
@@ -336,8 +345,9 @@ impl Session {
                 }
             }
         }
-        self.writer.write_all(data.as_bytes())?;
-        self.writer.flush()
+        let mut writer = self.writer.lock().unwrap_or_else(|e| e.into_inner());
+        writer.write_all(data.as_bytes())?;
+        writer.flush()
     }
 
     pub fn resize(&mut self, columns: u16, rows: u16) -> std::io::Result<()> {

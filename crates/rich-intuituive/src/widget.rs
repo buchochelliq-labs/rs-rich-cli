@@ -81,6 +81,10 @@ pub enum WidgetEvent {
     /// A key, while the focus is on the widget or inside it; with nothing
     /// focused, while the pointer is over it.
     Key(Key),
+    /// A key let go, offered as [`Key`](Self::Key) is but never to a
+    /// binding. Only from a terminal with the kitty keyboard protocol (or
+    /// the Windows console); see [`App::legacy_keys`](crate::App::legacy_keys).
+    KeyUp(Key),
     /// The mouse over the widget, or captured by it.
     Mouse(Mouse),
     /// Pasted text, while the focus is on the widget or inside it.

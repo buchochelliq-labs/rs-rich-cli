@@ -48,6 +48,15 @@ impl Script {
         self
     }
 
+    /// The key named `name` let go (see [`Event::KeyUp`]).
+    ///
+    /// # Panics
+    /// On a name that does not parse.
+    pub fn key_up(self, name: &str) -> Script {
+        let key = Key::parse(name).unwrap_or_else(|| panic!("unknown key {name:?}"));
+        self.event(Event::KeyUp(key))
+    }
+
     /// Each character of `text` as a key press.
     pub fn text(mut self, text: &str) -> Script {
         for c in text.chars() {
@@ -155,6 +164,12 @@ pub struct Headless {
     /// Whether copies reach a (recorded) clipboard. On by default; off
     /// tests a terminal without OSC 52.
     pub clipboard: bool,
+    /// Whether keys arrive as a terminal with the kitty keyboard protocol
+    /// reports them, each [`exact`](Key::exact). Off by default: they
+    /// arrive as a legacy terminal sends them ([`Key::legacy`]), so a
+    /// scripted `ctrl+i` is a Tab, which fires a `tab` or a `ctrl+i`
+    /// binding.
+    pub exact_keys: bool,
 }
 
 impl Headless {
@@ -167,6 +182,23 @@ impl Headless {
             handoff_code: Some(0),
             suspendable: false,
             clipboard: true,
+            exact_keys: false,
+        }
+    }
+
+    /// A key event as this terminal reports it.
+    fn as_read(&self, event: Event) -> Event {
+        let read = |key: Key| {
+            if self.exact_keys {
+                key.exact()
+            } else {
+                key.legacy()
+            }
+        };
+        match event {
+            Event::Key(key) => Event::Key(read(key)),
+            Event::KeyUp(key) => Event::KeyUp(read(key)),
+            event => event,
         }
     }
 
@@ -211,7 +243,7 @@ impl Backend for Headless {
                     if let Event::Resize { columns, rows } = event {
                         self.size = (columns, rows);
                     }
-                    return Ok(Some(event));
+                    return Ok(Some(self.as_read(event)));
                 }
             }
         }
@@ -281,4 +313,49 @@ pub fn run<C: Component>(
     drop(event_loop);
     let record = record.borrow().clone();
     (result, record)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::event::KeyCode;
+
+    fn read_all(exact: bool) -> Vec<Event> {
+        let script = Script::new().keys("ctrl+i ctrl+m q").key_up("q");
+        let mut backend = Headless::new(script, 10, 2);
+        backend.exact_keys = exact;
+        std::iter::from_fn(|| backend.read(None).ok().flatten()).collect()
+    }
+
+    #[test]
+    fn keys_arrive_as_a_legacy_terminal_sends_them_or_exactly() {
+        let legacy = read_all(false);
+        assert_eq!(
+            legacy,
+            [
+                Event::Key(Key::new(KeyCode::Tab)),
+                Event::Key(Key::new(KeyCode::Enter)),
+                Event::Key(Key::char('q')),
+                Event::KeyUp(Key::char('q')),
+            ]
+        );
+        let Event::Key(tab) = legacy[0] else {
+            unreachable!()
+        };
+        assert!(!tab.is_exact() && tab.matches(&Key::ctrl('i')));
+        let exact = read_all(true);
+        assert_eq!(
+            exact,
+            [
+                Event::Key(Key::ctrl('i')),
+                Event::Key(Key::ctrl('m')),
+                Event::Key(Key::char('q')),
+                Event::KeyUp(Key::char('q')),
+            ]
+        );
+        assert!(exact.iter().all(|event| match event {
+            Event::Key(key) | Event::KeyUp(key) => key.is_exact(),
+            _ => false,
+        }));
+    }
 }
