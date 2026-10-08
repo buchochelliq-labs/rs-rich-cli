@@ -753,6 +753,73 @@ leaves the last good styles in place, and the [inspector](#inspector) shows
 the error. `Theme::load(path)` and `theme.with_config(text)` read the same
 format without watching.
 
+## Stylesheets
+
+A stylesheet styles and lays out nodes from outside the code, in a subset
+of CSS:
+
+```rust
+App::new(build).stylesheet_file("app.tcss").run()
+```
+
+```css
+/* app.tcss */
+#status { dock: bottom; size: 1; background: $accent; color: black; }
+#preview { size: 3fr; padding: 0 1; border: round $accent; border-title: Preview; }
+.danger:focus { background: red; text-style: bold; }
+panel table:hover { text-style: underline; }
+```
+
+**Selectors** match a node's kind (`label`, `text`, `table`, `panel`,
+`column`, `row`, `grid`: what the [inspector](#inspector) shows), its
+`.name("…")` as `#name`, its classes as `.class`, and its states:
+
+- `:focus` and `:focus-within`;
+- `:hover`, for the node under the pointer and its ancestors;
+- `:selected` and `:disabled`, while `.selected_when(…)` or
+  `.disabled_when(…)` holds.
+
+Spaces separate a node from its ancestors (`panel label`). Sibling
+selectors and `!important` are not supported. The more specific rule wins,
+then the later one.
+
+`.class("warn big")` gives a node fixed classes, and
+`.class_when("danger", move || load.get() > 90)` gives it a class while a
+condition holds, following the signals the condition reads.
+
+**Properties:**
+
+| | |
+|---|---|
+| `color`, `background` | a colour (`red`, `#ff8800`, `grey23`) or a theme style's colour (`$accent`) |
+| `text-style` | `bold`, `dim`, `italic`, `underline`, `reverse`, `strike`, `blink`, `none` (every one off); a later rule's replaces an earlier one's |
+| `border`, `border-title` | `round`, `square`, `heavy`, `double`, `ascii` or `none` (which takes a panel's own border and its cells away), then a colour; a title |
+| `size`, `min-size`, `max-size` | `3`, `50%`, `2fr`, `auto`, along the parent's axis |
+| `padding` | one to four numbers, as in CSS |
+| `gap`, `grid-columns`, `grid-rows` | a stack's or grid's spacing; a grid's tracks |
+| `display` | `none` hides the node and what is inside, takes it out of the Tab order, and out of a grid's cells |
+| `dock` | `top` or `bottom` in a column, `left` or `right` in a row: kept at that edge |
+
+**How it applies:**
+
+- **Colours inherit, as in CSS.** They go under what a node draws, so a
+  widget's own colours and markup's `[green]` stay, and they fill in the
+  rest of the node's area, gaps included.
+- **Code wins.** `.fixed(3)` beats `size: 5`, and `.focus_style()` and
+  `.hover_style()` go over the sheet's colours. A node whose code sets no
+  size takes the sheet's.
+- **What follows states.** States and `class_when` change colours and text
+  styles. Layout is decided by a node's kind, name and fixed classes.
+- **Borders.** A `border` on a panel restyles the panel's own box. On
+  another node it draws a box round it, inside its area.
+- **Live.** A sheet file is read again whenever it changes. One that does
+  not parse is reported in a toast with its line and column, and the last
+  good sheet stays. `App::stylesheet(css)` takes a string.
+  `Stylesheet::parse` checks one in a test.
+- **Cost.** Rules are matched once per node and sheet, and a node's style
+  is worked out only when it draws. An app without a sheet does none of
+  it.
+
 ## Inline apps
 
 ![An inline app finishing under the prompt, with the scrollback above it kept](../../media/tapes/intuituive/inline.png)
