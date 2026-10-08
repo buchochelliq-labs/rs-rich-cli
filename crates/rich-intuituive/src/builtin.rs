@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use std::hash::Hash;
 use std::rc::Rc;
 
-use rich::{Console, Segment};
+use rich::{Console, Segment, Style};
 use rich_interact::{Component, Context, Event, Flow, KeyCode, MouseKind};
 
 use crate::app::Ctx;
@@ -72,9 +72,8 @@ impl Widget for Stack {
     }
 
     fn measure(&mut self, cx: &MeasureCx, axis: Axis, width: u16, height: u16) -> u16 {
-        let gaps = self
-            .gap
-            .saturating_mul(self.children.len().saturating_sub(1) as u16);
+        let shown = self.children.iter().filter(|c| !c.hidden()).count();
+        let gaps = self.gap.saturating_mul(shown.saturating_sub(1) as u16);
         if self.axis == axis {
             self.children.iter().fold(gaps, |sum, child| {
                 sum.saturating_add(cx.extent(child, axis, width, height))
@@ -106,6 +105,8 @@ impl Widget for Stack {
 /// Children in rows and columns: [`grid`](crate::grid).
 pub(crate) struct Grid {
     pub columns: Vec<Size>,
+    /// Whether code gave the columns (else a stylesheet may).
+    pub code_columns: bool,
     pub rows: Vec<Size>,
     /// Between rows, and between columns.
     pub gap: (u16, u16),
@@ -266,6 +267,17 @@ pub(crate) struct Panel {
     pub child: Node,
     /// Whether the border was last drawn as focused.
     shown_focus: Option<bool>,
+    /// What a stylesheet says about it.
+    pub look: PanelLook,
+}
+
+/// A stylesheet's border, title and padding for a [`Panel`].
+#[derive(Clone, Debug, Default)]
+pub(crate) struct PanelLook {
+    pub border: Option<(crate::sheet::BoxKind, Style)>,
+    pub title: Option<String>,
+    /// Inside the border: top, right, bottom, left.
+    pub padding: [u16; 4],
 }
 
 impl Panel {
@@ -274,6 +286,15 @@ impl Panel {
             title,
             child,
             shown_focus: None,
+            look: PanelLook::default(),
+        }
+    }
+
+    /// The title: the one code gave, else the stylesheet's.
+    fn title(&self) -> &str {
+        match (&self.title[..], &self.look.title) {
+            ("", Some(title)) => title,
+            (title, _) => title,
         }
     }
 }
@@ -284,17 +305,23 @@ impl Widget for Panel {
     }
 
     fn describe(&self) -> Option<String> {
-        (!self.title.is_empty()).then(|| format!("\"{}\"", self.title))
+        let title = self.title();
+        (!title.is_empty()).then(|| format!("\"{title}\""))
     }
 
     fn measure(&mut self, cx: &MeasureCx, axis: Axis, width: u16, height: u16) -> u16 {
-        cx.measure(
-            &self.child,
-            axis,
-            width.saturating_sub(2),
-            height.saturating_sub(2),
-        )
-        .saturating_add(2)
+        let [top, right, bottom, left] = self.look.padding;
+        let (across, down) = (left + right + 2, top + bottom + 2);
+        let height = if height == 0 {
+            0
+        } else {
+            height.saturating_sub(down)
+        };
+        cx.measure(&self.child, axis, width.saturating_sub(across), height)
+            .saturating_add(match axis {
+                Axis::Vertical => down,
+                Axis::Horizontal => across,
+            })
     }
 
     fn children(&self) -> &[Node] {
@@ -302,7 +329,14 @@ impl Widget for Panel {
     }
 
     fn layout(&mut self, _cx: &MeasureCx, rect: Rect) -> Vec<Rect> {
-        vec![rect.inner(1)]
+        let inner = rect.inner(1);
+        let [top, right, bottom, left] = self.look.padding;
+        vec![Rect::new(
+            inner.x.saturating_add(left),
+            inner.y.saturating_add(top),
+            inner.width.saturating_sub(left + right),
+            inner.height.saturating_sub(top + bottom),
+        )]
     }
 
     fn draw(&mut self, cx: &mut DrawCx, canvas: &mut Canvas) {
@@ -311,9 +345,16 @@ impl Widget for Panel {
         // when it comes or goes.
         let focused = cx.focus_within();
         if cx.repaint() || self.shown_focus != Some(focused) {
-            let style = cx.theme().border(focused);
+            // A stylesheet's border sets the box, and the colour while the
+            // focus is elsewhere.
+            let (kind, style) = match &self.look.border {
+                Some((kind, style)) if !focused && !style.is_null() => (*kind, style.clone()),
+                Some((kind, _)) => (*kind, cx.theme().border(focused)),
+                None => (crate::sheet::BoxKind::Round, cx.theme().border(focused)),
+            };
             let title_style = style.combine(&cx.theme().title);
-            canvas.border(&self.title, &style, &title_style);
+            let title = self.title().to_string();
+            canvas.border_box(kind, &title, &style, &title_style);
         }
         self.shown_focus = Some(focused);
     }

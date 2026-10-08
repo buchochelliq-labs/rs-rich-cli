@@ -45,6 +45,7 @@ pub use crate::layout::Size;
 use crate::layout::Track;
 use crate::reactive::{next_node, NodeId, Runtime, Signal};
 use crate::screen::{Rect, Screen};
+use crate::sheet::{BoxKind, Dock, Element, Layout, States, Stylesheet};
 use crate::widget::{Canvas, DrawCx, MeasureCx, ScrollCx, Watchers, Widget};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -107,6 +108,56 @@ pub struct Node {
     /// The value a drag from this node carries.
     pub(crate) drag: Option<Rc<dyn Any>>,
     pub(crate) drop: Option<DropTarget>,
+    /// What code set, which a stylesheet leaves alone: the size, the
+    /// minimum, the maximum, the gap and a grid's rows.
+    set: [bool; 5],
+    /// Its classes, for stylesheets: fixed ones, and ones that hold while a
+    /// condition does.
+    classes: Vec<String>,
+    class_when: Vec<(String, Condition)>,
+    selected_when: Option<Condition>,
+    disabled_when: Option<Condition>,
+    /// What the stylesheet decided for it.
+    sheet: RefCell<SheetNode>,
+    /// Where its widget lays out and draws: its rectangle less the
+    /// stylesheet's border and padding.
+    pub(crate) inner: Cell<Rect>,
+}
+
+/// A condition a node's class or state follows.
+type Condition = Box<dyn Fn() -> bool>;
+
+const SET_SIZE: usize = 0;
+const SET_MIN: usize = 1;
+const SET_MAX: usize = 2;
+const SET_GAP: usize = 3;
+const SET_ROWS: usize = 4;
+
+/// A node's part of the stylesheet.
+#[derive(Default)]
+struct SheetNode {
+    /// The sheet it was matched against (0: none yet).
+    generation: u64,
+    layout: Layout,
+    /// Whether a rule with a state could match it, and which states.
+    watch: (bool, bool, bool),
+    /// The border it draws round its widget (a panel draws its own).
+    decor: Option<(BoxKind, Style, String)>,
+    insets: [u16; 4],
+    /// The style it was last drawn in.
+    style: Option<Style>,
+    /// Its conditional classes that held, and whether it was selected and
+    /// disabled, when it last drew.
+    active: Vec<String>,
+    selected: bool,
+    disabled: bool,
+}
+
+/// The stylesheet as a frame draws with it.
+pub(crate) struct SheetCx<'a> {
+    pub sheet: &'a Stylesheet,
+    pub generation: u64,
+    pub vars: &'a dyn Fn(&str) -> Option<Style>,
 }
 
 /// A node's widget, and what the framework keeps for it between frames.
@@ -157,6 +208,13 @@ impl Node {
             tooltip: None,
             drag: None,
             drop: None,
+            set: [false; 5],
+            classes: Vec::new(),
+            class_when: Vec::new(),
+            selected_when: None,
+            disabled_when: None,
+            sheet: RefCell::new(SheetNode::default()),
+            inner: Cell::new(Rect::default()),
         }
     }
 
@@ -180,9 +238,10 @@ impl Node {
     /// How the inspector shows this node: its name or builder, and what it
     /// holds.
     pub(crate) fn describe(&self) -> String {
+        let classes: String = self.classes.iter().map(|c| format!(".{c}")).collect();
         let base = match &self.name {
-            Some(name) => format!("{name} ({})", self.what),
-            None => self.what.to_string(),
+            Some(name) => format!("{name} ({}{classes})", self.what),
+            None => format!("{}{classes}", self.what),
         };
         match self.body.borrow().widget.describe() {
             Some(more) => format!("{base} {more}"),
@@ -200,6 +259,7 @@ impl Node {
     /// Size this node along its parent's axis.
     pub fn size(mut self, size: Size) -> Node {
         self.size = size;
+        self.set[SET_SIZE] = true;
         self
     }
 
@@ -228,12 +288,14 @@ impl Node {
     /// room.
     pub fn min_size(mut self, cells: u16) -> Node {
         self.min = cells;
+        self.set[SET_MIN] = true;
         self
     }
 
     /// Never more than `cells` along the parent's axis.
     pub fn max_size(mut self, cells: u16) -> Node {
         self.max = cells;
+        self.set[SET_MAX] = true;
         self
     }
 
@@ -245,9 +307,10 @@ impl Node {
 
     /// For a [`column`](fn@column), [`row`] or [`grid`]: leave `cells` empty
     /// between neighbouring children. Ignored on other nodes.
-    pub fn gap(self, cells: u16) -> Node {
+    pub fn gap(mut self, cells: u16) -> Node {
         self.widget_mut(|stack: &mut Stack| stack.gap = cells);
         self.widget_mut(|grid: &mut Grid| grid.gap = (cells, cells));
+        self.set[SET_GAP] = true;
         self
     }
 
@@ -255,10 +318,65 @@ impl Node {
     /// its size, so `.rows([Size::Auto])` makes every row as tall as its
     /// content; without any, rows share the height evenly. Ignored on other
     /// nodes.
-    pub fn rows(self, rows: impl IntoIterator<Item = Size>) -> Node {
+    pub fn rows(mut self, rows: impl IntoIterator<Item = Size>) -> Node {
         let rows: Vec<Size> = rows.into_iter().collect();
         self.widget_mut(|grid: &mut Grid| grid.rows = rows);
+        self.set[SET_ROWS] = true;
         self
+    }
+
+    /// Give this node `classes` (space-separated), for a
+    /// [stylesheet](crate::App::stylesheet) to match with `.name`.
+    pub fn class(mut self, classes: &str) -> Node {
+        self.classes
+            .extend(classes.split_whitespace().map(str::to_string));
+        self
+    }
+
+    /// Give this node `class` while `condition` holds: a stylesheet's
+    /// colours and text styles for `.class` follow it (its layout does not;
+    /// that comes from fixed classes). `condition` may read signals.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| {
+    ///     let load = signal(95);
+    ///     text!("load {load}").class_when("danger", move || load.get() > 90)
+    /// })
+    /// .stylesheet(".danger { text-style: bold; }");
+    /// ```
+    pub fn class_when(mut self, class: &str, condition: impl Fn() -> bool + 'static) -> Node {
+        self.class_when
+            .push((class.to_string(), Box::new(condition)));
+        self
+    }
+
+    /// Match a stylesheet's `:selected` while `condition` holds.
+    pub fn selected_when(mut self, condition: impl Fn() -> bool + 'static) -> Node {
+        self.selected_when = Some(Box::new(condition));
+        self
+    }
+
+    /// Match a stylesheet's `:disabled` while `condition` holds. A disabled
+    /// node also leaves the Tab order, and its click and key handlers do
+    /// not run.
+    pub fn disabled_when(mut self, condition: impl Fn() -> bool + 'static) -> Node {
+        self.disabled_when = Some(Box::new(condition));
+        self
+    }
+
+    /// Whether it is [disabled](Self::disabled_when) now. Callers outside a
+    /// draw read it untracked.
+    pub(crate) fn disabled(&self) -> bool {
+        self.disabled_when
+            .as_ref()
+            .is_some_and(|condition| condition())
+    }
+
+    /// Whether it can take the focus now.
+    pub(crate) fn takes_focus(&self) -> bool {
+        self.focusable && !self.disabled()
     }
 
     /// Put this node in the Tab order, so it can hold the focus.
@@ -288,7 +406,8 @@ impl Node {
 
     /// While the pointer is over this node (or a node inside it), draw it
     /// in `style` over its own, as [`focus_style`](Self::focus_style) does
-    /// for the focus.
+    /// for the focus. A [stylesheet](crate::App::stylesheet)'s `:hover`
+    /// rules do the same from outside the code.
     ///
     /// ```
     /// use std::time::Duration;
@@ -463,12 +582,15 @@ impl Node {
 
     /// A node of `widget` round this one, taking over its size and span.
     fn wrap(self, widget: impl FnOnce(Node) -> Box<dyn Widget>, what: &'static str) -> Node {
-        let (size, min, max, span) = (self.size, self.min, self.max, self.span);
+        let (size, min, max, span, set) = (self.size, self.min, self.max, self.span, self.set);
         let mut outer = Node::from_widget(widget(self), what);
         outer.size = size;
         outer.min = min;
         outer.max = max;
         outer.span = span;
+        outer.set[SET_SIZE] = set[SET_SIZE];
+        outer.set[SET_MIN] = set[SET_MIN];
+        outer.set[SET_MAX] = set[SET_MAX];
         outer
     }
 
@@ -481,18 +603,138 @@ impl Node {
         self.id
     }
 
-    /// How it asks to be sized along its parent's axis.
+    /// How it asks to be sized along its parent's axis: as code set it,
+    /// else as the stylesheet does.
     pub fn size_hint(&self) -> Size {
-        self.size
+        self.dims().0
+    }
+
+    /// Its size, minimum and maximum: what code set, else what the
+    /// stylesheet says; nothing at all when the sheet hides it.
+    fn dims(&self) -> (Size, u16, u16) {
+        let sheet = self.sheet.borrow();
+        let layout = &sheet.layout;
+        if layout.hidden {
+            return (Size::Fixed(0), 0, 0);
+        }
+        fn pick<T>(set: bool, own: T, from: Option<T>) -> T {
+            if set {
+                own
+            } else {
+                from.unwrap_or(own)
+            }
+        }
+        (
+            pick(self.set[SET_SIZE], self.size, layout.size),
+            pick(self.set[SET_MIN], self.min, layout.min),
+            pick(self.set[SET_MAX], self.max, layout.max),
+        )
+    }
+
+    /// Whether a stylesheet hides it (`display: none`).
+    pub(crate) fn hidden(&self) -> bool {
+        self.sheet.borrow().layout.hidden
+    }
+
+    /// The edge a stylesheet docks it to, if any.
+    pub(crate) fn dock(&self) -> Option<Dock> {
+        self.sheet.borrow().layout.dock
     }
 
     pub(crate) fn track(&self) -> Track {
+        let (size, min, max) = self.dims();
         Track {
-            size: self.size,
-            min: self.min,
-            max: self.max,
+            size,
+            min,
+            max,
             content: 0,
         }
+    }
+
+    /// The node as selectors see it: its fixed classes, then its
+    /// conditional ones that held when it last drew.
+    fn element(&self) -> Element {
+        let sheet = self.sheet.borrow();
+        let mut classes = self.classes.clone();
+        classes.extend(sheet.active.iter().cloned());
+        Element {
+            id: self.id,
+            kind: self.what,
+            name: self.name.clone(),
+            fixed: self.classes.len(),
+            maybe: self.class_when.iter().map(|(c, _)| c.clone()).collect(),
+            classes,
+            selected: sheet.selected,
+            disabled: sheet.disabled,
+        }
+    }
+
+    /// Match the stylesheet's rules to this node, the last of `chain`'s
+    /// descendants, once per sheet: its layout, the border it draws, what
+    /// its widget takes (a stack's gap, a grid's tracks, a panel's look).
+    pub(crate) fn resolve(&self, cx: &SheetCx, chain: &mut Vec<Element>) {
+        if self.sheet.borrow().generation == cx.generation {
+            return;
+        }
+        chain.push(self.element());
+        let layout = cx.sheet.layout(chain, cx.vars);
+        let watch = cx.sheet.watches(chain);
+        chain.pop();
+        if !self.set[SET_GAP] {
+            let gap = layout.gap.unwrap_or(0);
+            self.widget_mut(|stack: &mut Stack| stack.gap = gap);
+            self.widget_mut(|grid: &mut Grid| grid.gap = (gap, gap));
+        }
+        let rows_set = self.set[SET_ROWS];
+        self.widget_mut(|grid: &mut Grid| {
+            if !rows_set {
+                grid.rows = layout.grid_rows.clone().unwrap_or_default();
+            }
+            if !grid.code_columns {
+                grid.columns = layout.grid_columns.clone().unwrap_or_default();
+            }
+        });
+        let title = layout.border_title.clone().unwrap_or_default();
+        let is_panel = self
+            .widget_mut(|panel: &mut Panel| {
+                panel.look = crate::builtin::PanelLook {
+                    border: layout.border.clone(),
+                    title: layout.border_title.clone(),
+                    padding: layout.padding,
+                };
+            })
+            .is_some();
+        let (decor, insets) = if is_panel {
+            (None, [0; 4])
+        } else {
+            (
+                layout
+                    .border
+                    .clone()
+                    .map(|(kind, style)| (kind, style, title)),
+                layout.insets(),
+            )
+        };
+        let mut sheet = self.sheet.borrow_mut();
+        sheet.generation = cx.generation;
+        sheet.layout = layout;
+        sheet.watch = watch;
+        sheet.decor = decor;
+        sheet.insets = insets;
+    }
+
+    /// Its conditional classes that hold now, and whether it is selected
+    /// and disabled, reading the signals they read.
+    fn conditions(&self) -> (Vec<String>, bool, bool) {
+        (
+            self.class_when
+                .iter()
+                .filter(|(_, condition)| condition())
+                .map(|(class, _)| class.clone())
+                .collect(),
+            self.selected_when.as_ref().is_some_and(|c| c()),
+            self.disabled_when.as_ref().is_some_and(|c| c()),
+        )
     }
 
     /// Visit this node and every node inside it that is shown, depth first.
@@ -502,6 +744,10 @@ impl Node {
     }
 
     fn walk_inner(&self, path: &mut Vec<NodeId>, f: &mut dyn FnMut(&Node, &[NodeId])) {
+        if self.hidden() {
+            // A stylesheet's `display: none`: not shown, nor anything inside.
+            return;
+        }
         path.push(self.id);
         f(self, path);
         self.each_child(&mut |child| child.walk_inner(path, f));
@@ -518,20 +764,41 @@ impl Node {
     /// Not shown this frame: no rectangle (so no clicks reach it or
     /// anything inside it), and it draws afresh when it comes back.
     fn hide(&self) {
-        self.walk(&mut |node, _| {
-            node.rect.set(Rect::default());
-            node.drawn.set(None);
-            node.highlit.set(false);
-        });
+        self.rect.set(Rect::default());
+        self.inner.set(Rect::default());
+        self.drawn.set(None);
+        self.highlit.set(false);
+        self.hover_lit.set(false);
+        // Its sheet style is applied afresh when it comes back.
+        self.sheet.borrow_mut().style = None;
+        self.each_child(&mut |child| child.hide());
     }
 
     /// How many cells of `axis` the content needs, given `width` x
     /// `height` to lay out in (a height of 0: as tall as it likes).
     pub(crate) fn measure(&self, console: &Console, axis: Axis, width: u16, height: u16) -> u16 {
-        self.body
-            .borrow_mut()
-            .widget
-            .measure(&MeasureCx { console }, axis, width, height)
+        let (hidden, [top, right, bottom, left]) = {
+            let sheet = self.sheet.borrow();
+            (sheet.layout.hidden, sheet.insets)
+        };
+        if hidden {
+            return 0;
+        }
+        let height = if height == 0 {
+            0
+        } else {
+            height.saturating_sub(top + bottom).max(1)
+        };
+        let width = width.saturating_sub(left + right);
+        let inner =
+            self.body
+                .borrow_mut()
+                .widget
+                .measure(&MeasureCx { console }, axis, width, height);
+        inner.saturating_add(match axis {
+            Axis::Vertical => top + bottom,
+            Axis::Horizontal => left + right,
+        })
     }
 
     /// Its extent along `axis` as a stack sizes it: its size, within its
@@ -541,12 +808,13 @@ impl Node {
             Axis::Vertical => height,
             Axis::Horizontal => width,
         };
-        let cells = match self.size {
+        let (size, min, max) = self.dims();
+        let cells = match size {
             Size::Fixed(n) => n,
             Size::Percent(p) => (along as u32 * p.min(100) as u32 / 100) as u16,
             Size::Auto | Size::Flex(_) => self.measure(console, axis, width, height),
         };
-        cells.min(self.max).max(self.min)
+        cells.min(max).max(min)
     }
 
     /// Lay out and draw into `screen`. A node draws if it is dirty, has
@@ -565,6 +833,23 @@ impl Node {
         let dirty = frame.dirty.contains(&self.id);
         let redraw = moved || force || dirty;
         let id = self.id;
+        // Inside the stylesheet's border and padding, the widget's own.
+        let (decor, inner) = {
+            let sheet = self.sheet.borrow();
+            let [top, right, bottom, left] = sheet.insets;
+            let inner = Rect::new(
+                rect.x.saturating_add(left),
+                rect.y.saturating_add(top),
+                rect.width.saturating_sub(left + right),
+                rect.height.saturating_sub(top + bottom),
+            );
+            (sheet.decor.clone(), inner)
+        };
+        self.inner.set(inner);
+        let styled = frame.sheet.is_some();
+        if styled {
+            frame.chain.push(self.element());
+        }
         let mut body = self.body.borrow_mut();
         let Body {
             widget,
@@ -588,18 +873,26 @@ impl Node {
         let mut repaint = false;
         let mut cleared = false;
         let mut relaid = false;
+        let mut restyled = false;
         if redraw {
             if let Some(last) = last.filter(|last| !last.is_empty()) {
                 if (last.width, last.height) != (rect.width, rect.height) {
                     frame.resized.push(id);
                 }
             }
+            // The children's layout from the stylesheet, before they are
+            // laid out.
+            if let Some(sheet) = &frame.sheet {
+                for child in widget.children() {
+                    child.resolve(sheet, &mut frame.chain);
+                }
+            }
             // Lay out first, subscribing to what that reads; a viewport
             // lays out in its content's coordinates.
             let space = if viewport {
-                Rect::new(0, 0, rect.width, rect.height)
+                Rect::new(0, 0, inner.width, inner.height)
             } else {
-                rect
+                inner
             };
             let new_areas = frame
                 .runtime
@@ -609,6 +902,11 @@ impl Node {
                 (!laid.is_empty() || !areas.is_empty()) && (ids != *laid || new_areas != *areas);
             *areas = new_areas;
             *laid = ids;
+            // Its classes and states for the stylesheet now, and the style
+            // they give it; a change draws it and what is inside again.
+            if styled {
+                restyled = self.restyle(frame);
+            }
             // A widget that keeps what it drew is cleared only when its own
             // children moved: when it moved, or was drawn over, whoever did
             // that cleared the area already.
@@ -617,17 +915,24 @@ impl Node {
             cleared = !widget.retained()
                 || focused != self.highlit.get()
                 || hovered != self.hover_lit.get()
+                || restyled
                 || (relaid && !viewport);
             repaint = moved || force || cleared;
             if cleared {
                 screen.clear(rect);
+            }
+            if let (true, Some((kind, style, title))) = (repaint, &decor) {
+                let title_style = style.combine(&frame.theme.title);
+                for edge in draw_box(screen, *kind, title, style, &title_style, rect) {
+                    frame.damage.push(edge);
+                }
             }
         }
         // A viewport's children draw offscreen before it decides where to
         // look; it draws itself after, so its scrollbar matches.
         let mut window = None;
         if viewport {
-            window = Some(self.draw_view(frame, widget, areas, view, rect, relaid));
+            window = Some(self.draw_view(frame, widget, areas, view, inner, relaid));
         }
         if redraw {
             let focus_path = frame.focus_path;
@@ -651,7 +956,7 @@ impl Node {
                     console,
                     theme: frame.theme,
                     id,
-                    rect,
+                    rect: inner,
                     repaint,
                     focus_path,
                     hover_path: frame.hover_path,
@@ -662,7 +967,7 @@ impl Node {
                 };
                 let mut canvas = Canvas {
                     screen: &mut *screen,
-                    rect,
+                    rect: inner,
                     written: &mut written,
                 };
                 frame.runtime.observe_node_more(id, || {
@@ -679,7 +984,7 @@ impl Node {
                 widget.caret()
             };
             self.caret.set(caret.and_then(|(x, y)| {
-                (x < rect.width && y < rect.height).then_some((rect.x + x, rect.y + y))
+                (x < inner.width && y < inner.height).then_some((inner.x + x, inner.y + y))
             }));
             if cleared {
                 frame.damage.push(rect);
@@ -712,7 +1017,7 @@ impl Node {
             }
             None => {
                 for (i, child) in widget.children().iter().enumerate() {
-                    match areas.get(i).map(|area| area.intersection(rect)) {
+                    match areas.get(i).map(|area| area.intersection(inner)) {
                         Some(area) if !area.is_empty() => {
                             // A child draws again where the widget drew over
                             // it.
@@ -723,6 +1028,30 @@ impl Node {
                     }
                 }
             }
+        }
+        // The stylesheet's colours go under everything drawn inside the
+        // node where nothing deeper set them, once its children have drawn.
+        let sheet_style = self.sheet.borrow().style.clone();
+        if let Some(style) = sheet_style {
+            let mut parts: Vec<Rect> = frame.damage[mark..]
+                .iter()
+                .map(|area| area.intersection(rect))
+                .filter(|area| !area.is_empty())
+                .collect();
+            if repaint {
+                parts = vec![rect];
+            }
+            for area in parts {
+                for row in area.y..area.bottom() {
+                    for column in area.x..area.right() {
+                        screen.underlay(column, row, &style);
+                    }
+                }
+                frame.damage.push(area);
+            }
+        }
+        if styled {
+            frame.chain.pop();
         }
         // The focus style goes over everything drawn inside the node, its
         // children's cells included, once they have drawn.
@@ -775,6 +1104,59 @@ impl Node {
         }
         self.hover_lit.set(hovered);
         self.drawn.set(Some(rect));
+    }
+
+    /// Read its conditions and states for the stylesheet (subscribing to
+    /// what they read) and work out its style. Whether anything changed
+    /// that it, or a node inside it, must draw again for.
+    fn restyle(&self, frame: &mut FrameState) -> bool {
+        let Some(cx) = &frame.sheet else {
+            return false;
+        };
+        let (any, focus, hover) = self.sheet.borrow().watch;
+        let (active, selected, disabled) = frame
+            .runtime
+            .observe_node_more(self.id, || self.conditions());
+        let changed = {
+            let sheet = self.sheet.borrow();
+            sheet.active != active || sheet.selected != selected || sheet.disabled != disabled
+        };
+        if changed {
+            let mut sheet = self.sheet.borrow_mut();
+            sheet.active = active;
+            sheet.selected = selected;
+            sheet.disabled = disabled;
+        }
+        if let Some(top) = frame.chain.last_mut() {
+            *top = self.element();
+        }
+        let style = if any {
+            if hover {
+                frame.wants_hover.set(true);
+            }
+            let read = |path: Signal<Vec<NodeId>>, track: bool| {
+                frame.runtime.observe_node_more(self.id, || {
+                    if track {
+                        path.get()
+                    } else {
+                        path.get_untracked()
+                    }
+                })
+            };
+            let focus_path = read(frame.focus_path, focus);
+            let hover_path = read(frame.hover_path, hover);
+            let states = States {
+                focus: &focus_path,
+                hover: &hover_path,
+            };
+            cx.sheet.style(&frame.chain, &states, cx.vars)
+        } else {
+            None
+        };
+        let mut sheet = self.sheet.borrow_mut();
+        let restyled = sheet.style != style;
+        sheet.style = style;
+        changed || restyled
     }
 
     /// Draw a viewport's children into its offscreen content and ask it
@@ -1086,6 +1468,10 @@ pub(crate) struct FrameState<'a> {
     pub drawn: usize,
     /// Which, when the inspector is watching.
     pub drawn_ids: Option<Vec<NodeId>>,
+    /// The app's stylesheet, if it has one.
+    pub sheet: Option<SheetCx<'a>>,
+    /// The nodes being drawn, outermost first, as selectors see them.
+    pub chain: Vec<Element>,
 }
 
 impl FrameState<'_> {
@@ -1106,6 +1492,18 @@ pub(crate) fn border(
     title_style: &Style,
     rect: Rect,
 ) -> Vec<Vec<Segment>> {
+    border_box(BoxKind::Round, title, style, title_style, rect)
+}
+
+/// [`border`] with a `kind` of box.
+pub(crate) fn border_box(
+    kind: BoxKind,
+    title: &str,
+    style: &Style,
+    title_style: &Style,
+    rect: Rect,
+) -> Vec<Vec<Segment>> {
+    let [top_left, across, top_right, side, bottom_left, bottom_right] = kind.chars();
     let (w, h) = (rect.width as usize, rect.height as usize);
     if w < 2 || h < 2 {
         return Vec::new();
@@ -1122,24 +1520,54 @@ pub(crate) fn border(
     let mut lines = Vec::with_capacity(h);
     if w < 4 {
         // Too narrow for a title: a plain box.
-        lines.push(vec![edge(format!("╭{}╮", "─".repeat(w - 2)))]);
+        lines.push(vec![edge(format!(
+            "{top_left}{}{top_right}",
+            across.repeat(w - 2)
+        ))]);
     } else {
         // `title_len` is at most `w - 4`, so one dash always follows it.
         lines.push(vec![
-            edge("╭─".into()),
+            edge(format!("{top_left}{across}")),
             Segment::new(title, Some(title_style.clone())),
-            edge(format!("{}╮", "─".repeat(w - 3 - title_len))),
+            edge(format!("{}{top_right}", across.repeat(w - 3 - title_len))),
         ]);
     }
     for _ in 0..h - 2 {
         lines.push(vec![
-            edge("│".into()),
+            edge(side.into()),
             Segment::new(" ".repeat(w - 2), None),
-            edge("│".into()),
+            edge(side.into()),
         ]);
     }
-    lines.push(vec![edge(format!("╰{}╯", "─".repeat(w - 2)))]);
+    lines.push(vec![edge(format!(
+        "{bottom_left}{}{bottom_right}",
+        across.repeat(w - 2)
+    ))]);
     lines
+}
+
+/// Draw the edges of a `kind` box round `rect`, with `title` in its top
+/// edge; the edges written.
+pub(crate) fn draw_box(
+    screen: &mut Screen,
+    kind: BoxKind,
+    title: &str,
+    style: &Style,
+    title_style: &Style,
+    rect: Rect,
+) -> Vec<Rect> {
+    let lines = border_box(kind, title, style, title_style, rect);
+    if lines.is_empty() {
+        return Vec::new();
+    }
+    let mut written = Vec::new();
+    for (edge, part) in edges(rect).into_iter().zip(edge_lines(&lines)) {
+        if !edge.is_empty() {
+            screen.write_lines(edge, &part);
+            written.push(edge);
+        }
+    }
+    written
 }
 
 // Builders.
@@ -1476,9 +1904,11 @@ pub fn grid(
     columns: impl IntoIterator<Item = Size>,
     children: impl IntoIterator<Item = Node>,
 ) -> Node {
+    let columns: Vec<Size> = columns.into_iter().collect();
     Node::from_widget(
         Box::new(Grid {
-            columns: columns.into_iter().collect(),
+            code_columns: !columns.is_empty(),
+            columns,
             rows: Vec::new(),
             gap: (0, 0),
             children: children.into_iter().collect(),

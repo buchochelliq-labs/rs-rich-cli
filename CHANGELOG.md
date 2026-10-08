@@ -9,6 +9,29 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### intuiTUIve: stylesheets (rs-rich-intuituive 0.0.3)
+
+0.0.18 workstream 4.
+
+- **`App::stylesheet(css)` and `App::stylesheet_file(path)`** style and
+  lay out nodes with a CSS subset. A file is read again when it changes;
+  a sheet that does not parse is reported in a toast with its line and
+  column, and the last good one stays. `Stylesheet::parse` checks one.
+- **Selectors:** kinds (`label`, `table`, `panel`…), `#name`, `.class`,
+  `:focus`, `:focus-within`, `:hover`, `:selected`, `:disabled`, and
+  descendants. CSS specificity, then order, decides.
+- **Properties:** `color`, `background` and `text-style` (with `$name`
+  for a theme style's colour); `border` and `border-title`; `size`,
+  `min-size`, `max-size`, `padding`, `gap`, `grid-columns`, `grid-rows`,
+  `display: none` and `dock`.
+- **Colours inherit** under what a node draws. **Code wins** over the
+  sheet. States and `class_when` restyle; layout follows kinds, names and
+  fixed classes.
+- **New builders:** `Node::class`, `Node::class_when`,
+  `Node::selected_when` and `Node::disabled_when`. A disabled node leaves
+  the Tab order, and its click and key handlers do not run. The inspector
+  shows classes.
+
 ### intuiTUIve: the widget gaps (rs-rich-intuituive 0.0.3)
 
 0.0.18 workstream 3.
