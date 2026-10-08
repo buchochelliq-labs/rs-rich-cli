@@ -57,7 +57,8 @@ rich-cli ──▶ rich-data ──▶ rich-ext ──▶ rich       (tabular da
                   └ ─ ▶ tungstenite, image       (portable-pty), `WebEngine`; Chrome over DevTools behind
                                                  its `chrome` feature, Browsh behind `browsh`. Nothing
                                                  in the workspace depends on it)
-rich-py  ──▶ rich, rich-ext, rich-art, rich-mermaid, rich-diagram, rich-micro, rich-interact, rich-cli
+rich-py  ──▶ rich, rich-ext, rich-art, rich-mermaid, rich-diagram, rich-micro, rich-interact, rich-cli,
+             rich-intuituive, rich-web, rich-embed
                            (Python bindings; outside the workspace, released to PyPI only)
 ```
 
