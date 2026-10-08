@@ -540,3 +540,51 @@ mod drag {
         );
     }
 }
+
+#[test]
+fn shift_and_the_wheel_scroll_across_through_a_driver() {
+    use intuituive::interact::Event;
+    use std::time::Duration;
+    let app = App::new(|| scroll_both(label(wide_lines(40))));
+    let mut driver = app.driver(12, 5);
+    driver.update(Duration::ZERO);
+    driver.render();
+    let wheel = Mouse {
+        modifiers: Modifiers {
+            shift: true,
+            ..Modifiers::NONE
+        },
+        ..Mouse::new(MouseKind::ScrollDown, 2, 2)
+    };
+    driver.event(Event::Mouse(wheel));
+    driver.update(Duration::ZERO);
+    driver.render();
+    let rows = driver.screen().plain();
+    // Across, not down: the line numbers have scrolled off to the left.
+    assert!(!rows[0].contains("line"), "moved across: {rows:?}");
+}
+
+#[test]
+fn a_viewport_wider_than_the_scroll_cap_lays_out() {
+    let app = App::new(|| scroll_x(label("narrow")));
+    let rows = screen(&run_open(app, Script::new(), 2100, 2));
+    assert!(rows[0].starts_with("narrow"), "{:?}", &rows[0][..20]);
+}
+
+#[test]
+fn a_lazy_tree_loads_an_open_branch_the_roots_change_to() {
+    let app = App::new(|| {
+        let which = signal("a");
+        let roots = move || vec![LazyItem::branch(which.get(), which.get())];
+        let children = |key: String| -> Result<Vec<LazyItem>, String> {
+            Ok(vec![LazyItem::leaf(
+                format!("{key}/x"),
+                format!("in {key}"),
+            )])
+        };
+        tree_lazy(roots, children, signal(None)).on_key("s", move |_| which.set("b"))
+    })
+    .wait_for_tasks(true);
+    let rows = screen(&run_open(app, Script::new().keys("right s"), 30, 4));
+    assert!(row_of(&rows, "in b").is_some(), "{rows:?}");
+}

@@ -765,8 +765,10 @@ impl Widget for ScrollView {
         // the last column for down, the last row for across.
         let wide = |width: u16| {
             if self.horizontal {
+                // A viewport wider than the cap is the content's width.
                 cx.measure(&self.child, Axis::Horizontal, MAX_SCROLL_COLUMNS, 0)
-                    .clamp(width, MAX_SCROLL_COLUMNS)
+                    .min(MAX_SCROLL_COLUMNS)
+                    .max(width)
             } else {
                 width
             }
