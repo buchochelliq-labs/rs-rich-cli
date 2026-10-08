@@ -201,10 +201,11 @@ impl Component for Confirm {
         let keymap = self.keymap();
         // A choice's key picks it in either case.
         let action = keymap.action(key).or_else(|| match key.code {
-            KeyCode::Char(c) if c.is_uppercase() => keymap.action(Key {
-                code: KeyCode::Char(c.to_ascii_lowercase()),
-                ..key
-            }),
+            KeyCode::Char(c) if c.is_uppercase() => {
+                let mut lower = key;
+                lower.code = KeyCode::Char(c.to_ascii_lowercase());
+                keymap.action(lower)
+            }
             _ => None,
         });
         let action = action.map(str::to_string);

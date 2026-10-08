@@ -631,6 +631,7 @@ impl Widget for HostWidget {
     fn event(&mut self, cx: &mut EventCx, event: &WidgetEvent) -> Used {
         let event = match event {
             WidgetEvent::Key(key) => Event::Key(*key),
+            WidgetEvent::KeyUp(key) => Event::KeyUp(*key),
             WidgetEvent::Paste(text) => Event::Paste(text.clone()),
             // A component sees the mouse only while it has the focus (a
             // press focuses it first).

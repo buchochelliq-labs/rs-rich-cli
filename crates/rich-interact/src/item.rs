@@ -305,9 +305,11 @@ impl<T> Item<T> {
         text
     }
 
-    /// The action bound to `key`, if any.
+    /// The action bound to `key`, if any: one bound to `key` itself before
+    /// one it only [`matches`](Key::matches).
     pub fn action_for(&self, key: Key) -> Option<&Action> {
-        self.actions.iter().find(|action| action.key == Some(key))
+        key.pick(self.actions.iter().map(|action| action.key.as_slice()))
+            .map(|at| &self.actions[at])
     }
 
     /// The same item with its value mapped.
@@ -335,6 +337,19 @@ impl<T: fmt::Display> From<T> for Item<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn an_action_bound_to_the_key_itself_wins_over_an_earlier_match() {
+        let key = |name| Key::parse(name).unwrap();
+        let item = Item::new((), "row")
+            .action(Action::new("indent", "Indent", key("ctrl+i")))
+            .action(Action::new("next", "Next", key("tab")));
+        // A legacy Tab fires both bindings; the one that names it wins.
+        assert_eq!(item.action_for(key("tab")).unwrap().id, "next");
+        assert_eq!(item.action_for(key("ctrl+i")).unwrap().id, "indent");
+        let item = Item::new((), "row").action(Action::new("indent", "Indent", key("ctrl+i")));
+        assert_eq!(item.action_for(key("tab")).unwrap().id, "indent");
+    }
 
     #[test]
     fn builds_and_searches_items() {
