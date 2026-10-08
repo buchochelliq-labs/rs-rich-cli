@@ -195,8 +195,10 @@ jobs:
             args: ""
           - crate: rs-rich-ratatui
             args: "--all-features"
-          # intuiTUIve, the TUI framework (no features of its own). Its
-          # benchmark against ratatui runs in release in `ratatui-gate`.
+          # intuiTUIve, the TUI framework, with both of interact's extra
+          # backends (its only features; each alone, and on macOS, in
+          # `backends`). Its benchmark against ratatui runs in release in
+          # `ratatui-gate`.
           - crate: rs-rich-intuituive
             args: "--all-features"
           # Serving intuiTUIve apps to a browser (no features of its own):
@@ -238,6 +240,43 @@ jobs:
 
       - name: Test (${{ matrix.crate }} ${{ matrix.args }})
         run: cargo test -p ${{ matrix.crate }} ${{ matrix.args }}
+
+  # rs-rich-interact's termion and termwiz backends (#677, #678), each on its
+  # own, on Linux and macOS: the PTY conformance suites (interact's
+  # `pty_backends`, intuiTUIve's `backends`) run every test against crossterm
+  # and the feature's backend.
+  backends:
+    name: interact backend (${{ matrix.feature }}, ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        feature: [termion, termwiz]
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.checkout_ref || github.ref }}
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Clippy (${{ matrix.feature }})
+        run: >-
+          cargo clippy -p rs-rich-interact -p rs-rich-intuituive --all-targets --locked
+          --features rs-rich-interact/${{ matrix.feature }},rs-rich-intuituive/${{ matrix.feature }}
+          -- -D warnings
+
+      - name: Test (${{ matrix.feature }})
+        run: >-
+          cargo test -p rs-rich-interact -p rs-rich-intuituive --locked
+          --features rs-rich-interact/${{ matrix.feature }},rs-rich-intuituive/${{ matrix.feature }}
 
   windows-pager:
     name: Windows system pager

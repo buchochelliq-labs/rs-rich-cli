@@ -18,7 +18,7 @@ use rich_interact::policy::Policy;
 use rich_interact::{
     run, Component, Context, Event, Flow, KeyCode, Output, RunOptions, SessionOptions, View,
 };
-use support::{assert_restored, Pty};
+use support::{assert_restored, child_pid, suspends_and_resumes, Pty};
 
 /// The child's component: `enter` (or `d`) finishes, `p` panics, `e` hands the
 /// terminal to `sh -c 'echo handed-off'`, `n` runs another component from
@@ -282,62 +282,6 @@ fn ctrl_z_pops_the_kitty_protocol_and_fg_pushes_it_again() {
     // Pushed at the start and again on `fg`.
     assert_eq!(output.matches("\x1b[>3u").count(), 2, "{output:?}");
     assert_restored(&output, &parser);
-}
-
-/// The child's process id, from its view.
-fn child_pid(pty: &Pty) -> String {
-    let text = pty.text();
-    let start = text.rfind("pid ").expect("the child shows its pid") + 4;
-    let end = start + text[start..].find('.').expect("pid ends with a dot");
-    text[start..end].to_string()
-}
-
-/// After the suspend: every mode left (so the shell has a normal terminal);
-/// after `SIGCONT`: every mode on again and the view painted anew.
-fn suspends_and_resumes(pty: &mut Pty, suspend: impl FnOnce(&mut Pty, &str)) {
-    pty.wait_for("child ready");
-    let pid = child_pid(pty);
-    let before = pty.text().len();
-    suspend(pty, &pid);
-    let end = std::time::Instant::now() + std::time::Duration::from_secs(30);
-    let stopped = loop {
-        let text = pty.text();
-        let after = &text[before..];
-        if ["\x1b[?1049l", "\x1b[?1000l", "\x1b[?2004l", "\x1b[?25h"]
-            .iter()
-            .all(|mode| after.contains(mode))
-        {
-            break after.len();
-        }
-        assert!(std::time::Instant::now() < end, "not restored:\n{after:?}");
-        std::thread::sleep(std::time::Duration::from_millis(20));
-    };
-    // Stopped: `T` in the third field. The session gives the terminal back
-    // before it stops itself, so the state can still read `R` for a moment
-    // after the restore sequences arrive; wait for the stop.
-    let stop_by = std::time::Instant::now() + std::time::Duration::from_secs(10);
-    while let Ok(state) = std::fs::read_to_string(format!("/proc/{pid}/stat")) {
-        let field = state.rsplit(')').next().unwrap().split_whitespace().next();
-        if field == Some("T") {
-            break;
-        }
-        assert!(
-            std::time::Instant::now() < stop_by,
-            "never stopped: {state}"
-        );
-        std::thread::sleep(std::time::Duration::from_millis(10));
-    }
-    Command::new("kill").args(["-CONT", &pid]).status().unwrap();
-    let end = std::time::Instant::now() + std::time::Duration::from_secs(30);
-    loop {
-        let text = pty.text();
-        let resumed = &text[before + stopped..];
-        if resumed.contains("\x1b[?1049h") && resumed.contains("child ready") {
-            break;
-        }
-        assert!(std::time::Instant::now() < end, "not resumed:\n{resumed:?}");
-        std::thread::sleep(std::time::Duration::from_millis(20));
-    }
 }
 
 #[test]
