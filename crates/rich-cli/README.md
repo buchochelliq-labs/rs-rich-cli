@@ -47,6 +47,7 @@ rich config explain width                               # where a setting comes 
 rich explore config.yaml                                # browse a document; Enter prints the path
 rich micro list                                         # micro assets, drawn as this terminal can
 rich record demo.tape                                   # run a scripted terminal recording
+rich serve -- htop                                      # a program in a browser tab (the `serve` feature)
 ```
 
 This source is **`0.0.15`**, prepared but not yet published (the latest
@@ -257,6 +258,7 @@ Off by default:
 - **`mmdc`** — the `mmdc` Mermaid backend. It starts Mermaid's CLI, which must be installed separately.
 - **`arrow`** — `rich schema` reading Arrow IPC files and streams (`.arrow`, `.feather`, `.arrows`, `.ipc`), via [`rs-rich-data`](https://crates.io/crates/rs-rich-data)'s Arrow adapter. It compiles the Arrow array and IPC crates.
 - **`dylib-plugins`**, **`wasm-plugins`** — runtime plugins loaded with `--plugin PATH` or from a trusted config: native libraries, or sandboxed WASM modules.
+- **`serve`** — `rich serve [--bind ADDR] [--port N] [--max-sessions N] [--allow-origin ORIGIN]... -- PROGRAM`: a terminal program in a web browser, one copy per tab on a pseudo-terminal of its own, via [`rs-rich-web`](https://crates.io/crates/rs-rich-web). It listens on 127.0.0.1 with a random token in the printed address; off by default so a default build has no network server.
 
 ```bash
 cargo install rs-rich-cli --no-default-features   # installs `rich`; no network or image decoders
