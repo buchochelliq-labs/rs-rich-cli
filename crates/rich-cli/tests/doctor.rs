@@ -24,6 +24,7 @@ fn doctor_json_reports_redirected_capabilities_without_environment_secrets() {
         ("interact", cfg!(feature = "interact")),
         ("dylib-plugins", cfg!(feature = "dylib-plugins")),
         ("wasm-plugins", cfg!(feature = "wasm-plugins")),
+        ("serve", cfg!(feature = "serve")),
     ] {
         assert_eq!(report["features"][name], on, "{name}");
     }

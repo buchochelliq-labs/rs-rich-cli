@@ -58,6 +58,10 @@ mmdc = ["mermaid", "art", "rich-mermaid/mmdc"]
 # asciinema casts, GIF and MP4 (rs-rich-record, #599). Pulls in a PTY, a VT
 # emulator and an embedded font.
 record = ["dep:rich-record"]
+# `rich serve -- PROGRAM`: run a terminal program in a web browser, one copy
+# per tab on a PTY of its own (rs-rich-web). Off by default: a default build
+# has no network server. Never in the Python wheel's feature list.
+serve = ["dep:rich-web"]
 # `rich choose`, `filter`, `input`, `confirm` and `pager`: the rs-rich-interact
 # components as shell commands (#493, #494).
 interact = ["dep:rich-interact"]
@@ -93,6 +97,7 @@ rich-diagram = { workspace = true, features = ["plugin", "graphviz"] }
 # `rich profile`, and the ER diagrams of `rich schema --er`.
 rich-data = { workspace = true, features = ["er"] }
 rich-record = { workspace = true, optional = true }
+rich-web = { workspace = true, optional = true }
 rich-interact = { workspace = true, optional = true, features = ["data"] }
 rich-lumis = { workspace = true, optional = true }
 rich-micro = { workspace = true, optional = true }
