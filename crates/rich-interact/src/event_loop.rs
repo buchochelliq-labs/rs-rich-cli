@@ -350,7 +350,7 @@ impl<'a> EventLoop<'a> {
                 .collect::<Vec<_>>()
                 .join("\n");
             self.backend.painted(&plain);
-            self.backend.write(&out)?;
+            self.backend.write_frame(&out)?;
         }
         self.rows = rows;
         self.shown = view.lines;
@@ -519,7 +519,7 @@ impl<'a> EventLoop<'a> {
     fn apply(&mut self, index: usize, step: Step) -> io::Result<()> {
         if let Step::Handoff(mut command) = step {
             let finish = self.painter.finish(false);
-            self.backend.write(&finish)?;
+            self.backend.write_frame(&finish)?;
             let code = self.backend.handoff(&mut command)?;
             self.painter.reset();
             self.deliver(index, &Event::Returned(code))?;
@@ -551,7 +551,7 @@ impl<'a> EventLoop<'a> {
     pub fn run(&mut self) -> io::Result<()> {
         let result = self.run_inner();
         let finish = self.painter.finish(self.options.transient);
-        let written = self.backend.write(&finish);
+        let written = self.backend.write_frame(&finish);
         result.and(written)
     }
 
@@ -578,7 +578,7 @@ impl<'a> EventLoop<'a> {
                 // shell's "Stopped" goes below it.
                 Some(Event::Key(key)) if key == Key::ctrl('z') && self.backend.can_suspend() => {
                     let finish = self.painter.finish(false);
-                    self.backend.write(&finish)?;
+                    self.backend.write_frame(&finish)?;
                     self.backend.suspend()?;
                     self.painter.reset();
                     let (columns, rows) = self.backend.size();

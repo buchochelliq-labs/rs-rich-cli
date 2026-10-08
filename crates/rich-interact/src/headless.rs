@@ -170,6 +170,10 @@ pub struct Headless {
     /// scripted `ctrl+i` is a Tab, which fires a `tab` or a `ctrl+i`
     /// binding.
     pub exact_keys: bool,
+    /// Whether frames are written as synchronized updates, as on a terminal
+    /// that knows DEC private mode 2026: each recorded paint is then wrapped
+    /// in `CSI ? 2026 h` and `CSI ? 2026 l`. Off by default.
+    pub synchronized_output: bool,
 }
 
 impl Headless {
@@ -183,6 +187,7 @@ impl Headless {
             suspendable: false,
             clipboard: true,
             exact_keys: false,
+            synchronized_output: false,
         }
     }
 
@@ -254,6 +259,10 @@ impl Backend for Headless {
         Ok(())
     }
 
+    fn synchronized_output(&self) -> bool {
+        self.synchronized_output
+    }
+
     fn elapsed(&self) -> Duration {
         self.clock
     }
@@ -319,6 +328,21 @@ pub fn run<C: Component>(
 mod tests {
     use super::*;
     use crate::event::KeyCode;
+
+    #[test]
+    fn frames_are_written_whole_or_not_at_all() {
+        let mut backend = Headless::new(Script::new(), 10, 2);
+        let record = backend.record();
+        backend.write_frame("plain").unwrap();
+        backend.synchronized_output = true;
+        backend.write_frame("\x1b[1;1Hhi").unwrap();
+        // Nothing to paint: no write, and no empty update.
+        backend.write_frame("").unwrap();
+        assert_eq!(
+            record.borrow().writes,
+            ["plain", "\x1b[?2026h\x1b[1;1Hhi\x1b[?2026l"]
+        );
+    }
 
     fn read_all(exact: bool) -> Vec<Event> {
         let script = Script::new().keys("ctrl+i ctrl+m q").key_up("q");

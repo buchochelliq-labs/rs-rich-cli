@@ -360,6 +360,36 @@ mod tests {
         assert!(reader.pending.is_empty() && reader.events.is_empty());
     }
 
+    #[test]
+    fn answers_to_the_start_up_query_are_no_keys() {
+        // A DECRQM report, kitty flags and the device attributes, late or
+        // among keys: each cut out whole, and read as nothing.
+        assert_eq!(cut(b"\x1b[?2026;2$yx"), Cut::Event(11));
+        let (resized, notify) = UnixStream::pair().unwrap();
+        let mut reader = Reader {
+            tty: tempfile_tty(),
+            pending: b"a\x1b[?2026;2$yb\x1b[?0u\x1b[?62;22cc\x1b[?2026;0$y".to_vec(),
+            events: VecDeque::new(),
+            held: HeldButton::default(),
+            resized,
+            resize_signal: signal_hook::low_level::pipe::register(
+                signal_hook::consts::SIGWINCH,
+                notify,
+            )
+            .unwrap(),
+        };
+        reader.drain(true);
+        let events: Vec<Event> = reader.events.drain(..).collect();
+        assert_eq!(
+            events,
+            [
+                Event::Key(Key::char('a')),
+                Event::Key(Key::char('b')),
+                Event::Key(Key::char('c')),
+            ]
+        );
+    }
+
     /// Any file stands in for the terminal where nothing reads it.
     fn tempfile_tty() -> File {
         File::open("/dev/null").unwrap()

@@ -37,9 +37,9 @@ data = ["rich-ext/data"]
 micro = ["dep:rich-micro"]
 # The termion backend (#677): `BackendKind::Termion`, Unix only (on other
 # platforms the feature compiles to nothing).
-termion = ["dep:termion", "dep:filedescriptor"]
+termion = ["dep:termion"]
 # The termwiz backend (#678): `BackendKind::Termwiz`, on Unix and Windows.
-termwiz = ["dep:termwiz", "dep:filedescriptor"]
+termwiz = ["dep:termwiz"]
 
 [[example]]
 name = "explore"
@@ -74,9 +74,9 @@ termwiz = { version = "0.23", optional = true }
 [target.'cfg(unix)'.dependencies]
 # The termion backend (MIT), off by default and Unix only.
 termion = { version = "4", optional = true }
-# A timed wait on the terminal, for the termion backend and the termwiz
-# backend's probes (crossterm's `use-dev-tty` already depends on it).
-filedescriptor = { version = "0.8", optional = true }
+# A timed wait on the terminal, for the start-up query and the termion and
+# termwiz backends' reads (crossterm's `use-dev-tty` already depends on it).
+filedescriptor = "0.8"
 # Restore the terminal on SIGTERM, SIGHUP and SIGQUIT (crossterm already
 # depends on it).
 signal-hook = "0.3"
