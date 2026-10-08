@@ -230,6 +230,8 @@ working slice to something others can build on, after the 0.0.17 cohort
   role and name per node;
 - serving to a browser in a new `rs-rich-web` crate, intuiTUIve apps first
   and then any terminal program (`rich serve`);
+- a terminal pane that runs any program inside an app, and a web view,
+  each over a swappable backend, in a new `rs-rich-embed` crate;
 - a full Python binding, `rs_rich.tui`.
 
 Core does not change.
