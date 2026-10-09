@@ -89,15 +89,19 @@ impl Reader {
     }
 
     /// Parse `bytes`, more of which may follow: a CSI sequence they end
-    /// in the middle of is held until its rest comes.
+    /// in the middle of, or an ESC they end with (a read can stop right
+    /// after it), is held until its rest comes. The parser, given an ESC
+    /// alone and its rest in the next call, reads a mouse report as typed
+    /// characters.
     fn parse(&mut self, bytes: &[u8]) {
         self.held.extend_from_slice(bytes);
         let cut = match self.held.iter().rposition(|&b| b == 0x1b) {
             Some(at)
-                if self.held.get(at + 1) == Some(&b'[')
-                    && self.held[at + 2..]
-                        .iter()
-                        .all(|b| (0x20..=0x3f).contains(b)) =>
+                if at + 1 == self.held.len()
+                    || (self.held[at + 1] == b'['
+                        && self.held[at + 2..]
+                            .iter()
+                            .all(|b| (0x20..=0x3f).contains(b))) =>
             {
                 at
             }
@@ -342,4 +346,45 @@ pub(super) fn release() {
         .ok()
         .and_then(|mut terminal| terminal.take());
     drop(terminal);
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use super::*;
+
+    /// What the reader parses from `chunks`, each as one read.
+    fn events(chunks: &[&[u8]]) -> Vec<String> {
+        let tty = std::fs::File::open("/dev/null").expect("/dev/null opens");
+        let mut reader = Reader::open(tty).expect("a reader");
+        for chunk in chunks {
+            reader.parse(chunk);
+        }
+        reader.flush();
+        reader
+            .events
+            .iter()
+            .map(|event| format!("{event:?}"))
+            .collect()
+    }
+
+    /// A read can stop right after an ESC: held, it joins the rest as one
+    /// sequence (given to the parser alone, a mouse report came out as
+    /// typed characters).
+    #[test]
+    fn an_escape_a_read_ends_with_waits_for_its_rest() {
+        let whole = events(&[b"\x1b[<0;5;3M"]);
+        assert_eq!(whole.len(), 1, "{whole:?}");
+        assert!(whole[0].starts_with("Mouse"), "{whole:?}");
+        for split in [
+            &[&b"\x1b"[..], b"[<0;5;", b"3M"][..],
+            &[b"\x1b", b"[<0;5;3M"],
+            &[b"\x1b[<0;5;", b"3M"],
+        ] {
+            assert_eq!(events(split), whole, "{split:?}");
+        }
+        // Escape alone is still the key, once no more comes.
+        let escape = events(&[b"\x1b"]);
+        assert_eq!(escape.len(), 1, "{escape:?}");
+        assert!(escape[0].contains("Escape"), "{escape:?}");
+    }
 }
