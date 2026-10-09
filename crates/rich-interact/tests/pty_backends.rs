@@ -111,8 +111,20 @@ fn backends() -> impl Iterator<Item = &'static str> {
 
 /// Send `bytes`, and return the event the child reports next.
 fn event_for(pty: &mut Pty, bytes: &str) -> String {
+    event_for_parts(pty, &[bytes])
+}
+
+/// Send `parts` 30 ms apart, as separate reads, and return the event the
+/// child reports next.
+fn event_for_parts(pty: &mut Pty, parts: &[&str]) -> String {
     let before = pty.text().len();
-    pty.send(bytes);
+    for (i, part) in parts.iter().enumerate() {
+        if i > 0 {
+            std::thread::sleep(Duration::from_millis(30));
+        }
+        pty.send(part);
+    }
+    let bytes = parts.concat();
     let end = Instant::now() + Duration::from_secs(30);
     loop {
         let text = pty.text();
@@ -251,6 +263,35 @@ fn every_backend_reads_a_legacy_terminal_alike() {
                 event_for(&mut pty, bytes),
                 format!("{expected:?}"),
                 "{backend}: {bytes:?}"
+            );
+        }
+        finish(pty, backend);
+    }
+}
+
+/// A sequence that one read cuts short (a slow link, a terminal that
+/// writes a report in two pieces) is read whole once its rest comes, not
+/// as typed characters.
+#[test]
+fn every_backend_reads_a_sequence_split_across_reads() {
+    for backend in backends() {
+        let mut pty = Pty::start_on(backend, "split");
+        pty.wait_for("child ready");
+        for (parts, expected) in [
+            (["\x1b[1;5", "C"], key("ctrl+right")),
+            (
+                ["\x1b[<0;5;", "3M"],
+                mouse(MouseKind::Down(Button::Left), 4, 2),
+            ),
+            (
+                ["\x1b[200~half ", "and half\x1b[201~"],
+                Event::Paste("half and half".into()),
+            ),
+        ] {
+            assert_eq!(
+                event_for_parts(&mut pty, &parts),
+                format!("{expected:?}"),
+                "{backend}: {parts:?}"
             );
         }
         finish(pty, backend);

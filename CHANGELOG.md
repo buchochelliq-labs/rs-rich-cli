@@ -37,6 +37,15 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   termion, with part of a sequence pending, never returned). Reading
   nothing from a terminal that said it had input is now the end of input,
   an error from `read`.
+- **termwiz reads a sequence split across reads whole.** termwiz's own
+  reader read a sequence that one read cut short (`ESC [ 1 ; 5`, then `C`
+  30 ms later; half a mouse report) as typed characters at once: Alt+[,
+  `1`, `;` and so on, typed into whatever had the focus. On Unix the
+  session now reads the terminal itself and gives termwiz's parser what it
+  read, holding a sequence cut short until its rest comes or 100 ms pass
+  with nothing more, as the termion backend does: the same event as from
+  one read, Ctrl+Right and the mouse press. Esc alone, likewise, is the
+  Esc key once those 100 ms pass.
 - **Answers to a program's queries are capped, and the terminal pane
   sends them.** rs-rich-record's emulator kept every answer it owed (the
   device attributes, the synchronized output report) until taken, and
