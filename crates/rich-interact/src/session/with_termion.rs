@@ -303,9 +303,19 @@ impl Reader {
             self.fill()?;
             self.drain(false);
             // An escape sequence cut short: wait for its rest as long as
-            // termion's own reader would.
-            let timeout = Duration::from_millis(termion::raw::CONTROL_SEQUENCE_TIMEOUT);
-            while !self.pending.is_empty() && self.wait(timeout)?.0 {
+            // termion's own reader would after an ESC alone, and longer
+            // after more of a sequence (which no one types), so a busy
+            // machine's late rest is not typed out.
+            let escape = Duration::from_millis(termion::raw::CONTROL_SEQUENCE_TIMEOUT);
+            loop {
+                let timeout = if self.pending.len() > 1 {
+                    escape * 5
+                } else {
+                    escape
+                };
+                if self.pending.is_empty() || !self.wait(timeout)?.0 {
+                    break;
+                }
                 self.fill()?;
                 self.drain(false);
             }

@@ -45,10 +45,16 @@ pub(super) struct Probed {
     reader: Box<Reader>,
 }
 
-/// How long the parser waits for the rest of a sequence a read cut short,
-/// as termion's reader does.
+/// How long the reader waits after an ESC for what follows it before it is
+/// the Escape key, as termion's reader does.
 #[cfg(unix)]
 const SEQUENCE_WAIT: Duration = Duration::from_millis(100);
+
+/// How long the reader waits for the rest of a control sequence a read cut
+/// short (`ESC [` and its parameters, which no one types): longer than for
+/// an ESC alone, so a busy machine's late rest is not typed out.
+#[cfg(unix)]
+const CSI_WAIT: Duration = Duration::from_millis(500);
 
 /// Reads the terminal, and parses what it read with termwiz's parser.
 #[cfg(unix)]
@@ -143,21 +149,36 @@ impl Reader {
         self.last_read = None;
     }
 
-    /// Whether the terminal has input within `wait`.
-    fn readable(&self, wait: Duration) -> io::Result<bool> {
+    /// How long what is held may wait for its rest after the last read.
+    fn sequence_wait(&self) -> Duration {
+        if self.held.len() > 1 {
+            CSI_WAIT
+        } else {
+            SEQUENCE_WAIT
+        }
+    }
+
+    /// Whether the terminal has input before `until`; a signal does not cut
+    /// the wait short.
+    fn readable(&self, until: Instant) -> io::Result<bool> {
         use filedescriptor::{poll, pollfd, POLLIN};
         use std::os::unix::io::AsRawFd;
-        let mut ready = [pollfd {
-            fd: self.tty.as_raw_fd(),
-            events: POLLIN,
-            revents: 0,
-        }];
-        match poll(&mut ready, Some(wait)) {
-            Ok(_) => Ok(ready[0].revents != 0),
-            Err(filedescriptor::Error::Poll(e)) if e.kind() == io::ErrorKind::Interrupted => {
-                Ok(false)
+        loop {
+            let mut ready = [pollfd {
+                fd: self.tty.as_raw_fd(),
+                events: POLLIN,
+                revents: 0,
+            }];
+            let wait = until.saturating_duration_since(Instant::now());
+            match poll(&mut ready, Some(wait)) {
+                Ok(_) => return Ok(ready[0].revents != 0),
+                Err(filedescriptor::Error::Poll(e))
+                    if e.kind() == io::ErrorKind::Interrupted && Instant::now() < until => {}
+                Err(filedescriptor::Error::Poll(e)) if e.kind() == io::ErrorKind::Interrupted => {
+                    return Ok(false)
+                }
+                Err(e) => return Err(other(e)),
             }
-            Err(e) => Err(other(e)),
         }
     }
 
@@ -170,7 +191,9 @@ impl Reader {
             return Ok(Some(event));
         }
         let wait = match self.last_read {
-            Some(at) => wait.min((at + SEQUENCE_WAIT).saturating_duration_since(Instant::now())),
+            Some(at) => {
+                wait.min((at + self.sequence_wait()).saturating_duration_since(Instant::now()))
+            }
             None => wait,
         };
         let mut ready = [
@@ -207,7 +230,11 @@ impl Reader {
             // A sequence cut short: wait here for its rest, as the termion
             // backend does, rather than leave it to the next call, which
             // may come too late on a busy machine.
-            while !self.held.is_empty() && self.readable(SEQUENCE_WAIT)? {
+            while !self.held.is_empty() {
+                let since = self.last_read.unwrap_or_else(Instant::now);
+                if !self.readable(since + self.sequence_wait())? {
+                    break;
+                }
                 self.fill()?;
             }
             if !self.held.is_empty() {
@@ -215,7 +242,7 @@ impl Reader {
             }
         } else if self
             .last_read
-            .is_some_and(|at| at.elapsed() >= SEQUENCE_WAIT)
+            .is_some_and(|at| at.elapsed() >= self.sequence_wait())
         {
             self.flush();
         }
