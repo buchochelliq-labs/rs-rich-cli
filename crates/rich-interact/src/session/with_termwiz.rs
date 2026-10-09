@@ -289,6 +289,13 @@ pub(super) fn poll(probed: &mut Probed, wait: Duration) -> io::Result<Option<Inp
     }
 }
 
+/// Bytes read from the terminal by someone else (keys that came with an
+/// answer the session asked for), for the parser.
+#[cfg(unix)]
+pub(super) fn unread(probed: &mut Probed, bytes: &[u8]) {
+    probed.reader.parse(bytes);
+}
+
 /// The session is over: drop termwiz's terminal, which puts back the mode
 /// it found.
 pub(super) fn release() {

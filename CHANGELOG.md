@@ -46,6 +46,14 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   with nothing more, as the termion backend does: the same event as from
   one read, Ctrl+Right and the mouse press. Esc alone, likewise, is the
   Esc key once those 100 ms pass.
+- **An inline termion or termwiz session finds the cursor among keys.**
+  Inline with the mouse, these backends ask the terminal for the cursor's
+  row, and took the first `ESC [` in what came back for the answer: a key
+  or mouse report that arrived just before it (an arrow key, the wheel)
+  made the session wait its full two seconds before the first paint, place
+  the region at row 0 so clicks missed, and drop the key. The answer is
+  now found wherever it is among other input, and the keys that came with
+  it are read as typed.
 - **Answers to a program's queries are capped, and the terminal pane
   sends them.** rs-rich-record's emulator kept every answer it owed (the
   device attributes, the synchronized output report) until taken, and

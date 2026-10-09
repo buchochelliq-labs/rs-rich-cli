@@ -280,6 +280,13 @@ impl Reader {
         }
     }
 
+    /// Bytes read from the terminal by someone else (keys that came with an
+    /// answer the session asked for), as if read here.
+    pub(super) fn unread(&mut self, bytes: &[u8]) {
+        self.pending.extend_from_slice(bytes);
+        self.drain(false);
+    }
+
     /// The next event, waiting up to `wait` for one.
     pub(super) fn next(&mut self, wait: Duration) -> io::Result<Option<Event>> {
         if let Some(event) = self.events.pop_front() {

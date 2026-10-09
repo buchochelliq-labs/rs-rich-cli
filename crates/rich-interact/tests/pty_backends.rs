@@ -100,6 +100,9 @@ fn child() {
     if std::env::var_os("INTERACT_CHILD").is_some_and(|mode| mode == "legacy") {
         options.session.legacy_keys = true;
     }
+    if std::env::var_os("INTERACT_CHILD").is_some_and(|mode| mode == "inline") {
+        options.session.alternate_screen = false;
+    }
     let outcome = run(Child::default(), &options);
     println!("OUTCOME {outcome:?}");
 }
@@ -294,6 +297,26 @@ fn every_backend_reads_a_sequence_split_across_reads() {
                 "{backend}: {parts:?}"
             );
         }
+        finish(pty, backend);
+    }
+}
+
+/// Inline with the mouse, termion and termwiz ask the cursor's row
+/// themselves: an arrow key typed just before the answer neither hides
+/// the answer (the region starts where it says, so a click lands on its
+/// row) nor is lost.
+#[test]
+fn every_backend_finds_the_cursor_among_keys() {
+    for backend in backends() {
+        let mut pty = Pty::start_cursor_on(backend, "inline", b"\x1b[A\x1b[12;1R");
+        pty.wait_for("child ready");
+        pty.wait_for(&format!("EV<{:?}>EV", key("up")));
+        // The view's second row is the terminal's 13th.
+        assert_eq!(
+            event_for(&mut pty, "\x1b[<0;2;13M"),
+            format!("{:?}", mouse(MouseKind::Down(Button::Left), 1, 1)),
+            "{backend}"
+        );
         finish(pty, backend);
     }
 }
