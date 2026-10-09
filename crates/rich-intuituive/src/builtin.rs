@@ -347,7 +347,8 @@ impl Widget for Panel {
     fn measure(&mut self, cx: &MeasureCx, axis: Axis, width: u16, height: u16) -> u16 {
         let [top, right, bottom, left] = self.look.padding;
         let edges = self.edge() * 2;
-        let (across, down) = (left + right + edges, top + bottom + edges);
+        let across = left.saturating_add(right).saturating_add(edges);
+        let down = top.saturating_add(bottom).saturating_add(edges);
         let height = if height == 0 {
             0
         } else {
@@ -370,8 +371,8 @@ impl Widget for Panel {
         vec![Rect::new(
             inner.x.saturating_add(left),
             inner.y.saturating_add(top),
-            inner.width.saturating_sub(left + right),
-            inner.height.saturating_sub(top + bottom),
+            inner.width.saturating_sub(left.saturating_add(right)),
+            inner.height.saturating_sub(top.saturating_add(bottom)),
         )]
     }
 
@@ -417,15 +418,16 @@ impl Widget for Pad {
 
     fn measure(&mut self, cx: &MeasureCx, axis: Axis, width: u16, height: u16) -> u16 {
         let [top, right, bottom, left] = self.edges;
+        let (across, down) = (left.saturating_add(right), top.saturating_add(bottom));
         let inner = cx.measure(
             &self.child,
             axis,
-            width.saturating_sub(left + right),
-            height.saturating_sub(top + bottom),
+            width.saturating_sub(across),
+            height.saturating_sub(down),
         );
         match axis {
-            Axis::Vertical => inner.saturating_add(top + bottom),
-            Axis::Horizontal => inner.saturating_add(left + right),
+            Axis::Vertical => inner.saturating_add(down),
+            Axis::Horizontal => inner.saturating_add(across),
         }
     }
 

@@ -633,23 +633,31 @@ impl Widget for Table {
                 }
                 _ => return Used::No,
             },
-            WidgetEvent::Mouse(mouse) if self.header && mouse.row == 0 => match mouse.kind {
-                MouseKind::Down(Button::Left) => {
-                    if let Some(edge) = self
-                        .edge_at(mouse.column)
-                        .filter(|_| self.options.resizable)
-                    {
-                        self.resizing.set(Some((edge, mouse.column)));
-                        cx.capture_mouse();
-                    } else if let Some(column) = self.column_at(mouse.column) {
-                        self.sort_by(column);
-                        if let Some(cursor) = self.options.column {
-                            cursor.set(column);
+            // The header is pressed and dragged; the wheel over it scrolls
+            // the rows, as anywhere on the table.
+            WidgetEvent::Mouse(mouse)
+                if self.header
+                    && mouse.row == 0
+                    && !matches!(mouse.kind, MouseKind::ScrollUp | MouseKind::ScrollDown) =>
+            {
+                match mouse.kind {
+                    MouseKind::Down(Button::Left) => {
+                        if let Some(edge) = self
+                            .edge_at(mouse.column)
+                            .filter(|_| self.options.resizable)
+                        {
+                            self.resizing.set(Some((edge, mouse.column)));
+                            cx.capture_mouse();
+                        } else if let Some(column) = self.column_at(mouse.column) {
+                            self.sort_by(column);
+                            if let Some(cursor) = self.options.column {
+                                cursor.set(column);
+                            }
                         }
                     }
+                    _ => return Used::No,
                 }
-                _ => return Used::No,
-            },
+            }
             WidgetEvent::Mouse(mouse) => match mouse.kind {
                 MouseKind::Down(button) if mouse.row >= self.header as u16 => {
                     if let (Some(cursor), Some(column)) =

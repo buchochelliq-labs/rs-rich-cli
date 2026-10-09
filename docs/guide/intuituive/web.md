@@ -68,8 +68,10 @@ Server::bind("127.0.0.1:0", counter)? // port 0: any free port
 
 - **`spawn()`** serves on a background thread and returns a `Handle`
   (`url()`, `local_addr()`, `sessions()`, `stop()`). Stopping it, or
-  dropping it, ends every session. Tests use it to serve on
-  `127.0.0.1:0`.
+  dropping it, ends every session, and returns once every program a
+  session ran has ended. Tests use it to serve on `127.0.0.1:0`.
+- **`run_until(f)`** is `run` that serves until `f` returns (a wait for a
+  signal, say), then stops as `stop()` does.
 - **`token(t)`** fixes the token instead of drawing a random one, for an
   address that stays the same between runs. Keep it as long and as secret.
 - **`allow_origin(o)`** accepts the page from another origin. That origin is
@@ -126,13 +128,21 @@ working directory. The program sees `TERM=xterm-256color`.
 - **Input** goes to the program as the page sent it: keys, pastes (bracketed
   when the program asked for that) and mouse reports when it turned the
   mouse on. Resizing the window resizes the pseudo-terminal, so the program
-  gets `SIGWINCH` and redraws.
+  gets `SIGWINCH` and redraws. Input the program has not read is held up
+  to 1 MiB; past that the server stops reading the page until the program
+  reads some, so a flood of pastes waits in the network, not in the
+  server's memory.
 - **Output** goes to the page as binary messages, and the page keeps a
-  scrollback of 5,000 lines, as a terminal does.
+  scrollback of 5,000 lines, as a terminal does. An OSC 52 clipboard
+  write in it is ignored: whatever a program prints (a file it shows, a
+  page it fetched) cannot replace what is on the browser's clipboard.
 - **The exit** ends the session: the page shows how the program ended
   ("The program exited with code 0." or "ended by signal …"), and a
   program that cannot start says why. Closing the tab, or stopping the
-  server, ends the program.
+  server, ends the program: it is hung up on (`SIGHUP`, as when a
+  terminal closes), and one still running a second later (it ignores
+  `SIGHUP`) is killed with `SIGKILL`, with everything in its process
+  group.
 - **A slow page holds the program back.** The page says when it has drawn
   each message. With half of `max_buffered` (1 MiB by default) sent and not
   yet drawn, the server stops reading the program's output, and with the
@@ -168,7 +178,8 @@ Serving htop at http://127.0.0.1:8080/?token=9b1e4c…
 
 Everything after `--` (or after the first word that is not an option) is
 the program and its arguments. Ctrl+C stops the server and every program
-it started.
+it started (on Unix, so do `SIGTERM` and `SIGHUP`): `rich` exits once each
+program has ended, so none outlives it.
 
 Serving a shell gives a shell to anyone who has the address with its
 token. Keep it on `127.0.0.1` unless a proxy with authentication is in
@@ -268,8 +279,12 @@ them do. The server is therefore closed by default:
   origin is refused.
 - **Sessions are capped.** One more than `max_sessions` is refused with
   `503` until a session ends.
+- **Requests are timed.** A connection has 10 seconds to send its whole
+  request, however slowly it trickles in. With 64 connections still
+  sending theirs, one more is answered `503` rather than closed unanswered.
 - **A program's output is bounded** by `max_buffered`: a page that stops
   reading holds the program back rather than growing the server's memory.
+  Its input is bounded too (1 MiB held that it has not read).
 - **The page is locked down:** a content security policy allows only its
   own scripts and styles and a WebSocket to the server, and other sites
   cannot frame it.

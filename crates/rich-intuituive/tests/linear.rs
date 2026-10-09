@@ -241,3 +241,90 @@ fn keys_still_work_in_linear_mode() {
     let written = record.borrow().output();
     assert_eq!(written, "count 0\r\ncount 1\r\ncount 2\r\n");
 }
+
+/// Names, values, toasts and announcements are the app's text: a terminal
+/// control in any of them is written as a visible symbol, never raw.
+#[test]
+fn controls_in_names_toasts_and_announcements_are_not_written_raw() {
+    let app = App::new(|| {
+        let picked = signal(0usize);
+        column([
+            list(|| vec!["ok\x1b]0;title\x07".into()], picked).label("Files\x1b[2J\x1b[H"),
+            label("x").label("n\u{9b}31m\r\x08"),
+        ])
+        .on_key("a", |cx| cx.announce("said\x1b]52;c;aGVsbG8=\x07", false))
+        .on_key("t", |cx| {
+            cx.toast(intuituive::rich::markup::escape("toast\x1b[31m"))
+        })
+    })
+    .linear(true);
+    let mut driver = app.driver(40, 6);
+    let mut written = Vec::new();
+    for key in [None, Some("a"), Some("t")] {
+        // `step` asserts that no ESC reaches the terminal.
+        written.extend(step(&mut driver, key));
+    }
+    assert!(
+        written
+            .iter()
+            .all(|line| !line.contains(['\u{9b}', '\r', '\x07', '\x08'])),
+        "{written:?}"
+    );
+    assert!(
+        written.iter().any(|line| line == "said␛]52;c;aGVsbG8=␇"),
+        "{written:?}"
+    );
+    assert!(
+        written.iter().any(|line| line == "toast␛[31m"),
+        "{written:?}"
+    );
+}
+
+/// Linear mode lays out on a screen as tall as the content: a terminal
+/// with few rows (or none reported, as a new pseudo-terminal) still has
+/// every node written, and Tab always says where the focus went.
+#[test]
+fn every_node_is_written_however_few_rows_the_terminal_has() {
+    let whole = step(&mut access::access_app().linear(true).driver(80, 20), None);
+    for (columns, rows) in [(80, 4), (80, 1), (0, 0)] {
+        let mut driver = access::access_app().linear(true).driver(columns, rows);
+        assert_eq!(step(&mut driver, None), whole, "{columns}x{rows}");
+        for _ in 0..5 {
+            let said = step(&mut driver, Some("tab"));
+            assert!(
+                said.iter().any(|line| line.starts_with("→ ")),
+                "{columns}x{rows}: {said:?}"
+            );
+        }
+    }
+}
+
+/// The session hides the cursor when it takes the terminal back after a
+/// suspend; linear mode shows it again, since a screen reader reads from
+/// where it is.
+#[test]
+fn the_cursor_is_shown_again_after_a_suspend() {
+    let app = App::new(|| label("Save").focusable()).linear(true);
+    let mut backend = intuituive::interact::headless::Headless::new(
+        intuituive::interact::headless::Script::new().keys("ctrl+z ctrl+c"),
+        20,
+        2,
+    );
+    backend.suspendable = true;
+    let record = backend.record();
+    app.run_on(&mut backend).expect("the app runs");
+    let record = record.borrow();
+    assert_eq!(record.suspends, 1);
+    // What the app writes as it suspends, then, once back, the cursor.
+    let writes = &record.writes;
+    let suspended = writes
+        .iter()
+        .position(|write| write.contains("\x1b[0m"))
+        .expect("the suspend is written");
+    assert!(
+        writes[suspended + 1..]
+            .iter()
+            .any(|write| write == "\x1b[?25h"),
+        "{writes:?}"
+    );
+}

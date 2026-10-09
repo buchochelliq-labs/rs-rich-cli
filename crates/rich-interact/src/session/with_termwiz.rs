@@ -8,19 +8,25 @@
 //! paste on itself, as with every backend, so termwiz is told to leave
 //! them alone.
 //!
-//! The terminal lives behind a lock, which the signal thread takes to give
-//! the terminal back for a suspend. So on Unix a read waits for input on
-//! the terminal without holding it, and only takes it to have termwiz
-//! read what arrived: held through termwiz's own wait, the lock would be
-//! taken again the moment it was let go, and the suspend kept waiting.
+//! On Unix the session reads the terminal itself and has a termwiz
+//! [`InputParser`] read the bytes, rather than termwiz's `poll_input`, which
+//! reads a sequence a read cut short (`ESC [ 1 ; 5`, then `C`) as typed
+//! characters: here, as with the termion backend, the parser waits up to
+//! 100 ms for the rest. Resizes come from SIGWINCH through a pipe. The
+//! terminal itself lives behind a lock, which the signal thread takes to
+//! give the terminal back for a suspend; reading never holds it.
 
 use std::io;
 use std::sync::Mutex;
 use std::time::Duration;
+#[cfg(unix)]
+use std::time::Instant;
 
 use rich::ColorSystem;
 use termwiz::caps::{Capabilities, ColorLevel, ProbeHints};
 use termwiz::input::InputEvent;
+#[cfg(unix)]
+use termwiz::input::InputParser;
 use termwiz::terminal::{SystemTerminal, Terminal};
 
 use super::Output;
@@ -29,14 +35,226 @@ use super::Output;
 /// reach it.
 static TERMINAL: Mutex<Option<SystemTerminal>> = Mutex::new(None);
 
-/// What termwiz's probe found, and the terminal to wait on.
+/// What termwiz's probe found, and the terminal's input.
 pub(super) struct Probed {
     pub(super) mouse: bool,
     pub(super) paste: bool,
     pub(super) color: Option<ColorSystem>,
-    /// The terminal, for waiting until it has input.
+    /// Boxed: termwiz's parser is large, and this sits in the session.
     #[cfg(unix)]
+    reader: Box<Reader>,
+}
+
+/// How long the reader waits after an ESC for what follows it before it is
+/// the Escape key, as termion's reader does.
+#[cfg(unix)]
+const SEQUENCE_WAIT: Duration = Duration::from_millis(100);
+
+/// How long the reader waits for the rest of a control sequence a read cut
+/// short (`ESC [` and its parameters, which no one types): longer than for
+/// an ESC alone, so a busy machine's late rest is not typed out.
+#[cfg(unix)]
+const CSI_WAIT: Duration = Duration::from_millis(500);
+
+/// Reads the terminal, and parses what it read with termwiz's parser.
+#[cfg(unix)]
+struct Reader {
     tty: std::fs::File,
+    parser: InputParser,
+    /// A CSI sequence a read cut short, not yet given to the parser: it
+    /// reads one it knows no key for (a mouse report) as typed characters
+    /// at once, even told more may follow.
+    held: Vec<u8>,
+    events: std::collections::VecDeque<InputEvent>,
+    /// When the last read was, while a sequence may be cut short (held, or
+    /// in the parser): once [`SEQUENCE_WAIT`] passes with no more, it is
+    /// read as it stands.
+    last_read: Option<Instant>,
+    /// Written to on SIGWINCH.
+    resized: std::os::unix::net::UnixStream,
+    resize_signal: signal_hook::SigId,
+}
+
+#[cfg(unix)]
+impl Reader {
+    fn open(tty: std::fs::File) -> io::Result<Reader> {
+        let (resized, notify) = std::os::unix::net::UnixStream::pair()?;
+        resized.set_nonblocking(true)?;
+        notify.set_nonblocking(true)?;
+        let resize_signal =
+            signal_hook::low_level::pipe::register(signal_hook::consts::SIGWINCH, notify)?;
+        Ok(Reader {
+            tty,
+            parser: InputParser::new(),
+            held: Vec::new(),
+            events: Default::default(),
+            last_read: None,
+            resized,
+            resize_signal,
+        })
+    }
+
+    /// Parse `bytes`, more of which may follow: a CSI sequence they end
+    /// in the middle of, or an ESC they end with (a read can stop right
+    /// after it), is held until its rest comes. The parser, given an ESC
+    /// alone and its rest in the next call, reads a mouse report as typed
+    /// characters.
+    fn parse(&mut self, bytes: &[u8]) {
+        self.held.extend_from_slice(bytes);
+        let cut = match self.held.iter().rposition(|&b| b == 0x1b) {
+            Some(at)
+                if at + 1 == self.held.len()
+                    || (self.held[at + 1] == b'['
+                        && self.held[at + 2..]
+                            .iter()
+                            .all(|b| (0x20..=0x3f).contains(b))) =>
+            {
+                at
+            }
+            _ => self.held.len(),
+        };
+        let events = &mut self.events;
+        self.parser
+            .parse(&self.held[..cut], |event| events.push_back(event), true);
+        self.held.drain(..cut);
+        self.last_read = Some(Instant::now());
+    }
+
+    /// Read what the terminal has, and parse it.
+    fn fill(&mut self) -> io::Result<()> {
+        use std::io::Read;
+        let mut buffer = [0u8; 1024];
+        match self.tty.read(&mut buffer) {
+            // Nothing from a terminal that said it had input: it hung up.
+            Ok(0) => Err(io::Error::new(
+                io::ErrorKind::UnexpectedEof,
+                "the terminal hung up",
+            )),
+            Ok(read) => {
+                self.parse(&buffer[..read]);
+                Ok(())
+            }
+            Err(e) if e.kind() == io::ErrorKind::Interrupted => Ok(()),
+            Err(e) => Err(e),
+        }
+    }
+
+    /// No more came: what is held (and what the parser holds) is read as
+    /// it stands.
+    fn flush(&mut self) {
+        let events = &mut self.events;
+        let held = std::mem::take(&mut self.held);
+        self.parser
+            .parse(&held, |event| events.push_back(event), false);
+        self.last_read = None;
+    }
+
+    /// How long what is held may wait for its rest after the last read.
+    fn sequence_wait(&self) -> Duration {
+        if self.held.len() > 1 {
+            CSI_WAIT
+        } else {
+            SEQUENCE_WAIT
+        }
+    }
+
+    /// Whether the terminal has input before `until`; a signal does not cut
+    /// the wait short.
+    fn readable(&self, until: Instant) -> io::Result<bool> {
+        use filedescriptor::{poll, pollfd, POLLIN};
+        use std::os::unix::io::AsRawFd;
+        loop {
+            let mut ready = [pollfd {
+                fd: self.tty.as_raw_fd(),
+                events: POLLIN,
+                revents: 0,
+            }];
+            let wait = until.saturating_duration_since(Instant::now());
+            match poll(&mut ready, Some(wait)) {
+                Ok(_) => return Ok(ready[0].revents != 0),
+                Err(filedescriptor::Error::Poll(e))
+                    if e.kind() == io::ErrorKind::Interrupted && Instant::now() < until => {}
+                Err(filedescriptor::Error::Poll(e)) if e.kind() == io::ErrorKind::Interrupted => {
+                    return Ok(false)
+                }
+                Err(e) => return Err(other(e)),
+            }
+        }
+    }
+
+    /// The next event within `wait` (or a little sooner).
+    fn next(&mut self, wait: Duration) -> io::Result<Option<InputEvent>> {
+        use filedescriptor::{poll, pollfd, POLLIN};
+        use std::io::Read;
+        use std::os::unix::io::AsRawFd;
+        if let Some(event) = self.events.pop_front() {
+            return Ok(Some(event));
+        }
+        let wait = match self.last_read {
+            Some(at) => {
+                wait.min((at + self.sequence_wait()).saturating_duration_since(Instant::now()))
+            }
+            None => wait,
+        };
+        let mut ready = [
+            pollfd {
+                fd: self.tty.as_raw_fd(),
+                events: POLLIN,
+                revents: 0,
+            },
+            pollfd {
+                fd: self.resized.as_raw_fd(),
+                events: POLLIN,
+                revents: 0,
+            },
+        ];
+        match poll(&mut ready, Some(wait)) {
+            Ok(_) => {}
+            // A signal (SIGWINCH, SIGCONT): look again next time.
+            Err(filedescriptor::Error::Poll(e)) if e.kind() == io::ErrorKind::Interrupted => {
+                return Ok(None)
+            }
+            Err(e) => return Err(other(e)),
+        }
+        if ready[1].revents != 0 {
+            let mut drained = [0u8; 64];
+            while matches!(self.resized.read(&mut drained), Ok(n) if n > 0) {}
+            let (cols, rows) = size()?;
+            return Ok(Some(InputEvent::Resized {
+                cols: cols.into(),
+                rows: rows.into(),
+            }));
+        }
+        if ready[0].revents != 0 {
+            self.fill()?;
+            // A sequence cut short: wait here for its rest, as the termion
+            // backend does, rather than leave it to the next call, which
+            // may come too late on a busy machine.
+            while !self.held.is_empty() {
+                let since = self.last_read.unwrap_or_else(Instant::now);
+                if !self.readable(since + self.sequence_wait())? {
+                    break;
+                }
+                self.fill()?;
+            }
+            if !self.held.is_empty() {
+                self.flush();
+            }
+        } else if self
+            .last_read
+            .is_some_and(|at| at.elapsed() >= self.sequence_wait())
+        {
+            self.flush();
+        }
+        Ok(self.events.pop_front())
+    }
+}
+
+#[cfg(unix)]
+impl Drop for Reader {
+    fn drop(&mut self) {
+        signal_hook::low_level::unregister(self.resize_signal);
+    }
 }
 
 fn other(error: impl std::fmt::Display) -> io::Error {
@@ -80,7 +298,7 @@ pub(super) fn open(output: Output) -> io::Result<Probed> {
             ColorLevel::TrueColor => Some(ColorSystem::Truecolor),
         },
         #[cfg(unix)]
-        tty,
+        reader: Box::new(Reader::open(tty)?),
     })
 }
 
@@ -129,34 +347,23 @@ pub(super) fn size() -> io::Result<(u16, u16)> {
 }
 
 /// termwiz's next event within `wait` (or a little sooner).
-pub(super) fn poll(probed: &Probed, wait: Duration) -> io::Result<Option<InputEvent>> {
+pub(super) fn poll(probed: &mut Probed, wait: Duration) -> io::Result<Option<InputEvent>> {
     #[cfg(unix)]
     {
-        // What termwiz has already: events parsed from an earlier read, a
-        // resize.
-        let now = || with(true, |terminal| terminal.poll_input(Some(Duration::ZERO)));
-        if let Some(event) = now()?.flatten() {
-            return Ok(Some(event));
-        }
-        // A resize arrives through termwiz's own pipe, which this wait
-        // does not watch: short waits, so it is seen soon after.
-        let mut ready = [filedescriptor::pollfd {
-            fd: std::os::unix::io::AsRawFd::as_raw_fd(&probed.tty),
-            events: filedescriptor::POLLIN,
-            revents: 0,
-        }];
-        match filedescriptor::poll(&mut ready, Some(wait.min(Duration::from_millis(50)))) {
-            Ok(_) => {}
-            Err(filedescriptor::Error::Poll(e)) if e.kind() == io::ErrorKind::Interrupted => {}
-            Err(e) => return Err(other(e)),
-        }
-        Ok(now()?.flatten())
+        probed.reader.next(wait)
     }
     #[cfg(not(unix))]
     {
         let _ = probed;
         Ok(with(true, |terminal| terminal.poll_input(Some(wait)))?.flatten())
     }
+}
+
+/// Bytes read from the terminal by someone else (keys that came with an
+/// answer the session asked for), for the parser.
+#[cfg(unix)]
+pub(super) fn unread(probed: &mut Probed, bytes: &[u8]) {
+    probed.reader.parse(bytes);
 }
 
 /// The session is over: drop termwiz's terminal, which puts back the mode
@@ -166,4 +373,45 @@ pub(super) fn release() {
         .ok()
         .and_then(|mut terminal| terminal.take());
     drop(terminal);
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use super::*;
+
+    /// What the reader parses from `chunks`, each as one read.
+    fn events(chunks: &[&[u8]]) -> Vec<String> {
+        let tty = std::fs::File::open("/dev/null").expect("/dev/null opens");
+        let mut reader = Reader::open(tty).expect("a reader");
+        for chunk in chunks {
+            reader.parse(chunk);
+        }
+        reader.flush();
+        reader
+            .events
+            .iter()
+            .map(|event| format!("{event:?}"))
+            .collect()
+    }
+
+    /// A read can stop right after an ESC: held, it joins the rest as one
+    /// sequence (given to the parser alone, a mouse report came out as
+    /// typed characters).
+    #[test]
+    fn an_escape_a_read_ends_with_waits_for_its_rest() {
+        let whole = events(&[b"\x1b[<0;5;3M"]);
+        assert_eq!(whole.len(), 1, "{whole:?}");
+        assert!(whole[0].starts_with("Mouse"), "{whole:?}");
+        for split in [
+            &[&b"\x1b"[..], b"[<0;5;", b"3M"][..],
+            &[b"\x1b", b"[<0;5;3M"],
+            &[b"\x1b[<0;5;", b"3M"],
+        ] {
+            assert_eq!(events(split), whole, "{split:?}");
+        }
+        // Escape alone is still the key, once no more comes.
+        let escape = events(&[b"\x1b"]);
+        assert_eq!(escape.len(), 1, "{escape:?}");
+        assert!(escape[0].contains("Escape"), "{escape:?}");
+    }
 }

@@ -63,6 +63,177 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   [intuiTUIve from Python](docs/guide/intuituive/python.md), and a page on
   the Python site.
 
+## 0.0.18 cohort
+
+record 0.0.6 / interact 0.0.6 / ratatui 0.0.3 / intuituive 0.0.3 / embed
+0.0.1 (new) / web 0.0.1 (new) / CLI 0.0.18, with data 0.0.2 from the 0.0.17
+cohort, which is not on crates.io yet (CLI 0.0.17 was never published;
+0.0.18 carries everything it had). Unchanged and already published: core
+0.0.9, macros 0.0.3, plugin API 0.0.3, art 0.0.12, diagram 0.0.2, mermaid
+0.0.5, lumis 0.0.3, ext 0.0.15, micro 0.0.4. The Python package (0.0.6, with
+`rs_rich.tui`) is held back from this cohort. See
+[the release notes](docs/releases/0.0.18.md).
+
+### 0.0.18 release test: fixes from three audits
+
+- **A masked line prompt turns echo off before it shows.** It wrote the
+  prompt, then turned echo off, so a key typed as soon as the prompt showed
+  (a pasted password, a script typing ahead) was echoed by the terminal.
+  `LineIo::prompt_secret` writes the prompt once echo is off; its default
+  writes, then reads, as before.
+- **Linear mode writes no terminal controls.** An accessible name, a value,
+  a toast or an announcement holding ESC, a C1 control, CR or BS reached
+  the terminal raw in linear mode (a label could clear the screen, an
+  announcement write the clipboard through OSC 52). Each control is now
+  written as a visible symbol, as on the cell screen.
+- **Linear mode writes every node, however few rows the terminal has.**
+  It laid out in the terminal's rows, so on a short terminal (or a new
+  pseudo-terminal that reports no size) the nodes below were never written
+  and Tab moved the focus onto them in silence. It now lays out as tall as
+  the content (up to 4096 rows), 80 columns wide when the terminal reports
+  none.
+- **Linear mode shows the cursor again after a suspend.** Back from
+  Ctrl+Z or `fg`, the session hid the cursor and nothing showed it again.
+- **A lazy tree whose children repeat an ancestor's key opens level by
+  level.** `tree_lazy` grew every loaded level, open or not, so a child
+  with the key of its own ancestor (a folder linked back up the tree)
+  recursed until the process aborted. Only open items are grown now.
+- **Large stylesheet padding no longer overflows.** `padding: 40000` (or
+  65535 with a border) parsed, then panicked at draw time in a debug build
+  and wrapped in a release one; the insets saturate.
+- **Stylesheet comments and quoted values hold any character.** A comment
+  holding a brace, a comment between a selector and its `{`, and a quoted
+  `border-title` holding `;` or `/*` were rejected or cut short; comments
+  are blanked first and quoted strings are kept whole. A sheet with a bad
+  rule is still reported and not applied, with the last good one kept.
+- **The wheel over a table's header scrolls the rows** again, as over the
+  rows.
+- **Browsh's server listens on this computer only.** `BrowshEngine::new()`
+  started `browsh --http-server-mode` with Browsh's own configuration,
+  whose default binds every interface, so anyone who could reach the
+  machine could have it fetch and render pages from there. The engine
+  now starts Browsh with a configuration of its own (a temporary
+  directory, removed when the engine goes) that binds `127.0.0.1`, in a
+  process group of its own that is killed, Firefox included, when the
+  engine goes; and spaces and control characters in an address are
+  percent-encoded in the request to it rather than written raw.
+- **A served program can no longer write the browser's clipboard.** The
+  xterm.js page put every OSC 52 copy on the clipboard, in program mode
+  too, so any output (`cat` of a hostile file, a fetched page, a log
+  line) could silently replace it with a command for a later paste. The
+  page now registers its OSC 52 handler for apps only, whose copies the
+  server itself sends.
+- **A web view address can no longer become a browser's option.**
+  `ProgramEngine` put the address on the terminal browser's command line
+  as it was, so a link such as `--renderer-cmd-prefix=…` (from a feed, a
+  document, a paste) reached Carbonyl, a Chromium, as a switch that runs
+  a command. Now `open` refuses an address that starts with `-` or has a
+  control character in it, and Carbonyl, found by `detect`, gets `--`
+  before the address.
+- **No spelling of a sandbox switch reaches Chrome.** `ChromeEngine`
+  dropped only arguments that began `--no-sandbox`, but Chromium also
+  reads `-no-sandbox` (and `/no-sandbox` and any case on Windows), and
+  `--disable-setuid-sandbox`, `--disable-seccomp-filter-sandbox` and
+  their kin passed untouched. Switches are now normalised (dashes, a
+  Windows slash, case, a value) before the filter, which drops every
+  switch that turns part of the sandbox off, `--single-process` and
+  `--no-zygote` included.
+- **Chrome's profile directory is private.** It was created with the
+  default mode (world-readable on most systems); it is now `0700` on
+  Unix. The `ChromeEngine` docs and the embed guide now say that its
+  DevTools port on `127.0.0.1` can be reached by other local users while
+  the view is open.
+- **A slow request no longer holds an rs-rich-web server's connection for
+  ever.** The 10-second limit on sending a request applied to each read,
+  so a client sending a byte every few seconds kept its connection (and
+  thread) for hours, and 64 such clients locked everyone else out with
+  connections closed unanswered. Now the whole request head must arrive
+  within 10 seconds, and a connection past the 64 still sending theirs is
+  answered `503`.
+- **A paste flood no longer grows a served program's memory without
+  bound.** `LocalPty::write` queued every input on an unbounded channel,
+  so a page pasting into a program that was not reading its input (or
+  reading slower than the network) could exhaust the server's memory.
+  Now `LocalPty` holds at most 1 MiB of unread input and refuses more
+  with `WouldBlock`, and an rs-rich-web program session stops reading the
+  page while the program's input is full, so the flood waits in the
+  network.
+- **A program that ignores `SIGHUP` no longer outlives its session.**
+  rs-rich-embed's `LocalPty` only hung up on its program, so one that
+  ignored the hang-up kept running after its pane, its browser session,
+  `Handle::stop` and `rich serve` were gone, and its waiter thread waited
+  for ever. Now a program still running a second after it was hung up on
+  is killed with `SIGKILL`, with its whole process group (Unix);
+  `Handle::stop` returns once every program has ended, a request still
+  arriving when it stops is not served, the new `Server::run_until` serves
+  until a closure returns, and `rich serve` waits for Ctrl+C, `SIGTERM`
+  or `SIGHUP` and exits only once every program has ended.
+- **`rich record` no longer hangs on a program that asks and does not
+  read.** The answers to a program's queries were written from the thread
+  that reads its output, with a blocking write, holding the lock typing
+  needs: a program that asked the device attributes many times without
+  reading its input (a `cat` of a file full of them, a raw-mode program)
+  filled its input queue, its output stopped being read, and the tape's
+  next keystroke never returned. Typing and answers now go through a
+  writer thread of their own: output is always read, typing never waits on
+  the program, and answers beyond 4 KiB waiting are dropped.
+- **rs-rich-record's emulator ends a control sequence where vt100 does.**
+  An ESC inside a CSI sequence was kept as part of it, so a query after a
+  sequence cut off (`ESC [ 1 ESC [ c`) went unanswered and the program
+  waited two seconds; and a CSI that never ended kept every byte after it.
+  ESC now starts a new sequence, CAN and SUB cancel one, and at most 32
+  bytes of a sequence are kept (a longer one is no query).
+- **A large paste no longer freezes a termion session.** While a
+  bracketed paste's end had not arrived, the termion backend searched the
+  whole paste for it again after every 1 KiB read: quadratic, 13 seconds
+  for 1 MiB and minutes for 4 MiB, with no repaint meanwhile. It now
+  searches only what each read added.
+- **A terminal that hangs up ends a termion or termwiz session's input.**
+  When the terminal went away but the process lived on, its reads
+  returned nothing at once, forever: the session spun at full CPU (and
+  termion, with part of a sequence pending, never returned). Reading
+  nothing from a terminal that said it had input is now the end of input,
+  an error from `read`.
+- **termwiz reads a sequence split across reads whole.** termwiz's own
+  reader read a sequence that one read cut short (`ESC [ 1 ; 5`, then `C`
+  30 ms later; half a mouse report) as typed characters at once: Alt+[,
+  `1`, `;` and so on, typed into whatever had the focus. On Unix the
+  session now reads the terminal itself and gives termwiz's parser what it
+  read, holding a sequence cut short until its rest comes, as the termion
+  backend does: the same event as from one read, Ctrl+Right and the mouse
+  press. A sequence's rest is waited for up to 500 ms (no one types
+  `ESC [`), an ESC alone 100 ms before it is the Esc key; both backends
+  wait so.
+- **An inline termion or termwiz session finds the cursor among keys.**
+  Inline with the mouse, these backends ask the terminal for the cursor's
+  row, and took the first `ESC [` in what came back for the answer: a key
+  or mouse report that arrived just before it (an arrow key, the wheel)
+  made the session wait its full two seconds before the first paint, place
+  the region at row 0 so clicks missed, and drop the key. The answer is
+  now found wherever it is among other input, and the keys that came with
+  it are read as typed.
+- **termwiz leaves xterm's modifyOtherKeys off.** termwiz's raw mode
+  turns modifyOtherKeys up to level 2 and its cooked mode leaves it at 1;
+  only dropping its terminal set it back to 0. So after Ctrl+Z, SIGTERM,
+  SIGHUP or SIGQUIT, and for a program handed the terminal, the shell or
+  the program got `CSI 27;…~` for keys such as Shift+Enter. Every way the
+  session gives the terminal back now sets it to 0, and taking it back
+  sets it up again.
+- **A suspend while a session starts no longer pushes the kitty flags
+  twice.** The session marked the kitty keyboard flags pushed before it
+  wrote the push: a SIGTSTP in between popped nothing, pushed them on
+  `fg`, and the session then pushed them again, one push more than the one
+  pop at exit. They are now marked with the write that pushes them, which
+  a suspend waits for.
+- **Answers to a program's queries are capped, and the terminal pane
+  sends them.** rs-rich-record's emulator kept every answer it owed (the
+  device attributes, the synchronized output report) until taken, and
+  rs-rich-embed's terminal pane never took them: a program that asked over
+  and over grew memory without end, and one that asked at its start (any
+  rs-rich-interact session) waited two seconds for an answer that never
+  came. The pane now sends the answers to its program, and at most 4 KiB
+  of them wait to be taken; more are dropped.
+
 ### Synchronized output (rs-rich-interact 0.0.6, rs-rich-intuituive 0.0.3)
 
 0.0.18 workstream 11. rs-rich-record changes with it.

@@ -1680,6 +1680,7 @@ dependencies = [
 name = "rs-rich-embed"
 version = "0.0.1"
 dependencies = [
+ "libc",
  "portable-pty",
  "rs-rich",
  "rs-rich-intuituive",

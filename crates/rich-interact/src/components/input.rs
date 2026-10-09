@@ -606,11 +606,13 @@ impl Component for Input {
         if let Some(hint) = self.default_hint() {
             prompt.push_str(&format!(" [{}]", &hint[1..hint.len() - 1]));
         }
-        io.write(&format!("{prompt}: "));
-        // A masked answer is read without echo where the terminal has it.
+        let prompt = format!("{prompt}: ");
+        // A masked answer is read without echo where the terminal has it,
+        // turned off before the prompt shows.
         let read = if self.mask.is_some() {
-            io.read_secret()
+            io.prompt_secret(&prompt)
         } else {
+            io.write(&prompt);
             io.read_line().map(Some).ok_or(NotInteractive::Ended)
         };
         let mut line = match read {

@@ -621,6 +621,13 @@ impl LineIo for GuardedIo<'_> {
         }
         self.0.read_secret()
     }
+
+    fn prompt_secret(&mut self, prompt: &str) -> Result<Option<String>, CoreNot> {
+        if renderable::has_pending() {
+            return Ok(None);
+        }
+        self.0.prompt_secret(prompt)
+    }
 }
 
 /// Run a built component in `mode`, with the GIL released.

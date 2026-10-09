@@ -278,6 +278,19 @@ impl BackendKind {
         }
     }
 
+    /// What to write once the library's raw mode is off, for what turning
+    /// it off leaves on: termwiz's raw mode sets xterm's modifyOtherKeys to
+    /// level 2 and its cooked mode to 1, and only dropping its terminal
+    /// sets it back to 0, as a shell or a program handed the terminal
+    /// expects.
+    fn after_raw_mode(self) -> &'static str {
+        match self {
+            #[cfg(all(unix, feature = "termwiz"))]
+            BackendKind::Termwiz => "\x1b[>4;0m",
+            _ => "",
+        }
+    }
+
     /// Give back what the library holds once the session is over.
     fn release(self) {
         match self {
@@ -382,7 +395,12 @@ fn restore(wait: bool) -> io::Result<()> {
         Ok(())
     };
     let raw = if active & RAW != 0 {
-        library.raw_mode(false, wait)
+        let off = library.raw_mode(false, wait);
+        let after = match library.after_raw_mode() {
+            "" => Ok(()),
+            after => Output::live().write(after),
+        };
+        off.and(after)
     } else {
         Ok(())
     };
@@ -476,6 +494,7 @@ fn restore_for_signal() {
     }
     if active & RAW != 0 {
         let _ = library.raw_mode(false, true);
+        write_direct(library.after_raw_mode());
     }
     if RAW_LINE.swap(false, Ordering::SeqCst) {
         let _ = crossterm::terminal::disable_raw_mode();
@@ -495,6 +514,7 @@ static RESUMED: AtomicBool = AtomicBool::new(false);
 /// SIGTSTP runs on the signal thread while the event loop runs on, so
 /// without it a session that ended during the stop (a key queued, a timer
 /// due) would have its modes turned back on after it restored them.
+/// `enter` holds it while it marks the modes on and writes them.
 static SUSPENDING: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 #[cfg(unix)]
@@ -569,8 +589,8 @@ fn lock<T>(mutex: &std::sync::Mutex<T>, wait: bool) -> io::Result<std::sync::Mut
 
 /// Ask the terminal `query` through `/dev/tty`, and read until `done` says
 /// the answer is complete, for two seconds at most (a terminal that does
-/// not answer). `None` when it does not answer in time. Keys typed while it
-/// waits are lost.
+/// not answer). `None` when it does not answer in time. What it returns
+/// holds anything else read meanwhile, such as keys typed.
 #[cfg(unix)]
 fn ask_terminal(query: &str, done: impl Fn(&[u8]) -> bool) -> Option<Vec<u8>> {
     use std::io::Read;
@@ -718,17 +738,50 @@ fn ask_start() -> Answers {
         .unwrap_or_default()
 }
 
-/// The cursor's row (0-based), asked directly (`CSI 6 n`).
-#[cfg(all(unix, any(feature = "termion", feature = "termwiz")))]
-fn ask_cursor_row() -> Option<u16> {
-    fn report(bytes: &[u8]) -> Option<u16> {
-        let start = bytes.windows(2).position(|w| w == b"\x1b[")? + 2;
-        let end = start + bytes[start..].iter().position(|&b| b == b'R')?;
-        let text = std::str::from_utf8(&bytes[start..end]).ok()?;
-        let (row, _) = text.split_once(';')?;
-        row.parse::<u16>().ok().map(|row| row.saturating_sub(1))
+/// The first complete cursor position report (`ESC [ <row> ; <column> R`)
+/// in `bytes`: its row (0-based), and where it is. Anything else (a key
+/// typed meanwhile, a mouse report, an answer cut short) is passed over.
+#[cfg(any(all(unix, any(feature = "termion", feature = "termwiz")), test))]
+fn cursor_report(bytes: &[u8]) -> Option<(u16, std::ops::Range<usize>)> {
+    let digits = |from: usize| {
+        from + bytes[from..]
+            .iter()
+            .take_while(|b| b.is_ascii_digit())
+            .count()
+    };
+    let mut at = 0;
+    while let Some(found) = bytes[at..].windows(2).position(|w| w == b"\x1b[") {
+        let start = at + found;
+        let row_end = digits(start + 2);
+        if row_end > start + 2 && bytes.get(row_end) == Some(&b';') {
+            let end = digits(row_end + 1);
+            if end > row_end + 1 && bytes.get(end) == Some(&b'R') {
+                let row = std::str::from_utf8(&bytes[start + 2..row_end]).map(str::parse::<u16>);
+                if let Ok(Ok(row)) = row {
+                    return Some((row.saturating_sub(1), start..end + 1));
+                }
+            }
+        }
+        at = start + 1;
     }
-    report(&ask_terminal("\x1b[6n", |bytes| report(bytes).is_some())?)
+    None
+}
+
+/// The cursor's row (0-based), asked directly (`CSI 6 n`), and the rest of
+/// what was read with the answer (keys typed meanwhile), for the reader.
+#[cfg(all(unix, any(feature = "termion", feature = "termwiz")))]
+fn ask_cursor_row() -> (Option<u16>, Vec<u8>) {
+    let Some(bytes) = ask_terminal("\x1b[6n", |bytes| cursor_report(bytes).is_some()) else {
+        return (None, Vec::new());
+    };
+    match cursor_report(&bytes) {
+        Some((row, at)) => {
+            let mut rest = bytes[..at.start].to_vec();
+            rest.extend_from_slice(&bytes[at.end..]);
+            (Some(row), rest)
+        }
+        None => (None, bytes),
+    }
 }
 
 thread_local! {
@@ -1014,7 +1067,6 @@ impl Session {
         self.kitty = answers.kitty;
         if self.kitty {
             out.push_str(library.kitty_push());
-            ACTIVE.fetch_or(KITTY, Ordering::SeqCst);
         }
         self.sync = self
             .options
@@ -1034,7 +1086,17 @@ impl Session {
             ACTIVE.fetch_or(PASTE, Ordering::SeqCst);
         }
         out.push_str("\x1b[?25l");
-        self.options.output.write(&out)?;
+        {
+            // The kitty flags are a stack: marked pushed with the write
+            // that pushes them, under the suspend's lock, so a suspend
+            // between the two neither pops flags not yet pushed nor
+            // pushes them on `fg` before this pushes them again.
+            let _suspending = SUSPENDING.lock().unwrap_or_else(|e| e.into_inner());
+            if self.kitty {
+                ACTIVE.fetch_or(KITTY, Ordering::SeqCst);
+            }
+            self.options.output.write(&out)?;
+        }
         // Where an inline region starts, so clicks land on the right rows.
         // Asking writes a query to standard output, so only when that is
         // the terminal being painted.
@@ -1080,13 +1142,24 @@ impl Session {
         }
     }
 
-    /// The cursor's row, asked of the terminal.
-    fn cursor_row(&self) -> Option<u16> {
+    /// The cursor's row, asked of the terminal. Keys that came with the
+    /// answer go to the reader.
+    fn cursor_row(&mut self) -> Option<u16> {
         match self.options.backend {
             BackendKind::Crossterm => crossterm::cursor::position().ok().map(|(_, row)| row),
             #[cfg(all(unix, any(feature = "termion", feature = "termwiz")))]
             #[allow(unreachable_patterns)]
-            _ => ask_cursor_row(),
+            _ => {
+                let (row, rest) = ask_cursor_row();
+                match &mut self.input {
+                    #[cfg(feature = "termion")]
+                    Some(Input::Termion(reader)) => reader.unread(&rest),
+                    #[cfg(feature = "termwiz")]
+                    Some(Input::Termwiz { probed, .. }) => with_termwiz::unread(probed, &rest),
+                    _ => {}
+                }
+                row
+            }
             #[cfg(all(not(unix), feature = "termwiz"))]
             _ => None,
         }
@@ -1390,6 +1463,29 @@ mod tests {
         for answers in [Answers::default(), sync, both] {
             assert_ne!(answers.encode(), 0);
             assert_eq!(Answers::decode(answers.encode()), answers);
+        }
+    }
+
+    #[test]
+    fn a_cursor_report_is_found_among_other_input() {
+        assert_eq!(cursor_report(b"\x1b[12;1R"), Some((11, 0..7)));
+        // After an arrow key, a mouse report or a sequence cut short, and
+        // with a key after it.
+        assert_eq!(cursor_report(b"\x1b[A\x1b[12;1R"), Some((11, 3..10)));
+        assert_eq!(
+            cursor_report(b"\x1b[<0;2;13M\x1b[3;40Rx"),
+            Some((2, 10..17))
+        );
+        assert_eq!(cursor_report(b"\x1b[1;\x1b[5;1R"), Some((4, 4..10)));
+        // Not complete, or not a report.
+        for bytes in [
+            &b"\x1b[12;"[..],
+            b"\x1b[12R",
+            b"\x1b[;1R",
+            b"\x1b[1;5C",
+            b"12;1R",
+        ] {
+            assert_eq!(cursor_report(bytes), None, "{bytes:?}");
         }
     }
 

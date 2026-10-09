@@ -164,7 +164,7 @@ impl Layout {
     pub(crate) fn insets(&self) -> [u16; 4] {
         let edge = u16::from(self.border.is_some());
         let [t, r, b, l] = self.padding;
-        [t + edge, r + edge, b + edge, l + edge]
+        [t, r, b, l].map(|side| side.saturating_add(edge))
     }
 }
 
@@ -214,7 +214,9 @@ impl Stylesheet {
     /// assert_eq!((error.line, error.message.as_str()), (2, "unknown property `colour`"));
     /// ```
     pub fn parse(css: &str) -> Result<Stylesheet, SheetError> {
-        Parser::new(css).sheet()
+        let plain = without_comments(css)
+            .map_err(|at| Parser::new(css).error(at, "a comment that never ends"))?;
+        Parser::new(&plain).sheet()
     }
 
     /// Whether it has no rules.
@@ -437,32 +439,21 @@ impl<'a> Parser<'a> {
         &self.text[self.at..]
     }
 
-    /// Skip spaces and comments.
-    fn skip(&mut self) -> Result<(), SheetError> {
-        loop {
-            let rest = self.rest();
-            let trimmed = rest.trim_start();
-            self.at += rest.len() - trimmed.len();
-            if let Some(comment) = trimmed.strip_prefix("/*") {
-                match comment.find("*/") {
-                    Some(end) => self.at += end + 4,
-                    None => return Err(self.error(self.at, "a comment that never ends")),
-                }
-            } else {
-                return Ok(());
-            }
-        }
+    /// Skip spaces (comments are spaces by now).
+    fn skip(&mut self) {
+        let rest = self.rest();
+        self.at += rest.len() - rest.trim_start().len();
     }
 
     fn sheet(mut self) -> Result<Stylesheet, SheetError> {
         let mut rules: Vec<(Rule, (usize, usize, usize), usize)> = Vec::new();
         loop {
-            self.skip()?;
+            self.skip();
             if self.rest().is_empty() {
                 break;
             }
             let start = self.at;
-            let Some(open) = self.rest().find('{') else {
+            let Some(open) = find_unquoted(self.rest(), '{') else {
                 return Err(self.error(start, "a selector with no `{`"));
             };
             let head = &self.rest()[..open];
@@ -475,7 +466,7 @@ impl<'a> Parser<'a> {
                 .collect::<Result<Vec<_>, _>>()?;
             self.at += open + 1;
             let body_start = self.at;
-            let Some(close) = self.rest().find('}') else {
+            let Some(close) = find_unquoted(self.rest(), '}') else {
                 return Err(self.error(start, "a rule with no `}`"));
             };
             let decls =
@@ -503,21 +494,10 @@ impl<'a> Parser<'a> {
     fn decls(&self, start: usize, body: &str) -> Result<Decls, SheetError> {
         let mut decls = Decls::default();
         let mut offset = 0;
-        for part in body.split(';') {
+        for part in split_unquoted(body, ';') {
             let here = start + offset;
             offset += part.len() + 1;
-            // Comments inside a rule.
-            let mut clean = String::new();
-            let mut rest = part;
-            while let Some(open) = rest.find("/*") {
-                clean.push_str(&rest[..open]);
-                match rest[open + 2..].find("*/") {
-                    Some(end) => rest = &rest[open + 2 + end + 2..],
-                    None => return Err(self.error(here, "a comment that never ends")),
-                }
-            }
-            clean.push_str(rest);
-            let line = clean.trim();
+            let line = part.trim();
             if line.is_empty() {
                 continue;
             }
@@ -532,6 +512,67 @@ impl<'a> Parser<'a> {
         }
         Ok(decls)
     }
+}
+
+/// `css` with each comment blanked to spaces (its line breaks kept), so
+/// offsets, lines and columns still point into the text as written, and a
+/// brace or a semicolon in a comment means nothing. A comment is only one
+/// outside a quoted string. The error is where a comment never ends.
+fn without_comments(css: &str) -> Result<String, usize> {
+    let bytes = css.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut quote = None;
+    let mut i = 0;
+    while i < bytes.len() {
+        let b = bytes[i];
+        match quote {
+            Some(q) if b == q => quote = None,
+            Some(_) => {}
+            None if b == b'"' || b == b'\'' => quote = Some(b),
+            None if bytes[i..].starts_with(b"/*") => {
+                let end = css[i + 2..].find("*/").ok_or(i)? + i + 4;
+                out.extend(
+                    bytes[i..end]
+                        .iter()
+                        .map(|&c| if c == b'\n' { c } else { b' ' }),
+                );
+                i = end;
+                continue;
+            }
+            None => {}
+        }
+        out.push(b);
+        i += 1;
+    }
+    // Only whole comments were replaced, by ASCII: still UTF-8.
+    Ok(String::from_utf8(out).expect("comments blanked whole"))
+}
+
+/// Where `c` first appears in `text` outside a quoted string.
+fn find_unquoted(text: &str, c: char) -> Option<usize> {
+    let mut quote = None;
+    text.char_indices().find_map(|(i, ch)| {
+        match quote {
+            Some(q) if ch == q => quote = None,
+            Some(_) => {}
+            None if ch == '"' || ch == '\'' => quote = Some(ch),
+            None if ch == c => return Some(i),
+            None => {}
+        }
+        None
+    })
+}
+
+/// `text` split at each `c` outside a quoted string.
+fn split_unquoted(text: &str, c: char) -> Vec<&str> {
+    let mut parts = Vec::new();
+    let mut rest = text;
+    while let Some(i) = find_unquoted(rest, c) {
+        parts.push(&rest[..i]);
+        rest = &rest[i + c.len_utf8()..];
+    }
+    parts.push(rest);
+    parts
 }
 
 fn is_ident(s: &str) -> bool {

@@ -117,3 +117,96 @@ fn serve_prints_the_address_and_serves_the_page() {
     let _ = child.wait();
     result.unwrap();
 }
+
+/// A program that ignores SIGHUP does not outlive `rich serve`: SIGTERM
+/// ends every session, and each program is killed once it has had a
+/// moment, before `rich` exits.
+#[cfg(all(unix, feature = "serve"))]
+#[test]
+fn serve_ends_a_program_that_ignores_hangups_when_it_stops() {
+    use std::io::{BufRead, BufReader, Read, Write};
+    use std::net::TcpStream;
+    use std::time::{Duration, Instant};
+
+    let running = |pid: &str| {
+        let out = Command::new("ps")
+            .args(["-o", "stat=", "-p", pid])
+            .output()
+            .unwrap();
+        let stat = String::from_utf8_lossy(&out.stdout).trim().to_string();
+        !stat.is_empty() && !stat.starts_with('Z')
+    };
+    let dir = tempfile::tempdir().unwrap();
+    let pid_file = dir.path().join("pid");
+    let script = format!(
+        "trap '' HUP; echo $$ > '{}'; exec sleep 60",
+        pid_file.display()
+    );
+    let mut child = rich()
+        .args(["serve", "--port", "0", "--", "sh", "-c", &script])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .unwrap();
+    let mut line = String::new();
+    BufReader::new(child.stdout.take().unwrap())
+        .read_line(&mut line)
+        .unwrap();
+    let result = std::panic::catch_unwind(|| {
+        let url = line
+            .trim()
+            .strip_prefix("Serving sh at http://")
+            .unwrap_or_else(|| panic!("the address: {line:?}"));
+        let (host, target) = url.split_once('/').unwrap();
+        // Open a session, as the page does: the program starts.
+        let mut stream = TcpStream::connect(host).unwrap();
+        let token = target.trim_start_matches("?token=");
+        write!(
+            stream,
+            "GET /ws?token={token}&cols=80&rows=24 HTTP/1.1\r\nHost: {host}\r\n\
+             Origin: http://{host}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n\
+             Sec-WebSocket-Version: 13\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\r\n"
+        )
+        .unwrap();
+        let mut answer = [0u8; 12];
+        stream.read_exact(&mut answer).unwrap();
+        assert_eq!(&answer, b"HTTP/1.1 101");
+        let start = Instant::now();
+        let pid = loop {
+            let pid = std::fs::read_to_string(&pid_file).unwrap_or_default();
+            if !pid.trim().is_empty() {
+                break pid.trim().to_string();
+            }
+            assert!(start.elapsed() < Duration::from_secs(10), "no program");
+            std::thread::sleep(Duration::from_millis(20));
+        };
+        assert!(running(&pid));
+        Command::new("kill")
+            .args(["-TERM", &child.id().to_string()])
+            .status()
+            .unwrap();
+        (pid, stream)
+    });
+    // `rich` exits once its program has ended.
+    let start = Instant::now();
+    let status = loop {
+        if let Some(status) = child.try_wait().unwrap() {
+            break Some(status);
+        }
+        if start.elapsed() > Duration::from_secs(20) {
+            break None;
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    };
+    if status.is_none() {
+        let _ = child.kill();
+        let _ = child.wait();
+    }
+    let (pid, _stream) = result.unwrap();
+    let alive = running(&pid);
+    if alive {
+        let _ = Command::new("kill").args(["-KILL", &pid]).status();
+    }
+    assert_eq!(status.and_then(|s| s.code()), Some(128 + 15), "rich exited");
+    assert!(!alive, "the program outlived `rich serve`");
+}

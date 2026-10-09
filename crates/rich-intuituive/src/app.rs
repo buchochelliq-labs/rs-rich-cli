@@ -1236,6 +1236,11 @@ impl App {
                     {
                         put(backend, linear, &driver.suspend())?;
                         backend.suspend()?;
+                        if linear {
+                            // The session hides the cursor on the way back;
+                            // linear mode reads from where it is.
+                            backend.write("\x1b[?25h")?;
+                        }
                         let (columns, rows) = backend.size();
                         if inline {
                             driver.set_origin(backend.origin());
@@ -1248,6 +1253,9 @@ impl App {
                     // is draws everything, in a new region when inline.
                     Event::Resize { .. } if backend.take_resumed() => {
                         let _ = driver.suspend();
+                        if linear {
+                            backend.write("\x1b[?25h")?;
+                        }
                     }
                     _ => {}
                 }
@@ -1297,7 +1305,7 @@ impl App {
     /// assert!(out.contains("count"));
     /// ```
     pub fn driver(mut self, width: u16, height: u16) -> Driver {
-        let console = self.console_for(width);
+        let console = self.console_for(self.columns(width));
         self.last_console = Some(console.clone());
         let mut painter = Painter::new(None);
         if self.inline.is_some() {
@@ -1309,7 +1317,7 @@ impl App {
         } else {
             console.color_system()
         });
-        let screen = Screen::new(width, self.region(height));
+        let screen = Screen::new(self.columns(width), self.region(height));
         // Focus what can be focused before the first frame (keyed children
         // appear only once drawn; `keep_focus` catches them after it).
         self.focus_first();
@@ -1358,6 +1366,29 @@ impl App {
     /// The rows the app draws in: the terminal's, or the inline region's.
     fn region(&self, rows: u16) -> u16 {
         self.inline.map_or(rows, |height| height.min(rows))
+    }
+
+    /// The columns the app lays out in. Linear mode draws nothing, so a
+    /// terminal that reports no size (a new pseudo-terminal) still gets
+    /// 80.
+    fn columns(&self, columns: u16) -> u16 {
+        if self.linear && columns == 0 {
+            80
+        } else {
+            columns
+        }
+    }
+
+    /// Linear mode: the rows to lay out in, as many as the top screen's
+    /// content wants (at least the terminal's, at most [`LINEAR_ROWS`]),
+    /// so every node has a place to be read from however few rows the
+    /// terminal has.
+    fn linear_rows(&self, console: &Console, columns: u16, rows: u16) -> u16 {
+        let root = &self.top().root;
+        let wanted = self
+            .runtime
+            .enter(|| root.measure(console, Axis::Vertical, columns, 0));
+        wanted.clamp(rows.clamp(1, LINEAR_ROWS), LINEAR_ROWS)
     }
 
     fn top(&self) -> &Layer {
@@ -2824,6 +2855,9 @@ pub struct Driver {
 /// writes stop drawing it again.
 const RESTLESS_FRAMES: u32 = 4;
 
+/// The most rows linear mode lays out in.
+const LINEAR_ROWS: u16 = 4096;
+
 impl Driver {
     /// Bring the app up to `now` (the time since it started): run the
     /// timers that are due, move animations, deliver results from other
@@ -3017,9 +3051,9 @@ impl Driver {
     /// The terminal is now `columns` x `rows`: everything draws again.
     pub fn resize(&mut self, columns: u16, rows: u16) {
         self.rows = rows;
-        self.console = self.app.console_for(columns);
+        self.console = self.app.console_for(self.app.columns(columns));
         self.app.last_console = Some(self.console.clone());
-        self.screen = Screen::new(columns, self.app.region(rows));
+        self.screen = Screen::new(self.app.columns(columns), self.app.region(rows));
         self.painter.invalidate();
         self.first = true;
     }
@@ -3210,10 +3244,18 @@ impl Driver {
     }
 
     /// Draw what changed: the bytes to send.
-    fn paint(&mut self, full: bool) -> String {
+    fn paint(&mut self, mut full: bool) -> String {
         let app = &mut self.app;
         app.poke = false;
         let screen = &mut self.screen;
+        if app.linear {
+            let columns = screen.area().width;
+            let rows = app.linear_rows(&self.console, columns, self.rows);
+            if rows != screen.area().height {
+                *screen = Screen::new(columns, rows);
+                full = true;
+            }
+        }
         let mut damage = app.frame(&self.console, screen, full);
         if app.linear {
             let out = self.lines();
@@ -3277,7 +3319,16 @@ impl Driver {
         self.written[screens - 1] = written;
         self.written_focus = focus;
         lines.append(&mut self.app.unwritten);
-        lines.iter().map(|line| format!("{line}\r\n")).collect()
+        // Names, values and announcements are the app's text, so terminal
+        // controls in them become visible symbols, as on the cell screen.
+        lines
+            .into_iter()
+            .map(|line| {
+                let mut line = [rich::Segment::new(line, None)];
+                rich_interact::paint::sanitize_line(&mut line);
+                format!("{}\r\n", line[0].text)
+            })
+            .collect()
     }
 }
 

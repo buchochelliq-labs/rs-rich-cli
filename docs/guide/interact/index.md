@@ -525,7 +525,12 @@ hand-off, Ctrl+Z and `fg`).
 
 termion has no reader with a timeout, so its session waits on the terminal
 itself and hands termion's parser one event's bytes at a time; a sequence
-termion does not know is dropped, and pastes are cut out before it. termwiz
+termion does not know is dropped, and pastes are cut out before it. On
+Unix the session reads the terminal for termwiz too, and hands what it
+read to termwiz's parser. With both, a sequence that one read cuts short
+(a slow link, a report written in two pieces) waits up to 500 ms for its
+rest rather than being read as typed characters; an ESC alone waits 100 ms
+before it is the Esc key. termwiz
 reads keys with the kitty protocol's first flag only, since it does not
 read the release reports of the second.
 

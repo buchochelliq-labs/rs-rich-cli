@@ -70,20 +70,26 @@ impl Pty {
     }
 
     fn start_full(mode: &str, kitty: bool, pipe: &str, backend: Option<&str>) -> Pty {
-        Pty::start_answering(mode, kitty, false, pipe, backend, &[])
+        Pty::start_answering(mode, kitty, false, pipe, backend, &[], b"")
+    }
+
+    /// A terminal that answers each cursor position query (`CSI 6 n`)
+    /// with `cursor`, with the child driving it with `backend`.
+    pub fn start_cursor_on(backend: &str, mode: &str, cursor: &'static [u8]) -> Pty {
+        Pty::start_answering(mode, false, false, "", Some(backend), &[], cursor)
     }
 
     /// A terminal that knows synchronized output (it answers DECRQM for
     /// mode 2026, reset) and, with `kitty`, the kitty keyboard protocol,
     /// with the child driving it with `backend` and `env` set.
     pub fn start_sync_on(backend: &str, mode: &str, kitty: bool, env: &[(&str, &str)]) -> Pty {
-        Pty::start_answering(mode, kitty, true, "", Some(backend), env)
+        Pty::start_answering(mode, kitty, true, "", Some(backend), env, b"")
     }
 
     /// A terminal without synchronized output or the kitty keyboard
     /// protocol, with the child driving it with `backend` and `env` set.
     pub fn start_env_on(backend: &str, mode: &str, env: &[(&str, &str)]) -> Pty {
-        Pty::start_answering(mode, false, false, "", Some(backend), env)
+        Pty::start_answering(mode, false, false, "", Some(backend), env, b"")
     }
 
     fn start_answering(
@@ -93,6 +99,7 @@ impl Pty {
         pipe: &str,
         backend: Option<&str>,
         env: &[(&str, &str)],
+        cursor: &'static [u8],
     ) -> Pty {
         let pty = native_pty_system()
             .openpty(PtySize {
@@ -130,7 +137,7 @@ impl Pty {
         let answers = Arc::clone(&writer);
         std::thread::spawn(move || {
             let mut buffer = [0u8; 4096];
-            let mut answered = 0;
+            let (mut answered, mut placed) = (0, 0);
             while let Ok(read) = reader.read(&mut buffer) {
                 if read == 0 {
                     break;
@@ -157,6 +164,15 @@ impl Pty {
                     let mut answers = answers.lock().unwrap();
                     let _ = answers.write_all(&answer).and_then(|()| answers.flush());
                     answered += 1;
+                }
+                if cursor.is_empty() {
+                    continue;
+                }
+                let asked = sink.windows(4).filter(|w| *w == b"\x1b[6n").count();
+                while placed < asked {
+                    let mut answers = answers.lock().unwrap();
+                    let _ = answers.write_all(cursor).and_then(|()| answers.flush());
+                    placed += 1;
                 }
             }
         });

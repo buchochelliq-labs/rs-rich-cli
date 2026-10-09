@@ -85,6 +85,27 @@ fn columns() -> Vec<Column> {
     ]
 }
 
+/// The wheel over the header scrolls the rows, as over the rows.
+#[test]
+fn the_wheel_over_a_header_scrolls_the_rows() {
+    use intuituive::interact::Event;
+    use std::time::Duration;
+    let many = || {
+        (0..20)
+            .map(|i| vec![format!("f{i}"), i.to_string()])
+            .collect()
+    };
+    let app = App::new(move || table_with(columns(), many, signal(0), TableOptions::default()));
+    let mut driver = app.driver(20, 4);
+    driver.update(Duration::ZERO);
+    driver.render();
+    driver.event(Event::Mouse(Mouse::new(MouseKind::ScrollDown, 2, 0)));
+    driver.update(Duration::ZERO);
+    driver.render();
+    let rows = driver.screen().plain();
+    assert!(!rows[1].starts_with("f0 "), "scrolled: {rows:?}");
+}
+
 #[test]
 fn a_click_on_a_header_sorts_by_it_as_numbers_and_again_reverses() {
     let app = App::new(|| {
@@ -236,6 +257,29 @@ fn a_lazy_tree_shows_loading_until_children_arrive() {
     });
     let rows = screen(&run_open(app, Script::new().keys("right"), 30, 4));
     assert!(row_of(&rows, "loading…").is_some(), "{rows:?}");
+}
+
+/// Data whose keys repeat on their own ancestors (a folder linked back
+/// up the tree) opens one level at a time, as far as it is opened, and
+/// never recurses.
+#[test]
+fn a_lazy_tree_whose_children_repeat_an_ancestor_opens_level_by_level() {
+    let app = App::new(|| {
+        let roots = || vec![LazyItem::branch("/loop", "loop")];
+        let children = |key: String| -> Result<Vec<LazyItem>, String> {
+            Ok(vec![LazyItem::branch(key, "again")])
+        };
+        tree_lazy(roots, children, signal(None))
+    })
+    .wait_for_tasks(true);
+    let rows = screen(&run_open(
+        app,
+        Script::new().keys("right down right down right"),
+        30,
+        6,
+    ));
+    let again = rows.iter().filter(|row| row.contains("again")).count();
+    assert_eq!(again, 3, "{rows:?}");
 }
 
 #[test]

@@ -15,9 +15,10 @@ use std::ffi::OsString;
 use std::fmt;
 use std::io::{self, Read, Write};
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{mpsc, Arc, Mutex, MutexGuard, PoisonError};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use portable_pty::{native_pty_system, ChildKiller, CommandBuilder, MasterPty, PtySize};
 
@@ -88,7 +89,10 @@ pub trait PtyHost {
     /// when the pane is first laid out.
     fn start(&mut self, columns: u16, rows: u16) -> io::Result<()>;
 
-    /// Send `bytes` to the program, as if typed.
+    /// Send `bytes` to the program, as if typed. A host may refuse with
+    /// [`io::ErrorKind::WouldBlock`] while the program's input is full
+    /// (it is not reading it): nothing was sent, and the same bytes can be
+    /// sent again later.
     fn write(&mut self, bytes: &[u8]) -> io::Result<()>;
 
     /// The pane is now `columns` x `rows` cells.
@@ -216,6 +220,13 @@ impl Command {
 /// so a program that floods a pane the app is not reading costs a bounded
 /// amount of memory.
 const MAX_BUFFERED: usize = 16 * 1024 * 1024;
+/// Input held for a program that has not read it yet, in bytes: past it,
+/// [`LocalPty::write`](PtyHost::write) refuses more.
+const MAX_INPUT: usize = 1024 * 1024;
+/// How long a program has to end once hung up on before it is killed.
+const KILL_GRACE: Duration = Duration::from_secs(1);
+/// How often the waiter looks whether the program has ended.
+const WAIT_TURN: Duration = Duration::from_millis(20);
 
 #[derive(Default)]
 struct Output {
@@ -226,6 +237,8 @@ struct Output {
     paused: bool,
     /// The host is gone: a paused reader stops.
     closed: bool,
+    /// When the program was hung up on ([`LocalPty::kill`]).
+    hung_up: Option<Instant>,
     status: Option<ExitStatus>,
     notify: Option<Notify>,
 }
@@ -251,6 +264,8 @@ pub struct LocalPty {
     /// To the writer thread: a program that stops reading its input fills
     /// the PTY, and a write would then block the app.
     writer: Option<mpsc::Sender<Vec<u8>>>,
+    /// Bytes sent to the writer thread and not yet written to the PTY.
+    queued: Arc<AtomicUsize>,
     killer: Option<Box<dyn ChildKiller + Send + Sync>>,
     /// Hold at most this much unread output, then stop reading.
     backpressure: Option<usize>,
@@ -263,6 +278,7 @@ impl LocalPty {
             shared: Arc::default(),
             master: None,
             writer: None,
+            queued: Arc::default(),
             killer: None,
             backpressure: None,
         }
@@ -309,6 +325,7 @@ impl PtyHost for LocalPty {
         let mut reader = pty.master.try_clone_reader().map_err(io::Error::other)?;
         let mut writer = pty.master.take_writer().map_err(io::Error::other)?;
         let (input, keys) = mpsc::channel::<Vec<u8>>();
+        let queued = Arc::clone(&self.queued);
         thread::spawn(move || {
             for bytes in keys {
                 if writer
@@ -316,8 +333,11 @@ impl PtyHost for LocalPty {
                     .and_then(|()| writer.flush())
                     .is_err()
                 {
+                    // Writes now fail as the program having gone.
+                    queued.store(0, Ordering::SeqCst);
                     break;
                 }
+                queued.fetch_sub(bytes.len(), Ordering::SeqCst);
             }
         });
         self.writer = Some(input);
@@ -346,10 +366,26 @@ impl PtyHost for LocalPty {
         });
 
         let shared = Arc::clone(&self.shared);
+        let leader = child.process_id();
         thread::spawn(move || {
-            let status = match child.wait() {
-                Ok(status) => ExitStatus::from(status),
-                Err(error) => ExitStatus::with_signal(error.to_string()),
+            // Polled rather than waited for, so that a program still
+            // running a moment after it was hung up on (one that ignores
+            // SIGHUP) is killed: the waiter never waits for ever.
+            let mut killed = false;
+            let status = loop {
+                match child.try_wait() {
+                    Ok(Some(status)) => break ExitStatus::from(status),
+                    Ok(None) => {}
+                    Err(error) => break ExitStatus::with_signal(error.to_string()),
+                }
+                let hung_up = lock(&shared).hung_up;
+                if !killed && hung_up.is_some_and(|at| at.elapsed() >= KILL_GRACE) {
+                    if let Some(leader) = leader {
+                        kill_group(leader);
+                    }
+                    killed = true;
+                }
+                thread::sleep(WAIT_TURN);
             };
             // What it wrote before exiting is still on its way through the
             // PTY: give the reader a moment to reach the end of it, so the
@@ -375,11 +411,25 @@ impl PtyHost for LocalPty {
         Ok(())
     }
 
+    /// Refused with [`io::ErrorKind::WouldBlock`] while 1 MiB of input
+    /// the program has not read is held (one write more at most), so a
+    /// flood of pastes to a program that is not reading costs a bounded
+    /// amount of memory. A pane drops what is refused.
     fn write(&mut self, bytes: &[u8]) -> io::Result<()> {
+        if self.writer.is_some() && self.queued.load(Ordering::SeqCst) >= MAX_INPUT {
+            return Err(io::Error::new(
+                io::ErrorKind::WouldBlock,
+                "the program is not reading its input",
+            ));
+        }
         match &self.writer {
-            Some(writer) => writer
-                .send(bytes.to_vec())
-                .map_err(|_| io::Error::new(io::ErrorKind::BrokenPipe, "the program has gone")),
+            Some(writer) => {
+                self.queued.fetch_add(bytes.len(), Ordering::SeqCst);
+                writer.send(bytes.to_vec()).map_err(|_| {
+                    self.queued.store(0, Ordering::SeqCst);
+                    io::Error::new(io::ErrorKind::BrokenPipe, "the program has gone")
+                })
+            }
             None => Err(io::Error::new(
                 io::ErrorKind::NotConnected,
                 "the program has not started",
@@ -420,9 +470,19 @@ impl PtyHost for LocalPty {
         }
     }
 
+    /// Hang up on the program (SIGHUP on Unix, as a terminal closing does;
+    /// on Windows it ends at once). One still running a second later, such
+    /// as one that ignores SIGHUP, is killed with SIGKILL, with everything
+    /// in its process group.
     fn kill(&mut self) -> io::Result<()> {
-        if lock(&self.shared).status.is_some() {
-            return Ok(());
+        {
+            let mut output = lock(&self.shared);
+            if output.status.is_some() {
+                return Ok(());
+            }
+            if self.killer.is_some() {
+                output.hung_up.get_or_insert_with(Instant::now);
+            }
         }
         match &mut self.killer {
             Some(killer) => killer.kill(),
@@ -437,6 +497,24 @@ impl Drop for LocalPty {
         let _ = self.kill();
     }
 }
+
+/// Kill the process group the program leads (it called `setsid`, through
+/// portable-pty), with SIGKILL.
+#[cfg(unix)]
+#[allow(unsafe_code)]
+fn kill_group(leader: u32) {
+    if let Ok(group) = libc::pid_t::try_from(leader) {
+        // SAFETY: `killpg` takes plain integers. The leader has not been
+        // reaped (its waiter is the caller), so its id names its group.
+        unsafe {
+            libc::killpg(group, libc::SIGKILL);
+        }
+    }
+}
+
+/// On Windows the program ended when it was killed.
+#[cfg(not(unix))]
+fn kill_group(_leader: u32) {}
 
 /// Add `bytes` to the unread output. Without backpressure (`drop_oldest`),
 /// past [`MAX_BUFFERED`] the oldest goes; with it, nothing is ever dropped:

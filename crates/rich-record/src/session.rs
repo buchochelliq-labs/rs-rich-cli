@@ -3,7 +3,7 @@
 use std::collections::VecDeque;
 use std::io::{Read, Write};
 use std::path::Path;
-use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
+use std::sync::{Arc, Condvar, Mutex, MutexGuard, PoisonError};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -24,6 +24,9 @@ pub const MAX_VIDEO: Duration = Duration::from_secs(300);
 const MAX_BATCH: usize = 32 * 1024;
 /// The screens kept for [`Session::seen`], in bytes: past it the oldest go.
 const MAX_SEEN: usize = 16 * 1024 * 1024;
+/// Answers to the program's queries waiting to be written, in bytes: past
+/// it, more are dropped, as by a terminal whose reply queue is full.
+const MAX_QUEUED_REPLIES: usize = 4096;
 
 /// What happened, and when, in the visible parts of a session.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -210,11 +213,94 @@ impl State {
     }
 }
 
+/// What waits to be written to the program, by the writer thread: a
+/// program that does not read its input blocks that thread only, never the
+/// reader (whose output would stop) or [`Session::send`].
+#[derive(Default)]
+struct Outbox {
+    /// Typed bytes, in order.
+    input: Vec<u8>,
+    /// Answers to the program's queries, at most [`MAX_QUEUED_REPLIES`].
+    replies: Vec<u8>,
+    /// Why a write failed: the writer has stopped, and sends report it.
+    error: Option<(std::io::ErrorKind, String)>,
+    /// The session is gone: the writer thread ends.
+    closed: bool,
+}
+
+/// The [`Outbox`], shared by the session, the reader and the writer
+/// thread, which waits on `ready`.
+#[derive(Default)]
+struct Outgoing {
+    outbox: Mutex<Outbox>,
+    ready: Condvar,
+}
+
+impl Outgoing {
+    fn lock(&self) -> MutexGuard<'_, Outbox> {
+        self.outbox.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+
+    /// Queue answers to the program's queries; dropped when too many wait.
+    fn reply(&self, replies: &[u8]) {
+        let mut outbox = self.lock();
+        if outbox.replies.len() + replies.len() <= MAX_QUEUED_REPLIES {
+            outbox.replies.extend_from_slice(replies);
+            self.ready.notify_one();
+        }
+    }
+
+    /// Queue typed bytes; fails once a write has.
+    fn send(&self, data: &[u8]) -> std::io::Result<()> {
+        let mut outbox = self.lock();
+        if let Some((kind, message)) = &outbox.error {
+            return Err(std::io::Error::new(*kind, message.clone()));
+        }
+        outbox.input.extend_from_slice(data);
+        self.ready.notify_one();
+        Ok(())
+    }
+
+    fn close(&self) {
+        self.lock().closed = true;
+        self.ready.notify_one();
+    }
+
+    /// The writer thread: typed bytes first, then answers, each written
+    /// whole, until the session is gone or a write fails.
+    fn run(&self, mut writer: Box<dyn Write + Send>) {
+        loop {
+            let bytes = {
+                let mut outbox = self.lock();
+                loop {
+                    if outbox.closed {
+                        return;
+                    }
+                    if !outbox.input.is_empty() {
+                        break std::mem::take(&mut outbox.input);
+                    }
+                    if !outbox.replies.is_empty() {
+                        break std::mem::take(&mut outbox.replies);
+                    }
+                    outbox = self
+                        .ready
+                        .wait(outbox)
+                        .unwrap_or_else(PoisonError::into_inner);
+                }
+            };
+            if let Err(error) = writer.write_all(&bytes).and_then(|()| writer.flush()) {
+                self.lock().error = Some((error.kind(), error.to_string()));
+                return;
+            }
+        }
+    }
+}
+
 /// A running shell session.
 pub struct Session {
     state: Arc<Mutex<State>>,
     master: Box<dyn MasterPty + Send>,
-    writer: Arc<Mutex<Box<dyn Write + Send>>>,
+    outgoing: Arc<Outgoing>,
     child: Box<dyn Child + Send + Sync>,
     /// Whether the child has been killed and waited for.
     reaped: bool,
@@ -279,10 +365,12 @@ impl Session {
             .try_clone_reader()
             .map_err(std::io::Error::other)?;
         let writer = pty.master.take_writer().map_err(std::io::Error::other)?;
-        let writer = Arc::new(Mutex::new(writer));
+        let outgoing = Arc::new(Outgoing::default());
+        let writing = Arc::clone(&outgoing);
+        thread::spawn(move || writing.run(writer));
         let state = Arc::new(Mutex::new(State::new(rows, columns, theme)));
         let shared = Arc::clone(&state);
-        let answers = Arc::clone(&writer);
+        let answers = Arc::clone(&outgoing);
         thread::spawn(move || {
             let mut buffer = [0u8; 65536];
             loop {
@@ -305,8 +393,7 @@ impl Session {
                 drop(state);
                 if !replies.is_empty() {
                     // Answers are not typing: they stay off the timeline.
-                    let mut writer = answers.lock().unwrap_or_else(|e| e.into_inner());
-                    let _ = writer.write_all(&replies).and_then(|()| writer.flush());
+                    answers.reply(&replies);
                 }
             }
             lock(&shared).alive = false;
@@ -314,7 +401,7 @@ impl Session {
         Ok(Session {
             state,
             master: pty.master,
-            writer,
+            outgoing,
             child,
             reaped: false,
         })
@@ -329,7 +416,9 @@ impl Session {
         self.lock().error.clone()
     }
 
-    /// Type `data`; `label` is shown by the key overlay.
+    /// Type `data`; `label` is shown by the key overlay. It is written to
+    /// the program in order, without waiting for a program that is not
+    /// reading; a write that failed is reported by the next send.
     pub fn send(&mut self, data: &str, label: Option<String>) -> std::io::Result<()> {
         {
             let mut state = self.lock();
@@ -345,9 +434,7 @@ impl Session {
                 }
             }
         }
-        let mut writer = self.writer.lock().unwrap_or_else(|e| e.into_inner());
-        writer.write_all(data.as_bytes())?;
-        writer.flush()
+        self.outgoing.send(data.as_bytes())
     }
 
     pub fn resize(&mut self, columns: u16, rows: u16) -> std::io::Result<()> {
@@ -442,6 +529,7 @@ impl Drop for Session {
     /// A session dropped on an error path still stops and reaps its shell.
     fn drop(&mut self) {
         self.stop();
+        self.outgoing.close();
     }
 }
 
