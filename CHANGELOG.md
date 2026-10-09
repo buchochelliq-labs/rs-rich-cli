@@ -76,6 +76,11 @@ cohort, which is not on crates.io yet (CLI 0.0.17 was never published;
 
 ### 0.0.18 release test: fixes from three audits
 
+- **A masked line prompt turns echo off before it shows.** It wrote the
+  prompt, then turned echo off, so a key typed as soon as the prompt showed
+  (a pasted password, a script typing ahead) was echoed by the terminal.
+  `LineIo::prompt_secret` writes the prompt once echo is off; its default
+  writes, then reads, as before.
 - **Linear mode writes no terminal controls.** An accessible name, a value,
   a toast or an announcement holding ESC, a C1 control, CR or BS reached
   the terminal raw in linear mode (a label could clear the screen, an

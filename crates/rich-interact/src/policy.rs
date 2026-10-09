@@ -189,6 +189,14 @@ pub trait LineIo {
     fn read_secret(&mut self) -> Result<Option<String>, NotInteractive> {
         self.read_line().map(Some).ok_or(NotInteractive::Ended)
     }
+    /// Write `prompt`, then read a secret as [`read_secret`](Self::read_secret)
+    /// does. One that turns echo off does so before it writes, so nothing
+    /// typed as soon as the prompt shows is echoed. The default writes,
+    /// then reads.
+    fn prompt_secret(&mut self, prompt: &str) -> Result<Option<String>, NotInteractive> {
+        self.write(prompt);
+        self.read_secret()
+    }
 }
 
 /// A [`LineIo`] whose writes show terminal controls as text, as a view
@@ -215,6 +223,17 @@ impl LineIo for Shown<'_> {
 
     fn read_secret(&mut self) -> Result<Option<String>, NotInteractive> {
         self.0.read_secret()
+    }
+
+    fn prompt_secret(&mut self, prompt: &str) -> Result<Option<String>, NotInteractive> {
+        let shown: String = prompt
+            .chars()
+            .map(|c| match c {
+                '\n' => c,
+                _ => crate::paint::visible(c).unwrap_or(c),
+            })
+            .collect();
+        self.0.prompt_secret(&shown)
     }
 }
 
@@ -245,18 +264,26 @@ impl LineIo for StdLineIo {
     /// the line is read gives the terminal back before the process ends.
     /// From a pipe, read a line as usual.
     fn read_secret(&mut self) -> Result<Option<String>, NotInteractive> {
+        self.prompt_secret("")
+    }
+
+    /// The prompt is written once echo is off, so a key typed as soon as
+    /// it shows is not echoed either.
+    fn prompt_secret(&mut self, prompt: &str) -> Result<Option<String>, NotInteractive> {
         if !std::io::stdin().is_terminal() {
+            self.write(prompt);
             return self.read_line().map(Some).ok_or(NotInteractive::Ended);
         }
-        let answer = read_hidden();
+        let answer = read_hidden(|| self.write(prompt));
         // The Enter was not echoed either: end the prompt's line.
         self.write("\n");
         answer
     }
 }
 
-/// One line read in raw mode, so nothing typed is echoed.
-fn read_hidden() -> Result<Option<String>, NotInteractive> {
+/// One line read in raw mode, so nothing typed is echoed; `shown` runs
+/// once raw mode is on (it writes the prompt).
+fn read_hidden(shown: impl FnOnce()) -> Result<Option<String>, NotInteractive> {
     use crate::event::{from_crossterm, Event, KeyCode};
 
     /// Raw mode off again on every way out, a panic and a terminating
@@ -274,6 +301,7 @@ fn read_hidden() -> Result<Option<String>, NotInteractive> {
         return Err(NotInteractive::Ended);
     }
     let _raw = Raw;
+    shown();
     let mut line = String::new();
     loop {
         let event = crossterm::event::read().map_err(|_| NotInteractive::Ended)?;
