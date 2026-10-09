@@ -142,6 +142,9 @@ Workstream 1 of the [0.0.18 plan](docs/plans/0.0.18.md).
     (announce changes).
   - `Driver::accessibility()` returns the tree: depth, role, name, value,
     focus and place.
+  - `Driver::cursor()` (workstream 7): where the last frame left the
+    caret, for a renderer that draws the screen itself (rs-rich-web's DOM
+    renderer).
 - **Announcements:** toasts, a screen or dialog opening, live nodes and
   `Ctx::announce` go to `App::announcer` and wait in
   `Driver::take_announcements()`.
@@ -251,9 +254,10 @@ Workstream 1 of the [0.0.18 plan](docs/plans/0.0.18.md).
 
 ### Serving intuiTUIve apps to a browser: rs-rich-web 0.0.1 (new)
 
-A new crate, from the 0.0.18 plan's workstream 7, phase 1. Nothing in the
-workspace depends on it, so neither the framework nor the CLI gains network
-code.
+A new crate, from the 0.0.18 plan's workstream 7: phase 1 (intuiTUIve
+apps), phase 2 (any terminal program) and phase 3 (a DOM renderer). The
+framework does not depend on it, and the CLI only behind its
+off-by-default `serve` feature, so neither gains network code by default.
 
 - **`rich_web::serve(addr, || app())`** serves an intuiTUIve app. Each
   browser tab gets its own `App` on its own thread, driven through the
@@ -301,6 +305,74 @@ code.
   release-readiness pattern, the CI feature matrix, `AGENTS.md`,
   `CONTRIBUTING.md`, the architecture, branching and porting docs, and the
   README and home-page tables.
+- **Phase 2, any terminal program:** `rich_web::serve_command(addr,
+  command)`, `Server::bind_command` and `Server::bind_host` run a program
+  per tab on a pseudo-terminal, through rs-rich-embed's `PtyHost`
+  (`LocalPty` for a command: a PTY on Unix, ConPTY on Windows; any other
+  host with `bind_host`), and stream it to the same xterm.js page. Keys,
+  pastes and mouse reports go to the program as the page sent them, and
+  resizes resize the PTY. Its output goes to the page as binary messages,
+  and the page keeps 5,000 lines of scrollback. Its exit closes the
+  session with its status as the close's reason, which the page shows
+  ("The program exited with code 3."); a program that cannot start says
+  why; closing the tab or stopping the server ends the program. The same
+  token, origin and session-cap checks as an app's, and the page's title
+  is the program's name. `Command`, `ExitStatus`, `LocalPty` and `PtyHost`
+  are re-exported.
+- **Output for a slow page is capped:** `Server::max_buffered` (1 MiB by
+  default). The page acknowledges each message once drawn; with half the
+  cap sent and not drawn, the server stops reading the host, and
+  `LocalPty::backpressure` (new in rs-rich-embed) stops reading the
+  program at the other half, so its writes wait as on a slow terminal.
+  Memory stays bounded and nothing is dropped.
+- **Phase 3, a DOM renderer:** `Renderer::Dom` (`Server::renderer`, or
+  `&renderer=dom` in the page's address; xterm.js stays the default, and
+  a program's page is always xterm.js) draws an app as a grid of styled
+  spans instead of xterm.js, in xterm.js's palette, with wide characters
+  and the text box's caret (the new `Driver::cursor`). Over the grid, the
+  app's accessibility tree as ARIA: each node of `Driver::accessibility()`
+  an element with `AccessNode::aria_attributes()`, nested by depth and laid
+  over the cells it describes; a widget of items gets an element for its
+  selected item with the item's states; text and a status read as
+  `AccessNode::describe()`. The focused node is focused in the page, and
+  announcements go to `aria-live` regions (assertive when urgent). Keys,
+  clicks, drags, the wheel, pointer movement and pastes become the bytes
+  the xterm.js page sends, so the server reads both pages alike. The page's
+  script is the crate's own (no third-party code), under the same content
+  security policy.
+- **The DOM wire protocol is versioned** (1) and documented in the `dom`
+  module: `hello`, `frame` (changed lines as styled runs, new styles as
+  CSS, the caret), `tree`, `say` and `copy`, as JSON; the page sends what
+  the xterm.js page sends. `rich_web::dom::Dom` builds the messages from a
+  `Driver`, so they are tested without a browser.
+- **`rich serve` in the CLI (rs-rich-cli 0.0.18),** behind a new `serve`
+  feature, off by default (a default build has no `serve` and no network
+  server, and the Python wheel does not enable it): `rich serve [--bind
+  ADDR] [--port N] [--max-sessions N] [--allow-origin ORIGIN]... --
+  PROGRAM [ARGS...]` serves the program as above, on `127.0.0.1:8080`
+  unless told otherwise, prints the address with its token, and stops on
+  Ctrl+C. `rich doctor` reports the feature. CI checks the CLI with it in
+  the feature matrix and on the MSRV, and runs its tests (the parsing,
+  help, the spec/parser drift checks, and a program served on 127.0.0.1).
+  `docs/cli-reference.md` is generated from a default build, so it does
+  not list `serve`; `docs/cli.md` and the CLI guide do.
+- **Tests (phases 2 and 3):** a program end to end over a real WebSocket
+  on 127.0.0.1 (`sh` on a PTY, Unix: input, a resize seen by `stty size`,
+  the exit status); a test host anywhere (input, pastes and mouse reports
+  passed through, resizes, the exit, the page closing and the server
+  stopping both ending the program); a program that cannot start; the
+  token, origin and session-cap refusals for a program; output held for a
+  page that draws nothing, then all of it, nothing dropped, once it
+  catches up. The DOM renderer's messages for a small app (every line
+  first, then only what changed; styles as CSS; a wide character; the
+  caret; the tree with roles, names, item states and the focus; a focus
+  move; a resize; announcements and copies), the page chosen by the server
+  or the address, and a DOM session end to end (keys, an announcement, a
+  copy answered by the page, a click). The test helpers moved to
+  `tests/common`.
+- rs-rich-web now depends on rs-rich-embed (and through it rs-rich-record
+  and portable-pty): `RELEASES.toml` publishes rs-rich-embed first, and
+  `AGENTS.md`, the architecture and branching docs say so.
 
 ### intuiTUIve and interact: termion and termwiz backends (rs-rich-interact 0.0.6)
 
@@ -403,6 +475,11 @@ writes itself. See `docs/guide/intuituive/embed.md`.
 - **rs-rich-record:** `Terminal::with_scrollback`, `set_scrollback` and
   `cell_text` (a cell's text as rich prints it, clusters whole), for the
   pane's scrollback and drawing.
+- **`LocalPty::backpressure(bytes)`:** past that much unread output, stop
+  reading the program, so its writes wait instead of the oldest output
+  being dropped (past 16 MiB, without it); with it, nothing is dropped at
+  any limit, 16 MiB or more. The exit is still reported after the last
+  output. rs-rich-web's program sessions use it.
 - **Tests:** the pane against `ReplayHost` (output, keys, the mouse,
   pastes, resizes, scrollback, the exit, released keys, the program ended
   with its pane); `sh -c 'printf hi; exit 3'` on a real PTY (Unix); the

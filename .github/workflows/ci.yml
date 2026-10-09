@@ -97,6 +97,12 @@ jobs:
       - name: Test
         run: cargo test --all
 
+      # `rich serve` is behind the CLI's off-by-default `serve` feature, so
+      # the default test run above has none of it: its unit tests (with the
+      # spec/parser drift checks seeing its options) and its end-to-end test.
+      - name: Test the CLI's serve feature
+        run: cargo test -p rs-rich-cli --features serve --locked --lib --test serve
+
       - name: Check generated CLI reference
         run: |
           cargo build -p rs-rich-cli --locked
@@ -201,9 +207,10 @@ jobs:
           # `ratatui-gate`.
           - crate: rs-rich-intuituive
             args: "--all-features"
-          # Serving intuiTUIve apps to a browser (no features of its own):
-          # its tests open real sockets on 127.0.0.1, and build.rs checks the
-          # vendored xterm.js against its pinned hashes.
+          # Serving apps and programs to a browser (no features of its own):
+          # its tests open real sockets on 127.0.0.1 and run programs on a
+          # PTY, and build.rs checks the vendored xterm.js against its
+          # pinned hashes.
           - crate: rs-rich-web
             args: "--all-features"
           # The terminal pane and the web view: the pane, ProgramEngine and
@@ -220,6 +227,9 @@ jobs:
           # The CLI must still build without network or image decoders.
           - crate: rs-rich-cli
             args: "--no-default-features"
+          # `rich serve` (rs-rich-web) on top of the defaults: off by default.
+          - crate: rs-rich-cli
+            args: "--features serve"
           - crate: rs-rich-cli
             args: "--all-features"
     steps:
@@ -360,7 +370,7 @@ jobs:
       - name: Check the whole workspace on the declared MSRV
         run: |
           cargo check --workspace --all-targets --all-features --exclude rs-rich-lumis --exclude rs-rich-cli
-          cargo check -p rs-rich-cli --all-targets --features "fetch art mermaid mmdc syntax-cache onig json-escape-safe dylib-plugins wasm-plugins arrow"
+          cargo check -p rs-rich-cli --all-targets --features "fetch art mermaid mmdc syntax-cache onig json-escape-safe dylib-plugins wasm-plugins arrow serve"
 
       # rs-rich-lumis declares its own minimum, lumis's (newer than the
       # workspace's), and is checked on exactly that.

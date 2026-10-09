@@ -427,12 +427,14 @@ depends on `rs-rich` and, behind its optional `interact` feature, on
 on crates.io. Nothing in the workspace depends on it, so it holds up no other
 tag. `rs-rich-intuituive` 0.0.1 depends on `rs-rich`, `rs-rich-ext` and
 `rs-rich-interact`: its own `rs-rich-intuituive-v0.0.1` tag goes after the
-releases of those it requires are on crates.io. `rs-rich-web` 0.0.1 depends on
-`rs-rich-intuituive`: its own `rs-rich-web-v0.0.1` tag goes after the
-`rs-rich-intuituive` release it requires is on crates.io; nothing depends on it.
-`rs-rich-embed` 0.0.1 depends on `rs-rich`, `rs-rich-intuituive` and
-`rs-rich-record`: its own `rs-rich-embed-v0.0.1` tag goes after the releases of
-those it requires are on crates.io; nothing depends on it. By hand, from the tagged commit on `main`:
+releases of those it requires are on crates.io. `rs-rich-embed` 0.0.1 depends
+on `rs-rich`, `rs-rich-intuituive` and `rs-rich-record`: its own
+`rs-rich-embed-v0.0.1` tag goes after the releases of those it requires are on
+crates.io, and before `rs-rich-web`'s. `rs-rich-web` 0.0.1 depends on
+`rs-rich-intuituive` and `rs-rich-embed` (for its PTY mode): its own
+`rs-rich-web-v0.0.1` tag goes after both are on crates.io, and before the
+`rs-rich-cli` tag, which depends on it behind its off-by-default `serve`
+feature. By hand, from the tagged commit on `main`:
 
 ```bash
 cargo publish -p rs-rich-macros --locked   # with a maintainer's API token

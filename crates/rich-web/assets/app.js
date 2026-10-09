@@ -1,11 +1,17 @@
-// The page's side of rs-rich-web: an xterm.js terminal connected to one app
-// session over a WebSocket.
+// The page's side of rs-rich-web: an xterm.js terminal connected to one
+// session over a WebSocket, of an app or of a program on a PTY.
 //
 // To the server, text messages: "d" and the bytes xterm.js produced for keys,
 // the mouse and pastes; "r" and "columns,rows" when the terminal's size
-// changes. From the server: what to draw, as terminal output.
+// changes; "c" and "number:1" (or ":0") when the clipboard took (or refused)
+// a copy; "a" and a number of bytes once a program's output is drawn. From
+// the server: what to draw, as terminal output (text for an app, binary for
+// a program), and a close whose reason, if any, says why the session ended.
 (function () {
   "use strict";
+
+  // "app" or "program", filled in by the server.
+  var mode = document.body.getAttribute("data-mode");
 
   var status = document.getElementById("status");
   function say(text) {
@@ -16,7 +22,8 @@
   var token = new URLSearchParams(window.location.search).get("token") || "";
   var term = new Terminal({
     cursorBlink: false,
-    scrollback: 0,
+    // An app owns the whole screen; a shell keeps what scrolled away.
+    scrollback: mode === "program" ? 5000 : 0,
     macOptionIsMeta: true,
     fontFamily: 'ui-monospace, "Cascadia Mono", "DejaVu Sans Mono", Menlo, Consolas, monospace',
     fontSize: 14,
@@ -60,7 +67,7 @@
 
   var scheme = window.location.protocol === "https:" ? "wss:" : "ws:";
   var url = scheme + "//" + window.location.host + "/ws?token=" + encodeURIComponent(token) +
-    "&cols=" + term.cols + "&rows=" + term.rows;
+    "&cols=" + term.cols + "&rows=" + term.rows + "&renderer=xterm";
   var socket = new WebSocket(url);
   socket.binaryType = "arraybuffer";
   var open = false;
@@ -82,14 +89,21 @@
     if (typeof event.data === "string") {
       term.write(event.data);
     } else {
-      term.write(new Uint8Array(event.data));
+      // A program's output: say once it is drawn, so the server sends more
+      // only as fast as the page keeps up.
+      var bytes = new Uint8Array(event.data);
+      term.write(bytes, function () {
+        send("a" + bytes.length);
+      });
     }
   };
   socket.onclose = function (event) {
     var was = open;
     open = false;
     term.options.disableStdin = true;
-    if (was) {
+    if (was && event.reason) {
+      say(event.reason + " Reload the page to start a new session.");
+    } else if (was) {
       say("The session ended. Reload the page to start a new one.");
     } else {
       say("Could not connect" + (event.reason ? ": " + event.reason : "") +

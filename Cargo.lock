@@ -2528,6 +2528,7 @@ dependencies = [
  "rs-rich-mermaid",
  "rs-rich-micro",
  "rs-rich-record",
+ "rs-rich-web",
  "same-file",
  "serde_json",
  "tempfile",
@@ -2728,7 +2729,9 @@ dependencies = [
  "data-encoding",
  "getrandom 0.4.3",
  "httparse",
+ "rs-rich-embed",
  "rs-rich-intuituive",
+ "serde_json",
  "sha2 0.11.0",
  "tungstenite",
 ]

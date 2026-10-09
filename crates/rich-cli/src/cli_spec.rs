@@ -1590,6 +1590,10 @@ pub(crate) fn spec() -> CommandSpec {
     {
         spec = spec.subcommand(super::micro::command());
     }
+    #[cfg(feature = "serve")]
+    {
+        spec = spec.subcommand(super::serve::command());
+    }
     spec.subcommand(
         CommandSpec::new("record")
             .about(
@@ -1811,6 +1815,8 @@ mod tests {
     const INTERACTIVE: &str = include_str!("interactive.rs");
     #[cfg(feature = "art")]
     const MICRO: &str = include_str!("micro.rs");
+    #[cfg(feature = "serve")]
+    const SERVE: &str = include_str!("serve.rs");
 
     /// The source of the item that starts with `start`, up to the next
     /// top-level item.
@@ -1871,6 +1877,8 @@ mod tests {
         }
         #[cfg(feature = "interact")]
         out.extend(option_literals(item(INTERACTIVE, "fn parse_args(")));
+        #[cfg(feature = "serve")]
+        out.extend(option_literals(item(SERVE, "fn parse_args(")));
         #[cfg(feature = "art")]
         for start in ["const CREATE_VALUES", "const CREATE_FLAGS", "fn request("] {
             out.extend(option_literals(item(MICRO, start)));

@@ -56,3 +56,30 @@ fn a_local_pty_carries_bytes_both_ways() {
     }
     assert!(pty.exit_status().is_some_and(|status| !status.success()));
 }
+
+#[test]
+fn backpressure_holds_the_program_until_its_output_is_read() {
+    let script = "head -c 300000 /dev/zero | tr '\\0' x; echo; echo END";
+    let mut pty = LocalPty::new(["sh", "-c", script]).backpressure(4096);
+    pty.start(80, 24).unwrap();
+    // Nothing is read: the program fills the little that is held, then
+    // waits, so it has not finished, and nothing was dropped.
+    std::thread::sleep(Duration::from_millis(500));
+    assert!(pty.exit_status().is_none());
+    let mut out = pty.read();
+    assert!(
+        !out.is_empty() && out.len() <= 4096 + 65536,
+        "{} bytes held",
+        out.len()
+    );
+    let start = Instant::now();
+    while pty.exit_status().is_none() && start.elapsed() < Duration::from_secs(20) {
+        out.extend(pty.read());
+        std::thread::sleep(Duration::from_millis(2));
+    }
+    out.extend(pty.read());
+    assert_eq!(pty.exit_status().map(|status| status.code()), Some(0));
+    let text = String::from_utf8_lossy(&out);
+    assert_eq!(text.matches('x').count(), 300_000);
+    assert!(text.contains("END"), "the end of the output arrived");
+}

@@ -862,8 +862,9 @@ is in [Testing with screen readers](screen-readers.md).
   named by the text it shows (a live row, a button) speaks for what is
   inside it, so its children are not listed again.
   `Driver::accessibility()` returns the tree: depth, role, name, what is
-  selected in it, focus, states and place. A browser's DOM renderer or a
-  screen reader bridge renders it.
+  selected in it, focus, states and place. rs-rich-web's
+  [DOM renderer](web.md#the-dom-renderer) carries it to a browser's screen
+  reader; a screen reader bridge could render it too.
 - **States.** Each node in the tree has an `AccessState`: `expanded`,
   `checked`, `selected`, `busy`, and `position`, the selected item's place
   (`3 of 10`). In a widget of items, the states are those of its selected
@@ -892,8 +893,9 @@ is in [Testing with screen readers](screen-readers.md).
 - **Announcements.** Toasts, a screen or dialog opening, `.live()` nodes
   whose text changes (a status line), and `cx.announce(text, urgent)` go to
   the app's `App::announcer(…)` as they happen, and wait in
-  `Driver::take_announcements()` for a loop that reads them (browser
-  serving puts them in an ARIA live region).
+  `Driver::take_announcements()` for a loop that reads them (the
+  [DOM renderer](web.md#the-dom-renderer) puts them in an ARIA live
+  region).
 
 ```rust
 App::new(|| {
@@ -1168,4 +1170,6 @@ widgets in an existing app, and ratatui widgets run inside rs-rich-interact.
 This is an early slice (0.0.x), so the API will change. Still to come:
 Python bindings for the framework, as rs-rich-interact's components already
 have (see [the widgets design note](../../design/intuituive-widgets.md)). An app can
-already be [served to a browser](web.md), with rs-rich-web.
+already be [served to a browser](web.md) with rs-rich-web, drawn by xterm.js
+or by a DOM renderer that carries its accessibility tree as ARIA, and so can
+any terminal program (`rich serve -- htop`).

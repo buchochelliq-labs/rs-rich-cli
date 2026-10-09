@@ -1,17 +1,21 @@
-# crates/rich-web — serving intuiTUIve apps to a browser.
+# crates/rich-web — serving intuiTUIve apps, and any terminal program, to a
+# browser.
 #
 # Not a port of anything upstream: an rs-rich addition (0.0.18 plan,
 # workstream 7). One intuiTUIve `App` per WebSocket connection, each on its
-# own thread, drawn by xterm.js in the browser. xterm.js is vendored under
-# `assets/` (pinned, MIT, hashes checked by build.rs) and served by the crate
-# itself: nothing is fetched from a CDN at run time. Synchronous network code
-# only (tungstenite, no async runtime), so neither the framework nor the CLI's
-# default build gains any. Independent SemVer from 0.0.1. See AGENTS.md →
-# Versioning.
+# own thread, drawn by xterm.js in the browser (or, opt-in, by a DOM
+# renderer that carries the accessibility tree as ARIA); or one program per
+# connection on a PTY, through rs-rich-embed's `PtyHost`. xterm.js is
+# vendored under `assets/` (pinned, MIT, hashes checked by build.rs) and
+# served by the crate itself: nothing is fetched from a CDN at run time.
+# Synchronous network code only (tungstenite, no async runtime), so neither
+# the framework nor the CLI's default build gains any (the CLI's `rich serve`
+# is behind its off-by-default `serve` feature). Independent SemVer from
+# 0.0.1. See AGENTS.md → Versioning.
 [package]
 name = "rs-rich-web"
 version = "0.0.1"
-description = "Serve rs-rich intuiTUIve terminal apps to a web browser over a WebSocket, drawn by a vendored xterm.js"
+description = "Serve rs-rich intuiTUIve apps, or any terminal program on a PTY, to a web browser over a WebSocket, drawn by a vendored xterm.js or as accessible DOM"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
@@ -32,6 +36,11 @@ workspace = true
 
 [dependencies]
 rich-intuituive.workspace = true
+# A program per connection: `PtyHost`, and `LocalPty` (portable-pty, a PTY on
+# Unix and ConPTY on Windows), shared with the terminal pane.
+rich-embed.workspace = true
+# The DOM renderer's messages.
+serde_json.workspace = true
 # The WebSocket protocol. `handshake` brings the accept-key derivation and the
 # client used by the tests; the server reads the HTTP request itself (below).
 tungstenite = { version = "0.30", default-features = false, features = ["handshake"] }

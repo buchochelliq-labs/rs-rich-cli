@@ -1558,6 +1558,31 @@ not the rendered-content/report split used by rendering commands. Errors retain
 the existing usage/error reporting contract. `--no-config` helps diagnose an
 invalid local configuration independently.
 
+## Run a program in a browser (0.0.18)
+
+`rich serve` runs a terminal program in a web browser: one copy per tab,
+each on a pseudo-terminal of its own, drawn by xterm.js. It is behind the
+`serve` feature, off by default, so a default build has no network server:
+
+```bash
+cargo install rs-rich-cli --features serve
+rich serve -- htop                        # prints http://127.0.0.1:8080/?token=…
+rich serve --port 0 -- bash -l            # any free port
+rich serve --max-sessions 2 -- python3    # at most two tabs at once
+```
+
+Open the printed address: it carries a random token, and the page and its
+WebSocket refuse requests without it, or from another site's page. It
+listens on `127.0.0.1` unless `--bind` says otherwise, and anyone who
+reaches it with the token can use the program, so serving a shell beyond
+this computer needs a reverse proxy with TLS and authentication in front
+(`--allow-origin https://term.example.com` accepts the page from where the
+proxy serves it). The program's exit ends its tab's session and the page
+shows its status; Ctrl+C stops the server and every program. See
+[Serving an app to a browser](guide/intuituive/web.md#any-terminal-program)
+for how a session runs, and rs-rich-web, the library underneath, which also
+serves intuiTUIve apps.
+
 ## Plugins
 
 ```bash
