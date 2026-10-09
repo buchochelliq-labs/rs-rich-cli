@@ -352,3 +352,27 @@ fn a_paste_flood_waits_in_the_network_not_in_the_server() {
     // The session still ends when the server stops.
     server.stop();
 }
+
+#[test]
+fn a_program_cannot_write_the_clipboard() {
+    // The page puts OSC 52 copies on the clipboard for an app only: a
+    // program's output is whatever it shows (a file, a fetched page).
+    let server = Server::bind_host("127.0.0.1:0", || Box::new(ReplayHost::new()))
+        .unwrap()
+        .token(TOKEN)
+        .spawn()
+        .unwrap();
+    let addr = server.local_addr();
+    let (status, page) = get(addr, &format!("/?token={TOKEN}"));
+    assert!(status.contains("200"), "{status}");
+    assert!(page.contains("data-mode=\"program\""));
+    let (status, script) = get(addr, "/app.js");
+    assert!(status.contains("200"), "{status}");
+    assert_eq!(script.matches("registerOscHandler").count(), 1);
+    let guard = script
+        .find("if (mode === \"app\") {")
+        .expect("the mode guard");
+    let handler = script.find("registerOscHandler(52").unwrap();
+    assert!(guard < handler, "the handler is registered for every mode");
+    server.stop();
+}

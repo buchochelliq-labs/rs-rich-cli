@@ -133,7 +133,9 @@ working directory. The program sees `TERM=xterm-256color`.
   reads some, so a flood of pastes waits in the network, not in the
   server's memory.
 - **Output** goes to the page as binary messages, and the page keeps a
-  scrollback of 5,000 lines, as a terminal does.
+  scrollback of 5,000 lines, as a terminal does. An OSC 52 clipboard
+  write in it is ignored: whatever a program prints (a file it shows, a
+  page it fetched) cannot replace what is on the browser's clipboard.
 - **The exit** ends the session: the page shows how the program ended
   ("The program exited with code 0." or "ended by signal …"), and a
   program that cannot start says why. Closing the tab, or stopping the

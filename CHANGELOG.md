@@ -11,6 +11,12 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### 0.0.18 release test: fixes from three audits
 
+- **A served program can no longer write the browser's clipboard.** The
+  xterm.js page put every OSC 52 copy on the clipboard, in program mode
+  too, so any output (`cat` of a hostile file, a fetched page, a log
+  line) could silently replace it with a command for a later paste. The
+  page now registers its OSC 52 handler for apps only, whose copies the
+  server itself sends.
 - **A web view address can no longer become a browser's option.**
   `ProgramEngine` put the address on the terminal browser's command line
   as it was, so a link such as `--renderer-cmd-prefix=…` (from a feed, a
