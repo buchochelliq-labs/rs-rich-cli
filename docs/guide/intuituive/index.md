@@ -909,7 +909,7 @@ App::new(|| {
 
 In linear mode the app draws no screen. It writes the accessibility tree
 as plain lines of text, in reading order: no cursor addressing, no
-alternate screen, no mouse and no colour. After each event it writes only
+alternate screen, no mouse, no colour and no synchronized output. After each event it writes only
 the lines of the nodes that changed, like a transcript, and a screen reader
 reads new output as it arrives. Keys work as usual.
 

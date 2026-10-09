@@ -929,8 +929,9 @@ impl App {
     /// transcript, which a screen reader reads as it arrives. The focus
     /// moving is written as `→ ` and the line of what has it; toasts and
     /// [`Ctx::announce`] as their text. There is no cursor addressing, no
-    /// alternate screen, no mouse and no colour; keys work as usual. On by
-    /// default when `INTUITUIVE_ACCESSIBLE` is `linear`.
+    /// alternate screen, no mouse, no colour and no synchronized output;
+    /// keys work as usual. On by default when `INTUITUIVE_ACCESSIBLE` is
+    /// `linear`.
     ///
     /// ```
     /// use intuituive::prelude::*;
@@ -1150,7 +1151,12 @@ impl App {
             output: Default::default(),
             legacy_keys: self.legacy_keys,
             backend,
-            synchronized_output: self.synchronized_output,
+            // Linear, lines are appended as they come: nothing to hold.
+            synchronized_output: if self.linear {
+                Some(false)
+            } else {
+                self.synchronized_output
+            },
         })?;
         if self.linear {
             // The cursor stays at the end of what was written.
@@ -1173,8 +1179,21 @@ impl App {
         let (width, height) = backend.size();
         let inline = self.inline.is_some();
         let text_frames = self.text_frames;
+        let linear = self.linear;
         let mut driver = self.driver(width, height);
         driver.set_clipboard(backend.clipboard().is_ok());
+        // A frame as one synchronized update, where the backend writes
+        // them; linear lines as they are, since they are appended and
+        // there is no frame to hold. Nothing for output that is empty.
+        fn put(backend: &mut impl Backend, linear: bool, out: &str) -> io::Result<()> {
+            if out.is_empty() {
+                Ok(())
+            } else if linear {
+                backend.write(out)
+            } else {
+                backend.write_frame(out)
+            }
+        }
         // Text a handler copied, or the mouse selected, onto the clipboard:
         // after every step that runs handlers (timers, tasks and watches in
         // `update`, lifecycle events in `render`, input in `event`), so a
@@ -1194,9 +1213,7 @@ impl App {
                     return Ok(());
                 }
                 if let Some(out) = driver.render() {
-                    // One synchronized update, where the backend writes
-                    // them; nothing for a frame that changed nothing.
-                    backend.write_frame(&out)?;
+                    put(backend, linear, &out)?;
                     if text_frames {
                         backend.painted(&driver.screen().plain().join("\n"));
                     }
@@ -1217,7 +1234,7 @@ impl App {
                             && backend.can_suspend()
                             && !driver.app.binds(*key) =>
                     {
-                        backend.write_frame(&driver.suspend())?;
+                        put(backend, linear, &driver.suspend())?;
                         backend.suspend()?;
                         let (columns, rows) = backend.size();
                         if inline {
@@ -1244,7 +1261,7 @@ impl App {
                 }
             }
         })();
-        let _ = backend.write_frame(&driver.finish());
+        let _ = put(backend, linear, &driver.finish());
         result
     }
 
