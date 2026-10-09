@@ -26,6 +26,11 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   waited two seconds; and a CSI that never ended kept every byte after it.
   ESC now starts a new sequence, CAN and SUB cancel one, and at most 32
   bytes of a sequence are kept (a longer one is no query).
+- **A large paste no longer freezes a termion session.** While a
+  bracketed paste's end had not arrived, the termion backend searched the
+  whole paste for it again after every 1 KiB read: quadratic, 13 seconds
+  for 1 MiB and minutes for 4 MiB, with no repaint meanwhile. It now
+  searches only what each read added.
 - **Answers to a program's queries are capped, and the terminal pane
   sends them.** rs-rich-record's emulator kept every answer it owed (the
   device attributes, the synchronized output report) until taken, and
