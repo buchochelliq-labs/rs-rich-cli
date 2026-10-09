@@ -514,6 +514,7 @@ static RESUMED: AtomicBool = AtomicBool::new(false);
 /// SIGTSTP runs on the signal thread while the event loop runs on, so
 /// without it a session that ended during the stop (a key queued, a timer
 /// due) would have its modes turned back on after it restored them.
+/// `enter` holds it while it marks the modes on and writes them.
 static SUSPENDING: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 #[cfg(unix)]
@@ -1066,7 +1067,6 @@ impl Session {
         self.kitty = answers.kitty;
         if self.kitty {
             out.push_str(library.kitty_push());
-            ACTIVE.fetch_or(KITTY, Ordering::SeqCst);
         }
         self.sync = self
             .options
@@ -1086,7 +1086,17 @@ impl Session {
             ACTIVE.fetch_or(PASTE, Ordering::SeqCst);
         }
         out.push_str("\x1b[?25l");
-        self.options.output.write(&out)?;
+        {
+            // The kitty flags are a stack: marked pushed with the write
+            // that pushes them, under the suspend's lock, so a suspend
+            // between the two neither pops flags not yet pushed nor
+            // pushes them on `fg` before this pushes them again.
+            let _suspending = SUSPENDING.lock().unwrap_or_else(|e| e.into_inner());
+            if self.kitty {
+                ACTIVE.fetch_or(KITTY, Ordering::SeqCst);
+            }
+            self.options.output.write(&out)?;
+        }
         // Where an inline region starts, so clicks land on the right rows.
         // Asking writes a query to standard output, so only when that is
         // the terminal being painted.

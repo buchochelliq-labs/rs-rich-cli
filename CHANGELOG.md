@@ -61,6 +61,12 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   the program got `CSI 27;…~` for keys such as Shift+Enter. Every way the
   session gives the terminal back now sets it to 0, and taking it back
   sets it up again.
+- **A suspend while a session starts no longer pushes the kitty flags
+  twice.** The session marked the kitty keyboard flags pushed before it
+  wrote the push: a SIGTSTP in between popped nothing, pushed them on
+  `fg`, and the session then pushed them again, one push more than the one
+  pop at exit. They are now marked with the write that pushes them, which
+  a suspend waits for.
 - **Answers to a program's queries are capped, and the terminal pane
   sends them.** rs-rich-record's emulator kept every answer it owed (the
   device attributes, the synchronized output report) until taken, and
