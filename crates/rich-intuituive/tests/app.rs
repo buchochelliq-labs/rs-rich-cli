@@ -87,6 +87,28 @@ fn synchronized_output_sends_each_frame_as_one_update() {
 }
 
 #[test]
+fn linear_mode_writes_no_synchronized_update_even_where_the_backend_has_it() {
+    let app = App::new(|| {
+        let tick = signal(0u32);
+        column([label("ops").fixed(1), text!("tick {tick}").fixed(1)])
+            .label("Ops")
+            .on_key("+", move |_| tick.update(|t| *t += 1))
+            .on_key("q", |cx| cx.quit())
+    })
+    .linear(true);
+    let mut backend = Headless::new(Script::new().keys("+ q"), 20, 2);
+    backend.synchronized_output = true;
+    let record = backend.record();
+    app.run_on(&mut backend).unwrap();
+    let record = record.borrow();
+    assert!(!record.writes.is_empty());
+    for write in &record.writes {
+        assert!(!write.is_empty());
+        assert!(!write.contains("2026"), "{write:?}");
+    }
+}
+
+#[test]
 fn only_the_nodes_that_read_a_signal_draw_again() {
     let draws = Rc::new(RefCell::new(Vec::<&'static str>::new()));
     let log = |name: &'static str, draws: &Rc<RefCell<Vec<&'static str>>>| {

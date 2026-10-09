@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{title}}</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #101010; color: #d0d0d0; }
+  #screen, #tree {
+    position: absolute; inset: 4px; overflow: hidden;
+    font: 14px/1.2 ui-monospace, "Cascadia Mono", "DejaVu Sans Mono", Menlo, Consolas, monospace;
+  }
+  #screen { cursor: default; user-select: none; }
+  .line { white-space: pre; height: var(--rh, 17px); }
+  .line > span { display: inline-block; height: 100%; vertical-align: top; }
+  .line > .w { width: calc(2 * var(--cw, 8px)); overflow: hidden; }
+  #caret {
+    position: absolute; width: var(--cw, 8px); height: var(--rh, 17px);
+    background: #d0d0d0; mix-blend-mode: difference;
+  }
+  #caret[hidden] { display: none; }
+  #probe { position: absolute; visibility: hidden; white-space: pre; }
+  /* The accessibility tree lies over the grid it describes: where a screen
+     reader highlights a node, the node is. It is not drawn, and the mouse
+     goes through it to the grid. */
+  #tree { pointer-events: none; color: transparent; }
+  #tree * { position: absolute; overflow: hidden; outline: none; }
+  #tree .item { inset: 0; }
+  .sr {
+    position: absolute; width: 1px; height: 1px; overflow: hidden;
+    clip-path: inset(50%); white-space: nowrap;
+  }
+  #status {
+    position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%);
+    padding: 6px 12px; border-radius: 4px; background: #2a2a2a; color: #f0f0f0;
+    font: 14px system-ui, sans-serif;
+  }
+  #status[hidden] { display: none; }
+</style>
+<style id="styles"></style>
+</head>
+<body data-mode="{{mode}}">
+<div id="screen" aria-hidden="true"><div id="grid"></div><div id="caret" hidden></div><span id="probe">MMMMMMMMMM</span></div>
+<div id="tree" role="application" aria-label="{{title}}" tabindex="0"></div>
+<div id="polite" class="sr" aria-live="polite"></div>
+<div id="assertive" class="sr" aria-live="assertive"></div>
+<div id="status" role="status" aria-live="polite" hidden></div>
+<script src="dom.js"></script>
+</body>
+</html>

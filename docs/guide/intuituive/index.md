@@ -862,8 +862,9 @@ is in [Testing with screen readers](screen-readers.md).
   named by the text it shows (a live row, a button) speaks for what is
   inside it, so its children are not listed again.
   `Driver::accessibility()` returns the tree: depth, role, name, what is
-  selected in it, focus, states and place. A browser's DOM renderer or a
-  screen reader bridge renders it.
+  selected in it, focus, states and place. rs-rich-web's
+  [DOM renderer](web.md#the-dom-renderer) carries it to a browser's screen
+  reader; a screen reader bridge could render it too.
 - **States.** Each node in the tree has an `AccessState`: `expanded`,
   `checked`, `selected`, `busy`, and `position`, the selected item's place
   (`3 of 10`). In a widget of items, the states are those of its selected
@@ -892,8 +893,9 @@ is in [Testing with screen readers](screen-readers.md).
 - **Announcements.** Toasts, a screen or dialog opening, `.live()` nodes
   whose text changes (a status line), and `cx.announce(text, urgent)` go to
   the app's `App::announcer(…)` as they happen, and wait in
-  `Driver::take_announcements()` for a loop that reads them (browser
-  serving puts them in an ARIA live region).
+  `Driver::take_announcements()` for a loop that reads them (the
+  [DOM renderer](web.md#the-dom-renderer) puts them in an ARIA live
+  region).
 
 ```rust
 App::new(|| {
@@ -909,7 +911,7 @@ App::new(|| {
 
 In linear mode the app draws no screen. It writes the accessibility tree
 as plain lines of text, in reading order: no cursor addressing, no
-alternate screen, no mouse and no colour. After each event it writes only
+alternate screen, no mouse, no colour and no synchronized output. After each event it writes only
 the lines of the nodes that changed, like a transcript, and a screen reader
 reads new output as it arrives. Keys work as usual.
 
@@ -1166,5 +1168,7 @@ widgets in an existing app, and ratatui widgets run inside rs-rich-interact.
 ## Status
 
 This is an early slice (0.0.x), so the API will change. An app can be
-[served to a browser](web.md), with rs-rich-web, and written
-[in Python](python.md), with `rs_rich.tui` in the `rs-rich` wheel.
+[served to a browser](web.md) with rs-rich-web, drawn by xterm.js or by a DOM
+renderer that carries its accessibility tree as ARIA, and so can any terminal
+program (`rich serve -- htop`). It can also be written [in Python](python.md),
+with `rs_rich.tui` in the `rs-rich` wheel.

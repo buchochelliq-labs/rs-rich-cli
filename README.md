@@ -102,7 +102,7 @@ in the release notes; the crates.io links show available packages.
 | `rs-rich-data` | tabular data: CSV/TSV, JSONL, serde and Arrow row sources, type inference and column statistics | `use rich_data` |
 | `rs-rich-ratatui` | ratatui interop: rich renderables as ratatui widgets, buffer and style conversions, ratatui widgets in rich-interact | `use rich_ratatui` |
 | `rs-rich-intuituive` | intuiTUIve: a reactive, retained terminal UI framework (signals, retained tree, damaged diff) on rich-interact | `use intuituive` |
-| `rs-rich-web` | serving intuiTUIve apps to a web browser over a WebSocket, drawn by a vendored xterm.js | `use rich_web` |
+| `rs-rich-web` | serving intuiTUIve apps, or any terminal program, to a web browser over a WebSocket, drawn by a vendored xterm.js or an accessible DOM renderer | `use rich_web` |
 | `rs-rich-embed` | a terminal pane and a web view for intuiTUIve apps, over swappable PTY and browser backends | `use rich_embed` |
 | `rs-rich-lumis` | the lumis (tree-sitter) code highlighter | `use rich_lumis` |
 | `rs-rich-record` | scripted terminal recordings (`rich record`) | `use rich_record` |

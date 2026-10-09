@@ -30,7 +30,8 @@ features can be turned off for a smaller, network-free binary:
 | `interact` | the interactive commands (`rich choose`, `filter`, `input`, `confirm`, `pager`, `write`, `file`, `color`, `asset`, `explore`) |
 
 `rich chart`, `rich dot`, `rich deps` and `rich schema` are in every build.
-`lumis`, `mmdc`, `dylib-plugins` and `wasm-plugins` are off by default; the
+`lumis`, `mmdc`, `arrow`, `dylib-plugins`, `wasm-plugins` and `serve` (`rich
+serve`, a program in a web browser) are off by default; the
 [crate README](https://github.com/buchochelliq-labs/rs-rich-cli/tree/main/crates/rich-cli#features)
 lists what each adds.
 
@@ -126,6 +127,7 @@ records exactly which parts are upstream and which are additions.
 | `explore` | — | Explore JSON, YAML, TOML, XML, INI or `.env` interactively | [Explore it interactively](../../cli.md#explore-it-interactively) |
 | `micro` | — | List, preview, add and create micro assets | [Micro assets in the CLI](../micro/cli.md) |
 | `record` | — | Run a tape and write screenshots, a cast, a GIF or an MP4 | [Terminal recordings](../../recordings.md#record-your-own) |
+| `serve` | — | Run a program in a web browser, one copy per tab (the `serve` feature) | [Serving to a browser](../intuituive/web.md#from-the-command-line-rich-serve) |
 | `plugins` | — | List the built-in, linked and loaded plugins | [Plugins](../../cli.md#plugins) |
 | — | `--watch` | Re-render files as they change | [Watch](walkthrough.md#watching-files) |
 | — | `--batch` | Convert many files to HTML/SVG | [Batch](walkthrough.md#converting-many-files) |

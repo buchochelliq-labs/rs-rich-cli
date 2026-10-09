@@ -23,9 +23,10 @@
 //! the diagram sources `mermaid`, `dot`, `deps` and `schema`, `chart` and
 //! `profile`;
 //! the interactive commands (`choose`, `filter`, `input`, `confirm`, `pager`,
-//! `write`, `file`, `color`, `asset`, `explore`); `micro`; and `record`. Each
-//! composes public `rich` / `rich-ext` / `rich-art` / `rich-diagram` /
-//! `rich-mermaid` / `rich-interact` / `rich-micro` / `rich-record` APIs.
+//! `write`, `file`, `color`, `asset`, `explore`); `micro`; `record`; and
+//! `serve` (behind the off-by-default `serve` feature). Each composes public
+//! `rich` / `rich-ext` / `rich-art` / `rich-diagram` / `rich-mermaid` /
+//! `rich-interact` / `rich-micro` / `rich-record` / `rich-web` APIs.
 
 use std::io::{BufRead, IsTerminal, Read, Write};
 use std::path::{Path, PathBuf};
@@ -53,6 +54,8 @@ mod profile;
 #[cfg(feature = "record")]
 mod record;
 mod render_target;
+#[cfg(feature = "serve")]
+mod serve;
 mod sources;
 mod structured_log;
 mod tools;
@@ -1015,6 +1018,10 @@ fn dispatch(args: Vec<String>) -> ExitCode {
     #[cfg(feature = "record")]
     if record::requested(&args) {
         return record::dispatch(&args);
+    }
+    #[cfg(feature = "serve")]
+    if serve::requested(&args) {
+        return serve::dispatch(&args);
     }
     match parse(&args) {
         Ok(None) => ExitCode::SUCCESS, // help/version already printed
@@ -6771,6 +6778,10 @@ mod tests {
             if record::requested(args) {
                 words.push("record");
             }
+            #[cfg(feature = "serve")]
+            if serve::requested(args) {
+                words.push("serve");
+            }
             #[cfg(feature = "interact")]
             words.extend(interactive::requested(args));
             if tools::bench_dispatch(args).unwrap_or(true) {
@@ -6787,8 +6798,8 @@ mod tests {
             words
         };
         let words = [
-            "plugins", "doctor", "record", "choose", "filter", "input", "confirm", "pager",
-            "bench", "config",
+            "plugins", "doctor", "record", "serve", "choose", "filter", "input", "confirm",
+            "pager", "bench", "config",
         ];
         for word in words {
             // Without a mode flag the word is the subcommand (where built).

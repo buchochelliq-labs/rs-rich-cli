@@ -32,8 +32,10 @@ The diagram shows the original crates. The others follow the same rule:
 features), `rich-lumis` → `rich-plugin-api`, and `rich-record`,
 `rich-interact`, `rich-micro` and `rich-data` → `rich-ext`, and
 `rich-ratatui` → `rich` (with `rich-interact` behind a feature), and
-`rich-intuituive` → `rich-interact`, and `rich-web` → `rich-intuituive`, and
-`rich-embed` → `rich-intuituive` and `rich-record`. The full graph is in
+`rich-intuituive` → `rich-interact`, and `rich-web` → `rich-intuituive` and
+`rich-embed`, and `rich-embed` → `rich-intuituive` and `rich-record`; the
+CLI depends on `rich-web` only behind its off-by-default `serve` feature.
+The full graph is in
 [AGENTS.md](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/AGENTS.md).
 
 - **`crates/rich`** — the faithful port of the Python `rich` *library*. Mirrors
@@ -82,14 +84,17 @@ features), `rich-lumis` → `rich-plugin-api`, and `rich-record`,
   it against. Independent SemVer. See
   [Terminal apps](guide/intuituive/index.md) and the
   [design note](design/intuituive.md).
-- **`crates/rich-web`** — serving intuiTUIve apps to a browser: one app per
+- **`crates/rich-web`** — serving to a browser: one intuiTUIve app per
   WebSocket connection, each on its own thread, driven through intuiTUIve's
-  `Driver`, and an xterm.js page vendored in the crate (pinned by hash,
-  embedded, never fetched from a CDN). Synchronous (`tungstenite`, no async
-  runtime); listens where it is told, with a URL token, an `Origin` check
-  and a session cap. Nothing in the workspace depends on it, so neither the
-  framework nor the CLI gains network code. Independent SemVer. See
-  [Serving an app to a browser](guide/intuituive/web.md).
+  `Driver`, or one program per connection on a PTY (through `rich-embed`'s
+  `PtyHost`, held back when the page falls behind); an xterm.js page
+  vendored in the crate (pinned by hash, embedded, never fetched from a
+  CDN), or, for apps, a DOM renderer that carries the accessibility tree as
+  ARIA. Synchronous (`tungstenite`, no async runtime); listens where it is
+  told, with a URL token, an `Origin` check and a session cap. The CLI's
+  `rich serve` uses it behind the off-by-default `serve` feature, so
+  neither the framework nor the CLI's default build gains network code.
+  Independent SemVer. See [Serving an app to a browser](guide/intuituive/web.md).
 - **`crates/rich-embed`** — other programs and web pages inside an
   intuiTUIve app: a terminal pane over a `PtyHost` (`LocalPty` through
   portable-pty, `ReplayHost` for tests), its screen followed by
@@ -97,7 +102,8 @@ features), `rich-lumis` → `rich-plugin-api`, and `rich-record`,
   (`ProgramEngine` runs a terminal browser the user installed; a headless
   Chrome over the DevTools protocol behind the `chrome` feature, Browsh's
   HTTP mode behind `browsh`). Its own crate so the framework gains no PTY,
-  emulator or browser protocol; nothing in the workspace depends on it.
+  emulator or browser protocol; `rich-web` runs programs through its
+  `LocalPty`.
   Independent SemVer. See [Embedding programs and pages](guide/intuituive/embed.md).
 - **`crates/rich-mermaid`** — Mermaid diagrams as a plugin: flowcharts drawn
   as text through `rich-diagram`'s layout, every diagram type through
