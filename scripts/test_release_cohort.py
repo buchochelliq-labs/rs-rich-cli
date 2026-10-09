@@ -218,7 +218,7 @@ class Tag(unittest.TestCase):
 
     def run_tag(self, **options):
         cohort.tag(options.get("commit", "origin/main"), "origin", 60, options.get("dry_run", False),
-                   status=self.status, wait=self.wait)
+                   status=self.status, wait=self.wait, registry=options.get("registry"))
 
     def test_tags_only_what_is_unpublished_in_order_and_waits_for_each(self):
         self.run_tag()
@@ -226,6 +226,11 @@ class Tag(unittest.TestCase):
         self.assertEqual(self.remote_tags(), ["python-v0.3.0", "rs-rich-art-v0.2.0"])
         self.assertEqual(git(self.work, "cat-file", "-t", "rs-rich-art-v0.2.0"), "tag")
         self.assertEqual(git(self.work, "rev-parse", "rs-rich-art-v0.2.0^{commit}"), self.sha)
+
+    def test_a_registry_tags_only_its_packages(self):
+        self.run_tag(registry="crates.io")
+        self.assertEqual(self.waited, ["rs-rich-art-v0.2.0"])
+        self.assertEqual(self.remote_tags(), ["rs-rich-art-v0.2.0"])
 
     def test_a_second_run_tags_nothing(self):
         self.run_tag()

@@ -362,7 +362,8 @@ dependencies published first and stays inside the release workflow's
 concurrency group, which keeps only one pending run. It is safe to re-run: a
 tag that exists but is not yet published is waited on, not recreated, and a
 tag on another commit stops it. `--dry-run` shows the plan; `status` shows
-every package's state.
+every package's state. `--registry crates.io` tags only the crates, leaving
+the Python package for later (and `--registry pypi` only it).
 
 Both release workflows also refuse a published version from the tag itself:
 the first job runs `release_cohort.py unreleased <tag>`, which fails when the

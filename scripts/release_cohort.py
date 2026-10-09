@@ -13,6 +13,8 @@ on it:
     tag         create and push the tag of every package not yet on its
                 registry, one at a time in order, waiting for each release to
                 appear before the next. A published version is never tagged.
+                `--registry crates.io` (or `pypi`) tags only that registry's
+                packages, to hold the other back.
 
 Requires Python 3.11+ and git; `tag` uses the GitHub CLI (`gh`), when present,
 to stop as soon as a release run fails.
@@ -308,7 +310,7 @@ def wait_for(package, timeout, status=registry_status, conclusion=run_conclusion
         sleep(30)
 
 
-def tag(commit, remote, timeout, dry_run, status=registry_status, wait=wait_for):
+def tag(commit, remote, timeout, dry_run, status=registry_status, wait=wait_for, registry=None):
     git("fetch", "--quiet", remote, "main", "--tags")
     sha = git("rev-parse", "--verify", f"{commit}^{{commit}}")
     if subprocess.run(["git", "merge-base", "--is-ancestor", sha, f"{remote}/main"], cwd=ROOT).returncode:
@@ -321,6 +323,9 @@ def tag(commit, remote, timeout, dry_run, status=registry_status, wait=wait_for)
     existing = remote_tags(remote)
     print(f"Releasing from {sha}", flush=True)
     for package in load(read):
+        if registry and package.registry != registry:
+            print(f"leave  {package.tag}: only {registry} packages were asked for", flush=True)
+            continue
         if is_published(package, status):
             print(f"skip   {package.tag}: {package} is already on {package.registry}", flush=True)
             continue
@@ -360,6 +365,8 @@ def main():
     tagger.add_argument("--remote", default="origin")
     tagger.add_argument("--timeout", type=int, default=120, help="minutes to wait for each release")
     tagger.add_argument("--dry-run", action="store_true", help="show what would be tagged, then stop")
+    tagger.add_argument("--registry", choices=sorted(REGISTRIES),
+                        help="tag only the packages released to this registry (default: all)")
     args = parser.parse_args()
 
     try:
@@ -378,7 +385,7 @@ def main():
         elif args.command == "unreleased":
             unreleased(args.tag, load(files_on_disk()))
         else:
-            tag(args.commit, args.remote, args.timeout * 60, args.dry_run)
+            tag(args.commit, args.remote, args.timeout * 60, args.dry_run, registry=args.registry)
     except (RuntimeError, ValueError, subprocess.CalledProcessError) as error:
         print(f"error: {error}", file=sys.stderr)
         return 1
