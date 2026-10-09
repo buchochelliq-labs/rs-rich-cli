@@ -75,8 +75,10 @@ fn utf8_len(lead: u8) -> usize {
 /// Cut the first event's bytes from `bytes` (not empty), as termion's own
 /// reader does: Esc alone at the end of what was read is the Esc key, an
 /// escape sequence runs to its final byte, and anything else is one
-/// character.
-fn cut(bytes: &[u8]) -> Cut {
+/// character. `searched`: how many of the first bytes were already
+/// searched for a paste's end without finding it, so a long paste that
+/// arrives over many reads is searched once, not again on every read.
+fn cut(bytes: &[u8], searched: usize) -> Cut {
     let whole = |n: usize| {
         if bytes.len() >= n {
             Cut::Event(n)
@@ -113,10 +115,17 @@ fn cut(bytes: &[u8]) -> Cut {
                             return Cut::Event(end + 1);
                         }
                         let text = &bytes[sequence.len()..];
-                        match text.windows(PASTE_END.len()).position(|w| w == PASTE_END) {
+                        // The end may have begun in the last bytes searched.
+                        let from = searched
+                            .saturating_sub(sequence.len() + PASTE_END.len() - 1)
+                            .min(text.len());
+                        match text[from..]
+                            .windows(PASTE_END.len())
+                            .position(|w| w == PASTE_END)
+                        {
                             Some(at) => Cut::Paste(
-                                String::from_utf8_lossy(&text[..at]).into_owned(),
-                                sequence.len() + at + PASTE_END.len(),
+                                String::from_utf8_lossy(&text[..from + at]).into_owned(),
+                                sequence.len() + from + at + PASTE_END.len(),
                             ),
                             None => Cut::Short,
                         }
@@ -151,6 +160,8 @@ pub(super) struct Reader {
     tty: File,
     /// Read but not yet an event.
     pending: Vec<u8>,
+    /// How much of `pending` was searched for a paste's end: see [`cut`].
+    searched: usize,
     events: VecDeque<Event>,
     held: HeldButton,
     /// Written to on SIGWINCH.
@@ -169,6 +180,7 @@ impl Reader {
         Ok(Reader {
             tty,
             pending: Vec::new(),
+            searched: 0,
             events: VecDeque::new(),
             held: HeldButton::default(),
             resized,
@@ -206,10 +218,16 @@ impl Reader {
         }
     }
 
-    /// Read what the terminal has.
+    /// Read what the terminal has. Nothing, once the terminal says it has
+    /// input, means it hung up: the end of input, an error, rather than a
+    /// wait that returns at once forever.
     fn fill(&mut self) -> io::Result<()> {
         let mut buffer = [0u8; 1024];
         match self.tty.read(&mut buffer) {
+            Ok(0) => Err(io::Error::new(
+                io::ErrorKind::UnexpectedEof,
+                "the terminal hung up",
+            )),
             Ok(read) => {
                 self.pending.extend_from_slice(&buffer[..read]);
                 Ok(())
@@ -223,7 +241,7 @@ impl Reader {
     /// an event cut short is read as far as it goes.
     fn drain(&mut self, last: bool) {
         while !self.pending.is_empty() {
-            let cut = match cut(&self.pending) {
+            let cut = match cut(&self.pending, self.searched) {
                 // Nothing came after it: the Escape key.
                 Cut::Short if last && self.pending == [0x1b] => Cut::Event(1),
                 cut => cut,
@@ -242,7 +260,10 @@ impl Reader {
                     n
                 }
                 Cut::Skip(n) => n,
-                Cut::Short if !last => return,
+                Cut::Short if !last => {
+                    self.searched = self.pending.len();
+                    return;
+                }
                 // A paste whose end never came is still what was pasted;
                 // anything else cut short is dropped.
                 Cut::Short => {
@@ -255,7 +276,15 @@ impl Reader {
                 }
             };
             self.pending.drain(..used);
+            self.searched = 0;
         }
+    }
+
+    /// Bytes read from the terminal by someone else (keys that came with an
+    /// answer the session asked for), as if read here.
+    pub(super) fn unread(&mut self, bytes: &[u8]) {
+        self.pending.extend_from_slice(bytes);
+        self.drain(false);
     }
 
     /// The next event, waiting up to `wait` for one.
@@ -299,24 +328,24 @@ mod tests {
 
     #[test]
     fn input_is_cut_into_events() {
-        assert_eq!(cut(b"ab"), Cut::Event(1));
-        assert_eq!(cut("é!".as_bytes()), Cut::Event(2));
-        assert_eq!(cut(&"é".as_bytes()[..1]), Cut::Short);
+        assert_eq!(cut(b"ab", 0), Cut::Event(1));
+        assert_eq!(cut("é!".as_bytes(), 0), Cut::Event(2));
+        assert_eq!(cut(&"é".as_bytes()[..1], 0), Cut::Short);
         // Esc alone at the end of a read is the key.
-        assert_eq!(cut(b"\x1b"), Cut::Short);
-        assert_eq!(cut(b"\x1bx!"), Cut::Event(2));
-        assert_eq!(cut(b"\x1b["), Cut::Short);
-        assert_eq!(cut(b"\x1b[1;5"), Cut::Short);
-        assert_eq!(cut(b"\x1b[1;5Cx"), Cut::Event(6));
-        assert_eq!(cut(b"\x1bOPx"), Cut::Event(3));
-        assert_eq!(cut(b"\x1b[<0;10;5Mx"), Cut::Event(10));
-        assert_eq!(cut(b"\x1b[M !!x"), Cut::Event(6));
-        assert_eq!(cut(b"\x1b[\x01"), Cut::Skip(2));
+        assert_eq!(cut(b"\x1b", 0), Cut::Short);
+        assert_eq!(cut(b"\x1bx!", 0), Cut::Event(2));
+        assert_eq!(cut(b"\x1b[", 0), Cut::Short);
+        assert_eq!(cut(b"\x1b[1;5", 0), Cut::Short);
+        assert_eq!(cut(b"\x1b[1;5Cx", 0), Cut::Event(6));
+        assert_eq!(cut(b"\x1bOPx", 0), Cut::Event(3));
+        assert_eq!(cut(b"\x1b[<0;10;5Mx", 0), Cut::Event(10));
+        assert_eq!(cut(b"\x1b[M !!x", 0), Cut::Event(6));
+        assert_eq!(cut(b"\x1b[\x01", 0), Cut::Skip(2));
         assert_eq!(
-            cut(b"\x1b[200~a\x1b[b\x1b[201~x"),
+            cut(b"\x1b[200~a\x1b[b\x1b[201~x", 0),
             Cut::Paste("a\x1b[b".into(), 16)
         );
-        assert_eq!(cut(b"\x1b[200~ab"), Cut::Short);
+        assert_eq!(cut(b"\x1b[200~ab", 0), Cut::Short);
     }
 
     #[test]
@@ -339,6 +368,7 @@ mod tests {
         let mut reader = Reader {
             tty: tempfile_tty(),
             pending: b"a\x1b[Ab\x1b[200~hi\x1b[201~\x1b".to_vec(),
+            searched: 0,
             events: VecDeque::new(),
             held: HeldButton::default(),
             resized,
@@ -396,11 +426,12 @@ mod tests {
     fn answers_to_the_start_up_query_are_no_keys() {
         // A DECRQM report, kitty flags and the device attributes, late or
         // among keys: each cut out whole, and read as nothing.
-        assert_eq!(cut(b"\x1b[?2026;2$yx"), Cut::Event(11));
+        assert_eq!(cut(b"\x1b[?2026;2$yx", 0), Cut::Event(11));
         let (resized, notify) = UnixStream::pair().unwrap();
         let mut reader = Reader {
             tty: tempfile_tty(),
             pending: b"a\x1b[?2026;2$yb\x1b[?0u\x1b[?62;22cc\x1b[?2026;0$y".to_vec(),
+            searched: 0,
             events: VecDeque::new(),
             held: HeldButton::default(),
             resized,
@@ -420,6 +451,69 @@ mod tests {
                 Event::Key(Key::char('c')),
             ]
         );
+    }
+
+    #[test]
+    fn a_long_paste_is_searched_once() {
+        // 8 MiB arriving 1 KiB a read: each read searches only what it
+        // added for the end, so the whole takes linear time.
+        let mut reader = reader(PASTE_START);
+        let start = std::time::Instant::now();
+        for _ in 0..8 * 1024 {
+            reader.pending.extend_from_slice(&[b'x'; 1024]);
+            reader.drain(false);
+            assert!(start.elapsed() < Duration::from_secs(5), "too slow");
+        }
+        // The end, cut across two reads.
+        reader.pending.extend_from_slice(&PASTE_END[..3]);
+        reader.drain(false);
+        reader.pending.extend_from_slice(&PASTE_END[3..]);
+        reader.pending.push(b'a');
+        reader.drain(false);
+        let events: Vec<Event> = reader.events.drain(..).collect();
+        assert_eq!(events.len(), 2);
+        assert!(
+            matches!(&events[0], Event::Paste(text) if text.len() == 8 << 20 && !text.contains('\x1b'))
+        );
+        assert_eq!(events[1], Event::Key(Key::char('a')));
+        assert!(reader.pending.is_empty() && reader.searched == 0);
+    }
+
+    #[test]
+    fn a_terminal_that_hangs_up_ends_the_input() {
+        // `/dev/null` reads as a terminal that hung up: always ready, never
+        // anything. Even with a sequence cut short pending, the reader
+        // ends rather than wait forever.
+        for pending in [&b""[..], b"\x1b[1;"] {
+            let mut reader = reader(pending);
+            let (sent, done) = std::sync::mpsc::channel();
+            std::thread::spawn(move || {
+                let _ = sent.send(reader.next(Duration::from_millis(10)).map_err(|e| e.kind()));
+            });
+            assert_eq!(
+                done.recv_timeout(Duration::from_secs(5)),
+                Ok(Err(io::ErrorKind::UnexpectedEof)),
+                "{pending:?}"
+            );
+        }
+    }
+
+    /// A reader on no terminal, with `pending` read.
+    fn reader(pending: &[u8]) -> Reader {
+        let (resized, notify) = UnixStream::pair().unwrap();
+        Reader {
+            tty: tempfile_tty(),
+            pending: pending.to_vec(),
+            searched: 0,
+            events: VecDeque::new(),
+            held: HeldButton::default(),
+            resized,
+            resize_signal: signal_hook::low_level::pipe::register(
+                signal_hook::consts::SIGWINCH,
+                notify,
+            )
+            .unwrap(),
+        }
     }
 
     /// Any file stands in for the terminal where nothing reads it.

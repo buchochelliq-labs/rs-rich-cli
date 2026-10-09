@@ -98,6 +98,70 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   arriving when it stops is not served, the new `Server::run_until` serves
   until a closure returns, and `rich serve` waits for Ctrl+C, `SIGTERM`
   or `SIGHUP` and exits only once every program has ended.
+- **`rich record` no longer hangs on a program that asks and does not
+  read.** The answers to a program's queries were written from the thread
+  that reads its output, with a blocking write, holding the lock typing
+  needs: a program that asked the device attributes many times without
+  reading its input (a `cat` of a file full of them, a raw-mode program)
+  filled its input queue, its output stopped being read, and the tape's
+  next keystroke never returned. Typing and answers now go through a
+  writer thread of their own: output is always read, typing never waits on
+  the program, and answers beyond 4 KiB waiting are dropped.
+- **rs-rich-record's emulator ends a control sequence where vt100 does.**
+  An ESC inside a CSI sequence was kept as part of it, so a query after a
+  sequence cut off (`ESC [ 1 ESC [ c`) went unanswered and the program
+  waited two seconds; and a CSI that never ended kept every byte after it.
+  ESC now starts a new sequence, CAN and SUB cancel one, and at most 32
+  bytes of a sequence are kept (a longer one is no query).
+- **A large paste no longer freezes a termion session.** While a
+  bracketed paste's end had not arrived, the termion backend searched the
+  whole paste for it again after every 1 KiB read: quadratic, 13 seconds
+  for 1 MiB and minutes for 4 MiB, with no repaint meanwhile. It now
+  searches only what each read added.
+- **A terminal that hangs up ends a termion or termwiz session's input.**
+  When the terminal went away but the process lived on, its reads
+  returned nothing at once, forever: the session spun at full CPU (and
+  termion, with part of a sequence pending, never returned). Reading
+  nothing from a terminal that said it had input is now the end of input,
+  an error from `read`.
+- **termwiz reads a sequence split across reads whole.** termwiz's own
+  reader read a sequence that one read cut short (`ESC [ 1 ; 5`, then `C`
+  30 ms later; half a mouse report) as typed characters at once: Alt+[,
+  `1`, `;` and so on, typed into whatever had the focus. On Unix the
+  session now reads the terminal itself and gives termwiz's parser what it
+  read, holding a sequence cut short until its rest comes or 100 ms pass
+  with nothing more, as the termion backend does: the same event as from
+  one read, Ctrl+Right and the mouse press. Esc alone, likewise, is the
+  Esc key once those 100 ms pass.
+- **An inline termion or termwiz session finds the cursor among keys.**
+  Inline with the mouse, these backends ask the terminal for the cursor's
+  row, and took the first `ESC [` in what came back for the answer: a key
+  or mouse report that arrived just before it (an arrow key, the wheel)
+  made the session wait its full two seconds before the first paint, place
+  the region at row 0 so clicks missed, and drop the key. The answer is
+  now found wherever it is among other input, and the keys that came with
+  it are read as typed.
+- **termwiz leaves xterm's modifyOtherKeys off.** termwiz's raw mode
+  turns modifyOtherKeys up to level 2 and its cooked mode leaves it at 1;
+  only dropping its terminal set it back to 0. So after Ctrl+Z, SIGTERM,
+  SIGHUP or SIGQUIT, and for a program handed the terminal, the shell or
+  the program got `CSI 27;…~` for keys such as Shift+Enter. Every way the
+  session gives the terminal back now sets it to 0, and taking it back
+  sets it up again.
+- **A suspend while a session starts no longer pushes the kitty flags
+  twice.** The session marked the kitty keyboard flags pushed before it
+  wrote the push: a SIGTSTP in between popped nothing, pushed them on
+  `fg`, and the session then pushed them again, one push more than the one
+  pop at exit. They are now marked with the write that pushes them, which
+  a suspend waits for.
+- **Answers to a program's queries are capped, and the terminal pane
+  sends them.** rs-rich-record's emulator kept every answer it owed (the
+  device attributes, the synchronized output report) until taken, and
+  rs-rich-embed's terminal pane never took them: a program that asked over
+  and over grew memory without end, and one that asked at its start (any
+  rs-rich-interact session) waited two seconds for an answer that never
+  came. The pane now sends the answers to its program, and at most 4 KiB
+  of them wait to be taken; more are dropped.
 
 ### Synchronized output (rs-rich-interact 0.0.6, rs-rich-intuituive 0.0.3)
 
