@@ -11,6 +11,15 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### 0.0.18 release test: fixes from three audits
 
+- **`rich record` no longer hangs on a program that asks and does not
+  read.** The answers to a program's queries were written from the thread
+  that reads its output, with a blocking write, holding the lock typing
+  needs: a program that asked the device attributes many times without
+  reading its input (a `cat` of a file full of them, a raw-mode program)
+  filled its input queue, its output stopped being read, and the tape's
+  next keystroke never returned. Typing and answers now go through a
+  writer thread of their own: output is always read, typing never waits on
+  the program, and answers beyond 4 KiB waiting are dropped.
 - **rs-rich-record's emulator ends a control sequence where vt100 does.**
   An ESC inside a CSI sequence was kept as part of it, so a query after a
   sequence cut off (`ESC [ 1 ESC [ c`) went unanswered and the program

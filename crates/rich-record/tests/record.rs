@@ -235,6 +235,39 @@ fn every_shell_records_with_the_same_prompt() {
     }
 }
 
+/// A program that asks the device attributes over and over and never reads
+/// its input: the answers fill its input queue, but its output is still
+/// read and typing still returns.
+#[test]
+fn a_program_that_asks_and_never_reads_blocks_nothing() {
+    use rich_record::session::Session;
+    use std::time::{Duration, Instant};
+    let dir = scratch("queries");
+    std::fs::create_dir_all(&dir).unwrap();
+    // It gets its first answer; then it asks 100,000 times, reading none.
+    let script = "stty raw -echo; printf '\\033[c'; dd bs=6 count=1 2>/dev/null | od -An -c; \
+                  yes \"$(printf '\\033[c')\" | head -n 100000; echo DONE-QUERIES; exec sleep 30";
+    let command = ["sh".to_string(), "-c".to_string(), script.to_string()];
+    let env = [
+        ("PATH".to_string(), std::env::var("PATH").unwrap()),
+        ("TERM".to_string(), "xterm-256color".to_string()),
+    ];
+    let mut session = Session::start(&command, &dir, 80, 24, &env, Default::default()).unwrap();
+    let end = Instant::now() + Duration::from_secs(20);
+    while !session.seen(|screen| screen.contains("DONE-QUERIES")) {
+        assert!(Instant::now() < end, "its output stopped being read");
+        std::thread::sleep(Duration::from_millis(50));
+    }
+    assert!(session.seen(|screen| screen.contains("?   6   2   c")));
+    let (sent, done) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let _ = sent.send(session.send("x", None).is_ok());
+        session
+    });
+    assert_eq!(done.recv_timeout(Duration::from_secs(5)), Ok(true));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 #[test]
 fn a_flood_of_output_is_recorded_in_bounded_frames() {
     let tape = tape::parse(
