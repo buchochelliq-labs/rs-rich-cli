@@ -7,9 +7,12 @@
 //! what it has drawn (`a` and a number of bytes): with more than a window's
 //! worth sent and not yet drawn, nothing more is read from the host, and a
 //! [`LocalPty`](rich_embed::LocalPty) with backpressure then stops reading
-//! the program, whose writes wait. The program's exit ends the session
-//! with a close whose reason the page shows; when the session ends first,
-//! the program is ended, and the session waits until it has.
+//! the program, whose writes wait. Input is held back the same way: while
+//! the host refuses it (a [`LocalPty`](rich_embed::LocalPty) holds at most
+//! 1 MiB that its program has not read), nothing more is read from the
+//! page, whose sends then wait in the network. The program's exit ends
+//! the session with a close whose reason the page shows; when the session
+//! ends first, the program is ended, and the session waits until it has.
 
 use std::io::{self, ErrorKind};
 use std::net::TcpStream;
@@ -113,6 +116,9 @@ fn serve(
 ) -> io::Result<Option<String>> {
     // Bytes sent that the page has not said it drew.
     let mut unshown: u64 = 0;
+    // Input the host refused, its program's input being full: until the
+    // host takes it, the page is not read.
+    let mut waiting: Option<Vec<u8>> = None;
     let window = window as u64;
     socket.get_mut().set_read_timeout(Some(TURN))?;
     loop {
@@ -129,6 +135,15 @@ fn serve(
         // Only once its output has all been read.
         if let Some(status) = host.exit_status() {
             return Ok(Some(format!("The program {status}.")));
+        }
+        if let Some(input) = waiting.take() {
+            if refused(host.write(&input)) {
+                waiting = Some(input);
+                if page_gone(socket) {
+                    return Ok(None);
+                }
+                continue;
+            }
         }
         let message = match socket.read() {
             Ok(message) => message,
@@ -151,7 +166,9 @@ fn serve(
         // Input as it came: the program reads what a terminal sends. A
         // program that has gone reports its exit on the next turn.
         if let Some(input) = text.strip_prefix('d') {
-            let _ = host.write(input.as_bytes());
+            if refused(host.write(input.as_bytes())) {
+                waiting = Some(input.as_bytes().to_vec());
+            }
             continue;
         }
         match parse_message(text) {
@@ -161,6 +178,25 @@ fn serve(
             PageMessage::Shown(bytes) => unshown = unshown.saturating_sub(bytes),
             _ => {}
         }
+    }
+}
+
+/// Whether a write was refused for now, to be tried again.
+fn refused(result: io::Result<()>) -> bool {
+    matches!(result, Err(error) if error.kind() == ErrorKind::WouldBlock)
+}
+
+/// Whether the page has closed the connection, looking for at most one turn
+/// without reading what it sent.
+fn page_gone(socket: &mut WebSocket<TcpStream>) -> bool {
+    match socket.get_ref().peek(&mut [0u8; 1]) {
+        Ok(0) => true,
+        Ok(_) => {
+            // More is waiting: wait a turn.
+            thread::sleep(TURN);
+            false
+        }
+        Err(error) => !matches!(error.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut),
     }
 }
 

@@ -144,3 +144,33 @@ fn a_program_that_ignores_hangups_is_killed() {
     }
     assert!(!running(pid), "the program outlived its host");
 }
+
+#[test]
+fn input_a_program_does_not_read_is_bounded() {
+    // Raw mode: the PTY holds a little of what is not read, then the
+    // writes to it wait.
+    let mut pty = LocalPty::new(["sh", "-c", "stty raw -echo; echo ready; exec sleep 60"]);
+    pty.start(20, 4).unwrap();
+    let start = Instant::now();
+    let mut out = Vec::new();
+    while !String::from_utf8_lossy(&out).contains("ready") {
+        assert!(start.elapsed() < Duration::from_secs(10), "{out:?}");
+        out.extend(pty.read());
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    let chunk = vec![b'x'; 64 * 1024];
+    let mut taken = 0;
+    let refused = loop {
+        match pty.write(&chunk) {
+            Ok(()) => taken += chunk.len(),
+            Err(error) => break error,
+        }
+        assert!(taken <= 64 << 20, "{taken} bytes taken, none read");
+    };
+    assert_eq!(refused.kind(), std::io::ErrorKind::WouldBlock);
+    // 1 MiB held, one write more, and what the PTY itself holds.
+    assert!(taken <= (1 << 20) + (512 << 10), "{taken} bytes taken");
+    // Still refused a moment later: the program reads none of it.
+    std::thread::sleep(Duration::from_millis(100));
+    assert!(pty.write(b"y").is_err());
+}

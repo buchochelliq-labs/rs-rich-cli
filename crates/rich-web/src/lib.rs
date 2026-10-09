@@ -49,7 +49,9 @@
 //! A page that falls behind holds the program back rather than the server
 //! buffering without end: at most [`Server::max_buffered`] bytes of output
 //! wait for the page, and past that the program's writes wait, as they do
-//! on a slow terminal.
+//! on a slow terminal. Input is bounded too: with 1 MiB that the program
+//! has not read held for it, the server stops reading the page until it
+//! reads some, so a flood of pastes waits in the network.
 //!
 //! # A DOM renderer
 //!

@@ -128,7 +128,10 @@ working directory. The program sees `TERM=xterm-256color`.
 - **Input** goes to the program as the page sent it: keys, pastes (bracketed
   when the program asked for that) and mouse reports when it turned the
   mouse on. Resizing the window resizes the pseudo-terminal, so the program
-  gets `SIGWINCH` and redraws.
+  gets `SIGWINCH` and redraws. Input the program has not read is held up
+  to 1 MiB; past that the server stops reading the page until the program
+  reads some, so a flood of pastes waits in the network, not in the
+  server's memory.
 - **Output** goes to the page as binary messages, and the page keeps a
   scrollback of 5,000 lines, as a terminal does.
 - **The exit** ends the session: the page shows how the program ended
@@ -276,6 +279,7 @@ them do. The server is therefore closed by default:
   `503` until a session ends.
 - **A program's output is bounded** by `max_buffered`: a page that stops
   reading holds the program back rather than growing the server's memory.
+  Its input is bounded too (1 MiB held that it has not read).
 - **The page is locked down:** a content security policy allows only its
   own scripts and styles and a WebSocket to the server, and other sites
   cannot frame it.

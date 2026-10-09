@@ -11,6 +11,14 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### 0.0.18 release test: fixes from three audits
 
+- **A paste flood no longer grows a served program's memory without
+  bound.** `LocalPty::write` queued every input on an unbounded channel,
+  so a page pasting into a program that was not reading its input (or
+  reading slower than the network) could exhaust the server's memory.
+  Now `LocalPty` holds at most 1 MiB of unread input and refuses more
+  with `WouldBlock`, and an rs-rich-web program session stops reading the
+  page while the program's input is full, so the flood waits in the
+  network.
 - **A program that ignores `SIGHUP` no longer outlives its session.**
   rs-rich-embed's `LocalPty` only hung up on its program, so one that
   ignored the hang-up kept running after its pane, its browser session,

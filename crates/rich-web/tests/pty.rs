@@ -317,3 +317,38 @@ fn a_program_that_ignores_hangups_does_not_outlive_its_session() {
     server.stop();
     assert!(!running(pid), "the program outlived the server");
 }
+
+#[cfg(unix)]
+#[test]
+fn a_paste_flood_waits_in_the_network_not_in_the_server() {
+    // A program that reads none of its input, in raw mode: the PTY holds
+    // a little, then its writes wait.
+    let script = "stty raw -echo; echo ready; exec sleep 60";
+    let server = Server::bind_command("127.0.0.1:0", ["sh", "-c", script])
+        .unwrap()
+        .token(TOKEN)
+        .spawn()
+        .unwrap();
+    let mut socket = connect(server.local_addr(), 40, 5);
+    read_program(&mut socket, true, Duration::from_secs(10), |out| {
+        text(out).contains("ready")
+    });
+    socket
+        .get_mut()
+        .set_write_timeout(Some(Duration::from_secs(2)))
+        .unwrap();
+    // 64 pastes of 1 MiB: the server holds 1 MiB for the program and one
+    // paste more, then stops reading, so the rest stays in the network's
+    // buffers (a few MiB) and the page's sends wait.
+    let paste = format!("d{}", "x".repeat((1 << 20) - 16));
+    let mut sent = 0;
+    while sent < 64 && socket.send(Message::text(paste.clone())).is_ok() {
+        sent += 1;
+    }
+    assert!(
+        sent < 32,
+        "{sent} MiB of pastes taken by a program that reads none"
+    );
+    // The session still ends when the server stops.
+    server.stop();
+}

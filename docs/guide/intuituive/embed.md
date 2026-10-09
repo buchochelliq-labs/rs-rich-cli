@@ -125,7 +125,10 @@ state is touched from another thread.
 - **`LocalPty`** runs a program on this machine: a PTY on Unix, ConPTY on
   Windows, through portable-pty, as rs-rich-record's tapes do. `terminal`
   is `terminal_with(LocalPty::new(command))`. A `Command` takes arguments,
-  environment and a working directory (default: the app's).
+  environment and a working directory (default: the app's). It holds at
+  most 1 MiB of input its program has not read: past that, `write` is
+  refused with `WouldBlock` until the program reads some (a pane drops
+  those keys).
 - **`ReplayHost`** plays bytes back instead of running anything. Its
   `ReplayHandle` feeds more output or an exit from any thread and reads
   back what the pane sent: the keys' bytes, the sizes. It is how the

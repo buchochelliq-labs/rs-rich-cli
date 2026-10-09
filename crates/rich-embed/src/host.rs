@@ -15,6 +15,7 @@ use std::ffi::OsString;
 use std::fmt;
 use std::io::{self, Read, Write};
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{mpsc, Arc, Mutex, MutexGuard, PoisonError};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -88,7 +89,10 @@ pub trait PtyHost {
     /// when the pane is first laid out.
     fn start(&mut self, columns: u16, rows: u16) -> io::Result<()>;
 
-    /// Send `bytes` to the program, as if typed.
+    /// Send `bytes` to the program, as if typed. A host may refuse with
+    /// [`io::ErrorKind::WouldBlock`] while the program's input is full
+    /// (it is not reading it): nothing was sent, and the same bytes can be
+    /// sent again later.
     fn write(&mut self, bytes: &[u8]) -> io::Result<()>;
 
     /// The pane is now `columns` x `rows` cells.
@@ -216,6 +220,9 @@ impl Command {
 /// so a program that floods a pane the app is not reading costs a bounded
 /// amount of memory.
 const MAX_BUFFERED: usize = 16 * 1024 * 1024;
+/// Input held for a program that has not read it yet, in bytes: past it,
+/// [`LocalPty::write`](PtyHost::write) refuses more.
+const MAX_INPUT: usize = 1024 * 1024;
 /// How long a program has to end once hung up on before it is killed.
 const KILL_GRACE: Duration = Duration::from_secs(1);
 /// How often the waiter looks whether the program has ended.
@@ -257,6 +264,8 @@ pub struct LocalPty {
     /// To the writer thread: a program that stops reading its input fills
     /// the PTY, and a write would then block the app.
     writer: Option<mpsc::Sender<Vec<u8>>>,
+    /// Bytes sent to the writer thread and not yet written to the PTY.
+    queued: Arc<AtomicUsize>,
     killer: Option<Box<dyn ChildKiller + Send + Sync>>,
     /// Hold at most this much unread output, then stop reading.
     backpressure: Option<usize>,
@@ -269,6 +278,7 @@ impl LocalPty {
             shared: Arc::default(),
             master: None,
             writer: None,
+            queued: Arc::default(),
             killer: None,
             backpressure: None,
         }
@@ -315,6 +325,7 @@ impl PtyHost for LocalPty {
         let mut reader = pty.master.try_clone_reader().map_err(io::Error::other)?;
         let mut writer = pty.master.take_writer().map_err(io::Error::other)?;
         let (input, keys) = mpsc::channel::<Vec<u8>>();
+        let queued = Arc::clone(&self.queued);
         thread::spawn(move || {
             for bytes in keys {
                 if writer
@@ -322,8 +333,11 @@ impl PtyHost for LocalPty {
                     .and_then(|()| writer.flush())
                     .is_err()
                 {
+                    // Writes now fail as the program having gone.
+                    queued.store(0, Ordering::SeqCst);
                     break;
                 }
+                queued.fetch_sub(bytes.len(), Ordering::SeqCst);
             }
         });
         self.writer = Some(input);
@@ -397,11 +411,25 @@ impl PtyHost for LocalPty {
         Ok(())
     }
 
+    /// Refused with [`io::ErrorKind::WouldBlock`] while 1 MiB of input
+    /// the program has not read is held (one write more at most), so a
+    /// flood of pastes to a program that is not reading costs a bounded
+    /// amount of memory. A pane drops what is refused.
     fn write(&mut self, bytes: &[u8]) -> io::Result<()> {
+        if self.writer.is_some() && self.queued.load(Ordering::SeqCst) >= MAX_INPUT {
+            return Err(io::Error::new(
+                io::ErrorKind::WouldBlock,
+                "the program is not reading its input",
+            ));
+        }
         match &self.writer {
-            Some(writer) => writer
-                .send(bytes.to_vec())
-                .map_err(|_| io::Error::new(io::ErrorKind::BrokenPipe, "the program has gone")),
+            Some(writer) => {
+                self.queued.fetch_add(bytes.len(), Ordering::SeqCst);
+                writer.send(bytes.to_vec()).map_err(|_| {
+                    self.queued.store(0, Ordering::SeqCst);
+                    io::Error::new(io::ErrorKind::BrokenPipe, "the program has gone")
+                })
+            }
             None => Err(io::Error::new(
                 io::ErrorKind::NotConnected,
                 "the program has not started",
