@@ -110,7 +110,7 @@ pub(super) fn tree(py: Python<'_>, component: &Bound<'_, PyAny>) -> PyResult<Opt
 }
 
 /// The node for any component, container or not.
-pub(super) fn node(py: Python<'_>, component: &Bound<'_, PyAny>, depth: usize) -> PyResult<Node> {
+pub(crate) fn node(py: Python<'_>, component: &Bound<'_, PyAny>, depth: usize) -> PyResult<Node> {
     if depth > MAX_DEPTH {
         return Err(PyRecursionError::new_err(format!(
             "containers nest more than {MAX_DEPTH} deep: does one contain itself?"

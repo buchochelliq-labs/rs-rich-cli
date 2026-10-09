@@ -1167,9 +1167,8 @@ widgets in an existing app, and ratatui widgets run inside rs-rich-interact.
 
 ## Status
 
-This is an early slice (0.0.x), so the API will change. Still to come:
-Python bindings for the framework, as rs-rich-interact's components already
-have (see [the widgets design note](../../design/intuituive-widgets.md)). An app can
-already be [served to a browser](web.md) with rs-rich-web, drawn by xterm.js
-or by a DOM renderer that carries its accessibility tree as ARIA, and so can
-any terminal program (`rich serve -- htop`).
+This is an early slice (0.0.x), so the API will change. An app can be
+[served to a browser](web.md) with rs-rich-web, drawn by xterm.js or by a DOM
+renderer that carries its accessibility tree as ARIA, and so can any terminal
+program (`rich serve -- htop`). It can also be written [in Python](python.md),
+with `rs_rich.tui` in the `rs-rich` wheel.

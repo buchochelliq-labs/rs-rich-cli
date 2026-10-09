@@ -104,3 +104,4 @@ The guides in the other sections explain how to use them.
 - [`rs_rich.theme`](rs_rich/theme.md)
 - [`rs_rich.traceback`](rs_rich/traceback.md)
 - [`rs_rich.tree`](rs_rich/tree.md)
+- [`rs_rich.tui`](rs_rich/tui.md)

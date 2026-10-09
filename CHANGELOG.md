@@ -9,6 +9,60 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### intuiTUIve in Python: `rs_rich.tui` (rs-rich 0.0.6 on PyPI)
+
+0.0.18 workstream 8.
+
+- **The whole framework, with the Rust API name for name**, so one guide
+  serves both: `App`, `Ctx`, `Driver`, `signal`, `memo`, `watch`,
+  `every`, every node builder (`text`, `label`, `renderable`, `leaf`,
+  `column`, `row`, `grid`, `each`, `switch`, `list`, the scrolls,
+  `component` and `repeating` for `rs_rich.interact` components, `Log`)
+  and every builder on `Node`, every widget (`table`, `table_with`,
+  `virtual_table`, `virtual_list`, `tabs`, `tree`, `tree_with`,
+  `tree_lazy`, `calendar`, the split panes, `menu_bar`, `open_menu`,
+  `context_menu`), the palette and help, toasts, animations, themes, the
+  stylesheet, accessibility and linear mode (`Driver.accessibility()`).
+  Where Rust has a closure, Python takes a function:
+  `text(lambda: f"{count.get()}").on_key("+", lambda cx: count.update(lambda c: c + 1))`.
+- **Signals hold Python objects.** `update(f)` keeps a value `f` changed in
+  place (`f` returning `None`). A signal given to a widget that needs a
+  typed one (a selection, a ratio, a `datetime.date`, a tree path) becomes
+  one, keeping its value, and what read it before follows it.
+- **Widgets in Python:** subclass `Widget` (`draw`, `event`, `measure`,
+  `layout`, `scroll`, `caret`, `role`, `access_state`, ...) and make a node
+  with `widget(w)`. The `DrawCx`, `Canvas`, `EventCx`, `MeasureCx` and
+  `Ctx` they get are lent for the call; using one later raises.
+- **Threads:** the app runs on the thread that called `run()` (or a
+  `Driver` method), with the GIL released while it waits; callbacks take it
+  back. `spawn` runs Python work on a thread of its own, `spawn_async`
+  awaits a coroutine on an asyncio loop (a new one, or `loop=` yours),
+  `resource` loads in the background, and `Proxy` reaches the app from any
+  thread. Signals, memos, logs and resources raise `RuntimeError` on
+  another thread.
+- **Exceptions:** one raised by any callback stops the app and is raised
+  from `run()` (or the `Driver` call that ran it), after the terminal is
+  restored. A served session reports it to `sys.unraisablehook`. A
+  resource's fetch raising is the resource failing.
+- **Headless testing:** `run(app, script)` with `rs_rich.interact`'s
+  `Script` returns a `Run` (frames, the last screen, the bytes, whether the
+  app quit), and `App.render_with` as in Rust.
+- **Serving and embedding:** `serve` and `Server` (rs-rich-web) run one app
+  per browser tab, each on its session's thread; `terminal`,
+  `terminal_with` and `ReplayHost`, and `web_view` with `ProgramEngine`
+  (rs-rich-embed) put a program or a web page in a pane.
+- **Not bound,** listed in the guide: traits other than `Widget`
+  implemented in Python (`PtyHost`, `WebEngine`), the Rust `Console` a
+  widget's contexts hold, `App::console`, `App::run_on` with a backend of
+  your own, termion and termwiz (off in the wheel), and type-filtered
+  drops (a Python drop target takes any dragged Python value).
+- **Type stubs** for every class in `_native.pyi`, checked against the
+  module by a test; the to-do app, the planner and the counter (also
+  served to a browser) ported to Python under `crates/rich-py/examples/tui`
+  and tested as the Rust ones are; a guide page,
+  [intuiTUIve from Python](docs/guide/intuituive/python.md), and a page on
+  the Python site.
+
 ### Synchronized output (rs-rich-interact 0.0.6, rs-rich-intuituive 0.0.3)
 
 0.0.18 workstream 11. rs-rich-record changes with it.

@@ -75,6 +75,7 @@ Your own classes render as they do with Rich, through `__rich__`,
 |---|---|---|
 | `rs-rich-ext` (39 modules: diagnostics, data, diffs, workflows, tables, terminals, frames, testing and QA, ...) | `rs_rich.ext`, `rs_rich.ext.<module>` | [Extensions](ext/index.md) |
 | `rs-rich-interact` (pickers, input, confirmations, forms, a pager; headless runs; fuzzy matching) | `rs_rich.interact` | [Interactive components](interact.md) |
+| `rs-rich-intuituive` (the TUI framework: nodes, signals, widgets, themes, stylesheets, accessibility; headless runs), with `rs-rich-web` (serving to a browser) and `rs-rich-embed` (terminal panes and web views) | `rs_rich.tui` | [Terminal apps](tui.md) |
 | `rs-rich-art` (images, FIGlet, GIFs, image diffs) | `rs_rich.art` | [Art](art.md) |
 | `rs-rich-ext`'s charts (sparklines, bars, line charts, gauges, heatmaps, status matrices, KPI cards, timelines) | `rs_rich.chart` | [Charts](chart.md) |
 | `rs-rich-diagram` (graphs, their layout, DOT) | `rs_rich.diagram` | [Diagrams](diagram.md) |

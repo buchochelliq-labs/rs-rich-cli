@@ -30,6 +30,7 @@
 //! | `diagram` | `rs-rich-diagram`: graphs, their layout, DOT |
 //! | `data` | `rs-rich-data`: rows, inference, statistics, profiles, quality, result sets; schema, conflict and record views |
 //! | `plugins` | the plugin API from Python |
+//! | `tui` | `rs-rich-intuituive` (with `rs-rich-web` and `rs-rich-embed`): apps, nodes, signals, widgets, serving |
 //! | `cli` | the `rich` CLI from Python |
 
 use pyo3::prelude::*;
@@ -61,6 +62,7 @@ mod table;
 mod terminal_theme;
 mod text;
 mod theme;
+mod tui;
 
 #[pymodule]
 fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -91,6 +93,7 @@ fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     data::register(m)?;
     micro::register(m)?;
     plugins::register(m)?;
+    tui::register(m)?;
     cli::register(m)?;
     Ok(())
 }
