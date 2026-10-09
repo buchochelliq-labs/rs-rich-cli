@@ -199,10 +199,11 @@ cohort, which is not on crates.io yet (CLI 0.0.17 was never published;
   30 ms later; half a mouse report) as typed characters at once: Alt+[,
   `1`, `;` and so on, typed into whatever had the focus. On Unix the
   session now reads the terminal itself and gives termwiz's parser what it
-  read, holding a sequence cut short until its rest comes or 100 ms pass
-  with nothing more, as the termion backend does: the same event as from
-  one read, Ctrl+Right and the mouse press. Esc alone, likewise, is the
-  Esc key once those 100 ms pass.
+  read, holding a sequence cut short until its rest comes, as the termion
+  backend does: the same event as from one read, Ctrl+Right and the mouse
+  press. A sequence's rest is waited for up to 500 ms (no one types
+  `ESC [`), an ESC alone 100 ms before it is the Esc key; both backends
+  wait so.
 - **An inline termion or termwiz session finds the cursor among keys.**
   Inline with the mouse, these backends ask the terminal for the cursor's
   row, and took the first `ESC [` in what came back for the answer: a key
