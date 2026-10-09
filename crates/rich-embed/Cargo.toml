@@ -49,3 +49,7 @@ tungstenite = { version = "0.30", default-features = false, features = ["handsha
 serde_json = { workspace = true, optional = true }
 # Decoding the screencast's JPEG frames.
 image = { workspace = true, optional = true }
+
+[target.'cfg(unix)'.dependencies]
+# Killing a program's whole process group, and Browsh's, with SIGKILL.
+libc = "0.2"

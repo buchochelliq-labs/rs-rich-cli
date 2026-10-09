@@ -3,10 +3,11 @@
 //
 // To the server, text messages: "d" and the bytes xterm.js produced for keys,
 // the mouse and pastes; "r" and "columns,rows" when the terminal's size
-// changes; "c" and "number:1" (or ":0") when the clipboard took (or refused)
-// a copy; "a" and a number of bytes once a program's output is drawn. From
-// the server: what to draw, as terminal output (text for an app, binary for
-// a program), and a close whose reason, if any, says why the session ended.
+// changes; "c" and "number:1" (or ":0") when the clipboard took (or
+// refused) an app's copy; "a" and a number of bytes once a program's output
+// is drawn. From the server: what to draw, as terminal output (text for an
+// app, binary for a program), and a close whose reason, if any, says why
+// the session ended.
 (function () {
   "use strict";
 
@@ -36,34 +37,38 @@
 
   // OSC 52: text the app copied goes on the browser's clipboard. Each copy
   // is answered, by its number, with whether the clipboard took it, so the
-  // app says "Copied" only when it did.
+  // app says "Copied" only when it did. Only an app's: a program's output
+  // can hold anything (a file it shows, a page it fetched), and must not
+  // write the clipboard behind the user's back.
   var copies = 0;
-  term.parser.registerOscHandler(52, function (data) {
-    var number = ++copies;
-    var answer = function (ok) {
-      send("c" + number + ":" + (ok ? "1" : "0"));
-    };
-    var parts = data.split(";");
-    if (parts.length < 2 || !navigator.clipboard) {
-      answer(false);
-      return true;
-    }
-    try {
-      var binary = atob(parts[1]);
-      var bytes = new Uint8Array(binary.length);
-      for (var i = 0; i < binary.length; i++) {
-        bytes[i] = binary.charCodeAt(i);
+  if (mode === "app") {
+    term.parser.registerOscHandler(52, function (data) {
+      var number = ++copies;
+      var answer = function (ok) {
+        send("c" + number + ":" + (ok ? "1" : "0"));
+      };
+      var parts = data.split(";");
+      if (parts.length < 2 || !navigator.clipboard) {
+        answer(false);
+        return true;
       }
-      navigator.clipboard.writeText(new TextDecoder().decode(bytes)).then(
-        function () { answer(true); },
-        function () { answer(false); }
-      );
-    } catch (e) {
-      // Not base64.
-      answer(false);
-    }
-    return true;
-  });
+      try {
+        var binary = atob(parts[1]);
+        var bytes = new Uint8Array(binary.length);
+        for (var i = 0; i < binary.length; i++) {
+          bytes[i] = binary.charCodeAt(i);
+        }
+        navigator.clipboard.writeText(new TextDecoder().decode(bytes)).then(
+          function () { answer(true); },
+          function () { answer(false); }
+        );
+      } catch (e) {
+        // Not base64.
+        answer(false);
+      }
+      return true;
+    });
+  }
 
   var scheme = window.location.protocol === "https:" ? "wss:" : "ws:";
   var url = scheme + "//" + window.location.host + "/ws?token=" + encodeURIComponent(token) +

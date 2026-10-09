@@ -74,8 +74,13 @@ protocol is versioned and described in the `dom` module.
 - The WebSocket's `Origin` must be the server's own page, or an origin
   allowed with `allow_origin`. Without this check, any website could open
   a WebSocket to a localhost port.
-- Sessions are capped (8 by default).
-- A program's session holds a bounded amount of output for its page.
+- Sessions are capped (8 by default), and a connection has 10 seconds to
+  send its whole request.
+- A program's session holds a bounded amount of output for its page, and
+  of input for the program.
+- Stopping the server ends every program, killing one that ignores the
+  hang-up a second later; a program's output cannot write the browser's
+  clipboard.
 
 There is no other authentication and no TLS. To expose an app beyond this
 computer, put it behind a reverse proxy that provides both.

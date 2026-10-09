@@ -15,9 +15,10 @@ use crate::web::{PageState, WebEngine, WebFrame, WebInput};
 pub const BROWSER_VARIABLE: &str = "RICH_EMBED_BROWSER";
 
 /// Terminal browsers [`ProgramEngine::detect`] looks for on `PATH`, in
-/// order: (program, arguments before the address).
+/// order: (program, arguments before the address). Carbonyl, a Chromium,
+/// takes `--` as the end of its options.
 pub const KNOWN_BROWSERS: &[(&str, &[&str])] = &[
-    ("carbonyl", &[]),
+    ("carbonyl", &["--"]),
     ("cha", &[]),
     ("browsh", &["--startup-url"]),
     ("w3m", &[]),
@@ -30,11 +31,14 @@ type Hosts = Box<dyn FnMut(&str) -> Box<dyn PtyHost>>;
 /// screen is the page. Nothing of ours ships with it, and nothing is
 /// downloaded; install the browser you want.
 ///
-/// The browser is started with the address as its last argument. Its own
-/// keys work as they do in a terminal (following links, its own history).
-/// The view's back, forward and reload restart it at an address from the
-/// engine's own history of what was opened; the address shown is the last
-/// one opened, since a terminal browser does not say where its links led.
+/// The browser is started with the address as its last argument. An
+/// address that starts with `-`, or has a control character in it, is
+/// refused ([`open`](WebEngine::open) fails), so that it is never read as
+/// one of the browser's options. Its own keys work as they do in a
+/// terminal (following links, its own history). The view's back, forward
+/// and reload restart it at an address from the engine's own history of
+/// what was opened; the address shown is the last one opened, since a
+/// terminal browser does not say where its links led.
 pub struct ProgramEngine {
     program: Option<(OsString, Vec<OsString>)>,
     hosts: Option<Hosts>,
@@ -142,6 +146,22 @@ impl ProgramEngine {
     }
 }
 
+/// Refuse an address that a browser would read as an option (it starts
+/// with `-`), or that has a control character in it.
+fn check_address(url: &str) -> io::Result<()> {
+    let why = if url.starts_with('-') {
+        "it starts with '-'"
+    } else if url.chars().any(char::is_control) {
+        "it has a control character in it"
+    } else {
+        return Ok(());
+    };
+    Err(io::Error::new(
+        io::ErrorKind::InvalidInput,
+        format!("not an address to open: {why}"),
+    ))
+}
+
 fn on_path(program: &str) -> bool {
     let Some(path) = std::env::var_os("PATH") else {
         return false;
@@ -154,6 +174,8 @@ fn on_path(program: &str) -> bool {
 
 impl WebEngine for ProgramEngine {
     fn open(&mut self, url: &str) -> io::Result<()> {
+        // It goes on the browser's command line.
+        check_address(url)?;
         if !self.history.is_empty() {
             self.history.truncate(self.at + 1);
         }

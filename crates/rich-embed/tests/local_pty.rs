@@ -83,3 +83,94 @@ fn backpressure_holds_the_program_until_its_output_is_read() {
     assert_eq!(text.matches('x').count(), 300_000);
     assert!(text.contains("END"), "the end of the output arrived");
 }
+
+/// Whether process `pid` is still running (and not just waiting to be
+/// reaped).
+fn running(pid: u32) -> bool {
+    std::process::Command::new("ps")
+        .args(["-o", "stat=", "-p", &pid.to_string()])
+        .output()
+        .map(|out| {
+            let stat = String::from_utf8_lossy(&out.stdout);
+            let stat = stat.trim();
+            !stat.is_empty() && !stat.starts_with('Z')
+        })
+        .unwrap_or(false)
+}
+
+/// Read until `pid:N` arrives: the program's process id.
+fn read_pid(pty: &mut LocalPty) -> u32 {
+    let start = Instant::now();
+    let mut out = String::new();
+    while start.elapsed() < Duration::from_secs(10) {
+        out.push_str(&String::from_utf8_lossy(&pty.read()));
+        if let Some(pid) = out
+            .split("pid:")
+            .nth(1)
+            .and_then(|rest| rest.split_whitespace().next())
+            .and_then(|pid| pid.parse().ok())
+        {
+            return pid;
+        }
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    panic!("no pid in {out:?}");
+}
+
+#[test]
+fn a_program_that_ignores_hangups_is_killed() {
+    let script = "trap '' HUP; echo pid:$$; exec sleep 60";
+    // Killed: hung up on, then, a moment later, killed.
+    let mut pty = LocalPty::new(["sh", "-c", script]);
+    pty.start(20, 4).unwrap();
+    let pid = read_pid(&mut pty);
+    pty.kill().unwrap();
+    let start = Instant::now();
+    while pty.exit_status().is_none() && start.elapsed() < Duration::from_secs(10) {
+        pty.read();
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    assert!(pty.exit_status().is_some_and(|status| !status.success()));
+    assert!(!running(pid));
+
+    // Dropped, as a pane that leaves the tree is: the same.
+    let mut pty = LocalPty::new(["sh", "-c", script]);
+    pty.start(20, 4).unwrap();
+    let pid = read_pid(&mut pty);
+    drop(pty);
+    let start = Instant::now();
+    while running(pid) && start.elapsed() < Duration::from_secs(10) {
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    assert!(!running(pid), "the program outlived its host");
+}
+
+#[test]
+fn input_a_program_does_not_read_is_bounded() {
+    // Raw mode: the PTY holds a little of what is not read, then the
+    // writes to it wait.
+    let mut pty = LocalPty::new(["sh", "-c", "stty raw -echo; echo ready; exec sleep 60"]);
+    pty.start(20, 4).unwrap();
+    let start = Instant::now();
+    let mut out = Vec::new();
+    while !String::from_utf8_lossy(&out).contains("ready") {
+        assert!(start.elapsed() < Duration::from_secs(10), "{out:?}");
+        out.extend(pty.read());
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    let chunk = vec![b'x'; 64 * 1024];
+    let mut taken = 0;
+    let refused = loop {
+        match pty.write(&chunk) {
+            Ok(()) => taken += chunk.len(),
+            Err(error) => break error,
+        }
+        assert!(taken <= 64 << 20, "{taken} bytes taken, none read");
+    };
+    assert_eq!(refused.kind(), std::io::ErrorKind::WouldBlock);
+    // 1 MiB held, one write more, and what the PTY itself holds.
+    assert!(taken <= (1 << 20) + (512 << 10), "{taken} bytes taken");
+    // Still refused a moment later: the program reads none of it.
+    std::thread::sleep(Duration::from_millis(100));
+    assert!(pty.write(b"y").is_err());
+}

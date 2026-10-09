@@ -337,6 +337,34 @@ fn a_program_engine_shows_the_browser_screen_and_keeps_a_history() {
     assert_eq!(handles.borrow()[0].1.started(), Some((30, 3)));
 }
 
+/// An address a browser would read as one of its options never reaches
+/// it, nor one with a control character in it.
+#[test]
+fn an_address_that_looks_like_an_option_is_refused() {
+    let made: Rc<RefCell<Vec<String>>> = Rc::default();
+    let seen = made.clone();
+    let mut engine = ProgramEngine::with_hosts(move |url| {
+        seen.borrow_mut().push(url.to_string());
+        Box::new(ReplayHost::new()) as Box<dyn PtyHost>
+    });
+    for url in [
+        "--renderer-cmd-prefix=touch /tmp/pwned;x://y",
+        "-dump",
+        "https://a.example/\r\nX-Injected: 1",
+        "https://a.example/\x1b]52;c;eA==\x07",
+    ] {
+        let error = engine.open(url).unwrap_err();
+        assert_eq!(error.kind(), io::ErrorKind::InvalidInput, "{url:?}");
+    }
+    assert!(made.borrow().is_empty());
+    assert_eq!(engine.state().url, "");
+    // A dash inside an address is an address.
+    engine.open("https://a.example/-x").unwrap();
+    assert_eq!(*made.borrow(), ["https://a.example/-x"]);
+    // Carbonyl, a Chromium, also gets `--` before the address.
+    assert_eq!(rich_embed::KNOWN_BROWSERS[0], ("carbonyl", &["--"][..]));
+}
+
 /// An engine with no browser: every call fails at once, and it never
 /// calls its `notify`.
 struct NoBrowser;

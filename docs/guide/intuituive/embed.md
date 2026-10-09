@@ -99,7 +99,9 @@ column([
 ])
 ```
 
-The program is ended when its pane leaves the tree.
+The program is ended when its pane leaves the tree: it is hung up on
+(`SIGHUP`, as when a terminal closes), and one still running a second
+later is killed with `SIGKILL`, with everything in its process group.
 
 ### Behind the pane: `PtyHost`
 
@@ -123,7 +125,10 @@ state is touched from another thread.
 - **`LocalPty`** runs a program on this machine: a PTY on Unix, ConPTY on
   Windows, through portable-pty, as rs-rich-record's tapes do. `terminal`
   is `terminal_with(LocalPty::new(command))`. A `Command` takes arguments,
-  environment and a working directory (default: the app's).
+  environment and a working directory (default: the app's). It holds at
+  most 1 MiB of input its program has not read: past that, `write` is
+  refused with `WouldBlock` until the program reads some (a pane drops
+  those keys).
 - **`ReplayHost`** plays bytes back instead of running anything. Its
   `ReplayHandle` feeds more output or an exit from any thread and reads
   back what the pane sent: the keys' bytes, the sizes. It is how the
@@ -163,7 +168,11 @@ page's size is given to the engine whenever it changes.
 `web_view(url)` without an engine uses `ProgramEngine::detect()`: the
 browser named in the `RICH_EMBED_BROWSER` environment variable (a program
 and its arguments), else the first of `carbonyl`, `cha` (Chawan), `browsh`,
-`w3m` and `lynx` found on `PATH`. With none, the view says so.
+`w3m` and `lynx` found on `PATH`. With none, the view says so. The address
+is the browser's last argument (Carbonyl gets `--` before it), so an
+address that starts with `-`, or has a control character in it, is
+refused: a link an app did not write cannot become one of the browser's
+options.
 
 ### Behind the view: `WebEngine`
 
@@ -213,10 +222,20 @@ names on `PATH` (`google-chrome`, `chromium`, `chromium-browser`, …) or its
 usual install location. It speaks the protocol directly over
 `tungstenite`, on a thread of its own, so no async runtime comes with it.
 
-- **The sandbox stays on.** `--no-sandbox` is never passed, and is dropped
-  if you pass it in `.args`. Chrome refuses to run as root with its sandbox
-  on: run the app as an ordinary user.
-- **The profile is a temporary directory**, removed when the engine goes.
+- **The sandbox stays on.** `--no-sandbox` is never passed, and it is
+  dropped if you pass it in `.args`, as is every other switch that turns
+  part of the sandbox off (`--disable-setuid-sandbox`,
+  `--disable-seccomp-filter-sandbox`, `--single-process`, …), however it
+  is spelled (`-no-sandbox`, `--No-Sandbox`, `/no-sandbox` on Windows).
+  Chrome refuses to run as root with its sandbox on: run the app as an
+  ordinary user.
+- **The profile is a temporary directory** that only this user can read
+  (mode 0700 on Unix), removed when the engine goes.
+- **DevTools listens on a random port of `127.0.0.1`** while the view is
+  open. Other programs and other users on this machine can reach that
+  port, and DevTools has no authentication of its own: whoever finds it
+  can drive the browser as you (open local files, run script in pages).
+  Use the Chrome engine on a machine you do not share.
 - **Downloads are denied** (`Browser.setDownloadBehavior`).
 - Frames are `Page.startScreencast` JPEGs, with the page laid out at the
   pane's size times `cell_pixels` (10 x 20 CSS pixels a cell by default).
@@ -232,6 +251,14 @@ each page as plain text (`X-Browsh-Raw-Mode: PLAIN`) on
 `127.0.0.1:4333`; `BrowshEngine::connect("host:port")` uses a server you
 started. Links and forms are not followed: for those, run Browsh in a
 terminal pane with `ProgramEngine::new("browsh")`.
+
+Browsh's own default is to listen on every interface, which would let
+anyone who can reach the machine have it fetch pages from there. The
+engine therefore starts it with a configuration of its own, in a temporary
+directory removed when the engine goes, that binds it to `127.0.0.1`; your
+own Browsh configuration is not read (start Browsh yourself and `connect`
+to use it). When the engine goes, Browsh is killed with its process
+group, the headless Firefox it started included (Unix).
 
 ## Testing
 

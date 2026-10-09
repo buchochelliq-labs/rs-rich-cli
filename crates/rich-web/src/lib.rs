@@ -49,7 +49,9 @@
 //! A page that falls behind holds the program back rather than the server
 //! buffering without end: at most [`Server::max_buffered`] bytes of output
 //! wait for the page, and past that the program's writes wait, as they do
-//! on a slow terminal.
+//! on a slow terminal. Input is bounded too: with 1 MiB that the program
+//! has not read held for it, the server stops reading the page until it
+//! reads some, so a flood of pastes waits in the network.
 //!
 //! # A DOM renderer
 //!
@@ -78,6 +80,9 @@
 //!   [`Server::allow_origin`].
 //! - **Sessions are capped** ([`DEFAULT_MAX_SESSIONS`] unless set with
 //!   [`Server::max_sessions`]); one more is refused with `503`.
+//! - **Requests are timed**: a connection has 10 seconds to send its whole
+//!   request, however slowly it trickles in, and with 64 still sending,
+//!   one more is answered `503`.
 //!
 //! There is no other authentication and no TLS. To reach the server from
 //! another machine, put it behind a reverse proxy that has both, and allow
@@ -93,11 +98,13 @@ pub extern crate rich_intuituive as intuituive;
 pub use rich_embed::{Command, ExitStatus, LocalPty, PtyHost};
 
 use std::io::{self, Write};
-use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, TcpListener, TcpStream, ToSocketAddrs};
+use std::net::{
+    IpAddr, Ipv4Addr, Ipv6Addr, Shutdown, SocketAddr, TcpListener, TcpStream, ToSocketAddrs,
+};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::thread::{self, JoinHandle};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use intuituive::App;
 use tungstenite::protocol::{Role, WebSocketConfig};
@@ -121,9 +128,10 @@ pub const DEFAULT_MAX_SESSIONS: usize = 8;
 /// otherwise ([`Server::max_buffered`]): 1 MiB.
 pub const DEFAULT_MAX_BUFFERED: usize = 1 << 20;
 
-/// Connections still sending their request at once; more are closed.
+/// Connections still sending their request at once; more are answered
+/// `503`.
 const MAX_PENDING: usize = 64;
-/// How long a connection may take to send its request.
+/// How long a connection may take to send its request, all of it.
 const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(10);
 /// How long a write to a browser may take before the session ends.
 const WRITE_TIMEOUT: Duration = Duration::from_secs(30);
@@ -229,6 +237,8 @@ struct Shared {
     sessions: AtomicUsize,
     /// Connections still sending their request.
     pending: AtomicUsize,
+    /// Programs started and not yet ended.
+    programs: AtomicUsize,
     stopping: AtomicBool,
 }
 
@@ -285,6 +295,7 @@ impl Server {
                 hosts,
                 sessions: AtomicUsize::new(0),
                 pending: AtomicUsize::new(0),
+                programs: AtomicUsize::new(0),
                 stopping: AtomicBool::new(false),
             },
         })
@@ -375,6 +386,26 @@ impl Server {
     /// Print the URL (and a warning when the address is not loopback),
     /// then serve until the process ends.
     pub fn run(self) -> io::Result<()> {
+        self.announce()?;
+        accept(self.listener, Arc::new(self.shared));
+        Ok(())
+    }
+
+    /// Print the URL as [`run`](Self::run) does, then serve until `until`
+    /// returns, and stop as [`Handle::stop`] does: every session ends, and
+    /// this returns once their programs have. `until` runs on this thread:
+    /// a wait for a signal, say, as `rich serve` waits for Ctrl+C, so that
+    /// no program outlives the server.
+    pub fn run_until(self, until: impl FnOnce()) -> io::Result<()> {
+        self.announce()?;
+        let handle = self.spawn()?;
+        until();
+        handle.stop();
+        Ok(())
+    }
+
+    /// Print the URL, and a warning when the address is not loopback.
+    fn announce(&self) -> io::Result<()> {
         let local = self.local_addr();
         let mut out = io::stdout().lock();
         writeln!(out, "Serving {} at {}", self.shared.title, self.url())?;
@@ -391,7 +422,6 @@ impl Server {
                  Put it behind a reverse proxy that has both."
             );
         }
-        accept(self.listener, Arc::new(self.shared));
         Ok(())
     }
 
@@ -443,17 +473,25 @@ impl Handle {
     }
 
     /// Stop: no more connections, and every session ends (within one turn
-    /// of its loop, at most 50 ms); a program's session ends its program.
+    /// of its loop, at most 50 ms). A program's session ends its program:
+    /// it is hung up on, and a [`LocalPty`]'s is killed, with its process
+    /// group, if it is still running a second later. This returns once
+    /// every program has ended; a connection still sending its request is
+    /// not served.
     pub fn stop(mut self) {
         self.shutdown();
     }
 
     fn shutdown(&mut self) {
         self.shared.stopping.store(true, Ordering::SeqCst);
-        if let Some(thread) = self.thread.take() {
+        if let Some(accepting) = self.thread.take() {
             // Wake the accept loop, which then sees `stopping`.
             let _ = TcpStream::connect_timeout(&reachable(self.local), Duration::from_secs(1));
-            let _ = thread.join();
+            let _ = accepting.join();
+            // A session counts its program before it looks at `stopping`.
+            while self.shared.programs.load(Ordering::SeqCst) > 0 {
+                thread::sleep(Duration::from_millis(10));
+            }
         }
     }
 }
@@ -498,6 +536,7 @@ fn accept(listener: TcpListener, shared: Arc<Shared>) {
         };
         if shared.pending.fetch_add(1, Ordering::SeqCst) >= MAX_PENDING {
             shared.pending.fetch_sub(1, Ordering::SeqCst);
+            busy(stream);
             continue;
         }
         let pending = Pending(shared.clone());
@@ -509,6 +548,23 @@ fn accept(listener: TcpListener, shared: Arc<Shared>) {
             continue;
         }
     }
+}
+
+/// Answer a connection past [`MAX_PENDING`] with `503`, without waiting
+/// for it: the answer is small enough for the socket's buffer.
+fn busy(mut stream: TcpStream) {
+    if stream.set_nonblocking(true).is_err() {
+        return;
+    }
+    // What the request has sent so far, so closing does not reset the
+    // connection before the answer is read.
+    let _ = io::Read::read(&mut stream, &mut [0u8; 4096]);
+    let _ = http::refuse(
+        &mut stream,
+        "503 Service Unavailable",
+        "Too many connections at once: try again in a moment.",
+    );
+    let _ = stream.shutdown(Shutdown::Write);
 }
 
 /// A connection still sending its request: counted until dropped.
@@ -550,14 +606,18 @@ impl Drop for Slot {
 /// Serve one connection: the page, an asset, or a session.
 fn connection(mut stream: TcpStream, pending: Pending) {
     let _ = stream.set_nodelay(true);
-    if stream.set_read_timeout(Some(HANDSHAKE_TIMEOUT)).is_err()
-        || stream.set_write_timeout(Some(WRITE_TIMEOUT)).is_err()
-    {
+    if stream.set_write_timeout(Some(WRITE_TIMEOUT)).is_err() {
         return;
     }
-    let Ok(bytes) = http::read_head(&mut stream) else {
+    // The whole head within the timeout, however slowly it comes.
+    let until = Instant::now() + HANDSHAKE_TIMEOUT;
+    let Ok(bytes) = http::read_head(&mut http::Deadline::new(&stream, until)) else {
         return;
     };
+    // The server stopped while the request came in.
+    if pending.0.stopping.load(Ordering::SeqCst) {
+        return;
+    }
     let Some(head) = Head::parse(&bytes) else {
         let _ = http::refuse(&mut stream, "400 Bad Request", "Bad request");
         return;
@@ -710,7 +770,7 @@ fn websocket(mut stream: TcpStream, head: &Head, shared: &Arc<Shared>, pending: 
         .max_message_size(Some(MAX_MESSAGE))
         .max_frame_size(Some(MAX_MESSAGE));
     let mut socket = WebSocket::from_raw_socket(stream, Role::Server, Some(config));
-    let stopping = &shared.stopping;
+    let (stopping, programs) = (&shared.stopping, &shared.programs);
     let _ = match &shared.mode {
         Mode::App(app) => {
             let renderer = renderer_for(head, shared);
@@ -719,11 +779,13 @@ fn websocket(mut stream: TcpStream, head: &Head, shared: &Arc<Shared>, pending: 
         Mode::Command(command) => {
             let (window, held) = pty::split(shared.max_buffered);
             let host = LocalPty::new(command.clone()).backpressure(held);
-            pty::run(&mut socket, Box::new(host), columns, rows, stopping, window)
+            let host = Box::new(host);
+            pty::run(&mut socket, host, columns, rows, stopping, programs, window)
         }
         Mode::Host(host) => {
             let (window, _) = pty::split(shared.max_buffered);
-            pty::run(&mut socket, host(), columns, rows, stopping, window)
+            let host = host();
+            pty::run(&mut socket, host, columns, rows, stopping, programs, window)
         }
     };
 }
@@ -773,6 +835,36 @@ mod tests {
         }
         assert_eq!(Renderer::parse("canvas"), None);
         assert_eq!(Renderer::default(), Renderer::Xterm);
+    }
+
+    #[test]
+    fn connections_past_the_pending_cap_are_answered() {
+        use std::io::Read;
+
+        let handle = Server::bind("127.0.0.1:0", || App::new(|| intuituive::label("x")))
+            .unwrap()
+            .spawn()
+            .unwrap();
+        let addr = handle.local_addr();
+        // Connections that send nothing hold every place for a request.
+        let idle: Vec<TcpStream> = (0..MAX_PENDING)
+            .map(|_| TcpStream::connect(addr).unwrap())
+            .collect();
+        let start = Instant::now();
+        while handle.shared.pending.load(Ordering::SeqCst) < MAX_PENDING {
+            assert!(
+                start.elapsed() < Duration::from_secs(5),
+                "the idle connections"
+            );
+            thread::sleep(Duration::from_millis(10));
+        }
+        // One more is told so, not closed without a word.
+        let mut late = TcpStream::connect(addr).unwrap();
+        late.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
+        let mut answer = String::new();
+        let _ = late.read_to_string(&mut answer);
+        assert!(answer.starts_with("HTTP/1.1 503 "), "{answer:?}");
+        drop(idle);
     }
 
     #[test]

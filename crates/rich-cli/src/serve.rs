@@ -5,9 +5,11 @@
 //! `serve` feature, so a default build has no network server.
 //!
 //! It prints the address to open, with its token, and serves until Ctrl+C,
-//! which ends it and every session's program. It listens on 127.0.0.1
-//! unless told otherwise; the token, the `Origin` check and the session cap
-//! are rs-rich-web's.
+//! which ends it and every session's program (on Unix SIGTERM and SIGHUP
+//! too; each program is hung up on, and killed with its process group if
+//! it is still running a second later, before `rich` exits). It listens on
+//! 127.0.0.1 unless told otherwise; the token, the `Origin` check and the
+//! session cap are rs-rich-web's.
 use super::*;
 
 use rich_ext::cli_doc::{ArgSpec, CommandSpec};
@@ -210,11 +212,60 @@ pub(super) fn dispatch(args: &[String]) -> ExitCode {
     for origin in args.origins {
         server = server.allow_origin(origin);
     }
-    // Serves until the process ends: Ctrl+C ends it, and the programs'
+    // Serves until Ctrl+C. On Unix the signal is waited for, so every
+    // program is ended (and killed, if it ignores the hang-up) before
+    // `rich` exits; elsewhere Ctrl+C ends the process, and the programs'
     // terminals with it.
-    match server.run() {
-        Ok(()) => ExitCode::SUCCESS,
+    #[cfg(unix)]
+    let (served, signal) = {
+        let mut signal = None;
+        let served = match stop_signals::block() {
+            Some(set) => server.run_until(|| signal = Some(stop_signals::wait(&set))),
+            None => server.run(),
+        };
+        (served, signal)
+    };
+    #[cfg(not(unix))]
+    let (served, signal) = (server.run(), None::<i32>);
+    match served {
+        // As a shell reports a process a signal ended: 128 and its number
+        // (SIGINT, SIGTERM and SIGHUP are all small).
+        Ok(()) => signal.map_or(ExitCode::SUCCESS, |signal| {
+            ExitCode::from(128 + signal as u8)
+        }),
         Err(error) => emit_error(json, ExitClass::Input, &format!("serving {addr}: {error}")),
+    }
+}
+
+/// Ctrl+C, `kill` and a closed terminal, waited for as a request to stop.
+#[cfg(unix)]
+mod stop_signals {
+    /// Block SIGINT, SIGTERM and SIGHUP on this thread, and so on every
+    /// thread started from it (a program gets an empty mask from
+    /// portable-pty), to [`wait`] for them; `None` when they cannot be.
+    #[allow(unsafe_code)]
+    pub(super) fn block() -> Option<libc::sigset_t> {
+        // SAFETY: the set is initialised by `sigemptyset` before it is
+        // used, and `pthread_sigmask` only reads it.
+        unsafe {
+            let mut set: libc::sigset_t = std::mem::zeroed();
+            libc::sigemptyset(&mut set);
+            for signal in [libc::SIGINT, libc::SIGTERM, libc::SIGHUP] {
+                libc::sigaddset(&mut set, signal);
+            }
+            (libc::pthread_sigmask(libc::SIG_BLOCK, &set, std::ptr::null_mut()) == 0).then_some(set)
+        }
+    }
+
+    /// Wait for one of the signals in `set`: its number.
+    #[allow(unsafe_code)]
+    pub(super) fn wait(set: &libc::sigset_t) -> i32 {
+        let mut signal = 0;
+        // SAFETY: `set` is a signal set made by `block`, and `signal` a
+        // place to write the one that came. It fails only for a set that
+        // is not valid.
+        while unsafe { libc::sigwait(set, &mut signal) } != 0 {}
+        signal
     }
 }
 

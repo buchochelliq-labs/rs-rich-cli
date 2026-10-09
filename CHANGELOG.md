@@ -38,6 +38,66 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   rule is still reported and not applied, with the last good one kept.
 - **The wheel over a table's header scrolls the rows** again, as over the
   rows.
+- **Browsh's server listens on this computer only.** `BrowshEngine::new()`
+  started `browsh --http-server-mode` with Browsh's own configuration,
+  whose default binds every interface, so anyone who could reach the
+  machine could have it fetch and render pages from there. The engine
+  now starts Browsh with a configuration of its own (a temporary
+  directory, removed when the engine goes) that binds `127.0.0.1`, in a
+  process group of its own that is killed, Firefox included, when the
+  engine goes; and spaces and control characters in an address are
+  percent-encoded in the request to it rather than written raw.
+- **A served program can no longer write the browser's clipboard.** The
+  xterm.js page put every OSC 52 copy on the clipboard, in program mode
+  too, so any output (`cat` of a hostile file, a fetched page, a log
+  line) could silently replace it with a command for a later paste. The
+  page now registers its OSC 52 handler for apps only, whose copies the
+  server itself sends.
+- **A web view address can no longer become a browser's option.**
+  `ProgramEngine` put the address on the terminal browser's command line
+  as it was, so a link such as `--renderer-cmd-prefix=…` (from a feed, a
+  document, a paste) reached Carbonyl, a Chromium, as a switch that runs
+  a command. Now `open` refuses an address that starts with `-` or has a
+  control character in it, and Carbonyl, found by `detect`, gets `--`
+  before the address.
+- **No spelling of a sandbox switch reaches Chrome.** `ChromeEngine`
+  dropped only arguments that began `--no-sandbox`, but Chromium also
+  reads `-no-sandbox` (and `/no-sandbox` and any case on Windows), and
+  `--disable-setuid-sandbox`, `--disable-seccomp-filter-sandbox` and
+  their kin passed untouched. Switches are now normalised (dashes, a
+  Windows slash, case, a value) before the filter, which drops every
+  switch that turns part of the sandbox off, `--single-process` and
+  `--no-zygote` included.
+- **Chrome's profile directory is private.** It was created with the
+  default mode (world-readable on most systems); it is now `0700` on
+  Unix. The `ChromeEngine` docs and the embed guide now say that its
+  DevTools port on `127.0.0.1` can be reached by other local users while
+  the view is open.
+- **A slow request no longer holds an rs-rich-web server's connection for
+  ever.** The 10-second limit on sending a request applied to each read,
+  so a client sending a byte every few seconds kept its connection (and
+  thread) for hours, and 64 such clients locked everyone else out with
+  connections closed unanswered. Now the whole request head must arrive
+  within 10 seconds, and a connection past the 64 still sending theirs is
+  answered `503`.
+- **A paste flood no longer grows a served program's memory without
+  bound.** `LocalPty::write` queued every input on an unbounded channel,
+  so a page pasting into a program that was not reading its input (or
+  reading slower than the network) could exhaust the server's memory.
+  Now `LocalPty` holds at most 1 MiB of unread input and refuses more
+  with `WouldBlock`, and an rs-rich-web program session stops reading the
+  page while the program's input is full, so the flood waits in the
+  network.
+- **A program that ignores `SIGHUP` no longer outlives its session.**
+  rs-rich-embed's `LocalPty` only hung up on its program, so one that
+  ignored the hang-up kept running after its pane, its browser session,
+  `Handle::stop` and `rich serve` were gone, and its waiter thread waited
+  for ever. Now a program still running a second after it was hung up on
+  is killed with `SIGKILL`, with its whole process group (Unix);
+  `Handle::stop` returns once every program has ended, a request still
+  arriving when it stops is not served, the new `Server::run_until` serves
+  until a closure returns, and `rich serve` waits for Ctrl+C, `SIGTERM`
+  or `SIGHUP` and exits only once every program has ended.
 
 ### Synchronized output (rs-rich-interact 0.0.6, rs-rich-intuituive 0.0.3)
 

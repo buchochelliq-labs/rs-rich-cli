@@ -184,3 +184,18 @@ pub fn wait_for(what: &str, mut done: impl FnMut() -> bool) {
         std::thread::sleep(Duration::from_millis(10));
     }
 }
+
+/// Whether process `pid` is still running (and not just waiting to be
+/// reaped).
+#[cfg(unix)]
+pub fn running(pid: u32) -> bool {
+    std::process::Command::new("ps")
+        .args(["-o", "stat=", "-p", &pid.to_string()])
+        .output()
+        .map(|out| {
+            let stat = String::from_utf8_lossy(&out.stdout);
+            let stat = stat.trim();
+            !stat.is_empty() && !stat.starts_with('Z')
+        })
+        .unwrap_or(false)
+}
