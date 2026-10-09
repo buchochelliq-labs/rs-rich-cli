@@ -42,7 +42,7 @@ bundle-backend = ["lumis/lang-bundle-backend"]
 [dependencies]
 rich = { workspace = true, features = ["syntax"] }
 rich-plugin-api.workspace = true
-lumis = { version = "0.15", default-features = false }
+lumis = { version = "0.17", default-features = false }
 
 [dev-dependencies]
 # Path only: stripped when packaging, so publishing never waits on ext.
