@@ -80,6 +80,9 @@
 //!   [`Server::allow_origin`].
 //! - **Sessions are capped** ([`DEFAULT_MAX_SESSIONS`] unless set with
 //!   [`Server::max_sessions`]); one more is refused with `503`.
+//! - **Requests are timed**: a connection has 10 seconds to send its whole
+//!   request, however slowly it trickles in, and with 64 still sending,
+//!   one more is answered `503`.
 //!
 //! There is no other authentication and no TLS. To reach the server from
 //! another machine, put it behind a reverse proxy that has both, and allow
@@ -95,11 +98,13 @@ pub extern crate rich_intuituive as intuituive;
 pub use rich_embed::{Command, ExitStatus, LocalPty, PtyHost};
 
 use std::io::{self, Write};
-use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, TcpListener, TcpStream, ToSocketAddrs};
+use std::net::{
+    IpAddr, Ipv4Addr, Ipv6Addr, Shutdown, SocketAddr, TcpListener, TcpStream, ToSocketAddrs,
+};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::thread::{self, JoinHandle};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use intuituive::App;
 use tungstenite::protocol::{Role, WebSocketConfig};
@@ -123,9 +128,10 @@ pub const DEFAULT_MAX_SESSIONS: usize = 8;
 /// otherwise ([`Server::max_buffered`]): 1 MiB.
 pub const DEFAULT_MAX_BUFFERED: usize = 1 << 20;
 
-/// Connections still sending their request at once; more are closed.
+/// Connections still sending their request at once; more are answered
+/// `503`.
 const MAX_PENDING: usize = 64;
-/// How long a connection may take to send its request.
+/// How long a connection may take to send its request, all of it.
 const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(10);
 /// How long a write to a browser may take before the session ends.
 const WRITE_TIMEOUT: Duration = Duration::from_secs(30);
@@ -530,6 +536,7 @@ fn accept(listener: TcpListener, shared: Arc<Shared>) {
         };
         if shared.pending.fetch_add(1, Ordering::SeqCst) >= MAX_PENDING {
             shared.pending.fetch_sub(1, Ordering::SeqCst);
+            busy(stream);
             continue;
         }
         let pending = Pending(shared.clone());
@@ -541,6 +548,23 @@ fn accept(listener: TcpListener, shared: Arc<Shared>) {
             continue;
         }
     }
+}
+
+/// Answer a connection past [`MAX_PENDING`] with `503`, without waiting
+/// for it: the answer is small enough for the socket's buffer.
+fn busy(mut stream: TcpStream) {
+    if stream.set_nonblocking(true).is_err() {
+        return;
+    }
+    // What the request has sent so far, so closing does not reset the
+    // connection before the answer is read.
+    let _ = io::Read::read(&mut stream, &mut [0u8; 4096]);
+    let _ = http::refuse(
+        &mut stream,
+        "503 Service Unavailable",
+        "Too many connections at once: try again in a moment.",
+    );
+    let _ = stream.shutdown(Shutdown::Write);
 }
 
 /// A connection still sending its request: counted until dropped.
@@ -582,12 +606,12 @@ impl Drop for Slot {
 /// Serve one connection: the page, an asset, or a session.
 fn connection(mut stream: TcpStream, pending: Pending) {
     let _ = stream.set_nodelay(true);
-    if stream.set_read_timeout(Some(HANDSHAKE_TIMEOUT)).is_err()
-        || stream.set_write_timeout(Some(WRITE_TIMEOUT)).is_err()
-    {
+    if stream.set_write_timeout(Some(WRITE_TIMEOUT)).is_err() {
         return;
     }
-    let Ok(bytes) = http::read_head(&mut stream) else {
+    // The whole head within the timeout, however slowly it comes.
+    let until = Instant::now() + HANDSHAKE_TIMEOUT;
+    let Ok(bytes) = http::read_head(&mut http::Deadline::new(&stream, until)) else {
         return;
     };
     // The server stopped while the request came in.
@@ -811,6 +835,36 @@ mod tests {
         }
         assert_eq!(Renderer::parse("canvas"), None);
         assert_eq!(Renderer::default(), Renderer::Xterm);
+    }
+
+    #[test]
+    fn connections_past_the_pending_cap_are_answered() {
+        use std::io::Read;
+
+        let handle = Server::bind("127.0.0.1:0", || App::new(|| intuituive::label("x")))
+            .unwrap()
+            .spawn()
+            .unwrap();
+        let addr = handle.local_addr();
+        // Connections that send nothing hold every place for a request.
+        let idle: Vec<TcpStream> = (0..MAX_PENDING)
+            .map(|_| TcpStream::connect(addr).unwrap())
+            .collect();
+        let start = Instant::now();
+        while handle.shared.pending.load(Ordering::SeqCst) < MAX_PENDING {
+            assert!(
+                start.elapsed() < Duration::from_secs(5),
+                "the idle connections"
+            );
+            thread::sleep(Duration::from_millis(10));
+        }
+        // One more is told so, not closed without a word.
+        let mut late = TcpStream::connect(addr).unwrap();
+        late.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
+        let mut answer = String::new();
+        let _ = late.read_to_string(&mut answer);
+        assert!(answer.starts_with("HTTP/1.1 503 "), "{answer:?}");
+        drop(idle);
     }
 
     #[test]

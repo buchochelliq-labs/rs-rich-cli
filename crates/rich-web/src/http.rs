@@ -3,7 +3,8 @@
 //! assets. Every response closes its connection.
 
 use std::io::{self, Read, Write};
-use std::net::{IpAddr, SocketAddr};
+use std::net::{IpAddr, SocketAddr, TcpStream};
+use std::time::Instant;
 
 /// The longest request head read; longer is refused.
 const MAX_HEAD: usize = 16 * 1024;
@@ -92,6 +93,31 @@ pub(crate) fn read_head(stream: &mut impl Read) -> io::Result<Vec<u8>> {
         }
     }
     Ok(head)
+}
+
+/// A stream whose reads all end by one deadline, however slowly the bytes
+/// come: each read waits only for what is left of it.
+pub(crate) struct Deadline<'a> {
+    stream: &'a TcpStream,
+    until: Instant,
+}
+
+impl<'a> Deadline<'a> {
+    pub fn new(stream: &'a TcpStream, until: Instant) -> Deadline<'a> {
+        Deadline { stream, until }
+    }
+}
+
+impl Read for Deadline<'_> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        let left = self.until.saturating_duration_since(Instant::now());
+        if left.is_zero() {
+            return Err(io::Error::new(io::ErrorKind::TimedOut, "too slow"));
+        }
+        self.stream.set_read_timeout(Some(left))?;
+        let mut stream = self.stream;
+        stream.read(buf)
+    }
 }
 
 /// Compare two tokens in time that does not depend on where they differ.
@@ -264,6 +290,41 @@ mod tests {
         assert!(read_head(&mut short).is_err());
         let long = vec![b'a'; MAX_HEAD + 10];
         assert!(read_head(&mut long.as_slice()).is_err());
+    }
+
+    #[test]
+    fn a_head_has_one_deadline_however_slowly_it_comes() {
+        use std::net::TcpListener;
+        use std::time::Duration;
+
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        std::thread::spawn(move || {
+            let mut stream = TcpStream::connect(addr).unwrap();
+            // A byte every 100 ms: each read is quick, the whole is not.
+            for byte in b"GET / HTTP/1.1\r\nHost: x\r\n\r\n" {
+                if stream.write_all(&[*byte]).is_err() {
+                    break;
+                }
+                std::thread::sleep(Duration::from_millis(100));
+            }
+        });
+        let (stream, _) = listener.accept().unwrap();
+        let start = Instant::now();
+        let until = start + Duration::from_millis(500);
+        let error = read_head(&mut Deadline::new(&stream, until)).unwrap_err();
+        assert!(
+            matches!(
+                error.kind(),
+                io::ErrorKind::TimedOut | io::ErrorKind::WouldBlock
+            ),
+            "{error}"
+        );
+        let took = start.elapsed();
+        assert!(
+            took >= Duration::from_millis(450) && took < Duration::from_secs(2),
+            "{took:?}"
+        );
     }
 
     #[test]

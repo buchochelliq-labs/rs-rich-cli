@@ -11,6 +11,13 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### 0.0.18 release test: fixes from three audits
 
+- **A slow request no longer holds an rs-rich-web server's connection for
+  ever.** The 10-second limit on sending a request applied to each read,
+  so a client sending a byte every few seconds kept its connection (and
+  thread) for hours, and 64 such clients locked everyone else out with
+  connections closed unanswered. Now the whole request head must arrive
+  within 10 seconds, and a connection past the 64 still sending theirs is
+  answered `503`.
 - **A paste flood no longer grows a served program's memory without
   bound.** `LocalPty::write` queued every input on an unbounded channel,
   so a page pasting into a program that was not reading its input (or

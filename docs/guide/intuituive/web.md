@@ -277,6 +277,9 @@ them do. The server is therefore closed by default:
   origin is refused.
 - **Sessions are capped.** One more than `max_sessions` is refused with
   `503` until a session ends.
+- **Requests are timed.** A connection has 10 seconds to send its whole
+  request, however slowly it trickles in. With 64 connections still
+  sending theirs, one more is answered `503` rather than closed unanswered.
 - **A program's output is bounded** by `max_buffered`: a page that stops
   reading holds the program back rather than growing the server's memory.
   Its input is bounded too (1 MiB held that it has not read).
