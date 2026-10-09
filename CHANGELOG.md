@@ -9,6 +9,17 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## 0.0.18 cohort
+
+record 0.0.6 / interact 0.0.6 / ratatui 0.0.3 / intuituive 0.0.3 / embed
+0.0.1 (new) / web 0.0.1 (new) / CLI 0.0.18, with data 0.0.2 from the 0.0.17
+cohort, which is not on crates.io yet (CLI 0.0.17 was never published;
+0.0.18 carries everything it had). Unchanged and already published: core
+0.0.9, macros 0.0.3, plugin API 0.0.3, art 0.0.12, diagram 0.0.2, mermaid
+0.0.5, lumis 0.0.3, ext 0.0.15, micro 0.0.4. The Python package (0.0.6, with
+`rs_rich.tui`) is held back from this cohort. See
+[the release notes](docs/releases/0.0.18.md).
+
 ### 0.0.18 release test: fixes from three audits
 
 - **Linear mode writes no terminal controls.** An accessible name, a value,
