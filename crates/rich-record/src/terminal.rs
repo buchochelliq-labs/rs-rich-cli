@@ -36,6 +36,10 @@ const FILLER: char = '\u{10fffd}';
 /// shorter; past this, characters go to vt100 as they are, so a flood of
 /// combining marks costs linear time, not quadratic.
 const MAX_CLUSTER_CHARS: usize = 32;
+/// The most of a CSI sequence's parameter and intermediate bytes kept.
+/// The queries answered are a few bytes long, so a longer sequence is no
+/// query, and one that never ends costs no more.
+const MAX_CSI: usize = 32;
 
 fn marker(c: char) -> Option<usize> {
     let index = (c as u32).checked_sub(MARKER_FIRST)? as usize;
@@ -192,12 +196,25 @@ impl Terminal {
                     self.out.push(byte);
                 }
                 Mode::Csi => {
-                    if (0x40..=0x7e).contains(&byte) {
-                        self.mode = Mode::Ground;
-                        self.answer(byte);
-                        self.csi.clear();
-                    } else {
-                        self.csi.push(byte);
+                    match byte {
+                        0x40..=0x7e => {
+                            self.mode = Mode::Ground;
+                            self.answer(byte);
+                            self.csi.clear();
+                        }
+                        // As in vt100's parser: ESC starts another sequence,
+                        // and CAN and SUB cancel this one.
+                        0x1b => {
+                            self.mode = Mode::Escape;
+                            self.csi.clear();
+                        }
+                        0x18 | 0x1a => {
+                            self.mode = Mode::Ground;
+                            self.csi.clear();
+                        }
+                        _ if self.csi.len() < MAX_CSI => self.csi.push(byte),
+                        // Too long for a query: what is kept matches none.
+                        _ => {}
                     }
                     self.out.push(byte);
                 }
@@ -512,6 +529,43 @@ mod tests {
         // Split across reads.
         terminal.process(b"\x1b[").unwrap();
         terminal.process(b"c").unwrap();
+        assert_eq!(terminal.take_replies(), b"\x1b[?62c");
+    }
+
+    #[test]
+    fn a_query_after_a_sequence_cut_off_is_answered() {
+        // ESC starts a new sequence, and CAN and SUB cancel one, as vt100
+        // reads them: the query after is the program's.
+        for bytes in [
+            &b"\x1b[1\x1b[c"[..],
+            b"\x1b[?2026\x18\x1b[c",
+            b"\x1b[1;\x1a\x1b[c",
+        ] {
+            let mut terminal = Terminal::new(2, 10);
+            terminal.process(bytes).unwrap();
+            assert_eq!(terminal.take_replies(), b"\x1b[?62c", "{bytes:?}");
+        }
+        // Cancelled, what follows is text, not the rest of a query.
+        let mut terminal = Terminal::new(2, 10);
+        terminal.process(b"\x1b[\x18c").unwrap();
+        assert!(terminal.take_replies().is_empty());
+        assert_eq!(terminal.contents(), "c");
+    }
+
+    #[test]
+    fn a_sequence_that_never_ends_keeps_little() {
+        let mut terminal = Terminal::new(2, 10);
+        terminal.process(b"\x1b[").unwrap();
+        for _ in 0..16 {
+            terminal.process(&[b'1'; 64 * 1024]).unwrap();
+        }
+        assert!(
+            terminal.csi.capacity() <= MAX_CSI,
+            "{}",
+            terminal.csi.capacity()
+        );
+        // It still ends at its final byte, and is no query.
+        terminal.process(b"c\x1b[c").unwrap();
         assert_eq!(terminal.take_replies(), b"\x1b[?62c");
     }
 

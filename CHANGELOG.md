@@ -9,6 +9,15 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### 0.0.18 release test: fixes from three audits
+
+- **rs-rich-record's emulator ends a control sequence where vt100 does.**
+  An ESC inside a CSI sequence was kept as part of it, so a query after a
+  sequence cut off (`ESC [ 1 ESC [ c`) went unanswered and the program
+  waited two seconds; and a CSI that never ended kept every byte after it.
+  ESC now starts a new sequence, CAN and SUB cancel one, and at most 32
+  bytes of a sequence are kept (a longer one is no query).
+
 ### Synchronized output (rs-rich-interact 0.0.6, rs-rich-intuituive 0.0.3)
 
 0.0.18 workstream 11. rs-rich-record changes with it.
