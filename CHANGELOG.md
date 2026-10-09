@@ -54,6 +54,13 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   the region at row 0 so clicks missed, and drop the key. The answer is
   now found wherever it is among other input, and the keys that came with
   it are read as typed.
+- **termwiz leaves xterm's modifyOtherKeys off.** termwiz's raw mode
+  turns modifyOtherKeys up to level 2 and its cooked mode leaves it at 1;
+  only dropping its terminal set it back to 0. So after Ctrl+Z, SIGTERM,
+  SIGHUP or SIGQUIT, and for a program handed the terminal, the shell or
+  the program got `CSI 27;…~` for keys such as Shift+Enter. Every way the
+  session gives the terminal back now sets it to 0, and taking it back
+  sets it up again.
 - **Answers to a program's queries are capped, and the terminal pane
   sends them.** rs-rich-record's emulator kept every answer it owed (the
   device attributes, the synchronized output report) until taken, and

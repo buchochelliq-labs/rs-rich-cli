@@ -447,6 +447,44 @@ fn every_backend_suspends_on_ctrl_z_and_sigtstp() {
     }
 }
 
+/// termwiz's raw mode turns xterm's modifyOtherKeys up (level 2) and its
+/// cooked mode leaves it at 1: every way the session gives the terminal
+/// back (a hand-off, Ctrl+Z, SIGTERM) leaves it at 0 for the shell or the
+/// program handed it, and taking it back turns it up again.
+#[test]
+fn every_backend_leaves_modify_other_keys_off() {
+    // Each level written to xterm's modifyOtherKeys (`CSI > 4 ; n m`).
+    let levels = |text: &str| -> Vec<char> {
+        text.match_indices("\x1b[>4;")
+            .filter_map(|(at, found)| text[at + found.len()..].chars().next())
+            .collect()
+    };
+    for backend in backends() {
+        let mut pty = Pty::start_on(backend, "handoff");
+        suspends_and_resumes(&mut pty, |pty, _| pty.send("\x1a"));
+        pty.send("e");
+        pty.wait_for("back from handoff Some(0)");
+        let pid = support::child_pid(&pty);
+        Command::new("kill").args(["-TERM", &pid]).status().unwrap();
+        let (output, _) = pty.finish();
+        let levels = levels(&output);
+        // Down to 1, then straight to 0, every time, and 0 at the end.
+        assert!(
+            levels.windows(2).all(|w| w[0] != '1' || w[1] == '0')
+                && levels.last().is_none_or(|level| *level == '0'),
+            "{backend}: {levels:?}"
+        );
+        if backend == "termwiz" {
+            // Turned up at the start, after `fg` and after the hand-off.
+            assert_eq!(
+                levels.iter().filter(|l| **l == '2').count(),
+                3,
+                "{levels:?}"
+            );
+        }
+    }
+}
+
 /// Painting on standard error with standard output piped, as
 /// `answer=$(rich choose …)` runs: keys still come from the terminal, the
 /// answer holds no kitty query, and the terminal is given back.

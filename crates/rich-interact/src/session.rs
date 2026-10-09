@@ -278,6 +278,19 @@ impl BackendKind {
         }
     }
 
+    /// What to write once the library's raw mode is off, for what turning
+    /// it off leaves on: termwiz's raw mode sets xterm's modifyOtherKeys to
+    /// level 2 and its cooked mode to 1, and only dropping its terminal
+    /// sets it back to 0, as a shell or a program handed the terminal
+    /// expects.
+    fn after_raw_mode(self) -> &'static str {
+        match self {
+            #[cfg(all(unix, feature = "termwiz"))]
+            BackendKind::Termwiz => "\x1b[>4;0m",
+            _ => "",
+        }
+    }
+
     /// Give back what the library holds once the session is over.
     fn release(self) {
         match self {
@@ -382,7 +395,12 @@ fn restore(wait: bool) -> io::Result<()> {
         Ok(())
     };
     let raw = if active & RAW != 0 {
-        library.raw_mode(false, wait)
+        let off = library.raw_mode(false, wait);
+        let after = match library.after_raw_mode() {
+            "" => Ok(()),
+            after => Output::live().write(after),
+        };
+        off.and(after)
     } else {
         Ok(())
     };
@@ -476,6 +494,7 @@ fn restore_for_signal() {
     }
     if active & RAW != 0 {
         let _ = library.raw_mode(false, true);
+        write_direct(library.after_raw_mode());
     }
     if RAW_LINE.swap(false, Ordering::SeqCst) {
         let _ = crossterm::terminal::disable_raw_mode();
