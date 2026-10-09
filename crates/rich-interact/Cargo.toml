@@ -79,7 +79,7 @@ termion = { version = "4", optional = true }
 filedescriptor = "0.8"
 # Restore the terminal on SIGTERM, SIGHUP and SIGQUIT (crossterm already
 # depends on it).
-signal-hook = "0.3"
+signal-hook = "0.4"
 # O_NONBLOCK, to open a file for its preview without blocking (crossterm
 # already depends on it).
 libc = "0.2"
