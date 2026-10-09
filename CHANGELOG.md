@@ -11,6 +11,13 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### 0.0.18 release test: fixes from three audits
 
+- **A web view address can no longer become a browser's option.**
+  `ProgramEngine` put the address on the terminal browser's command line
+  as it was, so a link such as `--renderer-cmd-prefix=…` (from a feed, a
+  document, a paste) reached Carbonyl, a Chromium, as a switch that runs
+  a command. Now `open` refuses an address that starts with `-` or has a
+  control character in it, and Carbonyl, found by `detect`, gets `--`
+  before the address.
 - **No spelling of a sandbox switch reaches Chrome.** `ChromeEngine`
   dropped only arguments that began `--no-sandbox`, but Chromium also
   reads `-no-sandbox` (and `/no-sandbox` and any case on Windows), and

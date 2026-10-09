@@ -168,7 +168,11 @@ page's size is given to the engine whenever it changes.
 `web_view(url)` without an engine uses `ProgramEngine::detect()`: the
 browser named in the `RICH_EMBED_BROWSER` environment variable (a program
 and its arguments), else the first of `carbonyl`, `cha` (Chawan), `browsh`,
-`w3m` and `lynx` found on `PATH`. With none, the view says so.
+`w3m` and `lynx` found on `PATH`. With none, the view says so. The address
+is the browser's last argument (Carbonyl gets `--` before it), so an
+address that starts with `-`, or has a control character in it, is
+refused: a link an app did not write cannot become one of the browser's
+options.
 
 ### Behind the view: `WebEngine`
 
