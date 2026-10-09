@@ -5,6 +5,10 @@
 
 mod common;
 
+use std::io::{Read, Write};
+use std::net::TcpStream;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
 use std::time::Duration;
 
 use common::{connect, get, read_close_reason, read_program, upgrade, wait_for, TOKEN};
@@ -230,4 +234,86 @@ fn output_waits_for_a_slow_page() {
     assert_eq!(all.matches('x').count(), 400_000);
     assert!(all.contains("END"));
     assert_eq!(reason.as_deref(), Some("The program exited with code 0."));
+}
+
+#[test]
+fn a_request_still_arriving_at_stop_is_not_served() {
+    let made = Arc::new(AtomicUsize::new(0));
+    let counter = made.clone();
+    let server = Server::bind_host("127.0.0.1:0", move || {
+        counter.fetch_add(1, Ordering::SeqCst);
+        Box::new(ReplayHost::new())
+    })
+    .unwrap()
+    .token(TOKEN)
+    .spawn()
+    .unwrap();
+    let addr = server.local_addr();
+    let text = format!(
+        "GET /ws?token={TOKEN}&cols=40&rows=5 HTTP/1.1\r\nHost: {addr}\r\n\
+         Origin: http://{addr}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n\
+         Sec-WebSocket-Version: 13\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\r\n"
+    );
+    let mut stream = TcpStream::connect(addr).unwrap();
+    stream.write_all(&text.as_bytes()[..20]).unwrap();
+    std::thread::sleep(Duration::from_millis(100));
+    server.stop();
+    // The rest arrives after the stop: nothing is served, nothing started.
+    let _ = stream.write_all(&text.as_bytes()[20..]);
+    stream
+        .set_read_timeout(Some(Duration::from_secs(5)))
+        .unwrap();
+    let mut response = Vec::new();
+    let _ = stream.read_to_end(&mut response);
+    assert!(response.is_empty(), "{}", text_of(&response));
+    assert_eq!(made.load(Ordering::SeqCst), 0);
+}
+
+fn text_of(bytes: &[u8]) -> String {
+    String::from_utf8_lossy(bytes).into_owned()
+}
+
+/// The `pid:N` a program printed.
+#[cfg(unix)]
+fn read_pid(socket: &mut tungstenite::WebSocket<TcpStream>) -> u32 {
+    let pid = |out: &[u8]| -> Option<u32> {
+        text(out)
+            .split("pid:")
+            .nth(1)?
+            .split_whitespace()
+            .next()?
+            .parse()
+            .ok()
+    };
+    let (out, _) = read_program(socket, true, Duration::from_secs(10), |out| {
+        pid(out).is_some()
+    });
+    pid(&out).unwrap_or_else(|| panic!("no pid in {:?}", text(&out)))
+}
+
+#[cfg(unix)]
+#[test]
+fn a_program_that_ignores_hangups_does_not_outlive_its_session() {
+    use common::running;
+
+    let script = "trap '' HUP; echo pid:$$; exec sleep 60";
+    let server = Server::bind_command("127.0.0.1:0", ["sh", "-c", script])
+        .unwrap()
+        .token(TOKEN)
+        .spawn()
+        .unwrap();
+    // The page goes: the program is killed once it has had a moment.
+    let mut socket = connect(server.local_addr(), 40, 5);
+    let pid = read_pid(&mut socket);
+    assert!(running(pid));
+    socket.close(None).unwrap();
+    let _ = read_close_reason(&mut socket);
+    wait_for("the session to end", || server.sessions() == 0);
+    assert!(!running(pid), "the program outlived its session");
+
+    // The server stops: it returns once the program has ended.
+    let mut socket = connect(server.local_addr(), 40, 5);
+    let pid = read_pid(&mut socket);
+    server.stop();
+    assert!(!running(pid), "the program outlived the server");
 }

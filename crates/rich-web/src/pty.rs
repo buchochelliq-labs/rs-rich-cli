@@ -8,12 +8,14 @@
 //! worth sent and not yet drawn, nothing more is read from the host, and a
 //! [`LocalPty`](rich_embed::LocalPty) with backpressure then stops reading
 //! the program, whose writes wait. The program's exit ends the session
-//! with a close whose reason the page shows.
+//! with a close whose reason the page shows; when the session ends first,
+//! the program is ended, and the session waits until it has.
 
 use std::io::{self, ErrorKind};
 use std::net::TcpStream;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::time::Duration;
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::thread;
+use std::time::{Duration, Instant};
 
 use rich_embed::PtyHost;
 use tungstenite::{Message, WebSocket};
@@ -25,6 +27,10 @@ use crate::session::{close, deliver, parse_message, PageMessage};
 const TURN: Duration = Duration::from_millis(10);
 /// The most output sent in one message.
 const CHUNK: usize = 32 * 1024;
+/// How long a session waits for its program to end once it has ended it
+/// (a [`LocalPty`](rich_embed::LocalPty) kills one still running after a
+/// second).
+const END_WAIT: Duration = Duration::from_secs(3);
 
 /// `max_buffered` split into the window of output sent and not yet drawn,
 /// and the output a host may hold unread.
@@ -33,22 +39,47 @@ pub(crate) fn split(max_buffered: usize) -> (usize, usize) {
     (window, max_buffered.saturating_sub(window).max(1))
 }
 
+/// Counts a program as running until dropped.
+struct Running<'a>(&'a AtomicUsize);
+
+impl Drop for Running<'_> {
+    fn drop(&mut self) {
+        self.0.fetch_sub(1, Ordering::SeqCst);
+    }
+}
+
 /// Run the program on `host` at `columns` x `rows` over `socket` until it
-/// exits, the page goes, or `stopping` is set; then end it.
+/// exits, the page goes, or `stopping` is set; then end it, and wait until
+/// it has ended. `running` counts it meanwhile.
 pub(crate) fn run(
     socket: &mut WebSocket<TcpStream>,
     mut host: Box<dyn PtyHost>,
     columns: u16,
     rows: u16,
     stopping: &AtomicBool,
+    running: &AtomicUsize,
     window: usize,
 ) -> io::Result<()> {
-    let result = match host.start(columns, rows) {
-        Ok(()) => serve(socket, &mut *host, stopping, window),
-        Err(error) => Ok(Some(format!("The program could not start: {error}."))),
+    // Counted before `stopping` is read, as `Handle::stop` sets `stopping`
+    // before it waits for the count: a program either never starts or is
+    // waited for.
+    running.fetch_add(1, Ordering::SeqCst);
+    let counted = Running(running);
+    let result = if stopping.load(Ordering::SeqCst) {
+        Ok(Some("The server stopped.".into()))
+    } else {
+        match host.start(columns, rows) {
+            Ok(()) => {
+                let result = serve(socket, &mut *host, stopping, window);
+                end(&mut *host);
+                result
+            }
+            Err(error) => Ok(Some(format!("The program could not start: {error}."))),
+        }
     };
     let _ = host.kill();
     drop(host);
+    drop(counted);
     match result {
         Ok(reason) => {
             close(socket, reason.as_deref());
@@ -58,6 +89,17 @@ pub(crate) fn run(
             close(socket, None);
             Err(error)
         }
+    }
+}
+
+/// End the program, and wait (at most [`END_WAIT`]) until it has ended.
+/// What it writes meanwhile is dropped.
+fn end(host: &mut dyn PtyHost) {
+    let _ = host.kill();
+    let deadline = Instant::now() + END_WAIT;
+    while host.exit_status().is_none() && Instant::now() < deadline {
+        host.read();
+        thread::sleep(Duration::from_millis(10));
     }
 }
 

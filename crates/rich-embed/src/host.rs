@@ -17,7 +17,7 @@ use std::io::{self, Read, Write};
 use std::path::PathBuf;
 use std::sync::{mpsc, Arc, Mutex, MutexGuard, PoisonError};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use portable_pty::{native_pty_system, ChildKiller, CommandBuilder, MasterPty, PtySize};
 
@@ -216,6 +216,10 @@ impl Command {
 /// so a program that floods a pane the app is not reading costs a bounded
 /// amount of memory.
 const MAX_BUFFERED: usize = 16 * 1024 * 1024;
+/// How long a program has to end once hung up on before it is killed.
+const KILL_GRACE: Duration = Duration::from_secs(1);
+/// How often the waiter looks whether the program has ended.
+const WAIT_TURN: Duration = Duration::from_millis(20);
 
 #[derive(Default)]
 struct Output {
@@ -226,6 +230,8 @@ struct Output {
     paused: bool,
     /// The host is gone: a paused reader stops.
     closed: bool,
+    /// When the program was hung up on ([`LocalPty::kill`]).
+    hung_up: Option<Instant>,
     status: Option<ExitStatus>,
     notify: Option<Notify>,
 }
@@ -346,10 +352,26 @@ impl PtyHost for LocalPty {
         });
 
         let shared = Arc::clone(&self.shared);
+        let leader = child.process_id();
         thread::spawn(move || {
-            let status = match child.wait() {
-                Ok(status) => ExitStatus::from(status),
-                Err(error) => ExitStatus::with_signal(error.to_string()),
+            // Polled rather than waited for, so that a program still
+            // running a moment after it was hung up on (one that ignores
+            // SIGHUP) is killed: the waiter never waits for ever.
+            let mut killed = false;
+            let status = loop {
+                match child.try_wait() {
+                    Ok(Some(status)) => break ExitStatus::from(status),
+                    Ok(None) => {}
+                    Err(error) => break ExitStatus::with_signal(error.to_string()),
+                }
+                let hung_up = lock(&shared).hung_up;
+                if !killed && hung_up.is_some_and(|at| at.elapsed() >= KILL_GRACE) {
+                    if let Some(leader) = leader {
+                        kill_group(leader);
+                    }
+                    killed = true;
+                }
+                thread::sleep(WAIT_TURN);
             };
             // What it wrote before exiting is still on its way through the
             // PTY: give the reader a moment to reach the end of it, so the
@@ -420,9 +442,19 @@ impl PtyHost for LocalPty {
         }
     }
 
+    /// Hang up on the program (SIGHUP on Unix, as a terminal closing does;
+    /// on Windows it ends at once). One still running a second later, such
+    /// as one that ignores SIGHUP, is killed with SIGKILL, with everything
+    /// in its process group.
     fn kill(&mut self) -> io::Result<()> {
-        if lock(&self.shared).status.is_some() {
-            return Ok(());
+        {
+            let mut output = lock(&self.shared);
+            if output.status.is_some() {
+                return Ok(());
+            }
+            if self.killer.is_some() {
+                output.hung_up.get_or_insert_with(Instant::now);
+            }
         }
         match &mut self.killer {
             Some(killer) => killer.kill(),
@@ -437,6 +469,24 @@ impl Drop for LocalPty {
         let _ = self.kill();
     }
 }
+
+/// Kill the process group the program leads (it called `setsid`, through
+/// portable-pty), with SIGKILL.
+#[cfg(unix)]
+#[allow(unsafe_code)]
+fn kill_group(leader: u32) {
+    if let Ok(group) = libc::pid_t::try_from(leader) {
+        // SAFETY: `killpg` takes plain integers. The leader has not been
+        // reaped (its waiter is the caller), so its id names its group.
+        unsafe {
+            libc::killpg(group, libc::SIGKILL);
+        }
+    }
+}
+
+/// On Windows the program ended when it was killed.
+#[cfg(not(unix))]
+fn kill_group(_leader: u32) {}
 
 /// Add `bytes` to the unread output. Without backpressure (`drop_oldest`),
 /// past [`MAX_BUFFERED`] the oldest goes; with it, nothing is ever dropped:

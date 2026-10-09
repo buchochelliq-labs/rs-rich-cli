@@ -68,8 +68,10 @@ Server::bind("127.0.0.1:0", counter)? // port 0: any free port
 
 - **`spawn()`** serves on a background thread and returns a `Handle`
   (`url()`, `local_addr()`, `sessions()`, `stop()`). Stopping it, or
-  dropping it, ends every session. Tests use it to serve on
-  `127.0.0.1:0`.
+  dropping it, ends every session, and returns once every program a
+  session ran has ended. Tests use it to serve on `127.0.0.1:0`.
+- **`run_until(f)`** is `run` that serves until `f` returns (a wait for a
+  signal, say), then stops as `stop()` does.
 - **`token(t)`** fixes the token instead of drawing a random one, for an
   address that stays the same between runs. Keep it as long and as secret.
 - **`allow_origin(o)`** accepts the page from another origin. That origin is
@@ -132,7 +134,10 @@ working directory. The program sees `TERM=xterm-256color`.
 - **The exit** ends the session: the page shows how the program ended
   ("The program exited with code 0." or "ended by signal …"), and a
   program that cannot start says why. Closing the tab, or stopping the
-  server, ends the program.
+  server, ends the program: it is hung up on (`SIGHUP`, as when a
+  terminal closes), and one still running a second later (it ignores
+  `SIGHUP`) is killed with `SIGKILL`, with everything in its process
+  group.
 - **A slow page holds the program back.** The page says when it has drawn
   each message. With half of `max_buffered` (1 MiB by default) sent and not
   yet drawn, the server stops reading the program's output, and with the
@@ -168,7 +173,8 @@ Serving htop at http://127.0.0.1:8080/?token=9b1e4c…
 
 Everything after `--` (or after the first word that is not an option) is
 the program and its arguments. Ctrl+C stops the server and every program
-it started.
+it started (on Unix, so do `SIGTERM` and `SIGHUP`): `rich` exits once each
+program has ended, so none outlives it.
 
 Serving a shell gives a shell to anyone who has the address with its
 token. Keep it on `127.0.0.1` unless a proxy with authentication is in

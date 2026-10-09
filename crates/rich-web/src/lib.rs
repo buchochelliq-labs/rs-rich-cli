@@ -229,6 +229,8 @@ struct Shared {
     sessions: AtomicUsize,
     /// Connections still sending their request.
     pending: AtomicUsize,
+    /// Programs started and not yet ended.
+    programs: AtomicUsize,
     stopping: AtomicBool,
 }
 
@@ -285,6 +287,7 @@ impl Server {
                 hosts,
                 sessions: AtomicUsize::new(0),
                 pending: AtomicUsize::new(0),
+                programs: AtomicUsize::new(0),
                 stopping: AtomicBool::new(false),
             },
         })
@@ -375,6 +378,26 @@ impl Server {
     /// Print the URL (and a warning when the address is not loopback),
     /// then serve until the process ends.
     pub fn run(self) -> io::Result<()> {
+        self.announce()?;
+        accept(self.listener, Arc::new(self.shared));
+        Ok(())
+    }
+
+    /// Print the URL as [`run`](Self::run) does, then serve until `until`
+    /// returns, and stop as [`Handle::stop`] does: every session ends, and
+    /// this returns once their programs have. `until` runs on this thread:
+    /// a wait for a signal, say, as `rich serve` waits for Ctrl+C, so that
+    /// no program outlives the server.
+    pub fn run_until(self, until: impl FnOnce()) -> io::Result<()> {
+        self.announce()?;
+        let handle = self.spawn()?;
+        until();
+        handle.stop();
+        Ok(())
+    }
+
+    /// Print the URL, and a warning when the address is not loopback.
+    fn announce(&self) -> io::Result<()> {
         let local = self.local_addr();
         let mut out = io::stdout().lock();
         writeln!(out, "Serving {} at {}", self.shared.title, self.url())?;
@@ -391,7 +414,6 @@ impl Server {
                  Put it behind a reverse proxy that has both."
             );
         }
-        accept(self.listener, Arc::new(self.shared));
         Ok(())
     }
 
@@ -443,17 +465,25 @@ impl Handle {
     }
 
     /// Stop: no more connections, and every session ends (within one turn
-    /// of its loop, at most 50 ms); a program's session ends its program.
+    /// of its loop, at most 50 ms). A program's session ends its program:
+    /// it is hung up on, and a [`LocalPty`]'s is killed, with its process
+    /// group, if it is still running a second later. This returns once
+    /// every program has ended; a connection still sending its request is
+    /// not served.
     pub fn stop(mut self) {
         self.shutdown();
     }
 
     fn shutdown(&mut self) {
         self.shared.stopping.store(true, Ordering::SeqCst);
-        if let Some(thread) = self.thread.take() {
+        if let Some(accepting) = self.thread.take() {
             // Wake the accept loop, which then sees `stopping`.
             let _ = TcpStream::connect_timeout(&reachable(self.local), Duration::from_secs(1));
-            let _ = thread.join();
+            let _ = accepting.join();
+            // A session counts its program before it looks at `stopping`.
+            while self.shared.programs.load(Ordering::SeqCst) > 0 {
+                thread::sleep(Duration::from_millis(10));
+            }
         }
     }
 }
@@ -558,6 +588,10 @@ fn connection(mut stream: TcpStream, pending: Pending) {
     let Ok(bytes) = http::read_head(&mut stream) else {
         return;
     };
+    // The server stopped while the request came in.
+    if pending.0.stopping.load(Ordering::SeqCst) {
+        return;
+    }
     let Some(head) = Head::parse(&bytes) else {
         let _ = http::refuse(&mut stream, "400 Bad Request", "Bad request");
         return;
@@ -710,7 +744,7 @@ fn websocket(mut stream: TcpStream, head: &Head, shared: &Arc<Shared>, pending: 
         .max_message_size(Some(MAX_MESSAGE))
         .max_frame_size(Some(MAX_MESSAGE));
     let mut socket = WebSocket::from_raw_socket(stream, Role::Server, Some(config));
-    let stopping = &shared.stopping;
+    let (stopping, programs) = (&shared.stopping, &shared.programs);
     let _ = match &shared.mode {
         Mode::App(app) => {
             let renderer = renderer_for(head, shared);
@@ -719,11 +753,13 @@ fn websocket(mut stream: TcpStream, head: &Head, shared: &Arc<Shared>, pending: 
         Mode::Command(command) => {
             let (window, held) = pty::split(shared.max_buffered);
             let host = LocalPty::new(command.clone()).backpressure(held);
-            pty::run(&mut socket, Box::new(host), columns, rows, stopping, window)
+            let host = Box::new(host);
+            pty::run(&mut socket, host, columns, rows, stopping, programs, window)
         }
         Mode::Host(host) => {
             let (window, _) = pty::split(shared.max_buffered);
-            pty::run(&mut socket, host(), columns, rows, stopping, window)
+            let host = host();
+            pty::run(&mut socket, host, columns, rows, stopping, programs, window)
         }
     };
 }

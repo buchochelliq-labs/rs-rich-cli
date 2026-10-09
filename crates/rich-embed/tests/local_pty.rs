@@ -83,3 +83,64 @@ fn backpressure_holds_the_program_until_its_output_is_read() {
     assert_eq!(text.matches('x').count(), 300_000);
     assert!(text.contains("END"), "the end of the output arrived");
 }
+
+/// Whether process `pid` is still running (and not just waiting to be
+/// reaped).
+fn running(pid: u32) -> bool {
+    std::process::Command::new("ps")
+        .args(["-o", "stat=", "-p", &pid.to_string()])
+        .output()
+        .map(|out| {
+            let stat = String::from_utf8_lossy(&out.stdout);
+            let stat = stat.trim();
+            !stat.is_empty() && !stat.starts_with('Z')
+        })
+        .unwrap_or(false)
+}
+
+/// Read until `pid:N` arrives: the program's process id.
+fn read_pid(pty: &mut LocalPty) -> u32 {
+    let start = Instant::now();
+    let mut out = String::new();
+    while start.elapsed() < Duration::from_secs(10) {
+        out.push_str(&String::from_utf8_lossy(&pty.read()));
+        if let Some(pid) = out
+            .split("pid:")
+            .nth(1)
+            .and_then(|rest| rest.split_whitespace().next())
+            .and_then(|pid| pid.parse().ok())
+        {
+            return pid;
+        }
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    panic!("no pid in {out:?}");
+}
+
+#[test]
+fn a_program_that_ignores_hangups_is_killed() {
+    let script = "trap '' HUP; echo pid:$$; exec sleep 60";
+    // Killed: hung up on, then, a moment later, killed.
+    let mut pty = LocalPty::new(["sh", "-c", script]);
+    pty.start(20, 4).unwrap();
+    let pid = read_pid(&mut pty);
+    pty.kill().unwrap();
+    let start = Instant::now();
+    while pty.exit_status().is_none() && start.elapsed() < Duration::from_secs(10) {
+        pty.read();
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    assert!(pty.exit_status().is_some_and(|status| !status.success()));
+    assert!(!running(pid));
+
+    // Dropped, as a pane that leaves the tree is: the same.
+    let mut pty = LocalPty::new(["sh", "-c", script]);
+    pty.start(20, 4).unwrap();
+    let pid = read_pid(&mut pty);
+    drop(pty);
+    let start = Instant::now();
+    while running(pid) && start.elapsed() < Duration::from_secs(10) {
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    assert!(!running(pid), "the program outlived its host");
+}

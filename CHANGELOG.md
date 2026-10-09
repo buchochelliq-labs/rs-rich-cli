@@ -9,6 +9,19 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### 0.0.18 release test: fixes from three audits
+
+- **A program that ignores `SIGHUP` no longer outlives its session.**
+  rs-rich-embed's `LocalPty` only hung up on its program, so one that
+  ignored the hang-up kept running after its pane, its browser session,
+  `Handle::stop` and `rich serve` were gone, and its waiter thread waited
+  for ever. Now a program still running a second after it was hung up on
+  is killed with `SIGKILL`, with its whole process group (Unix);
+  `Handle::stop` returns once every program has ended, a request still
+  arriving when it stops is not served, the new `Server::run_until` serves
+  until a closure returns, and `rich serve` waits for Ctrl+C, `SIGTERM`
+  or `SIGHUP` and exits only once every program has ended.
+
 ### Synchronized output (rs-rich-interact 0.0.6, rs-rich-intuituive 0.0.3)
 
 0.0.18 workstream 11. rs-rich-record changes with it.

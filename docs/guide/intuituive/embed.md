@@ -99,7 +99,9 @@ column([
 ])
 ```
 
-The program is ended when its pane leaves the tree.
+The program is ended when its pane leaves the tree: it is hung up on
+(`SIGHUP`, as when a terminal closes), and one still running a second
+later is killed with `SIGKILL`, with everything in its process group.
 
 ### Behind the pane: `PtyHost`
 
