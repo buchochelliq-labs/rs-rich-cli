@@ -8,11 +8,19 @@
 //! wheel; links and forms are not followed (that is Browsh's own terminal
 //! mode, which [`ProgramEngine`](crate::ProgramEngine) runs).
 //!
-//! Browsh is a program the user installs; nothing is downloaded.
+//! Browsh is a program the user installs; nothing is downloaded. The
+//! engine starts it with a configuration of its own, in a temporary
+//! directory removed when the engine goes, that binds its server to
+//! `127.0.0.1` (Browsh's own default is every interface: anyone who could
+//! reach the machine could have it fetch pages); the user's own Browsh
+//! configuration is not read. To use that, start Browsh yourself and
+//! [`connect`](BrowshEngine::connect).
 
 use std::io::{self, Read, Write};
 use std::net::TcpStream;
+use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -27,6 +35,20 @@ use crate::web::{PageState, WebEngine, WebFrame, WebInput};
 pub const DEFAULT_SERVER: &str = "127.0.0.1:4333";
 /// How long a page may take, including Browsh starting its browser.
 const FETCH_TIMEOUT: Duration = Duration::from_secs(90);
+/// The variable Browsh finds its configuration directory by, and where in
+/// it its own directory is.
+const CONFIG_HOME: (&str, &str) = if cfg!(windows) {
+    ("APPDATA", "browsh")
+} else if cfg!(target_os = "macos") {
+    ("HOME", "Library/Application Support/browsh")
+} else {
+    ("XDG_CONFIG_HOME", "browsh")
+};
+/// The engine's configuration for Browsh: its HTTP server on this
+/// computer only. Browsh reads its sample configuration first, so the rest
+/// keeps Browsh's defaults.
+const CONFIG: &str = "# Written by rs-rich-embed's BrowshEngine.\n\
+                      [http-server]\nport = 4333\nbind = \"127.0.0.1\"\n";
 
 #[derive(Default)]
 struct Shared {
@@ -47,6 +69,8 @@ pub struct BrowshEngine {
     /// The program to start the server with; `None`: one is running.
     program: Option<String>,
     child: Option<Child>,
+    /// The temporary configuration directory the server was started with.
+    config: Option<PathBuf>,
     shared: Arc<Mutex<Shared>>,
     lines: Vec<String>,
     scroll: usize,
@@ -67,12 +91,15 @@ impl Default for BrowshEngine {
 
 impl BrowshEngine {
     /// Start `browsh --http-server-mode` (from `PATH`) with the first
-    /// page, and ask it at [`DEFAULT_SERVER`].
+    /// page, and ask it at [`DEFAULT_SERVER`]. It is started with the
+    /// engine's own configuration, which binds it to `127.0.0.1` only, and
+    /// ended, with the Firefox it started, when the engine goes.
     pub fn new() -> BrowshEngine {
         BrowshEngine {
             server: DEFAULT_SERVER.to_string(),
             program: Some("browsh".to_string()),
             child: None,
+            config: None,
             shared: Arc::default(),
             lines: Vec::new(),
             scroll: 0,
@@ -107,22 +134,29 @@ impl BrowshEngine {
         if self.child.is_some() {
             return Ok(());
         }
-        // Its port is Browsh's own setting (`http-server.port` in its
-        // config, 4333 by default); for another, start it yourself and
-        // `connect`.
-        let child = Command::new(program)
+        // Its address is Browsh's own setting (`http-server` in its
+        // config): the engine's own config says 127.0.0.1:4333. For
+        // another, start it yourself and `connect`.
+        let config = temporary_config()?;
+        let mut command = Command::new(program);
+        command
             .arg("--http-server-mode")
+            .env(CONFIG_HOME.0, &config)
             .stdin(Stdio::null())
             .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .spawn()
-            .map_err(|error| {
-                io::Error::new(
-                    error.kind(),
-                    format!("could not start {program} (install Browsh, or connect to a running server): {error}"),
-                )
-            })?;
+            .stderr(Stdio::null());
+        // A group of its own, with the Firefox it starts, to end together.
+        #[cfg(unix)]
+        std::os::unix::process::CommandExt::process_group(&mut command, 0);
+        let child = command.spawn().map_err(|error| {
+            let _ = std::fs::remove_dir_all(&config);
+            io::Error::new(
+                error.kind(),
+                format!("could not start {program} (install Browsh, or connect to a running server): {error}"),
+            )
+        })?;
         self.child = Some(child);
+        self.config = Some(config);
         Ok(())
     }
 
@@ -175,15 +209,87 @@ impl BrowshEngine {
 impl Drop for BrowshEngine {
     fn drop(&mut self) {
         if let Some(mut child) = self.child.take() {
+            kill_group(&child);
             let _ = child.kill();
             let _ = child.wait();
+        }
+        if let Some(config) = &self.config {
+            let _ = std::fs::remove_dir_all(config);
         }
     }
 }
 
-/// The request for `url`: the page as plain text.
+/// Kill the process group Browsh leads (it and the Firefox it started),
+/// with SIGKILL.
+#[cfg(unix)]
+#[allow(unsafe_code)]
+fn kill_group(child: &Child) {
+    if let Ok(group) = libc::pid_t::try_from(child.id()) {
+        // SAFETY: `killpg` takes plain integers. Browsh has not been
+        // reaped, so its id still names the group it leads.
+        unsafe {
+            libc::killpg(group, libc::SIGKILL);
+        }
+    }
+}
+
+/// Elsewhere only Browsh itself is ended.
+#[cfg(not(unix))]
+fn kill_group(_child: &Child) {}
+
+/// A new directory holding the engine's configuration for Browsh, to set
+/// as its configuration home.
+fn temporary_config() -> io::Result<PathBuf> {
+    static NEXT: AtomicU64 = AtomicU64::new(0);
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.subsec_nanos())
+        .unwrap_or(0);
+    loop {
+        let n = NEXT.fetch_add(1, Ordering::SeqCst);
+        let dir = std::env::temp_dir().join(format!(
+            "rich-embed-browsh-{}-{n}-{nanos}",
+            std::process::id()
+        ));
+        let mut builder = std::fs::DirBuilder::new();
+        #[cfg(unix)]
+        std::os::unix::fs::DirBuilderExt::mode(&mut builder, 0o700);
+        match builder.create(&dir) {
+            Ok(()) => {
+                let written = write_config(&dir);
+                if written.is_err() {
+                    let _ = std::fs::remove_dir_all(&dir);
+                }
+                return written.map(|()| dir);
+            }
+            Err(error) if error.kind() == io::ErrorKind::AlreadyExists => continue,
+            Err(error) => return Err(error),
+        }
+    }
+}
+
+fn write_config(home: &Path) -> io::Result<()> {
+    let dir = home.join(CONFIG_HOME.1);
+    std::fs::create_dir_all(&dir)?;
+    std::fs::write(dir.join("config.toml"), CONFIG)
+}
+
+/// The request for `url`: the page as plain text. Spaces and control
+/// characters in the address are percent-encoded, so that it stays one
+/// request line.
 pub(crate) fn request(server: &str, url: &str) -> String {
-    format!("GET /{url} HTTP/1.0\r\nHost: {server}\r\nX-Browsh-Raw-Mode: PLAIN\r\n\r\n")
+    let mut target = String::with_capacity(url.len());
+    for c in url.chars() {
+        if c == ' ' || c.is_control() {
+            let mut bytes = [0u8; 4];
+            for byte in c.encode_utf8(&mut bytes).bytes() {
+                target.push_str(&format!("%{byte:02X}"));
+            }
+        } else {
+            target.push(c);
+        }
+    }
+    format!("GET /{target} HTTP/1.0\r\nHost: {server}\r\nX-Browsh-Raw-Mode: PLAIN\r\n\r\n")
 }
 
 /// Ask the server for `url`, retrying while it starts.
@@ -387,6 +493,15 @@ mod tests {
             request("127.0.0.1:4333", "https://example.com"),
             "GET /https://example.com HTTP/1.0\r\nHost: 127.0.0.1:4333\r\n\
              X-Browsh-Raw-Mode: PLAIN\r\n\r\n"
+        );
+    }
+
+    #[test]
+    fn an_address_stays_one_request_line() {
+        assert_eq!(
+            request("127.0.0.1:4333", "https://a.example/x y\r\nX-Evil: 1\u{85}"),
+            "GET /https://a.example/x%20y%0D%0AX-Evil:%201%C2%85 HTTP/1.0\r\n\
+             Host: 127.0.0.1:4333\r\nX-Browsh-Raw-Mode: PLAIN\r\n\r\n"
         );
     }
 

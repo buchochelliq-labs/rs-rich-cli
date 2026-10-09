@@ -11,6 +11,15 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### 0.0.18 release test: fixes from three audits
 
+- **Browsh's server listens on this computer only.** `BrowshEngine::new()`
+  started `browsh --http-server-mode` with Browsh's own configuration,
+  whose default binds every interface, so anyone who could reach the
+  machine could have it fetch and render pages from there. The engine
+  now starts Browsh with a configuration of its own (a temporary
+  directory, removed when the engine goes) that binds `127.0.0.1`, in a
+  process group of its own that is killed, Firefox included, when the
+  engine goes; and spaces and control characters in an address are
+  percent-encoded in the request to it rather than written raw.
 - **A served program can no longer write the browser's clipboard.** The
   xterm.js page put every OSC 52 copy on the clipboard, in program mode
   too, so any output (`cat` of a hostile file, a fetched page, a log

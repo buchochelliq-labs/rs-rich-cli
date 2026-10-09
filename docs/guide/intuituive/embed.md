@@ -252,6 +252,14 @@ each page as plain text (`X-Browsh-Raw-Mode: PLAIN`) on
 started. Links and forms are not followed: for those, run Browsh in a
 terminal pane with `ProgramEngine::new("browsh")`.
 
+Browsh's own default is to listen on every interface, which would let
+anyone who can reach the machine have it fetch pages from there. The
+engine therefore starts it with a configuration of its own, in a temporary
+directory removed when the engine goes, that binds it to `127.0.0.1`; your
+own Browsh configuration is not read (start Browsh yourself and `connect`
+to use it). When the engine goes, Browsh is killed with its process
+group, the headless Firefox it started included (Unix).
+
 ## Testing
 
 Both panes run under intuiTUIve's headless driver like any node.
