@@ -40,6 +40,11 @@ const MAX_CLUSTER_CHARS: usize = 32;
 /// The queries answered are a few bytes long, so a longer sequence is no
 /// query, and one that never ends costs no more.
 const MAX_CSI: usize = 32;
+/// The most bytes of answers kept for the program until they are taken.
+/// Past it, more are dropped, as by a terminal whose reply queue is full:
+/// a program that asks and asks, with nobody taking the answers, costs no
+/// more.
+const MAX_REPLIES: usize = 4096;
 
 fn marker(c: char) -> Option<usize> {
     let index = (c as u32).checked_sub(MARKER_FIRST)? as usize;
@@ -250,17 +255,19 @@ impl Terminal {
     /// write anyway, so the screen is the same either way. Other modes'
     /// reports go unanswered, as before.
     fn answer(&mut self, last: u8) {
-        match (last, self.csi.as_slice()) {
-            (b'c', b"" | b"0") => {
-                // A VT220 with no extensions, as xterm answers by default.
-                self.replies.extend_from_slice(b"\x1b[?62c");
-            }
-            (b'p', b"?2026$") => self.replies.extend_from_slice(b"\x1b[?2026;2$y"),
-            _ => {}
+        let reply: &[u8] = match (last, self.csi.as_slice()) {
+            // A VT220 with no extensions, as xterm answers by default.
+            (b'c', b"" | b"0") => b"\x1b[?62c",
+            (b'p', b"?2026$") => b"\x1b[?2026;2$y",
+            _ => return,
+        };
+        if self.replies.len() + reply.len() <= MAX_REPLIES {
+            self.replies.extend_from_slice(reply);
         }
     }
 
-    /// The answers to queries the program made, to send back to it.
+    /// The answers to queries the program made, to send back to it. Up to
+    /// 4 KiB of them are kept until taken; more are dropped.
     pub fn take_replies(&mut self) -> Vec<u8> {
         std::mem::take(&mut self.replies)
     }
@@ -529,6 +536,26 @@ mod tests {
         // Split across reads.
         terminal.process(b"\x1b[").unwrap();
         terminal.process(b"c").unwrap();
+        assert_eq!(terminal.take_replies(), b"\x1b[?62c");
+    }
+
+    #[test]
+    fn answers_nobody_takes_are_capped() {
+        let mut terminal = Terminal::new(2, 10);
+        for _ in 0..64 {
+            terminal.process(&b"\x1b[c".repeat(1024)).unwrap();
+        }
+        assert!(
+            terminal.replies.len() <= MAX_REPLIES,
+            "{}",
+            terminal.replies.len()
+        );
+        // Whole answers only, and once taken, answers come again.
+        assert!(terminal
+            .take_replies()
+            .chunks(6)
+            .all(|reply| reply == b"\x1b[?62c"));
+        terminal.process(b"\x1b[c").unwrap();
         assert_eq!(terminal.take_replies(), b"\x1b[?62c");
     }
 

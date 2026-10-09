@@ -17,6 +17,14 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   waited two seconds; and a CSI that never ended kept every byte after it.
   ESC now starts a new sequence, CAN and SUB cancel one, and at most 32
   bytes of a sequence are kept (a longer one is no query).
+- **Answers to a program's queries are capped, and the terminal pane
+  sends them.** rs-rich-record's emulator kept every answer it owed (the
+  device attributes, the synchronized output report) until taken, and
+  rs-rich-embed's terminal pane never took them: a program that asked over
+  and over grew memory without end, and one that asked at its start (any
+  rs-rich-interact session) waited two seconds for an answer that never
+  came. The pane now sends the answers to its program, and at most 4 KiB
+  of them wait to be taken; more are dropped.
 
 ### Synchronized output (rs-rich-interact 0.0.6, rs-rich-intuituive 0.0.3)
 

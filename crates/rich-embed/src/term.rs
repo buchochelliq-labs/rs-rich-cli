@@ -108,6 +108,11 @@ impl TermCore {
                 let (rows, columns) = self.terminal.screen().size();
                 self.terminal = Terminal::with_scrollback(rows, columns, self.scrollback);
             }
+            // Answers to the program's queries (the device attributes a
+            // session waits for at its start) go back to it, as from a
+            // terminal.
+            let replies = self.terminal.take_replies();
+            self.write(&replies);
             if self.scroll > 0 {
                 // Keep the same lines in view while output pushes them up.
                 self.set_scroll(self.scroll);
@@ -376,6 +381,21 @@ mod tests {
         let style = red.style.as_ref().unwrap();
         assert_eq!(style.color(), Some(&Color::from_ansi(1)));
         assert_eq!(style.attr(0), Some(true));
+    }
+
+    #[test]
+    fn queries_are_answered() {
+        // A session's start-up query: synchronized output, the kitty flags,
+        // then the device attributes.
+        let host = ReplayHost::new().output("\x1b[?2026$p\x1b[?u\x1b[c");
+        let handle = host.handle();
+        let mut core = TermCore::new(Box::new(host), 100);
+        core.fit(10, 2);
+        core.pump();
+        assert_eq!(handle.take_written(), b"\x1b[?2026;2$y\x1b[?62c");
+        handle.feed("\x1b[0c");
+        core.pump();
+        assert_eq!(handle.take_written(), b"\x1b[?62c");
     }
 
     #[test]
