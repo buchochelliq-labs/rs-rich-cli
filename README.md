@@ -108,7 +108,7 @@ in the release notes; the crates.io links show available packages.
 | `rs-rich-record` | scripted terminal recordings (`rich record`) | `use rich_record` |
 | `rs-rich-interact` | interactive components: pickers, input, forms, pagers, explorers | `use rich_interact` |
 | `rs-rich-micro` | micro assets: emoji-sized inline images written `:micro:name:` | `use rich_micro` |
-| `rs-rich` (PyPI) | Python bindings: Rich's API over the Rust core, plus the port's crates (`rs_rich.ext`, `rs_rich.chart`, `rs_rich.diagram`, `rs_rich.interact`, ...) | `import rs_rich` |
+| `rs-rich` (PyPI) | Python bindings: Rich's API over the Rust core, plus the port's crates (`rs_rich.ext`, `rs_rich.chart`, `rs_rich.diagram`, `rs_rich.interact`, `rs_rich.tui`, ...) | `import rs_rich` |
 
 The published package names carry an `rs-` prefix because `rich` is already taken
 on crates.io by an unrelated crate. The library targets keep the short names, so

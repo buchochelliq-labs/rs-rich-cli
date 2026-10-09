@@ -105,6 +105,7 @@ nav:
       - Progress: progress.md
       - Prompts: prompt.md
       - Interactive components: interact.md
+      - Terminal apps (intuiTUIve): tui.md
       - Logging: logging.md
   - Extensions (rs_rich.ext):
       - ext/index.md
