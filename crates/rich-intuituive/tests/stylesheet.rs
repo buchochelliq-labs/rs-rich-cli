@@ -447,3 +447,47 @@ fn a_disabled_autofocus_node_does_not_take_the_focus() {
     let rows = frame(&mut driver, press("x"));
     assert!(row_of(&rows, "picked first").is_some(), "{rows:?}");
 }
+
+/// Padding that parses never breaks an app, however large: the insets
+/// saturate instead of overflowing.
+#[test]
+fn huge_padding_draws_without_overflowing() {
+    for css in [
+        "label { padding: 40000; }",
+        "#n { padding: 65535; border: round; }",
+        "panel { padding: 40000; }",
+        "panel { padding: 65535 65535; border: round; }",
+    ] {
+        let app =
+            App::new(|| column([label("in").panel("P"), label("x").name("n")])).stylesheet(css);
+        let mut driver = app.driver(20, 5);
+        assert_eq!(frame(&mut driver, None).len(), 5, "{css}");
+    }
+}
+
+/// Comments are blanked wherever they are, even holding a brace, and a
+/// quoted value may hold a semicolon or a brace.
+#[test]
+fn comments_and_quoted_values_hold_any_character() {
+    for css in [
+        "label { color: red; /* } */ }",
+        "label /* note */ { color: red; }",
+        "/* { */ label { color: red; }",
+        "panel { border-title: \"a; b }\"; }",
+        "panel { border-title: \"/* not a comment */\"; }",
+    ] {
+        let sheet = intuituive::Stylesheet::parse(css);
+        assert!(
+            sheet.as_ref().is_ok_and(|sheet| !sheet.is_empty()),
+            "{css}: {sheet:?}"
+        );
+    }
+    let app = App::new(|| label("in"))
+        .stylesheet("label { border: round; border-title: \"a; b /* c */\"; }");
+    let mut driver = app.driver(30, 3);
+    let rows = frame(&mut driver, None);
+    assert!(rows[0].contains("a; b /* c */"), "{rows:?}");
+    // An unfinished comment is still an error, where it starts.
+    let error = intuituive::Stylesheet::parse("label { color: red; }\n  /* open").unwrap_err();
+    assert_eq!((error.line, error.column), (2, 3), "{error}");
+}

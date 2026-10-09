@@ -499,14 +499,29 @@ pub fn tree_lazy<E: std::fmt::Display>(
     }
 
     // An item with what it has loaded under it, as the tree draws it.
-    fn grow(item: &LazyItem, loaded: &HashMap<String, Load<Vec<LazyItem>>>) -> TreeItem {
+    // Only open items are grown further: a closed one needs just a row to
+    // show it has children, and data whose keys repeat on their own
+    // ancestors (a link back up a folder tree) cannot recurse forever.
+    fn grow(
+        item: &LazyItem,
+        loaded: &HashMap<String, Load<Vec<LazyItem>>>,
+        open: &HashSet<Vec<usize>>,
+        path: &mut Vec<usize>,
+    ) -> TreeItem {
         let label = rich::markup::escape(&item.label);
         let node = TreeItem::new(label);
         if !item.has_children {
             return node;
         }
         match loaded.get(&item.key) {
-            Some(Load::Ready(kids)) => node.children(kids.iter().map(|kid| grow(kid, loaded))),
+            Some(Load::Ready(kids)) if open.contains(path.as_slice()) || kids.is_empty() => node
+                .children(kids.iter().enumerate().map(|(i, kid)| {
+                    path.push(i);
+                    let grown = grow(kid, loaded, open, path);
+                    path.pop();
+                    grown
+                })),
+            Some(Load::Ready(_)) => node.child(TreeItem::new("")),
             Some(Load::Failed(error)) => node.child(TreeItem::new(format!(
                 "[red]{}[/]",
                 rich::markup::escape(error)
@@ -563,7 +578,20 @@ pub fn tree_lazy<E: std::fmt::Display>(
     );
     let items = move || {
         let roots = roots();
-        loaded.with(|loaded| roots.iter().map(|item| grow(item, loaded)).collect())
+        let open = expanded.get();
+        loaded.with(|loaded| {
+            let mut path = Vec::new();
+            roots
+                .iter()
+                .enumerate()
+                .map(|(i, item)| {
+                    path.push(i);
+                    let grown = grow(item, loaded, &open, &mut path);
+                    path.pop();
+                    grown
+                })
+                .collect()
+        })
     };
     // Busy, for assistive technology, while a level loads.
     let loading = move || {

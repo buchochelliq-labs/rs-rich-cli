@@ -9,6 +9,36 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### 0.0.18 release test: fixes from three audits
+
+- **Linear mode writes no terminal controls.** An accessible name, a value,
+  a toast or an announcement holding ESC, a C1 control, CR or BS reached
+  the terminal raw in linear mode (a label could clear the screen, an
+  announcement write the clipboard through OSC 52). Each control is now
+  written as a visible symbol, as on the cell screen.
+- **Linear mode writes every node, however few rows the terminal has.**
+  It laid out in the terminal's rows, so on a short terminal (or a new
+  pseudo-terminal that reports no size) the nodes below were never written
+  and Tab moved the focus onto them in silence. It now lays out as tall as
+  the content (up to 4096 rows), 80 columns wide when the terminal reports
+  none.
+- **Linear mode shows the cursor again after a suspend.** Back from
+  Ctrl+Z or `fg`, the session hid the cursor and nothing showed it again.
+- **A lazy tree whose children repeat an ancestor's key opens level by
+  level.** `tree_lazy` grew every loaded level, open or not, so a child
+  with the key of its own ancestor (a folder linked back up the tree)
+  recursed until the process aborted. Only open items are grown now.
+- **Large stylesheet padding no longer overflows.** `padding: 40000` (or
+  65535 with a border) parsed, then panicked at draw time in a debug build
+  and wrapped in a release one; the insets saturate.
+- **Stylesheet comments and quoted values hold any character.** A comment
+  holding a brace, a comment between a selector and its `{`, and a quoted
+  `border-title` holding `;` or `/*` were rejected or cut short; comments
+  are blanked first and quoted strings are kept whole. A sheet with a bad
+  rule is still reported and not applied, with the last good one kept.
+- **The wheel over a table's header scrolls the rows** again, as over the
+  rows.
+
 ### Synchronized output (rs-rich-interact 0.0.6, rs-rich-intuituive 0.0.3)
 
 0.0.18 workstream 11. rs-rich-record changes with it.

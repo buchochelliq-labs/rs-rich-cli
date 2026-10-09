@@ -1036,17 +1036,17 @@ impl Node {
         let height = if height == 0 {
             0
         } else {
-            height.saturating_sub(top + bottom).max(1)
+            height.saturating_sub(top.saturating_add(bottom)).max(1)
         };
-        let width = width.saturating_sub(left + right);
+        let width = width.saturating_sub(left.saturating_add(right));
         let inner =
             self.body
                 .borrow_mut()
                 .widget
                 .measure(&MeasureCx { console }, axis, width, height);
         inner.saturating_add(match axis {
-            Axis::Vertical => top + bottom,
-            Axis::Horizontal => left + right,
+            Axis::Vertical => top.saturating_add(bottom),
+            Axis::Horizontal => left.saturating_add(right),
         })
     }
 
@@ -1096,8 +1096,8 @@ impl Node {
             let inner = Rect::new(
                 rect.x.saturating_add(left),
                 rect.y.saturating_add(top),
-                rect.width.saturating_sub(left + right),
-                rect.height.saturating_sub(top + bottom),
+                rect.width.saturating_sub(left.saturating_add(right)),
+                rect.height.saturating_sub(top.saturating_add(bottom)),
             );
             (sheet.decor.clone(), inner)
         };
