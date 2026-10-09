@@ -110,6 +110,53 @@ impl Reader {
         self.last_read = Some(Instant::now());
     }
 
+    /// Read what the terminal has, and parse it.
+    fn fill(&mut self) -> io::Result<()> {
+        use std::io::Read;
+        let mut buffer = [0u8; 1024];
+        match self.tty.read(&mut buffer) {
+            // Nothing from a terminal that said it had input: it hung up.
+            Ok(0) => Err(io::Error::new(
+                io::ErrorKind::UnexpectedEof,
+                "the terminal hung up",
+            )),
+            Ok(read) => {
+                self.parse(&buffer[..read]);
+                Ok(())
+            }
+            Err(e) if e.kind() == io::ErrorKind::Interrupted => Ok(()),
+            Err(e) => Err(e),
+        }
+    }
+
+    /// No more came: what is held (and what the parser holds) is read as
+    /// it stands.
+    fn flush(&mut self) {
+        let events = &mut self.events;
+        let held = std::mem::take(&mut self.held);
+        self.parser
+            .parse(&held, |event| events.push_back(event), false);
+        self.last_read = None;
+    }
+
+    /// Whether the terminal has input within `wait`.
+    fn readable(&self, wait: Duration) -> io::Result<bool> {
+        use filedescriptor::{poll, pollfd, POLLIN};
+        use std::os::unix::io::AsRawFd;
+        let mut ready = [pollfd {
+            fd: self.tty.as_raw_fd(),
+            events: POLLIN,
+            revents: 0,
+        }];
+        match poll(&mut ready, Some(wait)) {
+            Ok(_) => Ok(ready[0].revents != 0),
+            Err(filedescriptor::Error::Poll(e)) if e.kind() == io::ErrorKind::Interrupted => {
+                Ok(false)
+            }
+            Err(e) => Err(other(e)),
+        }
+    }
+
     /// The next event within `wait` (or a little sooner).
     fn next(&mut self, wait: Duration) -> io::Result<Option<InputEvent>> {
         use filedescriptor::{poll, pollfd, POLLIN};
@@ -152,29 +199,21 @@ impl Reader {
             }));
         }
         if ready[0].revents != 0 {
-            let mut buffer = [0u8; 1024];
-            match self.tty.read(&mut buffer) {
-                // Nothing from a terminal that said it had input: it hung up.
-                Ok(0) => {
-                    return Err(io::Error::new(
-                        io::ErrorKind::UnexpectedEof,
-                        "the terminal hung up",
-                    ))
-                }
-                Ok(read) => self.parse(&buffer[..read]),
-                Err(e) if e.kind() == io::ErrorKind::Interrupted => {}
-                Err(e) => return Err(e),
+            self.fill()?;
+            // A sequence cut short: wait here for its rest, as the termion
+            // backend does, rather than leave it to the next call, which
+            // may come too late on a busy machine.
+            while !self.held.is_empty() && self.readable(SEQUENCE_WAIT)? {
+                self.fill()?;
+            }
+            if !self.held.is_empty() {
+                self.flush();
             }
         } else if self
             .last_read
             .is_some_and(|at| at.elapsed() >= SEQUENCE_WAIT)
         {
-            // No more came: what is held is read as it stands.
-            let events = &mut self.events;
-            let held = std::mem::take(&mut self.held);
-            self.parser
-                .parse(&held, |event| events.push_back(event), false);
-            self.last_read = None;
+            self.flush();
         }
         Ok(self.events.pop_front())
     }
