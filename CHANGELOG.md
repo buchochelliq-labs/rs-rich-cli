@@ -31,6 +31,12 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   whole paste for it again after every 1 KiB read: quadratic, 13 seconds
   for 1 MiB and minutes for 4 MiB, with no repaint meanwhile. It now
   searches only what each read added.
+- **A terminal that hangs up ends a termion or termwiz session's input.**
+  When the terminal went away but the process lived on, its reads
+  returned nothing at once, forever: the session spun at full CPU (and
+  termion, with part of a sequence pending, never returned). Reading
+  nothing from a terminal that said it had input is now the end of input,
+  an error from `read`.
 - **Answers to a program's queries are capped, and the terminal pane
   sends them.** rs-rich-record's emulator kept every answer it owed (the
   device attributes, the synchronized output report) until taken, and

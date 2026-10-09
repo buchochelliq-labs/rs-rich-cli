@@ -218,10 +218,16 @@ impl Reader {
         }
     }
 
-    /// Read what the terminal has.
+    /// Read what the terminal has. Nothing, once the terminal says it has
+    /// input, means it hung up: the end of input, an error, rather than a
+    /// wait that returns at once forever.
     fn fill(&mut self) -> io::Result<()> {
         let mut buffer = [0u8; 1024];
         match self.tty.read(&mut buffer) {
+            Ok(0) => Err(io::Error::new(
+                io::ErrorKind::UnexpectedEof,
+                "the terminal hung up",
+            )),
             Ok(read) => {
                 self.pending.extend_from_slice(&buffer[..read]);
                 Ok(())
@@ -464,6 +470,25 @@ mod tests {
         );
         assert_eq!(events[1], Event::Key(Key::char('a')));
         assert!(reader.pending.is_empty() && reader.searched == 0);
+    }
+
+    #[test]
+    fn a_terminal_that_hangs_up_ends_the_input() {
+        // `/dev/null` reads as a terminal that hung up: always ready, never
+        // anything. Even with a sequence cut short pending, the reader
+        // ends rather than wait forever.
+        for pending in [&b""[..], b"\x1b[1;"] {
+            let mut reader = reader(pending);
+            let (sent, done) = std::sync::mpsc::channel();
+            std::thread::spawn(move || {
+                let _ = sent.send(reader.next(Duration::from_millis(10)).map_err(|e| e.kind()));
+            });
+            assert_eq!(
+                done.recv_timeout(Duration::from_secs(5)),
+                Ok(Err(io::ErrorKind::UnexpectedEof)),
+                "{pending:?}"
+            );
+        }
     }
 
     /// A reader on no terminal, with `pending` read.
