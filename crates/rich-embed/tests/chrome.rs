@@ -1,7 +1,8 @@
 //! ChromeEngine against a real browser. Runs only when `RICH_EMBED_CHROME`
 //! names a Chrome or Chromium binary, so CI needs none; without it the test
 //! says it skipped and passes. The browser keeps its sandbox on, so it must
-//! be able to start one (as root it cannot).
+//! be able to start one (as root it cannot). And against a stand-in
+//! script, for the command line the browser is given.
 
 #![cfg(feature = "chrome")]
 
@@ -52,4 +53,59 @@ fn a_page_arrives_as_a_screencast_and_draws_as_half_blocks() {
         h.error().get_untracked()
     );
     assert!(h.address().get_untracked().starts_with("data:text/html"));
+}
+
+/// A stand-in browser: a script that writes down its arguments and the
+/// mode of its profile directory, then idles as a browser would.
+#[cfg(unix)]
+#[test]
+fn the_browser_gets_no_sandbox_switch_and_a_private_profile() {
+    use std::os::unix::fs::PermissionsExt;
+
+    use rich_embed::WebEngine;
+
+    let dir = std::env::temp_dir().join(format!("rich-embed-fake-chrome-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let argv = dir.join("argv");
+    let script = dir.join("chrome");
+    std::fs::write(
+        &script,
+        format!(
+            "#!/bin/sh\n\
+             for a in \"$@\"; do case \"$a\" in --user-data-dir=*) \
+             stat -c %a \"${{a#--user-data-dir=}}\" > '{dir}/mode' 2>/dev/null || \
+             stat -f %Lp \"${{a#--user-data-dir=}}\" > '{dir}/mode';; esac; done\n\
+             printf '%s\\n' \"$@\" > '{argv}.tmp' && mv '{argv}.tmp' '{argv}'\n\
+             exec sleep 30\n",
+            dir = dir.display(),
+            argv = argv.display()
+        ),
+    )
+    .unwrap();
+    std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+
+    let mut engine = ChromeEngine::new().binary(&script).args([
+        "-no-sandbox",
+        "--No-Sandbox",
+        "--disable-seccomp-filter-sandbox",
+        "--disable-namespace-sandbox",
+        "--disable-setuid-sandbox",
+        "--no-zygote-sandbox",
+        "--lang=en",
+    ]);
+    engine.resize(80, 24).unwrap();
+    let start = Instant::now();
+    while !argv.exists() && start.elapsed() < Duration::from_secs(10) {
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    let args = std::fs::read_to_string(&argv).unwrap_or_default();
+    let mode = std::fs::read_to_string(dir.join("mode")).unwrap_or_default();
+    drop(engine);
+    let _ = std::fs::remove_dir_all(&dir);
+    assert!(args.lines().any(|arg| arg == "--lang=en"), "{args}");
+    assert!(
+        !args.to_ascii_lowercase().contains("sandbox"),
+        "a sandbox switch reached the browser: {args}"
+    );
+    assert_eq!(mode.trim(), "700", "the profile's mode");
 }

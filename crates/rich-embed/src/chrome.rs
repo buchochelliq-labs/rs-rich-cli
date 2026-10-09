@@ -5,8 +5,9 @@
 //! of the engine's own, so no async runtime comes with it:
 //!
 //! - the browser is started headless with a temporary profile directory
-//!   (removed when the engine goes), its sandbox on (no `--no-sandbox`,
-//!   ever), and downloads denied (`Browser.setDownloadBehavior`);
+//!   (only this user's, removed when the engine goes), its sandbox on (no
+//!   switch that turns any of it off, ever), and downloads denied
+//!   (`Browser.setDownloadBehavior`);
 //! - a page target is created and attached in flat mode;
 //! - frames come from `Page.startScreencast` (JPEG, each acknowledged),
 //!   at the page's size in cells times [`ChromeEngine::cell_pixels`];
@@ -95,6 +96,16 @@ fn notify(shared: &Mutex<Shared>) {
 
 /// A headless Chrome or Chromium behind a web view. Frames are pixels,
 /// drawn as half blocks.
+///
+/// # Security
+///
+/// The engine drives the browser over DevTools on a random TCP port of
+/// `127.0.0.1`. While the view is open, that port can be reached by other
+/// programs and other users on this machine, and DevTools has no
+/// authentication of its own: whoever finds it can drive the browser as
+/// this user (open local files, run script in pages). Use this engine on a
+/// machine you do not share. The profile directory is readable by this
+/// user only.
 pub struct ChromeEngine {
     binary: Option<PathBuf>,
     args: Vec<String>,
@@ -139,12 +150,13 @@ impl ChromeEngine {
     }
 
     /// More command-line switches for the browser. The sandbox stays on
-    /// whatever they say: `--no-sandbox` is dropped.
+    /// whatever they say: `--no-sandbox`, and every other switch that turns
+    /// part of it off, is dropped, however it is spelled.
     pub fn args<I: IntoIterator<Item = S>, S: Into<String>>(mut self, args: I) -> ChromeEngine {
         self.args.extend(
             args.into_iter()
                 .map(Into::into)
-                .filter(|arg| !arg.starts_with("--no-sandbox")),
+                .filter(|arg| !turns_sandbox_off(arg)),
         );
         self
     }
@@ -315,7 +327,11 @@ fn temporary_profile() -> io::Result<PathBuf> {
             "rich-embed-chrome-{}-{n}-{nanos}",
             std::process::id()
         ));
-        match std::fs::create_dir(&dir) {
+        let mut builder = std::fs::DirBuilder::new();
+        // This user's only: it holds the browser's cookies and its cache.
+        #[cfg(unix)]
+        std::os::unix::fs::DirBuilderExt::mode(&mut builder, 0o700);
+        match builder.create(&dir) {
             Ok(()) => return Ok(dir),
             Err(error) if error.kind() == ErrorKind::AlreadyExists => continue,
             Err(error) => return Err(error),
@@ -323,9 +339,28 @@ fn temporary_profile() -> io::Result<PathBuf> {
     }
 }
 
+/// Whether `arg` is a switch that turns any part of the browser's sandbox
+/// off (`--no-sandbox`, `--disable-setuid-sandbox`, `--single-process`, …),
+/// in any spelling the browser reads as one: one dash or two (or a slash
+/// on Windows), any case, with or without a value.
+pub(crate) fn turns_sandbox_off(arg: &str) -> bool {
+    let name = arg.trim_start_matches(|c| c == '-' || (cfg!(windows) && c == '/'));
+    if name.len() == arg.len() {
+        // Not a switch: an address.
+        return false;
+    }
+    let name = name
+        .split('=')
+        .next()
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    ((name.starts_with("no-") || name.starts_with("disable-")) && name.contains("sandbox"))
+        || matches!(name.as_str(), "single-process" | "no-zygote")
+}
+
 /// The browser's command line: headless, on a random DevTools port, in its
 /// own profile, without first-run screens, extensions or background
-/// traffic. Never `--no-sandbox`.
+/// traffic. Never a switch that turns the sandbox off.
 pub(crate) fn launch_args(
     profile: &Path,
     extra: &[String],
@@ -347,12 +382,7 @@ pub(crate) fn launch_args(
         "--mute-audio".to_string(),
         "--hide-scrollbars".to_string(),
     ];
-    args.extend(
-        extra
-            .iter()
-            .filter(|arg| !arg.starts_with("--no-sandbox"))
-            .cloned(),
-    );
+    args.extend(extra.iter().filter(|arg| !turns_sandbox_off(arg)).cloned());
     args.push("about:blank".to_string());
     args
 }
@@ -935,6 +965,57 @@ mod tests {
         assert_eq!(args.last().unwrap(), "about:blank");
         let engine = ChromeEngine::new().args(["--no-sandbox"]);
         assert!(engine.args.is_empty());
+    }
+
+    #[test]
+    fn every_spelling_of_a_sandbox_switch_is_dropped() {
+        for arg in [
+            "--no-sandbox",
+            "-no-sandbox",
+            "---no-sandbox",
+            "--No-Sandbox",
+            "--no-sandbox=1",
+            "--disable-setuid-sandbox",
+            "--disable-namespace-sandbox",
+            "-disable-seccomp-filter-sandbox",
+            "--disable-gpu-sandbox",
+            "--no-zygote-sandbox",
+            "--no-sandbox-and-elevated",
+            "--single-process",
+            "--no-zygote",
+        ] {
+            assert!(turns_sandbox_off(arg), "{arg}");
+        }
+        assert_eq!(turns_sandbox_off("/no-sandbox"), cfg!(windows));
+        for arg in [
+            "--lang=en",
+            "--enable-sandbox",
+            "https://no-sandbox.example",
+            "--",
+        ] {
+            assert!(!turns_sandbox_off(arg), "{arg}");
+        }
+        let extra: Vec<String> = ["-no-sandbox", "--Disable-Setuid-Sandbox", "--lang=en"]
+            .map(String::from)
+            .to_vec();
+        let args = launch_args(Path::new("/tmp/profile"), &extra, 80, 24, (10, 20));
+        assert!(!args
+            .iter()
+            .any(|arg| arg.to_ascii_lowercase().contains("sandbox")));
+        let engine = ChromeEngine::new().args(extra);
+        assert_eq!(engine.args, ["--lang=en"]);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn the_profile_is_this_users_only() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let _starts = STARTS.lock().unwrap_or_else(|e| e.into_inner());
+        let profile = temporary_profile().unwrap();
+        let mode = std::fs::metadata(&profile).unwrap().permissions().mode();
+        std::fs::remove_dir(&profile).unwrap();
+        assert_eq!(mode & 0o777, 0o700, "{mode:o}");
     }
 
     #[test]

@@ -218,10 +218,20 @@ names on `PATH` (`google-chrome`, `chromium`, `chromium-browser`, …) or its
 usual install location. It speaks the protocol directly over
 `tungstenite`, on a thread of its own, so no async runtime comes with it.
 
-- **The sandbox stays on.** `--no-sandbox` is never passed, and is dropped
-  if you pass it in `.args`. Chrome refuses to run as root with its sandbox
-  on: run the app as an ordinary user.
-- **The profile is a temporary directory**, removed when the engine goes.
+- **The sandbox stays on.** `--no-sandbox` is never passed, and it is
+  dropped if you pass it in `.args`, as is every other switch that turns
+  part of the sandbox off (`--disable-setuid-sandbox`,
+  `--disable-seccomp-filter-sandbox`, `--single-process`, …), however it
+  is spelled (`-no-sandbox`, `--No-Sandbox`, `/no-sandbox` on Windows).
+  Chrome refuses to run as root with its sandbox on: run the app as an
+  ordinary user.
+- **The profile is a temporary directory** that only this user can read
+  (mode 0700 on Unix), removed when the engine goes.
+- **DevTools listens on a random port of `127.0.0.1`** while the view is
+  open. Other programs and other users on this machine can reach that
+  port, and DevTools has no authentication of its own: whoever finds it
+  can drive the browser as you (open local files, run script in pages).
+  Use the Chrome engine on a machine you do not share.
 - **Downloads are denied** (`Browser.setDownloadBehavior`).
 - Frames are `Page.startScreencast` JPEGs, with the page laid out at the
   pane's size times `cell_pixels` (10 x 20 CSS pixels a cell by default).

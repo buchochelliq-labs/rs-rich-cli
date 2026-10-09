@@ -11,6 +11,19 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### 0.0.18 release test: fixes from three audits
 
+- **No spelling of a sandbox switch reaches Chrome.** `ChromeEngine`
+  dropped only arguments that began `--no-sandbox`, but Chromium also
+  reads `-no-sandbox` (and `/no-sandbox` and any case on Windows), and
+  `--disable-setuid-sandbox`, `--disable-seccomp-filter-sandbox` and
+  their kin passed untouched. Switches are now normalised (dashes, a
+  Windows slash, case, a value) before the filter, which drops every
+  switch that turns part of the sandbox off, `--single-process` and
+  `--no-zygote` included.
+- **Chrome's profile directory is private.** It was created with the
+  default mode (world-readable on most systems); it is now `0700` on
+  Unix. The `ChromeEngine` docs and the embed guide now say that its
+  DevTools port on `127.0.0.1` can be reached by other local users while
+  the view is open.
 - **A slow request no longer holds an rs-rich-web server's connection for
   ever.** The 10-second limit on sending a request applied to each read,
   so a client sending a byte every few seconds kept its connection (and
