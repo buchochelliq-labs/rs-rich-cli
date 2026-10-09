@@ -327,6 +327,7 @@ fn temporary_profile() -> io::Result<PathBuf> {
             "rich-embed-chrome-{}-{n}-{nanos}",
             std::process::id()
         ));
+        #[cfg_attr(not(unix), allow(unused_mut))]
         let mut builder = std::fs::DirBuilder::new();
         // This user's only: it holds the browser's cookies and its cache.
         #[cfg(unix)]
