@@ -371,9 +371,10 @@ review release. Kept for the record:
 ~~**Theme stack**~~ — done in 0.0.10 (core 0.0.6): `push_theme`, `pop_theme`
 and a `use_theme` guard that derefs to the console; see [§14](DIVERGENCES.md).
 
-**Windows legacy console** — [#12](https://github.com/buchochelliq-labs/rs-rich-cli/issues/12).
-Needs an explicit `unsafe` opt-in, since the workspace denies `unsafe_code`.
-Without it, pre-Windows-10 terminals silently fall back to plain output.
+~~**Windows legacy console**~~ — not planned:
+[#12](https://github.com/buchochelliq-labs/rs-rich-cli/issues/12) is closed
+and the console without VT processing is unsupported
+([DIVERGENCES §38](DIVERGENCES.md#38-the-windows-legacy-console-is-not-supported)).
 
 ~~**Progress time/rate columns and Live integration**~~ — done: time, rate and
 spinner columns in 0.0.10 (core 0.0.6); the Live-driven display, `track()` and

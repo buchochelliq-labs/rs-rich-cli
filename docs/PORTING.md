@@ -91,7 +91,7 @@ Mirrored upstream: `rich` **15.0.0** (see [`UPSTREAM.toml`](https://github.com/b
 | `prompt.py` | `prompt.rs` | 🟡 |
 | `_unicode_data/` (21 version tables, `UNICODE_VERSION`) | `cell_widths.rs` | 🟢 |
 | `box.substitute` (legacy/ASCII fallback) | `box.rs` | 🟡 | ✅ |
-| `_windows.py`, `_win32_console.py`, `_windows_renderer.py` | `windows/` | ⬜ |
+| `_windows.py`, `_win32_console.py`, `_windows_renderer.py` | — | not ported: the legacy console is unsupported ([DIVERGENCES §38](DIVERGENCES.md#38-the-windows-legacy-console-is-not-supported)) |
 | `jupyter.py`, `file_proxy.py`, `diagnose.py`, `_fileno.py`, `_null_file.py` | resp. | ⬜ |
 | `_ratio.py` (`ratio_resolve`) | `ratio.rs` | 🟡 | ✅ |
 | `_loop.py`, `_pick.py`, `_stack.py`, `_timer.py` | internal helpers | ⬜ |
