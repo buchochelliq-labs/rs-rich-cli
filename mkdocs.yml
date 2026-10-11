@@ -167,6 +167,7 @@ nav:
   - Troubleshooting: troubleshooting.md
   - Known issues: known-issues.md
   - Development plans:
+      - "Plan to 1.0.0": plans/1.0.0.md
       - "intuiTUIve grows up": plans/0.0.18.md
       - "Data and developer tooling": plans/0.0.16.md
       - "Terminal charts and diagrams": plans/0.0.15.md
