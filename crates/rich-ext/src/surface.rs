@@ -289,6 +289,7 @@ impl<W: Write> Surface<W> {
             damage
         };
         let painted = self.painter.paint(&self.screen, &damage);
+        let written = self.painter.written().to_vec();
         if self.cursor_shown && !painted.is_empty() {
             // Hidden while the frame is written, so it does not flicker
             // across the screen.
@@ -297,7 +298,7 @@ impl<W: Write> Surface<W> {
         }
         out.push_str(&painted);
         if self.graphics.is_some() {
-            out.push_str(&self.draw_graphics(&damage));
+            out.push_str(&self.draw_graphics(&written));
         }
         let area = self.screen.area();
         match cursor.filter(|&(x, y)| x < area.width && y < area.height) {
@@ -322,8 +323,10 @@ impl<W: Write> Surface<W> {
     }
 
     /// After the cells: the graphics that moved, went away or had their
-    /// cells repainted under them.
-    fn draw_graphics(&mut self, damage: &[Rect]) -> String {
+    /// cells repainted under them. `written` is what the painter actually
+    /// wrote: a damaged cell that did not change was not written, so a
+    /// graphic over it was not wiped.
+    fn draw_graphics(&mut self, written: &[Rect]) -> String {
         let Some(source) = self.graphics.clone() else {
             return String::new();
         };
@@ -334,7 +337,7 @@ impl<W: Write> Surface<W> {
             .into_iter()
             .filter(|p| p.row + p.rows <= height)
             .collect();
-        let changes: Vec<Change> = damage
+        let changes: Vec<Change> = written
             .iter()
             .flat_map(|rect| {
                 (rect.y..rect.bottom()).map(move |row| Change {
@@ -376,11 +379,8 @@ impl<W: Write> Surface<W> {
     /// or the cursor goes below the last frame (inline); styles are reset
     /// and the cursor shown. Called by `Drop` if not before.
     pub fn finish(&mut self) -> io::Result<()> {
-        if self.finished {
-            return Ok(());
-        }
-        self.finished = true;
-        if !self.started {
+        if self.finished || !self.started {
+            self.finished = true;
             return Ok(());
         }
         let mut out = String::new();
@@ -397,7 +397,10 @@ impl<W: Write> Surface<W> {
             out.push_str("\x1b[?1049l");
         }
         self.writer.write_all(out.as_bytes())?;
-        self.writer.flush()
+        self.writer.flush()?;
+        // Only now: a failed write leaves `finish` (and `Drop`) to try again.
+        self.finished = true;
+        Ok(())
     }
 }
 
@@ -587,6 +590,90 @@ mod tests {
             .draw(|s| s.render(s.area(), &Text::new("a\x1b[2Jb")))
             .unwrap();
         assert_eq!(surface.screen().plain()[0], "a␛[2Jb    ");
+    }
+
+    /// A writer whose next `fails` writes fail.
+    struct Flaky {
+        fails: usize,
+        out: Vec<u8>,
+    }
+
+    impl Write for Flaky {
+        fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+            if self.fails > 0 {
+                self.fails -= 1;
+                return Err(io::Error::other("full"));
+            }
+            self.out.write(buf)
+        }
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn a_failed_finish_can_be_retried() {
+        let mut surface = Surface::new(
+            Flaky {
+                fails: 0,
+                out: Vec::new(),
+            },
+            4,
+            1,
+        );
+        surface
+            .draw(|s| s.render(s.area(), &Text::new("x")))
+            .unwrap();
+        surface.writer_mut().fails = 1;
+        assert!(surface.finish().is_err());
+        surface.finish().unwrap();
+        let out = String::from_utf8(surface.writer().out.clone()).unwrap();
+        assert!(out.ends_with("\x1b[?1049l"), "{out:?}");
+    }
+
+    /// A one-cell graphic on every `*`.
+    #[derive(Debug)]
+    struct Star;
+
+    impl crate::frame::Graphic for Star {
+        fn key(&self) -> u64 {
+            1
+        }
+        fn draw(&self, _frame: usize) -> String {
+            "<star>".into()
+        }
+    }
+
+    /// One star at a column it is told, whatever the cells say.
+    struct Moving(std::sync::Mutex<usize>);
+
+    impl PlacementSource for Moving {
+        fn placements(&self, _frame: &Frame) -> Vec<Placement> {
+            vec![Placement {
+                row: 0,
+                column: *self.0.lock().unwrap(),
+                cols: 1,
+                rows: 1,
+                graphic: Arc::new(Star),
+                frame: 0,
+            }]
+        }
+    }
+
+    #[test]
+    fn a_graphic_that_moves_off_unchanged_cells_leaves_no_ghost() {
+        let source = Arc::new(Moving(std::sync::Mutex::new(1)));
+        let mut surface = Surface::new(Vec::new(), 6, 1)
+            .graphics(Some(source.clone() as Arc<dyn PlacementSource>));
+        let draw = |s: &mut Drawing<'_>| s.render(s.area(), &Text::new("abcdef"));
+        surface.draw(draw).unwrap();
+        output(&mut surface);
+        *source.0.lock().unwrap() = 3;
+        // The row is drawn again with the same cells: none is written by the
+        // diff, so the cell under the old star must be repainted on purpose.
+        surface.draw(draw).unwrap();
+        let out = output(&mut surface);
+        assert_eq!(out, "\x1b[1;2H\x1b[0mb\x1b[1;4H<star>", "{out:?}");
     }
 
     #[test]

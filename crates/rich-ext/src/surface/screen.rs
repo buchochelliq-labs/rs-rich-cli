@@ -239,7 +239,7 @@ impl Screen {
 
     /// Copy the cells of `from` in `source` to this screen at `x`, `y`,
     /// clipped to this screen. A wide character cut by either edge of
-    /// `from` becomes a space.
+    /// `from`, or by this screen's right edge, becomes a space.
     pub fn blit(&mut self, source: &Screen, from: Rect, x: u16, y: u16) {
         let from = from.intersection(source.area());
         for row in 0..from.height {
@@ -254,7 +254,7 @@ impl Screen {
                 }
                 let cell = source.cell(from.x + column, from.y + row);
                 let cut = cell.is_continuation() && column == 0
-                    || cell.width >= 2 && column + 1 >= from.width;
+                    || cell.width >= 2 && (column + 1 >= from.width || tx + 1 >= self.width);
                 let id = self.styles.intern(source.style(cell.style));
                 if cut {
                     self.cell_mut(tx, ty).set(" ", 1, id);
@@ -348,6 +348,8 @@ pub struct Painter {
     height: u16,
     /// Write every cell inside the damage, changed or not.
     force: bool,
+    /// The cells the last paint wrote, one rectangle per run of a row.
+    written: Vec<Rect>,
 }
 
 /// The pen's state while a frame is written.
@@ -370,6 +372,7 @@ impl Painter {
             cursor: None,
             height: 0,
             force: false,
+            written: Vec::new(),
         }
     }
 
@@ -459,6 +462,7 @@ impl Painter {
     /// `damage` rectangles can have changed since the last paint (ignored
     /// on the first paint, or after a resize or [`invalidate`](Self::invalidate)).
     pub fn paint(&mut self, screen: &Screen, damage: &[Rect]) -> String {
+        self.written.clear();
         let mut out = String::new();
         let full = !matches!(&self.previous, Some(p) if p.width == screen.width && p.height == screen.height);
         let rects: Vec<Rect> = if full {
@@ -509,6 +513,13 @@ impl Painter {
             }
         }
         out
+    }
+
+    /// The cells the last [`paint`](Self::paint) or [`repaint`](Self::repaint)
+    /// wrote, one rectangle per run of a row: what a graphic drawn over them
+    /// lost.
+    pub fn written(&self) -> &[Rect] {
+        &self.written
     }
 
     /// [`paint`](Self::paint), writing every cell of `rects` whether it
@@ -566,6 +577,10 @@ impl Painter {
             self.set_pen(screen, cell.style, pen, out);
             out.push_str(&cell.text);
             let next = x0 + cell.width.max(1) as u16;
+            match self.written.last_mut() {
+                Some(run) if run.y == y && run.right() == x0 => run.width = next - run.x,
+                _ => self.written.push(Rect::new(x0, y, next - x0, 1)),
+            }
             pen.at = Some((next, y));
             x = next;
         }
@@ -712,6 +727,27 @@ mod tests {
             "the link is closed: {out:?}"
         );
         assert!(out.contains("\x1b[0;1mok"), "{out:?}");
+    }
+
+    #[test]
+    fn a_wide_grapheme_cut_by_the_destination_edge_becomes_a_space() {
+        let mut source = Screen::new(4, 1);
+        source.write_lines(source.area(), &[line("ab日")]);
+        let mut narrow = Screen::new(3, 1);
+        narrow.blit(&source, source.area(), 0, 0);
+        assert_eq!(narrow.plain(), ["ab "]);
+        assert_eq!(narrow.cell(2, 0).width, 1);
+    }
+
+    #[test]
+    fn the_painter_reports_the_runs_it_wrote() {
+        let mut screen = Screen::new(10, 2);
+        let mut painter = Painter::new(None);
+        screen.write_lines(screen.area(), &[line("abc"), line("xyz")]);
+        painter.paint(&screen, &[]);
+        screen.write_lines(Rect::new(0, 1, 10, 1), &[line("xYz")]);
+        painter.paint(&screen, &[Rect::new(0, 0, 10, 2)]);
+        assert_eq!(painter.written(), [Rect::new(1, 1, 1, 1)]);
     }
 
     #[test]
