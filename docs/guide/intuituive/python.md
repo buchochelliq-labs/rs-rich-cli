@@ -40,6 +40,7 @@ As in Rust, `build` runs once and returns the root node. `text` reads
 | `.class("warn")` | `.class_("warn")` (`class` is a Python keyword) |
 | `Size::Fixed(3)`, `Size::Auto` | `Size.Fixed(3)`, `Size.Auto`, or `3` and `"auto"` (`"40%"` and `"2fr"` too) |
 | `Easing::EaseOut`, `Placement::Below`, `Role::MenuBar` | `Easing.EaseOut`, `Placement.Below`, `Role.MenuBar`, or `"ease_out"`, `"below"`, `"menubar"` |
+| `.align_items(Align::Center)`, `.justify(Justify::SpaceBetween)`, `.align_content(AlignContent::Stretch)` | `.align_items("center")`, `.justify("space-between")`, `.align_content("stretch")`: the stylesheet's CSS names |
 | `Rect::new(x, y, w, h)` | `Rect(x, y, w, h)`, or a tuple `(x, y, w, h)` |
 | `Date::new(2026, 10, 7)` | `datetime.date(2026, 10, 7)` |
 | `Duration::from_millis(200)` | `0.2` (seconds), or a `timedelta` |

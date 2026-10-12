@@ -11,7 +11,9 @@ use rich::{Console, Segment, Style};
 use rich_interact::{Component, Context, Event, Flow, KeyCode, MouseKind};
 
 use crate::app::Ctx;
-use crate::layout::{grow_for_span, offsets, place, solve, Size, Track};
+use crate::layout::{
+    grow_for_span, offsets, place, solve, Align, AlignContent, Justify, Size, StackLayout, Track,
+};
 use crate::node::{Axis, Handler, Node};
 use crate::reactive::{NodeId, Runtime, Signal};
 use crate::screen::Rect;
@@ -59,7 +61,8 @@ impl Widget for Leaf {
 /// Children along an axis: [`column`](crate::column) and [`row`](crate::row).
 pub(crate) struct Stack {
     pub axis: Axis,
-    pub gap: u16,
+    /// The gap, alignment and wrapping.
+    pub flow: StackLayout,
     pub children: Vec<Node>,
 }
 
@@ -72,8 +75,26 @@ impl Widget for Stack {
     }
 
     fn measure(&mut self, cx: &MeasureCx, axis: Axis, width: u16, height: u16) -> u16 {
+        let gap = self.flow.gap;
+        // Wrapped, the size across the axis is the lines' sizes: a row as
+        // wide as `width`, or a column as tall as `height` (when bounded).
+        let bounded = match self.axis {
+            Axis::Horizontal => true,
+            Axis::Vertical => height > 0,
+        };
+        if self.flow.wrap && self.axis != axis && bounded {
+            let (total, room) = match self.axis {
+                Axis::Horizontal => (width, height),
+                Axis::Vertical => (height, width),
+            };
+            let lines = cx.wrap_lines(self.axis, gap, &self.children, total, room);
+            let gaps = gap.saturating_mul(lines.len().saturating_sub(1) as u16);
+            return lines
+                .iter()
+                .fold(gaps, |sum, (_, _, cross)| sum.saturating_add(*cross));
+        }
         let shown = self.children.iter().filter(|c| !c.hidden()).count();
-        let gaps = self.gap.saturating_mul(shown.saturating_sub(1) as u16);
+        let gaps = gap.saturating_mul(shown.saturating_sub(1) as u16);
         if self.axis == axis {
             self.children.iter().fold(gaps, |sum, child| {
                 sum.saturating_add(cx.extent(child, axis, width, height))
@@ -87,18 +108,72 @@ impl Widget for Stack {
         }
     }
 
+    fn describe(&self) -> Option<String> {
+        let flow = self.flow;
+        let mut parts = Vec::new();
+        if flow.align_items != Align::Stretch {
+            parts.push(format!("align-items:{}", css_align(flow.align_items)));
+        }
+        if flow.justify != Justify::Start {
+            parts.push(format!("justify:{}", css_justify(flow.justify)));
+        }
+        if flow.wrap {
+            parts.push("wrap".to_string());
+            if flow.align_content != AlignContent::Stretch {
+                parts.push(format!(
+                    "align-content:{}",
+                    css_align_content(flow.align_content)
+                ));
+            }
+        }
+        (!parts.is_empty()).then(|| parts.join(" "))
+    }
+
     fn children(&self) -> &[Node] {
         &self.children
     }
 
     fn layout(&mut self, cx: &MeasureCx, rect: Rect) -> Vec<Rect> {
-        cx.stack(self.axis, self.gap, &self.children, rect)
+        cx.stack_flow(self.axis, self.flow, &self.children, rect)
     }
 
     fn draw(&mut self, _cx: &mut DrawCx, _canvas: &mut Canvas) {}
 
     fn retained(&self) -> bool {
         true
+    }
+}
+
+/// The stylesheet's name for `align`.
+pub(crate) fn css_align(align: Align) -> &'static str {
+    match align {
+        Align::Start => "flex-start",
+        Align::Center => "center",
+        Align::End => "flex-end",
+        Align::Stretch => "stretch",
+    }
+}
+
+fn css_justify(justify: Justify) -> &'static str {
+    match justify {
+        Justify::Start => "flex-start",
+        Justify::Center => "center",
+        Justify::End => "flex-end",
+        Justify::SpaceBetween => "space-between",
+        Justify::SpaceAround => "space-around",
+        Justify::SpaceEvenly => "space-evenly",
+    }
+}
+
+fn css_align_content(align: AlignContent) -> &'static str {
+    match align {
+        AlignContent::Start => "flex-start",
+        AlignContent::Center => "center",
+        AlignContent::End => "flex-end",
+        AlignContent::SpaceBetween => "space-between",
+        AlignContent::SpaceAround => "space-around",
+        AlignContent::SpaceEvenly => "space-evenly",
+        AlignContent::Stretch => "stretch",
     }
 }
 

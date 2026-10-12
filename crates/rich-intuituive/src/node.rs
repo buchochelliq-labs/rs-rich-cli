@@ -42,7 +42,7 @@ use rich_interact::{Component, Key, Mouse};
 use crate::app::Ctx;
 use crate::builtin::{Each, Grid, Host, HostWidget, Leaf, Pad, Panel, ScrollView, Stack, Switch};
 pub use crate::layout::Size;
-use crate::layout::Track;
+use crate::layout::{Align, AlignContent, Justify, StackLayout, Track};
 use crate::reactive::{next_node, NodeId, Runtime, Signal};
 use crate::screen::{Rect, Screen};
 use crate::sheet::{BoxKind, Dock, Element, Layout, States, Stylesheet};
@@ -112,8 +112,11 @@ pub struct Node {
     pub(crate) drag: Option<Rc<dyn Any>>,
     pub(crate) drop: Option<DropTarget>,
     /// What code set, which a stylesheet leaves alone: the size, the
-    /// minimum, the maximum, the gap and a grid's rows.
-    set: [bool; 5],
+    /// minimum, the maximum, the gap, a grid's rows, and a stack's
+    /// alignment, justification, wrapping and line alignment.
+    set: [bool; 9],
+    /// Where it sits across its parent's axis, when code said.
+    align_self: Option<Align>,
     /// Its classes, for stylesheets: fixed ones, and ones that hold while a
     /// condition does.
     classes: Vec<String>,
@@ -150,6 +153,10 @@ const SET_MIN: usize = 1;
 const SET_MAX: usize = 2;
 const SET_GAP: usize = 3;
 const SET_ROWS: usize = 4;
+const SET_ALIGN_ITEMS: usize = 5;
+const SET_JUSTIFY: usize = 6;
+const SET_WRAP: usize = 7;
+const SET_ALIGN_CONTENT: usize = 8;
 
 /// A node's part of the stylesheet.
 #[derive(Default)]
@@ -227,7 +234,8 @@ impl Node {
             tooltip: None,
             drag: None,
             drop: None,
-            set: [false; 5],
+            set: [false; 9],
+            align_self: None,
             classes: Vec::new(),
             class_when: Vec::new(),
             selected_when: None,
@@ -444,6 +452,10 @@ impl Node {
             Some(name) => format!("{name} ({}{classes})", self.what),
             None => format!("{}{classes}", self.what),
         };
+        let base = match self.align_self {
+            Some(align) => format!("{base} align-self:{}", crate::builtin::css_align(align)),
+            None => base,
+        };
         match self.body.borrow().widget.describe() {
             Some(more) => format!("{base} {more}"),
             None => base,
@@ -509,9 +521,59 @@ impl Node {
     /// For a [`column`](fn@column), [`row`] or [`grid`]: leave `cells` empty
     /// between neighbouring children. Ignored on other nodes.
     pub fn gap(mut self, cells: u16) -> Node {
-        self.widget_mut(|stack: &mut Stack| stack.gap = cells);
+        self.widget_mut(|stack: &mut Stack| stack.flow.gap = cells);
         self.widget_mut(|grid: &mut Grid| grid.gap = (cells, cells));
         self.set[SET_GAP] = true;
+        self
+    }
+
+    /// For a [`column`](fn@column) or [`row`]: where the children sit
+    /// across its axis, each as wide (in a column) or tall (in a row) as its
+    /// content, unless it says otherwise with [`align_self`](Self::align_self).
+    /// [`Align::Stretch`], the default, gives them the whole width or
+    /// height. CSS's `align-items`. Ignored on other nodes.
+    pub fn align_items(mut self, align: Align) -> Node {
+        self.widget_mut(|stack: &mut Stack| stack.flow.align_items = align);
+        self.set[SET_ALIGN_ITEMS] = true;
+        self
+    }
+
+    /// In a [`column`](fn@column) or [`row`]: where this child sits across
+    /// the parent's axis, whatever the parent's
+    /// [`align_items`](Self::align_items) says. CSS's `align-self`.
+    pub fn align_self(mut self, align: Align) -> Node {
+        self.align_self = Some(align);
+        self
+    }
+
+    /// For a [`column`](fn@column) or [`row`]: where the children sit along
+    /// its axis when they leave room over (a flexible child leaves none).
+    /// CSS's `justify-content`. Ignored on other nodes.
+    pub fn justify(mut self, justify: Justify) -> Node {
+        self.widget_mut(|stack: &mut Stack| stack.flow.justify = justify);
+        self.set[SET_JUSTIFY] = true;
+        self
+    }
+
+    /// For a [`column`](fn@column) or [`row`]: children that do not fit go
+    /// on a new line (a new column, in a column), each line laid out on its
+    /// own, [`gap`](Self::gap) apart. Each child starts at its own size, or
+    /// its content's for a flexible one, and the flexible ones share what
+    /// their line leaves. Children are not docked in a wrapping stack. CSS's
+    /// `flex-wrap: wrap`. Ignored on other nodes.
+    pub fn wrap(mut self) -> Node {
+        self.widget_mut(|stack: &mut Stack| stack.flow.wrap = true);
+        self.set[SET_WRAP] = true;
+        self
+    }
+
+    /// For a [`wrap`](Self::wrap)ping [`column`](fn@column) or [`row`]:
+    /// where the lines sit across its axis when they leave room over.
+    /// [`AlignContent::Stretch`], the default, grows them to share it.
+    /// CSS's `align-content`. Ignored on other nodes.
+    pub fn align_content(mut self, align: AlignContent) -> Node {
+        self.widget_mut(|stack: &mut Stack| stack.flow.align_content = align);
+        self.set[SET_ALIGN_CONTENT] = true;
         self
     }
 
@@ -790,13 +852,13 @@ impl Node {
     /// takes the node's size.
     pub fn panel(self, title: &str) -> Node {
         let title = title.to_string();
-        self.wrap(|child| Box::new(Panel::new(title, child)), "panel")
+        self.wrap_in(|child| Box::new(Panel::new(title, child)), "panel")
     }
 
     /// Leave `vertical` empty rows above and below this node, and
     /// `horizontal` empty columns either side.
     pub fn padding(self, vertical: u16, horizontal: u16) -> Node {
-        self.wrap(
+        self.wrap_in(
             |child| {
                 Box::new(Pad {
                     child,
@@ -808,7 +870,7 @@ impl Node {
     }
 
     /// A node of `widget` round this one, taking over its size and span.
-    fn wrap(self, widget: impl FnOnce(Node) -> Box<dyn Widget>, what: &'static str) -> Node {
+    fn wrap_in(self, widget: impl FnOnce(Node) -> Box<dyn Widget>, what: &'static str) -> Node {
         let (size, min, max, span, set) = (self.size, self.min, self.max, self.span, self.set);
         let mut outer = Node::from_widget(widget(self), what);
         outer.size = size;
@@ -868,6 +930,12 @@ impl Node {
         self.sheet.borrow().layout.dock
     }
 
+    /// Where it sits across its parent's axis, if code or a stylesheet
+    /// (`align-self`) said; code wins.
+    pub(crate) fn self_align(&self) -> Option<Align> {
+        self.align_self.or(self.sheet.borrow().layout.align_self)
+    }
+
     pub(crate) fn track(&self) -> Track {
         let (size, min, max) = self.dims();
         Track {
@@ -909,9 +977,25 @@ impl Node {
         chain.pop();
         if !self.set[SET_GAP] {
             let gap = layout.gap.unwrap_or(0);
-            self.widget_mut(|stack: &mut Stack| stack.gap = gap);
+            self.widget_mut(|stack: &mut Stack| stack.flow.gap = gap);
             self.widget_mut(|grid: &mut Grid| grid.gap = (gap, gap));
         }
+        let set = self.set;
+        self.widget_mut(|stack: &mut Stack| {
+            let flow = &mut stack.flow;
+            if !set[SET_ALIGN_ITEMS] {
+                flow.align_items = layout.align_items.unwrap_or_default();
+            }
+            if !set[SET_JUSTIFY] {
+                flow.justify = layout.justify.unwrap_or_default();
+            }
+            if !set[SET_WRAP] {
+                flow.wrap = layout.wrap.unwrap_or_default();
+            }
+            if !set[SET_ALIGN_CONTENT] {
+                flow.align_content = layout.align_content.unwrap_or_default();
+            }
+        });
         let rows_set = self.set[SET_ROWS];
         self.widget_mut(|grid: &mut Grid| {
             if !rows_set {
@@ -2186,7 +2270,7 @@ fn stack(axis: Axis, children: impl IntoIterator<Item = Node>) -> Node {
     Node::from_widget(
         Box::new(Stack {
             axis,
-            gap: 0,
+            flow: StackLayout::default(),
             children: children.into_iter().collect(),
         }),
         "stack",

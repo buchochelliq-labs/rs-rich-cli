@@ -61,7 +61,10 @@ use rich::{Console, Renderable, Segment, Style};
 use rich_interact::{Key, Mouse, MouseKind};
 
 use crate::app::{Ctx, Theme};
-use crate::layout::{offsets, solve, Size};
+use crate::layout::{
+    align_cross, break_lines, justify_offsets, offsets, place_lines, solve, Align, Justify, Size,
+    StackLayout, Track,
+};
 use crate::node::{Axis, Node};
 use crate::reactive::{NodeId, Signal};
 use crate::screen::{Rect, Screen};
@@ -282,6 +285,33 @@ impl MeasureCx<'_> {
     /// [`column`](crate::column) or [`row`](crate::row) does: each by its
     /// [`Size`], the flexible ones sharing what is left.
     pub fn stack(&self, axis: Axis, gap: u16, children: &[Node], rect: Rect) -> Vec<Rect> {
+        self.stack_flow(
+            axis,
+            StackLayout {
+                gap,
+                ..StackLayout::default()
+            },
+            children,
+            rect,
+        )
+    }
+
+    /// [`stack`](Self::stack) with alignment and wrapping, as a
+    /// [`column`](crate::column) or [`row`](crate::row) given
+    /// [`align_items`](Node::align_items), [`justify`](Node::justify) or
+    /// [`wrap`](Node::wrap) does. A child's own
+    /// [`align_self`](Node::align_self) wins over `flow.align_items`.
+    pub fn stack_flow(
+        &self,
+        axis: Axis,
+        flow: StackLayout,
+        children: &[Node],
+        rect: Rect,
+    ) -> Vec<Rect> {
+        if flow.wrap {
+            return self.stack_wrapped(axis, flow, children, rect);
+        }
+        let gap = flow.gap;
         // Docked children go first or last; hidden ones take no room and
         // no gap.
         use crate::sheet::Dock;
@@ -294,28 +324,11 @@ impl MeasureCx<'_> {
             .filter(|&i| !children[i].hidden())
             .collect();
         order.sort_by_key(|&i| rank(&children[i]));
-        let placed: Vec<&Node> = order.iter().map(|&i| &children[i]).collect();
-        let tracks: Vec<_> = placed
+        let tracks: Vec<_> = order
             .iter()
-            .map(|child| {
-                let mut track = child.track();
-                if track.size == Size::Auto {
-                    // Content is measured in the whole rectangle across the
-                    // axis, and unbounded along it.
-                    track.content = match axis {
-                        Axis::Vertical => self.measure(child, Axis::Vertical, rect.width, 0),
-                        Axis::Horizontal => {
-                            self.measure(child, Axis::Horizontal, rect.width, rect.height)
-                        }
-                    };
-                }
-                track
-            })
+            .map(|&i| self.main_track(&children[i], axis, rect))
             .collect();
-        let (start, total) = match axis {
-            Axis::Vertical => (rect.y, rect.height),
-            Axis::Horizontal => (rect.x, rect.width),
-        };
+        let (start, total) = main_span(axis, rect);
         let sizes = solve(total, gap, &tracks);
         let mut at = offsets(start, gap, &sizes);
         // Children docked to the far edge keep to it when the rest leave
@@ -331,14 +344,188 @@ impl MeasureCx<'_> {
                 at[first + k] = offset;
             }
         }
+        // The children between the docked ones share what is left by
+        // `justify`.
+        let head = order.iter().filter(|&&i| rank(&children[i]) == 0).count();
+        let middle = head..order.len() - tail;
+        if !middle.is_empty() && flow.justify != Justify::Start {
+            let from = at[middle.start];
+            let end = if tail > 0 {
+                at[middle.end].saturating_sub(gap)
+            } else {
+                start.saturating_add(total)
+            };
+            let placed = justify_offsets(
+                from,
+                end.saturating_sub(from),
+                gap,
+                &sizes[middle.clone()],
+                flow.justify,
+            );
+            at[middle].copy_from_slice(&placed);
+        }
+        let (across, room) = cross_span(axis, rect);
         let mut areas = vec![Rect::default(); children.len()];
         for ((at, n), &i) in at.into_iter().zip(sizes).zip(&order) {
-            areas[i] = match axis {
-                Axis::Vertical => Rect::new(rect.x, at, rect.width, n),
-                Axis::Horizontal => Rect::new(at, rect.y, n, rect.height),
-            };
+            let (c, cn) = self.cross(&children[i], axis, flow.align_items, n, across, room);
+            areas[i] = along(axis, at, n, c, cn);
         }
         areas
+    }
+
+    /// A child's track along `axis` in `rect`, its content measured for
+    /// [`Size::Auto`]: in the whole rectangle across the axis, and
+    /// unbounded along it.
+    fn main_track(&self, child: &Node, axis: Axis, rect: Rect) -> Track {
+        let mut track = child.track();
+        if track.size == Size::Auto {
+            track.content = self.main_content(child, axis, rect);
+        }
+        track
+    }
+
+    fn main_content(&self, child: &Node, axis: Axis, rect: Rect) -> u16 {
+        match axis {
+            Axis::Vertical => self.measure(child, Axis::Vertical, rect.width, 0),
+            Axis::Horizontal => self.measure(child, Axis::Horizontal, rect.width, rect.height),
+        }
+    }
+
+    /// Across `axis`: where `child`, `main` cells along it, sits in `room`
+    /// cells from `at`, and how many it takes.
+    fn cross(
+        &self,
+        child: &Node,
+        axis: Axis,
+        align: Align,
+        main: u16,
+        at: u16,
+        room: u16,
+    ) -> (u16, u16) {
+        let align = child.self_align().unwrap_or(align);
+        if align == Align::Stretch {
+            return (at, room);
+        }
+        align_cross(at, room, self.cross_content(child, axis, main, room), align)
+    }
+
+    /// The cells `child` needs across `axis` when it is `main` cells along
+    /// it, with `room` cells to take.
+    fn cross_content(&self, child: &Node, axis: Axis, main: u16, room: u16) -> u16 {
+        match axis {
+            Axis::Vertical => self.measure(child, Axis::Horizontal, room, main),
+            Axis::Horizontal => self.measure(child, Axis::Vertical, main, 0),
+        }
+    }
+
+    /// The lines a wrapping stack breaks `children` into along `total`
+    /// cells, with `room` across: each line's children (indices into
+    /// `children`), their sizes along the axis and the line's size across
+    /// it (its largest child).
+    pub(crate) fn wrap_lines(
+        &self,
+        axis: Axis,
+        gap: u16,
+        children: &[Node],
+        total: u16,
+        room: u16,
+    ) -> Vec<(Vec<usize>, Vec<u16>, u16)> {
+        let shown: Vec<usize> = (0..children.len())
+            .filter(|&i| !children[i].hidden())
+            .collect();
+        let rect = match axis {
+            Axis::Vertical => Rect::new(0, 0, room, total),
+            Axis::Horizontal => Rect::new(0, 0, total, room),
+        };
+        // Each child's size before the lines share out what is left: its
+        // own, or its content for a flexible one, as a CSS flex basis.
+        let tracks: Vec<Track> = shown
+            .iter()
+            .map(|&i| {
+                let mut track = self.main_track(&children[i], axis, rect);
+                if matches!(track.size, Size::Flex(_)) {
+                    track.content = self.main_content(&children[i], axis, rect);
+                }
+                track
+            })
+            .collect();
+        let bases: Vec<u16> = tracks
+            .iter()
+            .map(|t| {
+                let wanted = match t.size {
+                    Size::Fixed(cells) => cells as u32,
+                    Size::Percent(p) => total as u32 * p.min(100) as u32 / 100,
+                    Size::Auto | Size::Flex(_) => t.content as u32,
+                };
+                wanted
+                    .min(t.max as u32)
+                    .max(t.min as u32)
+                    .min(u16::MAX as u32) as u16
+            })
+            .collect();
+        break_lines(total, gap, &bases)
+            .into_iter()
+            .map(|line| {
+                let sizes = solve(total, gap, &tracks[line.clone()]);
+                let items: Vec<usize> = line.map(|k| shown[k]).collect();
+                let cross = items
+                    .iter()
+                    .zip(&sizes)
+                    .map(|(&i, &n)| self.cross_content(&children[i], axis, n, room))
+                    .max()
+                    .unwrap_or(0);
+                (items, sizes, cross)
+            })
+            .collect()
+    }
+
+    fn stack_wrapped(
+        &self,
+        axis: Axis,
+        flow: StackLayout,
+        children: &[Node],
+        rect: Rect,
+    ) -> Vec<Rect> {
+        let (start, total) = main_span(axis, rect);
+        let (across, room) = cross_span(axis, rect);
+        let lines = self.wrap_lines(axis, flow.gap, children, total, room);
+        let crosses: Vec<u16> = lines.iter().map(|(_, _, cross)| *cross).collect();
+        let placed = place_lines(across, room, flow.gap, &crosses, flow.align_content);
+        let mut areas = vec![Rect::default(); children.len()];
+        for ((items, sizes, _), (line_at, line_size)) in lines.into_iter().zip(placed) {
+            let at = justify_offsets(start, total, flow.gap, &sizes, flow.justify);
+            for ((i, n), at) in items.into_iter().zip(sizes).zip(at) {
+                let (c, cn) =
+                    self.cross(&children[i], axis, flow.align_items, n, line_at, line_size);
+                // Lines that do not fit are cut at the container's edge.
+                areas[i] = along(axis, at, n, c, cn).intersection(rect);
+            }
+        }
+        areas
+    }
+}
+
+/// Where `rect` starts along `axis`, and its length.
+fn main_span(axis: Axis, rect: Rect) -> (u16, u16) {
+    match axis {
+        Axis::Vertical => (rect.y, rect.height),
+        Axis::Horizontal => (rect.x, rect.width),
+    }
+}
+
+/// Where `rect` starts across `axis`, and its breadth.
+fn cross_span(axis: Axis, rect: Rect) -> (u16, u16) {
+    match axis {
+        Axis::Vertical => (rect.x, rect.width),
+        Axis::Horizontal => (rect.y, rect.height),
+    }
+}
+
+/// The rectangle `n` cells along `axis` from `at`, `cn` across from `c`.
+fn along(axis: Axis, at: u16, n: u16, c: u16, cn: u16) -> Rect {
+    match axis {
+        Axis::Vertical => Rect::new(c, at, cn, n),
+        Axis::Horizontal => Rect::new(at, c, n, cn),
     }
 }
 

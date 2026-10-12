@@ -415,6 +415,58 @@ impl PyNode {
         Ok(slf)
     }
 
+    /// For a column or row: where the children sit across its axis, as
+    /// CSS's `align-items`: `"flex-start"`, `"center"`, `"flex-end"` or
+    /// `"stretch"` (the default).
+    fn align_items<'py>(slf: Bound<'py, Self>, align: &str) -> PyResult<Bound<'py, Self>> {
+        let align = align_arg(align)?;
+        slf.borrow().map(|n| n.align_items(align))?;
+        Ok(slf)
+    }
+
+    /// In a column or row: where this child sits across the parent's axis,
+    /// whatever its `align_items` says.
+    fn align_self<'py>(slf: Bound<'py, Self>, align: &str) -> PyResult<Bound<'py, Self>> {
+        let align = align_arg(align)?;
+        slf.borrow().map(|n| n.align_self(align))?;
+        Ok(slf)
+    }
+
+    /// For a column or row: where the children sit along its axis when they
+    /// leave room over, as CSS's `justify-content`: `"flex-start"` (the
+    /// default), `"center"`, `"flex-end"`, `"space-between"`,
+    /// `"space-around"` or `"space-evenly"`.
+    fn justify<'py>(slf: Bound<'py, Self>, justify: &str) -> PyResult<Bound<'py, Self>> {
+        let justify = justify_arg(justify)?;
+        slf.borrow().map(|n| n.justify(justify))?;
+        Ok(slf)
+    }
+
+    /// For a column or row: children that do not fit go on a new line.
+    fn wrap(slf: Bound<'_, Self>) -> PyResult<Bound<'_, Self>> {
+        slf.borrow().map(Node::wrap)?;
+        Ok(slf)
+    }
+
+    /// For a wrapping column or row: where the lines sit across its axis, as
+    /// CSS's `align-content`: the `justify` values, or `"stretch"` (the
+    /// default).
+    fn align_content<'py>(slf: Bound<'py, Self>, align: &str) -> PyResult<Bound<'py, Self>> {
+        let align = match align {
+            "stretch" | "normal" => intuituive::AlignContent::Stretch,
+            other => match justify_arg(other)? {
+                intuituive::Justify::Start => intuituive::AlignContent::Start,
+                intuituive::Justify::Center => intuituive::AlignContent::Center,
+                intuituive::Justify::End => intuituive::AlignContent::End,
+                intuituive::Justify::SpaceBetween => intuituive::AlignContent::SpaceBetween,
+                intuituive::Justify::SpaceAround => intuituive::AlignContent::SpaceAround,
+                intuituive::Justify::SpaceEvenly => intuituive::AlignContent::SpaceEvenly,
+            },
+        };
+        slf.borrow().map(|n| n.align_content(align))?;
+        Ok(slf)
+    }
+
     /// For a grid: the rows' sizes.
     fn rows<'py>(slf: Bound<'py, Self>, rows: &Bound<'py, PyAny>) -> PyResult<Bound<'py, Self>> {
         let rows = sizes(rows)?;
@@ -1161,4 +1213,37 @@ pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(tui_repeating, m)?)?;
     m.add_function(wrap_pyfunction!(tui_widget, m)?)?;
     Ok(())
+}
+
+/// An `align_items` or `align_self` value, by its CSS name.
+fn align_arg(value: &str) -> PyResult<intuituive::Align> {
+    Ok(match value {
+        "start" | "flex-start" => intuituive::Align::Start,
+        "center" => intuituive::Align::Center,
+        "end" | "flex-end" => intuituive::Align::End,
+        "stretch" | "normal" => intuituive::Align::Stretch,
+        _ => {
+            return Err(pyo3::exceptions::PyValueError::new_err(format!(
+                "{value:?}: expected 'flex-start', 'center', 'flex-end' or 'stretch'"
+            )))
+        }
+    })
+}
+
+/// A `justify` value, by its CSS name.
+fn justify_arg(value: &str) -> PyResult<intuituive::Justify> {
+    Ok(match value {
+        "start" | "flex-start" | "normal" => intuituive::Justify::Start,
+        "center" => intuituive::Justify::Center,
+        "end" | "flex-end" => intuituive::Justify::End,
+        "space-between" => intuituive::Justify::SpaceBetween,
+        "space-around" => intuituive::Justify::SpaceAround,
+        "space-evenly" => intuituive::Justify::SpaceEvenly,
+        _ => {
+            return Err(pyo3::exceptions::PyValueError::new_err(format!(
+                "{value:?}: expected 'flex-start', 'center', 'flex-end', 'space-between', \
+                 'space-around' or 'space-evenly'"
+            )))
+        }
+    })
 }

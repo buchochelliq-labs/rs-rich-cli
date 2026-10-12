@@ -27,6 +27,73 @@ pub enum Size {
     Auto,
 }
 
+/// Where a child sits across its parent's axis: across a
+/// [`column`](crate::column)'s width, or a [`row`](crate::row)'s height.
+/// CSS's `align-items` and `align-self`.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Align {
+    /// At the start (left in a column, top in a row), as wide or tall as
+    /// its content.
+    Start,
+    /// Centred, as wide or tall as its content.
+    Center,
+    /// At the end, as wide or tall as its content.
+    End,
+    /// The whole width or height: the default.
+    #[default]
+    Stretch,
+}
+
+/// Where children sit along their parent's axis when they leave room over:
+/// CSS's `justify-content`. A container with a flexible child has none left
+/// over (the child takes it), as in CSS.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Justify {
+    /// Packed at the start: the default.
+    #[default]
+    Start,
+    /// Packed in the middle.
+    Center,
+    /// Packed at the end.
+    End,
+    /// The first at the start, the last at the end, the room shared
+    /// evenly between them.
+    SpaceBetween,
+    /// The room shared evenly around each child: half as much at the ends
+    /// as between two children.
+    SpaceAround,
+    /// The room shared evenly, the ends included.
+    SpaceEvenly,
+}
+
+/// Where the lines of a [wrapping](crate::Node::wrap) row or column sit
+/// across its axis when they leave room over: CSS's `align-content`.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum AlignContent {
+    Start,
+    Center,
+    End,
+    SpaceBetween,
+    SpaceAround,
+    SpaceEvenly,
+    /// The lines grow to share the room: the default.
+    #[default]
+    Stretch,
+}
+
+/// How a [`column`](crate::column) or [`row`](crate::row) places its
+/// children: the gap between them, alignment across and along its axis,
+/// and wrapping. [`MeasureCx::stack_flow`](crate::widget::MeasureCx::stack_flow)
+/// takes one.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct StackLayout {
+    pub gap: u16,
+    pub align_items: Align,
+    pub justify: Justify,
+    pub wrap: bool,
+    pub align_content: AlignContent,
+}
+
 /// One track to solve: a size and its clamps.
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct Track {
@@ -202,6 +269,131 @@ pub(crate) fn offsets(start: u16, gap: u16, sizes: &[u16]) -> Vec<u16> {
         .collect()
 }
 
+/// Room shared out by `justify` before item `i` of `k`, when `free` cells
+/// are left over. Each share is computed from the total, so rounding never
+/// drifts: the last item of [`Justify::End`] or [`Justify::SpaceBetween`]
+/// ends exactly at the end.
+fn spread(justify: Justify, free: u32, i: u32, k: u32) -> u32 {
+    match justify {
+        Justify::Start => 0,
+        Justify::Center => free / 2,
+        Justify::End => free,
+        Justify::SpaceBetween if k > 1 => free * i / (k - 1),
+        Justify::SpaceBetween => 0,
+        Justify::SpaceAround => free * (2 * i + 1) / (2 * k),
+        Justify::SpaceEvenly => free * (i + 1) / (k + 1),
+    }
+}
+
+/// Where each of `sizes` starts along `total` cells from `start`, `gap`
+/// apart, with the room they leave placed by `justify`.
+pub(crate) fn justify_offsets(
+    start: u16,
+    total: u16,
+    gap: u16,
+    sizes: &[u16],
+    justify: Justify,
+) -> Vec<u16> {
+    let k = sizes.len() as u32;
+    let used: u32 = sizes.iter().map(|&n| n as u32).sum::<u32>() + gap as u32 * k.saturating_sub(1);
+    let free = (total as u32).saturating_sub(used);
+    let mut at = start as u32;
+    sizes
+        .iter()
+        .enumerate()
+        .map(|(i, &size)| {
+            let here = at + spread(justify, free, i as u32, k);
+            at += size as u32 + gap as u32;
+            here.min(u16::MAX as u32) as u16
+        })
+        .collect()
+}
+
+/// Where an item `content` cells across sits in a line of `line` cells at
+/// `at`, and how many cells it takes: all of them for [`Align::Stretch`].
+pub(crate) fn align_cross(at: u16, line: u16, content: u16, align: Align) -> (u16, u16) {
+    let size = content.min(line);
+    let free = line - size;
+    match align {
+        Align::Stretch => (at, line),
+        Align::Start => (at, size),
+        Align::Center => (at + free / 2, size),
+        Align::End => (at + free, size),
+    }
+}
+
+/// Break items whose main sizes are `bases` into lines of at most `total`
+/// cells with `gap` between items, as CSS wraps flex items: each line takes
+/// items while they fit, and always at least one.
+pub(crate) fn break_lines(total: u16, gap: u16, bases: &[u16]) -> Vec<std::ops::Range<usize>> {
+    let mut lines = Vec::new();
+    let mut first = 0;
+    let mut used = 0u32;
+    for (i, &base) in bases.iter().enumerate() {
+        let need = if i == first {
+            base as u32
+        } else {
+            used + gap as u32 + base as u32
+        };
+        if i > first && need > total as u32 {
+            lines.push(first..i);
+            first = i;
+            used = base as u32;
+        } else {
+            used = need;
+        }
+    }
+    if first < bases.len() {
+        lines.push(first..bases.len());
+    }
+    lines
+}
+
+/// Where each line of a wrapped container starts across its axis, and how
+/// many cells it takes, given each line's own size (its tallest or widest
+/// item) and `total` cells from `start` with `gap` between lines.
+pub(crate) fn place_lines(
+    start: u16,
+    total: u16,
+    gap: u16,
+    lines: &[u16],
+    align: AlignContent,
+) -> Vec<(u16, u16)> {
+    let k = lines.len() as u32;
+    let used: u32 = lines.iter().map(|&n| n as u32).sum::<u32>() + gap as u32 * k.saturating_sub(1);
+    let free = (total as u32).saturating_sub(used);
+    let justify = match align {
+        AlignContent::Start | AlignContent::Stretch => Justify::Start,
+        AlignContent::Center => Justify::Center,
+        AlignContent::End => Justify::End,
+        AlignContent::SpaceBetween => Justify::SpaceBetween,
+        AlignContent::SpaceAround => Justify::SpaceAround,
+        AlignContent::SpaceEvenly => Justify::SpaceEvenly,
+    };
+    let mut at = start as u32;
+    lines
+        .iter()
+        .enumerate()
+        .map(|(i, &size)| {
+            let i = i as u32;
+            // Stretch: line `i` grows by its share of the room, so the
+            // lines fill it exactly.
+            let grow = if align == AlignContent::Stretch {
+                free * (i + 1) / k - free * i / k
+            } else {
+                0
+            };
+            let here = at + spread(justify, free, i, k);
+            let size = size as u32 + grow;
+            at += size + gap as u32;
+            (
+                here.min(u16::MAX as u32) as u16,
+                size.min(u16::MAX as u32) as u16,
+            )
+        })
+        .collect()
+}
+
 /// A child's place in a grid: its first column and row, and how many of
 /// each it spans.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -321,6 +513,71 @@ mod tests {
         // Already enough: nothing changes.
         grow_for_span(&mut tracks, 20, 1, 0, 2, 4);
         assert_eq!(tracks[0].content, 3);
+    }
+
+    // The expected positions are those CSS flexbox computes for the same
+    // boxes, rounded down to whole cells: a 20-cell container, items 4 and 6
+    // cells wide.
+
+    #[test]
+    fn justify_places_what_the_items_leave() {
+        let at = |j| justify_offsets(0, 20, 0, &[4, 6], j);
+        assert_eq!(at(Justify::Start), [0, 4]);
+        assert_eq!(at(Justify::Center), [5, 9]);
+        assert_eq!(at(Justify::End), [10, 14]);
+        assert_eq!(at(Justify::SpaceBetween), [0, 14]);
+        // 10 free: 2.5 at each end, 5 between (CSS: 2.5 and 11.5).
+        assert_eq!(at(Justify::SpaceAround), [2, 11]);
+        // 10 free: 3.33 at each end and between (CSS: 3.33 and 10.67).
+        assert_eq!(at(Justify::SpaceEvenly), [3, 10]);
+    }
+
+    #[test]
+    fn justify_counts_gaps_and_never_overflows() {
+        assert_eq!(
+            justify_offsets(2, 20, 1, &[4, 6], Justify::End),
+            [11, 16],
+            "ends at 2 + 20"
+        );
+        // No room left: every justify packs at the start.
+        for j in [Justify::Center, Justify::End, Justify::SpaceEvenly] {
+            assert_eq!(justify_offsets(0, 10, 0, &[4, 6], j), [0, 4]);
+        }
+        // One item between: CSS puts it at the start.
+        assert_eq!(justify_offsets(0, 10, 0, &[4], Justify::SpaceBetween), [0]);
+    }
+
+    #[test]
+    fn items_align_across_the_line() {
+        assert_eq!(align_cross(1, 10, 4, Align::Start), (1, 4));
+        assert_eq!(align_cross(1, 10, 4, Align::Center), (4, 4));
+        assert_eq!(align_cross(1, 10, 4, Align::End), (7, 4));
+        assert_eq!(align_cross(1, 10, 4, Align::Stretch), (1, 10));
+        // Wider than the line: cut to it.
+        assert_eq!(align_cross(0, 3, 8, Align::Center), (0, 3));
+    }
+
+    #[test]
+    fn lines_break_where_the_next_item_does_not_fit() {
+        assert_eq!(
+            break_lines(10, 1, &[4, 4, 4, 9, 11]),
+            [0..2, 2..3, 3..4, 4..5]
+        );
+        // Exactly full: 4 + 1 + 5 = 10.
+        assert_eq!(break_lines(10, 1, &[4, 5, 1]), [0..2, 2..3]);
+        assert!(break_lines(10, 1, &[]).is_empty());
+    }
+
+    #[test]
+    fn align_content_places_the_lines() {
+        // Two lines 2 and 3 tall in 10 cells, gap 1: 4 left over.
+        let lines = |a| place_lines(0, 10, 1, &[2, 3], a);
+        assert_eq!(lines(AlignContent::Start), [(0, 2), (3, 3)]);
+        assert_eq!(lines(AlignContent::End), [(4, 2), (7, 3)]);
+        assert_eq!(lines(AlignContent::Center), [(2, 2), (5, 3)]);
+        assert_eq!(lines(AlignContent::SpaceBetween), [(0, 2), (7, 3)]);
+        // Stretch: each line grows by 2 and they fill the 10 cells.
+        assert_eq!(lines(AlignContent::Stretch), [(0, 4), (5, 5)]);
     }
 
     #[test]
