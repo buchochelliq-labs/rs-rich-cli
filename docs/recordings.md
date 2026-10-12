@@ -30,6 +30,12 @@ motion turned on in your system settings the cards stay still.
 [![The to-do app with the inspector docked on the right](media/tapes/intuituive/inspector.png){ data-gif="intuituive.gif" loading=lazy }<span class="tape-card-title">Terminal apps</span>](#terminal-apps){ .tape-card }
 [![A Yazi-style file manager previewing a Rust file](media/tapes/files/files.png){ data-gif="files.gif" loading=lazy }<span class="tape-card-title">A file manager</span>](#a-file-manager){ .tape-card }
 [![scope-tui rebuilt on intuiTUIve: a Lissajous figure in the vectorscope](media/tapes/scope/vectorscope.png){ data-gif="scope.gif" loading=lazy }<span class="tape-card-title">An oscilloscope</span>](#an-oscilloscope){ .tape-card }
+[![A status page restyled after its stylesheet changed](media/tapes/stylesheet/reloaded.png){ data-gif="stylesheet.gif" loading=lazy }<span class="tape-card-title">Stylesheets</span>](#stylesheets){ .tape-card }
+[![A process table sorted by user, with a cell cursor](media/tapes/tables/cells.png){ data-gif="tables.gif" loading=lazy }<span class="tape-card-title">Sorting and resizing a table</span>](#sorting-and-resizing-a-table){ .tape-card }
+[![A card's tooltip on a sprint board](media/tapes/board/tooltip.png){ data-gif="board.gif" loading=lazy }<span class="tape-card-title">Lazy trees, tooltips, drag-and-drop</span>](#lazy-trees-tooltips-and-drag-and-drop){ .tape-card }
+[![An app in linear mode, written as lines of text](media/tapes/access/linear.png){ data-gif="access.gif" loading=lazy }<span class="tape-card-title">Text mode and linear mode</span>](#text-mode-and-linear-mode){ .tape-card }
+[![rich serve printing its address, and sessions asked for](media/tapes/serve/sessions.png){ data-gif="serve.gif" loading=lazy }<span class="tape-card-title">Serve a program to a browser</span>](#serve-a-program-to-a-browser){ .tape-card }
+[![A shell in a terminal pane beside a web view](media/tapes/embed/pane.png){ data-gif="embed.gif" loading=lazy }<span class="tape-card-title">A terminal pane</span>](#a-terminal-pane){ .tape-card }
 [![A CSV file drawn as a line chart by rich chart](media/tapes/chart/lines.png){ data-gif="chart.gif" loading=lazy }<span class="tape-card-title">Charts from data</span>](#charts-from-data){ .tape-card }
 [![rich deps drawing a dependency graph](media/tapes/deps/graph.png){ data-gif="deps.gif" loading=lazy }<span class="tape-card-title">Dependency trees</span>](#dependency-trees){ .tape-card }
 [![rich profile describing each column of a CSV file](media/tapes/profile/profile.png){ data-gif="profile.gif" loading=lazy }<span class="tape-card-title">Profile a data file</span>](#profile-a-data-file){ .tape-card }
@@ -295,6 +301,124 @@ keys. See
 
 [Tape](tapes/scope.tape) · [Cast](media/tapes/scope/scope.cast) · [GIF](media/tapes/scope/scope.gif) · [Page](media/tapes/scope/scope.html)
 
+## Stylesheets
+
+`rs-rich-intuituive`'s `styled` example (0.0.18): a status page whose
+colours, borders, sizes and docking come from a stylesheet, `styled.tcss`.
+Rules select by kind (`table`), name (`#title`) and class (`.card`, and
+`.down` while a service is down), with `:focus` and `:hover`. The tape then
+edits the sheet from outside the terminal: the app reads it again, and a
+line it cannot parse is reported in a toast while the last good sheet
+stays. See [Stylesheets](guide/intuituive/index.md#stylesheets).
+
+<div class="tape-player" data-cast="../media/tapes/stylesheet/stylesheet.cast" data-poster="npt:0:3">
+  <img src="../media/tapes/stylesheet/stylesheet.gif" alt="A status page styled by a stylesheet, restyled when the sheet changes">
+</div>
+
+| Styled | `:focus` and `:hover` |
+|---|---|
+| ![The status page as the sheet styles it](media/tapes/stylesheet/styled.png) | ![The down service focused, another hovered](media/tapes/stylesheet/states.png) |
+| **Reloaded** | **A mistake** |
+| ![Heavy borders and a magenta title after the edit](media/tapes/stylesheet/reloaded.png) | ![A toast naming the line and column](media/tapes/stylesheet/error.png) |
+
+[Tape](tapes/stylesheet.tape) · [Cast](media/tapes/stylesheet/stylesheet.cast) · [GIF](media/tapes/stylesheet/stylesheet.gif) · [Page](media/tapes/stylesheet/stylesheet.html)
+
+## Sorting and resizing a table
+
+`rs-rich-intuituive`'s `tables` example (0.0.18), a process table built
+with `table_with`: a click on a header sorts by it and a second click
+reverses the order, ←/→ move the cell cursor and `s` sorts by its column,
+and dragging the gap after a header resizes the column. See
+[Sorting, resizing and a cell cursor](guide/intuituive/index.md#sorting-resizing-and-a-cell-cursor).
+
+<div class="tape-player" data-cast="../media/tapes/tables/tables.cast" data-poster="npt:0:3">
+  <img src="../media/tapes/tables/tables.gif" alt="A process table sorted by clicks on its headers, then resized">
+</div>
+
+| Sorted by a click | The cell cursor, sorted with `s` | Resized |
+|---|---|---|
+| ![Sorted by memory, largest first](media/tapes/tables/sorted.png) | ![Sorted by user, the cell cursor on a user](media/tapes/tables/cells.png) | ![The command column dragged wider](media/tapes/tables/resized.png) |
+
+[Tape](tapes/tables.tape) · [Cast](media/tapes/tables/tables.cast) · [GIF](media/tapes/tables/tables.gif) · [Page](media/tapes/tables/tables.html)
+
+## Lazy trees, tooltips and drag-and-drop
+
+`rs-rich-intuituive`'s `board` example (0.0.18), a sprint board. Past
+sprints sit in a `tree_lazy` that loads each one on another thread when it
+is opened, showing "loading…" until it arrives and the error in red when it
+fails. The pointer resting on a card shows its tooltip, and a card dragged
+to another lane moves there. See [The mouse](guide/intuituive/index.md#the-mouse).
+
+<div class="tape-player" data-cast="../media/tapes/board/board.cast" data-poster="npt:0:3">
+  <img src="../media/tapes/board/board.gif" alt="A sprint board: a lazy tree loading, a tooltip, and a card dragged to Done">
+</div>
+
+| Loading | Loaded, and a failure |
+|---|---|
+| ![Sprint 41 loading](media/tapes/board/loading.png) | ![Sprint 41's tickets, and Sprint 39's error](media/tapes/board/lazy.png) |
+| **A tooltip** | **Dropped** |
+| ![A card's tooltip](media/tapes/board/tooltip.png) | ![The card moved to Done](media/tapes/board/dropped.png) |
+
+[Tape](tapes/board.tape) · [Cast](media/tapes/board/board.cast) · [GIF](media/tapes/board/board.gif) · [Page](media/tapes/board/board.html)
+
+## Text mode and linear mode
+
+`rs-rich-intuituive`'s `access` example (0.0.18), the one the
+[screen reader checklist](guide/intuituive/screen-readers.md) walks
+through. In text mode (`--accessible`) boxes are blanks with their titles
+kept, there is no colour, `>` marks the selected item, and the terminal's
+cursor sits on the focus. In linear mode (`--linear`) there is no screen:
+the app is written as lines of text, then only the lines that change. See
+[Accessibility](guide/intuituive/index.md#accessibility).
+
+<div class="tape-player" data-cast="../media/tapes/access/access.cast" data-poster="npt:0:3">
+  <img src="../media/tapes/access/access.gif" alt="The access example in text mode, then in linear mode">
+</div>
+
+| Text mode | Linear mode |
+|---|---|
+| ![Blank boxes, no colour, > on the selected items](media/tapes/access/text-mode.png) | ![The app as lines of text, the focus moving as →](media/tapes/access/linear.png) |
+
+[Tape](tapes/access.tape) · [Cast](media/tapes/access/access.cast) · [GIF](media/tapes/access/access.gif) · [Page](media/tapes/access/access.html)
+
+## Serve a program to a browser
+
+`rich serve` (0.0.18, behind the CLI's `serve` feature) runs a program in
+a browser tab, one copy per tab, and prints the address with its token. A
+tape cannot drive a browser, so `curl` asks what a browser would: the page
+without the token is refused and with it is served, and a WebSocket
+upgrade from the server's own page starts a session while one from another
+site is refused. Ctrl+C stops the server and the programs. See
+[`rich serve`](guide/intuituive/web.md#from-the-command-line-rich-serve).
+
+<div class="tape-player" data-cast="../media/tapes/serve/serve.cast" data-poster="npt:0:3">
+  <img src="../media/tapes/serve/serve.gif" alt="rich serve printing its address, then curl asking for the page and a session">
+</div>
+
+| Started | The token and the origin checked |
+|---|---|
+| ![rich serve printing the address with its token](media/tapes/serve/started.png) | ![A session started, another site refused](media/tapes/serve/sessions.png) |
+
+[Tape](tapes/serve.tape) · [Cast](media/tapes/serve/serve.cast) · [GIF](media/tapes/serve/serve.gif) · [Page](media/tapes/serve/serve.html)
+
+## A terminal pane
+
+`rs-rich-embed`'s `embed` example (0.0.18): a shell in a terminal pane
+beside a web view, with a status line built from both panes' signals. Keys
+go to the program in the focused pane; F6 moves to the web view, where w3m
+shows a local page and Ctrl+L opens another. See
+[Embedding programs and pages](guide/intuituive/embed.md).
+
+<div class="tape-player" data-cast="../media/tapes/embed/embed.cast" data-poster="npt:0:4">
+  <img src="../media/tapes/embed/embed.gif" alt="A shell in a terminal pane running rich, beside w3m in a web view">
+</div>
+
+| The shell | Another address |
+|---|---|
+| ![rich run in the shell pane](media/tapes/embed/pane.png) | ![The web view on a second page](media/tapes/embed/followed.png) |
+
+[Tape](tapes/embed.tape) · [Cast](media/tapes/embed/embed.cast) · [GIF](media/tapes/embed/embed.gif) · [Page](media/tapes/embed/embed.html)
+
 ## Charts from data
 
 `rich chart` draws CSV, JSON or numbers piped in: bars labelled by a
@@ -550,11 +674,15 @@ recordings that match.
 Regenerate everything, or check it as CI does:
 
 ```bash
-cargo build -p rs-rich-cli -p rs-rich-interact -p rs-rich-intuituive --bins --examples
+cargo build -p rs-rich-cli -p rs-rich-interact -p rs-rich-intuituive -p rs-rich-embed \
+  --features rs-rich-cli/serve --bins --examples
 rich=target/debug/rich
 $rich record --bin-dir target/debug --output docs/media/tapes docs/tapes/*.tape
 $rich record --check --bin-dir target/debug --output docs/media/tapes docs/tapes/*.tape
 ```
+
+The pager tape needs `less`, the serve tape `curl` and port 8080, and the
+embed tape `w3m`; CI installs them.
 
 ## Record your own
 

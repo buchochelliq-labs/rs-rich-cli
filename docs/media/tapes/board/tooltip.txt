@@ -1,0 +1,18 @@
+╭─ Past sprints ───────────╮╭─ To do ───────────────╮╭─ Doing ───────────────╮╭─ Done ─────────────────╮
+│▾ Sprint 41               ││• Add Apple Pay        ││• Fix checkout timeout ││• Cache product images  │
+│    ✓ Search by SKU       ││• Load test the cart   ││• Po Fix checkout timeout                        │
+│    ✓ Gift cards          ││• Rotate API keys      ││     Seen when the cart has over 40 items.       │
+│    ✓ Faster product pages││                       ││     Sam                                         │
+│▸ Sprint 40               ││                       ││                       ││                        │
+│▾ Sprint 39               ││                       ││                       ││                        │
+│    archive offline       ││                       ││                       ││                        │
+│                          ││                       ││                       ││                        │
+│                          ││                       ││                       ││                        │
+│                          ││                       ││                       ││                        │
+│                          ││                       ││                       ││                        │
+│                          ││                       ││                       ││                        │
+│                          ││                       ││                       ││                        │
+│                          ││                       ││                       ││                        │
+│                          ││                       ││                       ││                        │
+╰──────────────────────────╯╰───────────────────────╯╰───────────────────────╯╰────────────────────────╯
+drag a card to another lane  tree: Sprint 39  F1 tooltip · q quits

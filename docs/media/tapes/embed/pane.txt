@@ -1,0 +1,22 @@
+╭─ shell ───────────────────────────────────────╮ ╭─ web ──────────────────────────────────────────╮
+│$ ls                                           │ │ ← → ↻ runbook.html                             │
+│bin  deploys.csv  deploys.html  runbook.html   │ │Checkout runbook                                │
+│$ rich deploys.csv                             │ │                                                │
+│┌───────────┬──────────┬─────────┬──────────┐  │ │What to do when the checkout service pages you. │
+││ when      │ service  │ version │ status   │  │ │                                                │
+││ 09:42     │ checkout │ v2.14.0 │ ok       │  │ │First steps                                     │
+││ 09:15     │ search   │ v3.2.1  │ ok       │  │ │                                                │
+││ Yesterday │ payments │ v1.9.3  │ reverted │  │ │ 1. Check the error rate on the dashboard.      │
+│└───────────┴──────────┴─────────┴──────────┘  │ │ 2. Look at the last deploy: recent deploys.    │
+│$                                              │ │ 3. Roll back if the deploy is under an hour    │
+│                                               │ │    old.                                        │
+│                                               │ │                                                │
+│                                               │ │Escalate to payments on call after 15 minutes.  │
+│                                               │ │                                                │
+│                                               │ │                                                │
+│                                               │ │                                                │
+│                                               │ │                                                │
+│                                               │ │                                                │
+│                                               │ │≪ ↑ ↓ Viewing <Checkout runbook>                │
+╰───────────────────────────────────────────────╯ ╰────────────────────────────────────────────────╯
+shell running · runbook.html · F6 switches pane · F10 quits

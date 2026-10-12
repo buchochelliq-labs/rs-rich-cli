@@ -1,0 +1,4 @@
+when,service,version,status
+09:42,checkout,v2.14.0,ok
+09:15,search,v3.2.1,ok
+Yesterday,payments,v1.9.3,reverted

@@ -195,6 +195,20 @@ Serving a shell gives a shell to anyone who has the address with its
 token. Keep it on `127.0.0.1` unless a proxy with authentication is in
 front (see [Security](#security)).
 
+The recording serves the `todo` example. A tape cannot drive a browser, so
+`curl` asks what one would: the page without the token is refused and with
+it is served; a WebSocket upgrade from the server's own page starts a
+session, and one from another site is refused. Ctrl+C then stops it. The
+tape is [`docs/tapes/serve.tape`](../../tapes/serve.tape).
+
+<div class="tape-player" data-cast="../../../media/tapes/serve/serve.cast" data-poster="npt:0:3">
+  <img src="../../../media/tapes/serve/serve.gif" alt="rich serve printing its address, then curl asking for the page and a session">
+</div>
+
+| Started | The token and the origin checked |
+|---|---|
+| ![rich serve printing the address with its token](../../media/tapes/serve/started.png) | ![A session started, another site refused](../../media/tapes/serve/sessions.png) |
+
 ## The DOM renderer
 
 `Renderer::Dom` draws an app with the page's own DOM instead of xterm.js:

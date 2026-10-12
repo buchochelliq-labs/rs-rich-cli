@@ -492,13 +492,17 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
-      - name: Install less (the pager tape pages through it), zsh and fish
+      - name: Install less (the pager tape pages through it), zsh, fish and w3m (the embed tape's web view)
         run: |
           sudo apt-get update
-          sudo apt-get install -y less zsh fish
+          sudo apt-get install -y less zsh fish w3m
 
-      - name: Build the CLI, the interact examples (the viewport tape) and the intuiTUIve examples
-        run: cargo build -p rs-rich-cli -p rs-rich-interact -p rs-rich-intuituive --bins --examples --locked
+      # The CLI with its `serve` feature (the serve tape), the interact
+      # examples (the viewport tape), and the intuiTUIve and embed examples.
+      - name: Build the CLI and the examples the tapes run
+        run: >-
+          cargo build -p rs-rich-cli -p rs-rich-interact -p rs-rich-intuituive
+          -p rs-rich-embed --features rs-rich-cli/serve --bins --examples --locked
 
       - name: Check every tape's screenshots
         run: >-

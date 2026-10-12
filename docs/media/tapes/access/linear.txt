@@ -1,0 +1,24 @@
+❯ access --linear
+Notes
+→ Sections, tab list, 1 of 2: Files, selected
+Folders, region
+Folders, tree, 1 of 3: src, selected, collapsed
+Files, region
+Files, list, 1 of 10: notes-1.md, selected
+10 files, loaded once
+Save, button
+Delete, button
+Reload, button
+tab moves · space ticks · s saves · d deletes · r reloads · q quits
+→ Folders, tree, 1 of 3: src, selected, collapsed
+Folders, tree, 1 of 5: src, selected, expanded
+Folders, tree, 2 of 5: main.rs, selected
+Saved
+
+
+
+
+
+
+
+

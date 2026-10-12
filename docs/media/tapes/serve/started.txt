@@ -1,0 +1,16 @@
+❯ rich serve -- todo | tee serve.log & sleep 1
+[1] …
+Serving todo at http://127.0.0.1:8080/?token=…
+❯
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,20 @@
+ shop · production
+┏━ checkout ━━━━━━━━┓ ┏━ payments ━━━━━━━━┓ ┏━ search ━━━━━━━━━━┓ ┏━ images ━━━━━━━━━━━━━┓
+┃ ● up · 84 ms      ┃ ┃ ● down            ┃ ┃ ● up · 46 ms      ┃ ┃ ● up · 12 ms         ┃
+┃ v2.14.0           ┃ ┃ v1.9.3            ┃ ┃ v3.2.1            ┃ ┃ v0.8.7               ┃
+┗━━━━━━━━━━━━━━━━━━━┛ ┗━━━━━━━━━━━━━━━━━━━┛ ┗━━━━━━━━━━━━━━━━━━━┛ ┗━━━━━━━━━━━━━━━━━━━━━━┛
+╭─ Deploys ──────────────────────────────────────────────────────────────────────────────╮
+│When      Service  Version By                                                           │
+│09:42     checkout v2.14.0 Sam                                                          │
+│09:15     search   v3.2.1  Priya                                                        │
+│Yesterday payments v1.9.3  Lena                                                         │
+│Yesterday images   v0.8.7  Priya                                                        │
+│Mon       checkout v2.13.2 Sam                                                          │
+│Mon       search   v3.2.0  Lena                                                         │
+│                                                                                        │
+│                                                                                        │
+│                                                                                        │
+│                                                                                        │
+│                                   ╭───────────────────────────────────────────────────╮│
+╰───────────────────────────────────│ stylesheet: line 18:11: unknown property `colour` │╯
+ tab moves · space takes a service d╰───────────────────────────────────────────────────╯

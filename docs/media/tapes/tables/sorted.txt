@@ -1,0 +1,20 @@
+╭─ Processes ──────────────────────────────────────────────────────────────────╮
+│PID   Command            User     CPU % Memory ▼  Threads                     │
+│ 3102 rust-analyzer      dev       14.2  2210 MiB      22                     │
+│ 3075 cargo build        dev       87.0  1540 MiB      16                     │
+│ 2240 node api/server.js app       23.5   618 MiB      11                     │
+│  988 postgres           postgres   6.4   412 MiB       9                     │
+│ 2251 node api/worker.js app       11.9   344 MiB       7                     │
+│ 4121 prometheus         monitor    3.6   288 MiB      12                     │
+│ 4130 grafana-server     monitor    1.7   172 MiB      14                     │
+│ 1311 redis-server       redis      2.8    96 MiB       6                     │
+│ 1024 nginx              www-data   1.2    36 MiB       4                     │
+│ 3388 vim src/main.rs    dev        0.3    24 MiB       1                     │
+│    1 systemd            root       0.0    12 MiB       1                     │
+│  412 sshd               root       0.1     8 MiB       1                     │
+│ 5502 bash               dev        0.0     6 MiB       1                     │
+│ 5577 htop               dev        0.9     5 MiB       1                     │
+│                                                                              │
+│                                                                              │
+╰──────────────────────────────────────────────────────────────────────────────╯
+3102 Memory: 2210 MiB  sorted by Memory ▼  s sorts · q quits

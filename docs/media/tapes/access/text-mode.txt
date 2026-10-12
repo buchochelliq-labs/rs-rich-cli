@@ -1,0 +1,24 @@
+Notes
+≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈
+>Files   Settings
+   Folders                                      Files
+   ▾ src                                      > notes-1.md
+ >     main.rs                                  notes-2.md
+       lib.rs                                   notes-3.md
+   ▸ docs                                       notes-4.md
+     README.md                                  notes-5.md
+                                                notes-6.md
+                                                notes-7.md
+                                                notes-8.md
+                                                notes-9.md
+                                                notes-10.md
+
+
+
+
+
+
+
+  10 files, loaded once
+[ Save ] [ Delete ] [ Reload ]
+tab moves · space ticks · s saves · d deletes · r reloads · q quits

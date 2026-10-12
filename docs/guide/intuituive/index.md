@@ -326,6 +326,22 @@ table_with(
 - **`.resizable()`** lets the columns be resized by dragging the gap after
   a header.
 
+The `tables` example sorts a process table in its rows closure, so its
+status line can name the selected process and the cell under the cursor
+(`cargo run -p rs-rich-intuituive --example tables`):
+
+```rust
+--8<-- "crates/rich-intuituive/examples/tables.rs:table"
+```
+
+<div class="tape-player" data-cast="../../media/tapes/tables/tables.cast" data-poster="npt:0:3">
+  <img src="../../media/tapes/tables/tables.gif" alt="A process table sorted by clicks on its headers, then resized">
+</div>
+
+| Sorted by a click | The cell cursor, sorted with `s` | Resized |
+|---|---|---|
+| ![Sorted by memory, largest first](../../media/tapes/tables/sorted.png) | ![Sorted by user, the cell cursor on a user](../../media/tapes/tables/cells.png) | ![The command column dragged wider](../../media/tapes/tables/resized.png) |
+
 ### Trees, split panes, calendars and lists
 
 ```rust
@@ -426,6 +442,36 @@ column([
   pointer is lit in the theme's `drop.target` style (reverse unless set).
 - Letting go over a target drops the value there; anywhere else, nothing
   happens. Esc cancels.
+
+The `board` example puts a lazy tree, tooltips and drag-and-drop together
+(`cargo run -p rs-rich-intuituive --example board`). Past sprints load
+when they are opened, each after a pause, as from a tracker over the
+network:
+
+```rust
+--8<-- "crates/rich-intuituive/examples/board.rs:lazy"
+```
+
+Each card carries its id and has its note as a tooltip, and each lane
+takes the ids dropped on it:
+
+```rust
+--8<-- "crates/rich-intuituive/examples/board.rs:card"
+```
+
+```rust
+--8<-- "crates/rich-intuituive/examples/board.rs:lanes"
+```
+
+<div class="tape-player" data-cast="../../media/tapes/board/board.cast" data-poster="npt:0:3">
+  <img src="../../media/tapes/board/board.gif" alt="A sprint board: a lazy tree loading, a tooltip, and a card dragged to Done">
+</div>
+
+| Loading | Loaded, and a failure |
+|---|---|
+| ![Sprint 41 loading](../../media/tapes/board/loading.png) | ![Sprint 41's tickets, and Sprint 39's error](../../media/tapes/board/lazy.png) |
+| **A tooltip** | **Dropped** |
+| ![A card's tooltip](../../media/tapes/board/tooltip.png) | ![The card moved to Done](../../media/tapes/board/dropped.png) |
 
 ### Selecting and copying text
 
@@ -823,6 +869,41 @@ condition holds, following the signals the condition reads.
   is worked out only when it draws. An app without a sheet does none of
   it.
 
+The `styled` example is a status page whose look is all in its sheet.
+Given the sheet's path, it reads the file again whenever it changes:
+
+```bash
+cargo run -p rs-rich-intuituive --example styled -- crates/rich-intuituive/examples/styled.tcss
+```
+
+```css
+--8<-- "crates/rich-intuituive/examples/styled.tcss"
+```
+
+The code names the nodes and gives them classes:
+
+```rust
+--8<-- "crates/rich-intuituive/examples/styled.rs:card"
+```
+
+```rust
+--8<-- "crates/rich-intuituive/examples/styled.rs:sheet"
+```
+
+The recording edits the sheet while the app runs: the borders and the
+title change, then a misspelt property is reported and the last good
+sheet stays.
+
+<div class="tape-player" data-cast="../../media/tapes/stylesheet/stylesheet.cast" data-poster="npt:0:3">
+  <img src="../../media/tapes/stylesheet/stylesheet.gif" alt="A status page styled by a stylesheet, restyled when the sheet changes">
+</div>
+
+| Styled | `:focus` and `:hover` |
+|---|---|
+| ![The status page as the sheet styles it](../../media/tapes/stylesheet/styled.png) | ![The down service focused, another hovered](../../media/tapes/stylesheet/states.png) |
+| **Reloaded** | **A mistake** |
+| ![Heavy borders and a magenta title after the edit](../../media/tapes/stylesheet/reloaded.png) | ![A toast naming the line and column](../../media/tapes/stylesheet/error.png) |
+
 ## Accessibility
 
 There are two modes for assistive technology:
@@ -967,6 +1048,17 @@ Delete notes-1.md? y / n
 `Driver::render()` returns the lines in linear mode (each ends with
 `\r\n`, as the terminal is in raw mode), so a test or a bridge can read
 them.
+
+The same example recorded in text mode (`--accessible`), then in linear
+mode:
+
+<div class="tape-player" data-cast="../../media/tapes/access/access.cast" data-poster="npt:0:3">
+  <img src="../../media/tapes/access/access.gif" alt="The access example in text mode, then in linear mode">
+</div>
+
+| Text mode | Linear mode |
+|---|---|
+| ![Blank boxes, no colour, > on the selected items](../../media/tapes/access/text-mode.png) | ![The app as lines of text, the focus moving as →](../../media/tapes/access/linear.png) |
 
 ## Inline apps
 
