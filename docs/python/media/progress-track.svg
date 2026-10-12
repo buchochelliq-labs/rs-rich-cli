@@ -1,0 +1,62 @@
+<svg class="rich-terminal" viewBox="0 0 750 74.4" xmlns="http://www.w3.org/2000/svg">
+    <!-- Generated with Rich https://www.textualize.io -->
+    <style>
+
+    @font-face {
+        font-family: "Fira Code";
+        src: local("FiraCode-Regular"),
+                url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff2/FiraCode-Regular.woff2") format("woff2"),
+                url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff/FiraCode-Regular.woff") format("woff");
+        font-style: normal;
+        font-weight: 400;
+    }
+    @font-face {
+        font-family: "Fira Code";
+        src: local("FiraCode-Bold"),
+                url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff2/FiraCode-Bold.woff2") format("woff2"),
+                url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff/FiraCode-Bold.woff") format("woff");
+        font-style: bold;
+        font-weight: 700;
+    }
+
+    .progress-track-matrix {
+        font-family: Fira Code, monospace;
+        font-size: 20px;
+        line-height: 24.4px;
+        font-variant-east-asian: full-width;
+    }
+
+    .progress-track-title {
+        font-size: 18px;
+        font-weight: bold;
+        font-family: arial;
+    }
+
+    .progress-track-r1 { fill: #c5c8c6 }
+.progress-track-r2 { fill: #729c1f }
+.progress-track-r3 { fill: #98729f }
+.progress-track-r4 { fill: #d0b344 }
+    </style>
+
+    <defs>
+    <clipPath id="progress-track-clip-terminal">
+      <rect x="0" y="0" width="731.0" height="23.4" />
+    </clipPath>
+    
+    </defs>
+
+    <rect fill="#292929" stroke="rgba(255,255,255,0.35)" stroke-width="1" x="1" y="1" width="748" height="72.4" rx="8"/><text class="progress-track-title" fill="#c5c8c6" text-anchor="middle" x="374" y="27">progress-track</text>
+            <g transform="translate(26,22)">
+            <circle cx="0" cy="0" r="7" fill="#ff5f57"/>
+            <circle cx="22" cy="0" r="7" fill="#febc2e"/>
+            <circle cx="44" cy="0" r="7" fill="#28c840"/>
+            </g>
+        
+    <g transform="translate(9, 41)" clip-path="url(#progress-track-clip-terminal)">
+    
+    <g class="progress-track-matrix">
+    <text class="progress-track-r1" x="0" y="20" textLength="97.6" clip-path="url(#progress-track-line-0)">Counting</text><text class="progress-track-r2" x="109.8" y="20" textLength="463.6" clip-path="url(#progress-track-line-0)">━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</text><text class="progress-track-r3" x="585.6" y="20" textLength="48.8" clip-path="url(#progress-track-line-0)">100%</text><text class="progress-track-r4" x="646.6" y="20" textLength="85.4" clip-path="url(#progress-track-line-0)">0:00:03</text><text class="progress-track-r1" x="732" y="20" textLength="12.2" clip-path="url(#progress-track-line-0)">
+</text>
+    </g>
+    </g>
+</svg>

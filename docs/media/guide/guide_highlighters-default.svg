@@ -1,0 +1,86 @@
+<svg class="rich-terminal" viewBox="0 0 506 220.79999999999998" xmlns="http://www.w3.org/2000/svg">
+    <!-- Generated with Rich https://www.textualize.io -->
+    <style>
+
+    @font-face {
+        font-family: "Fira Code";
+        src: local("FiraCode-Regular"),
+                url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff2/FiraCode-Regular.woff2") format("woff2"),
+                url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff/FiraCode-Regular.woff") format("woff");
+        font-style: normal;
+        font-weight: 400;
+    }
+    @font-face {
+        font-family: "Fira Code";
+        src: local("FiraCode-Bold"),
+                url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff2/FiraCode-Bold.woff2") format("woff2"),
+                url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff/FiraCode-Bold.woff") format("woff");
+        font-style: bold;
+        font-weight: 700;
+    }
+
+    .guide_highlighters-default-matrix {
+        font-family: Fira Code, monospace;
+        font-size: 20px;
+        line-height: 24.4px;
+        font-variant-east-asian: full-width;
+    }
+
+    .guide_highlighters-default-title {
+        font-size: 18px;
+        font-weight: bold;
+        font-family: arial;
+    }
+
+    .guide_highlighters-default-r1 { fill: #b48ead }
+.guide_highlighters-default-r2 { fill: #c0c5ce }
+.guide_highlighters-default-r3 { fill: #8fa1b3 }
+.guide_highlighters-default-r4 { fill: #c5c8c6 }
+.guide_highlighters-default-r5 { fill: #d08770 }
+    </style>
+
+    <defs>
+    <clipPath id="guide_highlighters-default-clip-terminal">
+      <rect x="0" y="0" width="487.0" height="169.79999999999998" />
+    </clipPath>
+    <clipPath id="guide_highlighters-default-line-0">
+    <rect x="0" y="1.5" width="488" height="24.65"/>
+            </clipPath>
+<clipPath id="guide_highlighters-default-line-1">
+    <rect x="0" y="25.9" width="488" height="24.65"/>
+            </clipPath>
+<clipPath id="guide_highlighters-default-line-2">
+    <rect x="0" y="50.3" width="488" height="24.65"/>
+            </clipPath>
+<clipPath id="guide_highlighters-default-line-3">
+    <rect x="0" y="74.7" width="488" height="24.65"/>
+            </clipPath>
+<clipPath id="guide_highlighters-default-line-4">
+    <rect x="0" y="99.1" width="488" height="24.65"/>
+            </clipPath>
+<clipPath id="guide_highlighters-default-line-5">
+    <rect x="0" y="123.5" width="488" height="24.65"/>
+            </clipPath>
+    </defs>
+
+    <rect fill="#292929" stroke="rgba(255,255,255,0.35)" stroke-width="1" x="1" y="1" width="504" height="218.8" rx="8"/><text class="guide_highlighters-default-title" fill="#c5c8c6" text-anchor="middle" x="252" y="27">guide_highlighters-default</text>
+            <g transform="translate(26,22)">
+            <circle cx="0" cy="0" r="7" fill="#ff5f57"/>
+            <circle cx="22" cy="0" r="7" fill="#febc2e"/>
+            <circle cx="44" cy="0" r="7" fill="#28c840"/>
+            </g>
+        
+    <g transform="translate(9, 41)" clip-path="url(#guide_highlighters-default-clip-terminal)">
+    <rect fill="#2b303b" x="0" y="1.5" width="24.4" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="24.4" y="1.5" width="12.2" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="36.6" y="1.5" width="48.8" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="85.4" y="1.5" width="12.2" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="97.6" y="1.5" width="12.2" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="109.8" y="1.5" width="12.2" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="122" y="1.5" width="12.2" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="134.2" y="1.5" width="353.8" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="0" y="25.9" width="48.8" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="48.8" y="25.9" width="36.6" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="85.4" y="25.9" width="97.6" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="183" y="25.9" width="12.2" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="195.2" y="25.9" width="12.2" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="207.4" y="25.9" width="24.4" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="231.8" y="25.9" width="12.2" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="244" y="25.9" width="244" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="0" y="50.3" width="48.8" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="48.8" y="50.3" width="24.4" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="73.2" y="50.3" width="97.6" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="170.8" y="50.3" width="12.2" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="183" y="50.3" width="12.2" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="195.2" y="50.3" width="24.4" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="219.6" y="50.3" width="12.2" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="231.8" y="50.3" width="12.2" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="244" y="50.3" width="244" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="0" y="74.7" width="97.6" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="97.6" y="74.7" width="73.2" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="170.8" y="74.7" width="12.2" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="183" y="74.7" width="305" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="0" y="99.1" width="48.8" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="48.8" y="99.1" width="12.2" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="61" y="99.1" width="427" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="0" y="123.5" width="12.2" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="12.2" y="123.5" width="475.8" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="0" y="147.9" width="488" height="24.65" shape-rendering="crispEdges"/>
+    <g class="guide_highlighters-default-matrix">
+    <text class="guide_highlighters-default-r1" x="0" y="20" textLength="24.4" clip-path="url(#guide_highlighters-default-line-0)">fn</text><text class="guide_highlighters-default-r3" x="36.6" y="20" textLength="48.8" clip-path="url(#guide_highlighters-default-line-0)">main</text><text class="guide_highlighters-default-r2" x="85.4" y="20" textLength="12.2" clip-path="url(#guide_highlighters-default-line-0)">(</text><text class="guide_highlighters-default-r2" x="97.6" y="20" textLength="12.2" clip-path="url(#guide_highlighters-default-line-0)">)</text><text class="guide_highlighters-default-r2" x="122" y="20" textLength="12.2" clip-path="url(#guide_highlighters-default-line-0)">{</text><text class="guide_highlighters-default-r4" x="488" y="20" textLength="12.2" clip-path="url(#guide_highlighters-default-line-0)">
+</text><text class="guide_highlighters-default-r1" x="48.8" y="44.4" textLength="36.6" clip-path="url(#guide_highlighters-default-line-1)">let</text><text class="guide_highlighters-default-r2" x="85.4" y="44.4" textLength="97.6" clip-path="url(#guide_highlighters-default-line-1)">&#160;answer&#160;</text><text class="guide_highlighters-default-r2" x="183" y="44.4" textLength="12.2" clip-path="url(#guide_highlighters-default-line-1)">=</text><text class="guide_highlighters-default-r5" x="207.4" y="44.4" textLength="24.4" clip-path="url(#guide_highlighters-default-line-1)">42</text><text class="guide_highlighters-default-r2" x="231.8" y="44.4" textLength="12.2" clip-path="url(#guide_highlighters-default-line-1)">;</text><text class="guide_highlighters-default-r4" x="488" y="44.4" textLength="12.2" clip-path="url(#guide_highlighters-default-line-1)">
+</text><text class="guide_highlighters-default-r1" x="48.8" y="68.8" textLength="24.4" clip-path="url(#guide_highlighters-default-line-2)">if</text><text class="guide_highlighters-default-r2" x="73.2" y="68.8" textLength="97.6" clip-path="url(#guide_highlighters-default-line-2)">&#160;answer&#160;</text><text class="guide_highlighters-default-r2" x="170.8" y="68.8" textLength="12.2" clip-path="url(#guide_highlighters-default-line-2)">&gt;</text><text class="guide_highlighters-default-r5" x="195.2" y="68.8" textLength="24.4" clip-path="url(#guide_highlighters-default-line-2)">40</text><text class="guide_highlighters-default-r2" x="231.8" y="68.8" textLength="12.2" clip-path="url(#guide_highlighters-default-line-2)">{</text><text class="guide_highlighters-default-r4" x="488" y="68.8" textLength="12.2" clip-path="url(#guide_highlighters-default-line-2)">
+</text><text class="guide_highlighters-default-r1" x="97.6" y="93.2" textLength="73.2" clip-path="url(#guide_highlighters-default-line-3)">return</text><text class="guide_highlighters-default-r2" x="170.8" y="93.2" textLength="12.2" clip-path="url(#guide_highlighters-default-line-3)">;</text><text class="guide_highlighters-default-r4" x="488" y="93.2" textLength="12.2" clip-path="url(#guide_highlighters-default-line-3)">
+</text><text class="guide_highlighters-default-r2" x="48.8" y="117.6" textLength="12.2" clip-path="url(#guide_highlighters-default-line-4)">}</text><text class="guide_highlighters-default-r4" x="488" y="117.6" textLength="12.2" clip-path="url(#guide_highlighters-default-line-4)">
+</text><text class="guide_highlighters-default-r2" x="0" y="142" textLength="12.2" clip-path="url(#guide_highlighters-default-line-5)">}</text><text class="guide_highlighters-default-r4" x="488" y="142" textLength="12.2" clip-path="url(#guide_highlighters-default-line-5)">
+</text><text class="guide_highlighters-default-r4" x="488" y="166.4" textLength="12.2" clip-path="url(#guide_highlighters-default-line-6)">
+</text>
+    </g>
+    </g>
+</svg>

@@ -32,6 +32,19 @@ rs-rich-data = "*"                                     # adapters, inference, st
 The crate's [README](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/crates/rich-data/README.md)
 summarises the same, with its features and limits.
 
+The examples on this page come from
+[`guide_tabular.rs`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/crates/rich-data/examples/guide_tabular.rs),
+which reads a small service export (`SERVICES`) and a month of orders
+(`ORDERS`) as CSV text, and use these imports:
+
+```rust
+--8<-- "crates/rich-data/examples/guide_tabular.rs:imports"
+```
+
+```bash
+cargo run -p rs-rich-data --example guide_tabular
+```
+
 ## Row sources and adapters
 
 A `RowSource` yields column names, an optional `Schema` (`rich_ext`'s
@@ -50,15 +63,10 @@ memory and becomes a `TableData` (`to_table_data()`) to
 | `arrow` (`arrow` feature) | Arrow `RecordBatch`es | Rows, a streaming `BatchSource`, and Arrow schemas in the model. |
 
 ```rust
-use rich::Console;
-use rich_data::{csv, RowSource};
-
-let rows = csv::CsvReader::new()
-    .read("service,p99,up\nweb,120,true\napi,35.5,false\n")
-    .unwrap();
-assert_eq!(rows.columns(), ["service", "p99", "up"]);
-Console::new().print(&rows.to_table_data());
+--8<-- "crates/rich-data/examples/guide_tabular.rs:read"
 ```
+
+![The services CSV as a table: every column left-aligned text](../../media/guide/guide_tabular-read.svg)
 
 Every cell a CSV adapter reads is text: `rich --csv` keeps rich-cli 1.8.1's
 behaviour, and types come only from [inference](#type-inference), when asked.
@@ -77,14 +85,10 @@ converts integer and float columns and attaches the schema, so tables align
 numbers right.
 
 ```rust
-use rich_data::infer::Inferrer;
-
-let inference = Inferrer::new().infer(&rows);
-assert_eq!(inference.columns()[1].data_type().to_string(), "float");
-assert_eq!(inference.columns()[1].summary(), "float: 2 of 2 values");
-console.print(&inference);
-inference.apply(&mut rows);
+--8<-- "crates/rich-data/examples/guide_tabular.rs:infer"
 ```
+
+![The inference table (column, type, parsed, nulls), then the services table with p99 and errors aligned right](../../media/guide/guide_tabular-infer.svg)
 
 A column where one cell does not parse stays text, and its summary says how
 close it came (`text: 12 of 13 values parse as float`).
@@ -98,11 +102,13 @@ table; `headers()` gives one summary line per column for a table heading.
 `StatsOptions` sets the quantiles and how many top values to keep.
 
 ```rust
-use rich_data::stats::{Stats, StatsOptions};
-
-let options = StatsOptions { quantiles: vec![0.5, 0.9], top: 5 };
-console.print(&Stats::with_options(&rows, &options));
+--8<-- "crates/rich-data/examples/guide_tabular.rs:stats"
 ```
+
+![Column statistics: count, nulls, distinct, min, max, mean, median, p90 and the top value of each column](../../media/guide/guide_tabular-stats.svg)
+
+Text columns have a count, distinct values, a min and a max (in text
+order) and top values; the mean, median and quantiles are left empty.
 
 ## Conditional styles
 
@@ -116,17 +122,10 @@ instead of the cell. Where several rules match, their styles combine in
 order. Rules restyle; they never change the text.
 
 ```rust
-use rich::Style;
-use rich_ext::table::{Comparison, StyleRule, StyleRules, Target};
-
-let rules = StyleRules::new()
-    .rule(StyleRule::new("p99", Comparison::Gt, 100, Style::parse("red").unwrap()))
-    .rule(
-        StyleRule::when("service", |v| v.plain() == "db", Style::parse("dim").unwrap())
-            .target(Target::Row),
-    );
-console.print(&rows.to_table_data().style_rules(rules));
+--8<-- "crates/rich-data/examples/guide_tabular.rs:rules"
 ```
+
+![p99 over 100 in bold red, zero errors in green, and the billing row reversed because it is down](../../media/guide/guide_tabular-rules.svg)
 
 Comparisons with a number compare numerically (a cell that is text parsing as
 a number counts), and a cell that is neither never matches an ordering. With
@@ -155,15 +154,13 @@ as a heading, a table of the columns, each distribution and the map, and
 serialises to JSON (`to_json()`), which is `rich profile --report json`.
 
 ```rust
-use rich_data::csv::CsvReader;
-use rich_data::profile::{Profile, ProfileOptions};
-
-let file = std::io::BufReader::new(std::fs::File::open("orders.csv")?);
-let source = CsvReader::new().source(file)?; // streamed, not read whole
-let options = ProfileOptions { sample: 10_000, ..Default::default() };
-let profile = Profile::from_source(source, options)?.with_name("orders.csv");
-console.print(&profile);
+--8<-- "crates/rich-data/examples/guide_tabular.rs:profile"
 ```
+
+For a file, pass `std::io::BufReader::new(std::fs::File::open("orders.csv")?)`
+to `source`: it is streamed, not read whole.
+
+![A profile of three columns of orders.csv: the column table, a top-values chart for email and status, a histogram of total, and a missing-value map showing where the nulls are](../../media/guide/guide_tabular-profile.svg)
 
 Profiles are bounded: a `Profiler` keeps a fixed-seed reservoir sample of at
 most `sample` rows (10,000 by default), so the same input always gives the
@@ -187,15 +184,10 @@ first with their failing rows, then a table of every check and a summary
 `quality::not_null` and `quality::unique` are two small checks over `Rows`.
 
 ```rust
-use rich_data::quality::{self, CheckResult, QualityReport, Status};
-
-let report = QualityReport::new([
-    quality::not_null(&rows, "email")?,
-    quality::unique(&rows, "id")?,
-    CheckResult::new("row_count", Status::Warn).observed("3").expected(">= 100"),
-]);
-console.print(&report);
+--8<-- "crates/rich-data/examples/guide_tabular.rs:quality"
 ```
+
+![A quality report: two failures with their failing rows, a warning, a table of every check and the summary 1 passed, 1 warned, 2 failed](../../media/guide/guide_tabular-quality.svg)
 
 Profiles and reports draw with theme keys: `profile::STYLES` (`profile.title`,
 `profile.column`, `profile.type`, `profile.note`, `profile.null`) and

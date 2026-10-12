@@ -41,11 +41,7 @@ console.print(Rule("[b]Section[/]"))
 console.print(Rule("left", align="left", characters="="))
 ```
 
-```text
-──────────────────────────────
-────────── Section ───────────
-left =========================
-```
+![A plain rule, a titled rule and a left-aligned rule of equals signs](media/rule-rule.svg)
 
 A titled rule's `end` is written after it, as in Rich: with `end=""` the next
 output joins its line. A rule without a title always ends its line.
@@ -71,12 +67,7 @@ console.print(Padding("padded", (1, 4), style="on blue"))
 console.print(Padding.indent("indented", 4))
 ```
 
-```text
-                    
-    padded          
-                    
-    indented
-```
+![Padding on a blue background, and an indented line](media/rule-padding.svg)
 
 ## Align
 
@@ -101,13 +92,7 @@ console.print(Align.center(Panel.fit("centred")))
 console.print(Align.right("[i]right[/]", vertical="bottom", height=2))
 ```
 
-```text
-      ╭─────────╮       
-      │ centred │       
-      ╰─────────╯       
-                        
-                   right
-```
+![A centred panel and right-aligned italic text at the bottom of two lines](media/rule-align.svg)
 
 ## Constrain and Styled
 
@@ -125,12 +110,7 @@ console = Console(width=40)
 console.print(Constrain(Panel("at most 16 cells wide"), 16))
 ```
 
-```text
-╭──────────────╮
-│ at most 16   │
-│ cells wide   │
-╰──────────────╯
-```
+![A panel constrained to 16 cells](media/rule-constrain.svg)
 
 ## Bar
 
@@ -146,9 +126,7 @@ console = Console(width=20)
 console.print(Bar(100, 25, 70))
 ```
 
-```text
-     █████████      
-```
+![A bar from 25 to 70 out of 100](media/rule-bar.svg)
 
 ## Spinner
 

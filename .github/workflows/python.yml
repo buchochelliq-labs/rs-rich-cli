@@ -26,6 +26,7 @@ on:
       - "crates/rich-embed/**"
       - "crates/rich-py/**"
       - "docs/python/**"
+      - "scripts/capture_python_docs.py"
       - ".github/workflows/python.yml"
       - ".github/workflows/pypi-release.yml"
   push:
@@ -50,6 +51,7 @@ on:
       - "crates/rich-embed/**"
       - "crates/rich-py/**"
       - "docs/python/**"
+      - "scripts/capture_python_docs.py"
       - ".github/workflows/python.yml"
       - ".github/workflows/pypi-release.yml"
 
@@ -140,3 +142,10 @@ jobs:
       - name: Install and import on Python 3.13
         shell: bash
         run: python crates/rich-py/tests/smoke.py dist
+      # The Python site's pictures (docs/python/media) are rendered by the
+      # scripts in crates/rich-py/examples/docs; a change that renders them
+      # differently must regenerate them. One platform is enough: the SVGs
+      # are the same bytes everywhere.
+      - name: Check the Python docs pictures
+        if: matrix.name == 'linux-x86_64'
+        run: python scripts/capture_python_docs.py --check

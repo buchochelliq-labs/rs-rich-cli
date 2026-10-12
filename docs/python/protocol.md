@@ -14,6 +14,7 @@ A class whose `__rich__()` returns something renderable (a markup string, a
 from rs_rich.console import Console
 from rs_rich.panel import Panel
 
+console = Console(width=30)
 class User:
     def __init__(self, name):
         self.name = name
@@ -21,17 +22,11 @@ class User:
     def __rich__(self):
         return f"[bold]{self.name}[/] (user)"
 
-console = Console(width=30)
 console.print(User("ada"))
 console.print(Panel(User("grace"), title="who"))
 ```
 
-```text
-ada (user)
-╭─────────── who ────────────╮
-│ grace (user)               │
-╰────────────────────────────╯
-```
+![An object printed through __rich__, alone and in a panel](media/protocol-rich.svg)
 
 `__rich__` is called when the object is printed, not when it is put in a
 panel or table, so it shows the object's state at that moment.
@@ -51,6 +46,7 @@ from rs_rich.style import Style
 from rs_rich.table import Table
 from rs_rich.text import Text
 
+console = Console(width=24)
 class Report:
     def __rich_console__(self, console, options):
         yield "[bold]Report[/]"
@@ -61,19 +57,10 @@ class Report:
         table.add_row("status", "ok")
         yield table
 
-Console(width=24).print(Report())
+console.print(Report())
 ```
 
-```text
-Report
-24 columns available
-raw segment
-┏━━━━━━━━┳━━━━━━━┓
-┃ key    ┃ value ┃
-┡━━━━━━━━╇━━━━━━━┩
-│ status │ ok    │
-└────────┴───────┘
-```
+![Markup, a Text, a raw segment and a table yielded by __rich_console__](media/protocol-console.svg)
 
 A yielded string or `Text` ends its line; a `Segment` does not, so end a
 line of segments with `Segment.line()`. Inside a container, `options` is the
@@ -84,11 +71,11 @@ from rs_rich.console import Console
 from rs_rich.panel import Panel
 from rs_rich.table import Table
 
+console = Console(width=30)
 class Width:
     def __rich_console__(self, console, options):
         yield f"width {options.max_width}"
 
-console = Console(width=30)
 console.print(Width())
 console.print(Panel(Width()))
 table = Table("a", "b", box=None)
@@ -96,14 +83,7 @@ table.add_row(Width(), "x")
 console.print(table)
 ```
 
-```text
-width 30
-╭────────────────────────────╮
-│ width 26                   │
-╰────────────────────────────╯
- a                          b 
- width 25                   x 
-```
+![The width a renderable is offered on its own, in a panel and in a table cell](media/protocol-options.svg)
 
 A `__rich_console__` may use the console while it renders: its width,
 `console.measure`, `console.render_lines` to render a child to lines, or
@@ -114,6 +94,7 @@ threads are not blocked.
 from rs_rich.console import Console
 from rs_rich.segment import Segment
 
+console = Console(width=12)
 class Framed:
     def __init__(self, child):
         self.child = child
@@ -126,13 +107,10 @@ class Framed:
             yield Segment("|")
             yield Segment.line()
 
-Console(width=12).print(Framed("some words to wrap"))
+console.print(Framed("some words to wrap"))
 ```
 
-```text
-|some words|
-|to wrap   |
-```
+![A child rendered to lines and framed with bars](media/protocol-render-lines.svg)
 
 ## `__rich_measure__`
 
@@ -147,6 +125,7 @@ from rs_rich.console import Console
 from rs_rich.measure import Measurement
 from rs_rich.panel import Panel
 
+console = Console(width=20)
 class Badge:
     def __rich_console__(self, console, options):
         yield "[reverse] OK [/]"
@@ -158,19 +137,17 @@ class Greedy:
     def __rich_console__(self, console, options):
         yield "greedy"
 
-console = Console(width=20)
 console.print(Panel.fit(Badge()))
 console.print(Panel.fit(Greedy()))
+```
+
+![A panel fitted to a measured badge, and one fitted to a greedy renderable](media/protocol-measure.svg)
+
+```python
 print(console.measure(Badge()), console.measure(Greedy()))
 ```
 
 ```text
-╭──────╮
-│  OK  │
-╰──────╯
-╭──────────────────╮
-│ greedy           │
-╰──────────────────╯
 Measurement(minimum=4, maximum=4) Measurement(minimum=0, maximum=20)
 ```
 

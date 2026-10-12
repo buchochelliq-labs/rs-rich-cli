@@ -70,9 +70,8 @@ A `Color` prints as a sample, as in Rich:
 from rs_rich.color import Color
 from rs_rich.console import Console
 
-Console(width=40).print(Color.parse("magenta"))
+console = Console(width=40)
+console.print(Color.parse("magenta"))
 ```
 
-```text
-<color 'magenta' (standard)⬤ >
-```
+![A colour printed as a sample](media/color-sample.svg)

@@ -14,6 +14,10 @@ The examples come from
 cargo run -p rs-rich-ext --example guide_transforms --features jsonpath
 ```
 
+It also has the test that checks the pipelines produce what the pictures
+show (`cargo test -p rs-rich-ext --example guide_transforms --features
+jsonpath`).
+
 | Module | Works on | Transforms |
 |---|---|---|
 | `rich_ext::transform` | `rich::Text` | `KeepLines`, `HighlightMatches`, any plugin `TextTransform` |
@@ -34,10 +38,7 @@ it does not), with their styles. `HighlightMatches` styles every match.
 --8<-- "crates/rich-ext/examples/guide_transforms.rs:text"
 ```
 
-```text
-WARN slow disk
-ERROR failed
-```
+![The two lines that match, with ERROR in bold red](../../media/guide/guide_transforms-text.svg)
 
 ## Data
 
@@ -49,15 +50,7 @@ it.
 --8<-- "crates/rich-ext/examples/guide_transforms.rs:data"
 ```
 
-```text
-servers
-├── [0]
-│   ├── host: "a"
-│   └── token: "********"
-└── [1]
-    ├── host: "b"
-    └── token: "********"
-```
+![The servers tree with only host and token kept, the tokens masked, and the second server highlighted in reverse video](../../media/guide/guide_transforms-data.svg)
 
 - `Select` narrows to what a JSONPath selects. One hit becomes the root and
   labels it with its path; several become a map keyed by path.
@@ -78,6 +71,8 @@ and `Filter`'s path is relative to what `Select` chose.
 --8<-- "crates/rich-ext/examples/guide_transforms.rs:table"
 ```
 
+![The two hosts sorted by host, the sorted column's header marked ▲](../../media/guide/guide_transforms-table.svg)
+
 ## Contribute a transform from a plugin
 
 Text transforms are part of the plugin contract. A plugin implements
@@ -94,9 +89,7 @@ A host builds a pipeline of registered transforms by name:
 --8<-- "crates/rich-ext/examples/guide_transforms.rs:registry"
 ```
 
-```text
-card #### ####
-```
+![card #### ####: every digit masked](../../media/guide/guide_transforms-registry.svg)
 
 `ExtensionRegistry::register_transform` adds one without a plugin, and
 `transform_names()` lists them. `rich doctor` lists each plugin's transforms

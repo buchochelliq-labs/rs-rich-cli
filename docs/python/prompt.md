@@ -24,7 +24,7 @@ import io
 from rs_rich.console import Console
 from rs_rich.prompt import Confirm, IntPrompt, Prompt
 
-console = Console(width=60)
+console = Console(width=70)
 fruit = Prompt.ask("Fruit", choices=["apple", "pear"], console=console,
                    stream=io.StringIO("kiwi\npear\n"))
 count = IntPrompt.ask("How many", default=2, console=console, stream=io.StringIO("lots\n3\n"))
@@ -32,11 +32,7 @@ sure = Confirm.ask("Sure", default=True, console=console, stream=io.StringIO("y\
 print(repr(fruit), count, sure)
 ```
 
-```text
-Fruit [apple/pear]: Please select one of the available options
-Fruit [apple/pear]: How many (2): Please enter a valid integer number
-How many (2): Sure [y/n] (y): 'pear' 3 True
-```
+![Prompts with their choices and defaults, and the messages for invalid answers; answers read from a stream are not echoed](media/prompt-ask.svg)
 
 ## Your own prompt
 
@@ -59,11 +55,9 @@ class Username(Prompt):
         return value
 
 
-name = Username.ask("User", console=Console(width=60), stream=io.StringIO("al\nalice\n"))
+console = Console(width=70)
+name = Username.ask("User", console=console, stream=io.StringIO("al\nalice\n"))
 print(repr(name))
 ```
 
-```text
-User: At least 3 characters
-User: 'alice'
-```
+![A custom prompt rejecting a short name](media/prompt-custom.svg)

@@ -1,0 +1,69 @@
+<svg class="rich-terminal" viewBox="0 0 872 123.19999999999999" xmlns="http://www.w3.org/2000/svg">
+    <!-- Generated with Rich https://www.textualize.io -->
+    <style>
+
+    @font-face {
+        font-family: "Fira Code";
+        src: local("FiraCode-Regular"),
+                url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff2/FiraCode-Regular.woff2") format("woff2"),
+                url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff/FiraCode-Regular.woff") format("woff");
+        font-style: normal;
+        font-weight: 400;
+    }
+    @font-face {
+        font-family: "Fira Code";
+        src: local("FiraCode-Bold"),
+                url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff2/FiraCode-Bold.woff2") format("woff2"),
+                url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff/FiraCode-Bold.woff") format("woff");
+        font-style: bold;
+        font-weight: 700;
+    }
+
+    .prompt-ask-matrix {
+        font-family: Fira Code, monospace;
+        font-size: 20px;
+        line-height: 24.4px;
+        font-variant-east-asian: full-width;
+    }
+
+    .prompt-ask-title {
+        font-size: 18px;
+        font-weight: bold;
+        font-family: arial;
+    }
+
+    .prompt-ask-r1 { fill: #c5c8c6 }
+.prompt-ask-r2 { fill: #98729f;font-weight: bold }
+.prompt-ask-r3 { fill: #cc555a }
+.prompt-ask-r4 { fill: #68a0b3;font-weight: bold }
+    </style>
+
+    <defs>
+    <clipPath id="prompt-ask-clip-terminal">
+      <rect x="0" y="0" width="853.0" height="72.19999999999999" />
+    </clipPath>
+    <clipPath id="prompt-ask-line-0">
+    <rect x="0" y="1.5" width="854" height="24.65"/>
+            </clipPath>
+<clipPath id="prompt-ask-line-1">
+    <rect x="0" y="25.9" width="854" height="24.65"/>
+            </clipPath>
+    </defs>
+
+    <rect fill="#292929" stroke="rgba(255,255,255,0.35)" stroke-width="1" x="1" y="1" width="870" height="121.2" rx="8"/><text class="prompt-ask-title" fill="#c5c8c6" text-anchor="middle" x="435" y="27">prompt-ask</text>
+            <g transform="translate(26,22)">
+            <circle cx="0" cy="0" r="7" fill="#ff5f57"/>
+            <circle cx="22" cy="0" r="7" fill="#febc2e"/>
+            <circle cx="44" cy="0" r="7" fill="#28c840"/>
+            </g>
+        
+    <g transform="translate(9, 41)" clip-path="url(#prompt-ask-clip-terminal)">
+    
+    <g class="prompt-ask-matrix">
+    <text class="prompt-ask-r1" x="0" y="20" textLength="73.2" clip-path="url(#prompt-ask-line-0)">Fruit&#160;</text><text class="prompt-ask-r2" x="73.2" y="20" textLength="146.4" clip-path="url(#prompt-ask-line-0)">[apple/pear]</text><text class="prompt-ask-r1" x="219.6" y="20" textLength="24.4" clip-path="url(#prompt-ask-line-0)">:&#160;</text><text class="prompt-ask-r3" x="244" y="20" textLength="512.4" clip-path="url(#prompt-ask-line-0)">Please&#160;select&#160;one&#160;of&#160;the&#160;available&#160;options</text><text class="prompt-ask-r1" x="854" y="20" textLength="12.2" clip-path="url(#prompt-ask-line-0)">
+</text><text class="prompt-ask-r1" x="0" y="44.4" textLength="73.2" clip-path="url(#prompt-ask-line-1)">Fruit&#160;</text><text class="prompt-ask-r2" x="73.2" y="44.4" textLength="146.4" clip-path="url(#prompt-ask-line-1)">[apple/pear]</text><text class="prompt-ask-r1" x="219.6" y="44.4" textLength="24.4" clip-path="url(#prompt-ask-line-1)">:&#160;</text><text class="prompt-ask-r1" x="244" y="44.4" textLength="109.8" clip-path="url(#prompt-ask-line-1)">How&#160;many&#160;</text><text class="prompt-ask-r4" x="353.8" y="44.4" textLength="36.6" clip-path="url(#prompt-ask-line-1)">(2)</text><text class="prompt-ask-r1" x="390.4" y="44.4" textLength="24.4" clip-path="url(#prompt-ask-line-1)">:&#160;</text><text class="prompt-ask-r3" x="414.8" y="44.4" textLength="427" clip-path="url(#prompt-ask-line-1)">Please&#160;enter&#160;a&#160;valid&#160;integer&#160;number</text><text class="prompt-ask-r1" x="854" y="44.4" textLength="12.2" clip-path="url(#prompt-ask-line-1)">
+</text><text class="prompt-ask-r1" x="0" y="68.8" textLength="109.8" clip-path="url(#prompt-ask-line-2)">How&#160;many&#160;</text><text class="prompt-ask-r4" x="109.8" y="68.8" textLength="36.6" clip-path="url(#prompt-ask-line-2)">(2)</text><text class="prompt-ask-r1" x="146.4" y="68.8" textLength="24.4" clip-path="url(#prompt-ask-line-2)">:&#160;</text><text class="prompt-ask-r1" x="170.8" y="68.8" textLength="61" clip-path="url(#prompt-ask-line-2)">Sure&#160;</text><text class="prompt-ask-r2" x="231.8" y="68.8" textLength="61" clip-path="url(#prompt-ask-line-2)">[y/n]</text><text class="prompt-ask-r4" x="305" y="68.8" textLength="36.6" clip-path="url(#prompt-ask-line-2)">(y)</text><text class="prompt-ask-r1" x="341.6" y="68.8" textLength="24.4" clip-path="url(#prompt-ask-line-2)">:&#160;</text><text class="prompt-ask-r1" x="366" y="68.8" textLength="158.6" clip-path="url(#prompt-ask-line-2)">&#x27;pear&#x27;&#160;3&#160;True</text><text class="prompt-ask-r1" x="854" y="68.8" textLength="12.2" clip-path="url(#prompt-ask-line-2)">
+</text>
+    </g>
+    </g>
+</svg>

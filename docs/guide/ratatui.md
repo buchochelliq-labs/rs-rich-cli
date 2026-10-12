@@ -37,31 +37,23 @@ reference (`RichWidget::new(&table)`) or by value (`RichWidget::owned(…)`,
 `RichWidget::markup("[b]q[/] quit")`), and render it like any other widget:
 
 ```rust
-use ratatui_core::backend::TestBackend;
-use ratatui_core::layout::Rect;
-use ratatui_core::terminal::Terminal;
-use rich::Table;
-use rich_ratatui::RichWidget;
-
-let mut table = Table::new();
-table.add_column("service");
-table.add_column("status");
-table.add_row(&["api", "[green]ok[/]"]);
-table.add_row(&["worker", "[bold red]failed[/]"]);
-
-let mut terminal = Terminal::new(TestBackend::new(40, 8)).unwrap();
-terminal
-    .draw(|frame| {
-        // A borrowed renderable: the table outlives the frame.
-        frame.render_widget(&RichWidget::new(&table), Rect::new(0, 0, 40, 6));
-        // An owned one: markup, drawn in the last row.
-        frame.render_widget(RichWidget::markup("[b]q[/] quit"), Rect::new(0, 7, 40, 1));
-    })
-    .unwrap();
+--8<-- "crates/rich-ratatui/examples/guide_ratatui.rs:widget"
 ```
 
-(This is `RichWidget`'s doc test; in an app the terminal has a crossterm
-backend instead of `TestBackend`.)
+(The same code is `RichWidget`'s doc test; in an app the terminal has a
+crossterm backend instead of `TestBackend`.) The pictures on this page are
+the backend's buffer, read back with `buffer_to_lines` and exported through
+a rich console (the example's `Lines` is a renderable of rich lines), so
+each is the ratatui frame cell for cell:
+
+![The table in the top six rows of a 40 by 8 ratatui frame, and "q quit" in the last row](../media/guide/guide_ratatui-widget.svg)
+
+The examples come from
+[`guide_ratatui.rs`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/crates/rich-ratatui/examples/guide_ratatui.rs):
+
+```bash
+cargo run -p rs-rich-ratatui --example guide_ratatui --features interact
+```
 
 The renderable is rendered at the area's width, and its first
 `area.height` lines are drawn; the rest are cut off, as ratatui's
@@ -79,6 +71,12 @@ The renderable is rendered at the area's width, and its first
 Styles *patch* the cells beneath, as ratatui's own widgets do: an unstyled
 part of a table keeps the background a `Block` painted under it.
 
+```rust
+--8<-- "crates/rich-ratatui/examples/guide_ratatui.rs:patch"
+```
+
+![A rich table inside a bordered ratatui block: the block's dark blue background shows through the table's unstyled cells, and 340 keeps its red](../media/guide/guide_ratatui-patch.svg)
+
 The crate's example draws a rich table and rich Markdown side by side in one
 ratatui frame and prints the frame, with no terminal needed:
 
@@ -86,16 +84,13 @@ ratatui frame and prints the frame, with no terminal needed:
 cargo run -p rs-rich-ratatui --example rich_in_ratatui
 ```
 
-```text
-          Services                              Release notes
-┏━━━━━━━━━┳━━━━━━━━┳━━━━━━━━┓
-┃ service ┃ p99    ┃ status ┃      • Tables, panels and trees draw as
-┡━━━━━━━━━╇━━━━━━━━╇━━━━━━━━┩        ratatui widgets.
-│ api     │ 35 ms  │ ok     │      • Markdown, too:
-│ worker  │ 120 ms │ slow   │        RichWidget::new(&markdown).
-│ billing │ -      │ down   │
-└─────────┴────────┴────────┘     ▌ Styles patch the cells beneath them.
+The same frame, drawn by the guide's example:
+
+```rust
+--8<-- "crates/rich-ratatui/examples/guide_ratatui.rs:side-by-side"
 ```
+
+![A rich table titled Services on the left and rendered Markdown release notes on the right, in one 76-column ratatui frame](../media/guide/guide_ratatui-side-by-side.svg)
 
 ## Run ratatui widgets in rich-interact
 
@@ -106,33 +101,10 @@ component rather than behind an `Rc<RefCell>`, and it runs under every
 rich-interact driver, the headless one included:
 
 ```rust
-use ratatui_core::widgets::Widget;
-use ratatui_widgets::block::Block;
-use ratatui_widgets::paragraph::Paragraph;
-use rich_interact::headless::{self, Script};
-use rich_interact::{Event, Flow, KeyCode, Outcome};
-use rich_ratatui::RatatuiComponent;
-
-let counter = RatatuiComponent::with_state(0u32, |n, area, buf| {
-    Paragraph::new(format!("pressed {n}"))
-        .block(Block::bordered().title("counter"))
-        .render(area, buf);
-})
-.on_event(|n, event| match event {
-    Event::Key(key) if key.code == KeyCode::Enter => Flow::Done(*n),
-    Event::Key(_) => {
-        *n += 1;
-        Flow::Continue
-    }
-    _ => Flow::Ignored,
-})
-.height(3);
-
-// Under the headless driver; `rich_interact::run` drives a terminal.
-let (outcome, record) = headless::run(counter, Script::new().keys("a b enter"), 30, 10);
-assert!(matches!(outcome.unwrap(), Outcome::Done(2)));
-assert!(record.last_frame().contains("pressed 2"));
+--8<-- "crates/rich-ratatui/examples/guide_ratatui.rs:component"
 ```
+
+![A ratatui paragraph in a bordered block titled counter, reading pressed 2](../media/guide/guide_ratatui-component.svg)
 
 Each render draws into a fresh ratatui `Buffer` the size of the context (or
 `.height(rows)` rows) and converts it into the component's view. Without a

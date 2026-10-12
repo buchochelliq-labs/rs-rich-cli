@@ -12,7 +12,7 @@ covered by the snapshot and golden tests.
 ## What it covers
 
 The tool writes its own sample files into a temporary directory (the same files
-the [walkthrough](walkthrough.md) uses) and runs 86 cases:
+the [walkthrough](walkthrough.md) uses) and runs 90 cases:
 
 | Area | Cases |
 |---|---|
@@ -76,7 +76,7 @@ markdown-command        PASS      0.33s  rich markdown notes.md --hyperlinks
 demo-list               PASS      0.00s  rich --demo-list
 demo-core               PASS      0.43s  rich --demo --demo-section core --no-color
 
-86 passed, 0 failed, 0 skipped in 13.7s
+90 passed, 0 failed, 0 skipped in 9.9s
 ```
 
 A failure explains itself under its row:

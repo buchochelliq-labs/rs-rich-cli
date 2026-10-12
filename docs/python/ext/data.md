@@ -46,15 +46,7 @@ except data.DataError as error:
     console.print(error.diagnostic)
 ```
 
-```text
-json 3 10
-error: invalid JSON: expected `:`
-  --> api.json:3:10
-2 |   "name": "api",
-3 |   "port" 8080
-  |          ^ expected `:`
-4 | }
-```
+![A JSON parse error as a diagnostic pointing at the problem](../media/ext-data-error.svg)
 
 ## Views
 
@@ -71,32 +63,7 @@ console.print(data.TableView(
 console.print(data.FlatView(data.parse('{"name": "api", "ports": [80, 443]}')))
 ```
 
-```text
-deploy.yaml
-├── defaults: {…} 2 keys &defaults
-└── services
-    ├── web
-    │   ├── port: 8080
-    │   └── settings *defaults
-    │       ├── replicas: 2
-    │       └── image: "registry.example/app:1.4"
-    └── worker *defaults
-        ├── replicas: 2
-        └── image: "registry.example/app:1.4"
-┏━━━━━━┳━━━━━━┓
-┃ name ┃  CPU ┃
-┡━━━━━━╇━━━━━━┩
-│ web  │ 0.42 │
-│ db   │ 0.91 │
-└──────┴──────┘
-┏━━━━━━━━━━┳━━━━━━━┓
-┃ path     ┃ value ┃
-┡━━━━━━━━━━╇━━━━━━━┩
-│ name     │ api   │
-│ ports[0] │ 80    │
-│ ports[1] │ 443   │
-└──────────┴───────┘
-```
+![A data explorer with anchors and aliases, a table view and a flat view](../media/ext-data-views.svg)
 
 ## Search, select and diff
 
@@ -116,14 +83,7 @@ new = data.parse('{"name": "api", "ports": [80, 8443], "tls": true, "hsts": true
 console.print(data.DataDiffView(api, new))
 ```
 
-```text
-services.web.port key
-services.web.port: 8080
-1 match
-ports[1]
-~ ports[1]: 443 → 8443
-+ hsts: true
-```
+![Search matches in context and a data diff](../media/ext-data-search.svg)
 
 ## Secrets and config files
 
@@ -139,16 +99,7 @@ ini = data.parse(
 console.print(data.ConfigFileView(ini, title="app.ini", redaction=data.Redaction.secrets()))
 ```
 
-```text
-               app.ini               
-┏━━━━━━━━━━┳━━━━━━━━━━┳━━━━━━━━━━━━━┓
-┃ section  ┃ key      ┃ value       ┃
-┡━━━━━━━━━━╇━━━━━━━━━━╇━━━━━━━━━━━━━┩
-│ database │ host     │ db.internal │
-│          │ password │ ********    │
-│ api      │ timeout  │ 30          │
-└──────────┴──────────┴─────────────┘
-```
+![An INI file as a table with the password masked](../media/ext-data-config.svg)
 
 ## As transforms
 
@@ -168,12 +119,4 @@ document = (
 console.print(document)
 ```
 
-```text
-servers
-├── [0]
-│   ├── host: "a"
-│   └── token: "********"
-└── [1]
-    ├── host: "b"
-    └── token: "********"
-```
+![A document redacted and selected by a pipeline](../media/ext-data-pipeline.svg)

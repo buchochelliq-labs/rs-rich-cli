@@ -1,0 +1,89 @@
+<svg class="rich-terminal" viewBox="0 0 750 245.2" xmlns="http://www.w3.org/2000/svg">
+    <!-- Generated with Rich https://www.textualize.io -->
+    <style>
+
+    @font-face {
+        font-family: "Fira Code";
+        src: local("FiraCode-Regular"),
+                url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff2/FiraCode-Regular.woff2") format("woff2"),
+                url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff/FiraCode-Regular.woff") format("woff");
+        font-style: normal;
+        font-weight: 400;
+    }
+    @font-face {
+        font-family: "Fira Code";
+        src: local("FiraCode-Bold"),
+                url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff2/FiraCode-Bold.woff2") format("woff2"),
+                url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff/FiraCode-Bold.woff") format("woff");
+        font-style: bold;
+        font-weight: 700;
+    }
+
+    .ext-data-config-matrix {
+        font-family: Fira Code, monospace;
+        font-size: 20px;
+        line-height: 24.4px;
+        font-variant-east-asian: full-width;
+    }
+
+    .ext-data-config-title {
+        font-size: 18px;
+        font-weight: bold;
+        font-family: arial;
+    }
+
+    .ext-data-config-r1 { fill: #c5c8c6;font-style: italic; }
+.ext-data-config-r2 { fill: #c5c8c6 }
+.ext-data-config-r3 { fill: #c5c8c6;font-weight: bold }
+.ext-data-config-r4 { fill: #608ab1;font-weight: bold }
+    </style>
+
+    <defs>
+    <clipPath id="ext-data-config-clip-terminal">
+      <rect x="0" y="0" width="731.0" height="194.2" />
+    </clipPath>
+    <clipPath id="ext-data-config-line-0">
+    <rect x="0" y="1.5" width="732" height="24.65"/>
+            </clipPath>
+<clipPath id="ext-data-config-line-1">
+    <rect x="0" y="25.9" width="732" height="24.65"/>
+            </clipPath>
+<clipPath id="ext-data-config-line-2">
+    <rect x="0" y="50.3" width="732" height="24.65"/>
+            </clipPath>
+<clipPath id="ext-data-config-line-3">
+    <rect x="0" y="74.7" width="732" height="24.65"/>
+            </clipPath>
+<clipPath id="ext-data-config-line-4">
+    <rect x="0" y="99.1" width="732" height="24.65"/>
+            </clipPath>
+<clipPath id="ext-data-config-line-5">
+    <rect x="0" y="123.5" width="732" height="24.65"/>
+            </clipPath>
+<clipPath id="ext-data-config-line-6">
+    <rect x="0" y="147.9" width="732" height="24.65"/>
+            </clipPath>
+    </defs>
+
+    <rect fill="#292929" stroke="rgba(255,255,255,0.35)" stroke-width="1" x="1" y="1" width="748" height="243.2" rx="8"/><text class="ext-data-config-title" fill="#c5c8c6" text-anchor="middle" x="374" y="27">ext-data-config</text>
+            <g transform="translate(26,22)">
+            <circle cx="0" cy="0" r="7" fill="#ff5f57"/>
+            <circle cx="22" cy="0" r="7" fill="#febc2e"/>
+            <circle cx="44" cy="0" r="7" fill="#28c840"/>
+            </g>
+        
+    <g transform="translate(9, 41)" clip-path="url(#ext-data-config-clip-terminal)">
+    
+    <g class="ext-data-config-matrix">
+    <text class="ext-data-config-r1" x="0" y="20" textLength="451.4" clip-path="url(#ext-data-config-line-0)">&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;app.ini&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;</text><text class="ext-data-config-r2" x="732" y="20" textLength="12.2" clip-path="url(#ext-data-config-line-0)">
+</text><text class="ext-data-config-r2" x="0" y="44.4" textLength="451.4" clip-path="url(#ext-data-config-line-1)">┏━━━━━━━━━━┳━━━━━━━━━━┳━━━━━━━━━━━━━┓</text><text class="ext-data-config-r2" x="732" y="44.4" textLength="12.2" clip-path="url(#ext-data-config-line-1)">
+</text><text class="ext-data-config-r2" x="0" y="68.8" textLength="12.2" clip-path="url(#ext-data-config-line-2)">┃</text><text class="ext-data-config-r3" x="24.4" y="68.8" textLength="97.6" clip-path="url(#ext-data-config-line-2)">section&#160;</text><text class="ext-data-config-r2" x="134.2" y="68.8" textLength="12.2" clip-path="url(#ext-data-config-line-2)">┃</text><text class="ext-data-config-r3" x="158.6" y="68.8" textLength="97.6" clip-path="url(#ext-data-config-line-2)">key&#160;&#160;&#160;&#160;&#160;</text><text class="ext-data-config-r2" x="268.4" y="68.8" textLength="12.2" clip-path="url(#ext-data-config-line-2)">┃</text><text class="ext-data-config-r3" x="292.8" y="68.8" textLength="134.2" clip-path="url(#ext-data-config-line-2)">value&#160;&#160;&#160;&#160;&#160;&#160;</text><text class="ext-data-config-r2" x="439.2" y="68.8" textLength="12.2" clip-path="url(#ext-data-config-line-2)">┃</text><text class="ext-data-config-r2" x="732" y="68.8" textLength="12.2" clip-path="url(#ext-data-config-line-2)">
+</text><text class="ext-data-config-r2" x="0" y="93.2" textLength="451.4" clip-path="url(#ext-data-config-line-3)">┡━━━━━━━━━━╇━━━━━━━━━━╇━━━━━━━━━━━━━┩</text><text class="ext-data-config-r2" x="732" y="93.2" textLength="12.2" clip-path="url(#ext-data-config-line-3)">
+</text><text class="ext-data-config-r2" x="0" y="117.6" textLength="12.2" clip-path="url(#ext-data-config-line-4)">│</text><text class="ext-data-config-r3" x="24.4" y="117.6" textLength="97.6" clip-path="url(#ext-data-config-line-4)">database</text><text class="ext-data-config-r2" x="134.2" y="117.6" textLength="12.2" clip-path="url(#ext-data-config-line-4)">│</text><text class="ext-data-config-r4" x="158.6" y="117.6" textLength="97.6" clip-path="url(#ext-data-config-line-4)">host&#160;&#160;&#160;&#160;</text><text class="ext-data-config-r2" x="268.4" y="117.6" textLength="12.2" clip-path="url(#ext-data-config-line-4)">│</text><text class="ext-data-config-r2" x="292.8" y="117.6" textLength="134.2" clip-path="url(#ext-data-config-line-4)">db.internal</text><text class="ext-data-config-r2" x="439.2" y="117.6" textLength="12.2" clip-path="url(#ext-data-config-line-4)">│</text><text class="ext-data-config-r2" x="732" y="117.6" textLength="12.2" clip-path="url(#ext-data-config-line-4)">
+</text><text class="ext-data-config-r2" x="0" y="142" textLength="12.2" clip-path="url(#ext-data-config-line-5)">│</text><text class="ext-data-config-r2" x="134.2" y="142" textLength="12.2" clip-path="url(#ext-data-config-line-5)">│</text><text class="ext-data-config-r4" x="158.6" y="142" textLength="97.6" clip-path="url(#ext-data-config-line-5)">password</text><text class="ext-data-config-r2" x="268.4" y="142" textLength="12.2" clip-path="url(#ext-data-config-line-5)">│</text><text class="ext-data-config-r2" x="292.8" y="142" textLength="134.2" clip-path="url(#ext-data-config-line-5)">********&#160;&#160;&#160;</text><text class="ext-data-config-r2" x="439.2" y="142" textLength="12.2" clip-path="url(#ext-data-config-line-5)">│</text><text class="ext-data-config-r2" x="732" y="142" textLength="12.2" clip-path="url(#ext-data-config-line-5)">
+</text><text class="ext-data-config-r2" x="0" y="166.4" textLength="12.2" clip-path="url(#ext-data-config-line-6)">│</text><text class="ext-data-config-r3" x="24.4" y="166.4" textLength="97.6" clip-path="url(#ext-data-config-line-6)">api&#160;&#160;&#160;&#160;&#160;</text><text class="ext-data-config-r2" x="134.2" y="166.4" textLength="12.2" clip-path="url(#ext-data-config-line-6)">│</text><text class="ext-data-config-r4" x="158.6" y="166.4" textLength="97.6" clip-path="url(#ext-data-config-line-6)">timeout&#160;</text><text class="ext-data-config-r2" x="268.4" y="166.4" textLength="12.2" clip-path="url(#ext-data-config-line-6)">│</text><text class="ext-data-config-r2" x="292.8" y="166.4" textLength="134.2" clip-path="url(#ext-data-config-line-6)">30&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;</text><text class="ext-data-config-r2" x="439.2" y="166.4" textLength="12.2" clip-path="url(#ext-data-config-line-6)">│</text><text class="ext-data-config-r2" x="732" y="166.4" textLength="12.2" clip-path="url(#ext-data-config-line-6)">
+</text><text class="ext-data-config-r2" x="0" y="190.8" textLength="451.4" clip-path="url(#ext-data-config-line-7)">└──────────┴──────────┴─────────────┘</text><text class="ext-data-config-r2" x="732" y="190.8" textLength="12.2" clip-path="url(#ext-data-config-line-7)">
+</text>
+    </g>
+    </g>
+</svg>

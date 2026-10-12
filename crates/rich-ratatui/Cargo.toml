@@ -60,3 +60,7 @@ ratatui-widgets = { version = "0.3.2", default-features = false }
 
 [[example]]
 name = "rich_in_ratatui"
+
+[[example]]
+name = "guide_ratatui"
+required-features = ["interact"]

@@ -1,0 +1,18 @@
+╭─ Past sprints ───────────╮╭─ To do ───────────────╮╭─ Doing ───────────────╮╭─ Done ─────────────────╮
+│▾ Sprint 41               ││• Add Apple Pay        ││• Postgres 17 upgrade  ││• Cache product images  │
+│    ✓ Search by SKU       ││• Load test the cart   ││                       ││• Fix checkout timeout  │
+│    ✓ Gift cards          ││• Rotate API keys      ││                       ││                        │
+│    ✓ Faster product pages││                       ││                       ││                        │
+│▸ Sprint 40               ││                       ││                       ││                        │
+│▾ Sprint 39               ││                       ││                       ││                        │
+│    archive offline       ││                       ││                       ││                        │
+│                          ││                       ││                       ││                        │
+│                          ││                       ││                       ││                        │
+│                          ││                       ││                       ││                        │
+│                          ││                       ││                       ││                        │
+│                          ││                       ││                       ││                        │
+│                          ││                       ││                       ││                        │
+│                          ││                       ││                       ││                        │
+│                          ││                       ││                       ││                        │
+╰──────────────────────────╯╰───────────────────────╯╰───────────────────────╯╰────────────────────────╯
+Fix checkout timeout moved to Done  tree: Sprint 39  F1 tooltip · q quits

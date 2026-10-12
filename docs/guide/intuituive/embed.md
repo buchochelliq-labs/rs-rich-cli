@@ -50,6 +50,17 @@ signals:
 cargo run -p rs-rich-embed --example embed
 ```
 
+Here it runs bash in the shell pane and `w3m` on a local page in the web
+view; Ctrl+L opens another address:
+
+<div class="tape-player" data-cast="../../../media/tapes/embed/embed.cast" data-poster="npt:0:4">
+  <img src="../../../media/tapes/embed/embed.gif" alt="A shell in a terminal pane running rich, beside w3m in a web view">
+</div>
+
+| The shell | Another address |
+|---|---|
+| ![rich run in the shell pane](../../media/tapes/embed/pane.png) | ![The web view on a second page](../../media/tapes/embed/followed.png) |
+
 `terminal` and `web_view` return builders; `.node()` (or `.into()`) makes
 the node, which takes every builder a node has (`.panel`, `.flex`,
 `.on_key`). Like `signal`, they are called inside `App::new`'s closure or a

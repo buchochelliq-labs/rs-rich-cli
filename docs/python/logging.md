@@ -38,13 +38,15 @@ import logging
 from rs_rich.console import Console
 from rs_rich.logging import RichHandler
 
-handler = RichHandler(console=Console(width=70), show_time=False, show_path=False)
+console = Console(width=70)
+handler = RichHandler(console=console, show_time=False, show_path=False)
 log = logging.getLogger("docs.example")
 log.propagate = False
 log.addHandler(handler)
+log.setLevel(logging.INFO)
+log.info("Listening on port %d", 8080)
 log.warning("GET /index.html took %.1f seconds", 2.5)
+log.error("Lost the connection to %s", "db.internal")
 ```
 
-```text
-WARNING  GET /index.html took 2.5 seconds                             
-```
+![Three records with their levels in colour, the numbers and the GET keyword highlighted](media/logging-handler.svg)

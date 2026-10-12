@@ -47,13 +47,7 @@ console.print(fidelity.Degrade(panel, level="ascii"))
 print(fidelity.ascii_text("“quoted” → ok"))
 ```
 
-```text
-styled
-+------------ CI ------------+
-| v ok  x failed  > log      |
-+----------------------------+
-"quoted" > ok
-```
+![A panel degraded to ASCII](../media/ext-terminals-fidelity.svg)
 
 ## Accessibility
 

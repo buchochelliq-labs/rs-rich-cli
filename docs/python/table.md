@@ -53,21 +53,14 @@ Every style argument takes a `Style`, a style definition or a theme name.
 from rs_rich.console import Console
 from rs_rich.table import Table
 
+console = Console(width=40)
 table = Table("Planet", "Moons", title="Solar system")
 table.add_row("Earth", "1")
 table.add_row("Mars", "2")
-Console(width=40).print(table)
+console.print(table)
 ```
 
-```text
-   Solar system   
-┏━━━━━━━━┳━━━━━━━┓
-┃ Planet ┃ Moons ┃
-┡━━━━━━━━╇━━━━━━━┩
-│ Earth  │ 1     │
-│ Mars   │ 2     │
-└────────┴───────┘
-```
+![A titled table with a bold header row](media/table-first.svg)
 
 ## add_column
 
@@ -101,23 +94,16 @@ from rs_rich import box
 from rs_rich.console import Console
 from rs_rich.table import Table
 
+console = Console(width=32)
 table = Table(box=box.SIMPLE, expand=True)
 table.add_column("Name", ratio=1)
 table.add_column("Score", justify="right", width=6)
 table.add_row("alpha", "97")
 table.add_row("a much longer name that wraps", "3")
-Console(width=32).print(table)
+console.print(table)
 ```
 
-```text
-                                
-  Name                   Score  
- ────────────────────────────── 
-  alpha                     97  
-  a much longer name         3  
-  that wraps                    
-                                
-```
+![An expanded table with a ratio column and a fixed-width right-justified column](media/table-columns.svg)
 
 ## add_row
 
@@ -141,17 +127,14 @@ from rs_rich.console import Console
 from rs_rich.table import Table
 from rs_rich.text import Text
 
+console = Console(width=40)
 table = Table("markup", "text", "none", box=None)
 table.add_row("[bold]b[/]", Text("[not markup]"), None)
 print(table.row_count)
-Console(width=40).print(table)
+console.print(table)
 ```
 
-```text
-1
- markup  text          none 
- b       [not markup]       
-```
+![A markup cell, a Text cell kept literally, and an empty cell](media/table-rows.svg)
 
 A table is built when it is printed, so rows added after it was put in a
 panel still appear.
@@ -168,6 +151,7 @@ Footers, sections, row styles and a fixed width:
 from rs_rich.console import Console
 from rs_rich.table import Table
 
+console = Console(width=40)
 table = Table(title="Fruit", caption="per crate", caption_justify="right",
               show_footer=True, row_styles=["", "dim"], width=30)
 table.add_column("Name", "Total")
@@ -175,23 +159,10 @@ table.add_column("Qty", "12", justify="right")
 table.add_row("apple", "3")
 table.add_row("banana", "4", end_section=True)
 table.add_row("cherry", "5", style="bold")
-Console(width=40).print(table)
+console.print(table)
 ```
 
-```text
-            Fruit             
-┏━━━━━━━━━━━━━━━━━┳━━━━━━━━━━┓
-┃ Name            ┃      Qty ┃
-┡━━━━━━━━━━━━━━━━━╇━━━━━━━━━━┩
-│ apple           │        3 │
-│ banana          │        4 │
-├─────────────────┼──────────┤
-│ cherry          │        5 │
-├─────────────────┼──────────┤
-│ Total           │       12 │
-└─────────────────┴──────────┘
-                     per crate
-```
+![A table with a footer row, a section line, zebra rows and a right-justified caption](media/table-footers.svg)
 
 `leading`, `min_width`, and a row with more cells than columns:
 
@@ -200,18 +171,11 @@ from rs_rich import box
 from rs_rich.console import Console
 from rs_rich.table import Table
 
+console = Console(width=40)
 table = Table("a", "b", box=box.SIMPLE, leading=1, min_width=20)
 table.add_row("1", "2")
 table.add_row("3", "4", "extra")
-Console(width=40).print(table)
+console.print(table)
 ```
 
-```text
-                    
-  a    b            
- ────────────────── 
-  1    2            
-                    
-  3    4    extra   
-                    
-```
+![A table with a blank line between rows and an extra column](media/table-leading.svg)

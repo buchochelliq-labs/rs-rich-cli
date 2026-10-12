@@ -29,28 +29,7 @@ spec = cli_doc.CommandSpec(
 console.print(spec.help())
 ```
 
-```text
-Usage: deploy [OPTIONS] <ARTIFACT> [COMMAND]
-
-Ship a build to one or more regions
-
-Options:
-  -r, --region <NAME>...  Region to deploy to; repeat for several [env:
-                          DEPLOY_REGION] [config: deploy.region]
-  -j, --parallel <N>      Upload this many files at once [default: 4]
-                          [config: deploy.parallel]
-  -n, --dry-run           Show the plan without uploading
-
-Arguments:
-  <ARTIFACT>              The build archive to upload
-
-Commands:
-  rollback                Restore the previous release
-
-Examples:
-  Deploy to one region
-    $ deploy build.tar -r eu-west-1
-```
+![A generated help screen](../media/ext-cli-authoring-help.svg)
 
 `HelpView(spec)` is the same help as a renderable you can configure;
 `help(long=True, path=["rollback"])` shows a subcommand.
@@ -68,12 +47,7 @@ console.print(error)
 print(error.exit_code, cli_doc.suggest("eu-west", ["eu-west-1", "us-east-2"]))
 ```
 
-```text
-error: unexpected argument '--paralel'
-note: usage: deploy [OPTIONS] <ARTIFACT> [COMMAND]
-help: a similar argument exists: '--parallel'
-2 ['eu-west-1']
-```
+![A usage error with a suggestion](../media/ext-cli-authoring-error.svg)
 
 ## Completions and reference docs
 
@@ -110,9 +84,4 @@ precedence = cli_doc.Precedence([
 console.print(precedence.explain("deploy.parallel"))
 ```
 
-```text
-deploy.parallel = 2
-  ✔ flags                         2  effective
-  ✗ user (~/.config/deploy.toml)  8  overridden by flags
-  ✗ defaults                      4  overridden by user
-```
+![Where a layered setting's value came from](../media/ext-cli-authoring-precedence.svg)

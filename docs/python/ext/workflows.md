@@ -34,26 +34,14 @@ console.print(tree.view(animate=False))
 print(tree.overall(), tree.counts())
 ```
 
-```text
-Deploy
-├── ✔ ok build  9.2s
-│   └── ✔ ok compile  9.2s
-└── ▶ running upload  21/50 (42%)  1.9s
-running {'running': 1, 'succeeded': 1}
-```
+![A task tree with a finished branch and a running upload](../media/ext-workflows-tree.svg)
 
 ```python
 tree.fail(upload, "403 Forbidden")
 console.print(tree.summary(next_steps=["check the bucket policy"]))
 ```
 
-```text
-✖ error Deploy  11.1s
-  1 failed, 1 succeeded
-  ✖ error upload  1.9s  403 Forbidden
-Next steps:
-  → check the bucket policy
-```
+![A completion summary with the failure and the next step](../media/ext-workflows-summary.svg)
 
 `tree.token(id)` gives the task's `CancelToken`; cancelling a task cancels
 its children's tokens. `cancel.CancelToken` is also usable on its own:
@@ -78,15 +66,7 @@ print(record.state, record.detail, record.command_line)
 console.print(record.view(tail=2))
 ```
 
-```text
-failed exit 101 cargo test -p demo
-✖ error $ cargo test -p demo  exit 101  4.2s
-  │ running 3 tests
-  │ test parse::quoted ... FAILED
-  ! error: test failed
-error: `cargo test -p demo` exited with code 101
-caused by: error: test failed
-```
+![A failed command with the last lines of its output](../media/ext-workflows-command.svg)
 
 ## Transfers
 
@@ -108,12 +88,7 @@ console.print(transfer.Transfers([iso, docs], summary=True))
 print(iso.state, iso.eta)
 ```
 
-```text
-↓ debian-13.iso  210.0/650.0 MB  21.0 MB/s  ETA 0:00:21
-↓ docs.zip           2.4/2.4 MB          -  ✔ done
-2 transfers, 1 done  212.4/652.4 MB  21.0 MB/s
-active 21.0
-```
+![Two transfers with sizes, rates and a summary line](../media/ext-workflows-transfers.svg)
 
 ## Retries and rate limits
 
@@ -132,11 +107,7 @@ wide.print(backoff.status(2, "503 Service Unavailable"))
 wide.print(countdown.RateLimit(42, scope="search API", limit=30, remaining=0, bar=20))
 ```
 
-```text
-[1.0, 2.0, 4.0, None, None]
-⚠ warning attempt 2/4 failed: 503 Service Unavailable — retrying in 2s
-⚠ warning rate limited (search API) — resets in 0:00:42 (0/30 left)  [##################]
-```
+![A retry status line and a rate-limit countdown](../media/ext-workflows-retries.svg)
 
 ## Notifications
 
@@ -153,6 +124,4 @@ toasts.expire(5)
 console.print(toasts)
 ```
 
-```text
-⚠ warning Disk: 92% used
-```
+![The toast left after the others expired](../media/ext-workflows-notifications.svg)

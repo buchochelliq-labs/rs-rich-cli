@@ -197,3 +197,7 @@ required-features = ["serde"]
 [[example]]
 name = "guide_a11y"
 required-features = ["serde"]
+
+[[example]]
+name = "guide_sources"
+required-features = ["data"]

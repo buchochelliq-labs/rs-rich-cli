@@ -12,23 +12,17 @@ the exception, its notes, exception groups and the chain of causes.
 ```python
 from rs_rich.console import Console
 
+console = Console(width=64)
 def ratio(total, count):
     return total / count
 
-console = Console(width=64)
 try:
     ratio(1, 0)
 except ZeroDivisionError:
     console.print(Traceback(extra_lines=1))
 ```
 
-```text
-╭───────────── Traceback (most recent call last) ──────────────╮
-│ in <module>:8                                                │
-│ in ratio:4                                                   │
-╰──────────────────────────────────────────────────────────────╯
-ZeroDivisionError: division by zero
-```
+![A traceback with the code around each failing line](media/traceback-traceback.svg)
 
 ## Constructor
 

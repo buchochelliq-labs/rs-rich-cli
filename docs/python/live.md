@@ -54,11 +54,7 @@ with Live(console=console, auto_refresh=False) as live:
 console.print()
 ```
 
-```text
-╭────────────────────────────╮
-│ step 2                     │
-╰────────────────────────────╯
-```
+![The final frame of a live display](media/live-live.svg)
 
 ### Threads
 
@@ -141,11 +137,7 @@ console.print(Screen("top", "next"))
 console.print()
 ```
 
-```text
-top         
-next        
-            
-```
+![A screen filling a console three rows high](media/live-screen.svg)
 
 ## Pager
 

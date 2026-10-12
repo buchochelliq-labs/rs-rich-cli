@@ -46,6 +46,10 @@ Count: 2
 True
 ```
 
+The screen it left:
+
+![The counter at 2, in bold, over a dim hint line](media/tui-counter.svg)
+
 `App(counter).run()` is the same app in the terminal.
 
 ## Widgets and a loop of your own
@@ -81,6 +85,8 @@ a.txt 1K
 b.txt 2K
 Files, table, 2 of 2: b.txt 2K, selected
 ```
+
+![A two-row table with its second row selected](media/tui-driver.svg)
 
 ## Exceptions
 

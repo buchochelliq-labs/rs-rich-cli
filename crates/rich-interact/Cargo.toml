@@ -46,6 +46,10 @@ name = "explore"
 required-features = ["data"]
 
 [[example]]
+name = "guide_explorers"
+required-features = ["data"]
+
+[[example]]
 name = "micro_showcase"
 required-features = ["micro"]
 

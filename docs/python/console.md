@@ -116,17 +116,7 @@ console.print("before", Panel.fit("boxed"), "after")
 console.print("one two three four five six seven eight")
 ```
 
-```text
-Hello, World! 42 None
-a-b-c!
-before
-╭───────╮
-│ boxed │
-╰───────╯
-after
-one two three four five six 
-seven eight
-```
+![Strings and objects joined on one line, a panel on its own lines, and a wrapped line](media/console-print.svg)
 
 `justify` (`"left"`, `"center"`, `"right"`, `"full"` or `"default"`) aligns
 the text within the width; left, center and right also align other
@@ -146,16 +136,7 @@ console.print("a long line that will not fit", overflow="ellipsis", no_wrap=True
 console.print("narrow words here", width=8)
 ```
 
-```text
-      centred       
-           ╭───────╮
-           │ right │
-           ╰───────╯
-a long line that wi…
-narrow 
-words 
-here
-```
+![Centred and right-aligned output, an ellipsis, and a narrowed width](media/console-justify.svg)
 
 `style` applies a style under everything printed, and `new_line_start`
 starts on a fresh line when the output has more than one line. In colour,
@@ -211,12 +192,7 @@ console.rule("[bold]Section[/]")
 console.rule("left", align="left", characters="=")
 ```
 
-```text
-[not markup] 1
-
-─────── Section ────────
-left ===================
-```
+![Text written by out, a blank line, and two rules](media/console-out-rule.svg)
 
 ## log
 
@@ -243,11 +219,7 @@ console.log("same second")
 Console(width=40, log_time=False, log_path=False).log("no columns")
 ```
 
-```text
-[12:00:00] starting 1                   
-           same second                  
-no columns                              
-```
+![Two log lines, the repeated time left blank, then a line without the time column](media/console-log.svg)
 
 ## input
 
@@ -287,18 +259,11 @@ one line) and `highlight=False` prints it plain, as in Rich.
 ```python
 from rs_rich.console import Console
 
-Console(width=40).print_json('{"name": "rs_rich", "tags": [1, null]}')
+console = Console(width=40)
+console.print_json('{"name": "rs_rich", "tags": [1, null]}')
 ```
 
-```text
-{
-  "name": "rs_rich",
-  "tags": [
-    1,
-    null
-  ]
-}
-```
+![Highlighted JSON](media/console-print-json.svg)
 
 ## Capturing
 
@@ -447,23 +412,18 @@ Rich.
 from rs_rich.console import Console
 from rs_rich.panel import Panel
 
+console = Console(width=30)
 class Boxed:
     def process_renderables(self, renderables):
         return [Panel.fit(renderable) for renderable in renderables]
 
-console = Console(width=30)
 console.push_render_hook(Boxed())
 console.print("hooked")
 console.pop_render_hook()
 console.print("plain")
 ```
 
-```text
-╭────────╮
-│ hooked │
-╰────────╯
-plain
-```
+![A string boxed by a render hook, then printed plainly](media/console-render-hook.svg)
 
 ## The global console
 

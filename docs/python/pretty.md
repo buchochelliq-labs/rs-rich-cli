@@ -12,28 +12,18 @@ fits, otherwise expanded one item per line.
 
 ```python
 from dataclasses import dataclass
-
 from rs_rich.console import Console
 
+console = Console(width=40)
 @dataclass
 class Point:
     x: int
     y: int
 
-console = Console(width=40)
 console.print({"name": "rs_rich", "points": [Point(1, 2), Point(3, 4)], "ok": True})
 ```
 
-```text
-{
-    'name': 'rs_rich',
-    'points': [
-        Point(x=1, y=2),
-        Point(x=3, y=4)
-    ],
-    'ok': True
-}
-```
+![A dict of dataclasses pretty-printed and highlighted](media/pretty-pretty.svg)
 
 `Pretty(obj)` is the renderable behind that, with Rich's options:
 
@@ -59,17 +49,7 @@ console.print(Pretty({"nested": {"deeper": [1, 2]}}, max_depth=1))
 console.print(Pretty({"a": [1, 2], "b": "text"}, expand_all=True, indent_guides=True))
 ```
 
-```text
-[0, 1, 2, 3, 4, ... +15]
-{'nested': {...}}
-{
-│   'a': [
-│   │   1,
-│   │   2
-│   ],
-│   'b': 'text'
-}
-```
+![A shortened list, a container cut at depth one, and indent guides](media/pretty-options.svg)
 
 `pretty_repr(obj, *, max_width=80, indent_size=4, max_length=None,
 max_string=None, max_depth=None, expand_all=False)` returns the text without
@@ -111,17 +91,7 @@ console.print(JSON('{"name": "rs_rich", "tags": ["fast", "rust"], "stable": fals
 console.print(JSON.from_data({"compact": [1, 2]}, indent=None))
 ```
 
-```text
-{
-  "name": "rs_rich",
-  "tags": [
-    "fast",
-    "rust"
-  ],
-  "stable": false
-}
-{"compact": [1, 2]}
-```
+![Highlighted JSON, expanded and on one line](media/pretty-json.svg)
 
 `JSON(json, indent=2, highlight=True, skip_keys=False, ensure_ascii=False,
 check_circular=True, allow_nan=True, default=None, sort_keys=False)` and
@@ -149,21 +119,10 @@ class Account:
     def __repr__(self):
         return "Account()"
 
-rs_rich.inspect(Account(), console=Console(width=40))
+rs_rich.inspect(Account(), console=console)
 ```
 
-```text
-╭─ <class 'Account'> ─╮
-│ A bank account.     │
-│                     │
-│ ╭─────────────────╮ │
-│ │ Account()       │ │
-│ ╰─────────────────╯ │
-│                     │
-│ balance = 10.5      │
-│   owner = 'Ada'     │
-╰─────────────────────╯
-```
+![An inspect report on an object](media/pretty-inspect.svg)
 
 ## Highlighters
 

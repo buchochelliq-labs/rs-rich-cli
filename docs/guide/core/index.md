@@ -71,6 +71,12 @@ most of the API.
 Containers such as `Panel` and `Table` render their children through the same
 protocol, so everything nests: a table in a panel in a layout.
 
+```rust
+--8<-- "crates/rich/examples/guide_getting_started.rs:nesting"
+```
+
+![A two-row table inside a rounded panel titled Renderables nest](../../media/guide/guide_getting_started-nesting.svg)
+
 ## How it mirrors upstream
 
 - **Same modules, same names.** `rich/table.py` is `crates/rich/src/table.rs`;
@@ -98,6 +104,25 @@ so it compiles and runs:
 cargo run -p rs-rich --example guide_tables              # print to your terminal
 cargo run -p rs-rich --example guide_tables -- --svg out # write the screenshots
 ```
+
+Each screenshot sits under the snippet that drew it. The first table on
+the [Tables](tables.md) page, for instance:
+
+```rust
+--8<-- "crates/rich/examples/guide_tables.rs:basic"
+```
+
+![A table with a title, a caption and a right-justified column](../../media/guide/guide_tables-basic.svg)
+
+Every example renders its screenshots on a pinned console, so the same code
+gives the same bytes on every machine:
+
+```rust
+--8<-- "crates/rich/examples/guide_support/mod.rs:pinned"
+```
+
+`python3 scripts/capture_guide.py` regenerates every screenshot, and
+`--check` fails when one no longer matches its example.
 
 ## Pages
 

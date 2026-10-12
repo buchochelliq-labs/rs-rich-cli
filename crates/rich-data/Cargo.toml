@@ -55,3 +55,7 @@ arrow-ipc = { version = "60", default-features = false, optional = true }
 
 [dev-dependencies]
 serde = { version = "1", features = ["derive"] }
+
+[[example]]
+name = "guide_schemas"
+required-features = ["er"]

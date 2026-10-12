@@ -45,16 +45,7 @@ console.print(Panel(text))
 console.print(Panel(Text("right", justify="right")))
 ```
 
-```text
-abcdefghijkl
-mnop
-╭──────────╮
-│ abcdefg… │
-╰──────────╯
-╭──────────╮
-│    right │
-╰──────────╯
-```
+![A long text folded on its own, cut with an ellipsis in a panel, and right-justified in a panel](media/text-overflow.svg)
 
 ## from_markup
 
@@ -110,6 +101,15 @@ print(repr(out.getvalue()))
 Hello, World! 13
 '\x1b[3mHello\x1b[0m\x1b[1m, World\x1b[0m\x1b[4m!\x1b[0m\n'
 ```
+
+Printed on a terminal, each span shows its style:
+
+```python
+console = Console(width=20)
+console.print(text)
+```
+
+![Hello in italic, World in bold and the exclamation mark underlined](media/text-stylize.svg)
 
 Offsets count characters, not bytes:
 
@@ -184,6 +184,18 @@ print(text.markup)
 [Span(0, 3, 'repr.word'), Span(4, 7, 'repr.number'), Span(8, 11, 'repr.word'), Span(12, 14, 'repr.number'), Span(8, 11, 'bold')]
 [repr.word]foo[/repr.word] [repr.number]123[/repr.number] [repr.word][bold]bar[/repr.word][/bold] [repr.number]45[/repr.number]
 ```
+
+Printed, the spans take the theme's styles; `repr.word` is not in the
+default theme, so it adds nothing:
+
+```python
+from rs_rich.console import Console
+
+console = Console(width=20)
+console.print(text)
+```
+
+![The numbers in the theme's repr.number style and bar in bold](media/text-highlight.svg)
 
 ## Editing
 

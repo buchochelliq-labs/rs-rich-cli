@@ -61,22 +61,13 @@ total.
 from rs_rich.console import Console
 from rs_rich import data
 
-console = Console(width=60, color_system=None)
+console = Console(width=60)
 rows = data.read_csv("service,p99,up\nweb,120,true\napi,35.5,false\ndb,,true\n")
 print(rows.columns, rows.rows[0])
 console.print(rows)
 ```
 
-```text
-['service', 'p99', 'up'] ['web', '120', 'true']
-┏━━━━━━━━━┳━━━━━━┳━━━━━━━┓
-┃ service ┃ p99  ┃ up    ┃
-┡━━━━━━━━━╇━━━━━━╇━━━━━━━┩
-│ web     │ 120  │ true  │
-│ api     │ 35.5 │ false │
-│ db      │      │ true  │
-└─────────┴──────┴───────┘
-```
+![Rows read from CSV, printed as a table](media/data-rows.svg)
 
 ## Inference and statistics
 
@@ -108,18 +99,7 @@ p99 = data.Stats(rows).columns[1]
 print(p99.mean, p99.quantiles)
 ```
 
-```text
-┏━━━━━━━━━┳━━━━━━━━━┳━━━━━━━━┳━━━━━━━┓
-┃ column  ┃ type    ┃ parsed ┃ nulls ┃
-┡━━━━━━━━━╇━━━━━━━━━╇━━━━━━━━╇━━━━━━━┩
-│ service │ text    │    3/3 │     0 │
-│ p99     │ float   │    2/2 │     1 │
-│ up      │ boolean │    3/3 │     0 │
-└─────────┴─────────┴────────┴───────┘
-float: 2 of 2 values, 1 null
-['db', None, 'true']
-77.75 [(0.25, 56.625), (0.75, 98.875)]
-```
+![Each column's inferred type and the evidence](media/data-inference.svg)
 
 ## Profiles
 
@@ -147,46 +127,11 @@ as Python values, and `columns` and `column(name)` read it per column.
 profile = data.Profile.from_text("service,p99\nweb,120\napi,35\ndb,\nweb,80\n", name="p99.csv")
 print(profile.heading, profile.rows, profile.sampled)
 print(profile.column("p99")["mean"], profile.column("service")["distinct"])
-Console(width=72, color_system=None).print(profile)
+wide = Console(width=72)
+wide.print(profile)
 ```
 
-```text
-p99.csv: 4 rows, 2 columns 4 False
-78.33333333333333 3
-p99.csv: 4 rows, 2 columns
-
-┏━━━━━━━━━┳━━━━━━━━━┳━━━━━━━━━┳━━━━━━━━━━┳━━━━━┳━━━━━┳━━━━━━━━━┓
-┃ column  ┃ type    ┃   nulls ┃ distinct ┃ min ┃ max ┃    mean ┃
-┡━━━━━━━━━╇━━━━━━━━━╇━━━━━━━━━╇━━━━━━━━━━╇━━━━━╇━━━━━╇━━━━━━━━━┩
-│ service │ text    │       0 │        3 │ api │ web │         │
-│ p99     │ integer │ 1 (25%) │        3 │  35 │ 120 │ 78.3333 │
-└─────────┴─────────┴─────────┴──────────┴─────┴─────┴─────────┘
-
-service · text · 3 distinct
-  web ████████████████████████ 2
-  api ████████████             1
-  db  ████████████             1
-
-p99 · integer · 1 null (25%) · median 80 (p25 57.5, p75 100)
-  [30, 40)   ████████████████████████ 1
-  [40, 50)                            0
-  [50, 60)                            0
-  [60, 70)                            0
-  [70, 80)                            0
-  [80, 90)   ████████████████████████ 1
-  [90, 100)                           0
-  [100, 110)                          0
-  [110, 120)                          0
-  [120, 130] ████████████████████████ 1
-
-missing values (% null; rows top to bottom, a row each)
-  service p99     
-1                 
-2                 
-3         ████████
-4                 
-0 [ ░▒▓█] 100     
-```
+![A profile: a table of column statistics, a bar per common value or histogram bin, and a map of missing values](media/data-profile.svg)
 
 ## Data quality
 
@@ -220,28 +165,7 @@ console.print(report)
 print(report.ok, report.totals)
 ```
 
-```text
-FAIL not_null › p99
-  observed 1 null · expected 0
-  ┏━━━━━┳━━━━━━━━━┳━━━━━┳━━━━━━┓
-  ┃ row ┃ service ┃ p99 ┃ up   ┃
-  ┡━━━━━╇━━━━━━━━━╇━━━━━╇━━━━━━┩
-  │ 3   │ db      │     │ true │
-  └─────┴─────────┴─────┴──────┘
-
-WARN row_count
-  observed 3 · expected >= 100
-
-┏━━━━━━━━┳━━━━━━━━━━━┳━━━━━━━━━┳━━━━━━━━━━━━━━┳━━━━━━━━━━┓
-┃ status ┃ check     ┃ column  ┃ observed     ┃ expected ┃
-┡━━━━━━━━╇━━━━━━━━━━━╇━━━━━━━━━╇━━━━━━━━━━━━━━╇━━━━━━━━━━┩
-│ FAIL   │ not_null  │ p99     │ 1 null       │ 0        │
-│ PASS   │ unique    │ service │ 0 duplicates │ 0        │
-│ WARN   │ row_count │         │ 3            │ >= 100   │
-└────────┴───────────┴─────────┴──────────────┴──────────┘
-1 passed, 1 warned, 1 failed
-False {'passed': 1, 'warned': 1, 'failed': 1, 'errored': 0}
-```
+![A data-quality report with failures first and a summary table](media/data-quality.svg)
 
 ## Result sets and virtualised tables
 
@@ -274,25 +198,7 @@ table.scroll_by(1000)
 print(table.window(), table.position())
 ```
 
-```text
-┏━━━━━━━━━┳━━━━━━┳━━━━━━━┓
-┃ service ┃  p99 ┃  up   ┃
-┡━━━━━━━━━╇━━━━━━╇━━━━━━━┩
-│ web     │  120 │ true  │
-│ api     │ 35.5 │ false │
-│ db      │ NULL │ true  │
-└─────────┴──────┴───────┘
-(3 rows, 12ms)
-┏━━━━━┳━━━━━━━━┓
-┃   n ┃ square ┃
-┡━━━━━╇━━━━━━━━┩
-│ 501 │ 251001 │
-│ 502 │ 252004 │
-│ 503 │ 253009 │
-└─────┴────────┘
-rows 501–503 of 1,000
-(997, 1000) rows 998–1,000 of 1,000
-```
+![A SQL result set with NULL marked, and a window of a virtual table](media/data-result-set.svg)
 
 ## Schemas
 
@@ -342,31 +248,7 @@ console.print(diff)
 print([(c.marker, c.path, c.breaking) for c in diff.changes])
 ```
 
-```text
-shop  2 tables
-├── users  table
-│   ├── id (required)  INT  primary key
-│   └── email  TEXT  unique
-└── posts  table
-    ├── id (required)  INT  primary key
-    └── author (required)  INT  → users.id
-┌─────────────────┐                     ┌──────────────────┐
-│      posts      │                     │      users       │
-├─────────────────┤                     ├──────────────────┤
-│ id      INT  PK ├──author → id (N:1)─►│ id     INT    PK │
-│ author  INT  FK │                     │ email  TEXT?  UQ │
-└─────────────────┘                     └──────────────────┘
-[('posts', 'users', 'N:1')]
-┏━━━┳━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━┓
-┃   ┃ Where ┃ Change                  ┃          ┃
-┡━━━╇━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━┩
-│ ~ │ id    │ became required         │ breaking │
-│ ~ │ id    │ type integer → string   │ breaking │
-│ + │ name  │ property added (string) │          │
-└───┴───────┴─────────────────────────┴──────────┘
-v1 → v2: 3 changes, 2 breaking                    
-[('~', 'id', True), ('~', 'id', True), ('+', 'name', False)]
-```
+![A schema tree, an ER diagram and a schema diff](media/data-schema.svg)
 
 ## Conflicts and records
 
@@ -398,25 +280,7 @@ record = {"id": 7, "name": "web", "owner": {"team": "infra", "oncall": {"primary
 console.print(data.RecordView(record, expand=["owner.oncall"]))
 ```
 
-```text
-conflict 1 of 1, lines 2-6
-1   a
-  ours: HEAD
-3 < b
-  theirs: topic
-5 > c
-7   d
-┏━━━━━━━┳━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━┓
-┃ field ┃ type ┃ value                  ┃
-┡━━━━━━━╇━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━┩
-│ id    │ int  │ 7                      │
-│ name  │ str  │ web                    │
-│ owner │ map  │ {…} 2 keys             │
-│       │      │ ├── team: "infra"      │
-│       │      │ └── oncall             │
-│       │      │     └── primary: "ana" │
-└───────┴──────┴────────────────────────┘
-```
+![A merge conflict, stacked, and a record with an expanded branch](media/data-conflict.svg)
 
 From the shell, `rich profile FILE` profiles a data file, `rich schema`
 draws schemas and `rich diff --conflicts FILE` a file's conflicts

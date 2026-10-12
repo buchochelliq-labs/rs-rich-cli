@@ -20,13 +20,11 @@ its emoji or its text:
 from rs_rich.console import Console
 from rs_rich.micro import MicroMarkup
 
-console = Console()
+console = Console(width=40)
 console.print(MicroMarkup("Deploying :micro:status/loading: then :micro:status/success:"))
 ```
 
-```text
-Deploying ⏳ then ✅
-```
+![Micro asset tokens drawn as their emoji fallbacks](media/micro-markup.svg)
 
 `mode="text"` never draws images, and `preference="text"` (or `"alt"`)
 picks the text fallback (or the alt text) over the emoji. An unknown name

@@ -28,36 +28,18 @@ console is cropped, with a note.
 from rs_rich.console import Console
 from rs_rich.mermaid import Mermaid
 
-console = Console(width=50, color_system=None)
+console = Console(width=50)
 console.print(Mermaid("graph LR\n  A[Start] --> B{Ready?}\n  B -->|yes| C((Go))"))
 console.print(Mermaid("graph TD\n  A --> B", ascii=True))
 ```
 
-```text
-┌───────┐  ╱────────╲       ╭────╮
-│ Start ├─►< Ready? >──yes─►( Go )
-└───────┘  ╲────────╱       ╰────╯
-+---+
-| A |
-+-+-+
-  |
-  v
-+---+
-| B |
-+---+
-```
+![A Mermaid flowchart with a decision, then one drawn in ASCII](media/mermaid-flowchart.svg)
 
 ```python
 console.print(Mermaid("sequenceDiagram\n  Alice->>Bob: Hi"))
 ```
 
-```text
-Mermaid: sequence diagrams are not drawn as text
-                                                  
- sequenceDiagram                                  
-   Alice->>Bob: Hi                                
-                                                  
-```
+![A sequence diagram shown as its source under a note](media/mermaid-fallback.svg)
 
 ### The mmdc backend
 
@@ -131,9 +113,4 @@ print(fences.accepts("mermaid"), fences.accepts("python"))
 console.print(fences.render_fence("mermaid", "graph LR\n  x --> y"))
 ```
 
-```text
-True False
-┌───┐  ┌───┐
-│ x ├─►│ y │
-└───┘  └───┘
-```
+![A Mermaid fence drawn by the fence renderer](media/mermaid-fences.svg)

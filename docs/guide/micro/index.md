@@ -113,6 +113,23 @@ an asset), under a style whose metadata holds
 tables and panels at exactly its width, and prints as plain fallback in
 pipes, logs and exports.
 
+Here the built-in library's assets sit in a table's cells, each two
+columns wide, printed with their emoji fallback:
+
+```rust
+--8<-- "crates/rich-micro/examples/guide_micro.rs:table"
+--8<-- "crates/rich-micro/examples/guide_micro.rs:fallback"
+```
+
+![A table of deploy steps, each status starting with an emoji: a check mark, a warning sign, a bug, a package and a cross](../../media/guide/guide_micro-fallback.svg)
+
+The pictures on this page come from
+[`guide_micro.rs`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/crates/rich-micro/examples/guide_micro.rs):
+
+```bash
+cargo run -p rs-rich-micro --example guide_micro
+```
+
 `MicroView` wraps any renderable and offers each complete placement in its
 output to `MicroRenderer`s, which may swap it for other cells of the same
 width. A placement that was cropped or split is never offered.
@@ -141,6 +158,19 @@ let console = Console::new();
 let (text, _) = render_markup(&console, "Deploying :micro:ship:", &registry, FallbackPreference::Emoji);
 console.print(&graphics.view(text));
 ```
+
+The same table drawn in half-blocks, the mode a colour terminal without an
+image protocol gets. Each asset's image is fitted to its two cells, so the
+table keeps its layout exactly:
+
+```rust
+--8<-- "crates/rich-micro/examples/guide_micro.rs:blocks"
+```
+
+![The same table with each emoji replaced by two cells of coloured half-blocks: green, amber, dark green, brown and red](../../media/guide/guide_micro-blocks.svg)
+
+The [built-in library](library.md) page shows each asset magnified, and
+the drawing modes side by side.
 
 The selection goes, in order:
 

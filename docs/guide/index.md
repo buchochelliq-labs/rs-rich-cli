@@ -12,6 +12,33 @@ This guide walks through all of it. Every code sample on these pages is taken
 from an example program that CI compiles, and every screenshot is that program's
 real output, exported to SVG by the library itself.
 
+A Markdown document from the core, a dashboard of `rs-rich-ext` charts in a
+core `Layout`, and an `rs-rich-interact` explorer searching a YAML file:
+
+![A Markdown document with a heading, inline styles, lists, a quote, a table and a code block](../media/guide/guide_code-markdown.svg)
+
+??? example "The code: Markdown (core)"
+
+    ```rust
+    --8<-- "crates/rich/examples/guide_code.rs:markdown"
+    ```
+
+![Two KPI cards, a status matrix and a timeline in a Layout](../media/guide/guide_charts-dashboard.svg)
+
+??? example "The code: a dashboard of charts (rs-rich-ext)"
+
+    ```rust
+    --8<-- "crates/rich-ext/examples/guide_charts.rs:dashboard"
+    ```
+
+![A data explorer filtered by port, with the path to the focused node and a preview](../media/guide/guide_explorers-explorer-search.svg)
+
+??? example "The code: a data explorer (rs-rich-interact)"
+
+    ```rust
+    --8<-- "crates/rich-interact/examples/guide_explorers.rs:explorer"
+    ```
+
 ## The pieces
 
 | Crate | Import as | What it gives you | Guide |

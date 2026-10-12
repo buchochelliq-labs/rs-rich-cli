@@ -16,7 +16,6 @@ from rs_rich.console import Console
 from rs_rich.ext import table
 
 console = Console(width=60)
-
 def latency(value):
     return "[dim]-[/]" if value is None else f"{value:.0f} ms"
 
@@ -32,22 +31,7 @@ services = table.TableData(
 console.print(services)
 ```
 
-```text
-┏━━━━━━━━━━━━┳━━━━━━━━━━━┳━━━━━━━━┳━━━━━━━━┓
-┃ service ▲2 ┃ region ▲1 ┃ errors ┃    p99 ┃
-┡━━━━━━━━━━━━╇━━━━━━━━━━━╇━━━━━━━━╇━━━━━━━━┩
-│ region: eu │           │        │        │
-│ api        │ eu        │      3 │ 120 ms │
-│ db         │ eu        │      7 │      - │
-│ worker-10  │ eu        │      3 │  95 ms │
-│ subtotal   │           │     13 │        │
-│ region: us │           │        │        │
-│ web        │ us        │      0 │  80 ms │
-│ worker-9   │ us        │      0 │  60 ms │
-│ subtotal   │           │      0 │        │
-│ total: 5   │           │        │  89 ms │
-└────────────┴───────────┴────────┴────────┘
-```
+![A sorted, grouped table with subtotals and a totals row](../media/ext-tables-typed.svg)
 
 `sort_by(keys)` returns a sorted copy (`SortKey(column, descending=True)`),
 and `TableSort`/`TableGroup` do the same as pipeline stages.
@@ -68,17 +52,7 @@ console.print(jobs)
 print(jobs["build"], len(jobs))
 ```
 
-```text
-… 1 earlier row
-┏━━━━━━━┳━━━━━━━━━┓
-┃ job   ┃ state   ┃
-┡━━━━━━━╇━━━━━━━━━┩
-│ build │ running │
-│ test  │ queued  │
-│ lint  │ queued  │
-└───────┴─────────┘
-['build', 'running'] 4
-```
+![A streaming table keeping the last three rows](../media/ext-tables-streaming.svg)
 
 ## Records
 
@@ -99,18 +73,7 @@ console.print(derive.Record.from_object(Server("web", 8080), presentation="panel
 console.print(derive.records_table([Server("web", 8080), Server("db", 5432)]))
 ```
 
-```text
-╭───────────────────────── Server ─────────────────────────╮
-│ name: 'web'                                              │
-│ port: 8080                                               │
-╰──────────────────────────────────────────────────────────╯
-┏━━━━━━━┳━━━━━━┓
-┃ name  ┃ port ┃
-┡━━━━━━━╇━━━━━━┩
-│ 'web' │ 8080 │
-│ 'db'  │ 5432 │
-└───────┴──────┘
-```
+![A record in a panel and records in a table](../media/ext-tables-records.svg)
 
 ## Badges and size bars
 
@@ -126,11 +89,7 @@ console.print(size_bar.SizeBar.limit(9_300_000, 10_000_000, label="rs-rich-ext "
 console.print(size_bar.SizeBar(3 << 30, 8 << 30, label="disk        ", units="binary"))
 ```
 
-```text
-[OK build] [ERROR tests] [version: 0.0.11]
-rs-rich-ext   ███████████████████░  9.3 MB / 10.0 MB  93%
-disk          ████████░░░░░░░░░░░░  3.0 GiB / 8.0 GiB  38%
-```
+![Status badges and two size bars](../media/ext-tables-badges.svg)
 
 ## Formatting numbers and times
 
@@ -165,10 +124,4 @@ print(" ".join(redact.Redactor.secrets().redact_args(["--password", "pw", "--nam
 console.print(redact.Redacted(Panel("DATABASE_URL=postgres://app:s3cret@db/app"), redactor))
 ```
 
-```text
-GET /api?token=******** for order ********
---password ******** --name x
-╭──────────────────────────────────────────────────────────╮
-│ DATABASE_URL=postgres://app:******@db/app                │
-╰──────────────────────────────────────────────────────────╯
-```
+![A panel whose secret is masked](../media/ext-tables-redaction.svg)

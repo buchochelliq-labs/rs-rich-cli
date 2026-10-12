@@ -1,0 +1,22 @@
+╭─ shell ───────────────────────────────────────╮ ╭─ web ──────────────────────────────────────────╮
+│$ ls                                           │ │ ← → ↻ file:deploys.html                        │
+│bin  deploys.csv  deploys.html  runbook.html   │ │Recent deploys                                  │
+│$ rich deploys.csv                             │ │                                                │
+│┌───────────┬──────────┬─────────┬──────────┐  │ │  When    Service  Version                      │
+││ when      │ service  │ version │ status   │  │ │09:42     checkout v2.14.0                      │
+││ 09:42     │ checkout │ v2.14.0 │ ok       │  │ │09:15     search   v3.2.1                       │
+││ 09:15     │ search   │ v3.2.1  │ ok       │  │ │Yesterday payments v1.9.3                       │
+││ Yesterday │ payments │ v1.9.3  │ reverted │  │ │                                                │
+│└───────────┴──────────┴─────────┴──────────┘  │ │Back to the runbook                             │
+│$                                              │ │                                                │
+│                                               │ │                                                │
+│                                               │ │                                                │
+│                                               │ │                                                │
+│                                               │ │                                                │
+│                                               │ │                                                │
+│                                               │ │                                                │
+│                                               │ │                                                │
+│                                               │ │                                                │
+│                                               │ │≪ ↑ ↓ Viewing <Recent deploys>                  │
+╰───────────────────────────────────────────────╯ ╰────────────────────────────────────────────────╯
+shell running · file:deploys.html · F6 switches pane · F10 quits

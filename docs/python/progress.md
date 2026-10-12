@@ -46,8 +46,8 @@ Properties: `tasks`, `task_ids`, `finished`, `console`, `live`, `columns`,
 from rs_rich.console import Console
 from rs_rich.progress import Progress
 
-now = [0.0]
 console = Console(width=60)
+now = [0.0]
 with Progress(console=console, auto_refresh=False, get_time=lambda: now[0]) as progress:
     download = progress.add_task("Download", total=200)
     unpack = progress.add_task("Unpack", total=None)
@@ -56,10 +56,7 @@ with Progress(console=console, auto_refresh=False, get_time=lambda: now[0]) as p
         progress.advance(download, 40)
 ```
 
-```text
-Download ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━          80% 0:00:01
-Unpack   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━             
-```
+![A download bar at 80% with the time remaining, and a pulsing bar for a task with no total](media/progress-tasks.svg)
 
 Task values keep their Python types, and every attribute of a `Task` (`id`,
 `description`, `total`, `completed`, `fields`, `percentage`, `elapsed`,
@@ -69,18 +66,17 @@ Task values keep their Python types, and every attribute of a `Task` (`id`,
 from rs_rich.console import Console
 from rs_rich.progress import Progress, TextColumn
 
+console = Console(width=40)
 progress = Progress(
     TextColumn("{task.description}: {task.completed}/{task.total} {task.fields[unit]}"),
-    console=Console(width=40),
+    console=console,
 )
 task = progress.add_task("Files", total=12, unit="files")
 progress.update(task, advance=5)
 progress.console.print(progress)
 ```
 
-```text
-Files: 5/12 files
-```
+![A text column formatted from the task's fields](media/progress-fields.svg)
 
 ## Columns
 
@@ -106,14 +102,13 @@ class Left(ProgressColumn):
         return Text(f"{task.remaining} left", style="magenta")
 
 
-progress = Progress(BarColumn(bar_width=20), Left(), console=Console(width=40))
+console = Console(width=40)
+progress = Progress(BarColumn(bar_width=20), Left(), console=console)
 task = progress.add_task("", total=10, completed=7)
 progress.console.print(progress)
 ```
 
-```text
-━━━━━━━━━━━━━━       3 left
-```
+![A 20-cell bar and a custom column in magenta](media/progress-column.svg)
 
 ## track, wrap_file and open
 
@@ -129,15 +124,14 @@ yielding a reader that advances the display as it is read.
 from rs_rich.console import Console
 from rs_rich.progress import track
 
+console = Console(width=60)
 now = [0.0]
-for value in track(range(3), description="Counting", console=Console(width=60),
+for value in track(range(3), description="Counting", console=console,
                    auto_refresh=False, get_time=lambda: now[0]):
     now[0] += 1
 ```
 
-```text
-Counting ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 100% 0:00:03
-```
+![A finished track bar at 100% with the elapsed time](media/progress-track.svg)
 
 With `auto_refresh=True` (the default) a background thread advances the task
 every `update_period` seconds, as in Rich; leaving the loop early (or calling
@@ -159,13 +153,12 @@ total=None)` changes it, `percentage_completed` reads it.
 from rs_rich.console import Console
 from rs_rich.progress_bar import ProgressBar
 
-Console(width=40).print(ProgressBar(total=100, completed=40, width=20))
+console = Console(width=40)
+console.print(ProgressBar(total=100, completed=40, width=20))
 print()
 ```
 
-```text
-━━━━━━━━
-```
+![A progress bar 40% complete](media/progress-bar.svg)
 
 ## Differences from Rich
 

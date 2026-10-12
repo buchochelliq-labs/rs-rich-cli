@@ -52,6 +52,12 @@ counter and a list:
 cargo run -p rs-rich-web --example serve
 ```
 
+Here it is in Chromium, after typing two lines and pressing `+` three
+times on the counter (`scripts/capture_web.mjs` takes this page's
+pictures):
+
+![The example app on the xterm.js page: a clock, a text box, a counter at 3 and the two lines said](../../media/web/xterm.png)
+
 ## Options
 
 `serve` is `Server::bind` and `Server::run` with the defaults. `Server`
@@ -125,6 +131,10 @@ A string is a program name, an array or a vector is the program and its
 arguments, and a `rich_web::Command` also sets the environment and the
 working directory. The program sees `TERM=xterm-256color`.
 
+Here `rich serve` runs vim, showing the xterm.js page's own script:
+
+![vim on the xterm.js page, with syntax colours and line numbers](../../media/web/program.png)
+
 - **Input** goes to the program as the page sent it: keys, pastes (bracketed
   when the program asked for that) and mouse reports when it turned the
   mouse on. Resizing the window resizes the pseudo-terminal, so the program
@@ -185,6 +195,20 @@ Serving a shell gives a shell to anyone who has the address with its
 token. Keep it on `127.0.0.1` unless a proxy with authentication is in
 front (see [Security](#security)).
 
+The recording serves the `todo` example. A tape cannot drive a browser, so
+`curl` asks what one would: the page without the token is refused and with
+it is served; a WebSocket upgrade from the server's own page starts a
+session, and one from another site is refused. Ctrl+C then stops it. The
+tape is [`docs/tapes/serve.tape`](../../tapes/serve.tape).
+
+<div class="tape-player" data-cast="../../../media/tapes/serve/serve.cast" data-poster="npt:0:3">
+  <img src="../../../media/tapes/serve/serve.gif" alt="rich serve printing its address, then curl asking for the page and a session">
+</div>
+
+| Started | The token and the origin checked |
+|---|---|
+| ![rich serve printing the address with its token](../../media/tapes/serve/started.png) | ![A session started, another site refused](../../media/tapes/serve/sessions.png) |
+
 ## The DOM renderer
 
 `Renderer::Dom` draws an app with the page's own DOM instead of xterm.js:
@@ -205,6 +229,10 @@ xterm.js stays the default. A page's address can choose either way:
 `&renderer=dom` after the token asks for the DOM renderer from a server
 whose default is xterm.js, and `&renderer=xterm` the other way. A program
 has no tree, so a program's page is always xterm.js.
+
+The example from above, with `&renderer=dom`, after the same keys:
+
+![The example app drawn by the DOM renderer](../../media/web/dom.png)
 
 What the page carries:
 
@@ -240,6 +268,13 @@ What the page carries:
 
 The page's script, `dom.js`, is the crate's own (no third-party code), a
 few hundred lines, and runs under the same content security policy.
+
+The tree's elements are invisible on the page. Outlined, and labelled with
+their roles, they lie over the panels they describe: a region for each
+panel, a `textbox` for the text box and a `button` for the counter, which
+has the focus:
+
+![The DOM page with the accessibility tree outlined: regions, text, a textbox and a button over the app](../../media/web/dom-tree.png)
 
 ### The protocol
 

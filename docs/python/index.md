@@ -12,23 +12,16 @@ pip install rs-rich
 from rs_rich.console import Console   # was: from rich.console import Console
 from rs_rich.table import Table       # was: from rich.table import Table
 
+console = Console(width=50)
 table = Table(title="Star Wars Movies")
 table.add_column("Released", justify="right", style="cyan", no_wrap=True)
 table.add_column("Title", style="magenta")
 table.add_row("Dec 20, 2019", "Star Wars: The Rise of Skywalker")
 
-Console(width=50).print(table)
+console.print(table)
 ```
 
-```text
-                 Star Wars Movies                 
-┏━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
-┃     Released ┃ Title                           ┃
-┡━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
-│ Dec 20, 2019 │ Star Wars: The Rise of          │
-│              │ Skywalker                       │
-└──────────────┴─────────────────────────────────┘
-```
+![The Star Wars table from Rich's README, rendered by rs_rich](media/index-star-wars.svg)
 
 The package is `rs-rich` and it imports as `rs_rich`. It never claims the
 `rich` namespace, so both can be installed side by side. New here? Start with
@@ -142,3 +135,9 @@ installed, for the art tests that take Pillow images). Install it in its own
 virtualenv, never alongside `rich-cli` (see `AGENTS.md`). `tests/test_cli.py`
 compares `python -m rs_rich` with the `rich` binary: it builds it with cargo,
 or uses `RS_RICH_CLI_BIN`.
+
+The pictures on these pages are rendered by `rs_rich` itself, from the
+scripts in `crates/rich-py/examples/docs` (one per page, holding the code the
+page shows). With the package installed, `python scripts/capture_python_docs.py`
+regenerates them, and `--check` fails when one is stale, as the `python`
+workflow does.

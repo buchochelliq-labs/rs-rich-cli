@@ -17,24 +17,17 @@ from rs_rich.ext import layout
 from rs_rich.panel import Panel
 from rs_rich.text import Text
 
+console = Console(width=40, height=7)
 header = layout.LayoutNode(Text("acme deploy"), height=1)
 sidebar = layout.LayoutNode(Text("api\nworker\nweb"), width=layout.Constraint(min=6, max=12), content_width=True)
 body = layout.LayoutNode(Panel("v2.4.1 on 3 of 4 services", title="status"))
 footer = layout.LayoutNode(Text("q quit"), height=1, align=("end", "start"))
 screen = layout.LayoutNode.split("vertical", [header, layout.LayoutNode.split("horizontal", [sidebar, body]), footer])
 screen.validate()
-Console(width=40, height=7).print(screen)
+console.print(screen)
 ```
 
-```text
-acme deploy                             
-api   ╭──────────── status ────────────╮
-worker│ v2.4.1 on 3 of 4 services      │
-web   │                                │
-      │                                │
-      ╰────────────────────────────────╯
-                                  q quit
-```
+![A header, a sidebar sized to its content, a panel and a right-aligned footer](../media/ext-layout-bounded.svg)
 
 `allocate(total, constraints)` is the size solver on its own: it returns the
 sizes, the padding left over, and whether minimums had to be relaxed.
@@ -55,13 +48,12 @@ print(layout.allocate(30, constraints))
 segments to lines.
 
 ```python
+console = Console(width=30)
 code = Text("let answer = compute_the_answer(universe, everything, 42);")
-Console(width=30).print(layout.Overflowing(code, "ellipsis"))
+console.print(layout.Overflowing(code, "ellipsis"))
 ```
 
-```text
-let answer = compute_the_answ…
-```
+![A long line cut with an ellipsis](../media/ext-layout-overflow.svg)
 
 ## The live coordinator
 

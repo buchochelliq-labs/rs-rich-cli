@@ -1,0 +1,73 @@
+<svg class="rich-terminal" viewBox="0 0 994 147.6" xmlns="http://www.w3.org/2000/svg">
+    <!-- Generated with Rich https://www.textualize.io -->
+    <style>
+
+    @font-face {
+        font-family: "Fira Code";
+        src: local("FiraCode-Regular"),
+                url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff2/FiraCode-Regular.woff2") format("woff2"),
+                url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff/FiraCode-Regular.woff") format("woff");
+        font-style: normal;
+        font-weight: 400;
+    }
+    @font-face {
+        font-family: "Fira Code";
+        src: local("FiraCode-Bold"),
+                url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff2/FiraCode-Bold.woff2") format("woff2"),
+                url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff/FiraCode-Bold.woff") format("woff");
+        font-style: bold;
+        font-weight: 700;
+    }
+
+    .chart-gauges-matrix {
+        font-family: Fira Code, monospace;
+        font-size: 20px;
+        line-height: 24.4px;
+        font-variant-east-asian: full-width;
+    }
+
+    .chart-gauges-title {
+        font-size: 18px;
+        font-weight: bold;
+        font-family: arial;
+    }
+
+    .chart-gauges-r1 { fill: #c5c8c6 }
+.chart-gauges-r2 { fill: #68a0b3 }
+.chart-gauges-r3 { fill: #9a9b99 }
+.chart-gauges-r4 { fill: #c5c8c6;font-weight: bold }
+    </style>
+
+    <defs>
+    <clipPath id="chart-gauges-clip-terminal">
+      <rect x="0" y="0" width="975.0" height="96.6" />
+    </clipPath>
+    <clipPath id="chart-gauges-line-0">
+    <rect x="0" y="1.5" width="976" height="24.65"/>
+            </clipPath>
+<clipPath id="chart-gauges-line-1">
+    <rect x="0" y="25.9" width="976" height="24.65"/>
+            </clipPath>
+<clipPath id="chart-gauges-line-2">
+    <rect x="0" y="50.3" width="976" height="24.65"/>
+            </clipPath>
+    </defs>
+
+    <rect fill="#292929" stroke="rgba(255,255,255,0.35)" stroke-width="1" x="1" y="1" width="992" height="145.6" rx="8"/><text class="chart-gauges-title" fill="#c5c8c6" text-anchor="middle" x="496" y="27">chart-gauges</text>
+            <g transform="translate(26,22)">
+            <circle cx="0" cy="0" r="7" fill="#ff5f57"/>
+            <circle cx="22" cy="0" r="7" fill="#febc2e"/>
+            <circle cx="44" cy="0" r="7" fill="#28c840"/>
+            </g>
+        
+    <g transform="translate(9, 41)" clip-path="url(#chart-gauges-clip-terminal)">
+    
+    <g class="chart-gauges-matrix">
+    <text class="chart-gauges-r1" x="0" y="20" textLength="36.6" clip-path="url(#chart-gauges-line-0)">cpu</text><text class="chart-gauges-r2" x="48.8" y="20" textLength="183" clip-path="url(#chart-gauges-line-0)">██████████████▍</text><text class="chart-gauges-r3" x="231.8" y="20" textLength="12.2" clip-path="url(#chart-gauges-line-0)">▒</text><text class="chart-gauges-r4" x="244" y="20" textLength="12.2" clip-path="url(#chart-gauges-line-0)">│</text><text class="chart-gauges-r3" x="256.2" y="20" textLength="36.6" clip-path="url(#chart-gauges-line-0)">░░░</text><text class="chart-gauges-r1" x="305" y="20" textLength="36.6" clip-path="url(#chart-gauges-line-0)">72%</text><text class="chart-gauges-r1" x="341.6" y="20" textLength="61" clip-path="url(#chart-gauges-line-0)">&#160;high</text><text class="chart-gauges-r1" x="976" y="20" textLength="12.2" clip-path="url(#chart-gauges-line-0)">
+</text><text class="chart-gauges-r1" x="0" y="44.4" textLength="48.8" clip-path="url(#chart-gauges-line-1)">high</text><text class="chart-gauges-r1" x="976" y="44.4" textLength="12.2" clip-path="url(#chart-gauges-line-1)">
+</text><text class="chart-gauges-r1" x="0" y="68.8" textLength="85.4" clip-path="url(#chart-gauges-line-2)">revenue</text><text class="chart-gauges-r2" x="97.6" y="68.8" textLength="122" clip-path="url(#chart-gauges-line-2)">██████████</text><text class="chart-gauges-r4" x="219.6" y="68.8" textLength="12.2" clip-path="url(#chart-gauges-line-2)">│</text><text class="chart-gauges-r3" x="231.8" y="68.8" textLength="12.2" clip-path="url(#chart-gauges-line-2)">░</text><text class="chart-gauges-r1" x="268.4" y="68.8" textLength="36.6" clip-path="url(#chart-gauges-line-2)">270</text><text class="chart-gauges-r1" x="976" y="68.8" textLength="12.2" clip-path="url(#chart-gauges-line-2)">
+</text><text class="chart-gauges-r1" x="0" y="93.2" textLength="73.2" clip-path="url(#chart-gauges-line-3)">profit</text><text class="chart-gauges-r2" x="97.6" y="93.2" textLength="109.8" clip-path="url(#chart-gauges-line-3)">█████████</text><text class="chart-gauges-r3" x="207.4" y="93.2" textLength="12.2" clip-path="url(#chart-gauges-line-3)">░</text><text class="chart-gauges-r4" x="219.6" y="93.2" textLength="12.2" clip-path="url(#chart-gauges-line-3)">│</text><text class="chart-gauges-r3" x="231.8" y="93.2" textLength="12.2" clip-path="url(#chart-gauges-line-3)">░</text><text class="chart-gauges-r1" x="256.2" y="93.2" textLength="48.8" clip-path="url(#chart-gauges-line-3)">22.5</text><text class="chart-gauges-r1" x="976" y="93.2" textLength="12.2" clip-path="url(#chart-gauges-line-3)">
+</text>
+    </g>
+    </g>
+</svg>

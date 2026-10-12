@@ -55,14 +55,7 @@ console.print("Hello, [bold magenta]World[/]!", ":sparkles:")
 console.print({"name": "rs-rich", "version": [0, 0, 1], "rust": True})
 ```
 
-```text
-Hello, World! ✨
-{
-    'name': 'rs-rich',
-    'version': [0, 0, 1],
-    'rust': True
-}
-```
+![Markup, an emoji code and a pretty-printed dict](media/getting-started-first-output.svg)
 
 `Console` takes the same arguments as Rich's. Markup, emoji codes and
 highlighting work as they do in Rich, and containers are pretty-printed. The
@@ -103,6 +96,7 @@ from rs_rich.panel import Panel
 from rs_rich.table import Table
 from rs_rich.tree import Tree
 
+console = Console(width=40)
 table = Table("Crate", "Version", title="Cohort")
 table.add_row("rs-rich", "0.0.8")
 table.add_row("rs-rich-ext", "0.0.10")
@@ -111,27 +105,11 @@ tree = Tree("rs_rich")
 tree.add("console").add("Console")
 tree.add("table").add("Table")
 
-console = Console(width=40)
 console.print(Panel.fit(table, title="Table in a panel"))
 console.print(tree)
 ```
 
-```text
-╭──── Table in a panel ─────╮
-│          Cohort           │
-│ ┏━━━━━━━━━━━━━┳━━━━━━━━━┓ │
-│ ┃ Crate       ┃ Version ┃ │
-│ ┡━━━━━━━━━━━━━╇━━━━━━━━━┩ │
-│ │ rs-rich     │ 0.0.8   │ │
-│ │ rs-rich-ext │ 0.0.10  │ │
-│ └─────────────┴─────────┘ │
-╰───────────────────────────╯
-rs_rich
-├── console
-│   └── Console
-└── table
-    └── Table
-```
+![A table in a panel, and a tree](media/getting-started-tour.svg)
 
 Markdown, Syntax, JSON, Pretty and tracebacks all work:
 
@@ -139,16 +117,11 @@ Markdown, Syntax, JSON, Pretty and tracebacks all work:
 from rs_rich.console import Console
 from rs_rich.markdown import Markdown
 
-console = Console(width=40, color_system=None)
+console = Console(width=40)
 console.print(Markdown("# Notes\n\n- fast\n- **byte-identical** to Rich"))
 ```
 
-```text
-                 Notes                  
-
- • fast                                 
- • byte-identical to Rich               
-```
+![A Markdown heading and a bulleted list](media/getting-started-markdown.svg)
 
 Live displays run in threads, as in Rich (not run here, because they draw
 over time):
@@ -185,6 +158,7 @@ these.
 from rs_rich import art
 from rs_rich.console import Console
 
+console = Console(width=40)
 def gradient(w, h):
     pixels = bytearray()
     for y in range(h):
@@ -193,11 +167,10 @@ def gradient(w, h):
     return art.ArtImage.frombytes("RGBA", (w, h), pixels)
 
 image = gradient(32, 16)
-console = Console(width=40, color_system=None)
-console.print(art.ImageArt(image, mode="ascii", width=32))
+console.print(art.ImageArt(image, mode="blocks", width=32))
 ```
 
-```
+![A colour gradient drawn with half-blocks](media/getting-started-image.svg)
 
 **Mermaid** flowcharts drawn as text ([Mermaid](mermaid.md)):
 
@@ -205,12 +178,12 @@ console.print(art.ImageArt(image, mode="ascii", width=32))
 from rs_rich.console import Console
 from rs_rich.mermaid import Mermaid
 
-console = Console(width=50, color_system=None)
+console = Console(width=50)
 console.print(Mermaid("graph LR\n  A[Start] --> B{Ready?}\n  B -->|yes| C((Go))"))
 console.print(Mermaid("graph TD\n  A --> B", ascii=True))
 ```
 
-```
+![A Mermaid flowchart drawn with box characters, then in ASCII](media/getting-started-mermaid.svg)
 
 **Charts and diagrams**: sparklines, bars, line charts, gauges, heatmaps, KPI
 cards and timelines ([Charts](chart.md)), and graphs and DOT sources drawn as

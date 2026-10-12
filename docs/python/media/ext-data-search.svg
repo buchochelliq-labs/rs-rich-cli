@@ -1,0 +1,83 @@
+<svg class="rich-terminal" viewBox="0 0 750 196.39999999999998" xmlns="http://www.w3.org/2000/svg">
+    <!-- Generated with Rich https://www.textualize.io -->
+    <style>
+
+    @font-face {
+        font-family: "Fira Code";
+        src: local("FiraCode-Regular"),
+                url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff2/FiraCode-Regular.woff2") format("woff2"),
+                url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff/FiraCode-Regular.woff") format("woff");
+        font-style: normal;
+        font-weight: 400;
+    }
+    @font-face {
+        font-family: "Fira Code";
+        src: local("FiraCode-Bold"),
+                url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff2/FiraCode-Bold.woff2") format("woff2"),
+                url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff/FiraCode-Bold.woff") format("woff");
+        font-style: bold;
+        font-weight: 700;
+    }
+
+    .ext-data-search-matrix {
+        font-family: Fira Code, monospace;
+        font-size: 20px;
+        line-height: 24.4px;
+        font-variant-east-asian: full-width;
+    }
+
+    .ext-data-search-title {
+        font-size: 18px;
+        font-weight: bold;
+        font-family: arial;
+    }
+
+    .ext-data-search-r1 { fill: #c5c8c6 }
+.ext-data-search-r2 { fill: #608ab1;font-weight: bold }
+.ext-data-search-r3 { fill: #292929;font-weight: bold }
+.ext-data-search-r4 { fill: #868887 }
+.ext-data-search-r5 { fill: #d0b344 }
+.ext-data-search-r6 { fill: #98a84b }
+    </style>
+
+    <defs>
+    <clipPath id="ext-data-search-clip-terminal">
+      <rect x="0" y="0" width="731.0" height="145.39999999999998" />
+    </clipPath>
+    <clipPath id="ext-data-search-line-0">
+    <rect x="0" y="1.5" width="732" height="24.65"/>
+            </clipPath>
+<clipPath id="ext-data-search-line-1">
+    <rect x="0" y="25.9" width="732" height="24.65"/>
+            </clipPath>
+<clipPath id="ext-data-search-line-2">
+    <rect x="0" y="50.3" width="732" height="24.65"/>
+            </clipPath>
+<clipPath id="ext-data-search-line-3">
+    <rect x="0" y="74.7" width="732" height="24.65"/>
+            </clipPath>
+<clipPath id="ext-data-search-line-4">
+    <rect x="0" y="99.1" width="732" height="24.65"/>
+            </clipPath>
+    </defs>
+
+    <rect fill="#292929" stroke="rgba(255,255,255,0.35)" stroke-width="1" x="1" y="1" width="748" height="194.4" rx="8"/><text class="ext-data-search-title" fill="#c5c8c6" text-anchor="middle" x="374" y="27">ext-data-search</text>
+            <g transform="translate(26,22)">
+            <circle cx="0" cy="0" r="7" fill="#ff5f57"/>
+            <circle cx="22" cy="0" r="7" fill="#febc2e"/>
+            <circle cx="44" cy="0" r="7" fill="#28c840"/>
+            </g>
+        
+    <g transform="translate(9, 41)" clip-path="url(#ext-data-search-clip-terminal)">
+    <rect fill="#d0b344" x="231.8" y="25.9" width="48.8" height="24.65" shape-rendering="crispEdges"/>
+    <g class="ext-data-search-matrix">
+    <text class="ext-data-search-r1" x="0" y="20" textLength="256.2" clip-path="url(#ext-data-search-line-0)">services.web.port&#160;key</text><text class="ext-data-search-r1" x="732" y="20" textLength="12.2" clip-path="url(#ext-data-search-line-0)">
+</text><text class="ext-data-search-r2" x="0" y="44.4" textLength="97.6" clip-path="url(#ext-data-search-line-1)">services</text><text class="ext-data-search-r2" x="97.6" y="44.4" textLength="48.8" clip-path="url(#ext-data-search-line-1)">.web</text><text class="ext-data-search-r2" x="146.4" y="44.4" textLength="61" clip-path="url(#ext-data-search-line-1)">.port</text><text class="ext-data-search-r1" x="207.4" y="44.4" textLength="24.4" clip-path="url(#ext-data-search-line-1)">:&#160;</text><text class="ext-data-search-r3" x="231.8" y="44.4" textLength="48.8" clip-path="url(#ext-data-search-line-1)">8080</text><text class="ext-data-search-r1" x="732" y="44.4" textLength="12.2" clip-path="url(#ext-data-search-line-1)">
+</text><text class="ext-data-search-r4" x="0" y="68.8" textLength="85.4" clip-path="url(#ext-data-search-line-2)">1&#160;match</text><text class="ext-data-search-r1" x="732" y="68.8" textLength="12.2" clip-path="url(#ext-data-search-line-2)">
+</text><text class="ext-data-search-r1" x="0" y="93.2" textLength="97.6" clip-path="url(#ext-data-search-line-3)">ports[1]</text><text class="ext-data-search-r1" x="732" y="93.2" textLength="12.2" clip-path="url(#ext-data-search-line-3)">
+</text><text class="ext-data-search-r5" x="0" y="117.6" textLength="268.4" clip-path="url(#ext-data-search-line-4)">~&#160;ports[1]:&#160;443&#160;→&#160;8443</text><text class="ext-data-search-r1" x="732" y="117.6" textLength="12.2" clip-path="url(#ext-data-search-line-4)">
+</text><text class="ext-data-search-r6" x="0" y="142" textLength="146.4" clip-path="url(#ext-data-search-line-5)">+&#160;hsts:&#160;true</text><text class="ext-data-search-r1" x="732" y="142" textLength="12.2" clip-path="url(#ext-data-search-line-5)">
+</text>
+    </g>
+    </g>
+</svg>

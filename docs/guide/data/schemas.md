@@ -22,6 +22,18 @@ ER diagrams are in `rs-rich-data` behind its `arrow` and `er` features. The
 `rich schema` command draws them from the command line (see the
 [CLI guide](../../cli.md)).
 
+The examples on this page come from
+[`guide_schemas.rs`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/crates/rich-data/examples/guide_schemas.rs)
+and use these imports:
+
+```rust
+--8<-- "crates/rich-data/examples/guide_schemas.rs:imports"
+```
+
+```bash
+cargo run -p rs-rich-data --example guide_schemas --features er
+```
+
 ## The model
 
 A `Schema` is a list of `Field`s, optionally named and described, and, for
@@ -44,14 +56,13 @@ carry the same model, and `infer::Inference::schema` builds one from rows,
 so a CSV file's inferred columns draw like any other schema.
 
 ```rust
-use rich_ext::schema::{DataType, Field, Schema};
-
-let users = Schema::new([
-    Field::new("id", DataType::Integer).required(true),
-    Field::new("email", DataType::String).with_native_type("VARCHAR(320)"),
-])
-.named("users");
+--8<-- "crates/rich-data/examples/guide_schemas.rs:model"
 ```
+
+![The users schema as a tree: id required integer, email VARCHAR(320) with format=email, joined date with its description](../../media/guide/guide_schemas-model.svg)
+
+The tree shows the source's type name where there is one (`VARCHAR(320)`)
+and the model type otherwise (`integer`, `date`).
 
 ## Readers
 
@@ -71,40 +82,56 @@ let users = Schema::new([
 
 ## Views
 
-```rust
-use rich::Console;
-use rich_ext::schema::{sql, SchemaDiff, SchemaTimeline, SchemaTree};
+The views below read two versions of a shop's DDL, `V1` and `V2`:
 
-let v1 = sql::parse(V1)?.schema;
-let v2 = sql::parse(V2)?.schema;
-let console = Console::new();
-console.print(&SchemaTree::from_model(v2.clone()).title("shop"));
-console.print(&SchemaDiff::models(&v1, &v2).names("v1", "v2"));
-console.print(&SchemaTimeline::new().push("v1", v1).push("v2", v2));
-```
+??? example "The DDL"
 
-- **`SchemaTree`** draws each field with its type, `(required)`, its
-  constraints and the first line of its description; a schema with tables
-  draws each table under the root.
-- **`SchemaDiff`** lists fields added (`+`), removed (`-`) and changed
-  (`~`): type changes, required, enum values, constraints and keys, marking
-  `breaking` where data the old schema accepted may now be refused. The
-  rule is the same for every format.
-- **`SchemaTimeline`** lays a series of versions on a `chart::Timeline`: a
-  row per field spanning the versions it is in, a milestone per version
-  with its counts, and the changes listed under it.
-- **ER diagrams** (`rich_data::er`): a box per table with its columns,
-  types and keys (`PK`, `FK`, `UQ`, `?` for nullable), and an edge per
-  foreign key with its cardinality, laid out by `rs-rich-diagram`.
-  `er::model` takes any `Schema`; `er::from_sql` reads DDL and returns the
-  diagram with the reader's notes.
+    ```rust
+    --8<-- "crates/rich-data/examples/guide_schemas.rs:ddl"
+    ```
+
+**`SchemaTree`** draws each field with its type, `(required)`, its
+constraints and the first line of its description; a schema with tables
+draws each table under the root. The reader's notes say what it skipped.
 
 ```rust
-use rich_data::er;
-
-let (diagram, notes) = er::from_sql(DDL)?;
-console.print(&diagram);
+--8<-- "crates/rich-data/examples/guide_schemas.rs:sql"
 ```
+
+![The shop's version 1 as a tree: customers and orders, each column with its type, keys, reference and default](../../media/guide/guide_schemas-sql.svg)
+
+**`SchemaDiff`** lists fields added (`+`), removed (`-`) and changed
+(`~`): type changes, required, enum values, constraints and keys, marking
+`breaking` where data the old schema accepted may now be refused. The
+rule is the same for every format.
+
+```rust
+--8<-- "crates/rich-data/examples/guide_schemas.rs:diff"
+```
+
+![The diff of v1 and v2: six changes, three of them breaking](../../media/guide/guide_schemas-diff.svg)
+
+**`SchemaTimeline`** lays a series of versions on a `chart::Timeline`: a
+row per field spanning the versions it is in, a milestone per version
+with its counts, and the changes listed under it.
+
+```rust
+--8<-- "crates/rich-data/examples/guide_schemas.rs:timeline"
+```
+
+![A timeline of the two versions: a bar per field, milestones v1 and v2 with their counts, and the changes listed under it](../../media/guide/guide_schemas-timeline.svg)
+
+**ER diagrams** (`rich_data::er`): a box per table with its columns,
+types and keys (`PK`, `FK`, `UQ`, `?` for nullable), and an edge per
+foreign key with its cardinality, laid out by `rs-rich-diagram`.
+`er::model` takes any `Schema`; `er::from_sql` reads DDL and returns the
+diagram with the reader's notes.
+
+```rust
+--8<-- "crates/rich-data/examples/guide_schemas.rs:er"
+```
+
+![An ER diagram: orders with id, customer_id and placed_at, joined to customers by customer_id → id (N:1)](../../media/guide/guide_schemas-er.svg)
 
 None of the views reads colour alone: markers and words carry the meaning,
 and the styles come from the `schema.*` theme keys (`schema::STYLES`).

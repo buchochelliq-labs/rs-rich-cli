@@ -1,0 +1,18 @@
+╭─ Past sprints ───────────╮╭─ To do ───────────────╮╭─ Doing ───────────────╮╭─ Done ─────────────────╮
+│▾ Sprint 41               ││• Add Apple Pay        ││• Fix checkout timeout ││• Cache product images  │
+│    loading…              ││• Load test the cart   ││• Postgres 17 upgrade  ││                        │
+│▸ Sprint 40               ││• Rotate API keys      ││                       ││                        │
+│▸ Sprint 39               ││                       ││                       ││                        │
+│                          ││                       ││                       ││                        │
+│                          ││                       ││                       ││                        │
+│                          ││                       ││                       ││                        │
+│                          ││                       ││                       ││                        │
+│                          ││                       ││                       ││                        │
+│                          ││                       ││                       ││                        │
+│                          ││                       ││                       ││                        │
+│                          ││                       ││                       ││                        │
+│                          ││                       ││                       ││                        │
+│                          ││                       ││                       ││                        │
+│                          ││                       ││                       ││                        │
+╰──────────────────────────╯╰───────────────────────╯╰───────────────────────╯╰────────────────────────╯
+drag a card to another lane  tree: nothing  F1 tooltip · q quits

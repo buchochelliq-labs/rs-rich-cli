@@ -21,12 +21,7 @@ console.print(pipeline.apply(log))
 print(KeepLines("^ok", invert=True)(log).plain)
 ```
 
-```text
-ERROR: DISK FULL
-ERROR: GAVE UP
-error: disk full
-error: gave up
-```
+![The error lines, highlighted and upper-cased by a pipeline](../media/ext-transforms-pipeline.svg)
 
 `KeepLines(pattern, invert=False)` keeps the lines of a `Text` matching a
 regular expression; `HighlightMatches(pattern, style)` styles every match.

@@ -1,0 +1,70 @@
+<svg class="rich-terminal" viewBox="0 0 994 98.8" xmlns="http://www.w3.org/2000/svg">
+    <!-- Generated with Rich https://www.textualize.io -->
+    <style>
+
+    @font-face {
+        font-family: "Fira Code";
+        src: local("FiraCode-Regular"),
+                url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff2/FiraCode-Regular.woff2") format("woff2"),
+                url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff/FiraCode-Regular.woff") format("woff");
+        font-style: normal;
+        font-weight: 400;
+    }
+    @font-face {
+        font-family: "Fira Code";
+        src: local("FiraCode-Bold"),
+                url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff2/FiraCode-Bold.woff2") format("woff2"),
+                url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff/FiraCode-Bold.woff") format("woff");
+        font-style: bold;
+        font-weight: 700;
+    }
+
+    .ext-diagnostics-events-matrix {
+        font-family: Fira Code, monospace;
+        font-size: 20px;
+        line-height: 24.4px;
+        font-variant-east-asian: full-width;
+    }
+
+    .ext-diagnostics-events-title {
+        font-size: 18px;
+        font-weight: bold;
+        font-family: arial;
+    }
+
+    .ext-diagnostics-events-r1 { fill: #98a84b }
+.ext-diagnostics-events-r2 { fill: #c5c8c6 }
+.ext-diagnostics-events-r3 { fill: #68a0b3 }
+.ext-diagnostics-events-r4 { fill: #4e707b }
+.ext-diagnostics-events-r5 { fill: #d0b344 }
+.ext-diagnostics-events-r6 { fill: #d0b344;font-weight: bold }
+.ext-diagnostics-events-r7 { fill: #98729f }
+.ext-diagnostics-events-r8 { fill: #ff2c7a }
+.ext-diagnostics-events-r9 { fill: #68a0b3;font-weight: bold }
+    </style>
+
+    <defs>
+    <clipPath id="ext-diagnostics-events-clip-terminal">
+      <rect x="0" y="0" width="975.0" height="47.8" />
+    </clipPath>
+    <clipPath id="ext-diagnostics-events-line-0">
+    <rect x="0" y="1.5" width="976" height="24.65"/>
+            </clipPath>
+    </defs>
+
+    <rect fill="#292929" stroke="rgba(255,255,255,0.35)" stroke-width="1" x="1" y="1" width="992" height="96.8" rx="8"/><text class="ext-diagnostics-events-title" fill="#c5c8c6" text-anchor="middle" x="496" y="27">ext-diagnostics-events</text>
+            <g transform="translate(26,22)">
+            <circle cx="0" cy="0" r="7" fill="#ff5f57"/>
+            <circle cx="22" cy="0" r="7" fill="#febc2e"/>
+            <circle cx="44" cy="0" r="7" fill="#28c840"/>
+            </g>
+        
+    <g transform="translate(9, 41)" clip-path="url(#ext-diagnostics-events-clip-terminal)">
+    
+    <g class="ext-diagnostics-events-matrix">
+    <text class="ext-diagnostics-events-r1" x="0" y="20" textLength="61" clip-path="url(#ext-diagnostics-events-line-0)">info&#160;</text><text class="ext-diagnostics-events-r2" x="61" y="20" textLength="158.6" clip-path="url(#ext-diagnostics-events-line-0)">request&#160;done&#160;</text><text class="ext-diagnostics-events-r3" x="219.6" y="20" textLength="85.4" clip-path="url(#ext-diagnostics-events-line-0)">status=</text><text class="ext-diagnostics-events-r2" x="305" y="20" textLength="48.8" clip-path="url(#ext-diagnostics-events-line-0)">200&#160;</text><text class="ext-diagnostics-events-r3" x="353.8" y="20" textLength="61" clip-path="url(#ext-diagnostics-events-line-0)">path=</text><text class="ext-diagnostics-events-r2" x="414.8" y="20" textLength="48.8" clip-path="url(#ext-diagnostics-events-line-0)">/api</text><text class="ext-diagnostics-events-r2" x="976" y="20" textLength="12.2" clip-path="url(#ext-diagnostics-events-line-0)">
+</text><text class="ext-diagnostics-events-r4" x="0" y="44.4" textLength="122" clip-path="url(#ext-diagnostics-events-line-1)">[12:00:00]</text><text class="ext-diagnostics-events-r5" x="134.2" y="44.4" textLength="97.6" clip-path="url(#ext-diagnostics-events-line-1)">WARNING&#160;</text><text class="ext-diagnostics-events-r6" x="244" y="44.4" textLength="36.6" clip-path="url(#ext-diagnostics-events-line-1)">GET</text><text class="ext-diagnostics-events-r7" x="292.8" y="44.4" textLength="12.2" clip-path="url(#ext-diagnostics-events-line-1)">/</text><text class="ext-diagnostics-events-r8" x="305" y="44.4" textLength="61" clip-path="url(#ext-diagnostics-events-line-1)">index</text><text class="ext-diagnostics-events-r5" x="378.2" y="44.4" textLength="24.4" clip-path="url(#ext-diagnostics-events-line-1)">ms</text><text class="ext-diagnostics-events-r2" x="402.6" y="44.4" textLength="12.2" clip-path="url(#ext-diagnostics-events-line-1)">=</text><text class="ext-diagnostics-events-r9" x="414.8" y="44.4" textLength="24.4" clip-path="url(#ext-diagnostics-events-line-1)">12</text><text class="ext-diagnostics-events-r2" x="976" y="44.4" textLength="12.2" clip-path="url(#ext-diagnostics-events-line-1)">
+</text>
+    </g>
+    </g>
+</svg>

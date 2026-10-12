@@ -1,0 +1,132 @@
+<svg class="rich-terminal" viewBox="0 0 1287 489.2" xmlns="http://www.w3.org/2000/svg">
+    <!-- Generated with Rich https://www.textualize.io -->
+    <style>
+
+    @font-face {
+        font-family: "Fira Code";
+        src: local("FiraCode-Regular"),
+                url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff2/FiraCode-Regular.woff2") format("woff2"),
+                url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff/FiraCode-Regular.woff") format("woff");
+        font-style: normal;
+        font-weight: 400;
+    }
+    @font-face {
+        font-family: "Fira Code";
+        src: local("FiraCode-Bold"),
+                url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff2/FiraCode-Bold.woff2") format("woff2"),
+                url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff/FiraCode-Bold.woff") format("woff");
+        font-style: bold;
+        font-weight: 700;
+    }
+
+    .rich-record-matrix {
+        font-family: Fira Code, monospace;
+        font-size: 20px;
+        line-height: 24.4px;
+        font-variant-east-asian: full-width;
+    }
+
+    .rich-record-title {
+        font-size: 18px;
+        font-weight: bold;
+        font-family: arial;
+    }
+
+    .rich-record-r1 { fill: #398280 }
+.rich-record-r2 { fill: #398280;font-weight: bold }
+.rich-record-r3 { fill: #608ab1 }
+.rich-record-r4 { fill: #1984e9;font-weight: bold }
+.rich-record-r5 { fill: #c5c8c6 }
+.rich-record-r6 { fill: #292929 }
+.rich-record-r7 { fill: #cc555a }
+.rich-record-r8 { fill: #777877 }
+    </style>
+
+    <defs>
+    <clipPath id="rich-record-clip-terminal">
+      <rect x="0" y="0" width="1267.8" height="438.2" />
+    </clipPath>
+    <clipPath id="rich-record-line-0">
+    <rect x="0" y="1.5" width="1268.8" height="24.65"/>
+            </clipPath>
+<clipPath id="rich-record-line-1">
+    <rect x="0" y="25.9" width="1268.8" height="24.65"/>
+            </clipPath>
+<clipPath id="rich-record-line-2">
+    <rect x="0" y="50.3" width="1268.8" height="24.65"/>
+            </clipPath>
+<clipPath id="rich-record-line-3">
+    <rect x="0" y="74.7" width="1268.8" height="24.65"/>
+            </clipPath>
+<clipPath id="rich-record-line-4">
+    <rect x="0" y="99.1" width="1268.8" height="24.65"/>
+            </clipPath>
+<clipPath id="rich-record-line-5">
+    <rect x="0" y="123.5" width="1268.8" height="24.65"/>
+            </clipPath>
+<clipPath id="rich-record-line-6">
+    <rect x="0" y="147.9" width="1268.8" height="24.65"/>
+            </clipPath>
+<clipPath id="rich-record-line-7">
+    <rect x="0" y="172.3" width="1268.8" height="24.65"/>
+            </clipPath>
+<clipPath id="rich-record-line-8">
+    <rect x="0" y="196.7" width="1268.8" height="24.65"/>
+            </clipPath>
+<clipPath id="rich-record-line-9">
+    <rect x="0" y="221.1" width="1268.8" height="24.65"/>
+            </clipPath>
+<clipPath id="rich-record-line-10">
+    <rect x="0" y="245.5" width="1268.8" height="24.65"/>
+            </clipPath>
+<clipPath id="rich-record-line-11">
+    <rect x="0" y="269.9" width="1268.8" height="24.65"/>
+            </clipPath>
+<clipPath id="rich-record-line-12">
+    <rect x="0" y="294.3" width="1268.8" height="24.65"/>
+            </clipPath>
+<clipPath id="rich-record-line-13">
+    <rect x="0" y="318.7" width="1268.8" height="24.65"/>
+            </clipPath>
+<clipPath id="rich-record-line-14">
+    <rect x="0" y="343.1" width="1268.8" height="24.65"/>
+            </clipPath>
+<clipPath id="rich-record-line-15">
+    <rect x="0" y="367.5" width="1268.8" height="24.65"/>
+            </clipPath>
+<clipPath id="rich-record-line-16">
+    <rect x="0" y="391.9" width="1268.8" height="24.65"/>
+            </clipPath>
+    </defs>
+
+    <rect fill="#292929" stroke="rgba(255,255,255,0.35)" stroke-width="1" x="1" y="1" width="1285" height="487.2" rx="8"/><text class="rich-record-title" fill="#c5c8c6" text-anchor="middle" x="642" y="27">intuiTUIve&#160;·&#160;a&#160;lazy&#160;tree,&#160;tooltips&#160;and&#160;drag-and-drop</text>
+            <g transform="translate(26,22)">
+            <circle cx="0" cy="0" r="7" fill="#ff5f57"/>
+            <circle cx="22" cy="0" r="7" fill="#febc2e"/>
+            <circle cx="44" cy="0" r="7" fill="#28c840"/>
+            </g>
+        
+    <g transform="translate(9, 41)" clip-path="url(#rich-record-clip-terminal)">
+    <rect fill="#c5c8c6" x="12.2" y="147.9" width="317.2" height="24.65" shape-rendering="crispEdges"/>
+    <g class="rich-record-matrix">
+    <text class="rich-record-r1" x="0" y="20" textLength="24.4" clip-path="url(#rich-record-line-0)">╭─</text><text class="rich-record-r2" x="24.4" y="20" textLength="170.8" clip-path="url(#rich-record-line-0)">&#160;Past&#160;sprints&#160;</text><text class="rich-record-r1" x="195.2" y="20" textLength="146.4" clip-path="url(#rich-record-line-0)">───────────╮</text><text class="rich-record-r3" x="341.6" y="20" textLength="24.4" clip-path="url(#rich-record-line-0)">╭─</text><text class="rich-record-r4" x="366" y="20" textLength="85.4" clip-path="url(#rich-record-line-0)">&#160;To&#160;do&#160;</text><text class="rich-record-r3" x="451.4" y="20" textLength="219.6" clip-path="url(#rich-record-line-0)">───────────────╮╭─</text><text class="rich-record-r4" x="671" y="20" textLength="85.4" clip-path="url(#rich-record-line-0)">&#160;Doing&#160;</text><text class="rich-record-r3" x="756.4" y="20" textLength="219.6" clip-path="url(#rich-record-line-0)">───────────────╮╭─</text><text class="rich-record-r4" x="976" y="20" textLength="73.2" clip-path="url(#rich-record-line-0)">&#160;Done&#160;</text><text class="rich-record-r3" x="1049.2" y="20" textLength="219.6" clip-path="url(#rich-record-line-0)">─────────────────╮</text><text class="rich-record-r5" x="1268.8" y="20" textLength="12.2" clip-path="url(#rich-record-line-0)">
+</text><text class="rich-record-r1" x="0" y="44.4" textLength="12.2" clip-path="url(#rich-record-line-1)">│</text><text class="rich-record-r5" x="12.2" y="44.4" textLength="317.2" clip-path="url(#rich-record-line-1)">▾&#160;Sprint&#160;41&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;</text><text class="rich-record-r1" x="329.4" y="44.4" textLength="12.2" clip-path="url(#rich-record-line-1)">│</text><text class="rich-record-r3" x="341.6" y="44.4" textLength="12.2" clip-path="url(#rich-record-line-1)">│</text><text class="rich-record-r5" x="353.8" y="44.4" textLength="280.6" clip-path="url(#rich-record-line-1)">•&#160;Add&#160;Apple&#160;Pay&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;</text><text class="rich-record-r3" x="634.4" y="44.4" textLength="24.4" clip-path="url(#rich-record-line-1)">││</text><text class="rich-record-r5" x="658.8" y="44.4" textLength="280.6" clip-path="url(#rich-record-line-1)">•&#160;Fix&#160;checkout&#160;timeout&#160;</text><text class="rich-record-r3" x="939.4" y="44.4" textLength="24.4" clip-path="url(#rich-record-line-1)">││</text><text class="rich-record-r5" x="963.8" y="44.4" textLength="292.8" clip-path="url(#rich-record-line-1)">•&#160;Cache&#160;product&#160;images&#160;&#160;</text><text class="rich-record-r3" x="1256.6" y="44.4" textLength="12.2" clip-path="url(#rich-record-line-1)">│</text><text class="rich-record-r5" x="1268.8" y="44.4" textLength="12.2" clip-path="url(#rich-record-line-1)">
+</text><text class="rich-record-r1" x="0" y="68.8" textLength="12.2" clip-path="url(#rich-record-line-2)">│</text><text class="rich-record-r5" x="12.2" y="68.8" textLength="317.2" clip-path="url(#rich-record-line-2)">&#160;&#160;&#160;&#160;✓&#160;Search&#160;by&#160;SKU&#160;&#160;&#160;&#160;&#160;&#160;&#160;</text><text class="rich-record-r1" x="329.4" y="68.8" textLength="12.2" clip-path="url(#rich-record-line-2)">│</text><text class="rich-record-r3" x="341.6" y="68.8" textLength="12.2" clip-path="url(#rich-record-line-2)">│</text><text class="rich-record-r5" x="353.8" y="68.8" textLength="280.6" clip-path="url(#rich-record-line-2)">•&#160;Load&#160;test&#160;the&#160;cart&#160;&#160;&#160;</text><text class="rich-record-r3" x="634.4" y="68.8" textLength="24.4" clip-path="url(#rich-record-line-2)">││</text><text class="rich-record-r5" x="658.8" y="68.8" textLength="280.6" clip-path="url(#rich-record-line-2)">•&#160;Postgres&#160;17&#160;upgrade&#160;&#160;</text><text class="rich-record-r3" x="939.4" y="68.8" textLength="24.4" clip-path="url(#rich-record-line-2)">││</text><text class="rich-record-r3" x="1256.6" y="68.8" textLength="12.2" clip-path="url(#rich-record-line-2)">│</text><text class="rich-record-r5" x="1268.8" y="68.8" textLength="12.2" clip-path="url(#rich-record-line-2)">
+</text><text class="rich-record-r1" x="0" y="93.2" textLength="12.2" clip-path="url(#rich-record-line-3)">│</text><text class="rich-record-r5" x="12.2" y="93.2" textLength="317.2" clip-path="url(#rich-record-line-3)">&#160;&#160;&#160;&#160;✓&#160;Gift&#160;cards&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;</text><text class="rich-record-r1" x="329.4" y="93.2" textLength="12.2" clip-path="url(#rich-record-line-3)">│</text><text class="rich-record-r3" x="341.6" y="93.2" textLength="12.2" clip-path="url(#rich-record-line-3)">│</text><text class="rich-record-r5" x="353.8" y="93.2" textLength="280.6" clip-path="url(#rich-record-line-3)">•&#160;Rotate&#160;API&#160;keys&#160;&#160;&#160;&#160;&#160;&#160;</text><text class="rich-record-r3" x="634.4" y="93.2" textLength="24.4" clip-path="url(#rich-record-line-3)">││</text><text class="rich-record-r3" x="939.4" y="93.2" textLength="24.4" clip-path="url(#rich-record-line-3)">││</text><text class="rich-record-r3" x="1256.6" y="93.2" textLength="12.2" clip-path="url(#rich-record-line-3)">│</text><text class="rich-record-r5" x="1268.8" y="93.2" textLength="12.2" clip-path="url(#rich-record-line-3)">
+</text><text class="rich-record-r1" x="0" y="117.6" textLength="12.2" clip-path="url(#rich-record-line-4)">│</text><text class="rich-record-r5" x="12.2" y="117.6" textLength="317.2" clip-path="url(#rich-record-line-4)">&#160;&#160;&#160;&#160;✓&#160;Faster&#160;product&#160;pages</text><text class="rich-record-r1" x="329.4" y="117.6" textLength="12.2" clip-path="url(#rich-record-line-4)">│</text><text class="rich-record-r3" x="341.6" y="117.6" textLength="12.2" clip-path="url(#rich-record-line-4)">│</text><text class="rich-record-r3" x="634.4" y="117.6" textLength="24.4" clip-path="url(#rich-record-line-4)">││</text><text class="rich-record-r3" x="939.4" y="117.6" textLength="24.4" clip-path="url(#rich-record-line-4)">││</text><text class="rich-record-r3" x="1256.6" y="117.6" textLength="12.2" clip-path="url(#rich-record-line-4)">│</text><text class="rich-record-r5" x="1268.8" y="117.6" textLength="12.2" clip-path="url(#rich-record-line-4)">
+</text><text class="rich-record-r1" x="0" y="142" textLength="12.2" clip-path="url(#rich-record-line-5)">│</text><text class="rich-record-r5" x="12.2" y="142" textLength="317.2" clip-path="url(#rich-record-line-5)">▸&#160;Sprint&#160;40&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;</text><text class="rich-record-r1" x="329.4" y="142" textLength="12.2" clip-path="url(#rich-record-line-5)">│</text><text class="rich-record-r3" x="341.6" y="142" textLength="12.2" clip-path="url(#rich-record-line-5)">│</text><text class="rich-record-r3" x="634.4" y="142" textLength="24.4" clip-path="url(#rich-record-line-5)">││</text><text class="rich-record-r3" x="939.4" y="142" textLength="24.4" clip-path="url(#rich-record-line-5)">││</text><text class="rich-record-r3" x="1256.6" y="142" textLength="12.2" clip-path="url(#rich-record-line-5)">│</text><text class="rich-record-r5" x="1268.8" y="142" textLength="12.2" clip-path="url(#rich-record-line-5)">
+</text><text class="rich-record-r1" x="0" y="166.4" textLength="12.2" clip-path="url(#rich-record-line-6)">│</text><text class="rich-record-r6" x="12.2" y="166.4" textLength="317.2" clip-path="url(#rich-record-line-6)">▾&#160;Sprint&#160;39&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;</text><text class="rich-record-r1" x="329.4" y="166.4" textLength="12.2" clip-path="url(#rich-record-line-6)">│</text><text class="rich-record-r3" x="341.6" y="166.4" textLength="12.2" clip-path="url(#rich-record-line-6)">│</text><text class="rich-record-r3" x="634.4" y="166.4" textLength="24.4" clip-path="url(#rich-record-line-6)">││</text><text class="rich-record-r3" x="939.4" y="166.4" textLength="24.4" clip-path="url(#rich-record-line-6)">││</text><text class="rich-record-r3" x="1256.6" y="166.4" textLength="12.2" clip-path="url(#rich-record-line-6)">│</text><text class="rich-record-r5" x="1268.8" y="166.4" textLength="12.2" clip-path="url(#rich-record-line-6)">
+</text><text class="rich-record-r1" x="0" y="190.8" textLength="12.2" clip-path="url(#rich-record-line-7)">│</text><text class="rich-record-r7" x="61" y="190.8" textLength="183" clip-path="url(#rich-record-line-7)">archive&#160;offline</text><text class="rich-record-r1" x="329.4" y="190.8" textLength="12.2" clip-path="url(#rich-record-line-7)">│</text><text class="rich-record-r3" x="341.6" y="190.8" textLength="12.2" clip-path="url(#rich-record-line-7)">│</text><text class="rich-record-r3" x="634.4" y="190.8" textLength="24.4" clip-path="url(#rich-record-line-7)">││</text><text class="rich-record-r3" x="939.4" y="190.8" textLength="24.4" clip-path="url(#rich-record-line-7)">││</text><text class="rich-record-r3" x="1256.6" y="190.8" textLength="12.2" clip-path="url(#rich-record-line-7)">│</text><text class="rich-record-r5" x="1268.8" y="190.8" textLength="12.2" clip-path="url(#rich-record-line-7)">
+</text><text class="rich-record-r1" x="0" y="215.2" textLength="12.2" clip-path="url(#rich-record-line-8)">│</text><text class="rich-record-r1" x="329.4" y="215.2" textLength="12.2" clip-path="url(#rich-record-line-8)">│</text><text class="rich-record-r3" x="341.6" y="215.2" textLength="12.2" clip-path="url(#rich-record-line-8)">│</text><text class="rich-record-r3" x="634.4" y="215.2" textLength="24.4" clip-path="url(#rich-record-line-8)">││</text><text class="rich-record-r3" x="939.4" y="215.2" textLength="24.4" clip-path="url(#rich-record-line-8)">││</text><text class="rich-record-r3" x="1256.6" y="215.2" textLength="12.2" clip-path="url(#rich-record-line-8)">│</text><text class="rich-record-r5" x="1268.8" y="215.2" textLength="12.2" clip-path="url(#rich-record-line-8)">
+</text><text class="rich-record-r1" x="0" y="239.6" textLength="12.2" clip-path="url(#rich-record-line-9)">│</text><text class="rich-record-r1" x="329.4" y="239.6" textLength="12.2" clip-path="url(#rich-record-line-9)">│</text><text class="rich-record-r3" x="341.6" y="239.6" textLength="12.2" clip-path="url(#rich-record-line-9)">│</text><text class="rich-record-r3" x="634.4" y="239.6" textLength="24.4" clip-path="url(#rich-record-line-9)">││</text><text class="rich-record-r3" x="939.4" y="239.6" textLength="24.4" clip-path="url(#rich-record-line-9)">││</text><text class="rich-record-r3" x="1256.6" y="239.6" textLength="12.2" clip-path="url(#rich-record-line-9)">│</text><text class="rich-record-r5" x="1268.8" y="239.6" textLength="12.2" clip-path="url(#rich-record-line-9)">
+</text><text class="rich-record-r1" x="0" y="264" textLength="12.2" clip-path="url(#rich-record-line-10)">│</text><text class="rich-record-r1" x="329.4" y="264" textLength="12.2" clip-path="url(#rich-record-line-10)">│</text><text class="rich-record-r3" x="341.6" y="264" textLength="12.2" clip-path="url(#rich-record-line-10)">│</text><text class="rich-record-r3" x="634.4" y="264" textLength="24.4" clip-path="url(#rich-record-line-10)">││</text><text class="rich-record-r3" x="939.4" y="264" textLength="24.4" clip-path="url(#rich-record-line-10)">││</text><text class="rich-record-r3" x="1256.6" y="264" textLength="12.2" clip-path="url(#rich-record-line-10)">│</text><text class="rich-record-r5" x="1268.8" y="264" textLength="12.2" clip-path="url(#rich-record-line-10)">
+</text><text class="rich-record-r1" x="0" y="288.4" textLength="12.2" clip-path="url(#rich-record-line-11)">│</text><text class="rich-record-r1" x="329.4" y="288.4" textLength="12.2" clip-path="url(#rich-record-line-11)">│</text><text class="rich-record-r3" x="341.6" y="288.4" textLength="12.2" clip-path="url(#rich-record-line-11)">│</text><text class="rich-record-r3" x="634.4" y="288.4" textLength="24.4" clip-path="url(#rich-record-line-11)">││</text><text class="rich-record-r3" x="939.4" y="288.4" textLength="24.4" clip-path="url(#rich-record-line-11)">││</text><text class="rich-record-r3" x="1256.6" y="288.4" textLength="12.2" clip-path="url(#rich-record-line-11)">│</text><text class="rich-record-r5" x="1268.8" y="288.4" textLength="12.2" clip-path="url(#rich-record-line-11)">
+</text><text class="rich-record-r1" x="0" y="312.8" textLength="12.2" clip-path="url(#rich-record-line-12)">│</text><text class="rich-record-r1" x="329.4" y="312.8" textLength="12.2" clip-path="url(#rich-record-line-12)">│</text><text class="rich-record-r3" x="341.6" y="312.8" textLength="12.2" clip-path="url(#rich-record-line-12)">│</text><text class="rich-record-r3" x="634.4" y="312.8" textLength="24.4" clip-path="url(#rich-record-line-12)">││</text><text class="rich-record-r3" x="939.4" y="312.8" textLength="24.4" clip-path="url(#rich-record-line-12)">││</text><text class="rich-record-r3" x="1256.6" y="312.8" textLength="12.2" clip-path="url(#rich-record-line-12)">│</text><text class="rich-record-r5" x="1268.8" y="312.8" textLength="12.2" clip-path="url(#rich-record-line-12)">
+</text><text class="rich-record-r1" x="0" y="337.2" textLength="12.2" clip-path="url(#rich-record-line-13)">│</text><text class="rich-record-r1" x="329.4" y="337.2" textLength="12.2" clip-path="url(#rich-record-line-13)">│</text><text class="rich-record-r3" x="341.6" y="337.2" textLength="12.2" clip-path="url(#rich-record-line-13)">│</text><text class="rich-record-r3" x="634.4" y="337.2" textLength="24.4" clip-path="url(#rich-record-line-13)">││</text><text class="rich-record-r3" x="939.4" y="337.2" textLength="24.4" clip-path="url(#rich-record-line-13)">││</text><text class="rich-record-r3" x="1256.6" y="337.2" textLength="12.2" clip-path="url(#rich-record-line-13)">│</text><text class="rich-record-r5" x="1268.8" y="337.2" textLength="12.2" clip-path="url(#rich-record-line-13)">
+</text><text class="rich-record-r1" x="0" y="361.6" textLength="12.2" clip-path="url(#rich-record-line-14)">│</text><text class="rich-record-r1" x="329.4" y="361.6" textLength="12.2" clip-path="url(#rich-record-line-14)">│</text><text class="rich-record-r3" x="341.6" y="361.6" textLength="12.2" clip-path="url(#rich-record-line-14)">│</text><text class="rich-record-r3" x="634.4" y="361.6" textLength="24.4" clip-path="url(#rich-record-line-14)">││</text><text class="rich-record-r3" x="939.4" y="361.6" textLength="24.4" clip-path="url(#rich-record-line-14)">││</text><text class="rich-record-r3" x="1256.6" y="361.6" textLength="12.2" clip-path="url(#rich-record-line-14)">│</text><text class="rich-record-r5" x="1268.8" y="361.6" textLength="12.2" clip-path="url(#rich-record-line-14)">
+</text><text class="rich-record-r1" x="0" y="386" textLength="12.2" clip-path="url(#rich-record-line-15)">│</text><text class="rich-record-r1" x="329.4" y="386" textLength="12.2" clip-path="url(#rich-record-line-15)">│</text><text class="rich-record-r3" x="341.6" y="386" textLength="12.2" clip-path="url(#rich-record-line-15)">│</text><text class="rich-record-r3" x="634.4" y="386" textLength="24.4" clip-path="url(#rich-record-line-15)">││</text><text class="rich-record-r3" x="939.4" y="386" textLength="24.4" clip-path="url(#rich-record-line-15)">││</text><text class="rich-record-r3" x="1256.6" y="386" textLength="12.2" clip-path="url(#rich-record-line-15)">│</text><text class="rich-record-r5" x="1268.8" y="386" textLength="12.2" clip-path="url(#rich-record-line-15)">
+</text><text class="rich-record-r1" x="0" y="410.4" textLength="341.6" clip-path="url(#rich-record-line-16)">╰──────────────────────────╯</text><text class="rich-record-r3" x="341.6" y="410.4" textLength="927.2" clip-path="url(#rich-record-line-16)">╰───────────────────────╯╰───────────────────────╯╰────────────────────────╯</text><text class="rich-record-r5" x="1268.8" y="410.4" textLength="12.2" clip-path="url(#rich-record-line-16)">
+</text><text class="rich-record-r5" x="0" y="434.8" textLength="353.8" clip-path="url(#rich-record-line-17)">drag&#160;a&#160;card&#160;to&#160;another&#160;lane&#160;&#160;</text><text class="rich-record-r8" x="353.8" y="434.8" textLength="183" clip-path="url(#rich-record-line-17)">tree:&#160;Sprint&#160;39</text><text class="rich-record-r8" x="561.2" y="434.8" textLength="244" clip-path="url(#rich-record-line-17)">F1&#160;tooltip&#160;·&#160;q&#160;quits</text>
+    </g>
+    </g>
+</svg>

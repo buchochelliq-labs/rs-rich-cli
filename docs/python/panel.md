@@ -75,11 +75,7 @@ console = Console(width=30)
 console.print(Panel("Hello, [bold]World[/]!", title="Greeting", subtitle="rs_rich"))
 ```
 
-```text
-╭───────── Greeting ─────────╮
-│ Hello, World!              │
-╰───────── rs_rich ──────────╯
-```
+![A panel with a title and a subtitle](media/panel-titles.svg)
 
 A `Text` title or subtitle keeps its own styles:
 
@@ -88,15 +84,12 @@ from rs_rich.console import Console
 from rs_rich.panel import Panel
 from rs_rich.text import Text
 
-Console(width=30).print(Panel("body", title=Text("Title", style="bold"),
-                              subtitle=Text("page 1"), subtitle_align="right"))
+console = Console(width=30)
+console.print(Panel("body", title=Text("Title", style="bold"),
+                    subtitle=Text("page 1"), subtitle_align="right"))
 ```
 
-```text
-╭────────── Title ───────────╮
-│ body                       │
-╰─────────────────── page 1 ─╯
-```
+![A bold Text title and a right-aligned subtitle](media/panel-text-titles.svg)
 
 ## fit
 
@@ -116,18 +109,10 @@ from rs_rich.console import Console
 from rs_rich.panel import Panel
 from rs_rich.table import Table
 
+console = Console(width=40)
 table = Table("key", "value", box=box.SIMPLE)
 table.add_row("answer", "42")
-console = Console(width=40)
 console.print(Panel.fit(table, title="inner", box=box.DOUBLE, padding=(0, 2)))
 ```
 
-```text
-╔═══════ inner ════════╗
-║                      ║
-║    key      value    ║
-║   ────────────────   ║
-║    answer   42       ║
-║                      ║
-╚══════════════════════╝
-```
+![A double-edged panel fitted around a table, with wider padding](media/panel-fit.svg)

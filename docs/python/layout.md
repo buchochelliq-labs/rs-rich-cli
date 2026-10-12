@@ -32,13 +32,7 @@ console.print(Columns(words))
 console.print(Columns(words, equal=True, column_first=True))
 ```
 
-```text
-alpha beta gamma delta epsilon
-zeta  eta  theta              
-alpha delta   eta  
-beta  epsilon theta
-gamma zeta         
-```
+![Words in as many columns as fit, then in equal columns filled top to bottom](media/layout-columns.svg)
 
 ## Group
 
@@ -68,18 +62,7 @@ def lines():
 console.print(Panel.fit(lines()))
 ```
 
-```text
-╭────────────╮
-│ first      │
-│ ╭────────╮ │
-│ │ second │ │
-│ ╰────────╯ │
-╰────────────╯
-╭─────╮
-│ one │
-│ two │
-╰─────╯
-```
+![A group in a fitted panel, and a group built by a decorator](media/layout-group.svg)
 
 `rich.containers.Renderables` (a list that
 renders its items in turn) is `rs_rich.containers.Renderables`, and
@@ -113,18 +96,7 @@ layout["left"].update("left side")
 console.print(layout)
 ```
 
-```text
-╭──────────────────────────────────────╮
-│ header                               │
-╰──────────────────────────────────────╯
-left side    ╭─── 'right' (27 x 7) ────╮
-             │    Layout(              │
-             │        name='right',    │
-             │        ratio=2          │
-             │    )                    │
-             │                         │
-             ╰─────────────────────────╯
-```
+![A header panel over a left column of text and a placeholder for the right column](media/layout-layout.svg)
 
 A layout's height is the console's (or the `height=` given to `print`).
 `layout.tree` is a [`Tree`](tree.md) of the structure, `layout.render(console,
@@ -136,13 +108,7 @@ options)` returns `{layout: LayoutRender(region, lines)}` for each leaf, and
 console.print(layout.tree)
 ```
 
-```text
-⬍ Layout()
-├── ⬍ Layout(name='header', size=3)
-└── ⬌ Layout(name='body')
-    ├── ⬍ Layout(name='left')
-    └── ⬍ Layout(name='right', ratio=2)
-```
+![The layout's structure as a tree](media/layout-tree.svg)
 
 `layout.refresh_screen(console, name)` renders the leaf called `name` again,
 into the region it had when the layout was last printed, and writes it over
