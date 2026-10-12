@@ -1497,7 +1497,7 @@ def read_frames(sock, want):
 
 
 def test_serve_refuses_a_connection_without_the_token():
-    server = tui.Server("127.0.0.1:0", counter_app).title("Counter")
+    server = tui.Server("127.0.0.1:0", counter_app).isolation("threads").title("Counter")
     assert server.local_addr.startswith("127.0.0.1:")
     token = server.access_token
     assert server.url.endswith(f"/?token={token}")
@@ -1520,7 +1520,7 @@ def test_a_served_app_runs_on_the_sessions_thread():
         threads.append(threading.get_ident())
         return App(counter)
 
-    server = tui.Server("127.0.0.1:0", factory)
+    server = tui.Server("127.0.0.1:0", factory).isolation("threads")
     token = server.access_token
     with server.spawn() as handle:
         sock, head = websocket(handle.local_addr, token, f"http://{handle.local_addr}")
@@ -1530,9 +1530,71 @@ def test_a_served_app_runs_on_the_sessions_thread():
     assert threads and threads[0] != threading.get_ident()
 
 
+def send_text(sock, text):
+    """A masked text frame, as a page sends one."""
+    payload = text.encode()
+    mask = os.urandom(4)
+    head = bytes([0x81, 0x80 | len(payload)]) + mask
+    sock.sendall(head + bytes(b ^ mask[i % 4] for i, b in enumerate(payload)))
+
+
+SERVED = """
+import os
+from rs_rich.tui import App, Server, column, signal, text
+
+def app():
+    def build():
+        state = signal("waiting")
+        return (
+            column([text(lambda: f"pid {os.getpid()} {state.get()}").fixed(1)])
+            .on_key("+", lambda cx: state.set("ANSWERED"))
+            .on_key("x", lambda cx: os._exit(3))
+        )
+    return App(build)
+
+Server("127.0.0.1:0", app).token("py-token-0123456789").run()
+"""
+
+
+def test_each_served_tab_runs_in_a_process_of_its_own(tmp_path):
+    import subprocess
+    import sys
+
+    script = tmp_path / "served.py"
+    script.write_text(SERVED)
+    server = subprocess.Popen(
+        [sys.executable, str(script)], stdout=subprocess.PIPE, text=True
+    )
+    try:
+        line = server.stdout.readline()
+        addr = line.split("http://")[1].split("/")[0]
+        own = f"http://{addr}"
+
+        def tab():
+            sock, head = websocket(addr, "py-token-0123456789", own)
+            assert "101" in head.splitlines()[0], head
+            seen = read_frames(sock, "waiting")
+            return sock, int(seen.split("pid ")[1].split()[0])
+
+        (a, pid_a), (b, pid_b) = tab(), tab()
+        assert len({pid_a, pid_b, server.pid}) == 3
+        # One tab's process dies; the other, and new tabs, carry on.
+        send_text(a, "dx")
+        send_text(b, "d+")
+        assert "ANSWERED" in read_frames(b, "ANSWERED")
+        c, _ = tab()
+        for sock in (a, b, c):
+            sock.close()
+    finally:
+        server.kill()
+        server.wait()
+
+
 def test_a_server_token_is_checked():
     with pytest.raises(ValueError, match="token"):
         tui.Server("127.0.0.1:0", counter_app).token("not a token!")
+    with pytest.raises(ValueError, match="processes"):
+        tui.Server("127.0.0.1:0", counter_app).isolation("fibres")
     with pytest.raises(TypeError, match="function"):
         tui.Server("127.0.0.1:0", "not callable")
 

@@ -226,11 +226,20 @@ serve("127.0.0.1:8080", lambda: App(build))
 ```
 
 `serve` prints the URL to open, with its token, and serves one app per
-browser tab until Ctrl+C. The function is called on each session's own
-thread, so each tab's app (its signals, its nodes) lives there, as in
-[rs-rich-web](web.md). `Server(address, app)` takes the options
-(`max_sessions`, `token`, `allow_origin`, `title`), and `spawn()` serves in
-the background and returns a handle to `stop()` (or a context manager). The
+browser tab until Ctrl+C. Each tab runs in a
+[process of its own](web.md#one-process-per-session): the server runs your
+script again (`sys.executable` with the arguments it was started with), and
+when that process reaches the same `serve` call it runs the tab's app
+there. So the module-level code before `serve` runs once per tab, a crash
+or a hang ends that tab alone, and an `if __name__ == "__main__":` guard
+around `serve` is fine. In a REPL, with no script to run again, sessions
+run on threads.
+
+`Server(address, app)` takes the options (`max_sessions`, `token`,
+`allow_origin`, `title`, `isolation("threads")` to run every session on a
+thread of this process, as tests do, and on Unix `session_memory(bytes)`
+and `session_cpu(seconds)`), and `spawn()` serves in the background and
+returns a handle to `stop()` (or a context manager). The
 security model is the Rust crate's: a token, an origin check and a session
 cap, and nothing beyond this computer unless a proxy with TLS and
 authentication is in front.

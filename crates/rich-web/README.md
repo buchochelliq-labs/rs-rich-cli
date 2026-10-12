@@ -5,7 +5,9 @@ or any terminal program, to a web browser. It is part of
 [rs-rich](https://github.com/buchochelliq-labs/rs-rich-cli), an addition
 rather than a port.
 
-Each browser tab gets its own copy of the app, on its own thread. The page
+Each browser tab gets its own copy of the app, in a process of its own (the
+server starts its own program again for each tab), so a crash or a hang ends
+that tab alone. The page
 draws the terminal with [xterm.js](https://xtermjs.org), which is vendored in
 this crate and served by it. The app's frames go out over a WebSocket, and
 the page's keys, mouse and resizes come back as the events a terminal would

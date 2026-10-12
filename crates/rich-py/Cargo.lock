@@ -1820,6 +1820,7 @@ dependencies = [
  "httparse",
  "rs-rich-embed",
  "rs-rich-intuituive",
+ "rustix",
  "serde_json",
  "sha2",
  "tungstenite",

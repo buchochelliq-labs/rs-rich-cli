@@ -6,7 +6,7 @@ mod common;
 
 use common::{connect, get, read_close, read_until, request, upgrade, wait_for, TOKEN};
 use rich_web::intuituive::prelude::*;
-use rich_web::{Handle, Server};
+use rich_web::{Handle, Isolation, Server};
 use tungstenite::Message;
 
 /// An app whose one line is replaced whole by each key, so the cells a key
@@ -25,6 +25,7 @@ fn app() -> App {
 fn start(sessions: usize) -> Handle {
     Server::bind("127.0.0.1:0", app)
         .unwrap()
+        .isolation(Isolation::Threads)
         .token(TOKEN)
         .max_sessions(sessions)
         .title("Test <app>")
@@ -108,6 +109,7 @@ fn the_websocket_checks_token_and_origin() {
 fn an_allowed_origin_may_connect() {
     let server = Server::bind("127.0.0.1:0", app)
         .unwrap()
+        .isolation(Isolation::Threads)
         .token(TOKEN)
         .allow_origin("https://term.example.com")
         .spawn()

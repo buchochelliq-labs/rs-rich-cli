@@ -1,7 +1,8 @@
 //! Serve intuiTUIve apps, and any terminal program, to a web browser.
 //!
 //! [`serve`] listens on an address and runs one [`App`] per browser tab,
-//! each on its own thread. The page is [xterm.js](https://xtermjs.org),
+//! each in a process of its own (see [Isolation](#isolation)). The page is
+//! [xterm.js](https://xtermjs.org),
 //! vendored in this crate and served by it; the app's frames go to it as
 //! terminal output over a WebSocket, and its keys, mouse and resizes come
 //! back as the same [`Event`](intuituive::interact::Event)s a terminal
@@ -30,6 +31,22 @@
 //! [`Server`] is the same with options: a session cap, a fixed token, the
 //! page's title, origins a proxy serves the page from, and
 //! [`spawn`](Server::spawn) to run in the background.
+//!
+//! # Isolation
+//!
+//! Each app session runs in a process of its own ([`Isolation::Processes`],
+//! the default): the server starts this program again with
+//! [`SESSION_ENV`] set, and when that process reaches the same [`serve`] or
+//! [`Server::bind`] call, it runs the tab's app there, connected back to
+//! the server over loopback, and exits. A crash, a hang or a runaway
+//! allocation then ends one tab; the server kills a session's process
+//! (on Unix with its process group) when the tab closes or the server
+//! stops, and on Unix can cap its memory and CPU time
+//! ([`Server::session_memory`], [`Server::session_cpu`]).
+//! [`Server::session_command`] starts it some other way (an interpreter
+//! and its script), and [`Isolation::Threads`] runs every session on a
+//! thread of the server instead, as 0.0.18 did: for tests, and programs
+//! that cannot start themselves again.
 //!
 //! # Any terminal program
 //!
@@ -113,8 +130,11 @@ use tungstenite::WebSocket;
 pub mod dom;
 mod http;
 pub mod input;
+mod isolate;
 mod pty;
 mod session;
+
+pub use isolate::{Isolation, SESSION_ENV};
 
 use http::Head;
 
@@ -150,8 +170,9 @@ const FIT_JS: &str = include_str!("../assets/xterm/addon-fit.js");
 /// one app, made by `app`, per browser tab that opens it, until the process
 /// ends. [`Server::bind`] and [`Server::run`] with the defaults.
 ///
-/// `app` is called on each session's own thread, so the [`App`] itself
-/// never crosses threads.
+/// `app` is called in each session's own process (or, with
+/// [`Isolation::Threads`], on its own thread), so the [`App`] itself never
+/// crosses threads.
 pub fn serve<A, F>(addr: A, app: F) -> io::Result<()>
 where
     A: ToSocketAddrs,
@@ -237,20 +258,44 @@ struct Shared {
     sessions: AtomicUsize,
     /// Connections still sending their request.
     pending: AtomicUsize,
-    /// Programs started and not yet ended.
+    /// Programs (and sessions' processes) started and not yet ended.
     programs: AtomicUsize,
     stopping: AtomicBool,
+    /// Where an app's sessions run, and how their processes start.
+    isolation: Isolation,
+    spawn: isolate::Spawn,
+    /// This server's number among the app servers this program binds, which
+    /// a session's process uses to find the same one.
+    bind: usize,
 }
 
 impl Server {
     /// Listen on `addr` (`"127.0.0.1:0"` picks a free port) with a fresh
     /// random token, to serve the apps `app` makes.
+    ///
+    /// In a session's own process ([`Isolation::Processes`], the default),
+    /// this is where the session runs: the process this program started
+    /// for a browser tab reaches this same call, runs the app for that tab,
+    /// and exits here, without listening.
     pub fn bind<A, F>(addr: A, app: F) -> io::Result<Server>
     where
         A: ToSocketAddrs,
         F: Fn() -> App + Send + Sync + 'static,
     {
-        Server::with_mode(addr, Mode::App(Box::new(app)), "intuiTUIve".into())
+        let bind = isolate::next_bind();
+        if let Some(spec) = isolate::session_for(bind) {
+            std::process::exit(isolate::run_child(spec, app));
+        }
+        let mode = Mode::App(Box::new(app));
+        let mut server = if isolate::is_session_process() {
+            // Another server of this program: a session's process does not
+            // take its port.
+            Server::with_mode(("127.0.0.1", 0), mode, "intuiTUIve".into())?
+        } else {
+            Server::with_mode(addr, mode, "intuiTUIve".into())?
+        };
+        server.shared.bind = bind;
+        Ok(server)
     }
 
     /// Listen on `addr` with a fresh random token, to run `command` on a
@@ -297,8 +342,51 @@ impl Server {
                 pending: AtomicUsize::new(0),
                 programs: AtomicUsize::new(0),
                 stopping: AtomicBool::new(false),
+                isolation: Isolation::default(),
+                spawn: isolate::Spawn::default(),
+                bind: 0,
             },
         })
+    }
+
+    /// Where an app's sessions run: each in a process of its own
+    /// ([`Isolation::Processes`], the default), or each on a thread of the
+    /// server ([`Isolation::Threads`]). A program's sessions (a command, a
+    /// host) are processes already, and this does not change them.
+    pub fn isolation(mut self, isolation: Isolation) -> Server {
+        self.shared.isolation = isolation;
+        self
+    }
+
+    /// Start each session's process as `program` with `args`, rather than
+    /// as this program with the arguments it was given. It must reach the
+    /// same `serve` or `Server::bind` call: an interpreter running the same
+    /// script, say (Python's `rs_rich.tui.serve` passes its own).
+    pub fn session_command<P, I, S>(mut self, program: P, args: I) -> Server
+    where
+        P: Into<std::path::PathBuf>,
+        I: IntoIterator<Item = S>,
+        S: Into<std::ffi::OsString>,
+    {
+        let args = args.into_iter().map(Into::into).collect();
+        self.shared.spawn.command = Some((program.into(), args));
+        self
+    }
+
+    /// Cap each session's process at `bytes` of memory (its address
+    /// space): an allocation past it fails, and the process ends, alone.
+    /// Unix only; elsewhere this is not applied.
+    pub fn session_memory(mut self, bytes: u64) -> Server {
+        self.shared.spawn.memory = Some(bytes);
+        self
+    }
+
+    /// Cap each session's process at `time` of CPU (whole seconds, at least
+    /// one): past it the process is killed, alone. A session that waits for
+    /// input uses none. Unix only; elsewhere this is not applied.
+    pub fn session_cpu(mut self, time: Duration) -> Server {
+        self.shared.spawn.cpu = Some(time);
+        self
     }
 
     /// Run at most `n` sessions at once (8 by default); a browser that
@@ -766,6 +854,19 @@ fn websocket(mut stream: TcpStream, head: &Head, shared: &Arc<Shared>, pending: 
             .unwrap_or(default)
     };
     let (columns, rows) = (size("cols", 80), size("rows", 24));
+    if let (Mode::App(_), Isolation::Processes) = (&shared.mode, shared.isolation) {
+        let session = isolate::Session {
+            spawn: &shared.spawn,
+            bind: shared.bind,
+            columns,
+            rows,
+            renderer: renderer_for(head, shared),
+            stopping: &shared.stopping,
+            running: &shared.programs,
+        };
+        isolate::run_parent(stream, session);
+        return;
+    }
     let config = WebSocketConfig::default()
         .max_message_size(Some(MAX_MESSAGE))
         .max_frame_size(Some(MAX_MESSAGE));

@@ -1,0 +1,649 @@
+//! One process per app session ([`Isolation::Processes`], the default).
+//!
+//! The server keeps the browser's connection. For each session it starts
+//! its own program again (the same executable and arguments, or
+//! [`Server::session_command`](crate::Server::session_command)) with
+//! [`SESSION_ENV`] set, and listens on a loopback port for that one
+//! process. The child's call to [`Server::bind`](crate::Server::bind) (or
+//! [`serve`](crate::serve)) sees the variable and, instead of listening,
+//! connects back, proves it is the process the server started with a
+//! secret from the variable, runs the session there, and exits. The
+//! server relays the WebSocket's bytes both ways, so the session loop is
+//! the same one a thread runs, and the page cannot tell the difference.
+//!
+//! A crash, a hang or a runaway allocation then ends one process, not the
+//! server: the server tells the page the session ended, kills the process
+//! (on Unix with its process group) when the page goes or the server
+//! stops, and on Unix can cap each process's memory and CPU time
+//! ([`Server::session_memory`](crate::Server::session_memory),
+//! [`Server::session_cpu`](crate::Server::session_cpu)).
+
+use std::ffi::OsString;
+use std::io::{self, ErrorKind, Read, Write};
+use std::net::{Shutdown, TcpListener, TcpStream};
+use std::path::PathBuf;
+use std::process::{Child, Command, Stdio};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::Arc;
+use std::thread;
+use std::time::{Duration, Instant};
+
+use intuituive::App;
+use tungstenite::protocol::{Role, WebSocketConfig};
+use tungstenite::WebSocket;
+
+use crate::{session, Renderer};
+
+/// The variable a session's process is started with: what it needs to
+/// connect back and run its session. Not for setting by hand.
+pub const SESSION_ENV: &str = "RS_RICH_WEB_SESSION";
+
+/// Where each app session runs.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub enum Isolation {
+    /// A process of its own: this program started again, which runs the
+    /// session when it reaches the same `serve` or `Server::bind`. A crash,
+    /// a hang or a runaway allocation ends that session alone.
+    #[default]
+    Processes,
+    /// A thread of the server (0.0.18's behaviour): for a program that
+    /// cannot start itself again (tests, an app built inside another
+    /// program, a REPL).
+    Threads,
+}
+
+/// How long a session's process has to connect back before the page is
+/// told it did not start.
+const CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
+/// How long it has to send its secret once connected.
+const HELLO_TIMEOUT: Duration = Duration::from_secs(2);
+/// How long an ended session waits for its process to exit before it is
+/// killed.
+const EXIT_WAIT: Duration = Duration::from_secs(1);
+/// How often the relay looks up from its reads (the server stopping, the
+/// other side gone).
+const TURN: Duration = Duration::from_millis(50);
+
+/// How a session's process is started and limited.
+#[derive(Clone, Debug, Default)]
+pub(crate) struct Spawn {
+    /// The program and its arguments; `None`: this one, with the same.
+    pub command: Option<(PathBuf, Vec<OsString>)>,
+    /// The most memory (address space) a process may take, in bytes.
+    pub memory: Option<u64>,
+    /// The most CPU time a process may use.
+    pub cpu: Option<Duration>,
+}
+
+/// Which `bind` of this program a session belongs to: the parent numbers
+/// its binds, and the child runs the one with the same number.
+static BINDS: AtomicUsize = AtomicUsize::new(0);
+
+/// The number of the next app server this program binds.
+pub(crate) fn next_bind() -> usize {
+    BINDS.fetch_add(1, Ordering::SeqCst)
+}
+
+/// What a session's process was started with.
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) struct Spec {
+    port: u16,
+    secret: String,
+    bind: usize,
+    columns: u16,
+    rows: u16,
+    renderer: Renderer,
+    memory: Option<u64>,
+    cpu: Option<u64>,
+}
+
+impl Spec {
+    fn encode(&self) -> String {
+        let limit = |n: Option<u64>| n.map_or("-".to_string(), |n| n.to_string());
+        format!(
+            "1 {} {} {} {} {} {} {} {}",
+            self.port,
+            self.secret,
+            self.bind,
+            self.columns,
+            self.rows,
+            self.renderer.name(),
+            limit(self.memory),
+            limit(self.cpu)
+        )
+    }
+
+    fn decode(text: &str) -> Option<Spec> {
+        let mut parts = text.split(' ');
+        if parts.next()? != "1" {
+            return None;
+        }
+        let mut next = || parts.next();
+        let limit = |text: &str| match text {
+            "-" => Some(None),
+            n => n.parse().ok().map(Some),
+        };
+        let spec = Spec {
+            port: next()?.parse().ok()?,
+            secret: next()?.to_string(),
+            bind: next()?.parse().ok()?,
+            columns: next()?.parse().ok()?,
+            rows: next()?.parse().ok()?,
+            renderer: Renderer::parse(next()?)?,
+            memory: limit(next()?)?,
+            cpu: limit(next()?)?,
+        };
+        next().is_none().then_some(spec)
+    }
+}
+
+/// The session this process was started for, if it was, and this `bind`
+/// is the one it belongs to.
+pub(crate) fn session_for(bind: usize) -> Option<Spec> {
+    let spec = Spec::decode(&std::env::var(SESSION_ENV).ok()?)?;
+    (spec.bind == bind).then_some(spec)
+}
+
+/// Whether this process was started for a session (of any `bind`).
+pub(crate) fn is_session_process() -> bool {
+    std::env::var_os(SESSION_ENV).is_some()
+}
+
+/// In a session's process: limit it, connect back, run the session, and
+/// give the exit code.
+pub(crate) fn run_child(spec: Spec, app: impl FnOnce() -> App) -> i32 {
+    // On Linux, killed with the server's thread that started it, should
+    // the server die without ending it (a server that has died already
+    // refuses the connection below).
+    #[cfg(target_os = "linux")]
+    let _ = rustix::process::set_parent_process_death_signal(Some(rustix::process::Signal::KILL));
+    limit(spec.memory, spec.cpu);
+    let stream = match TcpStream::connect(("127.0.0.1", spec.port)) {
+        Ok(stream) => stream,
+        Err(error) => {
+            eprintln!("rich-web: the session could not reach its server: {error}");
+            return 1;
+        }
+    };
+    let _ = stream.set_nodelay(true);
+    let mut hello = stream.try_clone().expect("a socket clones");
+    if hello
+        .write_all(format!("{}\n", spec.secret).as_bytes())
+        .is_err()
+    {
+        return 1;
+    }
+    let config = WebSocketConfig::default()
+        .max_message_size(Some(crate::MAX_MESSAGE))
+        .max_frame_size(Some(crate::MAX_MESSAGE));
+    let mut socket = WebSocket::from_raw_socket(stream, Role::Server, Some(config));
+    // The server ends the session by closing the connection, or by killing
+    // this process.
+    let stopping = AtomicBool::new(false);
+    match session::run(
+        &mut socket,
+        app(),
+        spec.columns,
+        spec.rows,
+        &stopping,
+        spec.renderer,
+    ) {
+        Ok(()) => 0,
+        Err(_) => 1,
+    }
+}
+
+/// Cap this process's address space and CPU time (Unix; elsewhere there is
+/// no `setrlimit`, and the limits are not applied).
+#[cfg(unix)]
+fn limit(memory: Option<u64>, cpu: Option<u64>) {
+    use rustix::process::{setrlimit, Resource, Rlimit};
+    let set = |resource, value: Option<u64>| {
+        if let Some(value) = value {
+            let limit = Rlimit {
+                current: Some(value),
+                maximum: Some(value),
+            };
+            if let Err(error) = setrlimit(resource, limit) {
+                eprintln!("rich-web: the session's limit could not be set: {error}");
+            }
+        }
+    };
+    set(Resource::As, memory);
+    set(Resource::Cpu, cpu);
+}
+
+#[cfg(not(unix))]
+fn limit(_memory: Option<u64>, _cpu: Option<u64>) {}
+
+/// Counts a session's process as running until dropped, so that stopping
+/// the server waits for it.
+struct Running<'a>(&'a AtomicUsize);
+
+impl Drop for Running<'_> {
+    fn drop(&mut self) {
+        self.0.fetch_sub(1, Ordering::SeqCst);
+    }
+}
+
+/// What the parent needs to run one session in a process.
+pub(crate) struct Session<'a> {
+    pub spawn: &'a Spawn,
+    pub bind: usize,
+    pub columns: u16,
+    pub rows: u16,
+    pub renderer: Renderer,
+    pub stopping: &'a AtomicBool,
+    pub running: &'a AtomicUsize,
+}
+
+/// Run a session in a process of its own, relaying `browser`'s WebSocket
+/// (upgraded already) to it, until either side ends or the server stops.
+pub(crate) fn run_parent(browser: TcpStream, session: Session<'_>) {
+    session.running.fetch_add(1, Ordering::SeqCst);
+    let _counted = Running(session.running);
+    if session.stopping.load(Ordering::SeqCst) {
+        return goodbye(browser, "The server stopped.");
+    }
+    let started = match start(&session) {
+        Ok(started) => started,
+        Err(error) => {
+            return goodbye(
+                browser,
+                &format!("The session's process could not start: {error}."),
+            );
+        }
+    };
+    let (mut child, listener, secret) = started;
+    let child_stream = match connected(&listener, &secret, &mut child, session.stopping) {
+        Ok(stream) => stream,
+        Err(why) => {
+            end(&mut child);
+            return goodbye(browser, &why);
+        }
+    };
+    drop(listener);
+    let relayed = relay(&browser, &child_stream, session.stopping);
+    // The page went, the process ended, or the server is stopping: the
+    // process's connection closes, and its session ends. It gets a moment
+    // to exit, and is killed if it has not.
+    let _ = child_stream.shutdown(Shutdown::Both);
+    let status = end(&mut child);
+    // The page is told why, when it is still there, between frames, and
+    // was not sent a close by the session itself.
+    let reason = match relayed.ended {
+        _ if !relayed.can_close => None,
+        _ if session.stopping.load(Ordering::SeqCst) => Some("The server stopped.".to_string()),
+        Ended::Page => None,
+        Ended::Child => Some(match status {
+            Some(status) if status.success() => "The session ended.".to_string(),
+            Some(status) => format!("The session's process ended unexpectedly ({status})."),
+            None => "The session's process ended unexpectedly.".to_string(),
+        }),
+    };
+    match reason {
+        Some(reason) => goodbye(browser, &reason),
+        None => {
+            let _ = browser.shutdown(Shutdown::Both);
+        }
+    }
+}
+
+/// Start the process, with a loopback listener for it to connect to and
+/// the secret it must send.
+fn start(session: &Session<'_>) -> io::Result<(Child, TcpListener, String)> {
+    let listener = TcpListener::bind(("127.0.0.1", 0))?;
+    let secret = crate::random_token()?;
+    let spec = Spec {
+        port: listener.local_addr()?.port(),
+        secret: secret.clone(),
+        bind: session.bind,
+        columns: session.columns,
+        rows: session.rows,
+        renderer: session.renderer,
+        memory: session.spawn.memory,
+        cpu: session.spawn.cpu.map(|cpu| cpu.as_secs().max(1)),
+    };
+    let (program, args) = match &session.spawn.command {
+        Some((program, args)) => (program.clone(), args.clone()),
+        None => (
+            std::env::current_exe()?,
+            std::env::args_os().skip(1).collect(),
+        ),
+    };
+    let mut command = Command::new(program);
+    command
+        .args(args)
+        .env(SESSION_ENV, spec.encode())
+        .stdin(Stdio::null());
+    // Its own process group, so that what it starts is ended with it.
+    #[cfg(unix)]
+    std::os::unix::process::CommandExt::process_group(&mut command, 0);
+    let child = command.spawn()?;
+    listener.set_nonblocking(true)?;
+    Ok((child, listener, secret))
+}
+
+/// Wait for the process to connect and send its secret. Anything else that
+/// connects meanwhile is turned away.
+fn connected(
+    listener: &TcpListener,
+    secret: &str,
+    child: &mut Child,
+    stopping: &AtomicBool,
+) -> Result<TcpStream, String> {
+    let until = Instant::now() + CONNECT_TIMEOUT;
+    loop {
+        if stopping.load(Ordering::SeqCst) {
+            return Err("The server stopped.".into());
+        }
+        if let Ok(Some(status)) = child.try_wait() {
+            return Err(format!(
+                "The session's process ended before it started the app ({status}): \
+                 it must reach the same serve() call as the server."
+            ));
+        }
+        if Instant::now() > until {
+            return Err("The session's process did not start the app in time.".into());
+        }
+        match listener.accept() {
+            Ok((stream, _)) => {
+                if let Some(stream) = hello(stream, secret) {
+                    return Ok(stream);
+                }
+            }
+            Err(e) if e.kind() == ErrorKind::WouldBlock => thread::sleep(Duration::from_millis(10)),
+            Err(_) => thread::sleep(Duration::from_millis(10)),
+        }
+    }
+}
+
+/// The stream, if it sends `secret` and a newline first.
+fn hello(stream: TcpStream, secret: &str) -> Option<TcpStream> {
+    stream.set_nonblocking(false).ok()?;
+    stream.set_read_timeout(Some(HELLO_TIMEOUT)).ok()?;
+    let _ = stream.set_nodelay(true);
+    let mut line = Vec::with_capacity(secret.len() + 1);
+    let mut byte = [0u8];
+    while line.len() <= secret.len() {
+        (&stream).read_exact(&mut byte).ok()?;
+        if byte[0] == b'\n' {
+            break;
+        }
+        line.push(byte[0]);
+    }
+    crate::http::same_token(std::str::from_utf8(&line).ok()?, secret).then_some(stream)
+}
+
+/// Which side a relay ended on.
+#[derive(Debug, PartialEq, Eq)]
+enum Ended {
+    /// The page went (or the server stopped).
+    Page,
+    /// The process's side ended.
+    Child,
+}
+
+/// How a relay ended.
+struct Relayed {
+    ended: Ended,
+    /// What reached the page stopped between WebSocket frames, and held no
+    /// close: the server can still send one.
+    can_close: bool,
+}
+
+/// Copy bytes both ways until one side ends or the server stops.
+fn relay(browser: &TcpStream, child: &TcpStream, stopping: &AtomicBool) -> Relayed {
+    let failed = Relayed {
+        ended: Ended::Page,
+        can_close: true,
+    };
+    let done = Arc::new(AtomicBool::new(false));
+    let (Ok(page_in), Ok(child_out)) = (browser.try_clone(), child.try_clone()) else {
+        return failed;
+    };
+    let _ = page_in.set_read_timeout(Some(TURN));
+    let _ = child.set_read_timeout(Some(TURN));
+    // The page's input, to the process, on a thread of its own.
+    let upstream = {
+        let done = done.clone();
+        thread::Builder::new()
+            .name("rich-web relay".into())
+            .spawn(move || {
+                pump(page_in, child_out, &done, &mut |_| {});
+                done.store(true, Ordering::SeqCst);
+            })
+    };
+    // What the process draws, to the page, on this one, keeping track of
+    // where its frames begin.
+    let mut frames = Frames::default();
+    let (Ok(child_in), Ok(page_out)) = (child.try_clone(), browser.try_clone()) else {
+        done.store(true, Ordering::SeqCst);
+        return failed;
+    };
+    let child_ended = {
+        let stop = StopOr(&done, stopping);
+        pump_until(child_in, page_out, &stop, &mut |bytes| frames.feed(bytes))
+    };
+    done.store(true, Ordering::SeqCst);
+    if let Ok(upstream) = upstream {
+        let _ = upstream.join();
+    }
+    Relayed {
+        ended: if child_ended {
+            Ended::Child
+        } else {
+            Ended::Page
+        },
+        can_close: frames.at_boundary() && !frames.closed,
+    }
+}
+
+/// Either of two flags.
+struct StopOr<'a>(&'a AtomicBool, &'a AtomicBool);
+
+impl StopOr<'_> {
+    fn is_set(&self) -> bool {
+        self.0.load(Ordering::SeqCst) || self.1.load(Ordering::SeqCst)
+    }
+}
+
+/// Copy from `from` to `to` until either ends or `done` is set.
+fn pump(from: TcpStream, to: TcpStream, done: &AtomicBool, seen: &mut dyn FnMut(&[u8])) {
+    let never = AtomicBool::new(false);
+    pump_until(from, to, &StopOr(done, &never), seen);
+}
+
+/// Copy from `from` to `to` until either ends or `stop` is set; whether
+/// `from` ended (rather than `to`, or `stop`).
+fn pump_until(
+    mut from: TcpStream,
+    mut to: TcpStream,
+    stop: &StopOr<'_>,
+    seen: &mut dyn FnMut(&[u8]),
+) -> bool {
+    let mut buffer = vec![0u8; 64 * 1024];
+    loop {
+        if stop.is_set() {
+            return false;
+        }
+        match from.read(&mut buffer) {
+            Ok(0) => return true,
+            Ok(n) => {
+                seen(&buffer[..n]);
+                if to.write_all(&buffer[..n]).is_err() {
+                    return false;
+                }
+            }
+            Err(e) if matches!(e.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut) => {}
+            Err(e) if e.kind() == ErrorKind::Interrupted => {}
+            Err(_) => return true,
+        }
+    }
+}
+
+/// Where a stream of WebSocket frames is: inside a frame, or between two,
+/// and whether a close went by.
+#[derive(Default)]
+struct Frames {
+    /// The header read so far of the next frame.
+    header: Vec<u8>,
+    /// Payload bytes left in the current frame.
+    left: u64,
+    closed: bool,
+}
+
+impl Frames {
+    fn at_boundary(&self) -> bool {
+        self.header.is_empty() && self.left == 0
+    }
+
+    fn feed(&mut self, mut bytes: &[u8]) {
+        while !bytes.is_empty() {
+            if self.left > 0 {
+                let n = (self.left.min(bytes.len() as u64)) as usize;
+                self.left -= n as u64;
+                bytes = &bytes[n..];
+                continue;
+            }
+            self.header.push(bytes[0]);
+            bytes = &bytes[1..];
+            if let Some((length, opcode)) = header_done(&self.header) {
+                if opcode == 0x8 {
+                    self.closed = true;
+                }
+                self.header.clear();
+                self.left = length;
+            }
+        }
+    }
+}
+
+/// When `header` is a whole frame header: the payload's length and the
+/// opcode.
+fn header_done(header: &[u8]) -> Option<(u64, u8)> {
+    if header.len() < 2 {
+        return None;
+    }
+    let opcode = header[0] & 0x0f;
+    let masked = header[1] & 0x80 != 0;
+    let short = u64::from(header[1] & 0x7f);
+    let (extended, length) = match short {
+        126 => (2, None),
+        127 => (8, None),
+        n => (0, Some(n)),
+    };
+    let mask = if masked { 4 } else { 0 };
+    if header.len() < 2 + extended + mask {
+        return None;
+    }
+    let length = length.unwrap_or_else(|| {
+        header[2..2 + extended]
+            .iter()
+            .fold(0u64, |n, b| (n << 8) | u64::from(*b))
+    });
+    Some((length, opcode))
+}
+
+/// End the session's process: a moment to exit, then killed (on Unix with
+/// its process group). Its exit status, when it exited on its own.
+fn end(child: &mut Child) -> Option<std::process::ExitStatus> {
+    let until = Instant::now() + EXIT_WAIT;
+    while Instant::now() < until {
+        match child.try_wait() {
+            Ok(Some(status)) => {
+                kill_group(child.id());
+                return Some(status);
+            }
+            Ok(None) => thread::sleep(Duration::from_millis(10)),
+            Err(_) => break,
+        }
+    }
+    kill_group(child.id());
+    let _ = child.kill();
+    let _ = child.wait();
+    None
+}
+
+/// Kill what is left of the process group the session's process led.
+#[cfg(unix)]
+fn kill_group(leader: u32) {
+    use rustix::process::{kill_process_group, Pid, Signal};
+    if let Some(pid) = i32::try_from(leader).ok().and_then(Pid::from_raw) {
+        let _ = kill_process_group(pid, Signal::KILL);
+    }
+}
+
+#[cfg(not(unix))]
+fn kill_group(_leader: u32) {}
+
+/// Close the page's WebSocket with `reason`, which it shows, then let the
+/// connection go.
+fn goodbye(mut browser: TcpStream, reason: &str) {
+    let mut end = reason.len().min(123);
+    while !reason.is_char_boundary(end) {
+        end -= 1;
+    }
+    let mut payload = 1000u16.to_be_bytes().to_vec();
+    payload.extend_from_slice(&reason.as_bytes()[..end]);
+    let mut frame = vec![0x88, payload.len() as u8];
+    frame.extend_from_slice(&payload);
+    let _ = browser.write_all(&frame);
+    let _ = browser.flush();
+    // A moment for the page to answer, so the close is not cut off by a
+    // reset.
+    let _ = browser.set_read_timeout(Some(Duration::from_millis(200)));
+    let _ = browser.read(&mut [0u8; 256]);
+    let _ = browser.shutdown(Shutdown::Both);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn specs_round_trip() {
+        let spec = Spec {
+            port: 4321,
+            secret: "abc".into(),
+            bind: 2,
+            columns: 80,
+            rows: 24,
+            renderer: Renderer::Dom,
+            memory: Some(1 << 28),
+            cpu: None,
+        };
+        assert_eq!(Spec::decode(&spec.encode()), Some(spec));
+        assert_eq!(Spec::decode("2 1 a 0 80 24 xterm - -"), None);
+        assert_eq!(Spec::decode("1 1 a 0 80 24 xterm -"), None);
+        assert_eq!(Spec::decode("1 1 a 0 80 24 canvas - -"), None);
+    }
+
+    #[test]
+    fn frames_are_followed_across_reads() {
+        let mut frames = Frames::default();
+        // A text frame of 3 bytes, split across reads.
+        frames.feed(&[0x81, 0x03, b'a']);
+        assert!(!frames.at_boundary());
+        frames.feed(b"bc");
+        assert!(frames.at_boundary());
+        // A 300-byte binary frame: a 16-bit length.
+        let mut big = vec![0x82, 126, 0x01, 0x2c];
+        big.extend(vec![0u8; 300]);
+        frames.feed(&big[..3]);
+        assert!(!frames.at_boundary());
+        frames.feed(&big[3..]);
+        assert!(frames.at_boundary());
+        assert!(!frames.closed);
+        frames.feed(&[0x88, 0x02, 0x03, 0xe8]);
+        assert!(frames.closed && frames.at_boundary());
+    }
+
+    #[test]
+    fn a_masked_header_counts_its_key() {
+        assert_eq!(header_done(&[0x81, 0x85]), None);
+        assert_eq!(header_done(&[0x81, 0x85, 1, 2, 3]), None);
+        assert_eq!(header_done(&[0x81, 0x85, 1, 2, 3, 4]), Some((5, 1)));
+    }
+}

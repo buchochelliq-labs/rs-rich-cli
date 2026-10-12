@@ -12,7 +12,7 @@ use rich_web::dom::{self, Dom};
 use rich_web::intuituive::interact::{Event, Input, Key};
 use rich_web::intuituive::prelude::*;
 use rich_web::intuituive::Driver;
-use rich_web::{Renderer, Server};
+use rich_web::{Isolation, Renderer, Server};
 use serde_json::{json, Value};
 use tungstenite::Message;
 
@@ -222,6 +222,7 @@ fn styles_wide_characters_and_the_caret() {
 fn the_page_is_chosen_by_the_server_or_the_address() {
     let dom_server = Server::bind("127.0.0.1:0", app)
         .unwrap()
+        .isolation(Isolation::Threads)
         .token(TOKEN)
         .renderer(Renderer::Dom)
         .title("Files")
@@ -229,6 +230,7 @@ fn the_page_is_chosen_by_the_server_or_the_address() {
         .unwrap();
     let xterm_server = Server::bind("127.0.0.1:0", app)
         .unwrap()
+        .isolation(Isolation::Threads)
         .token(TOKEN)
         .spawn()
         .unwrap();
@@ -262,6 +264,7 @@ fn the_page_is_chosen_by_the_server_or_the_address() {
 fn a_dom_session_runs_end_to_end() {
     let server = Server::bind("127.0.0.1:0", app)
         .unwrap()
+        .isolation(Isolation::Threads)
         .token(TOKEN)
         .spawn()
         .unwrap();

@@ -1,8 +1,9 @@
 # Serving an app to a browser
 
 `rs-rich-web` (`rich_web`, new in 0.0.18) serves an intuiTUIve app to a web
-browser. Each browser tab that opens it gets its own copy of the app, on its
-own thread. The page draws the terminal with [xterm.js](https://xtermjs.org).
+browser. Each browser tab that opens it gets its own copy of the app, in a
+process of its own (since 0.0.19; [on a thread](#one-process-per-session)
+if you ask). The page draws the terminal with [xterm.js](https://xtermjs.org).
 The app's frames reach it over a WebSocket, and its keys, mouse and resizes
 come back as the same events a terminal gives. The app does not change: the
 function that builds it for `App::run` builds it for the browser too.
@@ -86,6 +87,9 @@ Server::bind("127.0.0.1:0", counter)? // port 0: any free port
   [DOM renderer](#the-dom-renderer) instead of xterm.js.
 - **`max_buffered(bytes)`** bounds the output a
   [program's](#any-terminal-program) session holds for a slow page.
+- **`isolation(Isolation::Threads)`**, **`session_command(program, args)`**,
+  **`session_memory(bytes)`** and **`session_cpu(time)`** decide where each
+  session runs (see [below](#one-process-per-session)).
 
 ## How a session runs
 
@@ -113,6 +117,58 @@ tasks keep drawing while nobody types.
 - **Quitting**: when the app quits (a handler calls `cx.quit()`, or Ctrl+C
   reaches it unbound), the session ends and the page says so. Reloading
   starts a new session.
+
+### One process per session
+
+Each session runs in a process of its own (`Isolation::Processes`, the
+default since 0.0.19), as textual-serve isolates them. For a new tab the
+server starts its own program again, with the same arguments and the
+`RS_RICH_WEB_SESSION` variable set. That process runs `main` as before
+until it reaches the same `serve` (or `Server::bind`) call, and there,
+instead of listening, it connects back to the server over a loopback
+socket, proves with a secret from the variable that it is the process the
+server started, runs the tab's app, and exits. The server keeps the
+browser's connection and relays its WebSocket to the process, so the app
+and the page see nothing different. The app needs no change.
+
+So a crash, a hang or a runaway allocation ends one tab, not the server:
+
+- **A crash** (a panic, an abort) ends the process; the server tells the
+  page "The session's process ended unexpectedly", and the other tabs carry
+  on.
+- **A hang** holds up its own tab only. When the tab closes, or the server
+  stops, the process is killed, on Unix with its process group, so what it
+  started goes too. On Linux a process also dies with its server, should
+  the server be killed.
+- **Limits** (Unix): `session_memory(bytes)` caps each process's address
+  space, so an allocation past it fails and that process ends;
+  `session_cpu(time)` kills one that has used that much CPU. Elsewhere they
+  are not applied.
+
+The `isolated` example shows it: each tab prints its process id, and `c`
+panics, `h` loops forever and `m` allocates until the memory limit stops
+it, while the other tabs keep answering
+(`cargo run -p rs-rich-web --example isolated`).
+
+What has to hold for a program to run its sessions this way:
+
+- **It reaches the same call when started again.** `main` runs again in
+  each session's process, up to `serve`, so it must not depend on
+  something that has changed (a file it deletes, a port it binds before
+  serving). With several servers in one program, each session's process
+  runs the one its server is: the binds are counted, in the order the
+  program makes them.
+- **It can be started again.** `std::env::current_exe()` with the same
+  arguments, unless `session_command(program, args)` names another way:
+  an interpreter running the same script, say. Python's
+  `rs_rich.tui.Server` passes `sys.executable` and the script's arguments
+  itself, and falls back to threads in a REPL.
+
+`isolation(Isolation::Threads)` keeps 0.0.18's behaviour, every session on
+a thread of the server's process: for tests (a test binary started again
+would run its tests again) and for an app built inside a program that
+cannot start itself again. A [program's](#any-terminal-program) sessions
+are processes already, and isolation does not change them.
 
 ## Any terminal program
 
@@ -347,6 +403,6 @@ still required.
 ## Status
 
 All three phases of serving to a browser (0.0.18 plan, workstream 7) are
-here: intuiTUIve apps, any terminal program, and the DOM renderer. Every
-session runs on a thread of the server's process; one process per session,
-as textual-serve isolates them, is planned for 0.0.19.
+here: intuiTUIve apps, any terminal program, and the DOM renderer. Since
+0.0.19 every app session runs in a
+[process of its own](#one-process-per-session).
