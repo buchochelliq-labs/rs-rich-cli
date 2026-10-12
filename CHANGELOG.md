@@ -9,6 +9,34 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Positioned drawing: `rich_ext::surface` (ext 0.0.16)
+
+0.0.19 workstream 4.
+
+- **`Surface`**: render any rich renderable into rectangles of the terminal
+  and write only the cells that changed. `surface.draw(|s| { s.render(rect,
+  &renderable); s.set_cursor(x, y) })` draws a frame; cells nothing drew
+  keep what they showed, and unchanged cells are never written.
+- **Full screen or inline.** `Viewport::Fullscreen` draws on the alternate
+  screen; `Viewport::Inline(rows)` takes rows below the cursor and leaves
+  the last frame in the scrollback. `resize` keeps what was drawn and
+  writes everything once. `finish` (or dropping the surface) gives the
+  terminal back.
+- **Synchronized output** (`synchronized(true)`, DEC mode 2026) and
+  **graphics** from a `PlacementSource`, redrawn when the cells under them
+  are repainted.
+- **intuiTUIve draws with it.** `rich_intuituive::screen::{Screen, Painter,
+  Rect, Cell}` are now re-exports of `rich_ext::surface`'s types, names
+  kept; every intuiTUIve test and the ratatui benchmark gate pass
+  unchanged. `Painter::repaint` writes cells whether they changed or not.
+- **`rich_ext::surface::sanitize_line` and `control_picture`** make terminal
+  controls in drawn text visible; `rich_interact::paint::sanitize_line`
+  now calls them.
+- **Python:** `rs_rich.ext.surface` (`Surface`, `Drawing`, `Rect`), with
+  `file=` for any stream and a context manager. **Docs:** a new guide page,
+  [Positioned drawing](docs/guide/ext/surface.md), with a ratatui
+  comparison, and a section on the Python layout page.
+
 ## 0.0.18 cohort
 
 Published on 2026-10-11: record 0.0.6 / interact 0.0.6 / ratatui 0.0.3 /

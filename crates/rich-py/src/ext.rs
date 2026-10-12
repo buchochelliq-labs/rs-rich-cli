@@ -21,6 +21,7 @@ mod layout;
 mod qa;
 mod registry;
 mod status;
+mod surface;
 pub(crate) mod tables;
 mod terminal;
 mod transform;
@@ -37,6 +38,7 @@ pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     terminal::register(m)?;
     workflow::register(m)?;
     status::register(m)?;
+    surface::register(m)?;
     widgets::register(m)?;
     tables::register(m)?;
     inspect::register(m)?;

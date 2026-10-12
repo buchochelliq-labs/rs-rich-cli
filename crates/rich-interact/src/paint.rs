@@ -24,14 +24,7 @@ use crate::component::View;
 /// pictures (`␛`, `␇`), DEL as `␡`, a tab as a space (it would move the
 /// cursor), and C1 controls (8-bit CSI and OSC among them) as `�`.
 pub(crate) fn visible(c: char) -> Option<char> {
-    match c {
-        '\t' => Some(' '),
-        '\u{1b}' => Some('␛'),
-        '\u{7f}' => Some('␡'),
-        '\0'..='\u{1f}' => char::from_u32(0x2400 + c as u32),
-        '\u{80}'..='\u{9f}' => Some('\u{fffd}'),
-        _ => None,
-    }
+    rich_ext::surface::control_picture(c)
 }
 
 /// Make the terminal controls in `line`'s text visible, so no view (a
@@ -41,15 +34,7 @@ pub(crate) fn visible(c: char) -> Option<char> {
 /// character, so character offsets into the text still hold. Control
 /// segments are left alone; the frame skips them.
 pub fn sanitize_line(line: &mut [Segment]) {
-    for segment in line.iter_mut().filter(|segment| !segment.control) {
-        if segment.text.chars().any(|c| visible(c).is_some()) {
-            segment.text = segment
-                .text
-                .chars()
-                .map(|c| visible(c).unwrap_or(c))
-                .collect();
-        }
-    }
+    rich_ext::surface::sanitize_line(line)
 }
 
 /// Where `column`, a cell of `line` as rendered, lands once
