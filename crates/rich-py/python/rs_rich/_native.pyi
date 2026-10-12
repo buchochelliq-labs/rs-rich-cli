@@ -6321,6 +6321,17 @@ def tui_tree_with(items: Union[Callable[[], Iterable[Union[TuiTreeItem, str]]], 
 def tui_tree_lazy(roots: Callable[[], Iterable[TuiLazyItem]], children: Callable[[str], Iterable[TuiLazyItem]], selected: TuiSignal) -> TuiNode:
     """``tree_lazy``: a tree whose levels load on a worker thread when opened."""
     ...
+def tui_text_area(
+    text: TuiSignal,
+    *,
+    language: Optional[str] = None,
+    line_numbers: bool = False,
+    soft_wrap: bool = True,
+    read_only: bool = False,
+    placeholder: Optional[str] = None,
+) -> TuiNode:
+    """``text_area``: a multi-line editor of the str in ``text``, kept in step with it both ways."""
+    ...
 def tui_calendar(selected: TuiSignal) -> TuiNode:
     """``calendar``: a month grid of the ``datetime.date`` in ``selected``."""
     ...

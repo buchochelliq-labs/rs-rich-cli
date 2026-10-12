@@ -35,6 +35,7 @@ motion turned on in your system settings the cards stay still.
 [![A card's tooltip on a sprint board](media/tapes/board/tooltip.png){ data-gif="board.gif" loading=lazy }<span class="tape-card-title">Lazy trees, tooltips, drag-and-drop</span>](#lazy-trees-tooltips-and-drag-and-drop){ .tape-card }
 [![Five cards wrapped onto two lines of a row](media/tapes/align/wrap.png){ data-gif="align.gif" loading=lazy }<span class="tape-card-title">Flex alignment</span>](#flex-alignment){ .tape-card }
 [![An app in linear mode, written as lines of text](media/tapes/access/linear.png){ data-gif="access.gif" loading=lazy }<span class="tape-card-title">Text mode and linear mode</span>](#text-mode-and-linear-mode){ .tape-card }
+[![A line of Rust selected in a highlighted text area](media/tapes/editor/selected.png){ data-gif="editor.gif" loading=lazy }<span class="tape-card-title">A text area</span>](#a-text-area){ .tape-card }
 [![rich serve printing its address, and sessions asked for](media/tapes/serve/sessions.png){ data-gif="serve.gif" loading=lazy }<span class="tape-card-title">Serve a program to a browser</span>](#serve-a-program-to-a-browser){ .tape-card }
 [![A shell in a terminal pane beside a web view](media/tapes/embed/pane.png){ data-gif="embed.gif" loading=lazy }<span class="tape-card-title">A terminal pane</span>](#a-terminal-pane){ .tape-card }
 [![A CSV file drawn as a line chart by rich chart](media/tapes/chart/lines.png){ data-gif="chart.gif" loading=lazy }<span class="tape-card-title">Charts from data</span>](#charts-from-data){ .tape-card }
@@ -403,6 +404,26 @@ the app is written as lines of text, then only the lines that change. See
 | ![Blank boxes, no colour, > on the selected items](media/tapes/access/text-mode.png) | ![The app as lines of text, the focus moving as →](media/tapes/access/linear.png) |
 
 [Tape](tapes/access.tape) · [Cast](media/tapes/access/access.cast) · [GIF](media/tapes/access/access.gif) · [Page](media/tapes/access/access.html)
+
+## A text area
+
+`rs-rich-intuituive`'s `editor` example (0.0.19): Rust source highlighted
+with line numbers, over a notes area that wraps and shows a placeholder.
+A line is typed, a line selected with Shift, the typing undone as one step
+with Ctrl+Z, and Escape then Tab moves on to the notes. See
+[Text areas](guide/intuituive/index.md#text-areas).
+
+<div class="tape-player" data-cast="../media/tapes/editor/editor.cast" data-poster="npt:0:3">
+  <img src="../media/tapes/editor/editor.gif" alt="Rust source in a text area: a line typed, a line selected, the typing undone, then notes typed below">
+</div>
+
+| Highlighted | A line selected |
+|---|---|
+| ![Rust source, highlighted, with line numbers](media/tapes/editor/editor.png) | ![A line selected with Shift+Home](media/tapes/editor/selected.png) |
+| **Undone** | **Notes** |
+| ![The typed line undone with Ctrl+Z](media/tapes/editor/undone.png) | ![Notes typed in the second area](media/tapes/editor/notes.png) |
+
+[Tape](tapes/editor.tape) · [Cast](media/tapes/editor/editor.cast) · [GIF](media/tapes/editor/editor.gif) · [Page](media/tapes/editor/editor.html)
 
 ## Serve a program to a browser
 

@@ -65,6 +65,38 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   [Positioned drawing](docs/guide/ext/surface.md), with a ratatui
   comparison, and a section on the Python layout page.
 
+### A text area in intuiTUIve (intuituive 0.0.4, interact 0.0.7)
+
+0.0.19 workstream 2.
+
+- **`text_area(text: Signal<String>)`**: a multi-line editor kept in step
+  with its signal both ways. Builders: `.language("rust")` highlights it
+  through the console's code highlighter (syntect, or lumis when
+  registered), `.line_numbers()`, `.soft_wrap(false)` to scroll long lines
+  sideways, `.read_only()` and `.placeholder(..)`.
+- **Editing:** a grapheme-aware caret, word moves, Home/End and
+  PageUp/PageDown; Shift selects with any move, Ctrl+A selects everything;
+  Tab and Shift+Tab indent and outdent the selected lines (Escape then Tab
+  moves the focus on); Ctrl+C, Ctrl+X and bracketed paste through the
+  clipboard (OSC 52); Ctrl+Z, Ctrl+Y and Ctrl+Shift+Z undo and redo, a
+  typed run as one step. The mouse places the caret, drags a selection,
+  and double and triple clicks select a word and a line.
+- **Large text:** only the lines in view are wrapped, highlighted and
+  drawn; a test pages through 100,000 highlighted lines.
+- **Accessibility:** a text box whose value is the caret's line, so linear
+  mode reads the line the caret moves to.
+- **`Widget::claims_key`** lets a widget on the focused path take a key the
+  app would otherwise act on: the text area takes Ctrl+Z (not suspending)
+  and, with a selection, Ctrl+C (not quitting).
+- **`rich_interact::edit::Buffer`**: the editing (lines, caret, selection,
+  undo and redo, the character limit, cleaning pasted text) moved out of
+  `rich_interact`'s `TextArea`, which now uses it, as the intuiTUIve one
+  does. Its behaviour is unchanged.
+- **Python:** `rs_rich.tui.text_area(text, language=None,
+  line_numbers=False, soft_wrap=True, read_only=False, placeholder=None)`.
+  **Docs:** [Text areas](docs/guide/intuituive/index.md#text-areas), the
+  `editor` example and its recording.
+
 ## 0.0.18 cohort
 
 Published on 2026-10-11: record 0.0.6 / interact 0.0.6 / ratatui 0.0.3 /

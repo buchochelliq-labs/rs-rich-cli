@@ -86,6 +86,7 @@ pub mod clipboard;
 pub mod component;
 pub mod components;
 pub mod compose;
+pub mod edit;
 pub mod event;
 pub mod event_loop;
 pub mod fuzzy;
