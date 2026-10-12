@@ -33,7 +33,7 @@ Each Rust module `rich_ext::<name>` is `rs_rich.ext.<name>`, and
 | [Tables, badges and formatting](tables.md) | `table`, `badge`, `size_bar`, `format`, `redact`, `derive` |
 | [Terminals and accessibility](terminals.md) | `capabilities`, `fidelity`, `a11y`, `ansi_explain`, `sanitize`, `encoding`, `target`, `frame`, `theme` |
 | [Inspectors](inspectors.md) | `source_view`, `hex`, `unicode_inspect`, `env_inspect` |
-| [Layout and live output](layout.md) | `layout`, `live` |
+| [Layout and live output](layout.md) | `layout`, `live`, `surface` |
 | [CLI authoring](cli-authoring.md) | `cli_doc` |
 | [Testing and QA](testing.md) | `testing`, `qa` |
 

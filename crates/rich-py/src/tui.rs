@@ -48,7 +48,7 @@ use rich_intuituive::{Proxy, Size};
 
 mod app;
 mod embed;
-mod node;
+pub(crate) mod node;
 mod reactive;
 mod web;
 mod widget;

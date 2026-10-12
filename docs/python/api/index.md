@@ -62,6 +62,7 @@ The guides in the other sections explain how to use them.
 - [`rs_rich.ext.size_bar`](rs_rich/ext/size_bar.md)
 - [`rs_rich.ext.source_view`](rs_rich/ext/source_view.md)
 - [`rs_rich.ext.stacktrace`](rs_rich/ext/stacktrace.md)
+- [`rs_rich.ext.surface`](rs_rich/ext/surface.md)
 - [`rs_rich.ext.table`](rs_rich/ext/table.md)
 - [`rs_rich.ext.target`](rs_rich/ext/target.md)
 - [`rs_rich.ext.testing`](rs_rich/ext/testing.md)

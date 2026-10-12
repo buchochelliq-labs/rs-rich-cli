@@ -28,7 +28,8 @@
 //!   gauges, heatmaps, status matrices, KPI cards and timelines).
 //! - Inspectors: [`source_view`], [`hex`], [`unicode_inspect`],
 //!   [`env_inspect`].
-//! - Layout and live output: [`layout`], [`live`].
+//! - Layout and live output: [`layout`], [`live`], [`surface`] (positioned
+//!   drawing that writes only what changed).
 //! - Pipelines: [`transform`], and `data::transform` (`jsonpath` feature).
 //!
 //! The user guide (<https://buchochelliq-labs.github.io/rs-rich-cli/guide/ext/>)
@@ -71,6 +72,7 @@ pub mod rst;
 pub mod sanitize;
 pub mod size_bar;
 pub mod source_view;
+pub mod surface;
 pub mod table;
 pub mod target;
 pub mod theme;

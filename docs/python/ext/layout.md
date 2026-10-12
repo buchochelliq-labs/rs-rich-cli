@@ -1,7 +1,7 @@
 # Layout and live output
 
-Modules: `rs_rich.ext.layout` and `rs_rich.ext.live` (Rust:
-`rich_ext::layout`, `rich_ext::live`).
+Modules: `rs_rich.ext.layout`, `rs_rich.ext.live` and `rs_rich.ext.surface`
+(Rust: `rich_ext::layout`, `rich_ext::live`, `rich_ext::surface`).
 
 ## Bounded layouts
 
@@ -87,3 +87,48 @@ tests   queued
 Regions are added, updated and removed by the `RegionId` that `add`
 returns. `countdown(seconds, message)` shows a waiting countdown, and
 `present(notifications, now)` shows a `Notifications` stack.
+
+## Positioned drawing
+
+`Surface` keeps the terminal's cells between frames. `draw(fn)` calls `fn`
+with a `Drawing`. Its `render(rect, renderable)` renders anything `print`
+takes into a rectangle `(x, y, width, height)`. When `fn` returns, only the
+cells that changed are written. `Surface()` takes the terminal's size and
+draws on the alternate screen, and `inline=rows` draws that many rows
+below the cursor instead. `file=` sends the bytes elsewhere, which is how
+this example shows what each frame sent:
+
+```python
+import io
+from rs_rich.ext.surface import Rect, Surface
+from rs_rich.panel import Panel
+
+out = io.StringIO()
+surface = Surface(24, 4, file=out, color_system=None)
+for tick in (1, 2):
+    surface.draw(lambda d: (
+        d.render(Rect(0, 0, 24, 3), Panel("deploy")),
+        d.render(Rect(0, 3, 24, 1), f"tick {tick}"),
+    ))
+    print(len(out.getvalue()), "bytes")
+    out.seek(0)
+    out.truncate()
+print("\n".join(row.rstrip() for row in surface.plain()))
+surface.finish()
+```
+
+```text
+149 bytes
+11 bytes
+╭──────────────────────╮
+│ deploy               │
+╰──────────────────────╯
+tick 2
+```
+
+`resize(width, height)` keeps what was drawn and writes everything on the
+next draw. `Drawing.set_cursor(x, y)` shows the cursor for a frame, and
+`synchronized=True` wraps each frame in a synchronized update. Use the
+surface as a context manager, or call `finish()` to give the terminal back.
+The [Rust guide](https://buchochelliq-labs.github.io/rs-rich-cli/guide/ext/surface/)
+compares it with ratatui.
