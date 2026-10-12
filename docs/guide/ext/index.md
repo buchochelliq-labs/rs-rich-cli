@@ -10,6 +10,25 @@ cargo add rs-rich rs-rich-ext
 cargo add rs-rich-ext --features macros,log    # add features as needed
 ```
 
+A compiler-style diagnostic, from [Diagnostics](diagnostics.md):
+
+```rust
+--8<-- "crates/rich-ext/examples/guide_diagnostics.rs:quickstart"
+```
+
+![error\[E0308\] header, location and cause](../../media/guide/guide_diagnostics-quickstart.svg)
+
+and KPI cards, a status matrix and a timeline from [Charts](charts.md), laid
+out with core's `Layout`:
+
+![Two KPI cards, a status matrix and a timeline in a Layout](../../media/guide/guide_charts-dashboard.svg)
+
+??? example "The code"
+
+    ```rust
+    --8<-- "crates/rich-ext/examples/guide_charts.rs:dashboard"
+    ```
+
 Every module is listed below with the feature it needs. "none" means it is
 always available. The `use` path is `rich_ext::<module>`.
 
@@ -116,6 +135,9 @@ cargo run -p rs-rich-ext --example guide_logging --features log,tracing
 cargo run -p rs-rich-ext --example guide_live_layout
 cargo run -p rs-rich-ext --example guide_macros --features macros
 cargo run -p rs-rich-ext --example guide_charts
+cargo run -p rs-rich-ext --example guide_sources --features data
+cargo run -p rs-rich-ext --example guide_transforms --features jsonpath
+cargo run -p rs-rich-ext --example guide_highlighters --features testing,syntax
 ```
 
 ## See also

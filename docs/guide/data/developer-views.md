@@ -29,13 +29,14 @@ a few lines of context. Line numbers are the file's, so they lead back to
 the markers. Malformed markers are an error naming the line.
 
 ```rust
-use rich_ext::diff::{ConflictLayout, ConflictView};
-
-let view = ConflictView::parse(&std::fs::read_to_string("src/config.rs")?)?
-    .path("src/config.rs")
-    .layout(ConflictLayout::Auto);
-console.print(&view);
+--8<-- "crates/rich-ext/examples/guide_diff.rs:conflicts"
 ```
+
+![A diff3 conflict, ours, base and theirs side by side, with the file's line numbers](../../media/guide/guide_diff-conflicts.svg)
+
+For a file on disk, `ConflictView::parse(&std::fs::read_to_string(path)?)?`
+parses and wraps it in one step, and `.layout(ConflictLayout::Stacked)` (or
+`SideBySide`) overrides the automatic choice.
 
 ```bash
 git diff --name-only --diff-filter=U | xargs -n1 rich diff --conflicts
@@ -49,6 +50,12 @@ trees opened a few levels deep, long strings and containers cut, and
 `expand(path)` / `collapse(path)` to open or fold a branch by path. Redact
 before display with `redact(…)`. It is the static half of
 `rich_interact`'s data explorer: both implement `OpenBranch`.
+
+```rust
+--8<-- "crates/rich-ext/examples/guide_data.rs:record"
+```
+
+![A record as a field, type and value table: the password redacted, ports cut after three, and the owner.oncall branch expanded](../../media/guide/guide_data-record.svg)
 
 ## The supply chain
 
@@ -67,6 +74,14 @@ wrote, and never run a scanner or reach the network:
 - **Licences**: crates grouped by licence, with copyleft, unknown and
   missing licences marked ([detail](../ext/sources.md#licences)).
 
+The advisories report, from a `cargo audit --json` file:
+
+```rust
+--8<-- "crates/rich-ext/examples/guide_sources.rs:audit"
+```
+
+![Two vulnerabilities and two warnings, grouped by severity, each with its ID, crate, patched versions and title](../../media/guide/guide_sources-audit.svg)
+
 ## Schema changes
 
 `SchemaDiff` lists what changed between two schemas (JSON Schema, SQL DDL
@@ -74,6 +89,12 @@ or Arrow, through one model), marking `breaking` the changes that may
 refuse data the old schema accepted; `SchemaTimeline` lays several versions
 side by side. The [schema guide](schemas.md) covers both, with the tree and
 ER views.
+
+```rust
+--8<-- "crates/rich-data/examples/guide_schemas.rs:diff"
+```
+
+![Six changes between two versions of a shop's DDL, three marked breaking](../../media/guide/guide_schemas-diff.svg)
 
 ## From Python
 

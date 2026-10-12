@@ -58,85 +58,20 @@ movement and editing rules, and none of them renders anything:
 | `Divider` | a border between two panes that the mouse drags and the keyboard nudges, with minimum sizes | `Split`, `Select`'s preview |
 | `ActionMenu` | the Ctrl+K menu of actions for one target | `Select`, `overlay::Menu` |
 
-A checklist that filters as you type needs only three of these. The list
-below is abridged from the example:
+A checklist that filters as you type needs only three of these. This one
+is a shorter version of the example's, from
+[`guide_components.rs`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/crates/rich-interact/examples/guide_components.rs),
+the file every picture on this page comes from:
 
 ```rust
-use rich_interact::keymap::{keys, Keymap};
-use rich_interact::kit::{self, FilterState, ListState, Theme};
-use rich_interact::{Component, Context, Event, Flow, KeyCode, View};
-
-pub struct Checklist {
-    items: Vec<String>,
-    filter: FilterState,
-    list: ListState,
-    keymap: Keymap,
-}
-
-impl Checklist {
-    pub fn new(items: Vec<String>) -> Checklist {
-        let mut list = ListState::new();
-        list.set_len(items.len());
-        Checklist {
-            filter: FilterState::new(items.iter().cloned()),
-            items,
-            list,
-            keymap: Keymap::new("checklist")
-                .bind("up", keys("up"), "move up")
-                .bind("down", keys("down"), "move down")
-                .bind("tick", keys("space"), "tick or untick")
-                .bind("done", keys("enter"), "finish"),
-        }
-    }
-}
-
-impl Component for Checklist {
-    type Output = Vec<String>;
-
-    fn handle(&mut self, event: &Event, _: &Context<'_>) -> Flow<Vec<String>> {
-        let Some(key) = event.key() else { return Flow::Ignored };
-        match self.keymap.action(key) {
-            Some("up") => self.list.step(-1, 8),
-            Some("down") => self.list.step(1, 8),
-            Some("tick") => {
-                if let Some(index) = self.filter.index(self.list.cursor()) {
-                    self.list.toggle(index);
-                }
-            }
-            Some("done") => {
-                let ticked = self.list.selected();
-                return Flow::Done(ticked.into_iter().map(|i| self.items[i].clone()).collect());
-            }
-            _ => match key.code {
-                KeyCode::Char(c) if !key.modifiers.ctrl => {
-                    self.filter.push(c);
-                    self.list.set_len(self.filter.len());
-                    self.list.reset(0, 8);
-                }
-                // Not ours: the container may want it.
-                _ => return Flow::Ignored,
-            },
-        }
-        Flow::Continue
-    }
-
-    fn render(&self, context: &Context<'_>) -> View {
-        let theme = Theme::default();
-        let mut lines = vec![kit::question(&theme, "Todo")];
-        for position in self.list.visible(8) {
-            let (index, matched) = &self.filter.matches()[position];
-            let mut line = vec![kit::plain(if self.list.is_selected(*index) { "◉ " } else { "○ " })];
-            line.extend(kit::highlight(&self.items[*index], matched, None, &theme.matched));
-            lines.push(kit::fit(line, context.width));
-        }
-        View::new(lines)
-    }
-
-    fn keymap(&self) -> Keymap {
-        self.keymap.clone()
-    }
-}
+--8<-- "crates/rich-interact/examples/guide_components.rs:checklist"
 ```
+
+Each picture is one frame: the example starts the component, gives it the
+keys of a headless `Script`, and prints the view it then renders, as the
+event loop would paint it. Here, after typing `t`, moving down and ticking:
+
+![The checklist filtered by t, the matched letters highlighted, the cursor on tag the release, which is ticked](../../media/guide/guide_components-checklist.svg)
 
 The built-ins also expose their parts. `Select` has `filter()`, `list()`,
 `divider()` and `menu()` for its state, `event()` to handle an event as it
@@ -176,6 +111,14 @@ taking focus.
 | `Tabs` | one child at a time under a bar of titles. Every tab keeps its state. Alt+Right and Alt+Left (or Ctrl+PageDown and Ctrl+PageUp) switch tabs, Alt+1 to Alt+9 pick one, and a click on a title shows it |
 | `Layers` | a base with `Layer::modal` and `Layer::popover` over it |
 
+The checklist beside a built-in `Select`, in a `Split`, after two ticks:
+
+```rust
+--8<-- "crates/rich-interact/examples/guide_components.rs:split"
+```
+
+![The checklist on the left with two items ticked, a border, and a region picker on the right](../../media/guide/guide_components-split.svg)
+
 A modal dims the base, traps focus (Tab cycles inside it) and ignores
 clicks outside it. A popover has no backdrop, and a click outside closes
 it. Either layer takes the keys while it is open. Escape dismisses the top
@@ -186,22 +129,12 @@ Layers open with `Layers::open_on(action, keys, description, factory)`, or
 from anywhere through a `LayerHandle`:
 
 ```rust
-use rich_interact::compose::{ComponentExt, Layer, Layers, Split, Tabs};
-use rich_interact::keymap::keys;
-use rich_interact::{Confirm, Flow, Select};
-
-#[derive(Debug)]
-enum App { Picked(String), Quit }
-
-let files = Select::new("File", ["a.rs", "b.rs"]).map(|f| Flow::Done(App::Picked(f.into())));
-let more = Select::new("More", ["c.rs"]).map(|f| Flow::Done(App::Picked(f.into())));
-let app = Layers::new(Tabs::new().tab("Files", files).tab("More", more))
-    .open_on("quit", keys("ctrl+q"), "quit", || {
-        let confirm = Confirm::new("Quit?")
-            .map(|answer| if answer == "yes" { Flow::Done(App::Quit) } else { Flow::Continue });
-        Layer::modal(confirm).title("Quit").size(30, 6)
-    });
+--8<-- "crates/rich-interact/examples/guide_components.rs:layers"
 ```
+
+After Ctrl+Q, the modal is open over the dimmed tabs:
+
+![Two tabs, Files and More, dimmed under a Quit dialog with Yes and No](../../media/guide/guide_components-layers.svg)
 
 ## Focus, routing and bubbling
 
@@ -232,16 +165,12 @@ take a key before its children do, with `shortcut(...)`, or after they
 leave it, with `on(...)`:
 
 ```rust
-use rich_interact::compose::{Column, FOCUS_NEXT};
-use rich_interact::keymap::keys;
-use rich_interact::{Flow, Input};
-
-let form = Column::new()
-    .child(Input::new("Name").map(|_| Flow::Continue))
-    .child(Input::new("Email").map(|_| Flow::Continue))
-    .rebind(FOCUS_NEXT, keys("f6 tab"))
-    .on("save", keys("ctrl+s"), "save", || Flow::Done(()));
+--8<-- "crates/rich-interact/examples/guide_components.rs:column"
 ```
+
+After typing a name and pressing Tab, focus is on the second input:
+
+![A Name input answered Ada Lovelace above an empty Email input](../../media/guide/guide_components-column.svg)
 
 A component that is not a container needs nothing extra. It takes focus by
 default, and `focusable()` returns `false` for one that shows only.
@@ -264,6 +193,15 @@ for binding in app.keymap().bindings() {
     println!("{:<20} {}", binding.keys_label(), binding.description);
 }
 ```
+
+The same list as a table, for the tabs-and-modal app above. The focused
+child's bindings (`select`) come first, then each container's:
+
+```rust
+--8<-- "crates/rich-interact/examples/guide_components.rs:keymap"
+```
+
+![A table of keys, what each does and its context: select first, then tabs, then layers](../../media/guide/guide_components-keymap.svg)
 
 You can rebind keys at two levels:
 

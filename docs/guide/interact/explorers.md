@@ -69,6 +69,25 @@ cargo run -p rs-rich-interact --features data --example explore -- config.json
 
 ![The explorer with a subtree previewed](../../media/tapes/explore/expanded.png)
 
+The pictures below are single frames from
+[`guide_explorers.rs`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/crates/rich-interact/examples/guide_explorers.rs):
+each component is started, given the keys of a headless `Script`, and its
+view printed as the event loop would paint it.
+
+```bash
+cargo run -p rs-rich-interact --features data --example guide_explorers
+```
+
+Typing searches keys and values, folded or not. With a YAML config and
+`port` typed, every match is listed with its ancestors, the breadcrumbs show
+the focused node's path, and the preview draws it:
+
+```rust
+--8<-- "crates/rich-interact/examples/guide_explorers.rs:explorer"
+```
+
+![The explorer filtered by port: server.port, server.tls.port and the ancestors that lead to them, with the path $ › server › port above and port: 8080 in the preview](../../media/guide/guide_explorers-explorer-search.svg)
+
 ## Trees: filtering and breadcrumbs
 
 `TreeSelect` filters as a tree. A query keeps what matches and every
@@ -108,6 +127,14 @@ labels joined by `/`. `paths_with(|index| …)` works each one out when it
 is asked for instead, so a large tree keeps no string per node.
 `fold_below(depth)` folds everything from a depth down.
 `set_collapsed(index, bool)` folds or opens one node.
+
+A file tree with breadcrumbs, after typing `table`:
+
+```rust
+--8<-- "crates/rich-interact/examples/guide_explorers.rs:tree"
+```
+
+![The tree filtered by table: table.rs, the table directory and tables.md with their dimmed ancestors, and the breadcrumbs rs-rich-cli › crates › rich-ext › src › table](../../media/guide/guide_explorers-tree.svg)
 
 Building a tree is linear in its nodes, and so is what it keeps: the
 paths and the guides (`│   ├── `) are worked out for the focused node and
@@ -176,6 +203,15 @@ underline. Alt+F cycles the format, and `copy_format` sets the first one:
 copying from anything else. The keys are in context `table` (`table_keymap`)
 and can be rebound like the others.
 
+```rust
+--8<-- "crates/rich-interact/examples/guide_explorers.rs:table"
+```
+
+After Down and Ctrl+Right twice, the second row is focused and its
+`licence` heading is underlined, so Alt+Y would copy `MIT`:
+
+![A table of four crates with the rs-rich-ext row focused and the licence column underlined](../../media/guide/guide_explorers-table.svg)
+
 ## Reloading a list
 
 A list can be refilled without losing the user's place (#485), as `fzf
@@ -225,3 +261,11 @@ let name = run(picker, &RunOptions::default())?;
 `ThemePicker::from_registry` offers the themes plugins registered (theme
 packs; `ExtensionRegistry::theme_names` lists them) after `default`, and
 `with_sample` previews your own renderable instead of `THEME_SAMPLE`.
+
+```rust
+--8<-- "crates/rich-interact/examples/guide_explorers.rs:theme"
+```
+
+With `night` focused, the preview shows `info` in its bold blue:
+
+![The theme picker with night focused and its preview beside the list](../../media/guide/guide_explorers-theme.svg)

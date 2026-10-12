@@ -10,8 +10,18 @@ behind its `data` feature, as `rich_ext::deps` and `rich_ext::schema`; the
 colour alone: markers and words carry the meaning, and colour repeats it.
 
 The examples below use the fixtures in `crates/rich-ext/tests/fixtures/sources`,
-which CI renders on every change. [A recording](../../recordings.md#dependency-trees)
-shows `rich deps` on the same fixture in a terminal.
+which CI renders on every change; `fixture(name)` reads one of them. The
+snippets and pictures come from
+[`guide_sources.rs`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/crates/rich-ext/examples/guide_sources.rs)
+(and the SQL ones from `rs-rich-data`'s
+[`guide_schemas.rs`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/crates/rich-data/examples/guide_schemas.rs)):
+
+```bash
+cargo run -p rs-rich-ext --example guide_sources --features data
+```
+
+[A recording](../../recordings.md#dependency-trees) shows `rich deps` on the
+same fixture in a terminal.
 
 ## Cargo dependency graphs
 
@@ -21,14 +31,7 @@ build and dev). Running Cargo is the caller's business; the library only
 reads its output.
 
 ```rust
-use rich::Console;
-use rich_ext::deps::{DepGraph, DepTree, WhyTree};
-
-let json = std::fs::read_to_string("metadata.json").unwrap();
-let graph = DepGraph::from_json(&json).unwrap();
-let console = Console::new();
-console.print(&DepTree::new(graph.clone()).summary(true));
-console.print(&WhyTree::new(graph, "syn@1.0.109").unwrap());
+--8<-- "crates/rich-ext/examples/guide_sources.rs:tree"
 ```
 
 `DepTree` prints what `cargo tree` prints: each root (the package
@@ -51,71 +54,17 @@ rich deps path/to/Cargo.toml      # ... or for that manifest (or its directory)
 rich deps --metadata meta.json    # ... or reads saved output (`-` for stdin)
 ```
 
-```text
-demo-app v0.3.0
-├── demo-core v0.3.0
-│   ├── serde v1.0.210
-│   │   └── serde_derive v1.0.210
-│   │       ├── proc-macro2 v1.0.86
-│   │       │   └── unicode-ident v1.0.13
-│   │       ├── quote v1.0.37
-│   │       │   └── proc-macro2 v1.0.86 (*)
-│   │       └── syn v2.0.79 (duplicate)
-│   │           ├── proc-macro2 v1.0.86 (*)
-│   │           ├── quote v1.0.37 (*)
-│   │           └── unicode-ident v1.0.13
-│   ├── strum_macros v0.25.3
-│   │   ├── proc-macro2 v1.0.86 (*)
-│   │   ├── quote v1.0.37 (*)
-│   │   └── syn v1.0.109 (duplicate)
-│   │       ├── proc-macro2 v1.0.86 (*)
-│   │       ├── quote v1.0.37 (*)
-│   │       └── unicode-ident v1.0.13
-│   └── thiserror v1.0.64
-│       └── thiserror-impl v1.0.64
-│           ├── proc-macro2 v1.0.86 (*)
-│           ├── quote v1.0.37 (*)
-│           └── syn v2.0.79 (duplicate) (*)
-├── log v0.4.22
-├── serde v1.0.210 (*)
-├── [build-dependencies]
-│   └── cc v1.1.28
-└── [dev-dependencies]
-    └── insta v1.40.0
-        ├── serde v1.0.210 (*)
-        └── similar v2.6.0
-demo-core v0.3.0
-├── serde v1.0.210 (*)
-├── strum_macros v0.25.3 (*)
-└── thiserror v1.0.64 (*)
-duplicate: syn v1.0.109, v2.0.79
-```
+![The dependency tree of demo-app and demo-core: repeated crates marked (*), build and dev dependencies under their own headings, syn marked duplicate, and the duplicates listed underneath](../../media/guide/guide_sources-tree.svg)
 
 `--depth N` keeps N levels below each root, `--no-dev` leaves dev
 dependencies out, and `--duplicates` keeps only the branches that lead to a
 duplicated crate:
 
-```text
-demo-app v0.3.0
-├── demo-core v0.3.0
-│   ├── serde v1.0.210
-│   │   └── serde_derive v1.0.210
-│   │       └── syn v2.0.79 (duplicate)
-│   ├── strum_macros v0.25.3
-│   │   └── syn v1.0.109 (duplicate)
-│   └── thiserror v1.0.64
-│       └── thiserror-impl v1.0.64
-│           └── syn v2.0.79 (duplicate)
-├── serde v1.0.210 (*)
-└── [dev-dependencies]
-    └── insta v1.40.0
-        └── serde v1.0.210 (*)
-demo-core v0.3.0
-├── serde v1.0.210 (*)
-├── strum_macros v0.25.3 (*)
-└── thiserror v1.0.64 (*)
-duplicate: syn v1.0.109, v2.0.79
+```rust
+--8<-- "crates/rich-ext/examples/guide_sources.rs:duplicates"
 ```
+
+![Only the branches that lead to syn v1.0.109 or v2.0.79](../../media/guide/guide_sources-duplicates.svg)
 
 ### Running Cargo
 
@@ -157,11 +106,11 @@ lists the paths one by one, shortest first.
 rich deps --why syn@1.0.109
 ```
 
-```text
-syn v1.0.109 (duplicate)
-└── strum_macros v0.25.3
-    └── demo-core v0.3.0
+```rust
+--8<-- "crates/rich-ext/examples/guide_sources.rs:why"
 ```
+
+![syn v1.0.109, pulled in by strum_macros, which demo-core uses](../../media/guide/guide_sources-why.svg)
 
 With `--no-dev`, a crate only dev dependencies pull in is not reached, and
 `rich deps --why` says so and exits 4 rather than print nothing:
@@ -239,14 +188,11 @@ requirements, which the resolved graph does not record. `DepGraph::consolidation
 `DepTree::consolidation(true)` adds it under a tree. Without `--duplicates`,
 `rich deps` prints what it always did.
 
-```text
-duplicate: syn v1.0.109, v2.0.79
-
-consolidation: 1 crate at several versions
-syn: 2 versions, 3 dependents; 2 use v2.0.79 (newest)
-├── v2.0.79 ← serde_derive v1.0.210, thiserror-impl v1.0.64
-└── v1.0.109 ← strum_macros v0.25.3
+```rust
+--8<-- "crates/rich-ext/examples/guide_sources.rs:consolidation"
 ```
+
+![syn at two versions with three dependents: two use v2.0.79, the newest, and strum_macros uses v1.0.109](../../media/guide/guide_sources-consolidation.svg)
 
 ### Feature trees
 
@@ -267,24 +213,11 @@ workspace members first, and the rest are counted.
 rich deps --features --package syn@2.0.79
 ```
 
-```text
-syn v2.0.79  5 features enabled
-├── default
-│   ├── derive
-│   ├── parsing
-│   ├── printing
-│   └── proc-macro
-├── derive
-├── parsing
-├── printing
-│   └── dep:quote → quote v1.0.37
-├── proc-macro
-│   ├── proc-macro2/proc-macro → proc-macro2 v1.0.86
-│   └── quote?/proc-macro → quote v1.0.37
-└── requested by
-    ├── serde_derive v1.0.210: derive, parsing, printing, proc-macro
-    └── thiserror-impl v1.0.64: default features
+```rust
+--8<-- "crates/rich-ext/examples/guide_sources.rs:features"
 ```
+
+![syn's five enabled features, each with what it turns on, and the crates that requested them](../../media/guide/guide_sources-features.svg)
 
 ### Build times
 
@@ -303,21 +236,11 @@ cargo build --timings
 rich deps --timings target/cargo-timings/cargo-timing.html
 ```
 
-```text
-12 units: 24.82s of compile time, 16.50s wall clock
-
-syn v2.0.79                    ████████████████████████████████████████ 6.84
-syn v1.0.109                   ██████████████████████████████           5.12
-serde_derive                   ██████████████████████▉                  3.91
-…
-
-┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━┳━━━━━━━┳━━━━━━━━━━┳━━━━━━━━━┓
-┃ Unit                           ┃ Version  ┃  Time ┃ Frontend ┃ Codegen ┃
-┡━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━╇━━━━━━━╇━━━━━━━━━━╇━━━━━━━━━┩
-│ syn                            │ v2.0.79  │ 6.84s │    3.95s │   2.89s │
-│ syn                            │ v1.0.109 │ 5.12s │    2.90s │   2.22s │
-…
+```rust
+--8<-- "crates/rich-ext/examples/guide_sources.rs:timings"
 ```
+
+![The six slowest of twelve units as bars, then a table splitting each unit's time into frontend and codegen](../../media/guide/guide_sources-timings.svg)
 
 ### Advisories
 
@@ -340,26 +263,14 @@ cargo audit --json > audit.json
 rich deps --audit audit.json
 ```
 
-```text
-2 vulnerabilities, 2 warnings in 16 dependencies
-1 high · 1 unknown · 2 informational
-
-┏━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
-┃ Severity     ┃ ID                ┃ Crate                ┃ Patched ┃ Title                        ┃
-┡━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
-│ high 7.5     │ RUSTSEC-2099-0001 │ similar v2.6.0       │ >=2.6.1 │ Unbounded recursion when     │
-│              │                   │                      │         │ diffing deeply nested input  │
-├──────────────┼───────────────────┼──────────────────────┼─────────┼──────────────────────────────┤
-│ unknown      │ RUSTSEC-2099-0002 │ log v0.4.22          │ no fix  │ Format string handling may   │
-│              │                   │                      │         │ read uninitialised memory    │
-├──────────────┼───────────────────┼──────────────────────┼─────────┼──────────────────────────────┤
-│ unmaintained │ RUSTSEC-2099-0003 │ strum_macros v0.25.3 │ no fix  │ strum_macros 0.25 is no      │
-│              │                   │                      │         │ longer maintained            │
-│ yanked       │ –                 │ cc v1.1.28           │ no fix  │ this version was yanked from │
-│              │                   │                      │         │ its registry                 │
-└──────────────┴───────────────────┴──────────────────────┴─────────┴──────────────────────────────┘
-rich: 2 vulnerabilities found: RUSTSEC-2099-0001, RUSTSEC-2099-0002
+```rust
+--8<-- "crates/rich-ext/examples/guide_sources.rs:audit"
 ```
+
+![Two vulnerabilities and two warnings in a table grouped by severity, most severe first](../../media/guide/guide_sources-audit.svg)
+
+`rich deps --audit` then ends with `rich: 2 vulnerabilities found:
+RUSTSEC-2099-0001, RUSTSEC-2099-0002` on stderr.
 
 **Exit code.** Like `cargo audit` itself, and like the CLI's other gates
 (`diff --threshold`, `bench compare`), `rich deps --audit` exits 5 when the
@@ -380,20 +291,11 @@ unreadable expressions, licence files and missing licences are marked; the
 operands of an expression are sorted, so `MIT OR Apache-2.0` and
 `Apache-2.0 OR MIT` are one group. It is a reading aid, not legal advice.
 
-```text
-16 crates under 7 licences: 1 copyleft, 1 licence file only, 1 no licence
-
-┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━┓
-┃ Licence                          ┃ Crates ┃ Which                            ┃ Note              ┃
-┡━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━┩
-│ Apache-2.0 OR MIT                │      9 │ cc v1.1.28, log v0.4.22,         │                   │
-…
-│ (licence file)                   │      1 │ demo-core v0.3.0                 │ licence file only │
-│ (none)                           │      1 │ thiserror-impl v1.0.64           │ no licence        │
-│ GPL-3.0-or-later                 │      1 │ demo-app v0.3.0                  │ copyleft          │
-│ MIT                              │      1 │ strum_macros v0.25.3             │                   │
-└──────────────────────────────────┴────────┴──────────────────────────────────┴───────────────────┘
+```rust
+--8<-- "crates/rich-ext/examples/guide_sources.rs:licenses"
 ```
+
+![Sixteen crates under seven licences, the GPL one marked copyleft, a licence file and a crate with no licence marked](../../media/guide/guide_sources-licenses.svg)
 
 ## JSON Schema
 
@@ -416,36 +318,14 @@ make exponentially many places: the tree stops at 10,000 entries
 entries)` note.
 
 ```rust
-use rich::Console;
-use rich_ext::schema::SchemaTree;
-
-let json = std::fs::read_to_string("order.schema.json").unwrap();
-Console::new().print(&SchemaTree::from_json(&json).unwrap());
+--8<-- "crates/rich-ext/examples/guide_sources.rs:schema"
 ```
 
 ```bash
 rich schema order-v1.schema.json
 ```
 
-```text
-Order  object  no other properties  A customer's order.
-├── id (required)  string  pattern=/^ord_[a-z0-9]+$/  Order id.
-├── status  enum  one of "pending", "paid", "shipped", default="pending"
-├── customer  object  → #/$defs/customer
-│   ├── email (required)  string  format=email
-│   └── referrer  object  → #/$defs/customer (recursive)  Who referred them.
-├── items (required)  array  minItems=1
-│   └── [items]  object  → #/$defs/item
-│       ├── sku (required)  string
-│       ├── quantity (required)  integer  minimum=1
-│       └── price  number  exclusiveMinimum=0
-├── payment  one of
-│   ├── [1] Card  object
-│   │   └── last4 (required)  string  minLength=4, maxLength=4
-│   └── [2] Invoice  object
-│       └── due  string  format=date
-└── notes  string | null  maxLength=500
-```
+![The Order schema as a tree: each property with its type, required marker and constraints, $refs resolved in place and one marked recursive, and the payment oneOf branches](../../media/guide/guide_sources-schema.svg)
 
 ### What changed
 
@@ -468,22 +348,11 @@ summary (`(stopped after …: more may differ)`; `SchemaDiff::is_truncated`).
 rich schema order-v1.schema.json order-v2.schema.json
 ```
 
-```text
-┏━━━┳━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━┓
-┃   ┃ Where         ┃ Change                             ┃          ┃
-┡━━━╇━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━┩
-│ ~ │ currency      │ became required                    │ breaking │
-│ - │ notes         │ property removed (string | null)   │ breaking │
-│ + │ status        │ enum value "refunded" added        │          │
-│ + │ items         │ maxItems 100 added                 │ breaking │
-│ ~ │ items[].price │ type number → string               │ breaking │
-│ + │ items[].price │ pattern /^[0-9]+\.[0-9]{2}$/ added │ breaking │
-│ - │ items[].price │ exclusiveMinimum 0 removed         │          │
-│ ~ │ payment       │ one of: 2 → 3 branches             │          │
-│ + │ currency      │ property added (string)            │          │
-└───┴───────────────┴────────────────────────────────────┴──────────┘
-order-v1.schema.json → order-v2.schema.json: 9 changes, 5 breaking
+```rust
+--8<-- "crates/rich-ext/examples/guide_sources.rs:schema-diff"
 ```
+
+![Nine changes between the two order schemas, five marked breaking](../../media/guide/guide_sources-schema-diff.svg)
 
 Both read a file, an http(s) URL or `-` (stdin, for one of the two); a file
 that is not a JSON Schema (an object, `true` or `false`) is an error, exit 4.
@@ -524,28 +393,18 @@ statement, 4,096 columns a table or a key and parentheses 64 deep;
 statements are read one at a time.
 
 ```rust
-use rich::Console;
-use rich_ext::schema::{sql, SchemaTree};
-
-let parsed = sql::parse(&std::fs::read_to_string("shop.sql").unwrap()).unwrap();
-for note in &parsed.notes {
-    eprintln!("{note}"); // line 13: orders.total: CHECK constraint skipped
-}
-Console::new().print(&SchemaTree::from_model(parsed.schema).title("shop"));
+--8<-- "crates/rich-data/examples/guide_schemas.rs:sql"
 ```
 
-```text
-shop  2 tables
-├── customers  table
-│   ├── id (required)  BIGINT  primary key
-│   ├── email (required)  VARCHAR(255)  unique
-│   └── name  TEXT
-└── orders  table
-    ├── id (required)  BIGINT  primary key
-    ├── customer_id (required)  BIGINT  → customers.id
-    ├── status  VARCHAR(16)  default='new'
-    └── total  NUMERIC(10, 2)
-```
+`V1` and `V2` are two versions of a shop's DDL:
+
+??? example "The DDL"
+
+    ```rust
+    --8<-- "crates/rich-data/examples/guide_schemas.rs:ddl"
+    ```
+
+![The shop as a tree: customers and orders, each column with its type, keys, reference and default](../../media/guide/guide_schemas-sql.svg)
 
 ### Comparing any two schemas
 
@@ -560,19 +419,11 @@ are compared by the source's own name, ignoring case, so `INT → BIGINT` and
 `Int32 → Int64` are changes; comparing schemas from two formats works, but
 reports every type whose names differ.
 
-```text
-┏━━━┳━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━┓
-┃   ┃ Where            ┃ Change                                 ┃          ┃
-┡━━━╇━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━┩
-│ ~ │ customers.name   │ became required                        │ breaking │
-│ ~ │ customers.email  │ type VARCHAR(255) → VARCHAR(320)       │ breaking │
-│ ~ │ orders.status    │ default 'new' → 'pending'              │          │
-│ ~ │ orders.total     │ type NUMERIC(10, 2) → NUMERIC(12, 2)   │ breaking │
-│ + │ orders.placed_at │ field added (TIMESTAMP WITH TIME ZONE) │          │
-│ + │ order_lines      │ table added (3 fields)                 │          │
-└───┴──────────────────┴────────────────────────────────────────┴──────────┘
-v1 → v2: 6 changes, 3 breaking
+```rust
+--8<-- "crates/rich-data/examples/guide_schemas.rs:diff"
 ```
+
+![Six changes between v1 and v2 of the shop, three marked breaking](../../media/guide/guide_schemas-diff.svg)
 
 `SchemaDiff::new` stays the way to compare two JSON Schemas: it follows
 `$ref`s as it goes, so shared definitions are compared only where they
@@ -614,36 +465,10 @@ their index unless placed with `at`; consecutive JSON Schemas compare as
 JSON Schema, anything else through the model.
 
 ```rust
-use rich_ext::schema::{sql, SchemaTimeline};
-
-let timeline = SchemaTimeline::new()
-    .push("v1", sql::parse(V1).unwrap().schema)
-    .push("v2", sql::parse(V2).unwrap().schema);
+--8<-- "crates/rich-data/examples/guide_schemas.rs:timeline"
 ```
 
-```text
-customers.id         #############################==============================
-customers.email      #############################==============================
-customers.name       #############################==============================
-orders.id            #############################==============================
-orders.customer_id   #############################==============================
-orders.status        #############################==============================
-orders.total         #############################==============================
-orders.placed_at                                  ##############################
-order_lines.order_id                              ##############################
-order_lines.line                                  ##############################
-order_lines.sku                                   ##############################
-                     * v1                         * v2: +2 ~4, 3 breaking
-                     +----------------------------+----------------------------+
-                     0                            1                            2
-v1 → v2: 6 changes, 3 breaking
-├── ~ customers.name  became required  breaking
-├── ~ customers.email  type VARCHAR(255) → VARCHAR(320)  breaking
-├── ~ orders.status  default 'new' → 'pending'
-├── ~ orders.total  type NUMERIC(10, 2) → NUMERIC(12, 2)  breaking
-├── + orders.placed_at  field added (TIMESTAMP WITH TIME ZONE)
-└── + order_lines  table added (3 fields)
-```
+![A bar per field across v1 and v2, milestones with their counts, and the six changes listed under the chart](../../media/guide/guide_schemas-timeline.svg)
 
 From the command line, `rich schema` reads JSON Schema, SQL DDL (`.sql`,
 `.ddl`) and Arrow IPC files (with the CLI's `arrow` feature), compares any two,
@@ -661,18 +486,7 @@ reader's notes. A key naming `users` finds `public.users` when that is the
 only table so named.
 
 ```rust
-use rich_data::er;
-
-let (diagram, notes) = er::from_sql(DDL).unwrap();
-console.print(&diagram);
+--8<-- "crates/rich-data/examples/guide_schemas.rs:er"
 ```
 
-```text
-┌────────────────────────────┐                          ┌──────────────────┐
-│           orders           │                          │    customers     │
-├────────────────────────────┤                          ├──────────────────┤
-│ id           INT        PK │                          │ id     INT    PK │
-│ customer_id  INT        FK ├──customer_id → id (N:1)─►│ email  TEXT   UQ │
-│ placed_at    TIMESTAMP     │                          │ name   TEXT?     │
-└────────────────────────────┘                          └──────────────────┘
-```
+![orders and customers as boxes of columns with their keys, joined by customer_id → id (N:1)](../../media/guide/guide_schemas-er.svg)

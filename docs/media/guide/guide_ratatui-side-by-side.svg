@@ -1,0 +1,98 @@
+<svg class="rich-terminal" viewBox="0 0 946 269.6" xmlns="http://www.w3.org/2000/svg">
+    <!-- Generated with Rich https://www.textualize.io -->
+    <style>
+
+    @font-face {
+        font-family: "Fira Code";
+        src: local("FiraCode-Regular"),
+                url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff2/FiraCode-Regular.woff2") format("woff2"),
+                url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff/FiraCode-Regular.woff") format("woff");
+        font-style: normal;
+        font-weight: 400;
+    }
+    @font-face {
+        font-family: "Fira Code";
+        src: local("FiraCode-Bold"),
+                url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff2/FiraCode-Bold.woff2") format("woff2"),
+                url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff/FiraCode-Bold.woff") format("woff");
+        font-style: bold;
+        font-weight: 700;
+    }
+
+    .guide_ratatui-side-by-side-matrix {
+        font-family: Fira Code, monospace;
+        font-size: 20px;
+        line-height: 24.4px;
+        font-variant-east-asian: full-width;
+    }
+
+    .guide_ratatui-side-by-side-title {
+        font-size: 18px;
+        font-weight: bold;
+        font-family: arial;
+    }
+
+    .guide_ratatui-side-by-side-r1 { fill: #c5c8c6;font-style: italic; }
+.guide_ratatui-side-by-side-r2 { fill: #c5c8c6 }
+.guide_ratatui-side-by-side-r3 { fill: #c5c8c6;font-weight: bold;text-decoration: underline; }
+.guide_ratatui-side-by-side-r4 { fill: #c5c8c6;font-weight: bold }
+.guide_ratatui-side-by-side-r5 { fill: #98a84b }
+.guide_ratatui-side-by-side-r6 { fill: #d0b344 }
+.guide_ratatui-side-by-side-r7 { fill: #68a0b3;font-weight: bold }
+.guide_ratatui-side-by-side-r8 { fill: #cc555a;font-weight: bold }
+.guide_ratatui-side-by-side-r9 { fill: #98729f }
+    </style>
+
+    <defs>
+    <clipPath id="guide_ratatui-side-by-side-clip-terminal">
+      <rect x="0" y="0" width="926.1999999999999" height="218.6" />
+    </clipPath>
+    <clipPath id="guide_ratatui-side-by-side-line-0">
+    <rect x="0" y="1.5" width="927.2" height="24.65"/>
+            </clipPath>
+<clipPath id="guide_ratatui-side-by-side-line-1">
+    <rect x="0" y="25.9" width="927.2" height="24.65"/>
+            </clipPath>
+<clipPath id="guide_ratatui-side-by-side-line-2">
+    <rect x="0" y="50.3" width="927.2" height="24.65"/>
+            </clipPath>
+<clipPath id="guide_ratatui-side-by-side-line-3">
+    <rect x="0" y="74.7" width="927.2" height="24.65"/>
+            </clipPath>
+<clipPath id="guide_ratatui-side-by-side-line-4">
+    <rect x="0" y="99.1" width="927.2" height="24.65"/>
+            </clipPath>
+<clipPath id="guide_ratatui-side-by-side-line-5">
+    <rect x="0" y="123.5" width="927.2" height="24.65"/>
+            </clipPath>
+<clipPath id="guide_ratatui-side-by-side-line-6">
+    <rect x="0" y="147.9" width="927.2" height="24.65"/>
+            </clipPath>
+<clipPath id="guide_ratatui-side-by-side-line-7">
+    <rect x="0" y="172.3" width="927.2" height="24.65"/>
+            </clipPath>
+    </defs>
+
+    <rect fill="#292929" stroke="rgba(255,255,255,0.35)" stroke-width="1" x="1" y="1" width="944" height="267.6" rx="8"/><text class="guide_ratatui-side-by-side-title" fill="#c5c8c6" text-anchor="middle" x="472" y="27">guide_ratatui-side-by-side</text>
+            <g transform="translate(26,22)">
+            <circle cx="0" cy="0" r="7" fill="#ff5f57"/>
+            <circle cx="22" cy="0" r="7" fill="#febc2e"/>
+            <circle cx="44" cy="0" r="7" fill="#28c840"/>
+            </g>
+        
+    <g transform="translate(9, 41)" clip-path="url(#guide_ratatui-side-by-side-clip-terminal)">
+    <rect fill="#4b4e55" x="451.4" y="123.5" width="317.2" height="24.65" shape-rendering="crispEdges"/>
+    <g class="guide_ratatui-side-by-side-matrix">
+    <text class="guide_ratatui-side-by-side-r1" x="0" y="20" textLength="353.8" clip-path="url(#guide_ratatui-side-by-side-line-0)">&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;Services&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;</text><text class="guide_ratatui-side-by-side-r3" x="585.6" y="20" textLength="158.6" clip-path="url(#guide_ratatui-side-by-side-line-0)">Release&#160;notes</text><text class="guide_ratatui-side-by-side-r2" x="927.2" y="20" textLength="12.2" clip-path="url(#guide_ratatui-side-by-side-line-0)">
+</text><text class="guide_ratatui-side-by-side-r2" x="0" y="44.4" textLength="927.2" clip-path="url(#guide_ratatui-side-by-side-line-1)">┏━━━━━━━━━┳━━━━━━━━┳━━━━━━━━┓&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;</text><text class="guide_ratatui-side-by-side-r2" x="927.2" y="44.4" textLength="12.2" clip-path="url(#guide_ratatui-side-by-side-line-1)">
+</text><text class="guide_ratatui-side-by-side-r2" x="0" y="68.8" textLength="12.2" clip-path="url(#guide_ratatui-side-by-side-line-2)">┃</text><text class="guide_ratatui-side-by-side-r4" x="12.2" y="68.8" textLength="109.8" clip-path="url(#guide_ratatui-side-by-side-line-2)">&#160;service&#160;</text><text class="guide_ratatui-side-by-side-r2" x="122" y="68.8" textLength="12.2" clip-path="url(#guide_ratatui-side-by-side-line-2)">┃</text><text class="guide_ratatui-side-by-side-r4" x="134.2" y="68.8" textLength="97.6" clip-path="url(#guide_ratatui-side-by-side-line-2)">&#160;p99&#160;&#160;&#160;&#160;</text><text class="guide_ratatui-side-by-side-r2" x="231.8" y="68.8" textLength="12.2" clip-path="url(#guide_ratatui-side-by-side-line-2)">┃</text><text class="guide_ratatui-side-by-side-r4" x="244" y="68.8" textLength="97.6" clip-path="url(#guide_ratatui-side-by-side-line-2)">&#160;status&#160;</text><text class="guide_ratatui-side-by-side-r2" x="341.6" y="68.8" textLength="73.2" clip-path="url(#guide_ratatui-side-by-side-line-2)">┃&#160;&#160;&#160;&#160;&#160;</text><text class="guide_ratatui-side-by-side-r4" x="414.8" y="68.8" textLength="109.8" clip-path="url(#guide_ratatui-side-by-side-line-2)">&#160;•&#160;Tables</text><text class="guide_ratatui-side-by-side-r2" x="524.6" y="68.8" textLength="402.6" clip-path="url(#guide_ratatui-side-by-side-line-2)">,&#160;panels&#160;and&#160;trees&#160;draw&#160;as&#160;&#160;&#160;&#160;&#160;&#160;&#160;</text><text class="guide_ratatui-side-by-side-r2" x="927.2" y="68.8" textLength="12.2" clip-path="url(#guide_ratatui-side-by-side-line-2)">
+</text><text class="guide_ratatui-side-by-side-r2" x="0" y="93.2" textLength="414.8" clip-path="url(#guide_ratatui-side-by-side-line-3)">┡━━━━━━━━━╇━━━━━━━━╇━━━━━━━━┩&#160;&#160;&#160;&#160;&#160;</text><text class="guide_ratatui-side-by-side-r1" x="451.4" y="93.2" textLength="183" clip-path="url(#guide_ratatui-side-by-side-line-3)">ratatui&#160;widgets</text><text class="guide_ratatui-side-by-side-r2" x="634.4" y="93.2" textLength="292.8" clip-path="url(#guide_ratatui-side-by-side-line-3)">.&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;</text><text class="guide_ratatui-side-by-side-r2" x="927.2" y="93.2" textLength="12.2" clip-path="url(#guide_ratatui-side-by-side-line-3)">
+</text><text class="guide_ratatui-side-by-side-r2" x="0" y="117.6" textLength="256.2" clip-path="url(#guide_ratatui-side-by-side-line-4)">│&#160;api&#160;&#160;&#160;&#160;&#160;│&#160;35&#160;ms&#160;&#160;│&#160;</text><text class="guide_ratatui-side-by-side-r5" x="256.2" y="117.6" textLength="24.4" clip-path="url(#guide_ratatui-side-by-side-line-4)">ok</text><text class="guide_ratatui-side-by-side-r2" x="280.6" y="117.6" textLength="134.2" clip-path="url(#guide_ratatui-side-by-side-line-4)">&#160;&#160;&#160;&#160;&#160;│&#160;&#160;&#160;&#160;&#160;</text><text class="guide_ratatui-side-by-side-r4" x="414.8" y="117.6" textLength="36.6" clip-path="url(#guide_ratatui-side-by-side-line-4)">&#160;•&#160;</text><text class="guide_ratatui-side-by-side-r2" x="451.4" y="117.6" textLength="475.8" clip-path="url(#guide_ratatui-side-by-side-line-4)">Markdown,&#160;too:&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;</text><text class="guide_ratatui-side-by-side-r2" x="927.2" y="117.6" textLength="12.2" clip-path="url(#guide_ratatui-side-by-side-line-4)">
+</text><text class="guide_ratatui-side-by-side-r2" x="0" y="142" textLength="256.2" clip-path="url(#guide_ratatui-side-by-side-line-5)">│&#160;worker&#160;&#160;│&#160;120&#160;ms&#160;│&#160;</text><text class="guide_ratatui-side-by-side-r6" x="256.2" y="142" textLength="48.8" clip-path="url(#guide_ratatui-side-by-side-line-5)">slow</text><text class="guide_ratatui-side-by-side-r2" x="305" y="142" textLength="109.8" clip-path="url(#guide_ratatui-side-by-side-line-5)">&#160;&#160;&#160;│&#160;&#160;&#160;&#160;&#160;</text><text class="guide_ratatui-side-by-side-r7" x="451.4" y="142" textLength="317.2" clip-path="url(#guide_ratatui-side-by-side-line-5)">RichWidget::new(&amp;markdown)</text><text class="guide_ratatui-side-by-side-r2" x="768.6" y="142" textLength="158.6" clip-path="url(#guide_ratatui-side-by-side-line-5)">.&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;</text><text class="guide_ratatui-side-by-side-r2" x="927.2" y="142" textLength="12.2" clip-path="url(#guide_ratatui-side-by-side-line-5)">
+</text><text class="guide_ratatui-side-by-side-r2" x="0" y="166.4" textLength="256.2" clip-path="url(#guide_ratatui-side-by-side-line-6)">│&#160;billing&#160;│&#160;-&#160;&#160;&#160;&#160;&#160;&#160;│&#160;</text><text class="guide_ratatui-side-by-side-r8" x="256.2" y="166.4" textLength="48.8" clip-path="url(#guide_ratatui-side-by-side-line-6)">down</text><text class="guide_ratatui-side-by-side-r2" x="305" y="166.4" textLength="622.2" clip-path="url(#guide_ratatui-side-by-side-line-6)">&#160;&#160;&#160;│&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;</text><text class="guide_ratatui-side-by-side-r2" x="927.2" y="166.4" textLength="12.2" clip-path="url(#guide_ratatui-side-by-side-line-6)">
+</text><text class="guide_ratatui-side-by-side-r2" x="0" y="190.8" textLength="414.8" clip-path="url(#guide_ratatui-side-by-side-line-7)">└─────────┴────────┴────────┘&#160;&#160;&#160;&#160;&#160;</text><text class="guide_ratatui-side-by-side-r9" x="414.8" y="190.8" textLength="488" clip-path="url(#guide_ratatui-side-by-side-line-7)">▌&#160;Styles&#160;patch&#160;the&#160;cells&#160;beneath&#160;them.&#160;&#160;</text><text class="guide_ratatui-side-by-side-r2" x="927.2" y="190.8" textLength="12.2" clip-path="url(#guide_ratatui-side-by-side-line-7)">
+</text><text class="guide_ratatui-side-by-side-r2" x="927.2" y="215.2" textLength="12.2" clip-path="url(#guide_ratatui-side-by-side-line-8)">
+</text>
+    </g>
+    </g>
+</svg>

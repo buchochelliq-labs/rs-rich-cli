@@ -8,7 +8,7 @@ The examples come from
 [`guide_highlighters.rs`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/crates/rich-ext/examples/guide_highlighters.rs):
 
 ```bash
-cargo run -p rs-rich-ext --example guide_highlighters --features testing
+cargo run -p rs-rich-ext --example guide_highlighters --features testing,syntax
 ```
 
 ## Choose one
@@ -26,6 +26,15 @@ cargo run -p rs-rich-ext --example guide_highlighters --features testing
 syntect is the default everywhere and is what upstream parity is measured
 with. Choose lumis for tree-sitter's more precise parsing, its languages or its
 themes, and accept the larger build.
+
+A `Syntax` with no highlighter of its own uses syntect, with its default
+theme, `base16-ocean.dark`:
+
+```rust
+--8<-- "crates/rich-ext/examples/guide_highlighters.rs:default"
+```
+
+![A short Rust function highlighted by syntect in base16-ocean.dark](../../media/guide/guide_highlighters-default.svg)
 
 !!! warning "One tree-sitter per binary"
     lumis links tree-sitter's C runtime. Another crate that links a different
@@ -45,6 +54,16 @@ console renders: register it, choose it by name and install the registry.
 ```rust
 --8<-- "crates/rich-ext/examples/guide_highlighters.rs:use"
 ```
+
+`Keywords` is the adapter written [below](#write-your-own). Given to one
+`Syntax` with its `blue` theme, it colours the keywords and nothing else:
+
+![The same function with only fn, let, if and return in bright blue](../../media/guide/guide_highlighters-one.svg)
+
+Installed as the console's default, it highlights a plain
+`Syntax::new(CODE, "rust")` with its default theme, `bold`:
+
+![The same function with the keywords in bold](../../media/guide/guide_highlighters-every.svg)
 
 A `Syntax` with a highlighter of its own always uses it; the console's default
 covers everything else, including Markdown code blocks. Theme names are each
@@ -107,3 +126,5 @@ upstream's Pygments token types (see
 ```rust
 --8<-- "crates/rich-ext/examples/guide_highlighters.rs:ansi"
 ```
+
+![A Python function in the terminal's own colours, on no background](../../media/guide/guide_highlighters-ansi.svg)

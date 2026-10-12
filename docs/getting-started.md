@@ -69,6 +69,11 @@ Then render something:
 rich --print "[bold magenta]Hello[/] [green]World[/]"
 ```
 
+![Hello in bold magenta and World in green](media/guide/cli_hello.svg)
+
+The picture is that command's own output, exported with `--export-svg` by
+`scripts/smoke_cli.py --screenshots`.
+
 ## Uninstall
 
 ```bash
@@ -109,8 +114,21 @@ use rich::Console;
 
 fn main() {
     let console = Console::new();
-    console.print_str("[bold magenta]Hello[/] [green]World[/]");
+    hello(&console);
 }
+
+--8<-- "crates/rich/examples/guide_getting_started.rs:hello"
+```
+
+![The same two words from the library: Hello in bold magenta, World in green](media/guide/guide_getting_started-hello.svg)
+
+The snippets on this page come from
+[`guide_getting_started.rs`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/crates/rich/examples/guide_getting_started.rs),
+which prints to your terminal, or with `-- --svg DIR` writes the picture
+above:
+
+```bash
+cargo run -p rs-rich --example guide_getting_started
 ```
 
 `Console::new()` detects the terminal: whether it *is* one, how wide it is, and
@@ -124,13 +142,7 @@ Detection is right most of the time. When it isn't — in tests, in CI, when
 generating documentation — configure it explicitly:
 
 ```rust
-use rich::{ColorSystem, Console};
-
-let console = Console::builder()
-    .force_terminal(true)                          // style even when redirected
-    .color_system(Some(ColorSystem::Truecolor))
-    .width(80)                                     // ignore the real width
-    .build();
+--8<-- "crates/rich/examples/guide_getting_started.rs:controlling"
 ```
 
 !!! tip "Reproducible output"
@@ -144,8 +156,7 @@ let console = Console::builder()
 Any render can be captured as a string rather than written out:
 
 ```rust
-let ansi = console.capture(|c| c.print_str("[bold]hi[/]"));
-assert_eq!(ansi, "\x1b[1mhi\x1b[0m\n");
+--8<-- "crates/rich/examples/guide_getting_started.rs:capturing"
 ```
 
 That is also how the exports work — see [Exporting](tutorial/06-cli.md#exporting)
