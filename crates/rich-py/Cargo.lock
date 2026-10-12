@@ -1631,7 +1631,7 @@ dependencies = [
 
 [[package]]
 name = "rs-rich-cli"
-version = "0.0.18"
+version = "0.0.19"
 dependencies = [
  "cap-fs-ext",
  "cap-std",
@@ -1659,7 +1659,7 @@ dependencies = [
 
 [[package]]
 name = "rs-rich-data"
-version = "0.0.2"
+version = "0.0.3"
 dependencies = [
  "rs-rich",
  "rs-rich-diagram",
@@ -1678,7 +1678,7 @@ dependencies = [
 
 [[package]]
 name = "rs-rich-embed"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "libc",
  "portable-pty",
@@ -1690,7 +1690,7 @@ dependencies = [
 
 [[package]]
 name = "rs-rich-ext"
-version = "0.0.15"
+version = "0.0.16"
 dependencies = [
  "fancy-regex 0.19.2",
  "libc",
@@ -1707,7 +1707,7 @@ dependencies = [
 
 [[package]]
 name = "rs-rich-interact"
-version = "0.0.6"
+version = "0.0.7"
 dependencies = [
  "crossterm",
  "filedescriptor",
@@ -1720,7 +1720,7 @@ dependencies = [
 
 [[package]]
 name = "rs-rich-intuituive"
-version = "0.0.3"
+version = "0.0.4"
 dependencies = [
  "rs-rich",
  "rs-rich-ext",
@@ -1748,7 +1748,7 @@ dependencies = [
 
 [[package]]
 name = "rs-rich-micro"
-version = "0.0.4"
+version = "0.0.5"
 dependencies = [
  "flate2",
  "pulldown-cmark",
@@ -1771,7 +1771,7 @@ dependencies = [
 
 [[package]]
 name = "rs-rich-py"
-version = "0.0.6"
+version = "0.0.7"
 dependencies = [
  "pyo3",
  "rs-rich",
@@ -1795,7 +1795,7 @@ dependencies = [
 
 [[package]]
 name = "rs-rich-record"
-version = "0.0.6"
+version = "0.0.7"
 dependencies = [
  "color_quant 2.0.0",
  "fancy-regex 0.19.2",
@@ -1813,7 +1813,7 @@ dependencies = [
 
 [[package]]
 name = "rs-rich-web"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "data-encoding",
  "getrandom 0.4.3",
