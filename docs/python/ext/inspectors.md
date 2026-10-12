@@ -19,12 +19,7 @@ console.print(view)
 print(view.matches())
 ```
 
-```text
-10 │ fn main() {                                            
-11 │     let greeting = "Hello";                            
-12 │ }                                                      
-[(11, 1)]
-```
+![Source with line numbers, a visible tab and a search match](../media/ext-inspectors-source.svg)
 
 ## Bytes
 
@@ -41,13 +36,7 @@ console.print(hex.HexView(data, bytes_per_line=8, highlight=b"Hello"))
 print(hex.find_all(data, '"l"'), hex.byte_class(0x7f))
 ```
 
-```text
-00000000  00 01 02 20 48 65 6c 6c  │... Hell│
-00000008  6f 2c 20 77 6f 72 6c 64  │o, world│
-00000010  21 7f ff                 │!..│
-00000013
-[6, 7, 14] control
-```
+![A hex dump with an ASCII column and a highlighted needle](../media/ext-inspectors-hex.svg)
 
 ## Unicode
 
@@ -58,31 +47,13 @@ invalid UTF-8.
 ```python
 from rs_rich.ext import unicode_inspect
 
+console = Console(width=70)
 view = unicode_inspect.UnicodeView("e\u0301👍🏽\t")
-Console(width=70).print(view)
+console.print(view)
 print(view.summary_text())
 ```
 
-```text
-┏━━━━━━━━┳━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━┓
-┃ Offset ┃ Char ┃ Details                 ┃
-┡━━━━━━━━╇━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━┩
-│      0 │ é    │ combining, 1 cell       │
-│        │      │ U+0065 U+0301           │
-│        │      │ 65 cc 81                │
-│        │      │ e\u{301}                │
-│      3 │ 👍🏽   │ emoji, 2 cells          │
-│        │      │ U+1F44D U+1F3FD         │
-│        │      │ f0 9f 91 8d f0 9f 8f bd │
-│        │      │ \u{1f44d}\u{1f3fd}      │
-│     11 │ ␉    │ control, 0 cells        │
-│        │      │ U+0009                  │
-│        │      │ 09                      │
-│        │      │ \u{9}                   │
-└────────┴──────┴─────────────────────────┘
-12 bytes, 5 code points, 3 graphemes, 3 cells, 0 invalid sequences
-12 bytes, 5 code points, 3 graphemes, 3 cells, 0 invalid sequences
-```
+![The grapheme clusters of a string with code points and widths](../media/ext-inspectors-unicode.svg)
 
 ## Environment
 
@@ -98,15 +69,15 @@ console.print(env_inspect.EnvView({"HOME": "/home/ada", "API_TOKEN": "sk-live-ab
 kinds = {"/usr/bin": "directory", "/etc/passwd": "file"}
 path = env_inspect.PathView("PATH", "/usr/bin:/opt/none:/etc/passwd:/usr/bin", separator=":",
                             probe=lambda entry: kinds.get(entry, "missing"))
+console.print(path)
+```
+
+![Environment variables with a secret redacted, and each PATH entry checked](../media/ext-inspectors-env.svg)
+
+```python
 print(path.problems())
 ```
 
 ```text
-┏━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━┓
-┃ Name      ┃ Value             ┃
-┡━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━┩
-│ API_TOKEN │ •••••• (11 chars) │
-│ HOME      │ /home/ada         │
-└───────────┴───────────────────┘
 [(2, '/opt/none', 'missing'), (3, '/etc/passwd', 'not a directory'), (4, '/usr/bin', 'duplicate of #1')]
 ```

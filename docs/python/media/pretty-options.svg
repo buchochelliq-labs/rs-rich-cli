@@ -1,0 +1,95 @@
+<svg class="rich-terminal" viewBox="0 0 506 269.6" xmlns="http://www.w3.org/2000/svg">
+    <!-- Generated with Rich https://www.textualize.io -->
+    <style>
+
+    @font-face {
+        font-family: "Fira Code";
+        src: local("FiraCode-Regular"),
+                url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff2/FiraCode-Regular.woff2") format("woff2"),
+                url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff/FiraCode-Regular.woff") format("woff");
+        font-style: normal;
+        font-weight: 400;
+    }
+    @font-face {
+        font-family: "Fira Code";
+        src: local("FiraCode-Bold"),
+                url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff2/FiraCode-Bold.woff2") format("woff2"),
+                url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff/FiraCode-Bold.woff") format("woff");
+        font-style: bold;
+        font-weight: 700;
+    }
+
+    .pretty-options-matrix {
+        font-family: Fira Code, monospace;
+        font-size: 20px;
+        line-height: 24.4px;
+        font-variant-east-asian: full-width;
+    }
+
+    .pretty-options-title {
+        font-size: 18px;
+        font-weight: bold;
+        font-family: arial;
+    }
+
+    .pretty-options-r1 { fill: #c5c8c6;font-weight: bold }
+.pretty-options-r2 { fill: #68a0b3;font-weight: bold }
+.pretty-options-r3 { fill: #c5c8c6 }
+.pretty-options-r4 { fill: #d0b344 }
+.pretty-options-r5 { fill: #98a84b }
+.pretty-options-r6 { fill: #6b753d }
+    </style>
+
+    <defs>
+    <clipPath id="pretty-options-clip-terminal">
+      <rect x="0" y="0" width="487.0" height="218.6" />
+    </clipPath>
+    <clipPath id="pretty-options-line-0">
+    <rect x="0" y="1.5" width="488" height="24.65"/>
+            </clipPath>
+<clipPath id="pretty-options-line-1">
+    <rect x="0" y="25.9" width="488" height="24.65"/>
+            </clipPath>
+<clipPath id="pretty-options-line-2">
+    <rect x="0" y="50.3" width="488" height="24.65"/>
+            </clipPath>
+<clipPath id="pretty-options-line-3">
+    <rect x="0" y="74.7" width="488" height="24.65"/>
+            </clipPath>
+<clipPath id="pretty-options-line-4">
+    <rect x="0" y="99.1" width="488" height="24.65"/>
+            </clipPath>
+<clipPath id="pretty-options-line-5">
+    <rect x="0" y="123.5" width="488" height="24.65"/>
+            </clipPath>
+<clipPath id="pretty-options-line-6">
+    <rect x="0" y="147.9" width="488" height="24.65"/>
+            </clipPath>
+<clipPath id="pretty-options-line-7">
+    <rect x="0" y="172.3" width="488" height="24.65"/>
+            </clipPath>
+    </defs>
+
+    <rect fill="#292929" stroke="rgba(255,255,255,0.35)" stroke-width="1" x="1" y="1" width="504" height="267.6" rx="8"/><text class="pretty-options-title" fill="#c5c8c6" text-anchor="middle" x="252" y="27">pretty-options</text>
+            <g transform="translate(26,22)">
+            <circle cx="0" cy="0" r="7" fill="#ff5f57"/>
+            <circle cx="22" cy="0" r="7" fill="#febc2e"/>
+            <circle cx="44" cy="0" r="7" fill="#28c840"/>
+            </g>
+        
+    <g transform="translate(9, 41)" clip-path="url(#pretty-options-clip-terminal)">
+    
+    <g class="pretty-options-matrix">
+    <text class="pretty-options-r1" x="0" y="20" textLength="12.2" clip-path="url(#pretty-options-line-0)">[</text><text class="pretty-options-r2" x="12.2" y="20" textLength="12.2" clip-path="url(#pretty-options-line-0)">0</text><text class="pretty-options-r3" x="24.4" y="20" textLength="24.4" clip-path="url(#pretty-options-line-0)">,&#160;</text><text class="pretty-options-r2" x="48.8" y="20" textLength="12.2" clip-path="url(#pretty-options-line-0)">1</text><text class="pretty-options-r3" x="61" y="20" textLength="24.4" clip-path="url(#pretty-options-line-0)">,&#160;</text><text class="pretty-options-r2" x="85.4" y="20" textLength="12.2" clip-path="url(#pretty-options-line-0)">2</text><text class="pretty-options-r3" x="97.6" y="20" textLength="24.4" clip-path="url(#pretty-options-line-0)">,&#160;</text><text class="pretty-options-r2" x="122" y="20" textLength="12.2" clip-path="url(#pretty-options-line-0)">3</text><text class="pretty-options-r3" x="134.2" y="20" textLength="24.4" clip-path="url(#pretty-options-line-0)">,&#160;</text><text class="pretty-options-r2" x="158.6" y="20" textLength="12.2" clip-path="url(#pretty-options-line-0)">4</text><text class="pretty-options-r3" x="170.8" y="20" textLength="24.4" clip-path="url(#pretty-options-line-0)">,&#160;</text><text class="pretty-options-r4" x="195.2" y="20" textLength="36.6" clip-path="url(#pretty-options-line-0)">...</text><text class="pretty-options-r3" x="231.8" y="20" textLength="24.4" clip-path="url(#pretty-options-line-0)">&#160;+</text><text class="pretty-options-r2" x="256.2" y="20" textLength="24.4" clip-path="url(#pretty-options-line-0)">15</text><text class="pretty-options-r1" x="280.6" y="20" textLength="12.2" clip-path="url(#pretty-options-line-0)">]</text><text class="pretty-options-r3" x="488" y="20" textLength="12.2" clip-path="url(#pretty-options-line-0)">
+</text><text class="pretty-options-r1" x="0" y="44.4" textLength="12.2" clip-path="url(#pretty-options-line-1)">{</text><text class="pretty-options-r5" x="12.2" y="44.4" textLength="97.6" clip-path="url(#pretty-options-line-1)">&#x27;nested&#x27;</text><text class="pretty-options-r3" x="109.8" y="44.4" textLength="24.4" clip-path="url(#pretty-options-line-1)">:&#160;</text><text class="pretty-options-r1" x="134.2" y="44.4" textLength="12.2" clip-path="url(#pretty-options-line-1)">{</text><text class="pretty-options-r4" x="146.4" y="44.4" textLength="36.6" clip-path="url(#pretty-options-line-1)">...</text><text class="pretty-options-r1" x="183" y="44.4" textLength="12.2" clip-path="url(#pretty-options-line-1)">}</text><text class="pretty-options-r1" x="195.2" y="44.4" textLength="12.2" clip-path="url(#pretty-options-line-1)">}</text><text class="pretty-options-r3" x="488" y="44.4" textLength="12.2" clip-path="url(#pretty-options-line-1)">
+</text><text class="pretty-options-r1" x="0" y="68.8" textLength="12.2" clip-path="url(#pretty-options-line-2)">{</text><text class="pretty-options-r3" x="488" y="68.8" textLength="12.2" clip-path="url(#pretty-options-line-2)">
+</text><text class="pretty-options-r6" x="0" y="93.2" textLength="48.8" clip-path="url(#pretty-options-line-3)">│&#160;&#160;&#160;</text><text class="pretty-options-r5" x="48.8" y="93.2" textLength="36.6" clip-path="url(#pretty-options-line-3)">&#x27;a&#x27;</text><text class="pretty-options-r3" x="85.4" y="93.2" textLength="24.4" clip-path="url(#pretty-options-line-3)">:&#160;</text><text class="pretty-options-r1" x="109.8" y="93.2" textLength="12.2" clip-path="url(#pretty-options-line-3)">[</text><text class="pretty-options-r3" x="488" y="93.2" textLength="12.2" clip-path="url(#pretty-options-line-3)">
+</text><text class="pretty-options-r6" x="0" y="117.6" textLength="97.6" clip-path="url(#pretty-options-line-4)">│&#160;&#160;&#160;│&#160;&#160;&#160;</text><text class="pretty-options-r2" x="97.6" y="117.6" textLength="12.2" clip-path="url(#pretty-options-line-4)">1</text><text class="pretty-options-r3" x="109.8" y="117.6" textLength="12.2" clip-path="url(#pretty-options-line-4)">,</text><text class="pretty-options-r3" x="488" y="117.6" textLength="12.2" clip-path="url(#pretty-options-line-4)">
+</text><text class="pretty-options-r6" x="0" y="142" textLength="97.6" clip-path="url(#pretty-options-line-5)">│&#160;&#160;&#160;│&#160;&#160;&#160;</text><text class="pretty-options-r2" x="97.6" y="142" textLength="12.2" clip-path="url(#pretty-options-line-5)">2</text><text class="pretty-options-r3" x="488" y="142" textLength="12.2" clip-path="url(#pretty-options-line-5)">
+</text><text class="pretty-options-r6" x="0" y="166.4" textLength="48.8" clip-path="url(#pretty-options-line-6)">│&#160;&#160;&#160;</text><text class="pretty-options-r1" x="48.8" y="166.4" textLength="12.2" clip-path="url(#pretty-options-line-6)">]</text><text class="pretty-options-r3" x="61" y="166.4" textLength="12.2" clip-path="url(#pretty-options-line-6)">,</text><text class="pretty-options-r3" x="488" y="166.4" textLength="12.2" clip-path="url(#pretty-options-line-6)">
+</text><text class="pretty-options-r6" x="0" y="190.8" textLength="48.8" clip-path="url(#pretty-options-line-7)">│&#160;&#160;&#160;</text><text class="pretty-options-r5" x="48.8" y="190.8" textLength="36.6" clip-path="url(#pretty-options-line-7)">&#x27;b&#x27;</text><text class="pretty-options-r3" x="85.4" y="190.8" textLength="24.4" clip-path="url(#pretty-options-line-7)">:&#160;</text><text class="pretty-options-r5" x="109.8" y="190.8" textLength="73.2" clip-path="url(#pretty-options-line-7)">&#x27;text&#x27;</text><text class="pretty-options-r3" x="488" y="190.8" textLength="12.2" clip-path="url(#pretty-options-line-7)">
+</text><text class="pretty-options-r1" x="0" y="215.2" textLength="12.2" clip-path="url(#pretty-options-line-8)">}</text><text class="pretty-options-r3" x="488" y="215.2" textLength="12.2" clip-path="url(#pretty-options-line-8)">
+</text>
+    </g>
+    </g>
+</svg>

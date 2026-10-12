@@ -16,11 +16,7 @@ console.print(Diagnostic.error("mismatched types", code="E0308",
                                causes=["expected `u16`, found `&str`"]))
 ```
 
-```text
-error[E0308]: mismatched types
-  --> src/main.rs:12:5
-caused by: expected `u16`, found `&str`
-```
+![A compact diagnostic: level, code, message, location and cause](../media/ext-index-diagnostic.svg)
 
 ## Modules
 

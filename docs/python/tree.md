@@ -30,21 +30,16 @@ tree.add(label, *, style=None, guide_style=None, expanded=True,
 is the list of child trees, which you may change directly.
 
 ```python
+console = Console(width=30)
 tree = Tree("[b]project[/]")
 source = tree.add("src", guide_style="bold")
 source.add("main.rs")
 source.add("lib.rs")
 tree.add("README.md")
-Console(width=30).print(tree)
+console.print(tree)
 ```
 
-```text
-project
-├── src
-│   ┣━━ main.rs
-│   ┗━━ lib.rs
-└── README.md
-```
+![A tree with heavy guides on one branch](media/tree-tree.svg)
 
 On a console whose encoding is not UTF the guides are ASCII (`Tree.ASCII_GUIDES`),
 as in Rich. A deep tree renders from an explicit stack, so depth is limited

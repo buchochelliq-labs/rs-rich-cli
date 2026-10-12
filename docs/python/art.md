@@ -34,6 +34,7 @@ The examples on this page draw a gradient built from raw pixels:
 from rs_rich import art
 from rs_rich.console import Console
 
+console = Console(width=40)
 def gradient(w, h):
     pixels = bytearray()
     for y in range(h):
@@ -42,20 +43,10 @@ def gradient(w, h):
     return art.ArtImage.frombytes("RGBA", (w, h), pixels)
 
 image = gradient(32, 16)
-console = Console(width=40, color_system=None)
 console.print(art.ImageArt(image, mode="ascii", width=32))
 ```
 
-```text
-          ............'''',,,,;;
-   ............'''',,,,;;;::::cc
-.......''',,,,;;;;::::cccclllloo
-'',,,,;;;;::::ccccllllooooddddxx
-;;::::ccccllllooooddddxxxxkkkkOO
-ccllllooooddddxxxxkkkOOOO0000KKK
-oddddxxxxkkkkOOOO0000KKKKXXXXNNN
-xxkkkkOOOO0000KKKKXXXXNNNNWWWWMM
-```
+![A gradient drawn in ASCII characters](media/art-ascii.svg)
 
 ### ImageArt
 
@@ -93,15 +84,18 @@ console.print(art.ImageArt(image, mode="braille", width=16))
 console.print(art.ImageArt(image, mode="ascii", fit="cover", width=12, height=3, anchor="left"))
 ```
 
-```text
-⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
-⠀⠀⠀⠀⠀⠀⠀⠀⠀⣀⣀⣤⣤⣶⣶⣿
-⠀⣀⣀⣤⣤⣶⣶⣿⣿⣿⣿⣿⣿⣿⣿⣿
-⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
-   ....',;:c
-',;:cllodxkO
-odxkO0KXXNWM
+![The gradient in Braille, and cropped to a strip in ASCII](media/art-braille.svg)
+
+On a colour terminal, `color=True` colours each ASCII cell with its pixel,
+and half-blocks and quadrants draw the pixels themselves:
+
+```python
+console.print(art.ImageArt(image, mode="ascii", width=32, color=True))
+console.print(art.ImageArt(image, mode="blocks", width=32))
+console.print(art.ImageArt(image, mode="quadrants", width=16))
 ```
+
+![The gradient in coloured ASCII, in half-blocks and in quadrants](media/art-color.svg)
 
 `resolve_mode` says what `"auto"` picks for a console's capabilities, and
 `native_grid` the cells `fit="native"` takes:
@@ -196,14 +190,7 @@ read `.flf` files (a bad one raises `FigletFontError`).
 console.print(art.Figlet("rs", justify="center"))
 ```
 
-```text
-                         
-                _ __ ___ 
-               | '__/ __|
-               | |  \__ \
-               |_|  |___/
-                         
-```
+![A FIGlet banner, centred](media/art-figlet.svg)
 
 ## GIFs
 

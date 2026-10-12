@@ -87,24 +87,12 @@ files for differences (or approves them with `approve=True` or
 from rs_rich.console import Console
 from rs_rich.ext import qa
 
+console = Console(width=60)
 report = qa.stress(Panel("hello world"), widths=[1, 20])
 print(report.ok, report.data["renders"], report.data["issues"][0]["kind"])
-Console(width=60).print(report)
+console.print(report)
 print(qa.lint("[bold]x[/italic]").data["findings"][0]["rule"])
 print([shot["key"] for shot in qa.screenshot("p", Panel("x"), widths=[10], color=["none"])])
 ```
 
-```text
-False 6 overflow
-┏━━━━━━━┳━━━━━━━━┳━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
-┃ Width ┃ Height ┃ Issue    ┃ Detail                       ┃
-┡━━━━━━━╇━━━━━━━━╇━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
-│ 1     │ -      │ overflow │ line 1 is 2 cells wide: "╭╮" │
-│ 1     │ 5      │ overflow │ line 1 is 2 cells wide: "╭╮" │
-│ 1     │ 24     │ overflow │ line 1 is 2 cells wide: "╭╮" │
-└───────┴────────┴──────────┴──────────────────────────────┘
-6 renders, 3 issues
-
-markup_error
-['p@10.none.unicode', 'p@10.none.ascii']
-```
+![A stress report of a panel at narrow widths](../media/ext-testing-stress.svg)

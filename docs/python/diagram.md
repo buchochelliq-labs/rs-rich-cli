@@ -48,6 +48,7 @@ with ASCII only; `None` follows the console.
 from rs_rich.console import Console
 from rs_rich import diagram
 
+console = Console(width=60)
 graph = (
     diagram.Graph("LR")
     .node("web", "Browser", shape="round")
@@ -56,17 +57,11 @@ graph = (
     .edge("web", "api", label="HTTPS")
     .edge("api", "db", label="reads")
 )
-console = Console(width=60, color_system=None)
 console.print(diagram.Diagram(graph))
-print(diagram.draw_graph(diagram.Graph().edge("a", "b"), ascii=True))
+print("\n".join(diagram.draw_graph(diagram.Graph().edge("a", "b"), ascii=True)))
 ```
 
-```text
-╭─────────╮         ┌─────┐         ╭──────────╮
-│ Browser ├──HTTPS─►│ API ├──reads─►│ Postgres │
-╰─────────╯         └─────┘         ╰──────────╯
-['+---+', '| a |', '+-+-+', '  |', '  v', '+---+', '| b |', '+---+']
-```
+![A left-to-right graph of a browser, an API and a database, then the lines draw_graph returns for a graph in ASCII](media/diagram-graph.svg)
 
 `Graph.nodes` and `Graph.edges` read the graph back (`DiagramNode`: `id`,
 `label`, `shape`; `DiagramEdge`: `source` and `target` as node indexes,
@@ -102,12 +97,7 @@ except diagram.DotError as error:
     print(error.line, error.construct)
 ```
 
-```text
-╭───────╮  ╭──────╮  ╭──────╮
-│ build ├─►│ test ├─►│ ship │
-╰───────╯  ╰──────╯  ╰──────╯
-3 a node port (`a:…`)
-```
+![A DOT source drawn left to right](media/diagram-dot.svg)
 
 From the shell, `rich dot FILE` draws a DOT file and `rich --markdown` draws
 ```` ```dot ```` fences

@@ -122,17 +122,13 @@ stages in code, without registering them, use `rs_rich.ext.transform.Pipeline`;
 A renderer's result is a renderable:
 
 ```python
-print(registry.text_pipeline(["upper"]).apply(Text("quiet please")))
 console = Console(width=40)
+print(registry.text_pipeline(["upper"]).apply(Text("quiet please")))
 console.print(registry.renderer("shout").render("hello"))
 print(registry.provided_by(plugins.Capability("theme", "loud")))
 ```
 
-```text
-QUIET PLEASE
-HELLO!
-shout
-```
+![The output of a text pipeline, a source renderer and a capability lookup](media/plugins-renderer.svg)
 
 The built-in plugins are classes too: `BuiltinPlugin` (what `with_defaults()`
 adds), `MermaidPlugin(ascii=None, backend="text")` and, in wheels built with
@@ -144,11 +140,7 @@ diagrams.add_plugin(plugins.MermaidPlugin())
 console.print(diagrams.renderer("mermaid").render("graph LR\nA-->B"))
 ```
 
-```text
-┌───┐  ┌───┐
-│ A ├─►│ B │
-└───┘  └───┘
-```
+![A Mermaid source drawn by the registered Mermaid renderer](media/plugins-mermaid.svg)
 
 `fences()` is one fence renderer routing each fence to the one registered for
 its language, as Markdown uses it; `render_fence(language, code, console,

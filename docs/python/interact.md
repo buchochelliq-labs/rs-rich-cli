@@ -32,6 +32,10 @@ print(repr(record.value))
 'src/main.rs'
 ```
 
+The first frame, as the terminal shows it:
+
+![The picker's first frame: the prompt, the focused item and the key hints](media/interact-select.svg)
+
 ## Running on the terminal
 
 ```text
@@ -160,6 +164,8 @@ print(Select("Server", servers).headless("down ctrl+s").outcome.action)
 ssh
 ```
 
+![The list beside the focused item's preview panel](media/interact-items.svg)
+
 ## Select and MultiSelect
 
 ```text
@@ -193,6 +199,8 @@ print(MultiSelect("Stage", files).headless("tab down tab enter").value)
   2/4 · ↑↓ move · enter pick · esc cancel
 ['src/lib.rs', 'docs/maintenance.md']
 ```
+
+![The picker filtered by a typed query](media/interact-filtered.svg)
 
 ## Input
 
@@ -232,6 +240,8 @@ print(Input("Token", password=True).headless(Script().text("s3cret").keys("enter
 ? Token › ••••••
 ```
 
+![An input whose validator refused the text](media/interact-input.svg)
+
 ## Confirm
 
 ```text
@@ -264,6 +274,8 @@ skip
 yes
 ```
 
+![A confirmation with a warning and two choices](media/interact-confirm.svg)
+
 ## Form
 
 `Form(title)` asks several named fields together; `text`, `masked`, `input`
@@ -292,6 +304,8 @@ print(record.last_frame)
   Git repository  yes
 ```
 
+![A form with its three answered fields](media/interact-form.svg)
+
 ## Pager
 
 `Pager(renderable, *, search=None)` pages any renderable at the terminal's
@@ -316,6 +330,8 @@ step 6
 step 7 failed
 lines 5–8 of 20 · match 1/1 · 
 ```
+
+![A pager scrolled to the search match, with its status line](media/interact-pager.svg)
 
 ## TextArea
 
@@ -346,6 +362,8 @@ print(repr(record.value))
   enter new line · ctrl+d submit · esc cancel
 'first\nsecond'
 ```
+
+![A text area with line numbers and two lines written](media/interact-textarea.svg)
 
 ## FilePicker
 
@@ -559,6 +577,10 @@ print(answers, record.value)
 ```text
 {'name': 'notes'} code
 ```
+
+Its frame before the last key: the answered input, and the counter and the picker side by side:
+
+![A column of a label, an answered input, and a split of a counter and a picker](media/interact-compose.svg)
 
 `keymap(component)` (or a container's `keymap()`) lists the bindings a
 composition has before its first event, the focused child's first:

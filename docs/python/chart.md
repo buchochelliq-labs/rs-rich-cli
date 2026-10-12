@@ -66,23 +66,14 @@ it. `Histogram.counts()` and `Histogram.edges()` give the bins.
 from rs_rich.console import Console
 from rs_rich import chart
 
-console = Console(width=40, color_system=None)
+console = Console(width=40)
 console.print(chart.Sparkline([12, 15, 14, 18, 25, 31, 28, 22, 35, 41]))
 console.print(chart.Sparkline([12, 15, 14, 18, 25, 31, 28, 22, 35, 41], min_max=True, threshold=30))
 console.print(chart.BarChart({"api": 412, "web": 268.5, "worker": 97}, bar_width=20))
 console.print(chart.Histogram([12, 14, 15, 21, 22, 23, 24, 38], bins=3, range=(10, 40), bar_width=8))
 ```
 
-```text
-▁▂▁▂▄▆▅▃▇█
-▁▂▁▂▄▆▅▃▇█ min 12 max 41 3 > 30
-api    ████████████████████   412
-web    █████████████        268.5
-worker ████▊                   97
-[10, 20) ██████   3
-[20, 30) ████████ 4
-[30, 40] ██       1
-```
+![Sparklines, a bar chart and a histogram](media/chart-bars.svg)
 
 ## Line and scatter charts
 
@@ -102,17 +93,7 @@ load = chart.Series("load", [1, 3, 2, 5, 4])
 console.print(chart.LineChart([load], height=6, charset="ascii"), width=24)
 ```
 
-```text
-6 +                     
-5 +               ***   
-4 +             **   ***
-3 +    ****   **        
-2 +  **    ***          
-1 +**                   
-  ++----+----+----+----+
-   0    1    2    3    4
-* load                  
-```
+![A line chart in ASCII with axes and a legend](media/chart-line.svg)
 
 ## Gauges and bullet charts
 
@@ -137,12 +118,7 @@ console.print(chart.BulletChart([
 ], bar_width=12))
 ```
 
-```text
-cpu ██████████████▍▒│░░░ 72% high
-high
-revenue ██████████│░  270
-profit  █████████░│░ 22.5
-```
+![A gauge with a target and bands, and a bullet chart](media/chart-gauges.svg)
 
 ## Heatmaps and status matrices
 
@@ -172,17 +148,7 @@ console.print(chart.StatusMatrix(
 ))
 ```
 
-```text
-    mon tue wed thu        
-api ....====@@@@::::       
-web     ****%%%%????       
-0 [ .:-=+*#%@] 9  ? no data
-     linux macos  win       
-unit   ✓     ✓     ✗        
-e2e    ✓     ⊘     ○        
-✓ pass 3  ✗ fail 1  ○ skip 1
-⊘ blocked 1                 
-```
+![A heatmap and a status matrix with a custom state](media/chart-heatmap.svg)
 
 ## KPI cards
 
@@ -200,14 +166,7 @@ then worked out). `trend` is the card's sparkline; `status` is `"ok"`,
 console.print(chart.KpiCard("Requests", 1234, delta_percent=4.2, trend=[1, 2, 3, 2, 5], status="ok", width=24))
 ```
 
-```text
-╭──────────────────────╮
-│ Requests        ✓ ok │
-│ 1.2k                 │
-│ ▲ +4.2%              │
-│ ▁▃▅▃█                │
-╰──────────────────────╯
-```
+![A KPI card with a delta, a sparkline and a status](media/chart-kpi.svg)
 
 ## Timelines
 
@@ -231,12 +190,4 @@ console.print(chart.Timeline(
 ))
 ```
 
-```text
-fetch   ████ 4s                         
-compile     █████████████████ 22s       
-test              ███████████████ 18s   
-                        ████████████ 14s
-                                ship ◆  
-        ┬───────┬───────┬───────┬───────
-        0s     10s     20s     30s      
-```
+![A timeline with overlapping spans and a milestone](media/chart-timeline.svg)

@@ -39,25 +39,17 @@ Syntax(code, lexer, *, theme="monokai", dedent=False, line_numbers=False,
 from rs_rich.console import Console
 from rs_rich.syntax import Syntax
 
+console = Console(width=44)
 code = '''def fib(n):
     if n < 2:
         return n
     return fib(n - 1) + fib(n - 2)
 '''
-console = Console(width=44)
 console.print(Syntax(code, "python", line_numbers=True, highlight_lines={3}))
 console.print(Syntax(code, "python", line_range=(2, 3), indent_guides=True))
 ```
 
-```text
-  1 def fib(n):                             
-  2     if n < 2:                           
-❱ 3         return n                        
-  4     return fib(n - 1) + fib(n - 2)      
-  5                                         
-│   if n < 2:                               
-│   │   return n                            
-```
+![Highlighted Python with line numbers and a marked line, then a range with indent guides](media/syntax-syntax.svg)
 
 Line numbers and ranges take Rich's signed values: here the numbering starts
 at -1, and the range runs from the second line to one before the last.
@@ -66,13 +58,12 @@ at -1, and the range runs from the second line to one before the last.
 from rs_rich.console import Console
 from rs_rich.syntax import Syntax
 
+console = Console(width=30)
 code = "x = 1\ny = 2\nz = 3\n"
-Console(width=30).print(Syntax(code, "python", line_numbers=True, start_line=-1, line_range=(2, -1)))
+console.print(Syntax(code, "python", line_numbers=True, start_line=-1, line_range=(2, -1)))
 ```
 
-```text
-  0 y = 2                     
-```
+![A numbered range starting at line 0](media/syntax-range.svg)
 
 ## Methods
 

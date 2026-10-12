@@ -38,19 +38,27 @@ for style in [box.ASCII, box.MARKDOWN]:
 print(repr(box.ROUNDED))
 ```
 
-```text
-+-------+
-| a | b |
-|---+---|
-| 1 | 2 |
-+-------+
-         
-| a | b |
-|---|---|
-| 1 | 2 |
-         
-box.ROUNDED
+![A table drawn with the ASCII box and as a Markdown table](media/box-markup-errors-boxes.svg)
+
+Eight of them side by side:
+
+```python
+from rs_rich import box
+from rs_rich.columns import Columns
+from rs_rich.console import Console
+from rs_rich.table import Table
+
+console = Console(width=60)
+tables = []
+for name in ["SQUARE", "ROUNDED", "HEAVY_HEAD", "DOUBLE_EDGE",
+             "SIMPLE", "MINIMAL", "HORIZONTALS", "ASCII2"]:
+    table = Table("Crate", "Version", box=getattr(box, name), title=name)
+    table.add_row("rs-rich", "0.0.8")
+    tables.append(table)
+console.print(Columns(tables))
 ```
+
+![Eight box styles, each drawing a small titled table](media/box-markup-errors-gallery.svg)
 
 ## Markup
 
@@ -70,15 +78,13 @@ that text from outside prints literally:
 from rs_rich.console import Console
 from rs_rich.markup import escape
 
+console = Console(width=40)
 user_input = "[bold]not a tag[/bold]"
 print(escape(user_input))
-Console(width=40).print(escape(user_input))
+console.print(escape(user_input))
 ```
 
-```text
-\[bold]not a tag\[/bold]
-[bold]not a tag[/bold]
-```
+![An escaped string printed literally](media/box-markup-errors-escape.svg)
 
 ## Errors
 

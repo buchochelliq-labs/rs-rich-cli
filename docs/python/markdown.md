@@ -33,6 +33,7 @@ The arguments are readable as attributes of the same names.
 from rs_rich.console import Console
 from rs_rich.markdown import Markdown
 
+console = Console(width=40)
 document = """# Shopping
 
 * **apples**, the *green* ones
@@ -47,55 +48,32 @@ document = """# Shopping
 
 See [the list](https://example.com).
 """
-Console(width=40).print(Markdown(document, hyperlinks=False))
+console.print(Markdown(document, hyperlinks=False))
 ```
 
-```text
-                Shopping                
-
- • apples, the green ones               
- • pears                                
-
- 1 go                                   
- 2 come back                            
-
-               
- item    count 
- ───────────── 
- apples      3 
-               
-
-See the list (https://example.com).     
-```
+![A heading, bulleted and numbered lists, a table and a link](media/markdown-document.svg)
 
 A code block is highlighted, with a one-cell margin and the theme's
 background:
 
 ```python
-Console(width=30).print(Markdown("```python\ndef add(a, b):\n    return a + b\n```"))
+console = Console(width=30)
+console.print(Markdown("```python\ndef add(a, b):\n    return a + b\n```"))
 ```
 
-```text
-                              
- def add(a, b):               
-     return a + b             
-                              
-```
+![A highlighted Python code block](media/markdown-code.svg)
 
 Fenced blocks can be drawn instead of highlighted (not in Rich):
 
 ```python
 from rs_rich.mermaid import MermaidFences
 
+console = Console(width=40)
 diagram = "```mermaid\nflowchart LR\n    A[Write] --> B[Print]\n```"
-Console(width=40).print(Markdown(diagram, fences=[MermaidFences()]))
+console.print(Markdown(diagram, fences=[MermaidFences()]))
 ```
 
-```text
-┌───────┐  ┌───────┐
-│ Write ├─►│ Print │
-└───────┘  └───────┘
-```
+![A Mermaid fence drawn as a flowchart](media/markdown-fences.svg)
 
 ## Differences from Rich
 

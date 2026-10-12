@@ -40,24 +40,7 @@ print(text_diff.unified("a/server.toml", "b/server.toml"), end="")
 console.print(diff.DiffView(OLD, NEW, layout="side_by_side", titles=("before", "after"), context=1))
 ```
 
-```text
-(3, 2)
---- a/server.toml
-+++ b/server.toml
-@@ -2,3 +2,4 @@
- host = "0.0.0.0"
--port = 8080
--log = "info"
-+port = 8443
-+log = "debug"
-+tls = true
-before                       │ after
-@@ -2,3 +2,4 @@
-2   host = "0.0.0.0"         │ 2   host = "0.0.0.0"
-3 - port = 8080              │ 3 + port = 8443
-4 - log = "info"             │ 4 + log = "debug"
-                             │ 5 + tls = true
-```
+![A unified diff, then a side-by-side diff view with titles](../media/ext-diffs-text.svg)
 
 `SourceDiff` is the same for code, syntax-highlighted, with an optional link
 template for line numbers.
@@ -88,18 +71,7 @@ console.print(diff.PatchView(
 ))
 ```
 
-```text
-[('src/lib.rs', 'modified')] (1, 1)
-modified src/lib.rs  +1 -1
-@@ -1,3 +1,3 @@
-1 1   pub fn total(items: &[u32]) -> u32 {
-2   -     let mut sum = 0;
-  2 +     let mut sum: u32 = 0;
-      note: consider `iter().sum()`
-3 3       for item in items {
-
-1 file changed, 1 insertion(+), 1 deletion(-)
-```
+![A git patch with an annotation on a changed line](../media/ext-diffs-patch.svg)
 
 `KeepFiles(["*.md"])` is a transform stage that keeps matching files of a
 patch; `TemplateLinks` makes file and line links from URL templates.
@@ -117,25 +89,14 @@ run = diff.TestRun([diff.TestSuite("parser", [
     diff.TestCase("quoted", status="failed", message="assertion failed", expected="1\n2\n3", actual="1\n2\n4"),
 ])])
 print(run.totals())
-console.print(diff.TestReport(run))
 ```
 
 ```text
 {'errored': 0, 'failed': 1, 'passed': 1, 'skipped': 0, 'total': 2}
-FAILED parser > quoted
-  assertion failed
-  --- expected
-  +++ actual
-  @@ -1,3 +1,3 @@
-  1 1   1
-  2 2   2
-  3   - 3
-    3 + 4
-
-┏━━━━━━━━┳━━━━━━━━┳━━━━━━━━┳━━━━━━━━━┳━━━━━━┓
-┃ Suite  ┃ Passed ┃ Failed ┃ Skipped ┃ Time ┃
-┡━━━━━━━━╇━━━━━━━━╇━━━━━━━━╇━━━━━━━━━╇━━━━━━┩
-│ parser │ 1      │ 1      │ 0       │      │
-└────────┴────────┴────────┴─────────┴──────┘
-1 passed, 1 failed
 ```
+
+```python
+console.print(diff.TestReport(run))
+```
+
+![A test report with a failure's expected and actual values diffed](../media/ext-diffs-tests.svg)

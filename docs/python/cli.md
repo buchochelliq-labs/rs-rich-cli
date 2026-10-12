@@ -43,8 +43,8 @@ Hello from rs_rich
 exit status 0
 ```
 
-Output that is not a terminal is plain text; `FORCE_COLOR=1` in the child's
-environment keeps the colour. Input comes on standard input with `-`:
+Output that is not a terminal is plain text (`FORCE_COLOR` is not read, as
+`rich --help` says). Input comes on standard input with `-`:
 
 ```python
 result = subprocess.run(
@@ -67,6 +67,25 @@ print(result.stdout, end="")
   ]
 }
 ```
+
+`--force-terminal` keeps the colour and styles, and `Text.from_ansi` turns
+them back into a `Text` your own console can print:
+
+```python
+from rs_rich.console import Console
+from rs_rich.text import Text
+
+result = subprocess.run(
+    [sys.executable, "-m", "rs_rich", "--json", "-", "--width", "30", "--force-terminal"],
+    input='{"name": "rich", "values": [1, 2.5, true, null]}',
+    capture_output=True,
+    text=True,
+)
+console = Console(width=30)
+console.print(Text.from_ansi(result.stdout), end="")
+```
+
+![JSON highlighted by the command line and printed again on a console](media/cli-json.svg)
 
 Errors go to standard error, with the binary's exit statuses (2 for a usage
 error, 3 for input that cannot be read):

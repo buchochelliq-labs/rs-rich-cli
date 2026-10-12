@@ -121,6 +121,21 @@ print(repr(out.getvalue()))
 '\x1b[1;38;2;255;136;0mstyled\x1b[0m\n'
 ```
 
+On a terminal, each definition looks like this:
+
+```python
+from rs_rich.console import Console
+from rs_rich.text import Text
+
+console = Console(width=40)
+for definition in ["bold", "dim", "italic", "underline", "strike", "reverse",
+                   "bold red", "black on bright_yellow", "#ff8800 on #102030",
+                   "bold not dim cyan on bright_black"]:
+    console.print(Text(definition, style=definition))
+```
+
+![Each style definition printed in its own style](media/style-definitions.svg)
+
 ## Properties and methods
 
 | Member | Meaning |
