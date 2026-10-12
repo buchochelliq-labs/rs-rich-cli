@@ -139,7 +139,8 @@ struct Decls {
     hidden: Option<bool>,
     dock: Option<Dock>,
     align_items: Option<Align>,
-    align_self: Option<Align>,
+    /// `Some(None)` is `align-self: auto`, which undoes an earlier rule's.
+    align_self: Option<Option<Align>>,
     justify: Option<Justify>,
     wrap: Option<bool>,
     align_content: Option<AlignContent>,
@@ -285,7 +286,9 @@ impl Stylesheet {
             out.dock = d.dock.or(out.dock);
             out.gap = d.gap.or(out.gap);
             out.align_items = d.align_items.or(out.align_items);
-            out.align_self = d.align_self.or(out.align_self);
+            if let Some(align_self) = d.align_self {
+                out.align_self = align_self;
+            }
             out.justify = d.justify.or(out.justify);
             out.wrap = d.wrap.or(out.wrap);
             out.align_content = d.align_content.or(out.align_content);
@@ -795,7 +798,7 @@ fn declare(decls: &mut Decls, property: &str, value: &str) -> Result<(), String>
             })
         }
         "align-items" => decls.align_items = Some(align(value, false)?.expect("not auto")),
-        "align-self" => decls.align_self = align(value, true)?,
+        "align-self" => decls.align_self = Some(align(value, true)?),
         "justify-content" => {
             decls.justify = Some(match value {
                 "start" | "flex-start" | "normal" => Justify::Start,
@@ -945,6 +948,9 @@ mod tests {
         assert_eq!(pin.align_self, Some(Align::End));
         let free = sheet.layout(&[element("text", None, &["free"])], &|_| None);
         assert_eq!(free.align_self, None, "auto: the parent decides");
+        // A later `auto` undoes an earlier rule's alignment.
+        let both = sheet.layout(&[element("text", None, &["pin", "free"])], &|_| None);
+        assert_eq!(both.align_self, None, "auto after flex-end");
         for (css, message) in [
             (
                 "row { align-items: baseline; }",
