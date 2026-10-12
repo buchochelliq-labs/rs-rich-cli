@@ -325,6 +325,24 @@ def test_sizes_take_ints_and_strings():
     assert screen(build, ["q"], 8, 1) == ["a b c"]
 
 
+def test_alignment_and_wrapping_take_css_names():
+    def build():
+        return column(
+            [
+                row([label("a").size(2), label("b").size(2)]).justify("space-between").size(1),
+                column([label("c").auto()]).align_items("center").size(1),
+                row([label(t).size(4) for t in "def"]).wrap().align_content("flex-start"),
+            ]
+        ).on_key("q", lambda cx: cx.quit())
+
+    out = screen(build, ["q"], 10, 5)
+    assert out[0].find("a") == 0 and out[0].find("b") == 8, out
+    assert out[1].find("c") == 4, out
+    assert out[2].startswith("d") and "e" in out[2] and out[3].startswith("f"), out
+    with pytest.raises(ValueError, match="flex-start"):
+        row([]).justify("left")
+
+
 def test_each_keeps_a_child_per_key():
     built = []
 

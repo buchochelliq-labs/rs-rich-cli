@@ -75,7 +75,7 @@ pub use rich;
 pub use rich_interact as interact;
 
 pub use app::{every, Anchor, App, Ctx, Driver, Easing, FrameStats, Placement, Theme};
-pub use layout::Size;
+pub use layout::{Align, AlignContent, Justify, Size, StackLayout};
 pub use log::Log;
 pub use node::{
     column, component, each, grid, label, leaf, list, renderable, repeating, row, scroll,
@@ -92,8 +92,8 @@ pub mod prelude {
     pub use crate::{
         column, component, each, every, grid, label, leaf, list, memo, renderable, repeating,
         resource, row, scroll, scroll_both, scroll_with, scroll_x, signal, spawn, switch, text,
-        watch, widget, App, Ctx, Load, Log, Memo, Node, Proxy, Resource, Signal, Size, Task, Theme,
-        Widget,
+        watch, widget, Align, App, Ctx, Justify, Load, Log, Memo, Node, Proxy, Resource, Signal,
+        Size, Task, Theme, Widget,
     };
 }
 

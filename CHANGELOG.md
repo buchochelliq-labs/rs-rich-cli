@@ -9,6 +9,34 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Flex alignment in intuiTUIve (intuituive 0.0.4)
+
+0.0.19 workstream 1.
+
+- **Across the axis:** `.align_items(Align::Start | Center | End |
+  Stretch)` on a row or column, and `.align_self(..)` on a child, which
+  wins. `Stretch` is what rows and columns did before, and stays the
+  default.
+- **Along the axis:** `.justify(Justify::Start | Center | End |
+  SpaceBetween | SpaceAround | SpaceEvenly)` shares the room the children
+  leave; a flexible child takes it, as in CSS. Docked children keep to
+  their edges and the rest are justified between them.
+- **Wrapping:** `.wrap()` moves children that do not fit to a new line,
+  each line solved on its own (a flexible child starts from its content,
+  within its clamps); `.align_content(..)` places the lines, `Stretch` by
+  default. A wrapping row with `.auto()` is as tall as its lines.
+- **In the stylesheet**, with CSS's names and values: `align-items`,
+  `align-self`, `justify-content`, `flex-wrap` and `align-content`. Code
+  wins over the sheet. The inspector shows a stack's alignment and a
+  child's `align-self`.
+- **`MeasureCx::stack_flow`** lays out a custom widget's children with a
+  `StackLayout` (gap, alignment, wrapping), as a row or column does;
+  `stack` stays as it was.
+- **Python:** `Node.align_items`, `align_self`, `justify`, `wrap` and
+  `align_content`, taking the stylesheet's CSS names.
+- **Docs:** "Alignment and wrapping" in the intuiTUIve guide, with the new
+  `align` example and its tape (also on the recordings page).
+
 ### Positioned drawing: `rich_ext::surface` (ext 0.0.16)
 
 0.0.19 workstream 4.

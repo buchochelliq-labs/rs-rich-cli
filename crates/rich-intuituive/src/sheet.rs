@@ -25,7 +25,7 @@ use std::rc::Rc;
 
 use rich::{Color, Style};
 
-use crate::layout::Size;
+use crate::layout::{Align, AlignContent, Justify, Size};
 use crate::reactive::NodeId;
 
 /// A parsed stylesheet: give it to [`App::stylesheet`](crate::App::stylesheet).
@@ -138,6 +138,11 @@ struct Decls {
     grid_rows: Option<Vec<Size>>,
     hidden: Option<bool>,
     dock: Option<Dock>,
+    align_items: Option<Align>,
+    align_self: Option<Align>,
+    justify: Option<Justify>,
+    wrap: Option<bool>,
+    align_content: Option<AlignContent>,
 }
 
 /// What a sheet decides about a node's layout.
@@ -157,6 +162,11 @@ pub(crate) struct Layout {
     pub gap: Option<u16>,
     pub grid_columns: Option<Vec<Size>>,
     pub grid_rows: Option<Vec<Size>>,
+    pub align_items: Option<Align>,
+    pub align_self: Option<Align>,
+    pub justify: Option<Justify>,
+    pub wrap: Option<bool>,
+    pub align_content: Option<AlignContent>,
 }
 
 impl Layout {
@@ -274,6 +284,11 @@ impl Stylesheet {
             out.hidden = d.hidden.unwrap_or(out.hidden);
             out.dock = d.dock.or(out.dock);
             out.gap = d.gap.or(out.gap);
+            out.align_items = d.align_items.or(out.align_items);
+            out.align_self = d.align_self.or(out.align_self);
+            out.justify = d.justify.or(out.justify);
+            out.wrap = d.wrap.or(out.wrap);
+            out.align_content = d.align_content.or(out.align_content);
             if d.grid_columns.is_some() {
                 out.grid_columns = d.grid_columns.clone();
             }
@@ -779,9 +794,70 @@ fn declare(decls: &mut Decls, property: &str, value: &str) -> Result<(), String>
                 _ => return Err(format!("`{value}`: dock is top, bottom, left or right")),
             })
         }
+        "align-items" => decls.align_items = Some(align(value, false)?.expect("not auto")),
+        "align-self" => decls.align_self = align(value, true)?,
+        "justify-content" => {
+            decls.justify = Some(match value {
+                "start" | "flex-start" | "normal" => Justify::Start,
+                "center" => Justify::Center,
+                "end" | "flex-end" => Justify::End,
+                "space-between" => Justify::SpaceBetween,
+                "space-around" => Justify::SpaceAround,
+                "space-evenly" => Justify::SpaceEvenly,
+                _ => {
+                    return Err(format!(
+                        "`{value}`: justify-content is flex-start, center, flex-end, \
+                         space-between, space-around or space-evenly"
+                    ))
+                }
+            })
+        }
+        "flex-wrap" => {
+            decls.wrap = Some(match value {
+                "nowrap" => false,
+                "wrap" => true,
+                _ => return Err(format!("`{value}`: flex-wrap is nowrap or wrap")),
+            })
+        }
+        "align-content" => {
+            decls.align_content = Some(match value {
+                "start" | "flex-start" => AlignContent::Start,
+                "center" => AlignContent::Center,
+                "end" | "flex-end" => AlignContent::End,
+                "space-between" => AlignContent::SpaceBetween,
+                "space-around" => AlignContent::SpaceAround,
+                "space-evenly" => AlignContent::SpaceEvenly,
+                "stretch" | "normal" => AlignContent::Stretch,
+                _ => {
+                    return Err(format!(
+                        "`{value}`: align-content is flex-start, center, flex-end, \
+                         space-between, space-around, space-evenly or stretch"
+                    ))
+                }
+            })
+        }
         _ => return Err(format!("unknown property `{property}`")),
     }
     Ok(())
+}
+
+/// An `align-items` or `align-self` value; `auto` (`align-self` only) is
+/// `None`: the parent's `align-items`.
+fn align(value: &str, auto: bool) -> Result<Option<Align>, String> {
+    Ok(Some(match value {
+        "auto" if auto => return Ok(None),
+        "start" | "flex-start" | "self-start" => Align::Start,
+        "center" => Align::Center,
+        "end" | "flex-end" | "self-end" => Align::End,
+        "stretch" | "normal" => Align::Stretch,
+        _ => {
+            return Err(format!(
+                "`{value}`: {} is flex-start, center, flex-end or stretch{}",
+                if auto { "align-self" } else { "align-items" },
+                if auto { " (or auto)" } else { "" }
+            ))
+        }
+    }))
 }
 
 #[cfg(test)]
@@ -851,6 +927,41 @@ mod tests {
             hover: &[],
         };
         assert!(sheet.style(&full, &states, &no_vars).is_none());
+    }
+
+    #[test]
+    fn flexbox_properties_take_css_names_and_values() {
+        let sheet = Stylesheet::parse(
+            "row { align-items: center; justify-content: space-between; flex-wrap: wrap; align-content: flex-end; } \
+             .pin { align-self: flex-end; } .free { align-self: auto; }",
+        )
+        .unwrap();
+        let row = sheet.layout(&[element("row", None, &[])], &|_| None);
+        assert_eq!(row.align_items, Some(Align::Center));
+        assert_eq!(row.justify, Some(Justify::SpaceBetween));
+        assert_eq!(row.wrap, Some(true));
+        assert_eq!(row.align_content, Some(AlignContent::End));
+        let pin = sheet.layout(&[element("text", None, &["pin"])], &|_| None);
+        assert_eq!(pin.align_self, Some(Align::End));
+        let free = sheet.layout(&[element("text", None, &["free"])], &|_| None);
+        assert_eq!(free.align_self, None, "auto: the parent decides");
+        for (css, message) in [
+            (
+                "row { align-items: baseline; }",
+                "align-items is flex-start",
+            ),
+            (
+                "row { flex-wrap: wrap-reverse; }",
+                "flex-wrap is nowrap or wrap",
+            ),
+            (
+                "row { justify-content: left; }",
+                "justify-content is flex-start",
+            ),
+        ] {
+            let error = Stylesheet::parse(css).unwrap_err().to_string();
+            assert!(error.contains(message), "{css}: {error}");
+        }
     }
 
     #[test]

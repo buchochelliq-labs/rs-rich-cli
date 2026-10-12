@@ -108,6 +108,48 @@ column([
 
 `.gap(1)` leaves a row (or, in a `row`, a column) between neighbours.
 
+### Alignment and wrapping
+
+Rows and columns place their children as CSS flexbox does, with CSS's
+names:
+
+- **Across the axis**, `.align_items(Align::Center)` sizes each child to
+  its content (its width in a column, its height in a row) and places it at
+  `Start`, `Center` or `End`. `Stretch`, the default, gives every child the
+  whole width or height. A child's own `.align_self(..)` wins.
+- **Along the axis**, `.justify(Justify::SpaceBetween)` shares out the room
+  the children leave: `Start` (the default), `Center`, `End`,
+  `SpaceBetween`, `SpaceAround` or `SpaceEvenly`. A flexible child takes the
+  room itself, so a container with one has nothing left to justify. Docked
+  children keep to their edges, and the others are justified between them.
+- **`.wrap()`** moves children that do not fit to a new line (a new column,
+  in a column), `gap` apart. Each child starts at its own size (a flexible
+  one at its content's, within its clamps), each line is laid out on its
+  own, and `.align_content(..)` places the lines: `Stretch` (the default)
+  grows them to share the room. A wrapping row with `.auto()` is as tall as
+  its lines.
+
+The `align` example cycles through them with keys
+(`cargo run -p rs-rich-intuituive --example align`):
+
+```rust
+--8<-- "crates/rich-intuituive/examples/align.rs:board"
+```
+
+<div class="tape-player" data-cast="../../media/tapes/align/align.cast" data-poster="npt:0:2">
+  <img src="../../media/tapes/align/align.gif" alt="Cards in a row, placed by align-items, justify, wrap and align-content">
+</div>
+
+| `Stretch`, the test card `align_self(End)` | `align_items(Align::Center)` |
+|---|---|
+| ![Cards stretched to the row's height](../../media/tapes/align/stretch.png) | ![Cards centred across the row](../../media/tapes/align/center.png) |
+| **`justify(Justify::SpaceBetween)`** | **`.wrap()`, two more cards** |
+| ![Cards spread to the row's ends](../../media/tapes/align/between.png) | ![Five cards on two lines](../../media/tapes/align/wrap.png) |
+
+A stylesheet sets the same with `align-items`, `align-self`,
+`justify-content`, `flex-wrap` and `align-content`; see
+[Stylesheets](#stylesheets).
+
 ### Grids
 
 ```rust
@@ -848,6 +890,9 @@ condition holds, following the signals the condition reads.
 | `gap`, `grid-columns`, `grid-rows` | a stack's or grid's spacing; a grid's tracks |
 | `display` | `none` hides the node and what is inside, takes it out of the Tab order, and out of a grid's cells |
 | `dock` | `top` or `bottom` in a column, `left` or `right` in a row: kept at that edge |
+| `align-items`, `align-self` | `flex-start`, `center`, `flex-end` or `stretch` (`align-self` also `auto`): where a stack's children sit across its axis |
+| `justify-content` | `flex-start`, `center`, `flex-end`, `space-between`, `space-around` or `space-evenly`: what a stack does with the room its children leave |
+| `flex-wrap`, `align-content` | `nowrap` or `wrap`; where a wrapping stack's lines sit (the `justify-content` values, or `stretch`) |
 
 **How it applies:**
 

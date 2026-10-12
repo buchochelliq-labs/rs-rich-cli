@@ -33,6 +33,7 @@ motion turned on in your system settings the cards stay still.
 [![A status page restyled after its stylesheet changed](media/tapes/stylesheet/reloaded.png){ data-gif="stylesheet.gif" loading=lazy }<span class="tape-card-title">Stylesheets</span>](#stylesheets){ .tape-card }
 [![A process table sorted by user, with a cell cursor](media/tapes/tables/cells.png){ data-gif="tables.gif" loading=lazy }<span class="tape-card-title">Sorting and resizing a table</span>](#sorting-and-resizing-a-table){ .tape-card }
 [![A card's tooltip on a sprint board](media/tapes/board/tooltip.png){ data-gif="board.gif" loading=lazy }<span class="tape-card-title">Lazy trees, tooltips, drag-and-drop</span>](#lazy-trees-tooltips-and-drag-and-drop){ .tape-card }
+[![Five cards wrapped onto two lines of a row](media/tapes/align/wrap.png){ data-gif="align.gif" loading=lazy }<span class="tape-card-title">Flex alignment</span>](#flex-alignment){ .tape-card }
 [![An app in linear mode, written as lines of text](media/tapes/access/linear.png){ data-gif="access.gif" loading=lazy }<span class="tape-card-title">Text mode and linear mode</span>](#text-mode-and-linear-mode){ .tape-card }
 [![rich serve printing its address, and sessions asked for](media/tapes/serve/sessions.png){ data-gif="serve.gif" loading=lazy }<span class="tape-card-title">Serve a program to a browser</span>](#serve-a-program-to-a-browser){ .tape-card }
 [![A shell in a terminal pane beside a web view](media/tapes/embed/pane.png){ data-gif="embed.gif" loading=lazy }<span class="tape-card-title">A terminal pane</span>](#a-terminal-pane){ .tape-card }
@@ -360,6 +361,28 @@ to another lane moves there. See [The mouse](guide/intuituive/index.md#the-mouse
 | ![A card's tooltip](media/tapes/board/tooltip.png) | ![The card moved to Done](media/tapes/board/dropped.png) |
 
 [Tape](tapes/board.tape) · [Cast](media/tapes/board/board.cast) · [GIF](media/tapes/board/board.gif) · [Page](media/tapes/board/board.html)
+
+## Flex alignment
+
+`rs-rich-intuituive`'s `align` example (0.0.19): a row of cards of
+different sizes placed by `align_items`, `justify`, `wrap` and
+`align_content`, each cycled with a key; the test card keeps to the end of
+its line with `align_self`. See
+[Alignment and wrapping](guide/intuituive/index.md#alignment-and-wrapping).
+
+<div class="tape-player" data-cast="../media/tapes/align/align.cast" data-poster="npt:0:2">
+  <img src="../media/tapes/align/align.gif" alt="Cards in a row, placed by align-items, justify, wrap and align-content">
+</div>
+
+| Stretched | Centred |
+|---|---|
+| ![Cards stretched to the row's height](media/tapes/align/stretch.png) | ![Cards centred across the row](media/tapes/align/center.png) |
+| **Space between** | **Wrapped** |
+| ![Cards spread to the row's ends](media/tapes/align/between.png) | ![Five cards on two lines](media/tapes/align/wrap.png) |
+| **Lines centred** | |
+| ![The two lines centred in the row](media/tapes/align/lines.png) | |
+
+[Tape](tapes/align.tape) · [Cast](media/tapes/align/align.cast) · [GIF](media/tapes/align/align.gif) · [Page](media/tapes/align/align.html)
 
 ## Text mode and linear mode
 
