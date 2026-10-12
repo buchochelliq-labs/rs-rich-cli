@@ -52,6 +52,12 @@ counter and a list:
 cargo run -p rs-rich-web --example serve
 ```
 
+Here it is in Chromium, after typing two lines and pressing `+` three
+times on the counter (`scripts/capture_web.mjs` takes this page's
+pictures):
+
+![The example app on the xterm.js page: a clock, a text box, a counter at 3 and the two lines said](../../media/web/xterm.png)
+
 ## Options
 
 `serve` is `Server::bind` and `Server::run` with the defaults. `Server`
@@ -124,6 +130,10 @@ fn main() -> std::io::Result<()> {
 A string is a program name, an array or a vector is the program and its
 arguments, and a `rich_web::Command` also sets the environment and the
 working directory. The program sees `TERM=xterm-256color`.
+
+Here `rich serve` runs vim, showing the xterm.js page's own script:
+
+![vim on the xterm.js page, with syntax colours and line numbers](../../media/web/program.png)
 
 - **Input** goes to the program as the page sent it: keys, pastes (bracketed
   when the program asked for that) and mouse reports when it turned the
@@ -206,6 +216,10 @@ xterm.js stays the default. A page's address can choose either way:
 whose default is xterm.js, and `&renderer=xterm` the other way. A program
 has no tree, so a program's page is always xterm.js.
 
+The example from above, with `&renderer=dom`, after the same keys:
+
+![The example app drawn by the DOM renderer](../../media/web/dom.png)
+
 What the page carries:
 
 - **The grid:** each line as runs of text in one style; styles become CSS
@@ -240,6 +254,13 @@ What the page carries:
 
 The page's script, `dom.js`, is the crate's own (no third-party code), a
 few hundred lines, and runs under the same content security policy.
+
+The tree's elements are invisible on the page. Outlined, and labelled with
+their roles, they lie over the panels they describe: a region for each
+panel, a `textbox` for the text box and a `button` for the counter, which
+has the focus:
+
+![The DOM page with the accessibility tree outlined: regions, text, a textbox and a button over the app](../../media/web/dom-tree.png)
 
 ### The protocol
 
