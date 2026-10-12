@@ -1,7 +1,7 @@
 # Roadmap
 
 What each release delivered, and where this goes next: the
-[0.0.12 plan](plans/0.0.12.md), after the 0.0.11 cohort (published 2026-09-24).
+[plan to 1.0.0](plans/1.0.0.md), after the 0.0.18 cohort (published 2026-10-11).
 Ordered by what unblocks people, not by what is most interesting to build.
 
 Two rules constrain everything here:
@@ -215,7 +215,7 @@ and #499). Delivered:
 - Atkinson dithering, OKLab distance, Sixel/GIF colour modes, alpha backgrounds
   (#498) and `--theme-file` (#499).
 
-## 0.0.18 — intuiTUIve grows up (planned)
+## 0.0.18 — intuiTUIve grows up (published 2026-10-11)
 
 The [0.0.18 plan](plans/0.0.18.md) takes the terminal-app framework from a
 working slice to something others can build on, after the 0.0.17 cohort
@@ -365,12 +365,16 @@ One rewrite closes all three, and closes
 
 ## 0.1.0 — the gaps that block real adoption
 
+Superseded by the [plan to 1.0.0](plans/1.0.0.md), where 0.1.0 is the API
+review release. Kept for the record:
+
 ~~**Theme stack**~~ — done in 0.0.10 (core 0.0.6): `push_theme`, `pop_theme`
 and a `use_theme` guard that derefs to the console; see [§14](DIVERGENCES.md).
 
-**Windows legacy console** — [#12](https://github.com/buchochelliq-labs/rs-rich-cli/issues/12).
-Needs an explicit `unsafe` opt-in, since the workspace denies `unsafe_code`.
-Without it, pre-Windows-10 terminals silently fall back to plain output.
+~~**Windows legacy console**~~ — not planned:
+[#12](https://github.com/buchochelliq-labs/rs-rich-cli/issues/12) is closed
+and the console without VT processing is unsupported
+([DIVERGENCES §38](DIVERGENCES.md#38-the-windows-legacy-console-is-not-supported)).
 
 ~~**Progress time/rate columns and Live integration**~~ — done: time, rate and
 spinner columns in 0.0.10 (core 0.0.6); the Live-driven display, `track()` and

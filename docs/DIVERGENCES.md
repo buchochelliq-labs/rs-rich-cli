@@ -101,9 +101,9 @@ Format: what differs · why · how to remove it (if temporary).
   default build always emits the requested glyphs.
 - **Why:** keeps default output deterministic (and golden fixtures, captured in
   UTF-8 non-legacy mode, unaffected); runtime terminal detection is platform code.
-- **Remove:** auto-detect `legacy_windows` (WINDOWS && no VT support) and
-  `ascii_only` (non-UTF-8 encoding) at `Console` build time, under the
-  Windows-console issue (#12).
+- **Remove:** auto-detecting `ascii_only` from a non-UTF-8 encoding at
+  `Console` build time remains possible. `legacy_windows` is never
+  auto-detected: the legacy console is not supported (§38).
 
 ### 7. `Table` — one rare padding edge remains
 - **Differs:** sizing (content, shrink-to-fit, `expand`), per-column justify,
@@ -596,6 +596,20 @@ Format: what differs · why · how to remove it (if temporary).
   `frame::export` unit tests).
 - **Why:** these are our exporters (the render tree's), not upstream's; they
   keep what core's lose.
+- **Remove:** not planned.
+
+### 38. The Windows legacy console is not supported
+
+- **Differs:** upstream falls back to the Win32 console API
+  (`_windows.py`, `_win32_console.py`, `_windows_renderer.py`) on a Windows
+  console without virtual terminal processing. The port does not: on Windows
+  it enables VT processing and writes escape sequences, so a console that
+  cannot do VT shows them raw.
+- **Why:** every supported Windows release (10 and later) has VT
+  processing in its console. The fallback would need `unsafe` Win32 calls in
+  core, which denies `unsafe_code`, for terminals almost nobody runs.
+  Decided for 1.0.0 on 2026-10-11 ([plan](plans/1.0.0.md), decision 7;
+  [#12](https://github.com/buchochelliq-labs/rs-rich-cli/issues/12)).
 - **Remove:** not planned.
 
 ## Feature-flagged divergences

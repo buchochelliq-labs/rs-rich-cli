@@ -37,8 +37,10 @@ Things that are not implemented, and are not claimed to be.
 processing; on a console that cannot do VT (very old `cmd.exe`), output will
 contain raw escape sequences.
 
-Upstream falls back to the Win32 console API for these. That port has not been
-done — [#12](https://github.com/buchochelliq-labs/rs-rich-cli/issues/12).
+Upstream falls back to the Win32 console API for these. The port will not:
+every supported Windows release has a VT-capable console, so this is a
+permanent divergence ([DIVERGENCES §38](DIVERGENCES.md#38-the-windows-legacy-console-is-not-supported),
+[#12](https://github.com/buchochelliq-labs/rs-rich-cli/issues/12)).
 **Workaround:** use Windows Terminal, or `--no-color`.
 
 ### No Jupyter integration, and no Python-object inspection
