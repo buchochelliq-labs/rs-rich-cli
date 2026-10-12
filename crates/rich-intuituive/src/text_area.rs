@@ -251,7 +251,12 @@ impl TextArea {
         let room = self.room(width);
         let (mut line, sub) = self.top.get();
         line = line.min(self.buffer.line_count() - 1);
-        let mut rows: Vec<Row> = self.line_rows(line, room).into_iter().skip(sub).collect();
+        let first = self.line_rows(line, room);
+        // A sub-row of the width the line was wrapped at before: wider now,
+        // it may have fewer rows.
+        let sub = sub.min(first.len().saturating_sub(1));
+        self.top.set((line, sub));
+        let mut rows: Vec<Row> = first.into_iter().skip(sub).collect();
         while rows.len() < height && line + 1 < self.buffer.line_count() {
             line += 1;
             rows.extend(self.line_rows(line, room));
@@ -295,6 +300,19 @@ impl TextArea {
             default: out.default_style,
         });
         Some(())
+    }
+
+    /// As wide as the widest line, a cell for the caret, and the gutter, at
+    /// most `u16::MAX`.
+    fn natural_width(&self) -> u16 {
+        let widest = self
+            .buffer
+            .lines()
+            .iter()
+            .map(|line| cells(line))
+            .max()
+            .unwrap_or(0);
+        (widest + 1 + usize::from(self.gutter())).min(u16::MAX as usize) as u16
     }
 
     /// The segments of `row`, from cell `left` (unwrapped), at most `width`
@@ -521,16 +539,7 @@ impl Widget for TextArea {
 
     fn measure(&mut self, _cx: &MeasureCx, axis: Axis, width: u16, _height: u16) -> u16 {
         match axis {
-            Axis::Horizontal => {
-                let widest = self
-                    .buffer
-                    .lines()
-                    .iter()
-                    .map(|line| cells(line))
-                    .max()
-                    .unwrap_or(0);
-                (widest + 1).min(u16::MAX as usize) as u16 + self.gutter()
-            }
+            Axis::Horizontal => self.natural_width(),
             Axis::Vertical => {
                 let room = self.room(width.max(1));
                 (0..self.buffer.line_count())
@@ -798,6 +807,27 @@ mod tests {
             dragging: Cell::new(false),
             escaped: false,
         }
+    }
+
+    #[test]
+    fn a_wider_view_clamps_a_stale_wrapped_row() {
+        let area = area(&"x".repeat(40));
+        // Scrolled to the fourth row of the line wrapped at 10 columns...
+        area.top.set((0, 3));
+        // ...then the terminal widens: the line is one row, and it shows.
+        let rows = area.view(100, 5);
+        assert_eq!(rows.len(), 1);
+        assert_eq!(area.top.get(), (0, 0));
+    }
+
+    #[test]
+    fn the_natural_width_counts_the_gutter_before_clamping() {
+        let mut area = area(&"x".repeat(70_000));
+        area.options.line_numbers = true;
+        assert_eq!(area.natural_width(), u16::MAX);
+        let mut short = super::tests::area("abc");
+        short.options.line_numbers = true;
+        assert_eq!(short.natural_width(), 4 + short.gutter());
     }
 
     #[test]
