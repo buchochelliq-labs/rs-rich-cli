@@ -117,18 +117,18 @@ fn main() {
     hello(&console);
 }
 
---8<-- "crates/rich/examples/guide_getting_started.rs:hello"
+--8<-- "crates/rich-ext/examples/guide_getting_started.rs:hello"
 ```
 
 ![The same two words from the library: Hello in bold magenta, World in green](media/guide/guide_getting_started-hello.svg)
 
 The snippets on this page come from
-[`guide_getting_started.rs`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/crates/rich/examples/guide_getting_started.rs),
+[`guide_getting_started.rs`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/crates/rich-ext/examples/guide_getting_started.rs),
 which prints to your terminal, or with `-- --svg DIR` writes the picture
 above:
 
 ```bash
-cargo run -p rs-rich --example guide_getting_started
+cargo run -p rs-rich-ext --example guide_getting_started
 ```
 
 `Console::new()` detects the terminal: whether it *is* one, how wide it is, and
@@ -142,7 +142,7 @@ Detection is right most of the time. When it isn't — in tests, in CI, when
 generating documentation — configure it explicitly:
 
 ```rust
---8<-- "crates/rich/examples/guide_getting_started.rs:controlling"
+--8<-- "crates/rich-ext/examples/guide_getting_started.rs:controlling"
 ```
 
 !!! tip "Reproducible output"
@@ -156,7 +156,7 @@ generating documentation — configure it explicitly:
 Any render can be captured as a string rather than written out:
 
 ```rust
---8<-- "crates/rich/examples/guide_getting_started.rs:capturing"
+--8<-- "crates/rich-ext/examples/guide_getting_started.rs:capturing"
 ```
 
 That is also how the exports work — see [Exporting](tutorial/06-cli.md#exporting)

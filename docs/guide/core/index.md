@@ -72,7 +72,7 @@ Containers such as `Panel` and `Table` render their children through the same
 protocol, so everything nests: a table in a panel in a layout.
 
 ```rust
---8<-- "crates/rich/examples/guide_getting_started.rs:nesting"
+--8<-- "crates/rich-ext/examples/guide_getting_started.rs:nesting"
 ```
 
 ![A two-row table inside a rounded panel titled Renderables nest](../../media/guide/guide_getting_started-nesting.svg)
