@@ -7,7 +7,7 @@
 # emulator or a browser protocol. Independent SemVer from 0.0.1.
 [package]
 name = "rs-rich-embed"
-version = "0.0.1"
+version = "0.0.2"
 description = "A terminal pane and a web view for intuiTUIve apps, over swappable PTY and browser backends"
 edition.workspace = true
 license.workspace = true

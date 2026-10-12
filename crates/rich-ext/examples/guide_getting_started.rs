@@ -1,4 +1,4 @@
-//! Guide: Getting started — run: cargo run -p rs-rich --example guide_getting_started [-- --svg docs/media/guide]
+//! Guide: Getting started — run: cargo run -p rs-rich-ext --example guide_getting_started [-- --svg docs/media/guide]
 //!
 //! The snippets in docs/getting-started.md and the overview pictures in
 //! docs/guide/core/index.md are cut from this file.
