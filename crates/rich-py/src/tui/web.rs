@@ -246,7 +246,10 @@ fn session_command(py: Python<'_>) -> PyResult<Option<(String, Vec<String>)>> {
         return Ok(None);
     };
     let argv: Vec<String> = sys.getattr("argv")?.extract()?;
-    if argv.first().is_none_or(|script| script.is_empty() || script == "-") {
+    if argv
+        .first()
+        .is_none_or(|script| script.is_empty() || script == "-")
+    {
         return Ok(None);
     }
     let args = match sys.getattr("orig_argv") {
