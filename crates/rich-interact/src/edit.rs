@@ -151,6 +151,9 @@ pub struct Buffer {
     redo: Vec<Step>,
     /// Bumped by every change, so a view knows when to draw again.
     revision: u64,
+    /// [`count`](Self::count), kept up to date by each change, so a limit
+    /// costs a keystroke only the lines it touches.
+    chars: usize,
 }
 
 impl Default for Buffer {
@@ -164,8 +167,10 @@ impl Buffer {
     /// start.
     pub fn new(text: &str) -> Buffer {
         let text = clean(text);
+        let lines: Vec<String> = text.split('\n').map(str::to_string).collect();
         Buffer {
-            lines: text.split('\n').map(str::to_string).collect(),
+            chars: chars_of(&lines),
+            lines,
             caret: Pos::default(),
             anchor: None,
             limit: None,
@@ -203,6 +208,7 @@ impl Buffer {
             let text = self.text();
             let kept = truncate(&text, limit).to_string();
             self.lines = kept.split('\n').map(str::to_string).collect();
+            self.chars = chars_of(&self.lines);
             self.caret = self.clamp(self.caret);
             self.anchor = None;
             self.revision += 1;
@@ -241,12 +247,7 @@ impl Buffer {
 
     /// The characters in the text, as the limit counts them.
     pub fn count(&self) -> usize {
-        self.lines
-            .iter()
-            .map(|line| graphemes(line).len())
-            .sum::<usize>()
-            + self.lines.len()
-            - 1
+        self.chars
     }
 
     pub fn caret(&self) -> Pos {
@@ -270,6 +271,20 @@ impl Buffer {
             .last()
             .unwrap_or(0);
         Pos::new(line, at)
+    }
+
+    /// `pos`, where an edit put the caret, moved on to the end of the
+    /// cluster it falls in. Only a non-ASCII character on either side of
+    /// it can join a cluster across it, so typing ASCII stays cheap.
+    fn snap(&self, pos: Pos, text: &str) -> Pos {
+        let line = &self.lines[pos.line];
+        let next = line[pos.at..].chars().next();
+        let last = text.chars().next_back();
+        if next.is_none_or(|c| c.is_ascii()) && last.is_none_or(|c| c.is_ascii()) {
+            return pos;
+        }
+        let stops = stops(line);
+        Pos::new(pos.line, stops[stops.partition_point(|&s| s < pos.at)])
     }
 
     /// Put the caret at `pos` (clamped), extending the selection from where
@@ -355,16 +370,30 @@ impl Buffer {
     /// the text taken out.
     fn splice(&mut self, start: Pos, end: Pos, text: &str) -> (Pos, String) {
         let removed = self.slice(start, end);
-        let prefix = self.lines[start.line][..start.at].to_string();
-        let suffix = self.lines[end.line][end.at..].to_string();
-        let mut pieces: Vec<String> = text.split('\n').map(str::to_string).collect();
+        let (pieces, column) = self.pieces(start, end, text);
         let last = pieces.len() - 1;
-        let column = pieces[last].len() + if last == 0 { prefix.len() } else { 0 };
-        pieces[0].insert_str(0, &prefix);
-        pieces[last].push_str(&suffix);
+        self.chars = self.count_with(start, end, &pieces);
         self.lines.splice(start.line..=end.line, pieces);
         self.revision += 1;
         (Pos::new(start.line + last, column), removed)
+    }
+
+    /// The lines `text` makes in place of `start..end`'s, and the column
+    /// where it ends on the last of them.
+    fn pieces(&self, start: Pos, end: Pos, text: &str) -> (Vec<String>, usize) {
+        let prefix = &self.lines[start.line][..start.at];
+        let suffix = &self.lines[end.line][end.at..];
+        let mut pieces: Vec<String> = text.split('\n').map(str::to_string).collect();
+        let last = pieces.len() - 1;
+        let column = pieces[last].len() + if last == 0 { prefix.len() } else { 0 };
+        pieces[0].insert_str(0, prefix);
+        pieces[last].push_str(suffix);
+        (pieces, column)
+    }
+
+    /// The count once `pieces` replace the lines from `start` to `end`.
+    fn count_with(&self, start: Pos, end: Pos, pieces: &[String]) -> usize {
+        self.chars - chars_of(&self.lines[start.line..=end.line]) + chars_of(pieces)
     }
 
     /// Insert `text` (cleaned) at the caret, replacing the selection, as
@@ -381,12 +410,8 @@ impl Buffer {
             // and give back what does not fit.
             text = truncate(text, room.saturating_add(2));
             while !text.is_empty() {
-                let saved = (self.lines.clone(), self.caret, self.anchor);
-                self.splice(start, end, text);
-                let fits = self.count() <= limit;
-                (self.lines, self.caret, self.anchor) = saved;
-                self.revision += 1;
-                if fits {
+                let (pieces, _) = self.pieces(start, end, text);
+                if self.count_with(start, end, &pieces) <= limit {
                     break;
                 }
                 text = truncate(text, length(text) - 1);
@@ -404,6 +429,9 @@ impl Buffer {
     fn edit(&mut self, start: Pos, end: Pos, text: &str, run: Option<Run>) {
         let before = (self.caret, self.anchor);
         let (after, removed) = self.splice(start, end, text);
+        // Text that went in before a combining mark joins its cluster: the
+        // caret goes to the cluster's end, never inside it.
+        let after = self.snap(after, text);
         self.caret = after;
         self.anchor = None;
         self.redo.clear();
@@ -607,12 +635,7 @@ impl Buffer {
                 pos
             };
         }
-        let at = stops(&self.lines[pos.line])
-            .into_iter()
-            .rev()
-            .find(|&s| s < pos.at)
-            .unwrap_or(0);
-        Pos::new(pos.line, at)
+        Pos::new(pos.line, stop_before(&stops(&self.lines[pos.line]), pos.at))
     }
 
     /// The place one grapheme after `pos` (the start of the next line at a
@@ -626,10 +649,33 @@ impl Buffer {
                 pos
             };
         }
-        let at = stops(&self.lines[pos.line])
-            .into_iter()
-            .find(|&s| s > pos.at)
-            .unwrap_or(length);
+        Pos::new(
+            pos.line,
+            stop_after(&stops(&self.lines[pos.line]), pos.at, length),
+        )
+    }
+
+    /// [`before`](Self::before) or [`after`](Self::after), keeping the
+    /// stops of the line between calls, so a word move stays linear in the
+    /// line's length.
+    fn step(&self, pos: Pos, forward: bool, cache: &mut Option<(usize, Vec<usize>)>) -> Pos {
+        let length = self.lines[pos.line].len();
+        if forward && pos.at >= length || !forward && pos.at == 0 {
+            return if forward {
+                self.after(pos)
+            } else {
+                self.before(pos)
+            };
+        }
+        let stops = match cache {
+            Some((line, stops)) if *line == pos.line => stops,
+            _ => &mut cache.insert((pos.line, stops(&self.lines[pos.line]))).1,
+        };
+        let at = if forward {
+            stop_after(stops, pos.at, length)
+        } else {
+            stop_before(stops, pos.at)
+        };
         Pos::new(pos.line, at)
     }
 
@@ -661,12 +707,14 @@ impl Buffer {
             .saturating_add_signed(delta)
             .min(self.lines.len() - 1);
         let column = cells(&self.lines[self.caret.line][..self.caret.at]);
-        let line = &self.lines[target];
-        let at = stops(line)
-            .into_iter()
-            .take_while(|&stop| cells(&line[..stop]) <= column)
-            .last()
-            .unwrap_or(0);
+        let (mut used, mut at) = (0, 0);
+        for (_, end, width) in graphemes(&self.lines[target]) {
+            if used + width > column {
+                break;
+            }
+            used += width;
+            at = end;
+        }
         self.move_to(Pos::new(target, at), select);
     }
 
@@ -692,16 +740,17 @@ impl Buffer {
     /// punctuation, then over a word, crossing lines.
     pub fn word_left(&mut self, select: bool) {
         let mut pos = self.caret;
+        let mut cache = None;
         // Over what is not a word, back to the end of one.
         loop {
-            let before = self.before(pos);
+            let before = self.step(pos, false, &mut cache);
             if before == pos || self.is_word(before, pos) {
                 break;
             }
             pos = before;
         }
         loop {
-            let before = self.before(pos);
+            let before = self.step(pos, false, &mut cache);
             if before == pos || !self.is_word(before, pos) {
                 break;
             }
@@ -713,15 +762,16 @@ impl Buffer {
     /// To the end of the word after the caret (Ctrl+→).
     pub fn word_right(&mut self, select: bool) {
         let mut pos = self.caret;
+        let mut cache = None;
         loop {
-            let after = self.after(pos);
+            let after = self.step(pos, true, &mut cache);
             if after == pos || self.is_word(pos, after) {
                 break;
             }
             pos = after;
         }
         loop {
-            let after = self.after(pos);
+            let after = self.step(pos, true, &mut cache);
             if after == pos || !self.is_word(pos, after) {
                 break;
             }
@@ -801,6 +851,32 @@ pub fn stops(line: &str) -> Vec<usize> {
     let mut stops: Vec<usize> = graphemes(line).iter().map(|(start, _, _)| *start).collect();
     stops.push(line.len());
     stops
+}
+
+/// The last of `stops` before `at` (0 if none).
+fn stop_before(stops: &[usize], at: usize) -> usize {
+    match stops.partition_point(|&s| s < at) {
+        0 => 0,
+        i => stops[i - 1],
+    }
+}
+
+/// The first of `stops` after `at` (`length` if none).
+fn stop_after(stops: &[usize], at: usize, length: usize) -> usize {
+    stops
+        .get(stops.partition_point(|&s| s <= at))
+        .copied()
+        .unwrap_or(length)
+}
+
+/// What [`Buffer::count`] counts, for `lines` alone: their clusters and the
+/// breaks between them.
+fn chars_of(lines: &[String]) -> usize {
+    lines
+        .iter()
+        .map(|line| graphemes(line).len())
+        .sum::<usize>()
+        + lines.len().saturating_sub(1)
 }
 
 #[cfg(test)]

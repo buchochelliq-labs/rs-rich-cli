@@ -69,3 +69,62 @@ def test_a_finished_surface_refuses_to_draw() -> None:
     surface.finish()
     with pytest.raises(ValueError, match="finished"):
         surface.draw(lambda d: None)
+
+
+class Flaky(io.StringIO):
+    """A file whose first write fails, as a full pipe or a Ctrl+C would."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.fail = True
+
+    def write(self, text: str) -> int:
+        if self.fail:
+            self.fail = False
+            raise OSError("the write failed")
+        return super().write(text)
+
+
+def test_a_failed_write_is_sent_again() -> None:
+    buf = Flaky()
+    surface = Surface(4, 1, file=buf, color_system=None)
+    with pytest.raises(OSError):
+        surface.draw(lambda d: d.render(d.area, "ab"))
+    surface.draw(lambda d: d.render(d.area, "ab"))
+    assert buf.getvalue().startswith("\x1b[?1049h") and "ab" in buf.getvalue()
+
+
+def test_a_failed_finish_gives_the_terminal_back_when_tried_again() -> None:
+    buf = Flaky()
+    surface = Surface(4, 1, file=buf, color_system=None)
+    buf.fail = False
+    surface.draw(lambda d: d.render(d.area, "ab"))
+    buf.fail = True
+    with pytest.raises(OSError):
+        surface.finish()
+    surface.finish()
+    assert buf.getvalue().endswith("\x1b[?1049l")
+
+
+def test_draw_takes_the_keyword_the_stub_names() -> None:
+    surface = Surface(4, 1, file=io.StringIO())
+    surface.draw(f=lambda d: d.render(d.area, "x"))
+    assert surface.plain() == ["x   "]
+
+
+def test_a_surface_left_open_at_exit_gives_the_terminal_back() -> None:
+    import subprocess
+    import sys
+
+    script = (
+        "import sys\n"
+        "from rs_rich.ext.surface import Surface\n"
+        "surface = Surface(4, 1, color_system=None)\n"
+        "surface.draw(lambda d: d.render(d.area, 'ab'))\n"
+        "raise KeyboardInterrupt\n"
+    )
+    run = subprocess.run(
+        [sys.executable, "-c", script], capture_output=True, text=True, timeout=60
+    )
+    assert "ab" in run.stdout
+    assert run.stdout.endswith("\x1b[?1049l"), repr(run.stdout[-40:])

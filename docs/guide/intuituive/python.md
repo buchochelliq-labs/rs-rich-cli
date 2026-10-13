@@ -284,6 +284,7 @@ counterpart, or a different one:
 - **Traits implemented in Python** other than `Widget`: a `PtyHost` or
   `WebEngine` of your own, and an `Announcer` other than a function
   (`App.announcer(f)`). The Chrome and Browsh engines are off in the wheel.
-- **Smaller pieces:** `Widget::hidden_children`, the cell-level `Screen`
+- **Smaller pieces:** `Widget::hidden_children`, `Widget::claims_key` and
+  `MeasureCx::stack_flow` (0.0.19), the cell-level `Screen`
   (`Driver.screen()` gives the rows, `Driver.lines()` the styled
   segments), `widget::markup_width` and `markup_line`, and `Easing::at`.

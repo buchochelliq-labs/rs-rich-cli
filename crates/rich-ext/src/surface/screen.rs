@@ -140,9 +140,30 @@ impl Screen {
         self.styles.intern(style)
     }
 
+    /// A wide grapheme that `rect` cuts in half, on either side, becomes a
+    /// space: the terminal erases a wide grapheme when either column is
+    /// written, so the half outside `rect` must not stay in the model.
+    fn split_edges(&mut self, rect: Rect) {
+        let rect = rect.intersection(self.area());
+        if rect.is_empty() {
+            return;
+        }
+        for y in rect.y..rect.bottom() {
+            if rect.x > 0 && self.cell(rect.x, y).is_continuation() {
+                let style = self.cell(rect.x - 1, y).style;
+                self.cell_mut(rect.x - 1, y).set(" ", 1, style);
+            }
+            if rect.right() < self.width && self.cell(rect.right(), y).is_continuation() {
+                let style = self.cell(rect.right(), y).style;
+                self.cell_mut(rect.right(), y).set(" ", 1, style);
+            }
+        }
+    }
+
     /// Clear `rect` to blank cells.
     pub fn clear(&mut self, rect: Rect) {
         let rect = rect.intersection(self.area());
+        self.split_edges(rect);
         for y in rect.y..rect.bottom() {
             for x in rect.x..rect.right() {
                 *self.cell_mut(x, y) = Cell::blank();
@@ -159,6 +180,7 @@ impl Screen {
         if rect.is_empty() {
             return;
         }
+        self.split_edges(rect);
         let mut segments = Vec::new();
         for line in lines.iter().take(rect.height as usize) {
             let start = segments.len();
@@ -242,6 +264,7 @@ impl Screen {
     /// `from`, or by this screen's right edge, becomes a space.
     pub fn blit(&mut self, source: &Screen, from: Rect, x: u16, y: u16) {
         let from = from.intersection(source.area());
+        self.split_edges(Rect::new(x, y, from.width, from.height));
         for row in 0..from.height {
             let ty = y.saturating_add(row);
             if ty >= self.height {
@@ -273,6 +296,7 @@ impl Screen {
             return;
         }
         let rows = rows.min(rect.height);
+        self.split_edges(rect);
         let width = self.width as usize;
         for y in rect.y..rect.bottom() - rows {
             let (from, to) = ((y + rows) as usize * width, y as usize * width);
@@ -475,9 +499,17 @@ impl Painter {
             self.codes.clear();
             vec![screen.area()]
         } else {
+            // A column either side too: writing a rectangle can turn the
+            // half of a wide grapheme it cut, just outside it, into a space.
+            // (Not for a forced repaint, which writes every cell it is given.)
+            let wide = u16::from(!self.force);
             damage
                 .iter()
-                .map(|r| r.intersection(screen.area()))
+                .map(|r| {
+                    let x = r.x.saturating_sub(wide);
+                    let right = r.right().saturating_add(wide);
+                    Rect::new(x, r.y, right - x, r.height).intersection(screen.area())
+                })
                 .collect()
         };
         let mut pen = Pen {
@@ -591,7 +623,12 @@ impl Painter {
             return;
         }
         let resolved = screen.style(style);
-        let link = resolved.and_then(|s| s.link()).map(str::to_string);
+        // A URL holding a control would end the OSC early and drive the
+        // terminal with the rest: such a link is dropped.
+        let link = resolved
+            .and_then(|s| s.link())
+            .filter(|url| !url.chars().any(|c| super::control_picture(c).is_some()))
+            .map(str::to_string);
         if link != pen.link {
             match &link {
                 Some(url) => out.push_str(&format!("\x1b]8;;{url}\x1b\\")),

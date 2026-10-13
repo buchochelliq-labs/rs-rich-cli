@@ -132,7 +132,8 @@ impl Surface<io::Stdout> {
         let width = clamp(size.width);
         let height = match viewport {
             Viewport::Fullscreen => clamp(size.height),
-            Viewport::Inline(rows) => rows,
+            // No taller than the terminal: relative moves stop at its edges.
+            Viewport::Inline(rows) => rows.min(clamp(size.height)),
         };
         Surface::new(io::stdout(), width, height)
             .viewport(viewport)
@@ -169,12 +170,14 @@ impl<W: Write> Surface<W> {
     }
 
     /// Draw inline or full screen. An inline viewport's row count replaces
-    /// the surface's height.
+    /// the surface's height, up to that height (the terminal's).
     pub fn viewport(mut self, viewport: Viewport) -> Surface<W> {
         self.viewport = viewport;
         if let Viewport::Inline(rows) = viewport {
-            let width = self.screen.area().width;
-            self.screen = Screen::new(width, rows);
+            // The surface's height is the terminal's: a region taller than
+            // that would lose rows at its edges.
+            let area = self.screen.area();
+            self.screen = Screen::new(area.width, rows.min(area.height.max(1)));
         }
         let system = self.console.color_system();
         self.painter = match viewport {
@@ -228,11 +231,12 @@ impl<W: Write> Surface<W> {
 
     /// The terminal changed size: keep what was drawn (cut to the new
     /// size), and write everything on the next [`draw`](Self::draw). An
-    /// inline viewport keeps its row count and takes the new width.
+    /// inline viewport keeps its row count, up to the terminal's height,
+    /// and takes the new width.
     pub fn resize(&mut self, width: u16, height: u16) {
         let height = match self.viewport {
             Viewport::Fullscreen => height,
-            Viewport::Inline(rows) => rows,
+            Viewport::Inline(rows) => rows.min(height.max(1)),
         };
         if (width, height) == (self.screen.area().width, self.screen.area().height) {
             return;
