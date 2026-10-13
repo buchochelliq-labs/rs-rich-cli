@@ -141,8 +141,11 @@ So a crash, a hang or a runaway allocation ends one tab, not the server:
 - **A hang** holds up its own tab only. When the tab closes, or the server
   stops, the process is killed, on Unix with its process group, so what it
   started goes too. Should the server itself be killed, each session's
-  process sees it go and ends its group the same way. A process that left
-  the group (`setsid`, a daemon) is not reached.
+  process sees it go and ends its group the same way (Unix). A process
+  that left the group (`setsid`, a daemon) is not reached. On Windows the
+  process is ended alone, and nothing watches for a killed server: a
+  session ends only when its connection fails, so one that hangs keeps
+  running.
 - **Limits** (Unix): `session_memory(bytes)` caps each process's address
   space, so an allocation past it fails and that process ends;
   `session_cpu(time)` kills one that has used that much CPU. On Linux the
