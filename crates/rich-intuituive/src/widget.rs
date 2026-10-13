@@ -475,8 +475,14 @@ impl MeasureCx<'_> {
             .into_iter()
             .map(|line| {
                 // As CSS: a percentage is of the container, as the line was
-                // broken by, and a flexible item keeps its content (its
-                // basis) before sharing what its line leaves.
+                // broken by, and a flexible item starts at its content (its
+                // basis) and grows by its share of what the line leaves. So
+                // the bases come off the line first, and only the rest is
+                // shared, the clamps moved down by the basis to match.
+                let basis = |k: usize| match tracks[k].size {
+                    Size::Flex(_) => bases[k].min(total),
+                    _ => 0,
+                };
                 let line_tracks: Vec<Track> = line
                     .clone()
                     .map(|k| match tracks[k].size {
@@ -485,13 +491,20 @@ impl MeasureCx<'_> {
                             ..tracks[k]
                         },
                         Size::Flex(_) => Track {
-                            min: tracks[k].min.max(bases[k].min(total)),
+                            min: tracks[k].min.saturating_sub(basis(k)),
+                            max: tracks[k].max.saturating_sub(basis(k)),
                             ..tracks[k]
                         },
                         _ => tracks[k],
                     })
                     .collect();
-                let sizes = solve(total, gap, &line_tracks);
+                let held: u32 = line.clone().map(|k| basis(k) as u32).sum();
+                let rest = (total as u32).saturating_sub(held).min(u16::MAX as u32) as u16;
+                let sizes: Vec<u16> = solve(rest, gap, &line_tracks)
+                    .into_iter()
+                    .zip(line.clone())
+                    .map(|(size, k)| size.saturating_add(basis(k)))
+                    .collect();
                 let items: Vec<usize> = line.map(|k| shown[k]).collect();
                 let cross = items
                     .iter()
