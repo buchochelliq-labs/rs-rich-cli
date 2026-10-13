@@ -584,6 +584,33 @@ def test_calendars():
     assert out[8] == "2026-11-08"
 
 
+def test_text_area_edits_its_signal():
+    def build():
+        value = signal("one")
+        return column([
+            tui.text_area(value, line_numbers=True, placeholder="empty").autofocus(),
+            text(lambda: "=" + value.get().replace("\n", "|")).fixed(1),
+        ]).on_key("ctrl+q", lambda cx: cx.quit())
+
+    out = screen(build, ["end", "enter", "t", "w", "o", "ctrl+q"], 20, 4)
+    assert out[0] == "1 │ one"
+    assert out[1] == "2 │ two"
+    assert out[3] == "=one|two"
+
+    def build_read_only():
+        value = signal("keep")
+        return column([
+            tui.text_area(value, read_only=True).autofocus(),
+            text(lambda: "=" + value.get()).fixed(1),
+        ]).on_key("ctrl+q", lambda cx: cx.quit())
+
+    out = screen(build_read_only, ["x", "backspace", "ctrl+q"], 20, 3)
+    assert out[2] == "=keep"
+
+    with pytest.raises(TypeError, match="a text area's text"):
+        App(lambda: tui.text_area(signal(3))).render_with([], 10, 2)
+
+
 def test_split_panes():
     def build():
         return split(Axis.Horizontal, label("left"), label("right"), signal(0.5)).on_key(

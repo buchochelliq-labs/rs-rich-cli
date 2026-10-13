@@ -63,6 +63,7 @@ pub mod screen;
 mod sheet;
 mod split;
 pub mod task;
+mod text_area;
 mod tree;
 pub mod widget;
 pub mod widgets;
@@ -85,6 +86,7 @@ pub use reactive::{memo, signal, watch, Memo, Proxy, Signal};
 pub use sheet::{SheetError, Stylesheet};
 pub use task::{resource, spawn, spawn_future, Load, Resource, Task};
 pub use widget::{widget, Widget};
+pub use widgets::text_area;
 
 /// Everything an app usually needs.
 pub mod prelude {
@@ -92,8 +94,8 @@ pub mod prelude {
     pub use crate::{
         column, component, each, every, grid, label, leaf, list, memo, renderable, repeating,
         resource, row, scroll, scroll_both, scroll_with, scroll_x, signal, spawn, switch, text,
-        watch, widget, Align, App, Ctx, Justify, Load, Log, Memo, Node, Proxy, Resource, Signal,
-        Size, Task, Theme, Widget,
+        text_area, watch, widget, Align, App, Ctx, Justify, Load, Log, Memo, Node, Proxy, Resource,
+        Signal, Size, Task, Theme, Widget,
     };
 }
 

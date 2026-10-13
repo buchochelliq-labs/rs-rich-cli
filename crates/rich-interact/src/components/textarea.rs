@@ -11,49 +11,14 @@
 
 use std::cell::Cell;
 
-use rich::cells::split_graphemes;
 use rich::Segment;
 
 use crate::component::{Component, Context, Flow, View};
 use crate::components::{fit, plain, question, text, Theme};
+use crate::edit::{cells, clean, graphemes, length, Buffer, Pos, TAB};
 use crate::event::{Event, Key, KeyCode};
 use crate::keymap::{keys, Keymap};
 use crate::policy::{LineIo, NotInteractive};
-
-/// The cells a tab takes on screen.
-const TAB: usize = 4;
-
-/// The grapheme clusters of `line` as (start, end, cells): rich's, with a
-/// tab one of its own, [`TAB`] cells wide, rather than joined to the one
-/// before it as a zero-width character is.
-fn graphemes(line: &str) -> Vec<(usize, usize, usize)> {
-    let mut out = Vec::new();
-    let mut start = 0;
-    for piece in line.split('\t') {
-        let (spans, _) = split_graphemes(piece);
-        out.extend(spans.into_iter().map(|(s, e, w)| (start + s, start + e, w)));
-        start += piece.len();
-        if start < line.len() {
-            out.push((start, start + 1, TAB));
-            start += 1;
-        }
-    }
-    out
-}
-
-/// The cells `text` (one line) takes on screen.
-fn cells(text: &str) -> usize {
-    graphemes(text).iter().map(|(_, _, width)| width).sum()
-}
-
-/// The characters in `text` as the limit counts them: grapheme clusters,
-/// and a line break one.
-fn length(text: &str) -> usize {
-    text.split('\n')
-        .map(|line| graphemes(line).len())
-        .sum::<usize>()
-        + text.matches('\n').count()
-}
 
 /// One row on screen: a piece of a line.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -69,12 +34,10 @@ struct Row {
 /// Multi-line text. Returns the text, lines joined with `\n`.
 pub struct TextArea {
     prompt: String,
-    lines: Vec<String>,
-    /// The caret: a line, and a byte offset into it on a grapheme boundary.
-    line: usize,
-    at: usize,
+    /// The text, the caret and the limit: the editing shared with
+    /// `rs-rich-intuituive`'s `text_area`.
+    buffer: Buffer,
     placeholder: Option<String>,
-    limit: Option<usize>,
     submit: Key,
     height: usize,
     line_numbers: bool,
@@ -91,11 +54,8 @@ impl TextArea {
     pub fn new(prompt: impl Into<String>) -> TextArea {
         TextArea {
             prompt: prompt.into(),
-            lines: vec![String::new()],
-            line: 0,
-            at: 0,
+            buffer: Buffer::new(""),
             placeholder: None,
-            limit: None,
             submit: Key::ctrl('d'),
             rebound: Keymap::new("textarea"),
             height: 5,
@@ -108,13 +68,8 @@ impl TextArea {
 
     /// Start with this text, the caret at its end.
     pub fn value(mut self, value: impl AsRef<str>) -> Self {
-        let mut value = clean(value.as_ref());
-        if let Some(limit) = self.limit {
-            value = TextArea::truncate(&value, limit).to_string();
-        }
-        self.lines = value.split('\n').map(str::to_string).collect();
-        self.line = self.lines.len() - 1;
-        self.at = self.lines[self.line].len();
+        self.buffer.set_text(value.as_ref());
+        self.buffer.bottom(false);
         self
     }
 
@@ -128,32 +83,16 @@ impl TextArea {
     /// and a combining accent is one), line breaks included. Text already
     /// there beyond it is cut.
     pub fn char_limit(mut self, chars: usize) -> Self {
-        self.limit = Some(chars);
-        let text = TextArea::truncate(&self.text(), chars).to_string();
-        self.value(text)
+        self.buffer.set_limit(Some(chars));
+        self.buffer.bottom(false);
+        self
     }
 
     /// The first `chars` characters of `text` as the character limit
     /// counts them: grapheme clusters, a line break one. Never cuts a
     /// cluster.
     pub fn truncate(text: &str, chars: usize) -> &str {
-        let mut left = chars;
-        let mut start = 0;
-        for line in text.split('\n') {
-            let clusters = graphemes(line);
-            if clusters.len() > left {
-                return &text[..start + clusters[left].0];
-            }
-            left -= clusters.len();
-            start += line.len();
-            if start == text.len() || left == 0 {
-                return &text[..start];
-            }
-            // The line break.
-            left -= 1;
-            start += 1;
-        }
-        text
+        crate::edit::truncate(text, chars)
     }
 
     /// Make `keys` do `action` (in context `textarea`; see
@@ -189,21 +128,16 @@ impl TextArea {
 
     /// The text so far.
     pub fn text(&self) -> String {
-        self.lines.join("\n")
+        self.buffer.text()
     }
 
     /// The caret: (line, character column).
     pub fn caret(&self) -> (usize, usize) {
-        (self.line, self.lines[self.line][..self.at].chars().count())
+        self.buffer.caret_column()
     }
 
     fn count(&self) -> usize {
-        self.lines
-            .iter()
-            .map(|line| graphemes(line).len())
-            .sum::<usize>()
-            + self.lines.len()
-            - 1
+        self.buffer.count()
     }
 
     /// Rows of text shown in a space `rows` high: the height asked for, cut
@@ -212,163 +146,9 @@ impl TextArea {
         self.height.min(rows.saturating_sub(2)).max(1)
     }
 
-    /// Byte offsets where the caret may stop in `line`: grapheme starts and
-    /// the end.
-    fn stops(line: &str) -> Vec<usize> {
-        let mut stops: Vec<usize> = graphemes(line).iter().map(|(start, _, _)| *start).collect();
-        stops.push(line.len());
-        stops
-    }
-
-    /// Insert `text` at the caret, as much of it as the limit leaves room
-    /// for. Clusters are counted once in place, since text joins the one
-    /// before or after the caret (a combining accent) or splits it.
-    fn insert(&mut self, text: &str) {
-        let Some(limit) = self.limit else {
-            self.splice(text);
-            return;
-        };
-        let room = limit.saturating_sub(self.count());
-        // Joining merges at most one cluster at each end.
-        let mut text = TextArea::truncate(text, room.saturating_add(2));
-        while !text.is_empty() {
-            let (line, at, before) = (self.line, self.at, self.lines[self.line].clone());
-            let added = self.splice(text);
-            if self.count() <= limit {
-                return;
-            }
-            self.lines.drain(line + 1..=line + added);
-            self.lines[line] = before;
-            (self.line, self.at) = (line, at);
-            text = TextArea::truncate(text, length(text) - 1);
-        }
-    }
-
-    /// Insert `text` at the caret; the number of lines it added.
-    fn splice(&mut self, text: &str) -> usize {
-        if text.is_empty() {
-            return 0;
-        }
-        let rest = self.lines[self.line].split_off(self.at);
-        let mut pieces = text.split('\n');
-        let first = pieces.next().unwrap_or("");
-        self.lines[self.line].push_str(first);
-        let mut line = self.line;
-        for piece in pieces {
-            line += 1;
-            self.lines.insert(line, piece.to_string());
-        }
-        let added = line - self.line;
-        self.line = line;
-        self.at = self.lines[line].len();
-        self.lines[line].push_str(&rest);
-        added
-    }
-
-    fn backspace(&mut self) {
-        if self.at == 0 {
-            if self.line > 0 {
-                let line = self.lines.remove(self.line);
-                self.line -= 1;
-                self.at = self.lines[self.line].len();
-                self.lines[self.line].push_str(&line);
-            }
-            return;
-        }
-        let stops = Self::stops(&self.lines[self.line]);
-        let previous = stops
-            .iter()
-            .rev()
-            .copied()
-            .find(|&s| s < self.at)
-            .unwrap_or(0);
-        self.lines[self.line].replace_range(previous..self.at, "");
-        self.at = previous;
-    }
-
-    fn delete(&mut self) {
-        let length = self.lines[self.line].len();
-        if self.at == length {
-            if self.line + 1 < self.lines.len() {
-                let next = self.lines.remove(self.line + 1);
-                self.lines[self.line].push_str(&next);
-            }
-            return;
-        }
-        let stops = Self::stops(&self.lines[self.line]);
-        let next = stops
-            .iter()
-            .copied()
-            .find(|&s| s > self.at)
-            .unwrap_or(length);
-        self.lines[self.line].replace_range(self.at..next, "");
-    }
-
-    fn left(&mut self) {
-        if self.at == 0 {
-            if self.line > 0 {
-                self.line -= 1;
-                self.at = self.lines[self.line].len();
-            }
-            return;
-        }
-        let stops = Self::stops(&self.lines[self.line]);
-        self.at = stops
-            .iter()
-            .rev()
-            .copied()
-            .find(|&s| s < self.at)
-            .unwrap_or(0);
-    }
-
-    fn right(&mut self) {
-        let length = self.lines[self.line].len();
-        if self.at == length {
-            if self.line + 1 < self.lines.len() {
-                self.line += 1;
-                self.at = 0;
-            }
-            return;
-        }
-        let stops = Self::stops(&self.lines[self.line]);
-        self.at = stops
-            .iter()
-            .copied()
-            .find(|&s| s > self.at)
-            .unwrap_or(length);
-    }
-
-    /// Move `delta` lines, keeping the column in cells as near as it goes.
-    fn vertical(&mut self, delta: isize) {
-        let target = self
-            .line
-            .saturating_add_signed(delta)
-            .min(self.lines.len() - 1);
-        if target == self.line {
-            return;
-        }
-        let column = cells(&self.lines[self.line][..self.at]);
-        self.line = target;
-        let line = &self.lines[target];
-        self.at = Self::stops(line)
-            .into_iter()
-            .take_while(|&stop| cells(&line[..stop]) <= column)
-            .last()
-            .unwrap_or(0);
-    }
-
-    fn kill_word(&mut self) {
-        let line = &self.lines[self.line];
-        let before = &line[..self.at];
-        let trimmed = before.trim_end_matches(' ');
-        let start = trimmed.rfind(' ').map_or(0, |space| space + 1);
-        self.lines[self.line].replace_range(start..self.at, "");
-        self.at = start;
-    }
-
     fn gutter(&self) -> usize {
         if self.line_numbers {
-            self.lines.len().to_string().len() + 3
+            self.buffer.line_count().to_string().len() + 3
         } else {
             2
         }
@@ -379,7 +159,7 @@ impl TextArea {
     fn rows(&self, width: usize) -> Vec<Row> {
         let room = width.saturating_sub(self.gutter() + 1).max(1);
         let mut rows = Vec::new();
-        for (index, line) in self.lines.iter().enumerate() {
+        for (index, line) in self.buffer.lines().iter().enumerate() {
             let spans = graphemes(line);
             let mut start = 0;
             let mut cells = 0;
@@ -414,10 +194,11 @@ impl TextArea {
             let next_same_line = rows
                 .get(index + 1)
                 .is_some_and(|next| next.line == row.line);
-            let within = self.at >= row.start && (self.at < row.end || !next_same_line);
-            if row.line == self.line && within {
-                let line = &self.lines[row.line];
-                return (index, cells(&line[row.start..self.at]));
+            let Pos { line, at } = self.buffer.caret();
+            let within = at >= row.start && (at < row.end || !next_same_line);
+            if row.line == line && within {
+                let text = self.buffer.line(row.line);
+                return (index, cells(&text[row.start..at]));
             }
         }
         (0, 0)
@@ -436,28 +217,13 @@ impl TextArea {
     }
 }
 
-/// Text for the area: `\r\n` and `\r` as `\n`, tabs kept, and other
-/// terminal controls (C0, DEL, C1) dropped.
-fn clean(text: &str) -> String {
-    let text = text.replace("\r\n", "\n").replace('\r', "\n");
-    let mut out = String::with_capacity(text.len());
-    for c in text.chars() {
-        match c {
-            '\n' | '\t' => out.push(c),
-            '\0'..='\u{1f}' | '\u{7f}'..='\u{9f}' => {}
-            _ => out.push(c),
-        }
-    }
-    out
-}
-
 impl Component for TextArea {
     type Output = String;
 
     fn handle(&mut self, event: &Event, context: &Context<'_>) -> Flow<String> {
         let height = self.shown_rows(context.height);
         if let Event::Paste(pasted) = event {
-            self.insert(&clean(pasted));
+            self.buffer.insert(pasted);
             self.follow(context.width, height);
             return Flow::Continue;
         }
@@ -486,36 +252,27 @@ impl Component for TextArea {
                 self.answer = Some(None);
                 return Flow::Cancel;
             }
-            Some("newline") => self.insert("\n"),
-            Some("indent") => self.insert("    "),
-            Some("backspace") => self.backspace(),
-            Some("delete") => self.delete(),
-            Some("left") => self.left(),
-            Some("right") => self.right(),
-            Some("up") => self.vertical(-1),
-            Some("down") => self.vertical(1),
-            Some("page-up") => self.vertical(-(height as isize)),
-            Some("page-down") => self.vertical(height as isize),
-            Some("top") => (self.line, self.at) = (0, 0),
-            Some("bottom") => {
-                self.line = self.lines.len() - 1;
-                self.at = self.lines[self.line].len();
-            }
-            Some("home") => self.at = 0,
-            Some("end") => self.at = self.lines[self.line].len(),
-            Some("delete-to-start") => {
-                self.lines[self.line].replace_range(..self.at, "");
-                self.at = 0;
-            }
-            Some("delete-to-end") => {
-                let at = self.at;
-                self.lines[self.line].truncate(at);
-            }
-            Some("delete-word") => self.kill_word(),
+            Some("newline") => self.buffer.insert("\n"),
+            Some("indent") => self.buffer.insert("    "),
+            Some("backspace") => self.buffer.backspace(),
+            Some("delete") => self.buffer.delete(),
+            Some("left") => self.buffer.left(false),
+            Some("right") => self.buffer.right(false),
+            Some("up") => self.buffer.vertical(-1, false),
+            Some("down") => self.buffer.vertical(1, false),
+            Some("page-up") => self.buffer.vertical(-(height as isize), false),
+            Some("page-down") => self.buffer.vertical(height as isize, false),
+            Some("top") => self.buffer.top(false),
+            Some("bottom") => self.buffer.bottom(false),
+            Some("home") => self.buffer.home(false),
+            Some("end") => self.buffer.end(false),
+            Some("delete-to-start") => self.buffer.delete_to_start(),
+            Some("delete-to-end") => self.buffer.delete_to_end(),
+            Some("delete-word") => self.buffer.delete_word(),
             _ => match key.code {
                 KeyCode::Char(c) if !key.modifiers.ctrl && !key.modifiers.alt => {
                     let mut buffer = [0; 4];
-                    self.insert(c.encode_utf8(&mut buffer));
+                    self.buffer.insert(c.encode_utf8(&mut buffer));
                 }
                 _ => return Flow::Ignored,
             },
@@ -579,7 +336,7 @@ impl Component for TextArea {
         let height = self.shown_rows(context.height);
         let top = self.top.get().min(rows.len().saturating_sub(1));
         let gutter = self.gutter();
-        let empty = self.lines.len() == 1 && self.lines[0].is_empty();
+        let empty = self.buffer.is_empty();
         for index in top..top + height {
             let mut line: Vec<Segment> = Vec::new();
             match rows.get(index) {
@@ -597,7 +354,7 @@ impl Component for TextArea {
                             line.push(text(placeholder.clone(), &theme.hint));
                         }
                     } else {
-                        let piece = &self.lines[row.line][row.start..row.end];
+                        let piece = &self.buffer.line(row.line)[row.start..row.end];
                         line.push(plain(piece.replace('\t', &" ".repeat(TAB))));
                     }
                 }
@@ -606,7 +363,7 @@ impl Component for TextArea {
             lines.push(fit(line, width));
         }
         let mut hint = String::from("  ");
-        if let Some(limit) = self.limit {
+        if let Some(limit) = self.buffer.limit() {
             hint.push_str(&format!("{}/{limit} · ", self.count()));
         }
         hint.push_str(&format!(
@@ -641,7 +398,7 @@ impl Component for TextArea {
         while let Some(line) = io.read_line() {
             total += length(&line) + 1;
             read.push(clean(&line));
-            if self.limit.is_some_and(|limit| total > limit) {
+            if self.buffer.limit().is_some_and(|limit| total > limit) {
                 break;
             }
         }
@@ -649,7 +406,7 @@ impl Component for TextArea {
             return Ok(Some(self.text()));
         }
         let text = read.join("\n");
-        Ok(Some(match self.limit {
+        Ok(Some(match self.buffer.limit() {
             Some(limit) => TextArea::truncate(&text, limit).to_string(),
             None => text,
         }))
@@ -667,15 +424,10 @@ mod tests {
         let rows = area.rows(12);
         let pieces: Vec<&str> = rows
             .iter()
-            .map(|row| &area.lines[row.line][row.start..row.end])
+            .map(|row| &area.buffer.line(row.line)[row.start..row.end])
             .collect();
         assert_eq!(pieces, ["abcdefghi", "j", "xy"]);
         assert!(rows[0].first && !rows[1].first && rows[2].first);
         assert_eq!(area.caret_at(&rows), (2, 2));
-    }
-
-    #[test]
-    fn cleans_pasted_text() {
-        assert_eq!(clean("a\r\nb\rc\td\x1b[2Je\u{9b}"), "a\nb\nc\td[2Je");
     }
 }

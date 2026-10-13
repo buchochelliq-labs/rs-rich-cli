@@ -212,6 +212,14 @@ pub trait Widget: Any {
         false
     }
 
+    /// Whether it takes `key` itself while it is on the focused path, so
+    /// the app does not: Ctrl+Z then reaches it rather than suspending the
+    /// app, and Ctrl+C rather than quitting. Default: no key.
+    fn claims_key(&self, key: rich_interact::Key) -> bool {
+        let _ = key;
+        false
+    }
+
     /// Where the text caret goes while it has the focus, in its own
     /// coordinates.
     fn caret(&self) -> Option<(u16, u16)> {

@@ -431,6 +431,67 @@ log of a hundred thousand rows, in panes whose dividers drag
 
 ![A planner: a menu bar, a tree of projects, a calendar and a long log](../../media/tapes/intuituive/planner.png)
 
+### Text areas
+
+`text_area(text)` edits the `String` in a signal: what is typed is set on
+the signal, and a string set on it from elsewhere replaces what the area
+holds. Its options are builders on the node, called before `.panel(..)`
+and the like wrap it:
+
+```rust
+--8<-- "crates/rich-intuituive/examples/editor.rs:areas"
+```
+
+- **`.language("rust")`** highlights it through the console's
+  [code highlighter](../ext/code-highlighters.md): syntect by default,
+  lumis when it is registered. Every row is filled with the theme's
+  background.
+- **`.line_numbers()`** numbers the lines in a gutter.
+- **`.soft_wrap(false)`** scrolls long lines sideways to the caret instead
+  of wrapping them (wrapping is the default).
+- **`.read_only()`** keeps the caret, selection and copying, and refuses
+  edits.
+- **`.placeholder("…")`** shows dimmed text while it is empty.
+
+The editing is `rich_interact::edit::Buffer`, which the interact crate's
+own `TextArea` uses too: the caret moves by grapheme cluster, so an emoji
+or an accented letter is one step. The keys:
+
+| Keys | What they do |
+|---|---|
+| arrows, Home/End, PageUp/PageDown | move; Ctrl+←/→ by word, Ctrl+Home/End to the start and end |
+| Shift with any of them | select |
+| Ctrl+A | select everything |
+| Ctrl+C, Ctrl+X | copy and cut the selection (OSC 52); with nothing selected, Ctrl+C quits as anywhere |
+| pasting | the terminal's bracketed paste, cleaned of control characters, as one undo step |
+| Tab, Shift+Tab | indent and outdent the selected lines |
+| Escape, then Tab | move the focus on (read-only, Tab always does) |
+| Ctrl+Z, Ctrl+Y or Ctrl+Shift+Z | undo and redo; a typed run is one step. Ctrl+Z here never suspends the app |
+| Ctrl+W, Ctrl+U, Ctrl+K | delete a word, to the line's start, to its end |
+
+The mouse places the caret, drags a selection, and a double or triple click
+selects a word or a line; the wheel scrolls.
+
+Only the lines in view are wrapped, highlighted and drawn, so a file of a
+hundred thousand lines pages as fast as a short one. Highlighting starts at
+the first line in view: a construct that opened above it (a long comment, a
+multi-line string) is not known to the lines it covers.
+
+For assistive technology it is a text box whose value is the caret's line,
+so linear mode reads the line the caret moves to.
+
+<div class="tape-player" data-cast="../../media/tapes/editor/editor.cast" data-poster="npt:0:3">
+  <img src="../../media/tapes/editor/editor.gif" alt="Rust source in a text area: a line typed, a line selected, the typing undone, then notes typed below">
+</div>
+
+| Highlighted, with line numbers | A line selected | Notes, after Escape and Tab |
+|---|---|---|
+| ![Rust source, highlighted, with line numbers](../../media/tapes/editor/editor.png) | ![A line selected with Shift+Home](../../media/tapes/editor/selected.png) | ![Notes typed in the second area](../../media/tapes/editor/notes.png) |
+
+`cargo run -p rs-rich-intuituive --example editor` runs it. In Python,
+`text_area(text, language="rust", line_numbers=True)` takes the options as
+keywords.
+
 ## The mouse
 
 Every mouse event (press, release, drag, movement, the wheel) goes to the
@@ -1002,6 +1063,7 @@ is in [Testing with screen readers](screen-readers.md).
     | `tree`, `tree_with` | the same, and `expanded` for an item with children |
     | `tree_lazy` | the same, and `busy` while a level loads |
     | `calendar` | `selected` |
+    | `text_area` | none: its value is the caret's line |
 
     Code sets them with `.selected_when(…)`, `.expanded_when(…)`,
     `.checked_when(…)` (which makes the role `checkbox` unless one is set;

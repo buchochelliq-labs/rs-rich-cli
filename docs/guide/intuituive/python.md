@@ -44,6 +44,7 @@ As in Rust, `build` runs once and returns the root node. `text` reads
 | `Rect::new(x, y, w, h)` | `Rect(x, y, w, h)`, or a tuple `(x, y, w, h)` |
 | `Date::new(2026, 10, 7)` | `datetime.date(2026, 10, 7)` |
 | `Duration::from_millis(200)` | `0.2` (seconds), or a `timedelta` |
+| `text_area(text).language("rust").line_numbers()` | `text_area(text, language="rust", line_numbers=True)`: the options are keywords |
 | `spawn_future(future, done)` | `spawn_async(coroutine, done)` |
 | `app.render_with(&["+", "q"], 30, 2)` | `app.render_with(["+", "q"], 30, 2)` |
 | `App::run_on(&mut Headless::new(script, w, h))` | `run(app, script, width=w, height=h)` |
@@ -73,7 +74,7 @@ to itself: use `update`.
 
 The widgets that need a signal of a particular type take one of yours: a
 list's or table's selection (an `int`), a split's ratio (a `float`), a
-calendar's day (a `datetime.date`), a tree's path (a list of indices) and
+calendar's day (a `datetime.date`), a text area's text (a `str`), a tree's path (a list of indices) and
 its expanded paths (a set of tuples), a table's sort (`None` or `(column,
 Order)`). The first time a signal goes to such a widget it becomes one of
 that type and keeps its value, and anything that read it before (a memo

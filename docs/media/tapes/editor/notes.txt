@@ -1,0 +1,32 @@
+╭─ count.rs ───────────────────────────────────────────────────────────────────╮
+│ 1 │ use std::collections::HashMap;                                           │
+│ 2 │                                                                          │
+│ 3 │ /// Count the words in `text`, most frequent first.                      │
+│ 4 │ fn count(text: &str) -> Vec<(&str, usize)> {                             │
+│ 5 │     let mut counts = HashMap::new();                                     │
+│ 6 │     for word in text.split_whitespace() {                                │
+│ 7 │         *counts.entry(word).or_insert(0) += 1;                           │
+│ 8 │     }                                                                    │
+│ 9 │     let mut counts: Vec<_> = counts.into_iter().collect();               │
+│10 │     counts.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(b.0)));             │
+│11 │     counts                                                               │
+│12 │ }                                                                        │
+│13 │                                                                          │
+│14 │ fn main() {                                                              │
+│15 │     for (word, n) in count("the cat and the hat and the bat") {          │
+│16 │         println!("{word:>4} {n}");                                       │
+│17 │     }                                                                    │
+│18 │ }                                                                        │
+│19 │                                                                          │
+│   │                                                                          │
+│   │                                                                          │
+│   │                                                                          │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ notes ──────────────────────────────────────────────────────────────────────╮
+│Check the ties: bat, cat and hat come out in that order.                      │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+╰──────────────────────────────────────────────────────────────────────────────╯
+count.rs 18 lines · notes 12 words
+esc tab moves on · ctrl+z undo · ctrl+y redo · ctrl+q quits

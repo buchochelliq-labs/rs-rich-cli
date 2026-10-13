@@ -515,6 +515,50 @@ fn tui_tree_lazy(
 }
 
 // ---------------------------------------------------------------------------
+// The text area
+
+/// `text_area(text, *, language=None, line_numbers=False, soft_wrap=True,
+/// read_only=False, placeholder=None)`: a multi-line editor of the str in
+/// `text`. What is typed is set on the signal; a str set on it from
+/// elsewhere replaces what the area holds.
+#[pyfunction]
+#[pyo3(signature = (
+    text,
+    *,
+    language=None,
+    line_numbers=false,
+    soft_wrap=true,
+    read_only=false,
+    placeholder=None,
+))]
+fn tui_text_area(
+    text: &Bound<'_, PyAny>,
+    language: Option<&str>,
+    line_numbers: bool,
+    soft_wrap: bool,
+    read_only: bool,
+    placeholder: Option<&str>,
+) -> PyResult<PyNode> {
+    let text = signal_arg(text, "text_area's text")?
+        .borrow()
+        .string(text.py(), "a text area's text")?;
+    let mut node = core::text_area(text).soft_wrap(soft_wrap);
+    if let Some(language) = language {
+        node = node.language(language);
+    }
+    if line_numbers {
+        node = node.line_numbers();
+    }
+    if read_only {
+        node = node.read_only();
+    }
+    if let Some(placeholder) = placeholder {
+        node = node.placeholder(placeholder);
+    }
+    Ok(PyNode::new(node))
+}
+
+// ---------------------------------------------------------------------------
 // The calendar and split panes
 
 /// `calendar(selected)`: a month grid of the `datetime.date` in `selected`.
@@ -748,6 +792,7 @@ pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(tui_tree, m)?)?;
     m.add_function(wrap_pyfunction!(tui_tree_with, m)?)?;
     m.add_function(wrap_pyfunction!(tui_tree_lazy, m)?)?;
+    m.add_function(wrap_pyfunction!(tui_text_area, m)?)?;
     m.add_function(wrap_pyfunction!(tui_calendar, m)?)?;
     m.add_function(wrap_pyfunction!(tui_calendar_with, m)?)?;
     m.add_function(wrap_pyfunction!(tui_split, m)?)?;

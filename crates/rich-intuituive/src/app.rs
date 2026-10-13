@@ -1475,7 +1475,9 @@ impl App {
                 }
                 None => String::new(),
             };
-            let value = if role.has_items() {
+            // A multi-line text box's value is its caret's line, as an
+            // item's is the selected one.
+            let value = if role.has_items() || (role == Role::TextBox && node.cursor().is_some()) {
                 node.cursor().map(|at| {
                     let inner = crate::node::translate(node.inner.get(), shift);
                     let item = Rect::new(
@@ -2248,7 +2250,8 @@ impl App {
     /// Route a key: from the focused node up through its ancestors to the
     /// root; Tab and Shift+Tab move the focus if no binding used them.
     /// Whether to quit.
-    /// Whether a node on the path keys take binds `key`.
+    /// Whether a node on the path keys take binds `key`, or its widget
+    /// [claims](crate::Widget::claims_key) it.
     fn binds(&self, key: Key) -> bool {
         let mut bound = false;
         for id in self.key_path() {
@@ -2257,7 +2260,8 @@ impl App {
                     .keys
                     .borrow()
                     .iter()
-                    .any(|(keys, _, _)| key.matches_any(keys));
+                    .any(|(keys, _, _)| key.matches_any(keys))
+                    || node.body.borrow().widget.claims_key(key);
             });
         }
         bound

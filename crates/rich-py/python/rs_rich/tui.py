@@ -26,7 +26,7 @@ The same API as the Rust crate, name for name, so one guide serves both::
   ``class_`` is Rust's ``class``.
 - **Widgets**: ``table``, ``table_with`` (``TableOptions``), ``virtual_table``,
   ``virtual_list``, ``tabs``, ``tree``, ``tree_with``, ``tree_lazy``
-  (``TreeItem``, ``LazyItem``), ``calendar``, ``calendar_with``, ``split``,
+  (``TreeItem``, ``LazyItem``), ``text_area``, ``calendar``, ``calendar_with``, ``split``,
   ``split_with``, ``hsplit``, ``vsplit``, menus (``menu_bar``, ``Menu``,
   ``MenuItem``, ``open_menu``, ``context_menu``).
 - **State**: ``signal``, ``memo``, ``watch``, ``every``; background work with
@@ -139,6 +139,7 @@ from ._native import (
     tui_terminal,
     tui_terminal_with,
     tui_text,
+    tui_text_area,
     tui_tree,
     tui_tree_lazy,
     tui_tree_with,
@@ -238,6 +239,7 @@ tabs = tui_tabs
 tree = tui_tree
 tree_with = tui_tree_with
 tree_lazy = tui_tree_lazy
+text_area = tui_text_area
 calendar = tui_calendar
 calendar_with = tui_calendar_with
 split = tui_split
@@ -346,6 +348,7 @@ __all__ = [
     "tree",
     "tree_with",
     "tree_lazy",
+    "text_area",
     "calendar",
     "calendar_with",
     "split",

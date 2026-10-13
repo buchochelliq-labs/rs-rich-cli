@@ -255,7 +255,7 @@ impl Node {
         }
     }
 
-    fn what(mut self, what: &'static str) -> Node {
+    pub(crate) fn what(mut self, what: &'static str) -> Node {
         self.what = what;
         self
     }
@@ -463,7 +463,7 @@ impl Node {
     }
 
     /// The widget, if it is a `W`.
-    fn widget_mut<W: Widget, R>(&self, f: impl FnOnce(&mut W) -> R) -> Option<R> {
+    pub(crate) fn widget_mut<W: Widget, R>(&self, f: impl FnOnce(&mut W) -> R) -> Option<R> {
         let mut body = self.body.borrow_mut();
         let widget: &mut dyn std::any::Any = &mut *body.widget;
         widget.downcast_mut::<W>().map(f)

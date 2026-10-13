@@ -422,6 +422,17 @@ impl PySignal {
         self.typed(py, what, from, Slot::Sort, sort_from)
     }
 
+    pub(crate) fn string(&self, py: Python<'_>, what: &str) -> PyResult<Signal<String>> {
+        let from = |s| match s {
+            Slot::Str(s) => Some(s),
+            _ => None,
+        };
+        self.typed(py, what, from, Slot::Str, |v| {
+            v.extract::<String>()
+                .map_err(|_| PyTypeError::new_err("its value must be a str"))
+        })
+    }
+
     pub(crate) fn key(&self, py: Python<'_>, what: &str) -> PyResult<Signal<Option<String>>> {
         let from = |s| match s {
             Slot::Key(s) => Some(s),
