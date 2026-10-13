@@ -872,11 +872,13 @@ impl Node {
     /// A node of `widget` round this one, taking over its size and span.
     fn wrap_in(self, widget: impl FnOnce(Node) -> Box<dyn Widget>, what: &'static str) -> Node {
         let (size, min, max, span, set) = (self.size, self.min, self.max, self.span, self.set);
+        let align_self = self.align_self;
         let mut outer = Node::from_widget(widget(self), what);
         outer.size = size;
         outer.min = min;
         outer.max = max;
         outer.span = span;
+        outer.align_self = align_self;
         outer.set[SET_SIZE] = set[SET_SIZE];
         outer.set[SET_MIN] = set[SET_MIN];
         outer.set[SET_MAX] = set[SET_MAX];

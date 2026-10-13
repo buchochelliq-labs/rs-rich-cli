@@ -504,6 +504,10 @@ jobs:
           cargo build -p rs-rich-cli -p rs-rich-interact -p rs-rich-intuituive
           -p rs-rich-embed --features rs-rich-cli/serve --bins --examples --locked
 
+      # rs-rich-ext's examples are guide programs; the surface tape runs one.
+      - name: Build the example the surface tape runs
+        run: cargo build -p rs-rich-ext --example guide_surface --locked
+
       - name: Check every tape's screenshots
         run: >-
           target/debug/rich record --check --bin-dir target/debug

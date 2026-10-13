@@ -1,0 +1,18 @@
+❯ echo 'earlier output stays above'
+earlier output stays above
+❯ guide_surface
+╭──────────────────────────────────────────────────────────────╮
+│ deploy · production                                          │
+╰──────────────────────────────────────────────────────────────╯
+┏━━━━━━━━━┳━━━━━━━━━┳━━━━━━━━┓
+┃ job     ┃ state   ┃ time   ┃
+┡━━━━━━━━━╇━━━━━━━━━╇━━━━━━━━┩
+│ build   │ done    │ 41s    │
+│ test    │ done    │ 2m 03s │
+│ rollout │ running │ 4s     │
+└─────────┴─────────┴────────┘
+tick 4 · updated in place
+❯
+
+
+

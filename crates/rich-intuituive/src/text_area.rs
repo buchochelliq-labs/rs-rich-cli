@@ -221,11 +221,16 @@ impl TextArea {
         // Rows from the top to the caret's, stopping once past the height.
         let mut between = 0;
         let (mut line, mut sub) = top;
+        // Each line wrapped once, not once a row: a long line has many.
+        let mut count = self.line_rows(line, room).len();
         while (line, sub) < here && between < height {
             between += 1;
             sub += 1;
-            if sub >= self.line_rows(line, room).len() {
+            if sub >= count {
                 (line, sub) = (line + 1, 0);
+                if line < self.buffer.line_count() {
+                    count = self.line_rows(line, room).len();
+                }
             }
         }
         if between < height {
@@ -697,14 +702,18 @@ impl Widget for TextArea {
                 }
                 MouseKind::ScrollUp | MouseKind::ScrollDown => {
                     let down = mouse.kind == MouseKind::ScrollDown;
-                    let (line, _) = self.top.get();
+                    let (top, _) = self.top.get();
                     let last = self.buffer.line_count() - 1;
                     let line = if down {
-                        (line + 3).min(last)
+                        (top + 3).min(last)
                     } else {
-                        line.saturating_sub(3)
+                        top.saturating_sub(3)
                     };
-                    self.top.set((line, 0));
+                    // Down from inside the last line stays where it is,
+                    // rather than going back to the line's first row.
+                    if !(down && line == top) {
+                        self.top.set((line, 0));
+                    }
                     cx.redraw();
                     return Used::Yes;
                 }

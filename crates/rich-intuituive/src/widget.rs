@@ -474,7 +474,24 @@ impl MeasureCx<'_> {
         break_lines(total, gap, &bases)
             .into_iter()
             .map(|line| {
-                let sizes = solve(total, gap, &tracks[line.clone()]);
+                // As CSS: a percentage is of the container, as the line was
+                // broken by, and a flexible item keeps its content (its
+                // basis) before sharing what its line leaves.
+                let line_tracks: Vec<Track> = line
+                    .clone()
+                    .map(|k| match tracks[k].size {
+                        Size::Percent(_) => Track {
+                            size: Size::Fixed(bases[k]),
+                            ..tracks[k]
+                        },
+                        Size::Flex(_) => Track {
+                            min: tracks[k].min.max(bases[k].min(total)),
+                            ..tracks[k]
+                        },
+                        _ => tracks[k],
+                    })
+                    .collect();
+                let sizes = solve(total, gap, &line_tracks);
                 let items: Vec<usize> = line.map(|k| shown[k]).collect();
                 let cross = items
                     .iter()

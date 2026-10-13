@@ -28,11 +28,15 @@ enum Op {
 /// color_system="truecolor", synchronized=False)`: a drawing handle on the
 /// terminal. Without a size it takes the terminal's; `inline=rows` draws
 /// that many rows below the cursor instead of on the alternate screen.
-#[pyclass(name = "Surface", module = "rs_rich.ext.surface", unsendable)]
+#[pyclass(name = "Surface", module = "rs_rich.ext.surface", unsendable, weakref)]
 pub(crate) struct Surface {
     inner: Option<CoreSurface<Vec<u8>>>,
     console: CoreConsole,
     file: Option<Py<PyAny>>,
+    /// The `atexit` hook, from the first `draw` to `finish`, that gives
+    /// the terminal back if the program ends with the surface open: one at
+    /// module level is not reliably dropped at interpreter shutdown.
+    at_exit: Option<Py<PyAny>>,
 }
 
 impl Surface {
@@ -42,26 +46,68 @@ impl Surface {
             .ok_or_else(|| PyValueError::new_err("the surface is finished"))
     }
 
+    /// Call `f(drawing)`, then write what changed in the rectangles it drew.
+    fn draw_with(&mut self, py: Python<'_>, f: &Bound<'_, PyAny>) -> PyResult<()> {
+        let area = self.inner()?.area();
+        let drawing = Py::new(
+            py,
+            Drawing {
+                area,
+                console: self.console.clone(),
+                ops: RefCell::new(Vec::new()),
+            },
+        )?;
+        f.call1((drawing.clone_ref(py),))?;
+        let ops = std::mem::take(&mut *drawing.borrow(py).ops.borrow_mut());
+        self.inner()?
+            .draw(|s| {
+                for op in ops {
+                    match op {
+                        Op::Lines(rect, lines) => s.write_lines(rect, lines),
+                        Op::Clear(rect) => s.clear(rect),
+                        Op::Cursor(x, y) => s.set_cursor(x, y),
+                    }
+                }
+            })
+            .map_err(|e| pyo3::exceptions::PyOSError::new_err(e.to_string()))?;
+        self.flush(py)
+    }
+
     /// Write what the Rust surface produced to the file.
     fn flush(&mut self, py: Python<'_>) -> PyResult<()> {
         let Some(inner) = self.inner.as_mut() else {
             return Ok(());
         };
-        let bytes = std::mem::take(inner.writer_mut());
-        if bytes.is_empty() {
+        if inner.writer_mut().is_empty() {
             return Ok(());
         }
-        let text = String::from_utf8_lossy(&bytes).into_owned();
+        let text = String::from_utf8_lossy(inner.writer_mut()).into_owned();
         let file = match &self.file {
             Some(file) => file.bind(py).clone(),
             None => py.import("sys")?.getattr("stdout")?,
         };
         file.call_method1("write", (text,))?;
+        // Only now are the bytes gone: after a failed write the next
+        // `draw` or `finish` sends them again.
+        if let Some(inner) = self.inner.as_mut() {
+            inner.writer_mut().clear();
+        }
         if file.hasattr("flush")? {
             file.call_method0("flush")?;
         }
         Ok(())
     }
+}
+
+/// `finish` the surface `weak` refers to, if it is still alive: the
+/// `atexit` hook a surface registers on its first `draw`.
+#[pyfunction]
+fn finish_at_exit(weak: &Bound<'_, PyAny>) -> PyResult<()> {
+    let surface = weak.call0()?;
+    if !surface.is_none() {
+        surface.call_method0("finish")?;
+    }
+    Ok(())
 }
 
 #[pymethods]
@@ -100,6 +146,7 @@ impl Surface {
             inner: Some(inner),
             console: build(),
             file,
+            at_exit: None,
         })
     }
 
@@ -110,30 +157,18 @@ impl Surface {
     }
 
     /// Call `fn(drawing)`, then write what changed in the rectangles it drew.
-    fn draw(&mut self, py: Python<'_>, f: &Bound<'_, PyAny>) -> PyResult<()> {
-        let area = self.inner()?.area();
-        let drawing = Py::new(
-            py,
-            Drawing {
-                area,
-                console: self.console.clone(),
-                ops: RefCell::new(Vec::new()),
-            },
-        )?;
-        f.call1((drawing.clone_ref(py),))?;
-        let ops = std::mem::take(&mut *drawing.borrow(py).ops.borrow_mut());
-        self.inner()?
-            .draw(|s| {
-                for op in ops {
-                    match op {
-                        Op::Lines(rect, lines) => s.write_lines(rect, lines),
-                        Op::Clear(rect) => s.clear(rect),
-                        Op::Cursor(x, y) => s.set_cursor(x, y),
-                    }
-                }
-            })
-            .map_err(|e| pyo3::exceptions::PyOSError::new_err(e.to_string()))?;
-        self.flush(py)
+    fn draw(slf: &Bound<'_, Self>, f: &Bound<'_, PyAny>) -> PyResult<()> {
+        let py = slf.py();
+        slf.borrow_mut().draw_with(py, f)?;
+        if slf.borrow().at_exit.is_none() && slf.borrow().inner.is_some() {
+            let hook = py.import("functools")?.getattr("partial")?.call1((
+                wrap_pyfunction!(finish_at_exit, py)?,
+                py.import("weakref")?.getattr("ref")?.call1((slf,))?,
+            ))?;
+            py.import("atexit")?.call_method1("register", (&hook,))?;
+            slf.borrow_mut().at_exit = Some(hook.unbind());
+        }
+        Ok(())
     }
 
     /// The terminal changed size: keep what was drawn, and write everything
@@ -164,6 +199,9 @@ impl Surface {
         }
         self.flush(py)?;
         self.inner = None;
+        if let Some(hook) = self.at_exit.take() {
+            py.import("atexit")?.call_method1("unregister", (hook,))?;
+        }
         Ok(())
     }
 

@@ -9,6 +9,53 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### 0.0.19 release test: fixes from three audits
+
+Three independent audits of the 0.0.19 delta (intuiTUIve and the surface;
+process isolation; Python, docs and packaging). Each defect was reproduced
+first and has a regression test. The isolation fixes are in [One process
+per browser session](#one-process-per-browser-session-web-002).
+
+- **A link cannot drive the terminal.** A style's link URL went into OSC 8
+  as it was, so one holding `ESC \` ended the hyperlink early and the rest
+  ran as terminal controls, past the surface's promise that nothing drawn
+  can drive the terminal. A link holding a control is dropped.
+- **Drawing over half of a wide character keeps the surface and the
+  terminal in step.** The half outside the rectangle stayed in the model
+  while the terminal erased it, and the diff never repaired it (an overlay
+  over CJK text, overlapping rectangles). That half becomes a space, and
+  each paint looks one column past what changed.
+- **An inline surface fits the terminal.** One taller than the terminal
+  lost rows and wrote them out of order; it now takes at most the
+  terminal's rows, and again when the terminal shrinks.
+- **Moving through a long line is linear.** Up and Down took 23 s, and
+  Ctrl+Right 46 s, on a 20,000-character line: each step measured the
+  line again from its start. Both now walk it once (5 ms and 8 ms).
+- **A character limit costs a keystroke only the lines it touches.** It
+  copied and counted the whole buffer (776 ms a key at 100,000 lines); the
+  buffer now keeps its count as it changes (65 µs).
+- **The caret never stops inside a cluster.** Typing before a combining
+  mark joins the two, and the caret was left between them, so the next
+  character took the mark. It now goes after the cluster.
+- **A keystroke in a long wrapped line costs the same at any height.**
+  Following the caret wrapped the whole line again for every row of the
+  view (1.25 s a key at 48 rows); each line is wrapped once.
+- **The mouse wheel does not jump back in a long last line.** Scrolling
+  down inside it went back to its first row.
+- **Wrapped rows lay out as CSS does.** A percentage was taken of the
+  container to break lines and of the line to size items, so items in one
+  container came out at different widths; it is the container's now. A
+  flexible item keeps the content its line was broken for before sharing
+  what is left, and `align_self` survives `.padding()` and `.panel()`.
+  Tens of thousands of items no longer overflow the spacing arithmetic.
+- **Python's `Surface` keeps what a failed write did not send**, so the
+  next `draw` or `finish` sends it, and a retried `finish` leaves the
+  alternate screen. A surface still open when the program ends (at module
+  level, on Ctrl+C) gives the terminal back through `atexit`. The stub
+  names `draw`'s argument `f`, as the method does.
+- **Docs:** the Python guide lists `Widget::claims_key` and
+  `MeasureCx::stack_flow` among what is not bound yet.
+
 ### Flex alignment in intuiTUIve (intuituive 0.0.4)
 
 0.0.19 workstream 1.

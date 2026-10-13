@@ -36,6 +36,7 @@ motion turned on in your system settings the cards stay still.
 [![Five cards wrapped onto two lines of a row](media/tapes/align/wrap.png){ data-gif="align.gif" loading=lazy }<span class="tape-card-title">Flex alignment</span>](#flex-alignment){ .tape-card }
 [![An app in linear mode, written as lines of text](media/tapes/access/linear.png){ data-gif="access.gif" loading=lazy }<span class="tape-card-title">Text mode and linear mode</span>](#text-mode-and-linear-mode){ .tape-card }
 [![A line of Rust selected in a highlighted text area](media/tapes/editor/selected.png){ data-gif="editor.gif" loading=lazy }<span class="tape-card-title">A text area</span>](#a-text-area){ .tape-card }
+[![A dashboard drawn in place below the prompt](media/tapes/surface/done.png){ data-gif="surface.gif" loading=lazy }<span class="tape-card-title">A surface</span>](#a-surface){ .tape-card }
 [![rich serve printing its address, and sessions asked for](media/tapes/serve/sessions.png){ data-gif="serve.gif" loading=lazy }<span class="tape-card-title">Serve a program to a browser</span>](#serve-a-program-to-a-browser){ .tape-card }
 [![A shell in a terminal pane beside a web view](media/tapes/embed/pane.png){ data-gif="embed.gif" loading=lazy }<span class="tape-card-title">A terminal pane</span>](#a-terminal-pane){ .tape-card }
 [![A CSV file drawn as a line chart by rich chart](media/tapes/chart/lines.png){ data-gif="chart.gif" loading=lazy }<span class="tape-card-title">Charts from data</span>](#charts-from-data){ .tape-card }
@@ -424,6 +425,25 @@ with Ctrl+Z, and Escape then Tab moves on to the notes. See
 | ![The typed line undone with Ctrl+Z](media/tapes/editor/undone.png) | ![Notes typed in the second area](media/tapes/editor/notes.png) |
 
 [Tape](tapes/editor.tape) · [Cast](media/tapes/editor/editor.cast) · [GIF](media/tapes/editor/editor.gif) · [Page](media/tapes/editor/editor.html)
+
+## A surface
+
+`rs-rich-ext`'s `guide_surface` example (0.0.19): a panel, a table and a
+status line drawn into rectangles of an inline `Surface`, eleven rows below
+the prompt, and redrawn every half second. Each frame sends only the cells
+that changed; the output above it stays, and the last frame stays on
+screen when the program ends. See
+[Positioned drawing](guide/ext/surface.md).
+
+<div class="tape-player" data-cast="../media/tapes/surface/surface.cast" data-poster="npt:0:2">
+  <img src="../media/tapes/surface/surface.gif" alt="A dashboard below the prompt, its rollout time ticking up in place">
+</div>
+
+| Ticking | Done |
+|---|---|
+| ![The dashboard at its second frame](media/tapes/surface/ticking.png) | ![The last frame left on screen, the prompt below it](media/tapes/surface/done.png) |
+
+[Tape](tapes/surface.tape) · [Cast](media/tapes/surface/surface.cast) · [GIF](media/tapes/surface/surface.gif) · [Page](media/tapes/surface/surface.html)
 
 ## Serve a program to a browser
 

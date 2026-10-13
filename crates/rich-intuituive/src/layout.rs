@@ -274,7 +274,9 @@ pub(crate) fn offsets(start: u16, gap: u16, sizes: &[u16]) -> Vec<u16> {
 /// drifts: the last item of [`Justify::End`] or [`Justify::SpaceBetween`]
 /// ends exactly at the end.
 fn spread(justify: Justify, free: u32, i: u32, k: u32) -> u32 {
-    match justify {
+    // In u64: tens of thousands of items times the free room overflow u32.
+    let (free, i, k) = (free as u64, i as u64, k as u64);
+    let share = match justify {
         Justify::Start => 0,
         Justify::Center => free / 2,
         Justify::End => free,
@@ -282,7 +284,8 @@ fn spread(justify: Justify, free: u32, i: u32, k: u32) -> u32 {
         Justify::SpaceBetween => 0,
         Justify::SpaceAround => free * (2 * i + 1) / (2 * k),
         Justify::SpaceEvenly => free * (i + 1) / (k + 1),
-    }
+    };
+    share as u32
 }
 
 /// Where each of `sizes` starts along `total` cells from `start`, `gap`
@@ -295,16 +298,17 @@ pub(crate) fn justify_offsets(
     justify: Justify,
 ) -> Vec<u16> {
     let k = sizes.len() as u32;
-    let used: u32 = sizes.iter().map(|&n| n as u32).sum::<u32>() + gap as u32 * k.saturating_sub(1);
-    let free = (total as u32).saturating_sub(used);
-    let mut at = start as u32;
+    let used: u64 =
+        sizes.iter().map(|&n| n as u64).sum::<u64>() + gap as u64 * k.saturating_sub(1) as u64;
+    let free = (total as u64).saturating_sub(used) as u32;
+    let mut at = start as u64;
     sizes
         .iter()
         .enumerate()
         .map(|(i, &size)| {
-            let here = at + spread(justify, free, i as u32, k);
-            at += size as u32 + gap as u32;
-            here.min(u16::MAX as u32) as u16
+            let here = at + spread(justify, free, i as u32, k) as u64;
+            at += size as u64 + gap as u64;
+            here.min(u16::MAX as u64) as u16
         })
         .collect()
 }
@@ -317,8 +321,8 @@ pub(crate) fn align_cross(at: u16, line: u16, content: u16, align: Align) -> (u1
     match align {
         Align::Stretch => (at, line),
         Align::Start => (at, size),
-        Align::Center => (at + free / 2, size),
-        Align::End => (at + free, size),
+        Align::Center => (at.saturating_add(free / 2), size),
+        Align::End => (at.saturating_add(free), size),
     }
 }
 
@@ -360,8 +364,9 @@ pub(crate) fn place_lines(
     align: AlignContent,
 ) -> Vec<(u16, u16)> {
     let k = lines.len() as u32;
-    let used: u32 = lines.iter().map(|&n| n as u32).sum::<u32>() + gap as u32 * k.saturating_sub(1);
-    let free = (total as u32).saturating_sub(used);
+    let used: u64 =
+        lines.iter().map(|&n| n as u64).sum::<u64>() + gap as u64 * k.saturating_sub(1) as u64;
+    let free = (total as u64).saturating_sub(used) as u32;
     let justify = match align {
         AlignContent::Start | AlignContent::Stretch => Justify::Start,
         AlignContent::Center => Justify::Center,
@@ -370,7 +375,7 @@ pub(crate) fn place_lines(
         AlignContent::SpaceAround => Justify::SpaceAround,
         AlignContent::SpaceEvenly => Justify::SpaceEvenly,
     };
-    let mut at = start as u32;
+    let mut at = start as u64;
     lines
         .iter()
         .enumerate()
@@ -379,15 +384,16 @@ pub(crate) fn place_lines(
             // Stretch: line `i` grows by its share of the room, so the
             // lines fill it exactly.
             let grow = if align == AlignContent::Stretch {
-                free * (i + 1) / k - free * i / k
+                let (free, i, k) = (free as u64, i as u64, k as u64);
+                (free * (i + 1) / k - free * i / k) as u32
             } else {
                 0
             };
-            let here = at + spread(justify, free, i, k);
+            let here = at + spread(justify, free, i, k) as u64;
             let size = size as u32 + grow;
-            at += size + gap as u32;
+            at += size as u64 + gap as u64;
             (
-                here.min(u16::MAX as u32) as u16,
+                here.min(u16::MAX as u64) as u16,
                 size.min(u16::MAX as u32) as u16,
             )
         })
