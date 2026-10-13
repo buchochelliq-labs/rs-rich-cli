@@ -111,8 +111,9 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 - **Ending and limits:** a session's process is killed when its tab closes
   or the server stops, on Unix with its process group; on Linux it also
   dies with its server. `Server::session_memory(bytes)` and
-  `session_cpu(time)` cap each process on Unix (`setrlimit`, through
-  rustix, so the crate keeps `unsafe_code = "deny"`).
+  `session_cpu(time)` cap each process on Unix (through rustix, so the
+  crate keeps `unsafe_code = "deny"`): on Linux from the moment it starts
+  (`prlimit` from the server), elsewhere from when it reaches `serve`.
 - **`Isolation::Threads`** keeps 0.0.18's behaviour, for tests and programs
   that cannot start themselves again; `Server::session_command(program,
   args)` starts the process some other way.

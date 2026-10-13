@@ -21,6 +21,10 @@ struct Server {
 
 impl Server {
     fn start() -> Server {
+        Server::start_with(&[])
+    }
+
+    fn start_with(extra: &[&str]) -> Server {
         // Examples are built next to the test binaries, in `examples/`.
         let exe = std::env::current_exe().unwrap();
         let example = exe
@@ -37,6 +41,7 @@ impl Server {
             .args(["127.0.0.1:0", "--token", TOKEN, "--memory"])
             .arg((512u64 << 20).to_string())
             .args(["--cpu", "20"])
+            .args(extra)
             .stdout(Stdio::piped())
             .spawn()
             .unwrap();
@@ -152,4 +157,16 @@ fn a_server_that_dies_takes_its_sessions_with_it() {
     wait_for("the hung session's process to die with its server", || {
         !running(pid_a)
     });
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn the_limits_hold_from_the_start_of_a_sessions_process() {
+    // Each session's process allocates 1 GiB before it reaches `serve`,
+    // past its 512 MiB limit: it never starts the app, and the server
+    // says so.
+    let server = Server::start_with(&["--startup-memory", &(1u64 << 30).to_string()]);
+    let mut socket = connect(server.addr, 60, 4);
+    let (_, reason) = read_close_reason(&mut socket);
+    assert!(reason.contains("before it started the app"), "{reason:?}");
 }

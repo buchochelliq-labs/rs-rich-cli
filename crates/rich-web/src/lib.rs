@@ -375,7 +375,8 @@ impl Server {
 
     /// Cap each session's process at `bytes` of memory (its address
     /// space): an allocation past it fails, and the process ends, alone.
-    /// Unix only; elsewhere this is not applied.
+    /// On Linux it holds from the moment the process starts; on other Unix
+    /// systems from when it reaches `serve`; elsewhere it is not applied.
     pub fn session_memory(mut self, bytes: u64) -> Server {
         self.shared.spawn.memory = Some(bytes);
         self
@@ -383,7 +384,9 @@ impl Server {
 
     /// Cap each session's process at `time` of CPU (whole seconds, at least
     /// one): past it the process is killed, alone. A session that waits for
-    /// input uses none. Unix only; elsewhere this is not applied.
+    /// input uses none. On Linux it holds from the moment the process
+    /// starts; on other Unix systems from when it reaches `serve`;
+    /// elsewhere it is not applied.
     pub fn session_cpu(mut self, time: Duration) -> Server {
         self.shared.spawn.cpu = Some(time);
         self

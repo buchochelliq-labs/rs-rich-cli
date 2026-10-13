@@ -194,24 +194,49 @@ pub(crate) fn run_child(spec: Spec, app: impl FnOnce() -> App) -> i32 {
     }
 }
 
-/// Cap this process's address space and CPU time (Unix; elsewhere there is
-/// no `setrlimit`, and the limits are not applied).
+/// The limits to set: address space in bytes, CPU time in seconds.
 #[cfg(unix)]
-fn limit(memory: Option<u64>, cpu: Option<u64>) {
-    use rustix::process::{setrlimit, Resource, Rlimit};
-    let set = |resource, value: Option<u64>| {
-        if let Some(value) = value {
+fn limits(
+    memory: Option<u64>,
+    cpu: Option<u64>,
+) -> impl Iterator<Item = (rustix::process::Resource, rustix::process::Rlimit)> {
+    use rustix::process::{Resource, Rlimit};
+    [(Resource::As, memory), (Resource::Cpu, cpu)]
+        .into_iter()
+        .filter_map(|(resource, value)| {
+            let value = value?;
             let limit = Rlimit {
                 current: Some(value),
                 maximum: Some(value),
             };
-            if let Err(error) = setrlimit(resource, limit) {
-                eprintln!("rich-web: the session's limit could not be set: {error}");
-            }
+            Some((resource, limit))
+        })
+}
+
+/// Cap this process's address space and CPU time (Unix; elsewhere there is
+/// no `setrlimit`, and the limits are not applied). On Linux the server has
+/// set them already, from the moment the process started.
+#[cfg(unix)]
+fn limit(memory: Option<u64>, cpu: Option<u64>) {
+    for (resource, limit) in limits(memory, cpu) {
+        if let Err(error) = rustix::process::setrlimit(resource, limit) {
+            eprintln!("rich-web: the session's limit could not be set: {error}");
         }
-    };
-    set(Resource::As, memory);
-    set(Resource::Cpu, cpu);
+    }
+}
+
+/// Cap a session's process from the server, as soon as it has started, so
+/// the limits hold for its startup too (before it reaches `serve`).
+#[cfg(target_os = "linux")]
+fn limit_child(pid: u32, memory: Option<u64>, cpu: Option<u64>) -> io::Result<()> {
+    let pid = i32::try_from(pid)
+        .ok()
+        .and_then(rustix::process::Pid::from_raw)
+        .ok_or_else(|| io::Error::other("no such process"))?;
+    for (resource, limit) in limits(memory, cpu) {
+        rustix::process::prlimit(Some(pid), resource, limit)?;
+    }
+    Ok(())
 }
 
 #[cfg(not(unix))]
@@ -320,7 +345,15 @@ fn start(session: &Session<'_>) -> io::Result<(Child, TcpListener, String)> {
     // Its own process group, so that what it starts is ended with it.
     #[cfg(unix)]
     std::os::unix::process::CommandExt::process_group(&mut command, 0);
-    let child = command.spawn()?;
+    let mut child = command.spawn()?;
+    #[cfg(target_os = "linux")]
+    if let Err(error) = limit_child(child.id(), spec.memory, spec.cpu) {
+        let _ = child.kill();
+        let _ = child.wait();
+        return Err(io::Error::other(format!(
+            "its limits could not be set: {error}"
+        )));
+    }
     listener.set_nonblocking(true)?;
     Ok((child, listener, secret))
 }
@@ -405,13 +438,17 @@ fn relay(browser: &TcpStream, child: &TcpStream, stopping: &AtomicBool) -> Relay
     };
     let _ = page_in.set_read_timeout(Some(TURN));
     let _ = child.set_read_timeout(Some(TURN));
+    // A process that has stopped reading (a hang) must not hold the relay
+    // in a write: writes to it give up each turn, and try again unless the
+    // relay is ending.
+    let _ = child.set_write_timeout(Some(TURN));
     // The page's input, to the process, on a thread of its own.
     let upstream = {
         let done = done.clone();
         thread::Builder::new()
             .name("rich-web relay".into())
             .spawn(move || {
-                pump(page_in, child_out, &done, &mut |_| {});
+                pump(page_in, child_out, &done, &mut |_| {}, true);
                 done.store(true, Ordering::SeqCst);
             })
     };
@@ -424,7 +461,13 @@ fn relay(browser: &TcpStream, child: &TcpStream, stopping: &AtomicBool) -> Relay
     };
     let child_ended = {
         let stop = StopOr(&done, stopping);
-        pump_until(child_in, page_out, &stop, &mut |bytes| frames.feed(bytes))
+        pump_until(
+            child_in,
+            page_out,
+            &stop,
+            &mut |bytes| frames.feed(bytes),
+            false,
+        )
     };
     done.store(true, Ordering::SeqCst);
     if let Ok(upstream) = upstream {
@@ -450,18 +493,26 @@ impl StopOr<'_> {
 }
 
 /// Copy from `from` to `to` until either ends or `done` is set.
-fn pump(from: TcpStream, to: TcpStream, done: &AtomicBool, seen: &mut dyn FnMut(&[u8])) {
+fn pump(
+    from: TcpStream,
+    to: TcpStream,
+    done: &AtomicBool,
+    seen: &mut dyn FnMut(&[u8]),
+    patient: bool,
+) {
     let never = AtomicBool::new(false);
-    pump_until(from, to, &StopOr(done, &never), seen);
+    pump_until(from, to, &StopOr(done, &never), seen, patient);
 }
 
 /// Copy from `from` to `to` until either ends or `stop` is set; whether
-/// `from` ended (rather than `to`, or `stop`).
+/// `from` ended (rather than `to`, or `stop`). `patient`: a write that
+/// times out is tried again (until `stop`) rather than ending the copy.
 fn pump_until(
     mut from: TcpStream,
     mut to: TcpStream,
     stop: &StopOr<'_>,
     seen: &mut dyn FnMut(&[u8]),
+    patient: bool,
 ) -> bool {
     let mut buffer = vec![0u8; 64 * 1024];
     loop {
@@ -472,7 +523,7 @@ fn pump_until(
             Ok(0) => return true,
             Ok(n) => {
                 seen(&buffer[..n]);
-                if to.write_all(&buffer[..n]).is_err() {
+                if !write_until(&mut to, &buffer[..n], stop, patient) {
                     return false;
                 }
             }
@@ -481,6 +532,27 @@ fn pump_until(
             Err(_) => return true,
         }
     }
+}
+
+/// Write all of `bytes`; whether it was. With `patient`, a write that times
+/// out is tried again until `stop` is set; without, it ends the copy.
+fn write_until(to: &mut TcpStream, mut bytes: &[u8], stop: &StopOr<'_>, patient: bool) -> bool {
+    while !bytes.is_empty() {
+        match to.write(bytes) {
+            Ok(0) => return false,
+            Ok(n) => bytes = &bytes[n..],
+            Err(e) if e.kind() == ErrorKind::Interrupted => {}
+            Err(e)
+                if patient && matches!(e.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut) =>
+            {
+                if stop.is_set() {
+                    return false;
+                }
+            }
+            Err(_) => return false,
+        }
+    }
+    true
 }
 
 /// Where a stream of WebSocket frames is: inside a frame, or between two,
@@ -638,6 +710,32 @@ mod tests {
         assert!(!frames.closed);
         frames.feed(&[0x88, 0x02, 0x03, 0xe8]);
         assert!(frames.closed && frames.at_boundary());
+    }
+
+    #[test]
+    fn a_write_to_a_process_that_stopped_reading_gives_up_when_told() {
+        let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let mut writer = TcpStream::connect(listener.local_addr().unwrap()).unwrap();
+        // The other end never reads: the socket's buffers fill.
+        let (_reader, _) = listener.accept().unwrap();
+        writer
+            .set_write_timeout(Some(Duration::from_millis(20)))
+            .unwrap();
+        let stopping = Arc::new(AtomicBool::new(false));
+        let never = AtomicBool::new(false);
+        let stopper = {
+            let stopping = stopping.clone();
+            thread::spawn(move || {
+                thread::sleep(Duration::from_millis(300));
+                stopping.store(true, Ordering::SeqCst);
+            })
+        };
+        let started = Instant::now();
+        let big = vec![0u8; 64 << 20];
+        let stop = StopOr(&never, &stopping);
+        assert!(!write_until(&mut writer, &big, &stop, true));
+        assert!(started.elapsed() < Duration::from_secs(5));
+        stopper.join().unwrap();
     }
 
     #[test]
