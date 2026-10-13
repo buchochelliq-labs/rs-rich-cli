@@ -127,7 +127,9 @@ server starts its own program again, with the same arguments and the
 until it reaches the same `serve` (or `Server::bind`) call, and there,
 instead of listening, it connects back to the server over a loopback
 socket, proves with a secret from the variable that it is the process the
-server started, runs the tab's app, and exits. The server keeps the
+server started (and the server answers with another, so a process whose
+server has died talks to nobody who took over its port), runs the tab's
+app, and exits. The server keeps the
 browser's connection and relays its WebSocket to the process, so the app
 and the page see nothing different. The app needs no change.
 
@@ -138,13 +140,15 @@ So a crash, a hang or a runaway allocation ends one tab, not the server:
   on.
 - **A hang** holds up its own tab only. When the tab closes, or the server
   stops, the process is killed, on Unix with its process group, so what it
-  started goes too. On Linux a process also dies with its server, should
-  the server be killed.
+  started goes too. Should the server itself be killed, each session's
+  process sees it go and ends its group the same way. A process that left
+  the group (`setsid`, a daemon) is not reached.
 - **Limits** (Unix): `session_memory(bytes)` caps each process's address
   space, so an allocation past it fails and that process ends;
   `session_cpu(time)` kills one that has used that much CPU. On Linux the
-  server sets them as the process starts, so they cover the code `main`
-  runs before `serve` too; on other Unix systems they take effect when the
+  server sets them as the process starts, and refuses one that took more
+  memory before they were set, so they cover the code `main` runs before
+  `serve` too; on other Unix systems they take effect when the
   process reaches `serve`. macOS has no memory limit to set, so there only
   the CPU limit applies; elsewhere neither is applied.
 
@@ -165,7 +169,10 @@ What has to hold for a program to run its sessions this way:
   arguments, unless `session_command(program, args)` names another way:
   an interpreter running the same script, say. Python's
   `rs_rich.tui.Server` passes `sys.executable` and the script's arguments
-  itself, and falls back to threads in a REPL.
+  itself, and falls back to threads in a REPL. The command must be the
+  program, or `exec` it: a session is the process the server started, and
+  a program that process runs (which inherits the variable) serves as it
+  would anywhere.
 
 `isolation(Isolation::Threads)` keeps 0.0.18's behaviour, every session on
 a thread of the server's process: for tests (a test binary started again

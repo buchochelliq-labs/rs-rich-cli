@@ -1590,6 +1590,67 @@ def test_each_served_tab_runs_in_a_process_of_its_own(tmp_path):
         server.wait()
 
 
+SERVES_ONCE = """
+import sys; sys.path.insert(0, {here!r})
+from test_tui import read_frames, websocket
+from rs_rich.tui import App, Server, column, text
+h = Server("127.0.0.1:0", lambda: App(lambda: column([text(lambda: "HELLO").fixed(1)])))
+h = h.token("py-token-0123456789").spawn()
+s, _ = websocket(h.local_addr, "py-token-0123456789", "http://" + h.local_addr)
+print("SEEN", "HELLO" in read_frames(s, "HELLO"))
+h.stop()
+"""
+
+
+def test_a_repl_serves_on_threads():
+    import os
+    import subprocess
+    import sys
+
+    # `python -m asyncio` is a REPL whose argv names asyncio's own
+    # `__main__.py`: run again, it would exit at once.
+    here = os.path.dirname(os.path.abspath(__file__))
+    run = subprocess.run(
+        [sys.executable, "-m", "asyncio"],
+        input=SERVES_ONCE.format(here=here),
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    assert "SEEN True" in run.stdout, (run.stdout, run.stderr[-500:])
+
+
+def test_a_script_that_changes_directory_still_serves(tmp_path):
+    import os
+    import subprocess
+    import sys
+
+    here = os.path.dirname(os.path.abspath(__file__))
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    # Started as `python served.py`, it moves before serving: each session
+    # runs the script again by its absolute path.
+    (tmp_path / "served.py").write_text(
+        f"import os\nos.chdir({str(elsewhere)!r})\n" + SERVES_ONCE.format(here=here)
+    )
+    run = subprocess.run(
+        [sys.executable, "served.py"],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    assert "SEEN True" in run.stdout, (run.stdout, run.stderr[-500:])
+
+
+def test_a_huge_session_cpu_is_a_value_error():
+    server = tui.Server("127.0.0.1:0", counter_app).isolation("threads")
+    with pytest.raises(ValueError, match="seconds"):
+        server.session_cpu(1e30)
+    # The server is still there to configure.
+    assert server.url
+
+
 def test_a_server_token_is_checked():
     with pytest.raises(ValueError, match="token"):
         tui.Server("127.0.0.1:0", counter_app).token("not a token!")

@@ -7,7 +7,9 @@
 //! process. The child's call to [`Server::bind`](crate::Server::bind) (or
 //! [`serve`](crate::serve)) sees the variable and, instead of listening,
 //! connects back, proves it is the process the server started with a
-//! secret from the variable, runs the session there, and exits. The
+//! secret from the variable (the server answers with a second one, so a
+//! process whose server died serves nobody who took over its port), runs
+//! the session there, and exits. The
 //! server relays the WebSocket's bytes both ways, so the session loop is
 //! the same one a thread runs, and the page cannot tell the difference.
 //!
@@ -56,8 +58,12 @@ pub enum Isolation {
 /// How long a session's process has to connect back before the page is
 /// told it did not start.
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
-/// How long it has to send its secret once connected.
+/// How long it has to send its secret once connected (in all, however
+/// slowly it trickles in).
 const HELLO_TIMEOUT: Duration = Duration::from_secs(2);
+/// The most connections waiting to send a secret at once; more are turned
+/// away.
+const MAX_WAITING: usize = 64;
 /// How long an ended session waits for its process to exit before it is
 /// killed.
 const EXIT_WAIT: Duration = Duration::from_secs(1);
@@ -89,7 +95,13 @@ pub(crate) fn next_bind() -> usize {
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) struct Spec {
     port: u16,
+    /// The server's process id: only its own child is a session.
+    parent: u32,
+    /// What the process sends to prove it is the one started.
     secret: String,
+    /// What the server answers to prove it is the server, so a process
+    /// whose server died serves nobody who took over its port.
+    reply: String,
     bind: usize,
     columns: u16,
     rows: u16,
@@ -102,9 +114,11 @@ impl Spec {
     fn encode(&self) -> String {
         let limit = |n: Option<u64>| n.map_or("-".to_string(), |n| n.to_string());
         format!(
-            "1 {} {} {} {} {} {} {} {}",
+            "2 {} {} {} {} {} {} {} {} {} {}",
             self.port,
+            self.parent,
             self.secret,
+            self.reply,
             self.bind,
             self.columns,
             self.rows,
@@ -116,7 +130,7 @@ impl Spec {
 
     fn decode(text: &str) -> Option<Spec> {
         let mut parts = text.split(' ');
-        if parts.next()? != "1" {
+        if parts.next()? != "2" {
             return None;
         }
         let mut next = || parts.next();
@@ -126,7 +140,9 @@ impl Spec {
         };
         let spec = Spec {
             port: next()?.parse().ok()?,
+            parent: next()?.parse().ok()?,
             secret: next()?.to_string(),
+            reply: next()?.to_string(),
             bind: next()?.parse().ok()?,
             columns: next()?.parse().ok()?,
             rows: next()?.parse().ok()?,
@@ -141,23 +157,46 @@ impl Spec {
 /// The session this process was started for, if it was, and this `bind`
 /// is the one it belongs to.
 pub(crate) fn session_for(bind: usize) -> Option<Spec> {
-    let spec = Spec::decode(&std::env::var(SESSION_ENV).ok()?)?;
+    let spec = own_spec()?;
     (spec.bind == bind).then_some(spec)
 }
 
 /// Whether this process was started for a session (of any `bind`).
 pub(crate) fn is_session_process() -> bool {
-    std::env::var_os(SESSION_ENV).is_some()
+    own_spec().is_some()
+}
+
+/// The spec, when this process is the one the server started. A program
+/// the app runs inherits the variable and is not a session: it serves as
+/// it would anywhere. The server starts each session's process leading a
+/// process group of its own, which what it runs joins; so a group leader
+/// whose parent is no longer the server is a session whose server has
+/// died, and exits. A `session_command` must therefore be the program, or
+/// `exec` it.
+fn own_spec() -> Option<Spec> {
+    let spec = Spec::decode(&std::env::var(SESSION_ENV).ok()?)?;
+    #[cfg(unix)]
+    {
+        use rustix::process::{getpgrp, getpid, getppid, Pid};
+        if Pid::as_raw(getppid()) as u32 != spec.parent {
+            if getpgrp() == getpid() {
+                eprintln!("rich-web: the session's server has gone");
+                std::process::exit(1);
+            }
+            return None;
+        }
+    }
+    Some(spec)
 }
 
 /// In a session's process: limit it, connect back, run the session, and
 /// give the exit code.
 pub(crate) fn run_child(spec: Spec, app: impl FnOnce() -> App) -> i32 {
-    // On Linux, killed with the server's thread that started it, should
-    // the server die without ending it (a server that has died already
-    // refuses the connection below).
-    #[cfg(target_os = "linux")]
-    let _ = rustix::process::set_parent_process_death_signal(Some(rustix::process::Signal::KILL));
+    // Should the server die without ending it, this process ends its whole
+    // group. (Not Linux's parent-death signal: that would kill this process
+    // alone, before it could end the rest.)
+    #[cfg(unix)]
+    watch_server(spec.parent);
     limit(spec.memory, spec.cpu);
     let stream = match TcpStream::connect(("127.0.0.1", spec.port)) {
         Ok(stream) => stream,
@@ -174,6 +213,21 @@ pub(crate) fn run_child(spec: Spec, app: impl FnOnce() -> App) -> i32 {
     {
         return 1;
     }
+    // The server answers with the reply; anyone else who took the port
+    // when the server died cannot.
+    let _ = stream.set_read_timeout(Some(CONNECT_TIMEOUT));
+    let mut answer = vec![0u8; spec.reply.len() + 1];
+    if hello.read_exact(&mut answer).is_err()
+        || !crate::http::same_token(
+            std::str::from_utf8(&answer[..spec.reply.len()]).unwrap_or(""),
+            &spec.reply,
+        )
+        || answer[spec.reply.len()] != b'\n'
+    {
+        eprintln!("rich-web: the session's server did not answer");
+        return 1;
+    }
+    let _ = stream.set_read_timeout(None);
     let config = WebSocketConfig::default()
         .max_message_size(Some(crate::MAX_MESSAGE))
         .max_frame_size(Some(crate::MAX_MESSAGE));
@@ -181,7 +235,7 @@ pub(crate) fn run_child(spec: Spec, app: impl FnOnce() -> App) -> i32 {
     // The server ends the session by closing the connection, or by killing
     // this process.
     let stopping = AtomicBool::new(false);
-    match session::run(
+    let code = match session::run(
         &mut socket,
         app(),
         spec.columns,
@@ -191,7 +245,39 @@ pub(crate) fn run_child(spec: Spec, app: impl FnOnce() -> App) -> i32 {
     ) {
         Ok(()) => 0,
         Err(_) => 1,
-    }
+    };
+    // A server that died closed the connection a moment before it let go
+    // of this process: a session ended by that is the watcher's to end, so
+    // what the app started does not outlive it. A live server ends the
+    // group itself.
+    #[cfg(unix)]
+    thread::sleep(ENDING);
+    code
+}
+
+/// How long a session's process waits, once its session ends, for the
+/// watcher to see a server that died.
+#[cfg(unix)]
+const ENDING: Duration = Duration::from_millis(250);
+
+/// How often a session's process looks for its server.
+#[cfg(unix)]
+const WATCH: Duration = Duration::from_millis(50);
+
+/// Should the server go (killed, so it could not end this process), end
+/// this process's whole group: what the app started goes with it. A
+/// process that left the group (`setsid`, a daemon) is not reached.
+#[cfg(unix)]
+fn watch_server(server: u32) {
+    use rustix::process::{getpid, getppid, kill_process_group, Pid, Signal};
+    thread::spawn(move || loop {
+        let parent = Pid::as_raw(getppid()) as u32;
+        if parent != server {
+            let _ = kill_process_group(getpid(), Signal::KILL);
+            std::process::exit(1);
+        }
+        thread::sleep(WATCH);
+    });
 }
 
 /// The limits to set: address space in bytes, CPU time in seconds.
@@ -282,8 +368,8 @@ pub(crate) fn run_parent(browser: TcpStream, session: Session<'_>) {
             );
         }
     };
-    let (mut child, listener, secret) = started;
-    let child_stream = match connected(&listener, &secret, &mut child, session.stopping) {
+    let (mut child, listener, secrets) = started;
+    let child_stream = match connected(&listener, &secrets, &mut child, session.stopping) {
         Ok(stream) => stream,
         Err(why) => {
             end(&mut child);
@@ -319,12 +405,17 @@ pub(crate) fn run_parent(browser: TcpStream, session: Session<'_>) {
 
 /// Start the process, with a loopback listener for it to connect to and
 /// the secret it must send.
-fn start(session: &Session<'_>) -> io::Result<(Child, TcpListener, String)> {
+fn start(session: &Session<'_>) -> io::Result<(Child, TcpListener, Secrets)> {
     let listener = TcpListener::bind(("127.0.0.1", 0))?;
-    let secret = crate::random_token()?;
+    let secrets = Secrets {
+        secret: crate::random_token()?,
+        reply: crate::random_token()?,
+    };
     let spec = Spec {
         port: listener.local_addr()?.port(),
-        secret: secret.clone(),
+        parent: std::process::id(),
+        secret: secrets.secret.clone(),
+        reply: secrets.reply.clone(),
         bind: session.bind,
         columns: session.columns,
         rows: session.rows,
@@ -349,7 +440,9 @@ fn start(session: &Session<'_>) -> io::Result<(Child, TcpListener, String)> {
     std::os::unix::process::CommandExt::process_group(&mut command, 0);
     let mut child = command.spawn()?;
     #[cfg(target_os = "linux")]
-    if let Err(error) = limit_child(child.id(), spec.memory, spec.cpu) {
+    if let Err(error) = limit_child(child.id(), spec.memory, spec.cpu)
+        .and_then(|()| within_memory(child.id(), spec.memory))
+    {
         let _ = child.kill();
         let _ = child.wait();
         return Err(io::Error::other(format!(
@@ -357,18 +450,50 @@ fn start(session: &Session<'_>) -> io::Result<(Child, TcpListener, String)> {
         )));
     }
     listener.set_nonblocking(true)?;
-    Ok((child, listener, secret))
+    Ok((child, listener, secrets))
 }
 
-/// Wait for the process to connect and send its secret. Anything else that
-/// connects meanwhile is turned away.
+/// The secret a session's process sends, and the reply the server answers.
+struct Secrets {
+    secret: String,
+    reply: String,
+}
+
+/// Refuse a process that took more memory than its limit before the limit
+/// was set (it raced ahead of `prlimit`): the limit holds from then on, so
+/// its peak until then is all there is to check.
+#[cfg(target_os = "linux")]
+fn within_memory(pid: u32, memory: Option<u64>) -> io::Result<()> {
+    let Some(memory) = memory else {
+        return Ok(());
+    };
+    let status = std::fs::read_to_string(format!("/proc/{pid}/status"))?;
+    let peak = status
+        .lines()
+        .find_map(|line| line.strip_prefix("VmPeak:"))
+        .and_then(|kb| kb.trim().trim_end_matches("kB").trim().parse::<u64>().ok())
+        .unwrap_or(0)
+        * 1024;
+    if peak > memory {
+        return Err(io::Error::other(format!(
+            "it took {peak} bytes before they were set"
+        )));
+    }
+    Ok(())
+}
+
+/// Wait for the process to connect and send its secret, then answer with
+/// the reply. Anything else that connects meanwhile is turned away; every
+/// connection is read at once, each for at most [`HELLO_TIMEOUT`], so none
+/// holds up the process or the server stopping.
 fn connected(
     listener: &TcpListener,
-    secret: &str,
+    secrets: &Secrets,
     child: &mut Child,
     stopping: &AtomicBool,
 ) -> Result<TcpStream, String> {
     let until = Instant::now() + CONNECT_TIMEOUT;
+    let mut waiting: Vec<(TcpStream, Vec<u8>, Instant)> = Vec::new();
     loop {
         if stopping.load(Ordering::SeqCst) {
             return Err("The server stopped.".into());
@@ -379,36 +504,63 @@ fn connected(
                  it must reach the same serve() call as the server."
             ));
         }
-        if Instant::now() > until {
+        let now = Instant::now();
+        if now > until {
             return Err("The session's process did not start the app in time.".into());
         }
-        match listener.accept() {
-            Ok((stream, _)) => {
-                if let Some(stream) = hello(stream, secret) {
-                    return Ok(stream);
-                }
+        while let Ok((stream, _)) = listener.accept() {
+            if waiting.len() < MAX_WAITING && stream.set_nonblocking(true).is_ok() {
+                waiting.push((stream, Vec::new(), now + HELLO_TIMEOUT));
             }
-            Err(e) if e.kind() == ErrorKind::WouldBlock => thread::sleep(Duration::from_millis(10)),
-            Err(_) => thread::sleep(Duration::from_millis(10)),
         }
+        let mut found = None;
+        waiting.retain_mut(|(stream, line, by)| {
+            if found.is_some() {
+                return true;
+            }
+            match hello(stream, line, &secrets.secret) {
+                Some(true) => {
+                    found = stream.try_clone().ok();
+                    false
+                }
+                Some(false) => false,
+                None => now < *by,
+            }
+        });
+        if let Some(mut stream) = found {
+            let answered = stream
+                .set_nonblocking(false)
+                .and_then(|()| stream.write_all(format!("{}\n", secrets.reply).as_bytes()));
+            if answered.is_ok() {
+                let _ = stream.set_nodelay(true);
+                return Ok(stream);
+            }
+            continue;
+        }
+        thread::sleep(Duration::from_millis(10));
     }
 }
 
-/// The stream, if it sends `secret` and a newline first.
-fn hello(stream: TcpStream, secret: &str) -> Option<TcpStream> {
-    stream.set_nonblocking(false).ok()?;
-    stream.set_read_timeout(Some(HELLO_TIMEOUT)).ok()?;
-    let _ = stream.set_nodelay(true);
-    let mut line = Vec::with_capacity(secret.len() + 1);
+/// Read what `stream` (non-blocking) has sent of its secret into `line`:
+/// `Some(true)` once it is the secret and a newline, `Some(false)` once it
+/// cannot be, `None` until there is more. Only the secret's bytes are read,
+/// one at a time: what follows is the session's.
+fn hello(stream: &TcpStream, line: &mut Vec<u8>, secret: &str) -> Option<bool> {
     let mut byte = [0u8];
-    while line.len() <= secret.len() {
-        (&stream).read_exact(&mut byte).ok()?;
-        if byte[0] == b'\n' {
-            break;
+    loop {
+        match (&*stream).read(&mut byte) {
+            Ok(1) if byte[0] == b'\n' => {
+                return Some(
+                    std::str::from_utf8(line)
+                        .is_ok_and(|line| crate::http::same_token(line, secret)),
+                )
+            }
+            Ok(1) if line.len() < secret.len() => line.push(byte[0]),
+            Err(e) if e.kind() == ErrorKind::WouldBlock => return None,
+            Err(e) if e.kind() == ErrorKind::Interrupted => {}
+            _ => return Some(false),
         }
-        line.push(byte[0]);
     }
-    crate::http::same_token(std::str::from_utf8(&line).ok()?, secret).then_some(stream)
 }
 
 /// Which side a relay ended on.
@@ -680,7 +832,9 @@ mod tests {
     fn specs_round_trip() {
         let spec = Spec {
             port: 4321,
+            parent: 99,
             secret: "abc".into(),
+            reply: "def".into(),
             bind: 2,
             columns: 80,
             rows: 24,
@@ -689,9 +843,11 @@ mod tests {
             cpu: None,
         };
         assert_eq!(Spec::decode(&spec.encode()), Some(spec));
-        assert_eq!(Spec::decode("2 1 a 0 80 24 xterm - -"), None);
-        assert_eq!(Spec::decode("1 1 a 0 80 24 xterm -"), None);
-        assert_eq!(Spec::decode("1 1 a 0 80 24 canvas - -"), None);
+        // 0.0.19's first form, without the parent and the reply.
+        assert_eq!(Spec::decode("1 1 a 0 80 24 xterm - -"), None);
+        assert_eq!(Spec::decode("3 1 9 a b 0 80 24 xterm - -"), None);
+        assert_eq!(Spec::decode("2 1 9 a b 0 80 24 xterm -"), None);
+        assert_eq!(Spec::decode("2 1 9 a b 0 80 24 canvas - -"), None);
     }
 
     #[test]

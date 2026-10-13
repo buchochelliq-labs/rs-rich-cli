@@ -169,9 +169,13 @@ fn a_server_that_dies_takes_its_sessions_with_it() {
 fn the_limits_hold_from_the_start_of_a_sessions_process() {
     // Each session's process allocates 1 GiB before it reaches `serve`,
     // past its 512 MiB limit: it never starts the app, and the server
-    // says so.
+    // says so (the allocation failed, or it raced ahead of the limit and
+    // the server refused it).
     let server = Server::start_with(&["--startup-memory", &(1u64 << 30).to_string()]);
     let mut socket = connect(server.addr, 60, 4);
     let (_, reason) = read_close_reason(&mut socket);
-    assert!(reason.contains("before it started the app"), "{reason:?}");
+    assert!(
+        reason.contains("before it started the app") || reason.contains("before they were set"),
+        "{reason:?}"
+    );
 }

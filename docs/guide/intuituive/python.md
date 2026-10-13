@@ -228,12 +228,13 @@ serve("127.0.0.1:8080", lambda: App(build))
 `serve` prints the URL to open, with its token, and serves one app per
 browser tab until Ctrl+C. Each tab runs in a
 [process of its own](web.md#one-process-per-session): the server runs your
-script again (`sys.executable` with the arguments it was started with), and
+script again (`sys.executable` with the arguments it was started with, the
+script by its absolute path), and
 when that process reaches the same `serve` call it runs the tab's app
 there. So the module-level code before `serve` runs once per tab, a crash
 or a hang ends that tab alone, and an `if __name__ == "__main__":` guard
-around `serve` is fine. In a REPL, with no script to run again, sessions
-run on threads.
+around `serve` is fine. In a REPL (Python's, `python -m asyncio`, IPython)
+or a Jupyter kernel, with no script to run again, sessions run on threads.
 
 `Server(address, app)` takes the options (`max_sessions`, `token`,
 `allow_origin`, `title`, `isolation("threads")` to run every session on a
