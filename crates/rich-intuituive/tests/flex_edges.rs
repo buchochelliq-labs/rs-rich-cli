@@ -40,9 +40,9 @@ fn wrapped_percentages_are_of_the_container() {
 }
 
 /// Two flexible children in a wrapping row: the line was broken so that
-/// both contents (7 + 1) fit, and the docs say the flexible ones start at
-/// their content and share what the line leaves. CSS (`flex: 1`, min-width
-/// auto) gives "aaaaaaa" its 7 cells.
+/// both contents (7 + 1) fit, and, as `Node::wrap` says (CSS's
+/// `flex-basis: auto`), each starts at its content and grows by its share
+/// of what the line leaves.
 #[test]
 fn wrapped_flexible_children_keep_their_content() {
     let app = App::new(|| {
@@ -54,6 +54,9 @@ fn wrapped_flexible_children_keep_their_content() {
     let rows = show(app, 10, 2);
     eprintln!("{rows:#?}");
     assert_eq!(rows[0].matches('a').count(), 7, "{rows:?}");
+    // Each grows from its basis (7 and 1) by an equal share of the 2 cells
+    // left: 8 and 2, so "b" starts at column 8.
+    assert_eq!(rows[0].trim_end(), "aaaaaaa b", "{rows:?}");
 }
 
 /// align_self set before padding/panel is lost: the wrapper node takes the
