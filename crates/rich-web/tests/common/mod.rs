@@ -123,7 +123,15 @@ pub fn read_close(socket: &mut WebSocket<TcpStream>) -> String {
 /// Wait until the server sends its close, within 5 s: the text before it,
 /// and the close's reason.
 pub fn read_close_reason(socket: &mut WebSocket<TcpStream>) -> (String, String) {
-    let deadline = Instant::now() + Duration::from_secs(5);
+    read_close_reason_within(socket, Duration::from_secs(5))
+}
+
+/// [`read_close_reason`], waiting up to `within`.
+pub fn read_close_reason_within(
+    socket: &mut WebSocket<TcpStream>,
+    within: Duration,
+) -> (String, String) {
+    let deadline = Instant::now() + within;
     let mut seen = String::new();
     while Instant::now() < deadline {
         match socket.read() {
@@ -137,7 +145,7 @@ pub fn read_close_reason(socket: &mut WebSocket<TcpStream>) -> (String, String) 
             Err(_) => return (seen, String::new()),
         }
     }
-    panic!("no close within 5 s; seen {seen:?}");
+    panic!("no close within {within:?}; seen {seen:?}");
 }
 
 /// A program's output, as the page reads it: binary messages, each

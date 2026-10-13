@@ -142,7 +142,10 @@ fn running_out_of_memory_ends_its_own_session_only() {
     let (mut a, pid_a) = session(&server);
     let (mut b, _) = session(&server);
     a.send(Message::text("dm")).unwrap();
-    let (_, reason) = read_close_reason(&mut a);
+    // A failed allocation aborts the process, and the system may first
+    // write a core dump of its half a gigabyte (a CI runner can take
+    // seconds); the session ends when it is gone.
+    let (_, reason) = common::read_close_reason_within(&mut a, std::time::Duration::from_secs(60));
     assert!(reason.contains("ended unexpectedly"), "{reason:?}");
     wait_for("the process to be gone", || !running(pid_a));
     answers(&mut b);
