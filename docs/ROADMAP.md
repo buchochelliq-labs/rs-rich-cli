@@ -220,9 +220,10 @@ and #499). Delivered:
 The [0.0.19 plan](plans/0.0.19.md) is stage 1 of the
 [plan to 1.0.0](plans/1.0.0.md): flex alignment and wrapping, a text-area
 widget, a process per browser session, a `Surface` drawing handle in
-rs-rich-ext, Chrome's DevTools over a pipe, and an example and a picture on
-every docs page, with recordings of everything 0.0.18 added. Core does not
-change.
+rs-rich-ext, and an example and a picture on every docs page, with
+recordings of everything 0.0.18 added. Core does not change. Chrome's
+DevTools over a pipe moved to 0.0.20: Windows cannot pass the pipe without
+`unsafe`, and it ships on every platform or none.
 
 ## 0.0.18 — intuiTUIve grows up (published 2026-10-11)
 

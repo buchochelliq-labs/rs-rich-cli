@@ -55,6 +55,14 @@ because unchanged cells are never written.
 --8<-- "crates/rich-ext/examples/guide_surface.rs:terminal"
 ```
 
+<div class="tape-player" data-cast="../../media/tapes/surface/surface.cast" data-poster="npt:0:2">
+  <img src="../../media/tapes/surface/surface.gif" alt="A dashboard below the prompt, its rollout time ticking up in place">
+</div>
+
+| Ticking | Done |
+|---|---|
+| ![The dashboard at its second frame, below the earlier output](../../media/tapes/surface/ticking.png) | ![The last frame left on screen, the prompt below it](../../media/tapes/surface/done.png) |
+
 `finish` gives the terminal back: it leaves the alternate screen (or moves
 below the inline region), resets styles and shows the cursor. A surface
 dropped without `finish` does the same.

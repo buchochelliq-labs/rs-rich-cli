@@ -246,7 +246,8 @@ usual install location. It speaks the protocol directly over
   open. Other programs and other users on this machine can reach that
   port, and DevTools has no authentication of its own: whoever finds it
   can drive the browser as you (open local files, run script in pages).
-  Use the Chrome engine on a machine you do not share.
+  Use the Chrome engine on a machine you do not share. A pipe in place of
+  the port is planned for 0.0.20, on every platform at once.
 - **Downloads are denied** (`Browser.setDownloadBehavior`).
 - Frames are `Page.startScreencast` JPEGs, with the page laid out at the
   pane's size times `cell_pixels` (10 x 20 CSS pixels a cell by default).
