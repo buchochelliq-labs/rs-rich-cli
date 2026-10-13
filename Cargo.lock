@@ -2732,6 +2732,7 @@ dependencies = [
  "httparse",
  "rs-rich-embed",
  "rs-rich-intuituive",
+ "rustix",
  "serde_json",
  "sha2 0.11.0",
  "tungstenite",

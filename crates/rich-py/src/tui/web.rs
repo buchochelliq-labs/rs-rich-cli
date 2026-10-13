@@ -91,10 +91,53 @@ impl PyServer {
         let address = address.to_string();
         let server = detached(py, move || rich_web::Server::bind(address, factory(app)))
             .map_err(os_error)?;
+        // A session's process is this interpreter running the same script
+        // (Rust's own executable would be the interpreter without the
+        // virtual environment's path); with no script to run (a REPL,
+        // standard input), sessions run on threads.
+        let server = match session_command(py)? {
+            Some((program, args)) => server.session_command(program, args),
+            None => server.isolation(rich_web::Isolation::Threads),
+        };
         Ok(PyServer {
             server: RefCell::new(Some(server)),
             title: RefCell::new("intuiTUIve".to_string()),
         })
+    }
+
+    /// Where each session runs: `"processes"` (the default: this script
+    /// run again for each tab, so a crash, a hang or a runaway allocation
+    /// ends that tab alone) or `"threads"` (a thread of this process: for
+    /// tests, and for an app that cannot run its script again).
+    fn isolation<'py>(slf: Bound<'py, Self>, isolation: &str) -> PyResult<Bound<'py, Self>> {
+        let isolation = match isolation {
+            "processes" => rich_web::Isolation::Processes,
+            "threads" => rich_web::Isolation::Threads,
+            _ => {
+                return Err(PyValueError::new_err(
+                    "isolation is \"processes\" or \"threads\"",
+                ))
+            }
+        };
+        slf.borrow().map(|s| s.isolation(isolation))?;
+        Ok(slf)
+    }
+
+    /// Cap each session's process at `bytes` of memory (Unix, not macOS).
+    fn session_memory(slf: Bound<'_, Self>, bytes: u64) -> PyResult<Bound<'_, Self>> {
+        slf.borrow().map(|s| s.session_memory(bytes))?;
+        Ok(slf)
+    }
+
+    /// Cap each session's process at `seconds` of CPU time (Unix).
+    fn session_cpu(slf: Bound<'_, Self>, seconds: f64) -> PyResult<Bound<'_, Self>> {
+        // `try_`: a finite but huge number would panic in `from_secs_f64`.
+        let time = Duration::try_from_secs_f64(seconds)
+            .ok()
+            .filter(|time| !time.is_zero())
+            .ok_or_else(|| PyValueError::new_err("seconds must be more than 0"))?;
+        slf.borrow().map(|s| s.session_cpu(time))?;
+        Ok(slf)
     }
 
     /// Run at most `n` sessions at once (8 by default).
@@ -193,6 +236,63 @@ impl PyServer {
 }
 
 use pyo3::types::IntoPyDict;
+
+/// How to run this script again: the interpreter, and the arguments it was
+/// started with (`sys.orig_argv`, from 3.10; `sys.argv` before), the
+/// script by its absolute path. `None` with no script: a REPL (Python's,
+/// `python -m asyncio`, IPython), a Jupyter kernel, or a program read from
+/// standard input.
+fn session_command(py: Python<'_>) -> PyResult<Option<(String, Vec<String>)>> {
+    let sys = py.import("sys")?;
+    let executable: Option<String> = sys.getattr("executable")?.extract()?;
+    let Some(executable) = executable.filter(|e| !e.is_empty()) else {
+        return Ok(None);
+    };
+    // A REPL's argv names the REPL itself (`asyncio/__main__.py`,
+    // IPython's), which run again with no input just exits.
+    if sys.hasattr("ps1")? || sys.getattr("modules")?.contains("ipykernel")? {
+        return Ok(None);
+    }
+    let argv: Vec<String> = sys.getattr("argv")?.extract()?;
+    if argv
+        .first()
+        .is_none_or(|script| script.is_empty() || script == "-")
+    {
+        return Ok(None);
+    }
+    let main = py.import("__main__")?;
+    let mut args: Vec<String> = match sys.getattr("orig_argv") {
+        Ok(orig) => orig.extract::<Vec<String>>()?.into_iter().skip(1).collect(),
+        Err(_) => {
+            // 3.9: `python -m pkg` is `-m pkg` again, so its relative
+            // imports still work.
+            let module: Option<String> = main
+                .getattr("__spec__")
+                .ok()
+                .filter(|spec| !spec.is_none())
+                .and_then(|spec| spec.getattr("name").ok()?.extract().ok());
+            match module {
+                Some(name) => {
+                    let name = name.strip_suffix(".__main__").unwrap_or(&name).to_string();
+                    ["-m".to_string(), name]
+                        .into_iter()
+                        .chain(argv.iter().skip(1).cloned())
+                        .collect()
+                }
+                None => argv.clone(),
+            }
+        }
+    };
+    // The script by its absolute path (`__main__.__file__`), so a program
+    // that changed directory before serving still finds it.
+    let file: Option<String> = main.getattr("__file__").ok().and_then(|f| f.extract().ok());
+    if let (Some(file), Some(at)) = (file, args.len().checked_sub(argv.len())) {
+        if args.get(at) == argv.first() {
+            args[at] = file;
+        }
+    }
+    Ok(Some((executable, args)))
+}
 
 /// `ServerHandle`: a server running in the background: its `url` and
 /// `local_addr`, `sessions()` running now, and `stop()`, which ends every

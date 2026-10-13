@@ -3,8 +3,8 @@
 //!     cargo run -p rs-rich-web --example serve [-- ADDRESS]
 //!
 //! Open the address it prints: it carries the token the server checks.
-//! Every tab gets its own copy of the app, on its own thread: its own
-//! clock, counter and list. The address is `127.0.0.1:8080` unless given;
+//! Every tab gets its own copy of the app, in a process of its own: its
+//! own clock, counter and list. The address is `127.0.0.1:8080` unless given;
 //! keep it a loopback one unless a proxy with authentication is in front
 //! (see the crate's documentation).
 //!

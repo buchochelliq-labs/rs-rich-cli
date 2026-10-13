@@ -97,6 +97,43 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   **Docs:** [Text areas](docs/guide/intuituive/index.md#text-areas), the
   `editor` example and its recording.
 
+### One process per browser session (web 0.0.2)
+
+0.0.19 workstream 3.
+
+- **`Isolation::Processes`, the default for an app:** each browser tab's
+  session runs in a process of its own. The server starts its own program
+  again with `RS_RICH_WEB_SESSION` set; the same `serve` or `Server::bind`
+  call in that process connects back over loopback (proving itself with a
+  secret, and the server itself with another), runs the tab's app and
+  exits, while the server relays the
+  WebSocket. Apps need no change. A crash, a hang or a runaway allocation
+  ends that tab alone, and the page is told the session ended.
+- **Ending and limits:** a session's process is killed when its tab closes
+  or the server stops, on Unix with its process group; should the server be
+  killed, the process ends its group itself. A program the app runs
+  inherits the variable but serves as it would anywhere. Connections to the
+  session's port are read side by side, each for 2 s at most, so none holds
+  up a session or the server stopping. `Server::session_memory(bytes)` and
+  `session_cpu(time)` cap each process on Unix (through rustix, so the
+  crate keeps `unsafe_code = "deny"`): on Linux from the moment it starts
+  (`prlimit` from the server, which refuses a process that took more before
+  it was set), elsewhere from when it reaches `serve`;
+  macOS has no memory limit, so there only the CPU limit applies.
+- **`Isolation::Threads`** keeps 0.0.18's behaviour, for tests and programs
+  that cannot start themselves again; `Server::session_command(program,
+  args)` starts the process some other way.
+- **Python:** `rs_rich.tui.Server` runs the script again with
+  `sys.executable` and the script's absolute path (threads in a REPL or a
+  Jupyter kernel), and takes `isolation("threads")`, `session_memory(bytes)`
+  and `session_cpu(seconds)`.
+- **Tests:** the new `isolated` example is served as a process of its own
+  while tabs crash, hang and run out of memory on purpose; the others, new
+  tabs and the server carry on, and a killed server takes its sessions
+  with it; `session_probe` checks a killed server's orphans, a program the
+  app runs, strangers on the session's port, and limits on one CPU. **Docs:** [One process per
+  session](docs/guide/intuituive/web.md#one-process-per-session).
+
 ## 0.0.18 cohort
 
 Published on 2026-10-11: record 0.0.6 / interact 0.0.6 / ratatui 0.0.3 /
