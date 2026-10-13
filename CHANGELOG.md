@@ -9,6 +9,15 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## 0.0.19 cohort
+
+ext 0.0.16 / micro 0.0.5 / record 0.0.7 / interact 0.0.7 / ratatui 0.0.4 /
+intuituive 0.0.4 / embed 0.0.2 / web 0.0.2 / data 0.0.3 / CLI 0.0.19, and
+`rs-rich` 0.0.7 on PyPI. Not published yet: the maintainer tags it.
+Unchanged and already published: core 0.0.9, macros 0.0.3, plugin API 0.0.3,
+art 0.0.12, diagram 0.0.2, mermaid 0.0.5, lumis 0.0.3. See
+[the release notes](docs/releases/0.0.19.md).
+
 ### 0.0.19 release test: fixes from three audits
 
 Three independent audits of the 0.0.19 delta (intuiTUIve and the surface;
