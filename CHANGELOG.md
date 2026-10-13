@@ -113,7 +113,8 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   dies with its server. `Server::session_memory(bytes)` and
   `session_cpu(time)` cap each process on Unix (through rustix, so the
   crate keeps `unsafe_code = "deny"`): on Linux from the moment it starts
-  (`prlimit` from the server), elsewhere from when it reaches `serve`.
+  (`prlimit` from the server), elsewhere from when it reaches `serve`;
+  macOS has no memory limit, so there only the CPU limit applies.
 - **`Isolation::Threads`** keeps 0.0.18's behaviour, for tests and programs
   that cannot start themselves again; `Server::session_command(program,
   args)` starts the process some other way.

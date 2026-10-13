@@ -134,6 +134,8 @@ fn a_hang_holds_up_its_own_session_only() {
     answers(&mut session(&server).0);
 }
 
+// macOS has no address-space limit.
+#[cfg(not(target_vendor = "apple"))]
 #[test]
 fn running_out_of_memory_ends_its_own_session_only() {
     let server = Server::start();

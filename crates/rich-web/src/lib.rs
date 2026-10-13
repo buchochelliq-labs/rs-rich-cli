@@ -376,7 +376,8 @@ impl Server {
     /// Cap each session's process at `bytes` of memory (its address
     /// space): an allocation past it fails, and the process ends, alone.
     /// On Linux it holds from the moment the process starts; on other Unix
-    /// systems from when it reaches `serve`; elsewhere it is not applied.
+    /// systems from when it reaches `serve`; macOS has no such limit, and
+    /// elsewhere it is not applied.
     pub fn session_memory(mut self, bytes: u64) -> Server {
         self.shared.spawn.memory = Some(bytes);
         self

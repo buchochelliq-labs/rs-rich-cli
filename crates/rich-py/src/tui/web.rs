@@ -123,7 +123,7 @@ impl PyServer {
         Ok(slf)
     }
 
-    /// Cap each session's process at `bytes` of memory (Unix).
+    /// Cap each session's process at `bytes` of memory (Unix, not macOS).
     fn session_memory(slf: Bound<'_, Self>, bytes: u64) -> PyResult<Bound<'_, Self>> {
         slf.borrow().map(|s| s.session_memory(bytes))?;
         Ok(slf)

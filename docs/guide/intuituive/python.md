@@ -237,7 +237,7 @@ run on threads.
 
 `Server(address, app)` takes the options (`max_sessions`, `token`,
 `allow_origin`, `title`, `isolation("threads")` to run every session on a
-thread of this process, as tests do, and on Unix `session_memory(bytes)`
+thread of this process, as tests do, and on Unix `session_memory(bytes)` (not macOS)
 and `session_cpu(seconds)`), and `spawn()` serves in the background and
 returns a handle to `stop()` (or a context manager). The
 security model is the Rust crate's: a token, an origin check and a session

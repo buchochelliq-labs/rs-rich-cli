@@ -201,6 +201,8 @@ fn limits(
     cpu: Option<u64>,
 ) -> impl Iterator<Item = (rustix::process::Resource, rustix::process::Rlimit)> {
     use rustix::process::{Resource, Rlimit};
+    // macOS refuses an address-space limit (`EINVAL`): there it has none.
+    let memory = memory.filter(|_| !cfg!(target_vendor = "apple"));
     [(Resource::As, memory), (Resource::Cpu, cpu)]
         .into_iter()
         .filter_map(|(resource, value)| {

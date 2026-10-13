@@ -145,7 +145,8 @@ So a crash, a hang or a runaway allocation ends one tab, not the server:
   `session_cpu(time)` kills one that has used that much CPU. On Linux the
   server sets them as the process starts, so they cover the code `main`
   runs before `serve` too; on other Unix systems they take effect when the
-  process reaches `serve`. Elsewhere they are not applied.
+  process reaches `serve`. macOS has no memory limit to set, so there only
+  the CPU limit applies; elsewhere neither is applied.
 
 The `isolated` example shows it: each tab prints its process id, and `c`
 panics, `h` loops forever and `m` allocates until the memory limit stops
