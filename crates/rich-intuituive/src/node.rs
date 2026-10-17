@@ -123,6 +123,13 @@ pub struct Node {
     class_when: Vec<(String, Condition)>,
     selected_when: Option<Condition>,
     disabled_when: Option<Condition>,
+    error_when: Option<Condition>,
+    /// Conditions on the app's [`viewport`](crate::viewport()) that must
+    /// all hold for it to be shown ([`hide_below`](Node::hide_below) and
+    /// the like).
+    shown_when: Vec<Condition>,
+    /// Whether it was last drawn in the theme's error look.
+    error_lit: Cell<bool>,
     /// What the stylesheet decided for it.
     sheet: RefCell<SheetNode>,
     /// Where its widget lays out and draws: its rectangle less the
@@ -171,11 +178,12 @@ struct SheetNode {
     insets: [u16; 4],
     /// The style it was last drawn in.
     style: Option<Style>,
-    /// Its conditional classes that held, and whether it was selected and
-    /// disabled, when it last drew.
+    /// Its conditional classes that held, and whether it was selected,
+    /// disabled and in error, when it last drew.
     active: Vec<String>,
     selected: bool,
     disabled: bool,
+    error: bool,
 }
 
 /// The stylesheet as a frame draws with it.
@@ -183,6 +191,8 @@ pub(crate) struct SheetCx<'a> {
     pub sheet: &'a Stylesheet,
     pub generation: u64,
     pub vars: &'a dyn Fn(&str) -> Option<Style>,
+    /// The app's [`viewport`](crate::viewport()), for `@media` rules.
+    pub viewport: (u16, u16),
 }
 
 /// A node's widget, and what the framework keeps for it between frames.
@@ -240,6 +250,9 @@ impl Node {
             class_when: Vec::new(),
             selected_when: None,
             disabled_when: None,
+            error_when: None,
+            shown_when: Vec::new(),
+            error_lit: Cell::new(false),
             sheet: RefCell::new(SheetNode::default()),
             inner: Cell::new(Rect::default()),
             role: None,
@@ -264,6 +277,11 @@ impl Node {
     pub fn name(mut self, name: &str) -> Node {
         self.name = Some(name.to_string());
         self
+    }
+
+    /// Its [name](Self::name), if it was given one.
+    pub(crate) fn given_name(&self) -> Option<&str> {
+        self.name.as_deref()
     }
 
     /// Its name, if it was given one: how the command palette and the help
@@ -382,6 +400,7 @@ impl Node {
         }
         state.selected |= holds(&self.selected_when).unwrap_or(false);
         state.busy |= holds(&self.busy_when).unwrap_or(false);
+        state.invalid |= holds(&self.error_when).unwrap_or(false);
         state
     }
 
@@ -637,6 +656,91 @@ impl Node {
             .is_some_and(|condition| condition())
     }
 
+    /// In error while `condition` holds: a field whose value is wrong, a
+    /// form that cannot be sent. It matches a stylesheet's `:error` (or
+    /// CSS's `:invalid`), and the theme gives it a look of its own: a
+    /// [panel](Self::panel)'s border in the theme's `border.error` style,
+    /// another node's text in its `error` style (under the text's own
+    /// colours, as a stylesheet's go), each the theme's `bad` style unless
+    /// the theme names it. Assistive technology is told it is invalid
+    /// (ARIA's `aria-invalid`). `condition` may read signals.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| {
+    ///     let age = signal(String::from("abc"));
+    ///     text!("Age: {age}")
+    ///         .label("Age")
+    ///         .error_when(move || age.with(|a| a.parse::<u8>().is_err()))
+    /// })
+    /// .stylesheet(":error { text-style: underline; }");
+    /// let mut driver = app.driver(12, 1);
+    /// driver.settle();
+    /// assert!(driver.accessibility()[0].state.invalid);
+    /// assert_eq!(driver.accessibility()[0].describe(), "Age, invalid");
+    /// ```
+    pub fn error_when(mut self, condition: impl Fn() -> bool + 'static) -> Node {
+        self.error_when = Some(Box::new(condition));
+        self
+    }
+
+    /// Whether it is [in error](Self::error_when) now.
+    pub(crate) fn invalid(&self) -> bool {
+        self.error_when
+            .as_ref()
+            .is_some_and(|condition| condition())
+    }
+
+    /// Hide this node while the app is narrower than `columns` cells (its
+    /// [`viewport`](crate::viewport())'s width): a sidebar that gives way
+    /// on a small terminal. Hidden, it is as if a stylesheet said
+    /// `display: none`: it takes no room, and it and what is inside it
+    /// leave the Tab order. It comes back when the terminal is wide enough.
+    /// `@media (max-width: N)` in a stylesheet does the same from outside
+    /// the code (`hide_below(80)` is `max-width: 79`).
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| row([label("nav").fixed(5).hide_below(20), label("main")]));
+    /// let mut driver = app.driver(24, 1);
+    /// driver.settle();
+    /// assert_eq!(driver.screen().plain()[0].trim_end(), "nav  main");
+    /// driver.resize(12, 1);
+    /// driver.settle();
+    /// assert_eq!(driver.screen().plain()[0].trim_end(), "main");
+    /// ```
+    pub fn hide_below(self, columns: u16) -> Node {
+        self.when_viewport(move |(width, _)| width >= columns)
+    }
+
+    /// Show this node only while the app is narrower than `columns` cells:
+    /// a compact stand-in for what [`hide_below`](Self::hide_below) hides
+    /// (`@media (min-width: N)` with `display: none` in a stylesheet).
+    pub fn show_below(self, columns: u16) -> Node {
+        self.when_viewport(move |(width, _)| width < columns)
+    }
+
+    /// Hide this node while the app is shorter than `rows` cells, as
+    /// [`hide_below`](Self::hide_below) does for the width.
+    pub fn hide_below_height(self, rows: u16) -> Node {
+        self.when_viewport(move |(_, height)| height >= rows)
+    }
+
+    /// Show this node only while the app is shorter than `rows` cells.
+    pub fn show_below_height(self, rows: u16) -> Node {
+        self.when_viewport(move |(_, height)| height < rows)
+    }
+
+    /// Shown only while `shown` holds of the app's viewport.
+    fn when_viewport(mut self, shown: impl Fn((u16, u16)) -> bool + 'static) -> Node {
+        let viewport = crate::reactive::viewport();
+        self.shown_when
+            .push(Box::new(move || shown(viewport.get())));
+        self
+    }
+
     /// Whether it can take the focus now.
     pub(crate) fn takes_focus(&self) -> bool {
         self.focusable && !self.disabled()
@@ -870,10 +974,13 @@ impl Node {
     }
 
     /// A node of `widget` round this one, taking over its size and span.
-    fn wrap_in(self, widget: impl FnOnce(Node) -> Box<dyn Widget>, what: &'static str) -> Node {
+    fn wrap_in(mut self, widget: impl FnOnce(Node) -> Box<dyn Widget>, what: &'static str) -> Node {
         let (size, min, max, span, set) = (self.size, self.min, self.max, self.span, self.set);
         let align_self = self.align_self;
+        // Shown or hidden by the viewport as a whole, box and all.
+        let shown_when = std::mem::take(&mut self.shown_when);
         let mut outer = Node::from_widget(widget(self), what);
+        outer.shown_when = shown_when;
         outer.size = size;
         outer.min = min;
         outer.max = max;
@@ -903,11 +1010,11 @@ impl Node {
     /// Its size, minimum and maximum: what code set, else what the
     /// stylesheet says; nothing at all when the sheet hides it.
     fn dims(&self) -> (Size, u16, u16) {
-        let sheet = self.sheet.borrow();
-        let layout = &sheet.layout;
-        if layout.hidden {
+        if self.hidden() {
             return (Size::Fixed(0), 0, 0);
         }
+        let sheet = self.sheet.borrow();
+        let layout = &sheet.layout;
         fn pick<T>(set: bool, own: T, from: Option<T>) -> T {
             if set {
                 own
@@ -922,9 +1029,12 @@ impl Node {
         )
     }
 
-    /// Whether a stylesheet hides it (`display: none`).
+    /// Whether a stylesheet hides it (`display: none`), or the app's
+    /// viewport does ([`hide_below`](Self::hide_below) and the like). A
+    /// parent laying out reads the viewport, so it lays out again when the
+    /// terminal's size changes.
     pub(crate) fn hidden(&self) -> bool {
-        self.sheet.borrow().layout.hidden
+        self.sheet.borrow().layout.hidden || self.shown_when.iter().any(|shown| !shown())
     }
 
     /// The edge a stylesheet docks it to, if any.
@@ -963,6 +1073,7 @@ impl Node {
             classes,
             selected: sheet.selected,
             disabled: sheet.disabled,
+            error: sheet.error,
         }
     }
 
@@ -974,8 +1085,8 @@ impl Node {
             return;
         }
         chain.push(self.element());
-        let layout = cx.sheet.layout(chain, cx.vars);
-        let watch = cx.sheet.watches(chain);
+        let layout = cx.sheet.layout(chain, cx.vars, cx.viewport);
+        let watch = cx.sheet.watches(chain, cx.viewport);
         chain.pop();
         if !self.set[SET_GAP] {
             let gap = layout.gap.unwrap_or(0);
@@ -1037,9 +1148,9 @@ impl Node {
         sheet.insets = insets;
     }
 
-    /// Its conditional classes that hold now, and whether it is selected
-    /// and disabled, reading the signals they read.
-    fn conditions(&self) -> (Vec<String>, bool, bool) {
+    /// Its conditional classes that hold now, and whether it is selected,
+    /// disabled and in error, reading the signals they read.
+    fn conditions(&self) -> (Vec<String>, bool, bool, bool) {
         (
             self.class_when
                 .iter()
@@ -1048,6 +1159,7 @@ impl Node {
                 .collect(),
             self.selected_when.as_ref().is_some_and(|c| c()),
             self.disabled_when.as_ref().is_some_and(|c| c()),
+            self.invalid(),
         )
     }
 
@@ -1112,13 +1224,10 @@ impl Node {
     /// How many cells of `axis` the content needs, given `width` x
     /// `height` to lay out in (a height of 0: as tall as it likes).
     pub(crate) fn measure(&self, console: &Console, axis: Axis, width: u16, height: u16) -> u16 {
-        let (hidden, [top, right, bottom, left]) = {
-            let sheet = self.sheet.borrow();
-            (sheet.layout.hidden, sheet.insets)
-        };
-        if hidden {
+        if self.hidden() {
             return 0;
         }
+        let [top, right, bottom, left] = self.sheet.borrow().insets;
         let height = if height == 0 {
             0
         } else {
@@ -1216,6 +1325,7 @@ impl Node {
         let mut cleared = false;
         let mut relaid = false;
         let mut restyled = false;
+        let mut invalid = self.error_lit.get();
         if redraw {
             // Told its size the first time it is laid out (or shown again),
             // and whenever the size changes.
@@ -1260,6 +1370,15 @@ impl Node {
                 self.access_state_of(&**widget);
                 self.disabled();
             });
+            // In error: a panel draws its border in the theme's error
+            // style; another node's cells take it under their own.
+            if self.error_when.is_some() {
+                invalid = frame.runtime.observe_node_more(id, || self.invalid());
+                let any: &mut dyn Any = &mut **widget;
+                if let Some(panel) = any.downcast_mut::<Panel>() {
+                    panel.invalid = invalid;
+                }
+            }
             // A widget that keeps what it drew is cleared only when its own
             // children moved: when it moved, or was drawn over, whoever did
             // that cleared the area already.
@@ -1268,6 +1387,7 @@ impl Node {
             cleared = !widget.retained()
                 || focused != self.highlit.get()
                 || hovered != self.hover_lit.get()
+                || invalid != self.error_lit.get()
                 || restyled
                 || (relaid && !viewport);
             repaint = moved || force || cleared;
@@ -1403,6 +1523,28 @@ impl Node {
                 frame.damage.push(area);
             }
         }
+        // The theme's error look goes under what the stylesheet left, the
+        // same way (a panel shows it on its border instead).
+        if invalid && self.what != "panel" {
+            let style = frame.theme.error_style("error");
+            let mut parts: Vec<Rect> = frame.damage[mark..]
+                .iter()
+                .map(|area| area.intersection(rect))
+                .filter(|area| !area.is_empty())
+                .collect();
+            if repaint {
+                parts = vec![rect];
+            }
+            for area in parts {
+                for row in area.y..area.bottom() {
+                    for column in area.x..area.right() {
+                        screen.underlay(column, row, &style);
+                    }
+                }
+                frame.damage.push(area);
+            }
+        }
+        self.error_lit.set(invalid);
         if styled {
             frame.chain.pop();
         }
@@ -1481,18 +1623,22 @@ impl Node {
             return false;
         };
         let (any, focus, hover) = self.sheet.borrow().watch;
-        let (active, selected, disabled) = frame
+        let (active, selected, disabled, error) = frame
             .runtime
             .observe_node_more(self.id, || self.conditions());
         let changed = {
             let sheet = self.sheet.borrow();
-            sheet.active != active || sheet.selected != selected || sheet.disabled != disabled
+            sheet.active != active
+                || sheet.selected != selected
+                || sheet.disabled != disabled
+                || sheet.error != error
         };
         if changed {
             let mut sheet = self.sheet.borrow_mut();
             sheet.active = active;
             sheet.selected = selected;
             sheet.disabled = disabled;
+            sheet.error = error;
         }
         if let Some(top) = frame.chain.last_mut() {
             *top = self.element();
@@ -1516,7 +1662,7 @@ impl Node {
                 focus: &focus_path,
                 hover: &hover_path,
             };
-            cx.sheet.style(&frame.chain, &states, cx.vars)
+            cx.sheet.style(&frame.chain, &states, cx.vars, cx.viewport)
         } else {
             None
         };

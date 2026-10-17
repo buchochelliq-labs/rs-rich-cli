@@ -55,8 +55,16 @@ fn main() -> std::io::Result<()> {
   (`[accent]…[/]`), switched at run time with `cx.set_theme`.
 - **Inline apps:** `App::inline(rows)` runs in a few rows under the prompt
   and leaves its last frame in the scrollback.
+- **Responsive:** `.hide_below(cols)` and `.show_below(cols)` on a node,
+  and `@media (max-width: 80)` in a stylesheet, follow the terminal's size;
+  `viewport()` reads it.
+- **Errors:** `.error_when(…)` puts a node in error, styled by the theme and
+  a stylesheet's `:error`, and told to screen readers as invalid.
 - **Testing:** `App::render_with(keys, width, height)` and `App::run_on` with
   `rs-rich-interact`'s headless driver run an app without a terminal.
+  `App::driver` steps one (`press`, `type_text`, `assert_focused`), and
+  `assert_screen!(driver, "name")` compares its screen with a snapshot in
+  `tests/snapshots` (`UPDATE_SNAPSHOTS=1` writes it).
 - **Inspector:** `INTUITUIVE_INSPECT=1` (or `App::inspector(true)`) docks a
   live view of the node tree, what drew in the last frame, the focus and
   the frame's cost; F12 toggles it.

@@ -440,6 +440,18 @@ impl Theme {
             .unwrap_or_else(|| style(fallback))
     }
 
+    /// The style for a node in [error](crate::Node::error_when): the
+    /// theme's style named `name` (`error`, or `border.error` for a
+    /// panel's border), else its `bad` style, else bold red.
+    pub(crate) fn error_style(&self, name: &str) -> Style {
+        self.styles
+            .iter()
+            .find(|(n, _)| n == name)
+            .or_else(|| self.styles.iter().find(|(n, _)| n == "bad"))
+            .map(|(_, style)| style.clone())
+            .unwrap_or_else(|| style("bold red"))
+    }
+
     pub(crate) fn border(&self, focused: bool) -> Style {
         if focused {
             self.border_focused.clone()
@@ -665,6 +677,8 @@ pub struct App {
     caret_at: Option<(u16, u16)>,
     /// Draw a frame even if no node is dirty (the inspector has news).
     poke: bool,
+    /// The stylesheet generation the last frame matched nodes against.
+    sheet_drawn: Option<u64>,
 }
 
 /// A theme file the app reloads when it changes.
@@ -674,6 +688,38 @@ struct SheetSource {
     /// A new number each time it changes, so nodes match it again.
     generation: u64,
     file: Option<ThemeFile>,
+    /// With `@media` rules: the generation and media key the number nodes
+    /// match against was made for, and that number. A viewport that
+    /// crosses a rule's bounds makes a new one.
+    media: Option<(u64, u64, u64)>,
+}
+
+impl SheetSource {
+    fn new(sheet: crate::Stylesheet, file: Option<ThemeFile>) -> SheetSource {
+        SheetSource {
+            sheet,
+            generation: sheet_generation(),
+            file,
+            media: None,
+        }
+    }
+
+    /// The number nodes match against at `viewport`: the sheet's
+    /// generation, or one for the `@media` blocks that hold there.
+    fn generation_at(&mut self, viewport: (u16, u16)) -> u64 {
+        if !self.sheet.has_media() {
+            return self.generation;
+        }
+        let key = self.sheet.media_key(viewport);
+        match self.media {
+            Some((base, held, generation)) if base == self.generation && held == key => generation,
+            _ => {
+                let generation = sheet_generation();
+                self.media = Some((self.generation, key, generation));
+                generation
+            }
+        }
+    }
 }
 
 /// A number no stylesheet had before.
@@ -703,6 +749,8 @@ impl App {
         let (root, focus_path, hover_path) = runtime.enter(|| {
             let focus_path = signal(Vec::new());
             let hover_path = signal(Vec::new());
+            // Made now, so a node closure reading it later makes nothing.
+            crate::reactive::viewport();
             (build(), focus_path, hover_path)
         });
         let timers = BUILDING
@@ -773,6 +821,7 @@ impl App {
             opened: false,
             caret_at: None,
             poke: false,
+            sheet_drawn: None,
         }
     }
 
@@ -828,11 +877,7 @@ impl App {
     pub fn stylesheet(mut self, css: &str) -> App {
         match crate::Stylesheet::parse(css) {
             Ok(sheet) => {
-                self.sheet = Some(SheetSource {
-                    sheet,
-                    generation: sheet_generation(),
-                    file: None,
-                })
+                self.sheet = Some(SheetSource::new(sheet, None));
             }
             Err(error) => self.sheet_error(&error.to_string()),
         }
@@ -843,17 +888,16 @@ impl App {
     /// changes while the app runs. A change that does not parse is
     /// reported in a toast, and the last good sheet stays.
     pub fn stylesheet_file(mut self, path: impl Into<std::path::PathBuf>) -> App {
-        self.sheet = Some(SheetSource {
-            sheet: crate::Stylesheet::default(),
-            generation: sheet_generation(),
-            file: Some(ThemeFile {
+        self.sheet = Some(SheetSource::new(
+            crate::Stylesheet::default(),
+            Some(ThemeFile {
                 path: path.into(),
                 stamp: None,
                 good: None,
                 read: None,
                 error: None,
             }),
-        });
+        ));
         self.reload_sheet();
         self
     }
@@ -1318,6 +1362,7 @@ impl App {
             console.color_system()
         });
         let screen = Screen::new(self.columns(width), self.region(height));
+        self.set_viewport(screen.area(), height);
         // Focus what can be focused before the first frame (keyed children
         // appear only once drawn; `keep_focus` catches them after it).
         self.focus_first();
@@ -1366,6 +1411,21 @@ impl App {
     /// The rows the app draws in: the terminal's, or the inline region's.
     fn region(&self, rows: u16) -> u16 {
         self.inline.map_or(rows, |height| height.min(rows))
+    }
+
+    /// Tell nodes the app's [`viewport`](crate::viewport()): `screen` (its
+    /// columns less the inspector's, while shown) and, in linear mode,
+    /// which lays out as tall as its content, the terminal's `rows`.
+    fn set_viewport(&self, screen: Rect, rows: u16) {
+        let panel = self
+            .inspector
+            .as_ref()
+            .and_then(|inspector| inspector.width(screen.width))
+            .unwrap_or(0);
+        let height = if self.linear { rows } else { screen.height };
+        self.runtime
+            .viewport()
+            .set((screen.width.saturating_sub(panel), height));
     }
 
     /// The columns the app lays out in. Linear mode draws nothing, so a
@@ -1618,7 +1678,18 @@ impl App {
             .iter()
             .zip(&rects)
             .any(|(layer, rect)| layer.modal.is_some() && layer.drawn.is_some_and(|d| d != *rect));
-        let full = full || moved || std::mem::take(&mut self.restack);
+        let mut full = full || moved || std::mem::take(&mut self.restack);
+        // The stylesheet as it applies at this size: crossing an `@media`
+        // rule's bounds matches every node again and draws everything.
+        let viewport = self.runtime.viewport().get_untracked();
+        let generation = self
+            .sheet
+            .as_mut()
+            .map(|source| source.generation_at(viewport));
+        if generation != self.sheet_drawn {
+            full = true;
+            self.sheet_drawn = generation;
+        }
         // `$name` in the stylesheet: the theme's style of that name.
         let theme = &self.theme;
         let vars = |name: &str| -> Option<Style> {
@@ -1650,8 +1721,9 @@ impl App {
             drawn_ids: panel.map(|_| Vec::new()),
             sheet: self.sheet.as_ref().map(|source| crate::node::SheetCx {
                 sheet: &source.sheet,
-                generation: source.generation,
+                generation: generation.unwrap_or(source.generation),
                 vars: &vars,
+                viewport,
             }),
             chain: Vec::new(),
             announcements: Vec::new(),
@@ -3058,6 +3130,7 @@ impl Driver {
         self.console = self.app.console_for(self.app.columns(columns));
         self.app.last_console = Some(self.console.clone());
         self.screen = Screen::new(self.app.columns(columns), self.app.region(rows));
+        self.app.set_viewport(self.screen.area(), rows);
         self.painter.invalidate();
         self.first = true;
     }
@@ -3102,6 +3175,161 @@ impl Driver {
     /// Whether the app quit (a handler called [`Ctx::quit`], or Ctrl+C).
     pub fn is_done(&self) -> bool {
         self.done
+    }
+
+    /// Bring the app up to date at the time of the last
+    /// [`update`](Self::update) and draw until nothing is left to draw: a
+    /// test's step between events, where the bytes do not matter. It does
+    /// not advance the clock.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| text!("ready"));
+    /// let mut driver = app.driver(10, 1);
+    /// driver.settle();
+    /// assert_eq!(driver.screen().plain()[0].trim_end(), "ready");
+    /// ```
+    pub fn settle(&mut self) {
+        // A frame can leave work for the next (a watch set off by a
+        // lifecycle event); a few rounds settle any sane app.
+        for _ in 0..8 {
+            if self.done {
+                return;
+            }
+            self.update(self.app.now);
+            let drew = self.render().is_some();
+            if !drew && !self.needs_render() && self.app.lifecycle.is_empty() {
+                return;
+            }
+        }
+    }
+
+    /// Press keys by name, separated by spaces (`"down down enter"`,
+    /// `"ctrl+s"`; the space key is `space`), each followed by
+    /// [`settle`](Self::settle). Keys after the app quits are dropped.
+    ///
+    /// # Panics
+    /// On a name that is not a key.
+    pub fn press(&mut self, keys: &str) {
+        self.settle();
+        for key in rich_interact::keymap::keys(keys) {
+            if self.done {
+                return;
+            }
+            self.event(Event::Key(key));
+            self.settle();
+        }
+    }
+
+    /// Type `text`, one key a character, then [`settle`](Self::settle):
+    /// what a test does to fill in a text box.
+    ///
+    /// ```
+    /// use intuituive::interact::Input;
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| {
+    ///     let name = signal(String::new());
+    ///     column([
+    ///         component(Input::new("Name"), move |answer, _| name.set(answer)),
+    ///         text!("Hello, {name}"),
+    ///     ])
+    /// });
+    /// let mut driver = app.driver(30, 4);
+    /// driver.type_text("Ada");
+    /// driver.press("enter");
+    /// assert!(driver.screen().plain().iter().any(|row| row.contains("Hello, Ada")));
+    /// ```
+    pub fn type_text(&mut self, text: &str) {
+        self.settle();
+        for c in text.chars() {
+            if self.done {
+                return;
+            }
+            self.event(Event::Key(Key::char(c)));
+        }
+        self.settle();
+    }
+
+    /// The node that has the focus on the top screen, if any.
+    pub fn focused(&self) -> Option<NodeId> {
+        self.app.focus()
+    }
+
+    /// The focused node's [name](crate::Node::name), else its accessible
+    /// name (its [label](crate::Node::label), the text it shows, a panel's
+    /// title), if any.
+    pub fn focused_name(&self) -> Option<String> {
+        let id = self.focused()?;
+        let mut name = None;
+        with_node(&self.app.top().root, id, &mut |node| {
+            name = node.given_name().map(str::to_string);
+        });
+        name.or_else(|| {
+            self.accessibility()
+                .into_iter()
+                .find(|node| node.id == id)
+                .map(|node| node.name)
+                .filter(|name| !name.is_empty())
+        })
+    }
+
+    /// Assert that the focus is on the node called `name`: its
+    /// [name](crate::Node::name), or its accessible name (see
+    /// [`focused_name`](Self::focused_name)).
+    ///
+    /// # Panics
+    /// When the focus is elsewhere, or nowhere, saying where it is.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| {
+    ///     column([
+    ///         label("Save").name("save").focusable(),
+    ///         label("Quit").name("quit").focusable(),
+    ///     ])
+    /// });
+    /// let mut driver = app.driver(10, 2);
+    /// driver.settle();
+    /// driver.assert_focused("save");
+    /// driver.press("tab");
+    /// driver.assert_focused("quit");
+    /// ```
+    #[track_caller]
+    pub fn assert_focused(&self, name: &str) {
+        if let Err(message) = self.check_focused(name) {
+            panic!("{message}");
+        }
+    }
+
+    /// [`assert_focused`](Self::assert_focused) as a result: the message
+    /// it would panic with when the focus is not on `name`.
+    pub fn check_focused(&self, name: &str) -> Result<(), String> {
+        let Some(id) = self.focused() else {
+            return Err(format!(
+                "expected the focus on `{name}`, but nothing has the focus"
+            ));
+        };
+        let mut given = None;
+        with_node(&self.app.top().root, id, &mut |node| {
+            given = node.given_name().map(str::to_string);
+        });
+        let tree = self.accessibility();
+        let access = tree.iter().find(|node| node.id == id);
+        if given.as_deref() == Some(name) || access.is_some_and(|node| node.name == name) {
+            return Ok(());
+        }
+        let what = match (given, access) {
+            (Some(given), Some(node)) => format!("`{given}` ({})", node.describe()),
+            (Some(given), None) => format!("`{given}`"),
+            (None, Some(node)) if !node.describe().is_empty() => node.describe(),
+            _ => format!("node {id}"),
+        };
+        Err(format!(
+            "expected the focus on `{name}`, but it is on {what}"
+        ))
     }
 
     /// The frame as drawn, cell by cell.
@@ -3252,6 +3480,8 @@ impl Driver {
         let app = &mut self.app;
         app.poke = false;
         let screen = &mut self.screen;
+        // The inspector may have opened or closed since the last frame.
+        app.set_viewport(screen.area(), self.rows);
         if app.linear {
             let columns = screen.area().width;
             let rows = app.linear_rows(&self.console, columns, self.rows);

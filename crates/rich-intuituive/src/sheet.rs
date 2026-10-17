@@ -11,14 +11,29 @@
 //! A selector names a node's kind (`label`, `table`, `panel`, `column`:
 //! what the inspector shows), its [name](crate::Node::name) (`#preview`),
 //! its [classes](crate::Node::class) (`.danger`) and its states (`:focus`,
-//! `:focus-within`, `:hover`, `:selected`, `:disabled`), with descendants
-//! separated by spaces. The more specific rule wins, then the later one.
+//! `:focus-within`, `:hover`, `:selected`, `:disabled`, `:error`), with
+//! descendants separated by spaces. The more specific rule wins, then the
+//! later one.
 //!
 //! Colours and text styles follow the states and
 //! [`class_when`](crate::Node::class_when); layout (sizes, padding, the
-//! border, `display`, `dock`, gaps and grid tracks) is decided once, by
-//! the kind, name and fixed classes. What code sets wins over the sheet:
-//! `.fixed(3)` beats `size: 5`.
+//! border, `display`, `dock`, gaps and grid tracks) is decided by the kind,
+//! name and fixed classes, again whenever the terminal's size crosses an
+//! `@media` rule's bounds. What code sets wins over the sheet: `.fixed(3)`
+//! beats `size: 5`.
+//!
+//! ```css
+//! /* Rules that hold while the app is at most 80 columns wide. */
+//! @media (max-width: 80) {
+//!     #sidebar { display: none; }
+//!     #main { grid-columns: 1fr; }
+//! }
+//! ```
+//!
+//! An `@media` condition is `(min-width: N)`, `(max-width: N)`,
+//! `(min-height: N)` or `(max-height: N)`, in cells, inclusive as in CSS,
+//! and several are joined with `and`. Width and height are the app's
+//! [`viewport`](crate::viewport()).
 
 use std::fmt;
 use std::rc::Rc;
@@ -55,6 +70,35 @@ impl std::error::Error for SheetError {}
 struct Rule {
     selector: Selector,
     decls: Rc<Decls>,
+    /// The `@media` block it is in, if any.
+    media: Option<Rc<Media>>,
+}
+
+/// An `@media` block's conditions, in cells, inclusive; all must hold.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+struct Media {
+    min_width: Option<u16>,
+    max_width: Option<u16>,
+    min_height: Option<u16>,
+    max_height: Option<u16>,
+}
+
+impl Media {
+    fn holds(&self, (width, height): (u16, u16)) -> bool {
+        self.min_width.is_none_or(|n| width >= n)
+            && self.max_width.is_none_or(|n| width <= n)
+            && self.min_height.is_none_or(|n| height >= n)
+            && self.max_height.is_none_or(|n| height <= n)
+    }
+}
+
+impl Rule {
+    /// Whether its `@media` conditions, if any, hold at `viewport`.
+    fn applies(&self, viewport: (u16, u16)) -> bool {
+        self.media
+            .as_ref()
+            .is_none_or(|media| media.holds(viewport))
+    }
 }
 
 /// Compounds from the outermost ancestor to the node itself.
@@ -78,6 +122,8 @@ enum State {
     Hover,
     Selected,
     Disabled,
+    /// `:error`, or CSS's `:invalid`.
+    Error,
 }
 
 /// A colour, or a theme style's colour by name (`$accent`).
@@ -192,6 +238,7 @@ pub(crate) struct Element {
     pub maybe: Vec<String>,
     pub selected: bool,
     pub disabled: bool,
+    pub error: bool,
 }
 
 /// How strictly a selector is matched.
@@ -235,12 +282,36 @@ impl Stylesheet {
         self.rules.is_empty()
     }
 
+    /// Which of its `@media` blocks hold at `viewport`, one bit each in
+    /// order (blocks past the 64th share the last bit): what the layout
+    /// depends on beyond the nodes. Zero when it has none.
+    pub(crate) fn media_key(&self, viewport: (u16, u16)) -> u64 {
+        let mut key = 0u64;
+        let mut seen: Vec<&Rc<Media>> = Vec::new();
+        for media in self.rules.iter().filter_map(|rule| rule.media.as_ref()) {
+            if seen.iter().any(|m| Rc::ptr_eq(m, media)) {
+                continue;
+            }
+            let bit = seen.len().min(63);
+            seen.push(media);
+            if media.holds(viewport) {
+                key |= 1 << bit;
+            }
+        }
+        key
+    }
+
+    /// Whether it has `@media` rules.
+    pub(crate) fn has_media(&self) -> bool {
+        self.rules.iter().any(|rule| rule.media.is_some())
+    }
+
     /// Whether a rule with colours or a text style could ever match the
     /// last node of `chain`, and whether such a rule asks about the focus
     /// and the pointer: what the node must draw again for.
-    pub(crate) fn watches(&self, chain: &[Element]) -> (bool, bool, bool) {
+    pub(crate) fn watches(&self, chain: &[Element], viewport: (u16, u16)) -> (bool, bool, bool) {
         let mut out = (false, false, false);
-        for rule in &self.rules {
+        for rule in self.rules.iter().filter(|rule| rule.applies(viewport)) {
             let d = &rule.decls;
             if d.color.is_none() && d.background.is_none() && d.text_style.is_none() {
                 continue;
@@ -263,11 +334,11 @@ impl Stylesheet {
     }
 
     /// The layout the rules without states or conditional classes give
-    /// the last node of `chain`.
-    pub(crate) fn layout(&self, chain: &[Element], vars: Vars) -> Layout {
+    /// the last node of `chain`, at `viewport`.
+    pub(crate) fn layout(&self, chain: &[Element], vars: Vars, viewport: (u16, u16)) -> Layout {
         let mut out = Layout::default();
         let mut border: Option<Option<(BoxKind, Option<Paint>)>> = None;
-        for rule in &self.rules {
+        for rule in self.rules.iter().filter(|rule| rule.applies(viewport)) {
             if !rule.selector.matches(chain, Mode::Fixed) {
                 continue;
             }
@@ -311,13 +382,19 @@ impl Stylesheet {
     }
 
     /// The colours and text style the rules give the last node of `chain`
-    /// in `states`, if any do.
-    pub(crate) fn style(&self, chain: &[Element], states: &States, vars: Vars) -> Option<Style> {
+    /// in `states`, at `viewport`, if any do.
+    pub(crate) fn style(
+        &self,
+        chain: &[Element],
+        states: &States,
+        vars: Vars,
+        viewport: (u16, u16),
+    ) -> Option<Style> {
         let mut color = None;
         let mut background = None;
         let mut text: Option<Style> = None;
         let mut any = false;
-        for rule in &self.rules {
+        for rule in self.rules.iter().filter(|rule| rule.applies(viewport)) {
             if !rule.selector.matches(chain, Mode::Exact(states)) {
                 continue;
             }
@@ -428,6 +505,7 @@ impl Compound {
             State::Hover => states.hover.contains(&element.id),
             State::Selected => element.selected,
             State::Disabled => element.disabled,
+            State::Error => element.error,
         })
     }
 }
@@ -465,12 +543,58 @@ impl<'a> Parser<'a> {
 
     fn sheet(mut self) -> Result<Stylesheet, SheetError> {
         let mut rules: Vec<(Rule, (usize, usize, usize), usize)> = Vec::new();
+        self.rules(&mut rules, None)?;
+        rules.sort_by_key(|(_, specificity, order)| (*specificity, *order));
+        Ok(Stylesheet {
+            rules: rules.into_iter().map(|(rule, _, _)| rule).collect(),
+        })
+    }
+
+    /// Rules up to the end of the text, or, inside an `@media` block
+    /// (`media`, with where it starts), up to the `}` that closes it.
+    fn rules(
+        &mut self,
+        rules: &mut Vec<(Rule, (usize, usize, usize), usize)>,
+        media: Option<(Rc<Media>, usize)>,
+    ) -> Result<(), SheetError> {
         loop {
             self.skip();
             if self.rest().is_empty() {
-                break;
+                return match media {
+                    Some((_, at)) => Err(self.error(at, "an `@media` block with no `}`")),
+                    None => Ok(()),
+                };
             }
             let start = self.at;
+            if media.is_some() && self.rest().starts_with('}') {
+                self.at += 1;
+                return Ok(());
+            }
+            if self.rest().starts_with('@') {
+                if media.is_some() {
+                    return Err(self.error(start, "an `@media` block inside another"));
+                }
+                let Some(open) = find_unquoted(self.rest(), '{') else {
+                    return Err(self.error(start, "an `@media` rule with no `{`"));
+                };
+                let head = self.rest()[..open].trim_end();
+                let query = match head.strip_prefix("@media") {
+                    Some(query) if query.is_empty() || query.starts_with(char::is_whitespace) => {
+                        query
+                    }
+                    _ => {
+                        let word = head.split_whitespace().next().unwrap_or(head);
+                        return Err(self.error(
+                            start,
+                            format!("`{word}`: only `@media` rules are supported"),
+                        ));
+                    }
+                };
+                let conditions = parse_media(query.trim()).map_err(|e| self.error(start, e))?;
+                self.at += open + 1;
+                self.rules(rules, Some((Rc::new(conditions), start)))?;
+                continue;
+            }
             let Some(open) = find_unquoted(self.rest(), '{') else {
                 return Err(self.error(start, "a selector with no `{`"));
             };
@@ -497,16 +621,13 @@ impl<'a> Parser<'a> {
                     Rule {
                         selector,
                         decls: Rc::clone(&decls),
+                        media: media.as_ref().map(|(media, _)| Rc::clone(media)),
                     },
                     specificity,
                     order,
                 ));
             }
         }
-        rules.sort_by_key(|(_, specificity, order)| (*specificity, *order));
-        Ok(Stylesheet {
-            rules: rules.into_iter().map(|(rule, _, _)| rule).collect(),
-        })
     }
 
     fn decls(&self, start: usize, body: &str) -> Result<Decls, SheetError> {
@@ -599,6 +720,54 @@ fn is_ident(s: &str) -> bool {
             .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
 }
 
+/// An `@media` query: conditions such as `(max-width: 80)`, joined by
+/// `and`.
+fn parse_media(query: &str) -> Result<Media, String> {
+    let usage = "`@media` takes conditions such as `(max-width: 80)`, joined by `and`";
+    let mut media = Media::default();
+    let mut rest = query;
+    loop {
+        let Some(inner) = rest.strip_prefix('(') else {
+            return Err(usage.into());
+        };
+        let Some(close) = inner.find(')') else {
+            return Err(format!("`{query}`: a condition with no `)`"));
+        };
+        let condition = &inner[..close];
+        let Some((feature, value)) = condition.split_once(':') else {
+            return Err(format!(
+                "`({condition})`: a condition is `(feature: cells)`, such as `(max-width: 80)`"
+            ));
+        };
+        let value = value.trim();
+        let cells: u16 = value
+            .parse()
+            .map_err(|_| format!("`{value}` is not a number of cells"))?;
+        let slot = match feature.trim() {
+            "min-width" => &mut media.min_width,
+            "max-width" => &mut media.max_width,
+            "min-height" => &mut media.min_height,
+            "max-height" => &mut media.max_height,
+            other => {
+                return Err(format!(
+                "unknown media feature `{other}`: min-width, max-width, min-height or max-height"
+            ))
+            }
+        };
+        *slot = Some(cells);
+        rest = inner[close + 1..].trim_start();
+        if rest.is_empty() {
+            return Ok(media);
+        }
+        match rest.strip_prefix("and") {
+            Some(after) if after.starts_with(char::is_whitespace) || after.starts_with('(') => {
+                rest = after.trim_start();
+            }
+            _ => return Err(usage.into()),
+        }
+    }
+}
+
 fn parse_selector(text: &str) -> Result<Selector, String> {
     if text.is_empty() {
         return Err("an empty selector".into());
@@ -645,6 +814,7 @@ fn parse_compound(word: &str) -> Result<Compound, String> {
                 "hover" => State::Hover,
                 "selected" => State::Selected,
                 "disabled" => State::Disabled,
+                "error" | "invalid" => State::Error,
                 _ => return Err(format!("unknown state `:{state}`")),
             });
         } else if piece == "*" {
@@ -878,8 +1048,11 @@ mod tests {
             maybe: Vec::new(),
             selected: false,
             disabled: false,
+            error: false,
         }
     }
+
+    const WIDE: (u16, u16) = (120, 40);
 
     fn no_vars(_: &str) -> Option<Style> {
         None
@@ -895,7 +1068,7 @@ mod tests {
             focus: &[],
             hover: &[],
         };
-        let style = |chain: &[Element]| sheet.style(chain, &states, &no_vars).unwrap();
+        let style = |chain: &[Element]| sheet.style(chain, &states, &no_vars, WIDE).unwrap();
         let red = Style::parse("red").unwrap();
         assert_eq!(style(&[element("label", Some("a"), &["b"])]), red);
         let green = Style::parse("green").unwrap();
@@ -917,19 +1090,19 @@ mod tests {
         // A class that holds now, not a fixed one: no layout from it.
         label.fixed = 0;
         full.push(label);
-        let layout = sheet.layout(&full, &no_vars);
+        let layout = sheet.layout(&full, &no_vars, WIDE);
         assert_eq!(layout.size, Some(Size::Fixed(3)));
         let focus = [full[0].id, full[2].id];
         let states = States {
             focus: &focus,
             hover: &[],
         };
-        assert!(sheet.style(&full, &states, &no_vars).is_some());
+        assert!(sheet.style(&full, &states, &no_vars, WIDE).is_some());
         let states = States {
             focus: &[],
             hover: &[],
         };
-        assert!(sheet.style(&full, &states, &no_vars).is_none());
+        assert!(sheet.style(&full, &states, &no_vars, WIDE).is_none());
     }
 
     #[test]
@@ -939,17 +1112,17 @@ mod tests {
              .pin { align-self: flex-end; } .free { align-self: auto; }",
         )
         .unwrap();
-        let row = sheet.layout(&[element("row", None, &[])], &|_| None);
+        let row = sheet.layout(&[element("row", None, &[])], &|_| None, WIDE);
         assert_eq!(row.align_items, Some(Align::Center));
         assert_eq!(row.justify, Some(Justify::SpaceBetween));
         assert_eq!(row.wrap, Some(true));
         assert_eq!(row.align_content, Some(AlignContent::End));
-        let pin = sheet.layout(&[element("text", None, &["pin"])], &|_| None);
+        let pin = sheet.layout(&[element("text", None, &["pin"])], &|_| None, WIDE);
         assert_eq!(pin.align_self, Some(Align::End));
-        let free = sheet.layout(&[element("text", None, &["free"])], &|_| None);
+        let free = sheet.layout(&[element("text", None, &["free"])], &|_| None, WIDE);
         assert_eq!(free.align_self, None, "auto: the parent decides");
         // A later `auto` undoes an earlier rule's alignment.
-        let both = sheet.layout(&[element("text", None, &["pin", "free"])], &|_| None);
+        let both = sheet.layout(&[element("text", None, &["pin", "free"])], &|_| None, WIDE);
         assert_eq!(both.align_self, None, "auto after flex-end");
         for (css, message) in [
             (
@@ -977,7 +1150,7 @@ mod tests {
         )
         .unwrap();
         let accent = |name: &str| (name == "accent").then(|| Style::parse("bold magenta").unwrap());
-        let layout = sheet.layout(&[element("grid", None, &[])], &accent);
+        let layout = sheet.layout(&[element("grid", None, &[])], &accent, WIDE);
         assert_eq!(
             layout.grid_columns,
             Some(vec![Size::Flex(1), Size::Fixed(20), Size::Percent(50)])
@@ -1010,5 +1183,90 @@ mod tests {
         let error =
             Stylesheet::parse("a { color: red; }\n\nb {\n  text-style: shiny;\n}").unwrap_err();
         assert_eq!((error.line, error.column), (4, 3));
+    }
+    #[test]
+    fn media_rules_hold_within_their_bounds() {
+        let sheet = Stylesheet::parse(
+            "#side { size: 20; } \
+             @media (max-width: 80) { #side { display: none; } #main { size: 2fr; } } \
+             @media (min-width: 60) and (max-height: 10) { #main { color: red; } }",
+        )
+        .unwrap();
+        assert!(sheet.has_media());
+        let side = [element("text", Some("side"), &[])];
+        assert!(!sheet.layout(&side, &no_vars, (81, 24)).hidden);
+        assert!(sheet.layout(&side, &no_vars, (80, 24)).hidden, "inclusive");
+        assert_eq!(
+            sheet.layout(&side, &no_vars, (80, 24)).size,
+            Some(Size::Fixed(20))
+        );
+        let main = [element("text", Some("main"), &[])];
+        assert_eq!(
+            sheet.layout(&main, &no_vars, (40, 24)).size,
+            Some(Size::Flex(2))
+        );
+        let states = States {
+            focus: &[],
+            hover: &[],
+        };
+        assert!(sheet.style(&main, &states, &no_vars, (70, 10)).is_some());
+        assert!(sheet.style(&main, &states, &no_vars, (70, 11)).is_none());
+        assert!(sheet.style(&main, &states, &no_vars, (59, 10)).is_none());
+        // One bit a block: what changes when a bound is crossed.
+        assert_eq!(sheet.media_key((120, 40)), 0);
+        assert_eq!(sheet.media_key((80, 40)), 1);
+        assert_eq!(sheet.media_key((70, 10)), 3);
+        assert!(!Stylesheet::parse("a { color: red; }").unwrap().has_media());
+    }
+
+    #[test]
+    fn media_and_error_mistakes_say_where() {
+        for (css, message) in [
+            ("@media { a { color: red; } }", "`@media` takes conditions"),
+            (
+                "@media screen { a { color: red; } }",
+                "`@media` takes conditions",
+            ),
+            ("@media (width: 80) { }", "unknown media feature `width`"),
+            (
+                "@media (max-width: wide) { }",
+                "`wide` is not a number of cells",
+            ),
+            (
+                "@media (max-width: 80) or (min-width: 9) { }",
+                "`@media` takes conditions",
+            ),
+            (
+                "@media (max-width: 80) { a { color: red; }",
+                "an `@media` block with no `}`",
+            ),
+            (
+                "@media (max-width: 80) { @media (min-width: 9) { } }",
+                "an `@media` block inside another",
+            ),
+            (
+                "@import \"x.css\" { }",
+                "`@import`: only `@media` rules are supported",
+            ),
+        ] {
+            let error = Stylesheet::parse(css).unwrap_err().to_string();
+            assert!(error.contains(message), "{css}: {error}");
+        }
+        let error = Stylesheet::parse("a { color: red; }\n@media (max: 3) { }").unwrap_err();
+        assert_eq!((error.line, error.column), (2, 1));
+        // `:error` and CSS's `:invalid` are the same state.
+        let sheet =
+            Stylesheet::parse(":error { color: red; } .x:invalid { text-style: bold; }").unwrap();
+        let mut field = element("text", None, &["x"]);
+        let states = States {
+            focus: &[],
+            hover: &[],
+        };
+        assert!(sheet
+            .style(std::slice::from_ref(&field), &states, &no_vars, WIDE)
+            .is_none());
+        field.error = true;
+        let style = sheet.style(&[field], &states, &no_vars, WIDE).unwrap();
+        assert_eq!(style, Style::parse("bold red").unwrap());
     }
 }
