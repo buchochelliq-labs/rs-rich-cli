@@ -139,10 +139,20 @@ So a crash, a hang or a runaway allocation ends one tab, not the server:
   page "The session's process ended unexpectedly", and the other tabs carry
   on.
 - **A hang** holds up its own tab only. When the tab closes, or the server
-  stops, the process is killed, on Unix with its process group, so what it
-  started goes too. Should the server itself be killed, each session's
+  stops, the process is killed with what it started. On Unix that is its
+  process group. Should the server itself be killed, each session's
   process sees it go and ends its group the same way. A process that left
   the group (`setsid`, a daemon) is not reached.
+- **On Windows** the server puts each session's process in a job object as
+  soon as it starts, and holds the job's only handle. The job kills every
+  process in it when that handle closes: when the session ends, and when
+  the server dies, however it dies. What the process starts is in the job
+  too, and cannot leave it. Only what a program starts in the moment before
+  the server assigns it escapes: the app runs after that, so only code
+  `main` runs before `serve` can, or a `session_command` that starts the
+  program as a child instead of being it. A server that runs inside a job
+  of its own (a CI runner, say) nests each session's job in it; if that job
+  forbids nesting, sessions cannot start, and the page says why.
 - **Limits** (Unix): `session_memory(bytes)` caps each process's address
   space, so an allocation past it fails and that process ends;
   `session_cpu(time)` kills one that has used that much CPU. On Linux the
@@ -150,7 +160,7 @@ So a crash, a hang or a runaway allocation ends one tab, not the server:
   memory before they were set, so they cover the code `main` runs before
   `serve` too; on other Unix systems they take effect when the
   process reaches `serve`. macOS has no memory limit to set, so there only
-  the CPU limit applies; elsewhere neither is applied.
+  the CPU limit applies. On Windows neither is applied.
 
 The `isolated` example shows it: each tab prints its process id, and `c`
 panics, `h` loops forever and `m` allocates until the memory limit stops
