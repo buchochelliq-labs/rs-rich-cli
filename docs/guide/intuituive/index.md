@@ -171,6 +171,57 @@ grid(
   `.rows([...])` sizes them, and rows past the last size given take that
   size, so `.rows([Size::Auto])` makes every row as tall as its content.
 
+### Responsive layout
+
+A layout can follow the terminal's size. The size is the app's
+**viewport**: the columns and rows it lays out in, which are the
+terminal's, less the [inspector](#inspector)'s columns while it is shown
+(an [inline](#inline-apps) app's rows are its region's). Every resize
+measures it again, and what depends on it lays out again.
+
+- `.hide_below(60)` hides a node while the viewport is narrower than 60
+  columns, and `.show_below(60)` shows one only then. Hidden, a node is as
+  if a stylesheet said `display: none`: it takes no room, and it and what
+  is inside it leave the Tab order and the accessibility tree. A node that
+  had the focus gives it to the next one. `.hide_below_height(rows)` and
+  `.show_below_height(rows)` do the same for the height.
+- A [stylesheet](#stylesheets)'s `@media` rules change sizes, grid tracks,
+  padding, borders, `display` and the rest at a size, from outside the
+  code.
+- `viewport()` returns the size as a value that nodes read like a signal,
+  for anything else: a `switch` that picks a `row` or a `column`, a
+  shorter label.
+
+```rust
+column([
+    label("[b]ops[/] · 3 hosts").fixed(1),
+    row([
+        hosts.panel("Hosts").fixed(12).hide_below(60),
+        grid([], [cpu.panel("CPU"), memory.panel("Memory")]).name("meters"),
+    ]),
+    label("[dim]wider for hosts").show_below(60).fixed(1),
+])
+```
+
+```css
+#meters { grid-columns: 1fr 1fr; }
+@media (max-width: 59) { #meters { grid-columns: 1fr; } }
+```
+
+At 64 columns, then at 40 (the snapshots of `tests/responsive.rs`, which
+resizes it between the two):
+
+```text
+--8<-- "crates/rich-intuituive/tests/snapshots/dashboard_wide.txt"
+```
+
+```text
+--8<-- "crates/rich-intuituive/tests/snapshots/dashboard_narrow.txt"
+```
+
+`hide_below(60)` and `@media (max-width: 59)` are the same breakpoint:
+CSS's bounds are inclusive.
+
 ## State
 
 ```rust
@@ -929,7 +980,9 @@ panel table:hover { text-style: underline; }
 - `:focus` and `:focus-within`;
 - `:hover`, for the node under the pointer and its ancestors;
 - `:selected` and `:disabled`, while `.selected_when(…)` or
-  `.disabled_when(…)` holds.
+  `.disabled_when(…)` holds;
+- `:error` (or CSS's `:invalid`), while `.error_when(…)` holds (see
+  [Errors](#errors)).
 
 Spaces separate a node from its ancestors (`panel label`). Sibling
 selectors and `!important` are not supported. The more specific rule wins,
@@ -938,6 +991,23 @@ then the later one.
 `.class("warn big")` gives a node fixed classes, and
 `.class_when("danger", move || load.get() > 90)` gives it a class while a
 condition holds, following the signals the condition reads.
+
+**`@media`** rules hold at some sizes of the
+[viewport](#responsive-layout) only:
+
+```css
+@media (max-width: 80) {
+    #sidebar { display: none; }
+    #main { grid-columns: 1fr; }
+}
+@media (min-width: 120) and (max-height: 30) { #log { size: 50%; } }
+```
+
+The conditions are `min-width`, `max-width`, `min-height` and
+`max-height`, in cells, inclusive as in CSS, joined with `and`. Inside,
+rules are written as anywhere else, and the more specific rule still wins,
+then the later one, whether it is in a block or not. Blocks do not nest,
+and other `@` rules are an error.
 
 **Properties:**
 
@@ -964,7 +1034,9 @@ condition holds, following the signals the condition reads.
   `.hover_style()` go over the sheet's colours. A node whose code sets no
   size takes the sheet's.
 - **What follows states.** States and `class_when` change colours and text
-  styles. Layout is decided by a node's kind, name and fixed classes.
+  styles. Layout is decided by a node's kind, name and fixed classes, and
+  decided again when a resize crosses an `@media` rule's bounds (then
+  everything draws once). A resize that crosses none matches nothing again.
 - **Borders.** A `border` on a panel restyles the panel's own box. On
   another node it draws a box round it, inside its area.
 - **Live.** A sheet file is read again whenever it changes. One that does
@@ -1009,6 +1081,36 @@ sheet stays.
 | ![The status page as the sheet styles it](../../media/tapes/stylesheet/styled.png) | ![The down service focused, another hovered](../../media/tapes/stylesheet/states.png) |
 | **Reloaded** | **A mistake** |
 | ![Heavy borders and a magenta title after the edit](../../media/tapes/stylesheet/reloaded.png) | ![A toast naming the line and column](../../media/tapes/stylesheet/error.png) |
+
+### Errors
+
+`.error_when(condition)` puts a node in error while the condition holds: a
+field whose value is wrong, a form that cannot be sent. Three things
+follow, alongside the focus and `:disabled`:
+
+- **The theme** gives it a look of its own, for every app: a panel draws
+  its border in the theme's `border.error` style, and another node's text
+  takes the theme's `error` style, under the text's own colours as a
+  stylesheet's go. Both are the theme's `bad` style unless the theme (or a
+  [theme file](#theme-files-reloaded-live)) names them.
+- **The stylesheet** matches it with `:error`, or CSS's `:invalid`.
+- **Assistive technology** is told it is invalid: `AccessState::invalid`,
+  `invalid` in [linear mode](#linear-mode)'s line, `aria-invalid` in a
+  browser.
+
+```rust
+let age = signal(String::new());
+column([
+    component(Input::new("Age"), move |answer, _| age.set(answer)),
+    text!("Age: {age}")
+        .label("Age")
+        .error_when(move || age.with(|a| a.parse::<u8>().is_err())),
+])
+```
+
+```css
+:error { background: $bad; color: white; }
+```
 
 ## Accessibility
 
@@ -1067,11 +1169,13 @@ is in [Testing with screen readers](screen-readers.md).
 
     Code sets them with `.selected_when(…)`, `.expanded_when(…)`,
     `.checked_when(…)` (which makes the role `checkbox` unless one is set;
-    use `Role::Switch` for a toggle) and `.busy_when(…)`, each taking a
+    use `Role::Switch` for a toggle), `.busy_when(…)` and
+    `.error_when(…)` (`invalid`; see [Errors](#errors)), each taking a
     condition that may read signals. `Widget::access_state` is the hook
     for a widget of your own. `AccessNode::aria_attributes()` maps them to
     ARIA (`aria-expanded`, `aria-checked`, `aria-selected`, `aria-busy`,
-    `aria-disabled`, `aria-posinset`, `aria-setsize`) for a browser.
+    `aria-disabled`, `aria-invalid`, `aria-posinset`, `aria-setsize`) for
+    a browser.
 - **Hidden from assistive technology.** `.access_hidden(true)` (ARIA's
   `aria-hidden`) leaves a node, and everything inside it, out of the tree,
   linear mode's lines, announcements and the names of what holds it, and
@@ -1314,10 +1418,63 @@ let screen = app.render_with(&["+", "+", "q"], 30, 2)?;
 assert_eq!(screen[0].trim_end(), "Count: 2");
 ```
 
-For more control, such as clicks, resizes, waits on a virtual clock, or the
-exact bytes sent, use `App::run_on` with `rs-rich-interact`'s `Headless`
-backend. `App::wait_for_tasks(true)` waits for background tasks before each
-scripted event, so a test sees a task's result however fast the machine is.
+`App::driver(width, height)` steps an app one event at a time, with no
+terminal and no clock of its own. For a test it has:
+
+- `press("tab tab enter")`: keys by name, each followed by `settle()`,
+  which draws until nothing is left to draw;
+- `type_text("Ada")`: a key a character, as a person types;
+- `resize(columns, rows)`, `event(…)` for the mouse and pastes, and
+  `update(now)` to move the clock;
+- `assert_focused("save")`: the focus is on the node with that
+  `.name("…")`, or that accessible name (its `.label("…")`, the text it
+  shows, a panel's title). When it is not, the message says where the
+  focus is. `focused()` and `focused_name()` return it;
+- `screen()` (the cells), `accessibility()` and `take_announcements()`.
+
+**Snapshots.** `assert_screen!(driver, "name")` compares the screen with
+`tests/snapshots/name.txt`: plain text, one line a row, trailing spaces
+trimmed, so a review reads it as the screen. When the screen differs, the
+test fails with a unified diff:
+
+```text
+snapshot tests/snapshots/counter_two.txt differs; run with UPDATE_SNAPSHOTS=1 to accept the change
+--- expected
++++ actual
+@@ -1 +1 @@
+-Count: 2
++Count: 3
+```
+
+Run the tests with `UPDATE_SNAPSHOTS=1` to write the files instead (a new
+snapshot is written the same way), then review them with `git diff`.
+`assert_screen_styled!(driver, "name")` also keeps `name.styled.txt`, each
+row as console markup (`[bold red]Age: forty[/]`), for a test about
+colours. Both take a `Driver`, a `Screen`, or the rows `render_with`
+returns; `intuituive::testing::assert_snapshot(path, text)` compares any
+text with any file.
+
+A component test builds the component in an app of its own:
+
+```rust
+--8<-- "crates/rich-intuituive/tests/testing.rs:component"
+```
+
+An end-to-end test drives the whole app, here the [tutorial](tutorial.md)'s
+to-do list:
+
+```rust
+--8<-- "crates/rich-intuituive/tests/testing.rs:app"
+```
+
+```text
+--8<-- "crates/rich-intuituive/tests/snapshots/todo_added.txt"
+```
+
+For the exact bytes sent, or a script of clicks and waits, use
+`App::run_on` with `rs-rich-interact`'s `Headless` backend.
+`App::wait_for_tasks(true)` waits for background tasks before each step,
+so a test sees a task's result however fast the machine is.
 
 ## Inspector
 
