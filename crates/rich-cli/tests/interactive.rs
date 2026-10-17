@@ -458,10 +458,80 @@ fn explore_reports_bad_documents_and_options() {
 }
 
 #[test]
+fn date_asks_line_by_line_without_a_terminal() {
+    let (out, err, code) = piped(&["date"], "2026-10-17\n");
+    assert_eq!((out.as_str(), code), ("2026-10-17\n", 0), "{err}");
+    assert!(
+        err.contains("Date (YYYY-MM-DD)"),
+        "the prompt goes to stderr: {err}"
+    );
+    let (out, err, code) = piped(&["date", "--kind", "time"], "2:30 pm\n");
+    assert_eq!((out.as_str(), code), ("14:30\n", 0), "{err}");
+    let args = ["date", "--kind", "datetime", "--seconds", "--twelve-hour"];
+    let (out, err, code) = piped(&args, "2026-10-17T14:30:05\n");
+    assert_eq!((out.as_str(), code), ("2026-10-17 14:30:05\n", 0), "{err}");
+    // An empty line, or the end of input, answers with the default.
+    let (out, _, code) = piped(&["date", "--default", "2026-10-17"], "\n");
+    assert_eq!((out.as_str(), code), ("2026-10-17\n", 0));
+    let (out, _, code) = piped(&["date", "--kind", "time", "--default", "9:05"], "");
+    assert_eq!((out.as_str(), code), ("09:05\n", 0));
+    // No answer, or one that is not a date: exit 3.
+    let (out, err, code) = piped(&["date"], "");
+    assert_eq!((out.as_str(), code), ("", 3), "{err}");
+    let (out, err, code) = piped(&["date"], "2026-02-30\n");
+    assert_eq!((out.as_str(), code), ("", 3), "{err}");
+}
+
+#[test]
+fn date_checks_its_range() {
+    let args = ["date", "--min", "2026-10-01", "--max", "2026-10-31"];
+    let (out, err, code) = piped(&args, "2026-11-01\n");
+    assert_eq!((out.as_str(), code), ("", 3), "{err}");
+    assert!(err.contains("the latest is 2026-10-31"), "{err}");
+    assert!(
+        err.contains("from 2026-10-01 to 2026-10-31"),
+        "the prompt says the range: {err}"
+    );
+    let args = ["date", "--kind", "datetime", "--min", "2026-10-17 09:00"];
+    let (out, err, code) = piped(&args, "2026-10-17 08:59\n");
+    assert_eq!((out.as_str(), code), ("", 3), "{err}");
+    assert!(err.contains("the earliest is 2026-10-17 09:00"), "{err}");
+    // Values that do not parse for the kind, a range the wrong way round,
+    // and a default outside it are usage errors.
+    for (args, message) in [
+        (
+            &["date", "--kind", "week"][..],
+            "is not date, time or datetime",
+        ),
+        (
+            &["date", "--value", "14:30"][..],
+            "--value: \"14:30\" is not a date",
+        ),
+        (
+            &["date", "--kind", "time", "--min", "25:00"][..],
+            "is not a time of day",
+        ),
+        (
+            &["date", "--min", "2026-10-31", "--max", "2026-10-01"][..],
+            "--min is after --max",
+        ),
+        (
+            &["date", "--max", "2026-10-01", "--default", "2026-10-02"][..],
+            "--default is outside",
+        ),
+        (&["date", "tomorrow"][..], "takes no arguments"),
+    ] {
+        let (out, err, code) = piped(args, "2026-10-01\n");
+        assert_eq!((out.as_str(), code), ("", 2), "{args:?}: {err}");
+        assert!(err.contains(message), "{args:?}: {err}");
+    }
+}
+
+#[test]
 fn every_command_has_help() {
     for command in [
         "choose", "filter", "input", "confirm", "pager", "write", "file", "color", "asset",
-        "explore",
+        "explore", "date",
     ] {
         let (out, _, code) = piped(&[command, "--help"], "");
         assert_eq!(code, 0);
