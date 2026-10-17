@@ -1,7 +1,7 @@
 //! Ready-made widgets, built on the public [`Widget`] trait as an app's own
 //! would be: a [`table`] with a selectable row and sized columns, a
 //! [`virtual_list`] of any length, a [`tabs`] strip, a [`tree`], [`split`]
-//! panes and a [`calendar`].
+//! panes, a [`calendar`], a [`time_picker`] and a [`datetime_picker`].
 //!
 //! [`scroll`](crate::scroll) and anchored pop-ups
 //! ([`Ctx::popup`](crate::Ctx::popup)) are part of the framework itself,
@@ -17,7 +17,13 @@ use crate::node::{Axis, Node};
 use crate::reactive::Signal;
 use crate::widget::{widget, Canvas, DrawCx, EventCx, MeasureCx, Used, Widget, WidgetEvent};
 
-pub use crate::calendar::{calendar, calendar_with, Date};
+pub use crate::calendar::{
+    calendar, calendar_options, calendar_with, CalendarOptions, Date, DateTime, Time,
+};
+pub use crate::datetime::{
+    datetime_picker, time_picker, time_picker_with, DateTimeOptions, TimeOptions,
+};
+pub use crate::reorder::Move;
 pub use crate::split::{hsplit, split, split_with, vsplit};
 pub use crate::text_area::text_area;
 pub use crate::tree::{tree, tree_lazy, tree_with, LazyItem, TreeItem};

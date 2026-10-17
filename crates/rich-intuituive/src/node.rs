@@ -143,6 +143,9 @@ pub struct Node {
     checked_when: Option<Condition>,
     busy_when: Option<Condition>,
     built_state: Option<Box<dyn Fn() -> crate::a11y::AccessState>>,
+    /// A [`list`]'s selection and scroll, for
+    /// [`reorderable`](Node::reorderable).
+    pub(crate) list_model: Option<Rc<crate::reorder::ListModel>>,
 }
 
 /// A condition a node's class or state follows.
@@ -252,6 +255,7 @@ impl Node {
             checked_when: None,
             busy_when: None,
             built_state: None,
+            list_model: None,
         }
     }
 
@@ -870,7 +874,11 @@ impl Node {
     }
 
     /// A node of `widget` round this one, taking over its size and span.
-    fn wrap_in(self, widget: impl FnOnce(Node) -> Box<dyn Widget>, what: &'static str) -> Node {
+    pub(crate) fn wrap_in(
+        self,
+        widget: impl FnOnce(Node) -> Box<dyn Widget>,
+        what: &'static str,
+    ) -> Node {
         let (size, min, max, span, set) = (self.size, self.min, self.max, self.span, self.set);
         let align_self = self.align_self;
         let mut outer = Node::from_widget(widget(self), what);
@@ -2103,9 +2111,16 @@ pub fn list(items: impl Fn() -> Vec<String> + 'static, selected: Signal<usize>) 
     let rows = Rc::new(Cell::new(1usize));
     // Where the selected row is, for the cursor in accessible mode.
     let cursor = Rc::new(Cell::new(None));
+    // Whether the selected row is being carried, once it is reorderable.
+    let carried: Rc<Cell<Option<Signal<bool>>>> = Rc::new(Cell::new(None));
     let draw = {
-        let (items, offset, rows, cursor) =
-            (items.clone(), offset.clone(), rows.clone(), cursor.clone());
+        let (items, offset, rows, cursor, carried) = (
+            items.clone(),
+            offset.clone(),
+            rows.clone(),
+            cursor.clone(),
+            carried.clone(),
+        );
         move |console: &Console, width: u16, height: u16| {
             let items = items();
             let len = items.len();
@@ -2125,9 +2140,11 @@ pub fn list(items: impl Fn() -> Vec<String> + 'static, selected: Signal<usize>) 
                 let row = (selected - first) as u16;
                 cursor.set((len > 0).then(|| Rect::new(0, row, width, 1)));
             }
-            // In text mode the selected row is marked, not only reversed.
+            // In text mode the selected row is marked, not only reversed;
+            // a carried row is marked in any mode.
+            let carrying = carried.get().is_some_and(|carried| carried.get());
             let marked = crate::a11y::text_mode();
-            let indent = if marked { 2 } else { 0 };
+            let indent = if marked || carrying { 2 } else { 0 };
             let mut options = console
                 .options()
                 .update_width(width.saturating_sub(indent).max(1) as usize);
@@ -2149,7 +2166,9 @@ pub fn list(items: impl Fn() -> Vec<String> + 'static, selected: Signal<usize>) 
                         .into_iter()
                         .next()
                         .unwrap_or_default();
-                    if marked {
+                    if carrying && i == selected {
+                        line.insert(0, Segment::new("↕ ", None));
+                    } else if marked {
                         let marker = if i == selected { "> " } else { "  " };
                         line.insert(0, Segment::new(marker, None));
                     }
@@ -2167,6 +2186,13 @@ pub fn list(items: impl Fn() -> Vec<String> + 'static, selected: Signal<usize>) 
         let items = items.clone();
         move || items().len()
     };
+    let model = Rc::new(crate::reorder::ListModel {
+        selected,
+        len: Rc::new(len.clone()),
+        first: offset.clone(),
+        rows: rows.clone(),
+        carried,
+    });
     let step = move |by: isize| {
         let len = len();
         let last = len.saturating_sub(1) as isize;
@@ -2181,6 +2207,7 @@ pub fn list(items: impl Fn() -> Vec<String> + 'static, selected: Signal<usize>) 
     };
     let mut node = leaf(draw).built_state(state);
     node.cursor_cell = Some(cursor);
+    node.list_model = Some(model);
     node.what("list")
         .focusable()
         .on_key("up k", move |_| up(-1))
