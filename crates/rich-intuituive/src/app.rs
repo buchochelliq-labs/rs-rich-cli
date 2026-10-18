@@ -43,6 +43,7 @@ use rich_interact::{
 use crate::inspect::{Handled, Inspector, Names, NodeTiming, Probe, TraceEntry, Traced};
 use crate::layout::Size;
 use crate::node::{with_node, Axis, FrameState, Node};
+use crate::notify::{Corner, Level, Note};
 use crate::place::{Offset, Origin};
 use crate::reactive::{signal, NodeId, Proxy, Runtime, Signal};
 use crate::screen::{Painter, Rect, Screen};
@@ -60,7 +61,7 @@ pub struct Ctx {
     proxy: Proxy,
     nav: Vec<Nav>,
     theme: Option<Theme>,
-    toasts: Vec<(String, Duration)>,
+    toasts: Vec<(Note, Duration)>,
     animations: Vec<(Signal<f64>, f64, Duration, Easing)>,
     copies: Vec<String>,
     announcements: Vec<crate::a11y::Announcement>,
@@ -372,14 +373,55 @@ impl Ctx {
         self.copies.push(text.into());
     }
 
-    /// Show `markup` in a toast at the bottom right for three seconds.
+    /// Show `markup` in a toast for three seconds, at the bottom right (or
+    /// in the corner [`App::toasts_at`] names).
     pub fn toast(&mut self, markup: impl Into<String>) {
         self.toast_for(markup, Duration::from_secs(3));
     }
 
     /// Show `markup` in a toast for `duration`.
     pub fn toast_for(&mut self, markup: impl Into<String>, duration: Duration) {
-        self.toasts.push((markup.into(), duration));
+        self.toasts.push((Note::plain(markup.into()), duration));
+    }
+
+    /// Show a notification for five seconds: a box with `title` (markup)
+    /// on its top edge and `body` (markup, wrapped) inside, its border and
+    /// title in the `level`'s style (the theme's `notify.info`,
+    /// `notify.warn` or `notify.error`, else `accent`, `warn` or `bad`). It
+    /// stacks with the toasts, in the corner [`App::toasts_at`] names, and
+    /// is announced as `Warning: title: body`.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    /// use intuituive::{Corner, Level};
+    ///
+    /// let app = App::new(|| {
+    ///     label("files").on_key("d", |cx| cx.notify(Level::Warn, "Trash", "3 files moved"))
+    /// })
+    /// .toasts_at(Corner::TopRight);
+    /// let mut driver = app.driver(40, 6);
+    /// driver.press("d");
+    /// let rows = driver.screen().plain();
+    /// assert!(rows[0].ends_with("╭─ Trash ───────╮ "));
+    /// assert!(rows[1].ends_with("│ 3 files moved │ "));
+    /// ```
+    pub fn notify(&mut self, level: Level, title: impl Into<String>, body: impl Into<String>) {
+        self.notify_for(level, title, body, Duration::from_secs(5));
+    }
+
+    /// [`notify`](Self::notify), shown for `duration`.
+    pub fn notify_for(
+        &mut self,
+        level: Level,
+        title: impl Into<String>,
+        body: impl Into<String>,
+        duration: Duration,
+    ) {
+        let note = Note {
+            markup: body.into(),
+            notice: Some((level, title.into())),
+        };
+        self.toasts.push((note, duration));
     }
 
     /// Say `text` to assistive technology (a screen reader through the
@@ -806,8 +848,9 @@ pub struct App {
     capture: Option<(NodeId, (i32, i32))>,
     /// Pointer movement reports: (wanted by a widget, turned on).
     motion: (bool, bool),
-    /// Toasts showing, with when each goes.
-    toasts: Vec<(String, Duration)>,
+    /// Toasts showing, with when each goes, and the corner they stack in.
+    toasts: Vec<(Note, Duration)>,
+    toast_corner: Corner,
     /// Animations running: the signal, from, to, start, length, easing.
     animations: Vec<Animation>,
     /// Keys that open the command palette and the help, if any.
@@ -1006,6 +1049,7 @@ impl App {
             clipboard: false,
             copies: Vec::new(),
             toasts: Vec::new(),
+            toast_corner: Corner::default(),
             animations: Vec::new(),
             palette_key: Vec::new(),
             help_key: Vec::new(),
@@ -1133,15 +1177,13 @@ impl App {
     /// Say in a toast that the stylesheet does not parse.
     fn sheet_error(&mut self, error: &str) {
         let markup = format!("[bad]stylesheet:[/] {}", rich::markup::escape(error));
-        self.push_toast(markup, self.now + Duration::from_secs(6));
+        self.push_toast(Note::plain(markup), self.now + Duration::from_secs(6));
     }
 
     /// Show a toast until `until`, and announce it.
-    fn push_toast(&mut self, markup: String, until: Duration) {
-        let text = rich::Text::from_markup(&markup)
-            .map(|text| text.plain().to_string())
-            .unwrap_or_else(|_| markup.clone());
-        self.toasts.push((markup, until));
+    fn push_toast(&mut self, note: Note, until: Duration) {
+        let text = note.spoken();
+        self.toasts.push((note, until));
         self.poke = true;
         self.announce(
             crate::a11y::Announcement {
@@ -1391,6 +1433,14 @@ impl App {
     /// Counters from the last frame.
     pub fn stats(&self) -> FrameStats {
         self.stats
+    }
+
+    /// Stack toasts and [notifications](Ctx::notify) in `corner`, newest
+    /// nearest it: [`Corner::BottomRight`] by default, Yazi's
+    /// [`Corner::TopRight`].
+    pub fn toasts_at(mut self, corner: Corner) -> App {
+        self.toast_corner = corner;
+        self
     }
 
     /// Show the which-key pop-up while a [key
@@ -2337,44 +2387,14 @@ impl App {
                 frame.damage.push(rect);
             }
         }
-        // Toasts, newest at the bottom right, over everything. Linear, they
-        // are written as lines instead, and nothing covers the nodes whose
-        // names are read from the screen.
-        let mut bottom = area.bottom();
-        let toasts: &[(String, Duration)] = if self.linear { &[] } else { &self.toasts };
-        for (markup, _) in toasts.iter().rev() {
-            let text =
-                rich::Text::from_markup(markup).unwrap_or_else(|_| rich::Text::new(markup.clone()));
-            let w = (text.cell_len() as u16 + 4).min(area.width.saturating_sub(2));
-            if w < 5 || bottom < area.y + 3 {
-                // No room for a box: the newest toast on the bottom row,
-                // reversed, so it is still seen.
-                if bottom == area.bottom() && area.width > 0 && area.height > 0 {
-                    let rect = Rect::new(area.x, area.bottom() - 1, area.width, 1);
-                    let mut options = console.options().update_width(rect.width as usize);
-                    options.no_wrap = Some(true);
-                    options.overflow = Some(rich::Overflow::Ellipsis);
-                    let line = console.render_lines(&text, &options, false);
-                    let reverse = Style::parse("reverse").unwrap_or_default();
-                    screen.write_lines(rect, &line);
-                    for x in rect.x..rect.right() {
-                        screen.restyle(x, rect.y, &reverse);
-                    }
-                    frame.damage.push(rect);
-                }
-                break;
-            }
-            let rect = Rect::new(area.right().saturating_sub(w + 1), bottom - 3, w, 3);
-            let style = self.theme.border(false);
-            let lines = crate::node::border("", &style, &style, rect);
-            screen.write_lines(rect, &lines);
-            let mut options = console.options().update_width(rect.width as usize - 4);
-            options.no_wrap = Some(true);
-            options.overflow = Some(rich::Overflow::Ellipsis);
-            let inner = console.render_lines(&text, &options, false);
-            screen.write_lines(Rect::new(rect.x + 2, rect.y + 1, rect.width - 4, 1), &inner);
-            frame.damage.push(rect);
-            bottom -= 3;
+        // Toasts, newest nearest their corner, over everything. Linear,
+        // they are written as lines instead, and nothing covers the nodes
+        // whose names are read from the screen.
+        if !self.linear {
+            let notes: Vec<&Note> = self.toasts.iter().map(|(note, _)| note).collect();
+            let corner = self.toast_corner;
+            let drawn = crate::notify::draw(console, screen, area, &notes, &self.theme, corner);
+            frame.damage.extend(drawn);
         }
         // The which-key pop-up, once its delay is over.
         self.which_key_at = None;
@@ -2550,8 +2570,8 @@ impl App {
             self.printed.extend(cx.printed);
         }
         self.copies.extend(cx.copies);
-        for (markup, duration) in cx.toasts {
-            self.push_toast(markup, self.now + duration);
+        for (note, duration) in cx.toasts {
+            self.push_toast(note, self.now + duration);
         }
         for announcement in cx.announcements {
             self.announce(announcement, true);
@@ -2970,10 +2990,10 @@ impl App {
             }
             let what = rich::markup::escape(&what);
             self.toasts.push((
-                format!(
+                Note::plain(format!(
                     "[bold red]{what} draws itself again and again[/]: it writes a \
                      signal it reads while it draws. Write it in a handler or a watch."
-                ),
+                )),
                 self.now + Duration::from_secs(8),
             ));
             self.restack = true;
@@ -4488,7 +4508,7 @@ impl Driver {
         let n = text.chars().count();
         let until = self.app.now + Duration::from_secs(2);
         self.app.push_toast(
-            format!("Copied {n} character{}", if n == 1 { "" } else { "s" }),
+            Note::plain(format!("Copied {n} character{}", if n == 1 { "" } else { "s" })),
             until,
         );
         self.app.restack = true;
