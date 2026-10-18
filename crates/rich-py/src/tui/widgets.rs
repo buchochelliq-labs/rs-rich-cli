@@ -1,5 +1,6 @@
 //! The ready-made widgets from Python: tables, virtual lists, tabs, trees,
-//! the calendar, split panes, and menus.
+//! the calendar, the time and date-and-time pickers, split panes, and
+//! menus.
 
 use std::cell::RefCell;
 
@@ -570,18 +571,94 @@ fn tui_calendar(selected: &Bound<'_, PyAny>) -> PyResult<PyNode> {
     Ok(PyNode::new(core::calendar(selected)))
 }
 
-/// `calendar_with(selected, today=None)`: a `calendar` that marks `today`.
+/// `calendar_with(selected, today=None, *, min=None, max=None)`: a
+/// `calendar` that marks `today`, and keeps the selection between `min`
+/// and `max` (days outside are dimmed).
 #[pyfunction]
-#[pyo3(signature = (selected, today=None))]
+#[pyo3(signature = (selected, today=None, *, min=None, max=None))]
 fn tui_calendar_with(
     selected: &Bound<'_, PyAny>,
     today: Option<&Bound<'_, PyAny>>,
+    min: Option<&Bound<'_, PyAny>>,
+    max: Option<&Bound<'_, PyAny>>,
 ) -> PyResult<PyNode> {
     let selected = signal_arg(selected, "calendar's selected")?
         .borrow()
         .date(selected.py(), "a calendar's day")?;
-    let today = today.filter(|t| !t.is_none()).map(date_arg).transpose()?;
-    Ok(PyNode::new(core::calendar_with(selected, today)))
+    let date =
+        |value: Option<&Bound<'_, PyAny>>| value.filter(|v| !v.is_none()).map(date_arg).transpose();
+    let options = core::CalendarOptions {
+        today: date(today)?,
+        min: date(min)?,
+        max: date(max)?,
+    };
+    if let (Some(min), Some(max)) = (options.min, options.max) {
+        if min > max {
+            return Err(pyo3::exceptions::PyValueError::new_err("min is after max"));
+        }
+    }
+    Ok(PyNode::new(core::calendar_options(selected, options)))
+}
+
+/// `time_picker(selected, *, seconds=False, twelve_hour=False, min=None,
+/// max=None)`: the `datetime.time` in `selected`, field by field.
+#[pyfunction]
+#[pyo3(signature = (selected, *, seconds=false, twelve_hour=false, min=None, max=None))]
+fn tui_time_picker(
+    selected: &Bound<'_, PyAny>,
+    seconds: bool,
+    twelve_hour: bool,
+    min: Option<&Bound<'_, PyAny>>,
+    max: Option<&Bound<'_, PyAny>>,
+) -> PyResult<PyNode> {
+    let selected = signal_arg(selected, "time_picker's selected")?
+        .borrow()
+        .time(selected.py(), "a time picker's time")?;
+    let time = |value: Option<&Bound<'_, PyAny>>| {
+        value
+            .filter(|v| !v.is_none())
+            .map(crate::interact::time_from)
+            .transpose()
+    };
+    let options = core::TimeOptions {
+        seconds,
+        twelve_hour,
+        min: time(min)?,
+        max: time(max)?,
+    };
+    Ok(PyNode::new(core::time_picker_with(selected, options)))
+}
+
+/// `datetime_picker(selected, *, today=None, min=None, max=None,
+/// seconds=False, twelve_hour=False)`: a calendar over a time picker, both
+/// on the naive `datetime.datetime` in `selected`.
+#[pyfunction]
+#[pyo3(signature = (selected, *, today=None, min=None, max=None, seconds=false, twelve_hour=false))]
+fn tui_datetime_picker(
+    selected: &Bound<'_, PyAny>,
+    today: Option<&Bound<'_, PyAny>>,
+    min: Option<&Bound<'_, PyAny>>,
+    max: Option<&Bound<'_, PyAny>>,
+    seconds: bool,
+    twelve_hour: bool,
+) -> PyResult<PyNode> {
+    let selected = signal_arg(selected, "datetime_picker's selected")?
+        .borrow()
+        .datetime(selected.py(), "a date-and-time picker's moment")?;
+    let moment = |value: Option<&Bound<'_, PyAny>>| {
+        value
+            .filter(|v| !v.is_none())
+            .map(crate::interact::datetime_from)
+            .transpose()
+    };
+    let options = core::DateTimeOptions {
+        today: today.filter(|v| !v.is_none()).map(date_arg).transpose()?,
+        min: moment(min)?,
+        max: moment(max)?,
+        seconds,
+        twelve_hour,
+    };
+    Ok(PyNode::new(core::datetime_picker(selected, options)))
 }
 
 /// A ratio: a signal (made a float one), or a float (a new signal).
@@ -795,6 +872,8 @@ pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(tui_text_area, m)?)?;
     m.add_function(wrap_pyfunction!(tui_calendar, m)?)?;
     m.add_function(wrap_pyfunction!(tui_calendar_with, m)?)?;
+    m.add_function(wrap_pyfunction!(tui_time_picker, m)?)?;
+    m.add_function(wrap_pyfunction!(tui_datetime_picker, m)?)?;
     m.add_function(wrap_pyfunction!(tui_split, m)?)?;
     m.add_function(wrap_pyfunction!(tui_split_with, m)?)?;
     m.add_function(wrap_pyfunction!(tui_hsplit, m)?)?;

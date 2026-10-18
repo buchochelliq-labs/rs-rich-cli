@@ -107,8 +107,8 @@ exit status 2
 
 ## Interactive commands
 
-`choose`, `filter`, `input`, `confirm`, `pager`, `write`, `file`, `color` and
-`asset` run the
+`choose`, `filter`, `input`, `confirm`, `pager`, `write`, `file`, `color`,
+`asset` and `date` run the
 [interactive components](interact.md) from a shell script. The answer goes
 to standard output and the component paints on standard error, so
 `choice=$(python -m rs_rich choose a b c)` works. Exit statuses: 0 answered
@@ -118,8 +118,8 @@ error, 3 no answer without a terminal.
 Without a terminal they degrade: `filter` prints the lines matching
 `--value`, best first (a fuzzy `grep`), `choose` from standard input answers
 with `--selected`, as does `file`, `write` prints what standard input held,
-and `input`, `confirm`, `color`, `asset` and `choose` from arguments ask line
-by line on standard error.
+and `input`, `confirm`, `color`, `asset`, `date` and `choose` from arguments
+ask line by line on standard error.
 
 ```python
 lines = "src/lib.rs\nsrc/main.rs\ndocs/maintenance.md\nCargo.toml\n"

@@ -5,8 +5,9 @@ from rs_rich.interact import Select, MultiSelect, Input, Confirm, Choice, Form, 
 ```
 
 `rs_rich.interact` is the port's `rs-rich-interact` crate from Python: fuzzy
-pickers, text input and multi-line text, confirmations, forms, a pager, and
-file, colour and asset pickers, between printing and a full TUI. Rich has none of these, so the reference is the Rust crate: the same
+pickers, text input and multi-line text, confirmations, forms, a pager,
+file, colour and asset pickers, a list to put in order, and date and time
+pickers, between printing and a full TUI. Rich has none of these, so the reference is the Rust crate: the same
 component, keys and terminal paint the same frames.
 
 Each component is a configuration. `ask()` runs it on the terminal and
@@ -441,6 +442,63 @@ print(AssetPicker("box").headless(Script().text("double").keys("enter")).value)
 ```text
 👍
 double
+```
+
+## Reorder
+
+`Reorder(prompt, items, *, height=10, mouse=False)` puts the items in order.
+Alt+↑/↓ (or Ctrl+↑/↓, or `K`/`J` in any terminal) moves the focused item;
+Space grabs it for the arrows to carry, Space drops it and Esc puts it
+back; with `mouse=True` a drag carries a row. The answer is the items'
+values in the new order. Without a terminal it reads the new order as
+numbers (`3 1`: those first, the rest keeping theirs).
+
+```python
+from rs_rich.interact import Reorder, degrade
+
+steps = Reorder("Order", ["build", "test", "deploy"])
+print(steps.headless("down alt+down enter").value)
+print(steps.headless("space end space enter").value)
+print(degrade(steps, ["3 1"]).value)
+```
+
+```text
+['build', 'deploy', 'test']
+['test', 'deploy', 'build']
+['deploy', 'build', 'test']
+```
+
+## DatePicker, TimePicker and DateTimePicker
+
+`DatePicker(prompt="Date", *, value=None, default=None, min=None, max=None,
+today=None, validate=None, mouse=False)` picks a `datetime.date` on a month
+grid: the arrows move a day and a week, PgUp/PgDn a month, `t` goes to
+today. `TimePicker(prompt="Time", ..., seconds=False, twelve_hour=False)`
+picks a `datetime.time` field by field (←/→ between the fields, ↑/↓ to
+change one, digits to type it), and `DateTimePicker("Date and time", ...)` a
+naive `datetime.datetime`, with Tab between the grid and the time. Days
+outside `min` and `max` are dimmed and cannot be reached; a time outside
+them, or a value `validate` refuses (it returns `None`/`True`, or a
+message), is refused on Enter with a message. Without a terminal each reads
+a line: `2026-10-17`, `14:30` or `2:30 pm`, `2026-10-17 14:30`.
+
+```python
+import datetime
+
+from rs_rich.interact import DatePicker, DateTimePicker, Script, TimePicker, degrade
+
+due = DatePicker("Due", value=datetime.date(2026, 10, 17), max=datetime.date(2026, 10, 20))
+print(due.headless("right down enter").value)
+start = TimePicker("Start", value=datetime.time(9, 0))
+print(start.headless(Script().text("1430").keys("enter")).value)
+meeting = DateTimePicker("Meeting", min=datetime.datetime(2026, 10, 17, 9, 0))
+print(degrade(meeting, ["2026-10-18 2:30 pm"]).value)
+```
+
+```text
+2026-10-20
+14:30:00
+2026-10-18 14:30:00
 ```
 
 ## Headless runs

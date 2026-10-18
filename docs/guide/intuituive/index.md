@@ -413,8 +413,13 @@ hsplit(
   smallest size of a pane (three cells by default).
 - **`calendar(selected)`** is a month grid of a `Date` signal: the arrows
   move by day and week, PgUp/PgDn by month, a click picks a day and the
-  wheel changes month. `Date` has the date arithmetic it needs (weekday,
-  adding days and months, month lengths).
+  wheel changes month. `Date` (rs-rich-interact's, shared with its date
+  pickers) has the date arithmetic it needs (weekday, adding days and
+  months, month lengths) and parses and prints `2026-10-07`.
+  `calendar_options(selected, CalendarOptions::new().min(..).max(..))`
+  keeps the selection in a range: days outside it are dimmed (the theme's
+  `calendar.disabled` style), and the keys, the wheel and clicks stop at
+  its ends.
 - **`virtual_list(len, row, selected)`** is the list form of
   `virtual_table`: it asks only for the rows in view.
 - **`tree_lazy(roots, children, selected)`** loads each level when it is
@@ -423,6 +428,65 @@ hsplit(
   (`LazyItem::leaf` or `LazyItem::branch`). The tree shows
   "loading…" until they arrive, and shows an error in red if loading
   fails. `selected` holds the key of the selected item.
+
+#### Times, and a date with a time
+
+```rust
+use intuituive::widgets::{datetime_picker, time_picker, DateTime, DateTimeOptions, Time};
+
+let start = signal(Time::new(9, 0, 0));
+let meeting = signal(DateTime::new(Date::new(2026, 10, 17), Time::new(9, 0, 0)));
+let opens = DateTime::new(Date::new(2026, 10, 17), Time::new(9, 0, 0));
+column([
+    time_picker(start).fixed(1),
+    datetime_picker(meeting, DateTimeOptions::new().min(opens)).fixed(11),
+])
+```
+
+- **`time_picker(selected)`** picks the `Time` in a signal field by field:
+  ←/→ move between the hour and the minute, ↑/↓ change the focused one,
+  wrapping round, and digits type it, two to a field. `time_picker_with`
+  takes `TimeOptions`: `.seconds()`, `.twelve_hour()` (AM and PM; `a` and
+  `p` set them), and `.min(..)`/`.max(..)`, where a change stops.
+- **`datetime_picker(selected, options)`** is a calendar over a time picker
+  on one `DateTime` signal, Tab moving between them, and two rows under
+  them for the range. `DateTimeOptions::min` is a moment: days before its
+  day cannot be selected, and on its day an earlier time moves up to it,
+  with a line saying why (`✗ the earliest is 2026-10-17 09:00`) until the
+  next change that needs none. Eleven rows, twenty cells wide.
+- The focused day and field are reversed, which reads without colour.
+
+#### Reorderable lists
+
+```rust
+use intuituive::widgets::Move;
+
+let items = signal(vec!["build".to_string(), "test".into(), "deploy".into()]);
+list(move || items.get(), signal(0usize))
+    .reorderable(move |step: Move, _| items.update(|items| step.apply(items)))
+```
+
+`.reorderable(on_reorder)` on a `list` lets the user put its items in
+order (#720). The app keeps the items, so each `Move { from, to }` comes to
+`on_reorder` to make in them (`Move::apply` does it on a `Vec`), and the
+selection follows the item.
+
+- Alt+↑/↓ or Ctrl+↑/↓ move the selected item a place, and Alt or Ctrl
+  with Home/End to the top or the bottom. These need a terminal that
+  reports modifiers on those keys: most do, and any with the kitty keyboard
+  protocol. `K` and `J` move it in any terminal.
+- Space grabs it: the arrows (`k`/`j`), PgUp/PgDn and Home/End then carry
+  it, Space drops it, Esc puts it back where it was, and any other key drops
+  it and does what it does (Enter reaches your binding).
+- A press selects a row and a drag carries it; below the last row shown,
+  the list scrolls. The mouse is held for the drag, so letting go outside
+  the list still ends it.
+- The carried row is marked `↕`, so it shows without colour.
+
+The keys are seen before the list's own (the reorder wraps the list and
+previews its keys), so the plain arrows still only select. Call it on the
+list itself, before `.panel(..)`: on a node that is not a `list` (a
+`virtual_list`, a table, a panel), `.reorderable` does nothing.
 
 The `planner` example puts them together under a menu bar: projects and
 their tasks in a tree, the selected task's due date on a calendar, and a

@@ -74,7 +74,9 @@ to itself: use `update`.
 
 The widgets that need a signal of a particular type take one of yours: a
 list's or table's selection (an `int`), a split's ratio (a `float`), a
-calendar's day (a `datetime.date`), a text area's text (a `str`), a tree's path (a list of indices) and
+calendar's day (a `datetime.date`), a time picker's time (a `datetime.time`),
+a date-and-time picker's moment (a naive `datetime.datetime`), a text area's
+text (a `str`), a tree's path (a list of indices) and
 its expanded paths (a set of tuples), a table's sort (`None` or `(column,
 Order)`). The first time a signal goes to such a widget it becomes one of
 that type and keeps its value, and anything that read it before (a memo

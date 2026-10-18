@@ -1698,3 +1698,54 @@ def test_the_stubs_describe_every_tui_class_and_method():
         if issubclass(cls, BaseException):
             own &= {"line", "column", "message"}
         assert own <= stubbed[name], (name, sorted(own - stubbed[name]))
+
+
+def test_a_reorderable_list():
+    def build():
+        items = signal(["a", "b", "c"])
+
+        def move(step, cx):
+            source, target = step
+            items.update(lambda values: values.insert(target, values.pop(source)))
+
+        return column([
+            list_(lambda: items.get(), signal(0)).reorderable(move).fixed(3),
+            text(lambda: "".join(items.get())).fixed(1),
+        ]).on_key("q", lambda cx: cx.quit())
+
+    assert screen(build, ["alt+down", "J", "q"], 10, 4)[3] == "bca"
+    assert screen(build, ["space", "down", "q"], 10, 4)[1] == "↕ a"
+    assert screen(build, ["end", "space", "up", "escape", "q"], 10, 4)[3] == "abc"
+
+
+def test_date_and_time_pickers():
+    def build_range():
+        day = signal(datetime.date(2026, 10, 15))
+        return column([
+            calendar_with(day, min=datetime.date(2026, 10, 10), max=datetime.date(2026, 10, 20)).fixed(8),
+            text(lambda: day.get().isoformat()),
+        ]).on_key("q", lambda cx: cx.quit())
+
+    assert screen(build_range, ["down", "down", "q"], 20, 9)[8] == "2026-10-20"
+
+    def build_time():
+        at = signal(datetime.time(9, 5))
+        return column([
+            tui.time_picker(at, twelve_hour=True).fixed(1),
+            text(lambda: at.get().isoformat()),
+        ]).on_key("q", lambda cx: cx.quit())
+
+    out = screen(build_time, ["up", "right", "3", "0", "p", "q"], 20, 2)
+    assert out == ["10:30 PM", "22:30:00"]
+
+    def build_moment():
+        at = signal(datetime.datetime(2026, 10, 18, 9, 0))
+        earliest = datetime.datetime(2026, 10, 17, 12, 0)
+        return column([
+            tui.datetime_picker(at, min=earliest).fixed(11),
+            text(lambda: at.get().isoformat(" ")),
+        ]).on_key("q", lambda cx: cx.quit())
+
+    out = screen(build_moment, ["left", "q"], 20, 12)
+    assert out[9] == "✗ the earliest is"
+    assert out[11] == "2026-10-17 12:00:00"

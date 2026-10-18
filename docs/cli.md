@@ -1057,8 +1057,8 @@ terminal.
 ## Ask in a script
 
 `rich choose`, `rich filter`, `rich input`, `rich confirm`, `rich pager`,
-`rich write`, `rich file`, `rich color`, `rich asset` and `rich explore`
-([above](#explore-it-interactively)) are the interactive
+`rich write`, `rich file`, `rich color`, `rich asset`, `rich date` and
+`rich explore` ([above](#explore-it-interactively)) are the interactive
 components as shell commands, in the manner of gum. The
 answer goes to stdout and the component paints on stderr, so a script
 captures the answer with `$(…)`; keys come from the terminal even when stdin
@@ -1074,6 +1074,7 @@ message=$(rich write --header 'Commit message' --char-limit 500)
 $EDITOR "$(rich file src --extension rs)"
 accent=$(rich color --format name)
 icon=$(rich asset --value rocket)
+due=$(rich date --header Due --min today)
 ```
 
 - `choose` and `filter` take ITEMs as arguments or one per line on stdin;
@@ -1114,9 +1115,22 @@ icon=$(rich asset --value rocket)
   lower case) with `--kind emoji|box|spinner`. `--panel` takes every box
   style it offers. `--selected NAME` must be one it offers (exit 2
   otherwise).
+- `date` picks a day on a month grid (`--kind date`, the default), a time of
+  day (`--kind time`) or both (`--kind datetime`; Tab moves between them),
+  and prints it in ISO 8601 form: `2026-10-17`, `14:30` (`14:30:05` with
+  `--seconds`), `2026-10-17 14:30`. `--min` and `--max` limit it: days
+  outside are dimmed and cannot be reached, and a time outside is refused
+  with a message. `--value` starts somewhere other than today (in UTC),
+  `--default` is also the answer to an empty line and without a terminal,
+  and `--twelve-hour` shows AM and PM (the answer stays on a 24-hour
+  clock). The values are written as the kind prints them (a date alone is
+  midnight for `datetime`; `today` and `now` are understood), and one that
+  does not parse, `--min` after `--max`, or a `--default` outside them is
+  a usage error. The selected day is in brackets as well as reversed, so it
+  reads without colour.
 - `--height` (choose, filter, write, file, color, asset) is cut to the
   terminal's height.
-- `--mouse` (choose, filter, confirm, file, color, asset) turns mouse
+- `--mouse` (choose, filter, confirm, file, color, asset, date) turns mouse
   reporting on: click a row to focus it and again to pick it (a row focused
   from the keyboard, or from the start, too), click a button, drag the
   border beside a preview. It is off by default because it
@@ -1135,8 +1149,10 @@ name cannot retitle or recolour the terminal; the answer is the item as it
 came.
 
 Without a terminal (in CI, or with nothing to read keys from) they degrade
-instead of waiting: `input`, `confirm`, `color`, `asset` and `choose ITEM…`
-ask line by line on stderr and read the answer from stdin; `choose` from stdin
+instead of waiting: `input`, `confirm`, `color`, `asset`, `date` and
+`choose ITEM…` ask line by line on stderr and read the answer from stdin
+(`date` checks it against `--min` and `--max`, and exits 3 when it is
+outside or does not parse); `choose` from stdin
 and `file` answer with `--selected` (with `--multi`, nothing marked is no
 answer); `write` prints what stdin held; `filter` prints the lines that match `--value`, best first, blank lines
 included, so it works as a fuzzy `grep`; `pager` writes the content out,

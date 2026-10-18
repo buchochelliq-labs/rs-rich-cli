@@ -218,7 +218,7 @@ Discovery and diagnostics
 
 Ask in a script
 : `rich choose`, `rich filter`, `rich input`, `rich confirm` and `rich pager`
-  (and `rich write`, `file`, `color`, `asset` and `explore`)
+  (and `rich write`, `file`, `color`, `asset`, `date` and `explore`)
   paint on stderr and answer on stdout, so `x=$(rich choose a b c)` works, and
   read keys from the terminal even when stdin is the list (`ls | rich filter`).
   `--preview COMMAND` shows a command's output for the focused item. Exit codes:
@@ -246,7 +246,7 @@ These five are on by default and can be dropped for a smaller binary:
 - **`art`** — `--gif` playback and `--diff`/`--image` picture rendering, via [`rs-rich-art`](https://crates.io/crates/rs-rich-art), and micro assets (`rich micro`, `:micro:name:` with `--emoji`), via [`rs-rich-micro`](https://crates.io/crates/rs-rich-micro).
 - **`mermaid`** — `rich mermaid` and Mermaid fences in Markdown, drawn as text, via [`rs-rich-mermaid`](https://crates.io/crates/rs-rich-mermaid).
 - **`record`** — `rich record TAPE`: scripted terminal sessions rendered as screenshots, casts, GIF and MP4, via [`rs-rich-record`](https://crates.io/crates/rs-rich-record).
-- **`interact`** — `rich choose`, `filter`, `input`, `confirm`, `pager`, `write`, `file`, `color`, `asset` and `explore`, via [`rs-rich-interact`](https://crates.io/crates/rs-rich-interact).
+- **`interact`** — `rich choose`, `filter`, `input`, `confirm`, `pager`, `write`, `file`, `color`, `asset`, `date` and `explore`, via [`rs-rich-interact`](https://crates.io/crates/rs-rich-interact).
 
 `rich dot`, `rich deps`, `rich schema` and `rich chart` are in every build:
 DOT through [`rs-rich-diagram`](https://crates.io/crates/rs-rich-diagram)

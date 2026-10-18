@@ -255,8 +255,9 @@ impl Node {
     /// - With the mouse, a press selects a row and dragging carries it;
     ///   below the last row shown the list scrolls.
     ///
-    /// The carried row is marked `↕`. On a node that is not a `list`, this
-    /// does nothing.
+    /// The carried row is marked `↕`. Call it on the list itself, before
+    /// `.panel(..)` or anything else that wraps it: on a node that is not a
+    /// `list`, this does nothing.
     ///
     /// ```
     /// use intuituive::prelude::*;

@@ -4,7 +4,10 @@ Components: ``Select`` and ``MultiSelect`` (fuzzy pickers over ``Item``s whose
 values are any Python objects), ``Input`` (one line, masked with
 ``password=True``), ``TextArea`` (several lines), ``Confirm`` (with
 ``Choice``s), ``Form``, ``Pager``, ``FilePicker`` (a path), ``ColorPicker`` (a
-colour string) and ``AssetPicker`` (an emoji, box style or spinner).
+colour string), ``AssetPicker`` (an emoji, box style or spinner), ``Reorder``
+(the items in a new order), and ``DatePicker``, ``TimePicker`` and
+``DateTimePicker`` (a ``datetime.date``, ``datetime.time`` or naive
+``datetime.datetime``, within ``min`` and ``max``).
 Subclass ``Component`` (``render(context)``, ``handle(event)``, ``keymap()``) to
 write your own; any object with ``handle(event)`` and ``render(width, height)``
 is a component too (``Event``, ``Done``, ``Cancel``, ``Ignored``).
@@ -45,6 +48,8 @@ from ._native import (
     InteractConfirm,
     InteractContainer,
     InteractContext,
+    InteractDatePicker,
+    InteractDateTimePicker,
     InteractDone,
     InteractError,
     InteractEvent,
@@ -62,6 +67,7 @@ from ._native import (
     InteractOutcome,
     InteractPager,
     InteractRecord,
+    InteractReorder,
     InteractRow,
     InteractScript,
     InteractSelect,
@@ -69,6 +75,7 @@ from ._native import (
     InteractStack,
     InteractTabs,
     InteractTextArea,
+    InteractTimePicker,
     NotInteractive,
     fuzzy_match,
     fuzzy_rank,
@@ -93,6 +100,10 @@ TextArea = InteractTextArea
 FilePicker = InteractFilePicker
 ColorPicker = InteractColorPicker
 AssetPicker = InteractAssetPicker
+Reorder = InteractReorder
+DatePicker = InteractDatePicker
+TimePicker = InteractTimePicker
+DateTimePicker = InteractDateTimePicker
 Event = InteractEvent
 Done = InteractDone
 Cancel = InteractCancel
@@ -137,6 +148,10 @@ __all__ = [
     "FilePicker",
     "ColorPicker",
     "AssetPicker",
+    "Reorder",
+    "DatePicker",
+    "TimePicker",
+    "DateTimePicker",
     "Event",
     "Done",
     "Cancel",

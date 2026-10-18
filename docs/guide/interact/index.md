@@ -262,6 +262,82 @@ or dotenv document as a tree, with breadcrumbs, search and copy, and is what
 `rich explore` runs. `ThemePicker` previews a sample in each theme as you
 move. Both are in [Explorers, copying and live lists](explorers.md).
 
+### Reorder
+
+Put a list in order (#720). Enter returns the items' values in their new
+order; `reorder.order()` has it as the items' first indices.
+
+| Keys | What they do |
+|------|--------------|
+| ↑ ↓ (or `k` `j`), PgUp PgDn, Home End | Move the focus |
+| Alt+↑ ↓ or Ctrl+↑ ↓, and `K` `J` | Move the focused item one place |
+| Alt+Home End or Ctrl+Home End | Move it to the top or the bottom |
+| Space | Grab it: the arrows, PgUp PgDn and Home End then carry it; Space drops it, Esc puts it back |
+| Ctrl+R | Restore the first order |
+| Enter, Esc | Done; cancel |
+
+Alt and Ctrl with an arrow need a terminal that reports modifiers on the
+arrows. Most do, in xterm's encoding, and every terminal with the kitty
+keyboard protocol does; macOS Terminal takes Ctrl+arrows for Mission
+Control by default. `K` and `J` and grabbing with Space work in any terminal.
+The carried item is marked `↕` as well as reversed, so it shows without
+colour. With the mouse on, a press focuses a row and a drag carries it,
+scrolling past the top or the bottom row. The keys are in context
+`reorder` and can be rebound.
+
+```rust
+use rich_interact::{run, Reorder, RunOptions};
+
+let order = run(Reorder::new("Priority", ["deploy", "test", "build"]), &RunOptions::default())?;
+```
+
+**Without a terminal** it lists the items numbered and reads the new order as
+numbers, `3 1 2` or `3, 1`: those come first, and the rest keep their order.
+An empty line, or the end of input, keeps the order.
+
+### DatePicker, TimePicker and DateTimePicker
+
+A day, a time of day, or both (#719), as the `rich_interact::datetime`
+types: `Date`, `Time` and `DateTime`. They are hand-rolled (the proleptic
+Gregorian calendar, with no time zone and no dependency), parse and print
+ISO 8601 (`2026-10-17`, `14:30`, `2026-10-17 14:30`), and are what
+intuiTUIve's calendar uses. `Date::today_utc()` and `DateTime::now_utc()`
+are in UTC: pass the local day with `.value(...)` and `.today(...)` when
+the difference matters.
+
+- **The date** is picked on a month grid: ←/→ a day, ↑/↓ a week, PgUp/PgDn
+  (or `[` `]`) a month, Shift+PgUp/PgDn (or `{` `}`) a year, Home/End the
+  month's first and last day, `t` today.
+- **The time** is picked field by field: ←/→ move between the hour, the
+  minute, the seconds (`.seconds(true)`) and AM/PM (`.twelve_hour(true)`;
+  `a` and `p` set it), ↑/↓ change the field, wrapping round, and digits type
+  it, two to a field.
+- **Both:** Tab moves between the grid and the time.
+- **A range:** `.min(..)` and `.max(..)`. Days outside it are dimmed and the
+  grid does not go to them; a time outside it is refused on Enter, with a
+  message that names the limit. `DateTimePicker::min` is a moment: on its
+  day an earlier time is refused, and later days take any time.
+- **A validator:** `.validate(|date| ...)` refuses with its own message (no
+  weekends, no holidays).
+- **Without colour:** the value so far is on the question line, the selected
+  day is in brackets as well as reversed (`16[17]18`), and the focused time
+  field too (`[14]:30`).
+- **Without a terminal:** a line, parsed and checked against the range and
+  the validator: `2026-10-17`, `14:30` or `2:30 pm`, `2026-10-17 14:30` (or
+  with a `T`). An empty line answers `.default(..)`.
+
+```rust
+use rich_interact::datetime::{Date, DateTime, Time};
+use rich_interact::{run, DateTimePicker, RunOptions};
+
+let opens = DateTime::new(Date::new(2026, 10, 17), Time::new(9, 0, 0));
+let picker = DateTimePicker::new("Meeting").value(opens).min(opens);
+let at = run(picker, &RunOptions::default())?;
+```
+
+`rich date` runs these from the shell: see
+[Ask in a script](../../cli.md#ask-in-a-script).
+
 ## Mouse
 
 Mouse reporting is off unless a component asks for it

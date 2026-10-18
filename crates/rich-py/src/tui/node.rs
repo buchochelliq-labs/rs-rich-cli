@@ -576,6 +576,31 @@ impl PyNode {
         Ok(slf)
     }
 
+    /// For a `list`: let the user reorder its items (Alt+Up/Down,
+    /// Ctrl+Up/Down, `K`/`J`, Space to grab, or a drag).
+    /// `handler((from, to), cx)` is called for each move, to make it in the
+    /// app's own items; the selection follows. On any other node it does
+    /// nothing.
+    fn reorderable<'py>(
+        slf: Bound<'py, Self>,
+        handler: &Bound<'py, PyAny>,
+    ) -> PyResult<Bound<'py, Self>> {
+        let handler = Callback::checked(handler, "the reorder handler")?;
+        slf.borrow().map(|n| {
+            n.reorderable(move |step: rich_intuituive::widgets::Move, cx| {
+                let value = Python::attach(|py| {
+                    PyTuple::new(py, [step.from, step.to])
+                        .map(|pair| PyValue(pair.into_any().unbind()))
+                });
+                match value {
+                    Ok(value) => call_with_ctx(&handler, Some(value), cx),
+                    Err(error) => Python::attach(|py| crate::renderable::report_error(py, error)),
+                }
+            })
+        })?;
+        Ok(slf)
+    }
+
     /// Run `handler(cx)` when one of `keys` (space-separated names) is
     /// pressed while the focus is on this node or inside it.
     fn on_key<'py>(

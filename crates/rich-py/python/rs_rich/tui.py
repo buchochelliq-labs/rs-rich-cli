@@ -26,7 +26,8 @@ The same API as the Rust crate, name for name, so one guide serves both::
   ``class_`` is Rust's ``class``.
 - **Widgets**: ``table``, ``table_with`` (``TableOptions``), ``virtual_table``,
   ``virtual_list``, ``tabs``, ``tree``, ``tree_with``, ``tree_lazy``
-  (``TreeItem``, ``LazyItem``), ``text_area``, ``calendar``, ``calendar_with``, ``split``,
+  (``TreeItem``, ``LazyItem``), ``text_area``, ``calendar``, ``calendar_with``
+  (with ``min`` and ``max``), ``time_picker``, ``datetime_picker``, ``split``,
   ``split_with``, ``hsplit``, ``vsplit``, menus (``menu_bar``, ``Menu``,
   ``MenuItem``, ``open_menu``, ``context_menu``).
 - **State**: ``signal``, ``memo``, ``watch``, ``every``; background work with
@@ -103,6 +104,7 @@ from ._native import (
     TuiWidgetEvent,
     tui_calendar,
     tui_calendar_with,
+    tui_datetime_picker,
     tui_column,
     tui_component,
     tui_context_menu,
@@ -140,6 +142,7 @@ from ._native import (
     tui_terminal_with,
     tui_text,
     tui_text_area,
+    tui_time_picker,
     tui_tree,
     tui_tree_lazy,
     tui_tree_with,
@@ -242,6 +245,8 @@ tree_lazy = tui_tree_lazy
 text_area = tui_text_area
 calendar = tui_calendar
 calendar_with = tui_calendar_with
+time_picker = tui_time_picker
+datetime_picker = tui_datetime_picker
 split = tui_split
 split_with = tui_split_with
 hsplit = tui_hsplit
@@ -351,6 +356,8 @@ __all__ = [
     "text_area",
     "calendar",
     "calendar_with",
+    "time_picker",
+    "datetime_picker",
     "split",
     "split_with",
     "hsplit",

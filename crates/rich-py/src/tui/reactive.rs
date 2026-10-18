@@ -17,7 +17,7 @@ use pyo3::types::{PyList, PySet, PyTuple};
 
 use rich_embed::ExitStatus;
 use rich_intuituive as intuituive;
-use rich_intuituive::widgets::{Date, Order};
+use rich_intuituive::widgets::{Date, DateTime, Order, Time};
 use rich_intuituive::{Load, Memo, Resource, Signal};
 
 use super::app::PyCtx;
@@ -114,6 +114,14 @@ pub(crate) fn date_arg(value: &Bound<'_, PyAny>) -> PyResult<Date> {
     date_from(value)
 }
 
+fn time_from(value: &Bound<'_, PyAny>) -> PyResult<Time> {
+    crate::interact::time_from(value)
+}
+
+fn datetime_from(value: &Bound<'_, PyAny>) -> PyResult<DateTime> {
+    crate::interact::datetime_from(value)
+}
+
 fn path_from(value: &Bound<'_, PyAny>) -> PyResult<Vec<usize>> {
     value
         .extract::<Vec<usize>>()
@@ -174,6 +182,8 @@ pub(crate) enum Slot {
     U16(Signal<u16>),
     F64(Signal<f64>),
     Date(Signal<Date>),
+    Time(Signal<Time>),
+    DateTime(Signal<DateTime>),
     Path(Signal<Vec<usize>>),
     Paths(Signal<HashSet<Vec<usize>>>),
     Sort(Signal<Option<(usize, Order)>>),
@@ -191,6 +201,8 @@ impl Slot {
             Slot::U16(_) => "an offset (int)",
             Slot::F64(_) => "a float",
             Slot::Date(_) => "a date",
+            Slot::Time(_) => "a time",
+            Slot::DateTime(_) => "a date and time",
             Slot::Path(_) => "a tree path",
             Slot::Paths(_) => "a set of tree paths",
             Slot::Sort(_) => "a sort",
@@ -258,6 +270,8 @@ impl PySignal {
             Slot::U16(s) => read!(s, |v| Ok(v.into_pyobject(py)?.into_any().unbind())),
             Slot::F64(s) => read!(s, |v| Ok(v.into_pyobject(py)?.into_any().unbind())),
             Slot::Date(s) => read!(s, |v| date_to(py, *v)),
+            Slot::Time(s) => read!(s, |v| crate::interact::time_to(py, *v)),
+            Slot::DateTime(s) => read!(s, |v| crate::interact::datetime_to(py, *v)),
             Slot::Path(s) => read!(s, |v| Ok(PyList::new(py, v)?.into_any().unbind())),
             Slot::Paths(s) => read!(s, |v| paths_to(py, v)),
             Slot::Sort(s) => read!(s, |v| sort_to(py, *v)),
@@ -299,6 +313,8 @@ impl PySignal {
             ),
             Slot::F64(s) => write!(s, value.extract::<f64>().map_err(|e| typed("a float", e))?),
             Slot::Date(s) => write!(s, date_from(value)?),
+            Slot::Time(s) => write!(s, time_from(value)?),
+            Slot::DateTime(s) => write!(s, datetime_from(value)?),
             Slot::Path(s) => write!(s, path_from(value)?),
             Slot::Paths(s) => write!(s, paths_from(value)?),
             Slot::Sort(s) => write!(s, sort_from(value)?),
@@ -388,6 +404,22 @@ impl PySignal {
             _ => None,
         };
         self.typed(py, what, from, Slot::Date, date_from)
+    }
+
+    pub(crate) fn time(&self, py: Python<'_>, what: &str) -> PyResult<Signal<Time>> {
+        let from = |s| match s {
+            Slot::Time(s) => Some(s),
+            _ => None,
+        };
+        self.typed(py, what, from, Slot::Time, time_from)
+    }
+
+    pub(crate) fn datetime(&self, py: Python<'_>, what: &str) -> PyResult<Signal<DateTime>> {
+        let from = |s| match s {
+            Slot::DateTime(s) => Some(s),
+            _ => None,
+        };
+        self.typed(py, what, from, Slot::DateTime, datetime_from)
     }
 
     pub(crate) fn path(&self, py: Python<'_>, what: &str) -> PyResult<Signal<Vec<usize>>> {

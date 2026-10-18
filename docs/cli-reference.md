@@ -361,12 +361,12 @@ With no RESOURCE and no mode flag, a capability demo is shown. Layout, style, pa
 ### Exit codes
 
 - 0: success
-- 1: cancelled, or answered no (choose, filter, input, confirm, write, file, color, asset)
+- 1: cancelled, or answered no (choose, filter, input, confirm, write, file, color, asset, date)
 - 2: usage/config error
 - 3: input/read/write error
 - 4: parse/render data error
 - 5: threshold/gate failure
-- 130: interrupted with Ctrl+C (choose, filter, input, confirm, pager, write, file, color, asset)
+- 130: interrupted with Ctrl+C (choose, filter, input, confirm, pager, write, file, color, asset, date)
 
 ### rich print
 

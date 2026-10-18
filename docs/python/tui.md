@@ -55,7 +55,11 @@ The screen it left:
 ## Widgets and a loop of your own
 
 Every widget of the Rust crate is here: tables, virtual lists, tabs, trees,
-the calendar, split panes, menus, the command palette and the help.
+the calendar (with a range), the time and date-and-time pickers
+(`time_picker`, `datetime_picker`), reorderable lists
+(`list(...).reorderable(handler)`, where `handler((source, target), cx)`
+makes each move in your items), split panes, menus, the command palette
+and the help.
 `App.driver(width, height)` drives an app from a loop of your own, and
 gives the accessibility tree a screen reader would get:
 
