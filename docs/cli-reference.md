@@ -122,7 +122,7 @@ Choose at most one; the default auto-detects .md/.rst/.json/.csv/.tsv/.ipynb, .m
 | `--metadata <FILE>` | With `rich deps`, read `cargo metadata --format-version 1` JSON from FILE (`-` for stdin) instead of running cargo. |
 | `--why <CRATE>` | With `rich deps`, show what pulls CRATE (`name` or `name@version`) in: every path from the workspace to it. |
 | `--graph` | With `rich deps`, draw the dependencies (or --why's paths) as a diagram instead of a tree. |
-| `--depth <N>` | With `rich deps`, show at most N levels below each workspace member. |
+| `--depth <N>` | With `rich deps`, show at most N levels below each workspace member; with `rich profile`, profile JSON paths at most N steps deep (default 4), an object or array at the last step counting as its JSON text. |
 | `--duplicates` | With `rich deps`, keep only the branches that lead to a crate resolved at more than one version, and add a consolidation summary: who pulls each version, and which version most of them already use. |
 | `--no-dev` | With `rich deps`, leave dev-dependencies out. |
 | `--features` | With `rich deps`, show the features Cargo resolved for each crate: what each turns on, and which dependents asked for them; every crate with a feature, or only --package's. |
@@ -147,6 +147,10 @@ Choose at most one; the default auto-detects .md/.rst/.json/.csv/.tsv/.ipynb, .m
 | `--sample <N>` | With `rich profile`, the most rows kept for types, statistics and distributions (default 10000): a longer input is sampled uniformly, the sample size is printed, and nulls still count every row. |
 | `--columns <COLUMN[,COLUMN...]>...` | With `rich profile`, profile only these columns, by header, in this order; repeatable. |
 | `--top <N>` | With `rich profile`, the most common values shown for a column that is not numeric (default 5) |
+| `--max-paths <N>` | With `rich profile` of JSON Lines, profile at most N paths (default 200), in the order first seen; the rest are noted. |
+| `--flat` | With `rich profile` of JSON Lines, profile rows of the top-level keys (nested values as JSON text) instead of every nested path. |
+| `--style-rule <RULE>...` | Style the cells, rows or columns of a data table by value: COLUMN OP VALUE:STYLE or COLUMN OP VALUE:row:STYLE (e.g. 'latency>500:bold red', 'status=failed:row:on red'); OP is == != < <= > >= *= ^= $= or a word such as contains or empty. Repeatable; applies to --csv, `rich profile`'s table and `rich inspect --table`, and has no effect elsewhere. Config: `rules`. |
+| `--rules <FILE>...` | Read style rules from FILE's [[rules]] tables (column, op, value, style, target), after the rules before it. |
 
 ### Image
 
@@ -969,7 +973,7 @@ rich deps [OPTIONS] [MANIFEST]
 | `--metadata <FILE>` | With `rich deps`, read `cargo metadata --format-version 1` JSON from FILE (`-` for stdin) instead of running cargo. |
 | `--why <CRATE>` | With `rich deps`, show what pulls CRATE (`name` or `name@version`) in: every path from the workspace to it. |
 | `--graph` | With `rich deps`, draw the dependencies (or --why's paths) as a diagram instead of a tree. |
-| `--depth <N>` | With `rich deps`, show at most N levels below each workspace member. |
+| `--depth <N>` | With `rich deps`, show at most N levels below each workspace member; with `rich profile`, profile JSON paths at most N steps deep (default 4), an object or array at the last step counting as its JSON text. |
 | `--duplicates` | With `rich deps`, keep only the branches that lead to a crate resolved at more than one version, and add a consolidation summary: who pulls each version, and which version most of them already use. |
 | `--no-dev` | With `rich deps`, leave dev-dependencies out. |
 | `--features` | With `rich deps`, show the features Cargo resolved for each crate: what each turns on, and which dependents asked for them; every crate with a feature, or only --package's. |
@@ -1066,6 +1070,11 @@ rich profile [OPTIONS] [FILE]
 | `--sample <N>` | With `rich profile`, the most rows kept for types, statistics and distributions (default 10000): a longer input is sampled uniformly, the sample size is printed, and nulls still count every row. |
 | `--columns <COLUMN[,COLUMN...]>...` | With `rich profile`, profile only these columns, by header, in this order; repeatable. |
 | `--top <N>` | With `rich profile`, the most common values shown for a column that is not numeric (default 5) |
+| `--depth <N>` | With `rich profile` of JSON Lines, profile paths at most N steps deep (default 4), a key or [] each; an object or array at the last step counts as its JSON text. |
+| `--max-paths <N>` | With `rich profile` of JSON Lines, profile at most N paths (default 200), in the order first seen; the rest are noted. |
+| `--flat` | With `rich profile` of JSON Lines, profile rows of the top-level keys (nested values as JSON text) instead of every nested path. |
+| `--style-rule <RULE>...` | Style the cells, rows or columns of a data table by value: COLUMN OP VALUE:STYLE or COLUMN OP VALUE:row:STYLE (e.g. 'latency>500:bold red', 'status=failed:row:on red'); OP is == != < <= > >= *= ^= $= or a word such as contains or empty. Repeatable; applies to --csv, `rich profile`'s table and `rich inspect --table`, and has no effect elsewhere. |
+| `--rules <FILE>...` | Read style rules from FILE's [[rules]] tables (column, op, value, style, target), after the rules before it. |
 
 #### Output & reports
 
@@ -1140,7 +1149,7 @@ rich config explain [OPTIONS] [KEY]
 
 | Argument | Description |
 | --- | --- |
-| `[KEY]` | Explain one setting instead of all of them. Possible values: `mode`, `format`, `width`, `panel`, `padding`, `log_presentation`, `mermaid_backend`, `dot_backend`, `highlighter`, `code_theme`, `height`, `image_fit`, `image_anchor`, `image_max_width`, `image_max_height`, `image_background`, `image_color`, `image_dither`, `image_color_distance`, `image_brightness`, `image_contrast`, `image_gamma`, `image_rotate`, `image_flip_horizontal`, `image_flip_vertical`, `image_grayscale`, `export_html`, `export_svg`, `pager`, `auto_pager`, `watch`, `watch_interval`, `watch_debounce`, `watch_poll`, `watch_exit_on_error`, `watch_cache`, `batch`, `batch_input_root`, `batch_preserve_dirs`, `batch_name_template`, `jobs`, `progress`, `continue_on_error`, `overwrite`, `collision`, `theme`, `theme_file`, `plugins`, `micro_project`, `no_color`, `sanitize`. |
+| `[KEY]` | Explain one setting instead of all of them. Possible values: `mode`, `format`, `width`, `panel`, `padding`, `log_presentation`, `mermaid_backend`, `dot_backend`, `rules`, `highlighter`, `code_theme`, `height`, `image_fit`, `image_anchor`, `image_max_width`, `image_max_height`, `image_background`, `image_color`, `image_dither`, `image_color_distance`, `image_brightness`, `image_contrast`, `image_gamma`, `image_rotate`, `image_flip_horizontal`, `image_flip_vertical`, `image_grayscale`, `export_html`, `export_svg`, `pager`, `auto_pager`, `watch`, `watch_interval`, `watch_debounce`, `watch_poll`, `watch_exit_on_error`, `watch_cache`, `batch`, `batch_input_root`, `batch_preserve_dirs`, `batch_name_template`, `jobs`, `progress`, `continue_on_error`, `overwrite`, `collision`, `theme`, `theme_file`, `plugins`, `micro_project`, `no_color`, `sanitize`. |
 
 #### rich config reference
 
@@ -2074,6 +2083,7 @@ Settings are read from these sources, lowest precedence first; a later source ov
 | `log_presentation` | enum: `plain`, `rich` | `plain` | | `--log-presentation` | With --log, select log presentation |
 | `mermaid_backend` | enum: `text`, `mmdc`, `off` | | | `--mermaid-backend` | How Mermaid diagrams (`rich mermaid`, ```mermaid fences in Markdown) are drawn: text draws flowcharts as text, mmdc uses Mermaid's own CLI (a build with the mmdc feature; `rich mermaid` tries it first there), off leaves fences as code |
 | `dot_backend` | enum: `text`, `graphviz`, `off` | | | `--dot-backend` | How DOT graphs (`rich dot`, ```dot fences in Markdown) are drawn: text draws them natively, graphviz also makes --export-svg write Graphviz's own SVG (the `dot` program, installed separately), off leaves fences as code |
+| `rules` | array of rule tables | | | `--style-rule` | Style the cells, rows or columns of a data table by value: COLUMN OP VALUE:STYLE or COLUMN OP VALUE:row:STYLE (e.g. 'latency>500:bold red', 'status=failed:row:on red'); OP is == != < <= > >= *= ^= $= or a word such as contains or empty. Repeatable; applies to --csv, `rich profile`'s table and `rich inspect --table`, and has no effect elsewhere |
 | `highlighter` | string | | | `--highlighter` | The code highlighter for source, Markdown code, view and diff: syntect (the default), or lumis in a build with the lumis feature |
 | `code_theme` | string | | | `--code-theme` | A theme of the chosen code highlighter, e.g. ansi_dark (`rich doctor --report json` lists them) |
 | `height` | positive integer | | | `--height` | With --image, render this many rows instead of the backend's default |

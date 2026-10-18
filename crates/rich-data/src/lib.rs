@@ -26,7 +26,8 @@
 //!   alignment, `NULL` marked apart from empty text, and a row count.
 //! - [`profile`]: a bounded profile of any row source (types, nulls,
 //!   distinct values, statistics, histograms or top values, and a
-//!   missing-value map), sampled when the input is long, as JSON or drawn.
+//!   missing-value map), sampled when the input is long, as JSON or drawn;
+//!   and of JSON records path by path, with presence and type mixes.
 //! - [`quality`]: data quality check results (pass, warn, fail, error, with
 //!   observed and expected values and failing rows) as a report.
 //!

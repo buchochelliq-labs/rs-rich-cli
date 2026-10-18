@@ -42,9 +42,10 @@ impl RuleOptions {
             "--rules" => {
                 let path = rest.next().ok_or("--rules requires a FILE")?;
                 let shown = super::controls::shown(path);
-                let text = read_rules_file(path).map_err(|err| format!("--rules {shown}: {err}"))?;
-                let rules =
-                    StyleRules::from_toml(&text).map_err(|err| format!("--rules {shown}: {err}"))?;
+                let text =
+                    read_rules_file(path).map_err(|err| format!("--rules {shown}: {err}"))?;
+                let rules = StyleRules::from_toml(&text)
+                    .map_err(|err| format!("--rules {shown}: {err}"))?;
                 for rule in rules.rules() {
                     self.rules.push(rule.clone());
                 }
@@ -153,8 +154,20 @@ mod tests {
             "note empty:dim",
         ])
         .unwrap();
-        let specs: Vec<String> = options.rules().rules().iter().map(|r| r.to_string()).collect();
-        assert_eq!(specs, ["latency>500:bold", "status==failed:row:red", "note empty:dim"]);
+        let specs: Vec<String> = options
+            .rules()
+            .rules()
+            .iter()
+            .map(|r| r.to_string())
+            .collect();
+        assert_eq!(
+            specs,
+            [
+                "latency>500:bold",
+                "status==failed:row:red",
+                "note empty:dim"
+            ]
+        );
     }
 
     #[test]
@@ -166,10 +179,16 @@ mod tests {
         );
         let dir = tempfile::tempdir().unwrap();
         let file = dir.path().join("bad.toml");
-        std::fs::write(&file, "[[rules]]\ncolumn = 'a'\nop = 'like'\nvalue = 1\nstyle = 'red'\n")
-            .unwrap();
+        std::fs::write(
+            &file,
+            "[[rules]]\ncolumn = 'a'\nop = 'like'\nvalue = 1\nstyle = 'red'\n",
+        )
+        .unwrap();
         let error = parsed(&["--rules", file.to_str().unwrap()]).unwrap_err();
-        assert!(error.ends_with("bad.toml: rules[0]: unknown op `like`"), "{error}");
+        assert!(
+            error.ends_with("bad.toml: rules[0]: unknown op `like`"),
+            "{error}"
+        );
         let error = parsed(&["--rules", dir.path().to_str().unwrap()]).unwrap_err();
         assert!(error.ends_with("not a regular file"), "{error}");
         let error = parsed(&["--rules", "missing.toml"]).unwrap_err();
@@ -189,9 +208,8 @@ mod tests {
             config_specs(&value).unwrap(),
             ["p99 ms>=0.5:yellow", "#2 empty:row:dim"]
         );
-        let bad: toml::Value = toml::from_str::<toml::Table>("rules = [{column = 'a'}]").unwrap()
-            ["rules"]
-            .clone();
+        let bad: toml::Value =
+            toml::from_str::<toml::Table>("rules = [{column = 'a'}]").unwrap()["rules"].clone();
         assert_eq!(config_specs(&bad).unwrap_err(), "rules[0]: missing `value`");
     }
 }

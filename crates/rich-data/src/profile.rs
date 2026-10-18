@@ -25,6 +25,16 @@
 //! Nulls are [`Value::Null`] and the null tokens (by default
 //! [`DEFAULT_NULL_TOKENS`]: an empty cell, `null`, `NULL`, `NA`, `N/A`).
 //!
+//! **JSON records** have more shape than rows: [`Profile::from_json_lines`]
+//! and [`JsonProfiler`] (#705) profile them path by path (`user.plan`,
+//! `tags[]`, `items[].sku`), each path with the records that lack it apart
+//! from `null`, and the mix of JSON types its values had ([`TypeCounts`]).
+//! See the [`nested`] module for paths, bounds and quoting.
+//!
+//! **Conditional styles** ([`Profile::style_rules`]) style the table of
+//! columns with `rich_ext`'s [`table::rules`](rich_ext::table::rules), by
+//! its headings ([`Profile::table_headers`]).
+//!
 //! ```
 //! use rich::Console;
 //! use rich_data::profile::Profile;
@@ -66,7 +76,7 @@ use crate::infer::{parse_float, Inferrer, DEFAULT_NULL_TOKENS};
 use crate::stats::{number, ColumnStats, Stats, StatsOptions};
 use crate::{DataError, Row, RowSource, Rows, Value};
 
-mod nested;
+pub mod nested;
 
 pub use nested::{
     path_key, JsonProfiler, PathSummary, TypeCounts, DEFAULT_DEPTH, DEFAULT_MAX_PATHS,
@@ -206,8 +216,13 @@ pub struct ColumnProfile {
 impl ColumnProfile {
     /// `absent` over the row count, for a nested profile.
     pub fn absent_rate(&self, rows: u64) -> Option<f64> {
-        self.absent
-            .map(|absent| if rows == 0 { 0.0 } else { absent as f64 / rows as f64 })
+        self.absent.map(|absent| {
+            if rows == 0 {
+                0.0
+            } else {
+                absent as f64 / rows as f64
+            }
+        })
     }
 }
 
@@ -610,9 +625,16 @@ impl Profile {
                 // A nested path's nulls are in its type mix.
                 cells.push(Text::new(nulls(c.nulls, c.null_rate)));
             }
+            // An object or array walked into has no values of its own.
+            let types = c.types.unwrap_or_default();
+            let container = c.count == 0 && types.object + types.array > 0;
             cells.extend(
                 [
-                    c.distinct.to_string(),
+                    if container {
+                        String::new()
+                    } else {
+                        c.distinct.to_string()
+                    },
                     text(&c.min),
                     text(&c.max),
                     optional(c.mean),
@@ -705,7 +727,8 @@ impl Profile {
                 format!("{}-{last}", bucket.first)
             };
             let rows = bucket.rows.max(1) as f64;
-            let share = |&i: &usize| bucket.nulls.get(i).copied().unwrap_or(0) as f64 * 100.0 / rows;
+            let share =
+                |&i: &usize| bucket.nulls.get(i).copied().unwrap_or(0) as f64 * 100.0 / rows;
             map = map.row(label, shown.iter().map(share));
         }
         Some(map)
@@ -782,18 +805,43 @@ impl Renderable for Profile {
         lines.push(Vec::new());
         // A name column (and a nested profile's type mixes) held wide can
         // push the table past a narrow width; then the mixes give way, then
-        // the names too.
+        // the names too. A nested profile's columns also give way rather
+        // than cut another column's heading.
         let fits = |table: &Table| {
             let drawn = console.render(table, Some(&options));
-            Segment::split_lines(&drawn).iter().all(|line| {
+            let lines = Segment::split_lines(&drawn);
+            let within = lines.iter().all(|line| {
                 line.iter().map(Segment::cell_length).sum::<usize>() <= options.max_width
-            })
+            });
+            let headings = || {
+                let heading: String = lines
+                    .get(1)
+                    .map(|line| line.iter().map(|s| s.text.to_string()).collect())
+                    .unwrap_or_default();
+                self.table_headers().iter().all(|h| heading.contains(h))
+            };
+            within && (!self.is_nested() || headings())
         };
         let mut table = self.table(Some(console), Hold::NamesAndMixes);
-        if self.is_nested() && !fits(&table) {
-            table = self.table(Some(console), Hold::Names);
+        let mut fit = fits(&table);
+        if self.is_nested() && !fit {
+            // Whole paths with the mixes wrapped, while the six other
+            // columns keep about eight cells each.
+            let names = self
+                .columns
+                .iter()
+                .map(|c| c.name.chars().count().min(24))
+                .max()
+                .unwrap_or(0);
+            if options.max_width >= names + 3 + 48 {
+                table = self.table(Some(console), Hold::Names);
+                let drawn = console.render(&table, Some(&options));
+                fit = Segment::split_lines(&drawn).iter().all(|line| {
+                    line.iter().map(Segment::cell_length).sum::<usize>() <= options.max_width
+                });
+            }
         }
-        if !fits(&table) {
+        if !fit {
             table = self.table(Some(console), Hold::Nothing);
         }
         block(console, &options, &table, 0, &mut lines);

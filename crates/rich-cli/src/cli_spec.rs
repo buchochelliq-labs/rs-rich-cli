@@ -164,6 +164,15 @@ fn command_options(name: &str) -> Vec<ArgSpec> {
                 .unwrap_or_else(|| panic!("no --{long} option"))
                 .clone();
             arg.config_key = None;
+            // `--depth` is `rich deps`'s too; in `rich profile --help` it
+            // sits with the profile's own options.
+            if name == "profile" && *long == "depth" {
+                arg = arg.heading(PROFILE).help(
+                    "With `rich profile` of JSON Lines, profile paths at most N steps deep \
+                     (default 4), a key or [] each; an object or array at the last step \
+                     counts as its JSON text",
+                );
+            }
             arg
         })
         .collect()

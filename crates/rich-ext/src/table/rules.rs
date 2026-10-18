@@ -515,7 +515,8 @@ fn operator_at(text: &str, word: bool) -> Option<(Comparison, usize)> {
     }
     WORDS.iter().find_map(|name| {
         let rest = text.strip_prefix(name)?;
-        let ends = rest.is_empty() || rest.starts_with(|c: char| c.is_whitespace() || c == ':' || c == '"');
+        let ends = rest.is_empty()
+            || rest.starts_with(|c: char| c.is_whitespace() || c == ':' || c == '"');
         ends.then(|| (Comparison::parse(name).expect("a known word"), name.len()))
     })
 }
@@ -590,7 +591,10 @@ fn bare_column(name: &str) -> bool {
         && name.trim() == name
         && !name.starts_with('#')
         && !name.contains(|c: char| "=<>!*^$:\"\\".contains(c) || c.is_control())
-        && !name.split_whitespace().skip(1).any(|word| WORDS.contains(&word))
+        && !name
+            .split_whitespace()
+            .skip(1)
+            .any(|word| WORDS.contains(&word))
 }
 
 /// A value as a spec writes it: numbers as they are, text bare when it
@@ -1063,15 +1067,33 @@ mod tests {
         let p = |spec| parts(spec);
         assert_eq!(
             p("latency>500:bold red"),
-            ("latency".into(), "gt", "int 500".into(), "cell", "bold red".into())
+            (
+                "latency".into(),
+                "gt",
+                "int 500".into(),
+                "cell",
+                "bold red".into()
+            )
         );
         assert_eq!(
             p("status=failed:row:on red"),
-            ("status".into(), "eq", "text failed".into(), "row", "on red".into())
+            (
+                "status".into(),
+                "eq",
+                "text failed".into(),
+                "row",
+                "on red".into()
+            )
         );
         assert_eq!(
             p("  p99 ms >= 12.5 : column : italic "),
-            ("p99 ms".into(), "ge", "float 12.5".into(), "column", "italic".into())
+            (
+                "p99 ms".into(),
+                "ge",
+                "float 12.5".into(),
+                "column",
+                "italic".into()
+            )
         );
         assert_eq!(p("delta<-5:red").2, "int -5");
         assert_eq!(p("a<=1:red").1, "le");
@@ -1084,7 +1106,13 @@ mod tests {
         // Words, after whitespace.
         assert_eq!(
             p("msg contains a=b:red"),
-            ("msg".into(), "contains", "text a=b".into(), "cell", "red".into())
+            (
+                "msg".into(),
+                "contains",
+                "text a=b".into(),
+                "cell",
+                "red".into()
+            )
         );
         assert_eq!(p("status eq failed:red").1, "eq");
         assert_eq!(p("note empty:dim").1, "empty");
@@ -1116,7 +1144,11 @@ mod tests {
     fn bad_specs_say_what_is_wrong_and_name_the_spec() {
         let error = |spec: &str| StyleRule::parse(spec).unwrap_err().to_string();
         assert!(error("").contains("empty"));
-        assert!(error("latency:red").contains("no comparison"), "{}", error("latency:red"));
+        assert!(
+            error("latency:red").contains("no comparison"),
+            "{}",
+            error("latency:red")
+        );
         assert!(error(">5:red").contains("no column"));
         assert!(error("latency>:red").starts_with("rule \"latency>:red\": no value after `>`"));
         assert!(error("latency>5").contains("no `:` and style"));
@@ -1154,17 +1186,34 @@ mod tests {
             assert_eq!(back.column(), rule.column(), "{spec}");
             assert_eq!(back.target_kind(), rule.target_kind(), "{spec}");
             assert_eq!(back.style(), rule.style(), "{spec}");
-            for cell in ["", "200", "failed", "x: y", " padded ", "13", "0.5", "say \"hi\"\n"] {
+            for cell in [
+                "",
+                "200",
+                "failed",
+                "x: y",
+                " padded ",
+                "13",
+                "0.5",
+                "say \"hi\"\n",
+            ] {
                 let cell = Value::from(cell);
-                assert_eq!(back.matches(&cell), rule.matches(&cell), "{spec} on {cell:?}");
+                assert_eq!(
+                    back.matches(&cell),
+                    rule.matches(&cell),
+                    "{spec} on {cell:?}"
+                );
             }
         }
         assert_eq!(
-            StyleRule::new("p99 ms", Comparison::Ge, 12.5, red()).to_spec().as_deref(),
+            StyleRule::new("p99 ms", Comparison::Ge, 12.5, red())
+                .to_spec()
+                .as_deref(),
             Some("p99 ms>=12.5:bold red")
         );
         assert_eq!(
-            StyleRule::new(1, Comparison::Eq, 2.0, red()).to_spec().as_deref(),
+            StyleRule::new(1, Comparison::Eq, 2.0, red())
+                .to_spec()
+                .as_deref(),
             Some("#1==2.0:bold red")
         );
         // What a spec cannot write.
@@ -1173,8 +1222,14 @@ mod tests {
             StyleRule::when("a", |_| true, red()).to_string(),
             "a <predicate>:bold red"
         );
-        assert_eq!(StyleRule::new("a", Comparison::Lt, Value::Null, red()).to_spec(), None);
-        assert_eq!(StyleRule::new("a", Comparison::Lt, f64::NAN, red()).to_spec(), None);
+        assert_eq!(
+            StyleRule::new("a", Comparison::Lt, Value::Null, red()).to_spec(),
+            None
+        );
+        assert_eq!(
+            StyleRule::new("a", Comparison::Lt, f64::NAN, red()).to_spec(),
+            None
+        );
     }
 
     #[cfg(feature = "toml")]

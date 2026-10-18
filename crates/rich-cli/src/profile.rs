@@ -208,7 +208,11 @@ pub(crate) fn profile(cli: &Cli) -> Result<Profile, Failure> {
                 format!(
                     "{} only {} JSON Lines; {name} is read as CSV",
                     flags.join(", "),
-                    if flags.len() == 1 { "applies to" } else { "apply to" }
+                    if flags.len() == 1 {
+                        "applies to"
+                    } else {
+                        "apply to"
+                    }
                 ),
             ));
         }
@@ -223,7 +227,11 @@ pub(crate) fn profile(cli: &Cli) -> Result<Profile, Failure> {
                     ExitClass::Data,
                     format!(
                         "{name}: no records to profile ({})",
-                        profile.notes().last().map(String::as_str).unwrap_or_default()
+                        profile
+                            .notes()
+                            .last()
+                            .map(String::as_str)
+                            .unwrap_or_default()
                     ),
                 ));
             }
@@ -271,7 +279,10 @@ pub(crate) fn profile(cli: &Cli) -> Result<Profile, Failure> {
     // `--style-rule` and `--rules`, by the table's headings.
     let rules = cli.rules.rules();
     if !rules.is_empty() {
-        cli.rules.warn_unresolved(profile.table_headers(), cli.report_format == ReportFormat::Json);
+        cli.rules.warn_unresolved(
+            profile.table_headers(),
+            cli.report_format == ReportFormat::Json,
+        );
     }
     Ok(profile
         .with_name(controls::shown(name))

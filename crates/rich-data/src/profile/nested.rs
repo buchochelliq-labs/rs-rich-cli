@@ -174,7 +174,7 @@ impl TypeCounts {
             return seen[0].0.to_string();
         }
         // Stable: ties keep the fixed order.
-        seen.sort_by(|a, b| b.1.cmp(&a.1));
+        seen.sort_by_key(|(_, n)| std::cmp::Reverse(*n));
         seen.iter()
             .map(|(short, n)| format!("{short} {}", percent(*n as f64 / total as f64)))
             .collect::<Vec<_>>()
@@ -652,7 +652,14 @@ impl JsonProfiler {
                 "max_paths ({}) was reached: {shown} more {} not profiled: {}",
                 grouped(self.options.max_paths.max(1) as u64),
                 plural(count, "path is", "paths are"),
-                listed(&names, if self.more_dropped { usize::MAX } else { names.len() })
+                listed(
+                    &names,
+                    if self.more_dropped {
+                        usize::MAX
+                    } else {
+                        names.len()
+                    }
+                )
             ));
         }
         if self.malformed > 0 {
@@ -743,7 +750,10 @@ impl Profile {
     /// while a read error or a line longer than
     /// [`jsonl::MAX_LINE`](crate::jsonl::MAX_LINE) fails. See
     /// [`JsonProfiler`].
-    pub fn from_json_lines(reader: impl BufRead, options: ProfileOptions) -> Result<Self, DataError> {
+    pub fn from_json_lines(
+        reader: impl BufRead,
+        options: ProfileOptions,
+    ) -> Result<Self, DataError> {
         let mut profiler = JsonProfiler::new(options);
         let mut lines = Lines::new(reader);
         while let Some(record) = lines.next() {
@@ -797,7 +807,10 @@ mod tests {
         );
         assert_eq!(p.heading(), "2 records, 8 paths");
         let sku = p.column("items[].sku").unwrap();
-        assert_eq!((sku.present, sku.absent, sku.values), (Some(2), Some(0), Some(2)));
+        assert_eq!(
+            (sku.present, sku.absent, sku.values),
+            (Some(2), Some(0), Some(2))
+        );
         let items = p.column("items").unwrap();
         assert_eq!(items.data_type, "array");
         assert_eq!(p.column("items[]").unwrap().data_type, "object");
@@ -810,7 +823,10 @@ mod tests {
             ProfileOptions::default(),
         );
         let tags = p.column("tags[]").unwrap();
-        assert_eq!((tags.values, tags.present, tags.absent), (Some(3), Some(1), Some(2)));
+        assert_eq!(
+            (tags.values, tags.present, tags.absent),
+            (Some(3), Some(1), Some(2))
+        );
         assert_eq!((tags.count, tags.distinct), (3, 2));
         let tags = p.column("tags").unwrap();
         assert_eq!((tags.present, tags.absent), (Some(2), Some(1)));
@@ -848,12 +864,22 @@ mod tests {
         let v = p.column("v").unwrap();
         let types = v.types.unwrap();
         assert_eq!(
-            (types.string, types.number, types.boolean, types.object, types.array, types.null),
+            (
+                types.string,
+                types.number,
+                types.boolean,
+                types.object,
+                types.array,
+                types.null
+            ),
             (1, 2, 1, 1, 1, 1)
         );
         assert_eq!(types.kinds(), 6);
         assert!(types.mixed());
-        assert_eq!(types.mix(), "num 29% · str 14% · bool 14% · obj 14% · arr 14% · null 14%");
+        assert_eq!(
+            types.mix(),
+            "num 29% · str 14% · bool 14% · obj 14% · arr 14% · null 14%"
+        );
         // A single type is its name alone.
         let only = TypeCounts {
             number: 3,
@@ -926,9 +952,15 @@ mod tests {
         assert!(paths.capped && paths.more_dropped);
         assert_eq!(paths.dropped.len(), 100);
         assert_eq!(paths.dropped[0], "k0004");
-        let note = p.notes().iter().find(|n| n.starts_with("max_paths")).unwrap();
+        let note = p
+            .notes()
+            .iter()
+            .find(|n| n.starts_with("max_paths"))
+            .unwrap();
         assert!(
-            note.starts_with("max_paths (5) was reached: 100+ more paths are not profiled: k0004, "),
+            note.starts_with(
+                "max_paths (5) was reached: 100+ more paths are not profiled: k0004, "
+            ),
             "{note}"
         );
         assert!(note.ends_with(", …"), "{note}");
@@ -937,7 +969,10 @@ mod tests {
             .color_system(None)
             .build()
             .render_export(&p.to_table());
-        assert!(table.contains("100+ more paths not profiled (max_paths 5)"), "{table}");
+        assert!(
+            table.contains("100+ more paths not profiled (max_paths 5)"),
+            "{table}"
+        );
         let json = p.to_json();
         assert_eq!(json["paths"]["capped"], true);
         assert_eq!(json["paths"]["max_paths"], 5);
@@ -951,8 +986,13 @@ mod tests {
             },
         )
         .unwrap_err();
-        assert!(error.message().starts_with("no path \"k0500\"; the paths are id, k0000"));
-        assert!(error.message().contains("max_paths 5 was reached"), "{error}");
+        assert!(error
+            .message()
+            .starts_with("no path \"k0500\"; the paths are id, k0000"));
+        assert!(
+            error.message().contains("max_paths 5 was reached"),
+            "{error}"
+        );
     }
 
     #[test]
@@ -1010,7 +1050,10 @@ mod tests {
         );
         // Scalar records are the `value` path, as in a flat profile.
         assert_eq!(names(&p), ["a", "value"]);
-        assert_eq!(p.column("value").unwrap().types.unwrap().mix(), "str 50% · num 50%");
+        assert_eq!(
+            p.column("value").unwrap().types.unwrap().mix(),
+            "str 50% · num 50%"
+        );
         let json = p.to_json();
         assert_eq!(json["malformed"], 25);
         assert_eq!(json["malformed_lines"][0], 2);
@@ -1065,7 +1108,10 @@ mod tests {
         let n = p.column("n").unwrap();
         assert_eq!((n.values, n.count), (Some(20_000), 100));
         let xs = p.column("xs[]").unwrap();
-        assert_eq!((xs.values, xs.present, xs.absent), (Some(10_000), Some(5_000), Some(15_000)));
+        assert_eq!(
+            (xs.values, xs.present, xs.absent),
+            (Some(10_000), Some(5_000), Some(15_000))
+        );
         let s = p.column("s").unwrap();
         assert_eq!((s.nulls, s.null_rate, s.absent), (15_000, 1.0, Some(5_000)));
         // The map stays at its bucket limit and counts every record.

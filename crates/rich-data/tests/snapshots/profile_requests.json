@@ -1,0 +1,1139 @@
+{
+  "name": "requests.jsonl",
+  "rows": 12,
+  "sample": 10000,
+  "columns": [
+    {
+      "name": "id",
+      "type": "integer",
+      "nulls": 0,
+      "null_rate": 0.0,
+      "count": 12,
+      "distinct": 12,
+      "min": "1",
+      "max": "12",
+      "mean": 6.5,
+      "median": 6.5,
+      "p25": 3.75,
+      "p75": 9.25,
+      "distribution": {
+        "kind": "histogram",
+        "bins": [
+          {
+            "label": "[0, 2)",
+            "low": 0.0,
+            "high": 2.0,
+            "count": 1
+          },
+          {
+            "label": "[2, 4)",
+            "low": 2.0,
+            "high": 4.0,
+            "count": 2
+          },
+          {
+            "label": "[4, 6)",
+            "low": 4.0,
+            "high": 6.0,
+            "count": 2
+          },
+          {
+            "label": "[6, 8)",
+            "low": 6.0,
+            "high": 8.0,
+            "count": 2
+          },
+          {
+            "label": "[8, 10)",
+            "low": 8.0,
+            "high": 10.0,
+            "count": 2
+          },
+          {
+            "label": "[10, 12)",
+            "low": 10.0,
+            "high": 12.0,
+            "count": 2
+          },
+          {
+            "label": "[12, 14)",
+            "low": 12.0,
+            "high": 14.0,
+            "count": 1
+          },
+          {
+            "label": "[14, 16)",
+            "low": 14.0,
+            "high": 16.0,
+            "count": 0
+          },
+          {
+            "label": "[16, 18)",
+            "low": 16.0,
+            "high": 18.0,
+            "count": 0
+          },
+          {
+            "label": "[18, 20]",
+            "low": 18.0,
+            "high": 20.0,
+            "count": 0
+          }
+        ]
+      },
+      "present": 12,
+      "absent": 0,
+      "values": 12,
+      "types": {
+        "number": 12
+      },
+      "mixed": false
+    },
+    {
+      "name": "ts",
+      "type": "timestamp",
+      "nulls": 0,
+      "null_rate": 0.0,
+      "count": 12,
+      "distinct": 12,
+      "min": "2026-10-06T09:00:00Z",
+      "max": "2026-10-06T09:00:11Z",
+      "mean": null,
+      "median": null,
+      "p25": null,
+      "p75": null,
+      "distribution": {
+        "kind": "top",
+        "values": [
+          {
+            "value": "2026-10-06T09:00:00Z",
+            "count": 1
+          },
+          {
+            "value": "2026-10-06T09:00:01Z",
+            "count": 1
+          },
+          {
+            "value": "2026-10-06T09:00:02Z",
+            "count": 1
+          },
+          {
+            "value": "2026-10-06T09:00:03Z",
+            "count": 1
+          },
+          {
+            "value": "2026-10-06T09:00:04Z",
+            "count": 1
+          }
+        ],
+        "other": 7
+      },
+      "present": 12,
+      "absent": 0,
+      "values": 12,
+      "types": {
+        "string": 12
+      },
+      "mixed": false
+    },
+    {
+      "name": "level",
+      "type": "text",
+      "nulls": 0,
+      "null_rate": 0.0,
+      "count": 12,
+      "distinct": 4,
+      "min": "debug",
+      "max": "warn",
+      "mean": null,
+      "median": null,
+      "p25": null,
+      "p75": null,
+      "distribution": {
+        "kind": "top",
+        "values": [
+          {
+            "value": "info",
+            "count": 7
+          },
+          {
+            "value": "error",
+            "count": 2
+          },
+          {
+            "value": "warn",
+            "count": 2
+          },
+          {
+            "value": "debug",
+            "count": 1
+          }
+        ],
+        "other": 0
+      },
+      "present": 12,
+      "absent": 0,
+      "values": 12,
+      "types": {
+        "string": 12
+      },
+      "mixed": false
+    },
+    {
+      "name": "user",
+      "type": "object",
+      "nulls": 1,
+      "null_rate": 0.09090909090909091,
+      "count": 0,
+      "distinct": 0,
+      "min": null,
+      "max": null,
+      "mean": null,
+      "median": null,
+      "p25": null,
+      "p75": null,
+      "distribution": {
+        "kind": "empty"
+      },
+      "present": 11,
+      "absent": 1,
+      "values": 11,
+      "types": {
+        "object": 10,
+        "null": 1
+      },
+      "mixed": false
+    },
+    {
+      "name": "user.id",
+      "type": "integer",
+      "nulls": 0,
+      "null_rate": 0.0,
+      "count": 10,
+      "distinct": 4,
+      "min": "3",
+      "max": "12",
+      "mean": 7.2,
+      "median": 7.0,
+      "p25": 4.0,
+      "p75": 9.0,
+      "distribution": {
+        "kind": "histogram",
+        "bins": [
+          {
+            "label": "[3, 4)",
+            "low": 3.0,
+            "high": 4.0,
+            "count": 3
+          },
+          {
+            "label": "[4, 5)",
+            "low": 4.0,
+            "high": 5.0,
+            "count": 0
+          },
+          {
+            "label": "[5, 6)",
+            "low": 5.0,
+            "high": 6.0,
+            "count": 0
+          },
+          {
+            "label": "[6, 7)",
+            "low": 6.0,
+            "high": 7.0,
+            "count": 0
+          },
+          {
+            "label": "[7, 8)",
+            "low": 7.0,
+            "high": 8.0,
+            "count": 3
+          },
+          {
+            "label": "[8, 9)",
+            "low": 8.0,
+            "high": 9.0,
+            "count": 0
+          },
+          {
+            "label": "[9, 10)",
+            "low": 9.0,
+            "high": 10.0,
+            "count": 2
+          },
+          {
+            "label": "[10, 11)",
+            "low": 10.0,
+            "high": 11.0,
+            "count": 0
+          },
+          {
+            "label": "[11, 12)",
+            "low": 11.0,
+            "high": 12.0,
+            "count": 0
+          },
+          {
+            "label": "[12, 13]",
+            "low": 12.0,
+            "high": 13.0,
+            "count": 2
+          }
+        ]
+      },
+      "present": 10,
+      "absent": 2,
+      "values": 10,
+      "types": {
+        "number": 10
+      },
+      "mixed": false
+    },
+    {
+      "name": "user.plan",
+      "type": "text",
+      "nulls": 1,
+      "null_rate": 0.1111111111111111,
+      "count": 8,
+      "distinct": 3,
+      "min": "free",
+      "max": "team",
+      "mean": null,
+      "median": null,
+      "p25": null,
+      "p75": null,
+      "distribution": {
+        "kind": "top",
+        "values": [
+          {
+            "value": "free",
+            "count": 3
+          },
+          {
+            "value": "pro",
+            "count": 3
+          },
+          {
+            "value": "team",
+            "count": 2
+          }
+        ],
+        "other": 0
+      },
+      "present": 9,
+      "absent": 3,
+      "values": 9,
+      "types": {
+        "string": 8,
+        "null": 1
+      },
+      "mixed": false
+    },
+    {
+      "name": "tags",
+      "type": "array",
+      "nulls": 0,
+      "null_rate": 0.0,
+      "count": 0,
+      "distinct": 0,
+      "min": null,
+      "max": null,
+      "mean": null,
+      "median": null,
+      "p25": null,
+      "p75": null,
+      "distribution": {
+        "kind": "empty"
+      },
+      "present": 11,
+      "absent": 1,
+      "values": 11,
+      "types": {
+        "array": 11
+      },
+      "mixed": false
+    },
+    {
+      "name": "tags[]",
+      "type": "text",
+      "nulls": 0,
+      "null_rate": 0.0,
+      "count": 12,
+      "distinct": 4,
+      "min": "api",
+      "max": "worker",
+      "mean": null,
+      "median": null,
+      "p25": null,
+      "p75": null,
+      "distribution": {
+        "kind": "top",
+        "values": [
+          {
+            "value": "api",
+            "count": 5
+          },
+          {
+            "value": "web",
+            "count": 4
+          },
+          {
+            "value": "beta",
+            "count": 2
+          },
+          {
+            "value": "worker",
+            "count": 1
+          }
+        ],
+        "other": 0
+      },
+      "present": 10,
+      "absent": 2,
+      "values": 12,
+      "types": {
+        "string": 12
+      },
+      "mixed": false
+    },
+    {
+      "name": "[\"http.status\"]",
+      "type": "integer",
+      "nulls": 0,
+      "null_rate": 0.0,
+      "count": 11,
+      "distinct": 6,
+      "min": "200",
+      "max": "503",
+      "mean": 303.1818181818182,
+      "median": 200.0,
+      "p25": 200.0,
+      "p75": 464.5,
+      "distribution": {
+        "kind": "histogram",
+        "bins": [
+          {
+            "label": "[200, 250)",
+            "low": 200.0,
+            "high": 250.0,
+            "count": 7
+          },
+          {
+            "label": "[250, 300)",
+            "low": 250.0,
+            "high": 300.0,
+            "count": 0
+          },
+          {
+            "label": "[300, 350)",
+            "low": 300.0,
+            "high": 350.0,
+            "count": 0
+          },
+          {
+            "label": "[350, 400)",
+            "low": 350.0,
+            "high": 400.0,
+            "count": 0
+          },
+          {
+            "label": "[400, 450)",
+            "low": 400.0,
+            "high": 450.0,
+            "count": 1
+          },
+          {
+            "label": "[450, 500)",
+            "low": 450.0,
+            "high": 500.0,
+            "count": 0
+          },
+          {
+            "label": "[500, 550)",
+            "low": 500.0,
+            "high": 550.0,
+            "count": 3
+          },
+          {
+            "label": "[550, 600)",
+            "low": 550.0,
+            "high": 600.0,
+            "count": 0
+          },
+          {
+            "label": "[600, 650)",
+            "low": 600.0,
+            "high": 650.0,
+            "count": 0
+          },
+          {
+            "label": "[650, 700]",
+            "low": 650.0,
+            "high": 700.0,
+            "count": 0
+          }
+        ]
+      },
+      "present": 11,
+      "absent": 1,
+      "values": 11,
+      "types": {
+        "string": 2,
+        "number": 9
+      },
+      "mixed": true
+    },
+    {
+      "name": "latency_ms",
+      "type": "integer",
+      "nulls": 1,
+      "null_rate": 0.08333333333333333,
+      "count": 11,
+      "distinct": 11,
+      "min": "4",
+      "max": "2210",
+      "mean": 254.54545454545453,
+      "median": 28.0,
+      "p25": 13.5,
+      "p75": 112.0,
+      "distribution": {
+        "kind": "histogram",
+        "bins": [
+          {
+            "label": "[0, 250)",
+            "low": 0.0,
+            "high": 250.0,
+            "count": 9
+          },
+          {
+            "label": "[250, 500)",
+            "low": 250.0,
+            "high": 500.0,
+            "count": 1
+          },
+          {
+            "label": "[500, 750)",
+            "low": 500.0,
+            "high": 750.0,
+            "count": 0
+          },
+          {
+            "label": "[750, 1000)",
+            "low": 750.0,
+            "high": 1000.0,
+            "count": 0
+          },
+          {
+            "label": "[1000, 1250)",
+            "low": 1000.0,
+            "high": 1250.0,
+            "count": 0
+          },
+          {
+            "label": "[1250, 1500)",
+            "low": 1250.0,
+            "high": 1500.0,
+            "count": 0
+          },
+          {
+            "label": "[1500, 1750)",
+            "low": 1500.0,
+            "high": 1750.0,
+            "count": 0
+          },
+          {
+            "label": "[1750, 2000)",
+            "low": 1750.0,
+            "high": 2000.0,
+            "count": 0
+          },
+          {
+            "label": "[2000, 2250)",
+            "low": 2000.0,
+            "high": 2250.0,
+            "count": 1
+          },
+          {
+            "label": "[2250, 2500]",
+            "low": 2250.0,
+            "high": 2500.0,
+            "count": 0
+          }
+        ]
+      },
+      "present": 12,
+      "absent": 0,
+      "values": 12,
+      "types": {
+        "number": 11,
+        "null": 1
+      },
+      "mixed": false
+    },
+    {
+      "name": "error",
+      "type": "object",
+      "nulls": 0,
+      "null_rate": 0.0,
+      "count": 0,
+      "distinct": 0,
+      "min": null,
+      "max": null,
+      "mean": null,
+      "median": null,
+      "p25": null,
+      "p75": null,
+      "distribution": {
+        "kind": "empty"
+      },
+      "present": 2,
+      "absent": 10,
+      "values": 2,
+      "types": {
+        "object": 2
+      },
+      "mixed": false
+    },
+    {
+      "name": "error.code",
+      "type": "text",
+      "nulls": 0,
+      "null_rate": 0.0,
+      "count": 2,
+      "distinct": 2,
+      "min": "E_TIMEOUT",
+      "max": "E_UPSTREAM",
+      "mean": null,
+      "median": null,
+      "p25": null,
+      "p75": null,
+      "distribution": {
+        "kind": "top",
+        "values": [
+          {
+            "value": "E_TIMEOUT",
+            "count": 1
+          },
+          {
+            "value": "E_UPSTREAM",
+            "count": 1
+          }
+        ],
+        "other": 0
+      },
+      "present": 2,
+      "absent": 10,
+      "values": 2,
+      "types": {
+        "string": 2
+      },
+      "mixed": false
+    },
+    {
+      "name": "error.retry",
+      "type": "boolean",
+      "nulls": 0,
+      "null_rate": 0.0,
+      "count": 2,
+      "distinct": 2,
+      "min": "false",
+      "max": "true",
+      "mean": null,
+      "median": null,
+      "p25": null,
+      "p75": null,
+      "distribution": {
+        "kind": "top",
+        "values": [
+          {
+            "value": "false",
+            "count": 1
+          },
+          {
+            "value": "true",
+            "count": 1
+          }
+        ],
+        "other": 0
+      },
+      "present": 2,
+      "absent": 10,
+      "values": 2,
+      "types": {
+        "boolean": 2
+      },
+      "mixed": false
+    },
+    {
+      "name": "items",
+      "type": "array",
+      "nulls": 0,
+      "null_rate": 0.0,
+      "count": 0,
+      "distinct": 0,
+      "min": null,
+      "max": null,
+      "mean": null,
+      "median": null,
+      "p25": null,
+      "p75": null,
+      "distribution": {
+        "kind": "empty"
+      },
+      "present": 3,
+      "absent": 9,
+      "values": 3,
+      "types": {
+        "array": 3
+      },
+      "mixed": false
+    },
+    {
+      "name": "items[]",
+      "type": "object",
+      "nulls": 0,
+      "null_rate": 0.0,
+      "count": 0,
+      "distinct": 0,
+      "min": null,
+      "max": null,
+      "mean": null,
+      "median": null,
+      "p25": null,
+      "p75": null,
+      "distribution": {
+        "kind": "empty"
+      },
+      "present": 3,
+      "absent": 9,
+      "values": 4,
+      "types": {
+        "object": 4
+      },
+      "mixed": false
+    },
+    {
+      "name": "items[].sku",
+      "type": "text",
+      "nulls": 0,
+      "null_rate": 0.0,
+      "count": 4,
+      "distinct": 3,
+      "min": "A-1",
+      "max": "C-2",
+      "mean": null,
+      "median": null,
+      "p25": null,
+      "p75": null,
+      "distribution": {
+        "kind": "top",
+        "values": [
+          {
+            "value": "A-1",
+            "count": 2
+          },
+          {
+            "value": "B-7",
+            "count": 1
+          },
+          {
+            "value": "C-2",
+            "count": 1
+          }
+        ],
+        "other": 0
+      },
+      "present": 3,
+      "absent": 9,
+      "values": 4,
+      "types": {
+        "string": 4
+      },
+      "mixed": false
+    },
+    {
+      "name": "items[].qty",
+      "type": "integer",
+      "nulls": 0,
+      "null_rate": 0.0,
+      "count": 4,
+      "distinct": 4,
+      "min": "1",
+      "max": "5",
+      "mean": 2.75,
+      "median": 2.5,
+      "p25": 1.75,
+      "p75": 3.5,
+      "distribution": {
+        "kind": "histogram",
+        "bins": [
+          {
+            "label": "[1, 1.5)",
+            "low": 1.0,
+            "high": 1.5,
+            "count": 1
+          },
+          {
+            "label": "[1.5, 2)",
+            "low": 1.5,
+            "high": 2.0,
+            "count": 0
+          },
+          {
+            "label": "[2, 2.5)",
+            "low": 2.0,
+            "high": 2.5,
+            "count": 1
+          },
+          {
+            "label": "[2.5, 3)",
+            "low": 2.5,
+            "high": 3.0,
+            "count": 0
+          },
+          {
+            "label": "[3, 3.5)",
+            "low": 3.0,
+            "high": 3.5,
+            "count": 1
+          },
+          {
+            "label": "[3.5, 4)",
+            "low": 3.5,
+            "high": 4.0,
+            "count": 0
+          },
+          {
+            "label": "[4, 4.5)",
+            "low": 4.0,
+            "high": 4.5,
+            "count": 0
+          },
+          {
+            "label": "[4.5, 5)",
+            "low": 4.5,
+            "high": 5.0,
+            "count": 0
+          },
+          {
+            "label": "[5, 5.5)",
+            "low": 5.0,
+            "high": 5.5,
+            "count": 1
+          },
+          {
+            "label": "[5.5, 6]",
+            "low": 5.5,
+            "high": 6.0,
+            "count": 0
+          }
+        ]
+      },
+      "present": 3,
+      "absent": 9,
+      "values": 4,
+      "types": {
+        "string": 1,
+        "number": 3
+      },
+      "mixed": true
+    }
+  ],
+  "missing": {
+    "bucket_rows": 1,
+    "buckets": [
+      {
+        "first": 1,
+        "rows": 1,
+        "nulls": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1
+        ]
+      },
+      {
+        "first": 2,
+        "rows": 1,
+        "nulls": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1
+        ]
+      },
+      {
+        "first": 3,
+        "rows": 1,
+        "nulls": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          1,
+          0,
+          0,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1
+        ]
+      },
+      {
+        "first": 4,
+        "rows": 1,
+        "nulls": [
+          0,
+          0,
+          0,
+          1,
+          1,
+          1,
+          1,
+          1,
+          0,
+          0,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1
+        ]
+      },
+      {
+        "first": 5,
+        "rows": 1,
+        "nulls": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          1,
+          0,
+          0,
+          0,
+          1,
+          0,
+          0,
+          0,
+          1,
+          1,
+          1,
+          1
+        ]
+      },
+      {
+        "first": 6,
+        "rows": 1,
+        "nulls": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          1,
+          1,
+          1,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      {
+        "first": 7,
+        "rows": 1,
+        "nulls": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          1,
+          1,
+          1,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      {
+        "first": 8,
+        "rows": 1,
+        "nulls": [
+          0,
+          0,
+          0,
+          1,
+          1,
+          1,
+          0,
+          0,
+          1,
+          0,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1
+        ]
+      },
+      {
+        "first": 9,
+        "rows": 1,
+        "nulls": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1
+        ]
+      },
+      {
+        "first": 10,
+        "rows": 1,
+        "nulls": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1
+        ]
+      },
+      {
+        "first": 11,
+        "rows": 1,
+        "nulls": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          1,
+          1,
+          1,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      {
+        "first": 12,
+        "rows": 1,
+        "nulls": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          1,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          1,
+          1,
+          1,
+          1
+        ]
+      }
+    ]
+  },
+  "notes": [
+    "! marks 2 paths holding more than one JSON type besides null: [\"http.status\"], items[].qty",
+    "1 line is not JSON and was skipped: line 13 (expected value)"
+  ],
+  "paths": {
+    "depth": 4,
+    "max_paths": 200,
+    "sampled": false,
+    "capped": false
+  },
+  "malformed": 1,
+  "malformed_lines": [
+    13
+  ],
+  "sampled": false
+}

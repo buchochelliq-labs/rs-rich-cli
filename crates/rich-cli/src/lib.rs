@@ -5526,7 +5526,9 @@ fn render_csv(
         None => {
             table.extend_owned_rows(body.collect());
         }
-        Some((console, rules)) => add_styled_csv_rows(&mut table, console, rules, &headers, body.collect()),
+        Some((console, rules)) => {
+            add_styled_csv_rows(&mut table, console, rules, &headers, body.collect())
+        }
     }
     table
 }
@@ -5545,7 +5547,11 @@ fn add_styled_csv_rows(
     let headers: Vec<&str> = headers.iter().map(String::as_str).collect();
     let values = |row: &[String]| -> Vec<Value> { row.iter().cloned().map(Value::Str).collect() };
     // Only a column rule needs every row before the first is drawn.
-    let resolved = if rules.rules().iter().any(|r| r.target_kind() == Target::Column) {
+    let resolved = if rules
+        .rules()
+        .iter()
+        .any(|r| r.target_kind() == Target::Column)
+    {
         rules.resolve(&headers, rows.iter().map(|row| values(row)))
     } else {
         rules.resolve(&headers, std::iter::empty::<Vec<Value>>())
