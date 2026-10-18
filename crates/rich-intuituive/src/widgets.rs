@@ -18,7 +18,8 @@ use crate::reactive::Signal;
 use crate::widget::{widget, Canvas, DrawCx, EventCx, MeasureCx, Used, Widget, WidgetEvent};
 
 pub use crate::calendar::{
-    calendar, calendar_options, calendar_with, CalendarOptions, Date, DateTime, Time,
+    calendar, calendar_options, calendar_with, month, CalendarOptions, Date, DateTime, Time,
+    Weekday,
 };
 pub use crate::datetime::{
     datetime_picker, time_picker, time_picker_with, DateTimeOptions, TimeOptions,

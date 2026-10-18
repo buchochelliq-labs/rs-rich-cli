@@ -9,9 +9,10 @@
 //! | Python | Rust |
 //! |---|---|
 //! | `Sparkline` | `rich_ext::chart::Sparkline` |
-//! | `ChartBar`, `BarChart`, `Histogram` | `Bar`, `BarChart`, `Histogram` |
+//! | `ChartBar`, `BarGroup`, `BarChart`, `Histogram` | `Bar`, `BarGroup`, `BarChart`, `Histogram` |
 //! | `Series`, `LineChart` | `Series`, `LineChart` |
 //! | `Band`, `Gauge`, `BulletChart` | `Band`, `Gauge`, `BulletChart` |
+//! | `FillGauge`, `LineGauge` | `FillGauge`, `LineGauge` (0.0.19) |
 //! | `Heatmap` | `Heatmap` |
 //! | `ChartState`, `StatusMatrix` | `State`, `StatusMatrix` |
 //! | `KpiCard` | `KpiCard` (its `status` by name) |
@@ -23,11 +24,13 @@ use pyo3::types::{PyDict, PyList, PySequence, PyString};
 
 use rich::protocol::Renderable;
 use rich_ext::chart::{
-    Band as CoreBand, Bar as CoreBar, BarChart as CoreBarChart, BulletChart as CoreBulletChart,
-    Charset, Gauge as CoreGauge, Heatmap as CoreHeatmap, Histogram as CoreHistogram,
-    KpiCard as CoreKpiCard, LineChart as CoreLineChart, Orientation, Series as CoreSeries,
-    SeriesKind, Span as CoreSpan, Sparkline as CoreSparkline, State as CoreState, Status,
-    StatusMatrix as CoreStatusMatrix, Timeline as CoreTimeline, ValueFormat,
+    Band as CoreBand, Bar as CoreBar, BarChart as CoreBarChart, BarGroup as CoreBarGroup,
+    BulletChart as CoreBulletChart, Charset, Direction, FillGauge as CoreFillGauge,
+    Gauge as CoreGauge, Heatmap as CoreHeatmap, Histogram as CoreHistogram, KpiCard as CoreKpiCard,
+    Levels, LineChart as CoreLineChart, LineGauge as CoreLineGauge, LineSet, Orientation,
+    Series as CoreSeries, SeriesKind, Span as CoreSpan, Sparkline as CoreSparkline,
+    State as CoreState, Status, StatusMatrix as CoreStatusMatrix, Timeline as CoreTimeline,
+    ValueFormat,
 };
 
 use crate::art::repr_str;
@@ -49,6 +52,22 @@ names!(orientation, orientation_name, Orientation, "orientation", {
 names!(series_kind, series_kind_name, SeriesKind, "series kind", {
     "line" => SeriesKind::Line,
     "scatter" => SeriesKind::Scatter,
+});
+
+names!(direction, direction_name, Direction, "direction", {
+    "left_to_right" => Direction::LeftToRight,
+    "right_to_left" => Direction::RightToLeft,
+});
+
+names!(levels, levels_name, Levels, "levels", {
+    "nine" => Levels::Nine,
+    "three" => Levels::Three,
+});
+
+names!(line_set, line_set_name, LineSet, "line", {
+    "thin" => LineSet::Thin,
+    "thick" => LineSet::Thick,
+    "double" => LineSet::Double,
 });
 
 names!(status, status_name, Status, "status", {
@@ -205,9 +224,13 @@ renders!(Sparkline);
 impl Sparkline {
     /// `values`: numbers, `None` for a gap. `range`: fix the scale as
     /// `(min, max)`. `min_max`: name the extremes after the line.
-    /// `threshold`: count (and mark) the values above it.
+    /// `threshold`: count (and mark) the values above it. `rows`: how many
+    /// rows tall (default: the height it is given, or one). `direction`:
+    /// `"left_to_right"` or `"right_to_left"`. `absent`: draw gaps with a
+    /// symbol, or a `(symbol, style)` pair. `styles`: a style (or `None`)
+    /// for each value. `levels`: `"nine"` or `"three"` block heights.
     #[new]
-    #[pyo3(signature = (values, *, range=None, min=None, max=None, charset="auto", style=None, min_max=false, threshold=None, format=None))]
+    #[pyo3(signature = (values, *, range=None, min=None, max=None, charset="auto", style=None, min_max=false, threshold=None, format=None, rows=None, direction="left_to_right", absent=None, styles=None, levels="nine"))]
     #[allow(clippy::too_many_arguments)]
     fn new(
         values: &Bound<'_, PyAny>,
@@ -219,11 +242,48 @@ impl Sparkline {
         min_max: bool,
         threshold: Option<f64>,
         format: Option<&Bound<'_, PyAny>>,
+        rows: Option<usize>,
+        direction: &str,
+        absent: Option<&Bound<'_, PyAny>>,
+        styles: Option<&Bound<'_, PyAny>>,
+        levels: &str,
     ) -> PyResult<Self> {
         let mut inner = CoreSparkline::new(numbers(values)?)
             .charset(self::charset(charset)?)
             .min_max(min_max)
-            .format(value_format(format)?);
+            .format(value_format(format)?)
+            .direction(self::direction(direction)?)
+            .levels(self::levels(levels)?);
+        if let Some(rows) = rows {
+            if rows == 0 {
+                return Err(PyValueError::new_err("rows must be at least 1"));
+            }
+            inner = inner.rows(rows);
+        }
+        if let Some(absent) = absent.filter(|a| !a.is_none()) {
+            let (symbol, style) = if let Ok(symbol) = absent.extract::<String>() {
+                (symbol, String::new())
+            } else {
+                absent
+                    .extract::<(String, Option<String>)>()
+                    .map(|(symbol, style)| (symbol, style.unwrap_or_default()))
+                    .map_err(|_| {
+                        PyTypeError::new_err("absent is a symbol, or a (symbol, style) pair")
+                    })?
+            };
+            inner = inner.absent(symbol, style);
+        }
+        let styles = each(styles, "styles", |item| {
+            if item.is_none() {
+                return Ok(None);
+            }
+            item.extract::<String>()
+                .map(Some)
+                .map_err(|_| PyTypeError::new_err("styles must be strings or None"))
+        })?;
+        if !styles.is_empty() {
+            inner = inner.styles(styles);
+        }
         if let Some((lo, hi)) = range {
             inner = inner.range(lo, hi);
         }
@@ -272,13 +332,31 @@ pub(crate) struct ChartBar {
 
 #[pymethods]
 impl ChartBar {
+    /// `text`: written instead of the value (`"76°"`). `value_style` and
+    /// `label_style`: styles over the chart's for this bar.
     #[new]
-    #[pyo3(signature = (label, value, *, style=None))]
-    fn new(label: String, value: &Bound<'_, PyAny>, style: Option<String>) -> PyResult<Self> {
+    #[pyo3(signature = (label, value, *, style=None, text=None, value_style=None, label_style=None))]
+    fn new(
+        label: String,
+        value: &Bound<'_, PyAny>,
+        style: Option<String>,
+        text: Option<String>,
+        value_style: Option<String>,
+        label_style: Option<String>,
+    ) -> PyResult<Self> {
         let value = number(value)?;
         let mut inner = CoreBar::new(label.clone(), value);
         if let Some(style) = &style {
             inner = inner.style(style.clone());
+        }
+        if let Some(text) = text {
+            inner = inner.text(text);
+        }
+        if let Some(style) = value_style {
+            inner = inner.value_style(style);
+        }
+        if let Some(style) = label_style {
+            inner = inner.label_style(style);
         }
         Ok(ChartBar {
             inner,
@@ -286,6 +364,12 @@ impl ChartBar {
             value,
             style,
         })
+    }
+
+    /// What is written instead of the value, if anything.
+    #[getter]
+    fn text(&self) -> Option<&str> {
+        self.inner.text.as_deref()
     }
 
     #[getter]
@@ -319,6 +403,57 @@ fn bar(item: &Bound<'_, PyAny>) -> PyResult<CoreBar> {
     Ok(CoreBar::new(label, number(&value)?))
 }
 
+/// Bars with a label, set apart from the others in a `BarChart`
+/// (`rich_ext::chart::BarGroup`).
+#[pyclass(
+    name = "BarGroup",
+    module = "rs_rich.chart",
+    frozen,
+    skip_from_py_object
+)]
+#[derive(Clone)]
+pub(crate) struct BarGroup {
+    inner: CoreBarGroup,
+    label: String,
+    len: usize,
+}
+
+#[pymethods]
+impl BarGroup {
+    /// `label`: under (or after) the group; empty for none. `bars`:
+    /// `ChartBar`s, `(label, value)` pairs or a `{label: value}` mapping.
+    #[new]
+    #[pyo3(signature = (label, bars=None))]
+    fn new(label: String, bars: Option<&Bound<'_, PyAny>>) -> PyResult<Self> {
+        let mut inner = CoreBarGroup::new(label.clone());
+        let mut len = 0;
+        if let Some(bars) = bars.filter(|b| !b.is_none()) {
+            for item in items(bars)? {
+                inner = inner.bar(bar(&item)?);
+                len += 1;
+            }
+        }
+        Ok(BarGroup { inner, label, len })
+    }
+
+    #[getter]
+    fn label(&self) -> &str {
+        &self.label
+    }
+
+    fn __len__(&self) -> usize {
+        self.len
+    }
+
+    fn __repr__(&self) -> String {
+        format!(
+            "<BarGroup {} with {} bars>",
+            repr_str(&self.label),
+            self.len
+        )
+    }
+}
+
 /// A label, a bar and a value per row, or columns side by side
 /// (`rich_ext::chart::BarChart`).
 #[pyclass(name = "BarChart", module = "rs_rich.chart", frozen)]
@@ -330,12 +465,17 @@ renders!(BarChart);
 #[pymethods]
 impl BarChart {
     /// `bars`: `ChartBar`s, `(label, value)` pairs or a `{label: value}`
-    /// mapping. `orientation`: `"horizontal"` or `"vertical"`.
+    /// mapping; `groups`: `BarGroup`s, after them. `orientation`:
+    /// `"horizontal"` or `"vertical"`. `thickness` is ratatui's
+    /// `bar_width` (cells across, or rows down); `bar_width` is the longest
+    /// bar's length, or the tallest column's height. `values_inside`
+    /// writes each value on its bar.
     #[new]
-    #[pyo3(signature = (bars=None, *, range=None, max=None, charset="auto", orientation="horizontal", bar_width=None, show_values=true, format=None, style=None))]
+    #[pyo3(signature = (bars=None, *, groups=None, range=None, max=None, charset="auto", orientation="horizontal", bar_width=None, show_values=true, format=None, style=None, thickness=None, bar_gap=None, group_gap=None, label_style=None, value_style=None, values_inside=false))]
     #[allow(clippy::too_many_arguments)]
     fn new(
         bars: Option<&Bound<'_, PyAny>>,
+        groups: Option<&Bound<'_, PyAny>>,
         range: Option<(f64, f64)>,
         max: Option<f64>,
         charset: &str,
@@ -344,16 +484,49 @@ impl BarChart {
         show_values: bool,
         format: Option<&Bound<'_, PyAny>>,
         style: Option<String>,
+        thickness: Option<usize>,
+        bar_gap: Option<usize>,
+        group_gap: Option<usize>,
+        label_style: Option<String>,
+        value_style: Option<String>,
+        values_inside: bool,
     ) -> PyResult<Self> {
         let mut inner = CoreBarChart::new()
             .charset(self::charset(charset)?)
             .orientation(self::orientation(orientation)?)
             .show_values(show_values)
+            .values_inside(values_inside)
             .format(value_format(format)?);
         if let Some(bars) = bars.filter(|b| !b.is_none()) {
             for item in items(bars)? {
                 inner = inner.push(bar(&item)?);
             }
+        }
+        let groups = each(groups, "groups", |item| {
+            item.cast::<BarGroup>()
+                .map(|group| group.get().inner.clone())
+                .map_err(|_| PyTypeError::new_err("groups must be BarGroups"))
+        })?;
+        for group in groups {
+            inner = inner.group(group);
+        }
+        if let Some(thickness) = thickness {
+            if thickness == 0 {
+                return Err(PyValueError::new_err("thickness must be at least 1"));
+            }
+            inner = inner.thickness(thickness);
+        }
+        if let Some(gap) = bar_gap {
+            inner = inner.bar_gap(gap);
+        }
+        if let Some(gap) = group_gap {
+            inner = inner.group_gap(gap);
+        }
+        if let Some(style) = label_style {
+            inner = inner.label_style(style);
+        }
+        if let Some(style) = value_style {
+            inner = inner.value_style(style);
         }
         if let Some((lo, hi)) = range {
             inner = inner.range(lo, hi);
@@ -688,6 +861,154 @@ impl Gauge {
 
     fn __repr__(&self) -> String {
         format!("<Gauge {}>", self.inner.value())
+    }
+}
+
+/// A ratio from 0 to 1, clamped; NaN is refused.
+fn ratio(value: f64) -> PyResult<f64> {
+    if value.is_nan() {
+        return Err(PyValueError::new_err(
+            "a gauge's ratio must be a number, not NaN",
+        ));
+    }
+    Ok(value.clamp(0.0, 1.0))
+}
+
+/// ratatui's `Gauge`: a bar that fills its area, the label on the middle
+/// row (`rich_ext::chart::FillGauge`).
+#[pyclass(
+    name = "FillGauge",
+    module = "rs_rich.chart",
+    frozen,
+    skip_from_py_object
+)]
+#[derive(Clone)]
+pub(crate) struct FillGauge {
+    inner: CoreFillGauge,
+}
+renders!(FillGauge);
+
+#[pymethods]
+impl FillGauge {
+    /// `ratio`: from 0 to 1 (clamped). `label`: the text on the middle
+    /// row (default the percentage). `style`: ratatui's `gauge_style`, its
+    /// foreground the bar's colour and its background the rest's.
+    /// `unicode`: eighths of a cell at the bar's edge. `height`: rows
+    /// (default: the height given, or one).
+    #[new]
+    #[pyo3(signature = (ratio, *, label=None, label_style=None, style=None, unicode=false, width=None, height=None))]
+    #[allow(clippy::too_many_arguments)]
+    fn new(
+        ratio: f64,
+        label: Option<String>,
+        label_style: Option<String>,
+        style: Option<String>,
+        unicode: bool,
+        width: Option<usize>,
+        height: Option<usize>,
+    ) -> PyResult<Self> {
+        let mut inner = CoreFillGauge::new(self::ratio(ratio)?).unicode(unicode);
+        if let Some(label) = label {
+            inner = inner.label(label);
+        }
+        if let Some(style) = label_style {
+            inner = inner.label_style(style);
+        }
+        if let Some(style) = style {
+            inner = inner.style(style);
+        }
+        if let Some(width) = width {
+            inner = inner.width(width);
+        }
+        if let Some(height) = height {
+            inner = inner.height(height);
+        }
+        Ok(FillGauge { inner })
+    }
+
+    #[getter]
+    fn ratio(&self) -> f64 {
+        self.inner.ratio()
+    }
+
+    fn __repr__(&self) -> String {
+        format!("<FillGauge {}>", self.inner.ratio())
+    }
+}
+
+/// ratatui's `LineGauge`: a label and a line in two styles
+/// (`rich_ext::chart::LineGauge`).
+#[pyclass(
+    name = "LineGauge",
+    module = "rs_rich.chart",
+    frozen,
+    skip_from_py_object
+)]
+#[derive(Clone)]
+pub(crate) struct LineGauge {
+    inner: CoreLineGauge,
+}
+renders!(LineGauge);
+
+/// One character, for a gauge's symbols.
+fn glyph(text: &str, what: &str) -> PyResult<char> {
+    let mut chars = text.chars();
+    match (chars.next(), chars.next()) {
+        (Some(c), None) => Ok(c),
+        _ => Err(PyValueError::new_err(format!(
+            "{what} must be one character, got {}",
+            repr_str(text)
+        ))),
+    }
+}
+
+#[pymethods]
+impl LineGauge {
+    /// `ratio`: from 0 to 1 (clamped). `label`: before the line (default
+    /// the percentage, ` 42%`). `line`: `"thin"`, `"thick"` or `"double"`;
+    /// `symbols`: a `(filled, unfilled)` pair of characters instead.
+    #[new]
+    #[pyo3(signature = (ratio, *, label=None, label_style=None, filled_style=None, unfilled_style=None, line="thin", symbols=None, width=None))]
+    #[allow(clippy::too_many_arguments)]
+    fn new(
+        ratio: f64,
+        label: Option<String>,
+        label_style: Option<String>,
+        filled_style: Option<String>,
+        unfilled_style: Option<String>,
+        line: &str,
+        symbols: Option<(String, String)>,
+        width: Option<usize>,
+    ) -> PyResult<Self> {
+        let mut inner = CoreLineGauge::new(self::ratio(ratio)?).line(line_set(line)?);
+        if let Some(label) = label {
+            inner = inner.label(label);
+        }
+        if let Some(style) = label_style {
+            inner = inner.label_style(style);
+        }
+        if let Some(style) = filled_style {
+            inner = inner.filled_style(style);
+        }
+        if let Some(style) = unfilled_style {
+            inner = inner.unfilled_style(style);
+        }
+        if let Some((filled, unfilled)) = symbols {
+            inner = inner.symbols(glyph(&filled, "symbols")?, glyph(&unfilled, "symbols")?);
+        }
+        if let Some(width) = width {
+            inner = inner.width(width);
+        }
+        Ok(LineGauge { inner })
+    }
+
+    #[getter]
+    fn ratio(&self) -> f64 {
+        self.inner.ratio()
+    }
+
+    fn __repr__(&self) -> String {
+        format!("<LineGauge {}>", self.inner.ratio())
     }
 }
 
@@ -1173,7 +1494,10 @@ fn chart_format(value: f64, format: Option<&Bound<'_, PyAny>>) -> PyResult<Strin
 pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     renderable::add_renderable_class::<Sparkline>(m)?;
     m.add_class::<ChartBar>()?;
+    m.add_class::<BarGroup>()?;
     renderable::add_renderable_class::<BarChart>(m)?;
+    renderable::add_renderable_class::<FillGauge>(m)?;
+    renderable::add_renderable_class::<LineGauge>(m)?;
     renderable::add_renderable_class::<Histogram>(m)?;
     m.add_class::<Series>()?;
     renderable::add_renderable_class::<LineChart>(m)?;

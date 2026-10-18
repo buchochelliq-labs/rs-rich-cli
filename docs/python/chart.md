@@ -14,11 +14,12 @@ markers.
 
 | Class | Draws |
 |---|---|
-| `Sparkline` | one line, one cell per value (two in Braille) |
-| `BarChart`, `ChartBar` | a label, a bar and a value per row, or columns side by side |
+| `Sparkline` | one cell per value (two in Braille), on one row or several |
+| `BarChart`, `ChartBar`, `BarGroup` | a label, a bar and a value per row, or columns side by side; bars in labelled groups |
 | `Histogram` | raw values counted into bins, drawn as bars |
 | `LineChart`, `Series` | one or more series as lines or points, with axes and a legend |
 | `Gauge`, `Band`, `BulletChart` | a value against a range, with a target and threshold bands; several aligned |
+| `FillGauge`, `LineGauge` | ratatui's two gauges: a bar that fills its area, and a label with a line |
 | `Heatmap` | a labelled grid of values as shades, with a legend |
 | `StatusMatrix`, `ChartState` | rows and columns of states (pass, fail, skip, flaky, your own) |
 | `KpiCard` | a label, a value, a delta, a sparkline and a status |
@@ -50,9 +51,14 @@ has a screenshot of each chart.
 
 ```text
 Sparkline(values, *, range=None, min=None, max=None, charset="auto", style=None,
-          min_max=False, threshold=None, format=None)
-BarChart(bars=None, *, range=None, max=None, charset="auto", orientation="horizontal",
-         bar_width=None, show_values=True, format=None, style=None)
+          min_max=False, threshold=None, format=None, rows=None,
+          direction="left_to_right", absent=None, styles=None, levels="nine")
+ChartBar(label, value, *, style=None, text=None, value_style=None, label_style=None)
+BarGroup(label, bars=None)
+BarChart(bars=None, *, groups=None, range=None, max=None, charset="auto",
+         orientation="horizontal", bar_width=None, show_values=True, format=None,
+         style=None, thickness=None, bar_gap=None, group_gap=None, label_style=None,
+         value_style=None, values_inside=False)
 Histogram(values, *, bins=None, range=None, charset="auto", orientation="horizontal",
           bar_width=None, show_values=True, style=None)
 ```
@@ -74,6 +80,36 @@ console.print(chart.Histogram([12, 14, 15, 21, 22, 23, 24, 38], bins=3, range=(1
 ```
 
 ![Sparklines, a bar chart and a histogram](media/chart-bars.svg)
+
+### Taller sparklines and grouped bars
+
+These options follow ratatui's `Sparkline` and `BarChart`.
+
+- `rows` stacks a sparkline over that many rows. Without it, a sparkline
+  fills the height it is given (a `Layout` region, say), or one row.
+- `direction="right_to_left"` puts the newest value on the left.
+- `absent` draws the gaps (`None`): a symbol, or a `(symbol, style)` pair.
+- `styles` styles each value; `None` in it keeps the sparkline's style.
+- `levels="three"` draws empty, half and full cells only.
+- `groups` takes `BarGroup`s, each a label over its bars; `bars` and
+  `groups` can be given together, the plain bars first.
+- `thickness` is how many cells across a bar is, `bar_gap` the cells
+  between bars and `group_gap` the cells between groups.
+- A bar's `text` is written in place of its value. `value_style` and
+  `label_style` style the values and labels, on a bar or on the whole
+  chart; a bar's own wins.
+- `values_inside=True` writes each value on its bar, as ratatui does.
+
+```python
+console.print(chart.Sparkline([3, 5, 2, 8, 6, 9, 4, 7], rows=3))
+console.print(chart.Sparkline([3, None, 2, 8, 6, None, 4, 7], direction="right_to_left", absent="·"))
+console.print(chart.BarChart(groups=[
+    chart.BarGroup("Q1", [("north", 31), chart.ChartBar("south", 18, text="18 (low)")]),
+    chart.BarGroup("Q2", [("north", 27), ("south", 24)]),
+], bar_width=16))
+```
+
+![A three-row sparkline, one right to left with gaps, and grouped bars](media/chart-ratatui-bars.svg)
 
 ## Line and scatter charts
 
@@ -119,6 +155,31 @@ console.print(chart.BulletChart([
 ```
 
 ![A gauge with a target and bands, and a bullet chart](media/chart-gauges.svg)
+
+### Fill and line gauges
+
+```text
+FillGauge(ratio, *, label=None, label_style=None, style=None, unicode=False,
+          width=None, height=None)
+LineGauge(ratio, *, label=None, label_style=None, filled_style=None,
+          unfilled_style=None, line="thin", symbols=None, width=None)
+```
+
+These are ratatui's `Gauge` and `LineGauge`. The ratio is clamped to 0 to 1
+(`NaN` raises `ValueError`). A `FillGauge` fills whole cells, or eighths of
+one with `unicode=True`. Its label (the percentage by default) sits on the
+middle row, and its colours swap where the bar runs under it. Without a
+`height`, it fills the height it is given, or one row. A `LineGauge` draws
+its label, then a line: `"thin"`, `"thick"` or `"double"`, or `symbols`, a
+`(filled, unfilled)` pair of one-character strings.
+
+```python
+console.print(chart.FillGauge(0.42, height=3, style="green"))
+console.print(chart.LineGauge(0.42, label="Downloading", line="thick", filled_style="cyan"))
+console.print(chart.LineGauge(0.8, label="cpu", symbols=("▰", "▱")))
+```
+
+![A fill gauge three rows high and two line gauges](media/chart-ratatui-gauges.svg)
 
 ## Heatmaps and status matrices
 

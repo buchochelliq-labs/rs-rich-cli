@@ -1,12 +1,14 @@
 //! A canvas in world coordinates, as ratatui's `Canvas` widget: points,
-//! lines, rectangles, circles and text, in layers, drawn with Braille dots,
-//! half blocks or one glyph a cell.
+//! lines, rectangles, circles, filled areas, a world map, your own shapes
+//! and text, in layers, drawn with Braille dots, block patterns, half
+//! blocks or one glyph a cell.
 
 use rich::cells::char_cell_width;
 use rich::measure::Measurement;
 use rich::{Console, ConsoleOptions, Renderable, Segment, Style};
 
-use super::canvas::bresenham;
+use super::canvas::{bresenham, octant, quadrant, sextant};
+use super::world::MapResolution;
 use super::{
     cell_units, cells, lines_to_segments, theme_style, user_style, Charset, DotCanvas, Line,
 };
@@ -23,6 +25,13 @@ const MAX_SIDE: usize = u16::MAX as usize;
 /// On an ASCII-only console (see [`Charset`]) every marker but
 /// [`Ascii`](Self::Ascii) draws one glyph a cell: `#` for the blocks, `*`
 /// for the others.
+///
+/// [`Quadrant`](Self::Quadrant), [`Bar`](Self::Bar) and
+/// [`HalfBlock`](Self::HalfBlock) draw with Block Elements, which every
+/// terminal font has. The sextants are in Symbols for Legacy Computing
+/// (Unicode 13) and the octants in its supplement (Unicode 16): a font
+/// without them shows a box or a blank in each cell, so check the fonts
+/// your users have before choosing them.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub enum Marker {
     /// Braille dots, 2×4 a cell.
@@ -33,6 +42,15 @@ pub enum Marker {
     HalfBlock,
     /// A full block, `█`, a cell.
     Block,
+    /// A lower half block, `▄`, a cell.
+    Bar,
+    /// Quarters of a cell (`▘`, `▚`, `▙`, ..), 2×2 a cell.
+    Quadrant,
+    /// Sixths of a cell (`🬀` to `🬻`), 2×3 a cell.
+    Sextant,
+    /// Eighths of a cell (U+1CD00 to U+1CDE5), 2×4 a cell: as fine as
+    /// Braille, and solid.
+    Octant,
     /// A dot, `•`, a cell.
     Dot,
     /// The given character, a cell. One that is not one cell wide, or not
@@ -51,7 +69,12 @@ impl Marker {
             }
             Marker::Ascii(_) => Marker::Ascii('*'),
             _ if !ascii => self,
-            Marker::Block | Marker::HalfBlock => Marker::Ascii('#'),
+            Marker::Block
+            | Marker::HalfBlock
+            | Marker::Bar
+            | Marker::Quadrant
+            | Marker::Sextant
+            | Marker::Octant => Marker::Ascii('#'),
             _ => Marker::Ascii('*'),
         }
     }
@@ -59,9 +82,21 @@ impl Marker {
     /// Dots across and down one cell.
     pub(crate) fn per_cell(self) -> (usize, usize) {
         match self {
-            Marker::Braille => (2, 4),
+            Marker::Braille | Marker::Octant => (2, 4),
+            Marker::Sextant => (2, 3),
+            Marker::Quadrant => (2, 2),
             Marker::HalfBlock => (1, 2),
             _ => (1, 1),
+        }
+    }
+
+    /// The glyph for a cell of a pattern marker, from its set dots (bit
+    /// `x + 2 * y`).
+    fn pattern(self, bits: u8) -> char {
+        match self {
+            Marker::Quadrant => quadrant(bits),
+            Marker::Sextant => sextant(bits),
+            _ => octant(bits),
         }
     }
 }
@@ -72,10 +107,50 @@ impl Marker {
 pub(crate) enum Op {
     Points(Vec<(f64, f64)>, String),
     Line((f64, f64), (f64, f64), String),
+    /// A line, and the area between it and a level `y`.
+    Area((f64, f64), (f64, f64), f64, String),
     Circle((f64, f64), f64, String),
+    Map(MapResolution, String),
     Print((f64, f64), String, String),
     Layer,
     Marker(Marker),
+}
+
+/// Something a [`CanvasPainter`] can draw, such as a wireframe, a sprite or
+/// a chart of your own. [`CanvasPainter::shape`] calls
+/// [`draw`](Self::draw), which draws with the painter's points, lines and
+/// text, in world coordinates.
+///
+/// ```
+/// use rich::Console;
+/// use rich_ext::chart::{Canvas, CanvasPainter, Marker, Shape};
+///
+/// /// A cross centred on a point.
+/// struct Cross(f64, f64);
+///
+/// impl Shape for Cross {
+///     fn draw(&self, painter: &mut CanvasPainter) {
+///         let Cross(x, y) = *self;
+///         painter.line(x - 1.0, y, x + 1.0, y, "red");
+///         painter.line(x, y - 1.0, x, y + 1.0, "red");
+///     }
+/// }
+///
+/// let canvas = Canvas::new()
+///     .x_bounds(0.0, 4.0)
+///     .y_bounds(0.0, 2.0)
+///     .width(5)
+///     .height(3)
+///     .marker(Marker::Ascii('+'))
+///     .paint(|p| {
+///         p.shape(&Cross(2.0, 1.0));
+///     });
+/// let console = Console::builder().width(5).color_system(None).build();
+/// assert_eq!(console.render_export(&canvas), "  +  \n +++ \n  +  \n");
+/// ```
+pub trait Shape {
+    /// Draw the shape with `painter`.
+    fn draw(&self, painter: &mut CanvasPainter);
 }
 
 /// What a [`Canvas::paint`] closure draws with.
@@ -94,6 +169,43 @@ impl CanvasPainter {
     pub fn points(&mut self, points: &[(f64, f64)], style: &str) -> &mut Self {
         self.ops
             .push(Op::Points(points.to_vec(), style.to_string()));
+        self
+    }
+
+    /// A dot at (`x`, `y`).
+    pub fn point(&mut self, x: f64, y: f64, style: &str) -> &mut Self {
+        self.points(&[(x, y)], style)
+    }
+
+    /// Draw a [`Shape`] of your own.
+    pub fn shape(&mut self, shape: &dyn Shape) -> &mut Self {
+        shape.draw(self);
+        self
+    }
+
+    /// The world's coastlines, in longitude (`x`, -180 to 180) and latitude
+    /// (`y`, -90 to 90): give the canvas those bounds for the whole world,
+    /// or narrower ones for a region. The lines are Natural Earth's, in the
+    /// public domain, simplified: see [`MapResolution`].
+    pub fn map(&mut self, resolution: MapResolution, style: &str) -> &mut Self {
+        self.ops.push(Op::Map(resolution, style.to_string()));
+        self
+    }
+
+    /// A straight line from (`x1`, `y1`) to (`x2`, `y2`), with the area
+    /// between it and the level `y = fill_to` filled in: a strip of an area
+    /// chart.
+    pub fn area(
+        &mut self,
+        x1: f64,
+        y1: f64,
+        x2: f64,
+        y2: f64,
+        fill_to: f64,
+        style: &str,
+    ) -> &mut Self {
+        self.ops
+            .push(Op::Area((x1, y1), (x2, y2), fill_to, style.to_string()));
         self
     }
 
@@ -166,8 +278,12 @@ impl CanvasPainter {
 /// - The bounds ([`x_bounds`](Self::x_bounds), [`y_bounds`](Self::y_bounds))
 ///   are the world's edges: `x` grows to the right and `y` upwards. They
 ///   default to `0..1`; empty, reversed or infinite bounds draw nothing.
-/// - It is [`height`](Self::height) rows (10 by default) by the width it is
-///   given (or [`width`](Self::width)).
+/// - It fills the height it is given (a `Layout` region, an intuiTUIve
+///   node), or is [`height`](Self::height) rows when that is set, or 10
+///   rows; and it is as wide as the width it is given (or
+///   [`width`](Self::width)).
+/// - [`background`](Self::background) styles the cells nothing drew in,
+///   and goes under what is drawn.
 /// - [`paint`](Self::paint) runs a closure once and records what it draws,
 ///   so the canvas renders the same every time and can be cloned.
 /// - [`Marker::Braille`] (the default) draws 2×4 dots a cell. An ASCII-only
@@ -214,8 +330,9 @@ pub struct Canvas {
     x_bounds: [f64; 2],
     y_bounds: [f64; 2],
     width: Option<usize>,
-    height: usize,
+    height: Option<usize>,
     marker: Marker,
+    background: Option<String>,
     ops: Vec<Op>,
 }
 
@@ -232,8 +349,9 @@ impl Canvas {
             x_bounds: [0.0, 1.0],
             y_bounds: [0.0, 1.0],
             width: None,
-            height: DEFAULT_HEIGHT,
+            height: None,
             marker: Marker::Braille,
+            background: None,
             ops: Vec::new(),
         }
     }
@@ -256,9 +374,18 @@ impl Canvas {
         self
     }
 
-    /// Height in rows (default 10, at most 65535).
+    /// Height in rows (at most 65535), whatever height it is given. Without
+    /// it, the canvas fills the height it is given, or takes 10 rows.
     pub fn height(mut self, rows: usize) -> Self {
-        self.height = rows.min(MAX_SIDE);
+        self.height = Some(rows.min(MAX_SIDE));
+        self
+    }
+
+    /// The style of the cells nothing drew in, and under what is drawn: a
+    /// theme key or a definition. A style with only a foreground colour
+    /// (`"navy_blue"`) is taken as that background (`"on navy_blue"`).
+    pub fn background(mut self, style: impl Into<String>) -> Self {
+        self.background = Some(style.into());
         self
     }
 
@@ -289,11 +416,35 @@ impl Canvas {
             x: self.x_bounds,
             y: self.y_bounds,
             width,
-            height: self.height,
+            height: self
+                .height
+                .or(options.height)
+                .unwrap_or(DEFAULT_HEIGHT)
+                .min(MAX_SIDE),
             marker: self.marker,
             ascii: is_ascii(console, options),
         };
-        raster(&self.ops, &view, console)
+        let mut grid = raster(&self.ops, &view, console);
+        if let Some(style) = self
+            .background
+            .as_deref()
+            .and_then(|spec| spec_style(console, spec))
+        {
+            grid.underlay(&background_style(style));
+        }
+        grid
+    }
+}
+
+/// A background style: one with a foreground colour and no background
+/// colour has the colour moved to the background.
+fn background_style(style: Style) -> Style {
+    match (style.color(), style.bgcolor()) {
+        (Some(colour), None) => {
+            let colour = colour.clone();
+            style.without_color().with_bgcolor(colour)
+        }
+        _ => style,
     }
 }
 
@@ -447,10 +598,16 @@ impl<'a> Styles<'a> {
     }
 }
 
-/// The dots one layer has set: Braille on a [`DotCanvas`], anything else
-/// as a grid of pixels holding the style that last set each.
+/// The dots one layer has set: Braille on a [`DotCanvas`]; quadrants,
+/// sextants and octants as a pattern of dots a cell, with the style that
+/// last set a dot in it; anything else as a grid of pixels holding the
+/// style that last set each.
 enum Pixels {
     Braille(DotCanvas),
+    Pattern {
+        bits: Vec<u8>,
+        styles: Vec<Option<usize>>,
+    },
     Grid(Vec<Option<usize>>),
 }
 
@@ -465,6 +622,10 @@ impl Layer {
     fn new(marker: Marker, width: usize, height: usize) -> Layer {
         let pixels = match marker {
             Marker::Braille => Pixels::Braille(DotCanvas::new(width, height)),
+            Marker::Quadrant | Marker::Sextant | Marker::Octant => Pixels::Pattern {
+                bits: vec![0; width * height],
+                styles: vec![None; width * height],
+            },
             _ => {
                 let (px, py) = marker.per_cell();
                 Pixels::Grid(vec![None; width * px * height * py])
@@ -491,6 +652,12 @@ impl Layer {
         }
         match &mut self.pixels {
             Pixels::Braille(canvas) => canvas.set(x as i64, y as i64, style),
+            Pixels::Pattern { bits, styles } => {
+                let (px, py) = self.marker.per_cell();
+                let cell = (y / py) * self.width + x / px;
+                bits[cell] |= 1 << (x % px + px * (y % py));
+                styles[cell] = Some(style);
+            }
             Pixels::Grid(grid) => grid[y * columns + x] = Some(style),
         }
     }
@@ -517,6 +684,33 @@ impl Layer {
         }
     }
 
+    /// The line from `a` to `b`, and the pixels between it and the level
+    /// `fill` (moved into the bounds), column by column.
+    fn area(&mut self, bounds: &Bounds, a: (f64, f64), b: (f64, f64), fill: f64, style: usize) {
+        if !fill.is_finite() {
+            return self.line(bounds, a, b, style);
+        }
+        let Some((a, b)) = bounds.clip(a, b) else {
+            return;
+        };
+        let (columns, rows) = self.resolution();
+        let fill = fill.clamp(bounds.bottom, bounds.top);
+        let (Some(start), Some(end), Some((_, level))) = (
+            bounds.cell(a, columns, rows),
+            bounds.cell(b, columns, rows),
+            bounds.cell((a.0, fill), columns, rows),
+        ) else {
+            return;
+        };
+        let to_i = |(x, y): (usize, usize)| (x as i64, y as i64);
+        for (x, y) in bresenham(to_i(start), to_i(end)) {
+            let (x, y) = (x as usize, y as usize);
+            for row in y.min(level)..=y.max(level) {
+                self.set((x, row), style);
+            }
+        }
+    }
+
     /// Copy the cells this layer drew in onto `out`.
     fn finish(&self, out: &mut CellGrid, styles: &Styles) {
         let columns = self.resolution().0;
@@ -527,6 +721,13 @@ impl Layer {
                         (c, Some(style)) if canvas.is_set(col, row) => Some((c, styles.get(style))),
                         _ => None,
                     },
+                    (Pixels::Pattern { bits, styles: set }, marker) => {
+                        let i = row * self.width + col;
+                        (bits[i] != 0).then(|| {
+                            let style = set[i].and_then(|s| styles.get(s));
+                            (marker.pattern(bits[i]), style)
+                        })
+                    }
                     (Pixels::Grid(grid), Marker::HalfBlock) => {
                         let upper = grid[2 * row * columns + col];
                         let lower = grid[(2 * row + 1) * columns + col];
@@ -535,6 +736,7 @@ impl Layer {
                     (Pixels::Grid(grid), marker) => grid[row * columns + col].map(|s| {
                         let glyph = match marker {
                             Marker::Block => '█',
+                            Marker::Bar => '▄',
                             Marker::Ascii(c) => c,
                             _ => '•',
                         };
@@ -611,6 +813,18 @@ pub(crate) fn raster(ops: &[Op], view: &View, console: &Console) -> CellGrid {
             Op::Line(a, b, style) => {
                 let style = styles.id(style);
                 layer.line(&bounds, *a, *b, style);
+            }
+            Op::Area(a, b, fill, style) => {
+                let style = styles.id(style);
+                layer.area(&bounds, *a, *b, *fill, style);
+            }
+            Op::Map(resolution, style) => {
+                let style = styles.id(style);
+                for line in resolution.lines() {
+                    for pair in line.windows(2) {
+                        layer.line(&bounds, pair[0], pair[1], style);
+                    }
+                }
             }
             Op::Circle((x, y), radius, style) => {
                 let style = styles.id(style);
@@ -703,6 +917,23 @@ impl CellGrid {
             self.set(row, at, unit, style.clone());
             at += 1;
             i += 1;
+        }
+    }
+
+    /// Put `style` under every cell: empty cells become spaces in it, and
+    /// drawn cells take it under their own.
+    pub(crate) fn underlay(&mut self, style: &Style) {
+        for cell in &mut self.cells {
+            *cell = Some(match cell.take() {
+                None => (" ".to_string(), Some(style.clone())),
+                Some((text, own)) => {
+                    let combined = match own {
+                        Some(own) => style.combine(&own),
+                        None => style.clone(),
+                    };
+                    (text, Some(combined))
+                }
+            });
         }
     }
 
@@ -971,6 +1202,231 @@ mod tests {
         // Points map as ratatui maps them, truncated.
         assert_eq!(out[2], "o  oo");
         assert!(out[0].contains('o') && out[4].contains('o'));
+    }
+
+    #[test]
+    fn every_marker_draws_a_diagonal() {
+        let diagonal = |marker| {
+            let canvas = Canvas::new().width(6).height(3).marker(marker).paint(|p| {
+                p.line(0.0, 0.0, 1.0, 1.0, "");
+            });
+            rows(&canvas, 6)
+        };
+        let expect = |a: &str, b: &str| {
+            vec![
+                format!("    {a}{b}"),
+                format!("  {a}{b}  "),
+                format!("{a}{b}    "),
+            ]
+        };
+        assert_eq!(diagonal(Marker::Braille), expect("⡠", "⠊"));
+        assert_eq!(diagonal(Marker::HalfBlock), expect("▄", "▀"));
+        assert_eq!(diagonal(Marker::Block), expect("█", "█"));
+        assert_eq!(diagonal(Marker::Bar), expect("▄", "▄"));
+        assert_eq!(diagonal(Marker::Quadrant), expect("▄", "▀"));
+        // Sextants: the bottom left and middle right sixths, then the
+        // middle left and top right ones.
+        assert_eq!(diagonal(Marker::Sextant), expect("\u{1FB16}", "\u{1FB05}"));
+        assert_eq!(diagonal(Marker::Octant), expect("\u{1CD51}", "\u{1CD01}"));
+        assert_eq!(diagonal(Marker::Dot), expect("•", "•"));
+        // ASCII consoles: `#` for the block markers.
+        let console = Console::builder()
+            .width(6)
+            .color_system(None)
+            .ascii_only(true)
+            .build();
+        for marker in [
+            Marker::Bar,
+            Marker::Quadrant,
+            Marker::Sextant,
+            Marker::Octant,
+        ] {
+            let canvas = Canvas::new().width(6).height(1).marker(marker).paint(|p| {
+                p.line(0.0, 0.5, 1.0, 0.5, "");
+            });
+            assert_eq!(console.render_export(&canvas), "######\n", "{marker:?}");
+        }
+    }
+
+    #[test]
+    fn pattern_cells_take_the_last_style_drawn_in_them() {
+        let canvas = Canvas::new()
+            .width(1)
+            .height(1)
+            .marker(Marker::Quadrant)
+            .paint(|p| {
+                p.point(0.0, 1.0, "red");
+                p.point(1.0, 0.0, "blue");
+            });
+        let g = grid(&canvas, 1);
+        assert_eq!(g.row_string(0), "▚");
+        assert_eq!(g.style_at(0, 0), Style::parse("blue").ok());
+    }
+
+    /// Whether any cell within a cell of (`col`, `row`) is drawn.
+    fn near(rows: &[String], col: usize, row: usize) -> bool {
+        (row.saturating_sub(1)..=row + 1).any(|r| {
+            rows.get(r).is_some_and(|line| {
+                line.chars()
+                    .enumerate()
+                    .any(|(c, ch)| c + 1 >= col && c <= col + 1 && ch != ' ')
+            })
+        })
+    }
+
+    #[test]
+    fn the_map_lights_known_coasts() {
+        for resolution in [MapResolution::Low, MapResolution::High] {
+            let world = Canvas::new()
+                .x_bounds(-180.0, 180.0)
+                .y_bounds(-90.0, 90.0)
+                .width(80)
+                .height(20)
+                .paint(|p| {
+                    p.map(resolution, "green");
+                });
+            let out = rows(&world, 80);
+            // The cell a longitude and latitude fall in, as the canvas maps
+            // them (2 × 4 dots a cell).
+            let cell = |lon: f64, lat: f64| {
+                let x = ((lon + 180.0) * 159.0 / 360.0) as usize / 2;
+                let y = ((90.0 - lat) * 79.0 / 180.0) as usize / 4;
+                (x, y)
+            };
+            for (place, lon, lat) in [
+                ("Sydney", 151.2, -33.9),
+                ("Perth", 115.9, -31.9),
+                ("Darwin", 130.8, -12.5),
+                ("Cape Town", 18.4, -33.9),
+                ("Lisbon", -9.1, 38.7),
+                ("Rio de Janeiro", -43.2, -22.9),
+                ("San Francisco", -122.4, 37.8),
+            ] {
+                let (x, y) = cell(lon, lat);
+                assert!(near(&out, x, y), "{resolution:?}: {place} at {x}, {y}");
+            }
+            // The open Pacific and the middle of Australia are blank.
+            for (lon, lat) in [(-140.0, -10.0), (-140.0, 20.0), (134.0, -25.0)] {
+                let (x, y) = cell(lon, lat);
+                assert_eq!(
+                    out[y].chars().nth(x),
+                    Some(' '),
+                    "{resolution:?} {lon} {lat}"
+                );
+            }
+            // The map draws in its style.
+            let g = grid(&world, 80);
+            let (x, y) = cell(151.2, -33.9);
+            let drawn = (y - 1..=y + 1)
+                .flat_map(|r| (x - 1..=x + 1).map(move |c| (r, c)))
+                .find(|&(r, c)| g.row_string(r).chars().nth(c) != Some(' '))
+                .unwrap();
+            assert_eq!(g.style_at(drawn.0, drawn.1), Style::parse("green").ok());
+        }
+    }
+
+    #[test]
+    fn a_background_goes_under_everything() {
+        let canvas = Canvas::new()
+            .width(3)
+            .height(1)
+            .marker(Marker::Block)
+            .background("navy_blue")
+            .paint(|p| {
+                p.point(0.0, 0.5, "red");
+            });
+        let g = grid(&canvas, 3);
+        assert_eq!(g.row_string(0), "█  ");
+        assert_eq!(g.style_at(0, 0), Style::parse("red on navy_blue").ok());
+        assert_eq!(g.style_at(0, 1), Style::parse("on navy_blue").ok());
+        // In a styled export, every cell carries the background.
+        let console = Console::builder()
+            .width(3)
+            .force_terminal(true)
+            .color_system(Some(rich::ColorSystem::Standard))
+            .no_color(false)
+            .build();
+        let canvas = canvas.background("on blue");
+        assert_eq!(
+            console.render_export(&canvas),
+            "\u{1b}[31;44m█\u{1b}[0m\u{1b}[44m  \u{1b}[0m\n"
+        );
+    }
+
+    #[test]
+    fn areas_fill_down_to_their_level() {
+        let canvas = Canvas::new()
+            .x_bounds(0.0, 4.0)
+            .y_bounds(0.0, 4.0)
+            .width(5)
+            .height(5)
+            .marker(Marker::Ascii('#'))
+            .paint(|p| {
+                p.area(0.0, 1.0, 4.0, 3.0, 0.0, "");
+            });
+        assert_eq!(
+            rows(&canvas, 5),
+            vec!["     ", "   ##", " ####", "#####", "#####"]
+        );
+        // Above the level the fill goes up to it.
+        let above = Canvas::new()
+            .x_bounds(0.0, 4.0)
+            .y_bounds(0.0, 4.0)
+            .width(5)
+            .height(5)
+            .marker(Marker::Ascii('#'))
+            .paint(|p| {
+                p.area(0.0, 1.0, 4.0, 1.0, 3.0, "");
+            });
+        assert_eq!(
+            rows(&above, 5),
+            vec!["     ", "#####", "#####", "#####", "     "]
+        );
+    }
+
+    #[test]
+    fn custom_shapes_draw_with_the_painter() {
+        struct Square(f64);
+        impl Shape for Square {
+            fn draw(&self, painter: &mut CanvasPainter) {
+                let s = self.0;
+                painter
+                    .rect(-s, -s, 2.0 * s, 2.0 * s, "yellow")
+                    .point(0.0, 0.0, "red");
+            }
+        }
+        let canvas = Canvas::new()
+            .x_bounds(-2.0, 2.0)
+            .y_bounds(-2.0, 2.0)
+            .width(5)
+            .height(5)
+            .marker(Marker::Ascii('o'))
+            .paint(|p| {
+                p.shape(&Square(1.0));
+            });
+        assert_eq!(
+            rows(&canvas, 5),
+            vec!["     ", " ooo ", " ooo ", " ooo ", "     "]
+        );
+        let g = grid(&canvas, 5);
+        assert_eq!(g.style_at(2, 2), Style::parse("red").ok());
+        assert_eq!(g.style_at(1, 1), Style::parse("yellow").ok());
+    }
+
+    #[test]
+    fn a_canvas_fills_the_height_it_is_given() {
+        let console = console(10);
+        let canvas = Canvas::new().paint(|p| {
+            p.line(0.0, 0.0, 1.0, 1.0, "");
+        });
+        let lines = console.render_lines(&canvas, &console.options().update_height(7), false);
+        assert_eq!(lines.len(), 7);
+        assert!(lines.iter().all(|l| !l.is_empty()));
+        // Its own height wins; with neither, ten rows.
+        let short = canvas.clone().height(3);
+        let lines = console.render_lines(&short, &console.options().update_height(7), false);
+        assert_eq!(lines.iter().filter(|l| !l.is_empty()).count(), 3);
+        assert_eq!(console.render_export(&canvas).lines().count(), 10);
     }
 
     #[test]

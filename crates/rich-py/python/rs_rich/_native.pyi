@@ -4263,6 +4263,8 @@ MERMAID_MAX_LINK_LENGTH: int
 ChartCharset = Literal["auto", "blocks", "braille", "ascii"]
 ChartFormat = Union[None, Literal["compact"], int]
 ChartOrientation = Literal["horizontal", "vertical"]
+ChartDirection = Literal["left_to_right", "right_to_left"]
+ChartBars = Union[None, Iterable[Union[ChartBar, Tuple[str, Optional[float]]]], Dict[str, Optional[float]]]
 
 CHART_STYLES: List[Tuple[str, str]]
 
@@ -4281,24 +4283,48 @@ class Sparkline:
         min_max: bool = False,
         threshold: Optional[float] = None,
         format: ChartFormat = None,
+        rows: Optional[int] = None,
+        direction: ChartDirection = "left_to_right",
+        absent: Union[None, str, Tuple[str, Optional[str]]] = None,
+        styles: Optional[Iterable[Optional[str]]] = None,
+        levels: Literal["nine", "three"] = "nine",
     ) -> None: ...
     @property
     def values(self) -> List[float]: ...
 
 class ChartBar:
-    def __init__(self, label: str, value: Optional[float], *, style: Optional[str] = None) -> None: ...
+    def __init__(
+        self,
+        label: str,
+        value: Optional[float],
+        *,
+        style: Optional[str] = None,
+        text: Optional[str] = None,
+        value_style: Optional[str] = None,
+        label_style: Optional[str] = None,
+    ) -> None: ...
     @property
     def label(self) -> str: ...
     @property
     def value(self) -> float: ...
     @property
     def style(self) -> Optional[str]: ...
+    @property
+    def text(self) -> Optional[str]: ...
+
+class BarGroup:
+    """Bars with a label, set apart from the others in a ``BarChart``."""
+    def __init__(self, label: str, bars: ChartBars = None) -> None: ...
+    @property
+    def label(self) -> str: ...
+    def __len__(self) -> int: ...
 
 class BarChart:
     def __init__(
         self,
-        bars: Union[None, Iterable[Union[ChartBar, Tuple[str, Optional[float]]]], Dict[str, Optional[float]]] = None,
+        bars: ChartBars = None,
         *,
+        groups: Optional[Iterable[BarGroup]] = None,
         range: Optional[Tuple[float, float]] = None,
         max: Optional[float] = None,
         charset: ChartCharset = "auto",
@@ -4307,8 +4333,47 @@ class BarChart:
         show_values: bool = True,
         format: ChartFormat = None,
         style: Optional[str] = None,
+        thickness: Optional[int] = None,
+        bar_gap: Optional[int] = None,
+        group_gap: Optional[int] = None,
+        label_style: Optional[str] = None,
+        value_style: Optional[str] = None,
+        values_inside: bool = False,
     ) -> None: ...
     def __len__(self) -> int: ...
+
+class FillGauge:
+    """ratatui's ``Gauge``: a bar that fills its area, the label on the middle row."""
+    def __init__(
+        self,
+        ratio: float,
+        *,
+        label: Optional[str] = None,
+        label_style: Optional[str] = None,
+        style: Optional[str] = None,
+        unicode: bool = False,
+        width: Optional[int] = None,
+        height: Optional[int] = None,
+    ) -> None: ...
+    @property
+    def ratio(self) -> float: ...
+
+class LineGauge:
+    """ratatui's ``LineGauge``: a label and a line in two styles."""
+    def __init__(
+        self,
+        ratio: float,
+        *,
+        label: Optional[str] = None,
+        label_style: Optional[str] = None,
+        filled_style: Optional[str] = None,
+        unfilled_style: Optional[str] = None,
+        line: Literal["thin", "thick", "double"] = "thin",
+        symbols: Optional[Tuple[str, str]] = None,
+        width: Optional[int] = None,
+    ) -> None: ...
+    @property
+    def ratio(self) -> float: ...
 
 class Histogram:
     def __init__(

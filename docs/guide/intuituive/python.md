@@ -347,6 +347,9 @@ counterpart, or a different one:
 - **Traits implemented in Python** other than `Widget`: a `PtyHost` or
   `WebEngine` of your own, and an `Announcer` other than a function
   (`App.announcer(f)`). The Chrome and Browsh engines are off in the wheel.
+- **The calendar's 0.0.19 options:** `CalendarOptions::event`, `events`,
+  `surrounding`, `first_weekday` and the header and day styles, and
+  `month`. `calendar_with` takes `today`, `min` and `max`.
 - **Smaller pieces:** `Widget::hidden_children`, `Widget::claims_key` and
   `MeasureCx::stack_flow` (0.0.19), the cell-level `Screen`
   (`Driver.screen()` gives the rows, `Driver.lines()` the styled

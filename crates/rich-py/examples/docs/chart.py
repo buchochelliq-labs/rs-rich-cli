@@ -14,6 +14,25 @@ def bars(console):
     # --8<-- [end:bars]
 
 
+def ratatui_bars(console):
+    # --8<-- [start:ratatui-bars]
+    console.print(chart.Sparkline([3, 5, 2, 8, 6, 9, 4, 7], rows=3))
+    console.print(chart.Sparkline([3, None, 2, 8, 6, None, 4, 7], direction="right_to_left", absent="·"))
+    console.print(chart.BarChart(groups=[
+        chart.BarGroup("Q1", [("north", 31), chart.ChartBar("south", 18, text="18 (low)")]),
+        chart.BarGroup("Q2", [("north", 27), ("south", 24)]),
+    ], bar_width=16))
+    # --8<-- [end:ratatui-bars]
+
+
+def ratatui_gauges(console):
+    # --8<-- [start:ratatui-gauges]
+    console.print(chart.FillGauge(0.42, height=3, style="green"))
+    console.print(chart.LineGauge(0.42, label="Downloading", line="thick", filled_style="cyan"))
+    console.print(chart.LineGauge(0.8, label="cpu", symbols=("▰", "▱")))
+    # --8<-- [end:ratatui-gauges]
+
+
 def line(console):
     # --8<-- [start:line]
     load = chart.Series("load", [1, 3, 2, 5, 4])
@@ -70,8 +89,10 @@ def timeline(console):
 
 shots = Shots("chart")
 shots.shot("bars", bars, width=40)
+shots.shot("ratatui-bars", ratatui_bars, width=40)
 shots.shot("line", line, width=80)
 shots.shot("gauges", gauges, width=80)
+shots.shot("ratatui-gauges", ratatui_gauges, width=40)
 shots.shot("heatmap", heatmap, width=80)
 shots.shot("kpi", kpi, width=80)
 shots.shot("timeline", timeline, width=80)

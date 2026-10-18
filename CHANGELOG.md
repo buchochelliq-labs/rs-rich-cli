@@ -602,6 +602,67 @@ test.
   hand, effects and theme sections, its Python page, and the rows closed
   in the ratatui comparison.
 
+### Charts, the canvas and colour, after ratatui (ext 0.0.16, intuituive 0.0.4)
+
+0.0.19 gap batch C (see [intuiTUIve against ratatui](docs/design/intuituive-vs-ratatui.md)).
+
+- **Charts fill their node.** A `Chart`, a `Canvas`, vertical bars, a
+  `Sparkline` and a `FillGauge` take the height they are given, as
+  ratatui's widgets fill their area: a `Layout` region, or an intuiTUIve
+  node through `renderable(..)`. Given no height, each draws as before.
+  `Chart::height` and `Canvas::height` still fix it, as `bar_width` does
+  for vertical bars.
+- **Gauges as ratatui draws them.** `FillGauge` fills whole cells (eighths
+  with `unicode(true)`), centres its label and swaps the label's colours
+  where the bar runs under it. `LineGauge` draws a label and a thin, thick
+  or double line (`LineSet`), or two symbols of your own. Both take a
+  ratio or a `percent`. The theme gains `chart.gauge.filled` and
+  `chart.gauge.unfilled`.
+- **Sparklines taller than a row.** `rows(n)` stacks eighths (or Braille
+  dots) over `n` rows. `direction(Direction::RightToLeft)` draws the
+  newest value on the left. `optional(..)` takes absent values, drawn with
+  `absent(symbol, style)`. `styles(..)` colours each value, and
+  `levels(Levels::Three)` draws halves and whole cells only.
+- **Grouped bars.** `BarGroup` holds bars under a label, added with
+  `BarChart::group`. `thickness`, `bar_gap` and `group_gap` set the bars'
+  size and the gaps between them. A `Bar` takes `text` to show in place
+  of its value, and `value_style` and `label_style`; the chart takes both
+  as defaults. `values_inside(true)` writes values on the bars, as
+  ratatui does.
+- **Area charts and styled labels.** `GraphType::Area` fills from a line
+  down (or up) to `Dataset::fill_to`, the bottom of the axis by default.
+  `Labels::Markup` styles axis labels, and `Axis::labels_align` places
+  them, the first x label against the y axis as ratatui does.
+- **The canvas.** `CanvasPainter::map` draws the world's coastlines at
+  `MapResolution::Low` or `High`. They are Natural Earth's public-domain
+  110m and 50m coastlines, simplified by `scripts/world_map.py` to about
+  28 KB in all. New markers are `Bar` (a lower half block), and
+  `Quadrant`, `Sextant` and `Octant`, which draw 2×2, 2×3 and 2×4 dots a
+  cell. `background(style)` colours every cell. `point` draws one dot,
+  `area` a line with the region below it filled, and the `Shape` trait
+  draws shapes of your own.
+- **Colour.** `rich_ext::palette` has the Tailwind CSS and Material Design
+  palettes, as `Color`s, and `hsl`, `hsv`, `oklab` and `okhsv` (Björn
+  Ottosson's Oklab colour space). `blend` and `gradient` mix colours.
+- **Calendars.** `CalendarOptions` takes `event(date, style)` and
+  `events(fn)` to mark days, `surrounding(style)` to show the days of the
+  months either side, and `first_weekday(Weekday::Sunday)`. It also takes
+  `weekday_style`, `month_style` and `day_style`. `month(shown, options)`
+  draws a month that cannot be focused, so a year is a grid of twelve.
+  **Breaking:** `CalendarOptions` is no longer `Copy`, as it holds a
+  function.
+- **Python:** `Sparkline(rows=, direction=, absent=, styles=, levels=)`,
+  `ChartBar(text=, value_style=, label_style=)`, `BarGroup`,
+  `BarChart(groups=, thickness=, bar_gap=, group_gap=, label_style=,
+  value_style=, values_inside=)`, `FillGauge` and `LineGauge` in
+  `rs_rich.chart`. Python has no canvas, xy chart or palette module yet,
+  and the calendar's new options are not bound.
+- **Docs:** the [charts guide](docs/guide/ext/charts.md) gains sections on
+  gauges, taller sparklines, grouped bars, area charts, the map and
+  palettes, with six new screenshots. The Python charts page gains two
+  sections and two pictures. The intuiTUIve guide covers the new calendar
+  options, and the ratatui matrix marks these rows as built.
+
 ### One process per browser session (web 0.0.2)
 
 0.0.19 workstream 3.

@@ -1,0 +1,9 @@
+   [bold]December 2026[/]
+[dim]Mo Tu We Th Fr Sa Su[/]
+   [reverse] 1[/]  2  3  4 [blue] 5[/] [blue] 6[/]
+ 7  8 [bold] 9[/] 10 11 [blue]12[/] [blue]13[/]
+14 15 16 17 18 [blue]19[/] [blue]20[/]
+21 22 23 24 [underline red]25[/] [red]26[/] [blue]27[/]
+28 29 30 31
+
+on 2026-12-01
