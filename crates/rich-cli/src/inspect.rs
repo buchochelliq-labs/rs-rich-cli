@@ -11,6 +11,7 @@ use rich_ext::data::{
     self, DiffView, Explorer, FlatView, Format, Node, Redaction, SearchQuery, SearchResults,
     Selectors, View,
 };
+use rich_ext::table::StyleRules;
 use rich_ext::transform::{HighlightMatches, KeepLines, Pipeline, PipelineError};
 use rich_ext::ExtensionRegistry;
 use std::borrow::Cow;
@@ -405,11 +406,23 @@ impl Renderable for Found {
 }
 
 /// Build `--inspect`'s view of `content`. `read` loads `--compare`'s document.
+#[cfg(test)]
 pub(crate) fn build(
     options: &DataOptions,
     content: &str,
     resource: Option<&str>,
     read: impl FnOnce(&str) -> Result<String, String>,
+) -> Result<Box<dyn Renderable>, String> {
+    build_with(options, content, resource, read, &StyleRules::new())
+}
+
+/// [`build`], with `--style-rule`/`--rules` for `--table`'s records.
+pub(crate) fn build_with(
+    options: &DataOptions,
+    content: &str,
+    resource: Option<&str>,
+    read: impl FnOnce(&str) -> Result<String, String>,
+    rules: &StyleRules,
 ) -> Result<Box<dyn Renderable>, String> {
     let format = options.format.unwrap_or(InputFormat::Auto);
     let (format, node) = parse_document(format, content, resource)?;
@@ -461,7 +474,7 @@ pub(crate) fn build(
         explorer = explorer.highlight(path, style);
     }
     if options.table {
-        explorer = explorer.view(View::Table);
+        explorer = explorer.view(View::Table).style_rules(rules.clone());
     }
     if let Some(depth) = options.max_depth {
         explorer = explorer.max_depth(depth);

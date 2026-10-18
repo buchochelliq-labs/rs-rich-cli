@@ -10,6 +10,7 @@ use rich::{Console, ConsoleOptions, Justify, Overflow, Renderable, Segment, Styl
 use super::table::{cell_text, TableOptions, TableView};
 use super::{quote_str, scalar_text, style, summary, Node, Path, Value, XmlKind};
 use crate::event::flatten as join_lines;
+use crate::table::StyleRules;
 
 // The thin guides of core's `Tree` (upstream `TREE_GUIDES[0]`).
 const SPACE: &str = "    ";
@@ -57,6 +58,7 @@ pub struct Explorer<'a> {
     highlighted: HashMap<Path, Style>,
     root_label: Option<String>,
     view: View,
+    rules: StyleRules,
 }
 
 enum Key<'n> {
@@ -96,6 +98,7 @@ impl<'a> Explorer<'a> {
             highlighted: HashMap::new(),
             root_label: None,
             view: View::Tree,
+            rules: StyleRules::new(),
         }
     }
 
@@ -153,6 +156,13 @@ impl<'a> Explorer<'a> {
     /// Tree or table.
     pub fn view(mut self, view: View) -> Self {
         self.view = view;
+        self
+    }
+
+    /// Conditional styles ([`table::rules`](crate::table::rules)) for the
+    /// table view of records, by header. The tree ignores them.
+    pub fn style_rules(mut self, rules: StyleRules) -> Self {
+        self.rules = rules;
         self
     }
 
@@ -379,6 +389,7 @@ impl<'a> Explorer<'a> {
             };
             return TableView::new(&*self.node)
                 .options(options)
+                .style_rules(self.rules.clone())
                 .to_table(console);
         }
         let mut table = Table::new();

@@ -1,11 +1,14 @@
 //! `rich profile`: a profile of CSV, TSV or JSON Lines (0.0.16 workstream 3,
-//! #343-#346). Not upstream: a binary-boundary convenience that composes
-//! `rs-rich-data`'s `profile`; see `docs/PORTING.md`.
+//! #343-#346; nested JSON Lines paths in 0.0.19, #705). Not upstream: a
+//! binary-boundary convenience that composes `rs-rich-data`'s `profile`; see
+//! `docs/PORTING.md`.
 //!
 //! This file is command routing: choosing the reader (by extension, else by
 //! the first character, as `rich chart` chooses), streaming a file or stdin
 //! into it so a long input is sampled rather than read into memory, and
-//! `--report json`. The profile itself is `rich_data::profile`'s.
+//! `--report json`. The profile itself is `rich_data::profile`'s: JSON Lines
+//! are profiled path by path (`JsonProfiler`) unless `--flat` asks for the
+//! rows of top-level keys.
 use super::*;
 
 use std::io::BufReader;
@@ -23,6 +26,14 @@ pub(crate) struct ProfileOptions {
     columns: Option<Vec<String>>,
     /// `--top N`: the most common values shown per categorical column.
     top: Option<usize>,
+    /// `--depth N`: the deepest JSON path profiled. Parsed by `rich deps`'s
+    /// options, which own the flag, and handed over by
+    /// [`set_depth`](Self::set_depth).
+    depth: Option<usize>,
+    /// `--max-paths N`: the most JSON paths profiled.
+    max_paths: Option<usize>,
+    /// `--flat`: JSON Lines as rows of their top-level keys.
+    flat: bool,
 }
 
 fn count(flag: &str, value: Option<&String>) -> Result<usize, String> {
@@ -42,6 +53,8 @@ impl ProfileOptions {
         match arg {
             "--sample" => self.sample = Some(count(arg, rest.next())?),
             "--top" => self.top = Some(count(arg, rest.next())?),
+            "--max-paths" => self.max_paths = Some(count(arg, rest.next())?),
+            "--flat" => self.flat = true,
             "--columns" => {
                 let value = rest.next().ok_or("--columns requires COLUMN[,COLUMN...]")?;
                 let columns: Vec<String> = value
@@ -66,10 +79,34 @@ impl ProfileOptions {
             ("--sample", self.sample.is_some()),
             ("--columns", self.columns.is_some()),
             ("--top", self.top.is_some()),
+            ("--max-paths", self.max_paths.is_some()),
+            ("--flat", self.flat),
         ]
         .into_iter()
         .filter(|(_, given)| *given)
         .map(|(flag, _)| (flag, &["profile"][..]))
+        .collect()
+    }
+
+    /// `--depth N` for `rich profile`, which `rich deps`'s options parsed.
+    pub(crate) fn set_depth(&mut self, depth: usize) -> Result<(), String> {
+        if depth == 0 {
+            return Err("--depth requires a positive integer".into());
+        }
+        self.depth = Some(depth);
+        Ok(())
+    }
+
+    /// The JSON Lines options given (`--depth`, `--max-paths`, `--flat`),
+    /// which CSV has no use for.
+    fn json_only(&self) -> Vec<&'static str> {
+        [
+            ("--depth", self.depth.is_some()),
+            ("--max-paths", self.max_paths.is_some()),
+            ("--flat", self.flat),
+        ]
+        .into_iter()
+        .filter_map(|(flag, given)| given.then_some(flag))
         .collect()
     }
 
@@ -79,6 +116,8 @@ impl ProfileOptions {
             sample: self.sample.unwrap_or(defaults.sample),
             top: self.top.unwrap_or(defaults.top),
             columns: self.columns.clone(),
+            depth: self.depth.unwrap_or(defaults.depth),
+            max_paths: self.max_paths.unwrap_or(defaults.max_paths),
             ..defaults
         }
     }
@@ -161,7 +200,35 @@ pub(crate) fn profile(cli: &Cli) -> Result<Profile, Failure> {
     };
     let data_error = |err: rich_data::DataError| (ExitClass::Data, format!("{name}: {err}"));
     let options = cli.profile.data_options();
+    if matches!(format, Format::Csv(_)) {
+        let flags = cli.profile.json_only();
+        if !flags.is_empty() {
+            return Err((
+                ExitClass::Usage,
+                format!(
+                    "{} only {} JSON Lines; {name} is read as CSV",
+                    flags.join(", "),
+                    if flags.len() == 1 { "applies to" } else { "apply to" }
+                ),
+            ));
+        }
+    }
     let profile = match format {
+        // Path by path: nested objects and arrays, presence and type mixes;
+        // a line that is not JSON is counted, not fatal.
+        Format::JsonLines if !cli.profile.flat => {
+            let profile = Profile::from_json_lines(reader, options).map_err(data_error)?;
+            if profile.rows() == 0 && profile.malformed() > 0 {
+                return Err((
+                    ExitClass::Data,
+                    format!(
+                        "{name}: no records to profile ({})",
+                        profile.notes().last().map(String::as_str).unwrap_or_default()
+                    ),
+                ));
+            }
+            profile
+        }
         Format::JsonLines => {
             let mut source = jsonl::source(reader).map_err(data_error)?;
             let mut profile = run(name, &mut source, options)?;
@@ -201,7 +268,14 @@ pub(crate) fn profile(cli: &Cli) -> Result<Profile, Failure> {
     if profile.columns().is_empty() && cli.profile.columns.is_none() {
         return Err((ExitClass::Data, format!("{name}: no rows to profile")));
     }
-    Ok(profile.with_name(controls::shown(name)))
+    // `--style-rule` and `--rules`, by the table's headings.
+    let rules = cli.rules.rules();
+    if !rules.is_empty() {
+        cli.rules.warn_unresolved(profile.table_headers(), cli.report_format == ReportFormat::Json);
+    }
+    Ok(profile
+        .with_name(controls::shown(name))
+        .style_rules(rules.clone()))
 }
 
 /// The most leading whitespace read while looking for the first character
