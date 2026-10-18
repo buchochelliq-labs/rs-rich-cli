@@ -127,13 +127,13 @@ pub use reactive::{memo, signal, viewport, watch, Memo, Proxy, Signal};
 pub use rich::Overflow;
 pub use rule::rule;
 pub use sheet::{SheetError, Stylesheet};
+pub use solver::Solver;
+pub use task::{latest, resource, spawn, spawn_future, Latest, Load, Resource, Task};
+pub use text_area::Caret;
 #[cfg(feature = "watch")]
 pub use watch::{
     watch_path, watch_path_with, ChangeKind, PathChange, PathEvent, PathWatch, WatchOptions,
 };
-pub use solver::Solver;
-pub use task::{latest, resource, spawn, spawn_future, Latest, Load, Resource, Task};
-pub use text_area::Caret;
 pub use widget::{widget, Widget};
 pub use widgets::text_area;
 

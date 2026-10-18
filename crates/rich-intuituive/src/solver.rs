@@ -32,9 +32,10 @@ pub enum Solver {
     /// [`Size::Ratio`] `Ratio`, [`Size::Flex`] `Fill`, [`Size::Auto`] a
     /// `Length` of the content; a minimum or maximum is a `Min` or `Max`
     /// over it. Not for wrapping stacks, which keep the native solver.
-    /// Where the answer is not unique (fixed lengths that do not fit
-    /// between spaced-out ends), ratatui's own changes from run to run, and
-    /// this one may differ from it.
+    /// Where the answer is not unique (fixed lengths against equal spacers,
+    /// or that do not fit), which one the solver finds follows a hash order
+    /// that changes from run to run, as ratatui's does: the cells can then
+    /// land a column apart between runs.
     Ratatui,
     /// [`Ratatui`](Self::Ratatui) with `Flex::Legacy`, ratatui's default
     /// for a `Layout`: the last child takes what is left over.
