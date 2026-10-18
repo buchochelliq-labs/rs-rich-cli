@@ -36,9 +36,9 @@ What round 1 of rebuilding Yazi (`examples/files.rs`) and scope-tui
   child, so the content's own bindings run.
 - **The palette** shows the keys of a binding with a long description (an
   `esc` binding's keys were dropped): the description is cut instead
-  (interact). `rich_interact::keymap::Binding::sequence` and
-  `Binding::sequence`/`Command::sequence` fields show keys pressed one
-  after another as `g g`; keymaps do not look them up (interact).
+  (interact). `rich_interact::keymap::Binding::sequence(..)`, and a
+  `sequence` field on `Binding` and `overlay::Command`, show keys pressed
+  one after another as `g g`; keymaps do not look them up (interact).
 - **`popup.title`:** a modal's or pop-up's panel title is drawn in the
   theme's `popup.title`, else its `title` (so nothing changes unless a
   theme sets it).
