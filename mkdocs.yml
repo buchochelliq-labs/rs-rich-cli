@@ -223,3 +223,4 @@ nav:
       - "Design: intuiTUIve widgets": design/intuituive-widgets.md
       - "Design: intuiTUIve against ratatui": design/intuituive-vs-ratatui.md
       - "Design: what the intuiTUIve demos are missing": design/intuituive-demo-gaps.md
+      - "Design: a playground in the docs": design/docs-playground.md
