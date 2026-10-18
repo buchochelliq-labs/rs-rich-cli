@@ -3529,6 +3529,58 @@ class StreamingTable:
     @window.setter
     def window(self, value: Any) -> None: ...
 
+StyleRuleOp = Literal[
+    "eq", "ne", "lt", "le", "gt", "ge", "contains", "starts_with", "ends_with", "empty",
+    "not_empty", "==", "!=", "<", "<=", ">", ">=",
+]
+StyleRuleTarget = Literal["cell", "row", "column"]
+
+class StyleRule:
+    def __init__(
+        self,
+        column: Union[str, int],
+        op: StyleRuleOp = "eq",
+        value: Union[None, int, float, str, Text] = None,
+        style: Optional[Union[str, Style]] = None,
+        *,
+        target: StyleRuleTarget = "cell",
+    ) -> None: ...
+    @staticmethod
+    def parse(spec: str) -> "StyleRule": ...
+    @staticmethod
+    def when(
+        column: Union[str, int],
+        predicate: Callable[[Any], bool],
+        style: Union[str, Style],
+        *,
+        target: StyleRuleTarget = "cell",
+    ) -> "StyleRule": ...
+    @property
+    def column(self) -> Union[str, int]: ...
+    @property
+    def op(self) -> Optional[str]: ...
+    @property
+    def value(self) -> Any: ...
+    @property
+    def style(self) -> str: ...
+    @property
+    def target(self) -> StyleRuleTarget: ...
+    @property
+    def spec(self) -> Optional[str]: ...
+    def matches(self, value: Any) -> bool: ...
+
+class StyleRules:
+    def __init__(self, rules: Optional[StyleRulesArg] = None) -> None: ...
+    @staticmethod
+    def from_toml(text: str) -> "StyleRules": ...
+    def add(self, rule: StyleRulesArg) -> "StyleRules": ...
+    @property
+    def rules(self) -> List[StyleRule]: ...
+    def __len__(self) -> int: ...
+    def __iter__(self) -> Iterator[StyleRule]: ...
+
+StyleRulesArg = Union[StyleRules, StyleRule, str, Iterable[Union[StyleRule, str]]]
+
 class StructuredEvent:
     def __init__(self, message: Any, *, markup: Any = ..., fields: Any = ..., field_order: Any = ..., hide_fields: Any = ..., view: Any = ..., overflow: Any = ..., timestamp: Any = ..., severity: Any = ..., target: Any = ..., module: Any = ..., path: Any = ..., line: Any = ..., column: Any = ..., thread: Any = ..., task: Any = ..., correlation_id: Any = ..., spans: Any = ..., span_event: Any = ..., elapsed: Any = ..., diagnostics: Any = ...) -> None: ...
     def add_diagnostic(self, diagnostic: Any) -> Any: ...
@@ -3561,7 +3613,7 @@ class SummaryItem:
     def state(self) -> Any: ...
 
 class TableData:
-    def __init__(self, columns: Any, rows: Any = ..., *, sort: Any = ..., group_by: Any = ..., totals: Any = ..., totals_label: Any = ..., title: Any = ..., caption: Any = ..., box: Any = ..., show_edge: Any = ..., expand: Any = ..., border_style: Any = ...) -> None: ...
+    def __init__(self, columns: Any, rows: Any = ..., *, sort: Any = ..., group_by: Any = ..., totals: Any = ..., totals_label: Any = ..., title: Any = ..., caption: Any = ..., box: Any = ..., show_edge: Any = ..., expand: Any = ..., border_style: Any = ..., rules: Optional[StyleRulesArg] = None) -> None: ...
     def __len__(self, /) -> int: ...
     def extend(self, rows: Any) -> Any: ...
     @property
@@ -3571,6 +3623,7 @@ class TableData:
     @property
     def rows(self) -> Any: ...
     def sort_by(self, keys: Any) -> Any: ...
+    def style_rules(self, rules: StyleRulesArg) -> "TableData": ...
 
 class TableGroup:
     def __init__(self, group_by: Any) -> None: ...
@@ -3583,7 +3636,7 @@ class TableSort:
     def apply(self, data: Any) -> Any: ...
 
 class TableView:
-    def __init__(self, data: Any, *, columns: Any = ..., headers: Any = ..., justify: Any = ..., title: Any = ..., max_rows: Any = ..., max_string: Any = ...) -> None: ...
+    def __init__(self, data: Any, *, columns: Any = ..., headers: Any = ..., justify: Any = ..., title: Any = ..., max_rows: Any = ..., max_string: Any = ..., rules: Optional[StyleRulesArg] = None) -> None: ...
 
 class TaskTree:
     def __init__(self, title: Any = ..., *, clock: Any = ..., collapse_finished: Any = ..., show_durations: Any = ..., symbols: Any = ..., animate: Any = ..., policy: Any = ...) -> None: ...
@@ -4652,6 +4705,77 @@ class Timeline:
     @property
     def rows(self) -> List[str]: ...
 
+ChartSummary = Dict[str, Optional[float]]
+
+def chart_quantile(values: Iterable[Optional[float]], q: float) -> Optional[float]: ...
+def chart_summary(values: Iterable[Optional[float]]) -> ChartSummary: ...
+def chart_describe(chart: Any, width: int = 80) -> str: ...
+
+class Distribution:
+    def __init__(
+        self,
+        values: Iterable[Optional[float]],
+        *,
+        label: Optional[str] = None,
+        range: Optional[Tuple[float, float]] = None,
+        strip_width: Optional[int] = None,
+        format: ChartFormat = None,
+        unit: Optional[str] = None,
+        charset: ChartCharset = "auto",
+        style: Optional[str] = None,
+        numbers: bool = True,
+    ) -> None: ...
+    @property
+    def summary(self) -> ChartSummary: ...
+    @property
+    def values(self) -> List[float]: ...
+    @property
+    def label(self) -> str: ...
+    def quantile(self, q: float) -> Optional[float]: ...
+
+class DistributionSet:
+    def __init__(
+        self,
+        distributions: Union[
+            None,
+            Iterable[Union[Distribution, Tuple[str, Iterable[Optional[float]]]]],
+            Dict[str, Iterable[Optional[float]]],
+        ] = None,
+        *,
+        range: Optional[Tuple[float, float]] = None,
+        strip_width: Optional[int] = None,
+        numbers: bool = True,
+        charset: ChartCharset = "auto",
+        shared_scale: bool = True,
+    ) -> None: ...
+    @property
+    def scale(self) -> Tuple[float, float]: ...
+    @property
+    def labels(self) -> List[str]: ...
+
+class SmallMultiples:
+    def __init__(
+        self,
+        items: Union[
+            Iterable[Tuple[str, Union[Sparkline, BarChart, LineChart]]],
+            Dict[str, Union[Sparkline, BarChart, LineChart]],
+        ],
+        *,
+        columns: Optional[int] = None,
+        min_cell_width: int = 24,
+        gap: int = 2,
+        shared_scale: bool = True,
+        range: Optional[Tuple[float, float]] = None,
+        height: Optional[int] = None,
+        note: bool = True,
+        charset: ChartCharset = "auto",
+    ) -> None: ...
+    def columns_at(self, width: int) -> int: ...
+    @property
+    def scale(self) -> Optional[Tuple[float, float]]: ...
+    @property
+    def titles(self) -> List[str]: ...
+
 # --- area: diagram (rs-rich-diagram) ---
 
 # ``rs_rich.diagram``: a ``Graph`` built in code, drawn by ``Diagram`` or
@@ -4903,6 +5027,9 @@ class Profile:
         buckets: int = 20,
         columns: Optional[Iterable[str]] = None,
         nulls: Optional[Iterable[str]] = None,
+        flat: bool = False,
+        depth: int = 4,
+        max_paths: int = 200,
     ) -> "Profile": ...
     @staticmethod
     def from_text(
@@ -4916,7 +5043,34 @@ class Profile:
         buckets: int = 20,
         columns: Optional[Iterable[str]] = None,
         nulls: Optional[Iterable[str]] = None,
+        flat: bool = False,
+        depth: int = 4,
+        max_paths: int = 200,
     ) -> "Profile": ...
+    @staticmethod
+    def from_records(
+        records: Iterable[Any],
+        *,
+        name: Optional[str] = None,
+        sample: int = 10000,
+        top: int = 5,
+        bins: int = 10,
+        buckets: int = 20,
+        columns: Optional[Iterable[str]] = None,
+        depth: int = 4,
+        max_paths: int = 200,
+    ) -> "Profile": ...
+    def style_rules(self, rules: StyleRulesArg) -> "Profile": ...
+    @property
+    def table_headers(self) -> List[str]: ...
+    @property
+    def is_nested(self) -> bool: ...
+    @property
+    def paths(self) -> Optional[Dict[str, Any]]: ...
+    @property
+    def malformed(self) -> int: ...
+    @property
+    def malformed_lines(self) -> List[int]: ...
     @property
     def name(self) -> Optional[str]: ...
     @property
@@ -5020,14 +5174,22 @@ class VirtualTable:
         max_column_width: int = 40,
         fit_window: bool = False,
         title: Optional[str] = None,
+        column_offset: int = 0,
+        visible_columns: Optional[int] = None,
+        fit_columns: bool = False,
+        frozen_columns: int = 0,
     ) -> None: ...
     offset: int
     height: int
+    column_offset: int
     @property
     def row_count(self) -> int: ...
     @property
     def max_offset(self) -> int: ...
     def scroll_by(self, rows: int) -> None: ...
+    def scroll_columns_by(self, columns: int) -> None: ...
+    def shown_columns(self, width: int = 80) -> List[int]: ...
+    def column_position(self, width: int = 80, *, ascii: bool = False) -> Optional[str]: ...
     def window(self) -> Tuple[int, int]: ...
     def position(self, *, ascii: bool = False) -> str: ...
 
@@ -5190,8 +5352,9 @@ class MicroError(Exception):
     """A micro asset, package or lookup was rejected."""
 
 class MicroAsset:
-    """An emoji-sized image or animation; renders as exactly its cells."""
-    def __init__(self, name: str, alt: str, *, emoji: Optional[str] = None, text: Optional[str] = None, size: Literal["2x1", "1x1"] = "2x1") -> None: ...
+    """An emoji-sized image or animation; renders as exactly its cells (both
+    rows of a two-row asset)."""
+    def __init__(self, name: str, alt: str, *, emoji: Optional[str] = None, text: Optional[str] = None, size: str = "2x1") -> None: ...
     @property
     def name(self) -> str: ...
     @property
@@ -5200,6 +5363,8 @@ class MicroAsset:
     def size(self) -> str: ...
     @property
     def cols(self) -> int: ...
+    @property
+    def rows(self) -> int: ...
     @property
     def kind(self) -> Literal["static", "animated"]: ...
     @property
@@ -5251,7 +5416,7 @@ def micro_create_package(
     alt: str,
     emoji: Optional[str] = None,
     text: Optional[str] = None,
-    size: Literal["2x1", "1x1"] = "2x1",
+    size: str = "2x1",
     fit: Literal["contain", "cover", "stretch"] = "contain",
     contrast: float = 1.0,
     brightness: float = 1.0,

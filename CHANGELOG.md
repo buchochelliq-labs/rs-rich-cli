@@ -857,6 +857,176 @@ test.
 - **Docs:** [ratatui's examples, rebuilt](docs/guide/intuituive/ratatui-examples.md),
   a new guide page; ratatui in the porting guide's credits;
   `docs/tapes/demo.tape` and `docs/tapes/demo2.tape` (not yet recorded).
+- **`widgets`, a widget gallery** (demo batch D2). `examples/widgets.rs`
+  rebuilds ratatui's widget examples, a tab each: blocks, text with a
+  masked secret and a link, lists (one bottom to top), a table and
+  ratatui's table app, tabs, scrollbars, a calendar, a pop-up over four
+  shadows, collapsed borders and buttons drawn by hand. The mouse picks
+  tabs, items, rows, panes and buttons.
+- **`charts`, a chart gallery.** `examples/charts.rs` rebuilds ratatui's
+  gauge, sparkline, bar, grouped bar, chart and canvas examples and its
+  `gauge`, `weather` and `chart` apps on rs-rich-ext's charts. A tick
+  draws only what moves, and `--frozen` stops the clock.
+- **`layout`, a layout explorer.** `examples/layout.rs` rebuilds
+  `constraint-explorer`, `constraints` and `flex`: a row of blocks you
+  edit, drawn in every `Justify` mode with its spacers; each kind of size
+  in real nodes; and `align_items` and wrapping, which ratatui lacks.
+- **Docs:** the galleries' section of the guide page, README rows, and
+  `docs/tapes/widgets.tape`, `charts.tape` and `layout.tape` (not yet
+  recorded).
+
+### Charts that read aloud, distributions and small multiples; wide tables by column (ext 0.0.16)
+
+0.0.19 workstream 14 (#726, #702).
+
+- **Charts read aloud.** Every chart implements `a11y::AccessibleText`:
+  sparklines, bars and their groups, histograms, line, scatter and area
+  charts, gauges, heatmaps, status matrices, KPI cards, timelines and the
+  canvas. Each says what it is, its axes' ranges and its key values, in a
+  few lines of plain words: `Sparkline, 24 values: min 12, max 52, last
+  14, trend up`, `Gauge cpu: 72%, 72 percent of 0% to 100%, band high`. A
+  trend is the least-squares line through the values: up or down when it
+  moves by a tenth of their range, flat otherwise. The text is the same at
+  any width, on any console.
+- **In an intuiTUIve app** (intuituive 0.0.4), `described(move || ..)`
+  draws a chart as `renderable(..)` does, and names it by that text. The
+  accessibility tree, linear mode and a screen reader read the
+  description, and read it again when the data changes.
+- **Distributions.** `Distribution` sums values up on one line: a
+  box-and-whisker strip, then the count, `min`, `p25`, `p50`, `p75`,
+  `p95`, `max` and `mean`. NaN and infinite values are left out and
+  counted. Quantiles are numpy's default, linear interpolation;
+  `Summary::of` and `quantile` give them without drawing.
+  `DistributionSet` stacks several on one scale, their numbers in columns.
+- **Small multiples.** `SmallMultiples` lays charts out in a grid, each
+  under its title, fitted to the width: one column at 40 cells, three at
+  80, four at 120, or `columns(n)`. Sparklines, bar charts, line charts and
+  `Chart`s (a `Facet` each) share one value scale. A note under the grid
+  says the scale and holds the one legend. The theme gains `chart.title`.
+- **Wide tables by column.** `VirtualTable` gets a window of columns as
+  well as rows: `column_offset`, `visible_columns` or `fit_columns`, and
+  `frozen_columns` kept on the left. Only the columns shown are fetched,
+  sampled and laid out, through the new `VirtualRows::rows_columns`. Its
+  default picks cells from `rows`, so existing sources keep working. The
+  position line adds `columns 42–51 of 2,000`, and `scroll_columns_by`
+  moves the window across. `FnCells` makes each cell on demand. A
+  120-column window of 2,000 columns by 100,000 rows renders in about
+  20 ms in release, its width sample included (an ignored test times it).
+- **Explicit bar sizes are kept.** A vertical `BarChart` with an explicit
+  `thickness`, `bar_gap` or `group_gap` keeps them when the bars do not
+  all fit, as ratatui does. It draws as many whole bars as fit, from the
+  first, and leaves the rest off: 24 bars 3 cells thick and 2 apart show
+  the first 8 in 40 cells. Before, they were squeezed to one cell with no
+  gap. Charts that set neither squeeze as before.
+- **Python:** `Distribution`, `DistributionSet`, `SmallMultiples`,
+  `quantile`, `summary` and `describe` in `rs_rich.chart`.
+  `rs_rich.ext.a11y.accessible_text` reads charts too. `data.VirtualTable`
+  takes `column_offset`, `visible_columns`, `fit_columns` and
+  `frozen_columns`, with `scroll_columns_by`, `shown_columns` and
+  `column_position`.
+- **Docs:** the [charts guide](docs/guide/ext/charts.md) gains sections on
+  distributions, small multiples and accessible text, with three new
+  screenshots. The [tables guide](docs/guide/ext/tables.md) covers the
+  column window. The Python charts page gains three sections and two
+  pictures.
+
+### Nested JSON Lines profiles and style rules everywhere (data 0.0.3, ext 0.0.16, cli 0.0.19)
+
+0.0.19 workstream 15 (#705, #701).
+
+- **Nested paths:** `rich profile` profiles JSON Lines path by path. Each key
+  of a nested object is a path (`user.plan`), an array's items are
+  `tags[]`, and a key of the objects in an array is `items[].sku`. A key
+  holding `.`, `[`, `]`, a quote or a control character is written as a
+  JSON string in brackets: `["http.status"]`. `--depth N` (4) bounds the
+  steps and `--max-paths N` (200) the paths; the paths past the cap are
+  named in a note and a last table row.
+- **Presence and types:** each path counts the records that lack it apart
+  from an explicit `null`, and the JSON types its values had. The table
+  shows the mix (`str 89% · null 11%`) and the absent records, and marks a
+  path of more than one type with `!`.
+- **Malformed lines** are counted and skipped, with their line numbers in a
+  note, rather than ending the profile.
+- **`--report json`** adds `paths`, `malformed`, `malformed_lines`, and per
+  path `present`, `absent`, `values`, `types` and `mixed`. Every key of a
+  flat profile is kept.
+- **Migration:** JSON Lines are now profiled path by path by default.
+  `--flat` gives the 0.0.16 output, rows of the top-level keys, and still
+  stops at a line that is not JSON. CSV and TSV are unchanged. `--depth` is
+  shared with `rich deps`.
+- **`rs-rich-data`:** `JsonProfiler`, `Profile::from_json_lines`,
+  `TypeCounts`, `PathSummary` and `path_key`; `ProfileOptions` gains `depth`
+  and `max_paths`, and `ColumnProfile` gains the presence and type fields.
+  Time is linear in the input and memory is bounded by the paths and their
+  samples.
+- **Style rules from the command line:** `--style-rule 'latency>500:bold
+  red'` styles a cell, and `--style-rule 'status=failed:row:on red'` a row.
+  The grammar maps one to one onto `StyleRule`: a symbol (`==`, `!=`, `<`,
+  `<=`, `>`, `>=`, `*=`, `^=`, `$=`) or a comparison word, an optional
+  target, and quotes for a value that holds `:` or must stay text. `--rules
+  FILE` reads `[[rules]]` tables. Rules apply to `--csv` tables, `rich
+  profile`'s table and `rich inspect --table`, and nowhere else.
+- **Rules in config profiles:** `[[defaults.rules]]` and
+  `[[profiles.NAME.rules]]` hold rules. They add up: the defaults', then the
+  profile's, then the command line's.
+- **Clear errors:** a bad rule is a usage error that names it and says what
+  is wrong. A rule for a column the table lacks is a warning.
+- **`rs-rich-ext`:** `StyleRule::parse`, `to_spec` and `Display`,
+  `Comparison::name` and `symbol`, `Target::name`, and `style_rules` on
+  `data::TableView` and `data::Explorer`.
+- **Python:** `rs_rich.ext.table.StyleRule` and `StyleRules` (with `parse`,
+  `when` for a Python predicate, and `from_toml`), a `rules` argument on
+  `TableData` and `TableView`, and `Profile.style_rules`. `Profile.from_path`
+  and `from_text` profile JSON Lines path by path (`flat=True` for rows), and
+  `Profile.from_records` profiles Python records. Python can now use
+  conditional table styles, which 0.0.16 listed as missing.
+- **Docs:** [Style cells by value](docs/cli.md#style-cells-by-value-0019)
+  and [Nested JSON Lines](docs/cli.md#nested-json-lines-0019) in the CLI
+  guide, the [data guide](docs/guide/data/index.md#conditional-styles), the
+  [Python tables page](docs/python/ext/tables.md#conditional-styles), and
+  `docs/tapes/profile-nested.tape` (not yet recorded).
+
+### Micro assets over two rows (micro 0.0.5)
+
+0.0.19 workstream 17 (#711).
+
+- **Two-row sizes.** A micro asset may now be any size up to 4×2 cells: 1
+  to 4 columns and 1 or 2 rows, such as a 2×2 icon or a 3×2 animation.
+  Anything larger is refused with an error that names the limit. The
+  manifest's `size` field takes the new values (`"2x2"`,
+  `{"cols": 3, "rows": 2}`); nothing else in the format changes, and old
+  packages load as before. A package with no `size` is 2×1, whatever its
+  image's shape: the size is never guessed.
+- **Rows reserved in any layout.** `MicroRows` (and `reserve_rows` for
+  rendered segments) adds a row below each line that holds a two-row
+  asset. The row is blank but for the asset's second row; the text beside
+  the asset stays on the first row, and the next line moves down, so
+  nothing is drawn over it. A table row or a panel grows to hold it, and
+  `MicroAssetRef` reserves its own rows. The output depends only on the
+  input, at every width.
+- **Drawn over both rows.** Kitty prints two rows of Unicode placeholders
+  for one image. iTerm2 and Sixel draw one image of the whole box from the
+  second row, moving the cursor up a row and back; Sixel's is twice the
+  cell height in pixels. Half-blocks draw two pixel rows a cell row. The
+  fallback is the emoji or text on the first row with a blank row below.
+  Animations play as one-row ones do. Where the second row was not
+  reserved (a bare `Text`, Markdown, a title), only the first row's
+  fallback shows.
+- **The tag carries the row.** The second row's cells are tagged
+  `[name, cols, rows, id, 1]`; `MicroMeta` has a `row` field and
+  `with_row`, and `fallback_row` gives any row's fallback. A placeholder is
+  never drawn at a size other than its asset's.
+- **Built-in library:** `fun/trophy` (2×2) and `fun/campfire` (3×2,
+  animated), drawn for this project.
+- **`rich micro`:** `create --size` takes the new sizes and refuses
+  `2x3`. `list`, `show` and `preview` give a two-row asset its row, and so
+  does `rich -p --emoji` text.
+- **Python:** `MicroAsset` takes the new sizes and has `rows`, and
+  `MicroMarkup` reserves the row below a two-row asset.
+- **Docs:** [Two rows](docs/guide/micro/index.md#two-rows) in the micro
+  assets guide, with a captured example; the authoring, terminals, CLI and
+  library pages; the CLI reference regenerated; and
+  `docs/tapes/micro-rows.tape` (not yet recorded).
 
 ### One process per browser session (web 0.0.2)
 

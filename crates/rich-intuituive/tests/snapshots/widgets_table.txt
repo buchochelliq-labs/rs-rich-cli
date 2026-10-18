@@ -1,0 +1,24 @@
+ Block  Text  List  Table  Tabs  Scrollbar  Calendar  Popup  Borders  Custom
+╭─ Table ──────────────────────────────────────────────────────────────────────╮
+│   Dish                                   Course                Price     Time│
+│                                                                              │
+│   Lentil soup                            Starter                6.50   20 min│
+│   Beetroot salad                         Starter                7.00   15 min│
+│🍴 Mushroom risotto                       Main                  14.00   35 min│
+│   Fish pie                               Main                  16.50   45 min│
+│   Chickpea curry                         Main                  13.00   30 min│
+│   Apple crumble                          Dessert                6.00   40 min│
+│   Lemon tart                             Dessert                6.50   25 min│
+│   Cheese board                           Dessert                9.00    5 min│
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│   8 dishes                                                     78.50         │
+╰─ ↑/↓ row · ←/→ cell · v the table app ───────────────────────────────────────╯
+←/→ or 1-9, 0 tabs · ? keys · Ctrl+P commands · q quit

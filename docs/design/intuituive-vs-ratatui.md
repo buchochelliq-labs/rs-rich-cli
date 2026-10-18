@@ -1405,6 +1405,24 @@ build differs from the sketch below:
 
 #### D2.1 `widgets`: a widget gallery
 
+**Status: built** (0.0.19, `examples/widgets.rs`). Where the build differs
+from the sketch below:
+
+- Ten tabs: 1 to 9 and 0 pick them. On the Table tab ←/→ move the cell
+  cursor, so the numbers and clicks change tabs from there; on Borders,
+  ↑/↓, Tab and clicks pick the pane, since ←/→ change tabs.
+- The Tabs tab's inner strip is one selection in four looks, moved by n
+  and p or a click; it takes no focus, so ←/→ still change tabs.
+- A tab whose widgets take no focus (Text, Tabs, Scrollbar, Calendar,
+  Popup) is focusable itself: a node's bindings run only while the focus
+  is on it or inside it.
+- The buttons look pressed while the mouse holds them; Enter and Space
+  count a press without the pressed look, as a terminal reports no key
+  release without the kitty protocol.
+- The tests are in `tests/widgets_gallery.rs`: `tests/widgets.rs` tests
+  the `Widget` trait.
+- The dishes, the people, the chat, the recipe and the events are our own.
+
 - **Mirrors** ratatui-widgets' examples, one tab each; 1 to 9, ←/→ and
   clicks move between them.
 - **Block:** bordered; styled bold italic blue on black; a rounded red border
@@ -1442,6 +1460,22 @@ build differs from the sketch below:
 
 #### D2.2 `charts`: a chart gallery
 
+**Status: built** (0.0.19, `examples/charts.rs`). Where the build differs
+from the sketch below:
+
+- The gauges fill at their own speeds; `--frozen` stops them at 42 ticks,
+  the first at 42%. The "ASCII" gauge is whole cells (`unicode(false)`):
+  `FillGauge` has no charset of its own.
+- The Sparkline tab has the first sparkline's values as bars beside the
+  three sparklines.
+- The `chart` app's bar chart is a dataset drawn as `GraphType::Bar`.
+- The grouped vertical bars are three cells thick, too narrow for the
+  companies' names: the colours and a legend say which is which, and the
+  values sit inside the bars. rs-rich-ext's grouped vertical `BarChart`
+  showed no values over the bars at this size.
+- Space stops and starts the clock.
+- The revenue, the commits and the weather are our own.
+
 - **Gauge:** ratatui's `gauge` app: four `FillGauge`s (a percentage, a ratio
   with a custom label, ASCII, unicode), animated; and the `line-gauge`
   example's three looks.
@@ -1464,6 +1498,19 @@ build differs from the sketch below:
     - `charts_canvas`.
 
 #### D2.3 `layout`: a layout explorer
+
+**Status: built** (0.0.19, `examples/layout.rs`). Where the build differs
+from the sketch below:
+
+- Tab and Shift+Tab change tabs, since ←/→ and 1 to 6 belong to the
+  explorer.
+- A ratio block is `Size::Ratio(n, 4)`; min and max are a flexible track
+  with `.min(n)` or `.max(n)`, as ratatui's `Min` and `Max` grow.
+- The explorer draws its rows itself, from `split_with_spacers`; the
+  Sizes and Flex tabs are rows of real nodes, each showing the width it
+  got.
+- The tests are in `tests/layout_explorer.rs`: `tests/layout.rs` tests the
+  layout itself.
 
 - **Mirrors** ratatui's `constraint-explorer`, `constraints` and `flex`.
 - **Explorer:**

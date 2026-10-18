@@ -1,0 +1,24 @@
+ Block  Text  List  Table  Tabs  Scrollbar  Calendar  Popup  Borders  Custom
+╭─ Table app · emerald ────────────────────────────────────────────────────────╮
+│   Name               Address            Email                                │
+│   Ada Marsh          4 Willow Row       ada.marsh@example.com               █│
+│                      Eastbrook                                              █│
+│                      EB2 7QL                                                █│
+│                                                                             █│
+│ █ Ben Okafor         17 Quarry Hill     ben.okafor@example.com              █│
+│                      Low Fenton                                             █│
+│                      LF9 1AA                                                ║│
+│                                                                             ║│
+│   Chloe Ruiz         2 Harbour Steps    chloe.ruiz@example.com              ║│
+│                      Portwick                                               ║│
+│                      PW1 3DS                                                ║│
+│                                                                             ║│
+│   Dev Patel          88 Mill Lane       dev.patel@example.com               ║│
+│                      Crossford                                              ║│
+│                      CF4 8NT                                                ║│
+│                                                                             ║│
+│                                                                             ║│
+│                                                                             ║│
+│                                                                             ║│
+╰─ ↑/↓ row · ←/→ cell · c colours · v the first table ─────────────────────────╯
+←/→ or 1-9, 0 tabs · ? keys · Ctrl+P commands · q quit

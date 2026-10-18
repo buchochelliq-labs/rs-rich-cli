@@ -1,0 +1,24 @@
+ Block  Text  List  Table  Tabs  Scrollbar  Calendar  Popup  Borders  Custom
+╭─ List ───────────────────────╮╭─ Chat, bottom to top ────────────────────────╮
+│  Apples                      ││                                              │
+│  Barley                      ││                                              │
+│> Carrots                     ││                                              │
+│  Dates                       ││                                              │
+│  Eggs                        ││                                              │
+│  Fennel                      ││                                              │
+│  Garlic                      ││                                              │
+│  Honey                       ││                                              │
+│  Ink for the printer         ││                                              │
+│  Jam                         ││                                              │
+│  Kale                        ││   Ben: Hello!                                │
+│  Lemons                      ││   Ana: How was the week?                     │
+│                              ││   Ben: Fine, and you?                        │
+│                              ││   Ana: Dinner tonight?                       │
+│                              ││   Ben: The new place on the corner has a long│
+│                              ││   menu and short queues on a Tuesday.        │
+│                              ││>> Ana: Did you book somewhere?               │
+│                              ││   Ben: Table for four at eight, by the       │
+│                              ││   window.                                    │
+│                              ││   Ana: On my way, ten minutes.               │
+╰─ ↑/↓ move · Tab the chat ────╯╰─ multi-line, scroll padding ─────────────────╯
+←/→ or 1-9, 0 tabs · ? keys · Ctrl+P commands · q quit

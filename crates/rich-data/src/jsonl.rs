@@ -70,6 +70,13 @@ impl<R: BufRead> Lines<R> {
             done: false,
         }
     }
+
+    /// Whether the stream has stopped: at the end, or after an error that
+    /// ends it (a read error, a line longer than [`MAX_LINE`]). A line that
+    /// is not JSON does not stop it; the next record follows.
+    pub fn stopped(&self) -> bool {
+        self.done
+    }
 }
 
 impl<R: BufRead> Iterator for Lines<R> {

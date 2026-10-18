@@ -366,6 +366,49 @@ the rows shown. Inference is opt-in: without `--infer` the table is exactly
 rich-cli 1.8.1's, and with any other mode `--infer` is a usage error. For the
 evidence behind each type, use `rich profile`.
 
+### Style cells by value (0.0.19)
+
+`--style-rule` styles the cells, rows or columns of a data table by what they
+hold. It is repeatable, and each rule is `COLUMN OP VALUE:STYLE`, or
+`COLUMN OP VALUE:TARGET:STYLE` to style more than the cell:
+
+```bash
+rich --csv services.csv --style-rule 'latency>500:bold red'
+rich services.csv --style-rule 'status=failed:row:on red' --style-rule 'note empty:dim'
+rich services.csv --rules rules.toml
+```
+
+| Part | Written as |
+|---|---|
+| `COLUMN` | a header (`p99 ms`), a header in double quotes when it holds a comparison, a `:` or a comparison word (`"a<b"`), or `#N` for the 0-based column `N` |
+| `OP` | `==` or `=`, `!=`, `<`, `<=`, `>`, `>=`, `*=` (contains), `^=` (starts with), `$=` (ends with), or a word after a space: `eq`, `ne`, `lt`, `le`, `gt`, `ge`, `contains`, `starts_with`, `ends_with`, `empty`, `not_empty` |
+| `VALUE` | the text up to the next `:`, trimmed. A number compares as a number (a cell that is text parsing as a number counts; one that does not never matches an ordering); anything else compares as text. In double quotes it is always text and may hold a `:` (`when="12:30"`, `code="200"`; `\"` and `\\` escape). `empty` and `not_empty` take none |
+| `TARGET` | `cell` (the default), `row`, or `column` (every cell of the column, when any cell matches) |
+| `STYLE` | the rest: any style, which may itself hold a `:` (`link https://…`) |
+
+Where several rules match, their styles combine in order, the later one
+winning. Rules restyle; they never change the text, and without them the table
+is exactly rich-cli 1.8.1's. `--rules FILE` reads the same rules from TOML
+rule tables, after the rules before it on the command line:
+
+```toml
+[[rules]]
+column = "status"     # a header, or a 0-based index
+op = "eq"             # or ==, !=, <, <=, >, >=, contains, starts_with, ends_with, empty, not_empty
+value = "failed"
+style = "on red"
+target = "row"        # cell (default), row or column
+```
+
+Rules apply wherever the CLI draws a data table from a file: `--csv` (and
+`rich FILE.csv` or `FILE.tsv`), `rich profile`'s table of columns, and
+`rich inspect --table`'s records. Elsewhere they have no effect, so a
+[config profile](#config-profiles) can carry rules without stopping other
+commands. A rule that does not parse is a usage error (exit 2) that names it
+and says what is wrong (`rich: --style-rule: rule "latency>:red": no value
+after ...`), and a rule naming a column the table lacks is drawn without, with
+a warning on stderr.
+
 ## Profile a data file (0.0.16)
 
 `rich profile` says what each column of a CSV, TSV or JSON Lines file holds:
@@ -415,20 +458,109 @@ missing values (% null; rows top to bottom, 2 rows each)
 The format comes from the extension (`.csv`, `.tsv`, `.jsonl`, `.ndjson`),
 else from the first character (`{` or `[` is JSON Lines); CSV is sniffed as
 `--csv` sniffs it, and the first row is a header unless every cell in it is
-a number. Empty cells, `null`, `NULL`, `NA` and `N/A` count as null. A file
-or stdin is streamed, not read into memory: past `--sample N` rows (10,000
-by default) the types, statistics and distributions describe a uniform
-sample, the heading prints the sample size (`sampled 10,000 of 3,000,000
-rows`), and the null counts and the map still count every row. A row with
-more cells than the header is noted rather than refused.
+a number. Empty cells, `null`, `NULL`, `NA` and `N/A` count as null (JSON
+Lines, profiled path by path as [below](#nested-json-lines-0019), have JSON's
+own `null`). A file or stdin is streamed, not read into memory: past `--sample
+N` rows (10,000 by default) the types, statistics and distributions describe a
+uniform sample, the heading prints the sample size (`sampled 10,000 of
+3,000,000 rows`, or for JSON Lines `sampled to 10,000 values a path`), and the
+null counts and the map still count every row. A row with more cells than the
+header is noted rather than refused.
 
 `--columns a,b` profiles only those columns, in that order; `--top N` sets
 how many common values are shown (5). `--report json` writes the profile
 itself to stdout (`rows`, `sample`, `sampled`, and per column `type`,
 `nulls`, `null_rate`, `distinct`, the statistics and the `distribution`),
 as `doctor --report json` writes its diagnostics; a failure is the usual
-error envelope on stderr. A column `--columns` names that is not there, or a
-line that is not JSON, is a data error (exit 4).
+error envelope on stderr. A column `--columns` names that is not there is a
+data error (exit 4).
+
+`--style-rule` and `--rules` style the table of columns
+([Style cells by value](#style-cells-by-value-0019)). Rules name its headings
+and compare the profile's own values, so `nulls`, `absent` and `distinct` are
+counts: `rich profile orders.csv --style-rule 'nulls>0:row:yellow'`.
+
+### Nested JSON Lines (0.0.19)
+
+JSON Lines are profiled **path by path**: each key of a nested object is its
+own path (`user.plan`), the items of an array are `tags[]`, and a key of the
+objects in an array is `items[].sku`. A key that holds `.`, `[`, `]`, `"`,
+`\`, a control character or surrounding spaces, or is empty, is written as a
+JSON string in brackets, as jq and JSONPath write it: `["http.status"]`,
+`meta["k8s.io/name"]`. A record that is not an object is the path `value`.
+
+```text
+$ rich profile requests.jsonl --columns 'user.plan,["http.status"],items[].qty' --width 72
+requests.jsonl: 12 records, 3 paths
+! marks 2 paths holding more than one JSON type besides null:
+["http.status"], items[].qty
+1 line is not JSON and was skipped: line 13 (expected value)
+
+┏━━━━━━━━━━━━━━━━━┳━━━━━━━━━┳━━━━━━━━━┳━━━━━━━━━┳━━━━━━┳━━━━━━┳━━━━━━━━┓
+┃ path            ┃ types   ┃  absent ┃ distin… ┃  min ┃  max ┃   mean ┃
+┡━━━━━━━━━━━━━━━━━╇━━━━━━━━━╇━━━━━━━━━╇━━━━━━━━━╇━━━━━━╇━━━━━━╇━━━━━━━━┩
+│ user.plan       │ str 89% │ 3 (25%) │       3 │ free │ team │        │
+│                 │ · null  │         │         │      │      │        │
+│                 │ 11%     │         │         │      │      │        │
+│ ["http.status"] │ ! num   │  1 (8%) │       6 │  200 │  503 │ 303.1… │
+│                 │ 82% ·   │         │         │      │      │        │
+│                 │ str 18% │         │         │      │      │        │
+│ items[].qty     │ ! num   │ 9 (75%) │       4 │    1 │    5 │   2.75 │
+│                 │ 75% ·   │         │         │      │      │        │
+│                 │ str 25% │         │         │      │      │        │
+└─────────────────┴─────────┴─────────┴─────────┴──────┴──────┴────────┘
+
+user.plan · text · 3 absent (25%) · 1 null (11%) · 3 distinct
+  free ████████████████████████ 3
+  ...
+```
+
+For each path the table shows:
+
+- **types**: the mix of JSON types its values had (`str`, `num`, `bool`,
+  `obj`, `arr`, `null`), most common first. One type is its name alone; a
+  path with more than one type besides `null` is **mixed**, marked `!` and
+  named in a note, so a field that is sometimes a number and sometimes a
+  string shows as such rather than as one inferred type.
+- **absent**: the records that do not hold the path at all, counted apart
+  from an explicit `null` (which is in the mix, and under the path's heading
+  as `1 null`). The missing-value map counts a record as missing a path when
+  it lacks it or holds only `null` there.
+- **distinct**, **min**, **max**, **mean** and the distribution below: of the
+  path's values, as for a column (an array's items count one by one, so
+  `items[].qty` has more values than records). An object or array that is
+  walked into has none of its own.
+
+Paths are bounded. `--depth N` (4 by default) is the most steps a path has, a
+key or `[]` each: an object or array at the last step is not walked into, and
+its JSON text is its value, as in a flat profile. `--max-paths N` (200) is
+the most paths profiled, in the order first seen; the paths seen after that
+are not profiled (nor anything below them), and a note and a last table row
+say how many there were (`+ 12 more paths not profiled (max_paths 200)`),
+naming the first. Each path keeps at most `--sample N` values; presence, the
+type mix, nulls and the map count every record, so the input is read once, in
+linear time and bounded memory. `--columns` names paths, as written
+(`--columns 'user.plan,["http.status"]'`).
+
+A line that is not JSON is counted and skipped, never fatal: a note gives the
+count, the first line numbers and why (`malformed` and `malformed_lines` in
+the JSON). Input with no record at all is still a data error (exit 4).
+
+`--flat` profiles JSON Lines as 0.0.16 did: one row per record, the top-level
+keys as columns (nested values as their JSON text, absent keys as nulls), and
+a line that is not JSON a data error. CSV and TSV are always flat, and
+`--depth`, `--max-paths` and `--flat` with them are a usage error.
+
+`--report json` of a nested profile adds, without changing any key a flat
+profile has: `paths` (`depth`, `max_paths`, whether any path was `sampled`,
+whether the cap was met as `capped`, and the first hundred paths past it as
+`dropped`), `malformed` and `malformed_lines` when lines were skipped, and per
+column `present`, `absent`, `values` (every value seen, `null`s included),
+`types` (a count per JSON type seen: `string`, `number`, `boolean`, `object`,
+`array`, `null`) and `mixed`. A nested column's `nulls` counts explicit
+`null`s and its `null_rate` is over its values; `type` is the type inferred
+from its sampled values, or `object` or `array` for a path that only ever
+held one.
 
 ## Stream JSONL and logs
 
@@ -648,7 +780,7 @@ files show as a key table with their comments. These options change the view:
 | `--highlight EXPR` | Show the lines a JSONPath expression selects in reverse video |
 | `--find TEXT` | List keys and values containing TEXT (any case), with context |
 | `--flatten` | One `path` / `value` row per value |
-| `--table` | Records as a table, or a path/value table |
+| `--table` | Records as a table, or a path/value table; [`--style-rule`](#style-cells-by-value-0019) styles the records by key (0.0.19) |
 | `--max-depth N`, `--max-length N` | Fold deeper containers; show at most N items each |
 | `--show-paths` | Print each value's path next to it |
 | `--redact` | Mask values under keys such as `password`, `token` or `api_key` (also spelled with dashes, `api-key`), everything nested under such a key, and XML element text |
@@ -1649,6 +1781,31 @@ inherited `true`. Inverse CLI flags such as `--no-watch`, `--no-overwrite`,
 `--no-batch`, `--no-continue-on-error`, `--no-sanitize` and `--color` override
 configured booleans. Option-looking values and operands after `--` remain data.
 Parse errors identify the config file. A quoted `#` remains part of the value.
+
+A profile (or `[defaults]`) can carry [style rules](#style-cells-by-value-0019)
+as `[[rules]]` tables, the shape `--rules` files hold (0.0.19):
+
+```toml
+[[defaults.rules]]
+column = "latency"
+op = ">"
+value = 500
+style = "bold red"
+
+[profiles.tables]
+[[profiles.tables.rules]]
+column = "status"
+value = "failed"
+style = "on red"
+target = "row"
+```
+
+Rules add up rather than replace: the defaults' rules apply first, then the
+selected profile's, then `--style-rule` and `--rules` on the command line, a
+later rule winning wherever two set the same thing. They only touch data
+tables, so `rich --profile tables README.md` is unaffected. A bad rule table
+fails validation, naming the table (`profiles.tables.rules[0]`) and what is
+wrong with it, and `config show` lists the rules in effect.
 
 Inspect and validate without rendering:
 

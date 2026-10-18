@@ -26,7 +26,7 @@ use rich_data::csv::{CsvReader, Header};
 use rich_data::infer::{
     ColumnInference as CoreColumnInference, Inference as CoreInference, InferredType, Inferrer,
 };
-use rich_data::profile::{Profile as CoreProfile, ProfileOptions, Profiler};
+use rich_data::profile::{JsonProfiler, Profile as CoreProfile, ProfileOptions, Profiler};
 use rich_data::quality::{
     CheckResult as CoreCheck, FailingRows as CoreFailingRows, QualityReport as CoreReport, Status,
 };
@@ -200,13 +200,9 @@ fn drain(source: &mut dyn RowSource, mut push: impl FnMut(Row)) -> Result<(), Co
     Ok(())
 }
 
-/// Open `path` and run `f` over its rows as a source.
-fn with_file_source<T>(
-    path: &Path,
-    format: Option<&str>,
-    header: Header,
-    f: impl FnOnce(&mut dyn RowSource) -> PyResult<T>,
-) -> PyResult<T> {
+/// Open `path`, and its format: `format` when given, else by the extension,
+/// else by the first character.
+fn open_file(path: &Path, format: Option<&str>) -> PyResult<(Box<dyn BufRead>, Format)> {
     let file = File::open(path).map_err(|err| {
         pyo3::exceptions::PyOSError::new_err(format!("cannot read {}: {err}", path.display()))
     })?;
@@ -218,22 +214,36 @@ fn with_file_source<T>(
             None => format_by_content(reader.fill_buf()?),
         },
     };
-    with_source(Box::new(reader), format, header, f)
+    Ok((Box::new(reader), format))
 }
 
-fn with_text_source<T>(
-    text: String,
-    format: &str,
+/// Open `path` and run `f` over its rows as a source.
+fn with_file_source<T>(
+    path: &Path,
+    format: Option<&str>,
     header: Header,
     f: impl FnOnce(&mut dyn RowSource) -> PyResult<T>,
 ) -> PyResult<T> {
-    let format = format_arg(format)?;
-    with_source(
-        Box::new(std::io::Cursor::new(text.into_bytes())),
-        format,
-        header,
-        f,
-    )
+    let (reader, format) = open_file(path, format)?;
+    with_source(reader, format, header, f)
+}
+
+/// A profile of `reader`: JSON Lines path by path unless `flat`, anything
+/// else (and flat JSON Lines) as rows.
+fn profile_reader(
+    reader: Box<dyn BufRead>,
+    format: Format,
+    options: ProfileOptions,
+    flat: bool,
+) -> PyResult<CoreProfile> {
+    match format {
+        Format::JsonLines if !flat => {
+            CoreProfile::from_json_lines(reader, options).map_err(|e| source_error(&e))
+        }
+        _ => with_source(reader, format, Header::UnlessNumeric, |source| {
+            profile_source(source, options)
+        }),
+    }
 }
 
 fn with_source<T>(
@@ -717,6 +727,30 @@ impl Stats {
 /// The most histogram bins a profile takes: far past a readable histogram.
 const MAX_BINS: usize = 1000;
 
+/// [`profile_options`] with a nested profile's `depth` and `max_paths`.
+#[allow(clippy::too_many_arguments)]
+fn nested_options(
+    sample: usize,
+    top: usize,
+    bins: usize,
+    buckets: usize,
+    columns: Option<&Bound<'_, PyAny>>,
+    nulls: Option<&Bound<'_, PyAny>>,
+    depth: usize,
+    max_paths: usize,
+) -> PyResult<ProfileOptions> {
+    if depth == 0 || max_paths == 0 {
+        return Err(PyValueError::new_err(
+            "depth and max_paths must be at least 1",
+        ));
+    }
+    Ok(ProfileOptions {
+        depth,
+        max_paths,
+        ..profile_options(sample, top, bins, buckets, columns, nulls)?
+    })
+}
+
 fn profile_options(
     sample: usize,
     top: usize,
@@ -808,12 +842,15 @@ impl Profile {
 
     /// Profile a CSV, TSV or JSON Lines file, streaming it (`format` as
     /// `read_file`; a CSV's first row is its header unless every cell is a
-    /// number, as `rich profile` reads it). Named after the path.
+    /// number, as `rich profile` reads it). JSON Lines are profiled path by
+    /// path (`depth` steps deep, at most `max_paths` paths; a line that is
+    /// not JSON is counted, not fatal) unless `flat`. Named after the path.
     #[staticmethod]
     #[pyo3(signature = (
         path, *, format=None, sample=rich_data::profile::DEFAULT_SAMPLE,
         top=rich_data::profile::DEFAULT_TOP, bins=rich_data::profile::DEFAULT_BINS,
-        buckets=rich_data::profile::DEFAULT_BUCKETS, columns=None, nulls=None
+        buckets=rich_data::profile::DEFAULT_BUCKETS, columns=None, nulls=None, flat=false,
+        depth=rich_data::profile::DEFAULT_DEPTH, max_paths=rich_data::profile::DEFAULT_MAX_PATHS
     ))]
     #[allow(clippy::too_many_arguments)]
     fn from_path(
@@ -826,12 +863,14 @@ impl Profile {
         buckets: usize,
         columns: Option<&Bound<'_, PyAny>>,
         nulls: Option<&Bound<'_, PyAny>>,
+        flat: bool,
+        depth: usize,
+        max_paths: usize,
     ) -> PyResult<Self> {
-        let options = profile_options(sample, top, bins, buckets, columns, nulls)?;
+        let options = nested_options(sample, top, bins, buckets, columns, nulls, depth, max_paths)?;
         let inner = py.detach(|| {
-            with_file_source(&path, format.as_deref(), Header::UnlessNumeric, |source| {
-                profile_source(source, options)
-            })
+            let (reader, format) = open_file(&path, format.as_deref())?;
+            profile_reader(reader, format, options, flat)
         })?;
         Ok(Profile {
             // The name is for the heading only; the file was opened by its
@@ -841,12 +880,13 @@ impl Profile {
     }
 
     /// Profile CSV, TSV or JSON Lines text (`format` `"csv"`, `"tsv"` or
-    /// `"jsonl"`).
+    /// `"jsonl"`); JSON Lines path by path unless `flat`, as `from_path`.
     #[staticmethod]
     #[pyo3(signature = (
         text, *, format="csv", name=None, sample=rich_data::profile::DEFAULT_SAMPLE,
         top=rich_data::profile::DEFAULT_TOP, bins=rich_data::profile::DEFAULT_BINS,
-        buckets=rich_data::profile::DEFAULT_BUCKETS, columns=None, nulls=None
+        buckets=rich_data::profile::DEFAULT_BUCKETS, columns=None, nulls=None, flat=false,
+        depth=rich_data::profile::DEFAULT_DEPTH, max_paths=rich_data::profile::DEFAULT_MAX_PATHS
     ))]
     #[allow(clippy::too_many_arguments)]
     fn from_text(
@@ -859,17 +899,106 @@ impl Profile {
         buckets: usize,
         columns: Option<&Bound<'_, PyAny>>,
         nulls: Option<&Bound<'_, PyAny>>,
+        flat: bool,
+        depth: usize,
+        max_paths: usize,
     ) -> PyResult<Self> {
-        let options = profile_options(sample, top, bins, buckets, columns, nulls)?;
-        let profile = with_text_source(text, format, Header::UnlessNumeric, |source| {
-            profile_source(source, options)
-        })?;
+        let options = nested_options(sample, top, bins, buckets, columns, nulls, depth, max_paths)?;
+        let format = format_arg(format)?;
+        let reader = Box::new(std::io::Cursor::new(text.into_bytes()));
+        let profile = profile_reader(reader, format, options, flat)?;
         Ok(Profile {
             inner: match name {
                 Some(name) => profile.with_name(name),
                 None => profile,
             },
         })
+    }
+
+    /// Profile Python records (dicts, lists and scalars that `json` can
+    /// write) path by path, as JSON Lines are.
+    #[staticmethod]
+    #[pyo3(signature = (
+        records, *, name=None, sample=rich_data::profile::DEFAULT_SAMPLE,
+        top=rich_data::profile::DEFAULT_TOP, bins=rich_data::profile::DEFAULT_BINS,
+        buckets=rich_data::profile::DEFAULT_BUCKETS, columns=None,
+        depth=rich_data::profile::DEFAULT_DEPTH, max_paths=rich_data::profile::DEFAULT_MAX_PATHS
+    ))]
+    #[allow(clippy::too_many_arguments)]
+    fn from_records(
+        py: Python<'_>,
+        records: &Bound<'_, PyAny>,
+        name: Option<String>,
+        sample: usize,
+        top: usize,
+        bins: usize,
+        buckets: usize,
+        columns: Option<&Bound<'_, PyAny>>,
+        depth: usize,
+        max_paths: usize,
+    ) -> PyResult<Self> {
+        let options = nested_options(sample, top, bins, buckets, columns, None, depth, max_paths)?;
+        let dumps = py.import("json")?.getattr("dumps")?;
+        let mut profiler = JsonProfiler::new(options);
+        for record in records.try_iter()? {
+            let text: String = dumps.call1((record?,))?.extract()?;
+            let record: serde_json::Value = serde_json::from_str(&text)
+                .map_err(|err| PyValueError::new_err(format!("not JSON: {err}")))?;
+            profiler.push(&record);
+        }
+        let profile = profiler.finish().map_err(|e| source_error(&e))?;
+        Ok(Profile {
+            inner: match name {
+                Some(name) => profile.with_name(name),
+                None => profile,
+            },
+        })
+    }
+
+    /// This profile with its table of columns styled by `rules` (a
+    /// `StyleRules`, a `StyleRule`, a spec or a list), naming the table's
+    /// headings (`table_headers`).
+    fn style_rules(&self, rules: &Bound<'_, PyAny>) -> PyResult<Self> {
+        Ok(Profile {
+            inner: self
+                .inner
+                .clone()
+                .style_rules(crate::ext::tables::rules_arg(rules)?),
+        })
+    }
+
+    /// The headings of the table of columns, which style rules name.
+    #[getter]
+    fn table_headers(&self) -> Vec<&'static str> {
+        self.inner.table_headers().to_vec()
+    }
+
+    /// Whether this is a nested profile of JSON paths.
+    #[getter]
+    fn is_nested(&self) -> bool {
+        self.inner.is_nested()
+    }
+
+    /// A nested profile's limits and the paths past its cap (`depth`,
+    /// `max_paths`, `sampled`, `capped`, `dropped`), or `None`.
+    #[getter]
+    fn paths(&self, py: Python<'_>) -> PyResult<Option<Py<PyAny>>> {
+        let json = self.inner.to_json();
+        json.get("paths")
+            .map(|paths| json_to_py(py, paths))
+            .transpose()
+    }
+
+    /// Lines skipped because they were not JSON.
+    #[getter]
+    fn malformed(&self) -> u64 {
+        self.inner.malformed()
+    }
+
+    /// The first of them, by line number.
+    #[getter]
+    fn malformed_lines(&self) -> Vec<usize> {
+        self.inner.malformed_lines().to_vec()
     }
 
     #[getter]
@@ -1270,7 +1399,9 @@ impl ResultSet {
 /// `height` rows from `offset` are laid out, column widths come from a
 /// sample of the first rows (`fit_window` widens them to the rows shown),
 /// and a position line (`rows 41-60 of 1,000`) says where the window is.
-/// `scroll_by` moves it.
+/// `scroll_by` moves it. A column window (`column_offset`,
+/// `visible_columns`, `fit_columns`, `frozen_columns`) shows some of the
+/// columns of a wide table, and `scroll_columns_by` moves it across.
 #[pyclass(name = "VirtualTable", module = "rs_rich.data")]
 pub(crate) struct VirtualTable {
     /// Shared with every table `core` builds, so a call copies no rows.
@@ -1284,6 +1415,10 @@ pub(crate) struct VirtualTable {
     max_column_width: usize,
     fit_window: bool,
     title: Option<String>,
+    column_offset: usize,
+    visible_columns: Option<usize>,
+    fit_columns: bool,
+    frozen_columns: usize,
 }
 
 impl VirtualTable {
@@ -1297,7 +1432,13 @@ impl VirtualTable {
             .show_position(self.show_position)
             .wrap(self.wrap)
             .max_column_width(self.max_column_width)
-            .fit_window(self.fit_window);
+            .fit_window(self.fit_window)
+            .column_offset(self.column_offset)
+            .fit_columns(self.fit_columns)
+            .frozen_columns(self.frozen_columns);
+        if let Some(count) = self.visible_columns {
+            table = table.visible_columns(count);
+        }
         if let Some(marker) = &self.null_marker {
             table = table.null_marker(marker.clone());
         }
@@ -1321,7 +1462,8 @@ impl VirtualTable {
         rows, *, offset=0, height=20, row_numbers=false, null_marker=None,
         show_position=true, wrap=false,
         max_column_width=rich_ext::table::virtualized::DEFAULT_MAX_COLUMN_WIDTH,
-        fit_window=false, title=None
+        fit_window=false, title=None, column_offset=0, visible_columns=None,
+        fit_columns=false, frozen_columns=0
     ))]
     #[allow(clippy::too_many_arguments)]
     fn new(
@@ -1335,8 +1477,15 @@ impl VirtualTable {
         max_column_width: usize,
         fit_window: bool,
         title: Option<String>,
-    ) -> Self {
-        VirtualTable {
+        column_offset: usize,
+        visible_columns: Option<usize>,
+        fit_columns: bool,
+        frozen_columns: usize,
+    ) -> PyResult<Self> {
+        if visible_columns == Some(0) {
+            return Err(PyValueError::new_err("visible_columns must be at least 1"));
+        }
+        Ok(VirtualTable {
             rows: Arc::new(rows.inner.clone()),
             offset,
             height: height.min(rich_ext::table::virtualized::MAX_HEIGHT),
@@ -1347,7 +1496,45 @@ impl VirtualTable {
             max_column_width,
             fit_window,
             title,
-        }
+            column_offset,
+            visible_columns,
+            fit_columns,
+            frozen_columns,
+        })
+    }
+
+    /// The first column of the column window (0-based, after the frozen
+    /// ones).
+    #[getter]
+    fn get_column_offset(&self) -> usize {
+        self.column_offset
+    }
+
+    #[setter]
+    fn set_column_offset(&mut self, offset: usize) {
+        self.column_offset = offset;
+    }
+
+    /// Move the column window by `columns` (negative moves left), within
+    /// the columns.
+    fn scroll_columns_by(&mut self, columns: isize) {
+        let mut table = self.core();
+        table.scroll_columns_by(columns);
+        self.column_offset = table.window_column_offset();
+    }
+
+    /// The 0-based columns a render `width` cells wide shows: the frozen
+    /// ones, then the window's.
+    #[pyo3(signature = (width=80))]
+    fn shown_columns(&self, width: usize) -> Vec<usize> {
+        self.core().shown_columns(width)
+    }
+
+    /// Where the column window is, `columns 41-60 of 2,000`, or `None`
+    /// when every column is shown at `width`.
+    #[pyo3(signature = (width=80, *, ascii=false))]
+    fn column_position(&self, width: usize, ascii: bool) -> Option<String> {
+        self.core().page_at(width).column_position(ascii)
     }
 
     /// The first row shown (0-based).

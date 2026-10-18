@@ -221,3 +221,63 @@ fn short_rows_sample_the_null_marker_width() {
     let out = plain(30).render_export(&table);
     assert!(out.contains("│ a │ NULL │"), "{out}");
 }
+
+/// A 120-column window of 2,000 columns by 100,000 rows: only the window's
+/// cells are computed, so it renders as fast as a narrow table. A timing,
+/// so it runs on request, in release:
+///
+/// ```text
+/// cargo test --release -p rs-rich-ext --test virtual_tables -- --ignored --nocapture
+/// ```
+#[test]
+#[ignore = "a timing: run in release with --ignored"]
+fn a_column_window_of_a_very_wide_table_is_fast() {
+    use rich_ext::table::FnCells;
+    let cells = AtomicUsize::new(0);
+    let grid = FnCells::new(100_000, 2_000, |r, c| {
+        cells.fetch_add(1, Ordering::Relaxed);
+        Value::from((r * 31 + c * 17) % 10_000)
+    });
+    let columns = (0..2_000).map(|c| Column::new(format!("col{c}")).justify(Justify::Right));
+    let mut table = VirtualTable::new(columns, &grid)
+        .offset(50_000)
+        .height(40)
+        .frozen_columns(1)
+        .column_offset(1_000)
+        .visible_columns(119);
+    let console = plain(1_400);
+    let options = console.options();
+
+    // The first render samples the window's columns.
+    let started = Instant::now();
+    let lines = console.render_lines(&table, &options, false);
+    let first = started.elapsed();
+    let text: String = lines
+        .last()
+        .unwrap()
+        .iter()
+        .map(|s| s.text.as_str())
+        .collect();
+    assert_eq!(
+        text.trim_end(),
+        "rows 50,001–50,040 of 100,000, columns 1,002–1,120 of 2,000"
+    );
+    // The sample (100 rows) and the window (40 rows), 120 columns each.
+    assert_eq!(cells.load(Ordering::Relaxed), (100 + 40) * 120);
+
+    // Scrolling across samples the new columns only.
+    table.scroll_columns_by(60);
+    let started = Instant::now();
+    console.render_lines(&table, &options, false);
+    let scrolled = started.elapsed();
+
+    // A window of rows already sampled: the window alone.
+    table.scroll_by(1_000);
+    let started = Instant::now();
+    console.render_lines(&table, &options, false);
+    let window = started.elapsed();
+    eprintln!("first {first:?}, scrolled across {scrolled:?}, scrolled down {window:?}");
+    for elapsed in [first, scrolled, window] {
+        assert!(elapsed.as_millis() < 50, "{elapsed:?}");
+    }
+}

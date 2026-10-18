@@ -144,6 +144,17 @@ target = "row"        # cell (default), row or column
 Any other renderer resolves rules once with `StyleRules::resolve(headers,
 rows)` and asks the result for each row's and cell's style.
 
+A rule also reads from one line of text (0.0.19), as `rich --style-rule`
+takes it: `StyleRule::parse("latency>500:bold red")`, or with a target,
+`"status=failed:row:on red"`. The comparison is a symbol (`==` or `=`, `!=`,
+`<`, `<=`, `>`, `>=`, `*=` contains, `^=` starts with, `$=` ends with) or a
+word after a space (`note empty`); a value in double quotes is always text
+and may hold a `:`, and `#2` names a column by index. `to_spec()` writes a
+rule back. The same rules style `rich_ext::data::TableView`'s records
+(`style_rules`), a profile's table of columns (`Profile::style_rules`, by
+its headings), the CLI's `--csv`, `rich profile` and `rich inspect --table`
+tables, and, from Python, `rs_rich.ext.table.StyleRule` and `StyleRules`.
+
 ## Profiles
 
 A profile says what each column of any row source holds: its inferred type,
@@ -172,6 +183,32 @@ and `nulls` replaces the null tokens. The
 has the details, and [`rich profile`](../../cli.md#profile-a-data-file-0016)
 draws one from the command line.
 
+JSON records have more shape than rows, so `Profile::from_json_lines(reader,
+options)` (or a `JsonProfiler` fed `serde_json::Value`s) profiles them **path
+by path** (0.0.19): `user.plan` for a key in an object, `tags[]` for an
+array's items, `items[].sku` for a key of the objects in one, and
+`["http.status"]` for a key that holds a `.` (`profile::path_key` writes
+one). Each path counts the records that lack it (`absent`) apart from an
+explicit `null`, and the JSON types its values had (`TypeCounts`: string,
+number, boolean, object, array, null), so a field that is sometimes a number
+and sometimes a string is **mixed** rather than one inferred type. The walk is
+bounded by `options.depth` (4 steps) and `options.max_paths` (200, the rest
+named in a note and `Profile::paths()`), each path keeps a sample of its
+values, and a line that is not JSON is counted (`Profile::malformed()`)
+rather than fatal. The model and its JSON gain `present`, `absent`, `values`,
+`types` and `mixed` per path and `paths`, `malformed` and `malformed_lines`
+overall, leaving every key of a flat profile as it was.
+
+```rust
+use rich_data::profile::{Profile, ProfileOptions};
+
+let text = "{\"id\": 1, \"user\": {\"plan\": \"pro\"}}\n{\"id\": \"2\", \"user\": null}\n";
+let profile = Profile::from_json_lines(text.as_bytes(), ProfileOptions::default())?;
+let plan = profile.column("user.plan").unwrap();
+assert_eq!((plan.present, plan.absent), (Some(1), Some(1)));
+assert_eq!(profile.column("id").unwrap().types.unwrap().mix(), "num 50% · str 50%");
+```
+
 ## Data quality reports
 
 `quality` is a model, not an engine: a `CheckResult` holds a check's name,
@@ -190,7 +227,8 @@ first with their failing rows, then a table of every check and a summary
 ![A quality report: two failures with their failing rows, a warning, a table of every check and the summary 1 passed, 1 warned, 2 failed](../../media/guide/guide_tabular-quality.svg)
 
 Profiles and reports draw with theme keys: `profile::STYLES` (`profile.title`,
-`profile.column`, `profile.type`, `profile.note`, `profile.null`) and
+`profile.column`, `profile.type`, `profile.note`, `profile.null`,
+`profile.mixed`) and
 `quality::STYLES` (`quality.pass`, `quality.warn`, `quality.fail`,
 `quality.error`, `quality.check`, `quality.dim`).
 

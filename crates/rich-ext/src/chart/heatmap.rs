@@ -358,3 +358,97 @@ impl Renderable for Heatmap {
             .normalize()
     }
 }
+
+/// `Heatmap, 2 rows by 4 columns, values from 0 to 9, 1 missing`, then
+/// where the highest and lowest values are (`Highest 9 at api, wed; lowest
+/// 0 at web, mon`).
+impl crate::a11y::AccessibleText for Heatmap {
+    fn accessible_text(&self, _width: usize) -> String {
+        use super::describe::{count, counted, range};
+        let columns = self.column_count();
+        if self.rows.is_empty() || columns == 0 {
+            return "Heatmap, no values".to_string();
+        }
+        let mut head = format!(
+            "Heatmap, {} by {}",
+            counted(self.rows.len(), "row", "rows"),
+            counted(columns, "column", "columns")
+        );
+        // Every cell, a short row's missing ones included.
+        let cells: Vec<(&str, usize, f64)> = self
+            .rows
+            .iter()
+            .flat_map(|(label, values)| {
+                (0..columns).map(move |c| {
+                    let value = values.get(c).copied().unwrap_or(f64::NAN);
+                    (label.as_str(), c, value)
+                })
+            })
+            .collect();
+        let finite: Vec<&(&str, usize, f64)> = cells.iter().filter(|c| c.2.is_finite()).collect();
+        let missing = cells.len() - finite.len();
+        if let Some((lo, hi)) = super::describe::extent(finite.iter().map(|c| c.2)) {
+            head.push_str(&format!(", values {}", range(lo, hi, self.format)));
+        }
+        if missing > 0 {
+            head.push_str(&format!(", {} missing", count(missing)));
+        }
+        let header = |c: usize| {
+            self.columns
+                .get(c)
+                .filter(|h| !h.is_empty())
+                .cloned()
+                .unwrap_or_else(|| format!("column {}", c + 1))
+        };
+        let at = |cell: &(&str, usize, f64)| {
+            let row = if cell.0.is_empty() {
+                String::new()
+            } else {
+                format!("{}, ", cell.0)
+            };
+            format!("{} at {row}{}", self.format.format(cell.2), header(cell.1))
+        };
+        // The first highest and the first lowest, in reading order.
+        let mut highest: Option<&(&str, usize, f64)> = None;
+        let mut lowest: Option<&(&str, usize, f64)> = None;
+        for &cell in &finite {
+            if highest.is_none_or(|h| cell.2 > h.2) {
+                highest = Some(cell);
+            }
+            if lowest.is_none_or(|l| cell.2 < l.2) {
+                lowest = Some(cell);
+            }
+        }
+        let mut out = vec![head];
+        if let (Some(hi), Some(lo)) = (highest, lowest) {
+            out.push(format!("Highest {}; lowest {}", at(hi), at(lo)));
+        }
+        out.join("\n")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::a11y::AccessibleText;
+
+    #[test]
+    fn accessible_text_finds_the_extremes() {
+        let map = Heatmap::new()
+            .columns(["mon", "tue", "wed", "thu"])
+            .row("api", [1.0, 4.0, 9.0, 2.0])
+            .row("web", [0.0, 6.0, 8.0, f64::NAN]);
+        assert_eq!(
+            map.accessible_text(80),
+            "Heatmap, 2 rows by 4 columns, values from 0 to 9, 1 missing\n\
+             Highest 9 at api, wed; lowest 0 at web, mon"
+        );
+        let short = Heatmap::new().row("", [3.0, 3.0]);
+        assert_eq!(
+            short.accessible_text(80),
+            "Heatmap, 1 row by 2 columns, values at 3\n\
+             Highest 3 at column 1; lowest 3 at column 1"
+        );
+        assert_eq!(Heatmap::new().accessible_text(80), "Heatmap, no values");
+    }
+}

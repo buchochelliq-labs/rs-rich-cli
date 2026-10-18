@@ -13,9 +13,10 @@ use crate::name::check_name;
 /// The widest asset, in cells. Micro assets are emoji-sized; anything wider
 /// is an image, not an inline icon.
 pub const MAX_COLS: u16 = 4;
-/// The tallest asset, in rows. Only single-row (inline) sizes exist in this
-/// release; multi-row sizes are blocks, left for later.
-pub const MAX_ROWS: u16 = 1;
+/// The tallest asset, in rows (#711). A one-row asset sits in a line of
+/// text; a two-row one (a 2×2 icon, a 3×2 animation) reserves the row below
+/// the line it sits on. Anything taller is an image, not an inline icon.
+pub const MAX_ROWS: u16 = 2;
 /// The longest alt text, in characters.
 pub const MAX_ALT_CHARS: usize = 200;
 
@@ -51,7 +52,10 @@ impl FromStr for AssetKind {
 
 /// An asset's footprint in terminal cells: columns × rows. The default is
 /// 2×1, the footprint of an emoji (a cell is about twice as tall as it is
-/// wide); 1×1 is allowed. Rows above one are rejected in this release.
+/// wide). Any size from 1×1 to [`MAX_COLS`] × [`MAX_ROWS`] (4×2) is allowed:
+/// 1 to 4 columns, 1 or 2 rows. A two-row asset (a 2×2 icon, a 3×2
+/// animation) reserves the row below the line it sits on; see
+/// [`MicroRows`](crate::MicroRows).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct CellSize {
     cols: u16,
@@ -65,22 +69,18 @@ impl Default for CellSize {
 }
 
 impl CellSize {
-    /// `cols` × `rows`, checked: 1..=[`MAX_COLS`] columns and exactly one row.
+    /// `cols` × `rows`, checked: 1..=[`MAX_COLS`] columns and
+    /// 1..=[`MAX_ROWS`] rows.
     pub fn new(cols: u16, rows: u16) -> Result<Self, MicroError> {
-        if rows > MAX_ROWS {
-            return Err(MicroError::InvalidSize(format!(
-                "micro asset size {cols}x{rows}: multi-row sizes are not supported yet; \
-                 rows must be 1"
-            )));
-        }
         if cols == 0 || rows == 0 {
             return Err(MicroError::InvalidSize(format!(
                 "micro asset size {cols}x{rows}: columns and rows must be at least 1"
             )));
         }
-        if cols > MAX_COLS {
+        if cols > MAX_COLS || rows > MAX_ROWS {
             return Err(MicroError::InvalidSize(format!(
-                "micro asset size {cols}x{rows}: at most {MAX_COLS} columns"
+                "micro asset size {cols}x{rows}: at most {MAX_COLS} columns and {MAX_ROWS} \
+                 rows ({MAX_COLS}x{MAX_ROWS}); anything larger is an image, not a micro asset"
             )));
         }
         Ok(CellSize { cols, rows })
@@ -93,6 +93,12 @@ impl CellSize {
     pub fn rows(self) -> usize {
         self.rows as usize
     }
+
+    /// Whether it takes more than one row: such an asset reserves the rows
+    /// below the line it sits on.
+    pub fn is_multi_row(self) -> bool {
+        self.rows > 1
+    }
 }
 
 impl fmt::Display for CellSize {
@@ -103,7 +109,7 @@ impl fmt::Display for CellSize {
 
 impl FromStr for CellSize {
     type Err = MicroError;
-    /// `"2x1"`, `"1x1"`.
+    /// `"2x1"`, `"1x1"`, `"2x2"`, `"3x2"`.
     fn from_str(value: &str) -> Result<Self, MicroError> {
         let bad = || {
             MicroError::InvalidSize(format!(
@@ -438,6 +444,12 @@ impl MicroAsset {
         self.size.cols()
     }
 
+    /// Its height in rows: 1, or 2 for an asset that reserves the row below
+    /// its line.
+    pub fn rows(&self) -> usize {
+        self.size.rows()
+    }
+
     pub fn variants(&self) -> &Variants {
         &self.variants
     }
@@ -540,9 +552,24 @@ mod tests {
     fn sizes() {
         assert_eq!("2x1".parse::<CellSize>().unwrap(), CellSize::default());
         assert_eq!("1x1".parse::<CellSize>().unwrap().cols(), 1);
-        let err = "2x2".parse::<CellSize>().unwrap_err().to_string();
-        assert!(err.contains("rows must be 1"), "{err}");
+        // Two rows (#711): every width up to four columns.
+        for cols in 1..=MAX_COLS {
+            let size: CellSize = format!("{cols}x2").parse().unwrap();
+            assert_eq!((size.cols(), size.rows()), (cols as usize, 2));
+            assert!(size.is_multi_row());
+        }
+        assert!(!CellSize::default().is_multi_row());
+        assert_eq!("3X2".parse::<CellSize>().unwrap().to_string(), "3x2");
+        for refused in ["2x3", "1x3", "5x2", "4x9"] {
+            let err = refused.parse::<CellSize>().unwrap_err().to_string();
+            assert!(err.contains("at most 4 columns and 2 rows (4x2)"), "{err}");
+        }
+        assert!(matches!(
+            CellSize::new(2, 3),
+            Err(MicroError::InvalidSize(_))
+        ));
         assert!("0x1".parse::<CellSize>().is_err());
+        assert!("2x0".parse::<CellSize>().is_err());
         assert!("5x1".parse::<CellSize>().is_err());
         assert!("x1".parse::<CellSize>().is_err());
         assert!("+2x1".parse::<CellSize>().is_err());

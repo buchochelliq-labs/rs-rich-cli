@@ -66,7 +66,7 @@ pub use group::{Aggregate, Group, GroupBy};
 pub use rules::{ColumnRef, Comparison, ResolvedRules, RuleError, StyleRule, StyleRules, Target};
 pub use sort::{Compare, Order, SortKey};
 pub use stream::{RenderStats, StreamingTable, Window};
-pub use virtualized::{FnRows, Page, VirtualRows, VirtualTable};
+pub use virtualized::{FnCells, FnRows, Page, VirtualRows, VirtualTable};
 
 /// Theme keys used by this module, with their fallback styles.
 ///

@@ -7,9 +7,10 @@
 //! |---|---|
 //! | `status` | `status/success`, `status/warning`, `status/error`, `status/info`, `status/loading` (animated) |
 //! | `dev` | `dev/bug`, `dev/branch`, `dev/terminal`, `dev/package` |
-//! | `fun` | `fun/heart` (animated), `fun/star`, `fun/cat`, `fun/coffee` (animated) |
+//! | `fun` | `fun/heart` (animated), `fun/star`, `fun/cat`, `fun/coffee` (animated), `fun/trophy` (2×2), `fun/campfire` (3×2, animated) |
 //!
-//! Every asset has alt text, an emoji and a text fallback, and a licence:
+//! Every asset is 2×1 cells but `fun/trophy` and `fun/campfire`, one
+//! example of each two-row size (#711). Every asset has alt text, an emoji and a text fallback, and a licence:
 //! the project's own (MIT). There are no third-party logos, and every name
 //! is in a namespace, so none is an emoji code (`:micro:fun/star:` is never
 //! confused with `:star:`).

@@ -41,6 +41,7 @@ use rich_interact::{Component, Key, Mouse};
 
 use crate::app::{Ctx, Theme};
 use crate::border::{Border, Edge, Shadow, Sides, Title};
+use crate::builtin::Described;
 use crate::builtin::{
     Each, Grid, Host, HostWidget, Layers, Leaf, Pad, Panel, ScrollView, Stack, Switch, TextNode,
 };
@@ -523,12 +524,23 @@ impl Node {
         }
     }
 
-    /// Its accessible name, if code gave one; a panel's is its title.
+    /// Its accessible name, if code gave one; a panel's is its title. A
+    /// [`described`] node's is what it says, after the name code gave.
     pub(crate) fn access_label(&self) -> Option<String> {
-        self.access_label.clone().or_else(|| {
-            self.widget_mut(|panel: &mut Panel| panel.shown_title())
-                .filter(|title| !title.is_empty())
-        })
+        let says = self
+            .widget_ref(|d: &Described| d.text.clone())
+            .flatten()
+            .filter(|text| !text.is_empty());
+        match (self.access_label.clone(), says) {
+            (Some(label), Some(text)) => return Some(format!("{label}: {text}")),
+            (label, text) => {
+                if let Some(name) = label.or(text) {
+                    return Some(name);
+                }
+            }
+        }
+        self.widget_mut(|panel: &mut Panel| panel.shown_title())
+            .filter(|title| !title.is_empty())
     }
 
     /// Where its selected item is, on its widget's surface.
@@ -2837,6 +2849,63 @@ pub fn renderable<R: Renderable + 'static>(f: impl Fn() -> R + 'static) -> Node 
         console.render_lines(&f(), &options, false)
     })
     .what("renderable")
+}
+
+/// A [`renderable`] that says what it shows: a chart, a table, a tree, or
+/// anything else with rich-ext's
+/// [`AccessibleText`](rich_ext::a11y::AccessibleText). Its accessible name
+/// is that text at the width it was last drawn, its lines joined with
+/// `. `, so the accessibility tree, [linear](crate::App::linear) mode and
+/// a screen reader read `Line chart, 2 series, x from 0 to 23, …` instead
+/// of the glyphs. A [`label`](Node::label) goes first: `CPU: Line chart,
+/// …`.
+///
+/// ```
+/// use intuituive::prelude::*;
+/// use rich_ext::chart::Sparkline;
+///
+/// let app = App::new(|| {
+///     let load = signal(vec![2.0, 4.0, 3.0, 9.0]);
+///     described(move || Sparkline::new(load.get())).label("Load")
+/// });
+/// let mut driver = app.driver(20, 1);
+/// driver.update(std::time::Duration::ZERO);
+/// driver.render();
+/// let tree = driver.accessibility();
+/// assert_eq!(
+///     tree[0].describe(),
+///     "Load: Sparkline, 4 values: min 2, max 9, last 9, trend up"
+/// );
+/// ```
+pub fn described<R>(f: impl Fn() -> R + 'static) -> Node
+where
+    R: Renderable + rich_ext::a11y::AccessibleText + 'static,
+{
+    let draw = move |console: &Console, width: u16, height: u16, say: bool| {
+        let value = f();
+        let options = console.options().update_width(width.max(1) as usize);
+        let options = if height == 0 {
+            options
+        } else {
+            options.update_height(height as usize)
+        };
+        let lines = console.render_lines(&value, &options, false);
+        let text = say.then(|| {
+            value
+                .accessible_text(width.max(1) as usize)
+                .lines()
+                .map(str::trim)
+                .filter(|l| !l.is_empty())
+                .collect::<Vec<_>>()
+                .join(". ")
+        });
+        (lines, text)
+    };
+    let widget = Described {
+        draw: Box::new(draw),
+        text: None,
+    };
+    Node::from_widget(Box::new(widget), "described").what("renderable")
 }
 
 /// A `rich-interact` component as a node: an `Input`, a `Select`, a
