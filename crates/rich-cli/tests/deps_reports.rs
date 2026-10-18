@@ -185,7 +185,10 @@ fn sizes_from_a_target_directory() {
         "",
     ));
     assert!(out.starts_with("2 artifacts: 1.1 MiB in "), "{out}");
-    assert!(out.contains(", 5.9 KiB of source"), "{out}");
+    // The heading names the target directory, so where it wraps depends on
+    // that path's length.
+    let flat = out.split_whitespace().collect::<Vec<_>>().join(" ");
+    assert!(flat.contains(", 5.9 KiB of source"), "{out}");
     assert!(!out.contains("insta"), "{out}");
     // No such profile: an input error.
     let out = run_in(
