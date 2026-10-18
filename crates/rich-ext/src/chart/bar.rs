@@ -210,6 +210,10 @@ struct Group {
 ///   whole-cell precision, their values under them. Given less width the
 ///   values go, then the labels are cut (and dropped below two cells),
 ///   then the gaps, and bars that still do not fit are left off the right.
+///   An explicit [`thickness`](Self::thickness), [`bar_gap`](Self::bar_gap)
+///   or [`group_gap`](Self::group_gap) is kept, as ratatui keeps them: the
+///   slots narrow to the thickness, then as many whole bars as fit are
+///   drawn, from the first, and the rest are left off.
 ///
 /// What ratatui's `BarChart` has, by our names:
 ///
@@ -627,6 +631,32 @@ impl BarChart {
         let without = label.max(floor);
         if fits(without) {
             return full(without, label > 0, values && self.values_inside);
+        }
+        // An explicit thickness or gap is kept, as ratatui keeps them: the
+        // slots narrow to the thickness, then the bars that do not fit are
+        // left off the right.
+        if self.thickness.is_some() || self.bar_gap.is_some() || self.group_gap.is_some() {
+            if fits(floor) {
+                let slot = (width - gaps) / n;
+                return full(slot, label > 0 && slot > 1, values && self.values_inside);
+            }
+            let mut shown = 0;
+            for (group, (_, range)) in self.spans().iter().enumerate() {
+                for index in range.clone() {
+                    let left = index
+                        .saturating_mul(floor.saturating_add(gap))
+                        .saturating_add(group.saturating_mul(group_gap));
+                    if left.saturating_add(floor) > width {
+                        break;
+                    }
+                    shown = index + 1;
+                }
+            }
+            let shows_values = self.values_inside || value <= floor;
+            return Columns {
+                shown: shown.max(1).min(self.bars.len()),
+                ..full(floor, label > 0 && floor > 1, values && shows_values)
+            };
         }
         if width >= gaps.saturating_add(n) {
             let slot = (width - gaps) / n;
@@ -1511,6 +1541,52 @@ fn bin_step(x: f64) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn an_explicit_thickness_and_gap_keep_and_leave_bars_off() {
+        let labels = "abcdefghijklmnopqrstuvwx";
+        let bars = |chart: BarChart| {
+            labels
+                .chars()
+                .fold(chart, |c, l| c.bar(l.to_string(), 5.0))
+                .max(5.0)
+                .orientation(Orientation::Vertical)
+                .show_values(false)
+                .bar_width(2)
+        };
+        // 24 bars 3 cells thick, 2 apart, in 40 cells: the first 8.
+        let kept = bars(BarChart::new()).thickness(3).bar_gap(2);
+        let row = ["███"; 8].join("  ");
+        assert_eq!(
+            rows(40, &kept),
+            vec![
+                row.clone(),
+                row,
+                " a    b    c    d    e    f    g    h ".to_string(),
+            ]
+        );
+        // Without them, every bar is squeezed in, one cell each.
+        let squeezed = bars(BarChart::new());
+        assert_eq!(rows(40, &squeezed)[0], "█".repeat(24));
+        // Room for every bar: the slots narrow, the thickness stays.
+        let narrow = bars(BarChart::new()).thickness(1).bar_gap(1);
+        assert_eq!(rows(47, &narrow)[0], ["█"; 24].join(" "));
+        // Group gaps are kept too: two whole groups of three fit 20 cells.
+        let group = |label: &str| {
+            BarGroup::new("").bars((0..3).map(|i| Bar::new(format!("{label}{i}"), 1.0)))
+        };
+        let grouped = ["p", "q", "r", "s"]
+            .into_iter()
+            .fold(BarChart::new(), |c, l| c.group(group(l)))
+            .max(1.0)
+            .orientation(Orientation::Vertical)
+            .show_values(false)
+            .bar_width(1)
+            .thickness(2)
+            .bar_gap(1)
+            .group_gap(3);
+        assert_eq!(rows(20, &grouped)[0], "██ ██ ██    ██ ██ ██");
+    }
 
     #[test]
     fn accessible_text_lists_few_bars_and_ranks_many() {

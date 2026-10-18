@@ -162,6 +162,11 @@ the labels underneath:
 - When the width is short the values go first, then the labels are cut
   (and left out below two cells), then the gaps between bars. Bars that
   still do not fit are left off the right.
+- An explicit `.thickness(n)`, `.bar_gap(n)` or `.group_gap(n)` is kept, as
+  ratatui keeps them: the slots narrow to the thickness, then as many whole
+  bars as fit (with their gaps) are drawn, from the first, and the rest are
+  left off. 24 bars 3 cells thick and 2 apart show the first 8 in 40
+  cells.
 - Without `.bar_width(..)` a vertical chart fills the height it is given,
   less its labels and values.
 - `Histogram` takes `.orientation(..)` too.

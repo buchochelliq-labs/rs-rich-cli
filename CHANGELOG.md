@@ -700,6 +700,12 @@ test.
   moves the window across. `FnCells` makes each cell on demand. A
   120-column window of 2,000 columns by 100,000 rows renders in about
   20 ms in release, its width sample included (an ignored test times it).
+- **Explicit bar sizes are kept.** A vertical `BarChart` with an explicit
+  `thickness`, `bar_gap` or `group_gap` keeps them when the bars do not
+  all fit, as ratatui does. It draws as many whole bars as fit, from the
+  first, and leaves the rest off: 24 bars 3 cells thick and 2 apart show
+  the first 8 in 40 cells. Before, they were squeezed to one cell with no
+  gap. Charts that set neither squeeze as before.
 - **Python:** `Distribution`, `DistributionSet`, `SmallMultiples`,
   `quantile`, `summary` and `describe` in `rs_rich.chart`.
   `rs_rich.ext.a11y.accessible_text` reads charts too. `data.VirtualTable`
