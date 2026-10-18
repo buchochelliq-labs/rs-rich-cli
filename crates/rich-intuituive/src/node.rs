@@ -1260,9 +1260,10 @@ impl Node {
     /// Match the stylesheet's rules to this node, the last of `chain`'s
     /// descendants, once per sheet: its layout, the border it draws, what
     /// its widget takes (a stack's gap, a grid's tracks, a panel's look).
-    pub(crate) fn resolve(&self, cx: &SheetCx, chain: &mut Vec<Element>) {
+    /// Whether it was matched now, rather than already.
+    pub(crate) fn resolve(&self, cx: &SheetCx, chain: &mut Vec<Element>) -> bool {
         if self.sheet.borrow().generation == cx.generation {
-            return;
+            return false;
         }
         chain.push(self.element());
         let layout = cx.sheet.layout(chain, cx.vars, cx.viewport);
@@ -1326,6 +1327,7 @@ impl Node {
         sheet.watch = watch;
         sheet.decor = decor;
         sheet.insets = insets;
+        true
     }
 
     /// Its conditional classes that hold now, and whether it is selected,
@@ -1451,6 +1453,13 @@ impl Node {
         screen: &mut Screen,
         force: bool,
     ) {
+        // Hidden (`display: none`, `hide_below` and the like): not drawn,
+        // whatever room its parent gave it (a split's pane, a scroll's or a
+        // switch's child), so nothing inside it is shown or clicked.
+        if self.hidden() {
+            self.hide();
+            return;
+        }
         // While the inspector is open: how long this node takes, less what
         // its children take.
         let clock = frame.timings.is_some().then(|| {
@@ -1536,9 +1545,23 @@ impl Node {
             } else {
                 inner
             };
-            let new_areas = frame
+            let mut new_areas = frame
                 .runtime
                 .observe_node(id, || widget.layout(&MeasureCx { console }, space));
+            // Children the layout built (a switch's page, a new keyed row)
+            // match the stylesheet before they draw, and it lays out again
+            // with what that says (`display: none`, a size).
+            if let Some(sheet) = &frame.sheet {
+                let mut fresh = false;
+                for child in widget.children() {
+                    fresh |= child.resolve(sheet, &mut frame.chain);
+                }
+                if fresh {
+                    new_areas = frame
+                        .runtime
+                        .observe_node(id, || widget.layout(&MeasureCx { console }, space));
+                }
+            }
             let ids: Vec<NodeId> = widget.children().iter().map(|c| c.id).collect();
             relaid =
                 (!laid.is_empty() || !areas.is_empty()) && (ids != *laid || new_areas != *areas);
@@ -2108,6 +2131,11 @@ pub(crate) fn walk_screen(root: &Node, f: &mut ScreenVisit) {
         clip: Rect,
         f: &mut ScreenVisit,
     ) {
+        if node.hidden() {
+            // Not shown, nor anything inside: no clicks reach it, and
+            // assistive technology is not told of it.
+            return;
+        }
         path.push(node.id);
         f(node, path, shift, clip);
         let scrolled = node.body.borrow().view.as_ref().and_then(|view| {

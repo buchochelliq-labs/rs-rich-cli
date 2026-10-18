@@ -46,6 +46,11 @@ impl CalendarOptions {
         self.min.is_none_or(|min| date >= min) && self.max.is_none_or(|max| date <= max)
     }
 
+    /// Whether no day is in the range: its min is after its max.
+    pub(crate) fn empty(&self) -> bool {
+        empty(self.min, self.max)
+    }
+
     /// `date`, moved into the range.
     pub fn clamp(&self, date: Date) -> Date {
         let mut date = date;
@@ -106,8 +111,32 @@ impl DaySource {
     }
 }
 
+/// Whether a range from `min` to `max` holds nothing: `min` is after
+/// `max`.
+pub(crate) fn empty<T: PartialOrd>(min: Option<T>, max: Option<T>) -> bool {
+    matches!((min, max), (Some(min), Some(max)) if min > max)
+}
+
+/// What a picker whose range is empty says, as rs-rich-interact's pickers
+/// do ("the range is empty: min is after max"), on two lines of twenty
+/// cells.
+pub(crate) const EMPTY: [&str; 2] = ["✗ the range is empty", "min is after max"];
+
+/// `at` moved into the range, and why it had to move.
+pub(crate) fn into_range(
+    min: Option<DateTime>,
+    max: Option<DateTime>,
+    at: DateTime,
+) -> (DateTime, Option<String>) {
+    match (min, max) {
+        (Some(min), _) if at < min => (min, Some(format!("the earliest is {min}"))),
+        (_, Some(max)) if at > max => (max, Some(format!("the latest is {max}"))),
+        _ => (at, None),
+    }
+}
+
 /// Set `value` to `at` moved into the range, and say in `message` when it
-/// had to move.
+/// had to move. An empty range changes nothing.
 pub(crate) fn set_moment(
     value: Signal<DateTime>,
     message: Signal<Option<String>>,
@@ -115,11 +144,10 @@ pub(crate) fn set_moment(
     max: Option<DateTime>,
     at: DateTime,
 ) {
-    let (at, why) = match (min, max) {
-        (Some(min), _) if at < min => (min, Some(format!("the earliest is {min}"))),
-        (_, Some(max)) if at > max => (max, Some(format!("the latest is {max}"))),
-        _ => (at, None),
-    };
+    if empty(min, max) {
+        return;
+    }
+    let (at, why) = into_range(min, max, at);
     value.set(at);
     if message.get_untracked() != why {
         message.set(why);
@@ -186,7 +214,10 @@ pub fn calendar_with(selected: Signal<Date>, today: Option<Date>) -> Node {
 /// [`min`](CalendarOptions::min) or after [`max`](CalendarOptions::max)
 /// are drawn in the theme's `calendar.disabled` style (dim unless set),
 /// the keys and the wheel stop at the range's ends, and a click on a day
-/// outside it does nothing.
+/// outside it does nothing. A range whose min is after its max is empty:
+/// where the weeks go, the calendar says so, as rs-rich-interact's pickers
+/// do ("the range is empty: min is after max"), in the theme's `error`
+/// style, and nothing changes the day.
 ///
 /// ```
 /// use intuituive::prelude::*;
@@ -236,6 +267,9 @@ impl Widget for Calendar {
     }
 
     fn cursor(&self) -> Option<crate::screen::Rect> {
+        if self.options.empty() {
+            return None;
+        }
         // The selected day's cell, as `draw` places it.
         let date = self.source.get_untracked();
         let at = date.first_of_month().weekday() + date.day - 1;
@@ -244,8 +278,10 @@ impl Widget for Calendar {
     }
 
     fn access_state(&self) -> crate::a11y::AccessState {
+        let empty = self.options.empty();
         crate::a11y::AccessState {
-            selected: true,
+            selected: !empty,
+            invalid: empty,
             ..Default::default()
         }
     }
@@ -262,6 +298,14 @@ impl Widget for Calendar {
         let title = format!("{} {}", selected.month_name(), selected.year);
         let x = WIDTH.saturating_sub(title.len() as u16) / 2;
         canvas.print(x, 0, &title, Some(&cx.style("calendar.title", "bold")));
+        if self.options.empty() {
+            // No day can be selected: why, where the weeks go.
+            let style = cx.theme().error_style("error");
+            for (row, line) in (2..).zip(EMPTY) {
+                canvas.print(0, row, line, Some(&style));
+            }
+            return;
+        }
         let header = cx.style("calendar.header", "dim");
         canvas.print(0, 1, "Mo Tu We Th Fr Sa Su", Some(&header));
         let highlight = if cx.focused() {
@@ -294,6 +338,10 @@ impl Widget for Calendar {
     }
 
     fn event(&mut self, _cx: &mut EventCx, event: &WidgetEvent) -> Used {
+        if self.options.empty() {
+            // Nothing can be selected, so nothing changes the day.
+            return Used::No;
+        }
         match event {
             WidgetEvent::Key(key) => {
                 if key.modifiers.ctrl || key.modifiers.alt {

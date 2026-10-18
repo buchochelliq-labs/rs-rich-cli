@@ -181,10 +181,13 @@ measures it again, and what depends on it lays out again.
 
 - `.hide_below(60)` hides a node while the viewport is narrower than 60
   columns, and `.show_below(60)` shows one only then. Hidden, a node is as
-  if a stylesheet said `display: none`: it takes no room, and it and what
-  is inside it leave the Tab order and the accessibility tree. A node that
-  had the focus gives it to the next one. `.hide_below_height(rows)` and
-  `.show_below_height(rows)` do the same for the height.
+  if a stylesheet said `display: none`, in any container: it takes no room
+  (a hidden pane of a `split` leaves the other the whole split, with no
+  divider), it is not drawn and takes no clicks, and it and what is inside
+  it leave the Tab order, the accessibility tree and linear mode's lines.
+  A node that had the focus gives it to the next one.
+  `.hide_below_height(rows)` and `.show_below_height(rows)` do the same
+  for the height.
 - A [stylesheet](#stylesheets)'s `@media` rules change sizes, grid tracks,
   padding, borders, `display` and the rest at a size, from outside the
   code.
@@ -476,7 +479,9 @@ hsplit(
 - **`hsplit(first, second, ratio)`** puts two panes side by side, and
   `vsplit` stacks them. Dragging the divider moves it, and so do Alt+←/→
   (Alt+↑/↓ when stacked) from inside either pane. `split_with` sets the
-  smallest size of a pane (three cells by default).
+  smallest size of a pane (three cells by default). A hidden pane
+  (`hide_below`, `display: none`) leaves the other the whole split, with
+  no divider.
 - **`calendar(selected)`** is a month grid of a `Date` signal: the arrows
   move by day and week, PgUp/PgDn by month, a click picks a day and the
   wheel changes month. `Date` (rs-rich-interact's, shared with its date
@@ -485,7 +490,9 @@ hsplit(
   `calendar_options(selected, CalendarOptions::new().min(..).max(..))`
   keeps the selection in a range: days outside it are dimmed (the theme's
   `calendar.disabled` style), and the keys, the wheel and clicks stop at
-  its ends.
+  its ends. A range whose min is after its max is empty: the calendar
+  says so where the weeks go ("the range is empty: min is after max", as
+  rs-rich-interact's pickers say it), and nothing changes the day.
 - **`virtual_list(len, row, selected)`** is the list form of
   `virtual_table`: it asks only for the rows in view.
 - **`tree_lazy(roots, children, selected)`** loads each level when it is
@@ -513,13 +520,22 @@ column([
   ←/→ move between the hour and the minute, ↑/↓ change the focused one,
   wrapping round, and digits type it, two to a field. `time_picker_with`
   takes `TimeOptions`: `.seconds()`, `.twelve_hour()` (AM and PM; `a` and
-  `p` set them), and `.min(..)`/`.max(..)`, where a change stops.
+  `p` set them), and `.min(..)`/`.max(..)`, where a step stops. A field
+  typed past them stops at the range's end for that field and keeps the
+  others where it can: with 09:30 the earliest, `08` typed into 12:45
+  makes 09:45. A first digit that would leave the range is not written
+  until the field is complete or left. With its min after its max, the
+  picker says the range is empty after its fields, and nothing changes the
+  time.
 - **`datetime_picker(selected, options)`** is a calendar over a time picker
   on one `DateTime` signal, Tab moving between them, and two rows under
   them for the range. `DateTimeOptions::min` is a moment: days before its
   day cannot be selected, and on its day an earlier time moves up to it,
   with a line saying why (`✗ the earliest is 2026-10-17 09:00`) until the
-  next change that needs none. Eleven rows, twenty cells wide.
+  next change that needs none. A field typed past the range moves alone,
+  as in a time picker, and the line says why. An empty range (its min
+  after its max) is said there too, and nothing changes the moment.
+  Eleven rows, twenty cells wide.
 - The focused day and field are reversed, which reads without colour.
 
 #### Reorderable lists
@@ -1083,7 +1099,8 @@ condition holds, following the signals the condition reads.
 ```
 
 The conditions are `min-width`, `max-width`, `min-height` and
-`max-height`, in cells, inclusive as in CSS, joined with `and`. Inside,
+`max-height`, in cells, inclusive as in CSS, joined with `and`; the space
+after `@media` may be left out, as in CSS (`@media(max-width: 80)`). Inside,
 rules are written as anywhere else, and the more specific rule still wins,
 then the later one, whether it is in a block or not. Blocks do not nest,
 and other `@` rules are an error.
@@ -1098,7 +1115,7 @@ and other `@` rules are an error.
 | `size`, `min-size`, `max-size` | `3`, `50%`, `2fr`, `auto`, along the parent's axis |
 | `padding` | one to four numbers, as in CSS |
 | `gap`, `grid-columns`, `grid-rows` | a stack's or grid's spacing; a grid's tracks |
-| `display` | `none` hides the node and what is inside, takes it out of the Tab order, and out of a grid's cells |
+| `display` | `none` hides the node and what is inside, in any container (a split's pane, a scroll's or a switch's child), takes it out of the Tab order, and out of a grid's cells |
 | `dock` | `top` or `bottom` in a column, `left` or `right` in a row: kept at that edge |
 | `align-items`, `align-self` | `flex-start`, `center`, `flex-end` or `stretch` (`align-self` also `auto`): where a stack's children sit across its axis |
 | `justify-content` | `flex-start`, `center`, `flex-end`, `space-between`, `space-around` or `space-evenly`: what a stack does with the room its children leave |
@@ -1532,8 +1549,9 @@ terminal and no clock of its own. For a test it has:
 
 **Snapshots.** `assert_screen!(driver, "name")` compares the screen with
 `tests/snapshots/name.txt`: plain text, one line a row, trailing spaces
-trimmed, so a review reads it as the screen. When the screen differs, the
-test fails with a unified diff:
+trimmed, so a review reads it as the screen. A file saved with Windows
+line endings, trimmed lines or a byte-order mark still matches. When the
+screen differs, the test fails with a unified diff:
 
 ```text
 snapshot tests/snapshots/counter_two.txt differs; run with UPDATE_SNAPSHOTS=1 to accept the change

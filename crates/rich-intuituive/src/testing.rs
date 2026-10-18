@@ -157,9 +157,10 @@ pub fn styled(screen: &impl StyledRows) -> String {
 
 /// Compare `actual` with the snapshot file at `path`, or write it there
 /// when `UPDATE_SNAPSHOTS` is set. The error says what differs, as a
-/// unified diff, and how to accept the change. Line endings and trailing
-/// spaces in the file are not compared, so a checkout that turns `\n`
-/// into `\r\n`, or an editor that trims lines, changes nothing.
+/// unified diff, and how to accept the change. Line endings, trailing
+/// spaces and a byte-order mark in the file are not compared, so a
+/// checkout that turns `\n` into `\r\n`, or an editor that trims lines or
+/// saves with a BOM, changes nothing.
 pub fn check_snapshot(path: impl AsRef<Path>, actual: &str) -> Result<(), String> {
     check(
         path.as_ref(),
@@ -201,8 +202,10 @@ fn check(path: &Path, actual: &str, update: bool) -> Result<(), String> {
     ))
 }
 
-/// Lines without `\r` or trailing spaces, each ending in a line break.
+/// Lines without `\r` or trailing spaces, each ending in a line break, and
+/// without the byte-order mark an editor may put first.
 fn normalize(text: &str) -> String {
+    let text = text.strip_prefix('\u{feff}').unwrap_or(text);
     text.lines()
         .map(|line| format!("{}\n", line.trim_end()))
         .collect()

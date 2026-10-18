@@ -282,23 +282,16 @@ impl Stylesheet {
         self.rules.is_empty()
     }
 
-    /// Which of its `@media` blocks hold at `viewport`, one bit each in
-    /// order (blocks past the 64th share the last bit): what the layout
-    /// depends on beyond the nodes. Zero when it has none.
-    pub(crate) fn media_key(&self, viewport: (u16, u16)) -> u64 {
-        let mut key = 0u64;
+    /// Whether each of its `@media` blocks holds at `viewport`, in order:
+    /// what the layout depends on beyond the nodes. Empty when it has none.
+    pub(crate) fn media_key(&self, viewport: (u16, u16)) -> Vec<bool> {
         let mut seen: Vec<&Rc<Media>> = Vec::new();
         for media in self.rules.iter().filter_map(|rule| rule.media.as_ref()) {
-            if seen.iter().any(|m| Rc::ptr_eq(m, media)) {
-                continue;
-            }
-            let bit = seen.len().min(63);
-            seen.push(media);
-            if media.holds(viewport) {
-                key |= 1 << bit;
+            if !seen.iter().any(|m| Rc::ptr_eq(m, media)) {
+                seen.push(media);
             }
         }
-        key
+        seen.iter().map(|media| media.holds(viewport)).collect()
     }
 
     /// Whether it has `@media` rules.
@@ -578,8 +571,13 @@ impl<'a> Parser<'a> {
                     return Err(self.error(start, "an `@media` rule with no `{`"));
                 };
                 let head = self.rest()[..open].trim_end();
+                // `@media (max-width: 80)`, or `@media(max-width: 80)`.
                 let query = match head.strip_prefix("@media") {
-                    Some(query) if query.is_empty() || query.starts_with(char::is_whitespace) => {
+                    Some(query)
+                        if query.is_empty()
+                            || query.starts_with(char::is_whitespace)
+                            || query.starts_with('(') =>
+                    {
                         query
                     }
                     _ => {
@@ -1212,10 +1210,10 @@ mod tests {
         assert!(sheet.style(&main, &states, &no_vars, (70, 10)).is_some());
         assert!(sheet.style(&main, &states, &no_vars, (70, 11)).is_none());
         assert!(sheet.style(&main, &states, &no_vars, (59, 10)).is_none());
-        // One bit a block: what changes when a bound is crossed.
-        assert_eq!(sheet.media_key((120, 40)), 0);
-        assert_eq!(sheet.media_key((80, 40)), 1);
-        assert_eq!(sheet.media_key((70, 10)), 3);
+        // One entry a block: what changes when a bound is crossed.
+        assert_eq!(sheet.media_key((120, 40)), [false, false]);
+        assert_eq!(sheet.media_key((80, 40)), [true, false]);
+        assert_eq!(sheet.media_key((70, 10)), [true, true]);
         assert!(!Stylesheet::parse("a { color: red; }").unwrap().has_media());
     }
 

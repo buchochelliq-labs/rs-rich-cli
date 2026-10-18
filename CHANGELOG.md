@@ -65,6 +65,52 @@ per browser session](#one-process-per-browser-session-web-002).
 - **Docs:** the Python guide lists `Widget::claims_key` and
   `MeasureCx::stack_flow` among what is not bound yet.
 
+A second round of audits, over workstreams 7 to 10 (a session's process
+tree on Windows; responsive layout, the error state and snapshot tests;
+wide and long tables; reorderable lists and the date and time pickers),
+found the defects below. Each was reproduced first and has a regression
+test.
+
+- **A hidden node is hidden in every container.** A node hidden by
+  `hide_below`, `show_below` or `@media { display: none }` left the Tab
+  order, but inside a `split`, a `scroll` or a `switch` it was still drawn
+  and still took clicks. Now it is drawn nowhere and takes no clicks, and
+  the accessibility tree and linear mode leave it out, whatever holds it.
+  A hidden pane leaves the other the whole split, with no divider, and a
+  hidden row of an `each` takes no room. A page that a `switch` or an
+  `each` builds takes the stylesheet before it first draws, so
+  `display: none` holds there from the start.
+- **Typing an hour into a time picker keeps its minutes.** With 09:00 the
+  earliest and 09:05 shown, typing `1` wrote 01:05, which the range moved
+  to 09:00, and the `4` then made 14:00; the app's signal saw 09:00 on the
+  way. A first digit that would leave the range is no longer written
+  until the field is complete or left. A field typed past the range stops
+  at the range's end for that field and keeps the others where it can:
+  `08` typed into 12:45, with 09:30 the earliest, makes 09:45. Beside a
+  calendar, the line under the picker says why a field moved.
+- **A calendar or a time picker whose min is after its max says so.**
+  Every day or time was disabled with no word why, and the first key
+  moved the value to the max. Now "the range is empty: min is after max"
+  shows where the calendar's weeks go, after a time picker's fields and
+  under a date-and-time picker, as rs-rich-interact's pickers say it, and
+  nothing changes the value. Assistive technology is told it is in error.
+- **A table column squeezed to nothing can be dragged wider again.** The
+  check that keeps a column scrolled out of view from being resized
+  applied to every table, so in a resizable table that fits, a column
+  squeezed to no cells had no edge to drag. It applies only while the
+  table scrolls across.
+- **`@media(max-width: 80)` parses.** A query with no space after
+  `@media` was refused with "only `@media` rules are supported". It is
+  accepted, as in CSS.
+- **A stylesheet with more than 64 `@media` blocks follows the
+  terminal.** The 64th block and those after it shared one bit of the key
+  that tells when a resize crosses a bound, so crossing a later block's
+  bounds did not apply it. Each block now counts on its own.
+- **A snapshot file saved with a byte-order mark still matches.** The
+  mark was compared as text, so the file never matched, and the diff
+  showed two lines that looked the same. It is ignored, as line endings
+  and trailing spaces are.
+
 ### Flex alignment in intuiTUIve (intuituive 0.0.4)
 
 0.0.19 workstream 1.

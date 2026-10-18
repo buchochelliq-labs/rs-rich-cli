@@ -505,10 +505,14 @@ impl Table {
             .position(|(start, width)| (*start..start + width).contains(&x))
     }
 
-    /// The column whose right edge (the gap after it) is at `x`.
+    /// The column whose right edge (the gap after it) is at `x`. Scrolled
+    /// across, a column out of view is drawn nowhere and has none; a column
+    /// squeezed to nothing in a table that fits still has one.
     fn edge_at(&self, x: u16) -> Option<usize> {
         let spans = self.spans.borrow();
-        (0..spans.len().saturating_sub(1)).find(|&i| spans[i].1 > 0 && spans[i].0 + spans[i].1 == x)
+        let scrolled = self.across.wide.get();
+        (0..spans.len().saturating_sub(1))
+            .find(|&i| (spans[i].1 > 0 || !scrolled) && spans[i].0 + spans[i].1 == x)
     }
 }
 
