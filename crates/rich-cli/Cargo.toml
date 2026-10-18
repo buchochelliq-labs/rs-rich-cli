@@ -37,7 +37,7 @@ workspace = true
 syntax-cache = ["rich/syntax-cache"]
 # Oniguruma regex engine for syntax highlighting (DIVERGENCES #26).
 onig = ["rich/onig"]
-default = ["fetch", "art", "mermaid", "record", "interact"]
+default = ["fetch", "art", "mermaid", "record", "png", "interact"]
 # Optional JSON display divergence; never enabled by default.
 json-escape-safe = ["rich/json-escape-safe"]
 # `fetch` enables the CLI's URL support (`rich <url>`); disable it
@@ -57,7 +57,11 @@ mmdc = ["mermaid", "art", "rich-mermaid/mmdc"]
 # `rich record TAPE`: run scripted terminal sessions and render screenshots,
 # asciinema casts, GIF and MP4 (rs-rich-record, #599). Pulls in a PTY, a VT
 # emulator and an embedded font.
-record = ["dep:rich-record"]
+record = ["png"]
+# `--export-png PATH`: rendered output as a PNG, drawn by rs-rich-record's
+# rasteriser with its embedded font (#723). Implied by `record`; on its own
+# for builds (the Python wheel) that do not run tapes.
+png = ["dep:rich-record"]
 # `rich serve -- PROGRAM`: run a terminal program in a web browser, one copy
 # per tab on a PTY of its own (rs-rich-web). Off by default: a default build
 # has no network server. Never in the Python wheel's feature list.
@@ -124,3 +128,6 @@ portable-pty = "0.9"
 vt100 = "0.16"
 # The WASM plugin tests compile the example module from text.
 wat = "1"
+# `--export-png` tests decode the image (already in the tree through
+# rs-rich-record).
+png = "0.18"

@@ -7,12 +7,14 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
-use pyo3::types::PyList;
+use pyo3::types::{PyDict, PyList};
 
 use rich::protocol::Renderable;
 use rich_ext::badge::{Badge as CoreBadge, Badges as CoreBadges};
 use rich_ext::format as fmt;
-use rich_ext::redact::{Detector, Redacted as CoreRedacted, Redactor as CoreRedactor};
+use rich_ext::redact::{
+    Detector, Preview as CorePreview, Redacted as CoreRedacted, Redactor as CoreRedactor,
+};
 use rich_ext::size_bar::{SizeBar as CoreSizeBar, Units};
 
 use super::common::{self, names, RedactPatternError};
@@ -417,6 +419,146 @@ impl RedactMatch {
     }
 }
 
+/// One span a preview found (`Redactor.preview`): its line and cell column
+/// (from 0), character offsets in the line's visible text, the rule, the
+/// text and what would replace it, and whether it is inside an escape
+/// sequence.
+#[pyclass(name = "RedactFinding", module = "rs_rich.ext.redact", frozen)]
+pub(crate) struct RedactFinding {
+    #[pyo3(get)]
+    line: usize,
+    #[pyo3(get)]
+    column: usize,
+    #[pyo3(get)]
+    start: usize,
+    #[pyo3(get)]
+    end: usize,
+    #[pyo3(get)]
+    kind: String,
+    #[pyo3(get)]
+    text: String,
+    #[pyo3(get)]
+    replacement: String,
+    #[pyo3(get)]
+    hidden: bool,
+}
+
+#[pymethods]
+impl RedactFinding {
+    fn __repr__(&self) -> String {
+        format!(
+            "RedactFinding(line={}, column={}, kind={:?}, replacement={:?}, hidden={})",
+            self.line,
+            self.column,
+            self.kind,
+            self.replacement,
+            if self.hidden { "True" } else { "False" }
+        )
+    }
+}
+
+/// What a `Redactor` would mask, without masking it: the findings, the
+/// lines they are on, counts per rule and a summary. A renderable: each
+/// line with a match, highlighted, and the summary. It shows the secrets
+/// unmasked.
+#[pyclass(
+    name = "RedactPreview",
+    module = "rs_rich.ext.redact",
+    frozen,
+    skip_from_py_object
+)]
+#[derive(Clone)]
+pub(crate) struct RedactPreview {
+    inner: CorePreview,
+}
+
+impl AsRenderable for RedactPreview {
+    fn to_renderable(&self, _py: Python<'_>) -> PyResult<Box<dyn Renderable>> {
+        Ok(Box::new(self.inner.clone()))
+    }
+}
+
+#[pymethods]
+impl RedactPreview {
+    /// Every finding, in line order.
+    #[getter]
+    fn findings(&self) -> Vec<RedactFinding> {
+        self.inner
+            .findings()
+            .iter()
+            .map(|f| {
+                let line = self.inner.line(f.line).unwrap_or_default();
+                let index = common::CharIndex::new(line);
+                RedactFinding {
+                    line: f.line,
+                    column: f.column,
+                    start: index.get(f.start),
+                    end: index.get(f.end),
+                    kind: f.kind.clone(),
+                    text: f.original.clone(),
+                    replacement: f.replacement.clone(),
+                    hidden: f.hidden,
+                }
+            })
+            .collect()
+    }
+
+    /// The number of lines previewed.
+    #[getter]
+    fn total_lines(&self) -> usize {
+        self.inner.total_lines()
+    }
+
+    /// The number of lines with a finding.
+    #[getter]
+    fn lines_affected(&self) -> usize {
+        self.inner.lines_affected()
+    }
+
+    /// Whether nothing would be masked.
+    #[getter]
+    fn is_empty(&self) -> bool {
+        self.inner.is_empty()
+    }
+
+    /// Findings per rule, in the order the rules first matched.
+    #[getter]
+    fn counts<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
+        let counts = PyDict::new(py);
+        for (kind, n) in self.inner.counts() {
+            counts.set_item(kind, n)?;
+        }
+        Ok(counts)
+    }
+
+    /// The visible text of line `index` (from 0), when it has a finding.
+    fn line(&self, index: usize) -> Option<String> {
+        self.inner.line(index).map(str::to_string)
+    }
+
+    /// `3 matches on 2 of 40 lines (key-value 2, token 1)`.
+    fn summary(&self) -> String {
+        self.inner.summary()
+    }
+
+    fn __len__(&self) -> usize {
+        self.inner.findings().len()
+    }
+
+    fn __repr__(&self) -> String {
+        format!("<RedactPreview {}>", self.inner.summary())
+    }
+}
+
+fn titled(preview: CorePreview, title: Option<String>) -> RedactPreview {
+    RedactPreview {
+        inner: match title {
+            Some(title) => preview.title(title),
+            None => preview,
+        },
+    }
+}
+
 fn pattern_error(error: rich_ext::redact::PatternError) -> PyErr {
     RedactPatternError::new_err(error.to_string())
 }
@@ -505,6 +647,24 @@ impl Redactor {
                 kind: m.kind,
             })
             .collect()
+    }
+
+    /// What `redact(text)` would mask, as a `RedactPreview`.
+    #[pyo3(signature = (text, *, title=None))]
+    fn preview(&self, text: &str, title: Option<String>) -> RedactPreview {
+        titled(self.inner.preview(text), title)
+    }
+
+    /// What `redact_ansi(text)` would mask; positions in the visible text.
+    #[pyo3(signature = (text, *, title=None))]
+    fn preview_ansi(&self, text: &str, title: Option<String>) -> RedactPreview {
+        titled(self.inner.preview_ansi(text), title)
+    }
+
+    /// What `redact_args(args)` would mask, the words as one line.
+    #[pyo3(signature = (args, *, title=None))]
+    fn preview_args(&self, args: Vec<String>, title: Option<String>) -> RedactPreview {
+        titled(self.inner.preview_args(&args), title)
     }
 
     /// `text` with its secrets masked.
@@ -665,6 +825,8 @@ pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(pyo3::wrap_pyfunction!(format_compact, m)?)?;
     m.add_class::<Redactor>()?;
     m.add_class::<RedactMatch>()?;
+    m.add_class::<RedactFinding>()?;
+    renderable::add_renderable_class::<RedactPreview>(m)?;
     renderable::add_renderable_class::<Redacted>(m)?;
     m.add_function(pyo3::wrap_pyfunction!(is_secret_key, m)?)?;
     m.add(

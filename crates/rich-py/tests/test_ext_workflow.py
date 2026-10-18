@@ -307,3 +307,32 @@ def test_redaction():
     assert redact.is_secret_key("API-KEY")
     with pytest.raises(redact.RedactPatternError):
         redact.Redactor(patterns=["("])
+
+
+def test_redaction_preview():
+    secrets = redact.Redactor.secrets()
+    preview = secrets.preview("user=ann\npassword=hunter2\n", title="config")
+    assert isinstance(preview, redact.RedactPreview)
+    assert len(preview) == 1 and not preview.is_empty
+    (finding,) = preview.findings
+    assert isinstance(finding, redact.RedactFinding)
+    assert (finding.line, finding.column, finding.start, finding.end) == (1, 9, 9, 16)
+    assert (finding.kind, finding.text, finding.replacement, finding.hidden) == (
+        "key-value",
+        "hunter2",
+        "********",
+        False,
+    )
+    assert preview.line(1) == "password=hunter2" and preview.line(0) is None
+    assert (preview.total_lines, preview.lines_affected) == (2, 1)
+    assert preview.counts == {"key-value": 1}
+    assert preview.summary() == "config: 1 match on 1 of 2 lines (key-value 1)"
+    # Character offsets in the visible text, escapes removed.
+    ansi = secrets.preview_ansi("é \x1b[1mtoken=\x1b[0mabc123\n")
+    assert ansi.line(0) == "é token=abc123"
+    assert [(f.start, f.end) for f in ansi.findings] == [(8, 14)]
+    args = secrets.preview_args(["deploy", "--token", "abc123"])
+    assert [f.text for f in args.findings] == ["abc123"]
+    shown = render(preview, width=60)
+    assert "2 │ password=hunter2" in shown
+    assert "╰ 2:10 key-value hunter2 → ********" in shown

@@ -568,3 +568,49 @@ fn pathological_lines_redact_in_linear_time() {
         }
     }
 }
+
+#[test]
+fn preview_lists_what_each_redaction_would_mask() {
+    let redactor = Redactor::secrets()
+        .pattern(r"order (?P<secret>\d{4})")
+        .unwrap()
+        .mask("[{kind}]");
+    let text = format!("push {GHP}\nok\norder 1234 token: {JWT}\n");
+    let preview = redactor.preview(&text);
+    let found: Vec<_> = preview
+        .findings()
+        .iter()
+        .map(|f| (f.line, f.column, f.kind.as_str(), f.replacement.as_str()))
+        .collect();
+    assert_eq!(
+        found,
+        [
+            (0, 5, "token", "[token]"),
+            (2, 6, "pattern", "[pattern]"),
+            (2, 18, "key-value", "[key-value]"),
+        ]
+    );
+    // Nothing is masked: the original text is in the findings.
+    assert_eq!(preview.findings()[0].original, GHP);
+    assert_eq!(preview.lines_affected(), 2);
+    assert_eq!(
+        preview.summary(),
+        "3 matches on 2 of 3 lines (token 1, pattern 1, key-value 1)"
+    );
+    // Each finding's replacement, applied, gives what redact_str gives.
+    let mut lines: Vec<String> = text.split('\n').map(str::to_string).collect();
+    for f in preview.findings().iter().rev() {
+        lines[f.line].replace_range(f.start..f.end, &f.replacement);
+    }
+    assert_eq!(lines.join("\n"), redactor.redact_str(&text));
+}
+
+#[test]
+fn preview_renders_matches_highlighted_in_colour() {
+    let console = color(60);
+    let preview = Redactor::secrets().preview("password=hunter2").title("out");
+    let shown = console.render_to_string(&preview);
+    // The match is drawn bold, reversed and red.
+    assert!(shown.contains("\x1b[1;7;31mhunter2\x1b[0m"), "{shown:?}");
+    assert!(Redactor::new().preview("password=x").is_empty());
+}

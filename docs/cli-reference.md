@@ -154,6 +154,10 @@ Choose at most one; the default auto-detects .md/.rst/.json/.csv/.tsv/.ipynb, .m
 | `--sample <N>` | With `rich profile`, the most rows kept for types, statistics and distributions (default 10000): a longer input is sampled uniformly, the sample size is printed, and nulls still count every row. |
 | `--columns <COLUMN[,COLUMN...]>...` | With `rich profile`, profile only these columns, by header, in this order; repeatable. |
 | `--top <N>` | With `rich profile`, the most common values shown for a column that is not numeric (default 5); with `rich deps --sizes`, `--timings` or `--baseline`, the units shown (default 20) |
+| `--max-paths <N>` | With `rich profile` of JSON Lines, profile at most N paths (default 200), in the order first seen; the rest are noted. |
+| `--flat` | With `rich profile` of JSON Lines, profile rows of the top-level keys (nested values as JSON text) instead of every nested path. |
+| `--style-rule <RULE>...` | Style the cells, rows or columns of a data table by value: COLUMN OP VALUE:STYLE or COLUMN OP VALUE:row:STYLE (e.g. 'latency>500:bold red', 'status=failed:row:on red'); OP is == != < <= > >= *= ^= $= or a word such as contains or empty. Repeatable; applies to --csv, `rich profile`'s table and `rich inspect --table`, and has no effect elsewhere. Config: `rules`. |
+| `--rules <FILE>...` | Read style rules from FILE's [[rules]] tables (column, op, value, style, target), after the rules before it. |
 
 ### Log
 
@@ -169,10 +173,6 @@ Choose at most one; the default auto-detects .md/.rst/.json/.csv/.tsv/.ipynb, .m
 | `--output <FORMAT>` | With `rich log`, write the records kept as text, or as one JSON object a line (jsonl) for another program. Default: `text`. Possible values: `text`, `jsonl`. |
 | `--summary`, `--no-summary` | With `rich log`, end with a summary: records shown, counts by level and, with --group, the groups with errors; on by default with --group (on standard error with --output jsonl) |
 | `-i`, `--interactive` | With `rich log` on a terminal, show the records in a live view that follows the end: / filters, Space pauses, Enter shows a record's fields, q quits; without a terminal the records stream as usual. |
-| `--max-paths <N>` | With `rich profile` of JSON Lines, profile at most N paths (default 200), in the order first seen; the rest are noted. |
-| `--flat` | With `rich profile` of JSON Lines, profile rows of the top-level keys (nested values as JSON text) instead of every nested path. |
-| `--style-rule <RULE>...` | Style the cells, rows or columns of a data table by value: COLUMN OP VALUE:STYLE or COLUMN OP VALUE:row:STYLE (e.g. 'latency>500:bold red', 'status=failed:row:on red'); OP is == != < <= > >= *= ^= $= or a word such as contains or empty. Repeatable; applies to --csv, `rich profile`'s table and `rich inspect --table`, and has no effect elsewhere. Config: `rules`. |
-| `--rules <FILE>...` | Read style rules from FILE's [[rules]] tables (column, op, value, style, target), after the rules before it. |
 
 ### Image
 
@@ -239,6 +239,7 @@ Choose at most one; the default auto-detects .md/.rst/.json/.csv/.tsv/.ipynb, .m
 | `--show-secrets` | With `rich env`, show values whose names look secret instead of masking them. |
 | `--cast <FILE>` | With `rich capture`, also write an asciicast v2 recording (`asciinema play FILE`) |
 | `--redact-pattern <REGEX>...` | With `rich capture` and `rich log`, also mask matches of REGEX (only its `secret` group when it has one); repeatable. Experimental: check the output before sharing it. |
+| `--redact-preview` | With `rich capture` or `rich log` and --redact or --redact-pattern, show each match on its line, highlighted, with its rule and replacement, and a summary, instead of the output; write nothing (no cast, export or log output) and name on stderr what would have been written. The preview shows the secrets unmasked. With --report json, the findings as one JSON document on stdout. |
 
 ### Export
 
@@ -246,6 +247,7 @@ Choose at most one; the default auto-detects .md/.rst/.json/.csv/.tsv/.ipynb, .m
 | --- | --- |
 | `-o`, `--export-html <PATH>` | Also write a self-contained HTML document to PATH. Config: `export_html`. |
 | `--export-svg <PATH>` | Also write an SVG document to PATH. Unlike the HTML, it references its font from a CDN, so it is not self-contained offline. Config: `export_svg`. |
+| `--export-png <PATH>` | Also write a PNG image of the output to PATH: the terminal's width, rich's SVG export theme, in a window titled like the SVG's, drawn with an embedded DejaVu Sans Mono so it is the same on every machine (the png feature; not with --batch) |
 
 ### Paging
 
@@ -613,6 +615,7 @@ rich log [OPTIONS] [RESOURCE]
 | --- | --- |
 | `--group <N\|BY>` | With `rich hex`, bytes per group (default 8); with `rich log`, group records by trace, span or correlation id (trace_id, span_id, correlation_id, request_id, ...) under a header each, with a summary at the end. |
 | `--redact-pattern <REGEX>...` | With `rich capture` and `rich log`, also mask matches of REGEX (only its `secret` group when it has one); repeatable. Experimental: check the output before sharing it. |
+| `--redact-preview` | With `rich capture` or `rich log` and --redact or --redact-pattern, show each match on its line, highlighted, with its rule and replacement, and a summary, instead of the output; write nothing (no cast, export or log output) and name on stderr what would have been written. The preview shows the secrets unmasked. With --report json, the findings as one JSON document on stdout. |
 
 #### Inspect
 
@@ -937,6 +940,7 @@ rich capture [OPTIONS] [RESOURCE]
 | --- | --- |
 | `--cast <FILE>` | With `rich capture`, also write an asciicast v2 recording (`asciinema play FILE`) |
 | `--redact-pattern <REGEX>...` | With `rich capture` and `rich log`, also mask matches of REGEX (only its `secret` group when it has one); repeatable. Experimental: check the output before sharing it. |
+| `--redact-preview` | With `rich capture` or `rich log` and --redact or --redact-pattern, show each match on its line, highlighted, with its rule and replacement, and a summary, instead of the output; write nothing (no cast, export or log output) and name on stderr what would have been written. The preview shows the secrets unmasked. With --report json, the findings as one JSON document on stdout. |
 
 #### Inspect
 

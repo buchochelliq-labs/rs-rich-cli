@@ -1047,6 +1047,56 @@ test.
   library pages; the CLI reference regenerated; and
   `docs/tapes/micro-rows.tape` (not yet recorded).
 
+### Sharing output: PNG export and a redaction preview (record 0.0.7, ext 0.0.16, cli 0.0.19)
+
+0.0.19 workstream 19 (#723, #722).
+
+- **PNG of rendered output, without a tape (#723).** rs-rich-record's
+  screenshot rasteriser now draws any rendered output, not only a screen
+  recorded on a PTY. `rich_record::render::png` has `segments_png` (the
+  segments `Console::record_output` returns), `frame_png` and
+  `frame_canvas` (a rich-ext `Frame`), `image_size` and `PngOptions`
+  (theme, window frame and title, caption, text size, width in cells);
+  `Snapshot::from_frame` resolves the cells as rich's SVG export does
+  (reverse swaps, dim blends 40% towards the background). The glyphs are
+  the embedded DejaVu Sans Mono and Twemoji, so the same output gives the
+  same bytes on every machine. Too large an image is an error, not an
+  allocation that fails.
+- **`--export-png PATH`** beside `--export-html` and `--export-svg`,
+  wherever they apply, `rich capture` included: the console's width, rich's
+  SVG export theme, a window titled like the SVG's, 28-pixel text as the
+  screenshots. Not with `--batch` (a usage error for now). It needs the new
+  `png` feature, on by default, implied by `record`, and on in the Python
+  wheel's command line.
+- **Preview a redaction before anything is written (#722).**
+  `Redactor::preview` (plain text), `preview_ansi` (text with escapes,
+  positions in its visible text; a secret in an escape's body, such as a
+  hyperlink's URL, is a `hidden` finding) and `preview_args` (a command
+  line, as `redact_args` masks it) mask nothing and return a `Preview`:
+  each `Finding` with its line, cell column, byte span, rule, text and
+  replacement, plus `counts()` per rule and a `summary()`
+  (`3 matches on 2 of 40 lines (key-value 2, token 1)`). A `Preview` is a
+  renderable: each line with a match, the matches highlighted, one line per
+  match, and the summary. It shows the secrets unmasked, so it is for the
+  person about to share, not for sharing.
+- **`--redact-preview`** on `rich capture` and `rich log`, with `--redact`
+  or `--redact-pattern`: the preview instead of the output (for capture,
+  the command line and the output; for log, every line read once, so not
+  with `--follow` or `--interactive`). A dry run: no cast, export or log
+  output is written, and stderr names what a run without the flag would
+  write. With `--report json`, one JSON document on stdout. Exit 0; exit 2
+  without a redaction flag.
+- **Python:** `Redactor.preview`, `preview_ansi` and `preview_args`
+  (`title=` optional) return a renderable `RedactPreview` of
+  `RedactFinding`s, with character offsets; stubs updated.
+- **Docs:** [A PNG of the output](docs/cli.md#a-png-of-the-output-0019) and
+  [Preview a redaction before you
+  share](docs/cli.md#preview-a-redaction-before-you-share-0019) in the CLI
+  guide, [Preview what would be
+  masked](docs/guide/ext/badges-and-redaction.md#preview-what-would-be-masked)
+  in the redaction guide, the CLI reference regenerated, and
+  `docs/tapes/share.tape` (not yet recorded).
+
 ### One process per browser session (web 0.0.2)
 
 0.0.19 workstream 3.

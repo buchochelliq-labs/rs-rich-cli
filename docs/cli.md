@@ -720,6 +720,10 @@ see the record before it is masked.
 rich log app.jsonl --redact --redact-pattern 'card=\d+'
 ```
 
+`--redact-preview` shows what would be masked instead of the records, and
+writes nothing; see [Preview a redaction before you
+share](#preview-a-redaction-before-you-share-0019).
+
 **Live view.** `-i` / `--interactive`, on a terminal, shows the records in a
 view that follows the end as they arrive (with `-f`, or from a pipe). `/`
 types a filter that applies as you type: words that look like `--where`
@@ -958,6 +962,25 @@ stdout is still printed once. Diff reports choose color blocks for HTML/SVG
 independently of redirected stdout, which stays readable ASCII. Explicit
 `--image-mode ascii`, `--image-mode none` and `--no-color` are respected; Sixel
 requests use blocks in exported documents.
+
+### A PNG of the output (0.0.19)
+
+```bash
+rich report.md --export-png report.png
+rich capture --redact --export-png build.png -- make test
+```
+
+`--export-png PATH` writes a PNG image of what was rendered, beside (or
+instead of reaching for) the SVG: no tape, no terminal emulator and no
+browser. It is drawn by the same rasteriser as `rich record`'s screenshots,
+with the same embedded DejaVu Sans Mono and Twemoji, so the same output gives
+the same pixels on every machine. The image is as wide as the console
+(`--width`), in rich's SVG export theme, inside a window frame titled like the
+SVG's (the file name), and at the screenshots' 28-pixel text size. It may be
+combined with `--export-html` and `--export-svg`, and works wherever they do,
+`rich capture` included, except with `--batch` (a usage error for now). It
+needs the `png` feature, on by default and implied by `record`; the library
+call is `rich_record::render::png::segments_png`.
 
 ## Compare two images
 
@@ -1924,7 +1947,7 @@ rich view FILE [--search TEXT] [--no-line-numbers] [--no-sanitize]  # detect, re
 rich hex FILE [--offset N] [--length N] [--bytes-per-line N] [--group N] [--search BYTES]
 rich unicode FILE [--limit N]                        # graphemes, code points, widths
 rich env [PATTERN...] [--show-secrets]               # variables; `rich env PATH` checks entries
-rich capture [--cast FILE] [--redact] [--redact-pattern REGEX]... -- COMMAND [ARGS...]
+rich capture [--cast FILE] [--redact] [--redact-pattern REGEX]... [--redact-preview] -- COMMAND [ARGS...]
                                                      # run, show, export or record
 ```
 
@@ -2003,6 +2026,41 @@ detectors are `rich_ext::redact`; see
 rich capture --redact --export-svg deploy.svg -- ./deploy.sh
 rich capture --redact-pattern 'order (?P<secret>\d{4})' --cast run.cast -- ./report.sh
 ```
+
+### Preview a redaction before you share (0.0.19)
+
+`--redact-preview` shows what `--redact` and `--redact-pattern` would mask,
+and writes nothing:
+
+```bash
+rich capture --redact --redact-preview --export-svg deploy.svg -- ./deploy.sh
+rich log app.log --redact --redact-preview
+```
+
+Each line with a match is shown with its number and the match highlighted,
+then one line per match: its position (line:column), the rule that matched
+(`key-value`, `token`, `jwt`, `pattern`, …), the text and its replacement. A
+summary per source ends it: `output: 3 matches on 2 of 40 lines (key-value 2,
+token 1)`. `rich capture` previews the command line (as its title and the
+cast header would be masked) and the output; a secret inside an escape
+sequence, such as a hyperlink's URL, is marked `(in an escape sequence)`.
+`rich log` previews each line of the log as read, to its end, so not with
+`--follow` or `--interactive`.
+
+It is a dry run: no cast, no `--export-*` file and no log output is written,
+and a line on stderr names what a run without the flag would write. The
+command still runs. With `--report json` the preview is one JSON document on
+stdout (`redact_preview.sources[].findings[]`, lines and columns from 1, with
+`would_write` and an empty `written`). It exits 0, and needs `--redact` or
+`--redact-pattern` (exit 2 without).
+
+!!! warning "The preview shows the secrets"
+    The preview is for you, before you share: it prints what it found
+    unmasked. Do not share the preview itself.
+
+The library calls are `Redactor::preview`, `preview_ansi` and `preview_args`
+in `rich_ext::redact`; see
+[Badges, size bars, formatters and redaction](guide/ext/badges-and-redaction.md#preview-what-would-be-masked).
 
 ## Inspect your environment
 
