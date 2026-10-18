@@ -17,7 +17,8 @@
 //!   by ratatui widgets, so an existing widget runs unchanged inside a
 //!   rich-interact event loop, and under its headless driver in tests.
 //! - **The conversions underneath**, useful on their own:
-//!   [`style`] maps styles and colours both ways; [`buffer`] writes rich
+//!   [`style`] maps styles and colours both ways, and reads ratatui's colour
+//!   names as console styles ([`style_from_color_name`]); [`buffer`] writes rich
 //!   lines into a buffer ([`lines_to_buffer`]), reads a buffer back into
 //!   rich lines ([`buffer_to_lines`]), and walks a rectangle of a buffer cell
 //!   by cell without allocating ([`cells`]).
@@ -96,5 +97,7 @@ pub use ratatui_core;
 pub use buffer::{buffer_area_to_lines, buffer_to_lines, cells, lines_to_buffer};
 #[cfg(feature = "interact")]
 pub use interact::RatatuiComponent;
-pub use style::{to_ratatui_color, to_ratatui_style, to_rich_color, to_rich_style};
+pub use style::{
+    style_from_color_name, to_ratatui_color, to_ratatui_style, to_rich_color, to_rich_style,
+};
 pub use widget::RichWidget;

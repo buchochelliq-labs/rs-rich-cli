@@ -136,6 +136,35 @@ pub fn to_rich_color(color: RColor) -> Color {
     }
 }
 
+/// The console style of a colour named as ratatui reads one, or `None` when
+/// ratatui would not read it: everything [`Color::from_str`](RColor) accepts.
+///
+/// That is the 16 names in any case and spacing (`DarkGray`, `light red`,
+/// `bright_red`, `grey`, `silver`), `reset`, a `#rrggbb` hex triplet and an
+/// indexed colour's number (`208`). The result is rich's canonical name for
+/// the same terminal colour (see [`to_rich_color`]), ready for a style string
+/// or a markup tag: ratatui's `Gray` is ANSI white (`white`), its `DarkGray`
+/// bright black (`bright_black`) and its `White` bright white; `reset` is
+/// rich's `default` and `208` is `color(208)`. A command-line option that
+/// takes ratatui colour names (`--axis-color DarkGray`) maps straight onto a
+/// rich style with it.
+///
+/// ```
+/// use rich_ratatui::style_from_color_name;
+///
+/// assert_eq!(style_from_color_name("DarkGray").as_deref(), Some("bright_black"));
+/// assert_eq!(style_from_color_name("light red").as_deref(), Some("bright_red"));
+/// assert_eq!(style_from_color_name("#FF8800").as_deref(), Some("#ff8800"));
+/// assert_eq!(style_from_color_name("208").as_deref(), Some("color(208)"));
+/// assert_eq!(style_from_color_name("reset").as_deref(), Some("default"));
+/// assert_eq!(style_from_color_name("chartreuse"), None);
+/// ```
+pub fn style_from_color_name(name: &str) -> Option<String> {
+    name.parse::<RColor>()
+        .ok()
+        .map(|colour| to_rich_color(colour).name)
+}
+
 /// Map a rich style to a ratatui style.
 ///
 /// Unset stays unset (a `None` colour, a modifier in neither set), so the
@@ -237,6 +266,45 @@ mod tests {
         // The named colours carry rich's names.
         assert_eq!(to_rich_color(RColor::Gray).name, "white");
         assert_eq!(to_rich_color(RColor::White).name, "bright_white");
+    }
+
+    #[test]
+    fn colour_names_read_as_ratatui_reads_them() {
+        let cases = [
+            ("Red", "red"),
+            ("red", "red"),
+            ("LightRed", "bright_red"),
+            ("light red", "bright_red"),
+            ("bright-red", "bright_red"),
+            ("BRIGHT_CYAN", "bright_cyan"),
+            ("Gray", "white"),
+            ("grey", "white"),
+            ("silver", "white"),
+            ("DarkGray", "bright_black"),
+            ("dark grey", "bright_black"),
+            ("bright black", "bright_black"),
+            ("light gray", "bright_white"),
+            ("White", "bright_white"),
+            ("Black", "black"),
+            ("Reset", "default"),
+            ("0", "color(0)"),
+            ("208", "color(208)"),
+            ("255", "color(255)"),
+            ("#ff8800", "#ff8800"),
+            ("#00FF7f", "#00ff7f"),
+        ];
+        for (name, style) in cases {
+            assert_eq!(
+                style_from_color_name(name).as_deref(),
+                Some(style),
+                "{name}"
+            );
+            // Every result is a style rich itself parses.
+            assert!(Style::parse(style).is_ok(), "{style}");
+        }
+        for bad in ["", "256", "-1", "#ff88", "#gg0000", "ff8800", "chartreuse"] {
+            assert_eq!(style_from_color_name(bad), None, "{bad:?}");
+        }
     }
 
     #[test]

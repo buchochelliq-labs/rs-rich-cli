@@ -45,6 +45,10 @@
 //!   instead of the alternate screen.
 //! - **Responsive**: [`Node::hide_below`] and a stylesheet's `@media`
 //!   rules follow the terminal's size; [`viewport`] reads it.
+//! - **The outside world** (off-by-default features): `audio::input`
+//!   captures a sound card into a signal (`audio`), `watch_path` wakes the
+//!   app when files change (`watch`), and `image` draws an image file in
+//!   half blocks (`art`).
 //! - **Tests**: [`App::render_with`] and [`App::run_on`] with
 //!   `rich-interact`'s headless driver run an app without a terminal;
 //!   [`App::driver`] steps one, and [`assert_screen!`] compares its screen
@@ -55,11 +59,15 @@
 
 pub mod a11y;
 pub mod app;
+#[cfg(feature = "audio")]
+pub mod audio;
 pub mod border;
 mod builtin;
 mod calendar;
 mod datetime;
 mod effect;
+#[cfg(feature = "art")]
+mod image;
 mod input;
 pub mod inspect;
 pub mod layout;
@@ -78,6 +86,8 @@ pub mod task;
 pub mod testing;
 mod text_area;
 mod tree;
+#[cfg(feature = "watch")]
+mod watch;
 pub mod widget;
 pub mod widgets;
 
@@ -93,6 +103,8 @@ pub use app::{
 };
 pub use border::{Border, BorderSet, Edge, Shadow, Sides};
 pub use effect::{effect, fill};
+#[cfg(feature = "art")]
+pub use image::{image, image_of, image_with, ImageAnchor, ImageFit, ImageMode, ImageView};
 pub use input::{input, number_input};
 pub use layout::{Align, AlignContent, Justify, Size, StackLayout, TextAlign};
 pub use list::list_optional;
@@ -107,6 +119,10 @@ pub use reactive::{memo, signal, viewport, watch, Memo, Proxy, Signal};
 pub use rich::Overflow;
 pub use sheet::{SheetError, Stylesheet};
 pub use task::{resource, spawn, spawn_future, Load, Resource, Task};
+#[cfg(feature = "watch")]
+pub use watch::{
+    watch_path, watch_path_with, ChangeKind, PathChange, PathEvent, PathWatch, WatchOptions,
+};
 pub use widget::{widget, Widget};
 pub use widgets::text_area;
 

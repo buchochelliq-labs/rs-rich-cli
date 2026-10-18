@@ -69,6 +69,11 @@ A `Syntax` with a highlighter of its own always uses it; the console's default
 covers everything else, including Markdown code blocks. Theme names are each
 highlighter's own.
 
+The first highlight loads syntect's grammars and themes, which takes seconds
+in a debug build. An interactive app can do that on a worker thread at
+start-up with `rich_ext::syntax::preload(&["rust", "markdown"])` (see
+[Warming up syntax highlighting](files-and-signals.md#warming-up-syntax-highlighting)).
+
 ## Write your own
 
 An adapter implements four methods. `highlight` returns one line per element

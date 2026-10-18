@@ -9,6 +9,61 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### The outside world in intuiTUIve: files, sound and images (intuituive 0.0.4, ext 0.0.16, ratatui 0.0.4)
+
+What the Yazi and scope-tui rebuilds found missing from the plugin side
+(`docs/design/intuituive-demo-gaps.md`, "Data, sources and the outside
+world"). Every new dependency is behind an off-by-default feature.
+
+- **intuiTUIve `watch` feature: `watch_path(path, |event, cx| …)`** wakes
+  the app when files change, through notify (the version the CLI already
+  uses), with no polling. Changes less than 100 ms apart are one
+  `PathEvent` (each path once: `Created`, `Modified`, `Removed`,
+  `Renamed`); `watch_path_with` takes `WatchOptions` (`recursive()`,
+  `debounce(d)`). It runs as long as the app, or until `PathWatch::stop`.
+- **intuiTUIve `audio` feature: `audio::input(device, rate, channels,
+  buffer) -> Signal<Matrix>`** captures a sound card through cpal 0.18,
+  one row a channel; the newest buffer wins, so a slow frame drops
+  buffers instead of falling behind. A device with fewer channels than
+  asked for is spread over the rows. `audio::devices()` lists the inputs
+  and is empty, not a panic, without sound. On Linux it needs ALSA's
+  headers (`libasound2-dev`).
+- **intuiTUIve `art` feature: `image(path)`**, `image_with(path,
+  ImageView)` and `image_of(|| path, view)`: an image file as a node, drawn
+  by rs-rich-art in half blocks (or quadrants, Braille, ASCII) to fit its
+  rectangle, with `ImageFit::Contain`, `Cover` and `Stretch`; decoded on a
+  worker thread and drawn again only when its size changes. Kitty and
+  Sixel are not drawn: the cell screen cannot pass their escapes through
+  yet.
+- **`rich_ext::filetype`**: `icon_for(path, is_dir) -> (glyph, colour)`
+  and `icon_with(path, FileFlags, Appearance)`, Yazi's default icon and
+  colour rules (its dark and light presets, from nvim-web-devicons, both
+  MIT); `style_for(mime, flags)`, its type colours; `mime_for`,
+  `mime_for_path` and `mime_from_bytes`, MIME types by extension and magic
+  bytes; and `nerd_font()`, which says honestly what can be known
+  (`RICH_NERD_FONT`, or a Nerd Font file installed). No dependencies.
+- **`rich_ext::fs`**: `user_name(uid)` and `group_name(gid)` (Unix,
+  `getpwuid_r`/`getgrgid_r`, cached; `None` elsewhere), and with the new
+  off-by-default `local-time` feature (chrono, already in the tree)
+  `local_time(time, format)` and `short_local_time(time)`.
+- **`rich_ext::dsp`**: `fft` of any length (radix 2, and Bluestein's chirp
+  otherwise), `hann` and `spectrum(samples, rate)`, the scope example's
+  tested FFT lifted into the library.
+- **`rich_ext::syntax::preload(langs)`** warms core's default highlighter
+  (syntect's grammars, themes and each language's patterns) on a worker
+  thread, so an app's first Markdown preview does not stall for seconds in
+  a debug build. It goes through the public `CodeHighlighter` API; core is
+  unchanged.
+- **`rich_ratatui::style_from_color_name("DarkGray")`**: a colour as
+  ratatui's `Color::from_str` reads it (names in any case and spacing,
+  `#rrggbb`, an index) as a rich style (`bright_black`).
+- **CI** installs `libasound2-dev` for the jobs that build every feature
+  (the feature matrix's `--all-features` builds, the MSRV check and the
+  staged package build).
+- **Docs:** "Files, sound and images" in the intuiTUIve guide, a new ext
+  page, [Files, spectra and warm-ups](docs/guide/ext/files-and-signals.md),
+  and the colour names on the ratatui page.
+
 ## 0.0.19 cohort
 
 ext 0.0.16 / micro 0.0.5 / record 0.0.7 / interact 0.0.7 / ratatui 0.0.4 /
