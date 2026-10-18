@@ -597,7 +597,7 @@ README.md
 ```
 
 They are the components behind `rich approve` and `rich jump`; the
-[Rust guide](../guide/interact/review-and-jump.md) has the keys and the
+[Rust guide](https://buchochelliq-labs.github.io/rs-rich-cli/guide/interact/review-and-jump/) has the keys and the
 theme keys in full.
 
 ## Headless runs
