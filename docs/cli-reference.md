@@ -243,6 +243,7 @@ Choose at most one; the default auto-detects .md/.rst/.json/.csv/.tsv/.ipynb, .m
 | `--show-secrets` | With `rich env`, show values whose names look secret instead of masking them. |
 | `--cast <FILE>` | With `rich capture`, also write an asciicast v2 recording (`asciinema play FILE`) |
 | `--redact-pattern <REGEX>...` | With `rich capture` and `rich log`, also mask matches of REGEX (only its `secret` group when it has one); repeatable. Experimental: check the output before sharing it. |
+| `--redact-preview` | With `rich capture` or `rich log` and --redact or --redact-pattern, show each match on its line, highlighted, with its rule and replacement, and a summary, instead of the output; write nothing (no cast, export or log output) and name on stderr what would have been written. The preview shows the secrets unmasked. With --report json, the findings as one JSON document on stdout. |
 
 ### Export
 
@@ -250,6 +251,7 @@ Choose at most one; the default auto-detects .md/.rst/.json/.csv/.tsv/.ipynb, .m
 | --- | --- |
 | `-o`, `--export-html <PATH>` | Also write a self-contained HTML document to PATH. Config: `export_html`. |
 | `--export-svg <PATH>` | Also write an SVG document to PATH. Unlike the HTML, it references its font from a CDN, so it is not self-contained offline. Config: `export_svg`. |
+| `--export-png <PATH>` | Also write a PNG image of the output to PATH: the terminal's width, rich's SVG export theme, in a window titled like the SVG's, drawn with an embedded DejaVu Sans Mono so it is the same on every machine (the png feature; not with --batch) |
 
 ### Paging
 
@@ -621,6 +623,7 @@ rich log [OPTIONS] [RESOURCE]
 | --- | --- |
 | `--group <N\|BY>` | With `rich hex`, bytes per group (default 8); with `rich log`, group records by trace, span or correlation id (trace_id, span_id, correlation_id, request_id, ...) under a header each, with a summary at the end. |
 | `--redact-pattern <REGEX>...` | With `rich capture` and `rich log`, also mask matches of REGEX (only its `secret` group when it has one); repeatable. Experimental: check the output before sharing it. |
+| `--redact-preview` | With `rich capture` or `rich log` and --redact or --redact-pattern, show each match on its line, highlighted, with its rule and replacement, and a summary, instead of the output; write nothing (no cast, export or log output) and name on stderr what would have been written. The preview shows the secrets unmasked. With --report json, the findings as one JSON document on stdout. |
 
 #### Inspect
 
@@ -945,6 +948,7 @@ rich capture [OPTIONS] [RESOURCE]
 | --- | --- |
 | `--cast <FILE>` | With `rich capture`, also write an asciicast v2 recording (`asciinema play FILE`) |
 | `--redact-pattern <REGEX>...` | With `rich capture` and `rich log`, also mask matches of REGEX (only its `secret` group when it has one); repeatable. Experimental: check the output before sharing it. |
+| `--redact-preview` | With `rich capture` or `rich log` and --redact or --redact-pattern, show each match on its line, highlighted, with its rule and replacement, and a summary, instead of the output; write nothing (no cast, export or log output) and name on stderr what would have been written. The preview shows the secrets unmasked. With --report json, the findings as one JSON document on stdout. |
 
 #### Inspect
 

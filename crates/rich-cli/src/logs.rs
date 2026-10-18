@@ -268,6 +268,9 @@ pub(super) fn run(cli: &Cli, console: &Console) -> ExitCode {
             );
         }
     }
+    if viewers::redact_preview(&cli.viewers) {
+        return preview(cli, console, path, redactor.as_ref());
+    }
     if options.interactive {
         if let Some(code) = interactive(cli, console, redactor.clone()) {
             return code;
@@ -283,6 +286,50 @@ pub(super) fn run(cli: &Cli, console: &Console) -> ExitCode {
         }),
     };
     finish(cli, read.and_then(|()| stream.finish()))
+}
+
+/// `--redact-preview`: every line of the log read once (to the end, so not
+/// with `--follow` or `--interactive`), and what the redactor would mask in
+/// it shown instead of the records (#722). Lines are previewed as
+/// `--redact` masks a line it does not parse; a parsed record's
+/// secret-named fields are the `key-value` matches.
+fn preview(
+    cli: &Cli,
+    console: &Console,
+    path: Option<&str>,
+    redactor: Option<&Redactor>,
+) -> ExitCode {
+    let Some(redactor) = redactor else {
+        return fail(
+            cli,
+            ExitClass::Usage,
+            "--redact-preview needs --redact or --redact-pattern",
+        );
+    };
+    if cli.logs.follow || cli.logs.interactive {
+        return fail(
+            cli,
+            ExitClass::Usage,
+            "--redact-preview reads the log once; it cannot be combined with --follow or \
+             --interactive",
+        );
+    }
+    let mut bytes = Vec::new();
+    let read = match path {
+        Some(path) => File::open(fs_path(path)).and_then(|mut file| file.read_to_end(&mut bytes)),
+        None => io::stdin().lock().read_to_end(&mut bytes),
+    };
+    if let Err(error) = read {
+        return fail(
+            cli,
+            ExitClass::Input,
+            format!("cannot read the log: {error}"),
+        );
+    }
+    let preview = redactor
+        .preview(&String::from_utf8_lossy(&bytes))
+        .title("log");
+    super::redact_preview::emit(cli, console, vec![("log", preview)], &[])
 }
 
 /// The exit for how the stream ended: a closed stdout is success, as a

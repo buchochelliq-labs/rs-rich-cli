@@ -137,7 +137,14 @@ fn command_options(name: &str) -> Vec<ArgSpec> {
             "width",
         ],
         "env" => &["show-secrets", "width"],
-        "capture" => &["cast", "redact", "redact-pattern", "sanitize", "width"],
+        "capture" => &[
+            "cast",
+            "redact",
+            "redact-pattern",
+            "redact-preview",
+            "sanitize",
+            "width",
+        ],
         "log" => &[
             "log-presentation",
             "level",
@@ -153,6 +160,7 @@ fn command_options(name: &str) -> Vec<ArgSpec> {
             "interactive",
             "redact",
             "redact-pattern",
+            "redact-preview",
             "sanitize",
             "width",
         ],
@@ -404,6 +412,15 @@ fn viewer_options() -> Vec<ArgSpec> {
              it",
         )
         .multiple(true),
+        flag(
+            "redact-preview",
+            VIEWERS,
+            "With `rich capture` or `rich log` and --redact or --redact-pattern, show each \
+             match on its line, highlighted, with its rule and replacement, and a summary, \
+             instead of the output; write nothing (no cast, export or log output) and name on \
+             stderr what would have been written. The preview shows the secrets unmasked. With \
+             --report json, the findings as one JSON document on stdout",
+        ),
     ]
 }
 
@@ -1258,6 +1275,15 @@ fn export_options() -> Vec<ArgSpec> {
         )
         .value(ValueHint::File)
         .config_key("export_svg"),
+        option(
+            "export-png",
+            "PATH",
+            EXPORT,
+            "Also write a PNG image of the output to PATH: the terminal's width, rich's SVG \
+             export theme, in a window titled like the SVG's, drawn with an embedded DejaVu \
+             Sans Mono so it is the same on every machine (the png feature; not with --batch)",
+        )
+        .value(ValueHint::File),
     ]
 }
 

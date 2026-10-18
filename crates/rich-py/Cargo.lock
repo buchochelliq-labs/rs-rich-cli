@@ -1648,6 +1648,7 @@ dependencies = [
  "rs-rich-lumis",
  "rs-rich-mermaid",
  "rs-rich-micro",
+ "rs-rich-record",
  "same-file",
  "serde_json",
  "tempfile",
