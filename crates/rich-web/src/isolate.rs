@@ -15,10 +15,26 @@
 //!
 //! A crash, a hang or a runaway allocation then ends one process, not the
 //! server: the server tells the page the session ended, kills the process
-//! (on Unix with its process group) when the page goes or the server
-//! stops, and on Unix can cap each process's memory and CPU time
+//! (on Unix with its process group, on Windows with its job object) when
+//! the page goes or the server stops, and on Unix can cap each process's
+//! memory and CPU time
 //! ([`Server::session_memory`](crate::Server::session_memory),
 //! [`Server::session_cpu`](crate::Server::session_cpu)).
+//!
+//! On Windows the server puts each session's process in a job object of
+//! its own as soon as it has started, and holds the job's only handle. The
+//! job kills its processes when that handle closes: when the session ends,
+//! and when the server dies however it dies, since the system closes a
+//! dead process's handles. What the session's process starts is in the job
+//! too, and cannot leave it (the job allows no breakaway). Only what a
+//! process starts in the moment between its start and the server's
+//! assignment escapes: the session's own code runs after it (the server
+//! answers the process's connection only once it is in the job), so only
+//! a program's startup before `serve` can, and a `session_command` that
+//! starts the program as a child rather than being it. A server that runs
+//! in a job itself (a CI runner, a service) nests the session's job in its
+//! own (Windows 8 and later); one whose job forbids that (UI limits) cannot
+//! start sessions in processes, and the page is told why.
 
 use std::ffi::OsString;
 use std::io::{self, ErrorKind, Read, Write};
@@ -168,11 +184,12 @@ pub(crate) fn is_session_process() -> bool {
 
 /// The spec, when this process is the one the server started. A program
 /// the app runs inherits the variable and is not a session: it serves as
-/// it would anywhere. The server starts each session's process leading a
-/// process group of its own, which what it runs joins; so a group leader
-/// whose parent is no longer the server is a session whose server has
-/// died, and exits. A `session_command` must therefore be the program, or
-/// `exec` it.
+/// it would anywhere. On Unix the server starts each session's process
+/// leading a process group of its own, which what it runs joins; so a group
+/// leader whose parent is no longer the server is a session whose server
+/// has died, and exits. A `session_command` must therefore be the program,
+/// or `exec` it. (On Windows a session whose server has died is ended by
+/// its job object.)
 fn own_spec() -> Option<Spec> {
     let spec = Spec::decode(&std::env::var(SESSION_ENV).ok()?)?;
     #[cfg(unix)]
@@ -194,7 +211,8 @@ fn own_spec() -> Option<Spec> {
 pub(crate) fn run_child(spec: Spec, app: impl FnOnce() -> App) -> i32 {
     // Should the server die without ending it, this process ends its whole
     // group. (Not Linux's parent-death signal: that would kill this process
-    // alone, before it could end the rest.)
+    // alone, before it could end the rest.) On Windows the job object the
+    // server holds does that.
     #[cfg(unix)]
     watch_server(spec.parent);
     limit(spec.memory, spec.cpu);
@@ -368,11 +386,11 @@ pub(crate) fn run_parent(browser: TcpStream, session: Session<'_>) {
             );
         }
     };
-    let (mut child, listener, secrets) = started;
+    let (mut child, tree, listener, secrets) = started;
     let child_stream = match connected(&listener, &secrets, &mut child, session.stopping) {
         Ok(stream) => stream,
         Err(why) => {
-            end(&mut child);
+            end(&mut child, tree);
             return goodbye(browser, &why);
         }
     };
@@ -382,7 +400,7 @@ pub(crate) fn run_parent(browser: TcpStream, session: Session<'_>) {
     // process's connection closes, and its session ends. It gets a moment
     // to exit, and is killed if it has not.
     let _ = child_stream.shutdown(Shutdown::Both);
-    let status = end(&mut child);
+    let status = end(&mut child, tree);
     // The page is told why, when it is still there, between frames, and
     // was not sent a close by the session itself.
     let reason = match relayed.ended {
@@ -403,9 +421,9 @@ pub(crate) fn run_parent(browser: TcpStream, session: Session<'_>) {
     }
 }
 
-/// Start the process, with a loopback listener for it to connect to and
-/// the secret it must send.
-fn start(session: &Session<'_>) -> io::Result<(Child, TcpListener, Secrets)> {
+/// Start the process, with what ends it and what it starts, a loopback
+/// listener for it to connect to, and the secret it must send.
+fn start(session: &Session<'_>) -> io::Result<(Child, Tree, TcpListener, Secrets)> {
     let listener = TcpListener::bind(("127.0.0.1", 0))?;
     let secrets = Secrets {
         secret: crate::random_token()?,
@@ -449,8 +467,64 @@ fn start(session: &Session<'_>) -> io::Result<(Child, TcpListener, Secrets)> {
             "its limits could not be set: {error}"
         )));
     }
+    // Before the process is answered (it runs nothing of the session's
+    // until then), so all the session starts is in the job.
+    let tree = match Tree::new(&child) {
+        Ok(tree) => tree,
+        Err(error) => {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(io::Error::other(format!(
+                "it could not be put in a job object: {error}"
+            )));
+        }
+    };
     listener.set_nonblocking(true)?;
-    Ok((child, listener, secrets))
+    Ok((child, tree, listener, secrets))
+}
+
+/// What ends a session's process and everything it started: on Unix the
+/// process group it leads, on Windows a job object whose only handle the
+/// server holds (dropped, or closed by the system when the server dies, it
+/// kills every process in the job).
+struct Tree {
+    #[cfg(unix)]
+    leader: u32,
+    #[cfg(windows)]
+    _job: win32job::Job,
+}
+
+impl Tree {
+    /// The tree of `child`, just started.
+    #[cfg(unix)]
+    fn new(child: &Child) -> io::Result<Tree> {
+        Ok(Tree { leader: child.id() })
+    }
+
+    /// The tree of `child`, just started: a job object that kills its
+    /// processes when its last handle closes, which `child` is put in.
+    /// Without breakaway, what it starts stays in the job.
+    #[cfg(windows)]
+    fn new(child: &Child) -> io::Result<Tree> {
+        use std::os::windows::io::AsRawHandle;
+        let mut limits = win32job::ExtendedLimitInfo::new();
+        limits.limit_kill_on_job_close();
+        let job = win32job::Job::create_with_limit_info(&limits)?;
+        job.assign_process(child.as_raw_handle() as isize)?;
+        Ok(Tree { _job: job })
+    }
+
+    #[cfg(not(any(unix, windows)))]
+    fn new(_child: &Child) -> io::Result<Tree> {
+        Ok(Tree {})
+    }
+
+    /// Kill what is left of it.
+    fn kill(self) {
+        #[cfg(unix)]
+        kill_group(self.leader);
+        // On Windows, dropping the job closes its handle, which kills it.
+    }
 }
 
 /// The secret a session's process sends, and the reply the server answers.
@@ -773,20 +847,21 @@ fn header_done(header: &[u8]) -> Option<(u64, u8)> {
 }
 
 /// End the session's process: a moment to exit, then killed (on Unix with
-/// its process group). Its exit status, when it exited on its own.
-fn end(child: &mut Child) -> Option<std::process::ExitStatus> {
+/// its process group, on Windows with its job). Its exit status, when it
+/// exited on its own.
+fn end(child: &mut Child, tree: Tree) -> Option<std::process::ExitStatus> {
     let until = Instant::now() + EXIT_WAIT;
     while Instant::now() < until {
         match child.try_wait() {
             Ok(Some(status)) => {
-                kill_group(child.id());
+                tree.kill();
                 return Some(status);
             }
             Ok(None) => thread::sleep(Duration::from_millis(10)),
             Err(_) => break,
         }
     }
-    kill_group(child.id());
+    tree.kill();
     let _ = child.kill();
     let _ = child.wait();
     None
@@ -800,9 +875,6 @@ fn kill_group(leader: u32) {
         let _ = kill_process_group(pid, Signal::KILL);
     }
 }
-
-#[cfg(not(unix))]
-fn kill_group(_leader: u32) {}
 
 /// Close the page's WebSocket with `reason`, which it shows, then let the
 /// connection go.

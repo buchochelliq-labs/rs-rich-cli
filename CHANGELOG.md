@@ -167,17 +167,20 @@ per browser session](#one-process-per-browser-session-web-002).
   ends that tab alone, and the page is told the session ended.
 - **Ending and limits:** a session's process is killed when its tab closes
   or the server stops, on Unix with its process group; should the server be
-  killed, the process ends its group itself (Unix: on Windows the process
-  is ended alone, and nothing watches for a killed server, so a hung
-  session outlives one). A program the app runs inherits the variable but
-  serves as it would anywhere. Connections to the session's port are read
-  side by side, each for 2 s at most, so none holds up a session or the
-  server stopping. `Server::session_memory(bytes)` and
+  killed, the process ends its group itself. On Windows the server puts the
+  process in a job object as soon as it starts (through `win32job`, a safe
+  API) and holds its only handle; the job kills the process and everything
+  it started when the session ends, or when the server dies, since the
+  system then closes the handle. A program the app runs inherits the
+  variable but serves as it would anywhere. Connections to the session's
+  port are read side by side, each for 2 s at most, so none holds up a
+  session or the server stopping. `Server::session_memory(bytes)` and
   `session_cpu(time)` cap each process on Unix (through rustix, so the
   crate keeps `unsafe_code = "deny"`): on Linux from the moment it starts
   (`prlimit` from the server, which refuses a process that took more before
   it was set), elsewhere from when it reaches `serve`;
-  macOS has no memory limit, so there only the CPU limit applies.
+  macOS has no memory limit, so there only the CPU limit applies, and on
+  Windows neither is applied.
 - **`Isolation::Threads`** keeps 0.0.18's behaviour, for tests and programs
   that cannot start themselves again; `Server::session_command(program,
   args)` starts the process some other way.
@@ -187,9 +190,12 @@ per browser session](#one-process-per-browser-session-web-002).
   and `session_cpu(seconds)`.
 - **Tests:** the new `isolated` example is served as a process of its own
   while tabs crash, hang and run out of memory on purpose; the others, new
-  tabs and the server carry on, and on Unix a killed server takes its
-  sessions with it; `session_probe` checks a killed server's orphans, a program the
-  app runs, strangers on the session's port, and limits on one CPU. **Docs:** [One process per
+  tabs and the server carry on, and a killed server takes its sessions
+  with it; `session_probe` checks a killed server's orphans, a program the
+  app runs, strangers on the session's port, and limits on one CPU. On
+  Windows, a new CI job checks that a closed tab, a stopped server and a
+  killed server each end the session's process and the program it started.
+  **Docs:** [One process per
   session](docs/guide/intuituive/web.md#one-process-per-session).
 
 ## 0.0.18 cohort

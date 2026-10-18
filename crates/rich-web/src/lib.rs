@@ -40,8 +40,9 @@
 //! [`Server::bind`] call, it runs the tab's app there, connected back to
 //! the server over loopback, and exits. A crash, a hang or a runaway
 //! allocation then ends one tab; the server kills a session's process
-//! (on Unix with its process group) when the tab closes or the server
-//! stops, and on Unix can cap its memory and CPU time
+//! with what it started (on Unix its process group, on Windows a job
+//! object) when the tab closes, the server stops or the server dies, and
+//! on Unix can cap its memory and CPU time
 //! ([`Server::session_memory`], [`Server::session_cpu`]).
 //! [`Server::session_command`] starts it some other way (an interpreter
 //! and its script), and [`Isolation::Threads`] runs every session on a
@@ -377,7 +378,7 @@ impl Server {
     /// space): an allocation past it fails, and the process ends, alone.
     /// On Linux it holds from the moment the process starts; on other Unix
     /// systems from when it reaches `serve`; macOS has no such limit, and
-    /// elsewhere it is not applied.
+    /// elsewhere (Windows) it is not applied.
     pub fn session_memory(mut self, bytes: u64) -> Server {
         self.shared.spawn.memory = Some(bytes);
         self
@@ -387,7 +388,7 @@ impl Server {
     /// one): past it the process is killed, alone. A session that waits for
     /// input uses none. On Linux it holds from the moment the process
     /// starts; on other Unix systems from when it reaches `serve`;
-    /// elsewhere it is not applied.
+    /// elsewhere (Windows) it is not applied.
     pub fn session_cpu(mut self, time: Duration) -> Server {
         self.shared.spawn.cpu = Some(time);
         self

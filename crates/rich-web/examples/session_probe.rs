@@ -1,11 +1,13 @@
 //! A probe app for the process-per-session isolation tests
-//! (`tests/isolation_hardening.rs`): not a docs example.
+//! (`tests/isolation_hardening.rs`, `tests/isolation_windows.rs`): not a
+//! docs example.
 //!
 //!     session_probe ADDRESS [--token T] [--startup-sleep MS] [--stdin-stop]
 //!     session_probe --nested ADDRESS
 //!
 //! Keys in the page: `f` starts `sleep 1000` (in the session's process
-//! group), `n` runs this program as an unrelated nested server (`--nested
+//! group; on Windows `ping -n 1000 127.0.0.1`, in the session's job), `n`
+//! runs this program as an unrelated nested server (`--nested
 //! 127.0.0.1:0`) and shows how it ended.
 
 use std::io::BufRead;
@@ -25,7 +27,7 @@ fn app() -> App {
         .on_key("f", move |_| {
             // Left running on purpose: the tests check what ends it.
             #[allow(clippy::zombie_processes)]
-            let child = Command::new("sleep").arg("1000").spawn().unwrap();
+            let child = long_wait().spawn().unwrap();
             state.set(format!("FORKED {} END", child.id()));
         })
         .on_key("n", move |_| {
@@ -40,6 +42,24 @@ fn app() -> App {
             state.set(format!("NESTED code={code} bound={bound} END"));
         })
     })
+}
+
+/// A program that waits about a thousand seconds.
+#[cfg(not(windows))]
+fn long_wait() -> Command {
+    let mut command = Command::new("sleep");
+    command.arg("1000");
+    command
+}
+
+/// A program that waits about a thousand seconds (Windows has no `sleep`).
+#[cfg(windows)]
+fn long_wait() -> Command {
+    let mut command = Command::new("ping");
+    command
+        .args(["-n", "1000", "127.0.0.1"])
+        .stdout(Stdio::null());
+    command
 }
 
 fn main() -> std::io::Result<()> {

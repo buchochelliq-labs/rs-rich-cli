@@ -59,6 +59,12 @@ getrandom = "0.4"
 [target.'cfg(unix)'.dependencies]
 rustix = { version = "1", features = ["process"] }
 
+# A session's process on Windows: a job object that ends it, and everything
+# it started, when the session ends or the server dies (kill on close),
+# through a safe API (MIT OR Apache-2.0; it wraps the `windows` crate).
+[target.'cfg(windows)'.dependencies]
+win32job = "2"
+
 [build-dependencies]
 # build.rs checks the vendored xterm.js files against their pinned hashes.
 sha2 = "0.11"

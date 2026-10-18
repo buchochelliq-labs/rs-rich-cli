@@ -207,3 +207,14 @@ pub fn running(pid: u32) -> bool {
         })
         .unwrap_or(false)
 }
+
+/// Whether process `pid` is still running (an exited process is not
+/// listed, though a handle to it is still open).
+#[cfg(windows)]
+pub fn running(pid: u32) -> bool {
+    std::process::Command::new("tasklist")
+        .args(["/FI", &format!("PID eq {pid}"), "/FO", "CSV", "/NH"])
+        .output()
+        .map(|out| String::from_utf8_lossy(&out.stdout).contains(&format!("\"{pid}\"")))
+        .unwrap_or(false)
+}
