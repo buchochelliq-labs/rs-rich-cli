@@ -373,6 +373,8 @@ Self-contained examples; ignores config; accepts --no-color.
 | `asset` | Pick an emoji, a box style or a spinner, with a preview, and print it |
 | `explore` | Explore a JSON, YAML, TOML, XML, INI or .env document: ← → fold, type to search, Ctrl+Y copies the path and Alt+Y the value (OSC 52), Enter prints the path; without a terminal, print the tree |
 | `date` | Pick a date on a month grid, a time of day, or both, and print it as 2026-10-17, 14:30 or 2026-10-17 14:30; without a terminal, read one typed in |
+| `approve` | Review ITEMs (or lines, or JSON Lines, on standard input) one by one or in bulk: a approves, r rejects, s skips (A, R, S ask for a reason), Space marks, Enter submits; prints one JSON line per item with its decision |
+| `jump` | Jump to anything: one fuzzy box over files, Markdown headings (#), code symbols (@), commands (>) and recent places in DIRs, grouped by source with a preview; prints the place picked (`path`, `path:line` or the command) |
 | `completions` | Print a shell completion script |
 | `docs` | Print reference documentation generated from this help |
 | `bench` | Compare benchmark runs |
@@ -1654,6 +1656,95 @@ A meeting slot within a range
 
 ```sh
 rich date --kind datetime --min '2026-10-17 09:00' --max '2026-10-31 17:00'
+```
+
+### rich approve
+
+Review ITEMs (or lines, or JSON Lines, on standard input) one by one or in bulk: a approves, r rejects, s skips (A, R, S ask for a reason), Space marks, Enter submits; prints one JSON line per item with its decision
+
+#### Usage
+
+```text
+rich approve [OPTIONS] [ITEM...]
+```
+
+#### Options
+
+| Option | Description |
+| --- | --- |
+| `--header <TEXT>` | The prompt above the queue (default "Approve") |
+| `--format <FORMAT>` | How items are read: one per line, or a JSON object per line (default auto: JSON Lines when every line is an object) Possible values: `auto`, `lines`, `jsonl`. |
+| `--label <FIELD>` | The JSON field to show as an item's label (default the first of title, name, label, summary and id) |
+| `--require-reason` | Ask for a reason on every rejection, and refuse an empty one. |
+| `--auto-submit` | Submit as soon as nothing is pending, without Enter. |
+| `--print <WHAT>` | What to print: a JSON line per item with its decision and reason (default), or the approved (or rejected) items as they were read. Possible values: `decisions`, `approved`, `rejected`. |
+| `--height <ROWS>` | Show at most ROWS at once, fewer when the terminal is shorter. |
+| `--mouse` | Report the mouse: click rows and buttons, scroll with the wheel (off by default: it takes text selection from the terminal) |
+
+#### Arguments
+
+| Argument | Description |
+| --- | --- |
+| `[ITEM]...` | The items; without any, one per line from standard input. |
+
+#### Examples
+
+Delete the branches approved
+
+```sh
+git branch --format='%(refname:short)' | rich approve --print approved | xargs -r git branch -D
+```
+
+Review JSON requests, with a reason for each rejection
+
+```sh
+rich approve --require-reason < requests.jsonl > decisions.jsonl
+```
+
+### rich jump
+
+Jump to anything: one fuzzy box over files, Markdown headings (#), code symbols (@), commands (>) and recent places in DIRs, grouped by source with a preview; prints the place picked (`path`, `path:line` or the command)
+
+#### Usage
+
+```text
+rich jump [OPTIONS] [DIR...]
+```
+
+#### Options
+
+| Option | Description |
+| --- | --- |
+| `--header <TEXT>` | The prompt (default "Jump") |
+| `--files` | Search file names. |
+| `--headings` | Search Markdown headings. |
+| `--symbols` | Search code symbols: functions, types, classes and modules, found by their keywords. |
+| `--commands <FILE>` | Search the commands in FILE, one per line (`LABEL<TAB>COMMAND` or just the command); a pick prints the command. |
+| `--recent <FILE>` | Show FILE's places first, as Recent, and add the pick to it (the latest 50 kept) |
+| `--value <QUERY>` | Start with QUERY typed; without a terminal, print its best match. |
+| `--limit <N>` | Results each source shows until Tab narrows to it (default 5) |
+| `--print <WHAT>` | What to print: the place (default), or a JSON object with its source, label and place. Possible values: `location`, `json`. |
+| `--height <ROWS>` | Show at most ROWS at once, fewer when the terminal is shorter. |
+| `--mouse` | Report the mouse: click rows and buttons, scroll with the wheel (off by default: it takes text selection from the terminal) |
+
+#### Arguments
+
+| Argument | Description |
+| --- | --- |
+| `[DIR]...` | Where to look (default the current directory); `-` reads entries from standard input instead. |
+
+#### Examples
+
+Open a file, or a Markdown file at a heading's line (an editor that takes `path:line`)
+
+```sh
+$EDITOR "$(rich jump --files --headings)"
+```
+
+Run a saved command, or go somewhere recent
+
+```sh
+eval "$(rich jump --commands ~/.commands --recent ~/.jump-recent src)"
 ```
 
 ### rich completions

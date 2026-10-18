@@ -1,0 +1,4 @@
+Build the workspace	cargo build --workspace
+Run the tests	cargo test
+Serve the docs	mkdocs serve
+Format	cargo fmt --all

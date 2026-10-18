@@ -35,6 +35,8 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 mod animation;
+#[cfg(feature = "interact")]
+mod approve_jump;
 mod authoring;
 #[cfg(feature = "art")]
 mod banner;
@@ -1060,6 +1062,10 @@ fn dispatch(args: Vec<String>) -> ExitCode {
     #[cfg(feature = "interact")]
     if let Some(command) = interactive::requested(&args) {
         return interactive::dispatch(command, &args);
+    }
+    #[cfg(feature = "interact")]
+    if let Some(command) = approve_jump::requested(&args) {
+        return approve_jump::dispatch(command, &args);
     }
     #[cfg(feature = "record")]
     if record::requested(&args) {
@@ -7067,6 +7073,8 @@ mod tests {
             }
             #[cfg(feature = "interact")]
             words.extend(interactive::requested(args));
+            #[cfg(feature = "interact")]
+            words.extend(approve_jump::requested(args));
             if tools::bench_dispatch(args).unwrap_or(true) {
                 words.push("bench");
             }

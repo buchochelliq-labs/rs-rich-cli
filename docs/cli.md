@@ -1609,6 +1609,95 @@ terminal back before the command ends. Ctrl+Z suspends a command as it would
 any other program: the terminal is given back to the shell, and `fg` takes it
 again and repaints.
 
+## Review and jump
+
+`rich approve` and `rich jump` are two more interactive commands, with the
+conventions [above](#ask-in-a-script): they paint on stderr, print the
+answer on stdout, read keys from the terminal while stdin is the list, and
+exit 0 answered, 1 cancelled, 130 interrupted, 2 on a usage error and 3
+with no answer without a terminal.
+
+### Approve, reject or skip a list
+
+`rich approve` reviews ITEMs, or the lines on stdin, one by one or in bulk,
+and prints one JSON line per item with its decision:
+
+```bash
+git branch --format='%(refname:short)' | rich approve --print approved | xargs -r git branch -D
+rich approve --require-reason < requests.jsonl > decisions.jsonl
+```
+
+```json
+{"index":0,"decision":"approved","reason":null,"item":"feature/old-login"}
+{"index":1,"decision":"rejected","reason":"still in review","item":"fix/cache"}
+{"index":2,"decision":"pending","reason":null,"item":"spike/wasm"}
+```
+
+`a` approves the focused item, `r` rejects it and `s` skips it, each moving
+on to the next pending item; `A`, `R` and `S` ask for a reason first. `u`
+takes a decision back. Space marks items and Ctrl+A marks every pending
+one: a decision then applies to all the marked items. `p` hides the detail
+pane, and Enter submits; Esc cancels (exit 1, nothing printed). With
+`--mouse`, rows, the cell after the pointer (a mark) and the buttons under
+the list click.
+
+- Items are read as `--format lines` or `jsonl`; the default, `auto`, reads
+  JSON Lines when every line is a JSON object. An object's label is
+  `--label FIELD`, or the first of `title`, `name`, `label`, `summary` and
+  `id`; its `description` and other plain fields are shown beside it, and
+  one with nested values is previewed whole. `"item"` in the output is the
+  object, or the line as a string.
+- `--print approved` (or `rejected`) prints those items as they were read
+  instead, one per line, for `xargs`.
+- `--require-reason` asks for a reason on every rejection and refuses an
+  empty one. `--auto-submit` submits once nothing is pending.
+- Every item is in the output, pending ones too, so a script can tell what
+  was not reviewed. The decisions are only recorded: what they lead to is
+  the script's.
+- Without a terminal, ITEMs given as arguments are asked about line by line
+  on stderr (`a`, `r` or `s`, a reason after a colon: `r: not now`; an
+  empty line skips and `q` stops). Items read from stdin leave nothing to
+  ask on, so every item is printed as pending.
+
+### Jump to anything
+
+`rich jump` searches files, Markdown headings, code symbols, commands and
+recent places in one fuzzy box, and prints the place picked: a path,
+`path:line` for a heading or a symbol, or a command.
+
+```bash
+$EDITOR "$(rich jump --files --headings docs)"
+eval "$(rich jump --commands ~/.commands --recent ~/.jump-recent)"
+```
+
+Results are grouped by source (Recent, Files, Headings, Symbols, Commands),
+each showing its best five (`--limit N`) and how many more there are, and
+the best match overall is focused, with a preview of the file at its line.
+↑ and ↓ move across the groups and Alt+↑ ↓ jump between them. Tab narrows
+the search to one source and Shift+Tab widens it again; typing `#` first
+searches headings only, `@` symbols and `>` commands. With `--mouse`, a
+click on a group's title narrows to it.
+
+- It searches the files, headings and symbols under each DIR (default
+  `.`), or those of them chosen with `--files`, `--headings` and
+  `--symbols`. Hidden entries, `target` and `node_modules` are left out, and
+  at most 20,000 files are listed and 1 MiB of each read.
+- Symbols are found by their keyword at the start of a line (`fn`,
+  `struct`, `enum`, `trait`, `mod`, `def`, `class`, `function`, `func`,
+  `interface`) in common code files: a quick index, not a parser.
+- `--commands FILE` adds FILE's commands, one per line, as `LABEL<TAB>COMMAND`
+  or the command alone; a pick prints the command.
+- `--recent FILE` shows FILE's places first, as Recent, and puts the pick at
+  its top (the latest 50 are kept); a FILE that is not there yet is made.
+- With `-` as DIR, or with stdin piped and no DIR, `--files`,
+  `--headings`, `--symbols` or `--commands`, the
+  entries come from stdin: lines, or JSON objects with `label` and
+  optionally `source` (the group), `location` (what is printed), `detail`
+  and `preview`.
+- `--print json` prints `{"source":…,"label":…,"location":…}` instead.
+- Without a terminal it prints the best match for `--value QUERY`, or for a
+  line read from stdin; with neither it exits 3.
+
 ## Use it in a script or CI
 
 `rich` writes rendered output to stdout and diagnostics to stderr, so the two

@@ -1088,3 +1088,52 @@ def test_a_picker_starts_at_its_value_and_answers_what_it_shows():
     if sys.version_info >= (3, 10):
         for picker, prompt in [(DatePicker, "Date"), (TimePicker, "Time"), (DateTimePicker, "Date and time")]:
             assert inspect.signature(picker).parameters["prompt"].default == prompt
+
+
+# ---------------------------------------------------------------------------
+# ApprovalQueue (#471) and Jump (#484)
+
+
+def test_approval_queue_reports_a_decision_for_every_item():
+    from rs_rich.interact import ApprovalQueue
+
+    queue = ApprovalQueue("Deploys", ["api", Item({"id": 2}, "web"), "db"], require_reason=True)
+    assert queue.values == ["api", {"id": 2}, "db"]
+    record = queue.headless(Script().keys("a r").text("flaky").keys("enter enter"))
+    decisions = record.value
+    assert [d["decision"] for d in decisions] == ["approved", "rejected", "pending"]
+    assert decisions[1] == {"index": 1, "value": {"id": 2}, "label": "web", "decision": "rejected", "reason": "flaky"}
+    assert "0/3 decided" in record.frames[0]
+    # Every pending item at once, then Esc cancels.
+    assert [d["decision"] for d in queue.headless("ctrl+a s enter").value] == ["skipped"] * 3
+    assert queue.headless("a escape").outcome.kind == "cancelled"
+    # Without a terminal: item by item, a reason after a colon.
+    record = degrade(queue, ["a", "r: no", "q"])
+    assert [(d["decision"], d["reason"]) for d in record.value] == [
+        ("approved", None),
+        ("rejected", "no"),
+        ("pending", None),
+    ]
+    assert all(d["decision"] == "pending" for d in degrade(queue, fallback="default").value)
+    with pytest.raises(ValueError):
+        ApprovalQueue("Deploys", ["a"], height=0)
+
+
+def test_jump_searches_sources_and_names_the_one_picked():
+    from rs_rich.interact import Jump, JumpSource
+
+    files = JumpSource("files", "Files", ["src/main.rs", "README.md"])
+    commands = JumpSource("commands", "Commands", [Item("cargo test", "Run the tests")], prefix=">")
+    assert (commands.prefix, len(files)) == (">", 2)
+    jump = Jump([files, commands])
+    record = jump.headless(Script().text(">te").keys("enter"))
+    assert record.value == {"source": "commands", "index": 0, "label": "Run the tests", "value": "cargo test"}
+    record = jump.headless("down enter")
+    assert record.value["value"] == "README.md"
+    assert "Files" in record.frames[0] and "Commands >" in record.frames[0]
+    assert degrade(jump, ["readme"]).value["value"] == "README.md"
+    assert degrade(Jump([files], query="main"), fallback="default").value["value"] == "src/main.rs"
+    with pytest.raises(TypeError):
+        Jump(["files"])
+    with pytest.raises(ValueError):
+        JumpSource("a", "A", [], prefix="ab")

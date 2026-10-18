@@ -1893,6 +1893,10 @@ pub(crate) fn spec() -> CommandSpec {
     for command in super::interactive::commands() {
         spec = spec.subcommand(command);
     }
+    #[cfg(feature = "interact")]
+    for command in super::approve_jump::commands() {
+        spec = spec.subcommand(command);
+    }
     for command in authoring_commands() {
         spec = spec.subcommand(command);
     }
@@ -2128,6 +2132,8 @@ mod tests {
     const STYLE_RULES_RS: &str = include_str!("style_rules.rs");
     #[cfg(feature = "interact")]
     const INTERACTIVE: &str = include_str!("interactive.rs");
+    #[cfg(feature = "interact")]
+    const APPROVE_JUMP: &str = include_str!("approve_jump.rs");
     #[cfg(feature = "art")]
     const MICRO: &str = include_str!("micro.rs");
     #[cfg(feature = "serve")]
@@ -2197,6 +2203,8 @@ mod tests {
         }
         #[cfg(feature = "interact")]
         out.extend(option_literals(item(INTERACTIVE, "fn parse_args(")));
+        #[cfg(feature = "interact")]
+        out.extend(option_literals(item(APPROVE_JUMP, "fn parse_args(")));
         #[cfg(feature = "serve")]
         out.extend(option_literals(item(SERVE, "fn parse_args(")));
         #[cfg(feature = "art")]
