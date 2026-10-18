@@ -1,0 +1,26 @@
+❯ due=$(rich date --header Due --value 2026-10-17 --min 2026-10-05 --max 2026-11-20)
+? Due › 2026-11-20
+❯ echo "due $due"
+due 2026-11-20
+❯ rich date --kind datetime --value '2026-10-17 08:00' --min '2026-10-17 09:00'
+? Date and time › 2026-10-17 09:00
+2026-10-17 09:00
+❯
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

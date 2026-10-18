@@ -37,6 +37,7 @@ motion turned on in your system settings the cards stay still.
 [![An app in linear mode, written as lines of text](media/tapes/access/linear.png){ data-gif="access.gif" loading=lazy }<span class="tape-card-title">Text mode and linear mode</span>](#text-mode-and-linear-mode){ .tape-card }
 [![A line of Rust selected in a highlighted text area](media/tapes/editor/selected.png){ data-gif="editor.gif" loading=lazy }<span class="tape-card-title">A text area</span>](#a-text-area){ .tape-card }
 [![A dashboard drawn in place below the prompt](media/tapes/surface/done.png){ data-gif="surface.gif" loading=lazy }<span class="tape-card-title">A surface</span>](#a-surface){ .tape-card }
+[![rich date: a day picked on a month grid within a range](media/tapes/date/grid.png){ data-gif="date.gif" loading=lazy }<span class="tape-card-title">Dates and times</span>](#dates-and-times){ .tape-card }
 [![rich serve printing its address, and sessions asked for](media/tapes/serve/sessions.png){ data-gif="serve.gif" loading=lazy }<span class="tape-card-title">Serve a program to a browser</span>](#serve-a-program-to-a-browser){ .tape-card }
 [![A shell in a terminal pane beside a web view](media/tapes/embed/pane.png){ data-gif="embed.gif" loading=lazy }<span class="tape-card-title">A terminal pane</span>](#a-terminal-pane){ .tape-card }
 [![A CSV file drawn as a line chart by rich chart](media/tapes/chart/lines.png){ data-gif="chart.gif" loading=lazy }<span class="tape-card-title">Charts from data</span>](#charts-from-data){ .tape-card }
@@ -444,6 +445,24 @@ screen when the program ends. See
 | ![The dashboard at its second frame](media/tapes/surface/ticking.png) | ![The last frame left on screen, the prompt below it](media/tapes/surface/done.png) |
 
 [Tape](tapes/surface.tape) · [Cast](media/tapes/surface/surface.cast) · [GIF](media/tapes/surface/surface.gif) · [Page](media/tapes/surface/surface.html)
+
+## Dates and times
+
+`rich date` (0.0.19): a day picked on a month grid, inside a range whose
+days outside are out of reach, then a date and time whose time is refused
+before the range's first moment, until it is moved into it. The answers
+are printed in ISO 8601 form, for a script to read. See
+[Ask in a script](cli.md#ask-in-a-script).
+
+<div class="tape-player" data-cast="../media/tapes/date/date.cast" data-poster="npt:0:2">
+  <img src="../media/tapes/date/date.gif" alt="rich date picking a day, then a date and time">
+</div>
+
+| A day | Refused | Answered |
+|---|---|---|
+| ![A month grid with the twentieth of November picked](media/tapes/date/grid.png) | ![A time before the range refused](media/tapes/date/refused.png) | ![The date and time printed](media/tapes/date/answer.png) |
+
+[Tape](tapes/date.tape) · [Cast](media/tapes/date/date.cast) · [GIF](media/tapes/date/date.gif) · [Page](media/tapes/date/date.html)
 
 ## Serve a program to a browser
 
