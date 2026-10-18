@@ -783,6 +783,31 @@ test.
   CLI reference regenerated, the porting page, the Python pages, and
   `docs/tapes/log.tape` (not yet recorded).
 
+### ratatui's demos, rebuilt on intuiTUIve (intuituive 0.0.4)
+
+0.0.19 demo batch D1 (see [intuiTUIve against ratatui](docs/design/intuituive-vs-ratatui.md#3-the-demos)).
+
+- **`demo`, ratatui's classic demo.** `examples/demo.rs` rebuilds its three
+  tabs: gauges, a sparkline, lists, bars and a sine chart fed by a timer; a
+  server table beside a world map; the named colours. A tick redraws only
+  the parts that move, and a test checks it. The mouse picks tabs, tasks
+  and servers, `?` and Ctrl+P list the keys, and `--frozen` stops the
+  clock.
+- **`demo2`, ratatui's showcase.** `examples/demo2.rs` rebuilds its About,
+  Recipe, Email, Traceroute and Weather tabs over an Okhsv swatch, with a
+  recipe, emails, hosts and weather of our own. Its colours are in
+  `examples/demo2.tcss`, reloaded live. It fits any size, and destroy is an
+  effect over the whole app, on the virtual clock in the tests.
+- **A list takes the mouse.** A press on an item selects it, and the wheel
+  moves the selection three items, as on a table. The press still reaches
+  the node's own handler.
+- **An idle effect costs nothing.** An `effect` that wrote no cells the
+  last time it ran no longer draws everything inside it again when a child
+  changes: the child draws alone.
+- **Docs:** [ratatui's examples, rebuilt](docs/guide/intuituive/ratatui-examples.md),
+  a new guide page; ratatui in the porting guide's credits;
+  `docs/tapes/demo.tape` and `docs/tapes/demo2.tape` (not yet recorded).
+
 ### One process per browser session (web 0.0.2)
 
 0.0.19 workstream 3.

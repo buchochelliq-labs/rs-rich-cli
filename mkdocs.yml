@@ -138,6 +138,7 @@ nav:
           - guide/intuituive/index.md
           - "Tutorial: a to-do app": guide/intuituive/tutorial.md
           - Porting a ratatui app: guide/intuituive/porting.md
+          - "ratatui's examples, rebuilt": guide/intuituive/ratatui-examples.md
           - Serving an app to a browser: guide/intuituive/web.md
           - "Embedding programs and pages (rs-rich-embed)": guide/intuituive/embed.md
           - Testing with screen readers: guide/intuituive/screen-readers.md

@@ -1276,6 +1276,20 @@ Every demo follows the conventions of the existing ports (`files`, `scope`,
 
 #### D1.1 `demo`: the classic demo
 
+**Status: built** (0.0.19, `examples/demo.rs`). Where the build differs
+from the sketch below:
+
+- The bar chart is given only the bars that fit, three cells thick and two
+  apart, as ratatui draws them: rs-rich-ext's `BarChart` given more bars
+  than fit makes them thinner and closes the gaps instead. With
+  `--unicode false` the bars keep their eighths, as `BarChart` has no
+  three-level set.
+- The tasks list does not take the focus, so ↑/↓ go round it from any tab,
+  as ratatui's do; a click and the wheel still move it. Lists took no
+  clicks before: a press now selects an item and the wheel moves the
+  selection, as on a table.
+- The tasks, the events, the servers and the footer's text are our own.
+
 - **Mirrors** ratatui's `demo`.
 - **The tab strip,** in a panel titled with the app's name: Graphs, World and
   Colours.
@@ -1317,6 +1331,22 @@ Every demo follows the conventions of the existing ports (`files`, `scope`,
     - ↓ moves the task selection.
 
 #### D1.2 `demo2`: the showcase
+
+**Status: built** (0.0.19, `examples/demo2.rs` and `demo2.tcss`). Where the
+build differs from the sketch below:
+
+- The swatch is a widget that draws round its content and leaves the
+  content's area blank, as ratatui's demo clears it, so the padding and
+  gaps take the content's background.
+- The stylesheet holds the frame's colours; the highlights inside the
+  widgets (a selected tab, row or email) are theme styles given in code
+  with `.theme_styles(..)`, which a sheet cannot set.
+- Weather's seasons sit beside the week's bars: ratatui's put them under,
+  in rows its 81×18 never has. `--today` sets the calendar's day.
+- The traceroute's map is of Europe, with hops of our own.
+- `effect` was changed so that an idle effect (one that wrote nothing the
+  last time it ran) costs nothing: before, a child's change under it drew
+  everything inside again, so a key redrew the whole app.
 
 - **Mirrors** ratatui's `demo2`. It comes with `examples/demo2.tcss`.
 - **The frame:**
