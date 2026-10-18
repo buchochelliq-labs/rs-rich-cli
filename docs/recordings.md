@@ -47,6 +47,7 @@ motion turned on in your system settings the cards stay still.
 [![rich profile describing each column of a CSV file](media/tapes/profile/profile.png){ data-gif="profile.gif" loading=lazy }<span class="tape-card-title">Profile a data file</span>](#profile-a-data-file){ .tape-card }
 [![rich schema --er drawing SQL tables as an ER diagram](media/tapes/schema/er.png){ data-gif="schema.gif" loading=lazy }<span class="tape-card-title">Schemas and ER diagrams</span>](#schemas-and-er-diagrams){ .tape-card }
 [![rich deps --features showing what turned syn's features on](media/tapes/deps-features/features.png){ data-gif="deps-features.gif" loading=lazy }<span class="tape-card-title">Crate features</span>](#crate-features){ .tape-card }
+[![rich deps --baseline flagging a crate that grew](media/tapes/deps-policy/baseline.png){ data-gif="deps-policy.gif" loading=lazy }<span class="tape-card-title">Sizes, baselines and licence policy</span>](#sizes-baselines-and-licence-policy){ .tape-card }
 [![rich diff --conflicts showing ours, base and theirs side by side](media/tapes/conflicts/conflicts.png){ data-gif="conflicts.gif" loading=lazy }<span class="tape-card-title">Merge conflicts</span>](#merge-conflicts){ .tape-card }
 [![A DOT fence drawn in a Markdown document](media/tapes/dot-fence/drawn.png){ data-gif="dot-fence.gif" loading=lazy }<span class="tape-card-title">DOT in Markdown</span>](#dot-in-markdown){ .tape-card }
 [![fun/heart previewed, its frames magnified](media/tapes/micro-modes/modes.png){ data-gif="micro-modes.gif" loading=lazy }<span class="tape-card-title">Micro assets</span>](#micro-assets){ .tape-card }
@@ -589,6 +590,24 @@ one crate; here `syn`, resolved at two versions.
 ![rich deps --features --package syn](media/tapes/deps-features/features.png)
 
 [Tape](tapes/deps-features.tape) · [Cast](media/tapes/deps-features/deps-features.cast) · [GIF](media/tapes/deps-features/deps-features.gif) · [Page](media/tapes/deps-features/deps-features.html)
+
+## Sizes, baselines and licence policy
+
+`rich deps` (0.0.19) as a CI gate: what each crate adds to a binary, from
+cargo-bloat's JSON; a size regression against a saved baseline, which
+exits 5; and a licence policy refusing a crate in an SBOM. Every input is
+a fixture in the repository. See
+[Dependency sizes, baselines and licence policy](cli.md#dependency-sizes-baselines-and-licence-policy-0019).
+
+<div class="tape-player" data-cast="../media/tapes/deps-policy/deps-policy.cast" data-poster="npt:0:3">
+  <img src="../media/tapes/deps-policy/deps-policy.gif" alt="rich deps reporting sizes, comparing them with a baseline, and checking a licence policy">
+</div>
+
+| Sizes | Baseline | Policy |
+|---|---|---|
+| ![Each crate's size as a bar, largest first](media/tapes/deps-policy/sizes.png) | ![A crate that grew past the threshold, flagged](media/tapes/deps-policy/baseline.png) | ![A crate whose licence the policy refuses](media/tapes/deps-policy/policy.png) |
+
+[Tape](tapes/deps-policy.tape) · [Cast](media/tapes/deps-policy/deps-policy.cast) · [GIF](media/tapes/deps-policy/deps-policy.gif) · [Page](media/tapes/deps-policy/deps-policy.html)
 
 ## Profile a data file
 

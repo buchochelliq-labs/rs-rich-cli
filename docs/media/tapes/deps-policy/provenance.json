@@ -1,0 +1,13 @@
+{
+  "tape": "docs/tapes/deps-policy.tape",
+  "tape_fnv1a64": "c4151e43061bbe1e",
+  "recorder": "rs-rich-record 0.0.7",
+  "rich": null,
+  "commit": "5fa8d96bef3ed1883e43b90ea909a863ee4ebdc4",
+  "screenshots": [
+    "sizes",
+    "baseline",
+    "policy"
+  ],
+  "note": "Every frame is real output of the program under test on a PTY."
+}
