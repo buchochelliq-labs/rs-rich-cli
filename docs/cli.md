@@ -2109,6 +2109,88 @@ exit 3 when the file cannot be read, 2 otherwise (another ABI version, a name
 another plugin already provides, a build without the loader). See the
 [plugin guide](PLUGINS.md) for what plugins can do and the threat model.
 
+## Draw a banner (0.0.19)
+
+`rich banner` draws text as a FIGlet banner, with rs-rich-art's FIGlet
+renderer (byte-identical with `pyfiglet` for the bundled `standard` font).
+It needs the `art` feature, which a default build has.
+
+```bash
+rich banner Hello
+rich banner --gradient rainbow --align center "Ship it"
+rich banner --gradient '#ff5f6d,#ffc371' --direction vertical --style bold v0.0.19
+echo "Release notes" | rich banner --fit plain
+rich banner --font slant Deploy        # an installed figlet's slant.flf
+```
+
+| Option | What it does |
+|---|---|
+| `--font NAME\|FILE` | `standard` (bundled, the default), a FIGfont `.flf` file, or the name of one in `$FIGLET_FONTDIR`, `/usr/share/figlet` or `/usr/local/share/figlet`. `--list-fonts` lists them |
+| `--style STYLE` | A style for every row: `bold cyan`, `white on blue` |
+| `--gradient COLORS` | Colours the strokes along two or more comma-separated colours, or a preset: `rainbow`, `sunset`, `ocean`, `forest`, `fire` |
+| `--direction D` | `horizontal` (the default), `vertical` or `diagonal` |
+| `--align A` | `left` (the default), `center` or `right` within the width |
+| `-w, --width N` | Lay out to N columns instead of the terminal's width |
+| `--fit F` | When the banner is wider than the width: `wrap` at spaces onto more banner rows (the default, as figlet does), print the text `plain` instead, or `none` (let it overflow) |
+| `--force-terminal` | Colour and styles even when stdout is not a terminal |
+
+With no words, or `-`, the text comes from stdin; a newline starts a new
+banner row. Colour follows the terminal: a pipe gets the plain banner,
+`NO_COLOR` and `--no-color` drop the colour and keep the strokes, and a
+terminal with fewer colours shows each gradient colour as its nearest one.
+A missing font exits 3, one that is not a FIGfont exits 4.
+
+## Shell integration (0.0.19)
+
+`rich shell init SHELL` prints a script for a shell's startup file. It sets
+up the completions (the same script as `rich completions SHELL`), OSC 133
+marks for the prompt and each command (terminals such as WezTerm, kitty,
+iTerm2, Windows Terminal and VS Code use them to jump between prompts and
+flag failed commands), OSC 7 so a new tab opens in the same directory, and a
+status line after each command.
+
+```bash
+eval "$(rich shell init bash)"                            # ~/.bashrc, bash 4.4+
+eval "$(rich shell init zsh)"                             # ~/.zshrc, after compinit
+rich shell init fish | source                             # ~/.config/fish/config.fish
+rich shell init pwsh | Out-String | Invoke-Expression     # $PROFILE
+```
+
+The status line is `rich shell status`, which a shell hook can call on its
+own:
+
+```text
+$ cargo test
+…
+✖ error $ cargo test  exit 101  4.2s
+```
+
+Successes quicker than `--min-duration` (2 seconds in `init`, 0 when
+`status` is run directly) print nothing; a failure always shows. The command
+is shown as typed, with control characters made visible. Markers follow
+`RICH_A11Y` (`ascii-symbols`, `word-symbols`, `screen-reader`) or
+`--symbols unicode|ascii|words`. Leave parts out with `--no-completions`,
+`--no-marks` and `--no-status`.
+
+`rich shell link [PATH[:LINE[:COL]]]...` prints paths, the working directory
+by default, as OSC 8 `file://` links (or through `--editor
+'vscode://file{path}:{line}'`); `--tilde` shows `$HOME` as `~`. Off a
+terminal the paths are plain, unless `--links always`, which a prompt's
+command substitution needs; `--prompt bash` or `--prompt zsh` marks the
+escape sequences as zero-width so the line editor measures the prompt right:
+
+```bash
+PS1='$(rich shell link --tilde --links always --prompt bash) \$ '        # bash
+setopt prompt_subst
+PROMPT='$(rich shell link --tilde --links always --prompt zsh) %# '       # zsh
+```
+
+The scripts call `rich` from `PATH`. They guard against being loaded twice,
+keep the previous `PROMPT_COMMAND`, `PS0`, `PS1` and PowerShell `prompt`,
+and keep `$?` and `$LASTEXITCODE` for whatever runs after them. In bash an
+empty command line reports nothing. PowerShell gets no OSC 133 `C` mark
+(that needs a PSReadLine hook).
+
 ## Shell completions and generated docs
 
 ```bash
@@ -2184,6 +2266,21 @@ Sequential frames captured from actual `--gif-mode blocks` CLI playback:
 ![CLI GIF frame 5](assets/releases/0.0.4-gif-frame4.jpg)
 
 [Playback recordings and reproduction commands](https://github.com/buchochelliq-labs/rs-rich-cli/tree/main/.github/evidence/v0.0.4-gif).
+
+### Speed, frame rate and limits (0.0.19)
+
+```bash
+rich --gif spinner.gif --speed 2                 # twice as fast
+rich --gif spinner.gif --speed 0.5 --fps 12      # half speed, at most 12 frames a second
+rich --gif spinner.gif --loop 0 --max-frames 48  # endless, but stop after 48 frames
+rich --gif a.gif b.gif --loop 0 --max-duration 5 # stop after five seconds
+```
+
+`--speed X` divides every frame's delay by X; `--fps N` (default 30) caps
+the frame rate after that; `--max-frames N` stops each animation after N
+frames, holding the last one; `--max-duration SECS` stops the whole stage.
+Each needs `--gif` and a number above 0. Redirected output is unchanged:
+one frame, whatever the controls.
 
 ## Optional syntax cache
 

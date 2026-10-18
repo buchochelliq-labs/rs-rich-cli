@@ -113,6 +113,10 @@ Choose at most one; the default auto-detects .md/.rst/.json/.csv/.tsv/.ipynb, .m
 | `--highlighter <NAME>` | The code highlighter for source, Markdown code, view and diff: syntect (the default), or lumis in a build with the lumis feature. Config: `highlighter`. |
 | `--code-theme <NAME>` | A theme of the chosen code highlighter, e.g. ansi_dark (`rich doctor --report json` lists them) Config: `code_theme`. |
 | `--loop <N>` | With --gif, repeat N times (default 1; 0 = forever) |
+| `--speed <X>` | With --gif, play X times as fast (0.5 = half speed; default 1) |
+| `--fps <N>` | With --gif, draw at most N frames a second (default 30) |
+| `--max-frames <N>` | With --gif, stop each animation after N frames, even with --loop 0. |
+| `--max-duration <SECS>` | With --gif, stop after SECS seconds, whatever is still playing. |
 | `--gif-mode <M>` | With --gif: ascii or blocks (half-block pixels). Blocks fall back to ASCII without color or when piped. Default: `ascii`. Possible values: `ascii`, `blocks`. |
 
 ### Diagram sources
@@ -373,6 +377,8 @@ Self-contained examples; ignores config; accepts --no-color.
 | `docs` | Print reference documentation generated from this help |
 | `bench` | Compare benchmark runs |
 | `micro` | Micro assets: emoji-sized images and animations written :micro:name: (with --emoji). List, show, preview, add, remove and create them; install packs |
+| `banner` | Draw TEXT as a FIGlet banner: a font, a style or colour gradient, alignment and width fitting. Built with the `art` feature |
+| `shell` | Shell integration: `init` prints a script with completions, OSC 133 prompt marks, OSC 7 and a status line after each command; `status` and `link` are its helpers |
 | `record` | Run tapes (scripted terminal sessions: type, press keys, wait for screen text, take screenshots) in a real terminal and write PNG, SVG and text screenshots, an asciinema cast, a GIF, an MP4 (with FFmpeg) and an HTML page with a player; --check compares screenshots with committed ones instead |
 | `plugins` | List the plugins this build has — built in, linked, and any --plugin PATH loads — with their source, version, ABI and capabilities |
 | `doctor` | Read-only build, terminal, config and pager diagnostics; --report json writes diagnostic data to stdout |
@@ -2070,6 +2076,186 @@ rich micro packs [--micro-project] [--report json]
 | Option | Description |
 | --- | --- |
 | `--report <FORMAT>` | json: write data to stdout (also --json) Possible values: `human`, `json`. |
+
+### rich banner
+
+Draw TEXT as a FIGlet banner: a font, a style or colour gradient, alignment and width fitting. Built with the `art` feature
+
+#### Usage
+
+```text
+rich banner [OPTIONS] [TEXT]...
+```
+
+#### Options
+
+| Option | Description |
+| --- | --- |
+| `--font <NAME\|FILE>` | standard (bundled, the default), a FIGfont .flf file, or the name of one in $FIGLET_FONTDIR, /usr/share/figlet or /usr/local/share/figlet. |
+| `--list-fonts` | List the bundled font and the .flf fonts found in those directories, then exit. |
+| `--style <STYLE>` | A style for every row, such as `bold cyan` or `white on blue`. |
+| `--gradient <COLORS>` | Colour the strokes along a gradient: two or more comma-separated colours (`#ff0000,blue`), or a preset: rainbow, sunset, ocean, forest, fire. Overrides --style's colour. |
+| `--direction <D>` | Which way --gradient runs (default horizontal) Possible values: `horizontal`, `vertical`, `diagonal`. |
+| `--align <A>` | Position the banner within the width (default left) Possible values: `left`, `center`, `right`. |
+| `-w`, `--width <N>` | Lay the banner out to N columns (default: the terminal's width) |
+| `--fit <F>` | When the banner is wider than the width: wrap it at spaces onto more rows (the default, as figlet does), print TEXT as plain text instead (plain), or let it overflow (none) Possible values: `wrap`, `plain`, `none`. |
+| `--force-terminal` | Write colour and styles even when stdout is not a terminal (for a pager or a file) |
+
+#### Arguments
+
+| Argument | Description |
+| --- | --- |
+| `[TEXT]...` | The words to draw, joined with spaces; none (or `-`) reads stdin. A newline starts a new banner row. |
+
+#### Examples
+
+A banner in the standard font
+
+```sh
+rich banner Hello
+```
+
+Centred, in rainbow colours
+
+```sh
+rich banner --gradient rainbow --align center 'Ship it'
+```
+
+An installed figlet font; plain text on a narrow terminal
+
+```sh
+rich banner --font slant --fit plain Release
+```
+
+### rich shell
+
+Shell integration: `init` prints a script with completions, OSC 133 prompt marks, OSC 7 and a status line after each command; `status` and `link` are its helpers
+
+#### Usage
+
+```text
+rich shell init|status|link [OPTIONS]
+```
+
+#### Commands
+
+| Command | Description |
+| --- | --- |
+| `init` | Print the integration script for SHELL, to eval from its startup file |
+| `status` | One line for a finished command: a status marker, the command, `exit N` and how long it took |
+| `link` | Print paths (default: the working directory) as OSC 8 file links, plain where links are off |
+
+#### rich shell init
+
+Print the integration script for SHELL, to eval from its startup file
+
+##### Usage
+
+```text
+rich shell init SHELL [--no-completions] [--no-marks] [--no-status] [--min-duration SECS]
+```
+
+##### Options
+
+| Option | Description |
+| --- | --- |
+| `--no-completions` | Leave out the completion script. |
+| `--no-marks` | Leave out the OSC 133 prompt and command marks and the OSC 7 directory. |
+| `--no-status` | Do not print a status line after each command. |
+| `--min-duration <SECS>` | Stay quiet after a success quicker than SECS (default 2) |
+
+##### Arguments
+
+| Argument | Description |
+| --- | --- |
+| `<SHELL>` | The shell (pwsh is accepted for powershell) Possible values: `bash`, `zsh`, `fish`, `powershell`. |
+
+##### Examples
+
+In ~/.bashrc (bash 4.4+)
+
+```sh
+eval "$(rich shell init bash)"
+```
+
+In ~/.zshrc
+
+```sh
+eval "$(rich shell init zsh)"
+```
+
+In ~/.config/fish/config.fish
+
+```sh
+rich shell init fish | source
+```
+
+In $PROFILE
+
+```sh
+rich shell init pwsh | Out-String | Invoke-Expression
+```
+
+#### rich shell status
+
+One line for a finished command: a status marker, the command, `exit N` and how long it took
+
+##### Usage
+
+```text
+rich shell status --exit CODE [--duration D] [--command TEXT] [--min-duration SECS] [--symbols unicode|ascii|words]
+```
+
+##### Options
+
+| Option | Description |
+| --- | --- |
+| `--exit <CODE>` | The command's exit status (0 = success) |
+| `--duration <D>` | How long it ran: seconds, or with a unit (1500ms, 1.5s, 2m) |
+| `--command <TEXT>` | The command line as typed. |
+| `--min-duration <SECS>` | Print nothing for a success quicker than SECS (default 0) |
+| `--symbols <SET>` | Status markers (default unicode, or as RICH_A11Y says) Possible values: `unicode`, `ascii`, `words`. |
+
+##### Examples
+
+✖ error $ cargo test  exit 101  4.2s
+
+```sh
+rich shell status --exit 101 --duration 4.2 --command 'cargo test'
+```
+
+#### rich shell link
+
+Print paths (default: the working directory) as OSC 8 file links, plain where links are off
+
+##### Usage
+
+```text
+rich shell link [PATH[:LINE[:COL]]]... [--tilde] [--editor TEMPLATE] [--links auto|always|never] [--prompt bash|zsh]
+```
+
+##### Options
+
+| Option | Description |
+| --- | --- |
+| `--tilde` | Show paths under $HOME as ~/…. |
+| `--editor <TEMPLATE>` | Link through an editor URL instead of file://, e.g. vscode://file{path}:{line}:{column}. |
+| `--links <WHEN>` | auto (links on a terminal, the default), always (as in a prompt's command substitution) or never. Possible values: `auto`, `always`, `never`. |
+| `--prompt <SHELL>` | Mark escape sequences as zero-width for a bash (\001…\002) or zsh (%{…%}) prompt. Possible values: `bash`, `zsh`. |
+
+##### Arguments
+
+| Argument | Description |
+| --- | --- |
+| `[PATH]...` | Paths to link, one per line; relative ones resolve here. |
+
+##### Examples
+
+A bash prompt with a clickable working directory
+
+```sh
+PS1='$(rich shell link --tilde --links always --prompt bash) \$ '
+```
 
 ### rich record
 

@@ -34,7 +34,10 @@ use std::io::{BufRead, IsTerminal, Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
+mod animation;
 mod authoring;
+#[cfg(feature = "art")]
+mod banner;
 mod batch;
 mod batch_output;
 mod batch_paths;
@@ -60,6 +63,7 @@ mod record;
 mod render_target;
 #[cfg(feature = "serve")]
 mod serve;
+mod shell;
 mod sources;
 mod structured_log;
 mod style_rules;
@@ -550,6 +554,9 @@ struct Cli {
     /// `--loop N`: how many times `--gif` repeats (0 = forever).
     #[cfg_attr(not(feature = "art"), allow(dead_code))]
     loops: Option<usize>,
+    /// `--speed`, `--fps`, `--max-frames`, `--max-duration`: `--gif` playback.
+    #[cfg_attr(not(feature = "art"), allow(dead_code))]
+    animation: animation::AnimationControls,
     /// `--threshold PCT`: with `--diff`, exit non-zero when the changed
     /// percentage of the canvas exceeds this. Makes the tool a CI gate.
     #[cfg_attr(not(feature = "art"), allow(dead_code))]
@@ -1040,6 +1047,13 @@ fn dispatch(args: Vec<String>) -> ExitCode {
         return plugins::dispatch(&args);
     }
     #[cfg(feature = "art")]
+    if banner::requested(&args) {
+        return banner::dispatch(&args);
+    }
+    if shell::requested(&args) {
+        return shell::dispatch(&args);
+    }
+    #[cfg(feature = "art")]
     if micro::requested(&args) {
         return micro::dispatch(&args);
     }
@@ -1198,6 +1212,10 @@ const VALUE_OPTIONS: &[&str] = &[
     "--encoding",
     "--threshold",
     "--loop",
+    "--speed",
+    "--fps",
+    "--max-frames",
+    "--max-duration",
     "--jobs",
     "--collision",
     "--format",
@@ -1878,6 +1896,7 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
     let mut mode = Mode::Auto;
     let mut resources: Vec<String> = Vec::new();
     let mut loops = None;
+    let mut animation = animation::AnimationControls::default();
     let mut diff_threshold = None;
     let mut image_mode = ImageMode::Auto;
     let mut image_fit = None;
@@ -2288,6 +2307,12 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
                         .parse()
                         .map_err(|_| format!("invalid loop count {value:?}"))?,
                 );
+            }
+            "--speed" | "--fps" | "--max-frames" | "--max-duration" => {
+                let value = iter
+                    .next()
+                    .ok_or_else(|| format!("{arg} requires a value"))?;
+                animation.set(arg, value)?;
             }
             "-u" | "--rule" => set_mode(&mut mode, Mode::Rule)?,
             "-l" | "--left" => justify = Some(Justify::Left),
@@ -2930,6 +2955,30 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
             "--gif",
             effective_mode == Mode::Gif,
         ),
+        (
+            "--speed",
+            animation.speed.is_some(),
+            "--gif",
+            effective_mode == Mode::Gif,
+        ),
+        (
+            "--fps",
+            animation.fps.is_some(),
+            "--gif",
+            effective_mode == Mode::Gif,
+        ),
+        (
+            "--max-frames",
+            animation.max_frames.is_some(),
+            "--gif",
+            effective_mode == Mode::Gif,
+        ),
+        (
+            "--max-duration",
+            animation.max_duration.is_some(),
+            "--gif",
+            effective_mode == Mode::Gif,
+        ),
         // `--title`/`--caption` are deliberately NOT here: upstream feeds them to
         // the CSV table as well as to the panel, so requiring `--panel` made
         // `rich --csv sales.csv --title Sales` — a documented upstream use —
@@ -3048,6 +3097,7 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
         resource,
         resources,
         loops,
+        animation,
         diff_threshold,
         image_mode,
         image_fit,
@@ -6288,7 +6338,7 @@ fn image_color_processing(
 
 #[cfg(feature = "art")]
 fn play_gifs(cli: &Cli, console: &Console) -> ExitCode {
-    use rich_art::{AnimatedArt, Repeat, Stage};
+    use rich_art::{AnimatedArt, Repeat, Stage, Until};
 
     if cli.resources.is_empty() {
         return fail(cli, ExitClass::Usage, "--gif needs at least one GIF path");
@@ -6310,21 +6360,19 @@ fn play_gifs(cli: &Cli, console: &Console) -> ExitCode {
         None => Repeat::Times(1),
     };
 
-    let mut stage = Stage::new().gap(GAP);
+    let mut arts = Vec::with_capacity(count);
     for path in &cli.resources {
         match AnimatedArt::from_path(path) {
             Ok(art) => {
                 let (color_mode, dither, distance) = image_color_processing(cli);
-                stage = stage.with(
+                arts.push(
                     art.width(per_gif)
                         .blocks(cli.extensions.gif_blocks())
                         .color(!cli.no_color)
                         .color_mode(color_mode)
                         .dither(dither)
                         .color_distance(distance)
-                        .repeat(repeat)
-                        // Colour art is byte-heavy; keep it comfortable.
-                        .max_fps(30.0),
+                        .repeat(repeat),
                 );
             }
             Err(err) => {
@@ -6350,7 +6398,28 @@ fn play_gifs(cli: &Cli, console: &Console) -> ExitCode {
     if let Some(width) = cli.width {
         builder = builder.width(width);
     }
-    match stage.play_stdout(builder.build()) {
+    let console = builder.build();
+    let played = if cli.animation.needs_player() && console.is_terminal() {
+        // `--speed` and `--max-frames` need the CLI's own clock.
+        let passes = match repeat {
+            Repeat::Forever => None,
+            Repeat::Times(n) => Some(n),
+            Repeat::Once => Some(1),
+        };
+        animation::play(arts, GAP, passes, &cli.animation, console)
+    } else {
+        // Colour art is byte-heavy; `--fps` (default 30) keeps it comfortable.
+        let fps = cli.animation.fps();
+        let mut stage = Stage::new().gap(GAP);
+        for art in arts {
+            stage = stage.with(art.max_fps(fps));
+        }
+        if let Some(limit) = cli.animation.max_duration {
+            stage = stage.until(Until::Elapsed(limit));
+        }
+        stage.play_stdout(console)
+    };
+    match played {
         Ok(()) => success(cli),
         Err(err) => fail(cli, ExitClass::Input, format!("playback failed: {err}")),
     }
