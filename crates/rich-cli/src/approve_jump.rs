@@ -157,10 +157,11 @@ pub(super) fn commands() -> Vec<CommandSpec> {
             .arg(
                 ArgSpec::option("print")
                     .value_name("WHAT")
-                    .choices(["location", "json"])
+                    .choices(["location", "json", "shell"])
                     .help(
-                        "What to print: the place (default), or a JSON object with its source, \
-                         label and place",
+                        "What to print: the place (default), a JSON object with its source, \
+                         label and place, or a shell command, safely quoted: `cd -- 'DIR'`, \
+                         `${EDITOR:-vi} [+LINE] -- 'FILE'`, or a `>` command as it is",
                     ),
             )
             .arg(height)
@@ -171,8 +172,9 @@ pub(super) fn commands() -> Vec<CommandSpec> {
                  `path:line`)",
             )
             .example(
-                "eval \"$(rich jump --commands ~/.commands --recent ~/.jump-recent src)\"",
-                "Run a saved command, or go somewhere recent",
+                "rich jump --print shell --commands ~/.commands --recent ~/.jump-recent src",
+                "Print what to run for the pick: a saved command, `cd` to a directory, or the \
+                 editor at a file's line",
             ),
     ]
 }
@@ -295,7 +297,7 @@ fn parse_args(command: &'static str, args: &[String]) -> Result<Args, String> {
                 let known: &[&str] = if command == "approve" {
                     &["decisions", "approved", "rejected"]
                 } else {
-                    &["location", "json"]
+                    &["location", "json", "shell"]
                 };
                 if !known.contains(&what.as_str()) {
                     return Err(format!("--print: {what:?} is not {}", known.join(" or ")));
@@ -542,6 +544,8 @@ struct Place {
     location: String,
     /// The file to preview, and the line in it.
     file: Option<(PathBuf, Option<usize>)>,
+    /// A `--commands` entry: `--print shell` prints it as it is.
+    command: bool,
 }
 
 /// A file's lines around one, read when the preview is first drawn.
@@ -851,6 +855,7 @@ fn stdin_entries(built: &mut Built, limit: usize) -> Result<(), (ExitClass, Stri
             Place {
                 location: location.clone(),
                 file,
+                command: false,
             },
             |id| {
                 let mut item = Item::new(id, sanitize_terminal_controls(&label))
@@ -890,13 +895,20 @@ fn build_sources(args: &Args) -> Result<(Built, bool), (ExitClass, String)> {
             false => Vec::new(),
         };
         let at = built.source(JumpSource::new("recent", "Recent").limit(limit));
-        for location in places.into_iter().take(MAX_RECENT) {
+        // A place with control characters is never remembered; one put in
+        // the file some other way is skipped.
+        for location in places
+            .into_iter()
+            .filter(|place| !has_controls(place))
+            .take(MAX_RECENT)
+        {
             let file = file_of(&location);
             built.add(
                 at,
                 Place {
                     location: location.clone(),
                     file,
+                    command: false,
                 },
                 |id| Item::new(id, sanitize_terminal_controls(&location)),
             );
@@ -951,6 +963,7 @@ fn build_sources(args: &Args) -> Result<(Built, bool), (ExitClass, String)> {
                 let place = Place {
                     location: shown.clone(),
                     file: Some((path.clone(), None)),
+                    command: false,
                 };
                 built.add(at, place, |id| Item::new(id, shown_text.clone()));
             }
@@ -975,6 +988,7 @@ fn build_sources(args: &Args) -> Result<(Built, bool), (ExitClass, String)> {
                     let place = Place {
                         location: format!("{shown}:{line}"),
                         file: Some((path.clone(), Some(line))),
+                        command: false,
                     };
                     let detail = format!("{} {shown_text}:{line}", "#".repeat(level));
                     built.add(at, place, |id| {
@@ -989,6 +1003,7 @@ fn build_sources(args: &Args) -> Result<(Built, bool), (ExitClass, String)> {
                     let place = Place {
                         location: format!("{shown}:{line}"),
                         file: Some((path.clone(), Some(line))),
+                        command: false,
                     };
                     let detail = format!("{kind} · {shown_text}:{line}");
                     built.add(at, place, |id| {
@@ -1016,6 +1031,7 @@ fn build_sources(args: &Args) -> Result<(Built, bool), (ExitClass, String)> {
                 Place {
                     location: command.clone(),
                     file: None,
+                    command: true,
                 },
                 |id| {
                     let item = Item::new(id, sanitize_terminal_controls(&label));
@@ -1031,6 +1047,46 @@ fn build_sources(args: &Args) -> Result<(Built, bool), (ExitClass, String)> {
     Ok((built, from_stdin))
 }
 
+/// Whether `text` has a control character other than a tab: such a place
+/// is not printed bare or remembered (a newline would split the recent
+/// file's entry in two, an escape would reach the terminal).
+fn has_controls(text: &str) -> bool {
+    text.chars().any(|c| c.is_control() && c != '\t')
+}
+
+/// `text` in single quotes, for a POSIX shell: each `'` ends the quote, is
+/// escaped, and starts it again.
+fn shell_quote(text: &str) -> String {
+    format!("'{}'", text.replace('\'', "'\\''"))
+}
+
+/// What `--print shell` prints for `place`: a command entry as it is, `cd`
+/// into a directory, or the editor at a file (and line).
+fn shell_command(place: &Place, places: &[Place]) -> String {
+    let command = place.command
+        || (place.file.is_none()
+            && !fs_path(&place.location).is_dir()
+            && places
+                .iter()
+                .any(|other| other.command && other.location == place.location));
+    if command {
+        return place.location.clone();
+    }
+    if fs_path(&place.location).is_dir() {
+        return format!("cd -- {}", shell_quote(&place.location));
+    }
+    let (path, line) = match place.location.rsplit_once(':') {
+        Some((path, line)) if line.parse::<usize>().is_ok() && fs_path(path).is_file() => {
+            (path, Some(line))
+        }
+        _ => (place.location.as_str(), None),
+    };
+    match line {
+        Some(line) => format!("${{EDITOR:-vi}} +{line} -- {}", shell_quote(path)),
+        None => format!("${{EDITOR:-vi}} -- {}", shell_quote(path)),
+    }
+}
+
 /// Put `location` first in the recent file, keeping the latest.
 fn remember(path: &str, location: &str) -> Result<(), (ExitClass, String)> {
     let path_buf = fs_path(path);
@@ -1039,7 +1095,7 @@ fn remember(path: &str, location: &str) -> Result<(), (ExitClass, String)> {
     } else {
         Vec::new()
     };
-    places.retain(|place| place != location);
+    places.retain(|place| place != location && !has_controls(place));
     places.insert(0, location.to_string());
     places.truncate(MAX_RECENT);
     let mut text = places.join("\n");
@@ -1086,7 +1142,17 @@ fn jump(args: &Args) -> Answer {
         Err(code) => return Ok(code),
     };
     let place = &places[jumped.value];
-    if let Some(recent) = &args.recent {
+    let controls = has_controls(&place.location);
+    if controls && args.print.as_deref() != Some("json") {
+        return Err((
+            ExitClass::Input,
+            format!(
+                "the place picked has control characters ({:?}); use --print json",
+                place.location
+            ),
+        ));
+    }
+    if let (Some(recent), false) = (&args.recent, controls) {
         remember(recent, &place.location)?;
     }
     let line = match args.print.as_deref() {
@@ -1096,6 +1162,7 @@ fn jump(args: &Args) -> Answer {
             "location": place.location,
         })
         .to_string(),
+        Some("shell") => shell_command(place, &places),
         _ => place.location.clone(),
     };
     write_stdout(&format!("{line}\n"))

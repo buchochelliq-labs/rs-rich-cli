@@ -463,6 +463,11 @@ enum Tailed<'a> {
     Notice(String),
 }
 
+/// The longest line `--follow` holds while it waits for the line's end: a
+/// longer one is given in pieces of this size, with a notice, so a writer
+/// that never ends its line cannot fill the memory.
+const MAX_LINE: usize = 1024 * 1024;
+
 /// A file being followed: its handle, where reading got to, and the start
 /// of a line not finished yet.
 struct Tail {
@@ -471,6 +476,11 @@ struct Tail {
     identity: Option<same_file::Handle>,
     position: u64,
     partial: Vec<u8>,
+    /// How much of `partial` is known to hold no line break: each read
+    /// looks for one only in what it added.
+    scanned: usize,
+    /// The longest line held ([`MAX_LINE`]).
+    limit: usize,
 }
 
 /// Open `path` for following: on Windows with every sharing flag, so the
@@ -498,6 +508,8 @@ impl Tail {
             identity,
             position: 0,
             partial: Vec::new(),
+            scanned: 0,
+            limit: MAX_LINE,
         })
     }
 
@@ -515,12 +527,34 @@ impl Tail {
             self.position += read as u64;
             self.partial.extend_from_slice(&chunk[..read]);
             let mut start = 0;
-            while let Some(end) = self.partial[start..].iter().position(|b| *b == b'\n') {
-                let line = String::from_utf8_lossy(&self.partial[start..start + end]).into_owned();
+            let mut from = self.scanned;
+            while let Some(end) = self.partial[from..].iter().position(|b| *b == b'\n') {
+                let end = from + end;
+                let line = String::from_utf8_lossy(&self.partial[start..end]).into_owned();
                 each(Tailed::Line(&line))?;
-                start += end + 1;
+                start = end + 1;
+                from = start;
+            }
+            // A line that will not end: give it in pieces (at a character
+            // boundary), saying so once.
+            if self.partial.len() - start >= self.limit {
+                each(Tailed::Notice(format!(
+                    "{}: a line over {} has no end yet; showing it in pieces",
+                    self.path.display(),
+                    crate::controls::size(self.limit as u64)
+                )))?;
+                while self.partial.len() - start >= self.limit {
+                    let mut end = start + self.limit;
+                    while end > start + 1 && (self.partial[end] & 0xC0) == 0x80 {
+                        end -= 1;
+                    }
+                    let line = String::from_utf8_lossy(&self.partial[start..end]).into_owned();
+                    each(Tailed::Line(&line))?;
+                    start = end;
+                }
             }
             self.partial.drain(..start);
+            self.scanned = self.partial.len();
         }
     }
 
@@ -529,6 +563,7 @@ impl Tail {
         if self.partial.is_empty() {
             return Ok(());
         }
+        self.scanned = 0;
         let line = String::from_utf8_lossy(&std::mem::take(&mut self.partial)).into_owned();
         each(Tailed::Line(&line))
     }
@@ -771,6 +806,52 @@ fn keep(record: &mut Record, filter: &Filter, sanitize: bool, redactor: Option<&
     true
 }
 
+/// The lines of `{"continuation": [LINE, ...]}`, the object `--output
+/// jsonl` writes for continuation lines that come after their record was
+/// written.
+fn continuation_object(line: &str) -> Option<Vec<String>> {
+    let text = line.trim();
+    if !text.starts_with('{') || !text.contains("\"continuation\"") {
+        return None;
+    }
+    let serde_json::Value::Object(object) = serde_json::from_str(text).ok()? else {
+        return None;
+    };
+    if object.len() != 1 {
+        return None;
+    }
+    match object.into_iter().next()? {
+        (key, serde_json::Value::Array(lines)) if key == "continuation" => lines
+            .into_iter()
+            .map(|line| match line {
+                serde_json::Value::String(line) => Some(line),
+                _ => None,
+            })
+            .collect(),
+        _ => None,
+    }
+}
+
+/// A JSON record's `continuation` list of strings (as `--output jsonl`
+/// writes a record's continuation lines) back as its continuation lines.
+fn lift_continuation(record: &mut Record) {
+    let Some(at) = record.fields.iter().position(|(key, value)| {
+        key == "continuation"
+            && matches!(value, rich_ext::event::Value::List(items)
+                if items.iter().all(|item| matches!(item, rich_ext::event::Value::String(_))))
+    }) else {
+        return;
+    };
+    let (_, value) = record.fields.remove(at);
+    if let rich_ext::event::Value::List(items) = value {
+        let lines = items.into_iter().filter_map(|item| match item {
+            rich_ext::event::Value::String(line) => Some(line),
+            _ => None,
+        });
+        record.continuation.splice(0..0, lines);
+    }
+}
+
 /// A continuation line as a record's would be: sanitized, then redacted.
 fn clean_line(line: &str, sanitize: bool, redactor: Option<&Redactor>) -> String {
     let line = if sanitize {
@@ -807,6 +888,8 @@ struct Stream<'a> {
     /// Whether the last record was written, so a line that comes after it
     /// is written under it.
     kept: bool,
+    /// Whether any record was read yet.
+    read_any: bool,
     /// On a terminal, following: the count of the repeat run written last,
     /// rewritten in place as it grows.
     live_repeat: Option<usize>,
@@ -834,12 +917,31 @@ impl<'a> Stream<'a> {
             live_group: group.filter(|_| options.follow).map(|by| (by, None)),
             summary: options.summarises().then(|| Summary::new(group)),
             kept: false,
+            read_any: false,
             live_repeat: None,
             terminal: io::stdout().is_terminal(),
         }
     }
 
     fn line(&mut self, line: &str) -> io::Result<()> {
+        if let Some(lines) = continuation_object(line) {
+            // `--output jsonl`'s lines for the record before: under it.
+            return match self.assembler.flush() {
+                Some(mut record) => {
+                    record.continuation.extend(lines);
+                    self.record(record)
+                }
+                // Before any record, they are lines like any other.
+                None if !self.read_any => lines.iter().try_for_each(|line| self.push(line)),
+                None => lines
+                    .into_iter()
+                    .try_for_each(|line| self.continuation(line)),
+            };
+        }
+        self.push(line)
+    }
+
+    fn push(&mut self, line: &str) -> io::Result<()> {
         match self.assembler.push(line) {
             Some(Assembled::Record(record)) => self.record(record),
             Some(Assembled::Continuation(line)) => self.continuation(line),
@@ -869,6 +971,8 @@ impl<'a> Stream<'a> {
     }
 
     fn record(&mut self, mut record: Record) -> io::Result<()> {
+        self.read_any = true;
+        lift_continuation(&mut record);
         if let Some(summary) = &mut self.summary {
             summary.read(1);
         }
@@ -948,7 +1052,9 @@ impl<'a> Stream<'a> {
             return Ok(());
         }
         if self.jsonl {
-            let json = serde_json::json!({ "continuation": line });
+            // The record was written already (the input went quiet): a
+            // line of its own that `rich log` folds back under it.
+            let json = serde_json::json!({ "continuation": [line] });
             serde_json::to_writer(&mut self.out, &json)?;
             return self.out.write_all(b"\n");
         }
@@ -1441,6 +1547,79 @@ mod tests {
             parse(&["--where", "a=1"]).unwrap().given(),
             [("--where", &["log"][..])]
         );
+    }
+
+    #[test]
+    fn a_followed_line_without_an_end_is_split_and_scanned_once() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("app.log");
+        // 23 bytes with no line break (a two-byte `é` across the first
+        // piece's end), then the rest of the line.
+        std::fs::write(&path, "ab\ncdefghijkélmnopqrstuvw").unwrap();
+        let mut tail = Tail::open(path.clone()).unwrap();
+        tail.limit = 10;
+        let mut seen = Vec::new();
+        let mut record = |event: Tailed<'_>| {
+            seen.push(match event {
+                Tailed::Line(line) => line.to_string(),
+                Tailed::Quiet => "<quiet>".into(),
+                Tailed::Notice(notice) => {
+                    assert!(notice.contains("10 bytes"), "{notice}");
+                    "<split>".into()
+                }
+            });
+            Ok(())
+        };
+        tail.read(&mut record).unwrap();
+        // Held: less than the limit, and all of it scanned.
+        assert!(tail.partial.len() < 10);
+        assert_eq!(tail.scanned, tail.partial.len());
+        let mut file = std::fs::OpenOptions::new()
+            .append(true)
+            .open(&path)
+            .unwrap();
+        file.write_all(b"xyz\nend\n").unwrap();
+        drop(file);
+        tail.read(&mut record).unwrap();
+        assert_eq!(
+            seen,
+            [
+                "ab",
+                "<split>",
+                // The first piece stops before the `é` it would split.
+                "cdefghijk",
+                "élmnopqrs",
+                "tuvwxyz",
+                "end"
+            ]
+        );
+        assert!(tail.partial.is_empty() && tail.scanned == 0);
+    }
+
+    #[test]
+    fn a_continuation_object_is_read_as_lines() {
+        assert_eq!(
+            continuation_object("{\"continuation\": [\"  at a\", \"  at b\"]}\n"),
+            Some(vec!["  at a".to_string(), "  at b".to_string()])
+        );
+        for not in [
+            "{\"continuation\": \"one\"}",
+            "{\"continuation\": [1]}",
+            "{\"continuation\": [], \"msg\": \"x\"}",
+            "continuation",
+        ] {
+            assert_eq!(continuation_object(not), None, "{not}");
+        }
+        let mut record = Record::new("json")
+            .field("msg", rich_ext::event::Value::String("x".into()))
+            .field(
+                "continuation",
+                rich_ext::event::Value::List(vec![rich_ext::event::Value::String("a".into())]),
+            );
+        record.continuation.push("b".into());
+        lift_continuation(&mut record);
+        assert_eq!(record.continuation, ["a", "b"]);
+        assert_eq!(record.fields.len(), 1);
     }
 
     #[test]

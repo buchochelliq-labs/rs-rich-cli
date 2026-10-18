@@ -204,6 +204,94 @@ fn jump_remembers_the_pick_in_the_recent_file() {
     assert_eq!(out, "elsewhere\n");
 }
 
+#[test]
+fn jump_print_shell_quotes_the_place() {
+    let dir = project("jump-shell");
+    let root = dir.to_str().unwrap();
+    std::fs::write(dir.join("$(touch pwned).md"), "# Pwned\n").unwrap();
+    std::fs::write(dir.join("it's.txt"), "").unwrap();
+    let commands = dir.join("commands");
+    let commands = commands.to_str().unwrap();
+    let shell = |args: &[&str], stdin: &str| {
+        let mut all = vec!["jump", "--print", "shell"];
+        all.extend_from_slice(args);
+        let (out, err, code) = piped(&all, stdin);
+        assert_eq!(code, 0, "{args:?}: {err}");
+        out
+    };
+    let out = shell(&["--files", "--value", "pwned", root], "");
+    assert_eq!(
+        out,
+        format!("${{EDITOR:-vi}} -- '{root}/$(touch pwned).md'\n")
+    );
+    let out = shell(&["--headings", "--value", "pwned", root], "");
+    assert_eq!(
+        out,
+        format!("${{EDITOR:-vi}} +1 -- '{root}/$(touch pwned).md'\n")
+    );
+    let out = shell(&["--files", "--value", "it's", root], "");
+    assert_eq!(out, format!("${{EDITOR:-vi}} -- '{root}/it'\\''s.txt'\n"));
+    let out = shell(&["--commands", commands, "--value", ">tests"], "");
+    assert_eq!(out, "cargo test\n");
+    let entry = format!("{{\"label\":\"Src\",\"location\":\"{root}/src\"}}\n");
+    let out = shell(&["--value", "src"], &entry);
+    assert_eq!(out, format!("cd -- '{root}/src'\n"));
+    // Read back by a shell, it opens the file and runs nothing else.
+    #[cfg(unix)]
+    {
+        let line = shell(&["--files", "--value", "pwned", root], "");
+        let status = Command::new("sh")
+            .arg("-c")
+            .arg(&line)
+            .current_dir(&dir)
+            .env("EDITOR", "true")
+            .status()
+            .unwrap();
+        assert!(status.success());
+        assert!(!dir.join("pwned").exists());
+    }
+}
+
+#[test]
+fn jump_keeps_control_characters_out_of_places() {
+    let dir = project("jump-controls");
+    let recent = dir.join("recent");
+    std::fs::write(&recent, "good\nbad\u{1b}]52;c;eA==\u{7}\n").unwrap();
+    let recent_arg = recent.to_str().unwrap();
+    let entry = "{\"label\":\"Evil\",\"location\":\"x\\u001b]52;c;eA==\\u0007\\nsecond\"}\n";
+    // Printed bare, refused.
+    let (out, err, code) = piped(
+        &["jump", "--recent", recent_arg, "--value", "evil", "-"],
+        entry,
+    );
+    assert_eq!(code, 3, "{err}");
+    assert_eq!(out, "");
+    assert!(err.contains("control characters"), "{err}");
+    assert!(!err.contains('\u{1b}'), "{err:?}");
+    // As JSON, escaped, and not remembered.
+    let (out, _, code) = piped(
+        &[
+            "jump", "--recent", recent_arg, "--value", "evil", "--print", "json", "-",
+        ],
+        entry,
+    );
+    assert_eq!(code, 0);
+    assert!(out.contains("\\u001b]52"), "{out}");
+    assert!(!out.contains('\u{1b}'));
+    let kept = std::fs::read_to_string(&recent).unwrap();
+    assert!(!kept.contains("second"), "{kept:?}");
+    // The bad line in the recent file is not offered, and is dropped when
+    // the file is next written.
+    let (out, _, _) = piped(&["jump", "--recent", recent_arg, "--value", "bad", "-"], "");
+    assert!(!out.contains('\u{1b}'), "{out:?}");
+    let (out, _, code) = piped(
+        &["jump", "--recent", recent_arg, "--value", "good", "-"],
+        "",
+    );
+    assert_eq!((out.as_str(), code), ("good\n", 0));
+    assert_eq!(std::fs::read_to_string(&recent).unwrap(), "good\n");
+}
+
 #[cfg(unix)]
 mod pty {
     use std::io::{Read, Write};

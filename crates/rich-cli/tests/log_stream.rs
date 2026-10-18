@@ -331,18 +331,8 @@ fn jsonl_output_writes_records_that_read_back_the_same() {
     );
     // Written again, nothing changes.
     assert_eq!(ok(&["--output", "jsonl"], &jsonl), jsonl);
-    // Read back, records without continuation lines show as they did.
-    let direct: Vec<String> = ok(&[], APP)
-        .lines()
-        .filter(|line| !line.starts_with(' ') && !line.contains("timed out"))
-        .map(str::to_string)
-        .collect();
-    let again: Vec<String> = ok(&[], &jsonl)
-        .lines()
-        .filter(|line| !line.contains("timed out"))
-        .map(str::to_string)
-        .collect();
-    assert_eq!(direct, again);
+    // Read back, every record shows as it did, continuation lines and all.
+    assert_eq!(ok(&[], &jsonl), ok(&[], APP));
     // Text lines become objects; filters apply; the summary goes to stderr.
     let (out, err, status) = log(
         &["--output", "jsonl", "--level", "error", "--summary", "-"],
@@ -352,6 +342,71 @@ fn jsonl_output_writes_records_that_read_back_the_same() {
     assert_eq!(out, "{\"level\":\"ERROR\",\"message\":\"boom\"}\n");
     assert!(err.contains("Summary: 1 of 2 records shown"), "{err}");
     assert!(usage(&["--output", "jsonl", "--fields", "-"]).contains("--output jsonl"));
+}
+
+#[test]
+fn continuation_after_a_quiet_spell_reads_back_under_its_record() {
+    // The record is written when stdin goes quiet; a line under it that
+    // comes later is an object of its own, folded back on reading.
+    let mut child = bin()
+        .args(["--no-config", "--no-color", "log", "--output", "jsonl", "-"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let mut input = child.stdin.take().unwrap();
+    let writer = std::thread::spawn(move || {
+        input
+            .write_all(b"{\"level\":\"error\",\"msg\":\"boom\"}\n  at one\n")
+            .unwrap();
+        input.flush().unwrap();
+        std::thread::sleep(Duration::from_millis(800));
+        input
+            .write_all(b"  at two\n{\"level\":\"info\",\"msg\":\"next\"}\n")
+            .unwrap();
+    });
+    let output = child.wait_with_output().unwrap();
+    writer.join().unwrap();
+    assert!(output.status.success(), "{output:?}");
+    let jsonl = String::from_utf8(output.stdout).unwrap();
+    assert_eq!(
+        jsonl,
+        "{\"level\":\"error\",\"msg\":\"boom\",\"continuation\":[\"  at one\"]}\n\
+         {\"continuation\":[\"  at two\"]}\n\
+         {\"level\":\"info\",\"msg\":\"next\"}\n"
+    );
+    // Read back: one record with both lines, the way it was read.
+    let again = ok(&["--output", "jsonl"], &jsonl);
+    assert_eq!(
+        again,
+        "{\"level\":\"error\",\"msg\":\"boom\",\"continuation\":[\"  at one\",\"  at two\"]}\n\
+         {\"level\":\"info\",\"msg\":\"next\"}\n"
+    );
+    let shown = ok(&[], &jsonl);
+    assert!(!shown.contains("continuation"), "{shown}");
+    assert!(
+        shown.contains("at one\n") && shown.contains("at two\n"),
+        "{shown}"
+    );
+    // A continuation object with no record before it: its lines are read
+    // as lines.
+    let out = ok(&["--output", "jsonl"], "{\"continuation\":[\"orphan\"]}\n");
+    assert_eq!(out, "{\"message\":\"orphan\"}\n");
+}
+
+#[test]
+fn untrusted_controls_are_shown_not_sent_by_default() {
+    let input = "{\"msg\":\"hi\",\"note\":\"\\u001b]52;c;aGk=\\u0007\",\"\\u001b[2Jkey\":1,\"nested\":{\"\\u001b]0;title\\u0007\":2}}\n  \u{1b}]52;c;aGk=\u{7}\n";
+    for output in [&[][..], &["--output", "jsonl"], &["--fields"]] {
+        let out = ok(output, input);
+        assert!(!out.contains('\u{1b}'), "{output:?}: {out:?}");
+        assert!(!out.contains('\u{7}'), "{output:?}: {out:?}");
+        assert!(out.contains("52;c;aGk="), "{output:?}: {out:?}");
+    }
+    // `--no-sanitize` lets them through.
+    let out = ok(&["--no-sanitize"], input);
+    assert!(out.contains("\u{1b}]52;c;aGk="), "{out:?}");
 }
 
 #[test]

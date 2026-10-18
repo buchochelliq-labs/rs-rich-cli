@@ -265,17 +265,27 @@ impl Record {
 
     /// Show terminal controls in its text as symbols (see
     /// [`sanitize_terminal_controls`](crate::sanitize_terminal_controls)):
-    /// every string value, and the continuation lines.
+    /// every key, nested ones included, every string value, and the
+    /// continuation lines.
     pub fn sanitize(&mut self) {
+        fn key(key: &mut String) {
+            if key.chars().any(char::is_control) {
+                *key = crate::sanitize_terminal_controls(key);
+            }
+        }
         fn walk(value: &mut Value) {
             match value {
                 Value::String(text) => *text = crate::sanitize_terminal_controls(text),
                 Value::List(items) => items.iter_mut().for_each(walk),
-                Value::Map(entries) => entries.iter_mut().for_each(|(_, value)| walk(value)),
+                Value::Map(entries) => entries.iter_mut().for_each(|(name, value)| {
+                    key(name);
+                    walk(value)
+                }),
                 _ => {}
             }
         }
-        for (_, value) in &mut self.fields {
+        for (name, value) in &mut self.fields {
+            key(name);
             walk(value);
         }
         for line in &mut self.continuation {
@@ -521,5 +531,35 @@ mod tests {
         record.sanitize();
         assert!(!record.message().unwrap().contains('\x1b'));
         assert!(!record.continuation[0].contains('\x07'));
+    }
+
+    #[test]
+    fn sanitize_shows_controls_in_keys_nested_ones_too() {
+        let mut record = Record::new("json")
+            .field("\x1b]52;c;eA==\x07", Value::Integer(1))
+            .field(
+                "outer",
+                Value::Map(vec![(
+                    "in\x1b[2Jner".into(),
+                    Value::List(vec![Value::Map(vec![(
+                        "\u{9b}31m".into(),
+                        Value::String("ok".into()),
+                    )])]),
+                )]),
+            );
+        record.sanitize();
+        fn controls(value: &Value) -> bool {
+            match value {
+                Value::Map(entries) => entries
+                    .iter()
+                    .any(|(key, value)| key.chars().any(char::is_control) || controls(value)),
+                Value::List(items) => items.iter().any(controls),
+                Value::String(text) => text.chars().any(char::is_control),
+                _ => false,
+            }
+        }
+        assert!(controls(&Value::Map(vec![("\x07".into(), Value::Null)])));
+        assert!(!controls(&Value::Map(record.fields.clone())), "{record:?}");
+        assert_eq!(record.fields[1].0, "outer");
     }
 }

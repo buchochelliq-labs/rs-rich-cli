@@ -17,6 +17,10 @@ use rich_ext::cli_doc::{ArgSpec, CommandSpec};
 /// The largest font file read: real FIGfonts are tens of kilobytes.
 const FONT_LIMIT: u64 = 4 * 1024 * 1024;
 
+/// The widest `--width`: wide enough for any terminal, small enough that a
+/// layout of that many columns stays cheap.
+const MAX_WIDTH: usize = 10_000;
+
 /// Named gradients for `--gradient`.
 const PRESETS: &[(&str, &[&str])] = &[
     (
@@ -265,8 +269,12 @@ fn parse_args(args: &[String]) -> Result<Args, String> {
             "-w" | "--width" => {
                 let text = value()?;
                 match text.parse::<usize>() {
-                    Ok(n) if n >= 1 => parsed.width = Some(n),
-                    _ => return Err(format!("--width takes a column count from 1, not {text:?}")),
+                    Ok(n) if (1..=MAX_WIDTH).contains(&n) => parsed.width = Some(n),
+                    _ => {
+                        return Err(format!(
+                            "--width takes a column count from 1 to {MAX_WIDTH}, not {text:?}"
+                        ))
+                    }
                 }
             }
             "--fit" => {
