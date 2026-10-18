@@ -392,6 +392,17 @@ original must also keep the original's copyright and licence notice with
 that code, as MIT and Apache-2.0 require. The ports here reuse none, so
 the credit is all they carry. Port your own app the same way.
 
+The ports so far, and whose they are:
+
+- **[Yazi](https://github.com/sxyazi/yazi)**, by sxyazi and its
+  contributors, MIT licence: `files`.
+- **[scope-tui](https://github.com/alemidev/scope-tui)**, by alemi, MIT
+  licence: `scope`.
+- **[ratatui](https://github.com/ratatui/ratatui)**'s example apps, by
+  Florian Dehau and the Ratatui Developers, MIT licence: rebuilt from
+  ratatui 0.30, with sample data of our own, and listed in
+  [ratatui's examples, rebuilt](ratatui-examples.md).
+
 ## Common questions
 
 **Where did my `Frame` go?** There is none. Nodes draw themselves into the

@@ -83,6 +83,9 @@ Coming from ratatui? The
 maps every concept, and `examples/files.rs` rebuilds the core of
 [Yazi](https://github.com/sxyazi/yazi), the most-starred ratatui app:
 three columns, vim keys, previews highlighted in the background.
+ratatui's own example apps are rebuilt too, starting with `demo` and
+`demo2`: see
+[ratatui's examples, rebuilt](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/docs/guide/intuituive/ratatui-examples.md).
 
 More examples (`cargo run -p rs-rich-intuituive --example <name>`):
 
@@ -97,6 +100,8 @@ More examples (`cargo run -p rs-rich-intuituive --example <name>`):
 | `scope` | an oscilloscope ported from scope-tui, on the chart widget |
 | `dashboard` | an ops dashboard: a service list, a detail pane, a streaming log (the benchmark measures it) |
 | `in_ratatui` | an app inside a ratatui program, which owns the loop |
+| `demo` | ratatui's classic demo rebuilt: gauges, a sparkline, lists, bars, a sine chart, a server table on a world map, colours; a tick redraws only what moves |
+| `demo2` | ratatui's showcase rebuilt: a recipe, an inbox, a traceroute on a map, the weather, and destroy, an effect; its colours in a stylesheet |
 
 ## Against ratatui
 

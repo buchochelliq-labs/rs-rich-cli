@@ -2190,8 +2190,12 @@ impl Node {
                 }
                 // An effect sees what is inside it whole: when a child
                 // drew and the effect did not, everything inside draws
-                // again before it runs.
-                let effect = (&**widget as &dyn Any).is::<crate::effect::Effect>();
+                // again before it runs, so that it never runs over what it
+                // wrote itself. An effect that wrote nothing last time left
+                // only what was drawn inside, so it runs over that as it is.
+                let effect = (&**widget as &dyn Any)
+                    .downcast_ref::<crate::effect::Effect>()
+                    .is_some_and(|effect| effect.wrote);
                 if effect && !repaint && frame.damage.len() > siblings {
                     screen.clear(inner);
                     frame.damage.push(inner);
@@ -2231,6 +2235,11 @@ impl Node {
                 frame
                     .runtime
                     .observe_node_more(id, || widget.draw_over(&mut cx, &mut canvas));
+            }
+            if let Some(effect) =
+                (&mut **widget as &mut dyn Any).downcast_mut::<crate::effect::Effect>()
+            {
+                effect.wrote = !over.is_empty();
             }
             if !over.is_empty() {
                 if !redraw {

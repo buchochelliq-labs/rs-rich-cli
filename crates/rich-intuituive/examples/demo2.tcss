@@ -1,0 +1,22 @@
+/* The colours of the `demo2` example. Run
+   `demo2 crates/rich-intuituive/examples/demo2.tcss` and edit this file:
+   the app reads it again when it changes. The highlights inside the
+   widgets (the selected tab, row or email) are theme styles in the code. */
+
+/* The frame: a dark blue under everything, the name, the tab strip. */
+#root { background: #101830; color: #bcbcbc; }
+#app-title { color: #eeeeee; }
+#tabs { color: #808080; }
+
+/* A tab's content, over the swatch. */
+.content { background: #101830; color: #bcbcbc; }
+#description { color: #bcbcbc; }
+
+/* The open email under its rule. */
+#email-view { color: #bcbcbc; }
+#headers { color: #bcbcbc; }
+
+/* The key chips along the bottom. */
+#keys { background: #080808; color: #303030; }
+.key { background: #444444; color: #080808; }
+.desc { background: #080808; color: #444444; }
