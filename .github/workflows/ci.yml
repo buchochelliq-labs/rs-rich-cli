@@ -306,7 +306,10 @@ jobs:
       - name: Test pager selection and launch the native Windows pager
         run: cargo test -p rs-rich --locked --lib pager::tests -- --test-threads=1
 
+      # bash, so each command's failure fails the step: PowerShell's step
+      # answers with the last command's exit code alone.
       - name: Test Windows batch paths and CLI pager controls
+        shell: bash
         run: |
           cargo test -p rs-rich-cli --locked --bin rich batch::tests
           cargo test -p rs-rich-cli --locked --bin rich batch_races
