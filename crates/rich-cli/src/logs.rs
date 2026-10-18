@@ -358,10 +358,10 @@ fn read_stdin(mut each: impl FnMut(Tailed<'_>) -> io::Result<()>) -> io::Result<
                 }
             }
             // Send what was read whenever the next read may wait.
-            if reader.buffer().is_empty() || batch.len() >= 1024 {
-                if sender.send(Ok(std::mem::take(&mut batch))).is_err() {
-                    return;
-                }
+            if (reader.buffer().is_empty() || batch.len() >= 1024)
+                && sender.send(Ok(std::mem::take(&mut batch))).is_err()
+            {
+                return;
             }
         }
         if !batch.is_empty() {
@@ -1257,7 +1257,7 @@ fn wrap_simple(line: &str, width: usize, indent: usize, out: &mut impl Write) ->
             end = end.min(from + width);
         }
         out.write_all(pad.as_bytes())?;
-        out.write_all(line[byte(from)..byte(end)].as_bytes())?;
+        out.write_all(&line.as_bytes()[byte(from)..byte(end)])?;
         out.write_all(b"\n")?;
         from = to;
     }

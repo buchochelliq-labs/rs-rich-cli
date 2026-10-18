@@ -595,7 +595,7 @@ fn log_options() -> Vec<ArgSpec> {
             "MODE",
             LOG,
             "With `rich log`, show each time as written (absolute), since the first record \
-             (relative) or not at all (none)",
+             shown (relative), or not at all (none)",
         )
         .choices(["absolute", "relative", "none"])
         .default_value("absolute"),
