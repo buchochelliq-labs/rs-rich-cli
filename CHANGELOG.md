@@ -1047,6 +1047,57 @@ test.
   library pages; the CLI reference regenerated; and
   `docs/tapes/micro-rows.tape` (not yet recorded).
 
+### Approval queues and jumping to anything (interact 0.0.7, cli 0.0.19)
+
+0.0.19 workstream 20 (#471, #484).
+
+- **`rich_interact::components::ApprovalQueue`**: review pending items one
+  by one or in bulk. `a`, `r` and `s` approve, reject and skip the focused
+  item and move on to the next pending one; `A`, `R` and `S` ask for a
+  reason first; Space and Ctrl+A mark items for one decision on all of
+  them; `u` takes a decision back; `p` hides the detail pane (label,
+  description, details, decision, then the item's preview); Enter submits
+  an `ApprovalReport` of every item's `Decision` (verdict and reason),
+  pending ones included. `require_reason(Verdict::Rejected)`,
+  `auto_submit`, `advance` and `decided` (resume a review) are options.
+  With the mouse on, rows, the mark cell and the buttons under the list
+  click. Decisions are drawn in the theme keys `approve.approved`,
+  `approve.rejected`, `approve.skipped` and `approve.pending`. Without a
+  terminal it asks item by item (`a`, `r` or `s`, a reason after a colon,
+  `q` stops). The keys are in context `approve`.
+- **`rich_interact::components::Jump`** over a **`JumpIndex`** of
+  **`JumpSource`s**: one fuzzy box over several sources, the results
+  grouped by source (each showing its best few, `limit`, and how many more
+  matched), the best match focused and previewed. A source's prefix typed
+  first searches only it, Tab and Shift+Tab narrow and widen, Alt+↑/↓
+  jump between groups, and a click on a group's title narrows to it. Enter
+  returns a `Jumped` (source id, index, label, value). `JumpIndex::search`
+  works without the component. Group titles use the theme keys
+  `jump.group` and `jump.more`. Without a terminal it answers with the best
+  match for a line read, or for its starting query. The keys are in
+  context `jump`.
+- **`rich approve`** reviews ITEMs, or lines or JSON Lines on stdin
+  (`--format`, `--label`), and prints one JSON line per item with its
+  decision and reason, or with `--print approved|rejected` those items as
+  they were read. `--require-reason`, `--auto-submit`, `--height` and
+  `--mouse`. Without a terminal, ITEMs are asked about line by line, and
+  items from stdin are printed as pending.
+- **`rich jump`** searches the files, Markdown headings (`#`) and code
+  symbols (`@`) under DIRs (`--files`, `--headings`, `--symbols`), a
+  commands file (`--commands`, `>`), a recent-places file (`--recent`,
+  which the pick is added to) or entries on stdin (lines or JSON), and
+  prints the place: `path`, `path:line` or the command (`--print json` for
+  more). `--value`, `--limit`, `--height` and `--mouse`; without a
+  terminal it prints the best match for `--value`. Both commands use the
+  exit codes of the other interactive commands.
+- **Python:** `rs_rich.interact.ApprovalQueue`, `Jump` and `JumpSource`;
+  a review answers with a list of dicts and a jump with a dict.
+- **Docs:** [Approval queues and jumping to anything](docs/guide/interact/review-and-jump.md),
+  [Review and jump](docs/cli.md#review-and-jump) in the CLI guide, the
+  Python guide, the CLI reference regenerated, and `docs/tapes/approve.tape`
+  and `docs/tapes/jump.tape` (not yet recorded). An intuiTUIve wrapper is
+  not part of this workstream.
+
 ### One process per browser session (web 0.0.2)
 
 0.0.19 workstream 3.

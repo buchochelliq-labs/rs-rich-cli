@@ -48,6 +48,7 @@ pub(crate) mod compose;
 mod keymap;
 mod log_view;
 mod order_date;
+mod review_jump;
 pub(crate) use order_date::{datetime_from, datetime_to, time_from, time_to};
 mod pickers;
 
@@ -971,6 +972,7 @@ pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     pickers::register(m)?;
     order_date::register(m)?;
     log_view::register(m)?;
+    review_jump::register(m)?;
     keymap::register(m)?;
     compose::register(m)?;
     components::register(m)

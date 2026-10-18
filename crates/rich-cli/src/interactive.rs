@@ -56,14 +56,14 @@ pub(super) fn requested(args: &[String]) -> Option<&'static str> {
     COMMANDS.iter().copied().find(|command| word == *command)
 }
 
-const EXIT_CANCELLED: u8 = 1;
-const EXIT_INTERRUPTED: u8 = 130;
+pub(super) const EXIT_CANCELLED: u8 = 1;
+pub(super) const EXIT_INTERRUPTED: u8 = 130;
 
 /// The most standard input (or a paged file) read, so an endless input such
 /// as `yes` ends with an error instead of exhausting memory.
 const MAX_INPUT_BYTES: usize = 64 * 1024 * 1024;
 /// The most items `choose` and `filter` read from standard input.
-const MAX_ITEMS: usize = 1_000_000;
+pub(super) const MAX_ITEMS: usize = 1_000_000;
 /// The most nodes `explore` lists. The explorer keeps a few hundred bytes a
 /// node, so 64 MiB of `[0,0,…]` (32 million nodes) would take gigabytes;
 /// past this a document is better narrowed first (`--inspect --select`).
@@ -841,17 +841,17 @@ pub(super) fn dispatch(command: &'static str, args: &[String]) -> ExitCode {
 
 /// The report envelope, on standard error, for an answered command; an
 /// answer of no (exit 1) or an interrupt (130) is not a failure to report.
-fn report(json: bool, code: ExitCode) -> ExitCode {
+pub(super) fn report(json: bool, code: ExitCode) -> ExitCode {
     if json && code == ExitCode::SUCCESS {
         emit_success_report(ReportFormat::Json);
     }
     code
 }
 
-type Answer = Result<ExitCode, (ExitClass, String)>;
+pub(super) type Answer = Result<ExitCode, (ExitClass, String)>;
 
 /// Painted on standard error, inline below the cursor.
-fn run_options(fallback: Fallback, no_color: bool) -> RunOptions {
+pub(super) fn run_options(fallback: Fallback, no_color: bool) -> RunOptions {
     RunOptions {
         policy: Policy {
             fallback,
@@ -887,7 +887,7 @@ fn finish(outcome: Result<Outcome<Vec<String>>, RunError>) -> Answer {
     }
 }
 
-fn write_stdout(text: &str) -> Answer {
+pub(super) fn write_stdout(text: &str) -> Answer {
     use std::io::Write;
     let mut stdout = std::io::stdout().lock();
     match stdout
@@ -906,7 +906,7 @@ fn write_stdout(text: &str) -> Answer {
 
 /// At most `limit` bytes of `reader`, or an input error (exit 3) naming
 /// `what` when there is more.
-fn read_bounded(
+pub(super) fn read_bounded(
     reader: impl Read,
     limit: usize,
     what: &str,
@@ -927,7 +927,7 @@ fn read_bounded(
 
 /// Standard input, up to [`MAX_INPUT_BYTES`], as text: invalid UTF-8 is
 /// replaced rather than failing the command.
-fn read_stdin() -> Result<String, (ExitClass, String)> {
+pub(super) fn read_stdin() -> Result<String, (ExitClass, String)> {
     let bytes = read_bounded(std::io::stdin().lock(), MAX_INPUT_BYTES, "standard input")?;
     Ok(String::from_utf8_lossy(&bytes).into_owned())
 }
