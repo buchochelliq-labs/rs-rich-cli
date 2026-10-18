@@ -366,9 +366,19 @@ let chart = Chart::new(vec![cpu])
     `Dot`, or `Ascii(c)`;
   - a style.
 
-  Later datasets win a cell.
+  Datasets with the same marker share the dots of a cell, which takes the
+  later one's style; `.layering(Layering::PerDataset)` draws each dataset
+  over the ones before, as ratatui 0.29 does, so a cell a later dataset
+  draws in shows only its dots (where scope-tui's reference lines break
+  under the trace). A line, bar or area segment with an end outside the
+  bounds is clipped at them; `.out_of_bounds(OutOfBounds::Drop)` leaves it
+  out, as ratatui 0.29 does.
 - **The legend** is a box in a corner (`LegendPosition`). It hides itself
-  when it would cover more than `hidden_legend_fraction` of the plot.
+  when it would cover more than `hidden_legend_fraction` of the plot. Its
+  box takes the x axis's style unless `.legend_style("..")` gives it one
+  of its own, and it clears the plot under it; `.legend_clear(false)`
+  leaves what the datasets drew there, unstyled around the names, as
+  ratatui does.
 - **The layout** is ratatui's:
   - the y labels sit left of a `│` line and the x labels under a `─` line,
     meeting at `└`;

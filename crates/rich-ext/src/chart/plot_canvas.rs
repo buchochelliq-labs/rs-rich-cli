@@ -990,6 +990,16 @@ impl CellGrid {
         }
     }
 
+    /// Give a drawn cell `style` in place of its own; an empty cell stays
+    /// empty. Out of range is ignored.
+    pub(crate) fn restyle(&mut self, row: usize, col: usize, style: Option<Style>) {
+        if row < self.height && col < self.width {
+            if let Some((_, own)) = &mut self.cells[row * self.width + col] {
+                *own = style;
+            }
+        }
+    }
+
     /// Copy the non-empty cells of `other` here, its top left at (`row`,
     /// `col`).
     pub(crate) fn blit(&mut self, other: &CellGrid, row: usize, col: usize) {
