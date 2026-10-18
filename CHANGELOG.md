@@ -541,7 +541,7 @@ test.
 - **Docs:** a guide page, [Documents](docs/guide/ext/documents.md), a
   section in [the CLI guide](docs/cli.md#org-asciidoc-and-man-pages), a
   note in [PLUGINS.md](docs/PLUGINS.md#document-formats-0019), and
-  `docs/tapes/documents.tape` (not yet recorded).
+  [a recording](docs/recordings.md#org-asciidoc-and-man-pages).
 
 ### Blocks, text and layout, after ratatui (intuituive 0.0.4)
 
