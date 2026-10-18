@@ -1905,7 +1905,7 @@ impl Node {
     }
 
     /// Call `f` with each child that is shown.
-    fn each_child(&self, f: &mut dyn FnMut(&Node)) {
+    pub(crate) fn each_child(&self, f: &mut dyn FnMut(&Node)) {
         for child in self.body.borrow().widget.children() {
             f(child);
         }

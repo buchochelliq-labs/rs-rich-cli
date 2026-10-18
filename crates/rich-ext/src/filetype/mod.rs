@@ -109,7 +109,9 @@ impl FileFlags {
             flags.socket = kind.is_socket();
             let mode = meta.permissions().mode();
             flags.sticky = mode & 0o1000 != 0;
-            flags.exec = !flags.dir && mode & 0o100 != 0;
+            // A link's own mode is 0777: whether it runs is its target's.
+            let target_mode = target.as_ref().map_or(0, |m| m.permissions().mode());
+            flags.exec = !flags.dir && target_mode & 0o100 != 0;
         }
         Ok(flags)
     }
@@ -556,13 +558,22 @@ pub fn mime_for(path: &Path) -> std::io::Result<&'static str> {
     std::fs::File::open(path)?
         .take(512)
         .read_to_end(&mut head)?;
-    Ok(mime_from_bytes(&head)
-        .or_else(|| mime_for_path(path))
-        .unwrap_or(if looks_like_text(&head) {
-            "text/plain"
-        } else {
-            "application/octet-stream"
-        }))
+    // A container's magic (a ZIP's `PK`) says less than a known extension
+    // does: .docx, .xlsx, .epub and .jar are all ZIPs. Anything more
+    // specific, a PNG named .txt say, wins over the name.
+    let magic = mime_from_bytes(&head);
+    let named = mime_for_path(path);
+    let generic = matches!(magic, Some("application/zip"));
+    Ok(if generic {
+        named.or(magic)
+    } else {
+        magic.or(named)
+    }
+    .unwrap_or(if looks_like_text(&head) {
+        "text/plain"
+    } else {
+        "application/octet-stream"
+    }))
 }
 
 /// Whether a Nerd Font is likely in use, and why we think so.
@@ -804,11 +815,35 @@ mod tests {
             let flags = FileFlags::of(&link).unwrap();
             assert!(flags.link && flags.orphan && !flags.dir);
             assert_eq!(style_for("inode/x-empty", flags), Some("on red"));
+            // A link runs only if what it points to does (its own mode is
+            // 0777 on Linux).
+            let to_text = dir.join("to-text");
+            let _ = std::fs::remove_file(&to_text);
+            std::os::unix::fs::symlink(&file, &to_text).unwrap();
+            assert!(!FileFlags::of(&to_text).unwrap().exec);
+            let to_script = dir.join("to-script");
+            let _ = std::fs::remove_file(&to_script);
+            std::os::unix::fs::symlink(&script, &to_script).unwrap();
+            assert!(FileFlags::of(&to_script).unwrap().exec);
         }
         assert_eq!(mime_for(&file).unwrap(), "text/plain");
         let png = dir.join("picture.dat");
         std::fs::write(&png, b"\x89PNG\r\n\x1a\n\0\0\0\rIHDR").unwrap();
         assert_eq!(mime_for(&png).unwrap(), "image/png");
+        // A ZIP's magic gives way to a known extension; a PNG's does not.
+        let document = dir.join("report.docx");
+        std::fs::write(&document, b"PK\x03\x04\x14\0\0\0").unwrap();
+        assert_eq!(
+            mime_for(&document).unwrap(),
+            mime_for_path(&document).unwrap()
+        );
+        assert_ne!(mime_for(&document).unwrap(), "application/zip");
+        let archive = dir.join("bundle.bin");
+        std::fs::write(&archive, b"PK\x03\x04\x14\0\0\0").unwrap();
+        assert_eq!(mime_for(&archive).unwrap(), "application/zip");
+        let disguised = dir.join("notes.txt");
+        std::fs::write(&disguised, b"\x89PNG\r\n\x1a\n\0\0\0\rIHDR").unwrap();
+        assert_eq!(mime_for(&disguised).unwrap(), "image/png");
         let empty = dir.join("empty.rs");
         std::fs::write(&empty, b"").unwrap();
         assert_eq!(mime_for(&empty).unwrap(), "inode/x-empty");

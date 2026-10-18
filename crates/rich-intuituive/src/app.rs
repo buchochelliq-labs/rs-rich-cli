@@ -2454,6 +2454,18 @@ impl App {
             }
             // Where nodes with a rect handle are on the screen now.
             if crate::place::any_handles() {
+                // Nowhere on the screen: whatever a full screen covers,
+                // and whatever is hidden.
+                for layer in &self.layers[..base] {
+                    clear_rect_handles(&layer.root);
+                }
+                for layer in &self.layers[base..] {
+                    layer.root.walk_all(&mut |node, _, hidden| {
+                        if hidden {
+                            clear_rect_handles(node);
+                        }
+                    });
+                }
                 for layer in &self.layers[base..] {
                     crate::node::walk_screen(&layer.root, &mut |node, _, shift, clip| {
                         if let Some(handle) = *node.rect_slot.borrow() {
@@ -5108,6 +5120,16 @@ fn modal_rect(console: &Console, root: &Node, area: Rect, width: Size, height: S
         w,
         h,
     )
+}
+
+/// Set every rect handle in `node`, and in everything inside it, to `None`.
+fn clear_rect_handles(node: &crate::node::Node) {
+    if let Some(handle) = *node.rect_slot.borrow() {
+        if handle.get_untracked().is_some() {
+            handle.set(None);
+        }
+    }
+    node.each_child(&mut |child| clear_rect_handles(child));
 }
 
 #[cfg(test)]

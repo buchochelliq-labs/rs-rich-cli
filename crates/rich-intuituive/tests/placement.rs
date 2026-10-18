@@ -121,6 +121,23 @@ fn a_rect_handle_follows_the_node_on_the_screen() {
 }
 
 #[test]
+fn a_rect_handle_under_a_pushed_screen_has_none() {
+    let mut handle: Option<RectHandle> = None;
+    let app = App::new(|| {
+        let node = label("here");
+        handle = Some(node.rect_handle());
+        column([node.fixed(1)]).on_key("p", |cx| cx.push(|| label("over")))
+    });
+    let handle = handle.expect("made while building");
+    let mut driver = app.driver(20, 3);
+    driver.settle();
+    assert!(handle.get_untracked().is_some());
+    // A full screen covers it: it is nowhere on the screen.
+    driver.press("p");
+    assert_eq!(handle.get_untracked(), None);
+}
+
+#[test]
 fn a_rect_handle_inside_a_scroll_is_on_the_screen() {
     let mut handle: Option<RectHandle> = None;
     let app = App::new(|| {
