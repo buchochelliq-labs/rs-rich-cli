@@ -399,6 +399,7 @@ fn options_only_apply_to_rich_log() {
     assert!(usage(&["-i", "--group", "trace", "-"]).contains("--interactive"));
 }
 
+#[cfg(feature = "interact")]
 #[test]
 fn interactive_without_a_terminal_streams_as_usual() {
     let out = ok(&["-i"], APP);
