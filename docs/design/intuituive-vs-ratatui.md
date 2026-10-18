@@ -190,7 +190,7 @@ API the matrix names lives:
 | `title_style` | the theme's `title`, for the whole app | ◐ | A1 |
 | `Padding::*` inside the border | `.padding(..)` before `.panel(..)`; a sheet's `padding` on the panel | ✓ | — |
 | `Block::style` (a background) | a stylesheet's `background` only | ◐ | S · A2 |
-| `Block::shadow(Shadow::..)` (0.30.1) | none, for panels, modals or pop-ups | ✗ | S · A1, B6 |
+| `Block::shadow(Shadow::..)` (0.30.1) | modals and pop-ups: `ModalOptions::shadow(style)` (B6); none for panels | ◐ | S · A1 |
 | `merge_borders(MergeStrategy::Exact)` | none | ✗ | A6 |
 | focus and error looks (by hand) | `border.focused`; `border.error` with `.error_when(..)` | ✓ beyond | — |
 
@@ -213,15 +213,15 @@ API the matrix names lives:
 | ratatui | intuiTUIve | Status | Fix |
 |---|---|---|---|
 | `List` with `ListState` | `list(items, selected)` (`node.rs`): keys, scrolling, the theme's `selected` style | ✓ beyond: the keys are built in | — |
-| `ListItem` of several lines | the first line only | ✗ | M · B1 |
-| `ListItem::style` (a row's background) | markup in the item, as wide as its text | ◐ | B1 |
-| `highlight_style` | the theme's `selected`, for the whole app | ◐ | B1, A9 |
-| `highlight_symbol`, `repeat_highlight_symbol` | none | ✗ | B1 |
-| `HighlightSpacing::Always`, `WhenSelected`, `Never` | none | ✗ | B1 |
-| `ListDirection::BottomToTop` | none | ✗ | B1 |
-| `scroll_padding(n)` | none: it scrolls only as far as it must | ✗ | B1 |
-| `ListState::select(None)` | a `Signal<usize>` always selects a row | ✗ | B1 |
-| `ListState::offset` | kept inside | ◐ | B1 |
+| `ListItem` of several lines | `.multiline()` (`list.rs`) | ✓ | B1 |
+| `ListItem::style` (a row's background) | `.row_style(\|i\| ..)`, the whole row | ✓ | B1 |
+| `highlight_style` | the theme's `selected`, for the whole app | ◐ | A9 |
+| `highlight_symbol`, `repeat_highlight_symbol` | `.symbol(markup)`, `.repeat_symbol()` | ✓ | B1 |
+| `HighlightSpacing::Always`, `WhenSelected`, `Never` | `.highlight_spacing(HighlightSpacing::..)` | ✓ | B1 |
+| `ListDirection::BottomToTop` | `.direction(ListDirection::BottomToTop)` | ✓ | B1 |
+| `scroll_padding(n)` | `.scroll_padding(n)` | ✓ | B1 |
+| `ListState::select(None)` | `list_optional(items, Signal<Option<usize>>)` | ✓ | B1 |
+| `ListState::offset` | `.offset(Signal<usize>)` | ✓ | B1 |
 | a row of any widgets | `each(keys, build)` with `.focus_style(..)` | ✓ beyond | — |
 | a million rows | `virtual_list(len, row, selected)` | ✓ beyond | — |
 | reordering (none) | `.reorderable(..)` (0.0.19) | ✓ beyond | — |
@@ -232,24 +232,24 @@ API the matrix names lives:
 |---|---|---|---|
 | `Table::new(rows, widths)` with `TableState` | `table(columns, rows, selected)`, `table_with(.., TableOptions)` (`widgets.rs`) | ✓ | — |
 | `header(Row)` | a sticky header of `Column` titles | ✓ | — |
-| the header row's style | the theme's `table.header` | ◐ | B2, A9 |
-| `Row::top_margin`, `bottom_margin` | none | ✗ | B2 |
-| `footer(Row)` | none | ✗ | M · B2 |
+| the header row's style | the theme's `table.header` | ◐ | A9 |
+| `Row::top_margin`, `bottom_margin` | `TableOptions::header_gap(n)`, `.row_gap(n)` | ✓ | B2 |
+| `footer(Row)` | `TableOptions::footer(cells)`, the theme's `table.footer` | ✓ | B2 |
 | widths: `Length`, `Percentage`, `Fill` | `Size::Fixed`, `Percent`, `Flex`; and `Size::Auto`, which fits the title and the rows in view | ✓ beyond | — |
-| widths: `Min`, `Max`, `Ratio` | none per column | ✗ | B2, A4 |
-| `column_spacing(n)` | always 1 | ✗ | B2 |
+| widths: `Min`, `Max`, `Ratio` | `Column::min(n)`, `.max(n)`; `Ratio` with A4 | ◐ | A4 |
+| `column_spacing(n)` | `TableOptions::column_spacing(n)` | ✓ | B2 |
 | `Table::flex` (where spare room goes) | none | ✗ | Later (L8) |
-| `Row::height(n)`, cells of several lines | one line a row, cut with `…` | ✗ | B2 |
-| `Row::style` (zebra stripes, a row's colour) | markup in each cell, which leaves the gaps unstyled | ◐ | B2 |
+| `Row::height(n)`, cells of several lines | `TableOptions::multiline()`, `.row_height(n)` | ✓ | B2 |
+| `Row::style` (zebra stripes, a row's colour) | `TableOptions::row_style(\|i\| ..)`, gaps included | ✓ | B2 |
 | `Cell::style` | markup in the cell | ✓ | — |
-| a cell's alignment (its `Text`'s) | none | ✗ | B2 |
+| a cell's alignment (its `Text`'s) | `Column::align(Align::End)`, a column's cells and title | ✓ | B2 |
 | `Cell::column_span` (0.30.1) | none (cells are strings) | ✗ | Later (L8) |
 | `row_highlight_style` | the theme's `selected` and `table.selected` | ◐ | A9 |
 | `cell_highlight_style` | `TableOptions::cells(signal)` and the theme's `selected.cell` | ✓ | — |
-| `column_highlight_style` | none | ✗ | B2 |
-| `highlight_symbol`, `highlight_spacing` | none | ✗ | B2 |
-| `TableState::select(None)` | always a row | ✗ | B2 |
-| `scroll_padding(n)` | none | ✗ | B2 |
+| `column_highlight_style` | `TableOptions::column_highlight()`, the theme's `selected.column` | ✓ | B2 |
+| `highlight_symbol`, `highlight_spacing` | `TableOptions::symbol(..)`, `.highlight_spacing(..)` | ✓ | B2 |
+| `TableState::select(None)` | `table_optional(.., Signal<Option<usize>>, ..)` | ✓ | B2 |
+| `scroll_padding(n)` | `TableOptions::scroll_padding(n)` | ✓ | B2 |
 | sorting, resizing, scrolling across, frozen columns (none) | `TableOptions` (0.0.18, 0.0.19) | ✓ beyond | — |
 | a million rows | `virtual_table(..)` | ✓ beyond | — |
 
@@ -259,8 +259,8 @@ API the matrix names lives:
 |---|---|---|---|
 | `Tabs::new(titles).select(i)` | `tabs(titles, selected)`: arrows, 1 to 9, clicks | ✓ beyond | — |
 | `highlight_style`, `style` | the theme's `tabs.selected`, `tabs.selected.blur` | ◐ | A9 |
-| `divider(..)` | always `│` (the theme's `tabs.divider`) | ✗ | S · B4 |
-| `padding(left, right)` | always one space | ✗ | B4 |
+| `divider(..)` | `.divider(markup)`, in the theme's `tabs.divider` | ✓ | B4 |
+| `padding(left, right)` | `.tab_padding(left, right)`; `.titles_align(Align)` | ✓ | B4 |
 | `select(None)` | always one | ✗ | Later |
 
 #### Gauge and LineGauge
@@ -333,13 +333,13 @@ API the matrix names lives:
 
 | ratatui | intuiTUIve | Status | Fix |
 |---|---|---|---|
-| `Scrollbar` with `ScrollbarState`, on its own | none | ✗ | M · B3 |
+| `Scrollbar` with `ScrollbarState`, on its own | `scrollbar(position, len, view, Scrollbar)` (`scrollbar.rs`) | ✓ | B3 |
 | `ScrollbarOrientation::VerticalRight`, `HorizontalBottom` | drawn by `scroll`, `scroll_x` and `scroll_both` when the content overflows | ✓ | — |
-| `VerticalLeft`, `HorizontalTop` | none | ✗ | B3 |
-| `thumb_symbol`, `track_symbol`, `begin_symbol`, `end_symbol`, `symbols(..)` | always `┃` on `│`, and `━` on `─` | ✗ | B3 |
-| `thumb_style`, `track_style` | the theme's `scrollbar.thumb` and `scrollbar` | ✓ | — |
-| on a list, a table, a tree, a text area, a log | none | ✗ | B3 |
-| dragging the thumb, clicking the track (none in ratatui) | none | ✗ beyond ratatui once built | B3 |
+| `VerticalLeft`, `HorizontalTop` | `Scrollbar::side(Side::Left)`, `Side::Top` | ✓ | B3 |
+| `thumb_symbol`, `track_symbol`, `begin_symbol`, `end_symbol`, `symbols(..)` | `.thumb(..)`, `.track(..)`, `.ends(..)`, `.symbols(ScrollbarSymbols::..)` | ✓ | B3 |
+| `thumb_style`, `track_style` | the theme's `scrollbar.thumb`, `scrollbar` and `scrollbar.arrow` | ✓ | — |
+| on a list, a table, a tree, a text area, a log | `.scrollbar(Scrollbar)` on each | ✓ | B3 |
+| dragging the thumb, clicking the track (none in ratatui) | built into every bar | ✓ beyond | B3 |
 
 #### The rest
 
@@ -356,17 +356,17 @@ API the matrix names lives:
 | `ratatui::init()`, `restore()`, `run(..)`, `DefaultTerminal` | `App::run()` takes the terminal and gives it back | ≠ | — |
 | `Viewport::Fullscreen` (the alternate screen) | the default | ✓ | — |
 | `Viewport::Inline(n)` | `App::inline(n)` | ✓ | — |
-| `Terminal::insert_before(n, ..)`: lines into the scrollback above an inline viewport | none | ✗ | M · B6 |
+| `Terminal::insert_before(n, ..)`: lines into the scrollback above an inline viewport | `cx.print_above(markup)`, `Proxy::print_above`; full-screen, printed after the app | ✓ | B6 |
 | `Viewport::Fixed(rect)` | `App::driver(w, h)` in a loop of your own (`examples/in_ratatui.rs`) | ◐ | Later (L5) |
 | `Frame::set_cursor_position` | `Widget::caret`; a component's cursor; the accessible cursor | ✓ | — |
 | the cursor's shape, the window title (crossterm commands an app writes) | none: the app owns the output | ✗ | S · Later (L3) |
 | a panic hook that restores the terminal | the session's hook, installed by `App::run` | ✓ | — |
 | a frame rate of the app's choosing (tick loops) | redraws on change; `every(interval)`; animations at about 60 frames a second; `Driver::timeout` | ≠ | — |
-| `Frame::count()` | none; `FrameStats` has the nodes drawn and the bytes | ◐ | S · B6 |
+| `Frame::count()` | `FrameStats::frames` | ✓ | B6 |
 | crossterm, termion and termwiz backends | `BackendKind::Crossterm`, `Termion`, `Termwiz` | ✓ | — |
 | the termina backend (0.30.2) | none | ✗ | L · Later (L6) |
 | `TestBackend` | `rich_interact::headless::Headless`, `App::driver` | ✓ | — |
-| mouse capture, at the app's choice | always on full-screen, always off inline | ◐ no switch | S · B6 |
+| mouse capture, at the app's choice | `App::mouse(Some(true))`, `Some(false)`; `None` is the old rule | ✓ | B6 |
 | the horizontal wheel (`ScrollLeft`, `ScrollRight`) | none; Shift with the wheel instead | ✗ | S · Later (L4) |
 | the kitty keyboard protocol (by hand) | on where the terminal has it; key releases as `WidgetEvent::KeyUp` | ✓ beyond | — |
 | bracketed paste | on; `WidgetEvent::Paste` | ✓ | — |
@@ -396,7 +396,7 @@ API the matrix names lives:
 | `assert_buffer_lines`, `Buffer::with_lines` | `assert_screen!`, `testing::plain` | ✓ | — |
 | comparing styled buffers | `assert_screen_styled!` | ✓ | — |
 | `assert_cursor_position` | `Driver::cursor()` | ✓ | — |
-| `assert_scrollback_lines` (after `insert_before`) | the headless recording's bytes | ◐ | B6 |
+| `assert_scrollback_lines` (after `insert_before`) | the headless recording's bytes; `Driver::take_printed` | ✓ | B6 |
 | `insta` snapshots | snapshot files, diffs, `UPDATE_SNAPSHOTS=1`; `testing::plain` feeds `insta` too | ✓ ≠ | — |
 | scripted keys, clicks and time (none) | `press`, `type_text`, `event`, `update(now)`, `assert_focused` | ✓ beyond | — |
 
@@ -415,7 +415,7 @@ API the matrix names lives:
 |---|---|---|---|
 | a diff of the whole buffer | a diff of the damaged rectangles only | ✓ beyond | — |
 | the cost of a frame | `tests/versus_ratatui.rs`: a tick, a selection move and a log line, gated in CI | ✓ beyond | — |
-| a frame where every cell changes (`colors-rgb`) | not measured | ◐ | S · B7 |
+| a frame where every cell changes (`colors-rgb`) | `tests/versus_ratatui.rs`: the churn and chart scenes, reported | ✓ | B7 |
 
 ### 1.10 Interop
 

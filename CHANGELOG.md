@@ -492,6 +492,71 @@ test.
   every key, [backends](docs/guide/intuituive/index.md#backends), the
   tutorial's look inside, and the porting and Python pages.
 
+### Widgets, inputs and the app shell, after ratatui (intuituive 0.0.4)
+
+0.0.19 gap batch B (see [intuiTUIve against ratatui](docs/design/intuituive-vs-ratatui.md)).
+
+- **List options.** `list` moves to its own widget, with builders on the
+  node: `.symbol(markup)`, `.repeat_symbol()` and
+  `.highlight_spacing(HighlightSpacing::..)` for a highlight symbol;
+  `.direction(ListDirection::BottomToTop)`; `.scroll_padding(n)`;
+  `.multiline()` for items of several lines; `.row_style(|i| ..)` for whole
+  rows; and `.offset(signal)` for the first item in view. They work on a
+  reorderable list too.
+- **An empty selection.** `list_optional(items, Signal<Option<usize>>)` and
+  `table_optional(columns, rows, selected, options)`: `None` shows no
+  highlight, and ↓ selects the first item.
+- **Table options.** `TableOptions` gains `.footer(cells)`,
+  `.header_gap(n)`, `.row_gap(n)`, `.column_spacing(n)`, `.symbol(..)`
+  with `.highlight_spacing(..)`, `.row_style(..)`, `.multiline()`,
+  `.row_height(n)` (for virtual tables), `.column_highlight()` and
+  `.scroll_padding(n)`. `Column` gains `.align(Align::End)`, `.min(n)` and
+  `.max(n)`. With rows of several lines, ↓ still moves a row and PgDn a
+  screenful of rows. The theme names `table.footer` and `selected.column`
+  are new.
+- **Scrollbars everywhere.** `Scrollbar::new()` with `.side(Side::..)`,
+  `.show(Show::..)`, `.symbols(ScrollbarSymbols::..)`, `.thumb(..)`,
+  `.track(..)` and `.ends(..)`. `.scrollbar(bar)` puts one on a scroll, a
+  list, a table or virtual list, a tree, a text area or a log, in a column
+  it keeps while the bar shows. `scrollbar(position, len, view, bar)` is a
+  bar on its own. A press on the track pages, an arrow steps, and dragging
+  the thumb scrolls. In text mode the bar is blank. The default bar of a
+  scroll is unchanged.
+- **Tab strip options.** `.divider(markup)`, `.tab_padding(left, right)`
+  and `.titles_align(Align)` on `tabs`. Clicks and `measure` follow them.
+- **Inputs bound to signals.** `input(Signal<String>)` is a text area in a
+  single-line mode: Enter goes to `.on_submit(..)` (or bubbles), Tab moves
+  on, pasted lines join, and a long line scrolls to the caret. `.mask('•')`
+  and `.max_length(n)` work on it. `number_input(Signal<i64>, range)` with
+  `.step(n)` steps with the arrows, the page keys and the wheel, and takes
+  typed digits, clamped. Both are text boxes for assistive technology.
+- **Modal shadows and backdrops.** `cx.modal_with(width, height,
+  ModalOptions::new().shadow(style).backdrop(style), build)` and
+  `cx.popup_with(..)`. The shadow and the backdrop restyle the screen below
+  wherever it draws again.
+- **Printing above an inline app.** `cx.print_above(markup)` and
+  `Proxy::print_above` put lines into the scrollback above the region, which
+  moves down under them, as ratatui's `insert_before` does. Full-screen,
+  they print once the app ends; `Driver::take_printed()` gives them to a
+  loop of your own.
+- **Exit values and errors.** `cx.quit_with(value)` with `App::run_for::<T>()`,
+  `App::run_on_for` and `Driver::take_exit`; `cx.fail(error)`, which
+  `App::run` and `run_on` then return, with `Driver::take_error`.
+- **A mouse switch and a frame count.** `App::mouse(Some(true))` captures
+  the mouse inline, and `Some(false)` leaves it to the terminal
+  full-screen. `App::session_options(backend)` is what `run` asks for.
+  `FrameStats::frames` counts the frames drawn.
+- **The churn benchmark.** `tests/versus_ratatui.rs` reports two more
+  scenes, not gated yet: every cell changing each frame (an RGB swatch, as
+  `colors-rgb`) and a chart redrawn each tick.
+- **Changed:** `Column` and `TableOptions` gain public fields, and
+  `FrameStats` gains `frames`, so code that builds them field by field
+  needs the new ones. `table_scroll`'s window takes the column spacing.
+- **Python:** the same options and functions in `rs_rich.tui`.
+- **Docs:** the guide's inputs, table, list, tab strip and scrollbar
+  options, modal shadows, exit values and printing above an inline app;
+  the porting guide's table.
+
 ### One process per browser session (web 0.0.2)
 
 0.0.19 workstream 3.

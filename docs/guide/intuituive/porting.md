@@ -51,13 +51,16 @@ covers both. Three complete ports show where it leads:
 | Content-sized rows (measured by hand) | `.auto()` |
 | `Block::bordered().title(t)` | `.panel(t)`; `.padding(v, h)` for space |
 | `Paragraph`, `Line`, `Span` | `text!("…{signal}…")`, `label("…")`, console markup |
-| `List` + `ListState` | `list(items, selected)` (scrolls, highlights, binds ↑↓ jk) |
-| `Table` + `TableState` | `table(columns, rows, selected)` (sized columns, a sticky header, keys, clicks); `virtual_table` for huge ones |
-| `Tabs` | `tabs(titles, selected)` with `switch(\|\| tab.get(), build)` for the content |
-| `Scrollbar` and a scroll offset | `scroll(child)`: a viewport with keys, the wheel and a scrollbar |
+| `List` + `ListState` | `list(items, selected)` (scrolls, highlights, binds ↑↓ jk); `list_optional` for `select(None)` |
+| `highlight_symbol`, `HighlightSpacing`, `ListDirection`, `scroll_padding`, `ListItem::style` | `.symbol(..)`, `.highlight_spacing(..)`, `.direction(..)`, `.scroll_padding(n)`, `.row_style(\|i\| ..)` on the list; `.multiline()` for items of several lines |
+| `Table` + `TableState` | `table(columns, rows, selected)` (sized columns, a sticky header, keys, clicks); `virtual_table` for huge ones; `table_optional` for `select(None)` |
+| `footer`, `column_spacing`, `Row::height`, `Row::style`, `column_highlight_style`, a cell's alignment | `TableOptions::footer(..)`, `.column_spacing(n)`, `.multiline()` or `.row_height(n)`, `.row_style(..)`, `.column_highlight()`; `Column::align(Align::End)` |
+| `Tabs` | `tabs(titles, selected)` with `switch(\|\| tab.get(), build)` for the content; `.divider(..)`, `.tab_padding(..)` |
+| `Scrollbar` and a scroll offset | `scroll(child)`: a viewport with keys, the wheel and a scrollbar; `.scrollbar(Scrollbar::new()..)` on lists, tables, trees, text areas and logs; `scrollbar(position, len, view, bar)` on its own |
+| An input field (`tui-input`, by hand) | `input(signal)`, `number_input(signal, range)` |
 | `Chart`, `Canvas` | `rich_ext::chart::{Chart, Canvas}` (laid out as ratatui's) via `renderable` |
 | `Gauge`, `Sparkline`, `BarChart` | `rich_ext::chart` (`Gauge`, `Sparkline`, `BarChart`) via `renderable` |
-| `Clear` + a centred popup | `cx.modal(width, height, build)` |
+| `Clear` + a centred popup | `cx.modal(width, height, build)`; `cx.modal_with(.., ModalOptions::new().shadow(..).backdrop(..), ..)` for a shadow |
 | A popup placed next to a widget | `cx.popup(anchor, Placement::Below, width, height, build)` |
 | A custom `Widget` | `impl Widget` and `widget(w)` (cells, events, children, focus); `leaf` for drawing only; or keep the widget (path 2) |
 | `crossterm::event::read()` + `match` | `.on_key("q", …)` on the node that owns the key; keys bubble. Or keep your loop and feed an `App::driver` (path 4) |
@@ -67,7 +70,11 @@ covers both. Three complete ports show where it leads:
 | Threads and channels into the loop | `spawn(work, done)`, `resource(fetch)`, `Proxy::run` |
 | "When X changes, do Y" in the loop | `watch(\|\| x.get(), \|x, cx\| …)` |
 | `ratatui::init()` / `restore()` | `App::run()` (restores on every exit, panics included) |
+| Returning a choice or an error from the loop | `cx.quit_with(value)` and `App::run_for::<T>()`; `cx.fail(error)` |
 | `Viewport::Inline(n)` | `App::inline(n)` |
+| `Terminal::insert_before(n, ..)` | `cx.print_above(markup)`, `Proxy::print_above` |
+| `EnableMouseCapture` at the app's choice | `App::mouse(Some(true))` or `Some(false)` |
+| `Frame::count()` | `FrameStats::frames` (`Driver::stats()`) |
 | `TestBackend` and buffer asserts | Headless scripts: keys, clicks, resizes, a virtual clock |
 
 ## Path 1: rich inside ratatui
