@@ -44,7 +44,7 @@ use std::time::Duration;
 use rich::cells::cell_len;
 use rich::{Segment, Style};
 
-use crate::chrome::{key_hint, keys_hint, Breadcrumbs, StatusBar};
+use crate::chrome::{key_hint, Breadcrumbs, StatusBar};
 use crate::component::{Component, Context, Flow, View};
 use crate::compose::{ComponentExt, Layer, LayerHandle, Layers, Rect};
 use crate::event::{Event, Key, KeyCode, MouseKind};
@@ -93,6 +93,8 @@ pub struct Command {
     /// The context it belongs to: listed only while that context is
     /// active ([`Palette::contexts`]). `None`: always listed.
     pub context: Option<String>,
+    /// Its keys are pressed one after another (`g g`), not alternatives.
+    pub sequence: bool,
 }
 
 impl Command {
@@ -103,6 +105,7 @@ impl Command {
             category: String::new(),
             keys: Vec::new(),
             context: None,
+            sequence: false,
         }
     }
 
@@ -133,12 +136,14 @@ impl Command {
             category: binding.context.clone(),
             keys: binding.keys.clone(),
             context: Some(binding.context.clone()),
+            sequence: binding.sequence,
         }
     }
 
-    /// The keys as a hint shows them: `↑/ctrl+p`.
+    /// The keys as a hint shows them: `↑/ctrl+p`, or `g g` for a
+    /// sequence.
     pub fn keys_label(&self) -> String {
-        keys_hint(&self.keys)
+        crate::chrome::keys_hint_of(&self.keys, self.sequence)
     }
 
     /// What fuzzy search looks in: the category, then the label.
@@ -385,6 +390,12 @@ impl Palette {
             if used + wanted < width {
                 line = kit::pad(line, width - wanted);
                 line.push(kit::text(format!("{shortcut} "), &theme.hint));
+            } else if width > wanted + 8 {
+                // A long label is cut, so its keys still show.
+                let room = width - wanted - 1;
+                line = kit::pad(line, room - 1);
+                line.push(kit::plain("… "));
+                line.push(kit::text(format!("{shortcut} "), &theme.hint));
             }
         }
         kit::fit(line, width)
@@ -533,7 +544,7 @@ impl Help {
         let candidates: Vec<String> = bindings
             .iter()
             .map(|b| {
-                let hint = keys_hint(&b.keys);
+                let hint = b.hint();
                 format!("{hint} {} {} {}", b.keys_label(), b.description, b.context)
             })
             .collect();
@@ -583,7 +594,7 @@ impl Help {
         let matches = self.matches();
         let key_width = matches
             .iter()
-            .map(|b| cell_len(&keys_hint(&b.keys)))
+            .map(|b| cell_len(&b.hint()))
             .max()
             .unwrap_or(0)
             .min(24);
@@ -601,10 +612,7 @@ impl Help {
                     rows.push(Vec::new());
                     continue;
                 }
-                let keys = kit::pad(
-                    vec![kit::text(keys_hint(&binding.keys), &theme.prompt)],
-                    key_width,
-                );
+                let keys = kit::pad(vec![kit::text(binding.hint(), &theme.prompt)], key_width);
                 let mut line = vec![kit::plain("  ")];
                 line.extend(keys);
                 line.push(kit::plain("  "));
@@ -726,6 +734,15 @@ impl Component for Help {
 // ---------------------------------------------------------------------------
 // Shortcuts.
 
+/// The key a shortcut list shows for `binding`: its first, or a whole
+/// sequence (`g g`).
+fn shortcut_hint(binding: &Binding) -> String {
+    if binding.sequence {
+        binding.hint()
+    } else {
+        key_hint(binding.keys[0])
+    }
+}
 /// A shortcut sheet (#475): every binding of a keymap at a glance, its
 /// first key and what it does, in as many columns as fit. Any key or a
 /// click closes it.
@@ -758,7 +775,7 @@ impl Shortcuts {
         let key = self
             .bindings
             .iter()
-            .map(|b| cell_len(&key_hint(b.keys[0])))
+            .map(|b| cell_len(&shortcut_hint(b)))
             .max()
             .unwrap_or(0);
         let entry = self
@@ -815,7 +832,7 @@ impl Component for Shortcuts {
                     line.push(kit::plain("   "));
                 }
                 let mut cell = kit::pad(
-                    vec![kit::text(key_hint(binding.keys[0]), &theme.prompt)],
+                    vec![kit::text(shortcut_hint(binding), &theme.prompt)],
                     key_width,
                 );
                 cell.push(kit::plain("  "));

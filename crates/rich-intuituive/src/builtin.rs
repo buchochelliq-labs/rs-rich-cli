@@ -932,6 +932,22 @@ impl Panel {
         }
     }
 
+    /// Its border's style: code's, else a stylesheet's, while the focus is
+    /// elsewhere; the theme's focused style while it is inside; the error
+    /// style over it while it is in error.
+    fn edge_style(&self, cx: &DrawCx, focused: bool) -> Style {
+        let sheet = self.look.border.as_ref().map(|(_, style)| style);
+        let mut style = match (&self.code.border_style, sheet) {
+            (Some(name), _) if !focused => cx.style(name, ""),
+            (None, Some(style)) if !focused && !style.is_null() => style.clone(),
+            _ => cx.theme().border(focused),
+        };
+        if self.invalid {
+            style = style.combine(&cx.theme().error_style("border.error"));
+        }
+        style
+    }
+
     /// The cells its shadow takes, right and below.
     fn shadow(&self) -> u16 {
         u16::from(self.code.shadow.is_some() && !self.collapsed && self.kind().is_some())
@@ -1016,18 +1032,14 @@ impl Widget for Panel {
         // when it comes or goes.
         let focused = cx.focus_within();
         if cx.repaint() || self.shown_focus != Some(focused) {
-            // Code's, else a stylesheet's, colour while the focus is
-            // elsewhere.
-            let sheet = self.look.border.as_ref().map(|(_, style)| style);
-            let mut style = match (&self.code.border_style, sheet) {
-                (Some(name), _) if !focused => cx.style(name, ""),
-                (None, Some(style)) if !focused && !style.is_null() => style.clone(),
-                _ => cx.theme().border(focused),
-            };
-            if self.invalid {
-                style = style.combine(&cx.theme().error_style("border.error"));
-            }
-            let title = match &self.code.title_style {
+            let style = self.edge_style(cx, focused);
+            let title = match self.code.title_style.as_deref() {
+                // A pop-up's title: the theme's `popup.title`, else its
+                // `title`.
+                Some(crate::app::POPUP_TITLE) => {
+                    crate::widget::named_style(cx.console(), crate::app::POPUP_TITLE)
+                        .unwrap_or_else(|| cx.theme().title.clone())
+                }
                 Some(name) => cx.style(name, ""),
                 None => cx.theme().title.clone(),
             };
@@ -1049,6 +1061,46 @@ impl Widget for Panel {
             canvas.frame(cx.console(), &frame, self.shadow() == 1, shadow);
         }
         self.shown_focus = Some(focused);
+    }
+
+    /// [Rules](crate::rule) that reach both sides join them: `├──┤`, in
+    /// the border's style and kind.
+    fn draw_over(&mut self, cx: &mut DrawCx, canvas: &mut Canvas) {
+        let Some(kind) = self.kind().filter(|_| !self.collapsed) else {
+            return;
+        };
+        let mut rules = Vec::new();
+        crate::rule::rules_in(&self.child, &mut rules);
+        if rules.is_empty() || crate::a11y::text_mode() {
+            return;
+        }
+        let [_, right, _, left] = self.insets();
+        let sides = self.sides();
+        let (joins_left, joins_right) = (sides.contains(Sides::LEFT), sides.contains(Sides::RIGHT));
+        let area = cx.rect;
+        let box_right = area.right().saturating_sub(self.shadow());
+        let style = self.edge_style(cx, cx.focus_within());
+        for rule in rules {
+            let inside = rule.y > area.y && rule.y < area.bottom() && rule.height > 0;
+            let from_left = rule.x == area.x + left;
+            let to_right = rule.right() + right == box_right;
+            if !inside || !(from_left || to_right) {
+                continue;
+            }
+            let y = rule.y - area.y;
+            let line = crate::rule::glyph(kind, [false, true, false, true]);
+            for x in rule.x..rule.right() {
+                canvas.set_cell(x - area.x, y, line, Some(&style));
+            }
+            if from_left && joins_left && left > 0 {
+                let tee = crate::rule::glyph(kind, [true, true, true, false]);
+                canvas.set_cell(left - 1, y, tee, Some(&style));
+            }
+            if to_right && joins_right && right > 0 {
+                let tee = crate::rule::glyph(kind, [true, false, true, true]);
+                canvas.set_cell(box_right - area.x - right, y, tee, Some(&style));
+            }
+        }
     }
 
     fn retained(&self) -> bool {

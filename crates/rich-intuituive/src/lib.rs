@@ -65,6 +65,7 @@ pub mod border;
 mod builtin;
 mod calendar;
 mod datetime;
+mod dialog;
 mod effect;
 #[cfg(feature = "art")]
 mod image;
@@ -75,11 +76,16 @@ mod list;
 pub mod log;
 pub mod menu;
 pub mod node;
+mod notify;
+mod place;
 pub mod reactive;
 mod reorder;
+mod rule;
 pub mod screen;
 mod scrollbar;
+mod sequence;
 mod sheet;
+mod solver;
 mod split;
 mod table_scroll;
 pub mod task;
@@ -99,7 +105,7 @@ pub use rich;
 pub use rich_interact as interact;
 
 pub use app::{
-    every, Anchor, App, Ctx, Driver, Easing, FrameStats, ModalOptions, Placement, Theme,
+    every, Anchor, App, Ctx, Driver, Easing, FrameStats, Handoff, ModalOptions, Placement, Theme,
 };
 pub use border::{Border, BorderSet, Edge, Shadow, Sides};
 pub use effect::{effect, fill};
@@ -114,15 +120,21 @@ pub use node::{
     column, component, each, grid, label, layers, leaf, list, renderable, repeating, row, scroll,
     scroll_both, scroll_both_with, scroll_with, scroll_x, switch, text, Node,
 };
+pub use notify::{Corner, Level};
+pub use place::{Offset, Origin, RectHandle};
 pub use reactive::{memo, signal, viewport, watch, Memo, Proxy, Signal};
 /// What a text does with what does not fit a line: rich's.
 pub use rich::Overflow;
+pub use rule::rule;
 pub use sheet::{SheetError, Stylesheet};
 pub use task::{resource, spawn, spawn_future, Load, Resource, Task};
 #[cfg(feature = "watch")]
 pub use watch::{
     watch_path, watch_path_with, ChangeKind, PathChange, PathEvent, PathWatch, WatchOptions,
 };
+pub use solver::Solver;
+pub use task::{latest, resource, spawn, spawn_future, Latest, Load, Resource, Task};
+pub use text_area::Caret;
 pub use widget::{widget, Widget};
 pub use widgets::text_area;
 
@@ -131,8 +143,8 @@ pub mod prelude {
     // `text` is both the function and the `text!` macro.
     pub use crate::described;
     pub use crate::{
-        column, component, each, effect, every, fill, grid, input, label, layers, leaf, list,
-        list_optional, memo, number_input, renderable, repeating, resource, row, scroll,
+        column, component, each, effect, every, fill, grid, input, label, latest, layers, leaf,
+        list, list_optional, memo, number_input, renderable, repeating, resource, row, scroll,
         scroll_both, scroll_with, scroll_x, signal, spawn, switch, text, text_area, viewport,
         watch, widget, Align, App, Border, Ctx, Edge, Justify, Load, Log, Memo, Node, Overflow,
         Proxy, Resource, Shadow, Sides, Signal, Size, Task, TextAlign, Theme, Widget,

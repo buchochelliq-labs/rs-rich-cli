@@ -115,6 +115,73 @@ world"). Every new dependency is behind an off-by-default feature.
   page, [Files, spectra and warm-ups](docs/guide/ext/files-and-signals.md),
   and the colour names on the ratatui page.
 
+### Keys, pop-ups, chrome and the runtime, from the Yazi and scope-tui clones (intuituive, interact)
+
+What round 1 of rebuilding Yazi (`examples/files.rs`) and scope-tui
+(`examples/scope.rs`) on intuiTUIve found missing
+(`docs/design/intuituive-demo-gaps.md`).
+
+- **Key sequences:** `.bind_sequence("g g", description, handler)` and
+  `.on_sequence`. A prefix waits for the next key; Esc cancels a sequence
+  under way, and any other key cancels it and is then handled as usual.
+  `App::which_key(true)` (or `which_key_delay(d)`) shows what can follow
+  in up to three columns at the bottom of the screen. The help and the
+  command palette list sequences as `g g`.
+- **Any key:** `.on_any_key(|cx, key| -> bool)` takes what a node's
+  bindings leave.
+- **Keys a container sees first:** `.previews_keys()` on a column or any
+  node: its bindings, sequences and `on_any_key` run before the focused
+  node inside it gets the key.
+- **The caret of an input:** `.caret(Caret::Start | End | At(n))` and
+  `.select(range)` on an `input` or a `text_area`. Fixed: a prefilled
+  input put its caret at the start (`input(signal("alpha".into()))`, then
+  `x`, gave `xalpha`); an input's caret now goes to the end when it is made
+  and when the signal is set from elsewhere. A text area keeps the start.
+- **Fixed: bindings inside a pop-up's panel never fired.** With nothing
+  focused, keys go down from the root through every node that holds one
+  child, so the content's own bindings run.
+- **The palette** shows the keys of a binding with a long description (an
+  `esc` binding's keys were dropped): the description is cut instead
+  (interact). `rich_interact::keymap::Binding::sequence(..)`, and a
+  `sequence` field on `Binding` and `overlay::Command`, show keys pressed
+  one after another as `g g`; keymaps do not look them up (interact).
+- **`popup.title`:** a modal's or pop-up's panel title is drawn in the
+  theme's `popup.title`, else its `title` (so nothing changes unless a
+  theme sets it).
+- **Ratatui's solver:** `.solver(Solver::Ratatui)` (or `RatatuiLegacy`) on
+  a row or column, and `StackLayout::solver` for `layout::split`, lays the
+  children out as ratatui's `Layout` does: percentages of the whole length
+  and what does not fit squeezed by the same constraints through kasuari,
+  ratatui's solver (a new dependency). Off by default; existing layouts
+  are unchanged. Checked against ratatui over widths 10 to 200 for
+  scope-tui's header and over every `Flex`.
+- **Where a node is:** `node.rect_handle()` gives its rectangle on the
+  screen after each frame, as a handle whose `get()` subscribes.
+- **Pop-ups from a point of the screen:** `cx.popup_at(Origin, Offset,
+  build)` (and `popup_at_with`): a corner, an edge's middle, the centre or
+  below a rectangle, moved by a signed offset and kept on the screen.
+- **A rule joined to its panel:** `rule()` draws a line across that joins
+  the border of the panel it spans (`├──┤`). Fixed: `.borders(Sides::..)`
+  on a node that is not a panel drew nothing; it now puts the node in a
+  panel without a title with those sides.
+- **Notifications:** `cx.notify(Level::Info | Warn | Error, title, body)`
+  and `notify_for`: a box with the title on its edge, in the level's style
+  (`notify.info`, `notify.warn`, `notify.error`, else `accent`, `warn`,
+  `bad`), announced with its level. `App::toasts_at(Corner::..)` stacks
+  toasts in another corner (Yazi's top right). `cx.toast` is unchanged.
+- **A confirm dialog:** `cx.confirm(title, body, items, on_yes)`, centred,
+  with the items and `[Y]es`/`(N)o` (y, n, Enter, Esc, Tab, the arrows and
+  clicks).
+- **The newest value from a thread:** `latest(|tx| ..) -> Signal<Option<T>>`;
+  `Latest::send` keeps only the newest value, and returns `false` once the
+  app has finished.
+- **Handing the terminal to a program:** `cx.handoff(command)` and
+  `handoff_then(command, |result, cx| ..)`: `App::run` leaves the
+  alternate screen and raw mode, runs it, takes the terminal back and
+  redraws. `Driver::take_handoff` and `Driver::handed_back` for a loop of
+  your own; the headless driver records it.
+- **Docs:** the intuiTUIve guide covers each of these.
+
 ## 0.0.19 cohort
 
 ext 0.0.16 / micro 0.0.5 / record 0.0.7 / interact 0.0.7 / ratatui 0.0.4 /

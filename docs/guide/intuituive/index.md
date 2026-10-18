@@ -250,6 +250,26 @@ widget needs: `centered(width, height)`, `inset(top, right, bottom, left)`,
 `inner(n)`, `offset(dx, dy)`, `union`, `intersection`, `intersects`,
 `contains`, and `rows()` and `columns()` to go through it a line at a time.
 
+### Ratatui's solver
+
+A column or row takes percentages of the room its gaps leave, rounded
+down. Ratatui's `Layout` takes them of the whole length and lets a
+constraint solver squeeze what does not fit, so a header ported from a
+ratatui `Table` (scope-tui's) puts its cells a few columns off.
+`.solver(Solver::Ratatui)` solves a column or row as ratatui does, with the
+same constraints at the same strengths and the same solver (kasuari): a
+`Size::Percent` is ratatui's `Percentage`, `Fixed` its `Length`, `Flex` its
+`Fill`, the gap its `spacing`, and `.justify(..)` its `Flex` (`Start`, as a
+`Table`'s columns, by default; `Solver::RatatuiLegacy` is `Flex::Legacy`,
+a `Layout`'s default). It is off by default, so no existing layout
+changes, and `layout::split` takes it too (`StackLayout::solver`).
+
+```rust
+row([label("scope").percent(35), label("1ms").percent(25), label("60fps").percent(40)])
+    .gap(1)
+    .solver(Solver::Ratatui)
+```
+
 ### Responsive layout
 
 A layout can follow the terminal's size. The size is the app's
@@ -359,6 +379,23 @@ A stylesheet sets the same: `border: thick` (and every kind by name),
 `border-title`, `border-title-align`, `border-subtitle` (the bottom
 title), `border-subtitle-align` and `border-sides: top bottom`. Code wins
 over the sheet.
+
+### Rules, and a border on any node
+
+`rule()` is a line across, one row tall, in the theme's border style.
+Directly inside a panel, from its left side to its right, it joins the
+border, in the panel's kind and focus colour: the `├──┤` between the parts
+of a help box. Padding between them keeps it apart. `.border(Border::Thick)`
+picks the kind of a rule on its own, and it is left out of what assistive
+technology reads.
+
+```rust
+column([label("Keys"), rule(), label("q quit")]).panel("Help")
+```
+
+`.borders(Sides::BOTTOM)` (or any sides) on a node that is not a panel
+puts it in a panel without a title first: an underlined header, a status
+line with a rule above it.
 
 ### Collapsed borders
 
@@ -478,6 +515,40 @@ column([
   children, while it has the focus, which is how a list shows its selected
   row.
 
+### Key sequences, any key, and keys a container sees first
+
+```rust
+column([list(files, selected), status])
+    .previews_keys()
+    .bind_sequence("g g", "Go to the top", move |_| selected.set(0))
+    .bind_sequence("g h", "Go home", go_home)
+    .on_any_key(|cx, key| { log(key); false })
+```
+
+- **`.bind_sequence("g g", description, handler)`** (`.on_sequence` without
+  a description) runs once the keys are pressed one after another. The
+  first key starts the sequence where a binding of it would run (a deeper
+  node's binding of the key wins, as for any key; on one node, a binding of
+  the first key wins over the sequence). Esc cancels a sequence under way;
+  any other key that goes on with none of the node's sequences cancels it
+  and is then handled as usual, so `g` then `j` still moves down. The comma
+  key is written in quotes, as in any binding: `"\",\" s"`.
+- **`App::which_key(true)`** shows what can follow while a sequence waits,
+  Yazi's way: in up to three columns, in a box at the bottom of the screen,
+  the keys left in the theme's `which_key.key` style (else `accent`).
+  `App::which_key_delay(d)` waits `d` first, so a sequence typed quickly
+  shows nothing. The help and the command palette list sequences as `g g`.
+- **`.on_any_key(|cx, key| -> bool)`** gets every key that reaches the node
+  and none of its bindings or sequences took; it returns whether it used
+  it, and one it did not use goes on to the ancestors.
+- **`.previews_keys()`** lets a container's own bindings, sequences and
+  `on_any_key` see keys before the focused node inside it does, outermost
+  container first: an app-wide keymap that wins over a focused list's `j`,
+  `k` and `g`, without making the container focusable.
+- **With nothing focused** (a pop-up of plain text), keys go to the root
+  and down through every node that holds a single child, so a binding on
+  the content inside a pop-up's `.panel()` works.
+
 ## Components
 
 ```rust
@@ -530,6 +601,13 @@ column([
   Home/End go to the ends, and the wheel steps it. Digits type a new number
   (a `-` first for a negative one), which is set on the signal at once,
   clamped, and shown as typed until Enter or the focus leaves.
+- **The caret** goes to the end of an input's text when it is made and
+  whenever the signal is set from elsewhere (a text area's goes to the
+  start). `.caret(Caret::Start | Caret::End | Caret::At(n))` puts it
+  elsewhere, and `.select(range)` selects characters (grapheme clusters, a
+  line break counting one) with the caret at the end, so typing replaces
+  them: a rename that selects the name before its extension is
+  `input(name).select(0..stem)`.
 - Both are text boxes for assistive technology, with their text as the
   value. Validate them with `.error_when(..)`, as any node.
 
@@ -1402,6 +1480,27 @@ The anchor can also be a `Rect` of the screen, for a pop-up at a place
 rather than a node: `EventCx::rect()` gives a widget its own, and
 `Ctx::pointer()` gives where the mouse event being handled happened.
 
+`cx.popup_at(origin, offset, build)` places a pop-up from a point of the
+screen instead (Yazi's): an `Origin` (`TopLeft`, `TopCenter`, `TopRight`,
+`Center`, `BottomLeft`, `BottomCenter`, `BottomRight`, or `At(rect)`,
+below a rectangle or above it when there is no room), moved and sized by
+an `Offset { x, y, w, h }` (cells, negative to go left or up; the sizes as
+a modal's). However far the offset, the pop-up stays on the screen: it is
+moved back inside, and made smaller if it is larger. It closes as any
+pop-up does.
+
+```rust
+cx.popup_at(Origin::TopCenter, Offset::new(0, 2, 50, 3), move || {
+    input(name).select(0..stem).panel("Rename:")
+})
+```
+
+`node.rect_handle()`, taken while the tree is built, says where a node is
+on the screen after each frame (`None` while hidden or scrolled out of
+view); reading it with `get()` subscribes, so what reads it redraws when
+the node moves. `Origin::At(handle.get_untracked()?)` puts a pop-up under
+it.
+
 ### Menus
 
 ```rust
@@ -1448,12 +1547,36 @@ App::new(build).palette_key("ctrl+p").help_key("?")
 Bindings made with `.on_key` have no description and stay out of both.
 Name a node (`.name("Editor")`) to group its commands under that name.
 
+Sequence bindings are listed too, with their keys as `g g`; a long
+description is cut so its keys still show.
+
+### Confirming
+
+```rust
+cx.confirm("Trash 3 selected files?", "", names, move |cx| trash(cx, &paths))
+```
+
+`cx.confirm(title, body, items, on_yes)` asks in the framework's look,
+Yazi's way: a modal centred over the screen, the title on its top edge, the
+body under it, the items (ten at most, and a count of the rest) between two
+rules, and `[Y]es` and `(N)o`. `y`, or Enter on Yes, closes it and runs
+`on_yes`; `n`, Esc, or Enter on No closes it; Tab and the arrows move
+between the two, and a click picks one.
+
 ## Toasts and animations
 
 - **`cx.toast(markup)`** shows a message at the bottom right for three
   seconds, and `toast_for(markup, duration)` for as long as you say.
   Toasts stack and do not take the focus. On a screen too small for a
   toast's box, the newest shows reversed on the bottom row.
+- **`cx.notify(level, title, body)`** (`notify_for` with a duration; five
+  seconds by default) is a notification: a box with the title on its top
+  edge and the body wrapped inside, its border and title in the level's
+  style (`Level::Info`, `Warn` or `Error`: the theme's `notify.info`,
+  `notify.warn` or `notify.error`, else `accent`, `warn` or `bad`). It is
+  announced with its level (`Error: Copy failed: …`).
+- **`App::toasts_at(corner)`** stacks toasts and notifications in another
+  corner, newest nearest it: `Corner::TopRight` is Yazi's.
 - **`cx.animate(signal, to, duration, easing)`** moves a `Signal<f64>` to
   `to` over `duration`, setting it every frame, so whatever reads it moves
   with it: a split's ratio, a gauge, a scroll offset. `Easing` is `Linear`,
@@ -1515,6 +1638,19 @@ text(move || match user.get() {
   yourself (a tokio runtime, a file watcher) sends closures through a
   `Proxy` from `cx.proxy()` or `app.proxy()`: `proxy.run(move ||
   status.set(body))`, or `proxy.run_with(|cx| …)` for a `Ctx` too.
+- **The newest value from a thread:** `latest(|tx| loop { if !tx.send(read()) { break } })`
+  runs the closure on a thread of its own and returns a
+  `Signal<Option<T>>`: `None` until the first value, then the newest.
+  Nothing queues: values the app had no time for are skipped (an audio
+  buffer, a sensor, scope-tui's reader). `send` returns `false` once the
+  app has finished.
+- **Another program:** `cx.handoff(command)` gives the terminal to a
+  program once the handler returns (an editor, a pager, a shell): the app
+  leaves the alternate screen and raw mode, runs it and waits, then takes
+  the terminal back and draws everything again. `cx.handoff_then(command,
+  |result, cx| …)` hears how it ended. Under the headless driver the
+  program is recorded, not run; a loop of your own takes it with
+  `Driver::take_handoff` and gives it back with `Driver::handed_back`.
 
 ## Files, sound and images
 
@@ -1587,6 +1723,12 @@ label("[accent]ops[/] · [good]12 up[/] · [bad]1 down[/]")
 Add your own with `Theme::dark().style("brand", Style::parse("bold magenta")?)`,
 set it with `App::theme`, and switch at run time with `cx.set_theme(theme)`;
 everything is drawn again in the new theme.
+
+The framework's own parts look for names of their own and fall back to
+these: a modal's or pop-up's panel title (the palette's, the help's, a
+confirm's) is drawn in `popup.title`, else `title`; the which-key keys in
+`which_key.key`, else `accent`; notifications in `notify.info`,
+`notify.warn` and `notify.error`, else `accent`, `warn` and `bad`.
 
 ### Theme files, reloaded live
 
