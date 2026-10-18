@@ -748,10 +748,7 @@ impl PyNode {
 
     /// For a `list`: when the symbol keeps its column: `"when_selected"`
     /// (the default), `"always"` or `"never"`.
-    fn highlight_spacing<'py>(
-        slf: Bound<'py, Self>,
-        spacing: &str,
-    ) -> PyResult<Bound<'py, Self>> {
+    fn highlight_spacing<'py>(slf: Bound<'py, Self>, spacing: &str) -> PyResult<Bound<'py, Self>> {
         let spacing = spacing_arg(spacing)?;
         slf.borrow().map(|n| n.highlight_spacing(spacing))?;
         Ok(slf)

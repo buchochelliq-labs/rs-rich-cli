@@ -53,7 +53,9 @@ impl PyColumn {
 
     /// The column with its cells at `align`.
     fn align(&self, align: &str) -> PyResult<PyColumn> {
-        Ok(PyColumn(self.0.clone().align(super::node::align_arg(align)?)))
+        Ok(PyColumn(
+            self.0.clone().align(super::node::align_arg(align)?),
+        ))
     }
 
     /// The column at least `cells` wide.
@@ -391,7 +393,12 @@ fn tui_table_optional(
 /// "thin_horizontal" | "vertical" | "double_vertical" | "horizontal" |
 /// "double_horizontal")`, `thumb(symbol)`, `track(symbol or None)` and
 /// `ends(begin, end)` (each a symbol or `None`).
-#[pyclass(name = "Scrollbar", module = "rs_rich.tui", frozen, skip_from_py_object)]
+#[pyclass(
+    name = "Scrollbar",
+    module = "rs_rich.tui",
+    frozen,
+    skip_from_py_object
+)]
 #[derive(Clone, Default)]
 pub(crate) struct PyScrollbar(pub(crate) core::Scrollbar);
 
@@ -472,9 +479,9 @@ fn count_source(value: &Bound<'_, PyAny>, what: &str) -> PyResult<Box<dyn Fn() -
     if value.is_callable() {
         return Ok(Box::new(len_source(value)?));
     }
-    let count: usize = value
-        .extract()
-        .map_err(|_| PyTypeError::new_err(format!("{what} is an int, or a function returning one")))?;
+    let count: usize = value.extract().map_err(|_| {
+        PyTypeError::new_err(format!("{what} is an int, or a function returning one"))
+    })?;
     Ok(Box::new(move || count))
 }
 

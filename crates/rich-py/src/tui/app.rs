@@ -593,7 +593,12 @@ impl From<intuituive::FrameStats> for PyFrameStats {
 /// looks over the screen below: `shadow(style)`, a strip one cell right and
 /// down of the box, and `backdrop(style)`, the screen below restyled (each
 /// returns a new one).
-#[pyclass(name = "ModalOptions", module = "rs_rich.tui", frozen, skip_from_py_object)]
+#[pyclass(
+    name = "ModalOptions",
+    module = "rs_rich.tui",
+    frozen,
+    skip_from_py_object
+)]
 #[derive(Clone, Default)]
 pub(crate) struct PyModalOptions(intuituive::ModalOptions);
 
@@ -1125,7 +1130,10 @@ fn headless(
     shared.close();
     let (ran, record) = result?;
     let (finished, exit) = match ran {
-        Ok(exit) => (true, exit.map_or_else(|| py.None(), |value| value.object(py))),
+        Ok(exit) => (
+            true,
+            exit.map_or_else(|| py.None(), |value| value.object(py)),
+        ),
         Err(error) if error.kind() == std::io::ErrorKind::UnexpectedEof => (false, py.None()),
         Err(error) => return Err(PyOSError::new_err(error.to_string())),
     };
