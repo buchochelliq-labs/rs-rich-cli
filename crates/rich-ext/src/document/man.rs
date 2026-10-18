@@ -218,6 +218,9 @@ enum FrameKind {
     Item,
 }
 
+/// The most bytes of `\*` string values one line may expand to.
+const EXPANSION_BUDGET: usize = 64 * 1024;
+
 #[derive(Debug)]
 struct Frame {
     kind: FrameKind,
@@ -1594,7 +1597,14 @@ impl Man {
         let mut pieces = Vec::new();
         let mut current = String::new();
         self.saw_continuation = false;
-        self.expand(text, &mut pieces, &mut current, 0);
+        let mut budget = EXPANSION_BUDGET;
+        self.expand(
+            text,
+            &mut pieces,
+            &mut current,
+            &mut Vec::new(),
+            &mut budget,
+        );
         if !current.is_empty() {
             pieces.push(Piece::Run(self.font, current));
         }
@@ -1604,7 +1614,18 @@ impl Man {
         pieces
     }
 
-    fn expand(&mut self, text: &str, pieces: &mut Vec<Piece>, current: &mut String, depth: usize) {
+    /// `stack` holds the `\*` strings being expanded (a name already on it
+    /// is not expanded again) and `budget` the bytes of string values one
+    /// call of [`escapes`](Self::escapes) may still splice in, so a string
+    /// that refers to itself many times cannot grow without bound.
+    fn expand(
+        &mut self,
+        text: &str,
+        pieces: &mut Vec<Piece>,
+        current: &mut String,
+        stack: &mut Vec<String>,
+        budget: &mut usize,
+    ) {
         let mut chars = text.char_indices().peekable();
         while let Some((_, ch)) = chars.next() {
             if ch != '\\' {
@@ -1643,8 +1664,11 @@ impl Man {
                         .cloned()
                         .or_else(|| predefined_string(&name).map(str::to_string));
                     if let Some(value) = value {
-                        if depth < 8 {
-                            self.expand(&value, pieces, current, depth + 1);
+                        if stack.len() < 8 && !stack.contains(&name) && value.len() <= *budget {
+                            *budget -= value.len();
+                            stack.push(name);
+                            self.expand(&value, pieces, current, stack, budget);
+                            stack.pop();
                         }
                     }
                 }
@@ -2315,6 +2339,28 @@ Full documentation
 .UR https://www.gnu.org/software/coreutils/ls
 .UE
 "#;
+
+    #[test]
+    fn string_expansion_is_bounded() {
+        // Each string refers to the one before 16 times: 16^5 copies of "x"
+        // unbounded, plus a string that refers to itself.
+        let mut source = String::from(".ds a xxxxxxxx\n.ds s \\*s\\*s\\*s\n");
+        for (name, previous) in [("b", "a"), ("c", "b"), ("d", "c"), ("e", "d"), ("f", "e")] {
+            source.push_str(&format!(
+                ".ds {name} {}\n",
+                format!("\\*{previous}").repeat(16)
+            ));
+        }
+        source.push_str("\\*f \\*s\n");
+        let text: usize = blocks(&source)
+            .iter()
+            .map(|block| match block {
+                Block::Paragraph(inlines) => inlines_text(inlines).len(),
+                _ => 0,
+            })
+            .sum();
+        assert!(text <= EXPANSION_BUDGET + 64, "{text}");
+    }
 
     #[test]
     fn a_man_page_has_its_banner_headings_and_options() {

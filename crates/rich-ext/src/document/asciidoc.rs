@@ -191,6 +191,10 @@ impl Pending {
     }
 }
 
+/// The most bytes an attribute value, or a line, may grow to once its
+/// `{name}` references are replaced.
+const ATTRIBUTE_LIMIT: usize = 64 * 1024;
+
 impl AsciiDoc {
     fn warn(&mut self, line: usize, message: impl Into<String>) {
         self.diagnostics.push(Diagnostic {
@@ -219,7 +223,7 @@ impl AsciiDoc {
             if text.trim().is_empty() || is_comment_line(text) {
                 i += 1;
             } else if let Some((name, value)) = attribute_entry(text) {
-                self.set_attribute(name, value);
+                self.set_attribute(lines[i].no, name, value);
                 i += 1;
             } else {
                 break;
@@ -243,7 +247,7 @@ impl AsciiDoc {
         while i < lines.len() && !lines[i].text.trim().is_empty() {
             let text = lines[i].text.as_str();
             if let Some((name, value)) = attribute_entry(text) {
-                self.set_attribute(name, value);
+                self.set_attribute(lines[i].no, name, value);
             } else if !is_comment_line(text) {
                 header_lines += 1;
                 if header_lines == 1 {
@@ -287,10 +291,19 @@ impl AsciiDoc {
         (blocks, i)
     }
 
-    fn set_attribute(&mut self, name: &str, value: Option<&str>) {
+    fn set_attribute(&mut self, line: usize, name: &str, value: Option<&str>) {
         match value {
             Some(value) => {
-                let value = self.substitute(value.trim());
+                let (value, cut) = self.substitute_within(value.trim());
+                if cut {
+                    self.warn(
+                        line,
+                        format!(
+                            "the value of :{name}: is longer than {ATTRIBUTE_LIMIT} bytes once \
+                             its references are replaced; it is cut there"
+                        ),
+                    );
+                }
                 self.attributes.insert(name.to_ascii_lowercase(), value);
             }
             None => {
@@ -301,8 +314,15 @@ impl AsciiDoc {
 
     /// `{name}` references replaced; unknown ones stay as written.
     fn substitute(&self, text: &str) -> String {
+        self.substitute_within(text).0
+    }
+
+    /// [`substitute`](Self::substitute), cut at [`ATTRIBUTE_LIMIT`] bytes
+    /// so references to references cannot grow without bound; the flag says
+    /// whether it was cut.
+    fn substitute_within(&self, text: &str) -> (String, bool) {
         if !text.contains('{') {
-            return text.to_string();
+            return (text.to_string(), false);
         }
         let mut out = String::with_capacity(text.len());
         let mut rest = text;
@@ -325,7 +345,17 @@ impl AsciiDoc {
                     })
                     .flatten();
                 match value {
-                    Some(value) => out.push_str(&value),
+                    Some(value) => {
+                        if out.len() + value.len() > ATTRIBUTE_LIMIT {
+                            let mut end = ATTRIBUTE_LIMIT.saturating_sub(out.len());
+                            while !value.is_char_boundary(end) {
+                                end -= 1;
+                            }
+                            out.push_str(&value[..end]);
+                            return (out, true);
+                        }
+                        out.push_str(&value);
+                    }
                     None => {
                         out.push('{');
                         out.push_str(name);
@@ -339,7 +369,7 @@ impl AsciiDoc {
             }
         }
         out.push_str(rest);
-        out
+        (out, false)
     }
 
     /// Parse inline markup, after attribute references.
@@ -420,7 +450,7 @@ impl AsciiDoc {
             }
             if let Some((name, value)) = attribute_entry(text) {
                 if context == Context::Body {
-                    self.set_attribute(name, value);
+                    self.set_attribute(lines[i].no, name, value);
                     i += 1;
                     continue;
                 }
@@ -2530,6 +2560,26 @@ mod tests {
             matches!(&inlines[1], Inline::Link { target, .. } if target == "https://asciidoc.org")
         );
         assert!(inlines.iter().any(|i| matches!(i, Inline::Image { .. })));
+    }
+
+    #[test]
+    fn attribute_values_are_cut_at_the_limit() {
+        // Each attribute is ten of the one before: 10^9 bytes unbounded.
+        let mut source = String::from(":a0: xxxxxxxxxx\n");
+        for level in 1..10 {
+            let refs = format!("{{a{}}}", level - 1).repeat(10);
+            source.push_str(&format!(":a{level}: {refs}\n"));
+        }
+        source.push_str("\n{a9}{a9}{a9}\n");
+        let parsed = parse(&source);
+        assert!(parsed
+            .diagnostics
+            .iter()
+            .any(|d| d.severity == Severity::Warning && d.message.contains(":a5:")));
+        let Some(Block::Paragraph(inlines)) = parsed.document.blocks.last() else {
+            panic!("{:?}", parsed.document.blocks);
+        };
+        assert!(inlines_text(inlines).len() <= ATTRIBUTE_LIMIT);
     }
 
     #[test]

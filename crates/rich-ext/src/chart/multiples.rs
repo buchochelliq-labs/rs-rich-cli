@@ -13,6 +13,8 @@ use super::{
 const DEFAULT_MIN_WIDTH: usize = 24;
 /// Cells between two columns, by default.
 const DEFAULT_GAP: usize = 2;
+/// The widest [`gap`](SmallMultiples::gap), as the bar chart's gaps.
+const MAX_GAP: usize = u16::MAX as usize;
 
 /// One chart of a [`SmallMultiples`] grid: a chart whose value scale can
 /// be shared. Each chart type converts with `.into()`.
@@ -223,9 +225,9 @@ impl SmallMultiples {
         self
     }
 
-    /// Cells between two columns (default 2).
+    /// Cells between two columns (default 2, at most 65535).
     pub fn gap(mut self, cells: usize) -> Self {
-        self.gap = cells;
+        self.gap = cells.min(MAX_GAP);
         self
     }
 
@@ -271,11 +273,11 @@ impl SmallMultiples {
     pub fn columns_at(&self, width: usize) -> usize {
         let n = self.items.len().max(1);
         let gap = self.gap;
-        let wanted = self
-            .columns
-            .unwrap_or_else(|| ((width + gap) / (self.min_width + gap)).max(1));
+        let wanted = self.columns.unwrap_or_else(|| {
+            (width.saturating_add(gap) / self.min_width.saturating_add(gap)).max(1)
+        });
         // Never so many that a cell has no room.
-        let fits = ((width + gap) / (1 + gap)).max(1);
+        let fits = (width.saturating_add(gap) / gap.saturating_add(1)).max(1);
         wanted.min(n).min(fits)
     }
 
@@ -419,7 +421,8 @@ impl Renderable for SmallMultiples {
             return lines_to_segments(vec![line], width);
         }
         let columns = self.columns_at(width);
-        let cell = (width.saturating_sub(self.gap * (columns - 1)) / columns).max(1);
+        let gaps = self.gap.saturating_mul(columns - 1);
+        let cell = (width.saturating_sub(gaps) / columns).max(1);
         let rows = self.items.len().div_ceil(columns);
         let note = self.note_lines(console, options, ascii);
         let height = self.chart_height(options.height, rows, note.len());
@@ -524,6 +527,18 @@ mod tests {
             .lines()
             .map(str::to_string)
             .collect()
+    }
+
+    #[test]
+    fn a_huge_gap_or_width_does_not_overflow() {
+        let grid = sparks().gap(usize::MAX);
+        assert_eq!(grid.columns_at(usize::MAX), grid.items().len());
+        assert_eq!(grid.columns_at(80), 1);
+        assert_eq!(
+            sparks().min_cell_width(usize::MAX).columns_at(usize::MAX),
+            1
+        );
+        assert!(!rows(40, &sparks().gap(usize::MAX)).is_empty());
     }
 
     fn sparks() -> SmallMultiples {

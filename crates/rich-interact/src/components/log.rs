@@ -43,7 +43,7 @@ use rich::cells::cell_len;
 use rich::{Segment, Style};
 use rich_ext::event::{Severity, Value};
 use rich_ext::log_stream::{
-    format_offset, Predicate, Record, TimeMode, LEVEL_KEYS, MESSAGE_KEYS, TIME_KEYS,
+    format_offset, Assembler, Predicate, Record, TimeMode, LEVEL_KEYS, MESSAGE_KEYS, TIME_KEYS,
 };
 
 use crate::component::{Component, Context, Flow, View};
@@ -99,6 +99,9 @@ struct Entry {
     /// The row's text, lower-cased, and the continuation lines: what a
     /// filter word is looked for in.
     search: String,
+    /// Continuation lines past [`Assembler::CONTINUATION_LIMIT`], counted
+    /// rather than kept.
+    more: usize,
 }
 
 /// One row: a record, and how many identical ones it stands for.
@@ -280,7 +283,11 @@ impl LogView {
         }
         let search = search_text(&record);
         let entry = self.first + self.entries.len();
-        self.entries.push_back(Entry { record, search });
+        self.entries.push_back(Entry {
+            record,
+            search,
+            more: 0,
+        });
         if self.matches(entry) {
             self.add_row(entry);
         }
@@ -289,11 +296,17 @@ impl LogView {
         }
     }
 
-    /// Add a line under the last record.
+    /// Add a line under the last record. Past
+    /// [`Assembler::CONTINUATION_LIMIT`] lines it is only counted, and shown
+    /// as `… N more lines`.
     pub fn push_continuation(&mut self, line: String) {
         let Some(last) = self.entries.back_mut() else {
             return;
         };
+        if last.record.continuation.len() >= Assembler::CONTINUATION_LIMIT {
+            last.more += 1;
+            return;
+        }
         last.search.push('\n');
         last.search.push_str(&line.to_lowercase());
         last.record.continuation.push(line);
@@ -420,7 +433,7 @@ impl LogView {
     /// The lines a row takes.
     fn height(&self, row: &Row) -> usize {
         1 + if self.is_expanded(row.entry) {
-            detail_count(&self.entry(row.entry).record)
+            detail_count(self.entry(row.entry))
         } else {
             0
         }
@@ -604,22 +617,23 @@ impl LogView {
             line.push(plain(one_line(&value_text(value))));
         }
         if !record.continuation.is_empty() && !self.is_expanded(row.entry) {
-            let lines = record.continuation.len();
+            let lines = record.continuation.len() + self.entry(row.entry).more;
             let label = if lines == 1 { "line" } else { "lines" };
             line.push(text(format!(" (+{lines} {label})"), &theme.hint));
         }
         fit(line, width)
     }
 
-    /// The lines under an expanded row: its fields, then its continuation
-    /// lines.
-    fn details(&self, row: &Row, width: usize) -> Vec<Vec<Segment>> {
-        let record = &self.entry(row.entry).record;
+    /// The lines under an expanded row, at most `room` of them: its
+    /// fields, then its continuation lines.
+    fn details(&self, row: &Row, width: usize, room: usize) -> Vec<Vec<Segment>> {
+        let entry = self.entry(row.entry);
+        let record = &entry.record;
         let theme = &self.theme;
         let indent = cell_len(&theme.pointer) + 3;
         let mut lines = Vec::new();
         let field = style("cyan");
-        for (key, value) in record.fields.iter() {
+        for (key, value) in record.fields.iter().take(room) {
             lines.push(fit(
                 vec![
                     plain(" ".repeat(indent)),
@@ -629,7 +643,12 @@ impl LogView {
                 width,
             ));
         }
-        for continuation in &record.continuation {
+        let more = (entry.more > 0).then(|| format!("… {} more lines", entry.more));
+        let continuations = record.continuation.iter().map(String::as_str);
+        for continuation in continuations
+            .chain(more.as_deref())
+            .take(room.saturating_sub(lines.len()))
+        {
             lines.push(fit(
                 vec![
                     plain(" ".repeat(indent)),
@@ -647,7 +666,7 @@ impl LogView {
             TimeMode::Hidden => None,
             TimeMode::Absolute => record.time().map(|time| one_line(&time)),
             TimeMode::Relative => match (record.instant(), self.origin) {
-                (Some(at), Some(origin)) => Some(format_offset(at - origin)),
+                (Some(at), Some(origin)) => Some(format_offset(at.saturating_sub(origin))),
                 _ => record.time().map(|time| one_line(&time)),
             },
         }
@@ -773,7 +792,8 @@ impl Component for LogView {
             }
             lines.push(self.row_line(row, index == self.cursor, width));
             if self.is_expanded(row.entry) {
-                lines.extend(self.details(row, width));
+                let room = page.saturating_sub(lines.len());
+                lines.extend(self.details(row, width, room));
             }
         }
         lines.truncate(page);
@@ -895,8 +915,8 @@ fn shown_fields(record: &Record) -> impl Iterator<Item = (&str, &Value)> {
 }
 
 /// The lines under an expanded record.
-fn detail_count(record: &Record) -> usize {
-    record.fields.len() + record.continuation.len()
+fn detail_count(entry: &Entry) -> usize {
+    entry.record.fields.len() + entry.record.continuation.len() + usize::from(entry.more > 0)
 }
 
 /// What a filter word is looked for in: the row's text and the
@@ -1079,6 +1099,52 @@ mod tests {
         );
         let first = &frames.frames[0];
         assert!(first.contains("(+1 line)"), "{first}");
+    }
+
+    #[test]
+    fn continuation_lines_are_capped_and_counted() {
+        let mut view = LogView::new().records([record("error", "failed", 0)]);
+        let extra = 5;
+        for n in 0..Assembler::CONTINUATION_LIMIT + extra {
+            view.push_continuation(format!("line {n}"));
+        }
+        let entry = view.entries.back().unwrap();
+        assert_eq!(
+            entry.record.continuation.len(),
+            Assembler::CONTINUATION_LIMIT
+        );
+        assert_eq!(entry.more, extra);
+        let row = view.rows[0];
+        let details = view.details(&row, 80, usize::MAX);
+        let last: String = details
+            .last()
+            .unwrap()
+            .iter()
+            .map(|s| s.text.as_str())
+            .collect();
+        assert!(last.contains("… 5 more lines"), "{last}");
+        // Only what fits the page is built.
+        assert_eq!(view.details(&row, 80, 4).len(), 4);
+        let frames = run(view, Script::new().keys("enter q"), 10);
+        let frame = frames.last_frame();
+        assert!(frame.contains("line 0"), "{frame}");
+        let first = &frames.frames[0];
+        assert!(first.contains("(+1005 lines)"), "{first}");
+    }
+
+    #[test]
+    fn relative_time_before_the_origin_does_not_overflow() {
+        let mut view = LogView::new();
+        // The first record's time (the origin) is i64::MAX microseconds,
+        // the second's i64::MIN.
+        for micros in [i64::MAX, i64::MIN] {
+            let time = Value::Integer128(i128::from(micros) * 1_000);
+            view.push(Record::new("json").field("time", time));
+        }
+        let record = view.entries.back().unwrap().record.clone();
+        assert_eq!(record.instant(), Some(i64::MIN));
+        view.time = TimeMode::Relative;
+        assert!(view.time_of(&record).is_some());
     }
 
     #[test]
