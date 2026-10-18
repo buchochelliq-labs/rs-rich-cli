@@ -228,9 +228,11 @@ The source implements `VirtualRows`:
 | `row(index)` | yes | The row at a 0-based index, or `None` past the end |
 | `row_count()` | no | The number of rows, when the source knows |
 | `rows(start, len)` | no | A range at once, for sources that fetch ranges cheaply (the default calls `row`) |
+| `rows_columns(start, len, &columns)` | no | A range with only some columns' cells, for a [column window](#wide-tables-a-window-of-columns) (the default calls `rows` and picks the cells) |
 
 `Vec<Vec<Value>>`, slices of rows, references, `Box` and `Arc` implement it,
-and `FnRows` wraps a closure:
+`FnRows` wraps a closure that makes a row, and `FnCells` one that makes a
+cell (`|row, column| value`), so only the cells a window shows are made:
 
 ```rust
 use rich::{Console, Justify};
@@ -293,6 +295,53 @@ line below it. `row_numbers(true)` adds a `#` column, and
 `null_marker("NULL")` shows null cells as a dim italic `NULL` instead of
 empty, the way an empty string shows.
 
+### Wide tables: a window of columns
+
+A table of thousands of columns gets a window across as well as down. Only
+the columns it shows are fetched (through `rows_columns`), sampled for
+their widths and laid out, so 2,000 columns cost what a screenful does:
+
+```rust
+use rich::Console;
+use rich_ext::table::{Column, FnCells, Value, VirtualTable};
+
+// 100,000 rows by 2,000 columns, each cell made when it is shown.
+let cells = FnCells::new(100_000, 2_000, |r, c| Value::from(r * c));
+let columns = (0..2_000).map(|c| Column::new(format!("c{c}")));
+let table = VirtualTable::new(columns, cells)
+    .height(2)
+    .frozen_columns(1) // `c0` stays on the left
+    .column_offset(40)
+    .fit_columns(true); // as many as fit the width
+Console::new().print(&table); // 80 columns wide
+```
+
+```text
+┏━━━━┳━━━━━━┳━━━━━━┳━━━━━━┳━━━━━━┳━━━━━━┳━━━━━━┳━━━━━━┳━━━━━━┳━━━━━━┳━━━━━━┓
+┃ c0 ┃ c41  ┃ c42  ┃ c43  ┃ c44  ┃ c45  ┃ c46  ┃ c47  ┃ c48  ┃ c49  ┃ c50  ┃
+┡━━━━╇━━━━━━╇━━━━━━╇━━━━━━╇━━━━━━╇━━━━━━╇━━━━━━╇━━━━━━╇━━━━━━╇━━━━━━╇━━━━━━┩
+│ 0  │ 0    │ 0    │ 0    │ 0    │ 0    │ 0    │ 0    │ 0    │ 0    │ 0    │
+│ 0  │ 41   │ 42   │ 43   │ 44   │ 45   │ 46   │ 47   │ 48   │ 49   │ 50   │
+└────┴──────┴──────┴──────┴──────┴──────┴──────┴──────┴──────┴──────┴──────┘
+rows 1–2 of 100,000, columns 42–51 of 2,000
+```
+
+| Builder | What it does |
+|---|---|
+| `column_offset(n)` | The window's first column, counted from 0 after the frozen ones |
+| `visible_columns(n)` | Show `n` columns from the offset (with `fit_columns`, at most `n`) |
+| `fit_columns(true)` | Show as many columns as fit the width, and always one |
+| `frozen_columns(n)` | Keep the first `n` columns on the left, never scrolled: an id, a name |
+
+- The position line adds where the column window is when it leaves
+  columns out: `columns 42–51 of 2,000`, counted from 1, the frozen
+  columns aside. `Page::column_position` gives it on its own.
+- Widths are fixed or sampled as for rows, one column at a time as it
+  comes into view, and kept: scrolling back does not sample again. A fit
+  samples the columns a few at a time, those that surely fit at
+  `max_column_width`, so it looks at most one column past those it shows.
+- Without any of these builders the table shows every column, as before.
+
 ### In a viewport
 
 `VirtualTable` is a static renderer. Interactive scrolling belongs to
@@ -303,7 +352,10 @@ empty, the way an empty string shows.
 | `set_offset(n)` / `scroll_by(±n)` | Moves the window. `scroll_by` stops at the top and at the last full window |
 | `set_height(n)` | Shows `n` rows (at most 10,000) |
 | `max_offset()` | The offset of the last full window, when the count is known |
-| `page()` | The rows the window shows, its start, the total and whether more follow |
+| `page()`, `page_at(width)` | The rows the window shows, its start, the total, whether more follow, and the columns shown at that width (`page()` lays a fitted window out for 80 cells) |
+| `set_column_offset(n)` / `scroll_columns_by(±n)` | Moves the column window. `scroll_columns_by` stops at the first column and at `max_column_offset()` |
+| `set_visible_columns(Some(n))` | Shows `n` columns from the offset, or (`None`) all, or as many as fit |
+| `shown_columns(width)` | The columns a render `width` cells wide shows: the frozen ones, then the window's |
 | `chrome_lines(console, width)` | The lines around the rows: title, edges, header, position and footnote |
 
 A viewport of `lines` lines holds `lines - chrome_lines(…)` rows:
@@ -415,5 +467,5 @@ without colour.
 
 `TableData`, `StreamingTable` and `VirtualTable` implement
 `a11y::AccessibleText` through their core `Table` (for `VirtualTable`, the
-rows of the window). The result is the same `Table with N rows, columns: …`
+rows of the window, and its columns at the width given). The result is the same `Table with N rows, columns: …`
 summary that a core table produces.

@@ -1750,7 +1750,12 @@ is in [Testing with screen readers](screen-readers.md).
   `TextArea`, …) and a name: `.label("Save")`, else the text it shows,
   else a panel's title. `.role(Role::MenuBar)` sets a role in code. A node
   named by the text it shows (a live row, a button) speaks for what is
-  inside it, so its children are not listed again.
+  inside it, so its children are not listed again. A chart (or any
+  renderable with rich-ext's `AccessibleText`) drawn with
+  `described(move || ..)` instead of `renderable(..)` is named by what it
+  shows in words (`Line chart, 2 series, x from 0 to 23, …`; see
+  [accessible text](../ext/charts.md#accessible-text)), after its
+  `.label(..)` if it has one.
   `Driver::accessibility()` returns the tree: depth, role, name, what is
   selected in it, focus, states and place. rs-rich-web's
   [DOM renderer](web.md#the-dom-renderer) carries it to a browser's screen

@@ -37,8 +37,10 @@ panels keep their title, and links read as `text <url>`:
 ![The same content as semantic text](../../media/guide/guide_a11y-semantic.svg)
 
 `AccessibleText` is implemented for core `Table`, `Tree`, `Panel`, `Rule` and
-`Text`, for markup strings (`str`), and for
-[`Diagnostic`](diagnostics.md). `semantic_text(&renderable, width)` handles
+`Text`, for markup strings (`str`), for
+[`Diagnostic`](diagnostics.md), and for every
+[chart](charts.md#accessible-text), which says what it shows in words: its
+ranges, key values and trends. `semantic_text(&renderable, width)` handles
 any other renderable: it renders plainly and drops the decoration.
 
 Use it when you know the output goes to a screen reader or a log, for

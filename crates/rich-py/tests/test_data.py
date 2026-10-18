@@ -312,6 +312,24 @@ def test_a_virtual_table_shows_one_window():
     assert "│ 150000 │" in drawn(data.VirtualTable(wide, offset=150, height=1, fit_window=True))
 
 
+def test_a_virtual_table_windows_its_columns():
+    names = [f"c{c}" for c in range(12)]
+    rows = data.Rows(names, [[f"r{r}c{c}" for c in range(12)] for r in range(5)])
+    table = data.VirtualTable(rows, height=1, frozen_columns=1, column_offset=5, visible_columns=2)
+    out = drawn(table, 60)
+    assert "│ r0c0 │ r0c6 │ r0c7 │" in out
+    assert "rows 1–1 of 5, columns 7–8 of 12" in out
+    assert table.shown_columns() == [0, 6, 7]
+    assert table.column_position(ascii=True) == "columns 7-8 of 12"
+    table.scroll_columns_by(100)
+    assert table.column_offset == 9
+    fit = data.VirtualTable(rows, height=1, fit_columns=True)
+    assert fit.shown_columns(30) == [0, 1, 2, 3]
+    assert fit.column_position(200) is None
+    with pytest.raises(ValueError):
+        data.VirtualTable(rows, visible_columns=0)
+
+
 # ---------------------------------------------------------------------------
 # Schemas
 

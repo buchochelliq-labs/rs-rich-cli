@@ -405,3 +405,86 @@ impl Renderable for KpiCard {
             .normalize()
     }
 }
+
+/// `KPI Errors: 42, down 25% vs yesterday, better, status warning`: the
+/// value, its change in words and whether that is for the better, and the
+/// status; then the sparkline's text, if it has one.
+impl crate::a11y::AccessibleText for KpiCard {
+    fn accessible_text(&self, width: usize) -> String {
+        let what = if self.label.is_empty() {
+            "KPI".to_string()
+        } else {
+            format!("KPI {}", self.label)
+        };
+        let mut parts = vec![self.value_text()];
+        if let Some(delta) = self.delta {
+            let v = delta.value();
+            let mut change = if !v.is_finite() {
+                "change unknown".to_string()
+            } else if v == 0.0 {
+                "unchanged".to_string()
+            } else {
+                // The written number without its sign, as the arrow says it.
+                let text = self
+                    .delta_text(true)
+                    .unwrap_or_default()
+                    .split_once(' ')
+                    .map(|(_, n)| n.trim_start_matches(['+', '-']).to_string())
+                    .unwrap_or_default();
+                format!("{} {text}", if v > 0.0 { "up" } else { "down" })
+            };
+            if let Some(caption) = self.caption.as_deref().filter(|c| !c.is_empty()) {
+                change.push(' ');
+                change.push_str(caption);
+            }
+            parts.push(change);
+            if v.is_finite() && v != 0.0 {
+                let better = (v > 0.0) == self.higher_is_better;
+                parts.push(if better { "better" } else { "worse" }.to_string());
+            }
+        } else if let Some(caption) = self.caption.as_deref().filter(|c| !c.is_empty()) {
+            parts.push(caption.to_string());
+        }
+        if let Some(status) = self.status {
+            parts.push(format!("status {}", status.word()));
+        }
+        let mut out = format!("{what}: {}", parts.join(", "));
+        if let Some(spark) = &self.sparkline {
+            out.push('\n');
+            out.push_str(&crate::a11y::AccessibleText::accessible_text(spark, width));
+        }
+        out
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::a11y::AccessibleText;
+
+    #[test]
+    fn accessible_text_says_the_change_in_words() {
+        let card = KpiCard::new("Errors", 42.0)
+            .previous(56.0)
+            .higher_is_better(false)
+            .caption("vs yesterday")
+            .status(Status::Warning);
+        assert_eq!(
+            card.accessible_text(80),
+            "KPI Errors: 42, down 25% vs yesterday, better, status warning"
+        );
+        let trend = KpiCard::new("Requests", 12_400.0)
+            .unit("/s")
+            .delta_percent(8.49)
+            .trend([1.0, 3.0, 2.0, 5.0]);
+        assert_eq!(
+            trend.accessible_text(80),
+            "KPI Requests: 12.4k/s, up 8.49%, better\n\
+             Sparkline, 4 values: min 1, max 5, last 5, trend up"
+        );
+        assert_eq!(
+            KpiCard::new("", 0.0).delta(0.0).accessible_text(80),
+            "KPI: 0, unchanged"
+        );
+    }
+}

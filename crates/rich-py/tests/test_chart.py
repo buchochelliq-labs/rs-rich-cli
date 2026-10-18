@@ -402,3 +402,77 @@ def test_no_chart_draws_past_its_width(width):
         out = io.StringIO()
         Console(file=out, width=width, color_system=None).print(renderable)
         assert all(len(line) <= width for line in out.getvalue().splitlines()), (renderable, width)
+
+
+# ---------------------------------------------------------------------------
+# Charts that read aloud, distributions and small multiples (0.0.19, #726)
+
+
+def test_every_chart_describes_itself():
+    gauge = chart.Gauge("cpu", 72, range=(0, 100), target=80, unit="%")
+    assert chart.describe(gauge) == "Gauge cpu: 72%, 72 percent of 0% to 100%, target 80%"
+    assert chart.describe(chart.Sparkline([2, 4, 3, 9, 6, 5])) == (
+        "Sparkline, 6 values: min 2, max 9, last 5, trend up"
+    )
+    assert chart.describe(chart.BarChart([("api", 31.0), ("web", 12.5)])) == (
+        "Bar chart, 2 bars, values from 12.5 to 31\napi 31, web 12.5"
+    )
+    # rs_rich.ext.a11y reads charts the same way.
+    from rs_rich.ext import a11y
+
+    assert a11y.accessible_text(gauge) == chart.describe(gauge)
+    with pytest.raises(TypeError):
+        chart.describe("not a chart")
+
+
+def test_quantiles_and_summaries_are_numpys_linear():
+    assert chart.quantile([3, 1, 2, 4], 0.5) == 2.5
+    assert chart.quantile([1, 2, 3, 4, 5, 6, 7, 8, 9, 10], 0.25) == 3.25
+    assert chart.quantile([], 0.5) is None
+    s = chart.summary([1, 2, 3, 4, None, float("nan")])
+    assert (s["count"], s["ignored"], s["p50"], s["mean"]) == (4, 2, 2.5, 2.5)
+    assert chart.summary([])["min"] is None
+
+
+def test_a_distribution_draws_a_strip_and_its_numbers():
+    d = chart.Distribution(range(1, 21), label="x", strip_width=12)
+    assert drawn(d, 80) == (
+        "x ├──▒▒▒█▒▒▒─┤ n 20 min 1 p25 5.75 p50 10.5 p75 15.25 p95 19.05 max 20 mean 10.5\n"
+    )
+    assert drawn(chart.Distribution(range(1, 21), strip_width=12, numbers=False, charset="ascii")) == (
+        "|--===#===-|\n"
+    )
+    assert d.summary["p25"] == 5.75
+    assert d.quantile(0.5) == 10.5
+    assert d.values[:3] == [1.0, 2.0, 3.0]
+    assert chart.describe(d) == (
+        "Distribution x: 20 values, min 1, p25 5.75, median 10.5, p75 15.25, p95 19.05, max 20, mean 10.5"
+    )
+
+
+def test_a_distribution_set_shares_its_scale():
+    s = chart.DistributionSet(
+        {"a": [0, 2, 4, 6, 8], "b": [4, 5, 6]}, strip_width=9, numbers=False, charset="ascii"
+    )
+    assert drawn(s) == "a |-==#==-|\nb     |#=  \n  0       8\n"
+    assert s.scale == (0.0, 8.0)
+    assert s.labels == ["a", "b"]
+    assert chart.describe(s).splitlines()[0] == "Distributions, 2 on a shared scale from 0 to 8"
+
+
+def test_small_multiples_share_a_scale_and_fit_the_width():
+    grid = chart.SmallMultiples(
+        [("low", chart.Sparkline([1, 2, 3])), ("high", chart.Sparkline([7, 8, 9]))],
+        min_cell_width=10,
+    )
+    assert drawn(grid, 30) == (
+        "low             high          \n"
+        "▁▂▃             ▆▇█           \n"
+        "scale 1 to 9 in every chart   \n"
+    )
+    assert grid.scale == (1.0, 9.0)
+    assert grid.columns_at(30) == 2 and grid.columns_at(10) == 1
+    assert grid.titles == ["low", "high"]
+    assert chart.describe(grid).splitlines()[1] == "low: Sparkline, 3 values: min 1, max 3, last 3, trend up"
+    with pytest.raises(TypeError):
+        chart.SmallMultiples([("x", chart.Gauge("g", 1))])
