@@ -211,6 +211,11 @@ impl GraphSourceOptions {
         .map(|(flag, _)| (flag, &["deps"][..]))
         .collect()
     }
+
+    /// Take `--depth` for `rich profile`, which shares the flag.
+    pub(crate) fn take_depth(&mut self) -> Option<usize> {
+        self.depth.take()
+    }
 }
 
 type Failure = (ExitClass, String);

@@ -465,3 +465,113 @@ def test_a_record_view():
     assert drawn(data.RecordView(node, expand=["owner.oncall"]), width=44) == out
     with pytest.raises(ValueError):
         data.RecordView(record, expand=["owner..x["])
+
+
+# ---------------------------------------------------------------------------
+# Nested JSON Lines profiles (#705) and conditional styles (#701)
+
+NESTED = (
+    '{"id": 1, "user": {"name": "ada"}, "tags": ["a", "b"]}\n'
+    '{"id": "2", "user": null}\n'
+    "not json\n"
+    '{"id": 3, "tags": []}\n'
+)
+
+
+def test_json_lines_profile_path_by_path(tmp_path):
+    profile = data.Profile.from_text(NESTED, format="jsonl", name="e.jsonl")
+    assert profile.is_nested
+    assert [c["name"] for c in profile.columns] == ["id", "user", "user.name", "tags", "tags[]"]
+    ident = profile.column("id")
+    assert ident["types"] == {"string": 1, "number": 2} and ident["mixed"]
+    user = profile.column("user")
+    assert (user["present"], user["absent"], user["nulls"]) == (2, 1, 1)
+    assert profile.column("tags[]")["values"] == 2
+    assert (profile.malformed, profile.malformed_lines) == (1, [3])
+    assert profile.paths["depth"] == 4 and not profile.paths["capped"]
+    assert profile.table_headers == ["path", "types", "absent", "distinct", "min", "max", "mean"]
+    out = drawn(profile, width=100)
+    assert out.startswith("e.jsonl: 3 records, 5 paths\n")
+    assert "! num 67% · str 33%" in out
+    # Flat, shallow and capped.
+    flat = data.Profile.from_text('{"a": {"b": 1}}\n', format="jsonl", flat=True)
+    assert not flat.is_nested and flat.paths is None
+    assert [c["name"] for c in flat.columns] == ["a"]
+    shallow = data.Profile.from_text('{"a": {"b": 1}}\n', format="jsonl", depth=1)
+    assert [c["name"] for c in shallow.columns] == ["a"]
+    capped = data.Profile.from_text('{"a": 1, "b": 2, "c": 3}\n', format="jsonl", max_paths=2)
+    assert capped.paths["capped"] and capped.paths["dropped"] == ["c"]
+    path = tmp_path / "e.jsonl"
+    path.write_text(NESTED)
+    assert data.Profile.from_path(path).malformed == 1
+    with pytest.raises(data.DataSourceError):
+        data.Profile.from_path(path, flat=True)
+    with pytest.raises(ValueError):
+        data.Profile.from_text(NESTED, format="jsonl", depth=0)
+    # Python records, as JSON Lines are.
+    records = data.Profile.from_records([{"a": {"b": [1, 2]}}, {"a": None}], name="py")
+    assert [c["name"] for c in records.columns] == ["a", "a.b", "a.b[]"]
+    assert records.column("a")["nulls"] == 1
+    assert records.heading == "py: 2 records, 3 paths"
+
+
+def test_style_rules_from_python():
+    from rs_rich.ext.table import StyleRule, StyleRules
+
+    rule = StyleRule("latency", ">", 500, "bold red")
+    assert (rule.column, rule.op, rule.value, rule.style, rule.target) == (
+        "latency", "gt", 500, "bold red", "cell",
+    )
+    assert rule.spec == "latency>500:bold red" and str(rule) == rule.spec
+    assert rule.matches("612") and not rule.matches(500)
+    parsed = StyleRule.parse("status=failed:row:on red")
+    assert (parsed.op, parsed.value, parsed.target) == ("eq", "failed", "row")
+    assert repr(parsed) == "StyleRule.parse('status==failed:row:on red')"
+    with pytest.raises(ValueError, match='rule "latency>:red": no value after'):
+        StyleRule.parse("latency>:red")
+    with pytest.raises(ValueError, match="unknown op"):
+        StyleRule("a", "like", 1)
+    with pytest.raises(ValueError, match="unknown target"):
+        StyleRule("a", "eq", 1, target="table")
+    by_index = StyleRule(1, "empty", style="dim", target="column")
+    assert by_index.column == 1 and by_index.spec == "#1 empty:column:dim"
+
+    rules = StyleRules(["latency>500:bold red", parsed])
+    assert len(rules) == 2
+    assert [r.spec for r in rules] == ["latency>500:bold red", "status==failed:row:on red"]
+    more = rules.add("note empty:dim")
+    assert (len(more), len(rules)) == (3, 2)
+    assert repr(more).startswith("StyleRules(['latency>500:bold red', ")
+    from_toml = StyleRules.from_toml(
+        "[[rules]]\ncolumn = 'p99'\nop = '>='\nvalue = 0.5\nstyle = 'yellow'\n"
+    )
+    assert from_toml.rules[0].spec == "p99>=0.5:yellow"
+    with pytest.raises(ValueError, match=r"rules\[0\]: missing `value`"):
+        StyleRules.from_toml("[[rules]]\ncolumn = 'a'\nstyle = 'red'\n")
+    with pytest.raises(TypeError):
+        StyleRules(5)
+
+    def styled(renderable) -> str:
+        out = io.StringIO()
+        Console(file=out, width=60, force_terminal=True, color_system="standard").print(renderable)
+        return out.getvalue()
+
+    # A TableData, a records TableView and a profile's table take rules.
+    table = TableData(["service", "latency"], [["web", 120], ["api", 612]], rules=rules)
+    assert "\x1b[1;31m612" in styled(table)
+    assert "\x1b[1;31m" not in styled(TableData(["service", "latency"], [["web", 120]]))
+    seen = []
+
+    def big(value):
+        seen.append(value)
+        return isinstance(value, int) and value > 100
+
+    predicate = StyleRule.when("latency", big, "italic")
+    assert predicate.op is None and predicate.spec is None and predicate.matches(612)
+    plain = TableData(["service", "latency"], [["web", 120]])
+    assert plain.style_rules(predicate) is plain
+    assert "\x1b[3m" in styled(plain) and 120 in seen
+    view = ext_data.TableView([{"n": 1}, {"n": 700}], rules="n>500:reverse")
+    assert "7;36m700" in styled(view) and "7;36m  1" not in styled(view)
+    profile = data.Profile(services()).style_rules("nulls>0:row:reverse")
+    assert "\x1b[7m" in styled(profile)

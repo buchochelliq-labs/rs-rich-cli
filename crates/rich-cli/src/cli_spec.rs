@@ -124,7 +124,18 @@ fn command_options(name: &str) -> Vec<ArgSpec> {
         ],
         "schema" => &["er", "width"],
         "chart" => &["kind", "x", "y", "width"],
-        "profile" => &["sample", "columns", "top", "report", "width"],
+        "profile" => &[
+            "sample",
+            "columns",
+            "top",
+            "depth",
+            "max-paths",
+            "flat",
+            "style-rule",
+            "rules",
+            "report",
+            "width",
+        ],
         "env" => &["show-secrets", "width"],
         "capture" => &["cast", "redact", "redact-pattern", "sanitize", "width"],
         "log" => &[
@@ -185,6 +196,15 @@ fn command_options(name: &str) -> Vec<ArgSpec> {
             // commands; its help lists them with its own options.
             if name == "deps" && long != &"width" {
                 arg.heading = Some(SOURCES.into());
+            }
+            // `--depth` is `rich deps`'s too; in `rich profile --help` it
+            // sits with the profile's own options.
+            if name == "profile" && *long == "depth" {
+                arg = arg.heading(PROFILE).help(
+                    "With `rich profile` of JSON Lines, profile paths at most N steps deep \
+                     (default 4), a key or [] each; an object or array at the last step \
+                     counts as its JSON text",
+                );
             }
             arg
         })
@@ -735,7 +755,9 @@ fn mode_options() -> Vec<ArgSpec> {
             "depth",
             "N",
             SOURCES,
-            "With `rich deps`, show at most N levels below each workspace member",
+            "With `rich deps`, show at most N levels below each workspace member; with `rich \
+             profile`, profile JSON paths at most N steps deep (default 4), an object or array \
+             at the last step counting as its JSON text",
         ),
         flag(
             "duplicates",
@@ -890,6 +912,40 @@ fn mode_options() -> Vec<ArgSpec> {
              numeric (default 5); with `rich deps --sizes`, `--timings` or `--baseline`, the \
              units shown (default 20)",
         ),
+        option(
+            "max-paths",
+            "N",
+            PROFILE,
+            "With `rich profile` of JSON Lines, profile at most N paths (default 200), in the \
+             order first seen; the rest are noted",
+        ),
+        flag(
+            "flat",
+            PROFILE,
+            "With `rich profile` of JSON Lines, profile rows of the top-level keys (nested \
+             values as JSON text) instead of every nested path",
+        ),
+        option(
+            "style-rule",
+            "RULE",
+            PROFILE,
+            "Style the cells, rows or columns of a data table by value: COLUMN OP VALUE:STYLE \
+             or COLUMN OP VALUE:row:STYLE (e.g. 'latency>500:bold red', \
+             'status=failed:row:on red'); OP is == != < <= > >= *= ^= $= or a word such as \
+             contains or empty. Repeatable; applies to --csv, `rich profile`'s table and \
+             `rich inspect --table`, and has no effect elsewhere",
+        )
+        .multiple(true)
+        .config_key("rules"),
+        option(
+            "rules",
+            "FILE",
+            PROFILE,
+            "Read style rules from FILE's [[rules]] tables (column, op, value, style, target), \
+             after the rules before it",
+        )
+        .value(ValueHint::Path)
+        .multiple(true),
         option(
             "highlighter",
             "NAME",
@@ -1945,6 +2001,7 @@ pub(crate) fn config_reference() -> ConfigReference {
             "watch_interval" | "watch_debounce" | "image_brightness" | "image_contrast"
             | "image_gamma" => "number",
             "plugins" => "list of paths",
+            "rules" => "array of rule tables",
             _ => continue,
         };
         entry.kind = kind.to_string();
@@ -2042,6 +2099,7 @@ mod tests {
     const CHART_RS: &str = include_str!("chart.rs");
     const PROFILE_RS: &str = include_str!("profile.rs");
     const LOGS_RS: &str = include_str!("logs.rs");
+    const STYLE_RULES_RS: &str = include_str!("style_rules.rs");
     #[cfg(feature = "interact")]
     const INTERACTIVE: &str = include_str!("interactive.rs");
     #[cfg(feature = "art")]
@@ -2104,6 +2162,7 @@ mod tests {
             item(CHART_RS, "impl ChartOptions {"),
             item(PROFILE_RS, "impl ProfileOptions {"),
             item(LOGS_RS, "impl LogOptions {"),
+            item(STYLE_RULES_RS, "impl RuleOptions {"),
         ] {
             out.extend(option_literals(source));
         }

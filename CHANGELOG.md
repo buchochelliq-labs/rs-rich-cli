@@ -913,6 +913,62 @@ test.
   column window. The Python charts page gains three sections and two
   pictures.
 
+### Nested JSON Lines profiles and style rules everywhere (data 0.0.3, ext 0.0.16, cli 0.0.19)
+
+0.0.19 workstream 15 (#705, #701).
+
+- **Nested paths:** `rich profile` profiles JSON Lines path by path. Each key
+  of a nested object is a path (`user.plan`), an array's items are
+  `tags[]`, and a key of the objects in an array is `items[].sku`. A key
+  holding `.`, `[`, `]`, a quote or a control character is written as a
+  JSON string in brackets: `["http.status"]`. `--depth N` (4) bounds the
+  steps and `--max-paths N` (200) the paths; the paths past the cap are
+  named in a note and a last table row.
+- **Presence and types:** each path counts the records that lack it apart
+  from an explicit `null`, and the JSON types its values had. The table
+  shows the mix (`str 89% · null 11%`) and the absent records, and marks a
+  path of more than one type with `!`.
+- **Malformed lines** are counted and skipped, with their line numbers in a
+  note, rather than ending the profile.
+- **`--report json`** adds `paths`, `malformed`, `malformed_lines`, and per
+  path `present`, `absent`, `values`, `types` and `mixed`. Every key of a
+  flat profile is kept.
+- **Migration:** JSON Lines are now profiled path by path by default.
+  `--flat` gives the 0.0.16 output, rows of the top-level keys, and still
+  stops at a line that is not JSON. CSV and TSV are unchanged. `--depth` is
+  shared with `rich deps`.
+- **`rs-rich-data`:** `JsonProfiler`, `Profile::from_json_lines`,
+  `TypeCounts`, `PathSummary` and `path_key`; `ProfileOptions` gains `depth`
+  and `max_paths`, and `ColumnProfile` gains the presence and type fields.
+  Time is linear in the input and memory is bounded by the paths and their
+  samples.
+- **Style rules from the command line:** `--style-rule 'latency>500:bold
+  red'` styles a cell, and `--style-rule 'status=failed:row:on red'` a row.
+  The grammar maps one to one onto `StyleRule`: a symbol (`==`, `!=`, `<`,
+  `<=`, `>`, `>=`, `*=`, `^=`, `$=`) or a comparison word, an optional
+  target, and quotes for a value that holds `:` or must stay text. `--rules
+  FILE` reads `[[rules]]` tables. Rules apply to `--csv` tables, `rich
+  profile`'s table and `rich inspect --table`, and nowhere else.
+- **Rules in config profiles:** `[[defaults.rules]]` and
+  `[[profiles.NAME.rules]]` hold rules. They add up: the defaults', then the
+  profile's, then the command line's.
+- **Clear errors:** a bad rule is a usage error that names it and says what
+  is wrong. A rule for a column the table lacks is a warning.
+- **`rs-rich-ext`:** `StyleRule::parse`, `to_spec` and `Display`,
+  `Comparison::name` and `symbol`, `Target::name`, and `style_rules` on
+  `data::TableView` and `data::Explorer`.
+- **Python:** `rs_rich.ext.table.StyleRule` and `StyleRules` (with `parse`,
+  `when` for a Python predicate, and `from_toml`), a `rules` argument on
+  `TableData` and `TableView`, and `Profile.style_rules`. `Profile.from_path`
+  and `from_text` profile JSON Lines path by path (`flat=True` for rows), and
+  `Profile.from_records` profiles Python records. Python can now use
+  conditional table styles, which 0.0.16 listed as missing.
+- **Docs:** [Style cells by value](docs/cli.md#style-cells-by-value-0019)
+  and [Nested JSON Lines](docs/cli.md#nested-json-lines-0019) in the CLI
+  guide, the [data guide](docs/guide/data/index.md#conditional-styles), the
+  [Python tables page](docs/python/ext/tables.md#conditional-styles), and
+  `docs/tapes/profile-nested.tape` (not yet recorded).
+
 ### One process per browser session (web 0.0.2)
 
 0.0.19 workstream 3.

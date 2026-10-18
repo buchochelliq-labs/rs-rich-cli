@@ -25,6 +25,16 @@
 //! Nulls are [`Value::Null`] and the null tokens (by default
 //! [`DEFAULT_NULL_TOKENS`]: an empty cell, `null`, `NULL`, `NA`, `N/A`).
 //!
+//! **JSON records** have more shape than rows: [`Profile::from_json_lines`]
+//! and [`JsonProfiler`] (#705) profile them path by path (`user.plan`,
+//! `tags[]`, `items[].sku`), each path with the records that lack it apart
+//! from `null`, and the mix of JSON types its values had ([`TypeCounts`]).
+//! See the [`nested`] module for paths, bounds and quoting.
+//!
+//! **Conditional styles** ([`Profile::style_rules`]) style the table of
+//! columns with `rich_ext`'s [`table::rules`](rich_ext::table::rules), by
+//! its headings ([`Profile::table_headers`]).
+//!
 //! ```
 //! use rich::Console;
 //! use rich_data::profile::Profile;
@@ -55,15 +65,23 @@
 //! [`DEFAULT_NULL_TOKENS`]: crate::infer::DEFAULT_NULL_TOKENS
 
 use rich::{
-    ColumnOptions, Console, ConsoleOptions, Justify, Renderable, Segment, Style, Table, Text,
+    Cell, ColumnOptions, Console, ConsoleOptions, Justify, Renderable, Segment, Style, Table, Text,
 };
 use rich_ext::chart::{BarChart, Heatmap, Histogram};
 use rich_ext::sanitize::sanitize_single_line;
+use rich_ext::table::StyleRules;
 use serde::{Deserialize, Serialize};
 
 use crate::infer::{parse_float, Inferrer, DEFAULT_NULL_TOKENS};
-use crate::stats::{number, Stats, StatsOptions};
+use crate::stats::{number, ColumnStats, Stats, StatsOptions};
 use crate::{DataError, Row, RowSource, Rows, Value};
+
+pub mod nested;
+
+pub use nested::{
+    path_key, JsonProfiler, PathSummary, TypeCounts, DEFAULT_DEPTH, DEFAULT_MAX_PATHS,
+    MAX_MALFORMED_LINES,
+};
 
 /// The rows a profile keeps by default.
 pub const DEFAULT_SAMPLE: usize = 10_000;
@@ -86,6 +104,7 @@ pub const STYLES: &[(&str, &str)] = &[
     ("profile.type", "cyan"),
     ("profile.note", "dim"),
     ("profile.null", "yellow"),
+    ("profile.mixed", "magenta"),
 ];
 
 /// The console theme's style for `key`, else its default from [`STYLES`].
@@ -117,8 +136,15 @@ pub struct ProfileOptions {
     /// Only these columns, by name, in this order (default every column).
     pub columns: Option<Vec<String>>,
     /// The cells that count as null, compared after trimming (default
-    /// [`DEFAULT_NULL_TOKENS`]).
+    /// [`DEFAULT_NULL_TOKENS`]). A nested profile ([`JsonProfiler`]) has
+    /// JSON's own `null` and ignores them.
     pub nulls: Vec<String>,
+    /// For a nested profile ([`JsonProfiler`]), the deepest path profiled,
+    /// in steps (a key or `[]`; default [`DEFAULT_DEPTH`], at least 1).
+    pub depth: usize,
+    /// For a nested profile, the most paths profiled (default
+    /// [`DEFAULT_MAX_PATHS`], at least 1).
+    pub max_paths: usize,
 }
 
 impl Default for ProfileOptions {
@@ -130,6 +156,8 @@ impl Default for ProfileOptions {
             buckets: DEFAULT_BUCKETS,
             columns: None,
             nulls: DEFAULT_NULL_TOKENS.map(String::from).to_vec(),
+            depth: DEFAULT_DEPTH,
+            max_paths: DEFAULT_MAX_PATHS,
         }
     }
 }
@@ -165,6 +193,37 @@ pub struct ColumnProfile {
     pub p75: Option<f64>,
     /// How the sampled values are spread.
     pub distribution: Distribution,
+    /// For a nested profile: the records that hold the path at least once.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub present: Option<u64>,
+    /// For a nested profile: the records that do not hold the path (an
+    /// explicit `null` is present, and counted in `nulls`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub absent: Option<u64>,
+    /// For a nested profile: the values seen at the path, `null`s included
+    /// (more than `present` inside arrays).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub values: Option<u64>,
+    /// For a nested profile: how many of those values were each JSON type.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub types: Option<TypeCounts>,
+    /// For a nested profile: whether the values were more than one JSON
+    /// type besides `null`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mixed: Option<bool>,
+}
+
+impl ColumnProfile {
+    /// `absent` over the row count, for a nested profile.
+    pub fn absent_rate(&self, rows: u64) -> Option<f64> {
+        self.absent.map(|absent| {
+            if rows == 0 {
+                0.0
+            } else {
+                absent as f64 / rows as f64
+            }
+        })
+    }
 }
 
 /// How a column's values are spread.
@@ -242,6 +301,34 @@ pub struct Profile {
     missing: MissingMap,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     notes: Vec<String>,
+    /// Set for a nested profile ([`JsonProfiler`]): its limits and the paths
+    /// past them.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    paths: Option<PathSummary>,
+    /// Lines that were not JSON, skipped (a nested profile only).
+    #[serde(default, skip_serializing_if = "is_zero")]
+    malformed: u64,
+    /// The first of them, by line number.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    malformed_lines: Vec<usize>,
+    /// Conditional styles for the table; not part of the model.
+    #[serde(skip)]
+    rules: Rules,
+}
+
+fn is_zero(n: &u64) -> bool {
+    *n == 0
+}
+
+/// [`StyleRules`] held by a [`Profile`]: presentation, so two profiles with
+/// different rules are still equal.
+#[derive(Clone, Debug, Default)]
+struct Rules(StyleRules);
+
+impl PartialEq for Rules {
+    fn eq(&self, _: &Self) -> bool {
+        true
+    }
 }
 
 impl Profile {
@@ -289,9 +376,14 @@ impl Profile {
         self.sample
     }
 
-    /// Whether the sample is fewer rows than were read.
+    /// Whether the sample is fewer rows than were read; for a nested
+    /// profile, whether any path kept fewer of its values than it had (then
+    /// [`sample_size`](Self::sample_size) is the most values a path keeps).
     pub fn sampled(&self) -> bool {
-        (self.sample as u64) < self.rows
+        match &self.paths {
+            Some(paths) => paths.sampled,
+            None => (self.sample as u64) < self.rows,
+        }
     }
 
     /// One entry per column, in order.
@@ -314,8 +406,99 @@ impl Profile {
         &self.notes
     }
 
+    /// Whether this is a nested profile of JSON paths ([`JsonProfiler`]):
+    /// its columns are paths, each with its presence and type mix.
+    pub fn is_nested(&self) -> bool {
+        self.paths.is_some()
+    }
+
+    /// A nested profile's limits, and the paths past its cap; `None` for a
+    /// profile of rows.
+    pub fn paths(&self) -> Option<&PathSummary> {
+        self.paths.as_ref()
+    }
+
+    /// Lines skipped because they were not JSON (a nested profile only).
+    pub fn malformed(&self) -> u64 {
+        self.malformed
+    }
+
+    /// The first of them by line number (at most
+    /// [`MAX_MALFORMED_LINES`]).
+    pub fn malformed_lines(&self) -> &[usize] {
+        &self.malformed_lines
+    }
+
+    /// Style the table of columns by value (`rich_ext`'s
+    /// [`table::rules`](rich_ext::table::rules)). A rule names a heading
+    /// ([`table_headers`](Self::table_headers)) and compares the model's
+    /// value, not the cell's text: `nulls`, `absent` and `distinct` are
+    /// counts, `mean` a number, the rest text.
+    ///
+    /// ```
+    /// use rich::Console;
+    /// use rich_data::profile::Profile;
+    /// use rich_data::Rows;
+    /// use rich_ext::table::{StyleRule, StyleRules};
+    ///
+    /// let mut rows = Rows::new(["a", "b"]);
+    /// rows.push(["1".into(), "".into()]);
+    /// let rules = StyleRules::new().rule(StyleRule::parse("nulls>0:row:bold red").unwrap());
+    /// let profile = Profile::of(&rows).style_rules(rules);
+    /// let console = Console::builder().width(60).force_terminal(true).build();
+    /// let out = console.render_export(&profile.to_table());
+    /// assert!(out.contains("\x1b[1;31mb"), "{out:?}");
+    /// ```
+    pub fn style_rules(mut self, rules: StyleRules) -> Self {
+        self.rules = Rules(rules);
+        self
+    }
+
+    /// The style rules set with [`style_rules`](Self::style_rules).
+    pub fn rules(&self) -> &StyleRules {
+        &self.rules.0
+    }
+
+    /// The headings of the table of columns, which style rules name:
+    /// `column`, `type`, `nulls`, `distinct`, `min`, `max` and `mean`; for
+    /// a nested profile `path`, `types` (the mix, `null` among them),
+    /// `absent`, `distinct`, `min`, `max` and `mean`.
+    pub fn table_headers(&self) -> &'static [&'static str] {
+        if self.is_nested() {
+            &["path", "types", "absent", "distinct", "min", "max", "mean"]
+        } else {
+            &["column", "type", "nulls", "distinct", "min", "max", "mean"]
+        }
+    }
+
+    /// One row of the table as style rules compare it, in
+    /// [`table_headers`](Self::table_headers) order.
+    fn rule_values(&self, c: &ColumnProfile) -> Vec<Value> {
+        let text = |v: &Option<String>| v.clone().map_or(Value::Null, Value::Str);
+        let count = |n: u64| Value::Int(i64::try_from(n).unwrap_or(i64::MAX));
+        let mut values = vec![Value::Str(c.name.clone())];
+        if self.is_nested() {
+            values.push(Value::Str(c.types.map(|t| t.mix()).unwrap_or_default()));
+            values.push(count(c.absent.unwrap_or(0)));
+        } else {
+            values.push(Value::Str(c.data_type.clone()));
+            values.push(count(c.nulls));
+        }
+        values.extend([
+            count(c.distinct as u64),
+            text(&c.min),
+            text(&c.max),
+            c.mean.map_or(Value::Null, Value::Float),
+        ]);
+        values
+    }
+
     /// The profile as JSON: `rows`, `sample`, `sampled`, `columns`,
-    /// `missing`, and `name` and `notes` when set.
+    /// `missing`, and `name` and `notes` when set. A nested profile adds
+    /// `paths` (its `depth`, `max_paths`, whether it was `capped` and the
+    /// paths `dropped`), `malformed` and `malformed_lines` when lines were
+    /// skipped, and per column `present`, `absent`, `values`, `types` and
+    /// `mixed`.
     pub fn to_json(&self) -> serde_json::Value {
         let mut value = serde_json::to_value(self).unwrap_or_default();
         if let Some(object) = value.as_object_mut() {
@@ -327,21 +510,39 @@ impl Profile {
     /// The heading: the name, the rows (and the sample, when smaller) and
     /// the columns.
     pub fn heading(&self) -> String {
-        let rows = if self.sampled() {
-            format!(
-                "sampled {} of {} rows",
-                grouped(self.sample as u64),
-                grouped(self.rows)
-            )
-        } else {
-            format!(
-                "{} {}",
+        let count = self.columns.len() as u64;
+        let body = if self.is_nested() {
+            // Records and paths; each path is sampled on its own.
+            let mut body = format!(
+                "{} {}, {} {}",
                 grouped(self.rows),
-                plural(self.rows, "row", "rows")
-            )
+                plural(self.rows, "record", "records"),
+                grouped(count),
+                plural(count, "path", "paths")
+            );
+            if self.sampled() {
+                body.push_str(&format!(
+                    ", sampled to {} values a path",
+                    grouped(self.sample as u64)
+                ));
+            }
+            body
+        } else {
+            let rows = if self.sampled() {
+                format!(
+                    "sampled {} of {} rows",
+                    grouped(self.sample as u64),
+                    grouped(self.rows)
+                )
+            } else {
+                format!(
+                    "{} {}",
+                    grouped(self.rows),
+                    plural(self.rows, "row", "rows")
+                )
+            };
+            format!("{rows}, {count} {}", plural(count, "column", "columns"))
         };
-        let columns = self.columns.len() as u64;
-        let body = format!("{rows}, {columns} {}", plural(columns, "column", "columns"));
         match &self.name {
             Some(name) => format!("{}: {body}", sanitize_single_line(name)),
             None => body,
@@ -351,14 +552,21 @@ impl Profile {
     /// The table of columns: type, nulls, distinct, min, max and mean (the
     /// median and quartiles are in the model and under each numeric
     /// column's heading).
+    ///
+    /// A nested profile's table has each path's type mix (`str 90% · null
+    /// 10%`, with `!` before the mix of a path holding more than one type
+    /// besides `null`) and the records that lack it (`absent`), in place of
+    /// the inferred type and the nulls (the mix has their share).
     pub fn to_table(&self) -> Table {
-        self.table(true)
+        self.table(None, Hold::NamesAndMixes)
     }
 
-    /// [`to_table`](Self::to_table), its name column held at the names'
-    /// width (up to 16) when `names_first`.
-    fn table(&self, names_first: bool) -> Table {
+    /// [`to_table`](Self::to_table), its columns held as `hold` says, and
+    /// mixed type mixes styled from `console`'s theme when there is one.
+    fn table(&self, console: Option<&Console>, hold: Hold) -> Table {
+        let names_first = hold != Hold::Nothing;
         let mut table = Table::new();
+        let headers = self.table_headers();
         // Names give way last.
         let widest = self
             .columns
@@ -366,34 +574,110 @@ impl Profile {
             .map(|c| c.name.chars().count())
             .max()
             .unwrap_or(0);
+        // A nested profile's paths are held whole (up to 24) and not
+        // narrowed before the other columns: paths differ at their ends.
+        let nested_names = names_first && self.is_nested();
         table.add_column_with(
-            Text::new("column"),
+            Text::new(headers[0]),
             ColumnOptions {
-                min_width: names_first.then(|| widest.clamp(6, 16)),
+                min_width: names_first.then(|| widest.clamp(6, if nested_names { 24 } else { 16 })),
+                no_wrap: nested_names,
                 ..ColumnOptions::default()
             },
         );
-        table.add_column("type");
-        for heading in ["nulls", "distinct", "min", "max", "mean"] {
-            table.add_column_justify(heading, Justify::Right);
+        // A nested profile's type mixes give way after the names.
+        let mixes = hold == Hold::NamesAndMixes && self.is_nested();
+        table.add_column_with(
+            Text::new(headers[1]),
+            ColumnOptions {
+                no_wrap: mixes,
+                ..ColumnOptions::default()
+            },
+        );
+        for heading in &headers[2..] {
+            table.add_column_justify(*heading, Justify::Right);
         }
-        for c in &self.columns {
+        let mixed = console.map(|console| style(console, "profile.mixed", STYLES));
+        let rules = &self.rules.0;
+        let values: Vec<Vec<Value>> = if rules.is_empty() {
+            Vec::new()
+        } else {
+            self.columns.iter().map(|c| self.rule_values(c)).collect()
+        };
+        let resolved = (!rules.is_empty()).then(|| rules.resolve(headers, &values));
+        for (index, c) in self.columns.iter().enumerate() {
             let optional = |v: Option<f64>| v.map(number).unwrap_or_default();
             let text = |v: &Option<String>| v.as_deref().map(label).unwrap_or_default();
-            table.add_row_text(
+            let mut cells = vec![Text::new(sanitize_single_line(&c.name))];
+            if self.is_nested() {
+                let mix = c.types.unwrap_or_default().mix();
+                cells.push(match (c.mixed == Some(true), &mixed) {
+                    (true, Some(style)) => Text::styled(format!("! {mix}"), style.clone()),
+                    (true, None) => Text::new(format!("! {mix}")),
+                    (false, _) => Text::new(mix),
+                });
+                cells.push(Text::new(nulls(
+                    c.absent.unwrap_or(0),
+                    c.absent_rate(self.rows).unwrap_or(0.0),
+                )));
+            } else {
+                cells.push(Text::new(c.data_type.clone()));
+                // A nested path's nulls are in its type mix.
+                cells.push(Text::new(nulls(c.nulls, c.null_rate)));
+            }
+            // An object or array walked into has no values of its own.
+            let types = c.types.unwrap_or_default();
+            let container = c.count == 0 && types.object + types.array > 0;
+            cells.extend(
                 [
-                    sanitize_single_line(&c.name),
-                    c.data_type.clone(),
-                    nulls(c.nulls, c.null_rate),
-                    c.distinct.to_string(),
+                    if container {
+                        String::new()
+                    } else {
+                        c.distinct.to_string()
+                    },
                     text(&c.min),
                     text(&c.max),
                     optional(c.mean),
                 ]
                 .into_iter()
-                .map(Text::new)
-                .collect(),
+                .map(Text::new),
             );
+            let (Some(resolved), Some(row)) = (&resolved, values.get(index)) else {
+                table.add_row_text(cells);
+                continue;
+            };
+            let cells = cells
+                .into_iter()
+                .enumerate()
+                .map(|(column, mut text)| {
+                    if let Some(style) = resolved.cell_style(row, column) {
+                        let len = text.plain().len();
+                        text.stylize(style, 0, len);
+                    }
+                    Cell::Text(text)
+                })
+                .collect();
+            table.add_row_with(cells, resolved.row_style(row).map(Into::into), false);
+        }
+        // A note row when a nested profile met its cap.
+        if let Some(paths) = self.paths.as_ref().filter(|p| p.capped) {
+            let more = paths.dropped.len() as u64;
+            let count = if paths.more_dropped {
+                format!("{}+", grouped(more))
+            } else {
+                grouped(more)
+            };
+            let note = format!(
+                "{count} more {} not profiled (max_paths {})",
+                plural(more, "path", "paths"),
+                grouped(paths.max_paths as u64)
+            );
+            let dim = console.map(|console| style(console, "profile.note", STYLES));
+            let cell = |text: String| match &dim {
+                Some(style) => Text::styled(text, style.clone()),
+                None => Text::new(text),
+            };
+            table.add_row_text(vec![cell("…".into()), cell(note)]);
         }
         table
     }
@@ -401,18 +685,38 @@ impl Profile {
     /// The missing-value map as a heatmap: a row per bucket, a column per
     /// column, each cell the percentage of the bucket's cells that are null.
     /// `None` when nothing is null.
+    ///
+    /// A nested profile counts a record as missing a path when it lacks the
+    /// path or holds only `null` there, and maps only the paths something is
+    /// missing from.
     pub fn missing_heatmap(&self) -> Option<Heatmap> {
-        if self.columns.iter().all(|c| c.nulls == 0) {
+        if !self.is_nested() && self.columns.iter().all(|c| c.nulls == 0) {
             return None;
         }
-        let widest = self
-            .columns
+        let missing = |i: usize| {
+            self.missing
+                .buckets
+                .iter()
+                .any(|b| b.nulls.get(i).is_some_and(|&n| n > 0))
+        };
+        // Every column, or for a nested profile those with anything missing.
+        let shown: Vec<usize> = (0..self.columns.len())
+            .filter(|&i| !self.is_nested() || missing(i))
+            .collect();
+        if shown.is_empty() {
+            return None;
+        }
+        let widest = shown
             .iter()
-            .map(|c| c.name.chars().count())
+            .map(|&i| self.columns[i].name.chars().count())
             .max()
             .unwrap_or(1);
         let mut map = Heatmap::new()
-            .columns(self.columns.iter().map(|c| sanitize_single_line(&c.name)))
+            .columns(
+                shown
+                    .iter()
+                    .map(|&i| sanitize_single_line(&self.columns[i].name)),
+            )
             .range(0.0, 100.0)
             .cell_width((widest + 1).clamp(2, 12));
         for bucket in &self.missing.buckets {
@@ -423,10 +727,23 @@ impl Profile {
                 format!("{}-{last}", bucket.first)
             };
             let rows = bucket.rows.max(1) as f64;
-            map = map.row(label, bucket.nulls.iter().map(|&n| n as f64 * 100.0 / rows));
+            let share =
+                |&i: &usize| bucket.nulls.get(i).copied().unwrap_or(0) as f64 * 100.0 / rows;
+            map = map.row(label, shown.iter().map(share));
         }
         Some(map)
     }
+}
+
+/// Which columns of the table of columns keep their width when it is tight.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Hold {
+    /// The names (up to 16) and a nested profile's type mixes (up to 20).
+    NamesAndMixes,
+    /// The names alone.
+    Names,
+    /// Neither.
+    Nothing,
 }
 
 /// A column's distribution as bars: the histogram's bins, or the most
@@ -465,15 +782,15 @@ impl Renderable for Profile {
             &mut lines,
         );
         if self.sampled() {
-            text(
-                Text::styled(
-                    "types, distinct values, statistics and distributions are of a uniform \
-                     sample; nulls and the missing-value map count every row",
-                    note.clone(),
-                ),
-                0,
-                &mut lines,
-            );
+            let says = if self.is_nested() {
+                "types, distinct values, statistics and distributions are of a uniform sample \
+                 of each path's values; presence, type mixes, nulls and the missing-value map \
+                 count every record"
+            } else {
+                "types, distinct values, statistics and distributions are of a uniform sample; \
+                 nulls and the missing-value map count every row"
+            };
+            text(Text::styled(says, note.clone()), 0, &mut lines);
         }
         for line in &self.notes {
             text(
@@ -486,15 +803,46 @@ impl Renderable for Profile {
             return join(lines);
         }
         lines.push(Vec::new());
-        // A name column held wide can push the table past a narrow width;
-        // then the names give way too.
-        let mut table = self.to_table();
-        let drawn = console.render(&table, Some(&options));
-        if Segment::split_lines(&drawn)
-            .iter()
-            .any(|line| line.iter().map(Segment::cell_length).sum::<usize>() > options.max_width)
-        {
-            table = self.table(false);
+        // A name column (and a nested profile's type mixes) held wide can
+        // push the table past a narrow width; then the mixes give way, then
+        // the names too. A nested profile's columns also give way rather
+        // than cut another column's heading.
+        let fits = |table: &Table| {
+            let drawn = console.render(table, Some(&options));
+            let lines = Segment::split_lines(&drawn);
+            let within = lines.iter().all(|line| {
+                line.iter().map(Segment::cell_length).sum::<usize>() <= options.max_width
+            });
+            let headings = || {
+                let heading: String = lines
+                    .get(1)
+                    .map(|line| line.iter().map(|s| s.text.to_string()).collect())
+                    .unwrap_or_default();
+                self.table_headers().iter().all(|h| heading.contains(h))
+            };
+            within && (!self.is_nested() || headings())
+        };
+        let mut table = self.table(Some(console), Hold::NamesAndMixes);
+        let mut fit = fits(&table);
+        if self.is_nested() && !fit {
+            // Whole paths with the mixes wrapped, while the six other
+            // columns keep about eight cells each.
+            let names = self
+                .columns
+                .iter()
+                .map(|c| c.name.chars().count().min(24))
+                .max()
+                .unwrap_or(0);
+            if options.max_width >= names + 3 + 48 {
+                table = self.table(Some(console), Hold::Names);
+                let drawn = console.render(&table, Some(&options));
+                fit = Segment::split_lines(&drawn).iter().all(|line| {
+                    line.iter().map(Segment::cell_length).sum::<usize>() <= options.max_width
+                });
+            }
+        }
+        if !fit {
+            table = self.table(Some(console), Hold::Nothing);
         }
         block(console, &options, &table, 0, &mut lines);
 
@@ -509,6 +857,27 @@ impl Renderable for Profile {
                 &c.data_type,
                 Some(style(console, "profile.type", STYLES).into()),
             );
+            // A nested path: its type mix when it holds more than one type
+            // besides null, and the records that lack it.
+            let types = c.types.unwrap_or_default();
+            if c.mixed == Some(true) {
+                title.append(" · ", None);
+                title.append(
+                    &format!("mixed types: {}", types.mix()),
+                    Some(style(console, "profile.mixed", STYLES).into()),
+                );
+            }
+            if let Some(absent) = c.absent.filter(|&n| n > 0) {
+                title.append(" · ", None);
+                title.append(
+                    &format!(
+                        "{} absent ({})",
+                        grouped(absent),
+                        percent(c.absent_rate(self.rows).unwrap_or(0.0))
+                    ),
+                    Some(style(console, "profile.null", STYLES).into()),
+                );
+            }
             if c.nulls > 0 {
                 title.append(" · ", None);
                 title.append(
@@ -521,17 +890,21 @@ impl Renderable for Profile {
                     Some(style(console, "profile.null", STYLES).into()),
                 );
             }
+            // A nested object or array whose own paths are profiled has no
+            // values of its own to show.
+            let container = c.count == 0 && types.object + types.array > 0;
             if matches!(c.distribution, Distribution::Histogram { .. }) {
                 let quartiles = [c.p25, c.median, c.p75].map(|q| q.map(number));
                 if let [Some(p25), Some(median), Some(p75)] = quartiles {
                     title.append(&format!(" · median {median} (p25 {p25}, p75 {p75})"), None);
                 }
-            } else {
+            } else if !container {
                 title.append(&format!(" · {} distinct", grouped(c.distinct as u64)), None);
             }
             text(title, 0, &mut lines);
             match distribution_chart(&c.distribution) {
                 Some(chart) => block(console, &options, &chart, 2, &mut lines),
+                None if container => {}
                 None => text(Text::styled("no values", note.clone()), 2, &mut lines),
             }
             if let Distribution::Top { values, other } = &c.distribution {
@@ -564,14 +937,19 @@ impl Renderable for Profile {
             ),
             Some(map) => {
                 let rows = self.missing.bucket_rows;
-                let per = if rows <= 1 {
-                    "a row each".to_string()
+                let (what, row, rows_name) = if self.is_nested() {
+                    ("% of records absent or null", "a record", "records")
                 } else {
-                    format!("{} rows each", grouped(rows))
+                    ("% null", "a row", "rows")
+                };
+                let per = if rows <= 1 {
+                    format!("{row} each")
+                } else {
+                    format!("{} {rows_name} each", grouped(rows))
                 };
                 text(
                     Text::styled(
-                        format!("missing values (% null; rows top to bottom, {per})"),
+                        format!("missing values ({what}; {rows_name} top to bottom, {per})"),
                         style(console, "profile.column", STYLES),
                     ),
                     0,
@@ -768,49 +1146,20 @@ impl Profiler {
             .zip(inference.columns())
             .enumerate()
             .map(|(index, (s, inferred))| {
-                let distribution = if s.count == 0 {
-                    Distribution::Empty
-                } else if s.numeric {
-                    let values = sample.column(index).filter_map(|v| {
-                        v.as_f64()
-                            .or_else(|| parse_float(v.plain().trim()))
-                            .filter(|n| n.is_finite())
-                    });
-                    histogram(Histogram::new(values).bins(self.options.bins.max(1)))
+                let mut column = describe(
+                    &sample,
+                    index,
+                    s,
+                    inferred.data_type().name(),
+                    self.options.bins,
+                );
+                column.nulls = self.nulls[index];
+                column.null_rate = if rows == 0 {
+                    0.0
                 } else {
-                    let shown: usize = s.top.iter().map(|(_, n)| n).sum();
-                    Distribution::Top {
-                        values: s
-                            .top
-                            .iter()
-                            .map(|(value, count)| TopValue {
-                                value: value.clone(),
-                                count: *count,
-                            })
-                            .collect(),
-                        other: s.count - shown,
-                    }
+                    self.nulls[index] as f64 / rows as f64
                 };
-                let quantile = |q: f64| s.quantiles.iter().find(|(at, _)| *at == q).map(|v| v.1);
-                ColumnProfile {
-                    name: s.name.clone(),
-                    data_type: inferred.data_type().name().to_string(),
-                    nulls: self.nulls[index],
-                    null_rate: if rows == 0 {
-                        0.0
-                    } else {
-                        self.nulls[index] as f64 / rows as f64
-                    },
-                    count: s.count,
-                    distinct: s.distinct,
-                    min: s.min.clone(),
-                    max: s.max.clone(),
-                    mean: s.mean,
-                    median: s.median,
-                    p25: quantile(0.25),
-                    p75: quantile(0.75),
-                    distribution,
-                }
+                column
             })
             .collect();
         let mut first = 1;
@@ -833,6 +1182,10 @@ impl Profiler {
                 buckets,
             },
             notes: Vec::new(),
+            paths: None,
+            malformed: 0,
+            malformed_lines: Vec::new(),
+            rules: Rules::default(),
         }
     }
 
@@ -866,6 +1219,62 @@ impl Profiler {
         z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
         z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
         z ^ (z >> 31)
+    }
+}
+
+/// Column `index` of `sample` described from its statistics `s`: its type,
+/// statistics and distribution, with no nulls counted yet (the caller
+/// counts them over every row, not the sample).
+fn describe(
+    sample: &Rows,
+    index: usize,
+    s: &ColumnStats,
+    data_type: &str,
+    bins: usize,
+) -> ColumnProfile {
+    let distribution = if s.count == 0 {
+        Distribution::Empty
+    } else if s.numeric {
+        let values = sample.column(index).filter_map(|v| {
+            v.as_f64()
+                .or_else(|| parse_float(v.plain().trim()))
+                .filter(|n| n.is_finite())
+        });
+        histogram(Histogram::new(values).bins(bins.max(1)))
+    } else {
+        let shown: usize = s.top.iter().map(|(_, n)| n).sum();
+        Distribution::Top {
+            values: s
+                .top
+                .iter()
+                .map(|(value, count)| TopValue {
+                    value: value.clone(),
+                    count: *count,
+                })
+                .collect(),
+            other: s.count - shown,
+        }
+    };
+    let quantile = |q: f64| s.quantiles.iter().find(|(at, _)| *at == q).map(|v| v.1);
+    ColumnProfile {
+        name: s.name.clone(),
+        data_type: data_type.to_string(),
+        nulls: 0,
+        null_rate: 0.0,
+        count: s.count,
+        distinct: s.distinct,
+        min: s.min.clone(),
+        max: s.max.clone(),
+        mean: s.mean,
+        median: s.median,
+        p25: quantile(0.25),
+        p75: quantile(0.75),
+        distribution,
+        present: None,
+        absent: None,
+        values: None,
+        types: None,
+        mixed: None,
     }
 }
 

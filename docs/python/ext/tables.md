@@ -37,6 +37,62 @@ console.print(services)
 and `TableSort`/`TableGroup` do the same as pipeline stages.
 `Aggregate.custom(column, function)` computes your own aggregate.
 
+## Conditional styles
+
+```text
+StyleRule(column, op="eq", value=None, style="bold", *, target="cell")
+StyleRule.parse(spec)
+StyleRule.when(column, predicate, style, *, target="cell")
+StyleRules(rules=())
+StyleRules.from_toml(text)
+```
+
+A `StyleRule` styles a cell, its row or its whole column by value (Rust:
+`rich_ext::table::rules`). It names a column (a header, or a 0-based index),
+a comparison (`eq`, `ne`, `lt`, `le`, `gt`, `ge`, `contains`, `starts_with`,
+`ends_with`, `empty`, `not_empty`, or `==`, `!=`, `<`, `<=`, `>`, `>=`), a
+value and a style; `target="row"` styles the row, and `target="column"` every
+cell of the column when any matches. A number compares as a number (text
+that parses as one counts). `StyleRule.parse` reads the spec `rich
+--style-rule` takes (`"latency>500:bold red"`, `"status=failed:row:on red"`),
+and `StyleRule.when` takes a Python predicate over the cell's value.
+`StyleRules` holds rules in order (where several match, the later wins), from
+`StyleRule`s or specs; `from_toml` reads `[[rules]]` tables, as `rich --rules`
+does. A bad rule raises `ValueError` naming it.
+
+`TableData(..., rules=...)` and `style_rules(rules)`, `ext.data.TableView(...,
+rules=...)` and `data.Profile.style_rules(rules)` apply them; any of them
+takes a `StyleRules`, a `StyleRule`, a spec or a list of rules and specs.
+Rules restyle; they never change the text.
+
+```python
+from rs_rich.ext.table import StyleRule, StyleRules
+
+rules = StyleRules([
+    "latency>500:bold red",
+    StyleRule("status", "eq", "failed", "on red", target="row"),
+])
+print([rule.spec for rule in rules])
+print(rules.rules[0].matches(612), rules.rules[0].matches("120"))
+checks = table.TableData(
+    ["service", "latency", "status"],
+    [["web", 120, "ok"], ["api", 612, "failed"]],
+    rules=rules,
+)
+console.print(checks)
+```
+
+```text
+['latency>500:bold red', 'status==failed:row:on red']
+True False
+┏━━━━━━━━━┳━━━━━━━━━┳━━━━━━━━┓
+┃ service ┃ latency ┃ status ┃
+┡━━━━━━━━━╇━━━━━━━━━╇━━━━━━━━┩
+│ web     │ 120     │ ok     │
+│ api     │ 612     │ failed │
+└─────────┴─────────┴────────┘
+```
+
 ## Streaming tables
 
 `StreamingTable` is a table of keyed rows for live output: `upsert` adds or
