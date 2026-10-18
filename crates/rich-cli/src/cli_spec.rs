@@ -968,6 +968,30 @@ fn mode_options() -> Vec<ArgSpec> {
             MODE_OPTIONS,
             "With --gif, repeat N times (default 1; 0 = forever)",
         ),
+        option(
+            "speed",
+            "X",
+            MODE_OPTIONS,
+            "With --gif, play X times as fast (0.5 = half speed; default 1)",
+        ),
+        option(
+            "fps",
+            "N",
+            MODE_OPTIONS,
+            "With --gif, draw at most N frames a second (default 30)",
+        ),
+        option(
+            "max-frames",
+            "N",
+            MODE_OPTIONS,
+            "With --gif, stop each animation after N frames, even with --loop 0",
+        ),
+        option(
+            "max-duration",
+            "SECS",
+            MODE_OPTIONS,
+            "With --gif, stop after SECS seconds, whatever is still playing",
+        ),
     ];
     args.extend(
         rich_ext::cli::arg_specs()
@@ -1875,7 +1899,9 @@ pub(crate) fn spec() -> CommandSpec {
     #[cfg(feature = "art")]
     {
         spec = spec.subcommand(super::micro::command());
+        spec = spec.subcommand(super::banner::command());
     }
+    spec = spec.subcommand(super::shell::command());
     #[cfg(feature = "serve")]
     {
         spec = spec.subcommand(super::serve::command());
@@ -2106,6 +2132,9 @@ mod tests {
     const MICRO: &str = include_str!("micro.rs");
     #[cfg(feature = "serve")]
     const SERVE: &str = include_str!("serve.rs");
+    #[cfg(feature = "art")]
+    const BANNER: &str = include_str!("banner.rs");
+    const SHELL: &str = include_str!("shell.rs");
 
     /// The source of the item that starts with `start`, up to the next
     /// top-level item.
@@ -2170,6 +2199,9 @@ mod tests {
         out.extend(option_literals(item(INTERACTIVE, "fn parse_args(")));
         #[cfg(feature = "serve")]
         out.extend(option_literals(item(SERVE, "fn parse_args(")));
+        #[cfg(feature = "art")]
+        out.extend(option_literals(item(BANNER, "fn parse_args(")));
+        out.extend(option_literals(item(SHELL, "fn parse_args(")));
         #[cfg(feature = "art")]
         for start in ["const CREATE_VALUES", "const CREATE_FLAGS", "fn request("] {
             out.extend(option_literals(item(MICRO, start)));
@@ -2325,7 +2357,14 @@ mod tests {
                 assert!(spec.find_subcommand(alias).is_some(), "{alias}");
             }
         }
-        for name in ["config", "completions", "docs", "doctor", "inspect"] {
+        for name in [
+            "config",
+            "completions",
+            "docs",
+            "doctor",
+            "inspect",
+            "shell",
+        ] {
             assert!(spec.find_subcommand(name).is_some(), "{name}");
         }
     }

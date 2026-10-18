@@ -1047,6 +1047,44 @@ test.
   library pages; the CLI reference regenerated; and
   `docs/tapes/micro-rows.tape` (not yet recorded).
 
+### Banners, GIF playback controls and shell integration (cli 0.0.19)
+
+0.0.19 workstream 21 (#708, #715).
+
+- **`rich banner TEXT`** draws a FIGlet banner with rs-rich-art's FIGlet
+  renderer: `--font` takes the bundled `standard`, a `.flf` file or the
+  name of one in `$FIGLET_FONTDIR` or figlet's font directories
+  (`--list-fonts`); `--style`; `--gradient` with two or more colours or a
+  preset (`rainbow`, `sunset`, `ocean`, `forest`, `fire`) and `--direction
+  horizontal|vertical|diagonal`; `--align left|center|right`; `-w/--width`;
+  `--fit wrap|plain|none` for a banner wider than the width; and
+  `--force-terminal`. Text comes from stdin when none is given. Behind the
+  default `art` feature.
+- **GIF playback controls:** `--speed X`, `--fps N` (the 30 fps cap, which
+  was fixed), `--max-frames N` and `--max-duration SECS`, next to `--loop`.
+  Each needs `--gif` and a number above 0. Without `--speed` or
+  `--max-frames`, playback is rs-rich-art's `Stage` as before; redirected
+  output is still one frame.
+- **`rich shell init bash|zsh|fish|powershell`** prints a script for a
+  shell's startup file: the completions, OSC 133 prompt and command marks,
+  OSC 7 for the working directory, and a status line after each command
+  (`--no-completions`, `--no-marks`, `--no-status`, `--min-duration`, 2 s
+  by default). It keeps the shell's own prompt hooks and `$?`.
+- **`rich shell status --exit CODE --duration D --command TEXT`** decorates
+  a finished command in one line (`✖ error $ cargo test  exit 101  4.2s`)
+  with rs-rich-ext's `CommandView`, following `RICH_A11Y` or `--symbols`;
+  quiet for a success under `--min-duration`.
+- **`rich shell link [PATH[:LINE[:COL]]]...`** prints paths, the working
+  directory by default, as OSC 8 file links with rs-rich-ext's
+  `Hyperlinker`, plain off a terminal unless `--links always`; `--tilde`,
+  `--editor TEMPLATE`, and `--prompt bash|zsh` to mark the escapes as
+  zero-width in a prompt.
+- **Docs:** [Draw a banner](docs/cli.md#draw-a-banner-0019),
+  [speed, frame rate and limits](docs/cli.md#speed-frame-rate-and-limits-0019)
+  and [shell integration](docs/cli.md#shell-integration-0019) in the CLI
+  guide; the CLI reference regenerated; `docs/PORTING.md`; and
+  `docs/tapes/banner.tape` (not yet recorded).
+
 ### One process per browser session (web 0.0.2)
 
 0.0.19 workstream 3.
