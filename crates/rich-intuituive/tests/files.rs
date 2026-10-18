@@ -27,7 +27,13 @@ fn tree(name: &str) -> PathBuf {
     std::fs::write(root.join("notes.md"), "# Title\n\nhello notes\n").unwrap();
     std::fs::write(root.join("data.bin"), [0u8, 1, 2, 3, 0, 9]).unwrap();
     std::fs::write(root.join("z.txt"), "zzz ".repeat(300)).unwrap();
-    root.canonicalize().unwrap()
+    // As the app shows it: on Windows, not the verbatim `\\?\` form
+    // `canonicalize` gives.
+    let full = root.canonicalize().unwrap();
+    match full.to_string_lossy().strip_prefix(r"\\?\") {
+        Some(rest) if rest.as_bytes().get(1) == Some(&b':') => PathBuf::from(rest),
+        _ => full,
+    }
 }
 
 fn app(root: &Path) -> App {
