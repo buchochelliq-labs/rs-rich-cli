@@ -23,10 +23,10 @@
 //! the diagram sources `mermaid`, `dot`, `deps` and `schema`, `chart` and
 //! `profile`;
 //! the interactive commands (`choose`, `filter`, `input`, `confirm`, `pager`,
-//! `write`, `file`, `color`, `asset`, `explore`); `micro`; `record`; and
-//! `serve` (behind the off-by-default `serve` feature). Each composes public
-//! `rich` / `rich-ext` / `rich-art` / `rich-diagram` / `rich-mermaid` /
-//! `rich-interact` / `rich-micro` / `rich-record` / `rich-web` APIs.
+//! `write`, `file`, `color`, `asset`, `explore`, `date`); `micro`; `record`;
+//! and `serve` (behind the off-by-default `serve` feature). Each composes
+//! public `rich` / `rich-ext` / `rich-art` / `rich-diagram` / `rich-mermaid`
+//! / `rich-interact` / `rich-micro` / `rich-record` / `rich-web` APIs.
 
 use std::io::{BufRead, IsTerminal, Read, Write};
 use std::path::{Path, PathBuf};
@@ -6799,7 +6799,7 @@ mod tests {
         };
         let words = [
             "plugins", "doctor", "record", "serve", "choose", "filter", "input", "confirm",
-            "pager", "bench", "config",
+            "pager", "date", "bench", "config",
         ];
         for word in words {
             // Without a mode flag the word is the subcommand (where built).

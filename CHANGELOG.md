@@ -237,6 +237,66 @@ per browser session](#one-process-per-browser-session-web-002).
   [interact guide](docs/guide/interact/index.md#pager), and
   [the CLI guide](docs/cli.md#ask-in-a-script).
 
+### Reorderable lists (interact 0.0.7, intuituive 0.0.4)
+
+0.0.19 workstream 10 (#720).
+
+- **`rich_interact::Reorder`**: put a list in order, then Enter returns the
+  items' values in the new order (`order()` has their first indices).
+  Alt+↑/↓ and Ctrl+↑/↓ move the focused item, and Alt or Ctrl with
+  Home/End to the top or the bottom. `K` and `J` do the same in any
+  terminal, and so does grabbing: Space grabs the item, the arrows carry
+  it, Space drops it and Esc puts it back. Ctrl+R restores the first
+  order. With the mouse on, a drag carries a row. The keys are in context
+  `reorder`. Without a terminal it reads the new order as numbers (`3 1`:
+  those first, the rest keeping theirs).
+- **intuiTUIve: `list(..).reorderable(on_reorder)`**, with the same keys
+  and a drag. Each `Move { from, to }` goes to `on_reorder` for the app to
+  make in its own items (`Move::apply`); the selection follows. The
+  carried row is marked `↕`.
+- **`rich_interact::components::move_item`** makes one move in a slice.
+- **Python:** `rs_rich.interact.Reorder(prompt, items, *, height=10,
+  mouse=False)`, and `Node.reorderable(handler)`, where
+  `handler((from, to), cx)` makes each move.
+
+### Date and time pickers (interact 0.0.7, intuituive 0.0.4, cli 0.0.19)
+
+0.0.19 workstream 10 (#719).
+
+- **`rich_interact::datetime`**: `Date` (moved from intuiTUIve, which
+  re-exports it unchanged), `Time` and `DateTime`. They are hand-rolled,
+  with no time zone and no dependency. Each parses and prints ISO 8601
+  (`2026-10-17`, `14:30`, `2026-10-17 14:30`), and a time also parses
+  `2:30 pm`. `today_utc()` and `now_utc()` are in UTC.
+- **`DatePicker`, `TimePicker` and `DateTimePicker`** in rs-rich-interact.
+  The date is picked on a month grid, the time field by field (seconds and
+  a 12-hour clock are options), and Tab moves between them. `min` and
+  `max` set a range: days outside it are dimmed and cannot be reached, and
+  a time outside it is refused on Enter with a message naming the limit.
+  `validate` refuses with a message of its own. The selected day is in
+  brackets as well as reversed, so it reads without colour. Without a
+  terminal each reads a typed line and checks it against the range.
+- **intuiTUIve:** `calendar_options` with `CalendarOptions` (today, `min`
+  and `max`; days outside are drawn in `calendar.disabled`), `time_picker`
+  and `time_picker_with` (`TimeOptions`), and `datetime_picker`
+  (`DateTimeOptions`): a calendar over a time picker on one `DateTime`
+  signal. A change past the range stops at its end, and a line says why.
+- **`rich date`** in the CLI picks a date, a time (`--kind time`) or both
+  (`--kind datetime`) and prints it in ISO 8601 form. It takes `--min`,
+  `--max`, `--value`, `--default`, `--seconds`, `--twelve-hour`, `--header`
+  and `--mouse`. Exit codes are those of the other interactive commands.
+  Without a terminal it reads a typed value, and one outside the range
+  exits 3. The CLI reference is regenerated, and `docs/tapes/date.tape` is
+  added (not yet recorded).
+- **Python:** `rs_rich.interact.DatePicker`, `TimePicker` and
+  `DateTimePicker`, on `datetime.date`, `datetime.time` and naive
+  `datetime.datetime`. In `rs_rich.tui`, `calendar_with(..., min=, max=)`,
+  `time_picker` and `datetime_picker`, whose signals hold a `datetime.time`
+  and a `datetime.datetime`.
+- **Docs:** [Reorder and the date pickers](docs/guide/interact/index.md#reorder),
+  [times and reorderable lists](docs/guide/intuituive/index.md#times-and-a-date-with-a-time)
+  in intuiTUIve, and `rich date` in [Ask in a script](docs/cli.md#ask-in-a-script).
+
 ### One process per browser session (web 0.0.2)
 
 0.0.19 workstream 3.

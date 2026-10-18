@@ -46,6 +46,8 @@ use rich_interact::{
 mod components;
 pub(crate) mod compose;
 mod keymap;
+mod order_date;
+pub(crate) use order_date::{datetime_from, datetime_to, time_from, time_to};
 mod pickers;
 
 use crate::ext::common::scoped;
@@ -966,6 +968,7 @@ pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(fuzzy_match, m)?)?;
     m.add_function(wrap_pyfunction!(fuzzy_rank, m)?)?;
     pickers::register(m)?;
+    order_date::register(m)?;
     keymap::register(m)?;
     compose::register(m)?;
     components::register(m)

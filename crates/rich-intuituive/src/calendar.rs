@@ -1,133 +1,134 @@
-//! A month calendar with a selected day, and the date arithmetic it needs.
-
-use std::fmt;
+//! A month calendar with a selected day, within an optional range (#719).
+//! The date types are rs-rich-interact's, shared with its date pickers.
 
 use rich_interact::{Button, KeyCode, MouseKind};
+
+pub use rich_interact::datetime::{Date, DateTime, Time};
 
 use crate::node::{Axis, Node};
 use crate::reactive::Signal;
 use crate::widget::{widget, Canvas, DrawCx, EventCx, MeasureCx, Used, Widget, WidgetEvent};
 
-/// A day of the proleptic Gregorian calendar. Months and days count from 1.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct Date {
-    pub year: i32,
-    pub month: u32,
-    pub day: u32,
+/// What a [`calendar_options`] marks and limits: today, and the first and
+/// last days that can be selected.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct CalendarOptions {
+    pub today: Option<Date>,
+    pub min: Option<Date>,
+    pub max: Option<Date>,
 }
 
-const MONTHS: [&str; 12] = [
-    "January",
-    "February",
-    "March",
-    "April",
-    "May",
-    "June",
-    "July",
-    "August",
-    "September",
-    "October",
-    "November",
-    "December",
-];
-
-impl Date {
-    pub const fn new(year: i32, month: u32, day: u32) -> Date {
-        Date { year, month, day }
+impl CalendarOptions {
+    pub fn new() -> CalendarOptions {
+        CalendarOptions::default()
     }
 
-    /// Whether `year` has a 29th of February.
-    pub const fn is_leap_year(year: i32) -> bool {
-        (year % 4 == 0 && year % 100 != 0) || year % 400 == 0
+    /// Mark `today` in the theme's `calendar.today` style.
+    pub fn today(mut self, today: Date) -> CalendarOptions {
+        self.today = Some(today);
+        self
     }
 
-    /// The days in `month` of `year`.
-    pub const fn days_in_month(year: i32, month: u32) -> u32 {
-        match month {
-            2 if Date::is_leap_year(year) => 29,
-            2 => 28,
-            4 | 6 | 9 | 11 => 30,
-            _ => 31,
+    /// The earliest day that can be selected.
+    pub fn min(mut self, min: Date) -> CalendarOptions {
+        self.min = Some(min);
+        self
+    }
+
+    /// The latest day that can be selected.
+    pub fn max(mut self, max: Date) -> CalendarOptions {
+        self.max = Some(max);
+        self
+    }
+
+    /// Whether `date` is in the range.
+    pub fn allows(&self, date: Date) -> bool {
+        self.min.is_none_or(|min| date >= min) && self.max.is_none_or(|max| date <= max)
+    }
+
+    /// `date`, moved into the range.
+    pub fn clamp(&self, date: Date) -> Date {
+        let mut date = date;
+        if let Some(min) = self.min {
+            date = date.max(min);
         }
-    }
-
-    /// Days since 1970-01-01 (negative before it).
-    pub fn days(self) -> i64 {
-        // Howard Hinnant's days_from_civil.
-        let year = self.year as i64 - (self.month <= 2) as i64;
-        let era = year.div_euclid(400);
-        let yoe = year - era * 400;
-        let month = self.month as i64;
-        let doy = (153 * (month + if month > 2 { -3 } else { 9 }) + 2) / 5 + self.day as i64 - 1;
-        let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
-        era * 146_097 + doe - 719_468
-    }
-
-    /// The date `days` after 1970-01-01.
-    pub fn from_days(days: i64) -> Date {
-        // Howard Hinnant's civil_from_days.
-        let z = days + 719_468;
-        let era = z.div_euclid(146_097);
-        let doe = z - era * 146_097;
-        let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
-        let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
-        let mp = (5 * doy + 2) / 153;
-        let day = (doy - (153 * mp + 2) / 5 + 1) as u32;
-        let month = if mp < 10 { mp + 3 } else { mp - 9 } as u32;
-        let year = (yoe + era * 400 + (month <= 2) as i64) as i32;
-        Date { year, month, day }
-    }
-
-    /// The day of the week: 0 for Monday to 6 for Sunday.
-    pub fn weekday(self) -> u32 {
-        // 1970-01-01 was a Thursday.
-        (self.days() + 3).rem_euclid(7) as u32
-    }
-
-    /// The date `days` later (earlier if negative).
-    pub fn add_days(self, days: i64) -> Date {
-        Date::from_days(self.days() + days)
-    }
-
-    /// The same day `months` later (earlier if negative), or the last day
-    /// of that month if it is shorter.
-    pub fn add_months(self, months: i32) -> Date {
-        let index = self.year as i64 * 12 + self.month as i64 - 1 + months as i64;
-        let year = index.div_euclid(12) as i32;
-        let month = index.rem_euclid(12) as u32 + 1;
-        let day = self.day.min(Date::days_in_month(year, month));
-        Date { year, month, day }
-    }
-
-    /// The first day of its month.
-    pub fn first_of_month(self) -> Date {
-        Date { day: 1, ..self }
-    }
-
-    /// The last day of its month.
-    pub fn last_of_month(self) -> Date {
-        Date {
-            day: Date::days_in_month(self.year, self.month),
-            ..self
+        if let Some(max) = self.max {
+            date = date.min(max);
         }
-    }
-
-    /// The month's name, in English.
-    pub fn month_name(self) -> &'static str {
-        MONTHS[(self.month.clamp(1, 12) - 1) as usize]
+        date
     }
 }
 
-impl fmt::Display for Date {
-    /// `2026-10-07`.
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:04}-{:02}-{:02}", self.year, self.month, self.day)
+/// Where a calendar's day is kept: a day, or the day of a moment whose
+/// time a [`datetime_picker`](crate::widgets::datetime_picker) picks
+/// beside it.
+#[derive(Clone, Copy)]
+pub(crate) enum DaySource {
+    Day(Signal<Date>),
+    Moment {
+        value: Signal<DateTime>,
+        min: Option<DateTime>,
+        max: Option<DateTime>,
+        /// Why the last change was moved into the range.
+        message: Signal<Option<String>>,
+    },
+}
+
+impl DaySource {
+    /// The day, subscribing the widget that is drawing.
+    fn get(&self) -> Date {
+        match self {
+            DaySource::Day(day) => day.get(),
+            DaySource::Moment { value, .. } => value.get().date,
+        }
+    }
+
+    fn get_untracked(&self) -> Date {
+        match self {
+            DaySource::Day(day) => day.get_untracked(),
+            DaySource::Moment { value, .. } => value.get_untracked().date,
+        }
+    }
+
+    fn set(&self, date: Date) {
+        match *self {
+            DaySource::Day(day) => day.set(date),
+            DaySource::Moment {
+                value,
+                min,
+                max,
+                message,
+            } => {
+                let at = value.get_untracked();
+                set_moment(value, message, min, max, DateTime { date, ..at });
+            }
+        }
+    }
+}
+
+/// Set `value` to `at` moved into the range, and say in `message` when it
+/// had to move.
+pub(crate) fn set_moment(
+    value: Signal<DateTime>,
+    message: Signal<Option<String>>,
+    min: Option<DateTime>,
+    max: Option<DateTime>,
+    at: DateTime,
+) {
+    let (at, why) = match (min, max) {
+        (Some(min), _) if at < min => (min, Some(format!("the earliest is {min}"))),
+        (_, Some(max)) if at > max => (max, Some(format!("the latest is {max}"))),
+        _ => (at, None),
+    };
+    value.set(at);
+    if message.get_untracked() != why {
+        message.set(why);
     }
 }
 
 struct Calendar {
-    selected: Signal<Date>,
-    today: Option<Date>,
+    source: DaySource,
+    options: CalendarOptions,
 }
 
 /// The width and height of a calendar.
@@ -155,7 +156,7 @@ const HEIGHT: u16 = 8;
 /// assert_eq!(screen[2].trim_end(), "          1  2  3  4");
 /// ```
 pub fn calendar(selected: Signal<Date>) -> Node {
-    calendar_with(selected, None)
+    calendar_options(selected, CalendarOptions::default())
 }
 
 /// A [`calendar`] that marks `today` in the theme's `calendar.today` style.
@@ -172,13 +173,56 @@ pub fn calendar(selected: Signal<Date>) -> Node {
 /// assert_eq!(screen[3].trim_end(), " 5  6  7  8  9 10 11");
 /// ```
 pub fn calendar_with(selected: Signal<Date>, today: Option<Date>) -> Node {
-    widget(Calendar { selected, today })
+    calendar_options(
+        selected,
+        CalendarOptions {
+            today,
+            ..CalendarOptions::default()
+        },
+    )
+}
+
+/// A [`calendar`] with a range (#719): days before
+/// [`min`](CalendarOptions::min) or after [`max`](CalendarOptions::max)
+/// are drawn in the theme's `calendar.disabled` style (dim unless set),
+/// the keys and the wheel stop at the range's ends, and a click on a day
+/// outside it does nothing.
+///
+/// ```
+/// use intuituive::prelude::*;
+/// use intuituive::widgets::{calendar_options, CalendarOptions, Date};
+///
+/// let app = App::new(|| {
+///     let day = signal(Date::new(2026, 10, 7));
+///     let range = CalendarOptions::new()
+///         .min(Date::new(2026, 10, 5))
+///         .max(Date::new(2026, 10, 9));
+///     column([
+///         calendar_options(day, range).fixed(8),
+///         text(move || format!("on {}", day.get())),
+///     ])
+///     .on_key("q", |cx| cx.quit())
+/// });
+/// // A week on is past the end: the selection stops on the last day.
+/// let screen = app.render_with(&["down", "q"], 20, 9).unwrap();
+/// assert_eq!(screen[8].trim_end(), "on 2026-10-09");
+/// ```
+pub fn calendar_options(selected: Signal<Date>, options: CalendarOptions) -> Node {
+    widget(Calendar {
+        source: DaySource::Day(selected),
+        options,
+    })
+}
+
+/// The calendar half of a date-and-time picker.
+pub(crate) fn moment_calendar(source: DaySource, options: CalendarOptions) -> Node {
+    widget(Calendar { source, options })
 }
 
 impl Calendar {
     fn change(&self, f: impl FnOnce(Date) -> Date) {
-        let date = f(self.selected.get_untracked());
-        self.selected.set(date);
+        let date = self.options.clamp(f(self.source.get_untracked()));
+        self.source.set(date);
     }
 }
 
@@ -193,7 +237,7 @@ impl Widget for Calendar {
 
     fn cursor(&self) -> Option<crate::screen::Rect> {
         // The selected day's cell, as `draw` places it.
-        let date = self.selected.get_untracked();
+        let date = self.source.get_untracked();
         let at = date.first_of_month().weekday() + date.day - 1;
         let (x, y) = ((at % 7) as u16 * 3, 2 + (at / 7) as u16);
         Some(crate::screen::Rect::new(x, y, 2, 1))
@@ -214,7 +258,7 @@ impl Widget for Calendar {
     }
 
     fn draw(&mut self, cx: &mut DrawCx, canvas: &mut Canvas) {
-        let selected = self.selected.get();
+        let selected = self.source.get();
         let title = format!("{} {}", selected.month_name(), selected.year);
         let x = WIDTH.saturating_sub(title.len() as u16) / 2;
         canvas.print(x, 0, &title, Some(&cx.style("calendar.title", "bold")));
@@ -226,6 +270,7 @@ impl Widget for Calendar {
             cx.style("calendar.selected", "underline")
         };
         let today = cx.style("calendar.today", "bold");
+        let disabled = cx.style("calendar.disabled", "dim");
         let offset = selected.first_of_month().weekday();
         for day in 1..=Date::days_in_month(selected.year, selected.month) {
             let at = offset + day - 1;
@@ -233,11 +278,13 @@ impl Widget for Calendar {
             let date = Date { day, ..selected };
             let style = if date == selected {
                 let mut style = highlight.clone();
-                if Some(date) == self.today {
+                if Some(date) == self.options.today {
                     style = today.combine(&style);
                 }
                 Some(style)
-            } else if Some(date) == self.today {
+            } else if !self.options.allows(date) {
+                Some(disabled.clone())
+            } else if Some(date) == self.options.today {
                 Some(today.clone())
             } else {
                 None
@@ -266,13 +313,21 @@ impl Widget for Calendar {
             }
             WidgetEvent::Mouse(mouse) => match mouse.kind {
                 MouseKind::Down(button) if mouse.row >= 2 && mouse.column < WIDTH => {
-                    let selected = self.selected.get_untracked();
+                    let selected = self.source.get_untracked();
                     let at = (mouse.row as u32 - 2) * 7 + mouse.column as u32 / 3;
                     let offset = selected.first_of_month().weekday();
                     let days = Date::days_in_month(selected.year, selected.month);
                     match (at + 1).checked_sub(offset) {
+                        // A day outside the range is used up: nothing
+                        // selects it, and no menu speaks for the old date.
+                        Some(day)
+                            if (1..=days).contains(&day)
+                                && !self.options.allows(Date { day, ..selected }) =>
+                        {
+                            return Used::Yes
+                        }
                         Some(day) if (1..=days).contains(&day) => {
-                            self.selected.set(Date { day, ..selected });
+                            self.source.set(Date { day, ..selected });
                             // Another button leaves the press to the node's
                             // own handler, as a table does.
                             if button != Button::Left {
@@ -296,62 +351,5 @@ impl Widget for Calendar {
 
     fn focusable(&self) -> bool {
         true
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::Date;
-
-    #[test]
-    fn leap_years_and_month_lengths() {
-        assert!(Date::is_leap_year(2000));
-        assert!(Date::is_leap_year(2024));
-        assert!(!Date::is_leap_year(1900));
-        assert!(!Date::is_leap_year(2026));
-        assert_eq!(Date::days_in_month(2024, 2), 29);
-        assert_eq!(Date::days_in_month(2026, 2), 28);
-        assert_eq!(Date::days_in_month(2026, 4), 30);
-        assert_eq!(Date::days_in_month(2026, 12), 31);
-    }
-
-    #[test]
-    fn weekdays_of_known_dates() {
-        // Monday is 0.
-        assert_eq!(Date::new(2026, 10, 7).weekday(), 2);
-        assert_eq!(Date::new(2000, 2, 29).weekday(), 1);
-        assert_eq!(Date::new(1970, 1, 1).weekday(), 3);
-        assert_eq!(Date::new(1969, 12, 31).weekday(), 2);
-        assert_eq!(Date::new(2026, 10, 1).weekday(), 3);
-    }
-
-    #[test]
-    fn days_round_trip() {
-        assert_eq!(Date::new(1970, 1, 1).days(), 0);
-        assert_eq!(Date::new(2000, 3, 1).days(), 11_017);
-        assert_eq!(Date::new(1969, 12, 31).days(), -1);
-        for days in -800_000..800_000 {
-            if days % 997 == 0 {
-                assert_eq!(Date::from_days(days).days(), days);
-            }
-        }
-        assert_eq!(Date::new(2000, 2, 28).add_days(1), Date::new(2000, 2, 29));
-        assert_eq!(Date::new(2026, 12, 31).add_days(1), Date::new(2027, 1, 1));
-        assert_eq!(Date::new(2026, 3, 1).add_days(-1), Date::new(2026, 2, 28));
-    }
-
-    #[test]
-    fn months_keep_the_day_where_they_can() {
-        assert_eq!(Date::new(2026, 1, 31).add_months(1), Date::new(2026, 2, 28));
-        assert_eq!(Date::new(2024, 1, 31).add_months(1), Date::new(2024, 2, 29));
-        assert_eq!(
-            Date::new(2026, 1, 15).add_months(-1),
-            Date::new(2025, 12, 15)
-        );
-        assert_eq!(
-            Date::new(2026, 10, 7).add_months(14),
-            Date::new(2027, 12, 7)
-        );
-        assert_eq!(Date::new(2026, 10, 7).to_string(), "2026-10-07");
     }
 }

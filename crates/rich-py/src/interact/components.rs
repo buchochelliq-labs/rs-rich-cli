@@ -103,7 +103,7 @@ impl Action {
 /// `str(value)`. `preview` is console markup (a `str`) or any renderable.
 #[pyclass(name = "Item", module = "rs_rich.interact", frozen)]
 pub(crate) struct Item {
-    value: Py<PyAny>,
+    pub(super) value: Py<PyAny>,
     #[pyo3(get)]
     label: String,
     #[pyo3(get)]
@@ -227,7 +227,7 @@ impl Item {
 }
 
 /// The items of a picker: `Item`s, or any objects (labelled with `str`).
-fn items(py: Python<'_>, values: &Bound<'_, PyAny>) -> PyResult<Vec<Py<Item>>> {
+pub(super) fn items(py: Python<'_>, values: &Bound<'_, PyAny>) -> PyResult<Vec<Py<Item>>> {
     if values.is_instance_of::<PyString>() {
         return Err(PyTypeError::new_err(
             "items must be an iterable of items, not a str",
@@ -257,7 +257,7 @@ fn items(py: Python<'_>, values: &Bound<'_, PyAny>) -> PyResult<Vec<Py<Item>>> {
         .collect()
 }
 
-fn core_items(py: Python<'_>, items: &[Py<Item>]) -> PyResult<Vec<CoreItem<usize>>> {
+pub(super) fn core_items(py: Python<'_>, items: &[Py<Item>]) -> PyResult<Vec<CoreItem<usize>>> {
     items
         .iter()
         .enumerate()
@@ -265,7 +265,10 @@ fn core_items(py: Python<'_>, items: &[Py<Item>]) -> PyResult<Vec<CoreItem<usize
         .collect()
 }
 
-fn item_values<'py>(py: Python<'py>, items: &[Py<Item>]) -> PyResult<Bound<'py, PyList>> {
+pub(super) fn item_values<'py>(
+    py: Python<'py>,
+    items: &[Py<Item>],
+) -> PyResult<Bound<'py, PyList>> {
     PyList::new(py, items.iter().map(|item| item.get().value.clone_ref(py)))
 }
 
@@ -1886,6 +1889,9 @@ pub(super) fn leaf(py: Python<'_>, component: &Bound<'_, PyAny>) -> PyResult<Opt
     if let Some(node) = super::pickers::leaf(component)? {
         return Ok(Some(node));
     }
+    if let Some(node) = super::order_date::leaf(component)? {
+        return Ok(Some(node));
+    }
     if component.is_instance_of::<compose::Base>() {
         let object = PyComponent::new(component.clone().unbind(), true);
         return Ok(Some(Box::new(move || Box::new(object))));
@@ -1949,6 +1955,10 @@ pub(crate) fn drive(py: Python<'_>, component: &Bound<'_, PyAny>, mode: Mode) ->
         return record(py, ran, |()| Ok(py.None()));
     }
     let mode = match super::pickers::drive(py, component, mode)? {
+        Ok(record) => return Ok(record),
+        Err(mode) => mode,
+    };
+    let mode = match super::order_date::drive(py, component, mode)? {
         Ok(record) => return Ok(record),
         Err(mode) => mode,
     };

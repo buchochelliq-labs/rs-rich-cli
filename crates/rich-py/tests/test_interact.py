@@ -936,3 +936,75 @@ def test_scripts_click_and_python_components_see_mouse_events():
         ("mouse", "scroll_down", 1, 0),
     ]
     assert len(Script().drag((0, 0), (3, 0))) == 5
+
+
+# ---------------------------------------------------------------------------
+# Reorder (#720) and the date and time pickers (#719)
+
+
+def test_reorder_returns_the_values_in_their_new_order():
+    from rs_rich.interact import Reorder
+
+    reorder = Reorder("Order", ["a", "b", "c", Item(4, "d")])
+    assert reorder.values == ["a", "b", "c", 4]
+    assert reorder.headless("down alt+down enter").value == ["a", "c", "b", 4]
+    # K and J, and Space to grab, work in any terminal; Esc puts it back.
+    assert reorder.headless("end K K enter").value == ["a", 4, "b", "c"]
+    assert reorder.headless("space down down space enter").value == ["b", "c", "a", 4]
+    assert reorder.headless("space end escape enter").value == ["a", "b", "c", 4]
+    record = reorder.headless("alt+down escape")
+    assert record.outcome.kind == "cancelled"
+    # Without a terminal: numbers, the rest keeping their order.
+    assert degrade(reorder, ["3 1"]).value == ["c", "a", "b", 4]
+    assert degrade(reorder, [""]).value == ["a", "b", "c", 4]
+    assert degrade(reorder, fallback="default").value == ["a", "b", "c", 4]
+    with pytest.raises(NotInteractive):
+        degrade(reorder, ["9"])
+    with pytest.raises(ValueError):
+        Reorder("Order", ["a"], height=0)
+
+
+def test_date_picker_moves_within_its_range():
+    import datetime
+
+    from rs_rich.interact import DatePicker
+
+    day = datetime.date(2026, 10, 17)
+    picker = DatePicker("Due", value=day, min=datetime.date(2026, 10, 10), max=datetime.date(2026, 10, 20))
+    assert picker.min == datetime.date(2026, 10, 10)
+    assert picker.headless("right enter").value == datetime.date(2026, 10, 18)
+    # A week on is past the end: the grid stops there.
+    assert picker.headless("down enter").value == datetime.date(2026, 10, 20)
+    record = picker.headless("escape")
+    assert "16[17]18" in record.frames[-2]
+    assert "from 2026-10-10 to 2026-10-20" in record.frames[-2]
+    assert degrade(picker, ["2026-10-12"]).value == datetime.date(2026, 10, 12)
+    with pytest.raises(NotInteractive, match="the latest is 2026-10-20"):
+        degrade(picker, ["2026-10-21"])
+    weekdays = DatePicker(value=day, validate=lambda date: None if date.weekday() < 5 else "not on a weekend")
+    record = weekdays.headless("enter left enter")
+    assert record.value == datetime.date(2026, 10, 16)
+    assert any("not on a weekend" in frame for frame in record.frames)
+    with pytest.raises(TypeError):
+        DatePicker(value="2026-10-17")
+    with pytest.raises(ValueError):
+        DatePicker(min=datetime.date(2026, 10, 2), max=datetime.date(2026, 10, 1))
+
+
+def test_time_and_date_time_pickers():
+    import datetime
+
+    from rs_rich.interact import DateTimePicker, TimePicker
+
+    picker = TimePicker("Start", value=datetime.time(9, 0))
+    assert picker.headless(Script().text("1430").keys("enter")).value == datetime.time(14, 30)
+    assert degrade(picker, ["2:30 pm"]).value == datetime.time(14, 30)
+    limited = TimePicker("Start", value=datetime.time(8, 0), min=datetime.time(9, 0), twelve_hour=True)
+    record = limited.headless("enter up enter")
+    assert record.value == datetime.time(9, 0)
+    assert any("the earliest is 9:00 AM" in frame for frame in record.frames)
+    start = datetime.datetime(2026, 10, 17, 9, 0)
+    picker = DateTimePicker("Meeting", value=start, seconds=True)
+    assert picker.headless(Script().keys("right tab").text("14").keys("enter")).value == datetime.datetime(2026, 10, 18, 14, 0)
+    assert degrade(picker, ["2026-10-17T08:30:15"]).value == datetime.datetime(2026, 10, 17, 8, 30, 15)
+    assert degrade(DateTimePicker(default=start), fallback="default").value == start

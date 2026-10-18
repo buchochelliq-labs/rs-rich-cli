@@ -336,6 +336,7 @@ Self-contained examples; ignores config; accepts --no-color.
 | `color` | Pick a colour and print it: rich's named colours, the 256 palette (Tab), or hex and rgb typed in, with a live swatch |
 | `asset` | Pick an emoji, a box style or a spinner, with a preview, and print it |
 | `explore` | Explore a JSON, YAML, TOML, XML, INI or .env document: ← → fold, type to search, Ctrl+Y copies the path and Alt+Y the value (OSC 52), Enter prints the path; without a terminal, print the tree |
+| `date` | Pick a date on a month grid, a time of day, or both, and print it as 2026-10-17, 14:30 or 2026-10-17 14:30; without a terminal, read one typed in |
 | `completions` | Print a shell completion script |
 | `docs` | Print reference documentation generated from this help |
 | `bench` | Compare benchmark runs |
@@ -360,12 +361,12 @@ With no RESOURCE and no mode flag, a capability demo is shown. Layout, style, pa
 ### Exit codes
 
 - 0: success
-- 1: cancelled, or answered no (choose, filter, input, confirm, write, file, color, asset)
+- 1: cancelled, or answered no (choose, filter, input, confirm, write, file, color, asset, date)
 - 2: usage/config error
 - 3: input/read/write error
 - 4: parse/render data error
 - 5: threshold/gate failure
-- 130: interrupted with Ctrl+C (choose, filter, input, confirm, pager, write, file, color, asset)
+- 130: interrupted with Ctrl+C (choose, filter, input, confirm, pager, write, file, color, asset, date)
 
 ### rich print
 
@@ -1469,6 +1470,44 @@ Pick a value from a command's output
 
 ```sh
 kubectl get pods -o json | rich explore --print value
+```
+
+### rich date
+
+Pick a date on a month grid, a time of day, or both, and print it as 2026-10-17, 14:30 or 2026-10-17 14:30; without a terminal, read one typed in
+
+#### Usage
+
+```text
+rich date [OPTIONS]
+```
+
+#### Options
+
+| Option | Description |
+| --- | --- |
+| `--kind <KIND>` | What to pick (default date): a day, a time of day, or a day and a time. Possible values: `date`, `time`, `datetime`. |
+| `--header <TEXT>` | The prompt (default "Date", "Time" or "Date and time") |
+| `--value <VALUE>` | Start at VALUE (default today, or now, in UTC) |
+| `--default <VALUE>` | Start at VALUE; the answer without a terminal and to an empty line. |
+| `--min <VALUE>` | The earliest that can be picked: earlier days are dimmed and cannot be reached, and an earlier time is refused with a message. |
+| `--max <VALUE>` | The latest that can be picked. |
+| `--seconds` | Pick and print the seconds too (14:30:05) |
+| `--twelve-hour` | Show a 12-hour clock with AM and PM (the answer is still printed on a 24-hour one) |
+| `--mouse` | Report the mouse: click a day to select it and again to pick it, click a time field; the wheel turns the month. |
+
+#### Examples
+
+A day from today on
+
+```sh
+due=$(rich date --header Due --min today)
+```
+
+A meeting slot within a range
+
+```sh
+rich date --kind datetime --min '2026-10-17 09:00' --max '2026-10-31 17:00'
 ```
 
 ### rich completions
