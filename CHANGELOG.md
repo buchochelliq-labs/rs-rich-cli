@@ -350,11 +350,13 @@ per browser session](#one-process-per-browser-session-web-002).
   `ChartBar(text=, value_style=, label_style=)`, `BarGroup`,
   `BarChart(groups=, thickness=, bar_gap=, group_gap=, label_style=,
   value_style=, values_inside=)`, `FillGauge` and `LineGauge` in
-  `rs_rich.chart`.
+  `rs_rich.chart`. Python has no canvas, xy chart or palette module yet,
+  and the calendar's new options are not bound.
 - **Docs:** the [charts guide](docs/guide/ext/charts.md) gains sections on
   gauges, taller sparklines, grouped bars, area charts, the map and
-  palettes, with six new screenshots. The intuiTUIve guide covers the new
-  calendar options, and the ratatui matrix marks these rows as built.
+  palettes, with six new screenshots. The Python charts page gains two
+  sections and two pictures. The intuiTUIve guide covers the new calendar
+  options, and the ratatui matrix marks these rows as built.
 
 ### One process per browser session (web 0.0.2)
 
