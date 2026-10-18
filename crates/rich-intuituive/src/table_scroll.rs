@@ -42,10 +42,10 @@ pub(crate) struct Window {
 }
 
 impl Across {
-    /// The window onto columns `widths` wide (their natural widths, one
-    /// cell apart, after `indent` cells) in a view `width` wide, with
-    /// `freeze` columns frozen and the cell cursor in `cursor`: `None`
-    /// when they fit. A cursor that moved is scrolled into view.
+    /// The window onto columns `widths` wide (their natural widths,
+    /// `spacing` cells apart, after `indent` cells) in a view `width`
+    /// wide, with `freeze` columns frozen and the cell cursor in `cursor`:
+    /// `None` when they fit. A cursor that moved is scrolled into view.
     pub fn window(
         &self,
         indent: u16,
@@ -53,6 +53,7 @@ impl Across {
         width: u16,
         freeze: usize,
         cursor: Option<usize>,
+        spacing: u16,
     ) -> Option<Window> {
         let count = widths.len();
         let frozen_columns = freeze.min(count);
@@ -60,9 +61,9 @@ impl Across {
         let mut at = indent as usize;
         for w in widths {
             starts.push(at);
-            at += *w as usize + 1;
+            at += *w as usize + spacing as usize;
         }
-        let total = at.saturating_sub(1);
+        let total = at.saturating_sub(spacing as usize);
         let width = width as usize;
         if count == 0 || total <= width || frozen_columns == count {
             self.wide.set(false);

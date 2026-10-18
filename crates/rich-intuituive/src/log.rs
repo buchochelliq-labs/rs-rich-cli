@@ -87,6 +87,8 @@ impl Log {
                 log: *self,
                 drawn_total: None,
                 shown: 0,
+                bar: crate::scrollbar::Bar::default(),
+                barred: false,
             }),
             "log",
         )
@@ -99,6 +101,10 @@ pub(crate) struct LogView {
     pub drawn_total: Option<u64>,
     /// How many lines it showed then (at most its height).
     pub shown: usize,
+    /// Its scrollbar, which shows where the lines in view are in what the
+    /// log keeps; and whether it kept a column for it at the last draw.
+    pub bar: crate::scrollbar::Bar,
+    pub barred: bool,
 }
 
 impl Widget for LogView {
@@ -125,8 +131,20 @@ impl Widget for LogView {
     /// screen up, unless the log moved or was drawn over.
     fn draw(&mut self, cx: &mut DrawCx, canvas: &mut Canvas) {
         let total = self.log.data.with(|data| data.total);
-        let (width, height) = (canvas.width(), canvas.height() as usize);
-        let full = cx.repaint();
+        let (mut width, height) = (canvas.width(), canvas.height() as usize);
+        // The bar keeps a column once the lines do not all fit; taking it or
+        // giving it back draws everything again.
+        let len = self.log.data.with_untracked(|data| data.lines.len());
+        let look = (self.bar.look.clone()).filter(|look| look.wanted(len, height));
+        let mut x = 0;
+        let mut bar = None;
+        if let Some(look) = &look {
+            let (rest, at) = look.split(width, canvas.height());
+            (x, width) = (rest.x, rest.width);
+            bar = Some(at);
+        }
+        let full = cx.repaint() || self.barred != bar.is_some();
+        self.barred = bar.is_some();
         let arrived = self
             .drawn_total
             .map(|drawn| total.saturating_sub(drawn) as usize);
@@ -146,22 +164,32 @@ impl Widget for LogView {
                     if len == shown + n && shown + n <= height {
                         // Room left and nothing dropped: the new lines go
                         // under the old.
-                        canvas.lines_at(0, shown as u16, width, n as u16, &render(shown));
+                        canvas.lines_at(x, shown as u16, width, n as u16, &render(shown));
                     } else if shown == height && len >= height {
                         // Full: scroll what is on screen up, and render only
                         // the new lines into the rows that opened.
                         canvas.scroll_up(n as u16);
                         let top = (height - n) as u16;
-                        canvas.lines_at(0, top, width, n as u16, &render(len - n));
+                        canvas.lines_at(x, top, width, n as u16, &render(len - n));
                     } else {
                         // Lines were dropped from a log shorter than the
                         // view: draw what it keeps.
-                        canvas.lines(&render(len.saturating_sub(height)));
+                        let lines = render(len.saturating_sub(height));
+                        canvas.lines_at(x, 0, width, height as u16, &lines);
                     }
                 }
-                _ => canvas.lines(&render(len.saturating_sub(height))),
+                _ if bar.is_none() => canvas.lines(&render(len.saturating_sub(height))),
+                _ => {
+                    let lines = render(len.saturating_sub(height));
+                    canvas.lines_at(x, 0, width, height as u16, &lines);
+                }
             }
         });
+        // The bar, at the end of what the log keeps.
+        if let (Some(look), Some(at)) = (look, bar) {
+            let first = len.saturating_sub(height);
+            look.paint(console, canvas, at, first, len, height);
+        }
         self.drawn_total = Some(total);
         self.shown = self
             .log
