@@ -529,6 +529,81 @@ impl From<intuituive::FrameStats> for PyFrameStats {
     }
 }
 
+/// `TraceEntry`: a line of the inspector's event trace: the `frame` that
+/// drew after it, when it happened (`at`, seconds on the app's clock), its
+/// `kind` (`"key"`, `"mouse"`, `"signal"`, ...) and its `text`.
+#[pyclass(name = "TraceEntry", module = "rs_rich.tui", frozen)]
+pub(crate) struct PyTraceEntry {
+    #[pyo3(get)]
+    frame: u64,
+    #[pyo3(get)]
+    at: f64,
+    #[pyo3(get)]
+    kind: &'static str,
+    #[pyo3(get)]
+    text: String,
+}
+
+#[pymethods]
+impl PyTraceEntry {
+    fn __repr__(&self) -> String {
+        format!(
+            "TraceEntry(frame={}, kind={:?}, text={:?})",
+            self.frame, self.kind, self.text
+        )
+    }
+}
+
+impl From<intuituive::inspect::TraceEntry> for PyTraceEntry {
+    fn from(entry: intuituive::inspect::TraceEntry) -> PyTraceEntry {
+        PyTraceEntry {
+            frame: entry.frame,
+            at: entry.at.as_secs_f64(),
+            kind: entry.kind.name(),
+            text: entry.text,
+        }
+    }
+}
+
+/// `NodeTiming`: what the inspector measured of a node while it was open:
+/// its `id` and `name`, the frames it drew in (`draws`), and the seconds
+/// it took to draw itself, in all (`total`) and the last time (`last`).
+#[pyclass(name = "NodeTiming", module = "rs_rich.tui", frozen)]
+pub(crate) struct PyNodeTiming {
+    #[pyo3(get)]
+    id: u64,
+    #[pyo3(get)]
+    name: String,
+    #[pyo3(get)]
+    draws: u64,
+    #[pyo3(get)]
+    total: f64,
+    #[pyo3(get)]
+    last: f64,
+}
+
+#[pymethods]
+impl PyNodeTiming {
+    fn __repr__(&self) -> String {
+        format!(
+            "NodeTiming({:?}, draws={}, total={:.6}, last={:.6})",
+            self.name, self.draws, self.total, self.last
+        )
+    }
+}
+
+impl From<intuituive::inspect::NodeTiming> for PyNodeTiming {
+    fn from(timing: intuituive::inspect::NodeTiming) -> PyNodeTiming {
+        PyNodeTiming {
+            id: timing.id,
+            name: timing.name,
+            draws: timing.draws,
+            total: timing.total.as_secs_f64(),
+            last: timing.last.as_secs_f64(),
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // The app
 
@@ -617,7 +692,9 @@ impl PyApp {
         PyApp::build(py, build, Shared::new())
     }
 
-    /// Dock the inspector on the right (F12 shows and hides it).
+    /// Dock the inspector on the right (F12 shows and hides it, Shift+F12
+    /// gives it the keys): the node tree, a node's layout and states, each
+    /// node's timings and a trace of what happened.
     #[pyo3(signature = (on=true))]
     fn inspector(slf: Bound<'_, Self>, on: bool) -> PyResult<Bound<'_, Self>> {
         slf.borrow().map(|a| a.inspector(on))?;
@@ -1183,6 +1260,35 @@ impl PyDriver {
         self.read(|driver| driver.stats().into())
     }
 
+    /// The id of the node selected in the inspector, or `None`.
+    fn inspector_selected(&self) -> PyResult<Option<u64>> {
+        self.read(intuituive::Driver::inspector_selected)
+    }
+
+    /// The inspector's event trace, oldest first: what happened while it
+    /// was open, the last 1000 events at most.
+    fn inspector_trace(&self) -> PyResult<Vec<PyTraceEntry>> {
+        self.read(|driver| {
+            driver
+                .inspector_trace()
+                .into_iter()
+                .map(PyTraceEntry::from)
+                .collect()
+        })
+    }
+
+    /// What the inspector measured of each node while it was open, the
+    /// most time first.
+    fn inspector_timings(&self) -> PyResult<Vec<PyNodeTiming>> {
+        self.read(|driver| {
+            driver
+                .inspector_timings()
+                .into_iter()
+                .map(PyNodeTiming::from)
+                .collect()
+        })
+    }
+
     /// Whether text can reach the clipboard (selections are then copied).
     fn set_clipboard(&self, py: Python<'_>, on: bool) -> PyResult<()> {
         self.step(py, move |driver| driver.set_clipboard(on))
@@ -1299,6 +1405,8 @@ pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
         ("TuiAccessNode", py.get_type::<PyAccessNode>()),
         ("TuiAnnouncement", py.get_type::<PyAnnouncement>()),
         ("TuiFrameStats", py.get_type::<PyFrameStats>()),
+        ("TuiTraceEntry", py.get_type::<PyTraceEntry>()),
+        ("TuiNodeTiming", py.get_type::<PyNodeTiming>()),
         ("TuiApp", py.get_type::<PyApp>()),
         ("TuiRun", py.get_type::<PyRun>()),
         ("TuiDriver", py.get_type::<PyDriver>()),

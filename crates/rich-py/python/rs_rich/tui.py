@@ -79,6 +79,7 @@ from ._native import (
     TuiMenuItem,
     TuiMouse,
     TuiNode,
+    TuiNodeTiming,
     TuiOrder,
     TuiPlacement,
     TuiProgramEngine,
@@ -100,6 +101,7 @@ from ._native import (
     TuiTask,
     TuiTerminalPane,
     TuiTheme,
+    TuiTraceEntry,
     TuiTreeItem,
     TuiWebHandle,
     TuiWebView,
@@ -203,6 +205,8 @@ AccessNode = TuiAccessNode
 AccessState = TuiAccessState
 Announcement = TuiAnnouncement
 FrameStats = TuiFrameStats
+TraceEntry = TuiTraceEntry
+NodeTiming = TuiNodeTiming
 Server = TuiServer
 ServerHandle = TuiServerHandle
 ExitStatus = TuiExitStatus
@@ -319,6 +323,8 @@ __all__ = [
     "AccessState",
     "Announcement",
     "FrameStats",
+    "TraceEntry",
+    "NodeTiming",
     "Server",
     "ServerHandle",
     "ExitStatus",

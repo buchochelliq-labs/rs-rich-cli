@@ -1391,6 +1391,25 @@ so widgets get no `WidgetEvent::KeyUp`. [The interact
 guide](../interact/index.md#backends-crossterm-termion-termwiz) compares
 them.
 
+`BackendKind::from_name("termwiz")` finds a backend by its name (in any
+case), for a flag or a setting, and `BackendKind::ALL` lists the ones the
+build has. The `files` and `scope` examples take `--backend NAME`, or
+`INTUITUIVE_BACKEND=NAME` (only these examples read it), and say which
+backends the build has when the name is not one of them:
+
+```bash
+cargo run -p rs-rich-intuituive --example files --features termwiz -- --backend termwiz
+INTUITUIVE_BACKEND=termion cargo run -p rs-rich-intuituive --example scope --features termion
+```
+
+termwiz runs on Windows too. CI builds both crates, and every target,
+with it on Linux, macOS and Windows; it runs the PTY conformance suites on
+Linux and macOS, and the headless suites on Windows, where the PTY suites
+do not run. A pass in real terminals of the mouse, resizes and Ctrl+Z on
+the termion and termwiz backends, and on termwiz in Windows Terminal, has
+not been made yet (see the [release
+notes](../../releases/0.0.19.md#not-yet-done-and-by-whom)).
+
 ## Synchronized output
 
 Where the terminal has synchronized output (DEC private mode 2026: kitty,
@@ -1564,20 +1583,94 @@ INTUITUIVE_INSPECT=1 cargo run      # any app, no code change
 ```
 
 or `App::inspector(true)` in code. The inspector docks on the right, and
-the app is laid out in the space to its left. F12 shows and hides it. It
-shows:
+the app is laid out in the space to its left. F12 shows and hides it.
+While it is shown the app keeps the keys, so you use the app and watch the
+inspector. Shift+F12, or a click on the panel, gives the inspector the
+keys; Esc, Shift+F12 again or a click on the app gives them back. Ctrl+C
+still quits.
 
-- the node tree as it is, each node's builder (or its `.name("…")`), what
-  it holds (a panel's title, a list's length, a grid's shape) and its size,
-  or `hidden`;
-- in yellow, the nodes that drew in the last frame; reversed, the focused
-  node;
-- the frame's cost: nodes drawn of those made dirty, damaged rectangles and
-  cells, and the bytes sent;
-- the theme file's state, and its error if the last edit did not parse.
+The top of the panel is always the last frame the app drew: its number,
+the nodes that drew of those made dirty, the damaged rectangles and cells,
+the bytes sent, and the theme file's state (and its error, if the last edit
+did not parse). A frame the inspector draws for itself, its selection
+moving, leaves it as it was. Below it is one of four panes, named on the
+line under the title:
+
+- **tree**: the node tree as it is, each node's builder (or its
+  `.name("…")`), what it holds (a panel's title, a list's length, a grid's
+  shape) and its size, or `hidden`. In yellow, the nodes that drew in the
+  last frame; reversed, the focused node; marked `›`, the selected one.
+- **node**: the selected node. Where it is on the screen (`at 0,2 ·
+  60x17`), and where its widget draws inside a stylesheet's border and
+  padding; its size and who set it (code, the stylesheet or the default),
+  its minimum and maximum; a column's or row's gap, alignment,
+  justification and wrapping where they differ from the defaults; a grid's
+  tracks, or a grid child's cell and span; `align-self` and `dock`; its
+  padding and border; whether it takes the focus and has it; whether it is
+  shown, or the rule that hides it (`hidden by hide_below 70 (app 60x20)`,
+  or a stylesheet's `display: none`); its classes, the conditional ones
+  that hold now and those that do not, and its states (`:focus`, `:hover`,
+  `:disabled`, `:error`, `:selected`); whether it was dirty and drew in the
+  last frame; its draws and times; its role, key bindings and handlers.
+- **timings**: the last frame's time and how many nodes drew, the average
+  and slowest of the last 120 frames, and each node's draws, its time in
+  all and the last time it drew, slowest first. A node's time is its own
+  layout and drawing: its children's are theirs.
+- **trace**: what happened, newest last, each line after the number of the
+  frame that drew next. Keys with their modifiers and what took them
+  (`key ctrl+s → editor on_key`, or `(unused)`); presses, releases, drags
+  and the wheel, with the node under the pointer and what took them
+  (`press left 12,3 on save → save on_click`); resizes and pastes; the
+  focus moving; screens, modals and pop-ups opening and closing; signal
+  writes, named by where the signal was made and where it was written, with
+  the nodes they made dirty (`signal main.rs:8 → count (i32, by
+  main.rs:14)`); timers, watches, tasks done and jobs from other threads,
+  each by where it was made. It keeps the last 1,000 events.
+
+While the inspector has the keys, its keys are these, and none reaches the
+app (the two help lines at the bottom of the panel list them):
+
+| Key | What it does |
+|---|---|
+| F12 | Show or hide the inspector (hidden, it gives the keys back) |
+| Shift+F12, Esc | Give the keys back (Esc while picking puts the selection back) |
+| Tab, Shift+Tab, `1` to `4` | The next pane, the one before, or that pane (a click on its name too) |
+| ↑ ↓, `k` `j`, PgUp PgDn, Home End, `g` `G` | Tree and node panes: select a node (a click on its line too); timings and trace: scroll |
+| ← →, `h` `l` | Select the node's parent, or its first child |
+| Enter | The node pane for the selected node, or back to the tree |
+| `p` | Pick: the pointer, or a cursor the arrows move (with Shift, five cells), selects the node under it; a click or Enter keeps it |
+| `f` | The redraw flash, on or off |
+| `s` | Timings: sort by time in all, the last time, or draws |
+| `c` | Timings: start again; trace: clear it |
+| Space | Trace: pause it, or take events in again |
+
+While the inspector has the keys, the selected node is outlined on the
+app: the cells of its edges are restyled in the theme's `inspector.selected`
+style (reverse magenta unless the theme names it), so nothing moves. The
+picking cursor is `inspector.cursor` (reverse yellow). The redraw flash
+marks what each frame drew, in `inspector.flash` (on dark green), for
+300 ms, so redraws show as they happen, keys given back or not; the flash
+is sent to the terminal like anything else, so the bytes count it. Each
+comes off at the next frame, and the app's cells are as they were.
+
+Nothing is measured or traced while the inspector is closed: each place
+that would note something checks a flag first, and the app sends the same
+bytes, frame for frame, as one without an inspector. A terminal narrower
+than 40 columns has no room for the panel: the app keeps the whole width
+and the keys, the trace goes on, and the panel is back when there is room.
+In linear mode, which draws nothing, the inspector is off: it takes no
+columns, and F12 is the app's.
+
+A test or a loop of your own reads the same with `Driver::inspector_trace()`
+(each entry's frame, time, kind and text), `inspector_timings()` and
+`inspector_selected()`:
+
+```rust
+--8<-- "crates/rich-intuituive/tests/inspector.rs:trace"
+```
 
 It is the quickest way to see that a change redraws what it should and
-nothing more.
+nothing more, and why.
 
 ## Against ratatui
 

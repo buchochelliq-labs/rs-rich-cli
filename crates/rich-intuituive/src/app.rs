@@ -31,6 +31,7 @@
 
 use std::collections::HashMap;
 use std::io;
+use std::panic::Location;
 use std::rc::Rc;
 use std::time::Duration;
 
@@ -39,7 +40,7 @@ use rich_interact::{
     Backend, BackendKind, Button, Event, Key, KeyCode, MouseKind, Session, SessionOptions,
 };
 
-use crate::inspect::Inspector;
+use crate::inspect::{Handled, Inspector, Names, NodeTiming, Probe, TraceEntry, Traced};
 use crate::layout::Size;
 use crate::node::{with_node, Axis, FrameState, Node};
 use crate::reactive::{signal, NodeId, Proxy, Runtime, Signal};
@@ -476,17 +477,24 @@ struct Timer {
     every: Duration,
     next: Duration,
     tick: Box<dyn FnMut(&mut Ctx)>,
+    /// Where it was made, for the inspector's trace.
+    at: &'static Location<'static>,
 }
 
 impl Timer {
     /// A zero interval would never move the timer on (and spin the loop),
     /// so the shortest interval is one millisecond.
-    fn new(interval: Duration, tick: impl FnMut(&mut Ctx) + 'static) -> Timer {
+    fn new(
+        interval: Duration,
+        tick: impl FnMut(&mut Ctx) + 'static,
+        at: &'static Location<'static>,
+    ) -> Timer {
         let every = interval.max(Duration::from_millis(1));
         Timer {
             every,
             next: every,
             tick: Box::new(tick),
+            at,
         }
     }
 }
@@ -555,13 +563,15 @@ pub(crate) fn building_watch(id: usize) {
 ///
 /// # Panics
 /// Outside `App::new`'s closure or a screen's.
+#[track_caller]
 pub fn every(interval: Duration, tick: impl FnMut(&mut Ctx) + 'static) {
+    let at = Location::caller();
     BUILDING.with(|building| {
         building
             .borrow_mut()
             .as_mut()
             .expect("every() is called inside App::new's closure or a screen's")
-            .push(Timer::new(interval, tick))
+            .push(Timer::new(interval, tick, at))
     });
 }
 
@@ -679,6 +689,9 @@ pub struct App {
     poke: bool,
     /// The stylesheet generation the last frame matched nodes against.
     sheet_drawn: Option<u64>,
+    /// While the inspector traces: the node that took the event being
+    /// routed, and how.
+    used: crate::inspect::Used,
 }
 
 /// A theme file the app reloads when it changes.
@@ -747,8 +760,9 @@ impl App {
         BUILDING.with(|building| *building.borrow_mut() = Some(Vec::new()));
         WATCHES.with(|watches| *watches.borrow_mut() = Some(Vec::new()));
         let (root, focus_path, hover_path) = runtime.enter(|| {
-            let focus_path = signal(Vec::new());
-            let hover_path = signal(Vec::new());
+            // The trace says when the focus moves and the pointer acts.
+            let focus_path = signal(Vec::new()).untraced();
+            let hover_path = signal(Vec::new()).untraced();
             // Made now, so a node closure reading it later makes nothing.
             crate::reactive::viewport();
             (build(), focus_path, hover_path)
@@ -822,13 +836,16 @@ impl App {
             caret_at: None,
             poke: false,
             sheet_drawn: None,
+            used: None,
         }
     }
 
     /// Dock the [inspector](crate::inspect) on the right: the node tree,
-    /// what drew in the last frame, the focus and the frame's cost. F12
-    /// shows and hides it. Setting `INTUITUIVE_INSPECT=1` turns it on for
-    /// any app without a code change.
+    /// what drew in the last frame, the focus and the frame's cost, a
+    /// selected node's layout and states, each node's timings and a trace
+    /// of what happened. F12 shows and hides it; Shift+F12 gives it the
+    /// keys. Setting `INTUITUIVE_INSPECT=1` turns it on for any app
+    /// without a code change.
     pub fn inspector(mut self, on: bool) -> App {
         self.inspector = on.then(|| Inspector::new(true));
         self
@@ -1066,8 +1083,10 @@ impl App {
     }
 
     /// Call `tick` every `interval` (a clock, a poll, an animation).
+    #[track_caller]
     pub fn every(mut self, interval: Duration, tick: impl FnMut(&mut Ctx) + 'static) -> App {
-        self.layers[0].timers.push(Timer::new(interval, tick));
+        let at = Location::caller();
+        self.layers[0].timers.push(Timer::new(interval, tick, at));
         self
     }
 
@@ -1349,6 +1368,7 @@ impl App {
     /// assert!(out.contains("count"));
     /// ```
     pub fn driver(mut self, width: u16, height: u16) -> Driver {
+        self.sync_tracer();
         let console = self.console_for(self.columns(width));
         self.last_console = Some(console.clone());
         let mut painter = Painter::new(None);
@@ -1417,15 +1437,132 @@ impl App {
     /// columns less the inspector's, while shown) and, in linear mode,
     /// which lays out as tall as its content, the terminal's `rows`.
     fn set_viewport(&self, screen: Rect, rows: u16) {
-        let panel = self
-            .inspector
-            .as_ref()
-            .and_then(|inspector| inspector.width(screen.width))
-            .unwrap_or(0);
+        let panel = self.panel_width(screen.width).unwrap_or(0);
         let height = if self.linear { rows } else { screen.height };
         self.runtime
             .viewport()
             .set((screen.width.saturating_sub(panel), height));
+    }
+
+    /// The columns the inspector's panel takes from a screen `columns`
+    /// wide: none while it is closed, or the screen too narrow, or in
+    /// linear mode, which draws nothing for it to sit beside.
+    fn panel_width(&self, columns: u16) -> Option<u16> {
+        if self.linear {
+            return None;
+        }
+        self.inspector
+            .as_ref()
+            .and_then(|inspector| inspector.width(columns))
+    }
+
+    /// Trace while the inspector is open and its trace not paused; off,
+    /// the runtime notes nothing.
+    fn sync_tracer(&self) {
+        let on = !self.linear && self.inspector.as_ref().is_some_and(Inspector::tracing);
+        self.runtime.tracer.set_on(on);
+    }
+
+    /// Whether the inspector's trace, shown, has news: draw a frame.
+    fn trace_news(&self) -> bool {
+        self.inspector.as_ref().is_some_and(|inspector| {
+            inspector.open && inspector.shown && inspector.pane == crate::inspect::Pane::Trace
+        }) && self.runtime.tracer.has_pending()
+    }
+
+    /// The node that took the event being routed, and how, for the
+    /// inspector's trace.
+    fn note_used(&mut self, id: NodeId, how: &'static str) {
+        if self.used.is_none() && self.runtime.tracer.on() {
+            self.used = Some((id, how));
+        }
+    }
+
+    /// Whether `event` is the inspector's: F12 and Shift+F12, and every key
+    /// and paste while it has the keys. The mouse is sorted in
+    /// [`inspector_mouse`](Self::inspector_mouse).
+    fn inspector_owns(&self, event: &Event) -> bool {
+        let Some(inspector) = self.inspector.as_ref().filter(|_| !self.linear) else {
+            return false;
+        };
+        let keys = inspector.open && (inspector.keys || inspector.pick.is_some());
+        match event {
+            Event::Key(key) => key.code == KeyCode::F(12) || keys,
+            Event::KeyUp(_) | Event::Paste(_) => keys,
+            _ => false,
+        }
+    }
+
+    /// A key while the inspector has the keys.
+    fn inspector_key(&mut self, key: Key) {
+        let layers = &self.layers;
+        let focus = layers.last().and_then(|layer| layer.focus);
+        let Some(inspector) = self.inspector.as_mut() else {
+            return;
+        };
+        let hit = |x: u16, y: u16| node_at(layers, x, y);
+        let rect = |id: NodeId| node_rect(layers, id);
+        let probe = Probe {
+            focus,
+            area: inspector.area,
+            hit: &hit,
+            rect: &rect,
+        };
+        let handled = inspector.key(key, &probe);
+        self.after_inspector(handled);
+    }
+
+    /// Offer `mouse` to the inspector, while it is shown: picking, or on its
+    /// panel. Whether it was the inspector's.
+    fn inspector_mouse(&mut self, mouse: rich_interact::Mouse) -> bool {
+        if self.linear {
+            return false;
+        }
+        let layers = &self.layers;
+        let focus = layers.last().and_then(|layer| layer.focus);
+        let Some(inspector) = self.inspector.as_mut().filter(|i| i.open && i.shown) else {
+            return false;
+        };
+        let hit = |x: u16, y: u16| node_at(layers, x, y);
+        let rect = |id: NodeId| node_rect(layers, id);
+        let probe = Probe {
+            focus,
+            area: inspector.area,
+            hit: &hit,
+            rect: &rect,
+        };
+        let panel = inspector.panel;
+        let handled = inspector.mouse(mouse, panel, &probe);
+        self.after_inspector(handled);
+        handled.used
+    }
+
+    /// What the inspector asked for after an event.
+    fn after_inspector(&mut self, handled: Handled) {
+        if handled.redraw {
+            self.poke = true;
+        }
+        if handled.motion {
+            // Picking follows the pointer.
+            self.motion.0 = true;
+        }
+        if handled.retrace {
+            self.sync_tracer();
+        }
+    }
+
+    /// Note `mouse` in the inspector's trace (not the pointer moving), with
+    /// the node under it; its number, to say later who took it.
+    fn trace_mouse(&self, mouse: rich_interact::Mouse) -> Option<u64> {
+        if !self.runtime.tracer.on() || mouse.kind == MouseKind::Moved {
+            return None;
+        }
+        let target = node_at(&self.layers, mouse.column, mouse.row);
+        self.runtime.tracer.push(Traced::Mouse {
+            mouse,
+            target,
+            used: None,
+        })
     }
 
     /// The columns the app lays out in. Linear mode draws nothing, so a
@@ -1628,13 +1765,19 @@ impl App {
     /// Draw what changed; returns the damage.
     fn frame(&mut self, console: &Console, screen: &mut Screen, full: bool) -> Vec<Rect> {
         crate::a11y::set_text_mode(self.text_mode());
+        // What the inspector drew over the app comes off first, so the
+        // app's cells are its own again before anything draws.
+        let restored = match &mut self.inspector {
+            Some(inspector) => inspector.restore(screen),
+            None => Vec::new(),
+        };
         let whole = screen.area();
         // The inspector, when shown, takes the right of the screen.
         let panel = self
-            .inspector
-            .as_ref()
-            .and_then(|inspector| inspector.width(whole.width))
+            .panel_width(whole.width)
             .map(|w| Rect::new(whole.right() - w, whole.y, w, whole.height));
+        // Only while it is shown is the frame timed.
+        let started = panel.map(|_| std::time::Instant::now());
         let area = match panel {
             Some(panel) => Rect::new(whole.x, whole.y, whole.width - panel.width, whole.height),
             None => whole,
@@ -1729,8 +1872,9 @@ impl App {
             announcements: Vec::new(),
             hidden: 0,
             hidden_rects: Vec::new(),
+            timings: panel.map(|_| Vec::new()),
+            time_stack: Vec::new(),
         };
-        let dirty = frame.dirty.len();
         if full {
             // A screen opened or closed: nothing on screen can be trusted.
             screen.clear(whole);
@@ -1759,6 +1903,7 @@ impl App {
                 layer.drawn = Some(*rect);
             }
         });
+        let took = started.map(|start| start.elapsed()).unwrap_or_default();
         self.stats.drawn = frame.drawn;
         // A drag: its source dimmed, the drop target under the pointer lit.
         if let Some(drag) = self.drag.as_ref().filter(|drag| drag.active) {
@@ -1839,26 +1984,79 @@ impl App {
             ));
         }
         let mut damage = frame.damage;
+        // While the inspector is open its trace takes in what happened,
+        // whether its panel is shown or the terminal is too narrow for it.
+        if let Some(inspector) = self.inspector.as_mut().filter(|i| i.open) {
+            inspector.shown = panel.is_some();
+            if panel.is_some() {
+                inspector.frames += 1;
+            } else {
+                // No room for the panel: the keys are the app's.
+                inspector.keys = false;
+                inspector.pick = None;
+            }
+            let (events, gone) = self.runtime.tracer.take();
+            if !events.is_empty() {
+                // Named from every screen on the stack, and those that
+                // closed since: an event may be about any of them.
+                let names = Names::of(self.layers.iter().map(|layer| &layer.root)).with(&gone);
+                inspector.take_trace(events, &names);
+            }
+        }
         if let (Some(panel), Some(drawn)) = (panel, frame.drawn_ids) {
+            let theme = self.theme_status();
+            let looks = crate::inspect::Looks {
+                selected: self.theme.named("inspector.selected", "reverse magenta"),
+                cursor: self.theme.named("inspector.cursor", "reverse yellow"),
+                flash: self.theme.named("inspector.flash", "on dark_green"),
+            };
+            let focus_path = self.focus_path.get_untracked();
+            let hover = self.hover_path.get_untracked();
+            let viewport = self.runtime.viewport().get_untracked();
+            let all = &self.layers;
+            let shown: Vec<(&Node, bool)> = all[base..]
+                .iter()
+                .map(|layer| (&layer.root, layer.modal.is_some()))
+                .collect();
+            let rect = |id: NodeId| node_rect(all, id);
+            // A frame drawn for the inspector alone (its selection moving)
+            // is not the app's: its numbers stay those of the app's last.
+            let fresh = full || !drawn.is_empty() || !frame.dirty.is_empty() || !damage.is_empty();
             let inspector = self.inspector.as_mut().expect("a panel means an inspector");
-            inspector.frames += 1;
+            inspector.area = area;
+            inspector.panel = panel;
+            if fresh {
+                inspector.record(frame.timings.as_deref().unwrap_or_default(), took);
+            }
             let report = crate::inspect::Report {
-                layers: self.layers[base..]
-                    .iter()
-                    .map(|layer| (&layer.root, layer.modal.is_some()))
-                    .collect(),
+                layers: shown,
+                fresh,
                 drawn: &drawn,
-                dirty,
+                dirty: &frame.dirty,
                 damage: &damage,
-                focus: self.layers.last().and_then(|layer| layer.focus),
+                focus: all.last().and_then(|layer| layer.focus),
+                focus_path: &focus_path,
+                hover: &hover,
                 stats: self.stats,
                 frame: inspector.frames,
-                theme: self.theme_status(),
+                theme,
+                viewport,
+                rect: &rect,
             };
-            let lines = crate::inspect::render(console, &report, panel.width, panel.height);
+            // The node pane reads conditions (`class_when`, `disabled_when`),
+            // which may read signals: in the app, subscribing nobody.
+            let runtime = self.runtime.clone();
+            let lines = runtime.enter(|| {
+                runtime.untracked(|| inspector.render(console, &report, panel.width, panel.height))
+            });
             screen.write_lines(panel, &lines);
+            // Over the app: the redraw flash, the selected node's outline,
+            // the picking cursor. They come off at the next frame.
+            let over = inspector.overlay(screen, area, &damage, self.now, &looks, &rect);
             damage.push(panel);
+            damage.extend(over);
         }
+        damage.extend(restored);
         for announcement in live {
             self.announce(announcement, false);
         }
@@ -1932,6 +2130,19 @@ impl App {
 
     /// Whether to quit (a command run from the palette may quit).
     fn navigate(&mut self, nav: Nav) -> bool {
+        let what = match &nav {
+            Nav::Push(_) => Some("screen opened"),
+            Nav::Modal(..) => Some("modal opened"),
+            Nav::Popup(..) => Some("pop-up opened"),
+            Nav::Pop => (self.layers.len() > 1).then_some("screen closed"),
+            Nav::Replace(_) => Some("screen replaced"),
+            Nav::Palette => Some("command palette opened"),
+            Nav::Help => Some("help opened"),
+            Nav::Run(..) => None,
+        };
+        if let Some(what) = what {
+            self.runtime.tracer.push(Traced::Screen(what));
+        }
         match nav {
             Nav::Push(build) => self.open(build, None),
             Nav::Modal(width, height, build) => self.open(build, Some((width, height))),
@@ -1955,6 +2166,7 @@ impl App {
                 } else {
                     // The first screen: its timers go with it.
                     let old = self.layers.pop().expect("an app always has a screen");
+                    self.runtime.tracer.farewell(&old.root);
                     old.root.forget(&self.runtime);
                     for watch in old.watches {
                         self.runtime.drop_watch(watch);
@@ -2049,6 +2261,7 @@ impl App {
                 }
             });
         });
+        self.note_used(id, "on_key");
         self.apply(cx)
     }
 
@@ -2089,6 +2302,7 @@ impl App {
     /// Take the top screen off, forgetting its subscriptions.
     fn close(&mut self) {
         let layer = self.layers.pop().expect("an app always has a screen");
+        self.runtime.tracer.farewell(&layer.root);
         layer.root.forget(&self.runtime);
         for watch in layer.watches {
             self.runtime.drop_watch(watch);
@@ -2293,6 +2507,7 @@ impl App {
             self.lifecycle
                 .extend(id.map(|id| (id, WidgetEvent::Focus(true))));
             self.focused = id;
+            self.runtime.tracer.push(Traced::Focus(id));
         }
         let top = self.top_mut();
         top.focus = id;
@@ -2363,10 +2578,30 @@ impl App {
             self.restack = true;
             return false;
         }
-        if let (Some(inspector), KeyCode::F(12)) = (&mut self.inspector, key.code) {
-            inspector.open = !inspector.open;
-            self.restack = true;
-            return false;
+        if let (Some(inspector), false) = (&mut self.inspector, self.linear) {
+            if key.code == KeyCode::F(12) {
+                if !key.modifiers.shift {
+                    // F12 shows and hides it; hidden, it gives the keys back.
+                    let open = !inspector.open;
+                    inspector.set_open(open);
+                    self.restack = true;
+                } else if inspector.open {
+                    // Shift+F12 gives it the keys, or gives them back.
+                    inspector.toggle_keys();
+                    self.poke = true;
+                } else {
+                    inspector.set_open(true);
+                    inspector.keys = true;
+                    self.restack = true;
+                }
+                self.sync_tracer();
+                return false;
+            }
+            if inspector.open && (inspector.keys || inspector.pick.is_some()) {
+                // Every key is the inspector's while it has them.
+                self.inspector_key(key);
+                return false;
+            }
         }
         // A focused node disabled since the last frame (nothing need have
         // drawn since) gives the focus up before the key is routed.
@@ -2422,6 +2657,7 @@ impl App {
                 });
             });
             if used {
+                self.note_used(id, "on_key");
                 return self.apply(cx);
             }
         }
@@ -2719,6 +2955,7 @@ impl App {
                         }
                     });
                 });
+                self.note_used(target, "on_drop");
                 Some(self.apply(cx))
             }
             _ => None,
@@ -2796,6 +3033,7 @@ impl App {
         }
         let mut cx = self.ctx();
         let mut used = false;
+        let mut how = "on_mouse";
         let runtime = self.runtime.clone();
         runtime.enter(|| {
             with_node(&self.top().root, id, &mut |node| {
@@ -2806,10 +3044,14 @@ impl App {
                     if let Some(handler) = node.click.borrow_mut().as_mut() {
                         handler(&mut cx);
                         used = true;
+                        how = "on_click";
                     }
                 }
             });
         });
+        if used {
+            self.note_used(id, how);
+        }
         used.then(|| self.apply(cx))
     }
 
@@ -2885,6 +3127,9 @@ impl App {
             Some(false) if self.capture.is_some_and(|(c, _)| c == id) => self.capture = None,
             _ => {}
         }
+        if used {
+            self.note_used(id, "widget");
+        }
         used.then(|| self.apply(cx))
     }
 }
@@ -2947,12 +3192,19 @@ impl Driver {
         app.reload_theme();
         app.reload_sheet();
         app.now = now;
+        app.runtime.tracer.set_now(now);
         let mut cx = app.ctx();
         let runtime = app.runtime.clone();
         runtime.enter(|| {
             for layer in &mut app.layers {
                 for timer in &mut layer.timers {
                     if now >= timer.next {
+                        if runtime.tracer.on() {
+                            runtime.tracer.push(Traced::Timer {
+                                every: timer.every,
+                                at: timer.at,
+                            });
+                        }
                         (timer.tick)(&mut cx);
                         // Once, however far behind (the clock jumped, the
                         // laptop slept), and on to the next tick in step.
@@ -3004,6 +3256,15 @@ impl Driver {
                 app.restack = true;
             }
         }
+        // The inspector's redraw flash, over: it comes off the app.
+        if app
+            .inspector
+            .as_ref()
+            .and_then(Inspector::flash_ends)
+            .is_some_and(|ends| now >= ends)
+        {
+            app.poke = true;
+        }
         if app.restyled {
             app.restyled = false;
             self.console = app.console_for(self.screen.area().width);
@@ -3019,6 +3280,7 @@ impl Driver {
             || self.app.poke
             || self.app.runtime.has_dirty()
             || !self.app.unwritten.is_empty()
+            || self.app.trace_news()
     }
 
     /// Draw what changed and return the bytes that show it (they may be
@@ -3097,6 +3359,13 @@ impl Driver {
                     .map(|tip| (tip.since + TOOLTIP_DELAY).saturating_sub(now))
                     .unwrap_or(Duration::MAX),
             )
+            .min(
+                app.inspector
+                    .as_ref()
+                    .and_then(Inspector::flash_ends)
+                    .map(|ends| ends.saturating_sub(now))
+                    .unwrap_or(Duration::MAX),
+            )
     }
 
     /// Handle an event: a key pressed or let go, the mouse, pasted text, or
@@ -3107,6 +3376,24 @@ impl Driver {
         if self.done {
             return;
         }
+        // While the inspector is open, the trace says what came, and who
+        // took it (the mouse is noted in `mouse`); not what was its own.
+        let owned = self.app.inspector_owns(&event);
+        let tracer = &self.app.runtime.tracer;
+        let seq = match &event {
+            _ if owned || !tracer.on() => None,
+            Event::Key(key) => tracer.push(Traced::Key {
+                key: *key,
+                used: None,
+            }),
+            Event::Paste(text) => tracer.push(Traced::Paste {
+                chars: text.chars().count(),
+                used: None,
+            }),
+            Event::Resize { columns, rows } => tracer.push(Traced::Resize(*columns, *rows)),
+            _ => None,
+        };
+        self.app.used = None;
         let quit = match event {
             Event::Key(key) if key == Key::ctrl('c') && !self.app.binds(key) => true,
             Event::Resize { columns, rows } => {
@@ -3114,11 +3401,20 @@ impl Driver {
                 false
             }
             Event::Key(key) => self.app.key(key),
+            // While the inspector has the keys, none reaches the app.
+            Event::KeyUp(_) | Event::Paste(_) if owned => false,
             Event::KeyUp(key) => self.app.key_up(key),
             Event::Paste(text) => self.app.bubble(&WidgetEvent::Paste(text)),
             Event::Mouse(mouse) => self.mouse(mouse),
             _ => false,
         };
+        if let Some(seq) = seq {
+            let used = self.app.used.take();
+            self.app
+                .runtime
+                .tracer
+                .amend(seq, |event| event.set_used(used));
+        }
         if quit {
             self.done = true;
         }
@@ -3131,15 +3427,17 @@ impl Driver {
         self.app.last_console = Some(self.console.clone());
         self.screen = Screen::new(self.app.columns(columns), self.app.region(rows));
         self.app.set_viewport(self.screen.area(), rows);
+        if let Some(inspector) = &mut self.app.inspector {
+            inspector.forget_overlay();
+        }
         self.painter.invalidate();
         self.first = true;
     }
 
     fn mouse(&mut self, mouse: rich_interact::Mouse) -> bool {
-        let app = &mut self.app;
         // Inline, the region starts where the session began, or higher if
         // it had to scroll to fit.
-        let top = if app.inline.is_some() {
+        let top = if self.app.inline.is_some() {
             self.origin
                 .min(self.rows.saturating_sub(self.screen.area().height))
         } else {
@@ -3149,6 +3447,29 @@ impl Driver {
             return false;
         };
         let mouse = rich_interact::Mouse { row, ..mouse };
+        // Picking, or on the inspector's panel: the inspector's.
+        if self.app.inspector_mouse(mouse) {
+            return false;
+        }
+        let seq = self.app.trace_mouse(mouse);
+        self.app.used = None;
+        let quit = self.route_mouse(mouse);
+        if let Some(seq) = seq {
+            let used = self.app.used.take();
+            self.app
+                .runtime
+                .tracer
+                .amend(seq, |event| event.set_used(used));
+        }
+        quit
+    }
+
+    /// Route a mouse event in the app's rows: to a selection being made,
+    /// or to the nodes under it; a press nothing used may start a
+    /// selection. Whether to quit.
+    fn route_mouse(&mut self, mouse: rich_interact::Mouse) -> bool {
+        let app = &mut self.app;
+        let row = mouse.row;
         if app.selecting && app.select(mouse, &self.screen) {
             return false;
         }
@@ -3349,6 +3670,61 @@ impl Driver {
     /// The last frame's numbers.
     pub fn stats(&self) -> FrameStats {
         self.app.stats
+    }
+
+    /// The node selected in the [inspector](crate::inspect), if any.
+    pub fn inspector_selected(&self) -> Option<NodeId> {
+        self.app.inspector.as_ref().and_then(|i| i.selected)
+    }
+
+    /// The inspector's event trace, oldest first: what happened while it
+    /// was open (nothing is traced while it is closed or its trace is
+    /// paused), the last [`TRACE_LIMIT`](crate::inspect::TRACE_LIMIT)
+    /// events at most. Events since the last frame are in it, numbered for
+    /// the next. Empty without an inspector.
+    ///
+    /// ```
+    /// use intuituive::inspect::TraceKind;
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| {
+    ///     let count = signal(0);
+    ///     text!("{count}").name("count").on_key("+", move |_| count.update(|n| *n += 1))
+    /// })
+    /// .inspector(true);
+    /// let mut driver = app.driver(80, 10);
+    /// driver.press("+");
+    /// let trace = driver.inspector_trace();
+    /// assert!(trace.iter().any(|e| e.kind == TraceKind::Key && e.text == "key + → count on_key"));
+    /// assert!(trace.iter().any(|e| e.kind == TraceKind::Signal && e.text.contains("→ count")));
+    /// ```
+    pub fn inspector_trace(&self) -> Vec<TraceEntry> {
+        let Some(inspector) = &self.app.inspector else {
+            return Vec::new();
+        };
+        let tracer = &self.app.runtime.tracer;
+        let pending = if tracer.has_pending() {
+            tracer.peek(&self.names(), inspector.frames + 1)
+        } else {
+            Vec::new()
+        };
+        inspector.trace_entries(pending)
+    }
+
+    /// What the inspector measured of each node while it was open, in the
+    /// order its timings pane shows them (by default, the most time first).
+    /// Empty without an inspector.
+    pub fn inspector_timings(&self) -> Vec<NodeTiming> {
+        match &self.app.inspector {
+            Some(inspector) => inspector.node_timings(&self.names()),
+            None => Vec::new(),
+        }
+    }
+
+    /// The nodes on every screen of the stack, named as the inspector
+    /// names them.
+    fn names(&self) -> Names {
+        Names::of(self.app.layers.iter().map(|layer| &layer.root))
     }
 
     /// Whether text selected with the mouse can be put on the clipboard
@@ -3678,6 +4054,33 @@ fn draw_tip(console: &Console, screen: &mut Screen, area: Rect, tip: &Tip, style
     );
     restyle_rect(screen, rect, style);
     rect
+}
+
+/// The screens drawn: the topmost full screen and the modals over it.
+fn shown_layers(layers: &[Layer]) -> &[Layer] {
+    let base = layers
+        .iter()
+        .rposition(|layer| layer.modal.is_none())
+        .unwrap_or(0);
+    &layers[base..]
+}
+
+/// The deepest node shown at `x`, `y`, on the topmost screen there (a
+/// point outside a modal is on the screen below it).
+fn node_at(layers: &[Layer], x: u16, y: u16) -> Option<NodeId> {
+    shown_layers(layers).iter().rev().find_map(|layer| {
+        crate::node::hit_path(&layer.root, x, y)
+            .last()
+            .map(|(id, _)| *id)
+    })
+}
+
+/// Where node `id` is on the screen, on whichever screen drawn holds it.
+fn node_rect(layers: &[Layer], id: NodeId) -> Option<Rect> {
+    shown_layers(layers)
+        .iter()
+        .rev()
+        .find_map(|layer| anchor_rect(&layer.root, id))
 }
 
 /// Where node `id` is on the screen, if it is in `root`'s tree and shown.

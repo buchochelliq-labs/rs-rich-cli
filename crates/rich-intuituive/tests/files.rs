@@ -133,19 +133,21 @@ fn hidden_files_sorting_and_filtering() {
 #[test]
 fn tabs_open_switch_and_close() {
     let root = tree("tabs");
+    // The header shows the path as the system writes it.
+    let alpha = format!("{}alpha", std::path::MAIN_SEPARATOR);
     // A tab in alpha: the strip shows both, numbered.
     let rows = screen(&run(app(&root), Script::new().keys("t l q"), 80, 10));
     assert!(
         rows[1].contains("1 ") && rows[1].contains("2 alpha"),
         "{rows:?}"
     );
-    assert!(rows[0].ends_with("/alpha"), "{rows:?}");
+    assert!(rows[0].ends_with(&alpha), "{rows:?}");
     // Back to the first tab: its own directory.
     let rows = screen(&run(app(&root), Script::new().keys("t l 1 q"), 80, 10));
-    assert!(!rows[0].ends_with("/alpha"), "{rows:?}");
+    assert!(!rows[0].ends_with(&alpha), "{rows:?}");
     // Closing the second leaves one tab and no strip.
     let rows = screen(&run(app(&root), Script::new().keys("t l ctrl+w q"), 80, 10));
-    assert!(!rows[0].ends_with("/alpha"), "{rows:?}");
+    assert!(!rows[0].ends_with(&alpha), "{rows:?}");
     assert!(rows[1].contains("Name"), "no strip: {rows:?}");
 }
 

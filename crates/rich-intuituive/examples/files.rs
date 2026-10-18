@@ -9,6 +9,12 @@
 //!
 //!     cargo run -p rs-rich-intuituive --example files [-- DIR]
 //!
+//! `--backend NAME` (or `INTUITUIVE_BACKEND=NAME`) drives the terminal with
+//! termion or termwiz instead of crossterm, when built with the crate's
+//! feature of that name:
+//!
+//!     cargo run -p rs-rich-intuituive --example files --features termwiz -- --backend termwiz
+//!
 //! j/k or ↑/↓ move · l, → or Enter opens · h or ← goes up · J/K scroll the
 //! preview · . shows hidden files · s sorts by name or size · / filters ·
 //! Esc clears the filter · y yanks the path · t opens a tab, 1–9 switch,
@@ -29,7 +35,7 @@ use std::sync::atomic::{AtomicU16, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
-use intuituive::interact::{Button, Input, MouseKind};
+use intuituive::interact::{BackendKind, Button, Input, MouseKind};
 use intuituive::menu::{context_menu, MenuItem};
 use intuituive::prelude::*;
 use intuituive::rich::markup::escape;
@@ -572,11 +578,50 @@ pub fn files_app(start: PathBuf) -> App {
     })
 }
 
+/// The backend called `name`, if this build has it: termion and termwiz
+/// are this crate's features of those names.
+#[allow(dead_code)]
+fn backend_named(name: &str) -> Result<BackendKind, String> {
+    BackendKind::from_name(name).ok_or_else(|| {
+        let have: Vec<&str> = BackendKind::ALL.iter().map(|kind| kind.name()).collect();
+        format!(
+            "no backend {name:?} in this build, which has {} (termion and termwiz \
+             are features of rs-rich-intuituive)",
+            have.join(", ")
+        )
+    })
+}
+
 #[allow(dead_code)]
 fn main() -> std::io::Result<()> {
-    let start = std::env::args()
-        .nth(1)
-        .map(PathBuf::from)
-        .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
-    files_app(start).help_key("?").palette_key("ctrl+p").run()
+    let invalid = |error: String| std::io::Error::new(std::io::ErrorKind::InvalidInput, error);
+    // `--backend NAME` (or `--backend=NAME`), else INTUITUIVE_BACKEND, else
+    // crossterm; the other argument is the directory to start in.
+    let mut backend = std::env::var("INTUITUIVE_BACKEND")
+        .ok()
+        .filter(|name| !name.is_empty());
+    let mut start = None;
+    let mut args = std::env::args().skip(1);
+    while let Some(arg) = args.next() {
+        if arg == "--backend" {
+            let name = args.next().ok_or_else(|| {
+                invalid("--backend takes a name: crossterm, termion or termwiz".into())
+            })?;
+            backend = Some(name);
+        } else if let Some(name) = arg.strip_prefix("--backend=") {
+            backend = Some(name.to_string());
+        } else {
+            start = Some(PathBuf::from(arg));
+        }
+    }
+    let backend = match backend {
+        Some(name) => backend_named(&name).map_err(invalid)?,
+        None => BackendKind::default(),
+    };
+    let start =
+        start.unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
+    files_app(start)
+        .help_key("?")
+        .palette_key("ctrl+p")
+        .run_with(backend)
 }

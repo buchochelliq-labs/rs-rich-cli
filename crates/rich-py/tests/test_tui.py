@@ -853,6 +853,42 @@ def test_driver_helpers_press_type_and_assert_the_focus():
         driver.press("ctrl-q")
 
 
+def test_the_inspector_traces_times_and_selects():
+    def build():
+        count = signal(0)
+        return (
+            text(lambda: f"count {count.get()}")
+            .name("count")
+            .on_key("+", lambda cx: count.update(lambda c: c + 1))
+        )
+
+    driver = App(build).inspector(True).driver(80, 10)
+    driver.press("+")
+    trace = driver.inspector_trace()
+    assert [e.text for e in trace if e.kind == "key"] == ["key + → count on_key"]
+    write = next(e for e in trace if e.kind == "signal")
+    assert "→ count" in write.text
+    assert write.frame >= 1 and write.at == 0.0
+    assert "TraceEntry(frame=" in repr(write)
+    timing = next(t for t in driver.inspector_timings() if t.name == "count")
+    # The first frame, and the one after `+`.
+    assert timing.draws == 2
+    assert timing.total >= timing.last >= 0.0
+    assert isinstance(timing.id, int)
+    # Shift+F12 gives the inspector the keys: the arrows select a node, and
+    # `+` does not reach the app until Esc gives them back.
+    assert driver.inspector_selected() is None
+    driver.press("shift+f12 down +")
+    assert driver.inspector_selected() == timing.id
+    assert driver.screen()[0].startswith("count 1")
+    driver.press("esc +")
+    assert driver.screen()[0].startswith("count 2")
+    # Without an inspector there is nothing.
+    plain = App(build).driver(20, 1)
+    plain.press("+")
+    assert plain.inspector_trace() == [] and plain.inspector_timings() == []
+
+
 def test_screen_snapshots_write_compare_and_diff(tmp_path, monkeypatch):
     def build():
         count = signal(0)
