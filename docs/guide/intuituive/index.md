@@ -1095,7 +1095,7 @@ the text under it, shown reversed, and copies it when the button is let
 go, with OSC 52, so it works over SSH too, in terminals that allow it. A
 toast says how much was copied. `App::selectable(false)` turns this off.
 A handler puts text of its own on the clipboard with `cx.copy(text)` (the
-`files` example yanks a path with `y`), with the same toast.
+`files` example copies a path with `c c`, as Yazi does), with the same toast.
 
 ## Your own widgets
 

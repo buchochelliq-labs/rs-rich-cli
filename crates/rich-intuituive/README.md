@@ -82,7 +82,8 @@ Coming from ratatui? The
 [porting guide](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/docs/guide/intuituive/porting.md)
 maps every concept, and `examples/files.rs` rebuilds the core of
 [Yazi](https://github.com/sxyazi/yazi), the most-starred ratatui app:
-three columns, vim keys, previews highlighted in the background.
+its layout, theme, status line and keymap, previews highlighted in the
+background, all from the framework's ready-made components.
 ratatui's own example apps are rebuilt too, starting with `demo` and
 `demo2`: see
 [ratatui's examples, rebuilt](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/docs/guide/intuituive/ratatui-examples.md).
@@ -96,7 +97,7 @@ More examples (`cargo run -p rs-rich-intuituive --example <name>`):
 | `inline` | an inline app that keeps the scrollback |
 | `meters` | widgets of your own: retained drawing, focus, resize and pointer events, keys seen first |
 | `planner` | the components together: a menu bar, a tree, split panes, a calendar, a virtual list, the palette |
-| `files` | a Yazi-style file manager: split panes, a table, a preview on a worker, help and palette from the bindings, a right-click menu |
+| `files` | a Yazi-style file manager: lists in split panes, a preview on a worker, chords with a which-key pop-up, prompts, confirmations, the help, tabs, a right-click menu |
 | `scope` | an oscilloscope ported from scope-tui, on the chart widget |
 | `dashboard` | an ops dashboard: a service list, a detail pane, a streaming log (the benchmark measures it) |
 | `in_ratatui` | an app inside a ratatui program, which owns the loop |

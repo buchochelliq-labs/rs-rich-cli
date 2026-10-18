@@ -25,9 +25,11 @@ covers both. Three complete ports show where it leads:
 - **A Yazi-style file manager.** [Yazi](https://github.com/sxyazi/yazi) is
   the most-starred app built on ratatui. It is rebuilt on intuiTUIve in
   [`examples/files.rs`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/crates/rich-intuituive/examples/files.rs)
-  (`cargo run -p rs-rich-intuituive --example files`), with three columns
-  (parent, current, preview), vim keys, previews loaded and highlighted in
-  the background, hidden files, sorting and filtering. See
+  (`cargo run -p rs-rich-intuituive --example files`), with Yazi's layout,
+  theme, status line and default keymap (chords and their which-key pop-up
+  included), previews loaded and highlighted in the background, selection
+  and visual mode, yank, paste, trash, delete, create and rename, find,
+  filter, sorting, tabs and the help. See
   [the walkthrough](#worked-example-a-yazi-style-file-manager) below.
 - **An oscilloscope.** [scope-tui](https://github.com/alemidev/scope-tui)
   draws audio as an oscilloscope, a vectorscope and a spectroscope, twenty
@@ -290,50 +292,71 @@ way in for an app too big to port at once: move one pane at a time.
 ## Worked example: a Yazi-style file manager
 
 [`examples/files.rs`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/crates/rich-intuituive/examples/files.rs)
-reproduces Yazi's core behaviour in about 550 lines, including its helpers.
-Its tests are in `tests/files.rs`. It does not reuse any of Yazi's code: it
-is a rebuild of the behaviour, showing how a large ratatui app's ideas map.
+reproduces Yazi as it looks and behaves out of the box: its 1:4:3 columns,
+its default dark theme, header, tab strip and status line, and its default
+keymap. It is built only from the framework's ready-made components, with
+no widget of its own. Its tests are in `tests/files.rs`. It does not reuse
+any of Yazi's code: it is a rebuild of the behaviour, showing how a large
+ratatui app's ideas map.
 
 !!! note "Credit"
     Ported from [Yazi](https://github.com/sxyazi/yazi), by sxyazi and its
-    contributors (MIT licence). Its three-column design, keys and behaviour
-    are theirs.
+    contributors (MIT licence). Its layout, keys, theme and behaviour are
+    theirs. The optional icons (`--icons`, for a Nerd Font) are the glyphs
+    Yazi's theme picks, from nvim-web-devicons (MIT).
 
 ![The file manager: parent, current directory and a highlighted preview](../../media/tapes/files/files.png)
 
 | Yazi does | The rebuild uses |
 |---|---|
-| Three columns: parent, current, preview, in a 1:4:3 ratio | `hsplit(parent, hsplit(current, preview, inner), outer)`, with dividers the mouse drags |
-| A selectable, scrolling file list with sizes | `table(columns, rows, selected)`: a name and a size column; keys, clicks and the wheel move the selection |
-| The parent column marks the current directory | a second `list(..)` with `.no_focus()`, its selection kept in step by a `watch` |
-| Previews loaded and highlighted off the UI thread | a `watch` on the selection starts a `spawn`; a generation counter drops stale results |
-| Remembers where you were when you go up | `h` selects the directory you came from |
-| Hidden files, sort order, filter | signals read by one `memo` of the directory listing |
-| Filter prompt | `cx.popup(status, Placement::Above, ..)` holding an `Input` component, just above the status line |
-| A preview that J and K scroll | `scroll_with(preview, offset)`; J/K move the offset, and the wheel scrolls it too |
-| Tabs (`t`, 1–9, close) | a signal of directories, `tabs(titles, active)` shown once there are two |
-| Help overlay | `.help_key("?")`: the built-in help, made from each binding's description (`.bind(keys, "what it does", ..)`) |
-| Yank the path (`y`) | `cx.copy(path)`: on the clipboard, and a toast says so |
-| (not in Yazi) a command palette and a right-click menu | `.palette_key("ctrl+p")`, from the same bindings; `context_menu(cx, items)` in the table's `on_mouse` |
-| Watches the disk | `every(2s)` re-reads; the listing is a memo, so an unchanged directory draws nothing |
+| Three columns, parent, current and preview, in a 1:4:3 ratio, with rails the mouse drags | `hsplit(parent, hsplit(current, preview, inner), outer)`; the theme's `split.divider` is Yazi's gray |
+| The hovered row reversed across the column, in the entry's colour (a blue bar on a directory) | a `list` per column: its `row_style` gives each row its type's colour and the theme's `selected` reverses it |
+| Line modes (size, permissions, times, owner) at the right of the rows | a second `list` on the same cursor, as wide as its widest cell |
+| Markers for selected, visual-range and yanked rows, and their count in the header | markup at the start of each row; a `text` in the header |
+| A status line: mode, size and name; permissions, `Top`/`Bot`/percent and position | two `text`s in a `row`, coloured as Yazi's theme |
+| Keys: one keymap, chords (`gg`, `,s`, `cc`, `tt`) with a which-key pop-up | the root takes the focus and holds every binding; the first key of a chord opens a `cx.popup` at the bottom whose bindings run the second |
+| Previews loaded and highlighted off the UI thread | a `watch` on the hovered entry starts a `spawn`; a generation counter drops stale results, and a slow one clears the pane |
+| Prompts for find, filter, create, rename and `cd`, applied as typed | `input(signal)` in a `cx.popup` at Yazi's place, a `watch` on the signal |
+| Confirmations before trashing, deleting and overwriting | `cx.modal` with the files and the two buttons |
+| The help, searchable | `cx.modal` holding an `input` and a `list` |
+| fzf and zoxide jumps (`z`, `Z`) | rs-rich-interact's `Jump` component in a modal: files below here, directories visited |
+| Tabs (`tt`, 1–9, `[ ]`, Ctrl+C) | a signal of tabs, `tabs(titles, active)` shown once there are two |
+| Watches the disk | `every(2s)` looks at the directories' modification times; a listing is read again only when one moved |
+| (not in Yazi) a command palette and a right-click menu | `.palette_key("ctrl+p")`, from the bindings' descriptions; `context_menu(cx, items)` in the list's `on_mouse` |
 
-![The help, made from the bindings' descriptions](../../media/tapes/files/files-help.png)
+![The which-key pop-up after `,`](../../media/tapes/files/files-which.png)
 
-![The command palette, from the same bindings](../../media/tapes/files/files-palette.png)
+![The help](../../media/tapes/files/files-help.png)
 
-![Two tabs, and the filter prompt opened just above the status line](../../media/tapes/files/files-filter.png)
+![The confirmation before trashing a file](../../media/tapes/files/files-confirm.png)
+
+![The filter, applied as it is typed](../../media/tapes/files/files-filter.png)
+
+Where it differs from Yazi, and why:
+
+- **Trash** goes to a `.trash` folder in the directory the app started in,
+  not the system's trash, so nothing outside it changes.
+- **Opening a file** (Enter, `o`) is left to the shell: the demo opens
+  directories only. Images are described, not drawn; there is no task
+  manager, shell (`;`), `fd`/`rg` search or bulk rename.
+- **Icons** are off unless `--icons` is given, since they need a Nerd Font;
+  without it the rows and the status line are plain text, as Yazi with its
+  icons turned off.
+- **Times** are in UTC and owners are numbers: the standard library has no
+  time zones or user names.
 
 Two things the port shows:
 
 1. **Slow work belongs on a worker, including rendering.** Highlighting a
-   language for the first time compiles its grammar, which takes over a
-   second in a debug build. The preview worker therefore highlights the text
-   too, at the pane's size, and the app's thread only copies the finished
-   lines onto the screen. Yazi does this for the same reason.
-2. **The listing is data, the table is a view.** One memo holds the
-   filtered, sorted entries. The table, the status bar and the preview
-   `watch` all read it, and each updates only when the part it read
-   changes.
+   language for the first time compiles its grammar, which takes seconds
+   in a debug build for Markdown and its embedded languages. The preview
+   worker therefore highlights the text too, at the pane's size, and the
+   app's thread only copies the finished lines onto the screen. Yazi does
+   this for the same reason.
+2. **The listing is data, the lists are views.** One memo holds the
+   filtered, sorted entries. The columns, the header, the status line and
+   the preview `watch` all read it, and each updates only when the part it
+   read changes.
 
 ## Worked example: scope-tui, an oscilloscope
 

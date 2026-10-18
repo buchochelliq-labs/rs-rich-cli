@@ -1,0 +1,26 @@
+~/project                                                                                        2
+  project   │ src                                            4│#!/bin/sh
+            │ tests                                          1│echo hi
+            │ run.sh                                       18B│
+            │ Cargo.toml                                  181B│
+            │ readme-link -> README.md                    1.4K│
+            │ README.md                                   1.4K│
+            │                                                 │
+            │                                                 │
+            │                                                 │
+            │                                                 │
+            │                                                 │
+            │                                                 │
+            │                                                 │
+            │                                                 │
+            │                                                 │
+            │                                                 │
+            │                                                 │
+            │                                                 │
+            │                                                 │
+            │                                                 │
+            │                                                 │
+            │                                                 │
+            │                                                 │
+            │                                                 │
+ NOR  18B  run.sh                                                            -rwxr-xr-x  50%   3/6

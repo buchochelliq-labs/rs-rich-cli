@@ -272,24 +272,28 @@ then the command palette. See [Terminal apps](guide/intuituive/index.md).
 
 `rs-rich-intuituive`'s `files` example, a rebuild of the behaviour of
 [Yazi](https://github.com/sxyazi/yazi) by sxyazi and contributors (MIT), in
-the fixture project: the parent directory, the current one (a table with
-sizes) and a preview highlighted on a worker thread, in panes whose
-dividers drag; then the help and the command palette, both made from the
-key bindings, a second tab, and the filter prompt opened just above the
-status line. See
+the fixture project: Yazi's three columns, theme and status line, a Rust
+file previewed with highlighting done on a worker thread, the which-key
+pop-up after `,` and the sort by size it picks, the help, a selection, the
+filter applied as it is typed, the confirmation before trashing, the
+right-click menu, the command palette and a second tab. See
 [Porting a ratatui app](guide/intuituive/porting.md#worked-example-a-yazi-style-file-manager).
 
 <div class="tape-player" data-cast="../media/tapes/files/files.cast" data-poster="npt:0:3">
   <img src="../media/tapes/files/files.gif" alt="A Yazi-style file manager browsing the fixture project">
 </div>
 
-| Browsing | Help |
+| Browsing | Which-key |
 |---|---|
-| ![A Rust file previewed](media/tapes/files/files.png) | ![The help overlay](media/tapes/files/files-help.png) |
-| **Tabs** | **Filter** |
-| ![Two tabs](media/tapes/files/files-tabs.png) | ![The filter prompt above the status line](media/tapes/files/files-filter.png) |
-| **Command palette** | **Right-click menu** |
-| ![The command palette](media/tapes/files/files-palette.png) | ![The menu a right click opens on a row](media/tapes/files/files-menu.png) |
+| ![A Rust file previewed](media/tapes/files/files.png) | ![What can follow `,`](media/tapes/files/files-which.png) |
+| **Help** | **Selection** |
+| ![The help](media/tapes/files/files-help.png) | ![Two directories selected](media/tapes/files/files-select.png) |
+| **Filter** | **Confirmation** |
+| ![The filter as it is typed](media/tapes/files/files-filter.png) | ![Trash, asked first](media/tapes/files/files-confirm.png) |
+| **Tabs** | **Right-click menu** |
+| ![Two tabs](media/tapes/files/files-tabs.png) | ![The menu a right click opens on a row](media/tapes/files/files-menu.png) |
+| **Command palette** | |
+| ![The command palette](media/tapes/files/files-palette.png) | |
 
 [Tape](tapes/files.tape) · [Cast](media/tapes/files/files.cast) · [GIF](media/tapes/files/files.gif) · [Page](media/tapes/files/files.html)
 
