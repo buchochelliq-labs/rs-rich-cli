@@ -61,6 +61,7 @@ mod render_target;
 mod serve;
 mod sources;
 mod structured_log;
+mod style_rules;
 mod tools;
 mod viewers;
 mod watch;
@@ -601,6 +602,9 @@ struct Cli {
     schema: sources::SchemaOptions,
     /// `rich profile` options: `--sample`, `--columns`, `--top`.
     profile: profile::ProfileOptions,
+    /// `--style-rule` and `--rules` (and a config's `[[rules]]`): conditional
+    /// styles for `--csv`, `rich profile` and `rich inspect --table`.
+    rules: style_rules::RuleOptions,
     /// `--highlighter NAME`: the console-wide code highlighter.
     highlighter: Option<String>,
     /// `--code-theme NAME`: a theme of the chosen code highlighter.
@@ -1124,6 +1128,9 @@ const VALUE_OPTIONS: &[&str] = &[
     "--sample",
     "--columns",
     "--top",
+    "--max-paths",
+    "--style-rule",
+    "--rules",
     "--highlighter",
     "--code-theme",
     "--plugin",
@@ -1882,6 +1889,7 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
     let mut chart = chart::ChartOptions::default();
     let mut schema_options = sources::SchemaOptions::default();
     let mut profile_options = profile::ProfileOptions::default();
+    let mut rule_options = style_rules::RuleOptions::default();
     let mut highlighter: Option<String> = None;
     let mut plugins: Vec<String> = Vec::new();
     let mut code_theme: Option<String> = None;
@@ -1996,6 +2004,9 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
             continue;
         }
         if profile_options.parse_option(arg, &mut iter)? {
+            continue;
+        }
+        if rule_options.parse_option(arg, &mut iter)? {
             continue;
         }
         if matches!(
@@ -2523,6 +2534,13 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
     {
         return Err(format!("{flag} only has an effect with --ansi-explain"));
     }
+    // `--depth` is `rich deps`'s flag and `rich profile`'s too: deps' options
+    // parse it, and hand it over here.
+    if mode == Mode::Profile {
+        if let Some(depth) = graph_sources.take_depth() {
+            profile_options.set_depth(depth)?;
+        }
+    }
     for (flag, commands) in viewer_options
         .given()
         .into_iter()
@@ -3015,6 +3033,7 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
         chart,
         schema: schema_options,
         profile: profile_options,
+        rules: rule_options,
         highlighter,
         code_theme,
         plugins,
@@ -4845,13 +4864,15 @@ fn run_once_with_fetch(mut cli: Cli, prefetched: Option<(String, Option<String>)
             // `.tsv` only picks the fallback dialect; the sniffer reads the file
             // itself, so a comma-separated `.tsv` still renders as a table.
             let fallback = csv_fallback_delimiter(cli.resource.as_deref());
-            let table = match build_csv_table(
+            let rules = cli.rules.rules();
+            let table = match build_csv_table_with(
                 &content,
                 fallback,
                 cli.title.as_deref(),
                 cli.caption.as_deref(),
                 (cli.source.head, cli.source.tail),
                 cli.source.infer,
+                (!rules.is_empty()).then_some((&console, rules)),
             ) {
                 Some(table) => table,
                 // Upstream's `on_error(str(error))`. The message is CPython's,
@@ -5015,7 +5036,14 @@ fn run_once_with_fetch(mut cli: Cli, prefetched: Option<(String, Option<String>)
                 read_resource_limited(Some(path), encoding, Some(controls::INSPECT_LIMIT))
                     .map_err(|err| format!("cannot read {path}: {err}"))
             };
-            let view = match inspect::build(&cli.data, &content, cli.resource.as_deref(), read) {
+            let rules = cli.rules.rules();
+            let view = match inspect::build_with(
+                &cli.data,
+                &content,
+                cli.resource.as_deref(),
+                read,
+                rules,
+            ) {
                 Ok(view) => view,
                 Err(err) => return fail(&cli, ExitClass::Data, err),
             };
@@ -5295,6 +5323,28 @@ fn build_csv_table(
     window: (Option<usize>, Option<usize>),
     infer: bool,
 ) -> Option<Table> {
+    build_csv_table_with(
+        content,
+        fallback_delimiter,
+        title,
+        caption,
+        window,
+        infer,
+        None,
+    )
+}
+
+/// [`build_csv_table`] with `--style-rule`/`--rules` (not upstream): the
+/// rules, and the console that renders a styled cell's markup.
+fn build_csv_table_with(
+    content: &str,
+    fallback_delimiter: Option<char>,
+    title: Option<&str>,
+    caption: Option<&str>,
+    window: (Option<usize>, Option<usize>),
+    infer: bool,
+    rules: Option<(&Console, &rich_ext::table::StyleRules)>,
+) -> Option<Table> {
     // The sniffer sees only the first 1024 *characters* — upstream's
     // `csv_data[:1024]` — however long the file is.
     let sample: String = content.chars().take(1024).collect();
@@ -5323,7 +5373,7 @@ fn build_csv_table(
         rows = header_row.into_iter().chain(data).collect();
     }
     let types = infer.then(|| infer_csv_types(&rows, header));
-    Some(render_csv(rows, header, title, caption, types))
+    Some(render_csv(rows, header, title, caption, types, rules))
 }
 
 /// Each column's inferred type, for `--infer`: the data rows (blank lines
@@ -5376,12 +5426,17 @@ fn csv_fallback_delimiter(resource: Option<&str>) -> Option<char> {
 /// an integer or a float, so null tokens (`NA`, `null`, …) no longer make a
 /// number column text, and each heading shows its type on a second, dim
 /// line; a table without a header row then shows a heading of types alone.
+///
+/// With `rules` (`--style-rule`, `--rules`; not upstream), the rules style
+/// the data rows by header (or `#N`), each cell compared as its text; a
+/// styled cell is its markup rendered by the console, then styled.
 fn render_csv(
     rows: Vec<Vec<String>>,
     has_header: bool,
     title: Option<&str>,
     caption: Option<&str>,
     types: Option<Vec<InferredType>>,
+    rules: Option<(&Console, &rich_ext::table::StyleRules)>,
 ) -> Table {
     let mut table = Table::new()
         .border_style(Style::parse("blue").expect("valid style"))
@@ -5457,13 +5512,78 @@ fn render_csv(
     // Measurement/style inference is complete. Move the parsed cells into the
     // table rather than retaining and cloning the complete input row set.
     drop(data);
-    table.extend_owned_rows(
-        rows.into_iter()
-            .skip(usize::from(has_header))
-            .filter(|row| !row.is_empty())
+    let headers: Vec<String> = match rules {
+        Some(_) => (0..columns)
+            .map(|index| header.get(index).cloned().unwrap_or_default())
             .collect(),
-    );
+        None => Vec::new(),
+    };
+    let body = rows
+        .into_iter()
+        .skip(usize::from(has_header))
+        .filter(|row| !row.is_empty());
+    match rules.filter(|(_, rules)| !rules.is_empty()) {
+        None => {
+            table.extend_owned_rows(body.collect());
+        }
+        Some((console, rules)) => {
+            add_styled_csv_rows(&mut table, console, rules, &headers, body.collect())
+        }
+    }
     table
+}
+
+/// Add CSV `rows` to `table` styled by `rules`, matched against `headers`;
+/// each cell is compared as its text (`Value::Str`, so a number in text
+/// compares as a number). An unstyled cell stays markup, as upstream's.
+fn add_styled_csv_rows(
+    table: &mut Table,
+    console: &Console,
+    rules: &rich_ext::table::StyleRules,
+    headers: &[String],
+    rows: Vec<Vec<String>>,
+) {
+    use rich_ext::table::{Target, Value};
+    let headers: Vec<&str> = headers.iter().map(String::as_str).collect();
+    let values = |row: &[String]| -> Vec<Value> { row.iter().cloned().map(Value::Str).collect() };
+    // Only a column rule needs every row before the first is drawn.
+    let resolved = if rules
+        .rules()
+        .iter()
+        .any(|r| r.target_kind() == Target::Column)
+    {
+        rules.resolve(&headers, rows.iter().map(|row| values(row)))
+    } else {
+        rules.resolve(&headers, std::iter::empty::<Vec<Value>>())
+    };
+    style_rules::warn_unresolved(&resolved, &headers);
+    for row in rows {
+        let cells: Vec<Value> = row.into_iter().map(Value::Str).collect();
+        let row_style = resolved.row_style(&cells);
+        let styles: Vec<Option<Style>> = (0..cells.len())
+            .map(|index| resolved.cell_style(&cells, index))
+            .collect();
+        let cells = cells
+            .into_iter()
+            .zip(styles)
+            .map(|(cell, style)| {
+                let markup = match cell {
+                    Value::Str(text) => text,
+                    other => other.plain(),
+                };
+                match style {
+                    None => rich::Cell::Markup(markup),
+                    Some(style) => {
+                        let mut text = console.render_str(&markup, Some(false));
+                        let len = text.plain().len();
+                        text.stylize(style, 0, len);
+                        rich::Cell::Text(text)
+                    }
+                }
+            })
+            .collect();
+        table.add_row_with(cells, row_style.map(Into::into), false);
+    }
 }
 
 /// Join a notebook cell/output `source` field (a JSON string, or an array of

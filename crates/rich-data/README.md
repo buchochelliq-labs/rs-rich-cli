@@ -83,6 +83,21 @@ rows arrive) count every row. The heading prints the sample size
 there was one. `CsvReader::source` and `jsonl::source` stream from any
 `BufRead`, so memory is the sample, whatever the input's size.
 
+**Nested JSON** (0.0.3): `Profile::from_json_lines` (or a `JsonProfiler` fed
+`serde_json::Value`s) profiles JSON records path by path rather than as rows
+of their top-level keys: `user.plan`, `tags[]`, `items[].sku`, and
+`["http.status"]` for a key holding a `.` (`profile::path_key`). Each path
+counts the records that lack it apart from an explicit `null`, and the JSON
+types its values had, so a field that is sometimes a number and sometimes a
+string is flagged as mixed. The walk is bounded (`ProfileOptions::depth`, 4
+steps; `max_paths`, 200, the rest named), each path keeps a sample of its
+values, and a line that is not JSON is counted rather than fatal.
+`rich profile` draws JSON Lines this way, `--flat` the old way.
+
+**Conditional styles** for a profile's table of columns:
+`Profile::style_rules(rules)` takes `rich_ext::table::StyleRules`, naming its
+headings (`table_headers()`) and comparing the profile's own values.
+
 **Data quality results** are a model, not an engine: a `quality::CheckResult`
 holds a check's name, its column, a status (pass, warn, fail or error),
 what it observed and expected, a message and a sample of the failing rows.
@@ -104,7 +119,7 @@ console.print(&report);
 
 Both draw with theme keys a console theme can override: `profile::STYLES`
 (`profile.title`, `profile.column`, `profile.type`, `profile.note`,
-`profile.null`) and `quality::STYLES` (`quality.pass`, `quality.warn`,
+`profile.null`, `profile.mixed`) and `quality::STYLES` (`quality.pass`, `quality.warn`,
 `quality.fail`, `quality.error`, `quality.check`, `quality.dim`).
 
 ## Features
