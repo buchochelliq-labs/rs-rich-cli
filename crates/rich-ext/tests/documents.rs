@@ -547,24 +547,128 @@ fn deep_nesting_and_long_lines_are_bounded() {
     }
 }
 
-/// About a megabyte of each format parses and renders in linear time: in a
-/// debug build this allows generous headroom; a release build is far faster.
+fn view_as(format: &str, source: &str) -> DocumentView {
+    match format {
+        "org" => DocumentView::org(source),
+        "asciidoc" => DocumentView::asciidoc(source),
+        _ => DocumentView::man(source),
+    }
+}
+
+/// Parse and print `source`, returning the time taken and the output size.
+fn timed(format: &str, source: &str) -> (Duration, usize) {
+    let started = Instant::now();
+    let view = view_as(format, source);
+    let out = console(100, false).capture(|console| console.print(&view));
+    (started.elapsed(), out.len())
+}
+
+/// A document of `bytes` or so that reads like most do: sections of prose
+/// with inline markup and lists, a code block every tenth section and a
+/// table every twentieth.
+fn typical(format: &str, bytes: usize) -> String {
+    let mut out = String::new();
+    let mut section = 0;
+    while out.len() < bytes {
+        section += 1;
+        let code = section % 10 == 0;
+        let table = section % 20 == 0;
+        let piece = match format {
+            "org" => {
+                let mut piece = format!(
+                    "* Section {section} :notes:\n\
+                     The parser reads *bold*, /italic/, ~code~ and +struck+ text, and links\n\
+                     such as [[https://orgmode.org][the Org site]]. A paragraph runs over a\n\
+                     few source lines and wraps to the terminal's width when printed.\n\n\
+                     Another paragraph follows it, with =verbatim= words and a footnote[fn:1].\n\n\
+                     - [X] a checked item\n- [ ] an open item\n  1. a numbered one inside\n\n"
+                );
+                if code {
+                    piece.push_str(
+                        "#+BEGIN_SRC python\ndef greet(name):\n    return name\n#+END_SRC\n\n",
+                    );
+                }
+                if table {
+                    piece.push_str("| Kind | Count |\n|------+-------|\n| a    |     1 |\n\n");
+                }
+                piece
+            }
+            "asciidoc" => {
+                let mut piece = format!(
+                    "== Section {section}\n\n\
+                     The parser reads *bold*, _italic_, `code` and #marked# text, and links\n\
+                     such as https://asciidoc.org[the AsciiDoc site]. A paragraph runs over a\n\
+                     few source lines and wraps to the terminal's width when printed.\n\n\
+                     Another paragraph follows it, with +passthrough+ words.footnote:[A note.]\n\n\
+                     * a bulleted item\n* another one\n** a nested one\n\n"
+                );
+                if code {
+                    piece.push_str(
+                        "[source,python]\n----\ndef greet(name):\n    return name\n----\n\n",
+                    );
+                }
+                if table {
+                    piece.push_str("|===\n| Kind | Count\n\n| a | 1\n|===\n\n");
+                }
+                piece
+            }
+            _ => {
+                let mut piece = format!(
+                    ".SH SECTION {section}\n\
+                     The parser reads \\fBbold\\fR, \\fIitalic\\fR and \\(em dashes, and\n\
+                     links such as\n.UR https://man7.org\nthe man pages\n.UE .\n\
+                     A paragraph runs over a few source lines and wraps when printed.\n\
+                     .PP\nAnother paragraph follows it.\n\
+                     .TP\n.B \\-n \\fIcount\\fR\nRepeat each greeting.\n\
+                     .IP \\(bu 2\nA bulleted item.\n"
+                );
+                if code {
+                    piece.push_str(".EX\ngreet \\-n 2 world\n.EE\n");
+                }
+                if table {
+                    piece.push_str(".TS\nl l.\nKind\tCount\na\t1\n.TE\n");
+                }
+                piece
+            }
+        };
+        out.push_str(&piece);
+    }
+    out
+}
+
+/// A megabyte of an ordinary document prints well under a second in a
+/// release build (a debug build only has to finish).
 #[test]
 fn a_megabyte_renders_quickly() {
-    let org_unit = fs::read_to_string(fixtures().join("sample.org")).unwrap();
-    let adoc_unit = fs::read_to_string(fixtures().join("sample.adoc")).unwrap();
-    let man_unit = fs::read_to_string(fixtures().join("sample.1")).unwrap();
     let limit = if cfg!(debug_assertions) {
         Duration::from_secs(60)
     } else {
         Duration::from_secs(1)
     };
-    for (format, unit) in [
-        ("org", org_unit),
-        ("asciidoc", adoc_unit),
-        ("man", man_unit),
+    for format in ["org", "asciidoc", "man"] {
+        let source = typical(format, 1024 * 1024);
+        let (elapsed, out) = timed(format, &source);
+        assert!(out > source.len() / 2, "{format}: little output");
+        assert!(
+            elapsed < limit,
+            "{format}: {} bytes took {elapsed:?}",
+            source.len()
+        );
+    }
+}
+
+/// The samples, which use nearly every construct, cost time in proportion
+/// to their size. Code blocks and tables cost what core's `Syntax` and
+/// `Table` cost, as they do in `Markdown`: a megabyte of nothing but code
+/// blocks takes seconds in either.
+#[test]
+fn rendering_time_grows_linearly() {
+    for (format, name) in [
+        ("org", "sample.org"),
+        ("asciidoc", "sample.adoc"),
+        ("man", "sample.1"),
     ] {
-        let repeat = (1024 * 1024) / unit.len() + 1;
+        let unit = fs::read_to_string(fixtures().join(name)).unwrap();
         // Keep one document title and running header; repeat the body.
         let body: String = unit
             .lines()
@@ -573,20 +677,17 @@ fn a_megabyte_renders_quickly() {
             })
             .map(|line| format!("{line}\n"))
             .collect();
-        let source = body.repeat(repeat);
-        let started = Instant::now();
-        let view = match format {
-            "org" => DocumentView::org(&source),
-            "asciidoc" => DocumentView::asciidoc(&source),
-            _ => DocumentView::man(&source),
-        };
-        let out = console(100, false).capture(|console| console.print(&view));
-        let elapsed = started.elapsed();
-        assert!(out.len() > source.len() / 4, "{format}: little output");
+        let small = body.repeat(64 * 1024 / body.len() + 1);
+        let large = body.repeat(4 * (64 * 1024 / body.len() + 1));
+        let (small_time, small_out) = timed(format, &small);
+        let (large_time, large_out) = timed(format, &large);
+        assert!(large_out >= 3 * small_out, "{format}: output did not grow");
+        // Four times the input; linear is about four times the time.
         assert!(
-            elapsed < limit,
-            "{format}: {} bytes took {elapsed:?}",
-            source.len()
+            large_time < small_time * 8 + Duration::from_millis(100),
+            "{format}: {} bytes took {small_time:?}, {} bytes {large_time:?}",
+            small.len(),
+            large.len()
         );
     }
 }

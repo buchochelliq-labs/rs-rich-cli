@@ -297,6 +297,57 @@ per browser session](#one-process-per-browser-session-web-002).
   [times and reorderable lists](docs/guide/intuituive/index.md#times-and-a-date-with-a-time)
   in intuiTUIve, and `rich date` in [Ask in a script](docs/cli.md#ask-in-a-script).
 
+### Org-mode, AsciiDoc and man pages (ext 0.0.16, cli 0.0.19)
+
+0.0.19 workstream 19 (#594, #595, #591, #592, #593).
+
+- **`rich_ext::document`**: one interface for document formats. A
+  `DocumentFormat` has an id, aliases, extensions, a content sniffer that
+  returns a confidence, and a renderer that returns diagnostics with the
+  renderable. `DocumentRegistry::with_builtins()` holds Markdown,
+  reStructuredText, Org, AsciiDoc and man, and `detect` picks one from a
+  file name and the content. A plugin's `SourceRenderer` joins the registry
+  through `SourceRendererFormat`.
+- **One look.** Org, AsciiDoc and man pages parse into a small block and
+  inline model (`Document`, `Block`, `Inline`). `DocumentView` draws it in
+  the look of core's `Markdown`, with the same `markdown.*` styles. New
+  `document.*` styles cover TODO keywords, tags, admonitions and callouts.
+- **Org**: headlines with TODO keywords, priorities and tags; emphasis;
+  plain, numbered, description and checkbox lists; source, example, quote,
+  verse and special blocks; tables; links, footnotes and timestamps.
+  Comments, export blocks and `#+NAME` lines are not shown.
+- **AsciiDoc**: the header and its attributes; sections; constrained and
+  unconstrained quotes; every list kind, with `+` continuations; listing,
+  source (with callouts), literal, example, sidebar, quote and verse blocks;
+  admonitions; tables; links, footnotes and inline macros. `include::` is
+  not followed, and a warning says so.
+- **Man pages**: man(7) with its header and footer, sections, tagged and
+  indented paragraphs, fonts and escapes, `.if` and `.ie`, tbl tables, and
+  the common mdoc(7) macros. `eqn`, `pic` and `.so` are skipped with a
+  warning.
+- **Robust.** No input makes a parser panic. Nesting is capped and inline
+  parsing is linear. A megabyte of ordinary text renders in well under a
+  second in a release build. A deterministic stress test feeds garbled and
+  deeply nested input to all three parsers.
+- **`rich` (CLI)**: `--org`, `--asciidoc` (`--adoc`) and `--man` (`--roff`),
+  and the same names as subcommands. `--format` takes a document format as
+  well as a data format. `--syntax` still shows a file's source. The config
+  file accepts the new modes, and `mode = "rst"`, which it refused before.
+  The CLI reference is regenerated.
+- **Detection.** `.org`, `.adoc`, `.asciidoc`, `.man`, `.roff` and `.mdoc`
+  pick their format by name. `.1` to `.9` and `.asc` need the content to
+  agree. A file with no extension is a document only when its content is
+  unmistakable. Piped input is sniffed only with `--format auto`. A
+  compressed man page such as `ls.1.gz` exits 3 with a hint to decompress
+  it, since rich does not decode it.
+- **Python:** `rs_rich.ext.document`, with `DocumentView`, `render`,
+  `detect`, `sniff` and `formats`, and a
+  [Documents](docs/python/ext/documents.md) page in the Python docs.
+- **Docs:** a guide page, [Documents](docs/guide/ext/documents.md), a
+  section in [the CLI guide](docs/cli.md#org-asciidoc-and-man-pages), a
+  note in [PLUGINS.md](docs/PLUGINS.md#document-formats-0019), and
+  `docs/tapes/documents.tape` (not yet recorded).
+
 ### One process per browser session (web 0.0.2)
 
 0.0.19 workstream 3.

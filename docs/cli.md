@@ -1,7 +1,8 @@
 # Using the CLI
 
-`rich` renders files that are painful to read in a terminal — Markdown, JSON,
-CSV, source code, notebooks, images — and compares images, text files and
+`rich` renders files that are painful to read in a terminal — Markdown, Org,
+AsciiDoc and man pages, JSON, CSV, source code, notebooks, images — and
+compares images, text files and
 patches. It also explores structured data (`inspect`), shows any file (`view`),
 looks inside bytes, characters and escape sequences (`hex`, `unicode`,
 `ansi explain`), lists the environment (`env`) and captures a command's output
@@ -62,7 +63,8 @@ optionally with `--demo-section`, `--demo-delay`, `--no-color` or
 ## Read a file
 
 Point `rich` at a file and it picks a renderer from the extension: `.md`,
-`.json`, `.csv`, `.tsv` and `.ipynb` get their own; **anything else with an
+`.rst`, `.org`, `.adoc`, `.json`, `.csv`, `.tsv` and `.ipynb` get their own (as
+do man pages, [below](#org-asciidoc-and-man-pages)); **anything else with an
 extension is syntax-highlighted**.
 
 ```bash
@@ -127,6 +129,56 @@ Titles are drawn in double-bordered panels, admonitions in titled panels,
 field lists as a table and code in a bordered `Syntax` panel. The port covers
 the common subset of reStructuredText; DIVERGENCES §35 lists what it leaves
 out.
+
+### Org, AsciiDoc and man pages
+
+*New in 0.0.19.* Upstream renders Markdown and reStructuredText only; this
+port also renders Org files, AsciiDoc and man pages from their roff source,
+in the same look as Markdown: the same heading styles, list markers, code
+panels and tables.
+
+```bash
+rich notes.org                    # headlines, TODO keywords, tags, drawers
+rich guide.adoc                   # sections, admonitions, source blocks
+rich ls.1                         # a man page's roff source
+rich --org TODO                   # force a format: --org, --asciidoc, --man
+rich asciidoc README.txt          # or as a subcommand (also adoc, roff)
+rich --format man page.txt        # or by name, as --format takes data formats
+zcat /usr/share/man/man1/ls.1.gz | rich --man -
+```
+
+Org covers the headline tree with `TODO`/`DONE` keywords (and those a
+`#+TODO:` line declares), priorities and tags, emphasis, lists with
+checkboxes, source, example, quote and verse blocks, tables, links, drawers
+and planning lines (shown dim and compact), and `#+TITLE` and the other
+keywords. AsciiDoc covers the document header and attributes (`{name}`
+references), sections, lists (with checklists, description and callout
+lists, and `+` continuations), source blocks with callouts, literal, example,
+sidebar and quote blocks, tables, admonitions, links and image placeholders;
+macros it does not draw are shown as written. Man pages cover the man macros
+(`.TH`, `.SH`, `.TP`, `.IP`, `.RS`, the font macros, `.nf`, `.EX`, `.UR`, …),
+font and special-character escapes, conditionals, tbl tables, and the common
+mdoc macros of BSD pages.
+
+Detection is careful, because these extensions are also used for other
+things. A flag always wins. Otherwise:
+
+| Input | Shown as |
+|---|---|
+| `.org`, `.adoc`/`.asciidoc`, `.man`/`.roff`/`.mdoc` | that document |
+| `.1` to `.9` (also `.3pm`, `.1ssl`, …) | a man page when it holds roff, else as before (`syslog.1` stays a log) |
+| `.asc` | AsciiDoc when the content says so (it is also a PGP signature) |
+| no extension (`TODO`, `LS`) | a document only when the content is unmistakably Org, AsciiDoc or roff |
+| any other extension | never a document: `gen.c` stays C even if it quotes `.TH` |
+| piped input | plain text, as upstream; `--format auto` detects a likely document |
+
+To see such a file's source instead, ask for it: `rich --syntax notes.org`
+(or any source option, such as `--line-numbers`). `--lexer LANG` names the
+language of code blocks that name none, such as a man page's examples. Links
+show their target after the text unless `-y/--hyperlinks` asks for terminal
+hyperlinks, as for Markdown. Content the renderer does not show (an
+`include::` it does not follow, an equation, a block that never closes) is
+named in a warning on stderr; `--report json` keeps stderr to its report.
 
 Read from standard input with `-` (including `-p -` for markup):
 
@@ -505,15 +557,19 @@ Libraries get the same stages from `rich_ext::transform` and
 
 Without a flag, piped text prints as plain text, as upstream does. Add
 `--format auto` to detect what it is: JSON goes to the JSON renderer, YAML,
-TOML, XML, INI and dotenv are highlighted, and anything else still prints as
-plain text. With `--format`, no RESOURCE means stdin.
+TOML, XML, INI and dotenv are highlighted, a likely Markdown,
+reStructuredText, Org, AsciiDoc or man page document is rendered (0.0.19),
+and anything else still prints as plain text. With `--format`, no RESOURCE
+means stdin.
 
 ```bash
 kubectl get pod web -o json | rich --format auto
 curl -s https://example.com/config | rich --format yaml
 ```
 
-A named format also overrides the file extension. To make detection the default,
+A named format also overrides the file extension, and a document format
+(`markdown`, `rst`, `org`, `asciidoc`, `man`) is the same as its mode flag. To
+make detection the default,
 set `format = "auto"` in your [config](#config-profiles); a mode you pick
 explicitly, such as `--markdown`, ignores it.
 

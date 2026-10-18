@@ -355,9 +355,11 @@ echo '{"ok": true, "items": [1, 2]}' | rich --format auto
 ![Piped JSON detected and pretty-printed](../../media/guide/cli_format_auto.svg)
 
 JSON goes to the JSON renderer; YAML, TOML, XML, INI and dotenv are
-highlighted; anything else stays plain text. `--format yaml` (or `json`, `toml`
-…) names the format outright, overriding a file's extension too. To make
-detection the default, put `format = "auto"` in your config.
+highlighted; a likely Markdown, reStructuredText, Org, AsciiDoc or man page
+document is rendered; anything else stays plain text. `--format yaml` (or
+`json`, `toml`, `org`, `man` …) names the format outright, overriding a file's
+extension too. To make detection the default, put `format = "auto"` in your
+config.
 
 ## Comparing text and patches
 

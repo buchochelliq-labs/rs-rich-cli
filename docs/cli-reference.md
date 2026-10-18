@@ -35,13 +35,16 @@ rich --watch [OPTIONS] FILE...
 
 ### Render mode
 
-Choose at most one; the default auto-detects .md/.rst/.json/.csv/.tsv/.ipynb, .mmd/.mermaid and .dot/.gv by extension — anything else with a file extension is syntax-highlighted.
+Choose at most one; the default auto-detects .md/.rst/.json/.csv/.tsv/.ipynb, .mmd/.mermaid and .dot/.gv by extension, and .org, .adoc/.asciidoc and .man/.roff/.mdoc documents; a man page's section extension (.1 to .9) or .asc counts when the content agrees, and a file with no extension that is plainly Org, AsciiDoc or roff renders as one — anything else with a file extension is syntax-highlighted.
 
 | Option | Description |
 | --- | --- |
 | `-p`, `--print` | Treat RESOURCE as literal markup TEXT, not a file path. |
 | `-m`, `--markdown` | Render RESOURCE as Markdown. |
 | `--rst` | Render RESOURCE as reStructuredText. |
+| `--org` | Render RESOURCE as an Org document (headlines, TODO keywords, lists, blocks, tables, drawers) |
+| `--asciidoc`, `--adoc` | Render RESOURCE as AsciiDoc (sections, attributes, lists, source blocks with callouts, tables, admonitions) |
+| `--man`, `--roff` | Render RESOURCE as a man page from its roff source (man and mdoc macros, tbl tables) |
 | `-j`, `-J`, `--json` | Pretty-print RESOURCE as JSON. |
 | `-x`, `--syntax` | Syntax-highlight RESOURCE (language from its extension) |
 | `--csv` | Render RESOURCE as a CSV/TSV table. |
@@ -59,7 +62,7 @@ Choose at most one; the default auto-detects .md/.rst/.json/.csv/.tsv/.ipynb, .m
 
 | Option | Description |
 | --- | --- |
-| `--format <F>` | Input format. With --inspect, the parser (default auto-detect); otherwise `auto` detects piped or extensionless input and routes it (JSON to --json, other formats to highlighting, anything else to plain text), and a named format overrides the extension. Default: `auto`. Config: `format`. Possible values: `auto`, `json`, `yaml`, `toml`, `xml`, `ini`, `env`. |
+| `--format <F>` | Input format. With --inspect, the parser (default auto-detect); otherwise `auto` detects piped or extensionless input and routes it (JSON to --json, other formats to highlighting, likely Markdown, reStructuredText, Org, AsciiDoc and man pages to their renderers, anything else to plain text), and a named format overrides the extension. A document format (markdown, rst, org, asciidoc, man) is the same as its mode flag. Default: `auto`. Config: `format`. Possible values: `auto`, `json`, `yaml`, `toml`, `xml`, `ini`, `env`, `markdown`, `rst`, `org`, `asciidoc`, `man`. |
 | `--encoding <E>` | Explicit text encoding: utf-8, utf-16 (BOM required), utf-16le or utf-16be. Strict; files, stdin and URLs only. Possible values: `utf-8`, `utf-16`, `utf-16le`, `utf-16be`. |
 
 ### Layout
@@ -94,7 +97,7 @@ Choose at most one; the default auto-detects .md/.rst/.json/.csv/.tsv/.ipynb, .m
 | `-t`, `--tail <LINES>` | Show the end of a source file or CSV (as upstream, --tail N shows the last N-1 source lines) |
 | `-n`, `--line-numbers` | Number the lines of source. |
 | `-g`, `--guides` | Draw indentation guides in source. |
-| `--lexer <LEXER>` | Highlight source as LEXER instead of guessing from the file name; with --rst, highlight code blocks that name no language as LEXER. |
+| `--lexer <LEXER>` | Highlight source as LEXER instead of guessing from the file name; with --rst, --org, --asciidoc or --man, highlight code blocks that name no language as LEXER. |
 | `--no-wrap` | Crop long lines of source instead of wrapping them; with --print, don't wrap text. |
 | `--infer` | With --csv (or a .csv/.tsv file), infer each column's type (integer, float, boolean, date, timestamp, text) and show it under the heading; number columns right-align even with null tokens such as NA. Without it the table is rich-cli's. |
 
@@ -302,6 +305,9 @@ Self-contained examples; ignores config; accepts --no-color.
 | `print` | Treat RESOURCE as literal markup TEXT (`--print`) |
 | `markdown`, `md` | Render Markdown (`--markdown`) |
 | `rst` | Render reStructuredText (`--rst`) |
+| `org` | Render an Org document (`--org`) |
+| `asciidoc`, `adoc` | Render AsciiDoc (`--asciidoc`) |
+| `man`, `roff` | Render a man page from its roff source (`--man`) |
 | `syntax`, `code` | Syntax-highlight source (`--syntax`) |
 | `json` | Pretty-print JSON (`--json`) |
 | `csv`, `tsv` | Render CSV/TSV as a table (`--csv`) |
@@ -408,6 +414,54 @@ Render reStructuredText (`--rst`)
 
 ```text
 rich rst [OPTIONS] [RESOURCE]
+```
+
+#### Arguments
+
+| Argument | Description |
+| --- | --- |
+| `[RESOURCE]` | A file path, an http(s) URL, or `-` for stdin; every `rich` option applies. |
+
+### rich org
+
+Render an Org document (`--org`)
+
+#### Usage
+
+```text
+rich org [OPTIONS] [RESOURCE]
+```
+
+#### Arguments
+
+| Argument | Description |
+| --- | --- |
+| `[RESOURCE]` | A file path, an http(s) URL, or `-` for stdin; every `rich` option applies. |
+
+### rich asciidoc
+
+Render AsciiDoc (`--asciidoc`)
+
+#### Usage
+
+```text
+rich asciidoc [OPTIONS] [RESOURCE]
+```
+
+#### Arguments
+
+| Argument | Description |
+| --- | --- |
+| `[RESOURCE]` | A file path, an http(s) URL, or `-` for stdin; every `rich` option applies. |
+
+### rich man
+
+Render a man page from its roff source (`--man`)
+
+#### Usage
+
+```text
+rich man [OPTIONS] [RESOURCE]
 ```
 
 #### Arguments
@@ -611,7 +665,7 @@ rich inspect [OPTIONS] [RESOURCE]
 
 | Option | Description |
 | --- | --- |
-| `--format <F>` | Input format. With --inspect, the parser (default auto-detect); otherwise `auto` detects piped or extensionless input and routes it (JSON to --json, other formats to highlighting, anything else to plain text), and a named format overrides the extension. Default: `auto`. Possible values: `auto`, `json`, `yaml`, `toml`, `xml`, `ini`, `env`. |
+| `--format <F>` | Input format. With --inspect, the parser (default auto-detect); otherwise `auto` detects piped or extensionless input and routes it (JSON to --json, other formats to highlighting, likely Markdown, reStructuredText, Org, AsciiDoc and man pages to their renderers, anything else to plain text), and a named format overrides the extension. A document format (markdown, rst, org, asciidoc, man) is the same as its mode flag. Default: `auto`. Possible values: `auto`, `json`, `yaml`, `toml`, `xml`, `ini`, `env`, `markdown`, `rst`, `org`, `asciidoc`, `man`. |
 
 #### Inspect
 
@@ -2012,8 +2066,8 @@ Settings are read from these sources, lowest precedence first; a later source ov
 
 | Key | Type | Default | Environment | Flag | Description |
 | --- | --- | --- | --- | --- | --- |
-| `mode` | enum: `print`, `markdown`, `rst`, `json`, `syntax`, `csv`, `ipynb`, `jsonl`, `log`, `rule`, `image`, `gif`, `diff`, `inspect`, `ansi` | `auto` | | `--print, --markdown, ... or a command word` | Render mode, as the flag or command of the same name |
-| `format` | enum: `auto`, `json`, `yaml`, `toml`, `xml`, `ini`, `env` | `auto` | | `--format` | Input format. With --inspect, the parser (default auto-detect); otherwise `auto` detects piped or extensionless input and routes it (JSON to --json, other formats to highlighting, anything else to plain text), and a named format overrides the extension |
+| `mode` | enum: `print`, `markdown`, `rst`, `org`, `asciidoc`, `man`, `json`, `syntax`, `csv`, `ipynb`, `jsonl`, `log`, `rule`, `image`, `gif`, `diff`, `inspect`, `ansi` | `auto` | | `--print, --markdown, ... or a command word` | Render mode, as the flag or command of the same name |
+| `format` | enum: `auto`, `json`, `yaml`, `toml`, `xml`, `ini`, `env`, `markdown`, `rst`, `org`, `asciidoc`, `man` | `auto` | | `--format` | Input format. With --inspect, the parser (default auto-detect); otherwise `auto` detects piped or extensionless input and routes it (JSON to --json, other formats to highlighting, likely Markdown, reStructuredText, Org, AsciiDoc and man pages to their renderers, anything else to plain text), and a named format overrides the extension. A document format (markdown, rst, org, asciidoc, man) is the same as its mode flag |
 | `width` | positive integer | | | `--width` | Render the output N columns wide (the console keeps its own width, so --left/--center/--right still use it) |
 | `panel` | enum: `ascii`, `ascii2`, `square`, `rounded`, `heavy`, `double`, `ascii_double_head`, `square_double_head`, `minimal`, `minimal_heavy_head`, `minimal_double_head`, `simple`, `simple_head`, `simple_heavy`, `horizontals`, `heavy_edge`, `heavy_head`, `double_edge`, `markdown`, `none` | | | `--panel` | Wrap output in a panel, shrunk to fit its content (none = no panel) |
 | `padding` | string | | | `--padding` | Wrap output in padding (1, 2, or 4 comma-separated ints) |
