@@ -86,6 +86,8 @@ pub struct Node {
     pub(crate) body: RefCell<Body>,
     /// Where it was last laid out.
     pub(crate) rect: Cell<Rect>,
+    /// Where it is on the screen, for a [`rect_handle`](Node::rect_handle).
+    pub(crate) rect_slot: RefCell<Option<Signal<Option<Rect>>>>,
     /// Where it last drew; `None` before its first draw, or while hidden.
     drawn: Cell<Option<Rect>>,
     /// Whether it was last drawn in its focus style.
@@ -95,6 +97,14 @@ pub struct Node {
     /// node does.
     pub(crate) autofocus: bool,
     pub(crate) keys: RefCell<Vec<(Vec<Key>, String, Handler)>>,
+    /// Key sequences ([`bind_sequence`](Node::bind_sequence)): the keys in
+    /// order, a description and the handler.
+    pub(crate) sequences: RefCell<Vec<(Vec<Key>, String, Handler)>>,
+    /// What [`on_any_key`](Node::on_any_key) runs.
+    pub(crate) any_key: RefCell<Option<crate::sequence::AnyKey>>,
+    /// Its bindings see keys before the focused node inside it
+    /// ([`previews_keys`](Node::previews_keys)).
+    pub(crate) previews: bool,
     pub(crate) click: RefCell<Option<Handler>>,
     pub(crate) mouse: RefCell<Option<MouseHandler>>,
     /// Where the widget wants the text caret, on its surface.
@@ -330,11 +340,15 @@ impl Node {
                 view: None,
             }),
             rect: Cell::new(Rect::default()),
+            rect_slot: RefCell::new(None),
             drawn: Cell::new(None),
             highlit: Cell::new(false),
             focusable: false,
             autofocus: false,
             keys: RefCell::new(Vec::new()),
+            sequences: RefCell::new(Vec::new()),
+            any_key: RefCell::new(None),
+            previews: false,
             click: RefCell::new(None),
             mouse: RefCell::new(None),
             caret: Cell::new(None),
@@ -679,18 +693,31 @@ impl Node {
             .filter(|class| !active.contains(class))
             .collect();
         let (_, focus, hover) = self.sheet.borrow().watch;
-        let keys = self
+        let joined = |keys: &[Key], with: &str| {
+            keys.iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>()
+                .join(with)
+        };
+        let mut keys: Vec<String> = self
             .keys
             .borrow()
             .iter()
-            .map(|(keys, _, _)| {
-                keys.iter()
-                    .map(ToString::to_string)
-                    .collect::<Vec<_>>()
-                    .join("/")
-            })
+            .map(|(keys, _, _)| joined(keys, "/"))
             .collect();
+        keys.extend(
+            self.sequences
+                .borrow()
+                .iter()
+                .map(|(keys, _, _)| joined(keys, " ")),
+        );
         let mut handlers = Vec::new();
+        if self.any_key.borrow().is_some() {
+            handlers.push("on_any_key");
+        }
+        if self.previews {
+            handlers.push("previews_keys");
+        }
         if self.click.borrow().is_some() {
             handlers.push("on_click");
         }
@@ -1857,6 +1884,11 @@ impl Node {
     /// Not shown this frame: no rectangle (so no clicks reach it or
     /// anything inside it), and it draws afresh when it comes back.
     fn hide(&self) {
+        if let Some(handle) = *self.rect_slot.borrow() {
+            if handle.get_untracked().is_some() {
+                handle.set(None);
+            }
+        }
         self.rect.set(Rect::default());
         self.inner.set(Rect::default());
         self.drawn.set(None);

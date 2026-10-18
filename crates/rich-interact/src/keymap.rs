@@ -120,6 +120,10 @@ pub struct Binding {
     pub keys: Vec<Key>,
     /// What it does, for people: `move down`.
     pub description: String,
+    /// The keys are pressed one after another (`g g`), rather than being
+    /// alternatives: a key sequence an app runs itself, listed in a help
+    /// or a palette. A keymap does not look these up.
+    pub sequence: bool,
 }
 
 impl Binding {
@@ -134,6 +138,28 @@ impl Binding {
             action: action.into(),
             keys: keys.into_iter().collect(),
             description: description.into(),
+            sequence: false,
+        }
+    }
+
+    /// A binding of keys pressed one after another (`g` then `g`), for a
+    /// help or a palette to list: shown as `g g`.
+    ///
+    /// ```
+    /// use rich_interact::keymap::{keys, Binding};
+    ///
+    /// let top = Binding::sequence("files", "top", keys("g g"), "go to the top");
+    /// assert_eq!(top.keys_label(), "g g");
+    /// ```
+    pub fn sequence(
+        context: impl Into<String>,
+        action: impl Into<String>,
+        keys: impl IntoIterator<Item = Key>,
+        description: impl Into<String>,
+    ) -> Binding {
+        Binding {
+            sequence: true,
+            ..Binding::new(context, action, keys, description)
         }
     }
 
@@ -142,13 +168,20 @@ impl Binding {
         format!("{}.{}", self.context, self.action)
     }
 
-    /// The keys as people read them: `up/ctrl+p`.
+    /// The keys as people read them: `up/ctrl+p`, or `g g` for a
+    /// [sequence](Self::sequence).
     pub fn keys_label(&self) -> String {
         self.keys
             .iter()
             .map(Key::to_string)
             .collect::<Vec<_>>()
-            .join("/")
+            .join(if self.sequence { " " } else { "/" })
+    }
+
+    /// The keys as a hint shows them: `↑/ctrl+p`, or `g g` for a
+    /// [sequence](Self::sequence).
+    pub fn hint(&self) -> String {
+        crate::chrome::keys_hint_of(&self.keys, self.sequence)
     }
 }
 
@@ -288,6 +321,9 @@ impl Keymap {
     fn find_by(&self, fires: impl Fn(&[Key]) -> bool) -> Option<usize> {
         let mut found: Option<(u8, usize)> = None;
         for (index, binding) in self.bindings.iter().enumerate() {
+            if binding.sequence {
+                continue;
+            }
             let (level, _) = self.source(binding);
             if found.is_some_and(|(best, _)| best >= level) {
                 continue;
