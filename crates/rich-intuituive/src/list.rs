@@ -520,10 +520,6 @@ impl Widget for List {
         "list"
     }
 
-    fn describe(&self) -> Option<String> {
-        Some(format!("{} items", (self.items)().len()))
-    }
-
     fn role(&self) -> crate::a11y::Role {
         crate::a11y::Role::List
     }

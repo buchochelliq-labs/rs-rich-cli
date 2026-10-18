@@ -1945,3 +1945,188 @@ def test_time_pickers_refuse_an_inverted_range_and_a_time_zone():
     aware = datetime.datetime(2026, 10, 18, 9, 0, tzinfo=datetime.timezone.utc)
     with pytest.raises(TypeError, match="time zone"):
         App(lambda: tui.datetime_picker(signal(aware))).render_with([], 20, 12)
+
+
+def test_list_options_and_an_empty_selection():
+    fruit = ["apple", "banana", "cherry", "damson", "elder"]
+
+    def build_symbol():
+        return list_(fruit, signal(1)).symbol(">> ").on_key("q", lambda cx: cx.quit())
+
+    out = screen(build_symbol, ["q"], 12, 5)
+    assert out[:2] == ["   apple", ">> banana"]
+
+    def build_up():
+        selected = signal(0)
+        return column([
+            list_(fruit, selected).direction("bottom_to_top"),
+            text(lambda: str(selected.get())).fixed(1),
+        ]).on_key("q", lambda cx: cx.quit())
+
+    out = screen(build_up, ["up", "q"], 10, 7)
+    assert out[5] == "apple" and out[1] == "elder" and out[6] == "1"
+
+    def build_none():
+        selected = signal(None)
+        return column([
+            tui.list_optional(fruit, selected).symbol("> ").fixed(3),
+            text(lambda: repr(selected.get())).fixed(1),
+        ]).on_key("q", lambda cx: cx.quit())
+
+    assert screen(build_none, ["q"], 12, 4)[::3] == ["apple", "None"]
+    assert screen(build_none, ["down", "q"], 12, 4)[::3] == ["> apple", "0"]
+
+    def build_rest():
+        items = [f"item {n}\nmore" for n in range(10)]
+        first = signal(0)
+        return column([
+            list_(items, signal(0))
+            .multiline()
+            .scroll_padding(1)
+            .row_style(lambda i: "on blue" if i % 2 else None)
+            .offset(first),
+            text(lambda: str(first.get())).fixed(1),
+        ]).on_key("q", lambda cx: cx.quit())
+
+    out = screen(build_rest, ["down", "down", "q"], 10, 5)
+    assert out[0] == "item 1" and out[4] == "1"
+
+
+def test_table_options():
+    def build():
+        columns = [
+            Column("Food", Size.Auto),
+            Column("Qty", Size.Fixed(4), align="flex-end"),
+            Column("Energy", Size.Auto).align("end").min(8),
+        ]
+        rows = [["Apple", "1", "95 kcal"], ["Bread", "2", "160 kcal"]]
+        options = (
+            TableOptions()
+            .footer(lambda: ["Total", "3", "255 kcal"])
+            .symbol("» ")
+            .highlight_spacing("always")
+            .column_spacing(1)
+            .row_style(lambda i: "on blue" if i % 2 else None)
+            .header_gap(1)
+            .scroll_padding(1)
+        )
+        return tui.table_with(columns, rows, signal(0), options).on_key("q", lambda cx: cx.quit())
+
+    out = screen(build, ["q"], 26, 6)
+    assert out[0] == "  Food    Qty   Energy"
+    assert out[1] == ""
+    assert out[2] == "» Apple     1  95 kcal"
+    assert out[5] == "  Total     3 255 kcal"
+
+    def build_none():
+        selected = signal(None)
+        return column([
+            tui.table_optional(["Name"], [["a"], ["b"]], selected, TableOptions().multiline()).fixed(3),
+            text(lambda: repr(selected.get())).fixed(1),
+        ]).on_key("q", lambda cx: cx.quit())
+
+    assert screen(build_none, ["down", "q"], 10, 4)[3] == "0"
+
+
+def test_tab_strip_options():
+    def build():
+        strip = tui.tabs(["Recipe", "Email"], signal(0)).divider(" • ").tab_padding("", "")
+        return strip.on_key("q", lambda cx: cx.quit())
+
+    assert screen(build, ["q"], 20, 1)[0] == "Recipe • Email"
+
+    def build_end():
+        strip = tui.tabs(["A", "B"], signal(0)).titles_align("flex-end")
+        return strip.on_key("q", lambda cx: cx.quit())
+
+    assert screen(build_end, ["q"], 10, 1)[0] == "   A │ B"
+
+
+def test_scrollbars():
+    lines = [f"line {n}" for n in range(20)]
+
+    def build():
+        bar = (
+            tui.Scrollbar()
+            .side("left")
+            .symbols("vertical")
+            .track(None)
+            .ends("↑", "↓")
+            .show("always")
+        )
+        return list_(lines, signal(0)).scrollbar(bar).on_key("q", lambda cx: cx.quit())
+
+    out = screen(build, ["q"], 10, 4)
+    assert out[0] == "↑line 0" and out[3] == "↓line 3"
+
+    def build_own():
+        top = signal(0)
+        return tui.row([
+            text(lambda: f"from {top.get()}"),
+            tui.scrollbar(top, 100, lambda: 10, tui.Scrollbar()),
+        ]).on_key("j", lambda cx: top.set(50)).on_key("q", lambda cx: cx.quit())
+
+    out = screen(build_own, ["j", "q"], 10, 10)
+    assert out[0] == "from 50  │" and out[5] == "         ┃"
+    with pytest.raises(ValueError, match="'right', 'left'"):
+        tui.Scrollbar().side("middle")
+
+
+def test_inputs_bound_to_signals():
+    def build():
+        name = signal("")
+        said = signal("")
+        age = signal(30)
+        return column([
+            tui.input(name).placeholder("Name").on_submit(lambda value, cx: said.set(value)).fixed(1),
+            tui.input(signal("")).mask("•").max_length(3).fixed(1),
+            tui.number_input(age, 0, 150).step(5).fixed(1),
+            text(lambda: f"{said.get()}|{age.get()}").fixed(1),
+        ]).on_key("esc", lambda cx: cx.quit())
+
+    keys = ["A", "d", "a", "enter", "tab", "s", "e", "c", "r", "tab", "up", "esc"]
+    assert screen(build, keys, 20, 4) == ["Ada", "•••", "35", "Ada|35"]
+    with pytest.raises(ValueError, match="min"):
+        App(lambda: tui.number_input(signal(0), 5, 1)).render_with([], 10, 1)
+
+
+def test_the_app_shell():
+    def build_modal():
+        def open_(cx):
+            look = tui.ModalOptions().shadow("on blue").backdrop("dim")
+            cx.modal_with(Size.Fixed(8), Size.Fixed(3), look, lambda: label("hi").panel(""))
+
+        return label("below").on_key("o", open_)
+
+    driver = App(build_modal).driver(20, 6)
+    driver.press("o")
+    assert "[dim]" in driver.styled() and "[on blue]" in driver.styled()
+
+    def build_exit():
+        return label("x").on_key("y", lambda cx: cx.quit_with({"picked": 2}))
+
+    ran = tui.run(App(build_exit), "y", width=10, height=1)
+    assert ran.finished and ran.exit == {"picked": 2}
+
+    def build_fail():
+        return label("x").on_key("f", lambda cx: cx.fail("bad config"))
+
+    with pytest.raises(OSError, match="bad config"):
+        tui.run(App(build_fail), "f", width=10, height=1)
+
+    def build_print():
+        return label("full").on_key("p", lambda cx: cx.print_above("[b]done[/]"))
+
+    driver = App(build_print).driver(20, 2)
+    driver.press("p")
+    assert driver.take_printed() == ["[b]done[/]"]
+    assert driver.stats().frames >= 1
+    driver = App(build_exit).driver(10, 1)
+    driver.press("y")
+    assert driver.take_exit() == {"picked": 2}
+    assert driver.take_error() is None
+
+    inline = App(lambda: label("region").on_key("p", lambda cx: cx.print_above("above"))).inline(1)
+    inline.mouse(True)
+    ran = tui.run(inline, "p", width=20, height=5)
+    assert ran.output.index("above") < ran.output.rindex("region")

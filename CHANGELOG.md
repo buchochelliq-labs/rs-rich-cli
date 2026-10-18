@@ -551,7 +551,7 @@ test.
   `colors-rgb`) and a chart redrawn each tick.
 - **Changed:** `Column` and `TableOptions` gain public fields, and
   `FrameStats` gains `frames`, so code that builds them field by field
-  needs the new ones. `table_scroll`'s window takes the column spacing.
+  needs the new ones.
 - **Python:** the same options and functions in `rs_rich.tui`.
 - **Docs:** the guide's inputs, table, list, tab strip and scrollbar
   options, modal shadows, exit values and printing above an inline app;

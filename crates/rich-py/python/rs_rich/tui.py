@@ -18,15 +18,17 @@ The same API as the Rust crate, name for name, so one guide serves both::
     App(build).run()
 
 - **Nodes**: ``text``, ``label``, ``renderable`` (any renderable), ``leaf``,
-  ``column``, ``row``, ``grid``, ``each``, ``switch``, ``list``, ``scroll``
+  ``column``, ``row``, ``grid``, ``each``, ``switch``, ``list`` (and
+  ``list_optional``), ``scroll``
   (and ``scroll_with``, ``scroll_x``, ``scroll_both``, ``scroll_both_with``),
   ``component`` and ``repeating`` (``rs_rich.interact`` components),
   ``Log(...).view()``, and ``widget`` for a ``Widget`` subclass. Builders on
   ``Node`` chain (``.panel``, ``.fixed``, ``.on_key``, ``.focus_style``, ...);
   ``class_`` is Rust's ``class``.
-- **Widgets**: ``table``, ``table_with`` (``TableOptions``), ``virtual_table``,
-  ``virtual_list``, ``tabs``, ``tree``, ``tree_with``, ``tree_lazy``
-  (``TreeItem``, ``LazyItem``), ``text_area``, ``calendar``, ``calendar_with``
+- **Widgets**: ``table``, ``table_with`` (``TableOptions``), ``table_optional``,
+  ``virtual_table``, ``virtual_list``, ``tabs``, ``tree``, ``tree_with``,
+  ``tree_lazy`` (``TreeItem``, ``LazyItem``), ``text_area``, ``input``,
+  ``number_input``, ``scrollbar`` (``Scrollbar``), ``calendar``, ``calendar_with``
   (with ``min`` and ``max``), ``time_picker``, ``datetime_picker``, ``split``,
   ``split_with``, ``hsplit``, ``vsplit``, menus (``menu_bar``, ``Menu``,
   ``MenuItem``, ``open_menu``, ``context_menu``).
@@ -35,8 +37,9 @@ The same API as the Rust crate, name for name, so one guide serves both::
   ``spawn`` (a thread), ``spawn_async`` (a coroutine on an asyncio loop),
   ``resource`` and ``Proxy``.
 - **The app**: ``App`` (themes, stylesheets, the palette and help keys,
-  accessibility and linear mode, inline), ``Ctx`` (what handlers get:
-  screens, modals, pop-ups, toasts, animations, focus), ``Theme``,
+  accessibility and linear mode, inline, the mouse, ``run_for``), ``Ctx``
+  (what handlers get: screens, modals and pop-ups with ``ModalOptions``,
+  toasts, animations, focus, ``quit_with``, ``fail``, ``print_above``), ``Theme``,
   ``Stylesheet``; ``Driver`` for a loop of your own; ``run`` with a
   ``Script`` for headless tests, and ``assert_screen``,
   ``assert_screen_styled`` and ``assert_snapshot`` for snapshots
@@ -77,6 +80,7 @@ from ._native import (
     TuiMemo,
     TuiMenu,
     TuiMenuItem,
+    TuiModalOptions,
     TuiMouse,
     TuiNode,
     TuiNodeTiming,
@@ -91,6 +95,7 @@ from ._native import (
     TuiRole,
     TuiRun,
     TuiScrollCx,
+    TuiScrollbar,
     TuiServer,
     TuiServerHandle,
     TuiSheetError,
@@ -120,11 +125,14 @@ from ._native import (
     tui_every,
     tui_grid,
     tui_hsplit,
+    tui_input,
     tui_label,
     tui_leaf,
     tui_list,
+    tui_list_optional,
     tui_memo,
     tui_menu_bar,
+    tui_number_input,
     tui_open_menu,
     tui_renderable,
     tui_repeating,
@@ -136,6 +144,7 @@ from ._native import (
     tui_scroll_both_with,
     tui_scroll_with,
     tui_scroll_x,
+    tui_scrollbar,
     tui_serve,
     tui_signal,
     tui_spawn,
@@ -144,6 +153,7 @@ from ._native import (
     tui_split_with,
     tui_switch,
     tui_table,
+    tui_table_optional,
     tui_table_with,
     tui_tabs,
     tui_terminal,
@@ -190,6 +200,8 @@ Resource = TuiResource
 Proxy = TuiProxy
 Column = TuiColumn
 TableOptions = TuiTableOptions
+Scrollbar = TuiScrollbar
+ModalOptions = TuiModalOptions
 TreeItem = TuiTreeItem
 LazyItem = TuiLazyItem
 Menu = TuiMenu
@@ -238,6 +250,10 @@ grid = tui_grid
 each = tui_each
 switch = tui_switch
 list = tui_list  # noqa: A001 - the Rust name; import it by name, not with *
+list_optional = tui_list_optional
+input = tui_input  # noqa: A001 - the Rust name; import it by name, not with *
+number_input = tui_number_input
+scrollbar = tui_scrollbar
 scroll = tui_scroll
 scroll_with = tui_scroll_with
 scroll_x = tui_scroll_x
@@ -248,6 +264,7 @@ repeating = tui_repeating
 widget = tui_widget
 table = tui_table
 table_with = tui_table_with
+table_optional = tui_table_optional
 virtual_table = tui_virtual_table
 virtual_list = tui_virtual_list
 tabs = tui_tabs
@@ -308,6 +325,8 @@ __all__ = [
     "Proxy",
     "Column",
     "TableOptions",
+    "Scrollbar",
+    "ModalOptions",
     "TreeItem",
     "LazyItem",
     "Menu",
@@ -355,6 +374,10 @@ __all__ = [
     "each",
     "switch",
     "list",
+    "list_optional",
+    "input",
+    "number_input",
+    "scrollbar",
     "scroll",
     "scroll_with",
     "scroll_x",
@@ -365,6 +388,7 @@ __all__ = [
     "widget",
     "table",
     "table_with",
+    "table_optional",
     "virtual_table",
     "virtual_list",
     "tabs",
