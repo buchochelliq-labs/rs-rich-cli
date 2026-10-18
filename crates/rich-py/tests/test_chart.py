@@ -125,7 +125,13 @@ def test_grouped_bars():
 
 def test_thick_bars_text_values_and_values_inside():
     assert drawn(chart.BarChart([("a", 4.0), ("b", 2.0)], bar_width=8, thickness=3, bar_gap=1), 30) == (
-        "  ████████  \na ████████ 4\n  ████████  \n            \n  ████      \nb ████     2\n  ████      \n"
+        "  ████████  \n"
+        "a ████████ 4\n"
+        "  ████████  \n"
+        "            \n"
+        "  ████      \n"
+        "b ████     2\n"
+        "  ████      \n"
     )
     text = chart.BarChart([chart.ChartBar("a", 4.0, text="four"), chart.ChartBar("b", 2.0)], bar_width=8)
     assert drawn(text, 30) == "a ████████ four\nb ████        2\n"
