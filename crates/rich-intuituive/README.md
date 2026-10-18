@@ -102,6 +102,9 @@ More examples (`cargo run -p rs-rich-intuituive --example <name>`):
 | `in_ratatui` | an app inside a ratatui program, which owns the loop |
 | `demo` | ratatui's classic demo rebuilt: gauges, a sparkline, lists, bars, a sine chart, a server table on a world map, colours; a tick redraws only what moves |
 | `demo2` | ratatui's showcase rebuilt: a recipe, an inbox, a traceroute on a map, the weather, and destroy, an effect; its colours in a stylesheet |
+| `widgets` | ratatui's widget examples as a gallery: blocks, text, lists, tables, tabs, scrollbars, a calendar, a pop-up, collapsed borders, buttons of your own |
+| `charts` | ratatui's chart examples as a gallery: gauges, sparklines, bars, grouped bars, line, area and scatter charts, the canvas and its map |
+| `layout` | ratatui's constraint explorer rebuilt: sizes and justify modes with their spacers, each kind of size, flex, alignment and wrapping |
 
 ## Against ratatui
 

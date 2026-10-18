@@ -1,0 +1,30 @@
+ Explorer │ Sizes │ Flex │ Beyond
+What ratatui's layout has no counterpart for. The `align` example changes each of these with a key.
+align_items(Start)       align_items(Center)      align_items(End)         align_items(Stretch)
+╭─ a ─╮ ╭─ b ─╮ ╭─ c ─╮          ╭─ b ─╮ ╭─ c ─╮          ╭─ b ─╮          ╭─ a ─╮ ╭─ b ─╮ ╭─ c ─╮
+│·    │ │·    │ │·    │  ╭─ a ─╮ │·    │ │·    │          │·    │ ╭─ c ─╮  │·    │ │·    │ │·    │
+╰─────╯ │·    │ │·    │  │·    │ │·    │ │·    │  ╭─ a ─╮ │·    │ │·    │  │     │ │·    │ │·    │
+        │·    │ ╰─────╯  ╰─────╯ │·    │ ╰─────╯  │·    │ │·    │ │·    │  │     │ │·    │ │     │
+        ╰─────╯                  ╰─────╯          ╰─────╯ ╰─────╯ ╰─────╯  ╰─────╯ ╰─────╯ ╰─────╯
+wrap(): cards that do not fit go on the next line
+╭─ card 1 ───────╮ ╭─ card 2 ───────────╮ ╭─ card 3 ───╮ ╭─ card 4 ───────╮ ╭─ card 5 ───────────╮
+│·               │ │·                   │ │·           │ │·               │ │·                   │
+╰────────────────╯ ╰────────────────────╯ ╰────────────╯ ╰────────────────╯ ╰────────────────────╯
+
+╭─ card 6 ───╮ ╭─ card 7 ───────╮ ╭─ card 8 ───────────╮ ╭─ card 9 ───╮
+│·           │ │·               │ │·                   │ │·           │
+╰────────────╯ ╰────────────────╯ ╰────────────────────╯ ╰────────────╯
+
+
+
+
+
+
+
+
+
+
+
+
+
+Tab/Shift+Tab tabs · ? keys · Ctrl+P commands · q quit

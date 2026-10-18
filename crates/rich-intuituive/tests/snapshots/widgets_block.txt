@@ -1,0 +1,24 @@
+ Block  Text  List  Table  Tabs  Scrollbar  Calendar  Popup  Borders  Custom
+┌─ Bordered ─────────────┐╭─ Styled ───────────────╮╭─ Rounded red ────────────╮
+│A plain border, all four││Bold italic blue on     ││A rounded border in red,  │
+│sides.                  ││black, the border and   ││its title in bold.        │
+│                        ││the inside.             ││                          │
+│                        ││                        ││                          │
+│                        ││                        ││                          │
+└────────────────────────┘╰────────────────────────╯╰──────────────────────────╯
+┏━ Thick ━━━━━━━━━━━━━━━━┓╔════════ Double ════════╗╭─ Left ─────────── Right ─╮
+┃A thick border.         ┃║A double border, its    ║│Titles left, right and on │
+┃                        ┃║title in the middle.    ║│the bottom edge.          │
+┃                        ┃║                        ║│                          │
+┃                        ┃║                        ║│                          │
+┃                        ┃║                        ║│                          │
+┗━━━━━━━━━━━━━━━━━━━━━━━━┛╚════════════════════════╝╰─ Bottom ─────────── 1/9 ─╯
+── Sides ─────────────────┌╌ Dashed ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┐╭─ Shadow ────────────────╮
+Only the top and the      ╎Dashes, light and heavy.╎│A shadow down the right  │▒
+bottom.                   ╎                        ╎│and along the bottom.    │▒
+                          ╎                        ╎│                         │▒
+                          ╎                        ╎│                         │▒
+                          ╎                        ╎│                         │▒
+                          ╎                        ╎╰─────────────────────────╯▒
+──────────────────────────└╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┘ ▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒
+←/→ or 1-9, 0 tabs · ? keys · Ctrl+P commands · q quit

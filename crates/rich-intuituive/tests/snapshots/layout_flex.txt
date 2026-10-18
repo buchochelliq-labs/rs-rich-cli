@@ -1,0 +1,30 @@
+ Explorer │ Sizes │ Flex │ Beyond
+Start, gap 0                                                                                       ┃
+╭─ Fixed 20 ───────╮╭─ Percent 20% ───╮╭─ Fix… ─╮                                                  ┃
+│     20 wide      ││     19 wide     ││10 wide │                                                  ┃
+╰──────────────────╯╰─────────────────╯╰────────╯                                                  ┃
+Center, gap 0                                                                                      ┃
+                         ╭─ Fixed 20 ───────╮╭─ Percent 20% ───╮╭─ Fix… ─╮                         ┃
+                         │     20 wide      ││     19 wide     ││10 wide │                         ┃
+                         ╰──────────────────╯╰─────────────────╯╰────────╯                         ┃
+End, gap 0                                                                                         ┃
+                                                  ╭─ Fixed 20 ───────╮╭─ Percent 20% ───╮╭─ Fix… ─╮┃
+                                                  │     20 wide      ││     19 wide     ││10 wide │┃
+                                                  ╰──────────────────╯╰─────────────────╯╰────────╯┃
+SpaceBetween, gap 0                                                                                ┃
+╭─ Fixed 20 ───────╮                         ╭─ Percent 20% ───╮                         ╭─ Fix… ─╮┃
+│     20 wide      │                         │     19 wide     │                         │10 wide │┃
+╰──────────────────╯                         ╰─────────────────╯                         ╰────────╯┃
+SpaceAround, gap 0                                                                                 │
+        ╭─ Fixed 20 ───────╮                 ╭─ Percent 20% ───╮                ╭─ Fix… ─╮         │
+        │     20 wide      │                 │     19 wide     │                │10 wide │         │
+        ╰──────────────────╯                 ╰─────────────────╯                ╰────────╯         │
+SpaceEvenly, gap 0                                                                                 │
+            ╭─ Fixed 20 ───────╮             ╭─ Percent 20% ───╮            ╭─ Fix… ─╮             │
+            │     20 wide      │             │     19 wide     │            │10 wide │             │
+            ╰──────────────────╯             ╰─────────────────╯            ╰────────╯             │
+Start, gap 2                                                                                       │
+╭─ Fixed 20 ───────╮  ╭─ Percent 20% ───╮  ╭─ Fix… ─╮                                              │
+│     20 wide      │  │     19 wide     │  │10 wide │                                              │
+╰──────────────────╯  ╰─────────────────╯  ╰────────╯                                              │
+Tab/Shift+Tab tabs · ? keys · Ctrl+P commands · q quit
