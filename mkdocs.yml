@@ -217,3 +217,4 @@ nav:
       - "Design: plugin loading (#14, #232)": design/plugin-loading.md
       - "Design: intuiTUIve spike (milestone 11)": design/intuituive.md
       - "Design: intuiTUIve widgets": design/intuituive-widgets.md
+      - "Design: intuiTUIve against ratatui": design/intuituive-vs-ratatui.md

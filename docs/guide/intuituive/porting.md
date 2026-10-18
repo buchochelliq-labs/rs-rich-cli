@@ -10,6 +10,11 @@ move it to intuiTUIve. You do not have to move all of it at once:
 | **3. Port fully** | Everything | A new major version, or a small app |
 | **4. Host intuiTUIve in ratatui** | One pane | ratatui keeps the terminal and the loop, and an intuiTUIve app runs in part of the frame |
 
+!!! tip "Coming from ratatui, and looking for a feature?"
+    [intuiTUIve against ratatui](../../design/intuituive-vs-ratatui.md)
+    compares the two feature by feature: what intuiTUIve does the same way,
+    what it does differently and why, and what is still missing and planned.
+
 Paths 2 and 3 are the same work done at different speeds, so the recipe below
 covers both. Three complete ports show where it leads:
 
