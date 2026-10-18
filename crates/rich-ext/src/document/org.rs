@@ -345,12 +345,20 @@ impl Org {
                         );
                     }
                     "BEGIN" => {
-                        // A dynamic block: its content is ordinary Org.
-                        let end = ends.dynamic_end(i).unwrap_or(lines.len());
-                        let inner = self.elements(&lines[i + 1..end], false, depth + 1);
-                        blocks.extend(inner);
-                        i = end + 1;
-                        continue;
+                        // A dynamic block: its content is ordinary Org, one
+                        // level deeper (as text past the nesting limit).
+                        // Without an #+END: it is a keyword line like any
+                        // other, and the lines after it are read as usual.
+                        if let Some(end) = ends.dynamic_end(i) {
+                            let inner = self.nested(&lines[i + 1..end], depth);
+                            blocks.extend(inner);
+                            i = end + 1;
+                            continue;
+                        }
+                        self.warn(
+                            lines[i].no,
+                            format!("#+BEGIN: {value} has no #+END:; it is not shown"),
+                        );
                     }
                     "END" => {}
                     _ => keywords.push((name.to_string(), value)),
@@ -1658,6 +1666,26 @@ mod tests {
 
     fn blocks(source: &str) -> Vec<Block> {
         parse(source).document.blocks
+    }
+
+    #[test]
+    fn dynamic_blocks_are_bounded() {
+        // Unclosed: each is a keyword line, not a block holding the rest.
+        let parsed = parse(&"#+BEGIN: clock\n".repeat(100_000));
+        assert!(parsed.document.blocks.is_empty());
+        let parsed = parse("#+BEGIN: clock\ntext");
+        assert_eq!(parsed.diagnostics.len(), 1);
+        assert!(matches!(&parsed.document.blocks[..], [Block::Paragraph(_)]));
+        // Openers before one #+END: the first holds the rest, which are
+        // keyword lines, and its text.
+        let deep = format!(
+            "{}text\n{}",
+            "#+BEGIN: a\n".repeat(5_000),
+            "#+END:\n".repeat(5_000)
+        );
+        assert!(
+            matches!(&blocks(&deep)[..], [Block::Paragraph(text)] if inlines_text(text) == "text")
+        );
     }
 
     #[test]

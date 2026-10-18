@@ -78,7 +78,9 @@ impl Across {
         // in view, where `‹` goes.
         let from = |left: usize| {
             if left > frozen_columns {
-                starts[left] - 1
+                // Never before the frozen columns' end: a zero-wide column
+                // (with no indent or spacing) starts where they end.
+                starts[left].saturating_sub(1).max(frozen)
             } else {
                 frozen
             }
@@ -163,5 +165,19 @@ impl Window {
             out = overlay(&out, self.width - 1, &[Segment::new("›", None)]);
         }
         out
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn zero_wide_columns_with_no_indent_or_spacing_do_not_underflow() {
+        let across = Across::default();
+        across.left.set(2);
+        let window = across.window(0, &[0, 0, 10], 5, 0, None, 0).unwrap();
+        assert_eq!(window.from, 0);
+        assert!(window.right);
     }
 }

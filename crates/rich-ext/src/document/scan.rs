@@ -19,7 +19,11 @@ pub(crate) const BLOCK_WEIGHT: usize = 2;
 pub(crate) const SNIFF_BYTES: usize = 64 * 1024;
 
 /// The source with line endings made `\n`, a leading byte-order mark
-/// dropped, and NUL bytes replaced, so a parser sees one kind of line.
+/// dropped, NUL bytes replaced, and other terminal controls (ESC, C1, …;
+/// not tab) made visible as
+/// [`sanitize_terminal_controls`](crate::sanitize_terminal_controls) shows
+/// them, so a parser sees one kind of line and nothing in the document
+/// reaches the terminal as a control.
 pub(crate) fn normalize(source: &str) -> String {
     let source = source.strip_prefix('\u{feff}').unwrap_or(source);
     let mut out = String::with_capacity(source.len());
@@ -33,6 +37,12 @@ pub(crate) fn normalize(source: &str) -> String {
                 out.push('\n');
             }
             '\0' => out.push('\u{fffd}'),
+            '\n' | '\t' => out.push(ch),
+            '\u{1}'..='\u{1f}' | '\u{7f}'..='\u{9f}' => {
+                out.push_str(&crate::sanitize_terminal_controls(
+                    ch.encode_utf8(&mut [0; 4]),
+                ));
+            }
             _ => out.push(ch),
         }
     }
@@ -325,5 +335,9 @@ mod tests {
     #[test]
     fn line_endings_are_normalised() {
         assert_eq!(normalize("\u{feff}a\r\nb\rc\0"), "a\nb\nc\u{fffd}");
+        assert_eq!(
+            normalize("a\tb\x1b[2J\u{9b}c\x07\n"),
+            "a\tb\u{241b}[2J\\u{009B}c\u{2407}\n"
+        );
     }
 }
