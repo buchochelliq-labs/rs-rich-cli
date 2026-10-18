@@ -122,7 +122,11 @@ fn table_zebra() {
     let styled = intuituive::testing::styled(&driver);
     // The whole row, gaps and all.
     assert!(
-        styled.lines().nth(2).unwrap().starts_with("[on blue]Bread     2 160 kcal  [/]"),
+        styled
+            .lines()
+            .nth(2)
+            .unwrap()
+            .starts_with("[on blue]Bread     2 160 kcal  [/]"),
         "{styled}"
     );
 }
@@ -131,7 +135,10 @@ fn table_zebra() {
 fn table_multiline() {
     let rows_of = || {
         vec![
-            vec!["Ratatui".into(), "A library\nfor terminal\nuser\ninterfaces".into()],
+            vec![
+                "Ratatui".into(),
+                "A library\nfor terminal\nuser\ninterfaces".into(),
+            ],
             vec!["intuiTUIve".into(), "A framework".into()],
         ]
     };
@@ -219,7 +226,10 @@ fn table_column_highlight() {
     assert_screen_styled!(driver, "table_column_highlight");
     let styled = intuituive::testing::styled(&driver);
     // The column is bold down the rows, the cell cursor over it.
-    assert!(styled.lines().nth(2).unwrap().contains("[bold]   2[/]"), "{styled}");
+    assert!(
+        styled.lines().nth(2).unwrap().contains("[bold]   2[/]"),
+        "{styled}"
+    );
 }
 
 #[test]
@@ -259,7 +269,11 @@ fn clicks_select_the_row_drawn_there() {
     let mut driver = app.driver(22, 6);
     driver.settle();
     // The header, a gap, then the rows: line 3 is the second row.
-    driver.event(Event::Mouse(Mouse::new(MouseKind::Down(Button::Left), 2, 3)));
+    driver.event(Event::Mouse(Mouse::new(
+        MouseKind::Down(Button::Left),
+        2,
+        3,
+    )));
     driver.settle();
     assert_eq!(rows(&driver)[5], "1");
 }

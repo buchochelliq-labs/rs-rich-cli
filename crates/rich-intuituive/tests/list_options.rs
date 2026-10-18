@@ -136,12 +136,16 @@ fn list_scroll_padding() {
 
 #[test]
 fn list_zebra() {
-    let app = App::new(|| list(fruit, signal(0)).row_style(|i| (i % 2 == 1).then(|| "on blue".into())));
+    let app =
+        App::new(|| list(fruit, signal(0)).row_style(|i| (i % 2 == 1).then(|| "on blue".into())));
     let mut driver = app.driver(10, 4);
     driver.settle();
     assert_screen_styled!(driver, "list_zebra");
     let styled = intuituive::testing::styled(&driver);
-    assert!(styled.lines().nth(1).unwrap().contains("on blue"), "{styled}");
+    assert!(
+        styled.lines().nth(1).unwrap().contains("on blue"),
+        "{styled}"
+    );
 }
 
 #[test]
