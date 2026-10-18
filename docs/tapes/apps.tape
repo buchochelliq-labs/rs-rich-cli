@@ -22,10 +22,7 @@ Sleep 1500ms
 Right
 Wait /the greys/
 Sleep 1500ms
-Right
-Wait /frames a second/
-Sleep 3s
-Right
+Type "4"
 Wait /Crossed out/
 Sleep 1500ms
 Right

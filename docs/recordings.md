@@ -37,6 +37,9 @@ motion turned on in your system settings the cards stay still.
 [![An app in linear mode, written as lines of text](media/tapes/access/linear.png){ data-gif="access.gif" loading=lazy }<span class="tape-card-title">Text mode and linear mode</span>](#text-mode-and-linear-mode){ .tape-card }
 [![A line of Rust selected in a highlighted text area](media/tapes/editor/selected.png){ data-gif="editor.gif" loading=lazy }<span class="tape-card-title">A text area</span>](#a-text-area){ .tape-card }
 [![A dashboard drawn in place below the prompt](media/tapes/surface/done.png){ data-gif="surface.gif" loading=lazy }<span class="tape-card-title">A surface</span>](#a-surface){ .tape-card }
+[![ratatui's demo rebuilt on intuiTUIve](media/tapes/demo/graphs.png){ data-gif="demo.gif" loading=lazy }<span class="tape-card-title">ratatui's examples</span>](#ratatuis-examples-on-intuituive){ .tape-card }
+[![rich profile on nested JSON Lines](media/tapes/profile-nested/nested.png){ data-gif="profile-nested.gif" loading=lazy }<span class="tape-card-title">Nested JSON Lines</span>](#nested-json-lines-and-style-rules){ .tape-card }
+[![A two-row micro icon](media/tapes/micro-rows/icon.png){ data-gif="micro-rows.gif" loading=lazy }<span class="tape-card-title">Two-row micro assets</span>](#two-row-micro-assets){ .tape-card }
 [![rich date: a day picked on a month grid within a range](media/tapes/date/grid.png){ data-gif="date.gif" loading=lazy }<span class="tape-card-title">Dates and times</span>](#dates-and-times){ .tape-card }
 [![A man page rendered by rich, its sections and tagged paragraphs](media/tapes/documents/man.png){ data-gif="documents.gif" loading=lazy }<span class="tape-card-title">Org, AsciiDoc and man pages</span>](#org-asciidoc-and-man-pages){ .tape-card }
 [![rich log grouping records under a header for each trace id](media/tapes/log/groups.png){ data-gif="log.gif" loading=lazy }<span class="tape-card-title">Filter and group a log</span>](#filter-and-group-a-log){ .tape-card }
@@ -502,6 +505,114 @@ traces that failed. See [Logs: `rich log`](cli.md#logs-rich-log).
 | ![Four formats read as records](media/tapes/log/records.png) | ![Warnings and above from one service](media/tapes/log/filtered.png) | ![Repeated messages folded with a count](media/tapes/log/folded.png) | ![Records grouped under a header for each trace id](media/tapes/log/groups.png) |
 
 [Tape](tapes/log.tape) · [Cast](media/tapes/log/log.cast) · [GIF](media/tapes/log/log.gif) · [Page](media/tapes/log/log.html)
+
+## ratatui's examples on intuiTUIve
+
+ratatui's `demo` and `demo2`, its widget, chart and layout examples, and
+seven of its apps, rebuilt on intuiTUIve's API (0.0.19) with the mouse,
+help and a command palette added. The design, layout and keys are
+ratatui's (MIT, Florian Dehau and the Ratatui Developers); the code and
+the sample data are ours. See
+[ratatui's examples](guide/intuituive/ratatui-examples.md).
+
+### The classic demo
+
+<div class="tape-player" data-cast="../media/tapes/demo/demo.cast" data-poster="npt:0:3">
+  <img src="../media/tapes/demo/demo.gif" alt="ratatui's demo on intuiTUIve: gauges, a sparkline, lists, bars, a chart, a world map">
+</div>
+
+| Graphs | World | Colours |
+|---|---|---|
+| ![Gauges, a sparkline, lists, bars and a moving chart](media/tapes/demo/graphs.png) | ![A server table beside a world map](media/tapes/demo/world.png) | ![The sixteen named colours](media/tapes/demo/colours.png) |
+
+[Tape](tapes/demo.tape) · [Cast](media/tapes/demo/demo.cast) · [GIF](media/tapes/demo/demo.gif) · [Page](media/tapes/demo/demo.html)
+
+### The showcase
+
+<div class="tape-player" data-cast="../media/tapes/demo2/demo2.cast" data-poster="npt:0:3">
+  <img src="../media/tapes/demo2/demo2.gif" alt="ratatui's demo2 on intuiTUIve: about, recipe, email, traceroute and weather tabs">
+</div>
+
+| About | Email | Weather |
+|---|---|---|
+| ![A mark over a colour swatch](media/tapes/demo2/about.png) | ![An inbox and an open email](media/tapes/demo2/email.png) | ![A calendar, bars and a gauge](media/tapes/demo2/weather.png) |
+
+[Tape](tapes/demo2.tape) · [Cast](media/tapes/demo2/demo2.cast) · [GIF](media/tapes/demo2/demo2.gif) · [Page](media/tapes/demo2/demo2.html)
+
+### Widgets, charts and layout
+
+<div class="tape-player" data-cast="../media/tapes/widgets/widgets.cast" data-poster="npt:0:3">
+  <img src="../media/tapes/widgets/widgets.gif" alt="A gallery of intuiTUIve widgets in the style of ratatui's widget examples">
+</div>
+
+| Blocks | Table | Popup |
+|---|---|---|
+| ![Panels with titles, borders and a shadow](media/tapes/widgets/block.png) | ![A table with a footer and highlights](media/tapes/widgets/table.png) | ![A modal with a shadow](media/tapes/widgets/popup.png) |
+
+[Tape](tapes/widgets.tape) · [Cast](media/tapes/widgets/widgets.cast) · [GIF](media/tapes/widgets/widgets.gif) · [Page](media/tapes/widgets/widgets.html)
+
+<div class="tape-player" data-cast="../media/tapes/charts/charts.cast" data-poster="npt:0:3">
+  <img src="../media/tapes/charts/charts.gif" alt="A gallery of gauges, sparklines, bars, charts and the canvas">
+</div>
+
+| Gauges | Chart | Canvas |
+|---|---|---|
+| ![Fill and line gauges](media/tapes/charts/gauge.png) | ![Line, area and scatter charts](media/tapes/charts/chart.png) | ![The world map on the canvas](media/tapes/charts/canvas.png) |
+
+[Tape](tapes/charts.tape) · [Cast](media/tapes/charts/charts.cast) · [GIF](media/tapes/charts/charts.gif) · [Page](media/tapes/charts/charts.html)
+
+<div class="tape-player" data-cast="../media/tapes/layout/layout.cast" data-poster="npt:0:3">
+  <img src="../media/tapes/layout/layout.gif" alt="A layout explorer: sizes, flex modes and spacing">
+</div>
+
+| Explorer | Flex |
+|---|---|
+| ![Blocks sized and justified, with their widths](media/tapes/layout/explorer.png) | ![Each flex mode with and without a gap](media/tapes/layout/flex.png) |
+
+[Tape](tapes/layout.tape) · [Cast](media/tapes/layout/layout.cast) · [GIF](media/tapes/layout/layout.gif) · [Page](media/tapes/layout/layout.html)
+
+### Apps
+
+<div class="tape-player" data-cast="../media/tapes/apps/apps.cast" data-poster="npt:0:3">
+  <img src="../media/tapes/apps/apps.gif" alt="Four of ratatui's apps on intuiTUIve: colours, the canvas, a form and a calendar">
+</div>
+
+| Colours | Canvas | Form | Calendar |
+|---|---|---|---|
+| ![Named colours on backgrounds](media/tapes/apps/colors-named.png) | ![The canvas app](media/tapes/apps/canvas.png) | ![A form with a field in error](media/tapes/apps/form-error.png) | ![A year of months](media/tapes/apps/calendar.png) |
+
+[Tape](tapes/apps.tape) · [Cast](media/tapes/apps/apps.cast) · [GIF](media/tapes/apps/apps.gif) · [Page](media/tapes/apps/apps.html)
+
+## Nested JSON Lines and style rules
+
+`rich profile` (0.0.19) on JSON Lines, path by path with each path's mix
+of types, then a table styled by value with `--style-rule`. See
+[Nested JSON Lines](cli.md#nested-json-lines-0019).
+
+<div class="tape-player" data-cast="../media/tapes/profile-nested/profile-nested.cast" data-poster="npt:0:3">
+  <img src="../media/tapes/profile-nested/profile-nested.gif" alt="rich profile profiling nested JSON Lines, then style rules on a table">
+</div>
+
+| Nested | Rules |
+|---|---|
+| ![A profile of nested paths and their types](media/tapes/profile-nested/nested.png) | ![A table styled by value](media/tapes/profile-nested/rules.png) |
+
+[Tape](tapes/profile-nested.tape) · [Cast](media/tapes/profile-nested/profile-nested.cast) · [GIF](media/tapes/profile-nested/profile-nested.gif) · [Page](media/tapes/profile-nested/profile-nested.html)
+
+## Two-row micro assets
+
+Micro assets two rows high (0.0.19): a 2×2 icon in text and a table, and
+a 3×2 animation. See [Micro assets](guide/micro/index.md).
+
+<div class="tape-player" data-cast="../media/tapes/micro-rows/micro-rows.cast" data-poster="npt:0:3">
+  <img src="../media/tapes/micro-rows/micro-rows.gif" alt="A two-row micro icon in text and a table, and a two-row animation">
+</div>
+
+| Icon | Animation |
+|---|---|
+| ![A 2×2 icon with its row reserved](media/tapes/micro-rows/icon.png) | ![A 3×2 animation](media/tapes/micro-rows/animation.png) |
+
+[Tape](tapes/micro-rows.tape) · [Cast](media/tapes/micro-rows/micro-rows.cast) · [GIF](media/tapes/micro-rows/micro-rows.gif) · [Page](media/tapes/micro-rows/micro-rows.html)
 
 ## Serve a program to a browser
 

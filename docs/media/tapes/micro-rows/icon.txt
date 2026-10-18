@@ -1,0 +1,34 @@
+❯ rich -p --emoji "$LINE"
+Release 🏆 shipped, team night at the 🔥⠀ ✅
+        ⠀⠀                            ⠀⠀⠀
+❯ RICH_MICRO=blocks rich -p --emoji "$LINE"
+Release ▀▀ shipped, team night at the  ▄  ▀▀
+                                      ▄▀▄
+❯ rich micro show fun/trophy
+Asset     🏆
+          ⠀⠀
+Name      fun/trophy
+Size      2x2 cells
+Kind      static
+Alt text  gold trophy cup on a dark stand
+Fallback  emoji 🏆 · text #1
+Origin    built-in pack fun (builtin:fun/trophy)
+Version   1.0.0
+Licence   MIT
+Author    rs-rich-cli contributors
+Files     static.png (png 16x32)
+fun/trophy = fun/trophy 2x2 v1.0.0 (pack fun)
+  ✔ built-in (rs-rich-micro)  fun/trophy 2x2 v1.0.0 (pack fun)  effective
+❯
+
+
+
+
+
+
+
+
+
+
+
+

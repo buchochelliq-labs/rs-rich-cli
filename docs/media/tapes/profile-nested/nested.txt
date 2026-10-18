@@ -1,0 +1,50 @@
+❯ rich profile requests.jsonl --width 100 --force-terminal | head -25
+requests.jsonl: 12 records, 17 paths
+! marks 2 paths holding more than one JSON type besides null: ["http.status"], items[].qty
+1 line is not JSON and was skipped: line 13 (expected value)
+
+┏━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━┳━━━━━━━━━━┳━━━━━━━━━━━━┳━━━━━━━━━━━━┳━━━━━━━━━━┓
+┃ path            ┃ types               ┃   absent ┃ distinct ┃        min ┃        max ┃     mean ┃
+┡━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━╇━━━━━━━━━━╇━━━━━━━━━━━━╇━━━━━━━━━━━━╇━━━━━━━━━━┩
+│ id              │ num                 │        0 │       12 │          1 │         12 │      6.5 │
+│ ts              │ str                 │        0 │       12 │ 2026-10-0… │ 2026-10-0… │          │
+│ level           │ str                 │        0 │        4 │      debug │       warn │          │
+│ user            │ obj 91% · null 9%   │   1 (8%) │          │            │            │          │
+│ user.id         │ num                 │  2 (17%) │        4 │          3 │         12 │      7.2 │
+│ user.plan       │ str 89% · null 11%  │  3 (25%) │        3 │       free │       team │          │
+│ tags            │ arr                 │   1 (8%) │          │            │            │          │
+│ tags[]          │ str                 │  2 (17%) │        4 │        api │     worker │          │
+│ ["http.status"] │ ! num 82% · str 18% │   1 (8%) │        6 │        200 │        503 │ 303.1818 │
+│ latency_ms      │ num 92% · null 8%   │        0 │       11 │          4 │       2210 │ 254.5455 │
+│ error           │ obj                 │ 10 (83%) │          │            │            │          │
+│ error.code      │ str                 │ 10 (83%) │        2 │  E_TIMEOUT │ E_UPSTREAM │          │
+│ error.retry     │ bool                │ 10 (83%) │        2 │      false │       true │          │
+│ items           │ arr                 │  9 (75%) │          │            │            │          │
+│ items[]         │ obj                 │  9 (75%) │          │            │            │          │
+│ items[].sku     │ str                 │  9 (75%) │        3 │        A-1 │        C-2 │          │
+│ items[].qty     │ ! num 75% · str 25% │  9 (75%) │        4 │          1 │          5 │     2.75 │
+└─────────────────┴─────────────────────┴──────────┴──────────┴────────────┴────────────┴──────────┘
+❯
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

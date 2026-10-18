@@ -1,0 +1,24 @@
+ Block  Text  List  Table  Tabs  Scrollbar  Calendar  Popup  Borders  Custom
+╭─ Top left ───────────────────────────┬─ Top right ───────────────────────────╮
+│Four panes share their borders.       │The lines join where they meet.        │
+│                                      │                                       │
+│                                      │                                       │
+│                                      │                                       │
+│                                      │                                       │
+│                                      │                                       │
+│                                      │                                       │
+│                                      │                                       │
+│                                      │                                       │
+┢━ Bottom left ━━━━━━━━━━━━━━━━━━━━━━━━╅─ Bottom right ────────────────────────┤
+┃The pane with the focus is drawn      ┃↑/↓, Tab or a click pick a pane.       │
+┃thick.                                ┃                                       │
+┃                                      ┃                                       │
+┃                                      ┃                                       │
+┃                                      ┃                                       │
+┃                                      ┃                                       │
+┃                                      ┃                                       │
+┃                                      ┃                                       │
+┃                                      ┃                                       │
+┃                                      ┃                                       │
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┹───────────────────────────────────────╯
+←/→ or 1-9, 0 tabs · ? keys · Ctrl+P commands · q quit

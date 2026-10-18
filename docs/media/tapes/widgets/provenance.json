@@ -1,0 +1,22 @@
+{
+  "tape": "docs/tapes/widgets.tape",
+  "tape_fnv1a64": "719676f10193cdc4",
+  "recorder": "rs-rich-record 0.0.7",
+  "rich": null,
+  "commit": "31aff44b9ffe3290222eabe96d7af95a90ba0eb0",
+  "screenshots": [
+    "block",
+    "text",
+    "list",
+    "table",
+    "table-app",
+    "tabs",
+    "scrollbar",
+    "calendar",
+    "popup",
+    "borders",
+    "custom",
+    "keys"
+  ],
+  "note": "Every frame is real output of the program under test on a PTY."
+}

@@ -1,0 +1,17 @@
+{
+  "tape": "docs/tapes/layout.tape",
+  "tape_fnv1a64": "d47796603f1bd009",
+  "recorder": "rs-rich-record 0.0.7",
+  "rich": null,
+  "commit": "31aff44b9ffe3290222eabe96d7af95a90ba0eb0",
+  "screenshots": [
+    "explorer",
+    "explorer-gap",
+    "explorer-flex",
+    "sizes-ratio",
+    "sizes-max",
+    "flex",
+    "beyond"
+  ],
+  "note": "Every frame is real output of the program under test on a PTY."
+}
