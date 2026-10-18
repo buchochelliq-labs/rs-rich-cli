@@ -1094,7 +1094,11 @@ due=$(rich date --header Due --min today)
 - `pager` pages a FILE or stdin, keeping its colours: `/` searches, `q`
   quits. When the content starts with a table, its header stays on top
   while the rows scroll; `--sticky LINES` keeps the first LINES lines there
-  instead, and `--sticky 0` nothing.
+  instead, and `--sticky 0` nothing. On a terminal too short for them all,
+  the last that fit stay and the ones before scroll away first. A table
+  whose rows are divided by lines drawn like the one under a header
+  (`show_lines` in a square box, or a table without a header) keeps
+  nothing on top.
 - `write` reads several lines: Enter starts a line, Ctrl+D submits. It takes
   `--header`, `--placeholder`, `--value`, `--height`, `--char-limit` and
   `--show-line-numbers`; piped stdin is the text to start from, its last
@@ -1123,13 +1127,17 @@ due=$(rich date --header Due --min today)
   `--seconds`), `2026-10-17 14:30`. `--min` and `--max` limit it: days
   outside are dimmed and cannot be reached, and a time outside is refused
   with a message. `--value` starts somewhere other than today (in UTC),
-  `--default` is also the answer to an empty line and without a terminal,
-  and `--twelve-hour` shows AM and PM (the answer stays on a 24-hour
-  clock). The values are written as the kind prints them (a date alone is
-  midnight for `datetime`; `today` and `now` are understood), and one that
-  does not parse, `--min` after `--max`, or a `--default` outside them is
-  a usage error. The selected day is in brackets as well as reversed, so it
-  reads without colour.
+  `--default` is the answer to an empty line and without a terminal, and
+  the start unless `--value` is given; `--twelve-hour` shows AM and PM (the
+  answer stays on a 24-hour clock). Without `--seconds` everything is to the
+  minute: a value or a typed answer drops its seconds, and a limit is the
+  minute that can be picked (`--min 09:00:30` is 09:01). `--seconds` and
+  `--twelve-hour` need `--kind time` or `datetime`. The values are written
+  as the kind prints them (a four-digit year; a date alone is midnight for
+  `datetime`; `today` and `now` are understood), and one that does not
+  parse, `--min` after `--max`, a `--default` outside them, or `--seconds`
+  or `--twelve-hour` for a date is a usage error. The selected day is in
+  brackets as well as reversed, so it reads without colour.
 - `--height` (choose, filter, write, file, color, asset) is cut to the
   terminal's height.
 - `--mouse` (choose, filter, confirm, file, color, asset, date) turns mouse

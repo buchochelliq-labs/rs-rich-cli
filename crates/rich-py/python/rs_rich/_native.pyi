@@ -5204,7 +5204,7 @@ class InteractForm:
     def headless(self, script: ScriptType = None, *, width: int = 80, height: int = 24) -> "InteractRecord": ...
 
 class InteractPager:
-    """``Pager``: page any renderable, with search and a sticky header; the answer is ``None``."""
+    """``Pager``: page any renderable, with search and a sticky header (``sticky_header`` at least 0); the answer is ``None``."""
     def __init__(
         self,
         renderable: RenderableType,
@@ -5326,7 +5326,7 @@ class InteractReorder:
     def headless(self, script: ScriptType = None, *, width: int = 80, height: int = 24) -> "InteractRecord": ...
 
 class InteractDatePicker:
-    """``DatePicker``: a day from a month grid, within ``min`` and ``max``; the answer is a ``datetime.date``."""
+    """``DatePicker``: a day from a month grid, within ``min`` and ``max`` (and ``default`` too); the answer is a ``datetime.date``."""
     def __init__(self, prompt: str = "Date", *, value: Optional[_datetime.date] = None, default: Optional[_datetime.date] = None, min: Optional[_datetime.date] = None, max: Optional[_datetime.date] = None, today: Optional[_datetime.date] = None, validate: Optional[Callable[[_datetime.date], Any]] = None, mouse: bool = False) -> None: ...
     @property
     def prompt(self) -> str: ...
@@ -5346,7 +5346,7 @@ class InteractDatePicker:
     def headless(self, script: ScriptType = None, *, width: int = 80, height: int = 24) -> "InteractRecord": ...
 
 class InteractTimePicker:
-    """``TimePicker``: a time of day, field by field, within ``min`` and ``max``; the answer is a ``datetime.time``."""
+    """``TimePicker``: a naive time of day, field by field, within ``min`` and ``max`` (and ``default`` too), to the minute without ``seconds``; the answer is a ``datetime.time``."""
     def __init__(self, prompt: str = "Time", *, value: Optional[_datetime.time] = None, default: Optional[_datetime.time] = None, min: Optional[_datetime.time] = None, max: Optional[_datetime.time] = None, seconds: bool = False, twelve_hour: bool = False, validate: Optional[Callable[[_datetime.time], Any]] = None, mouse: bool = False) -> None: ...
     @property
     def prompt(self) -> str: ...
@@ -5368,7 +5368,7 @@ class InteractTimePicker:
     def headless(self, script: ScriptType = None, *, width: int = 80, height: int = 24) -> "InteractRecord": ...
 
 class InteractDateTimePicker:
-    """``DateTimePicker``: a day and a time, within ``min`` and ``max``; the answer is a naive ``datetime.datetime``."""
+    """``DateTimePicker``: a day and a time, within ``min`` and ``max`` (and ``default`` too), to the minute without ``seconds``; the values are naive ``datetime.datetime``s."""
     def __init__(self, prompt: str = "Date and time", *, value: Optional[_datetime.datetime] = None, default: Optional[_datetime.datetime] = None, min: Optional[_datetime.datetime] = None, max: Optional[_datetime.datetime] = None, today: Optional[_datetime.date] = None, seconds: bool = False, twelve_hour: bool = False, validate: Optional[Callable[[_datetime.datetime], Any]] = None, mouse: bool = False) -> None: ...
     @property
     def prompt(self) -> str: ...
@@ -6454,10 +6454,10 @@ def tui_calendar_with(selected: TuiSignal, today: Any = None, *, min: Any = None
     """``calendar_with``: a ``calendar`` that marks ``today`` and keeps the day between ``min`` and ``max``."""
     ...
 def tui_time_picker(selected: TuiSignal, *, seconds: bool = False, twelve_hour: bool = False, min: Any = None, max: Any = None) -> TuiNode:
-    """``time_picker``: the ``datetime.time`` in ``selected``, field by field."""
+    """``time_picker``: the naive ``datetime.time`` in ``selected``, field by field; ``min`` not after ``max``."""
     ...
 def tui_datetime_picker(selected: TuiSignal, *, today: Any = None, min: Any = None, max: Any = None, seconds: bool = False, twelve_hour: bool = False) -> TuiNode:
-    """``datetime_picker``: a calendar over a time picker, on the naive ``datetime.datetime`` in ``selected``."""
+    """``datetime_picker``: a calendar over a time picker, on the naive ``datetime.datetime`` in ``selected``; ``min`` not after ``max``."""
     ...
 def tui_split(axis: AxisArg, first: NodeArg, second: NodeArg, ratio: Union[TuiSignal, float]) -> TuiNode:
     """``split``: two panes and a divider that drags."""

@@ -336,10 +336,13 @@ jobs:
       - name: Clippy (rs-rich-web, Windows)
         run: cargo clippy -p rs-rich-web --all-targets --locked -- -D warnings
 
+      # One command a step: in a pwsh step of several, only the last one's
+      # exit code would fail it.
+      - name: Build the session examples
+        run: cargo build -p rs-rich-web --locked --examples
+
       - name: Test session job objects
-        run: |
-          cargo build -p rs-rich-web --locked --examples
-          cargo test -p rs-rich-web --locked --test isolation_windows
+        run: cargo test -p rs-rich-web --locked --test isolation_windows
 
   # The whole workspace's tests on macOS: PTYs, terminal modes, signals and
   # paths differ enough from Linux to break on their own.

@@ -7,7 +7,9 @@
 //! own: a minimal pager that returns where it was left.
 //!
 //! Since 0.0.7 its first lines can be sticky (#716): a table's header
-//! stays on top while the rows under it scroll.
+//! stays on top while the rows under it scroll. On a page too short for
+//! them all, the last that fit stay (a table's column names) and the ones
+//! before scroll away with the rest.
 
 use rich::{Segment, Style};
 
@@ -59,7 +61,9 @@ impl Viewport {
     /// Keep the first `rows` lines on every page, above the lines that
     /// scroll: a table's header (#716). The scroll position
     /// ([`offset`](Self::offset), [`scroll_to`](Self::scroll_to)) then
-    /// counts the lines under them.
+    /// counts the lines under them. A page always keeps one row to scroll:
+    /// on one too short for every sticky line, the last that fit stay, and
+    /// the ones before them scroll away first, so every line is shown.
     pub fn sticky(mut self, rows: usize) -> Viewport {
         self.set_sticky(rows);
         self
@@ -82,15 +86,29 @@ impl Viewport {
         self.sticky.min(self.lines.len())
     }
 
-    /// The sticky lines shown on a page of `page` rows: one row at least
-    /// is left to scroll.
+    /// The sticky lines that stay on a page of `page` rows, the last of
+    /// them: one row at least is left to scroll.
     fn pinned(&self, page: usize) -> usize {
         self.stuck().min(page.saturating_sub(1))
+    }
+
+    /// The sticky lines that do not fit on a page of `page` rows: they
+    /// scroll away first, before the others stay.
+    fn unpinned(&self, page: usize) -> usize {
+        self.stuck() - self.pinned(page)
     }
 
     /// The rows of a page of `page` that scroll.
     fn body(&self, page: usize) -> usize {
         page - self.pinned(page)
+    }
+
+    /// The scroll state for a page of `page` rows: its length is the lines
+    /// less those that stay, so the last page ends with the last line.
+    fn scroll_for(&mut self, page: usize) -> (&mut ScrollState, usize) {
+        let (len, body) = (self.lines.len() - self.pinned(page), self.body(page));
+        self.scroll.set_len(len);
+        (&mut self.scroll, body)
     }
 
     /// Make `keys` do `action` (see [`viewport_keymap`]) when the viewport
@@ -143,24 +161,39 @@ impl Viewport {
 
     /// Scroll by `delta` lines (negative: up), within the lines.
     pub fn scroll(&mut self, delta: isize, page: usize) -> bool {
-        let body = self.body(page);
-        self.scroll.scroll(delta, body)
+        let (scroll, body) = self.scroll_for(page);
+        scroll.scroll(delta, body)
     }
 
     /// Scroll to the [offset](Self::offset) `line`, or as near as the last
     /// page allows.
     pub fn scroll_to(&mut self, line: usize, page: usize) -> bool {
-        let body = self.body(page);
-        self.scroll.scroll_to(line, body)
+        let (scroll, body) = self.scroll_for(page);
+        scroll.scroll_to(line, body)
     }
 
     /// Scroll just enough that `line` (counted from the first line, sticky
-    /// lines included) is shown.
+    /// lines included) is shown. A sticky line that stays needs no scroll.
     pub fn show(&mut self, line: usize, page: usize) -> bool {
-        let body = self.body(page);
-        match line.checked_sub(self.stuck()) {
-            Some(line) => self.scroll.show(line, body),
-            None => false,
+        let (unpinned, pinned) = (self.unpinned(page), self.pinned(page));
+        // The offsets that show it: from the one that puts it last on the
+        // page, to the one that puts it first under the lines that stay
+        // (a sticky line that scrolls away: first on the page).
+        let first = (line + 1).saturating_sub(page);
+        let last = if line < unpinned {
+            line
+        } else if line < self.stuck() {
+            usize::MAX
+        } else {
+            line - pinned
+        };
+        let offset = self.offset();
+        if offset < first {
+            self.scroll_to(first, page)
+        } else if offset > last {
+            self.scroll_to(last, page)
+        } else {
+            false
         }
     }
 
@@ -168,33 +201,54 @@ impl Viewport {
     /// `page-down`, ...), for a component that looks its keys up in a
     /// keymap. Returns whether `action` is a scroll action.
     pub fn act(&mut self, action: &str, page: usize) -> bool {
-        let body = self.body(page);
-        self.scroll.act(action, body)
+        let (scroll, body) = self.scroll_for(page);
+        scroll.act(action, body)
     }
 
     /// Move with the usual keys and the mouse wheel: arrows and `j`/`k` by a
     /// line, PageUp/PageDown and Space by a page, Home/End and `g`/`G` to
     /// the ends. Returns whether the event was a scroll key (moved or not).
     pub fn handle_scroll(&mut self, event: &Event, page: usize) -> bool {
-        let body = self.body(page);
-        self.scroll.handle(event, body)
+        let (scroll, body) = self.scroll_for(page);
+        scroll.handle(event, body)
+    }
+
+    /// Whether the sticky lines that fit stay on a page of `page` rows:
+    /// once those that do not fit have scrolled away.
+    fn stays(&self, page: usize) -> bool {
+        self.offset() >= self.unpinned(page)
+    }
+
+    /// The index of the first line that scrolls on a page of `page` rows:
+    /// the first shown under the sticky lines that stay, or the first shown
+    /// when none stay yet.
+    pub fn top(&self, page: usize) -> usize {
+        let offset = self.offset();
+        if self.stays(page) {
+            offset + self.pinned(page)
+        } else {
+            offset
+        }
     }
 
     /// The lines that scroll, as shown on a page of `page` rows: every
     /// line shown when none are [sticky](Self::sticky).
     pub fn visible(&self, page: usize) -> &[Vec<Segment>] {
-        let range = self.scroll.visible(self.body(page));
-        let stuck = self.stuck();
-        &self.lines[range.start + stuck..range.end + stuck]
+        let end = (self.offset() + page).min(self.lines.len());
+        &self.lines[self.top(page).min(end)..end]
     }
 
     /// The lines shown on a page of `page` rows, each with its index: the
-    /// sticky lines, then those scrolled to.
+    /// sticky lines that stay, then those scrolled to.
     pub fn rows(&self, page: usize) -> Vec<(usize, &[Segment])> {
-        let range = self.scroll.visible(self.body(page));
-        let stuck = self.stuck();
-        (0..self.pinned(page))
-            .chain(range.start + stuck..range.end + stuck)
+        let staying = if self.stays(page) {
+            self.unpinned(page)..self.stuck()
+        } else {
+            0..0
+        };
+        let end = (self.offset() + page).min(self.lines.len());
+        staying
+            .chain(self.top(page).min(end)..end)
             .map(|index| (index, self.lines[index].as_slice()))
             .collect()
     }
@@ -207,12 +261,11 @@ impl Viewport {
         if total <= page {
             return format!("all {total} lines");
         }
-        let offset = self.scroll.offset();
-        let first = match offset {
+        let first = match self.offset() {
             0 => 0,
-            offset => offset + self.stuck(),
+            _ => self.top(page),
         };
-        let last = (offset + self.stuck() + self.body(page)).min(total);
+        let last = (self.offset() + page).min(total);
         format!("lines {}–{last} of {total}", first + 1)
     }
 }
@@ -233,11 +286,10 @@ impl Component for Viewport {
                 Flow::Ignored
             };
         };
-        let body = self.body(page);
-        match self.keymap.action(key) {
+        match self.keymap.action(key).map(str::to_string).as_deref() {
             Some("done") => Flow::Done(self.offset()),
             Some("quit") => Flow::Cancel,
-            Some(action) if self.scroll.act(action, body) => Flow::Continue,
+            Some(action) if self.act(action, page) => Flow::Continue,
             _ => Flow::Ignored,
         }
     }

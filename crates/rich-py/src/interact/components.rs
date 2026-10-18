@@ -1338,6 +1338,12 @@ impl Sticky {
                 ))),
             };
         }
+        // A negative number is the right type with the wrong value.
+        if value.extract::<i64>().is_ok_and(|lines| lines < 0) {
+            return Err(PyValueError::new_err(
+                "sticky_header: a number of lines is at least 0",
+            ));
+        }
         value
             .extract::<usize>()
             .map(Sticky::Lines)

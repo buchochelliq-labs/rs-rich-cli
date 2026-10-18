@@ -8,20 +8,27 @@
 //! minute, the second and AM/PM, ↑/↓ change the field, and digits type it.
 //! With both, Tab moves between the grid and the time. Enter picks; Esc
 //! cancels. Every key comes from the keymap (context `date`), so it can be
-//! rebound.
+//! rebound. Tab and Shift+Tab are the containers' `focus-next` and
+//! `focus-previous`: in a [container](crate::compose), Tab after the last
+//! part moves on to the next field, and on its own the picker goes round.
 //!
 //! A range ([`min`](DatePicker::min), [`max`](DatePicker::max)) limits
 //! what can be picked: days outside it are dimmed and the grid does not go
 //! to them; a time outside it is refused on Enter, with a message under
 //! the picker that says what the limit is, as is an answer a
-//! [validator](DatePicker::validate) refuses. The value so far shows on the
+//! [validator](DatePicker::validate) refuses, and every answer when the
+//! earliest is after the latest. The days go from the year 1 to 9999, the
+//! years ISO 8601's four digits write. The value so far shows on the
 //! question line, and the selected day is in brackets as well as reversed,
-//! so both read without colour.
+//! so both read without colour. Without seconds a picker works to the
+//! minute: the value and the answer drop their seconds, and a limit with
+//! seconds is the minute that can be picked (the earliest rounds up).
 //!
 //! Without a terminal each asks for a line and parses it: `2026-10-17`,
 //! `14:30` (or `2:30 pm`), or `2026-10-17 14:30`; an empty line answers
 //! with the default. A line outside the range or refused by the validator
-//! is an error, as is one that does not parse.
+//! is an error, as is one that does not parse, and so is a default the
+//! picker would refuse.
 
 use std::cell::Cell;
 use std::sync::Arc;
@@ -30,12 +37,15 @@ use rich::{Segment, Style};
 
 use crate::component::{Component, Context, Flow, View};
 use crate::components::{fit, plain, question, text, Theme};
+use crate::compose::{FOCUS_NEXT, FOCUS_PREVIOUS};
 use crate::datetime::{Date, DateTime, Time};
 use crate::event::{Button, Event, Key, KeyCode, MouseKind};
 use crate::keymap::{keys, Keymap};
 use crate::policy::{LineIo, NotInteractive};
 
-/// The keys of the date and time pickers, in context `date`.
+/// The keys of the date and time pickers, in context `date`. Tab and
+/// Shift+Tab are [`FOCUS_NEXT`] and [`FOCUS_PREVIOUS`], as in a
+/// container: past the picker's last part, focus moves on.
 pub fn date_keymap() -> Keymap {
     Keymap::new("date")
         .bind("pick", keys("enter"), "pick")
@@ -51,8 +61,8 @@ pub fn date_keymap() -> Keymap {
         .bind("first-day", keys("home"), "the month's first day")
         .bind("last-day", keys("end"), "the month's last day")
         .bind("today", keys("t"), "today")
-        .bind("next-field", keys("tab"), "the next part")
-        .bind("previous-field", keys("shift+tab"), "the part before")
+        .bind(FOCUS_NEXT, keys("tab"), "the next part")
+        .bind(FOCUS_PREVIOUS, keys("shift+tab"), "the part before")
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -82,12 +92,18 @@ const WEEKS: usize = 6;
 const GRID_WIDTH: usize = 23;
 /// The rows above the grid's weeks: the question, the month, the weekdays.
 const GRID_TOP: usize = 3;
+/// The first and last days a picker goes to: the years ISO 8601's four
+/// digits write, so every answer prints and parses back.
+const FIRST_DAY: Date = Date::new(1, 1, 1);
+const LAST_DAY: Date = Date::new(9999, 12, 31);
 
 /// The state the three pickers share.
 struct Chooser {
     prompt: String,
     mode: Mode,
     value: DateTime,
+    /// Whether `value` was given: a default does not move the start then.
+    value_given: bool,
     min: Option<DateTime>,
     max: Option<DateTime>,
     seconds: bool,
@@ -123,6 +139,7 @@ impl Chooser {
             prompt,
             mode,
             value,
+            value_given: false,
             min: None,
             max: None,
             seconds: false,
@@ -172,21 +189,79 @@ impl Chooser {
         parts
     }
 
-    /// Whether `date` has a moment in the range.
-    fn day_allowed(&self, date: Date) -> bool {
-        self.min.is_none_or(|min| date >= min.date) && self.max.is_none_or(|max| date <= max.date)
+    /// Whether the picker works to the minute: it has a time, and no
+    /// seconds.
+    fn to_the_minute(&self) -> bool {
+        self.has_time() && !self.seconds
     }
 
-    /// `date`, moved into the range.
+    /// `at` as the picker shows it, and so answers it: to the minute when
+    /// it has no seconds.
+    fn shown(&self, at: DateTime) -> DateTime {
+        if !self.to_the_minute() {
+            return at;
+        }
+        DateTime::new(
+            at.date,
+            Time {
+                second: 0,
+                ..at.time
+            },
+        )
+    }
+
+    /// The earliest moment that can be picked: `min`, rounded up to the
+    /// next minute when the picker works to the minute and it has seconds.
+    fn earliest(&self) -> Option<DateTime> {
+        let min = self.min?;
+        if !self.to_the_minute() || min.time.second == 0 {
+            return Some(min);
+        }
+        let minute = i64::from(min.time.seconds() - min.time.second);
+        let time = Time::from_seconds(minute + 60);
+        let date = if time == Time::MIDNIGHT {
+            min.date.add_days(1)
+        } else {
+            min.date
+        };
+        Some(DateTime::new(date, time))
+    }
+
+    /// The latest moment that can be picked: `max`, to the minute when the
+    /// picker works to the minute.
+    fn latest(&self) -> Option<DateTime> {
+        self.max.map(|max| self.shown(max))
+    }
+
+    /// The earliest, as a message says it: the minute that can be picked,
+    /// or, when no minute of a time picker's day is that late, `min` to
+    /// the second.
+    fn earliest_text(&self) -> Option<String> {
+        let (min, earliest) = (self.min?, self.earliest()?);
+        Some(if self.mode == Mode::Time && earliest.date != min.date {
+            min.time.format(true, self.twelve_hour)
+        } else {
+            self.format(earliest)
+        })
+    }
+
+    /// Whether `date` has a moment in the range.
+    fn day_allowed(&self, date: Date) -> bool {
+        (FIRST_DAY..=LAST_DAY).contains(&date)
+            && self.earliest().is_none_or(|min| date >= min.date)
+            && self.latest().is_none_or(|max| date <= max.date)
+    }
+
+    /// `date`, moved into the range (and the years 1 to 9999).
     fn clamp_day(&self, date: Date) -> Date {
         let mut date = date;
-        if let Some(min) = self.min {
+        if let Some(min) = self.earliest() {
             date = date.max(min.date);
         }
-        if let Some(max) = self.max {
+        if let Some(max) = self.latest() {
             date = date.min(max.date);
         }
-        date
+        date.clamp(FIRST_DAY, LAST_DAY)
     }
 
     /// What is compared with the range: a date picker's day, a time
@@ -208,15 +283,27 @@ impl Chooser {
         }
     }
 
-    /// Why `at` cannot be picked, if it cannot.
+    /// Why `at` cannot be picked, if it cannot. It is compared as shown:
+    /// to the minute when the picker works to the minute.
     fn refusal(&self, at: DateTime) -> Option<String> {
+        let at = self.shown(at);
+        if let (Some(earliest), Some(latest)) = (self.earliest(), self.latest()) {
+            if self.key_of(earliest) > self.key_of(latest) {
+                return Some(format!(
+                    "the range is empty: the earliest, {}, is after the latest, {}",
+                    self.earliest_text().unwrap_or_default(),
+                    self.format(latest)
+                ));
+            }
+        }
         let at_key = self.key_of(at);
         if let Some(min) = self.min {
             if at_key < self.key_of(min) {
-                return Some(format!("the earliest is {}", self.format(min)));
+                let earliest = self.earliest_text().unwrap_or_default();
+                return Some(format!("the earliest is {earliest}"));
             }
         }
-        if let Some(max) = self.max {
+        if let Some(max) = self.latest() {
             if at_key > self.key_of(max) {
                 return Some(format!("the latest is {}", self.format(max)));
             }
@@ -295,38 +382,69 @@ impl Chooser {
         };
         if full {
             self.typed.clear();
-            self.move_part(1, false);
+            self.move_part(1);
         }
     }
 
-    /// Move the focus `by` parts; `wrap` goes round from the last to the
-    /// first (Tab), otherwise it stops at the ends (the arrows).
-    fn move_part(&mut self, by: isize, wrap: bool) {
-        let parts = self.parts();
-        let at = parts
+    /// Where the focused part is among the parts.
+    fn part_index(&self, parts: &[Part]) -> usize {
+        parts
             .iter()
             .position(|part| *part == self.part)
-            .unwrap_or(0);
+            .unwrap_or(0)
+    }
+
+    /// Move the focus `by` parts, stopping at the ends (the arrows): the
+    /// arrows stay among the time fields.
+    fn move_part(&mut self, by: isize) {
+        let parts = self.parts();
         let count = parts.len() as isize;
-        let next = at as isize + by;
-        let next = if wrap {
-            next.rem_euclid(count)
-        } else {
-            // The arrows stay among the time fields.
-            let first = if self.has_date() { 1 } else { 0 };
-            next.clamp(first.min(count - 1), count - 1)
-        };
+        let first = if self.has_date() { 1 } else { 0 };
+        let next = (self.part_index(&parts) as isize + by).clamp(first.min(count - 1), count - 1);
         self.part = parts[next as usize];
         self.typed.clear();
     }
 
+    /// Move the focus to the next part (or the one before), for Tab:
+    /// `false` past the last (or before the first), where Tab leaves the
+    /// picker for its container's next field.
+    fn step_part(&mut self, forward: bool) -> bool {
+        let parts = self.parts();
+        let at = self.part_index(&parts);
+        let next = if forward {
+            Some(at + 1)
+        } else {
+            at.checked_sub(1)
+        };
+        match next.and_then(|next| parts.get(next)) {
+            Some(part) => {
+                self.part = *part;
+                self.typed.clear();
+                true
+            }
+            None => false,
+        }
+    }
+
+    /// Take the focus from outside: at the first part going forward, at
+    /// the last going back.
+    fn enter(&mut self, forward: bool) {
+        let parts = self.parts();
+        if let Some(part) = if forward { parts.first() } else { parts.last() } {
+            self.part = *part;
+        }
+        self.typed.clear();
+    }
+
     fn pick(&mut self) -> Flow<DateTime> {
-        if let Some(why) = self.refusal(self.value) {
+        let value = self.shown(self.value);
+        if let Some(why) = self.refusal(value) {
             self.message = Some(why);
             return Flow::Continue;
         }
-        self.answer = Some(Some(self.format(self.value)));
-        Flow::Done(self.value)
+        self.value = value;
+        self.answer = Some(Some(self.format(value)));
+        Flow::Done(value)
     }
 
     fn act(&mut self, action: &str) -> Flow<DateTime> {
@@ -338,15 +456,20 @@ impl Chooser {
                 self.answer = Some(None);
                 return Flow::Cancel;
             }
-            "next-field" | "previous-field" if self.parts().len() > 1 => {
-                self.move_part(if action == "next-field" { 1 } else { -1 }, true);
+            // Past the last part (or before the first) Tab is left to the
+            // container: its next field. On its own, the event loop takes
+            // the picker round to its other end.
+            FOCUS_NEXT | FOCUS_PREVIOUS => {
+                if !self.step_part(action == FOCUS_NEXT) {
+                    return Flow::Ignored;
+                }
             }
             "left" if on_grid => self.set_day(day.add_days(-1)),
             "right" if on_grid => self.set_day(day.add_days(1)),
             "up" if on_grid => self.set_day(day.add_days(-7)),
             "down" if on_grid => self.set_day(day.add_days(7)),
-            "left" => self.move_part(-1, false),
-            "right" => self.move_part(1, false),
+            "left" => self.move_part(-1),
+            "right" => self.move_part(1),
             "up" => self.step_field(1),
             "down" => self.step_field(-1),
             "previous-month" if self.has_date() => self.set_day(day.add_months(-1)),
@@ -628,13 +751,14 @@ impl Chooser {
         hint
     }
 
+    /// The range, as the limits that can be picked.
     fn range_line(&self) -> Option<String> {
-        let shown = |at: DateTime| self.format(at);
-        match (self.min, self.max) {
+        let latest = self.latest().map(|at| self.format(at));
+        match (self.earliest_text(), latest) {
             (None, None) => None,
-            (Some(min), Some(max)) => Some(format!("  from {} to {}", shown(min), shown(max))),
-            (Some(min), None) => Some(format!("  from {}", shown(min))),
-            (None, Some(max)) => Some(format!("  until {}", shown(max))),
+            (Some(min), Some(max)) => Some(format!("  from {min} to {max}")),
+            (Some(min), None) => Some(format!("  from {min}")),
+            (None, Some(max)) => Some(format!("  until {max}")),
         }
     }
 
@@ -705,10 +829,11 @@ impl Chooser {
         io.write(&format!("{prompt}: "));
         let line = match io.read_line() {
             Some(line) if !line.trim().is_empty() => line,
-            // Input ended, or an empty line: the default answers.
+            // Input ended, or an empty line: the default answers, checked
+            // as a typed answer is.
             ended => {
                 return match self.default {
-                    Some(default) => Ok(Some(default)),
+                    Some(default) => self.checked(default).map(Some),
                     None if ended.is_none() => Err(NotInteractive::Ended),
                     None => Err(NotInteractive::Invalid(format!(
                         "no answer given ({})",
@@ -718,13 +843,20 @@ impl Chooser {
             }
         };
         let at = self.parse(&line).map_err(NotInteractive::Invalid)?;
-        if let Some(why) = self.refusal(at) {
-            return Err(NotInteractive::Invalid(format!(
+        self.checked(at).map(Some)
+    }
+
+    /// `at` as the picker answers it (to the minute without seconds), or
+    /// why it is refused, as the line-based form says it.
+    fn checked(&self, at: DateTime) -> Result<DateTime, NotInteractive> {
+        let at = self.shown(at);
+        match self.refusal(at) {
+            Some(why) => Err(NotInteractive::Invalid(format!(
                 "{}: {why}",
                 self.format(at)
-            )));
+            ))),
+            None => Ok(at),
         }
-        Ok(Some(at))
     }
 }
 
@@ -762,12 +894,12 @@ macro_rules! shared_builders {
 /// The builders of a picker with a time.
 macro_rules! time_builders {
     () => {
-        /// Pick the seconds too.
+        /// Pick the seconds too. Without them (the default) the picker
+        /// works to the minute, whatever order the builders come in: the
+        /// start, the default and a typed answer drop their seconds, the
+        /// earliest rounds up to a minute and the latest down.
         pub fn seconds(mut self, on: bool) -> Self {
             self.0.seconds = on;
-            if !on {
-                self.0.value.time.second = 0;
-            }
             self
         }
 
@@ -817,13 +949,16 @@ impl DatePicker {
     /// Start on this day.
     pub fn value(mut self, date: Date) -> Self {
         self.0.value.date = date;
+        self.0.value_given = true;
         self
     }
 
-    /// Start on this day, and answer it without a terminal and to an empty
-    /// line.
+    /// Answer this day without a terminal and to an empty line, and start
+    /// on it unless [`value`](Self::value) says where to start.
     pub fn default(mut self, date: Date) -> Self {
-        self.0.value.date = date;
+        if !self.0.value_given {
+            self.0.value.date = date;
+        }
         self.0.default = Some(date.into());
         self
     }
@@ -881,13 +1016,16 @@ impl TimePicker {
     /// Start at this time.
     pub fn value(mut self, time: Time) -> Self {
         self.0.value.time = time;
+        self.0.value_given = true;
         self
     }
 
-    /// Start at this time, and answer it without a terminal and to an
-    /// empty line.
+    /// Answer this time without a terminal and to an empty line, and start
+    /// at it unless [`value`](Self::value) says where to start.
     pub fn default(mut self, time: Time) -> Self {
-        self.0.value.time = time;
+        if !self.0.value_given {
+            self.0.value.time = time;
+        }
         self.0.default = Some(self.0.value.date.at(time));
         self
     }
@@ -916,7 +1054,7 @@ impl TimePicker {
 
     /// The time selected so far.
     pub fn selected(&self) -> Time {
-        self.0.value.time
+        self.0.shown(self.0.value).time
     }
 }
 
@@ -950,13 +1088,16 @@ impl DateTimePicker {
     /// Start at this moment.
     pub fn value(mut self, at: DateTime) -> Self {
         self.0.value = at;
+        self.0.value_given = true;
         self
     }
 
-    /// Start at this moment, and answer it without a terminal and to an
-    /// empty line.
+    /// Answer this moment without a terminal and to an empty line, and
+    /// start at it unless [`value`](Self::value) says where to start.
     pub fn default(mut self, at: DateTime) -> Self {
-        self.0.value = at;
+        if !self.0.value_given {
+            self.0.value = at;
+        }
         self.0.default = Some(at);
         self
     }
@@ -986,7 +1127,7 @@ impl DateTimePicker {
 
     /// The moment selected so far.
     pub fn selected(&self) -> DateTime {
-        self.0.value
+        self.0.shown(self.0.value)
     }
 }
 
@@ -998,9 +1139,11 @@ macro_rules! picker_component {
             type Output = $output;
 
             fn start(&mut self, _context: &Context<'_>) -> Flow<$output> {
-                // A start outside the range moves into it.
-                let day = self.0.clamp_day(self.0.value.date);
-                self.0.value.date = day;
+                // A start outside the range moves into it, and without
+                // seconds it is to the minute.
+                let mut value = self.0.shown(self.0.value);
+                value.date = self.0.clamp_day(value.date);
+                self.0.value = value;
                 Flow::Continue
             }
 
@@ -1025,8 +1168,24 @@ macro_rules! picker_component {
                 self.0.keymap.clone()
             }
 
+            /// Tab inside: the next part, if there is one.
+            fn focus_step(&mut self, forward: bool) -> bool {
+                self.0.step_part(forward)
+            }
+
+            /// Tab from outside: the first part, or the last going back.
+            fn focus_enter(&mut self, forward: bool) -> bool {
+                self.0.enter(forward);
+                true
+            }
+
+            /// The default, unless the picker would refuse it: outside the
+            /// range, or refused by the validator.
             fn default_value(&self) -> Option<$output> {
-                self.0.default.map($from)
+                self.0
+                    .default
+                    .and_then(|default| self.0.checked(default).ok())
+                    .map($from)
             }
 
             fn prompt(&mut self, io: &mut dyn LineIo) -> Result<Option<$output>, NotInteractive> {

@@ -192,7 +192,12 @@ resize.
   top while its rows scroll, when the content starts with a table: its
   title, top edge and header rows, down to the line under them, found again
   at each width (`table_header_rows`). `sticky_header(n)` keeps the first
-  `n` lines instead. `rich pager` does the first by default.
+  `n` lines instead. `rich pager` does the first by default. On a page too
+  short for them all, the last that fit stay (a table's column names) and
+  the ones before scroll away first. A table whose rows are divided by
+  lines drawn like the one under a header (`show_lines` in `SQUARE`, or a
+  table without a header) has no header found: pinning a row would be
+  worse than pinning nothing.
 - **Without a terminal:** it writes the content out in full.
 
 ![Searching in the pager](../../media/tapes/components/pager.png)
@@ -288,8 +293,9 @@ keyboard protocol does; macOS Terminal takes Ctrl+arrows for Mission
 Control by default. `K` and `J` and grabbing with Space work in any terminal.
 The carried item is marked `↕` as well as reversed, so it shows without
 colour. With the mouse on, a press focuses a row and a drag carries it,
-scrolling past the top or the bottom row. The keys are in context
-`reorder` and can be rebound.
+scrolling past the top or the bottom row; the wheel is ↑ and ↓, so it
+carries a grabbed item too. The keys are in context `reorder` and can be
+rebound.
 
 ```rust
 use rich_interact::{run, Reorder, RunOptions};
@@ -318,11 +324,26 @@ the difference matters.
   minute, the seconds (`.seconds(true)`) and AM/PM (`.twelve_hour(true)`;
   `a` and `p` set it), ↑/↓ change the field, wrapping round, and digits type
   it, two to a field.
-- **Both:** Tab moves between the grid and the time.
+- **Both:** Tab moves between the grid and the time. Tab and Shift+Tab are
+  the containers' `focus-next` and `focus-previous`: in a `Column` or any
+  other container, Tab after the last part moves on to the next field, and
+  Shift+Tab into a picker lands on its last part. On its own, a picker goes
+  round.
+- **A start and a default:** `.value(..)` is where the picker starts;
+  `.default(..)` is the answer without a terminal and the start too, unless
+  `.value(..)` is given, in either order.
 - **A range:** `.min(..)` and `.max(..)`. Days outside it are dimmed and the
   grid does not go to them; a time outside it is refused on Enter, with a
   message that names the limit. `DateTimePicker::min` is a moment: on its
-  day an earlier time is refused, and later days take any time.
+  day an earlier time is refused, and later days take any time. A range
+  whose earliest is after its latest refuses every answer, saying "the
+  range is empty". Days go from the year 1 to 9999, the years `YYYY`
+  writes.
+- **To the minute:** without `.seconds(true)` a picker works to the minute,
+  whatever order the builders come in: the start, the default and a typed
+  answer drop their seconds, and a limit is the minute that can be picked
+  (`min` 09:00:30 is 09:01, `max` 14:30:45 is 14:30), so a message never
+  names a limit the picker refuses.
 - **A validator:** `.validate(|date| ...)` refuses with its own message (no
   weekends, no holidays).
 - **Without colour:** the value so far is on the question line, the selected
@@ -330,7 +351,10 @@ the difference matters.
   field too (`[14]:30`).
 - **Without a terminal:** a line, parsed and checked against the range and
   the validator: `2026-10-17`, `14:30` or `2:30 pm`, `2026-10-17 14:30` (or
-  with a `T`). An empty line answers `.default(..)`.
+  with a `T`: `2026-10-17T2:30 pm`). The year is four digits. An empty line
+  answers `.default(..)`, checked as a typed answer is: one outside the
+  range or refused by the validator is an error, and asked for defaults
+  there is none.
 
 ```rust
 use rich_interact::datetime::{Date, DateTime, Time};
@@ -678,7 +702,10 @@ cell diffs, scrolling rewrites only what moved.
 scroll: a table's header. `rows(page)` gives the lines shown with their
 indices, sticky ones first. The scroll position (`offset`, `scroll_to`)
 then counts the lines under them, and `show(line)` takes a line's index in
-the whole content.
+the whole content. A page keeps one row to scroll: on one too short for
+every sticky line, the last that fit stay, and the ones before scroll away
+first, so every line is shown; `top(page)` is the first line under those
+that stay, and `status`, `show` and the pager's search count the same way.
 
 On its own it is a minimal pager:
 

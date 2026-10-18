@@ -319,6 +319,8 @@ the content out.
 or `"table"` for the header of a table the content starts with (its title,
 top edge and header rows, down to the line under them). `Pager(table,
 sticky_header="table")` pages a long table with its header always in view.
+On a page too short for every sticky line, the last that fit stay and the
+ones before scroll away first. A negative number is a `ValueError`.
 
 ```python
 from rs_rich.interact import Pager
@@ -486,6 +488,16 @@ outside `min` and `max` are dimmed and cannot be reached; a time outside
 them, or a value `validate` refuses (it returns `None`/`True`, or a
 message), is refused on Enter with a message. Without a terminal each reads
 a line: `2026-10-17`, `14:30` or `2:30 pm`, `2026-10-17 14:30`.
+
+The values are naive: a `datetime` or `time` with a time zone is a
+`TypeError` (keeping its clock and dropping its offset would change the
+moment), and microseconds are dropped, since the pickers work to the
+second. Without `seconds` they work to the minute: the start, the default
+and a typed answer drop their seconds, and `min` rounds up to a minute.
+`value` is where a picker starts, `default` or not, and a `default` outside
+`min` and `max` (or one `validate` refuses, when it is asked for) is no
+answer: a `ValueError` when the picker is made, or `NotInteractive`. The
+days go from `datetime.date.min` to `datetime.date.max`.
 
 ```python
 import datetime

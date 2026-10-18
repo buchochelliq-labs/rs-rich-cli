@@ -1,8 +1,10 @@
 //! `Reorder` (#720) and `DatePicker`, `TimePicker` and `DateTimePicker`
 //! (#719) for `rs_rich.interact`: configurations built into a fresh
 //! `rich_interact` component per run, like the other component classes.
-//! Dates and times are Python's `datetime.date`, `datetime.time` and naive
-//! `datetime.datetime` (a time zone and microseconds are not kept).
+//! Dates and times are Python's `datetime.date`, and naive `datetime.time`
+//! and `datetime.datetime`: one with a time zone is refused, and
+//! microseconds are dropped (the pickers work to the second). The pickers
+//! keep to the years 1 to 9999, `datetime.date.min` to `max`.
 
 use pyo3::exceptions::{PyTypeError, PyValueError};
 use pyo3::prelude::*;
@@ -54,9 +56,22 @@ pub(crate) fn date_from(value: &Bound<'_, PyAny>) -> PyResult<Date> {
     Ok(date)
 }
 
-/// A `datetime.time` (or a `datetime.datetime`'s time), to the second.
+/// Refuse `value` when it has a time zone: the pickers take naive values,
+/// and keeping the clock while dropping the offset would change the moment.
+fn naive(value: &Bound<'_, PyAny>, what: &str) -> PyResult<()> {
+    if value.hasattr("utcoffset")? && !value.call_method0("utcoffset")?.is_none() {
+        return Err(PyTypeError::new_err(format!(
+            "{what} with a time zone: the pickers take naive values"
+        )));
+    }
+    Ok(())
+}
+
+/// A naive `datetime.time` (or a `datetime.datetime`'s time), to the
+/// second: microseconds are dropped.
 pub(crate) fn time_from(value: &Bound<'_, PyAny>) -> PyResult<Time> {
     let what = "a datetime.time";
+    naive(value, what)?;
     let (hour, minute, second) = (
         part(value, "hour", what)?,
         part(value, "minute", what)?,
@@ -76,11 +91,12 @@ pub(crate) fn time_from(value: &Bound<'_, PyAny>) -> PyResult<Time> {
     Ok(time)
 }
 
-/// A `datetime.datetime`, without its time zone.
+/// A naive `datetime.datetime`, to the second.
 pub(crate) fn datetime_from(value: &Bound<'_, PyAny>) -> PyResult<DateTime> {
     if !value.hasattr("hour")? || !value.hasattr("year")? {
         return Err(PyTypeError::new_err("expected a datetime.datetime"));
     }
+    naive(value, "a datetime.datetime")?;
     Ok(DateTime::new(date_from(value)?, time_from(value)?))
 }
 
@@ -298,6 +314,29 @@ struct DateConfig {
 }
 
 impl DateConfig {
+    /// Check the range, as the CLI does: `min` not after `max`, and
+    /// `default` within them as the picker compares it (to the minute when
+    /// a picker with a time has no seconds). The picker would refuse a
+    /// default outside them, so it is no default.
+    fn check(&self, to_the_minute: bool) -> PyResult<()> {
+        if let (Some(min), Some(max)) = (self.min, self.max) {
+            if min > max {
+                return Err(PyValueError::new_err("min is after max"));
+            }
+        }
+        if let Some(mut default) = self.default {
+            if to_the_minute {
+                default.time.second = 0;
+            }
+            let early = self.min.is_some_and(|min| default < min);
+            let late = self.max.is_some_and(|max| default > max);
+            if early || late {
+                return Err(PyValueError::new_err("default is outside min and max"));
+            }
+        }
+        Ok(())
+    }
+
     fn clone_ref(&self, py: Python<'_>) -> DateConfig {
         DateConfig {
             prompt: self.prompt.clone(),
@@ -417,8 +456,8 @@ fn clock(time: Time) -> DateTime {
     DateTime::new(Date::new(2000, 1, 1), time)
 }
 
-/// The arguments every picker takes, converted by `from`, and checked:
-/// `min` not after `max`.
+/// The arguments every picker takes, converted by `from`; each picker
+/// [checks](DateConfig::check) the range once it has them all.
 #[allow(clippy::too_many_arguments)]
 fn config(
     prompt: String,
@@ -440,7 +479,7 @@ fn config(
             }
         })
         .transpose()?;
-    let config = DateConfig {
+    Ok(DateConfig {
         prompt,
         value: optional(value, from, "value")?,
         default: optional(default, from, "default")?,
@@ -451,13 +490,7 @@ fn config(
         twelve_hour: false,
         mouse,
         validator,
-    };
-    if let (Some(min), Some(max)) = (config.min, config.max) {
-        if min > max {
-            return Err(PyValueError::new_err("min is after max"));
-        }
-    }
-    Ok(config)
+    })
 }
 
 fn date_arg(value: &Bound<'_, PyAny>) -> PyResult<DateTime> {
@@ -555,7 +588,9 @@ macro_rules! picker_methods {
 /// grid (`datetime.date`s). The arrows move a day and a week, PgUp/PgDn a
 /// month, `t` goes to today; days outside `min` and `max` are dimmed and
 /// cannot be reached. `validate(date)` returns `None`/`True` to accept, or
-/// a message to refuse. Without a terminal it reads `YYYY-MM-DD`.
+/// a message to refuse. `value` is where it starts, `default` or not; a
+/// `default` outside `min` and `max` is a `ValueError`. Without a terminal
+/// it reads `YYYY-MM-DD`.
 #[pyclass(name = "DatePicker", module = "rs_rich.interact", frozen)]
 pub(crate) struct DatePicker(DateConfig);
 
@@ -564,7 +599,8 @@ picker_methods!(DatePicker, as_date, {
     #[pyo3(signature = (
         prompt="Date".to_string(), *, value=None, default=None, min=None, max=None, today=None,
         validate=None, mouse=false
-    ))]
+    ), text_signature = "(prompt='Date', *, value=None, default=None, min=None, max=None, \
+        today=None, validate=None, mouse=False)")]
     #[allow(clippy::too_many_arguments)]
     fn new(
         prompt: String,
@@ -578,6 +614,7 @@ picker_methods!(DatePicker, as_date, {
     ) -> PyResult<Self> {
         let mut config = config(prompt, value, default, min, max, date_arg, validate, mouse)?;
         config.today = optional(today, date_from, "today")?;
+        config.check(false)?;
         Ok(DatePicker(config))
     }
 
@@ -589,10 +626,11 @@ picker_methods!(DatePicker, as_date, {
 
 /// `TimePicker(prompt="Time", *, value=None, default=None, min=None,
 /// max=None, seconds=False, twelve_hour=False, validate=None,
-/// mouse=False)`: a time of day (`datetime.time`s), field by field: ←/→
-/// move between the fields, ↑/↓ change one, digits type it. A time outside
-/// `min` and `max` is refused on Enter with a message. Without a terminal
-/// it reads `HH:MM` (or `2:30 pm`).
+/// mouse=False)`: a naive time of day (`datetime.time`s), field by field:
+/// ←/→ move between the fields, ↑/↓ change one, digits type it. A time
+/// outside `min` and `max` is refused on Enter with a message. Without
+/// `seconds` it works to the minute. Without a terminal it reads `HH:MM`
+/// (or `2:30 pm`).
 #[pyclass(name = "TimePicker", module = "rs_rich.interact", frozen)]
 pub(crate) struct TimePicker(DateConfig);
 
@@ -601,7 +639,8 @@ picker_methods!(TimePicker, as_time, {
     #[pyo3(signature = (
         prompt="Time".to_string(), *, value=None, default=None, min=None, max=None,
         seconds=false, twelve_hour=false, validate=None, mouse=false
-    ))]
+    ), text_signature = "(prompt='Time', *, value=None, default=None, min=None, max=None, \
+        seconds=False, twelve_hour=False, validate=None, mouse=False)")]
     #[allow(clippy::too_many_arguments)]
     fn new(
         prompt: String,
@@ -617,6 +656,7 @@ picker_methods!(TimePicker, as_time, {
         let mut config = config(prompt, value, default, min, max, time_arg, validate, mouse)?;
         config.seconds = seconds;
         config.twelve_hour = twelve_hour;
+        config.check(!seconds)?;
         Ok(TimePicker(config))
     }
 
@@ -636,8 +676,8 @@ picker_methods!(TimePicker, as_time, {
 /// validate=None, mouse=False)`: a day and a time (naive
 /// `datetime.datetime`s); Tab moves between the grid and the time. Days
 /// before `min`'s or after `max`'s are dimmed; on those days a time past
-/// the limit is refused on Enter. Without a terminal it reads
-/// `YYYY-MM-DD HH:MM`.
+/// the limit is refused on Enter. Without `seconds` it works to the
+/// minute. Without a terminal it reads `YYYY-MM-DD HH:MM`.
 #[pyclass(name = "DateTimePicker", module = "rs_rich.interact", frozen)]
 pub(crate) struct DateTimePicker(DateConfig);
 
@@ -646,7 +686,8 @@ picker_methods!(DateTimePicker, datetime_to, {
     #[pyo3(signature = (
         prompt="Date and time".to_string(), *, value=None, default=None, min=None, max=None,
         today=None, seconds=false, twelve_hour=false, validate=None, mouse=false
-    ))]
+    ), text_signature = "(prompt='Date and time', *, value=None, default=None, min=None, \
+        max=None, today=None, seconds=False, twelve_hour=False, validate=None, mouse=False)")]
     #[allow(clippy::too_many_arguments)]
     fn new(
         prompt: String,
@@ -673,6 +714,7 @@ picker_methods!(DateTimePicker, datetime_to, {
         config.today = optional(today, date_from, "today")?;
         config.seconds = seconds;
         config.twelve_hour = twelve_hour;
+        config.check(!seconds)?;
         Ok(DateTimePicker(config))
     }
 
