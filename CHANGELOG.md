@@ -363,6 +363,54 @@ per browser session](#one-process-per-browser-session-web-002).
   every key, [backends](docs/guide/intuituive/index.md#backends), the
   tutorial's look inside, and the porting and Python pages.
 
+### `rich log`: filters, follow mode and groups (ext 0.0.16, interact 0.0.7, cli 0.0.19)
+
+0.0.19 workstream 13 (#724).
+
+- **Records from any log.** `rich_ext::log_stream::Record` holds a log
+  record's fields under the names the input gave them, and the lines that
+  followed it. `Record::to_event` reads it as a `StructuredEvent`.
+  `Parsers` reads logfmt, lines that start with a level, lines that start
+  with an ISO 8601 time, and nginx and Apache access logs, and JSON with
+  the `data` feature. A `LineParser` of your own plugs in. `Assembler`
+  joins a line no parser reads (a stack trace) to the record before it,
+  and keeps any other as a text record: nothing is dropped.
+- **Filters.** `LevelFilter` keeps a level (`error`) or a level and those
+  above it (`warn+`). `Predicate` is a small grammar: `=`, `!=`, `>`, `>=`,
+  `<`, `<=`, `~` (a regular expression), `!~`, `FIELD` and `!FIELD`, with
+  dots into nested fields. Levels compare by severity, numbers as numbers
+  and times as instants. `Filter` takes both and ANDs the predicates.
+- **Repeats, groups and a summary.** `Collapser` folds a run of identical
+  records (their times aside) into the first and a count. `GroupBy` finds
+  a trace, span or correlation id (`trace_id`, `request_id`, an event's
+  `correlation_id`, ...); `Groups`, `GroupHeader` and `Summary` gather and
+  draw them, the summary with counts by level and the groups with errors.
+  `Clock` shows a time as written, since the first record, or not at all,
+  and `parse_timestamp` reads RFC 3339, the access log's times and epoch
+  numbers.
+- **`rich log` takes them:** `--level`, `--where` (repeatable),
+  `-f`/`--follow` (a truncated or replaced file is read again from its
+  start), `--collapse` (on by default when following, the count growing in
+  place on a terminal), `--group trace|span|correlation` with a summary
+  (`--summary`, `--no-summary`), `--fields`, `--parser`, `--time
+  absolute|relative|none`, `--output jsonl`, and `--redact` and
+  `--redact-pattern` as `rich capture` has them. A line that is not JSON
+  used to fail the command; it is now parsed, or shown as text.
+- **The same output, faster.** With none of the options, JSON records print
+  as before, byte for byte. Plain text that is one cell a character wraps
+  without core's per-character measuring, which a test holds to core's
+  output: 100,000 records take 0.57 s in a release build, down from 1.5 s.
+- **A live view:** `rich_interact::LogView` shows records as they arrive,
+  following the end. `/` types a filter (words, or `--where` tests), Space
+  pauses, Enter shows a record's fields and lines. `rich log -i` runs it on
+  a terminal; without one the records stream as usual.
+- **Smaller things:** `Severity` is ordered (`Warn < Error`) and hashable.
+  `Redactor::redact_field` masks a field's value as `key=value` would be
+  masked. The `log.*` theme keys are in `STYLE_TABLES`.
+- **Docs:** [`rich log`](docs/cli.md#logs-rich-log) with every option, the
+  CLI reference regenerated, the porting page, and `docs/tapes/log.tape`
+  (not yet recorded).
+
 ### One process per browser session (web 0.0.2)
 
 0.0.19 workstream 3.

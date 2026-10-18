@@ -11,7 +11,8 @@
 //!
 //! - Errors and logs: [`diagnostic`], [`dashboard`], [`stacktrace`],
 //!   [`hyperlink`], [`log_handler`] (`RichHandler`, `SpanView`), `adapters`
-//!   (`log` / `tracing` features), [`event`].
+//!   (`log` / `tracing` features), [`event`], [`log_stream`] (log records
+//!   parsed, filtered, collapsed and grouped).
 //! - Data and authoring: `data`, `deps` (Cargo dependency trees) and `schema`
 //!   (JSON Schema trees and diffs, and the format-neutral schema model), all
 //!   behind the `data` feature;
@@ -140,6 +141,9 @@ pub mod stacktrace;
 
 pub mod log_handler;
 pub use log_handler::{RichHandler, SpanView};
+
+// Log streams: parsing, filtering, collapsing and grouping records (#724).
+pub mod log_stream;
 
 #[cfg(any(feature = "log", feature = "tracing"))]
 pub mod adapters;

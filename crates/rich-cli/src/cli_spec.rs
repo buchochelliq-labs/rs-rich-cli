@@ -18,6 +18,7 @@ const RENDER_MODE: &str = "Render mode";
 const INPUT: &str = "Input";
 const LAYOUT: &str = "Layout";
 const MODE_OPTIONS: &str = "Mode options";
+const LOG: &str = "Log";
 const SOURCE: &str = "Source";
 const IMAGE: &str = "Image";
 const INSPECT: &str = "Inspect";
@@ -117,6 +118,24 @@ fn command_options(name: &str) -> Vec<ArgSpec> {
         "profile" => &["sample", "columns", "top", "report", "width"],
         "env" => &["show-secrets", "width"],
         "capture" => &["cast", "redact", "redact-pattern", "sanitize", "width"],
+        "log" => &[
+            "log-presentation",
+            "level",
+            "where",
+            "follow",
+            "collapse",
+            "group",
+            "fields",
+            "parser",
+            "time",
+            "output",
+            "summary",
+            "interactive",
+            "redact",
+            "redact-pattern",
+            "sanitize",
+            "width",
+        ],
         "inspect" => &[
             "format",
             "select",
@@ -183,7 +202,12 @@ fn render_modes() -> Vec<ArgSpec> {
         mode("csv", None, "Render RESOURCE as a CSV/TSV table"),
         mode("ipynb", None, "Render RESOURCE as a Jupyter notebook"),
         mode("jsonl", None, "Stream JSON Lines / NDJSON records").alias("ndjson"),
-        mode("log", None, "Stream common structured-log JSONL records"),
+        mode(
+            "log",
+            None,
+            "Stream log records: JSON Lines, logfmt and common text formats, filtered, followed \
+             and grouped",
+        ),
         mode(
             "gif",
             None,
@@ -292,7 +316,14 @@ fn viewer_options() -> Vec<ArgSpec> {
             VIEWERS,
             "With `rich hex`, bytes on each line (default: fit the width, up to 16)",
         ),
-        option("group", "N", VIEWERS, "With `rich hex`, bytes per group").default_value("8"),
+        option(
+            "group",
+            "N|BY",
+            VIEWERS,
+            "With `rich hex`, bytes per group (default 8); with `rich log`, group records by \
+             trace, span or correlation id (trace_id, span_id, correlation_id, request_id, ...) \
+             under a header each, with a summary at the end",
+        ),
         option(
             "limit",
             "N",
@@ -314,8 +345,9 @@ fn viewer_options() -> Vec<ArgSpec> {
             "redact-pattern",
             "REGEX",
             VIEWERS,
-            "With `rich capture`, also mask matches of REGEX (only its `secret` group when it \
-             has one); repeatable. Experimental: check the output before sharing it",
+            "With `rich capture` and `rich log`, also mask matches of REGEX (only its `secret` \
+             group when it has one); repeatable. Experimental: check the output before sharing \
+             it",
         )
         .multiple(true),
     ]
@@ -503,6 +535,95 @@ fn source_options() -> Vec<ArgSpec> {
              boolean, date, timestamp, text) and show it under the heading; number columns \
              right-align even with null tokens such as NA. Without it the table is rich-cli's",
         ),
+    ]
+}
+
+fn log_options() -> Vec<ArgSpec> {
+    vec![
+        option(
+            "level",
+            "LEVEL",
+            LOG,
+            "With `rich log`, keep only records at LEVEL (trace, debug, info, warn, error or \
+             fatal), or at it and above with a `+` (`warn+`); several with commas or by \
+             repeating it",
+        )
+        .multiple(true),
+        option(
+            "where",
+            "EXPR",
+            LOG,
+            "With `rich log`, keep only records whose fields pass EXPR: FIELD=VALUE, \
+             FIELD!=VALUE, FIELD>N (and >=, <, <=), FIELD~REGEX, FIELD!~REGEX, FIELD (it is \
+             there) or !FIELD (it is not); numbers, levels and times compare as such, dots \
+             reach nested fields; repeatable, and every one must pass",
+        )
+        .multiple(true),
+        flag(
+            "follow",
+            LOG,
+            "With `rich log`, read FILE, then what is appended to it, starting again when it \
+             is truncated or replaced (log rotation), until Ctrl+C",
+        )
+        .short('f'),
+        flag(
+            "collapse",
+            LOG,
+            "With `rich log`, fold a run of identical records (their times aside) into the \
+             first and a `× N` count; on by default with --follow and --interactive",
+        )
+        .alias("no-collapse"),
+        flag(
+            "fields",
+            LOG,
+            "With `rich log`, list each record's fields under it, one a line, instead of on \
+             its line",
+        ),
+        option(
+            "parser",
+            "NAME",
+            LOG,
+            "With `rich log`, how lines that are not JSON are read: auto tries each format; \
+             logfmt, level (`LEVEL message`), timestamp (a line that starts with a time) and \
+             access (nginx and Apache) read one; text reads none. A line no parser reads \
+             joins the record before it, or is shown as text",
+        )
+        .choices(["auto", "logfmt", "level", "timestamp", "access", "text"])
+        .default_value("auto"),
+        option(
+            "time",
+            "MODE",
+            LOG,
+            "With `rich log`, show each time as written (absolute), since the first record \
+             (relative) or not at all (none)",
+        )
+        .choices(["absolute", "relative", "none"])
+        .default_value("absolute"),
+        option(
+            "output",
+            "FORMAT",
+            LOG,
+            "With `rich log`, write the records kept as text, or as one JSON object a line \
+             (jsonl) for another program",
+        )
+        .choices(["text", "jsonl"])
+        .default_value("text"),
+        flag(
+            "summary",
+            LOG,
+            "With `rich log`, end with a summary: records shown, counts by level and, with \
+             --group, the groups with errors; on by default with --group (on standard error \
+             with --output jsonl)",
+        )
+        .alias("no-summary"),
+        flag(
+            "interactive",
+            LOG,
+            "With `rich log` on a terminal, show the records in a live view that follows the \
+             end: / filters, Space pauses, Enter shows a record's fields, q quits; without a \
+             terminal the records stream as usual",
+        )
+        .short('i'),
     ]
 }
 
@@ -928,8 +1049,9 @@ fn inspect_options() -> Vec<ArgSpec> {
             "Mask secret-looking keys such as password, token and api_key. With `rich \
              capture`, mask secrets in the output before it is shown, exported or recorded: \
              secret-named `key=value` values, bearer tokens, GitHub/GitLab/Slack/Stripe/npm/`sk-` \
-             tokens, AWS key ids, JWTs and URL passwords. Capture redaction is experimental \
-             and best effort: check the output before sharing it",
+             tokens, AWS key ids, JWTs and URL passwords; with `rich log`, the same in each \
+             record's fields and lines. Capture redaction is experimental and best effort: \
+             check the output before sharing it",
         ),
         option(
             "compare",
@@ -1252,6 +1374,7 @@ fn root_args() -> Vec<ArgSpec> {
         layout_options(),
         source_options(),
         mode_options(),
+        log_options(),
         image_options(),
         inspect_options(),
         diff_options(),
@@ -1450,7 +1573,8 @@ pub(crate) fn spec() -> CommandSpec {
         (
             "log",
             &["logs"][..],
-            "Stream common structured-log JSONL records (`--log`)",
+            "Stream log records (`--log`): JSON Lines, logfmt and common text formats; filter \
+             with --level and --where, follow a file with -f, group with --group",
         ),
         ("gif", &[][..], "Animate GIFs (`--gif`)"),
         (
@@ -1811,6 +1935,7 @@ mod tests {
     const SOURCES_RS: &str = include_str!("sources.rs");
     const CHART_RS: &str = include_str!("chart.rs");
     const PROFILE_RS: &str = include_str!("profile.rs");
+    const LOGS_RS: &str = include_str!("logs.rs");
     #[cfg(feature = "interact")]
     const INTERACTIVE: &str = include_str!("interactive.rs");
     #[cfg(feature = "art")]
@@ -1872,6 +1997,7 @@ mod tests {
             item(SOURCES_RS, "impl SchemaOptions {"),
             item(CHART_RS, "impl ChartOptions {"),
             item(PROFILE_RS, "impl ProfileOptions {"),
+            item(LOGS_RS, "impl LogOptions {"),
         ] {
             out.extend(option_literals(source));
         }
