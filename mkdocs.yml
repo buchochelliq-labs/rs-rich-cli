@@ -221,3 +221,4 @@ nav:
       - "Design: intuiTUIve spike (milestone 11)": design/intuituive.md
       - "Design: intuiTUIve widgets": design/intuituive-widgets.md
       - "Design: intuiTUIve against ratatui": design/intuituive-vs-ratatui.md
+      - "Design: what the intuiTUIve demos are missing": design/intuituive-demo-gaps.md

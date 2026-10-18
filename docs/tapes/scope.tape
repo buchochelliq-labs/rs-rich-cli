@@ -1,10 +1,12 @@
 # scope-tui rebuilt on intuiTUIve (examples/scope.rs): the test signal
 # moving in the oscilloscope and the vectorscope, then held still and
 # paused for the screenshots, so they are the same on every run, in each
-# of the three scopes.
+# of the three scopes. Paused, the scope still counts frames, as
+# scope-tui's does, so the frame rate is masked.
 Set Title "scope · scope-tui on intuiTUIve"
 Set Size 110x26
 Set TypingDelay 40ms
+Mask /\d+fps/ "NNfps"
 Hide
 Exec "mkdir -p bin && ln -sf \"$(dirname \"$(command -v rich)\")/examples/scope\" bin/scope"
 Type "export PATH=\"$PWD/bin:$PATH\"; clear"
@@ -28,10 +30,8 @@ Enter
 Wait /oscillo::scope-tui/
 Sleep 500ms
 Space
-# Two ticks of the counter after the pause, so it reads 0.
-Sleep 2200ms
-Wait / 0fps/
-Sleep 300ms
+Wait /\|\|/
+Sleep 1200ms
 Screenshot oscilloscope
 Tab
 Wait /vector::scope-tui/

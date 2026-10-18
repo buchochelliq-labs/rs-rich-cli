@@ -265,12 +265,9 @@ mod gif_controls {
         assert!(took < Duration::from_secs(10), "took {took:?}");
     }
 
-    #[test]
-    fn a_slower_speed_takes_longer() {
-        let (_, fast) = play(&["--max-frames", "4", "--speed", "8"]);
-        let (_, slow) = play(&["--max-frames", "4", "--speed", "0.5"]);
-        assert!(slow > fast, "fast {fast:?}, slow {slow:?}");
-    }
+    // How long each frame shows at a given speed and frame-rate cap is
+    // checked exactly, against a test clock, in src/animation.rs; these
+    // only check that playback ends, with a generous bound for slow runners.
 
     #[test]
     fn piped_output_is_the_first_frame_whatever_the_controls() {

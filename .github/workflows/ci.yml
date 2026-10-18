@@ -51,6 +51,9 @@ jobs:
       - name: Test release selection and registry verification
         run: python3 -m unittest discover -s scripts -p 'test_release*.py' -v
 
+      - name: Test the failing-test report
+        run: python3 -m unittest discover -s scripts -p 'test_test_failures.py' -v
+
   packages:
     name: registry source identity and staged packages
     runs-on: ubuntu-latest
@@ -94,8 +97,18 @@ jobs:
       - name: Clippy
         run: cargo clippy --all-targets -- -D warnings
 
+      # The run's output is kept: a failure in an early test target ends up
+      # far above the end of the log, so the next step prints each failing
+      # test's output at the end and in the job summary.
       - name: Test
-        run: cargo test --all
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo test --all 2>&1 | tee test.log
+
+      - name: Show the failing tests
+        if: failure()
+        run: python3 scripts/test_failures.py test.log | tee -a "$GITHUB_STEP_SUMMARY"
 
       # `rich serve` is behind the CLI's off-by-default `serve` feature, so
       # the default test run above has none of it: its unit tests (with the
@@ -374,8 +387,25 @@ jobs:
       - name: Install GNU diffutils
         run: brew install diffutils
 
+      # macOS's /bin/bash is 3.2, older than the shell integration supports
+      # (it says so and sets nothing up), so its end-to-end test would skip
+      # itself. Homebrew's bash, first on PATH, makes it run here as it does
+      # for macOS users who have it.
+      - name: Install bash
+        run: brew install bash && bash --version | head -1
+
+      # The run's output is kept: a failure in an early test target ends up
+      # far above the end of the log, so the next step prints each failing
+      # test's output at the end and in the job summary.
       - name: Test
-        run: cargo test --all --locked --no-fail-fast
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo test --all --locked --no-fail-fast 2>&1 | tee test.log
+
+      - name: Show the failing tests
+        if: failure()
+        run: python3 scripts/test_failures.py test.log | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: Test core without syntect and pulldown-cmark
         run: cargo test -p rs-rich --no-default-features --locked

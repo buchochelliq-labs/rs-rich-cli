@@ -112,7 +112,7 @@ mod player {
     const FALLBACK_DELAY: Duration = Duration::from_millis(100);
 
     /// One animation and its own clock.
-    struct Track {
+    pub(super) struct Track {
         art: AnimatedArt,
         frame: usize,
         /// Frames shown so far, the first included.
@@ -219,6 +219,25 @@ mod player {
         }
     }
 
+    /// Where the player gets the time and waits: the real clock, or a test's.
+    pub(super) trait Clock {
+        fn now(&self) -> Instant;
+        fn sleep(&mut self, wait: Duration);
+    }
+
+    /// The wall clock.
+    struct RealClock;
+
+    impl Clock for RealClock {
+        fn now(&self) -> Instant {
+            Instant::now()
+        }
+
+        fn sleep(&mut self, wait: Duration) {
+            std::thread::sleep(wait);
+        }
+    }
+
     /// Play `arts` together on a terminal console, honouring `controls`;
     /// `passes` is how many times each repeats (`None` = forever, which
     /// `--max-frames` or `--max-duration` still ends).
@@ -232,9 +251,28 @@ mod player {
         if arts.is_empty() {
             return Ok(());
         }
-        let start = Instant::now();
-        let mut tracks: Vec<Track> = arts
-            .into_iter()
+        let mut clock = RealClock;
+        let mut tracks = start_tracks(arts, controls, clock.now());
+        let stdout = std::io::stdout();
+        let mut writer = stdout.lock();
+        let mut live = Live::new(Box::new(compose(&tracks, gap)), console, &mut writer);
+        live.start();
+        drive(&mut tracks, passes, controls, &mut clock, |tracks| {
+            live.update(Box::new(compose(tracks, gap)));
+        });
+        live.stop();
+        drop(live);
+        writer.flush()
+    }
+
+    /// Each animation on its first frame, its first change due after that
+    /// frame's delay.
+    pub(super) fn start_tracks(
+        arts: Vec<AnimatedArt>,
+        controls: &AnimationControls,
+        start: Instant,
+    ) -> Vec<Track> {
+        arts.into_iter()
             .map(|art| {
                 let mut track = Track {
                     art,
@@ -247,19 +285,27 @@ mod player {
                 track.next_change = start + track.delay(controls);
                 track
             })
-            .collect();
-        let stdout = std::io::stdout();
-        let mut writer = stdout.lock();
-        let mut live = Live::new(Box::new(compose(&tracks, gap)), console, &mut writer);
-        live.start();
+            .collect()
+    }
+
+    /// Advance the tracks until each has finished or `--max-duration` has
+    /// passed, waiting on `clock` and calling `redraw` when a frame changes.
+    pub(super) fn drive(
+        tracks: &mut [Track],
+        passes: Option<usize>,
+        controls: &AnimationControls,
+        clock: &mut dyn Clock,
+        mut redraw: impl FnMut(&[Track]),
+    ) {
+        let start = clock.now();
         loop {
-            let elapsed = start.elapsed();
+            let elapsed = clock.now().saturating_duration_since(start);
             if tracks.iter().all(|track| track.finished)
                 || controls.max_duration.is_some_and(|limit| elapsed >= limit)
             {
                 break;
             }
-            let now = Instant::now();
+            let now = clock.now();
             let mut wait = tracks
                 .iter()
                 .filter(|track| !track.finished)
@@ -270,20 +316,106 @@ mod player {
                 wait = wait.min(limit.saturating_sub(elapsed));
             }
             if !wait.is_zero() {
-                std::thread::sleep(wait);
+                clock.sleep(wait);
             }
-            let now = Instant::now();
+            let now = clock.now();
             let mut changed = false;
-            for track in &mut tracks {
+            for track in tracks.iter_mut() {
                 changed |= track.tick(now, passes, controls);
             }
             if changed {
-                live.update(Box::new(compose(&tracks, gap)));
+                redraw(tracks);
             }
         }
-        live.stop();
-        drop(live);
-        writer.flush()
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        /// A clock that moves only when the player sleeps, and keeps each
+        /// sleep.
+        struct TestClock {
+            now: Instant,
+            sleeps: Vec<Duration>,
+        }
+
+        impl Clock for TestClock {
+            fn now(&self) -> Instant {
+                self.now
+            }
+
+            fn sleep(&mut self, wait: Duration) {
+                self.sleeps.push(wait);
+                self.now += wait;
+            }
+        }
+
+        const BALL: &str = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../rich-art/examples/assets/ball.gif"
+        );
+
+        /// ball.gif played under `flags`: the sleeps, and the frames drawn.
+        fn schedule(flags: &[(&str, &str)], passes: Option<usize>) -> (Vec<Duration>, Vec<usize>) {
+            let mut controls = AnimationControls::default();
+            for (flag, value) in flags {
+                controls.set(flag, value).unwrap();
+            }
+            let art = AnimatedArt::from_path(BALL).unwrap().width(12);
+            let mut clock = TestClock {
+                now: Instant::now(),
+                sleeps: Vec::new(),
+            };
+            let mut tracks = start_tracks(vec![art], &controls, clock.now);
+            let mut drawn = Vec::new();
+            drive(&mut tracks, passes, &controls, &mut clock, |tracks| {
+                drawn.push(tracks[0].frame)
+            });
+            (clock.sleeps, drawn)
+        }
+
+        fn ms(n: u64) -> Duration {
+            Duration::from_millis(n)
+        }
+
+        #[test]
+        fn speed_divides_each_frame_delay() {
+            // ball.gif's frames are 40 ms. Four frames: three changes.
+            let (sleeps, drawn) = schedule(&[("--max-frames", "4"), ("--speed", "0.5")], None);
+            assert_eq!(sleeps, vec![ms(80); 4]);
+            assert_eq!(drawn, vec![1, 2, 3]);
+            let (sleeps, _) = schedule(&[("--max-frames", "4"), ("--speed", "0.8")], None);
+            assert_eq!(sleeps, vec![ms(50); 4]);
+        }
+
+        #[test]
+        fn the_frame_rate_cap_holds_fast_frames() {
+            // At speed 8 a frame would last 5 ms; 30 fps holds it 33.3 ms.
+            let (sleeps, _) = schedule(&[("--max-frames", "2"), ("--speed", "8")], None);
+            assert_eq!(sleeps, vec![Duration::from_secs_f64(1.0 / 30.0); 2]);
+        }
+
+        #[test]
+        fn max_frames_ends_an_endless_loop() {
+            let (sleeps, drawn) = schedule(&[("--max-frames", "3")], None);
+            assert_eq!(drawn, vec![1, 2]);
+            assert_eq!(sleeps.len(), 3);
+        }
+
+        #[test]
+        fn max_duration_ends_an_endless_loop_on_time() {
+            let (sleeps, _) = schedule(&[("--max-duration", "0.5"), ("--speed", "0.9")], None);
+            let total: Duration = sleeps.iter().sum();
+            assert_eq!(total, ms(500));
+        }
+
+        #[test]
+        fn a_finite_loop_holds_the_last_frame() {
+            let (_, drawn) = schedule(&[("--speed", "2")], Some(1));
+            let count = AnimatedArt::from_path(BALL).unwrap().frame_count();
+            assert_eq!(drawn, (1..count).collect::<Vec<_>>());
+        }
     }
 }
 

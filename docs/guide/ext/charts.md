@@ -353,7 +353,8 @@ let chart = Chart::new(vec![cpu])
   - a style.
 
   An axis with an empty `Values` list draws its line and takes no room
-  for labels, as scope-tui's do.
+  for labels; with `Labels::None` it draws no line either, as a ratatui
+  axis without labels (scope-tui's) does.
 - **`Dataset`**:
   - points;
   - a name for the legend;
