@@ -338,7 +338,7 @@ Two things the port shows:
 ## Worked example: scope-tui, an oscilloscope
 
 [`examples/scope.rs`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/crates/rich-intuituive/examples/scope.rs)
-rebuilds [scope-tui](https://github.com/alemidev/scope-tui) in about 1,100
+rebuilds [scope-tui](https://github.com/alemidev/scope-tui) in about 1,300
 lines. Its tests are in `tests/scope.rs`. Like the file manager, it reuses
 none of the original's code. Where the file manager redraws when you press
 a key, this app redraws whenever a new buffer of audio arrives.
@@ -356,8 +356,8 @@ a key, this app redraws whenever a new buffer of audio arrives.
 | Audio from PulseAudio or cpal | raw PCM from a file or stdin (audio piped from `parec`), read on its own thread; a built-in test signal |
 | Three `DisplayMode` trait objects, mutated by key handlers | one signal per mode's settings, and one per shared setting (`Graph`) |
 | The header, a `Table` with percentage columns | a `row` of `text` cells with `.percent(…)` and `.gap(1)` |
-| `Chart` with Braille `Dataset`s, axis titles and a legend | rs-rich-ext's `Chart`, laid out as ratatui's, with the same `Dataset`s; the spectroscope's frequencies on a log `Axis` |
-| `rustfft` for the spectrum | a 40-line radix-2 FFT in the example |
+| `Chart` with Braille `Dataset`s, axis titles and a legend, and axes without labels (so without lines) | rs-rich-ext's `Chart`, laid out as ratatui's, with the same `Dataset`s and `Labels::None`; the spectroscope's frequencies on a log `Axis`; points outside the bounds turned into NaN, so lines to them are left out as ratatui's canvas leaves them |
+| `rustfft` for the spectrum | a radix-2 FFT, with Bluestein's for other lengths, in the example |
 | Shift ×10, Ctrl ×5, Alt ×⅕ on every step | the same bindings, made in a loop over the modifiers |
 | `h` hides the interface | `switch` on the `show_ui` setting |
 
@@ -374,12 +374,19 @@ What the port shows:
    reader thread keeps only the latest buffer. When the terminal falls
    behind, the app skips old buffers rather than drawing a backlog.
 
-It differs from scope-tui in four small ways:
+It differs from scope-tui in a few deliberate ways:
 
-- The trigger threshold is in the same -1 to 1 units as the samples.
-- The spectrum is padded to a power of two.
-- The header says when the input ends.
-- It has no audio-device backends: pipe audio in instead.
+- It has no audio-device backends (`audio`, `pulse`): pipe audio into
+  `file -` instead. Without a source it draws a test signal.
+- Its `file` source reads a whole buffer per channel. scope-tui 0.3.5's
+  reads half of one, so its waveform fills half the width and its
+  spectroscope stops at the first frame; this one draws what scope-tui's
+  audio sources do.
+- The trigger threshold keeps scope-tui's 16-bit units, and compares them
+  with the samples scaled back up, so it triggers on every source.
+- `?` lists the keys, options may follow the source, and the header's
+  columns are intuiTUIve's percentages, which can differ from ratatui's
+  table by a cell or two.
 
 ![The spectroscope: each channel's spectrum on a log frequency axis](../../media/tapes/scope/spectroscope.png)
 
