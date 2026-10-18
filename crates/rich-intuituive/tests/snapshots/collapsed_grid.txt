@@ -1,0 +1,7 @@
+┌─ CPU ─────┬─ Memory ──┐
+│cpu        │memory     │
+│           │           │
+├─ Disk ────┼─ Net ─────┤
+│disk       │network    │
+│           │           │
+└───────────┴───────────┘

@@ -164,6 +164,59 @@ pub trait Widget: Any {
     /// [`retained`](Self::retained) and only its own state changed.
     fn draw(&mut self, cx: &mut DrawCx, canvas: &mut Canvas);
 
+    /// Draw over what its children drew: a badge, a highlight, an effect.
+    /// It runs after the children, in every frame where the widget or a
+    /// node inside it drew, on a canvas that is not cleared:
+    /// [`Canvas::cell`] reads what is there, and what it writes is sent.
+    /// When only a child drew, the rest of the canvas still holds what
+    /// this wrote last time, so an overlay that changes cells it reads
+    /// (reversing them, moving them) should be one that comes out the same
+    /// when it runs twice, or the widget should not be
+    /// [`retained`](Self::retained), which draws everything inside afresh
+    /// whenever it draws. Signals read here make it draw again. Default:
+    /// nothing.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    /// use intuituive::screen::Rect;
+    /// use intuituive::widget::{widget, Canvas, DrawCx, MeasureCx, Widget};
+    ///
+    /// /// Its child, with a mark in the top right corner.
+    /// struct Badge(Node);
+    ///
+    /// impl Widget for Badge {
+    ///     fn children(&self) -> &[Node] {
+    ///         std::slice::from_ref(&self.0)
+    ///     }
+    ///
+    ///     fn layout(&mut self, _cx: &MeasureCx, rect: Rect) -> Vec<Rect> {
+    ///         vec![rect]
+    ///     }
+    ///
+    ///     fn draw(&mut self, _cx: &mut DrawCx, _canvas: &mut Canvas) {}
+    ///
+    ///     fn draw_over(&mut self, _cx: &mut DrawCx, canvas: &mut Canvas) {
+    ///         canvas.set_cell(canvas.width() - 1, 0, "●", None);
+    ///     }
+    /// }
+    ///
+    /// let app = App::new(|| widget(Badge(label("inbox"))));
+    /// let mut driver = app.driver(8, 1);
+    /// driver.settle();
+    /// assert_eq!(driver.screen().plain()[0], "inbox  ●");
+    /// ```
+    fn draw_over(&mut self, cx: &mut DrawCx, canvas: &mut Canvas) {
+        let _ = (cx, canvas);
+    }
+
+    /// Whether its children may overlap, later ones over earlier ones (as
+    /// [`layers`](crate::layers) does): a child then draws again where an
+    /// earlier sibling drew over it in the same frame, and a click goes to
+    /// the last child under the pointer. Default: no.
+    fn overlapping(&self) -> bool {
+        false
+    }
+
     /// Whether the widget keeps what it drew between frames. A retained
     /// widget's canvas is not cleared when a signal it read changes (only
     /// when it moved, or what is under it was drawn over:
@@ -384,7 +437,7 @@ impl MeasureCx<'_> {
     /// A child's track along `axis` in `rect`, its content measured for
     /// [`Size::Auto`]: in the whole rectangle across the axis, and
     /// unbounded along it.
-    fn main_track(&self, child: &Node, axis: Axis, rect: Rect) -> Track {
+    pub(crate) fn main_track(&self, child: &Node, axis: Axis, rect: Rect) -> Track {
         let mut track = child.track();
         if track.size == Size::Auto {
             track.content = self.main_content(child, axis, rect);
@@ -463,6 +516,7 @@ impl MeasureCx<'_> {
                 let wanted = match t.size {
                     Size::Fixed(cells) => cells as u32,
                     Size::Percent(p) => total as u32 * p.min(100) as u32 / 100,
+                    Size::Ratio(a, b) => crate::layout::ratio_of(total as u32, a, b),
                     Size::Auto | Size::Flex(_) => t.content as u32,
                 };
                 wanted
@@ -486,7 +540,7 @@ impl MeasureCx<'_> {
                 let line_tracks: Vec<Track> = line
                     .clone()
                     .map(|k| match tracks[k].size {
-                        Size::Percent(_) => Track {
+                        Size::Percent(_) | Size::Ratio(..) => Track {
                             size: Size::Fixed(bases[k]),
                             ..tracks[k]
                         },
@@ -862,6 +916,75 @@ impl Canvas<'_> {
         self.print(x, y, c.encode_utf8(&mut buffer), style);
     }
 
+    /// What is on the screen at `x`, `y` of the canvas now: what this
+    /// widget, its parent, an earlier sibling or (in
+    /// [`draw_over`](Widget::draw_over)) its children drew there. `None`
+    /// off the canvas.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    /// use intuituive::widget::{widget, Canvas, DrawCx, Widget};
+    ///
+    /// /// Each cell's symbol, in capitals.
+    /// struct Shout;
+    ///
+    /// impl Widget for Shout {
+    ///     fn draw(&mut self, _cx: &mut DrawCx, canvas: &mut Canvas) {
+    ///         canvas.print(0, 0, "hey", None);
+    ///         for x in 0..canvas.width() {
+    ///             let Some(cell) = canvas.cell(x, 0) else { continue };
+    ///             let (upper, style) = (cell.symbol().to_uppercase(), cell.style().cloned());
+    ///             canvas.set_cell(x, 0, &upper, style.as_ref());
+    ///         }
+    ///     }
+    /// }
+    ///
+    /// let mut driver = App::new(|| widget(Shout)).driver(3, 1);
+    /// driver.settle();
+    /// assert_eq!(driver.screen().plain()[0], "HEY");
+    /// ```
+    pub fn cell(&self, x: u16, y: u16) -> Option<CellView<'_>> {
+        if x >= self.rect.width || y >= self.rect.height {
+            return None;
+        }
+        let cell = self.screen.get(self.rect.x + x, self.rect.y + y)?;
+        Some(CellView {
+            symbol: &cell.text,
+            style: self.screen.style(cell.style),
+            width: cell.width,
+        })
+    }
+
+    /// Set the cell at `x`, `y` to `symbol` (one grapheme, which may be
+    /// two cells wide) in `style`.
+    pub fn set_cell(&mut self, x: u16, y: u16, symbol: &str, style: Option<&Style>) {
+        self.print(x, y, symbol, style);
+    }
+
+    /// Fill the part at `x`, `y`, `width` x `height` with `symbol` (one
+    /// grapheme) in `style`: ratatui's `Fill`. A wide symbol that does not
+    /// fit at the end of a row leaves a space.
+    pub fn fill_with(
+        &mut self,
+        x: u16,
+        y: u16,
+        width: u16,
+        height: u16,
+        symbol: &str,
+        style: Option<&Style>,
+    ) {
+        let Some(area) = self.area(x, y, width, height) else {
+            return;
+        };
+        let cells = rich::cells::cell_len(symbol).max(1);
+        let times = area.width as usize / cells;
+        let rest = area.width as usize - times * cells;
+        let row = format!("{}{}", symbol.repeat(times), " ".repeat(rest));
+        let lines = vec![vec![Segment::new(row, style.cloned())]; area.height as usize];
+        self.screen.write_lines(area, &lines);
+        self.written.push(area);
+    }
+
     /// Fill the part at `x`, `y`, `width` x `height` with spaces in
     /// `style` (a background).
     pub fn fill(&mut self, x: u16, y: u16, width: u16, height: u16, style: Option<&Style>) {
@@ -904,21 +1027,44 @@ impl Canvas<'_> {
         self.written.push(self.rect);
     }
 
-    /// A rounded border on the canvas's edges, with `title` in the top
-    /// one; the inside is left as it is.
+    /// A rounded border on the canvas's edges, with `title` (plain text)
+    /// in the top one; the inside is left as it is.
     pub fn border(&mut self, title: &str, style: &Style, title_style: &Style) {
-        self.border_box(crate::sheet::BoxKind::Round, title, style, title_style);
+        let edges = crate::node::draw_box(
+            self.screen,
+            crate::border::Border::Rounded,
+            title,
+            style,
+            title_style,
+            self.rect,
+        );
+        self.written.extend(edges);
     }
 
-    /// [`border`](Self::border) with a stylesheet's kind of box.
-    pub(crate) fn border_box(
+    /// A panel's `frame` on the canvas's edges, a cell in from the right
+    /// and the bottom when `shadowed`, where `shadow` (when given) is
+    /// drawn.
+    pub(crate) fn frame(
         &mut self,
-        kind: crate::sheet::BoxKind,
-        title: &str,
-        style: &Style,
-        title_style: &Style,
+        console: &Console,
+        frame: &crate::border::Frame,
+        shadowed: bool,
+        shadow: Option<(crate::border::Shadow, Style)>,
     ) {
-        let edges = crate::node::draw_box(self.screen, kind, title, style, title_style, self.rect);
+        let mut rect = self.rect;
+        if shadowed {
+            if let Some((shadow, style)) = shadow {
+                let strip = crate::border::draw_shadow(self.screen, shadow, &style, rect);
+                self.written.extend(strip);
+            }
+            rect = Rect::new(
+                rect.x,
+                rect.y,
+                rect.width.saturating_sub(1),
+                rect.height.saturating_sub(1),
+            );
+        }
+        let edges = crate::border::draw_frame(self.screen, console, frame, rect);
         self.written.extend(edges);
     }
 
@@ -932,6 +1078,37 @@ impl Canvas<'_> {
         let height = height.min(self.rect.height - y);
         let area = Rect::new(self.rect.x + x, self.rect.y + y, width, height);
         (!area.is_empty()).then_some(area)
+    }
+}
+
+/// One cell as [`Canvas::cell`] reads it.
+#[derive(Clone, Copy, Debug)]
+pub struct CellView<'a> {
+    symbol: &'a str,
+    style: Option<&'a Style>,
+    width: u8,
+}
+
+impl CellView<'_> {
+    /// Its grapheme: empty for the second column of a wide one.
+    pub fn symbol(&self) -> &str {
+        self.symbol
+    }
+
+    /// Its style, if it has one.
+    pub fn style(&self) -> Option<&Style> {
+        self.style
+    }
+
+    /// The columns its grapheme takes: 1, 2 for a wide one, and 0 for the
+    /// second column of a wide one.
+    pub fn width(&self) -> u16 {
+        u16::from(self.width)
+    }
+
+    /// Whether it is the second column of a wide grapheme.
+    pub fn is_continuation(&self) -> bool {
+        self.width == 0
     }
 }
 

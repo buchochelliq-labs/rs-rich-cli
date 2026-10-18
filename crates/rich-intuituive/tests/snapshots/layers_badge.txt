@@ -1,0 +1,6 @@
+row 0 tick 3 -----------
+row 1 tick╭─ Badge ──╮--
+row 2 tick│on top    │--
+row 3 tick│          │--
+row 4 tick╰──────────╯--
+row 5 tick 3 -----------

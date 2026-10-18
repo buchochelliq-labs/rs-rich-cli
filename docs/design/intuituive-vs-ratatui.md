@@ -124,7 +124,7 @@ API the matrix names lives:
 |---|---|---|---|
 | `Constraint::Length(n)` | `.fixed(n)`, `Size::Fixed` (`layout.rs`) | ✓ | — |
 | `Constraint::Percentage(p)` | `.percent(p)`, `Size::Percent` | ✓ (of the room after gaps; ratatui's is of the whole area) | — |
-| `Constraint::Ratio(a, b)` | none; `.percent(..)` rounds differently | ✗ | S · A4 |
+| `Constraint::Ratio(a, b)` | `.ratio(a, b)`, `Size::Ratio`, `1/3` in a stylesheet (0.0.19): of the room after gaps, the rounding's cells to the last ratio | ✓ | — |
 | `Constraint::Min(n)` | `.min_size(n)` on a flexible child | ✓ (CSS semantics: a clamped flex child) | — |
 | `Constraint::Max(n)` | `.max_size(n)` | ✓ | — |
 | `Constraint::Fill(w)` | `.flex(w)`; `flex(1)` is the default | ✓ | — |
@@ -135,15 +135,15 @@ API the matrix names lives:
 | cross-axis alignment (none: layouts are one-dimensional) | `.align_items(..)`, `.align_self(..)` | ✓ beyond | — |
 | wrapping (none) | `.wrap()`, `.align_content(..)` | ✓ beyond | — |
 | `Spacing::Space(n)`, `.spacing(n)` | `.gap(n)` | ✓ | — |
-| `Spacing::Overlap(n)` (negative spacing) | none: `gap` is a `u16` | ✗ for overlapping siblings; collapsed borders and layers cover its uses | M · A6, A8 |
-| `Block::merge_borders` with `Spacing::Overlap(1)`: collapsed borders (0.30) | none | ✗ | M · A6 |
+| `Spacing::Overlap(n)` (negative spacing) | `.collapse_borders()` for shared edges, `layers([..])` for overlapping siblings (0.0.19) | ≠ `gap` stays a `u16`: collapsed borders and layers cover its uses | — |
+| `Block::merge_borders` with `Spacing::Overlap(1)`: collapsed borders (0.30) | `.collapse_borders()` on a row, column or grid, `border-collapse: collapse` (0.0.19) | ✓ the container draws the junctions, whichever child redraws | — |
 | `Layout::margin`, `horizontal_margin`, `vertical_margin` | `.padding(v, h)`; a sheet's `padding` (one to four values) | ✓ | — |
 | nested layouts | nested `column`, `row` and `grid` | ✓ | — |
 | grids (by nesting layouts) | `grid(columns, children)`, `.span(..)`, `.rows(..)` | ✓ beyond | — |
 | `Layout::split`, `areas::<N>`, `try_areas`, `Rect::layout` | none: the tree is laid out for you | ≠ declarative | — |
-| `Layout::spacers`, `split_with_spacers` | `MeasureCx::stack_flow` for a widget's own children; nothing standalone | ✗ | S · A5 |
+| `Layout::spacers`, `split_with_spacers` | `layout::split(rect, axis, &tracks, flow)`, `split_with_spacers(..)`, a public `Track` (0.0.19) | ✓ | — |
 | the `layout-cache` feature | layout is retained, and runs again only when a sizing signal changes | ≠ | — |
-| `Rect`: `inner(Margin)`, `outer`, `offset`, `union`, `intersection`, `intersects`, `contains`, `clamp`, `rows()`, `columns()`, `positions()`, `centered(..)` | `rich_ext::surface::Rect`: `right`, `bottom`, `is_empty`, `contains`, `intersection`, `inner(n)` | ◐ no margins per side, `centered`, `offset`, `union` or iterators | S · A5 |
+| `Rect`: `inner(Margin)`, `outer`, `offset`, `union`, `intersection`, `intersects`, `contains`, `clamp`, `rows()`, `columns()`, `positions()`, `centered(..)` | `rich_ext::surface::Rect`: `right`, `bottom`, `is_empty`, `contains`, `intersection`, `inner(n)`, and `inset(..)`, `centered(..)`, `offset(..)`, `union`, `intersects`, `rows()`, `columns()` (0.0.19) | ✓ no `outer`, `clamp` or `positions()` | — |
 | `Position`, `Size`, `Offset` | tuples and `Rect` | ≠ | — |
 | `Direction::Vertical`, `Horizontal` | `column`, `row` | ✓ | — |
 | docking (by hand) | a sheet's `dock: top/bottom/left/right` | ✓ beyond | — |
@@ -155,7 +155,7 @@ API the matrix names lives:
 |---|---|---|---|
 | `Span` (a styled run) | console markup: `[b red]run[/]` in `text!`, `text(..)`, `label(..)` | ✓ ≠ markup, not types, so no lifetimes in app structs | — |
 | `Line`, `Text` | markup with `\n`; any rich `Text` through `renderable(..)` | ✓ | — |
-| `Paragraph::alignment`, `Text::centered()` (the whole text) | none on `text`/`label`; a rich `Text` with `.justify(..)` in `renderable(..)` | ◐ | S · A3 |
+| `Paragraph::alignment`, `Text::centered()` (the whole text) | `.text_align(TextAlign::Center)` on `text`/`label`, `text-align` (0.0.19) | ✓ | — |
 | `Line::centered()` on some lines of a paragraph | none in markup; a column of aligned nodes | ◐ | Later (L10) |
 | `Style` with `fg`, `bg` and modifiers | rich `Style`, `Style::parse("bold red on blue")`, markup, theme names | ✓ | — |
 | `Modifier::BOLD`, `DIM`, `ITALIC`, `UNDERLINED`, `REVERSED` | `bold`, `dim`, `italic`, `underline`, `reverse` | ✓ | — |
@@ -177,21 +177,21 @@ API the matrix names lives:
 | ratatui | intuiTUIve | Status | Fix |
 |---|---|---|---|
 | `Block::bordered()` | `.panel(title)` (`Panel`, `builtin.rs`) | ✓ rounded, lit while the focus is inside | — |
-| `Borders::TOP` and the other sides | none: all four sides or none | ✗ | M · A1 |
-| `BorderType::Plain`, `Rounded`, `Double`, `Thick` | a sheet's `border: square/round/double/heavy` (and `ascii`) | ◐ in a stylesheet only, not in code | A1 |
-| `BorderType::LightDoubleDashed` and the other dashed kinds, `QuadrantInside`, `QuadrantOutside`, a custom `border::Set` | none | ✗ | A1 |
-| `border_style` | the theme's `border` and `border.focused`; a sheet's `border: round red` | ◐ not per panel in code | A1 |
+| `Borders::TOP` and the other sides | `.borders(Sides::TOP \| Sides::LEFT)`, `border-sides: top left` (0.0.19) | ✓ | — |
+| `BorderType::Plain`, `Rounded`, `Double`, `Thick` | `.border(Border::Thick)` (0.0.19); a sheet's `border: plain/round/double/thick` (and `ascii`) | ✓ | — |
+| `BorderType::LightDoubleDashed` and the other dashed kinds, `QuadrantInside`, `QuadrantOutside`, a custom `border::Set` | `Border::LightDoubleDashed` to `HeavyQuadrupleDashed`, `QuadrantInside`, `QuadrantOutside`, `Custom(BorderSet)`, by name in a sheet too (0.0.19) | ✓ | — |
+| `border_style` | `.border_style(..)` while the focus is elsewhere (0.0.19); the theme's `border.focused` while it is inside | ✓ | — |
 | `title(..)` | `.panel("Title")`; a sheet's `border-title` | ✓ one title | — |
-| styled titles (a `Line` of spans) | plain text in the theme's `title` style; markup shows as typed | ✗ | A1 |
-| `title_alignment`, centred and right-aligned titles | top left only | ✗ | A1 |
-| `title_bottom`, `TitlePosition::Bottom` | none | ✗ | A1 |
-| several titles on one edge | one | ✗ | A1 |
-| a title without a border: `Block::new().title(..)` | `border: none` drops the title too | ✗ | A1 |
-| `title_style` | the theme's `title`, for the whole app | ◐ | A1 |
+| styled titles (a `Line` of spans) | titles are console markup (0.0.19) | ✓ | — |
+| `title_alignment`, centred and right-aligned titles | `.title_align(Align::Center)`, `border-title-align` (0.0.19) | ✓ | — |
+| `title_bottom`, `TitlePosition::Bottom` | `.title_bottom(..)`, `border-subtitle` (0.0.19) | ✓ | — |
+| several titles on one edge | `.title_right(..)`, `.add_title(Edge, Align, ..)` (0.0.19): the right ones give way first, then the centred ones | ✓ | — |
+| a title without a border: `Block::new().title(..)` | `.border(Border::None)` (0.0.19); a sheet's `border: none` still takes the whole frame away | ✓ | — |
+| `title_style` | `.title_style(..)` (0.0.19) | ✓ | — |
 | `Padding::*` inside the border | `.padding(..)` before `.panel(..)`; a sheet's `padding` on the panel | ✓ | — |
-| `Block::style` (a background) | a stylesheet's `background` only | ◐ | S · A2 |
-| `Block::shadow(Shadow::..)` (0.30.1) | none, for panels, modals or pop-ups | ✗ | S · A1, B6 |
-| `merge_borders(MergeStrategy::Exact)` | none | ✗ | A6 |
+| `Block::style` (a background) | `.style(..)`, `.bg(..)`, `.fg(..)` on any node (0.0.19) | ✓ | — |
+| `Block::shadow(Shadow::..)` (0.30.1) | `.shadow(Shadow::MediumShade)` on a panel (0.0.19); none for modals or pop-ups | ◐ | B6 |
+| `merge_borders(MergeStrategy::Exact)` | `.collapse_borders()`, `.focus_border(Border::Thick)` (0.0.19) | ✓ | — |
 | focus and error looks (by hand) | `border.focused`; `border.error` with `.error_when(..)` | ✓ beyond | — |
 
 ### 1.4 Widgets
@@ -202,10 +202,10 @@ API the matrix names lives:
 |---|---|---|---|
 | `Paragraph::new(text)` | `text!`, `text(..)`, `label(..)` | ✓ | — |
 | `.block(..)` | `.panel(..)` | ✓ | — |
-| `.style(..)` | markup inside; nothing on the node | ◐ | A2 |
-| `.wrap(Wrap { trim })` | always wraps, as rich does | ◐ no "don't wrap", no overflow choice | A3 |
+| `.style(..)` | `.style(..)` on the node (0.0.19); markup inside | ✓ | — |
+| `.wrap(Wrap { trim })` | wraps as rich does; `.no_wrap()`, `.overflow(Overflow::Ellipsis)`, `text-wrap`, `text-overflow` (0.0.19) | ✓ | — |
 | `.scroll((y, x))` | `scroll_with(child, offset)`, `scroll_both_with(..)`: keys, the wheel, a bar | ✓ beyond | — |
-| `.alignment(..)`, `.centered()` | none | ✗ | A3 |
+| `.alignment(..)`, `.centered()` | `.text_align(TextAlign::Center)` (0.0.19) | ✓ | — |
 | `line_count`, `line_width` (unstable) | `MeasureCx::measure`, for widgets | ◐ | — |
 
 #### List
@@ -215,7 +215,7 @@ API the matrix names lives:
 | `List` with `ListState` | `list(items, selected)` (`node.rs`): keys, scrolling, the theme's `selected` style | ✓ beyond: the keys are built in | — |
 | `ListItem` of several lines | the first line only | ✗ | M · B1 |
 | `ListItem::style` (a row's background) | markup in the item, as wide as its text | ◐ | B1 |
-| `highlight_style` | the theme's `selected`, for the whole app | ◐ | B1, A9 |
+| `highlight_style` | the theme's `selected`; per list with `.theme_styles([("selected", ..)])` (0.0.19) | ✓ | — |
 | `highlight_symbol`, `repeat_highlight_symbol` | none | ✗ | B1 |
 | `HighlightSpacing::Always`, `WhenSelected`, `Never` | none | ✗ | B1 |
 | `ListDirection::BottomToTop` | none | ✗ | B1 |
@@ -232,11 +232,11 @@ API the matrix names lives:
 |---|---|---|---|
 | `Table::new(rows, widths)` with `TableState` | `table(columns, rows, selected)`, `table_with(.., TableOptions)` (`widgets.rs`) | ✓ | — |
 | `header(Row)` | a sticky header of `Column` titles | ✓ | — |
-| the header row's style | the theme's `table.header` | ◐ | B2, A9 |
+| the header row's style | the theme's `table.header`; per table with `.theme_styles([("table.header", ..)])` (0.0.19) | ✓ | — |
 | `Row::top_margin`, `bottom_margin` | none | ✗ | B2 |
 | `footer(Row)` | none | ✗ | M · B2 |
 | widths: `Length`, `Percentage`, `Fill` | `Size::Fixed`, `Percent`, `Flex`; and `Size::Auto`, which fits the title and the rows in view | ✓ beyond | — |
-| widths: `Min`, `Max`, `Ratio` | none per column | ✗ | B2, A4 |
+| widths: `Min`, `Max`, `Ratio` | `Size::Ratio` (0.0.19); no `Min` or `Max` per column | ◐ | B2 |
 | `column_spacing(n)` | always 1 | ✗ | B2 |
 | `Table::flex` (where spare room goes) | none | ✗ | Later (L8) |
 | `Row::height(n)`, cells of several lines | one line a row, cut with `…` | ✗ | B2 |
@@ -244,7 +244,7 @@ API the matrix names lives:
 | `Cell::style` | markup in the cell | ✓ | — |
 | a cell's alignment (its `Text`'s) | none | ✗ | B2 |
 | `Cell::column_span` (0.30.1) | none (cells are strings) | ✗ | Later (L8) |
-| `row_highlight_style` | the theme's `selected` and `table.selected` | ◐ | A9 |
+| `row_highlight_style` | the theme's `selected` and `table.selected`, per table with `.theme_styles(..)` (0.0.19) | ✓ | — |
 | `cell_highlight_style` | `TableOptions::cells(signal)` and the theme's `selected.cell` | ✓ | — |
 | `column_highlight_style` | none | ✗ | B2 |
 | `highlight_symbol`, `highlight_spacing` | none | ✗ | B2 |
@@ -258,7 +258,7 @@ API the matrix names lives:
 | ratatui | intuiTUIve | Status | Fix |
 |---|---|---|---|
 | `Tabs::new(titles).select(i)` | `tabs(titles, selected)`: arrows, 1 to 9, clicks | ✓ beyond | — |
-| `highlight_style`, `style` | the theme's `tabs.selected`, `tabs.selected.blur` | ◐ | A9 |
+| `highlight_style`, `style` | the theme's `tabs.selected`, `tabs.selected.blur`, per strip with `.theme_styles(..)` (0.0.19) | ✓ | — |
 | `divider(..)` | always `│` (the theme's `tabs.divider`) | ✗ | S · B4 |
 | `padding(left, right)` | always one space | ✗ | B4 |
 | `select(None)` | always one | ✗ | Later |
@@ -346,7 +346,7 @@ API the matrix names lives:
 | ratatui | intuiTUIve | Status | Fix |
 |---|---|---|---|
 | `Clear` | nodes own their cells; modals and pop-ups clear what they cover | ≠ | — |
-| `Fill` (0.30.1) | a `leaf`, or `Canvas::fill` in a widget | ◐ | S · A7 |
+| `Fill` (0.30.1) | `fill(symbol, style)`, `Canvas::fill_with` (0.0.19) | ✓ | — |
 | `RatatuiLogo`, `RatatuiMascot` | none | ≠ ratatui's branding: the demos draw intuiTUIve's own mark | — |
 
 ### 1.5 Terminal
@@ -384,9 +384,9 @@ API the matrix names lives:
 | `WidgetRef`, boxed widgets in a container | `Box<dyn Widget>`, `Vec<Node>` | ✓ | — |
 | custom widgets | `impl Widget` and `widget(..)`: measuring, children, layout, events, focus, the caret, hover, roles | ✓ beyond | — |
 | writing cells: `buf[(x, y)]`, `set_string`, `set_line`, `set_span`, `set_style` | `Canvas::print`, `markup`, `lines`, `lines_at`, `set`, `fill`, `restyle`, `render`, `border` | ✓ | — |
-| reading cells: `buf[(x, y)].symbol()`, `.style()` | none | ✗ | S · A7 |
-| post-processing a frame (`frame.buffer_mut()` after rendering: demo2's "destroy") | none | ✗ | M · A7 |
-| drawing over what was drawn (draw order is up to the app) | parents draw before their children, and siblings never overlap | ◐ | A7, A8 |
+| reading cells: `buf[(x, y)].symbol()`, `.style()` | `Canvas::cell(x, y)`, with `.symbol()` and `.style()`; `Canvas::set_cell` (0.0.19) | ✓ | — |
+| post-processing a frame (`frame.buffer_mut()` after rendering: demo2's "destroy") | `effect(node, \|canvas, cx\| ..)`, `Widget::draw_over` (0.0.19) | ✓ | — |
+| drawing over what was drawn (draw order is up to the app) | `Widget::draw_over` after the children; `layers([..])` and `Widget::overlapping` for siblings that overlap (0.0.19) | ✓ | — |
 
 ### 1.7 Testing
 

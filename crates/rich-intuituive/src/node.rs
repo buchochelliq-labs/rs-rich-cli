@@ -36,16 +36,19 @@ use std::collections::{HashMap, HashSet};
 use std::hash::Hash;
 use std::rc::Rc;
 
-use rich::{Console, Renderable, Segment, Style};
+use rich::{Console, Overflow, Renderable, Segment, Style};
 use rich_interact::{Component, Key, Mouse};
 
-use crate::app::Ctx;
-use crate::builtin::{Each, Grid, Host, HostWidget, Leaf, Pad, Panel, ScrollView, Stack, Switch};
+use crate::app::{Ctx, Theme};
+use crate::border::{Border, Edge, Shadow, Sides, Title};
+use crate::builtin::{
+    Each, Grid, Host, HostWidget, Layers, Leaf, Pad, Panel, ScrollView, Stack, Switch, TextNode,
+};
 pub use crate::layout::Size;
-use crate::layout::{Align, AlignContent, Justify, StackLayout, Track};
+use crate::layout::{Align, AlignContent, Justify, StackLayout, TextAlign, Track};
 use crate::reactive::{next_node, NodeId, Runtime, Signal};
 use crate::screen::{Rect, Screen};
-use crate::sheet::{BoxKind, Dock, Element, Layout, States, Stylesheet};
+use crate::sheet::{Dock, Element, Layout, States, Stylesheet};
 use crate::widget::{Canvas, DrawCx, MeasureCx, ScrollCx, Watchers, Widget};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -153,6 +156,102 @@ pub struct Node {
     /// A [`list`]'s selection and scroll, for
     /// [`reorderable`](Node::reorderable).
     pub(crate) list_model: Option<Rc<crate::reorder::ListModel>>,
+    /// Its own colours and text style ([`style`](Node::style),
+    /// [`bg`](Node::bg), [`fg`](Node::fg)), under what it draws.
+    own_style: Option<OwnStyle>,
+    /// Theme styles that hold inside it ([`theme_styles`](Node::theme_styles)),
+    /// and the console and theme its subtree draws with, made from them.
+    theme_styles: Vec<(String, String)>,
+    scope: RefCell<Option<Rc<Scope>>>,
+    /// In [`layers`]: its inset from the layers' edges, and where it sits
+    /// at its content's size.
+    pub(crate) inset: Option<[u16; 4]>,
+    pub(crate) place: Option<(Align, Align)>,
+}
+
+/// A node's own style: a style (or theme style name), a foreground and a
+/// background, each a colour or a theme style's colour.
+#[derive(Clone, Debug, Default)]
+struct OwnStyle {
+    style: Option<String>,
+    fg: Option<String>,
+    bg: Option<String>,
+}
+
+impl OwnStyle {
+    /// The style, its names looked up in `console`'s theme.
+    fn resolve(&self, console: &Console) -> Style {
+        let mut out = match &self.style {
+            Some(name) => crate::widget::theme_style(console, name, ""),
+            None => Style::default(),
+        };
+        // A colour, or a theme style's: its colour, else its background,
+        // as a stylesheet's `$name` is.
+        let color = |name: &str, background: bool| {
+            let style = crate::widget::theme_style(console, name, "");
+            let (first, second) = match background {
+                true => (style.bgcolor(), style.color()),
+                false => (style.color(), style.bgcolor()),
+            };
+            first
+                .or(second)
+                .cloned()
+                .or_else(|| rich::Color::parse(name).ok())
+        };
+        if let Some(fg) = self.fg.as_deref().and_then(|name| color(name, false)) {
+            out = out.combine(&Style::from_color(Some(fg), None));
+        }
+        if let Some(bg) = self.bg.as_deref().and_then(|name| color(name, true)) {
+            out = out.combine(&Style::from_color(None, Some(bg)));
+        }
+        out
+    }
+}
+
+/// The console and theme a subtree draws with when a node gives it theme
+/// styles of its own ([`Node::theme_styles`]): copies made once, and again
+/// when what they were made over changes.
+pub(crate) struct Scope {
+    pub console: Console,
+    pub theme: Theme,
+    /// The theme it was made over (`None`: made while measuring, before a
+    /// theme was at hand), and its console's size.
+    made_over: Option<Theme>,
+    size: (usize, usize),
+}
+
+impl Scope {
+    fn new(console: &Console, theme: Option<&Theme>, styles: &[(String, String)]) -> Scope {
+        let mut scoped = console.clone();
+        let mut own = theme.cloned().unwrap_or_default();
+        let mut named = rich::Theme::new();
+        for (name, definition) in styles {
+            // Theme names in a definition are the ones around it.
+            let style = crate::widget::theme_style(console, definition, "");
+            named.insert(name.clone(), style.clone());
+            match name.as_str() {
+                "border" => own.border = style,
+                "border.focused" => own.border_focused = style,
+                "title" => own.title = style,
+                _ => own = own.style(name, style),
+            }
+        }
+        scoped.push_theme(named, true);
+        Scope {
+            console: scoped,
+            theme: own,
+            made_over: theme.cloned(),
+            size: (console.width(), console.height()),
+        }
+    }
+}
+
+/// Whether two themes style everything the same.
+fn same_theme(a: &Theme, b: &Theme) -> bool {
+    a.border == b.border
+        && a.border_focused == b.border_focused
+        && a.title == b.title
+        && a.styles == b.styles
 }
 
 /// A condition a node's class or state follows.
@@ -176,8 +275,9 @@ struct SheetNode {
     layout: Layout,
     /// Whether a rule with a state could match it, and which states.
     watch: (bool, bool, bool),
-    /// The border it draws round its widget (a panel draws its own).
-    decor: Option<(BoxKind, Style, String)>,
+    /// The border it draws round its widget (a panel draws its own); its
+    /// titles and sides are the layout's.
+    decor: Option<(Border, Style)>,
     insets: [u16; 4],
     /// The style it was last drawn in.
     style: Option<Style>,
@@ -269,6 +369,11 @@ impl Node {
             busy_when: None,
             built_state: None,
             list_model: None,
+            own_style: None,
+            theme_styles: Vec::new(),
+            scope: RefCell::new(None),
+            inset: None,
+            place: None,
         }
     }
 
@@ -496,7 +601,7 @@ impl Node {
 
     /// The widget, if it is a `W`, read only: for a node whose children are
     /// being visited, which holds its widget borrowed meanwhile.
-    fn widget_ref<W: Widget, R>(&self, f: impl FnOnce(&W) -> R) -> Option<R> {
+    pub(crate) fn widget_ref<W: Widget, R>(&self, f: impl FnOnce(&W) -> R) -> Option<R> {
         let body = self.body.borrow();
         let widget: &dyn std::any::Any = &*body.widget;
         widget.downcast_ref::<W>().map(f)
@@ -560,13 +665,7 @@ impl Node {
             Dock::Left => "left",
             Dock::Right => "right",
         });
-        let border = sheet.decor.as_ref().map(|(kind, _, _)| match kind {
-            BoxKind::Round => "round",
-            BoxKind::Square => "square",
-            BoxKind::Heavy => "heavy",
-            BoxKind::Double => "double",
-            BoxKind::Ascii => "ascii",
-        });
+        let border = sheet.decor.as_ref().map(|(kind, _)| kind.css());
         let padding = if sheet.decor.is_some() || sheet.insets != [0; 4] {
             layout.padding
         } else {
@@ -1149,6 +1248,339 @@ impl Node {
         )
     }
 
+    /// For a [panel](Self::panel): where its own title sits on the top edge,
+    /// [`Align::Start`] (the default), [`Align::Center`] or [`Align::End`].
+    /// A stylesheet's `border-title-align` does the same. Ignored on other
+    /// nodes.
+    pub fn title_align(self, align: Align) -> Node {
+        self.widget_mut(|panel: &mut Panel| panel.code.title_align = Some(align));
+        self
+    }
+
+    /// For a [panel](Self::panel): another title, console markup, at the
+    /// right of the top edge. Ignored on other nodes.
+    pub fn title_right(self, markup: impl Into<String>) -> Node {
+        self.add_title(Edge::Top, Align::End, markup)
+    }
+
+    /// For a [panel](Self::panel): a title, console markup, at the left of
+    /// the bottom edge (a stylesheet's `border-subtitle`). Ignored on other
+    /// nodes.
+    pub fn title_bottom(self, markup: impl Into<String>) -> Node {
+        self.add_title(Edge::Bottom, Align::Start, markup)
+    }
+
+    /// For a [panel](Self::panel): a title, console markup, on `edge`,
+    /// placed by `align`. Titles with the same alignment sit side by side,
+    /// one cell apart, in the order given. When they do not fit, the
+    /// right-hand ones give way first, then the centred ones, and the left
+    /// ones are cut with `…`. An edge with a title keeps its row even when
+    /// its line is not drawn. Ignored on other nodes.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| {
+    ///     label("…")
+    ///         .panel("Pull requests")
+    ///         .title_right("[dim]loading")
+    ///         .add_title(Edge::Bottom, Align::End, "1/20")
+    /// });
+    /// let mut driver = app.driver(32, 3);
+    /// driver.settle();
+    /// let rows = driver.screen().plain();
+    /// assert_eq!(rows[0], "╭─ Pull requests ──── loading ─╮");
+    /// assert!(rows[2].starts_with("╰───") && rows[2].ends_with("─ 1/20 ─╯"));
+    /// ```
+    pub fn add_title(self, edge: Edge, align: Align, markup: impl Into<String>) -> Node {
+        let title = Title::new(edge, align, markup);
+        self.widget_mut(|panel: &mut Panel| panel.code.titles.push(title));
+        self
+    }
+
+    /// For a [panel](Self::panel): the kind of box it draws, which wins over
+    /// a stylesheet's `border`. [`Border::None`] draws no lines, but its
+    /// titles keep their rows. For a container with
+    /// [collapsed borders](Self::collapse_borders): the kind of its lines.
+    /// Ignored on other nodes.
+    pub fn border(self, border: Border) -> Node {
+        self.widget_mut(|panel: &mut Panel| panel.code.border = Some(border));
+        self.widget_mut(|stack: &mut Stack| stack.collapse.border = Some(border));
+        self.widget_mut(|grid: &mut Grid| grid.collapse.border = Some(border));
+        self
+    }
+
+    /// For a [panel](Self::panel): the sides of the box it draws,
+    /// [`Sides::ALL`] by default, or some of them joined with `|`. The
+    /// inside grows into the sides it does not draw. A stylesheet's
+    /// `border-sides: top bottom` does the same. Ignored on other nodes.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| label("body").panel("Notes").borders(Sides::TOP));
+    /// let mut driver = app.driver(12, 2);
+    /// driver.settle();
+    /// assert_eq!(driver.screen().plain(), ["── Notes ───", "body        "]);
+    /// ```
+    pub fn borders(self, sides: Sides) -> Node {
+        self.widget_mut(|panel: &mut Panel| panel.code.sides = Some(sides));
+        self
+    }
+
+    /// For a [panel](Self::panel) or a container with
+    /// [collapsed borders](Self::collapse_borders): the border's style (or a
+    /// theme style's name) while the focus is elsewhere; with the focus
+    /// inside, it takes the theme's `border.focused`. Ignored on other
+    /// nodes.
+    pub fn border_style(self, style: &str) -> Node {
+        let style = style.to_string();
+        self.widget_mut(|panel: &mut Panel| panel.code.border_style = Some(style.clone()));
+        self.widget_mut(|stack: &mut Stack| stack.collapse.border_style = Some(style.clone()));
+        self.widget_mut(|grid: &mut Grid| grid.collapse.border_style = Some(style));
+        self
+    }
+
+    /// For a [panel](Self::panel): its titles' style (or a theme style's
+    /// name), over the border's colour, instead of the theme's `title`.
+    /// Markup in a title goes over it. Ignored on other nodes.
+    pub fn title_style(self, style: &str) -> Node {
+        let style = style.to_string();
+        self.widget_mut(|panel: &mut Panel| panel.code.title_style = Some(style));
+        self
+    }
+
+    /// For a [panel](Self::panel): a shadow down its right and along its
+    /// bottom, inside its own rectangle (the box is a cell narrower and
+    /// shorter for it), in the theme's `shadow` style. Ignored on other
+    /// nodes.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| label("hi").panel("").shadow(Shadow::MediumShade));
+    /// let mut driver = app.driver(6, 4);
+    /// driver.settle();
+    /// assert_eq!(driver.screen().plain(), ["╭───╮ ", "│hi │▒", "╰───╯▒", " ▒▒▒▒▒"]);
+    /// ```
+    pub fn shadow(self, shadow: Shadow) -> Node {
+        self.widget_mut(|panel: &mut Panel| panel.code.shadow = Some(shadow));
+        self
+    }
+
+    /// For a [`column`](fn@column), [`row`] or [`grid`] of
+    /// [panels](Self::panel): draw one frame for them all, each panel's box
+    /// sharing its edges with its neighbours', joined where lines meet
+    /// (`┬ ┴ ├ ┤ ┼`). Each panel's titles sit on its own edges and its
+    /// content between the lines; the lines round the panel with the focus
+    /// are lit in the theme's `border.focused` (and drawn in
+    /// [`focus_border`](Self::focus_border)'s kind). Gaps are ignored. A
+    /// stylesheet's `border-collapse: collapse` does the same. Ignored on
+    /// other nodes.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| {
+    ///     row([label("a").panel("A"), label("b").panel("B")]).collapse_borders()
+    /// });
+    /// let mut driver = app.driver(13, 3);
+    /// driver.settle();
+    /// assert_eq!(driver.screen().plain(), ["╭─ A ─┬─ B ─╮", "│a    │b    │", "╰─────┴─────╯"]);
+    /// ```
+    pub fn collapse_borders(self) -> Node {
+        let on = |collapse: &mut crate::builtin::Collapse| {
+            collapse.on = true;
+            collapse.code = true;
+        };
+        self.widget_mut(|stack: &mut Stack| on(&mut stack.collapse));
+        self.widget_mut(|grid: &mut Grid| on(&mut grid.collapse));
+        self
+    }
+
+    /// For a container with [collapsed borders](Self::collapse_borders):
+    /// the kind of the lines round the child with the focus
+    /// ([`Border::Thick`] makes it stand out, as ratatui's
+    /// `collapsed-borders` example does). Ignored on other nodes.
+    pub fn focus_border(self, border: Border) -> Node {
+        self.widget_mut(|stack: &mut Stack| stack.collapse.focus_border = Some(border));
+        self.widget_mut(|grid: &mut Grid| grid.collapse.focus_border = Some(border));
+        self
+    }
+
+    /// Draw this node in `style` (`"white on #101830"`, or a theme style's
+    /// name: `"accent"`): ratatui's `Block::style`. It goes under what the
+    /// node and its children draw, as a stylesheet's `color` and
+    /// `background` do, and fills the rest of the node's rectangle, gaps
+    /// and borders included. Code wins over a stylesheet; markup inside
+    /// wins over both.
+    pub fn style(mut self, style: &str) -> Node {
+        self.own_style.get_or_insert_with(OwnStyle::default).style = Some(style.to_string());
+        self
+    }
+
+    /// [`style`](Self::style) with only a background: a colour
+    /// (`"#101830"`, `"grey11"`) or a theme style's colour.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| column([label("a"), label("b")]).gap(1).bg("blue"));
+    /// let mut driver = app.driver(3, 3);
+    /// driver.settle();
+    /// // Every cell is blue, the gap included.
+    /// let blue = rich::Style::parse("on blue").unwrap();
+    /// let gap = driver.screen().cell(1, 1).style;
+    /// assert_eq!(driver.screen().style(gap), Some(&blue));
+    /// ```
+    pub fn bg(mut self, color: &str) -> Node {
+        self.own_style.get_or_insert_with(OwnStyle::default).bg = Some(color.to_string());
+        self
+    }
+
+    /// [`style`](Self::style) with only a foreground: a colour or a theme
+    /// style's colour.
+    pub fn fg(mut self, color: &str) -> Node {
+        self.own_style.get_or_insert_with(OwnStyle::default).fg = Some(color.to_string());
+        self
+    }
+
+    /// For a [`text`](fn@text) or [`label`]: how its lines sit across its
+    /// width, ratatui's `Paragraph::alignment`. A stylesheet's `text-align`
+    /// does the same. It does not change the text's natural width (an
+    /// [`auto`](Self::auto) node is as wide as its longest line). Ignored on
+    /// other nodes.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| label("hi").text_align(TextAlign::Center));
+    /// let mut driver = app.driver(6, 1);
+    /// driver.settle();
+    /// assert_eq!(driver.screen().plain()[0], "  hi  ");
+    /// ```
+    pub fn text_align(self, align: TextAlign) -> Node {
+        self.widget_mut(|text: &mut TextNode| {
+            text.align = Some(align);
+            text.code[0] = true;
+        });
+        self
+    }
+
+    /// For a [`text`](fn@text) or [`label`]: lines are cut at the edge
+    /// rather than wrapped (with `…` after [`overflow`](Self::overflow)'s
+    /// `Ellipsis`). A stylesheet's `text-wrap: nowrap` does the same.
+    /// Ignored on other nodes.
+    pub fn no_wrap(self) -> Node {
+        self.widget_mut(|text: &mut TextNode| {
+            text.no_wrap = Some(true);
+            text.code[1] = true;
+        });
+        self
+    }
+
+    /// For a [`text`](fn@text) or [`label`]: what happens to what does not
+    /// fit a line: [`Overflow::Fold`] (words longer than the line are
+    /// broken, the default), [`Overflow::Crop`] (cut) or
+    /// [`Overflow::Ellipsis`] (cut, with `…`). A stylesheet's
+    /// `text-overflow: fold`, `clip` or `ellipsis` does the same. Ignored on
+    /// other nodes.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| label("a long line").no_wrap().overflow(Overflow::Ellipsis));
+    /// let mut driver = app.driver(6, 1);
+    /// driver.settle();
+    /// assert_eq!(driver.screen().plain()[0], "a lon…");
+    /// ```
+    pub fn overflow(self, overflow: Overflow) -> Node {
+        self.widget_mut(|text: &mut TextNode| {
+            text.overflow = Some(overflow);
+            text.code[2] = true;
+        });
+        self
+    }
+
+    /// `a / b` of the parent's axis (see [`Size::Ratio`]): three
+    /// `.ratio(1, 3)` children fill it exactly.
+    pub fn ratio(self, a: u32, b: u32) -> Node {
+        self.size(Size::Ratio(a, b))
+    }
+
+    /// In [`layers`]: keep `top`, `right`, `bottom` and `left` cells
+    /// between this layer and the layers' edges, as CSS's `inset`. Ignored
+    /// elsewhere.
+    pub fn inset(mut self, top: u16, right: u16, bottom: u16, left: u16) -> Node {
+        self.inset = Some([top, right, bottom, left]);
+        self
+    }
+
+    /// In [`layers`]: make this layer as big as its content, placed by
+    /// `across` (left to right) and `down` ([`Align::Stretch`] takes the
+    /// whole width or height). Ignored elsewhere.
+    pub fn place(mut self, across: Align, down: Align) -> Node {
+        self.place = Some((across, down));
+        self
+    }
+
+    /// Theme styles that hold for this node and everything inside it, over
+    /// the app's theme, as CSS custom properties do: `[selected]…[/]` in
+    /// markup, a list's selected row, a table's `table.header`, a tab
+    /// strip's `tabs.selected`, a panel's `border` and `title`. The styles
+    /// are definitions or the names of the theme's other styles. It is the
+    /// one answer to ratatui's `highlight_style` and the like, per
+    /// instance, with no style option on each widget.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| {
+    ///     let selected = signal(0usize);
+    ///     list(|| vec!["one".into(), "two".into()], selected)
+    ///         .theme_styles([("selected", "bold yellow on #303030")])
+    /// });
+    /// let mut driver = app.driver(5, 2);
+    /// driver.settle();
+    /// let picked = rich::Style::parse("bold yellow on #303030").unwrap();
+    /// let cell = driver.screen().cell(0, 0).style;
+    /// assert_eq!(driver.screen().style(cell), Some(&picked));
+    /// ```
+    pub fn theme_styles<N: Into<String>, S: Into<String>>(
+        mut self,
+        styles: impl IntoIterator<Item = (N, S)>,
+    ) -> Node {
+        self.theme_styles
+            .extend(styles.into_iter().map(|(n, s)| (n.into(), s.into())));
+        *self.scope.get_mut() = None;
+        self
+    }
+
+    /// This node's [scope](Self::theme_styles) over `console` and `theme`,
+    /// made again when they changed; `None` without theme styles. While
+    /// measuring, `theme` is not at hand: any copy made already does.
+    fn scope_over(&self, console: &Console, theme: Option<&Theme>) -> Option<Rc<Scope>> {
+        if self.theme_styles.is_empty() {
+            return None;
+        }
+        let size = (console.width(), console.height());
+        if let Some(scope) = self.scope.borrow().as_ref() {
+            let current = match theme {
+                None => true,
+                Some(theme) => scope
+                    .made_over
+                    .as_ref()
+                    .is_some_and(|made| same_theme(made, theme)),
+            };
+            if current && scope.size == size {
+                return Some(scope.clone());
+            }
+        }
+        let scope = Rc::new(Scope::new(console, theme, &self.theme_styles));
+        *self.scope.borrow_mut() = Some(scope.clone());
+        Some(scope)
+    }
+
     /// A node of `widget` round this one, taking over its size and span.
     pub(crate) fn wrap_in(
         mut self,
@@ -1157,6 +1589,8 @@ impl Node {
     ) -> Node {
         let (size, min, max, span, set) = (self.size, self.min, self.max, self.span, self.set);
         let align_self = self.align_self;
+        // Where it goes in layers is the box's place.
+        let (inset, place) = (self.inset.take(), self.place.take());
         // Shown or hidden by the viewport as a whole, box and all.
         let shown_when = std::mem::take(&mut self.shown_when);
         let mut outer = Node::from_widget(widget(self), what);
@@ -1166,6 +1600,8 @@ impl Node {
         outer.max = max;
         outer.span = span;
         outer.align_self = align_self;
+        outer.inset = inset;
+        outer.place = place;
         outer.set[SET_SIZE] = set[SET_SIZE];
         outer.set[SET_MIN] = set[SET_MIN];
         outer.set[SET_MAX] = set[SET_MAX];
@@ -1299,27 +1735,51 @@ impl Node {
                 grid.columns = layout.grid_columns.clone().unwrap_or_default();
             }
         });
-        let title = layout.border_title.clone().unwrap_or_default();
         let is_panel = self
             .widget_mut(|panel: &mut Panel| {
                 panel.look = crate::builtin::PanelLook {
                     border: layout.border.clone(),
                     no_border: layout.no_border,
                     title: layout.border_title.clone(),
+                    title_align: layout.title_align,
+                    subtitle: layout.subtitle.clone(),
+                    subtitle_align: layout.subtitle_align,
+                    sides: layout.sides,
                     padding: layout.padding,
                 };
             })
             .is_some();
+        self.widget_mut(|text: &mut TextNode| {
+            let [align, wrap, overflow] = text.code;
+            if !align {
+                text.align = layout.text_align;
+            }
+            if !wrap {
+                text.no_wrap = layout.text_wrap.map(|wrap| !wrap);
+            }
+            if !overflow {
+                text.overflow = layout.text_overflow;
+            }
+        });
+        // A container that collapses its children's borders takes a
+        // stylesheet's border as its lines', rather than a box round it.
+        let collapse = |collapse: &mut crate::builtin::Collapse| {
+            if !collapse.code {
+                collapse.on = layout.collapse.unwrap_or(false);
+            }
+            collapse.sheet = layout.border.clone().filter(|_| collapse.on);
+            collapse.on
+        };
+        let collapsed = self
+            .widget_mut(|stack: &mut Stack| collapse(&mut stack.collapse))
+            .or_else(|| self.widget_mut(|grid: &mut Grid| collapse(&mut grid.collapse)))
+            .unwrap_or(false);
         let (decor, insets) = if is_panel {
             (None, [0; 4])
+        } else if collapsed {
+            (None, layout.padding)
         } else {
-            (
-                layout
-                    .border
-                    .clone()
-                    .map(|(kind, style)| (kind, style, title)),
-                layout.insets(),
-            )
+            (layout.border.clone(), layout.insets())
         };
         let mut sheet = self.sheet.borrow_mut();
         sheet.generation = cx.generation;
@@ -1416,6 +1876,9 @@ impl Node {
             height.saturating_sub(top.saturating_add(bottom)).max(1)
         };
         let width = width.saturating_sub(left.saturating_add(right));
+        // With theme styles of its own, it measures with them.
+        let scope = self.scope_over(console, None);
+        let console = scope.as_ref().map_or(console, |scope| &scope.console);
         let inner =
             self.body
                 .borrow_mut()
@@ -1438,6 +1901,7 @@ impl Node {
         let cells = match size {
             Size::Fixed(n) => n,
             Size::Percent(p) => (along as u32 * p.min(100) as u32 / 100) as u16,
+            Size::Ratio(a, b) => crate::layout::ratio_of(along as u32, a, b) as u16,
             Size::Auto | Size::Flex(_) => self.measure(console, axis, width, height),
         };
         cells.min(max).max(min)
@@ -1496,6 +1960,22 @@ impl Node {
         if styled {
             frame.chain.push(self.element());
         }
+        // With theme styles of its own, it and everything inside it draw
+        // with a console and theme that have them, over those around it.
+        let around = frame.scoped.last().cloned();
+        let own_scope = self.scope_over(
+            around
+                .as_ref()
+                .map_or(frame.console, |scope| &scope.console),
+            Some(around.as_ref().map_or(frame.theme, |scope| &scope.theme)),
+        );
+        if let Some(scope) = &own_scope {
+            frame.scoped.push(scope.clone());
+        }
+        let scope = own_scope.clone().or(around);
+        let (app_console, app_theme) = (frame.console, frame.theme);
+        let console: &Console = scope.as_ref().map_or(app_console, |scope| &scope.console);
+        let theme: &Theme = scope.as_ref().map_or(app_theme, |scope| &scope.theme);
         let mut body = self.body.borrow_mut();
         let Body {
             widget,
@@ -1504,7 +1984,6 @@ impl Node {
             view,
         } = &mut *body;
         let viewport = widget.viewport();
-        let console = frame.console;
         let focused = self.focus_style.is_some()
             && frame
                 .focus_path
@@ -1603,9 +2082,20 @@ impl Node {
             if cleared {
                 screen.clear(rect);
             }
-            if let (true, Some((kind, style, title))) = (repaint, &decor) {
-                let title_style = style.combine(&frame.theme.title);
-                for edge in draw_box(screen, *kind, title, style, &title_style, rect) {
+            if let (true, Some((kind, style))) = (repaint, &decor) {
+                let title_style = style.combine(&theme.title);
+                let (sides, titles) = {
+                    let sheet = self.sheet.borrow();
+                    (sheet.layout.sides(), sheet.layout.titles())
+                };
+                let look = crate::border::Frame {
+                    border: *kind,
+                    sides,
+                    style,
+                    title_style: &title_style,
+                    titles: &titles,
+                };
+                for edge in crate::border::draw_frame(screen, console, &look, rect) {
                     frame.damage.push(edge);
                 }
             }
@@ -1636,7 +2126,7 @@ impl Node {
             let caret = {
                 let mut cx = DrawCx {
                     console,
-                    theme: frame.theme,
+                    theme,
                     id,
                     rect: inner,
                     repaint,
@@ -1698,23 +2188,87 @@ impl Node {
                 }
             }
             None => {
+                let overlapping = widget.overlapping();
+                let siblings = frame.damage.len();
                 for (i, child) in widget.children().iter().enumerate() {
                     match areas.get(i).map(|area| area.intersection(inner)) {
                         Some(area) if !area.is_empty() => {
                             // A child draws again where the widget drew over
-                            // it.
-                            let over = written.iter().any(|w| !w.intersection(area).is_empty());
-                            child.draw(frame, area, screen, repaint || over);
+                            // it, and, over its earlier siblings, where they
+                            // drew this frame, on a clear area.
+                            let over = written.iter().any(|w| w.intersects(area));
+                            let under = overlapping
+                                && frame.damage[siblings..].iter().any(|d| d.intersects(area));
+                            if under {
+                                screen.clear(area);
+                                frame.damage.push(area);
+                            }
+                            child.draw(frame, area, screen, repaint || over || under);
                         }
                         _ => child.hide(),
                     }
                 }
+                // An effect sees what is inside it whole: when a child
+                // drew and the effect did not, everything inside draws
+                // again before it runs.
+                let effect = (&**widget as &dyn Any).is::<crate::effect::Effect>();
+                if effect && !repaint && frame.damage.len() > siblings {
+                    screen.clear(inner);
+                    frame.damage.push(inner);
+                    for (i, child) in widget.children().iter().enumerate() {
+                        if let Some(area) = areas.get(i).map(|area| area.intersection(inner)) {
+                            if !area.is_empty() {
+                                child.draw(frame, area, screen, true);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        // What it draws over its children, in a frame where it or one of
+        // them drew.
+        if redraw || frame.damage.len() > mark {
+            let mut over: Vec<Rect> = Vec::new();
+            {
+                let mut cx = DrawCx {
+                    console,
+                    theme,
+                    id,
+                    rect: inner,
+                    repaint,
+                    focus_path: frame.focus_path,
+                    hover_path: frame.hover_path,
+                    pointer: frame.pointer,
+                    shift: frame.shift,
+                    wants_hover: &frame.wants_hover,
+                    watchers: frame.watchers,
+                };
+                let mut canvas = Canvas {
+                    screen: &mut *screen,
+                    rect: inner,
+                    written: &mut over,
+                };
+                frame
+                    .runtime
+                    .observe_node_more(id, || widget.draw_over(&mut cx, &mut canvas));
+            }
+            if !over.is_empty() {
+                if !redraw {
+                    frame.drew(id);
+                }
+                frame.damage.extend(over);
             }
         }
         // The stylesheet's colours go under everything drawn inside the
-        // node where nothing deeper set them, once its children have drawn.
+        // node where nothing deeper set them, once its children have drawn;
+        // the node's own style (code's) goes over the sheet's.
         let sheet_style = self.sheet.borrow().style.clone();
-        if let Some(style) = sheet_style {
+        let own_style = self.own_style.as_ref().map(|own| own.resolve(console));
+        let under = match (sheet_style, own_style) {
+            (Some(sheet), Some(own)) => Some(sheet.combine(&own)),
+            (sheet, own) => own.or(sheet),
+        };
+        if let Some(style) = under {
             let mut parts: Vec<Rect> = frame.damage[mark..]
                 .iter()
                 .map(|area| area.intersection(rect))
@@ -1735,7 +2289,7 @@ impl Node {
         // The theme's error look goes under what the stylesheet left, the
         // same way (a panel shows it on its border instead).
         if invalid && self.what != "panel" {
-            let style = frame.theme.error_style("error");
+            let style = theme.error_style("error");
             let mut parts: Vec<Rect> = frame.damage[mark..]
                 .iter()
                 .map(|area| area.intersection(rect))
@@ -1821,6 +2375,9 @@ impl Node {
         self.drawn.set(Some(rect));
         if self.access_hidden {
             frame.hidden -= 1;
+        }
+        if own_scope.is_some() {
+            frame.scoped.pop();
         }
         if let Some(start) = clock {
             frame.timed(id, start, redraw);
@@ -2214,6 +2771,9 @@ pub(crate) struct FrameState<'a> {
     /// The time the children of each node being drawn took, innermost
     /// last.
     pub time_stack: Vec<std::time::Duration>,
+    /// The [theme styles](Node::theme_styles) of the nodes being drawn,
+    /// innermost last: the console and theme to draw with.
+    pub scoped: Vec<Rc<Scope>>,
 }
 
 impl FrameState<'_> {
@@ -2240,20 +2800,20 @@ impl FrameState<'_> {
     }
 }
 
-/// A rounded border round `rect`, with `title` in the top edge; the inside
-/// is left to the child.
+/// A rounded border round `rect`, with `title` (plain text) in the top
+/// edge; the inside is left to the child.
 pub(crate) fn border(
     title: &str,
     style: &Style,
     title_style: &Style,
     rect: Rect,
 ) -> Vec<Vec<Segment>> {
-    border_box(BoxKind::Round, title, style, title_style, rect)
+    border_box(Border::Rounded, title, style, title_style, rect)
 }
 
 /// [`border`] with a `kind` of box.
 pub(crate) fn border_box(
-    kind: BoxKind,
+    kind: Border,
     title: &str,
     style: &Style,
     title_style: &Style,
@@ -2261,11 +2821,19 @@ pub(crate) fn border_box(
 ) -> Vec<Vec<Segment>> {
     // In text mode a box is blank: a screen reader reads no lines, and the
     // title stays.
+    let set = kind.set().unwrap_or(crate::border::BorderSet::ROUNDED);
     let [top_left, across, top_right, side, bottom_left, bottom_right] = if crate::a11y::text_mode()
     {
         [" "; 6]
     } else {
-        kind.chars()
+        [
+            set.top_left,
+            set.top,
+            set.top_right,
+            set.left,
+            set.bottom_left,
+            set.bottom_right,
+        ]
     };
     let (w, h) = (rect.width as usize, rect.height as usize);
     if w < 2 || h < 2 {
@@ -2313,7 +2881,7 @@ pub(crate) fn border_box(
 /// edge; the edges written.
 pub(crate) fn draw_box(
     screen: &mut Screen,
-    kind: BoxKind,
+    kind: Border,
     title: &str,
     style: &Style,
     title_style: &Style,
@@ -2345,18 +2913,11 @@ pub fn leaf(draw: impl Fn(&Console, u16, u16) -> Vec<Vec<Segment>> + 'static) ->
 
 /// Console markup, from a closure that may read signals:
 /// `text(move || format!("[b]{}[/] items", count.get()))`. The
-/// [`text!`](crate::text!) macro writes the closure for you.
+/// [`text!`](crate::text!) macro writes the closure for you. Its lines
+/// wrap at its width; [`Node::text_align`], [`Node::no_wrap`] and
+/// [`Node::overflow`] change how they sit and where they are cut.
 pub fn text(markup: impl Fn() -> String + 'static) -> Node {
-    let node = leaf(move |console, width, _| {
-        let markup = markup();
-        let text = rich::Text::from_markup(&markup).unwrap_or_else(|_| rich::Text::new(markup));
-        console.render_lines(
-            &text,
-            &console.options().update_width(width.max(1) as usize),
-            false,
-        )
-    });
-    node.what("text")
+    Node::from_widget(Box::new(TextNode::new(Box::new(markup))), "text")
 }
 
 /// Console markup that never changes.
@@ -2676,8 +3237,40 @@ fn stack(axis: Axis, children: impl IntoIterator<Item = Node>) -> Node {
             axis,
             flow: StackLayout::default(),
             children: children.into_iter().collect(),
+            collapse: Default::default(),
         }),
         "stack",
+    )
+}
+
+/// Children stacked on one rectangle, later ones over earlier ones: a
+/// background under its content, a badge over a chart, a panel over a
+/// ticking board. Each takes the whole rectangle, less its
+/// [`inset`](Node::inset), or only its content's size where
+/// [`place`](Node::place) puts it. A layer draws again wherever one under
+/// it drew, so the one on top stays on top; a click goes to the top layer
+/// under the pointer. The Tab order, and what assistive technology reads,
+/// follow the order of the children.
+///
+/// ```
+/// use intuituive::prelude::*;
+///
+/// let app = App::new(|| {
+///     layers([
+///         label("........\n........\n........"),
+///         label("[b]3[/]").place(Align::End, Align::Start),
+///     ])
+/// });
+/// let mut driver = app.driver(8, 3);
+/// driver.settle();
+/// assert_eq!(driver.screen().plain()[0], ".......3");
+/// ```
+pub fn layers(children: impl IntoIterator<Item = Node>) -> Node {
+    Node::from_widget(
+        Box::new(Layers {
+            children: children.into_iter().collect(),
+        }),
+        "layers",
     )
 }
 
@@ -2717,6 +3310,7 @@ pub fn grid(
             rows: Vec::new(),
             gap: (0, 0),
             children: children.into_iter().collect(),
+            collapse: Default::default(),
         }),
         "grid",
     )
@@ -2797,15 +3391,36 @@ where
 
 /// The nodes under `column`, `row`, outermost first (the path to the
 /// deepest node whose shown rectangle holds the point), each with the
-/// translation from screen coordinates to its own.
+/// translation from screen coordinates to its own. Where children overlap
+/// ([`layers`]), the later one's path wins, however deep the earlier one's
+/// goes: it is on top.
 pub(crate) fn hit_path(root: &Node, column: u16, row: u16) -> Vec<(NodeId, (i32, i32))> {
     let mut found: Vec<(NodeId, (i32, i32))> = Vec::new();
     let mut shifts: Vec<(i32, i32)> = Vec::new();
+    // The nodes whose children overlap.
+    let mut overlapping: HashSet<NodeId> = HashSet::new();
     walk_screen(root, &mut |node, path, shift, clip| {
         shifts.truncate(path.len() - 1);
         shifts.push(shift);
+        if node.body.borrow().widget.overlapping() {
+            overlapping.insert(node.id);
+        }
         let shown = translate(node.rect(), shift).intersection(clip);
-        if shown.contains(column, row) && path.len() > found.len() {
+        if !shown.contains(column, row) {
+            return;
+        }
+        // Where this path leaves the one found: under a node whose
+        // children overlap, this one is the later child.
+        let common = found
+            .iter()
+            .zip(path)
+            .take_while(|((id, _), other)| id == *other)
+            .count();
+        let above = common > 0
+            && common < found.len()
+            && common < path.len()
+            && overlapping.contains(&path[common - 1]);
+        if path.len() > found.len() || above {
             found = path
                 .iter()
                 .zip(&shifts)
@@ -2814,6 +3429,37 @@ pub(crate) fn hit_path(root: &Node, column: u16, row: u16) -> Vec<(NodeId, (i32,
         }
     });
     found
+}
+
+/// For each node under a later layer ([`layers`]), where those layers are
+/// on the screen: what reading its text from the screen leaves out.
+pub(crate) fn covered(root: &Node) -> HashMap<NodeId, Vec<Rect>> {
+    // Each child of a node whose children overlap: its later siblings.
+    let mut over: HashMap<NodeId, Vec<Rect>> = HashMap::new();
+    let mut out = HashMap::new();
+    walk_screen(root, &mut |node, path, shift, clip| {
+        let body = node.body.borrow();
+        if body.widget.overlapping() {
+            let children = body.widget.children();
+            let rects: Vec<Rect> = children
+                .iter()
+                .map(|child| translate(child.rect(), shift).intersection(clip))
+                .collect();
+            for (i, child) in children.iter().enumerate() {
+                over.insert(child.id, rects[i + 1..].to_vec());
+            }
+        }
+        let mine: Vec<Rect> = path
+            .iter()
+            .filter_map(|id| over.get(id))
+            .flatten()
+            .copied()
+            .collect();
+        if !mine.is_empty() {
+            out.insert(node.id, mine);
+        }
+    });
+    out
 }
 
 /// Every node shown, with the translation from screen coordinates to its
@@ -2849,4 +3495,34 @@ pub(crate) fn with_node(root: &Node, id: NodeId, f: &mut dyn FnMut(&Node)) {
             done = true;
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_node_without_theme_styles_draws_with_no_copy_and_one_with_them_with_one() {
+        let console = Console::builder().width(10).build();
+        let (dark, light) = (Theme::dark(), Theme::light());
+        assert!(label("plain").scope_over(&console, Some(&dark)).is_none());
+        let styled = label("x").theme_styles([("x", "red")]);
+        let first = styled.scope_over(&console, Some(&dark)).expect("a scope");
+        // Made once, and kept while the theme and the console's size hold.
+        let again = styled.scope_over(&console, Some(&dark)).expect("a scope");
+        assert!(Rc::ptr_eq(&first, &again));
+        let measuring = styled.scope_over(&console, None).expect("measuring");
+        assert!(Rc::ptr_eq(&first, &measuring));
+        // Made again for another theme, or another size.
+        let other = styled.scope_over(&console, Some(&light)).expect("a scope");
+        assert!(!Rc::ptr_eq(&first, &other));
+        let wider = Console::builder().width(20).build();
+        let resized = styled.scope_over(&wider, Some(&light)).expect("a scope");
+        assert!(!Rc::ptr_eq(&other, &resized));
+        let named = rich::style::StyleType::Name("x".into());
+        assert_eq!(
+            resized.console.get_style(&named).ok(),
+            Style::parse("red").ok()
+        );
+    }
 }

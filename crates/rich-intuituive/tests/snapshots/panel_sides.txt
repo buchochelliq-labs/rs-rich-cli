@@ -1,0 +1,7 @@
+── Top ─────────────
+top only
+│Sides             │
+│left and right    │
+bottom only
+
+────────────────────

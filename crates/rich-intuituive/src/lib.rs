@@ -55,9 +55,11 @@
 
 pub mod a11y;
 pub mod app;
+pub mod border;
 mod builtin;
 mod calendar;
 mod datetime;
+mod effect;
 pub mod inspect;
 pub mod layout;
 pub mod log;
@@ -84,13 +86,17 @@ pub use rich;
 pub use rich_interact as interact;
 
 pub use app::{every, Anchor, App, Ctx, Driver, Easing, FrameStats, Placement, Theme};
-pub use layout::{Align, AlignContent, Justify, Size, StackLayout};
+pub use border::{Border, BorderSet, Edge, Shadow, Sides};
+pub use effect::{effect, fill};
+pub use layout::{Align, AlignContent, Justify, Size, StackLayout, TextAlign};
 pub use log::Log;
 pub use node::{
-    column, component, each, grid, label, leaf, list, renderable, repeating, row, scroll,
+    column, component, each, grid, label, layers, leaf, list, renderable, repeating, row, scroll,
     scroll_both, scroll_both_with, scroll_with, scroll_x, switch, text, Node,
 };
 pub use reactive::{memo, signal, viewport, watch, Memo, Proxy, Signal};
+/// What a text does with what does not fit a line: rich's.
+pub use rich::Overflow;
 pub use sheet::{SheetError, Stylesheet};
 pub use task::{resource, spawn, spawn_future, Load, Resource, Task};
 pub use widget::{widget, Widget};
@@ -100,10 +106,11 @@ pub use widgets::text_area;
 pub mod prelude {
     // `text` is both the function and the `text!` macro.
     pub use crate::{
-        column, component, each, every, grid, label, leaf, list, memo, renderable, repeating,
-        resource, row, scroll, scroll_both, scroll_with, scroll_x, signal, spawn, switch, text,
-        text_area, viewport, watch, widget, Align, App, Ctx, Justify, Load, Log, Memo, Node, Proxy,
-        Resource, Signal, Size, Task, Theme, Widget,
+        column, component, each, effect, every, fill, grid, label, layers, leaf, list, memo,
+        renderable, repeating, resource, row, scroll, scroll_both, scroll_with, scroll_x, signal,
+        spawn, switch, text, text_area, viewport, watch, widget, Align, App, Border, Ctx, Edge,
+        Justify, Load, Log, Memo, Node, Overflow, Proxy, Resource, Shadow, Sides, Signal, Size,
+        Task, TextAlign, Theme, Widget,
     };
 }
 
