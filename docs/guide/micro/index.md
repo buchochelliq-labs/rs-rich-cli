@@ -32,8 +32,10 @@ A `MicroAsset` has:
   `status/success`;
 - a **kind**: static or animated;
 - a **size in cells**: 2×1 by default (an emoji's footprint, since a cell is
-  about twice as tall as it is wide), 1×1 allowed, at most 4 columns, and one
-  row only in this release;
+  about twice as tall as it is wide), and anything up to **4×2**: 1 to 4
+  columns, 1 or 2 rows, such as a 2×2 icon or a 3×2 animation (since 0.0.5;
+  see [Two rows](#two-rows)). A larger size is refused with an error that
+  names the limit;
 - **alt text**, which is mandatory: screen readers, logs and plain exports
   show it where nothing else fits;
 - a **fallback**: an emoji, a short text, or both, each fitting the asset's
@@ -111,7 +113,8 @@ padded with U+2800 (a blank that is not whitespace, so wrapping never splits
 an asset), under a style whose metadata holds
 `rich.micro = [name, cols, rows, id]`. It measures, wraps, crops, and sits in
 tables and panels at exactly its width, and prints as plain fallback in
-pipes, logs and exports.
+pipes, logs and exports. That is its first row; a two-row asset's second row
+is reserved after layout (below).
 
 Here the built-in library's assets sit in a table's cells, each two
 columns wide, printed with their emoji fallback:
@@ -135,6 +138,55 @@ output to `MicroRenderer`s, which may swap it for other cells of the same
 width. A placement that was cropped or split is never offered.
 `FallbackRenderer` redraws the emoji, text or alt text; the terminal graphics
 renderers below plug in at the same seam.
+
+### Two rows
+
+A 2×2 or 3×2 asset (any size with two rows) is still one word of its
+columns in the line it sits on, so wrapping, measuring and cropping treat it
+as they treat a one-row asset. `MicroRows` gives it the row below: it
+renders what it wraps, and after each line holding a two-row asset it
+inserts a **reserved row**. The rules:
+
+- The reserved row holds the asset's second row at the same columns (U+2800
+  blanks tagged `[name, cols, rows, id, 1]`), and nothing else: the text
+  beside the asset stays on the first row, and the reserved row is blank
+  under it (spaces that keep only the background colour above, with no
+  trailing blanks). The next line of text moves down one row; nothing is
+  ever drawn over it.
+- Two assets on one line share one reserved row.
+- The rule is the same at every width, and the output depends only on the
+  input, so the same text renders the same way every time.
+- Wrap the `Text`, not the table or panel around it: a table cell or a panel
+  sees the extra row in the lines it renders, so the row or the panel grows
+  to hold it. `MicroAssetRef` reserves its own rows. Reserving twice changes
+  nothing.
+- Where nothing reserves the row (a bare `Text`, Markdown, a panel or table
+  title), a two-row asset shows its first row only, as its fallback: no mode
+  draws an image unless both rows are there, the second right below the
+  first.
+
+```rust
+use rich::{Console, Text};
+use rich_micro::{CellSize, MicroAsset, MicroExt, MicroRows};
+
+let icon = MicroAsset::new("team/icon", "blue square")?
+    .with_size(CellSize::new(2, 2)?)?
+    .with_text("[]")?;
+let mut text = Text::new("Deploying ");
+text.append_micro_asset(&icon).append(" done", None);
+let console = Console::builder().width(40).build();
+let shown = console.render_export(&MicroRows::new(text));
+assert_eq!(shown, "Deploying [] done\n          \u{2800}\u{2800}\n");
+```
+
+The built-in `fun/trophy` (2×2) and `fun/campfire` (3×2, animated), as the
+fallback and drawn in half-blocks, in text and in a table:
+
+```rust
+--8<-- "crates/rich-micro/examples/guide_micro.rs:rows"
+```
+
+![A line with a trophy emoji and a fire emoji, the row below it blank; the same line in half-blocks, each drawing over both rows; then a table whose rows are two lines tall, one for each asset](../../media/guide/guide_micro-rows.svg)
 
 ## Drawing on a terminal
 
@@ -189,6 +241,14 @@ The selection goes, in order:
 4. **Half-blocks**, on a colour terminal: the asset's emoji or text if it has
    one, else its image as block cells at exactly its size, else its alt text.
 5. **Text**: the emoji or text fallback, else the alt text.
+
+A two-row asset is drawn over both its rows, or not at all: Kitty prints
+row 0 of its placeholders on the first row and row 1 on the reserved row,
+for one image placed over the whole box; iTerm2 and Sixel draw one image of
+the box (Sixel at twice the cell height in pixels) once both rows' blank
+cells are printed, from the second row with the cursor moved up to the
+first and back; half-blocks draw two pixel rows a cell row; and the text
+fallback is the emoji or text on the first row with blanks below.
 
 `RICH_MICRO=kitty|iterm|sixel|blocks|text` overrides the choice on a
 terminal (`blocks` puts the image before the emoji). Output that is not a
@@ -267,6 +327,13 @@ A `.richmicro` package is a zip archive or a directory holding
   "author": "you"
 }
 ```
+
+`"size"` is `"COLSxROWS"` (or `{"cols": 3, "rows": 2}`): 1 to 4 columns and
+1 or 2 rows. A manifest without one is 2×1, whatever its images' shape: a
+size is never guessed, and a placeholder tagged with a size its asset does
+not declare (one made with another registry) is never drawn. Packages
+written before two-row sizes load as they always did; an older reader
+refuses a two-row package with an error naming its size.
 
 The animation may be a GIF, APNG or WebP, or a `"frames"` list of still
 images. A **pack** is a directory or zip archive with a `pack.json`

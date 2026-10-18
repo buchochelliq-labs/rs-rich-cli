@@ -8,7 +8,8 @@ use std::fmt;
 pub enum MicroError {
     /// A name outside `[a-z0-9_-]` segments joined by `/`.
     InvalidName(String),
-    /// A cell size that is not allowed (zero, too wide, or more than one row).
+    /// A cell size that is not allowed (zero, more than 4 columns, or more
+    /// than 2 rows).
     InvalidSize(String),
     /// Alt text is mandatory and must be printable.
     InvalidAlt(String),

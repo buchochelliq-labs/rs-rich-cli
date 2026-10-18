@@ -25,8 +25,8 @@ use rich_micro::create::{package_path, write_package, PackageSpec};
 use rich_micro::package::{self as micro_package, Loaded};
 use rich_micro::pipeline::{Magnified, Pipeline, Transparency};
 use rich_micro::{
-    CellSize, FallbackPreference, ImageCache, Layer, Limits, MicroAsset, MicroGraphics,
-    MicroRegistry, MicroRoots, PackageLocation,
+    CellSize, FallbackPreference, ImageCache, Layer, Limits, MicroAsset, MicroAssetRef,
+    MicroGraphics, MicroRegistry, MicroRoots, MicroRows, PackageLocation,
 };
 
 /// Whether the command line is `rich micro …`.
@@ -85,9 +85,11 @@ pub(super) fn command() -> CommandSpec {
         |command: CommandSpec| {
             command
                 .arg(
-                    ArgSpec::option("size")
-                        .value_name("COLSxROWS")
-                        .help("Cells the asset takes: 2x1 (default, an emoji's footprint) or 1x1"),
+                    ArgSpec::option("size").value_name("COLSxROWS").help(
+                        "Cells the asset takes: 2x1 (default, an emoji's footprint), 1 to 4 \
+                         columns, and 1 or 2 rows: 2x2 for an icon, 3x2 for a mini animation \
+                         (at most 4x2)",
+                    ),
                 )
                 .arg(
                     ArgSpec::option("fit")
@@ -513,6 +515,34 @@ fn shown_cell(value: &str) -> Text {
     Text::new(controls::shown(value))
 }
 
+/// `asset` in a table cell: its placeholder, or for an asset two rows high
+/// (#711), a renderable that reserves its second row, so the row grows.
+fn asset_cell(asset: &Arc<MicroAsset>, preference: FallbackPreference) -> rich::table::Cell {
+    if asset.size().is_multi_row() {
+        rich::table::Cell::Renderable(Arc::new(
+            MicroAssetRef::new(Arc::clone(asset)).preference(preference),
+        ))
+    } else {
+        rich::table::Cell::Text(rich_micro::placeholder(asset, preference))
+    }
+}
+
+/// Printed text, with the rows of its two-row micro assets reserved (#711).
+/// Text without one prints as it always has: as text.
+pub(crate) fn rows(text: Text) -> Box<dyn Renderable> {
+    let multi_row = text.spans().iter().any(|span| match &span.style {
+        rich::style::StyleType::Style(style) => {
+            rich_micro::MicroMeta::from_style(style).is_some_and(|meta| meta.rows > 1)
+        }
+        rich::style::StyleType::Name(_) => false,
+    });
+    if multi_row {
+        Box::new(MicroRows::new(text))
+    } else {
+        Box::new(text)
+    }
+}
+
 /// Loading problems, as warnings on standard error.
 fn warn(report: &rich_micro::LoadReport) {
     for rejected in &report.rejected {
@@ -617,7 +647,7 @@ fn list(context: &Context, request: &Request) -> Result<(), Failure> {
         .add_column("Alt text");
     for asset in &assets {
         table.add_row_cells(vec![
-            rich::table::Cell::Text(rich_micro::placeholder(asset, preference)),
+            asset_cell(asset, preference),
             shown_cell(asset.name()).into(),
             Text::new(asset.size().to_string()).into(),
             Text::new(asset.kind().as_str()).into(),
@@ -673,11 +703,10 @@ fn show(context: &Context, request: &Request) -> Result<(), Failure> {
             value.into(),
         ]);
     };
-    row(
-        &mut table,
-        "Asset",
-        rich_micro::placeholder(&asset, preference(&console)),
-    );
+    table.add_row_cells(vec![
+        Text::styled("Asset", Style::parse("bold").unwrap_or_default()).into(),
+        asset_cell(&asset, preference(&console)),
+    ]);
     for (key, value) in details(&asset) {
         row(&mut table, key, shown_cell(&value));
     }
@@ -997,7 +1026,7 @@ fn preview(context: &Context, request: &Request) -> Result<(), Failure> {
     let mut line = Text::from_markup("[bold]Inline:[/] Deploying ").unwrap_or_default();
     line = line.append_text(&rich_micro::placeholder(&asset, preference(&console)));
     line = line.append_text(&Text::new(" done"));
-    context.print(&registry, line);
+    context.print(&registry, MicroRows::new(line));
     let mut table = rich::Table::grid().padding(0, 2, 0, 0);
     table.add_column("").add_column("");
     for (key, value) in details(&asset) {

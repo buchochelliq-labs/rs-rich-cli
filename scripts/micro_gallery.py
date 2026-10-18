@@ -85,16 +85,23 @@ def render(manifest, folder):
 
 
 def sheet(found) -> bytes:
-    """Every asset's still image in one row per pack, for the top of the page."""
-    gap, size = 2 * SCALE, 16 * SCALE
+    """Every asset's still image in one row per pack, for the top of the page.
+    A row is as tall as its tallest asset (two-row assets are twice as tall);
+    each image sits at the top of it."""
+    gap = 2 * SCALE
     packs = {}
     for manifest, folder in found:
         packs.setdefault(manifest["name"].split("/")[0], []).append(magnify(Image.open(folder / manifest["static"])))
-    columns = max(len(row) for row in packs.values())
-    out = Image.new("RGB", (gap + columns * (size + gap), gap + len(packs) * (size + gap)), BACKGROUND[:3])
-    for y, row in enumerate(packs.values()):
-        for x, picture in enumerate(row):
-            out.paste(picture, (gap + x * (size + gap), gap + y * (size + gap)))
+    width = gap + max(sum(picture.width + gap for picture in row) for row in packs.values())
+    heights = [max(picture.height for picture in row) for row in packs.values()]
+    out = Image.new("RGB", (width, gap + sum(height + gap for height in heights)), BACKGROUND[:3])
+    y = gap
+    for row, height in zip(packs.values(), heights):
+        x = gap
+        for picture in row:
+            out.paste(picture, (x, y))
+            x += picture.width + gap
+        y += height + gap
     data = io.BytesIO()
     out.save(data, "PNG", optimize=True)
     return data.getvalue()
@@ -102,8 +109,8 @@ def sheet(found) -> bytes:
 
 def table(found) -> str:
     rows = [
-        "| Image | Name | Alt text | Fallback | Kind | Licence |",
-        "|---|---|---|---|---|---|",
+        "| Image | Name | Size | Alt text | Fallback | Kind | Licence |",
+        "|---|---|---|---|---|---|---|",
     ]
     for manifest, folder in found:
         name = manifest["name"]
@@ -116,9 +123,12 @@ def table(found) -> str:
             kind = f"animated, {len(sequence)} frames, {loop} ms a loop"
         else:
             kind = "static"
+        # Five display pixels an image pixel: 80 for a 16-pixel-wide asset.
+        shown = 5 * Image.open(folder / manifest["static"]).width
+        size = manifest.get("size", "2x1").replace("x", "×")
         rows.append(
-            f"| ![{manifest['alt']}](../../media/micro/library/{image}){{ width=80 }} "
-            f"| `:micro:{name}:` | {manifest['alt']} | {emoji} `{text}` | {kind} "
+            f"| ![{manifest['alt']}](../../media/micro/library/{image}){{ width={shown} }} "
+            f"| `:micro:{name}:` | {size} | {manifest['alt']} | {emoji} `{text}` | {kind} "
             f"| {manifest.get('license', '')} |"
         )
     return "\n".join(rows)

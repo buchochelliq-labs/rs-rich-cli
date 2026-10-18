@@ -68,7 +68,9 @@ Deploying ⏳ then ✅ ✨
 
 On a terminal with an image protocol the assets are images; elsewhere they
 are their emoji (or text) fallback, and in a pipe always the fallback, so
-scripts see plain text. An unknown name stays as typed. `RICH_MICRO=blocks`
+scripts see plain text. A two-row asset (`fun/trophy` is 2×2,
+`fun/campfire` 3×2) takes the row below its line too, blank but for its
+second row, and `rich micro list`, `show` and `preview` give it that row. An unknown name stays as typed. `RICH_MICRO=blocks`
 draws half-blocks from the image instead of the emoji:
 
 ![micro assets in --print text](../../media/tapes/micro/markup.png)
@@ -89,7 +91,8 @@ $ rich README.md    # :micro:status/success: in the text draws the asset
 ```
 
 They draw as images on a terminal that can, like `--print`'s; exports, the
-pager and `--watch` show the fallback.
+pager and `--watch` show the fallback. Labels and Markdown have no room for
+a second row, so a two-row asset there shows its first row's fallback.
 
 ## In the interactive commands
 

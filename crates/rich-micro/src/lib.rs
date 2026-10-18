@@ -6,9 +6,9 @@
 //! core untouched, and every seam here goes through core's public API (style
 //! metadata, [`Renderable`](rich::Renderable)) or rs-rich-ext's.
 //!
-//! - [`MicroAsset`]: a name, a kind, a size in cells (2×1 by default, 1×1
-//!   allowed, one row only), images, mandatory alt text, an emoji or text
-//!   fallback, and where it came from.
+//! - [`MicroAsset`]: a name, a kind, a size in cells (2×1 by default, up
+//!   to 4×2: 1 to 4 columns, 1 or 2 rows), images, mandatory alt text, an
+//!   emoji or text fallback, and where it came from.
 //! - [`package`]: `.richmicro` packages and packs, read under hard
 //!   [`Limits`].
 //! - [`MicroRegistry`]: built-in < user < trusted project < inline, with
@@ -17,6 +17,9 @@
 //!   ([`PreparedMarkdown`]); [`MicroExt`] and [`MicroAssetRef`] in code.
 //! - [`render`]: the placeholder representation, and the [`MicroRenderer`]
 //!   seam that terminal graphics plug into.
+//! - [`rows`]: assets two rows high (a 2×2 icon, a 3×2 animation):
+//!   [`MicroRows`] reserves the row below the line each one sits on, in
+//!   wrapped text, table cells and panels.
 //! - [`graphics`]: drawing on a terminal: [`select`] picks Kitty, iTerm2,
 //!   Sixel, half-blocks or the text fallback, and [`MicroGraphics`] draws
 //!   with it, in printed output and through the graphics side channel of
@@ -57,6 +60,7 @@ pub mod package;
 pub mod pipeline;
 pub mod registry;
 pub mod render;
+pub mod rows;
 
 pub use api::{MicroAssetRef, MicroExt, MicroPlugin};
 pub use cache::{ImageCache, Prepared};
@@ -74,8 +78,9 @@ pub use name::is_valid_name;
 pub use package::{Limits, Pack};
 pub use registry::{Collision, LoadReport, MicroRegistry, MicroRoots, Rejected};
 pub use render::{
-    fallback_cells, placeholder, FallbackPreference, FallbackRenderer, MicroMeta, MicroRenderer,
-    MicroView, Placement, MICRO_META_KEY, PAD_CELL,
+    fallback_cells, fallback_row, placeholder, FallbackPreference, FallbackRenderer, MicroMeta,
+    MicroRenderer, MicroView, Placement, MICRO_META_KEY, PAD_CELL,
 };
+pub use rows::{reserve_rows, MicroRows};
 /// The size of a terminal cell in pixels, as the cache and pipeline take it.
 pub use rich_art::graphics::CellPixels;

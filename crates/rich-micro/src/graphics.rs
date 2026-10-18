@@ -28,6 +28,19 @@
 //! - Every renderer checks [`Console::is_terminal`] at render time: an
 //!   export or a capture keeps the fallback.
 //!
+//! # Two rows (#711)
+//!
+//! An asset two rows high is drawn only when both its rows are in the
+//! output, the second right below the first (see [`crate::rows`]), and
+//! always over both: Kitty prints row 0 of its Unicode placeholders on the
+//! first row and row 1 on the second, for one image placed over `cols × 2`
+//! cells; iTerm2 and Sixel draw one image of the whole cell box (Sixel's
+//! `2 × cell height` pixels high) from the second row, once both rows' blank
+//! cells are on the screen, moving the cursor up to the first row to draw
+//! and back after; half-blocks draw two pixel rows per cell row, four for
+//! the asset; and the fallback is the emoji or text on the first row with
+//! blanks below. Animated two-row assets play as one-row ones do.
+//!
 //! # Fallback (#577)
 //!
 //! Where no protocol draws, an asset shows its emoji or text; failing both,
@@ -77,7 +90,7 @@ use crate::model::MicroAsset;
 use crate::package::Limits;
 use crate::registry::MicroRegistry;
 use crate::render::{
-    fallback_cells, FallbackPreference, MicroMeta, MicroRenderer, MicroView, Placement, PAD_CELL,
+    fallback_row, FallbackPreference, MicroMeta, MicroRenderer, MicroView, Placement, PAD_CELL,
 };
 
 /// How micro assets are drawn on one terminal.
@@ -489,22 +502,25 @@ impl Inner {
         Some((id, Some(escape)))
     }
 
-    /// Kitty placeholder cells for image `id`, tagged with `style`.
+    /// Kitty placeholder cells for row `row` of image `id`, tagged with
+    /// `style`.
     fn kitty_cells(
         &self,
         prepared: &Prepared,
         id: u32,
         style: Option<&Style>,
+        row: usize,
     ) -> Option<Vec<Segment>> {
+        if row >= prepared.rows {
+            return None;
+        }
         let truecolor = self.selection.color_system == Some(ColorSystem::Truecolor);
         let color = rich_art::kitty::id_color(id, truecolor)?;
         let style = style
             .cloned()
             .unwrap_or_default()
             .combine(&Style::new().with_color(color));
-        // One row this release; the placeholder row is 0.
-        let _ = prepared.rows;
-        let cells = rich_art::kitty::placeholder_row(0, prepared.cols)?;
+        let cells = rich_art::kitty::placeholder_row(row, prepared.cols)?;
         Some(vec![Segment::new(cells, Some(style))])
     }
 
@@ -551,8 +567,14 @@ impl Inner {
         }
     }
 
-    /// Block cells for the frame the clock is on, tagged with `style`.
-    fn block_cells(&self, prepared: &Prepared, style: Option<&Style>) -> Option<Vec<Segment>> {
+    /// Row `row` of the block cells for the frame the clock is on, tagged
+    /// with `style`.
+    fn block_cells(
+        &self,
+        prepared: &Prepared,
+        style: Option<&Style>,
+        row: usize,
+    ) -> Option<Vec<Segment>> {
         let frames = prepared.blocks.get_or_init(|| {
             prepared
                 .frames
@@ -569,6 +591,7 @@ impl Inner {
         let tag = style.cloned().unwrap_or_default();
         Some(
             frames[index]
+                .get(row)?
                 .iter()
                 .map(|segment| {
                     let style = segment
@@ -592,15 +615,16 @@ impl Inner {
         has && !self.selection.blocks_first
     }
 
-    /// Cells for `placement` in this mode, and the escapes to write before
-    /// and after them when printing inline.
+    /// Cells for `placement` (one row of its asset) in this mode, and the
+    /// escapes to write before and after them when printing inline.
     fn draw(&self, placement: &Placement<'_>, inline: bool) -> Option<Drawn> {
         let style = placement.style.as_ref();
         let asset = placement.asset;
+        let row = placement.meta.row;
         let fallback = || Drawn {
             before: None,
             cells: vec![Segment::new(
-                fallback_cells(asset, self.selection.preference),
+                fallback_row(asset, self.selection.preference, row),
                 placement.style.clone(),
             )],
             after: None,
@@ -614,7 +638,7 @@ impl Inner {
                 match self.prepared(asset) {
                     Some(prepared) => {
                         self.moving(&prepared);
-                        match self.block_cells(&prepared, style) {
+                        match self.block_cells(&prepared, style, row) {
                             Some(cells) => Some(Drawn::cells(cells)),
                             None => Some(fallback()),
                         }
@@ -624,8 +648,10 @@ impl Inner {
             }
             MicroMode::Kitty => {
                 let prepared = self.prepared(asset)?;
-                let (id, transmit) = self.kitty(&prepared, inline)?;
-                let cells = self.kitty_cells(&prepared, id, style)?;
+                // The first row transmits the image (once a session); the
+                // row below only shows its own placeholders.
+                let (id, transmit) = self.kitty(&prepared, inline && row == 0)?;
+                let cells = self.kitty_cells(&prepared, id, style, row)?;
                 Some(Drawn {
                     before: transmit,
                     cells,
@@ -642,9 +668,14 @@ impl Inner {
                     self.moving(&prepared);
                     return Some(Drawn::cells(blank));
                 }
+                // One image for the whole box, drawn from its last row, when
+                // every row's blank cells are on the screen.
+                if row + 1 < prepared.rows {
+                    return Some(Drawn::cells(blank));
+                }
                 let frame = self.overlay_frame(&prepared);
                 let escape = self.escapes(&prepared).get(frame)?;
-                let (before, after) = overlay(escape, asset.cols());
+                let (before, after) = overlay_rows(escape, asset.cols(), prepared.rows);
                 Some(Drawn {
                     before: Some(before),
                     cells: blank,
@@ -688,13 +719,24 @@ impl Inner {
     }
 }
 
-/// Block cells for `image` at exactly `cols × rows` cells, untagged.
+/// `overlay` for an image `rows` high, written after the cells of its last
+/// row: the cursor goes up to the first row to draw it, then back past the
+/// cells. One row is exactly `overlay`.
+fn overlay_rows(image: &str, cols: usize, rows: usize) -> (String, String) {
+    if rows <= 1 {
+        return overlay(image, cols);
+    }
+    overlay(&format!("\x1b[{}A{image}", rows - 1), cols)
+}
+
+/// Block cells for `image` at exactly `cols × rows` cells, untagged: one
+/// line of `cols` cells per row, two pixel rows to a cell.
 fn blocks(
     console: &Console,
     image: &rich_art::image::RgbaImage,
     cols: usize,
     rows: usize,
-) -> Option<Vec<Segment>> {
+) -> Option<Vec<Vec<Segment>>> {
     use rich_art::{ImageArt, ImageBackground, ImageFit, ImageMode};
     let art = ImageArt::new(rich_art::image::DynamicImage::ImageRgba8(image.clone()))
         .mode(ImageMode::Blocks)
@@ -704,10 +746,19 @@ fn blocks(
         .background_mode(ImageBackground::TerminalDefault);
     let options = console.options().update_width(cols);
     let segments = art.render(console, &options).ok()?;
-    let line = Segment::split_lines(&segments).into_iter().next()?;
-    // Rows beyond the first would be a block, not inline text: one row only.
-    let line = Segment::adjust_line_length(&line, cols, None);
-    (line.iter().map(Segment::cell_length).sum::<usize>() == cols).then_some(line)
+    let mut lines = Segment::split_lines(&segments);
+    if lines.is_empty() || lines.len() > rows {
+        return None;
+    }
+    // A shorter rendering (an image wider than the box) is padded below.
+    lines.resize_with(rows, Vec::new);
+    lines
+        .iter()
+        .map(|line| {
+            let line = Segment::adjust_line_length(line, cols, None);
+            (line.iter().map(Segment::cell_length).sum::<usize>() == cols).then_some(line)
+        })
+        .collect()
 }
 
 /// What a mode draws for one placement.
@@ -838,7 +889,15 @@ impl PlacementSource for Source {
             inner: Arc::clone(&self.inner),
             inline: false,
         });
-        crate::render::rewrite(line, &self.inner.registry, &[renderer], &self.inner.console)
+        // One line at a time: each row of a two-row asset gets its own cells
+        // here, and `placements` finds the whole box in the frame.
+        crate::render::rewrite_rows(
+            line,
+            &self.inner.registry,
+            &[renderer],
+            &self.inner.console,
+            true,
+        )
     }
 
     fn placements(&self, frame: &Frame) -> Vec<FramePlacement> {
@@ -846,7 +905,8 @@ impl PlacementSource for Source {
         if !mode.is_graphics() {
             return Vec::new();
         }
-        let mut out = Vec::new();
+        // Every tagged run: (frame row, column, width, tag).
+        let mut found: Vec<(usize, usize, usize, MicroMeta)> = Vec::new();
         for row in 0..frame.height() {
             let mut column = 0;
             let mut open: Option<(MicroMeta, usize, usize)> = None;
@@ -863,22 +923,48 @@ impl PlacementSource for Source {
                 .collect();
             runs.push((None, 0));
             for (meta, cells) in runs {
-                let continues =
-                    matches!((&open, &meta), (Some((o, _, _)), Some(m)) if o.id == m.id);
+                let continues = matches!(
+                    (&open, &meta),
+                    (Some((o, _, _)), Some(m)) if o.id == m.id && o.row == m.row
+                );
                 if continues {
                     if let Some(open) = open.as_mut() {
                         open.2 += cells;
                     }
                 } else {
                     if let Some((meta, start, width)) = open.take() {
-                        if let Some(placement) = self.placement(row, start, width, &meta) {
-                            out.push(placement);
-                        }
+                        found.push((row, start, width, meta));
                     }
                     open = meta.map(|meta| (meta, column, cells));
                 }
                 column += cells;
             }
+        }
+        let at = |row: usize, column: usize, meta: &MicroMeta, which: usize| {
+            found.iter().any(|(r, c, w, m)| {
+                *r == row && *c == column && m.id == meta.id && m.row == which && *w == meta.cols
+            })
+        };
+        let mut out = Vec::new();
+        for (row, column, width, meta) in &found {
+            let (row, column, width) = (*row, *column, *width);
+            if meta.row > 0 {
+                // A second row whose first is not above it (scrolled off a
+                // viewport): Kitty's placeholders still need the image.
+                let first = row >= meta.row && at(row - meta.row, column, meta, 0);
+                if mode == MicroMode::Kitty && !first {
+                    out.extend(self.placement(row, column, width, meta, 1));
+                }
+                continue;
+            }
+            // An image over several rows only where they are all there.
+            let whole = (1..meta.rows).all(|below| at(row + below, column, meta, below));
+            let rows = match (whole, mode) {
+                (true, _) => meta.rows,
+                (false, MicroMode::Kitty) => 1,
+                (false, _) => continue,
+            };
+            out.extend(self.placement(row, column, width, meta, rows));
         }
         out
     }
@@ -906,15 +992,17 @@ impl PlacementSource for Source {
 }
 
 impl Source {
+    /// The placement of the asset `meta` tags, `rows` high from `row`.
     fn placement(
         &self,
         row: usize,
         column: usize,
         width: usize,
         meta: &MicroMeta,
+        rows: usize,
     ) -> Option<FramePlacement> {
         let asset = self.inner.registry.resolve(&meta.name)?;
-        if asset.cols() != meta.cols || width != meta.cols {
+        if asset.cols() != meta.cols || asset.rows() != meta.rows || width != meta.cols {
             return None;
         }
         let prepared = self.inner.prepared(asset)?;
@@ -947,7 +1035,7 @@ impl Source {
             row,
             column,
             cols: meta.cols,
-            rows: 1,
+            rows,
             graphic,
             frame,
         })

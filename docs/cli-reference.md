@@ -1866,7 +1866,7 @@ rich micro preview NAME|PACKAGE|IMAGE [PIPELINE OPTIONS] [--report json]
 | Option | Description |
 | --- | --- |
 | `--report <FORMAT>` | json: write data to stdout (also --json) Possible values: `human`, `json`. |
-| `--size <COLSxROWS>` | Cells the asset takes: 2x1 (default, an emoji's footprint) or 1x1. |
+| `--size <COLSxROWS>` | Cells the asset takes: 2x1 (default, an emoji's footprint), 1 to 4 columns, and 1 or 2 rows: 2x2 for an icon, 3x2 for a mini animation (at most 4x2) |
 | `--fit <FIT>` | contain (default) keeps the whole image; cover fills and crops. Possible values: `contain`, `cover`, `stretch`. |
 | `--anchor <ANCHOR>` | What cover keeps: center (default), top, bottom, left, right, …. |
 | `--brightness <F>` | Multiply brightness (1 = as is) |
@@ -1957,7 +1957,7 @@ rich micro create IMAGE --name NAME --alt TEXT [--emoji E] [--text T] [OPTIONS]
 | `--add` | Write it into the user (or --project) layer. |
 | `--project` | Use the project's ./.rich/micro/ instead of the user layer. |
 | `--report <FORMAT>` | json: write data to stdout (also --json) Possible values: `human`, `json`. |
-| `--size <COLSxROWS>` | Cells the asset takes: 2x1 (default, an emoji's footprint) or 1x1. |
+| `--size <COLSxROWS>` | Cells the asset takes: 2x1 (default, an emoji's footprint), 1 to 4 columns, and 1 or 2 rows: 2x2 for an icon, 3x2 for a mini animation (at most 4x2) |
 | `--fit <FIT>` | contain (default) keeps the whole image; cover fills and crops. Possible values: `contain`, `cover`, `stretch`. |
 | `--anchor <ANCHOR>` | What cover keeps: center (default), top, bottom, left, right, …. |
 | `--brightness <F>` | Multiply brightness (1 = as is) |

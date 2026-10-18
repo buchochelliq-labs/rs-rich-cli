@@ -3,15 +3,16 @@
 //! The pictures on `docs/guide/micro/index.md` come from this file: the same
 //! markup with the built-in library, as the emoji fallback (what a pipe or a
 //! log gets) and drawn as half-block cells (what a colour terminal without
-//! an image protocol gets).
+//! an image protocol gets); and the two-row assets, in text and in a table.
 
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use rich::table::Cell;
 use rich::{ColorSystem, Console, Table};
 use rich_micro::{
-    render_markup, CellPixels, FallbackPreference, MicroGraphics, MicroMode, MicroRegistry,
-    Selection,
+    render_markup, CellPixels, FallbackPreference, MicroAssetRef, MicroGraphics, MicroMode,
+    MicroRegistry, MicroRows, Selection,
 };
 
 // --8<-- [start:table]
@@ -56,10 +57,43 @@ fn blocks(console: &Console) {
 }
 // --8<-- [end:blocks]
 
+// --8<-- [start:rows]
+fn rows(console: &Console) {
+    let registry = Arc::new(MicroRegistry::builtin());
+    // fun/trophy is 2x2 and fun/campfire 3x2: `MicroRows` reserves the row
+    // below the line each one sits on.
+    let (text, _) = render_markup(
+        console,
+        "Release :micro:fun/trophy: shipped, then the team at the :micro:fun/campfire:",
+        &registry,
+        FallbackPreference::Emoji,
+    );
+    // `MicroAssetRef` reserves its own rows: a table row grows to hold them.
+    let mut table = Table::new();
+    table.add_column("asset");
+    table.add_column("size");
+    for name in ["fun/trophy", "fun/campfire"] {
+        let asset = MicroAssetRef::from_registry(&registry, name).expect("built in");
+        let size = asset.asset().size().to_string();
+        table.add_row_cells(vec![
+            Cell::Renderable(Arc::new(asset)),
+            Cell::Text(rich::Text::new(size)),
+        ]);
+    }
+    // The fallback first, then half-blocks over both rows.
+    console.print(&MicroRows::new(text.clone()));
+    let selection = Selection::forced(MicroMode::Blocks, CellPixels::DEFAULT);
+    let graphics = MicroGraphics::new(Arc::clone(&registry), selection);
+    console.print(&graphics.view(MicroRows::new(text)));
+    console.print(&graphics.view(table));
+}
+// --8<-- [end:rows]
+
 fn main() {
     let shots = Shots::from_args("guide_micro");
     shots.shot("fallback", 48, fallback);
     shots.shot("blocks", 48, blocks);
+    shots.shot("rows", 64, rows);
 }
 
 /// `--svg DIR` writes each shot as `DIR/<topic>-<shot>.svg` from a pinned
