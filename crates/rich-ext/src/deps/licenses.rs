@@ -16,6 +16,11 @@
 //! or `AND` sorted, so `Apache-2.0 OR MIT` and `MIT OR Apache-2.0` are one
 //! group) and draws a table, most-used licence first.
 //!
+//! A licence policy, an allow and deny list with conflicts against the
+//! root crate's licence, is [`Policy`] and [`PolicyReport`] (in
+//! [`policy`](super::policy)); an SPDX or CycloneDX document's packages
+//! are read by [`Sbom`] (in [`sbom`](super::sbom)) into the same report.
+//!
 //! ```
 //! use rich_ext::deps::licenses::{classify, LicenseClass};
 //!
@@ -36,6 +41,9 @@ use rich::{Console, ConsoleOptions, Justify, Renderable, Segment, Text};
 use serde_json::Value;
 
 use super::{check_count, clean, compare_versions, stack, stack_measure, theme_style, DepsError};
+
+pub use super::policy::{Conflict, ConflictMode, Finding, Policy, PolicyReport};
+pub use super::sbom::Sbom;
 
 /// The longest licence expression read, in bytes; longer is
 /// [`LicenseClass::Invalid`].
@@ -160,7 +168,7 @@ fn starts_with_ignore_case(id: &str, prefix: &str) -> bool {
 }
 
 /// SPDX matches identifiers without regard to case, so `gpl-3.0` is GPL.
-fn identifier(id: &str) -> LicenseClass {
+pub(crate) fn identifier(id: &str) -> LicenseClass {
     let id = id.trim_end_matches('+');
     if PERMISSIVE.iter().any(|p| p.eq_ignore_ascii_case(id)) {
         LicenseClass::Permissive
@@ -175,7 +183,7 @@ fn identifier(id: &str) -> LicenseClass {
 
 /// A parsed expression.
 #[derive(Clone, Debug, PartialEq, Eq)]
-enum Expr {
+pub(crate) enum Expr {
     Id(String),
     With(String, String),
     And(Vec<Expr>),
@@ -183,7 +191,7 @@ enum Expr {
 }
 
 impl Expr {
-    fn class(&self) -> LicenseClass {
+    pub(crate) fn class(&self) -> LicenseClass {
         match self {
             Expr::Id(id) | Expr::With(id, _) => identifier(id),
             Expr::And(parts) => parts
@@ -311,7 +319,7 @@ impl<'a> Parser<'a> {
     }
 }
 
-fn parse(expression: &str) -> Option<Expr> {
+pub(crate) fn parse(expression: &str) -> Option<Expr> {
     if expression.len() > MAX_EXPRESSION {
         return None;
     }

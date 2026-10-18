@@ -4,7 +4,10 @@ Two sources the terminal is often asked about, drawn as trees (0.0.15):
 Cargo's resolved dependency graph and JSON Schemas (and, since 0.0.16, SQL
 DDL and Arrow schemas through [the schema model](#the-schema-model)); beside the graph, the
 [supply-chain reports](#supply-chain-reports) (0.0.16) read feature,
-build-time, advisory and licence data Cargo and its tools already wrote. Both live in `rs-rich-ext`
+build-time, advisory and licence data Cargo and its tools already wrote
+(and, since 0.0.19, [artifact sizes](#artifact-sizes),
+[baselines](#comparing-with-a-baseline), a [licence policy](#licence-policy)
+and [SBOMs](#sboms)). Both live in `rs-rich-ext`
 behind its `data` feature, as `rich_ext::deps` and `rich_ext::schema`; the
 `rich` CLI shows them with `rich deps` and `rich schema`. Neither reads
 colour alone: markers and words carry the meaning, and colour repeats it.
@@ -17,7 +20,7 @@ snippets and pictures come from
 [`guide_schemas.rs`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/crates/rich-data/examples/guide_schemas.rs)):
 
 ```bash
-cargo run -p rs-rich-ext --example guide_sources --features data
+cargo run -p rs-rich-ext --example guide_sources --features data,toml
 ```
 
 [A recording](../../recordings.md#dependency-trees) shows `rich deps` on the
@@ -163,6 +166,12 @@ The examples use the fixtures in `crates/rich-ext/tests/fixtures/supply-chain`.
 | `--licenses` | `cargo metadata` | crates grouped by licence; copyleft, unknown and missing marked |
 | `--timings FILE` | `cargo build --timings` | the slowest units as bars and a table |
 | `--audit FILE` | `cargo audit --json` | advisories grouped by severity; exit 5 on a vulnerability |
+| `--sizes [DIR\|FILE]` | a target directory, or `cargo bloat` JSON | artifact sizes per crate as bars and a table (0.0.19) |
+| `--baseline FILE` | a saved report, or the original format | `--timings` or `--sizes` compared unit by unit; exit 5 on a regression (0.0.19) |
+| `--policy FILE` | `cargo metadata`, or `--sbom FILE` | licences checked against an allow and deny list, and conflicts; exit 5 on a violation (0.0.19) |
+
+Four more modules back the 0.0.19 reports: `sizes`, `compare`, `policy`
+and `sbom`, described [below](#artifact-sizes).
 
 Give one report at a time. An option that does not apply to it (`--graph`,
 `--depth` or `--duplicates` with any of them, `--no-dev` with anything but
@@ -229,7 +238,8 @@ older nightly toolchains wrote with `--timings=json -Zunstable-options`.
 (`TimingsReport::limit` changes the number) and a table that splits each
 unit's time into the frontend (until its `.rmeta` was ready, which lets
 dependents start) and codegen. A crate built at two versions has the version
-in its bar's label. Artifact sizes are not in the report and are not shown.
+in its bar's label. Artifact sizes are not in the report: `--sizes` shows them
+([below](#artifact-sizes)).
 
 ```bash
 cargo build --timings
@@ -296,6 +306,168 @@ operands of an expression are sorted, so `MIT OR Apache-2.0` and
 ```
 
 ![Sixteen crates under seven licences, the GPL one marked copyleft, a licence file and a crate with no licence marked](../../media/guide/guide_sources-licenses.svg)
+
+### Artifact sizes
+
+`sizes::Sizes` measures what each crate adds to a build (0.0.19). Two
+sources feed it:
+
+- **A target directory.** `Sizes::from_target_dir(dir, metadata, options)`
+  reads one profile's directory (`target/debug`, `target/release`, a cross
+  build's `target/<triple>/<profile>`, or that directory itself) and
+  matches each artifact to a package in `cargo metadata`: libraries in
+  `deps/` (the `.rlib`, else the `.rmeta` a check build leaves),
+  proc-macros and dylibs (`.so`, `.dylib`, `.dll`), static libraries, and
+  the workspace's binaries. When a crate is resolved at two versions, its
+  dep-info file says which package an artifact belongs to. Old builds
+  leave artifacts behind, so of each package's artifacts of a kind the
+  newest is taken; artifacts no package claims are counted, not shown.
+  `SizeOptions::profile` picks the profile (`dev` and `test` build into
+  `debug`, `bench` into `release`); `SizeOptions::sources` adds each
+  package's source size (its manifest directory, without `target/`, `.git/`
+  and nested packages, never following a symbolic link).
+- **cargo-bloat.** `Sizes::parse` reads `cargo bloat --crates
+  --message-format json` (or its per-function listing, added up by crate):
+  each crate's share of one binary's code.
+
+`SizeReport` draws the total, the largest entries as bars and a table with
+each one's share; `SizeReport::limit` sets how many (20 by default).
+
+```bash
+rich deps --sizes                          # the target directory cargo metadata names
+rich deps --sizes target --build-profile release --source-sizes
+cargo bloat --release --crates --message-format json > bloat.json
+rich deps --sizes bloat.json --top 6
+```
+
+```rust
+--8<-- "crates/rich-ext/examples/guide_sources.rs:sizes"
+```
+
+![Seventeen crates in a 5.2 MiB binary: the six largest as bars and a table with each one's share](../../media/guide/guide_sources-sizes.svg)
+
+### Comparing with a baseline
+
+`compare::Comparison` sets two timings or size reports side by side, unit
+by unit: a timing unit by its label (`syn`, `app build-script (run)`), a
+size entry by its crate (`app (bin)` for a binary). A name that appears
+twice on one side, a crate built at two versions, is added up, so dropping
+a duplicate reads as a smaller unit. Each unit gets a verdict:
+
+- **regression**: it grew by more than the percentage *and* by more than
+  the absolute floor. A new unit regresses when it is larger than the
+  floor.
+- **improvement**: it shrank by both.
+- **new** (no larger than the floor), **removed**, or **unchanged**.
+
+The floor keeps noise on small units from counting. `Thresholds::TIMINGS`
+is 10% and 0.5 s, `Thresholds::SIZES` 10% and 64 KiB;
+`Threshold::parse("100KiB")` and `Thresholds::with` change either. The
+totals are compared the same way. `Comparison::regressions()` lists the
+units that regressed, and `Comparison::failed()` adds the total, for a gate.
+
+`Timings::to_json` and `Sizes::to_json` save a report as JSON, and
+`Timings::parse` and `Sizes::parse` read it back, so CI can keep one build's
+report and compare the next with it:
+
+```bash
+rich deps --sizes bloat.json --save sizes.json          # keep it
+rich deps --sizes bloat.json --baseline sizes.json      # later: compare
+rich deps --timings target/cargo-timings/cargo-timing.html \
+  --baseline timings.json --threshold 15% --threshold 1s
+```
+
+```rust
+--8<-- "crates/rich-ext/examples/guide_sources.rs:comparison"
+```
+
+![Sizes against the baseline: toml_edit is new and regex_automata grew 66%, both regressions, as is the total; serde_json shrank](../../media/guide/guide_sources-comparison.svg)
+
+`rich deps --baseline` exits 5 when a unit or the total regressed, like
+`--audit`, naming them on stderr: `rich: 3 regressions against the
+baseline (over 10% and over 64.0 KiB): toml_edit, regex_automata, the
+total`. `--threshold` takes a percentage (`10%`, or a bare `10`), a time
+(`0.5s`, `500ms`) for `--timings` or a size (`100KiB`, `1MB`, `512B`) for
+`--sizes`; give it twice to set both. `--threshold 0B` (or `0s`) drops the
+floor.
+
+### Licence policy
+
+`policy::Policy` is an allow and deny list (0.0.19). `Policy::from_toml`
+(with the `toml` feature) reads either shape, told apart by whether the
+document has a `[licenses]` table:
+
+```toml
+--8<-- "crates/rich-ext/tests/fixtures/deps/policy.toml"
+```
+
+or cargo-deny's `deny.toml`, of which it reads `[licenses]`: `allow`,
+`deny` (older releases), `exceptions` (`crate` or `name`, an optional
+`version` requirement, `allow`) and `private.ignore` (with `cargo metadata`,
+the workspace's unpublished crates are left out). It notes the keys it does
+not apply, such as `confidence-threshold` and `clarify`: licence files are
+not read. In cargo-deny's shape a licence not allowed is refused, as
+cargo-deny refuses it; in rich's, a policy without `allow` allows whatever
+it does not deny.
+
+Each expression is evaluated, not matched as text. An `OR` passes when any
+alternative is allowed (`MIT OR GPL-3.0-only` passes on MIT), an `AND` when
+every part is, and a `WITH` exception belongs to the licence:
+`Apache-2.0 WITH LLVM-exception` must be allowed as written. Identifiers
+match without case, and `-only`, `-or-later` and `+` are read, so allowing
+`GPL-3.0-only` satisfies `GPL-2.0-or-later`. A deny entry catches its
+licence however it is suffixed (and with any exception, unless the entry
+names one), and wins over the allow list; a crate's exception wins over
+both. A crate with no licence, only a licence file, or an expression that
+does not parse is a violation under an allow list and a warning without
+one.
+
+**Conflicts.** `policy::conflicts(root, packages)` sets each dependency's
+licence against the root crate's on a small table. It is a heuristic, not
+legal advice:
+
+| Dependency | Root permissive, proprietary or unlicensed | Root weak copyleft | Root strong copyleft |
+|---|---|---|---|
+| Permissive | fine | fine | fine (but Apache-2.0 under `GPL-2.0-only` conflicts) |
+| Weak copyleft (LGPL, MPL, EPL, …) | check | fine | fine (but EPL-1.0 and CDDL conflict with the GPL, and version 3 licences with `GPL-2.0-only`) |
+| Strong copyleft (GPL, AGPL, EUPL, …) | conflict | conflict | fine within the GNU family (but version 3 under `GPL-2.0-only` conflicts, and AGPL under GPL is a check); another family is a check |
+| Unknown identifier | check | check | check |
+
+An `OR` takes its best alternative and an `AND` its worst part, on either
+side. A linking exception (Classpath, the GCC runtime library, LLVM) makes
+a copyleft licence count as weak. `rich deps --policy` checks each
+workspace member against what it ships with: its normal dependencies, all
+the way down (dev and build dependencies are not part of what it builds).
+A policy's `conflicts = "warn"` (the default) shows them, `"deny"` makes a
+conflict fail the check, and `"ignore"` leaves them out.
+
+`PolicyReport` draws the violations (crate, version, expression, why), the
+conflicts and the warnings; `PolicyReport::failed()` says whether the check
+failed, which `rich deps --policy` turns into exit 5.
+
+```rust
+--8<-- "crates/rich-ext/examples/guide_sources.rs:policy"
+```
+
+![The policy refuses gpl-widget (GPL-3.0-only is denied) and mystery-codec (not an SPDX expression); against ledger's MIT, gpl-widget conflicts and two licences are worth a check](../../media/guide/guide_sources-policy.svg)
+
+### SBOMs
+
+`sbom::Sbom::parse` reads an SPDX (2.2, 2.3) or CycloneDX (1.4 to 1.6) JSON
+document, told apart by content, into the same `LicenseReport`, so the
+licence report and the policy work beyond Cargo. From SPDX it takes each
+package's `licenseConcluded`, else `licenseDeclared` (`NOASSERTION` and
+`NONE` read as no licence), and the package the document `DESCRIBES` as
+the root; from CycloneDX each component's (nested ones too) `licenses`, an
+`expression` or a `license` `id` or `name`, several of them read as all
+applying (`AND`, the stricter reading), and `metadata.component` as the
+root. SPDX tag-value, SPDX 3 and XML documents are refused with an error
+that names them.
+
+```bash
+rich deps --licenses --sbom bom.cdx.json
+rich deps --policy deny.toml --sbom bom.spdx.json
+```
 
 ## JSON Schema
 

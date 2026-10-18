@@ -185,6 +185,10 @@ The same feature adds two trees drawn from real sources (0.0.15):
 - `deps`: the resolved graph from `cargo metadata --format-version 1` as
   `DepTree` (what `cargo tree` prints, with crates resolved at several
   versions marked `(duplicate)`) and `WhyTree` (what pulls a crate in).
+  Supply-chain reports sit beside it: features, build timings, advisories
+  and licences (0.0.16), and artifact sizes (`deps::sizes`), regression
+  baselines (`deps::compare`), a licence policy with conflict checks
+  (`deps::policy`) and SPDX/CycloneDX input (`deps::sbom`) (0.0.19).
 - `schema`: a JSON Schema as `SchemaTree` (types, `(required)`, constraints,
   local `$ref`s resolved with cycle protection, `oneOf`/`anyOf`/`allOf`), and
   `SchemaDiff` between two versions, with breaking changes marked. Both read
