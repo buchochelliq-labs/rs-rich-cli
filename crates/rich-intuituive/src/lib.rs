@@ -108,6 +108,7 @@ pub use rich::Overflow;
 pub use sheet::{SheetError, Stylesheet};
 pub use task::{resource, spawn, spawn_future, Load, Resource, Task};
 pub use widget::{widget, Widget};
+pub use text_area::Caret;
 pub use widgets::text_area;
 
 /// Everything an app usually needs.
