@@ -662,6 +662,11 @@ fn tui_time_picker(
         min: time(min)?,
         max: time(max)?,
     };
+    if let (Some(min), Some(max)) = (options.min, options.max) {
+        if min > max {
+            return Err(pyo3::exceptions::PyValueError::new_err("min is after max"));
+        }
+    }
     Ok(PyNode::new(core::time_picker_with(selected, options)))
 }
 
@@ -694,6 +699,11 @@ fn tui_datetime_picker(
         seconds,
         twelve_hour,
     };
+    if let (Some(min), Some(max)) = (options.min, options.max) {
+        if min > max {
+            return Err(pyo3::exceptions::PyValueError::new_err("min is after max"));
+        }
+    }
     Ok(PyNode::new(core::datetime_picker(selected, options)))
 }
 

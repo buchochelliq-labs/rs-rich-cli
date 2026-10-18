@@ -419,6 +419,18 @@ def test_pager_keeps_a_tables_header_on_top():
         Pager(text, sticky_header=1.5)
 
 
+def test_pager_shows_sticky_lines_a_short_page_cannot_hold():
+    # Six sticky lines on a page of five: the first scroll away, the last
+    # four stay, and every line is shown on the way down.
+    text = Text("\n".join(f"line {i}" for i in range(1, 41)))
+    record = Pager(text, sticky_header=6).headless("j " * 45 + "q", width=30, height=6)
+    shown = {line for frame in record.frames for line in frame.splitlines()}
+    assert {f"line {i}" for i in range(1, 41)} <= shown
+    assert record.last_frame.splitlines()[:5] == ["line 3", "line 4", "line 5", "line 6", "line 40"]
+    with pytest.raises(ValueError, match="at least 0"):
+        Pager(text, sticky_header=-1)
+
+
 # ---------------------------------------------------------------------------
 # Python components
 
@@ -1008,3 +1020,69 @@ def test_time_and_date_time_pickers():
     assert picker.headless(Script().keys("right tab").text("14").keys("enter")).value == datetime.datetime(2026, 10, 18, 14, 0)
     assert degrade(picker, ["2026-10-17T08:30:15"]).value == datetime.datetime(2026, 10, 17, 8, 30, 15)
     assert degrade(DateTimePicker(default=start), fallback="default").value == start
+
+
+def test_pickers_stay_within_pythons_dates():
+    import datetime
+
+    from rs_rich.interact import DatePicker, DateTimePicker
+
+    assert DatePicker(value=datetime.date.max).headless("right enter").value == datetime.date.max
+    assert DatePicker(value=datetime.date.max).headless("} enter").value == datetime.date.max
+    assert DatePicker(value=datetime.date.min).headless("left enter").value == datetime.date.min
+    last = datetime.datetime(9999, 12, 31, 9, 0)
+    assert DateTimePicker(value=last).headless("down enter").value == last
+    # A year is four digits, 0001 to 9999.
+    with pytest.raises(NotInteractive):
+        degrade(DatePicker(), ["0000-01-01"])
+
+
+def test_pickers_take_naive_values_and_drop_microseconds():
+    import datetime
+
+    from rs_rich.interact import DateTimePicker, TimePicker
+
+    plus_five = datetime.timezone(datetime.timedelta(hours=5))
+    with pytest.raises(TypeError, match="time zone"):
+        DateTimePicker(value=datetime.datetime(2026, 10, 17, 9, 0, tzinfo=plus_five))
+    with pytest.raises(TypeError, match="time zone"):
+        TimePicker(min=datetime.time(9, 0, tzinfo=plus_five))
+    assert TimePicker(value=datetime.time(9, 0, 5, 999_999), seconds=True).value == datetime.time(9, 0, 5)
+
+
+def test_a_picker_default_is_one_it_would_take():
+    import datetime
+
+    from rs_rich.interact import DatePicker, TimePicker
+
+    with pytest.raises(ValueError, match="default is outside min and max"):
+        DatePicker(default=datetime.date(2026, 1, 1), min=datetime.date(2026, 6, 1))
+    # Without seconds the picker works to the minute: 09:00:30 is 09:00,
+    # before the earliest.
+    with pytest.raises(ValueError, match="default is outside min and max"):
+        TimePicker(default=datetime.time(9, 0, 30), min=datetime.time(9, 0, 30))
+    picker = TimePicker(default=datetime.time(9, 0, 30), min=datetime.time(9, 0, 30), seconds=True)
+    assert degrade(picker, [""]).value == datetime.time(9, 0, 30)
+    never = DatePicker(default=datetime.date(2026, 10, 17), validate=lambda date: "never")
+    with pytest.raises(NotInteractive, match="never"):
+        degrade(never, [""])
+    with pytest.raises(NotInteractive):
+        degrade(never, fallback="default")
+
+
+def test_a_picker_starts_at_its_value_and_answers_what_it_shows():
+    import datetime
+    import inspect
+
+    from rs_rich.interact import DatePicker, DateTimePicker, TimePicker
+
+    picker = DatePicker(value=datetime.date(2026, 10, 1), default=datetime.date(2026, 10, 17))
+    assert picker.headless("enter").value == datetime.date(2026, 10, 1)
+    assert degrade(picker, [""]).value == datetime.date(2026, 10, 17)
+    # Without seconds, to the minute.
+    picker = TimePicker(value=datetime.time(14, 30, 45), max=datetime.time(14, 30))
+    record = picker.headless("enter")
+    assert record.value == datetime.time(14, 30)
+    assert not any("the latest is" in frame for frame in record.frames)
+    for picker, prompt in [(DatePicker, "Date"), (TimePicker, "Time"), (DateTimePicker, "Date and time")]:
+        assert inspect.signature(picker).parameters["prompt"].default == prompt

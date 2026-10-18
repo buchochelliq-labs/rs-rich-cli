@@ -1489,11 +1489,11 @@ rich date [OPTIONS]
 | `--kind <KIND>` | What to pick (default date): a day, a time of day, or a day and a time. Possible values: `date`, `time`, `datetime`. |
 | `--header <TEXT>` | The prompt (default "Date", "Time" or "Date and time") |
 | `--value <VALUE>` | Start at VALUE (default today, or now, in UTC) |
-| `--default <VALUE>` | Start at VALUE; the answer without a terminal and to an empty line. |
+| `--default <VALUE>` | The answer without a terminal and to an empty line; the start too, unless --value is given. |
 | `--min <VALUE>` | The earliest that can be picked: earlier days are dimmed and cannot be reached, and an earlier time is refused with a message. |
 | `--max <VALUE>` | The latest that can be picked. |
-| `--seconds` | Pick and print the seconds too (14:30:05) |
-| `--twelve-hour` | Show a 12-hour clock with AM and PM (the answer is still printed on a 24-hour one) |
+| `--seconds` | Pick and print the seconds too (14:30:05), with --kind time or datetime; without it every value is to the minute, and --min rounds up to one. |
+| `--twelve-hour` | Show a 12-hour clock with AM and PM, with --kind time or datetime (the answer is still printed on a 24-hour one) |
 | `--mouse` | Report the mouse: click a day to select it and again to pick it, click a time field; the wheel turns the month. |
 
 #### Examples

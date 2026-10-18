@@ -110,6 +110,89 @@ test.
   mark was compared as text, so the file never matched, and the diff
   showed two lines that looked the same. It is ignored, as line endings
   and trailing spaces are.
+- **The wheel carries a grabbed item, as the arrows do.** With an item
+  grabbed, the wheel moved only the focus, so the item focused next showed
+  as carried and Esc moved it into the grabbed one's place. The wheel is ↑
+  and ↓ now, so Esc puts back the item that was grabbed.
+- **A click on a reorderable list lands on the row under it.** Clicks and
+  drags counted rows from the offset the last key left, not the one drawn,
+  so after `focus(..)` scrolled the first page, or after the terminal grew,
+  a click moved another item. Drawing and the mouse share one offset.
+- **A new order typed as numbers is read in one pass.** Each number was
+  checked against all those before it: 40,000 took 18 s in a debug build.
+  They take 0.15 s now.
+- **Tab leaves a time picker in a container.** `TimePicker` and
+  `DateTimePicker` took every Tab and went round their fields, so in a
+  `Column` the focus never reached the next field. Tab and Shift+Tab are
+  the containers' `focus-next` and `focus-previous` now (the `date`
+  keymap's `next-field` and `previous-field` are renamed): after the last
+  field the focus moves on, and Shift+Tab comes back in at the last. On
+  its own a picker still goes round.
+- **Sticky lines a page cannot hold are still shown.** On a page shorter
+  than them, the viewport kept the first that fit and never showed the
+  rest: `rich pager --sticky 6` in a six-row terminal never showed lines 5
+  and 6, a search found them without showing them, and the status line
+  counted lines that were not on screen. The last that fit stay now (a
+  table's column names) and the ones before scroll away first, so every
+  line is shown. `rows`, `visible`, `status`, `show` and the pager's search
+  agree, and `Viewport::top` says where the scrolling lines start.
+- **A table without a header has no header pinned.** A box such as
+  `SQUARE` draws the line between rows as it draws the one under a header,
+  so a headerless table with `show_lines` (which rich draws in `SQUARE`)
+  had its first row pinned by `rich pager`. Such a line marks a header
+  only when it does not come again now. A header with a line of its own,
+  as in rich's default `HEAVY_HEAD`, is still found.
+- **Without seconds a picker answers what it shows.** A time picker showed
+  14:30 and answered 14:30:45, and a limit with seconds refused the value
+  it named: `rich date --kind time --min now` refused 01:22 with "the
+  earliest is 01:22". Without seconds the pickers work to the minute now,
+  whatever order the builders come in. The start, the default and a typed
+  answer drop their seconds; the earliest rounds up to a minute and the
+  latest down. `rich date` checks `--default` the same way.
+- **A default the picker would refuse is no answer.** Without a terminal,
+  an empty line, or a run asked for defaults, answered the default even
+  outside `min` and `max` or refused by the validator. It is checked as a
+  typed answer is now. Python's pickers raise `ValueError` for a default
+  outside `min` and `max`, as `rich date` refuses one.
+- **A range the wrong way round says so.** A `min` after the `max` was
+  taken silently, and each answer was refused naming one limit. Every
+  answer is refused with "the range is empty" now, and
+  `rs_rich.tui.time_picker` and `datetime_picker` raise `ValueError`, as
+  `calendar_with` does.
+- **`--value` is where `rich date` starts, with `--default` or without.**
+  The default set the start too, so `--value 2026-10-01 --default
+  2026-10-17` opened on the 17th. An explicit value wins, in either order,
+  in the library and in Python too.
+- **`2026-10-17T2:30 pm` parses.** A date and time were split at the first
+  space, inside the time; the first `T` or space after the date splits
+  them now.
+- **A year is four digits.** `26-10-17` parsed as the year 26. A date needs
+  four year digits, 0001 to 9999, and the pickers stay within those
+  years, so every answer prints and parses back.
+- **Python's pickers stay within Python's dates.** At `date.max`, a day on
+  raised `ValueError: year 10000 is out of range`, and `0000-01-01` typed
+  raised it rather than `NotInteractive`. The days stop at the years 1 and
+  9999 now.
+- **Python's pickers refuse a value with a time zone.** One kept its clock
+  and lost its offset, and a `datetime_picker` rewrote the caller's signal
+  without it. It is a `TypeError` now. The docs say the pickers drop
+  microseconds.
+- **`help()` shows the pickers' prompts.** `DatePicker`, `TimePicker` and
+  `DateTimePicker` showed `prompt=Ellipsis` in their signatures.
+- **`Pager(sticky_header=-1)` is a `ValueError`**, not a `TypeError`.
+- **`rich date --seconds` and `--twelve-hour` need a time.** With
+  `--kind date` they were ignored; they are a usage error (exit 2) now.
+- **CI: every command of the Windows web job counts.** Its step ran two
+  commands in one PowerShell step, where only the last one's exit code
+  failed it. Each has a step of its own now.
+- **What a session runs on Windows serves as it would anywhere.** A
+  program the app ran that serves an app too took the inherited
+  `RS_RICH_WEB_SESSION` for its own and exited: Unix tells the two apart
+  by process group, Windows had nothing to. The session's process takes
+  the variable out of its environment before the app runs.
+- **CI: every command of the Windows pager job counts.** It ran three
+  commands in one PowerShell step, where only the last one's exit code
+  failed it; the step runs in bash now.
 
 ### Flex alignment in intuiTUIve (intuituive 0.0.4)
 

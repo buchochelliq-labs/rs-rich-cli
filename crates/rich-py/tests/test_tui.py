@@ -1932,3 +1932,16 @@ def test_date_and_time_pickers():
     out = screen(build_moment, ["left", "q"], 20, 12)
     assert out[9] == "✗ the earliest is"
     assert out[11] == "2026-10-17 12:00:00"
+
+
+def test_time_pickers_refuse_an_inverted_range_and_a_time_zone():
+    nine, five = datetime.time(9, 0), datetime.time(17, 0)
+    with pytest.raises(ValueError, match="min is after max"):
+        App(lambda: tui.time_picker(signal(nine), min=five, max=nine)).render_with([], 20, 2)
+    first, last = datetime.datetime(2026, 10, 10), datetime.datetime(2026, 10, 20)
+    with pytest.raises(ValueError, match="min is after max"):
+        App(lambda: tui.datetime_picker(signal(first), min=last, max=first)).render_with([], 20, 12)
+    # The signal's value would be rewritten without its offset: refused.
+    aware = datetime.datetime(2026, 10, 18, 9, 0, tzinfo=datetime.timezone.utc)
+    with pytest.raises(TypeError, match="time zone"):
+        App(lambda: tui.datetime_picker(signal(aware))).render_with([], 20, 12)

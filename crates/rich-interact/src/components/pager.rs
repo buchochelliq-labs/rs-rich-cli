@@ -284,9 +284,12 @@ impl Pager {
 /// its top edge and its header rows, down to and including the line under
 /// the header (#716). `None` when the content does not start with a table
 /// whose header a line of its box marks off, such as rich's default
-/// `HEAVY_HEAD` table, or when nothing would be left under it. The text of
-/// each line is what is looked at, so it works on output rendered
-/// elsewhere (`rich data.csv --force-terminal | rich pager`).
+/// `HEAVY_HEAD` table, or when nothing would be left under it, or when the
+/// box draws the lines between rows as it draws that one and the line comes
+/// again (a table without a header, or with `show_lines`, in `SQUARE`):
+/// pinning a row would be worse than pinning nothing. The text of each line
+/// is what is looked at, so it works on output rendered elsewhere
+/// (`rich data.csv --force-terminal | rich pager`).
 pub fn table_header_rows(lines: &[Vec<Segment>]) -> Option<usize> {
     // A header taller than this is not looked for.
     const LIMIT: usize = 16;
@@ -358,6 +361,25 @@ fn header_above(plain: &[String], under: usize, set: &rich::r#box::Box) -> Optio
     // Its edges, or a crossing, tell it from a rule.
     let edged = left != ' ' && right != ' ' && ends(line, left, right);
     if !drawn || !(edged || (cross != across && line.contains(cross))) {
+        return None;
+    }
+    // A box that draws the line between rows (`show_lines`) as it draws
+    // the one under the header (SQUARE, and so a headerless HEAVY_HEAD
+    // table): the line comes again in a table without a header, so it
+    // marks one only where it is the only such line. Better not to pin a
+    // header than to pin a row.
+    let between = (
+        set.row_left,
+        set.row_horizontal,
+        set.row_cross,
+        set.row_right,
+    );
+    if between == (left, across, cross, right)
+        && plain
+            .iter()
+            .enumerate()
+            .any(|(at, text)| at != under && text == line)
+    {
         return None;
     }
     // With its edges, or (`show_edge=False`) its dividers.
@@ -453,7 +475,7 @@ impl Component for Pager {
                     // The first match at or after the top of the page.
                     let top = match self.viewport.offset() {
                         0 => 0,
-                        offset => offset + self.viewport.sticky_rows(),
+                        _ => self.viewport.top(page),
                     };
                     let first = self
                         .hits

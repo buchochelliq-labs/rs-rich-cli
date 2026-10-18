@@ -533,6 +533,52 @@ fn date_checks_its_range() {
     }
 }
 
+/// Without `--seconds`, `rich date` works to the minute: a typed time and
+/// the limits are compared as printed, and the earliest rounds up (0.0.19
+/// release test). `--seconds` and `--twelve-hour` need a time.
+#[test]
+fn date_without_seconds_works_to_the_minute() {
+    let args = ["date", "--kind", "time", "--max", "14:30"];
+    let (out, err, code) = piped(&args, "14:30:45\n");
+    assert_eq!((out.as_str(), code), ("14:30\n", 0), "{err}");
+    let args = ["date", "--kind", "time", "--min", "09:00:30"];
+    let (out, err, code) = piped(&args, "09:00\n");
+    assert_eq!((out.as_str(), code), ("", 3), "{err}");
+    assert!(err.contains("the earliest is 09:01"), "{err}");
+    assert!(
+        err.contains("from 09:01"),
+        "the prompt says the range: {err}"
+    );
+    let (out, err, code) = piped(&args, "09:01\n");
+    assert_eq!((out.as_str(), code), ("09:01\n", 0), "{err}");
+    // A default earlier than --min once it drops its seconds.
+    let args = [
+        "date",
+        "--kind",
+        "time",
+        "--min",
+        "09:00:30",
+        "--default",
+        "09:00:30",
+    ];
+    let (out, err, code) = piped(&args, "");
+    assert_eq!((out.as_str(), code), ("", 2), "{err}");
+    assert!(err.contains("--default is outside"), "{err}");
+    // With --seconds the same default is in the range.
+    let mut seconds = args.to_vec();
+    seconds.push("--seconds");
+    let (out, err, code) = piped(&seconds, "");
+    assert_eq!((out.as_str(), code), ("09:00:30\n", 0), "{err}");
+    // A day has no seconds or clock to show.
+    for flag in ["--seconds", "--twelve-hour"] {
+        for args in [&["date", flag][..], &["date", "--kind", "date", flag][..]] {
+            let (out, err, code) = piped(args, "2026-10-17\n");
+            assert_eq!((out.as_str(), code), ("", 2), "{args:?}: {err}");
+            assert!(err.contains("needs --kind time or datetime"), "{err}");
+        }
+    }
+}
+
 #[test]
 fn every_command_has_help() {
     for command in [
@@ -1256,5 +1302,43 @@ mod pty {
                 "{env}: {out:?}"
             );
         }
+    }
+
+    /// `--value` says where the picker starts, `--default` or not (0.0.19
+    /// release test).
+    #[test]
+    fn date_starts_at_its_value_even_with_a_default() {
+        let mut pty = Pty::start(
+            r#"x=$(rich date --value 2026-10-01 --default 2026-10-17); echo "code=$? got=$x""#,
+        );
+        pty.wait_for("October 2026");
+        pty.send("\r");
+        let out = pty.finish();
+        assert!(out.contains("code=0 got=2026-10-01"), "{out}");
+    }
+
+    /// More sticky lines than the page holds: the first scroll away and
+    /// the last stay, so a search finds and shows a line among them (0.0.19
+    /// release test). 23 rows of content: 22 stay, one scrolls.
+    #[test]
+    fn pager_sticky_lines_taller_than_the_page_are_all_shown() {
+        let mut pty = Pty::start(r#"seq 1 60 | rich pager --sticky 30; echo "code=$?""#);
+        pty.wait_for("lines 1–23 of 60");
+        pty.send("/25\r");
+        pty.wait_for("lines 3–25 of 60");
+        let screen = rows(&pty);
+        assert_eq!(screen[0].trim(), "3", "{screen:#?}");
+        assert_eq!(screen[22].trim(), "25", "{screen:#?}");
+        pty.send("G");
+        pty.wait_for("lines 60–60 of 60");
+        let screen = rows(&pty);
+        assert_eq!(
+            (screen[0].trim(), screen[21].trim(), screen[22].trim()),
+            ("9", "30", "60"),
+            "{screen:#?}"
+        );
+        pty.send("q");
+        let out = pty.finish();
+        assert!(out.contains("code=0"), "{out}");
     }
 }

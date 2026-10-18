@@ -169,8 +169,8 @@ impl fmt::Display for Date {
 impl FromStr for Date {
     type Err = String;
 
-    /// `YYYY-MM-DD` (the month and day may have one digit), or `today`
-    /// (in UTC).
+    /// `YYYY-MM-DD` (the year four digits, 0001 to 9999; the month and day
+    /// may have one), or `today` (in UTC).
     fn from_str(text: &str) -> Result<Date, String> {
         let text = text.trim();
         if text.eq_ignore_ascii_case("today") {
@@ -188,8 +188,10 @@ impl FromStr for Date {
                 .then(|| part.parse::<u32>().ok())
                 .flatten()
         };
-        let (Some(year), Some(month), Some(day)) =
-            (number(year, 4), number(month, 2), number(day, 2))
+        // Four digits make the year, as the date is printed: `26-10-17` is
+        // not the year 26.
+        let year = (year.len() == 4).then(|| number(year, 4)).flatten();
+        let (Some(year @ 1..), Some(month), Some(day)) = (year, number(month, 2), number(day, 2))
         else {
             return Err(bad());
         };
@@ -378,18 +380,15 @@ impl FromStr for DateTime {
         if text.eq_ignore_ascii_case("now") {
             return Ok(DateTime::now_utc());
         }
-        // A space, or ISO 8601's `T` after the day's last digit.
+        // A space, or ISO 8601's `T` after the day's last digit, whichever
+        // comes first: the time may hold a space (`2026-10-17T2:30 pm`).
         let split = text
-            .find(' ')
-            .or_else(|| {
-                text.char_indices()
-                    .skip(1)
-                    .find(|&(at, c)| {
-                        matches!(c, 'T' | 't') && text.as_bytes()[at - 1].is_ascii_digit()
-                    })
-                    .map(|(at, _)| at)
+            .char_indices()
+            .skip(1)
+            .find(|&(at, c)| {
+                c == ' ' || (matches!(c, 'T' | 't') && text.as_bytes()[at - 1].is_ascii_digit())
             })
-            .map(|at| (&text[..at], &text[at + 1..]));
+            .map(|(at, _)| (&text[..at], &text[at + 1..]));
         match split {
             Some((date, time)) => Ok(DateTime::new(date.parse()?, time.parse()?)),
             None => Ok(DateTime::new(text.parse()?, Time::MIDNIGHT)),

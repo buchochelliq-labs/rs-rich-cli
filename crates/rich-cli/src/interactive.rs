@@ -1543,11 +1543,10 @@ fn date_command() -> CommandSpec {
                 .value_name("VALUE")
                 .help("Start at VALUE (default today, or now, in UTC)"),
         )
-        .arg(
-            ArgSpec::option("default")
-                .value_name("VALUE")
-                .help("Start at VALUE; the answer without a terminal and to an empty line"),
-        )
+        .arg(ArgSpec::option("default").value_name("VALUE").help(
+            "The answer without a terminal and to an empty line; the start too, unless \
+             --value is given",
+        ))
         .arg(ArgSpec::option("min").value_name("VALUE").help(
             "The earliest that can be picked: earlier days are dimmed and cannot be reached, \
              and an earlier time is refused with a message",
@@ -1557,9 +1556,13 @@ fn date_command() -> CommandSpec {
                 .value_name("VALUE")
                 .help("The latest that can be picked"),
         )
-        .arg(ArgSpec::flag("seconds").help("Pick and print the seconds too (14:30:05)"))
+        .arg(ArgSpec::flag("seconds").help(
+            "Pick and print the seconds too (14:30:05), with --kind time or datetime; without \
+             it every value is to the minute, and --min rounds up to one",
+        ))
         .arg(ArgSpec::flag("twelve-hour").help(
-            "Show a 12-hour clock with AM and PM (the answer is still printed on a 24-hour one)",
+            "Show a 12-hour clock with AM and PM, with --kind time or datetime (the answer is \
+             still printed on a 24-hour one)",
         ))
         .arg(ArgSpec::flag("mouse").help(
             "Report the mouse: click a day to select it and again to pick it, click a time \
@@ -1604,6 +1607,15 @@ fn date_values(args: &Args) -> Result<DateValues, String> {
         Some("datetime") => DateKind::DateTime,
         _ => DateKind::Date,
     };
+    // A day has no seconds to pick and no clock to show.
+    for (flag, on) in [
+        ("--seconds", args.seconds),
+        ("--twelve-hour", args.twelve_hour),
+    ] {
+        if on && kind == DateKind::Date {
+            return Err(format!("{flag} needs --kind time or datetime"));
+        }
+    }
     let parse = |name: &str, value: &Option<String>| -> Result<Option<DateTime>, String> {
         let Some(text) = value else {
             return Ok(None);
@@ -1635,7 +1647,17 @@ fn date_values(args: &Args) -> Result<DateValues, String> {
             return Err("--min is after --max".into());
         }
     }
-    if let Some(default) = values.default {
+    // Without --seconds the picker works to the minute: the default is
+    // compared as it is printed, so one before --min only by its seconds
+    // is outside.
+    let shown = |at: DateTime| match kind {
+        DateKind::Time | DateKind::DateTime if !args.seconds => at.date.at(Time {
+            second: 0,
+            ..at.time
+        }),
+        _ => at,
+    };
+    if let Some(default) = values.default.map(shown) {
         let early = values.min.is_some_and(|min| key(default) < key(min));
         let late = values.max.is_some_and(|max| key(default) > key(max));
         if early || late {
@@ -1653,12 +1675,14 @@ fn date(args: &Args) -> Answer {
     let seconds = args.seconds;
     let answer = match values.kind {
         DateKind::Date => {
+            // The default, then the value, as `rich color` takes them: an
+            // explicit --value says where to start.
             let mut picker = DatePicker::new(header("Date")).with_mouse(args.mouse);
-            if let Some(value) = values.value {
-                picker = picker.value(value.date);
-            }
             if let Some(default) = values.default {
                 picker = picker.default(default.date);
+            }
+            if let Some(value) = values.value {
+                picker = picker.value(value.date);
             }
             if let Some(min) = values.min {
                 picker = picker.min(min.date);
@@ -1674,11 +1698,11 @@ fn date(args: &Args) -> Answer {
                 .seconds(seconds)
                 .twelve_hour(args.twelve_hour)
                 .with_mouse(args.mouse);
-            if let Some(value) = values.value {
-                picker = picker.value(value.time);
-            }
             if let Some(default) = values.default {
                 picker = picker.default(default.time);
+            }
+            if let Some(value) = values.value {
+                picker = picker.value(value.time);
             }
             if let Some(min) = values.min {
                 picker = picker.min(min.time);
@@ -1694,11 +1718,11 @@ fn date(args: &Args) -> Answer {
                 .seconds(seconds)
                 .twelve_hour(args.twelve_hour)
                 .with_mouse(args.mouse);
-            if let Some(value) = values.value {
-                picker = picker.value(value);
-            }
             if let Some(default) = values.default {
                 picker = picker.default(default);
+            }
+            if let Some(value) = values.value {
+                picker = picker.value(value);
             }
             if let Some(min) = values.min {
                 picker = picker.min(min);

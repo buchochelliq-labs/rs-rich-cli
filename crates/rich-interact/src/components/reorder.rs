@@ -190,11 +190,22 @@ impl<T> Reorder<T> {
     }
 
     fn follow(&mut self) {
-        let page = self.page.get().max(1);
-        if self.cursor < self.offset {
-            self.offset = self.cursor;
-        } else if self.cursor >= self.offset + page {
-            self.offset = self.cursor + 1 - page;
+        self.offset = self.offset_for(self.page.get());
+    }
+
+    /// The first position shown on a page of `rows`: the offset as the
+    /// last event left it, kept on the focused row and the page full in
+    /// case the terminal changed size since (or `focus` moved it before
+    /// the first paint). Drawing and the mouse both use it.
+    fn offset_for(&self, rows: usize) -> usize {
+        let rows = rows.max(1);
+        let offset = self.offset.min(self.order.len().saturating_sub(rows));
+        if self.cursor < offset {
+            self.cursor
+        } else if self.cursor >= offset + rows {
+            self.cursor + 1 - rows
+        } else {
+            offset
         }
     }
 
@@ -287,12 +298,9 @@ impl<T> Reorder<T> {
         let top = 1;
         let shown = self.order.len().saturating_sub(self.offset).min(page);
         match kind {
-            MouseKind::ScrollUp => {
-                self.focus_on(self.by(-1));
-            }
-            MouseKind::ScrollDown => {
-                self.focus_on(self.by(1));
-            }
+            // The wheel is ↑ and ↓: while an item is grabbed, it carries it.
+            MouseKind::ScrollUp => return self.act("up"),
+            MouseKind::ScrollDown => return self.act("down"),
             MouseKind::Down(Button::Left) if row >= top && row < top + shown => {
                 self.grabbed = None;
                 self.focus_on(self.offset + row - top);
@@ -318,6 +326,8 @@ impl<T> Reorder<T> {
 
     fn event(&mut self, event: &Event, context: &Context<'_>) -> Flow<Vec<usize>> {
         self.page.set(self.rows(context.height));
+        // The rows as drawn, for a click to land on the one under it.
+        self.follow();
         if let Some(mouse) = event.mouse() {
             return self.mouse_event(mouse.kind, mouse.row as usize);
         }
@@ -352,14 +362,7 @@ impl<T> Reorder<T> {
         let rows = self.rows(context.height);
         self.page.set(rows);
         let mut lines = vec![fit(header, width)];
-        // The offset as the last event left it, kept on the focused row
-        // in case the terminal shrank since.
-        let mut offset = self.offset.min(self.order.len().saturating_sub(rows));
-        if self.cursor < offset {
-            offset = self.cursor;
-        } else if self.cursor >= offset + rows {
-            offset = self.cursor + 1 - rows;
-        }
+        let offset = self.offset_for(rows);
         let reverse = rich::Style::parse("reverse").expect("a built-in style");
         for (position, &index) in self.order.iter().enumerate().skip(offset).take(rows) {
             let item = &self.items[index];
@@ -435,6 +438,8 @@ impl<T> Reorder<T> {
 /// and the rest keep theirs. Returns positions from 0.
 pub(crate) fn parse_order(line: &str, len: usize) -> Result<Vec<usize>, String> {
     let mut named = Vec::new();
+    // Which positions are named, so a long list is read in one pass.
+    let mut used = vec![false; len];
     for word in line
         .split(|c: char| c == ',' || c.is_whitespace())
         .filter(|word| !word.is_empty())
@@ -444,13 +449,12 @@ pub(crate) fn parse_order(line: &str, len: usize) -> Result<Vec<usize>, String> 
             .ok()
             .filter(|number| (1..=len).contains(number))
             .ok_or_else(|| format!("{word:?} is not a number from 1 to {len}"))?;
-        if named.contains(&(number - 1)) {
+        if std::mem::replace(&mut used[number - 1], true) {
             return Err(format!("{number} is given twice"));
         }
         named.push(number - 1);
     }
-    let rest: Vec<usize> = (0..len).filter(|at| !named.contains(at)).collect();
-    named.extend(rest);
+    named.extend((0..len).filter(|&at| !used[at]));
     Ok(named)
 }
 
