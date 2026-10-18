@@ -1516,6 +1516,63 @@ text(move || match user.get() {
   `Proxy` from `cx.proxy()` or `app.proxy()`: `proxy.run(move ||
   status.set(body))`, or `proxy.run_with(|cx| …)` for a `Ctx` too.
 
+## Files, sound and images
+
+Three off-by-default features bring the outside world in, each working on
+its own thread and delivering on the app's thread, between frames:
+
+```toml
+rs-rich-intuituive = { version = "0.0.4", features = ["watch", "audio", "art"] }
+```
+
+- **`watch`: files that change.** `watch_path(path, |event, cx| …)` wakes
+  the app when a file, or a directory's entries, change, through notify
+  (inotify, FSEvents, ReadDirectoryChangesW, kqueue), with no polling.
+  Changes less than 100 ms apart are one `PathEvent`: each path once, with
+  what last happened to it (`Created`, `Modified`, `Removed`, `Renamed`).
+  `watch_path_with(path, WatchOptions::new().recursive().debounce(d), …)`
+  watches a whole tree. The watcher runs as long as the app, or until its
+  `PathWatch` is `stop()`ped.
+
+```rust
+let entries = signal(list_dir(&dir));
+watch_path(&dir, move |_event, _cx| entries.set(list_dir(&dir)))?;
+```
+
+- **`audio`: a sound card.** `audio::input(device, rate, channels,
+  buffer)` returns a `Signal<Matrix>`, one row a channel of `buffer`
+  samples from -1 to 1, which changes with every buffer the device
+  captures (through cpal: ALSA, CoreAudio, WASAPI). The newest buffer
+  wins: one that arrives while the app is busy replaces the one still
+  waiting, so a slow frame drops buffers rather than falling behind.
+  `audio::devices()` lists the inputs (none, not a panic, on a machine
+  without sound). A device with fewer channels than asked for is spread
+  over the rows. On Linux the feature needs ALSA's headers to build
+  (`libasound2-dev`). For a spectrum, rs-rich-ext's `rich_ext::dsp` has
+  `fft` (any length), `hann` and `spectrum(samples, rate)`.
+
+```rust
+let samples = audio::input(None, 48_000, 2, 1024)?;
+renderable(move || oscilloscope(&samples.get()))
+```
+
+- **`art`: images.** `image(path)` is a node that draws an image file in
+  half blocks, sized to its rectangle and kept to its aspect ratio, decoded
+  on a worker thread (`loading…` until then). `image_with(path,
+  ImageView::new().fit(ImageFit::Cover))` fills the rectangle instead
+  (`Contain` centres, `Stretch` ignores the aspect), `.mode(ImageMode::
+  Quadrants)` (or `Braille`, `Ascii`) draws with other cells, and
+  `image_of(move || selected.get(), view)` follows a path that changes, as
+  a preview pane does. Kitty and Sixel pixels are not drawn yet: they need
+  escapes outside the cells, which the screen does not pass through.
+
+A file manager's other parts are in rs-rich-ext: `rich_ext::filetype`
+(Yazi's icons and type colours, MIME types, a Nerd Font check) and
+`rich_ext::fs` (local times, owner and group names); see
+[Files, spectra and warm-ups](../ext/files-and-signals.md). rs-rich-ratatui's
+`style_from_color_name("DarkGray")` reads a ratatui colour name, as a
+ported app's options take them, as a rich style.
+
 ## Themes
 
 A `Theme` styles what the framework draws (borders, the focused border,

@@ -20,6 +20,11 @@ keywords = ["terminal", "tui", "reactive", "framework", "rich"]
 categories = ["command-line-interface"]
 include = ["src/**/*", "README.md", "LICENSE", "Cargo.toml"]
 
+# The image nodes and the file watcher on docs.rs too; `audio` is left out,
+# as its ALSA headers may not be there to build it.
+[package.metadata.docs.rs]
+features = ["art", "watch"]
+
 [lib]
 name = "intuituive"
 
@@ -33,11 +38,24 @@ termion = ["rich-interact/termion"]
 # `App::run_with(BackendKind::Termwiz)`: the termwiz backend of
 # rs-rich-interact.
 termwiz = ["rich-interact/termwiz"]
+# `audio::input` and `audio::devices`: capture from a sound card through
+# cpal (ALSA on Linux, which needs libasound2-dev to build; CoreAudio on
+# macOS; WASAPI on Windows). Off by default.
+audio = ["dep:cpal"]
+# `watch_path`: wake the app when files change, through notify (inotify,
+# FSEvents, ReadDirectoryChangesW, kqueue). Off by default.
+watch = ["dep:notify"]
+# `image`: an image file as a node, drawn by rs-rich-art in half blocks
+# (or quadrants, Braille, ASCII). Off by default.
+art = ["dep:rich-art", "rich-art/image"]
 
 [dependencies]
 rich.workspace = true
 rich-ext.workspace = true
 rich-interact.workspace = true
+cpal = { version = "0.18.2", optional = true }
+notify = { workspace = true, optional = true }
+rich-art = { workspace = true, optional = true }
 
 [dev-dependencies]
 # PTY tests: an app run on every backend gives the terminal back
