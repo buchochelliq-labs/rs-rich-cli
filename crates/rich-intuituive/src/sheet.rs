@@ -941,11 +941,13 @@ fn declare(decls: &mut Decls, property: &str, value: &str) -> Result<(), String>
                 Some(word) if Border::parse(word).is_some() => {
                     Border::parse(word).expect("checked")
                 }
-                _ => return Err(format!(
+                _ => {
+                    return Err(format!(
                     "`{value}`: a border is none, round, square, heavy, double, ascii, a dashed \
                          kind (dashed, light-triple-dashed, ...) or quadrant-inside or \
                          quadrant-outside, then a colour"
-                )),
+                ))
+                }
             };
             let color = words.next().map(paint).transpose()?;
             if let Some(extra) = words.next() {
