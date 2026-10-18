@@ -38,6 +38,7 @@ motion turned on in your system settings the cards stay still.
 [![A line of Rust selected in a highlighted text area](media/tapes/editor/selected.png){ data-gif="editor.gif" loading=lazy }<span class="tape-card-title">A text area</span>](#a-text-area){ .tape-card }
 [![A dashboard drawn in place below the prompt](media/tapes/surface/done.png){ data-gif="surface.gif" loading=lazy }<span class="tape-card-title">A surface</span>](#a-surface){ .tape-card }
 [![rich date: a day picked on a month grid within a range](media/tapes/date/grid.png){ data-gif="date.gif" loading=lazy }<span class="tape-card-title">Dates and times</span>](#dates-and-times){ .tape-card }
+[![A man page rendered by rich, its sections and tagged paragraphs](media/tapes/documents/man.png){ data-gif="documents.gif" loading=lazy }<span class="tape-card-title">Org, AsciiDoc and man pages</span>](#org-asciidoc-and-man-pages){ .tape-card }
 [![rich serve printing its address, and sessions asked for](media/tapes/serve/sessions.png){ data-gif="serve.gif" loading=lazy }<span class="tape-card-title">Serve a program to a browser</span>](#serve-a-program-to-a-browser){ .tape-card }
 [![A shell in a terminal pane beside a web view](media/tapes/embed/pane.png){ data-gif="embed.gif" loading=lazy }<span class="tape-card-title">A terminal pane</span>](#a-terminal-pane){ .tape-card }
 [![A CSV file drawn as a line chart by rich chart](media/tapes/chart/lines.png){ data-gif="chart.gif" loading=lazy }<span class="tape-card-title">Charts from data</span>](#charts-from-data){ .tape-card }
@@ -463,6 +464,24 @@ are printed in ISO 8601 form, for a script to read. See
 | ![A month grid with the twentieth of November picked](media/tapes/date/grid.png) | ![A time before the range refused](media/tapes/date/refused.png) | ![The date and time printed](media/tapes/date/answer.png) |
 
 [Tape](tapes/date.tape) · [Cast](media/tapes/date/date.cast) · [GIF](media/tapes/date/date.gif) · [Page](media/tapes/date/date.html)
+
+## Org, AsciiDoc and man pages
+
+`rich FILE` (0.0.19) on an Org file, an AsciiDoc file and a man page, each
+found by its extension (the man page by its section number and the roff
+in it) and drawn in the look of rich's Markdown; then the man page's
+source with `--syntax`. See
+[Org, AsciiDoc and man pages](cli.md#org-asciidoc-and-man-pages).
+
+<div class="tape-player" data-cast="../media/tapes/documents/documents.cast" data-poster="npt:0:3">
+  <img src="../media/tapes/documents/documents.gif" alt="rich rendering an Org file, an AsciiDoc file and a man page, then the man page's source">
+</div>
+
+| Org | AsciiDoc | Man page | Source |
+|---|---|---|---|
+| ![An Org file with TODO keywords, tags and a table](media/tapes/documents/org.png) | ![An AsciiDoc file with its header, admonitions and a listing](media/tapes/documents/asciidoc.png) | ![A man page with its header, sections and tagged paragraphs](media/tapes/documents/man.png) | ![The man page's roff highlighted](media/tapes/documents/source.png) |
+
+[Tape](tapes/documents.tape) · [Cast](media/tapes/documents/documents.cast) · [GIF](media/tapes/documents/documents.gif) · [Page](media/tapes/documents/documents.html)
 
 ## Serve a program to a browser
 
