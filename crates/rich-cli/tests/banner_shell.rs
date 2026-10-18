@@ -188,6 +188,11 @@ mod banner {
             (&["banner", "--align", "middle", "x"], "--align"),
             (&["banner", "--fit", "squash", "x"], "--fit"),
             (&["banner", "--width", "0", "x"], "--width"),
+            (&["banner", "--width", "10001", "x"], "from 1 to 10000"),
+            (
+                &["banner", "--width", "18446744073709551615", "x"],
+                "from 1 to 10000",
+            ),
             (&["banner", "--direction", "up", "x"], "--direction"),
             (&["banner", "--bogus", "x"], "unknown option"),
         ] {
@@ -296,6 +301,9 @@ mod gif_controls {
             &["--gif", BALL, "--fps", "-1"],
             &["--gif", BALL, "--max-frames", "0"],
             &["--gif", BALL, "--max-duration", "NaN"],
+            &["--gif", BALL, "--max-duration", "1e300"],
+            &["--gif", BALL, "--fps", "1e-320"],
+            &["--gif", BALL, "--speed", "1e-300"],
             &["--gif", BALL, "--speed"],
         ] {
             usage_error(args);
@@ -368,6 +376,36 @@ mod shell {
             "2",
         ]);
         assert!(loud.contains("exit 2"), "{loud}");
+        // Without --command, the line comes from RICH_SHELL_COMMAND (how
+        // the PowerShell hook hands it over, unsplit).
+        let out = rich(
+            &["shell", "status", "--exit", "1"],
+            "",
+            &[("RICH_SHELL_COMMAND", "echo \"a b\" 'c'")],
+        );
+        let text = String::from_utf8(out.stdout).unwrap();
+        assert!(text.contains("$ echo \"a b\" 'c'  exit 1"), "{text}");
+        let out = rich(
+            &["shell", "status", "--exit", "1", "--command", "given"],
+            "",
+            &[("RICH_SHELL_COMMAND", "ignored")],
+        );
+        let text = String::from_utf8(out.stdout).unwrap();
+        assert!(text.contains("$ given"), "{text}");
+    }
+
+    #[test]
+    fn durations_out_of_range_are_usage_errors() {
+        for args in [
+            &["shell", "status", "--exit", "0", "--duration", "1e300"][..],
+            &["shell", "status", "--exit", "0", "--duration", "1e20m"],
+            &["shell", "status", "--exit", "0", "--min-duration", "1e10"],
+            &["shell", "init", "bash", "--min-duration", "1e300"],
+        ] {
+            let err = usage_error(args);
+            assert!(err.contains("at most 10^9 seconds"), "{args:?}: {err}");
+        }
+        assert!(ok(&["shell", "status", "--exit", "1", "--duration", "1e9"]).contains("exit 1"));
     }
 
     #[test]
@@ -421,6 +459,20 @@ mod shell {
             "shell", "link", "--links", "always", "--prompt", "zsh", path,
         ]);
         assert!(zsh.starts_with("%{\x1b]8;;"), "{zsh:?}");
+        // zsh expands `%` inside `%{…%}` as well: a URL's escapes are doubled.
+        let spaced = dir.path().join("a b.txt");
+        std::fs::write(&spaced, "x").unwrap();
+        let zsh = ok(&[
+            "shell",
+            "link",
+            "--links",
+            "always",
+            "--prompt",
+            "zsh",
+            spaced.to_str().unwrap(),
+        ]);
+        assert!(zsh.contains("a%%20b.txt\x1b"), "{zsh:?}");
+        assert!(!zsh.contains("a%20b"), "{zsh:?}");
         // With no path, the working directory, under ~ with --tilde.
         let mut cwd = Command::new(env!("CARGO_BIN_EXE_rich"));
         let cwd_out = cwd
@@ -457,6 +509,95 @@ mod shell {
             assert!(bare.len() < 2_000, "{shell}: {bare}");
         }
         assert!(init("bash", &["--min-duration", "0.5"]).contains("--min-duration 0.5"));
+    }
+
+    #[test]
+    fn init_scripts_encode_the_directory_and_pass_the_command_safely() {
+        // OSC 7: $PWD is percent-encoded, never printed raw or as a format.
+        let bash = init("bash", &["--no-completions"]);
+        assert!(bash.contains("__rich_shell_url \"$PWD\""), "{bash}");
+        assert!(
+            bash.contains("\"${HOSTNAME-}\" \"$__rich_shell_path\""),
+            "{bash}"
+        );
+        let zsh = init("zsh", &["--no-completions"]);
+        assert!(zsh.contains("__rich_shell_url \"$PWD\""), "{zsh}");
+        assert!(
+            zsh.contains("print -rn -- $'\\e]7;file://'\"${HOST}${REPLY}\""),
+            "{zsh}"
+        );
+        assert!(!zsh.contains("print -n \""), "{zsh}");
+        let fish = init("fish", &["--no-completions"]);
+        assert!(
+            fish.contains("(string escape --style=url -- $PWD)"),
+            "{fish}"
+        );
+        let pwsh = init("pwsh", &["--no-completions"]);
+        assert!(pwsh.contains("[Uri]::EscapeDataString"), "{pwsh}");
+        for (shell, script) in [
+            ("bash", &bash),
+            ("zsh", &zsh),
+            ("fish", &fish),
+            ("pwsh", &pwsh),
+        ] {
+            assert!(!script.contains("${PWD}\\a"), "{shell}: {script}");
+            assert!(!script.contains("$PWD\n"), "{shell}: {script}");
+        }
+        // PowerShell hands the command line over in the environment, so
+        // legacy argument passing cannot split it.
+        assert!(
+            pwsh.contains("$env:RICH_SHELL_COMMAND = $last.CommandLine"),
+            "{pwsh}"
+        );
+        assert!(!pwsh.contains("--command"), "{pwsh}");
+        // bash names the command only when history saved it.
+        assert!(bash.contains("__rich_shell_histnum='\\!'"), "{bash}");
+        assert!(bash.contains("if (( __rich_saved )) && [["), "{bash}");
+        assert!(bash.contains("\"${__rich_cmd[@]}\""), "{bash}");
+        assert!(!bash.contains("--command \"$__rich_cmd\""), "{bash}");
+    }
+
+    /// The encoders themselves, run in each shell that is installed.
+    #[test]
+    fn the_directory_encoders_escape_control_characters() {
+        let name = "/tmp/a b\x07%\u{e9}\x1b]52;c;x\x07";
+        let want = "/tmp/a%20b%07%25%C3%A9%1B%5D52%3Bc%3Bx%07";
+        let run = |program: &str, args: &[&str]| -> Option<String> {
+            if !has(program) {
+                eprintln!("{program} not installed; skipping");
+                return None;
+            }
+            let out = Command::new(program)
+                .args(args)
+                .env("LANG", "C.UTF-8")
+                .env("RICH_TEST_DIR", name)
+                .output()
+                .unwrap();
+            assert!(out.status.success(), "{program}: {out:?}");
+            Some(String::from_utf8(out.stdout).unwrap())
+        };
+        let bash = init("bash", &["--no-completions", "--no-status"]);
+        let script = format!(
+            "{bash}\n__rich_shell_url \"$RICH_TEST_DIR\"; printf '%s' \"$__rich_shell_path\""
+        );
+        if let Some(out) = run("bash", &["--norc", "-c", &script]) {
+            assert_eq!(out, want);
+        }
+        let zsh = init("zsh", &["--no-completions", "--no-status"]);
+        let script = format!("{zsh}\n__rich_shell_url \"$RICH_TEST_DIR\"; print -rn -- $REPLY");
+        if let Some(out) = run("zsh", &["-f", "-c", &script]) {
+            assert_eq!(out, want);
+        }
+        if let Some(out) = run(
+            "fish",
+            &[
+                "--no-config",
+                "-c",
+                "string escape --style=url -- $RICH_TEST_DIR",
+            ],
+        ) {
+            assert_eq!(out.trim_end(), want);
+        }
     }
 
     #[test]
@@ -504,10 +645,13 @@ mod shell {
             bin.display(),
             std::env::var("PATH").unwrap_or_default()
         );
+        let tmp = tempfile::tempdir().unwrap();
         let mut child = Command::new("bash")
             .args(["--norc", "--noprofile", "-i"])
+            .env("TMPDIR", tmp.path())
             .env("PATH", path)
             .env("HISTFILE", "/dev/null")
+            .env("HISTCONTROL", "ignorespace")
             .env_remove("PROMPT_COMMAND")
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
@@ -522,6 +666,8 @@ mod shell {
                 b"eval \"$(rich shell init bash --no-completions --min-duration 0)\"\n\
                   true\n\
                   (exit 7)\n\
+                  \x20(exit 3)\n\
+                  mkdir -p \"$TMPDIR/rich odd\"$'\\a' && cd \"$TMPDIR/rich odd\"$'\\a'\n\
                   exit\n",
             )
             .unwrap();
@@ -536,6 +682,12 @@ mod shell {
         assert!(stdout.contains("ok $ true"), "{stdout:?}");
         assert!(stdout.contains("\x1b]133;D;7\x07"), "{stdout:?}");
         assert!(stdout.contains("$ (exit 7)  exit 7"), "{stdout:?}");
+        // Left out of history (a leading space): no command named, rather
+        // than the one before it.
+        assert!(stdout.contains("$ -  exit 3"), "{stdout:?}");
+        assert_eq!(stdout.matches("(exit 7)").count(), 1, "{stdout:?}");
+        // The directory is percent-encoded: its BEL does not end the OSC.
+        assert!(stdout.contains("rich%20odd%07\x07"), "{stdout:?}");
         assert!(stdout.contains("\x1b]7;file://"), "{stdout:?}");
         assert!(stderr.contains("\x1b]133;C\x07"), "{stderr:?}");
     }

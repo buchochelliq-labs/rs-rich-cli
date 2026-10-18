@@ -597,11 +597,17 @@ impl Measured {
 /// `--baseline FILE` compared with that (exit 5 on a regression).
 fn measured(cli: &Cli, current: Measured, name: String) -> Result<DepsView, Failure> {
     let options = &cli.graph_sources;
-    if let Some(file) = &options.save {
-        std::fs::write(fs_path(file), current.to_json())
-            .map_err(|err| (ExitClass::Input, format!("cannot write {file}: {err}")))?;
-    }
+    // `--save` is written only after `--baseline` has been read, so the two
+    // may name the same file: the comparison is against the old report.
+    let save = |current: &Measured| -> Result<(), Failure> {
+        if let Some(file) = &options.save {
+            std::fs::write(fs_path(file), current.to_json())
+                .map_err(|err| (ExitClass::Input, format!("cannot write {file}: {err}")))?;
+        }
+        Ok(())
+    };
     let Some(file) = &options.baseline else {
+        save(&current)?;
         let view: Box<dyn Renderable> = match current {
             Measured::Timings(timings) => {
                 let report = TimingsReport::new(timings);
@@ -625,10 +631,10 @@ fn measured(cli: &Cli, current: Measured, name: String) -> Result<DepsView, Fail
         .map_err(|err| (ExitClass::Usage, err))?;
     let data =
         |err: rich_ext::deps::DepsError| (ExitClass::Data, format!("{}: {err}", shown_name(file)));
-    let mut comparison = match current {
+    let mut comparison = match &current {
         Measured::Timings(current) => {
             let baseline = Timings::parse(&report_file(cli, file)?).map_err(data)?;
-            Comparison::timings(&baseline, &current, thresholds)
+            Comparison::timings(&baseline, current, thresholds)
         }
         Measured::Sizes(current) => {
             let baseline = if file != "-" && fs_path(file).is_dir() {
@@ -637,9 +643,10 @@ fn measured(cli: &Cli, current: Measured, name: String) -> Result<DepsView, Fail
             } else {
                 Sizes::parse(&report_file(cli, file)?).map_err(data)?
             };
-            Comparison::sizes(&baseline, &current, thresholds)
+            Comparison::sizes(&baseline, current, thresholds)
         }
     };
+    save(&current)?;
     comparison = comparison.names(shown_name(file), name);
     if let Some(top) = options.top {
         comparison = comparison.limit(top);

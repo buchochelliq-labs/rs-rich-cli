@@ -366,6 +366,44 @@ fn a_saved_report_is_a_baseline() {
 }
 
 #[test]
+fn save_and_baseline_may_name_the_same_file() {
+    // The baseline is read before `--save` replaces it: the regression is
+    // still reported, and the file then holds the new report.
+    let root = tempfile::tempdir().unwrap();
+    let bloat = fixture("deps/bloat.json");
+    let file = root.path().join("sizes.json");
+    std::fs::copy(fixture("deps/bloat-baseline.json"), &file).unwrap();
+    let file = file.to_str().unwrap();
+    let out = run_in(
+        root.path(),
+        &[
+            "deps",
+            "--sizes",
+            &bloat,
+            "--baseline",
+            file,
+            "--save",
+            file,
+        ],
+        "",
+    );
+    assert_eq!(out.status.code(), Some(5), "{}", stderr(&out));
+    assert!(stderr(&out).contains("regressions against the baseline"));
+    let json: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(file).unwrap()).unwrap();
+    assert_eq!(json["format"], "rich-deps");
+    let out = stdout(&run_in(
+        root.path(),
+        &["deps", "--sizes", &bloat, "--baseline", file],
+        "",
+    ));
+    assert!(
+        out.contains("0 regressions, 0 improvements, 17 unchanged"),
+        "{out}"
+    );
+}
+
+#[test]
 fn a_policy_reports_violations_and_gates() {
     let policy = fixture("deps/policy.toml");
     let cdx = fixture("deps/sbom.cdx.json");

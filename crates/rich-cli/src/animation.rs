@@ -31,11 +31,26 @@ pub(crate) struct AnimationControls {
     pub(crate) max_duration: Option<Duration>,
 }
 
-/// A positive, finite number, for `flag`.
+/// The bounds of each number, so every delay derived from them is a
+/// `Duration` that exists: `(flag, at least, at most)`.
+const RANGES: [(&str, f64, f64); 3] = [
+    ("--speed", 0.001, 1000.0),
+    ("--fps", 0.01, 1000.0),
+    ("--max-duration", 0.001, 1e9),
+];
+
+/// A finite number in `flag`'s range.
 fn positive(flag: &str, value: &str) -> Result<f64, String> {
+    let (_, min, max) = RANGES
+        .iter()
+        .copied()
+        .find(|(name, ..)| *name == flag)
+        .unwrap_or((flag, f64::MIN_POSITIVE, 1e9));
     match value.trim().parse::<f64>() {
-        Ok(number) if number.is_finite() && number > 0.0 => Ok(number),
-        _ => Err(format!("{flag} takes a number above 0, not {value:?}")),
+        Ok(number) if number.is_finite() && number >= min && number <= max => Ok(number),
+        _ => Err(format!(
+            "{flag} takes a number from {min} to {max}, not {value:?}"
+        )),
     }
 }
 
@@ -70,9 +85,11 @@ impl AnimationControls {
     /// How long frame `delay` shows: divided by the speed, then held for at
     /// least one frame at the cap.
     pub(crate) fn scaled(&self, delay: Duration) -> Duration {
+        // The flags are bounded; a delay that still cannot be one holds.
+        let seconds = |value: f64| Duration::try_from_secs_f64(value).unwrap_or(Duration::MAX);
         let speed = self.speed.unwrap_or(1.0);
-        let floor = Duration::from_secs_f64(1.0 / self.fps());
-        delay.div_f64(speed).max(floor)
+        let floor = seconds(1.0 / self.fps());
+        seconds(delay.as_secs_f64() / speed).max(floor)
     }
 }
 
@@ -294,6 +311,11 @@ mod tests {
             ("--max-frames", "0"),
             ("--max-frames", "1.5"),
             ("--max-duration", "0"),
+            ("--max-duration", "1e300"),
+            ("--fps", "1e-320"),
+            ("--fps", "1e9"),
+            ("--speed", "1e-300"),
+            ("--speed", "1e300"),
         ] {
             assert!(controls.set(flag, bad).is_err(), "{flag} {bad}");
         }
@@ -315,5 +337,10 @@ mod tests {
         assert_eq!(controls.scaled(delay), Duration::from_millis(200));
         controls.speed = Some(1.0);
         assert!(!controls.needs_player());
+        // At the bounds, and past them, no delay panics.
+        controls.speed = Some(0.001);
+        controls.fps = Some(0.01);
+        assert_eq!(controls.scaled(delay), Duration::from_secs(100));
+        assert_eq!(controls.scaled(Duration::MAX), Duration::MAX);
     }
 }

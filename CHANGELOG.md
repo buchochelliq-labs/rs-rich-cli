@@ -194,6 +194,56 @@ test.
   commands in one PowerShell step, where only the last one's exit code
   failed it; the step runs in bash now.
 
+A third round of audits, over the CLI's shell integration, `rich jump`,
+`rich log` and `rich deps`, found the defects below. Each was reproduced
+first and has a regression test.
+
+- **`rich deps --save` and `--baseline` may name one file.** The report
+  was saved before the baseline was read, so the comparison was against
+  itself and a regression passed. The baseline is read first now.
+- **`rich jump` no longer suggests `eval`.** Its help and docs piped the
+  place to `eval`, where a file named `$(…)` would run. `--print shell`
+  prints a safely quoted command instead: `cd -- 'DIR'`, `${EDITOR:-vi}
+  +LINE -- 'FILE'`, or a `>` command as it is.
+- **zsh prompts keep a link's `%`.** `rich shell link --prompt zsh`
+  doubled `%` only outside escape sequences, so a URL's `%20` was expanded
+  by the prompt; it is doubled inside them too.
+- **A directory name cannot drive the terminal from the prompt.** The init
+  scripts wrote `$PWD` into OSC 7 raw (zsh's `print` even read its
+  backslashes as escapes); every shell percent-encodes it now, and zsh
+  uses `print -rn --`.
+- **Huge durations are usage errors, not panics.** `rich shell status
+  --duration`/`--min-duration` and `--gif`'s `--speed`, `--fps` and
+  `--max-duration` are bounded (exit 2 outside), and playback delays are
+  computed without panicking.
+- **`rich banner --width` is at most 10000.**
+- **Python's `Jump` rejects two sources with one id** (a `ValueError`): the
+  answer's value was looked up by id, so the second source's pick gave the
+  first source's value.
+- **`rich log --output jsonl` keeps late continuation lines readable.**
+  Lines after a record written on a quiet spell are a
+  `{"continuation": [...]}` object, and reading JSONL back folds such an
+  object, and a record's `continuation` list, into continuation lines.
+- **`rich log` sanitizes by default**, as `rich view` does: a log is
+  untrusted, and an OSC 52 sequence in a field reached the terminal.
+  `--no-sanitize` turns it off.
+- **Sanitizing a log record covers its keys**, nested map keys included
+  (`Record::sanitize`).
+- **`rich log --follow` holds at most 1 MiB of an unfinished line** (more
+  is shown in pieces, with a notice) and scans each byte for a line break
+  once, not on every read.
+- **`rich jump --recent` keeps control characters out.** A place with a
+  newline split the recent file's entry in two, and an escape reached the
+  terminal: such a place is printed only by `--print json`, never
+  remembered, and skipped when read.
+- **PowerShell's status line shows the whole command.** The hook passed
+  `--command $last.CommandLine`, which legacy argument passing split at
+  quotes; it hands it over in `RICH_SHELL_COMMAND`, which `rich shell
+  status` reads when `--command` is not given.
+- **bash's status line never names the wrong command.** A command history
+  left out (`HISTCONTROL=ignorespace`) showed the one before it; the hook
+  passes `--command` only when the history number moved on.
+
 ### Flex alignment in intuiTUIve (intuituive 0.0.4)
 
 0.0.19 workstream 1.

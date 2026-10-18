@@ -323,12 +323,20 @@ impl Jump {
         if height == 0 {
             return Err(PyValueError::new_err("height must be at least 1"));
         }
-        let mut kept = Vec::new();
+        let mut kept: Vec<Py<JumpSource>> = Vec::new();
         for source in sources.try_iter()? {
             let source = source?;
             let source = source
                 .cast::<JumpSource>()
                 .map_err(|_| PyTypeError::new_err("sources must be JumpSource objects"))?;
+            // The answer names its source by id, and the value is looked up
+            // by it: two sources with one id would give the wrong value.
+            let id = &source.get().id;
+            if kept.iter().any(|other| other.get().id == *id) {
+                return Err(PyValueError::new_err(format!(
+                    "two sources have the id {id:?}; each needs its own"
+                )));
+            }
             kept.push(source.clone().unbind());
         }
         Ok(Jump {

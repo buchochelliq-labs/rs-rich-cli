@@ -24,6 +24,9 @@ use rich_ext::hyperlink::Hyperlinker;
 use rich_ext::workflow::{CommandRecord, CommandStatus};
 use std::time::Duration;
 
+/// Where `status` finds the command line when `--command` is not given.
+const COMMAND_VAR: &str = "RICH_SHELL_COMMAND";
+
 /// `init`'s default for `--min-duration`: successes quicker than this stay
 /// quiet.
 const DEFAULT_MIN_DURATION: f64 = 2.0;
@@ -108,7 +111,7 @@ pub(super) fn command() -> CommandSpec {
                 .arg(
                     ArgSpec::option("command")
                         .value_name("TEXT")
-                        .help("The command line as typed"),
+                        .help("The command line as typed (default $RICH_SHELL_COMMAND)"),
                 )
                 .arg(
                     ArgSpec::option("min-duration")
@@ -214,6 +217,9 @@ struct LinkArgs {
     prompt: Option<Shell>,
 }
 
+/// The longest duration `--duration` and `--min-duration` take.
+const MAX_DURATION_SECS: f64 = 1e9;
+
 /// A duration: seconds, or a number with `ms`, `s` or `m`.
 fn parse_duration(flag: &str, text: &str) -> Result<Duration, String> {
     let trimmed = text.trim();
@@ -226,12 +232,14 @@ fn parse_duration(flag: &str, text: &str) -> Result<Duration, String> {
     } else {
         (trimmed, 1.0)
     };
+    // At most MAX_DURATION_SECS, so the `Duration` always exists.
     match number.trim().parse::<f64>() {
-        Ok(value) if value.is_finite() && value >= 0.0 => {
-            Ok(Duration::from_secs_f64(value * scale))
+        Ok(value) if value.is_finite() && value >= 0.0 && value * scale <= MAX_DURATION_SECS => {
+            Duration::try_from_secs_f64(value * scale).map_err(|err| format!("{flag}: {err}"))
         }
         _ => Err(format!(
-            "{flag} takes a duration such as 1.5, 1500ms or 2m, not {text:?}"
+            "{flag} takes a duration such as 1.5, 1500ms or 2m (at most 10^9 seconds), \
+             not {text:?}"
         )),
     }
 }
@@ -426,7 +434,11 @@ fn parse_args(args: &[String]) -> Result<Command, String> {
             Ok(Command::Status(StatusArgs {
                 exit: exit.ok_or("`rich shell status` needs --exit CODE")?,
                 duration,
-                command: command_text.unwrap_or_default(),
+                // PowerShell hands the line over in the environment: an
+                // argument would be split by legacy native argument passing.
+                command: command_text
+                    .or_else(|| std::env::var(COMMAND_VAR).ok())
+                    .unwrap_or_default(),
                 min_duration: min_duration.unwrap_or(Duration::ZERO),
                 symbols,
             }))
@@ -574,7 +586,13 @@ fn prompt_escape(text: &str, shell: Shell) -> String {
                 Some(_) => index += 1,
                 None => {}
             }
-            out.extend(&chars[start..index]);
+            // zsh expands `%` inside `%{…%}` too (a URL's `%20`).
+            for &c in &chars[start..index] {
+                if shell == Shell::Zsh && c == '%' {
+                    out.push('%');
+                }
+                out.push(c);
+            }
         }
         out.push_str(close);
     }
@@ -628,6 +646,37 @@ fn run_link(args: &LinkArgs, no_color: bool) -> String {
 /// The `rich` the scripts call.
 const PROGRAM: &str = "rich";
 
+/// bash: `$1` percent-encoded into `__rich_shell_path`, byte by byte, for
+/// OSC 7 (a directory name is data: no escape in it reaches the terminal).
+const BASH_URL: &str = r#"__rich_shell_url() {
+    local LC_ALL=C __rich_i __rich_c
+    __rich_shell_path=
+    for (( __rich_i = 0; __rich_i < ${#1}; __rich_i++ )); do
+        __rich_c=${1:__rich_i:1}
+        case $__rich_c in
+            [A-Za-z0-9/._~-]) __rich_shell_path+=$__rich_c ;;
+            *) printf -v __rich_c '%%%02X' "'$__rich_c"; __rich_shell_path+=$__rich_c ;;
+        esac
+    done
+}
+"#;
+
+/// zsh: `$1` percent-encoded into `REPLY`, byte by byte, for OSC 7.
+const ZSH_URL: &str = r#"__rich_shell_url() {
+    emulate -L zsh
+    setopt nomultibyte
+    local __rich_c
+    REPLY=
+    for __rich_c in ${(s::)1}; do
+        if [[ $__rich_c == [A-Za-z0-9/._~-] ]]; then
+            REPLY+=$__rich_c
+        else
+            REPLY+=%${(l:2::0:)$(( [##16] #__rich_c ))}
+        fi
+    done
+}
+"#;
+
 fn bash_script(args: &InitArgs, completions: &str) -> String {
     let min = args.min_duration;
     let mut s = String::from(
@@ -638,6 +687,9 @@ fn bash_script(args: &InitArgs, completions: &str) -> String {
     if args.completions {
         s.push_str(completions);
         s.push('\n');
+    }
+    if args.marks {
+        s.push_str(BASH_URL);
     }
     s.push_str(
         "__rich_shell_ran=0 __rich_shell_ps0=\n\
@@ -656,8 +708,20 @@ fn bash_script(args: &InitArgs, completions: &str) -> String {
     s.push_str("\"${PS0-}\"\n");
     s.push_str(
         "__rich_shell_precmd() {\n\
-         \x20   local __rich_code=$?\n\
-         \x20   if [[ \"${__rich_shell_ran-0}\" == 1 ]]; then\n\
+         \x20   local __rich_code=$?\n",
+    );
+    if args.status {
+        // `\!` is the number the next history entry gets: unchanged when the
+        // command was not saved (HISTCONTROL, HISTIGNORE), and then `history
+        // 1` would name the one before it.
+        s.push_str(
+            "    local __rich_next=${__rich_shell_histnum@P} __rich_saved=0\n\
+             \x20   [[ $__rich_next != \"${__rich_shell_next-}\" ]] && __rich_saved=1\n\
+             \x20   __rich_shell_next=$__rich_next\n",
+        );
+    }
+    s.push_str(
+        "    if [[ \"${__rich_shell_ran-0}\" == 1 ]]; then\n\
          \x20       __rich_shell_ran=0\n",
     );
     if args.marks {
@@ -665,24 +729,31 @@ fn bash_script(args: &InitArgs, completions: &str) -> String {
     }
     if args.status {
         s.push_str(&format!(
-            "        local __rich_end __rich_cmd\n\
+            "        local __rich_end __rich_cmd=()\n\
              \x20       eval \"__rich_end=$__rich_shell_clock\"\n\
-             \x20       __rich_cmd=$(HISTTIMEFORMAT= builtin history 1)\n\
-             \x20       [[ $__rich_cmd =~ ^[[:space:]]*[0-9]+[*]?[[:space:]]+(.*)$ ]] && __rich_cmd=${{BASH_REMATCH[1]}}\n\
+             \x20       if (( __rich_saved )) && [[ $(HISTTIMEFORMAT= builtin history 1) =~ ^[[:space:]]*[0-9]+[*]?[[:space:]]+(.*)$ ]]; then\n\
+             \x20           __rich_cmd=(--command \"${{BASH_REMATCH[1]}}\")\n\
+             \x20       fi\n\
              \x20       command {PROGRAM} shell status --exit \"$__rich_code\" \\\n\
              \x20           --duration \"$(( (__rich_end - __rich_shell_start) / 1000 ))ms\" \\\n\
-             \x20           --min-duration {min} --command \"$__rich_cmd\"\n"
+             \x20           --min-duration {min} \"${{__rich_cmd[@]}}\"\n"
         ));
     }
     s.push_str("    fi\n");
     if args.marks {
-        s.push_str("    printf '\\e]7;file://%s%s\\a' \"${HOSTNAME-}\" \"$PWD\"\n");
+        s.push_str(
+            "    __rich_shell_url \"$PWD\"\n\
+             \x20   printf '\\e]7;file://%s%s\\a' \"${HOSTNAME-}\" \"$__rich_shell_path\"\n",
+        );
     }
     s.push_str(
         "    return \"$__rich_code\"\n\
          }\n\
          PROMPT_COMMAND=\"__rich_shell_precmd${PROMPT_COMMAND:+;$PROMPT_COMMAND}\"\n",
     );
+    if args.status {
+        s.push_str("__rich_shell_histnum='\\!'\n");
+    }
     if args.marks {
         s.push_str("PS1='\\[\\e]133;A\\a\\]'\"$PS1\"'\\[\\e]133;B\\a\\]'\n");
     }
@@ -699,6 +770,9 @@ fn zsh_script(args: &InitArgs, completions: &str) -> String {
          zmodload zsh/datetime 2>/dev/null\n\
          autoload -Uz add-zsh-hook\n",
     );
+    if args.marks {
+        s.push_str(ZSH_URL);
+    }
     if args.completions {
         s.push_str("# Completions need compinit; run it before this.\n");
         s.push_str("if (( $+functions[compdef] )); then\n");
@@ -710,7 +784,7 @@ fn zsh_script(args: &InitArgs, completions: &str) -> String {
          \x20   typeset -g __rich_shell_start=$EPOCHREALTIME __rich_shell_cmd=$1\n",
     );
     if args.marks {
-        s.push_str("    print -n '\\e]133;C\\a'\n");
+        s.push_str("    print -rn -- $'\\e]133;C\\a'\n");
     }
     s.push_str(
         "}\n\
@@ -719,7 +793,7 @@ fn zsh_script(args: &InitArgs, completions: &str) -> String {
          \x20   if [[ -n \"${__rich_shell_start-}\" ]]; then\n",
     );
     if args.marks {
-        s.push_str("        print -n \"\\e]133;D;$__rich_code\\a\"\n");
+        s.push_str("        print -rn -- $'\\e]133;D;'\"$__rich_code\"$'\\a'\n");
     }
     if args.status {
         s.push_str(&format!(
@@ -731,7 +805,11 @@ fn zsh_script(args: &InitArgs, completions: &str) -> String {
     }
     s.push_str("        unset __rich_shell_start\n    fi\n");
     if args.marks {
-        s.push_str("    print -n \"\\e]7;file://${HOST}${PWD}\\a\"\n");
+        s.push_str(
+            "    local REPLY\n\
+             \x20   __rich_shell_url \"$PWD\"\n\
+             \x20   print -rn -- $'\\e]7;file://'\"${HOST}${REPLY}\"$'\\a'\n",
+        );
     }
     s.push_str(
         "    return $__rich_code\n\
@@ -764,7 +842,7 @@ fn fish_script(args: &InitArgs, completions: &str) -> String {
              end\n\
              function __rich_shell_prompt --on-event fish_prompt\n\
              \x20   printf '\\e]133;A\\a'\n\
-             \x20   printf '\\e]7;file://%s%s\\a' $hostname $PWD\n\
+             \x20   printf '\\e]7;file://%s%s\\a' $hostname (string escape --style=url -- $PWD)\n\
              end\n",
         );
     }
@@ -815,7 +893,9 @@ fn powershell_script(args: &InitArgs, completions: &str) -> String {
     if args.status {
         s.push_str(&format!(
             "        $ms = [long]($last.EndExecutionTime - $last.StartExecutionTime).TotalMilliseconds\n\
-             \x20       & {PROGRAM} shell status --exit $code --duration \"${{ms}}ms\" --min-duration {min} --command $last.CommandLine | Out-Host\n"
+             \x20       $env:RICH_SHELL_COMMAND = $last.CommandLine\n\
+             \x20       & {PROGRAM} shell status --exit $code --duration \"${{ms}}ms\" --min-duration {min} | Out-Host\n\
+             \x20       Remove-Item Env:RICH_SHELL_COMMAND -ErrorAction SilentlyContinue\n"
         ));
     }
     s.push_str("    }\n");
@@ -823,6 +903,7 @@ fn powershell_script(args: &InitArgs, completions: &str) -> String {
         s.push_str(
             "    $dir = $PWD.ProviderPath -replace '\\\\', '/'\n\
              \x20   if (-not $dir.StartsWith('/')) { $dir = '/' + $dir }\n\
+             \x20   $dir = (($dir -split '/' | ForEach-Object { [Uri]::EscapeDataString($_) }) -join '/').Replace('%3A', ':')\n\
              \x20   [Console]::Write(\"$esc]7;file://$([Environment]::MachineName)$dir$bel\")\n",
         );
     }
@@ -930,6 +1011,28 @@ mod tests {
             parsed(&["shell", "status", "--help"]),
             Ok(Command::Help(vec!["shell", "status"]))
         );
+    }
+
+    #[test]
+    fn zsh_prompt_doubles_percent_inside_escapes() {
+        let link = "\x1b]8;;file:///a%20b\x1b\\a b\x1b]8;;\x1b\\ 100%";
+        assert_eq!(
+            prompt_escape(link, Shell::Zsh),
+            "%{\x1b]8;;file:///a%%20b\x1b\\%}a b%{\x1b]8;;\x1b\\%} 100%%"
+        );
+        // bash's markers leave `%` alone.
+        assert_eq!(
+            prompt_escape(link, Shell::Bash),
+            "\u{1}\x1b]8;;file:///a%20b\x1b\\\u{2}a b\u{1}\x1b]8;;\x1b\\\u{2} 100%"
+        );
+    }
+
+    #[test]
+    fn durations_are_bounded() {
+        assert!(parse_duration("--duration", "1e9").is_ok());
+        for bad in ["1e300", "1e8m", "inf", "-1", "NaN", "1e10s"] {
+            assert!(parse_duration("--duration", bad).is_err(), "{bad}");
+        }
     }
 
     #[test]
