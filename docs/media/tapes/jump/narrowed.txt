@@ -1,0 +1,26 @@
+❯ place=$(rich jump --commands commands --recent .jump-recent docs src)
+? Jump › [Files] approval
+  no matches
+  0 results · shift+tab widen · ↑↓ move · alt+↑↓ group · enter jump · esc cancel
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

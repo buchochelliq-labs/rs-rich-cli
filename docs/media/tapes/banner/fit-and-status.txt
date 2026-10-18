@@ -1,0 +1,30 @@
+❯ rich banner -w 30 --fit plain 'Too wide to draw'
+Too wide to draw
+❯ rich shell status --exit 101 --duration 4.2 --command 'cargo test'
+✖ error $ cargo test  exit 101  4.2s
+❯
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

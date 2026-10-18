@@ -1,0 +1,26 @@
+❯ place=$(rich jump --commands commands --recent .jump-recent docs src)
+? Jump › approval
+Headings #  +5 more · tab                         │    46
+❯ Screenshot approvals  ## docs/guide/ext/qa.md:5 │    47 The sections below explain each tool.
+  ApprovalQueue and Jump  ### docs/guide/interact │    48
+  The approval queue  ## docs/guide/interact/revi │    49 ## Screenshot approvals
+  Approval queues and jumping to anything  # docs │ ▶  50
+  Tutorial: a to-do app  # docs/guide/intuituive/ │    51 `Screenshot::capture(name, &renderable, &matrix)` re
+Symbols @                                         │    52 combination of a `Matrix`: widths × colour depths ×
+  ApprovalQueue  struct · src/components/approve. │    53 default matrix is 40, 80 and 120 columns × truecolor
+  ApprovalReport  struct · src/components/approve │    54 and ASCII, which gives 12 shots. Each `Shot` has a k
+  a_palette_filters_by_context_and_reads_hints_fr │    55 `status-table@80.truecolor.unicode`.
+  8 results · tab narrow · ↑↓ move · alt+↑↓ group · enter jump · esc cancel · # headings, @ symbols, > command
+
+
+
+
+
+
+
+
+
+
+
+
+

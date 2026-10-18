@@ -1,0 +1,15 @@
+{
+  "tape": "docs/tapes/approve.tape",
+  "tape_fnv1a64": "0d7b98ab6d2b8baa",
+  "recorder": "rs-rich-record 0.0.7",
+  "rich": null,
+  "commit": "ea42bea72df7ac2b01b609d134682f9ecc7c59ef",
+  "screenshots": [
+    "queue",
+    "reason",
+    "marked",
+    "decided",
+    "output"
+  ],
+  "note": "Every frame is real output of the program under test on a PTY."
+}

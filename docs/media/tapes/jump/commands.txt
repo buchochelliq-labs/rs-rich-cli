@@ -1,0 +1,26 @@
+❯ place=$(rich jump --commands commands --recent .jump-recent docs src)
+? Jump › [Files] >test
+Commands >
+❯ Run the tests  cargo test
+  1 results · shift+tab widen · ↑↓ move · alt+↑↓ group · enter jump · esc cancel
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

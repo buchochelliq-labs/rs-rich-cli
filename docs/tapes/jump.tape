@@ -6,7 +6,7 @@ Set Size 110x26
 Set TypingDelay 45ms
 Hide
 Exec "cp $REPO/docs/tapes/fixtures/jump/commands ."
-Exec "cp -r $REPO/docs $REPO/crates/rich-interact/src ."
+Exec "mkdir docs && cp -r $REPO/docs/guide docs/ && cp -r $REPO/crates/rich-interact/src ."
 Type "clear"
 Enter
 Wait /❯\s*$/

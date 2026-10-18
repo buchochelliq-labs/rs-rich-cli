@@ -7,6 +7,7 @@
 Set Title "rich capture · preview, then share"
 Set Size 96x30
 Set TypingDelay 40ms
+Mask /· \d+ms/ "· Nms"
 Write deploy.sh "echo 'deploying build 42'\necho 'GITHUB_TOKEN=ghp_0123456789abcdefghijklmnopqrstuvwxyzAB'\necho 'db: postgres://app:s3cret@db/app'\necho 'done'\n"
 Type "rich capture --redact --redact-preview --export-png deploy.png -- sh deploy.sh"
 Enter

@@ -1,0 +1,26 @@
+❯ place=$(rich jump --commands commands --recent .jump-recent docs src)
+? Jump › ApprovalQueue
+❯ echo "$place"
+src/components/approve.rs:237
+❯
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

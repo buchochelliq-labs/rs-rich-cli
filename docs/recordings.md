@@ -40,6 +40,9 @@ motion turned on in your system settings the cards stay still.
 [![ratatui's demo rebuilt on intuiTUIve](media/tapes/demo/graphs.png){ data-gif="demo.gif" loading=lazy }<span class="tape-card-title">ratatui's examples</span>](#ratatuis-examples-on-intuituive){ .tape-card }
 [![rich profile on nested JSON Lines](media/tapes/profile-nested/nested.png){ data-gif="profile-nested.gif" loading=lazy }<span class="tape-card-title">Nested JSON Lines</span>](#nested-json-lines-and-style-rules){ .tape-card }
 [![A two-row micro icon](media/tapes/micro-rows/icon.png){ data-gif="micro-rows.gif" loading=lazy }<span class="tape-card-title">Two-row micro assets</span>](#two-row-micro-assets){ .tape-card }
+[![rich approve reviewing a queue](media/tapes/approve/queue.png){ data-gif="approve.gif" loading=lazy }<span class="tape-card-title">Review and jump</span>](#review-a-queue-and-jump-to-anything){ .tape-card }
+[![A FIGlet banner in a gradient](media/tapes/banner/gradient.png){ data-gif="banner.gif" loading=lazy }<span class="tape-card-title">Banners and shell integration</span>](#banners-and-shell-integration){ .tape-card }
+[![A redaction preview](media/tapes/share/preview.png){ data-gif="share.gif" loading=lazy }<span class="tape-card-title">Preview, then share</span>](#preview-then-share){ .tape-card }
 [![rich date: a day picked on a month grid within a range](media/tapes/date/grid.png){ data-gif="date.gif" loading=lazy }<span class="tape-card-title">Dates and times</span>](#dates-and-times){ .tape-card }
 [![A man page rendered by rich, its sections and tagged paragraphs](media/tapes/documents/man.png){ data-gif="documents.gif" loading=lazy }<span class="tape-card-title">Org, AsciiDoc and man pages</span>](#org-asciidoc-and-man-pages){ .tape-card }
 [![rich log grouping records under a header for each trace id](media/tapes/log/groups.png){ data-gif="log.gif" loading=lazy }<span class="tape-card-title">Filter and group a log</span>](#filter-and-group-a-log){ .tape-card }
@@ -613,6 +616,67 @@ a 3×2 animation. See [Micro assets](guide/micro/index.md).
 | ![A 2×2 icon with its row reserved](media/tapes/micro-rows/icon.png) | ![A 3×2 animation](media/tapes/micro-rows/animation.png) |
 
 [Tape](tapes/micro-rows.tape) · [Cast](media/tapes/micro-rows/micro-rows.cast) · [GIF](media/tapes/micro-rows/micro-rows.gif) · [Page](media/tapes/micro-rows/micro-rows.html)
+
+## Review a queue and jump to anything
+
+`rich approve` (0.0.19) walks a queue of items, approved, rejected with a
+reason or skipped, and prints the decisions as JSON Lines; `rich jump`
+finds a file, a heading, a symbol or a command from one fuzzy box. See
+[Review and jump](cli.md#review-and-jump).
+
+<div class="tape-player" data-cast="../media/tapes/approve/approve.cast" data-poster="npt:0:3">
+  <img src="../media/tapes/approve/approve.gif" alt="rich approve reviewing a queue of items">
+</div>
+
+| Queue | Reason | Decisions |
+|---|---|---|
+| ![A queue of items to review](media/tapes/approve/queue.png) | ![A rejection with a reason](media/tapes/approve/reason.png) | ![The decisions as JSON Lines](media/tapes/approve/output.png) |
+
+[Tape](tapes/approve.tape) · [Cast](media/tapes/approve/approve.cast) · [GIF](media/tapes/approve/approve.gif) · [Page](media/tapes/approve/approve.html)
+
+<div class="tape-player" data-cast="../media/tapes/jump/jump.cast" data-poster="npt:0:3">
+  <img src="../media/tapes/jump/jump.gif" alt="rich jump searching files, headings, symbols and commands">
+</div>
+
+| Groups | Narrowed | Answer |
+|---|---|---|
+| ![Results grouped by source](media/tapes/jump/groups.png) | ![A search narrowed to one source](media/tapes/jump/narrowed.png) | ![The picked location printed](media/tapes/jump/answer.png) |
+
+[Tape](tapes/jump.tape) · [Cast](media/tapes/jump/jump.cast) · [GIF](media/tapes/jump/jump.gif) · [Page](media/tapes/jump/jump.html)
+
+## Banners and shell integration
+
+`rich banner` (0.0.19) draws FIGlet text in a gradient, and `rich shell`
+prints a status line after a command and links to files. See
+[Draw a banner](cli.md#draw-a-banner-0019) and
+[Shell integration](cli.md#shell-integration-0019).
+
+<div class="tape-player" data-cast="../media/tapes/banner/banner.cast" data-poster="npt:0:3">
+  <img src="../media/tapes/banner/banner.gif" alt="rich banner drawing FIGlet text in gradients">
+</div>
+
+| Gradient | Vertical | Fit and status |
+|---|---|---|
+| ![A banner in a horizontal gradient](media/tapes/banner/gradient.png) | ![A banner in a vertical gradient](media/tapes/banner/vertical.png) | ![A banner fitted to the width, and a status line](media/tapes/banner/fit-and-status.png) |
+
+[Tape](tapes/banner.tape) · [Cast](media/tapes/banner/banner.cast) · [GIF](media/tapes/banner/banner.gif) · [Page](media/tapes/banner/banner.html)
+
+## Preview, then share
+
+`rich capture --redact --redact-preview` (0.0.19) shows each secret a
+redaction would mask, and its replacement, without writing anything; then
+the redacted capture is shared as a PNG. See
+[Preview a redaction before you share](cli.md#preview-a-redaction-before-you-share-0019).
+
+<div class="tape-player" data-cast="../media/tapes/share/share.cast" data-poster="npt:0:3">
+  <img src="../media/tapes/share/share.gif" alt="rich capture previewing a redaction, then sharing the output">
+</div>
+
+| Preview | Shared |
+|---|---|
+| ![Each match, its rule and its replacement](media/tapes/share/preview.png) | ![The redacted output, shared](media/tapes/share/shared.png) |
+
+[Tape](tapes/share.tape) · [Cast](media/tapes/share/share.cast) · [GIF](media/tapes/share/share.gif) · [Page](media/tapes/share/share.html)
 
 ## Serve a program to a browser
 
