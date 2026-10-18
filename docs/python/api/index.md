@@ -54,6 +54,7 @@ The guides in the other sections explain how to use them.
 - [`rs_rich.ext.layout`](rs_rich/ext/layout.md)
 - [`rs_rich.ext.live`](rs_rich/ext/live.md)
 - [`rs_rich.ext.log_handler`](rs_rich/ext/log_handler.md)
+- [`rs_rich.ext.log_stream`](rs_rich/ext/log_stream.md)
 - [`rs_rich.ext.notify`](rs_rich/ext/notify.md)
 - [`rs_rich.ext.qa`](rs_rich/ext/qa.md)
 - [`rs_rich.ext.redact`](rs_rich/ext/redact.md)

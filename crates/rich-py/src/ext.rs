@@ -18,6 +18,7 @@ mod diff;
 mod frame;
 mod inspect;
 mod layout;
+pub(crate) mod log_stream;
 mod qa;
 mod registry;
 mod status;
@@ -31,6 +32,7 @@ mod workflow;
 pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     common::register(m)?;
     diagnostic::register(m)?;
+    log_stream::register(m)?;
     data::register(m)?;
     transform::register(m)?;
     diff::register(m)?;

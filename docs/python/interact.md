@@ -339,6 +339,40 @@ lines 5–8 of 20 · match 1/1 ·
 
 ![A pager scrolled to the search match, with its status line](media/interact-pager.svg)
 
+## LogView
+
+`LogView(records=(), *, collapse=True, time="absolute", fields=False,
+filter=None, limit=200000)` is the view `rich log -i` shows: log records,
+newest at the bottom. Records are `rs_rich.ext.log_stream.LogRecord`s,
+dicts of fields, or lines (read by the same parsers as `rich log`). `/`
+types a filter: words match the text, and `status>=400` and the other
+`rich log --where` tests match fields. Enter shows a record's fields and
+the lines that followed it, Space pauses, and `q` closes (the answer is
+`None`). A run of identical records shows once, with a count. Without a
+terminal it writes the rows out.
+
+```python
+from rs_rich.interact import LogView, Script, degrade
+
+view = LogView([
+    "2026-10-18T10:00:00Z INFO started service=api",
+    "2026-10-18T10:00:01Z ERROR refused trace_id=t1",
+    "2026-10-18T10:00:02Z ERROR refused trace_id=t1",
+    "2026-10-18T10:00:04Z WARN slow status=503",
+], time="relative")
+print(degrade(view).prompts, end="")
+typed = Script().keys("/").text("status>=500").keys("enter q")
+print(view.headless(typed, width=60, height=4).last_frame)
+```
+
+```text
++0.000s INFO  started service=api
++1.000s ERROR ×2 refused trace_id=t1
++4.000s WARN  slow status=503
+❯ +4.000s WARN  slow status=503
+4 records · 1 matching "status>=500" · at the end · / filter
+```
+
 ## TextArea
 
 `TextArea(prompt="Write", *, value="", placeholder=None, char_limit=None,

@@ -187,6 +187,7 @@ and explicit overrides, not a materialized list of built-in defaults.
 | `--image-background default\|checkerboard` (#126) | CLI routing; art `image_art.rs` and the text backends | `ImageBackground::{Color, TerminalDefault, Checkerboard}`; alpha kept through fitting; unpainted cells for pixels under half opacity |
 | `--theme-file`, `theme_file` (#499) | CLI main + config | Reads upstream theme files with the public `rich::Theme::from_file`; layered under config themes and `--theme-style`; no core theme-stack change |
 | Python `rs_rich.interact` and `rs_rich.ext.frame` (0.0.13 WS5) | `crates/rich-py` (`src/interact.rs`, `src/ext/frame.rs`) | binds the public `rich_interact` components, drivers and `fuzzy` API and `rich_ext::frame::Frame`; values stay Python objects (items chosen by index); tested headless against the Rust crate's frames; no core change |
+| Python `rs_rich.ext.log_stream` and `rs_rich.interact.LogView` (0.0.19, #724) | `crates/rich-py` (`src/ext/log_stream.rs`, `src/interact/log_view.rs`) | binds the public `rich_ext::log_stream` records, parsers, filters, collapser, groups and summary, and `rich_interact::LogView`; the flat native module prefixes names other areas use with `Log`, and the Python module exports the Rust names too; no core change |
 
 Art owns palette quantisation (ANSI256, ANSI16, grayscale) and the
 Floyd–Steinberg, Bayer and Atkinson dithers on the final sampled image, with RGB

@@ -407,9 +407,13 @@ per browser session](#one-process-per-browser-session-web-002).
 - **Smaller things:** `Severity` is ordered (`Warn < Error`) and hashable.
   `Redactor::redact_field` masks a field's value as `key=value` would be
   masked. The `log.*` theme keys are in `STYLE_TABLES`.
+- **Python:** `rs_rich.ext.log_stream` has the records, parsers, filters,
+  folding, groups and summary (`LogRecord`, `LogAssembler`, `LogFilter`,
+  `LogSummary`, ..., and the Rust names too). `rs_rich.interact.LogView` is
+  the live view.
 - **Docs:** [`rich log`](docs/cli.md#logs-rich-log) with every option, the
-  CLI reference regenerated, the porting page, and `docs/tapes/log.tape`
-  (not yet recorded).
+  CLI reference regenerated, the porting page, the Python pages, and
+  `docs/tapes/log.tape` (not yet recorded).
 
 ### One process per browser session (web 0.0.2)
 
