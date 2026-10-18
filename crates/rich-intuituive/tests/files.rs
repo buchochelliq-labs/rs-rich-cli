@@ -81,7 +81,10 @@ fn opening_and_going_up_keep_the_place() {
     let name = root.file_name().unwrap().to_string_lossy().into_owned();
     // Into alpha: the header shows it, the parent column lists root.
     let rows = screen(&run(app(&root), Script::new().keys("l q"), 80, 10));
-    assert!(rows[0].ends_with(&format!("{name}/alpha")), "{rows:?}");
+    let sep = std::path::MAIN_SEPARATOR;
+    assert!(rows[0].ends_with(&format!("{name}{sep}alpha")), "{rows:?}");
+    // On Windows, an ordinary drive path, not a verbatim one.
+    assert!(!rows[0].contains(r"\\?\"), "{rows:?}");
     assert!(middle(&rows, 11, 50)[0].starts_with("a.txt"), "{rows:?}");
     assert!(rows[1].starts_with("alpha/"), "parent column: {rows:?}");
     // Back up: alpha is selected again.

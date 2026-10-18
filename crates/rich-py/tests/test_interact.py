@@ -1084,5 +1084,7 @@ def test_a_picker_starts_at_its_value_and_answers_what_it_shows():
     record = picker.headless("enter")
     assert record.value == datetime.time(14, 30)
     assert not any("the latest is" in frame for frame in record.frames)
-    for picker, prompt in [(DatePicker, "Date"), (TimePicker, "Time"), (DateTimePicker, "Date and time")]:
-        assert inspect.signature(picker).parameters["prompt"].default == prompt
+    # Python 3.9's inspect reads no text signature from a native class.
+    if sys.version_info >= (3, 10):
+        for picker, prompt in [(DatePicker, "Date"), (TimePicker, "Time"), (DateTimePicker, "Date and time")]:
+            assert inspect.signature(picker).parameters["prompt"].default == prompt

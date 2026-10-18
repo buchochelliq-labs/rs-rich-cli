@@ -231,11 +231,23 @@ fn size_cell(entry: &Entry) -> String {
     }
 }
 
+/// `path` made absolute, as a person would write it: on Windows,
+/// `canonicalize` gives a verbatim path (`\\?\C:\…`), whose prefix is
+/// dropped when what follows is an ordinary drive path.
+fn absolute(path: PathBuf) -> PathBuf {
+    let full = path.canonicalize().unwrap_or(path);
+    let text = full.to_string_lossy();
+    match text.strip_prefix(r"\\?\") {
+        Some(rest) if rest.as_bytes().get(1) == Some(&b':') => PathBuf::from(rest),
+        _ => full,
+    }
+}
+
 /// The app, starting in `start`.
 pub fn files_app(start: PathBuf) -> App {
     App::new(move || {
         // Tabs, as Yazi's: each has its directory; `active` is the one shown.
-        let tab_dirs = signal(vec![start.canonicalize().unwrap_or(start)]);
+        let tab_dirs = signal(vec![absolute(start)]);
         let active = signal(0usize);
         let cwd =
             memo(move || tab_dirs.with(|dirs| dirs[active.get().min(dirs.len() - 1)].clone()));
