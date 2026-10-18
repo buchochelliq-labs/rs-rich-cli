@@ -195,3 +195,32 @@ fn fill_dots() {
     assert_eq!(style_at(&driver, 0, 0), Some(style("bright_black")));
     assert_eq!(style_at(&driver, 6, 2), Some(style("bright_cyan")));
 }
+
+#[test]
+fn an_idle_effect_lets_a_child_draw_alone() {
+    // An effect that wrote nothing last time does not draw everything
+    // inside it again when one child changes (demo2's destroy, idle).
+    let app = App::new(|| {
+        let word = signal("ab");
+        let on = signal(false);
+        effect(
+            column([text!("{word}"), label("xy"), label("zz")]),
+            move |canvas, _cx| {
+                if on.get() {
+                    canvas.set_cell(0, 0, "*", None);
+                }
+            },
+        )
+        .on_key("x", move |_| word.set("cd"))
+        .on_key("o", move |_| on.set(true))
+    });
+    let mut driver = shown(app, 4, 3);
+    driver.event(Event::Key(Key::char('x')));
+    driver.update(Duration::ZERO);
+    driver.render().expect("the change draws");
+    assert_eq!(driver.stats().drawn, 1, "only the text drew");
+    assert_eq!(driver.screen().plain(), ["cd  ", "xy  ", "zz  "]);
+    // Once it writes, it runs over what is inside drawn afresh.
+    driver.press("o");
+    assert_eq!(driver.screen().plain()[0], "*d  ");
+}

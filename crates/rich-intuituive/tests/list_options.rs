@@ -2,6 +2,7 @@
 //! the direction, scroll padding, multi-line items, row styles, the
 //! offset, and an empty selection.
 
+use intuituive::interact::{Button, Event, Mouse, MouseKind};
 use intuituive::prelude::*;
 use intuituive::widgets::{HighlightSpacing, ListDirection, Move};
 use intuituive::{assert_screen, assert_screen_styled};
@@ -229,4 +230,55 @@ fn accessibility_positions_are_unchanged() {
     assert_eq!(tree[0].state.position, Some((3, 5)));
     // The value is the item, not its symbol.
     assert_eq!(tree[0].value.as_deref().map(str::trim_end), Some("cherry"));
+}
+
+#[test]
+fn a_press_selects_an_item_and_the_wheel_moves_the_selection() {
+    // A list that never takes the focus still takes the mouse (the demo
+    // port's task list), as a table does.
+    let app = App::new(|| {
+        let selected = signal(None);
+        column([
+            list_optional(fruit, selected)
+                .symbol("> ")
+                .no_focus()
+                .fixed(5),
+            text(move || format!("{:?}", selected.get())).fixed(1),
+        ])
+    });
+    let mut driver = app.driver(12, 6);
+    driver.settle();
+    let mouse = |kind, row| Event::Mouse(Mouse::new(kind, 3, row));
+    driver.event(mouse(MouseKind::Down(Button::Left), 1));
+    driver.settle();
+    assert_eq!(rows(&driver)[1], "> banana");
+    assert_eq!(rows(&driver)[5], "Some(1)");
+    // The wheel: three items a turn, kept in the list.
+    driver.event(mouse(MouseKind::ScrollDown, 1));
+    driver.settle();
+    assert_eq!(rows(&driver)[5], "Some(4)");
+    driver.event(mouse(MouseKind::ScrollUp, 1));
+    driver.settle();
+    assert_eq!(rows(&driver)[5], "Some(1)");
+    // A right press selects too, and is left to the node's own handler.
+    driver.event(mouse(MouseKind::Down(Button::Right), 2));
+    driver.settle();
+    assert_eq!(rows(&driver)[5], "Some(2)");
+}
+
+#[test]
+fn a_reorderable_list_still_drags_with_a_press() {
+    let app = App::new(|| {
+        let items = signal(fruit());
+        list(move || items.get(), signal(0))
+            .reorderable(move |step: Move, _| items.update(|items| step.apply(items)))
+    });
+    let mut driver = app.driver(12, 5);
+    driver.settle();
+    let mouse = |kind, row| Event::Mouse(Mouse::new(kind, 3, row));
+    driver.event(mouse(MouseKind::Down(Button::Left), 0));
+    driver.event(mouse(MouseKind::Drag(Button::Left), 2));
+    driver.event(mouse(MouseKind::Up(Button::Left), 2));
+    driver.settle();
+    assert_eq!(rows(&driver)[2], "apple", "{:?}", rows(&driver));
 }
