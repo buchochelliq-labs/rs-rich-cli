@@ -444,6 +444,71 @@ pub enum LegendPosition {
     None,
 }
 
+/// What a [`Chart`] does with a line, bar or area segment that has an end
+/// outside the axes' bounds.
+///
+/// ```
+/// use rich::Console;
+/// use rich_ext::chart::{Axis, Chart, Dataset, GraphType, Marker, OutOfBounds};
+///
+/// let console = Console::builder().width(5).color_system(None).build();
+/// // From (0, 0) to (8, 2): the second end is past the right edge.
+/// let line = Dataset::new([(0.0, 0.0), (8.0, 2.0)])
+///     .graph_type(GraphType::Line)
+///     .marker(Marker::Ascii('*'));
+/// let chart = Chart::new(vec![line])
+///     .x_axis(Axis::default().bounds(0.0, 4.0))
+///     .y_axis(Axis::default().bounds(0.0, 2.0))
+///     .width(5)
+///     .height(3);
+/// assert_eq!(console.render_export(&chart), "     \n  ***\n**   \n");
+/// // ratatui 0.29 drops it; only the point inside is drawn.
+/// let dropped = chart.out_of_bounds(OutOfBounds::Drop);
+/// assert_eq!(console.render_export(&dropped), "     \n     \n*    \n");
+/// ```
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum OutOfBounds {
+    /// Draw the part inside the bounds (the default; ratatui's since
+    /// 0.30).
+    #[default]
+    Clip,
+    /// Leave the whole segment out, as ratatui 0.29 does. Points outside
+    /// are never drawn either way.
+    Drop,
+}
+
+/// How a [`Chart`] puts its datasets together where they share a cell.
+///
+/// ```
+/// use rich::Console;
+/// use rich_ext::chart::{Axis, Chart, Dataset, Layering, Marker};
+///
+/// let console = Console::builder().width(1).color_system(None).build();
+/// // Two Braille dots in one cell, from two datasets.
+/// let chart = Chart::new(vec![
+///     Dataset::new([(0.0, 1.0)]).marker(Marker::Braille),
+///     Dataset::new([(0.0, 0.0)]).marker(Marker::Braille),
+/// ])
+/// .x_axis(Axis::default().bounds(0.0, 1.0))
+/// .y_axis(Axis::default().bounds(0.0, 1.0))
+/// .width(1)
+/// .height(1);
+/// assert_eq!(console.render_export(&chart), "⡁\n");
+/// let layered = chart.layering(Layering::PerDataset);
+/// assert_eq!(console.render_export(&layered), "⡀\n");
+/// ```
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum Layering {
+    /// Datasets with the same marker share the dots of a cell, which takes
+    /// the style of the last dataset to set one (the default).
+    #[default]
+    Merge,
+    /// Each dataset is drawn over the ones before it, as ratatui 0.29
+    /// draws a canvas per dataset: a cell a later dataset draws in shows
+    /// only its dots, in its style.
+    PerDataset,
+}
+
 /// Datasets on two axes, laid out as ratatui's `Chart`, so a ratatui app
 /// ports with the same look.
 ///
@@ -452,13 +517,19 @@ pub enum LegendPosition {
 ///   width) and its line (`│`) the column after, meeting at `└`. An axis
 ///   draws its line only when it has [`Labels`].
 /// - The datasets are drawn in order on a [`Canvas`](super::Canvas) filling
-///   the rest, each with its marker; a later one wins a cell.
+///   the rest, each with its marker. Datasets with the same marker share
+///   the dots of a cell, which takes the later one's style;
+///   [`Layering::PerDataset`] draws each over the ones before. A line
+///   leaving the bounds is clipped at them ([`OutOfBounds`]).
 /// - The y axis's title sits on the plot's top row, from its left; the x
 ///   axis's at the right end of the plot's bottom row.
 /// - The legend is a box listing the named datasets, each in its style, in
 ///   a corner of the plot ([`LegendPosition::TopRight`] by default). It
 ///   hides itself when it would take more than a share of the plot: a
-///   quarter of the width and a quarter of the height by default.
+///   quarter of the width and a quarter of the height by default. Its box
+///   is in the x axis's style unless [`legend_style`](Self::legend_style)
+///   says otherwise, and it clears the plot under it unless
+///   [`legend_clear`](Self::legend_clear) is false.
 /// - It fills the height it is given, as ratatui's fills its area: a
 ///   `Layout` region, a `Panel` with a height, an intuiTUIve node through
 ///   `renderable(..)`. [`height`](Self::height) fixes it instead; given no
@@ -503,6 +574,10 @@ pub struct Chart {
     y_axis: Axis,
     legend: LegendPosition,
     hidden_legend: (f64, f64),
+    legend_style: Option<String>,
+    legend_clear: bool,
+    out_of_bounds: OutOfBounds,
+    layering: Layering,
     width: Option<usize>,
     height: Option<usize>,
 }
@@ -522,6 +597,10 @@ impl Chart {
             y_axis: Axis::default(),
             legend: LegendPosition::TopRight,
             hidden_legend: (0.25, 0.25),
+            legend_style: None,
+            legend_clear: true,
+            out_of_bounds: OutOfBounds::Clip,
+            layering: Layering::Merge,
             width: None,
             height: None,
         }
@@ -562,6 +641,65 @@ impl Chart {
     pub fn hidden_legend_fraction(mut self, width: f64, height: f64) -> Self {
         let share = |v: f64| if v.is_nan() { 0.25 } else { v.clamp(0.0, 1.0) };
         self.hidden_legend = (share(width), share(height));
+        self
+    }
+
+    /// The style of the legend's box: a theme key or a definition (default:
+    /// the x axis's style). The names keep their datasets' styles.
+    ///
+    /// ```
+    /// use rich_ext::chart::{Chart, Dataset};
+    ///
+    /// let chart = Chart::new(vec![Dataset::new([(0.0, 1.0)]).name("left")])
+    ///     .legend_style("dim");
+    /// ```
+    pub fn legend_style(mut self, style: impl Into<String>) -> Self {
+        self.legend_style = Some(style.into());
+        self
+    }
+
+    /// Whether the legend clears the plot under it (default true). When
+    /// false, as in ratatui, what the datasets drew inside the box stays,
+    /// unstyled, around the names.
+    ///
+    /// ```
+    /// use rich::Console;
+    /// use rich_ext::chart::{Axis, Chart, Dataset, Marker};
+    ///
+    /// let console = Console::builder().width(8).color_system(None).build();
+    /// let wall = (0..8).flat_map(|x| (0..4).map(move |y| (f64::from(x), f64::from(y))));
+    /// let dots = Dataset::new(wall).name("a").marker(Marker::Ascii('.'));
+    /// let chart = Chart::new(vec![dots, Dataset::new([]).name("bb")])
+    ///     .x_axis(Axis::default().bounds(0.0, 7.0))
+    ///     .y_axis(Axis::default().bounds(0.0, 3.0))
+    ///     .hidden_legend_fraction(1.0, 1.0)
+    ///     .width(8)
+    ///     .height(4);
+    /// assert_eq!(
+    ///     console.render_export(&chart),
+    ///     "....┌──┐\n....│a │\n....│bb│\n....└──┘\n"
+    /// );
+    /// assert_eq!(
+    ///     console.render_export(&chart.legend_clear(false)),
+    ///     "....┌──┐\n....│a.│\n....│bb│\n....└──┘\n"
+    /// );
+    /// ```
+    pub fn legend_clear(mut self, clear: bool) -> Self {
+        self.legend_clear = clear;
+        self
+    }
+
+    /// What to do with a segment that has an end outside the bounds
+    /// (default [`OutOfBounds::Clip`]).
+    pub fn out_of_bounds(mut self, out_of_bounds: OutOfBounds) -> Self {
+        self.out_of_bounds = out_of_bounds;
+        self
+    }
+
+    /// How datasets that share a cell are put together (default
+    /// [`Layering::Merge`]).
+    pub fn layering(mut self, layering: Layering) -> Self {
+        self.layering = layering;
         self
     }
 
@@ -750,7 +888,7 @@ impl Chart {
             marker,
             ascii,
         };
-        let plot = raster(&self.ops(&y), &view, console);
+        let plot = raster(&self.ops(&x, &y), &view, console);
         grid.blit(&plot, 0, gx);
 
         // Titles.
@@ -799,14 +937,18 @@ impl Chart {
                 } else {
                     ['┌', '┐', '└', '┘', '─', '│']
                 };
-                draw_legend(
-                    &mut grid,
-                    (top, col),
+                let style = match &self.legend_style {
+                    Some(spec) => spec_style(console, spec),
+                    None => x_style.clone(),
+                };
+                let box_ = LegendBox {
+                    at: (top, col),
                     inner,
-                    &named,
                     border,
-                    x_style.clone(),
-                );
+                    style,
+                    clear: self.legend_clear,
+                };
+                box_.draw(&mut grid, &named);
             }
         }
         grid
@@ -825,9 +967,21 @@ impl Chart {
     }
 
     /// The datasets as canvas steps, in the axes' mapped terms.
-    fn ops(&self, y: &Resolved) -> Vec<Op> {
+    fn ops(&self, x: &Resolved, y: &Resolved) -> Vec<Op> {
+        let within = |v: f64, s: &Scale| {
+            let (a, b) = (s.min(), s.max());
+            a.min(b) <= v && v <= a.max(b)
+        };
+        let inside = |(px, py): (f64, f64)| within(px, &x.scale) && within(py, &y.scale);
+        // Whether a segment from `a` to `b` is drawn (clipped) at all.
+        let keep = |a: (f64, f64), b: (f64, f64)| {
+            self.out_of_bounds == OutOfBounds::Clip || (inside(a) && inside(b))
+        };
         let mut ops = Vec::new();
         for (index, dataset) in self.datasets.iter().enumerate() {
+            if index > 0 && self.layering == Layering::PerDataset {
+                ops.push(Op::Layer);
+            }
             let style = self.dataset_spec(index);
             let mapped: Vec<Option<(f64, f64)>> = dataset
                 .points
@@ -842,7 +996,9 @@ impl Chart {
                 GraphType::Line => {
                     for pair in mapped.windows(2) {
                         if let [Some(a), Some(b)] = pair {
-                            ops.push(Op::Line(*a, *b, style.clone()));
+                            if keep(*a, *b) {
+                                ops.push(Op::Line(*a, *b, style.clone()));
+                            }
                         }
                     }
                 }
@@ -851,7 +1007,7 @@ impl Chart {
                         AxisScale::Linear => 0.0,
                         AxisScale::Log => y.scale.min(),
                     };
-                    for (px, py) in shown() {
+                    for (px, py) in shown().filter(|&p| keep((p.0, base), p)) {
                         ops.push(Op::Line((px, base), (px, py), style.clone()));
                     }
                 }
@@ -859,7 +1015,9 @@ impl Chart {
                     let level = self.y_axis.map(dataset.fill_to).unwrap_or(y.scale.min());
                     for pair in mapped.windows(2) {
                         if let [Some(a), Some(b)] = pair {
-                            ops.push(Op::Area(*a, *b, level, style.clone()));
+                            if keep(*a, *b) {
+                                ops.push(Op::Area(*a, *b, level, style.clone()));
+                            }
                         }
                     }
                 }
@@ -1024,28 +1182,40 @@ impl Area {
     }
 }
 
-/// A box at `at` listing `named`, each name in its style.
-fn draw_legend(
-    grid: &mut CellGrid,
-    (top, left): (usize, usize),
+/// The legend's box: its top left cell, the width inside it, its border
+/// glyphs and style, and whether it clears what is under it.
+struct LegendBox {
+    at: (usize, usize),
     inner: usize,
-    named: &[(String, Option<Style>)],
-    [tl, tr, bl, br, h, v]: [char; 6],
-    border: Option<Style>,
-) {
-    let edge = |a: char, b: char| format!("{a}{}{b}", h.to_string().repeat(inner));
-    let right = left + inner + 2;
-    grid.put_text(top, left, &edge(tl, tr), border.clone(), right);
-    for (i, (name, style)) in named.iter().enumerate() {
-        let row = top + 1 + i;
-        grid.set(row, left, v.to_string(), border.clone());
-        for col in left + 1..right - 1 {
-            grid.set(row, col, " ".to_string(), None);
+    border: [char; 6],
+    style: Option<Style>,
+    clear: bool,
+}
+
+impl LegendBox {
+    /// The box, listing `named`, each name in its style.
+    fn draw(&self, grid: &mut CellGrid, named: &[(String, Option<Style>)]) {
+        let ((top, left), inner, border) = (self.at, self.inner, &self.style);
+        let [tl, tr, bl, br, h, v] = self.border;
+        let edge = |a: char, b: char| format!("{a}{}{b}", h.to_string().repeat(inner));
+        let right = left + inner + 2;
+        grid.put_text(top, left, &edge(tl, tr), border.clone(), right);
+        for (i, (name, style)) in named.iter().enumerate() {
+            let row = top + 1 + i;
+            grid.set(row, left, v.to_string(), border.clone());
+            for col in left + 1..right - 1 {
+                if self.clear {
+                    grid.set(row, col, " ".to_string(), None);
+                } else {
+                    grid.restyle(row, col, None);
+                }
+            }
+            grid.put_text(row, left + 1, name, style.clone(), right - 1);
+            grid.set(row, right - 1, v.to_string(), border.clone());
         }
-        grid.put_text(row, left + 1, name, style.clone(), right - 1);
-        grid.set(row, right - 1, v.to_string(), border.clone());
+        let bottom = top + named.len() + 1;
+        grid.put_text(bottom, left, &edge(bl, br), border.clone(), right);
     }
-    grid.put_text(top + named.len() + 1, left, &edge(bl, br), border, right);
 }
 
 impl Axis {
@@ -1398,6 +1568,163 @@ mod tests {
         let grid = chart.grid(&console, &console.options());
         assert_eq!(grid.row_string(1), "• ");
         assert_eq!(grid.style_at(1, 0), Style::parse("blue").ok());
+    }
+
+    /// A 5 × 3 chart on 0..=4 × 0..=2, one glyph a cell.
+    fn unit_chart(datasets: Vec<Dataset>) -> Chart {
+        Chart::new(datasets)
+            .x_axis(Axis::default().bounds(0.0, 4.0))
+            .y_axis(Axis::default().bounds(0.0, 2.0))
+            .width(5)
+            .height(3)
+    }
+
+    #[test]
+    fn segments_leaving_the_bounds_are_clipped_by_default() {
+        let line = dot(&[(0.0, 0.0), (8.0, 2.0)]).graph_type(GraphType::Line);
+        let chart = unit_chart(vec![line]);
+        assert_eq!(chart.out_of_bounds, OutOfBounds::Clip);
+        assert_eq!(rows(&chart, 5), vec!["     ", "  ooo", "oo   "]);
+        let explicit = chart.clone().out_of_bounds(OutOfBounds::Clip);
+        assert_eq!(rows(&explicit, 5), rows(&chart, 5));
+    }
+
+    #[test]
+    fn dropped_segments_leave_out_any_with_an_end_outside() {
+        let drop = |d: Dataset| rows(&unit_chart(vec![d]).out_of_bounds(OutOfBounds::Drop), 5);
+        // One end outside: only the point inside is drawn.
+        let line = dot(&[(0.0, 0.0), (8.0, 2.0)]).graph_type(GraphType::Line);
+        assert_eq!(drop(line), vec!["     ", "     ", "o    "]);
+        // Both ends inside: drawn whole; the next segment, leaving, is not.
+        let line = dot(&[(0.0, 0.0), (4.0, 2.0), (4.0, 9.0)]).graph_type(GraphType::Line);
+        assert_eq!(drop(line), vec!["   oo", " oo  ", "o    "]);
+        // A segment that crosses the plot with both ends outside.
+        let across = dot(&[(-1.0, 1.0), (5.0, 1.0)]).graph_type(GraphType::Line);
+        assert_eq!(drop(across.clone()), vec!["     "; 3]);
+        assert_eq!(
+            rows(&unit_chart(vec![across]), 5),
+            vec!["     ", "ooooo", "     "]
+        );
+        // A bar from zero, when zero is below the bounds.
+        let bar = |d: Dataset| {
+            let chart = unit_chart(vec![d.graph_type(GraphType::Bar)])
+                .y_axis(Axis::default().bounds(1.0, 3.0));
+            (
+                rows(&chart.clone(), 5),
+                rows(&chart.out_of_bounds(OutOfBounds::Drop), 5),
+            )
+        };
+        let (clipped, dropped) = bar(dot(&[(2.0, 3.0)]));
+        assert_eq!(clipped, vec!["  o  "; 3]);
+        assert_eq!(dropped, vec!["  o  ", "     ", "     "]);
+        // An area segment, as a line.
+        let area = dot(&[(0.0, 2.0), (8.0, 2.0)]).graph_type(GraphType::Area);
+        assert_eq!(drop(area), vec!["o    ", "     ", "     "]);
+    }
+
+    /// A Braille reference line along y = 1 and a trace crossing it.
+    fn crossing() -> Chart {
+        Chart::new(vec![
+            Dataset::new([(0.0, 1.0), (4.0, 1.0)])
+                .graph_type(GraphType::Line)
+                .marker(Marker::Braille)
+                .style("red"),
+            Dataset::new([(2.0, 0.0), (2.0, 2.0)])
+                .graph_type(GraphType::Line)
+                .marker(Marker::Braille)
+                .style("blue"),
+        ])
+        .x_axis(Axis::default().bounds(0.0, 4.0))
+        .y_axis(Axis::default().bounds(0.0, 2.0))
+        .width(3)
+        .height(1)
+    }
+
+    #[test]
+    fn datasets_merge_their_dots_by_default() {
+        let console = Console::builder().width(3).build();
+        let chart = crossing();
+        assert_eq!(chart.layering, Layering::Merge);
+        let grid = chart.grid(&console, &console.options());
+        // The trace's column in the middle cell, over the line's row.
+        assert_eq!(grid.row_string(0), "⠒⡗⠒");
+        assert_eq!(grid.style_at(0, 1), Style::parse("blue").ok());
+        assert_eq!(grid.style_at(0, 0), Style::parse("red").ok());
+    }
+
+    #[test]
+    fn per_dataset_layering_draws_each_over_the_ones_before() {
+        let console = Console::builder().width(3).build();
+        let chart = crossing().layering(Layering::PerDataset);
+        let grid = chart.grid(&console, &console.options());
+        // The trace's cell shows only its dots: the line breaks there.
+        assert_eq!(grid.row_string(0), "⠒⡇⠒");
+        assert_eq!(grid.style_at(0, 1), Style::parse("blue").ok());
+        assert_eq!(grid.style_at(0, 2), Style::parse("red").ok());
+        // Cells only one dataset draws in are as merged.
+        let merged = crossing().grid(&console, &console.options());
+        assert_eq!(grid.row_string(0)[..3], merged.row_string(0)[..3]);
+    }
+
+    #[test]
+    fn the_legend_box_takes_the_x_axis_style_unless_given_its_own() {
+        let console = Console::builder().width(9).build();
+        let options = console.options();
+        let chart = legend_chart(LegendPosition::TopRight).x_axis(Axis::default().style("magenta"));
+        let grid = chart.grid(&console, &options);
+        assert_eq!(grid.style_at(0, 4), Style::parse("magenta").ok());
+        assert_eq!(grid.style_at(1, 4), Style::parse("magenta").ok());
+        let own = chart.legend_style("green").grid(&console, &options);
+        for (row, col) in [(0, 4), (0, 8), (1, 4), (1, 8), (3, 6)] {
+            assert_eq!(own.style_at(row, col), Style::parse("green").ok());
+        }
+        // The names keep their datasets' styles.
+        assert_eq!(own.style_at(1, 5), Style::parse("red").ok());
+        assert_eq!(own.style_at(2, 5), Style::parse("blue").ok());
+        // The text is the same either way.
+        let text = |g: &CellGrid| (0..6).map(|r| g.row_string(r)).collect::<Vec<_>>();
+        assert_eq!(text(&own), text(&grid));
+    }
+
+    /// An 8 × 4 wall of red dots with a legend of "a" and "bb" over it.
+    fn walled() -> Chart {
+        let wall = (0..8).flat_map(|x| (0..4).map(move |y| (f64::from(x), f64::from(y))));
+        let dots = Dataset::new(wall)
+            .name("a")
+            .marker(Marker::Ascii('.'))
+            .style("red");
+        Chart::new(vec![dots, Dataset::new([]).name("bb").style("blue")])
+            .x_axis(Axis::default().bounds(0.0, 7.0))
+            .y_axis(Axis::default().bounds(0.0, 3.0))
+            .hidden_legend_fraction(1.0, 1.0)
+            .width(8)
+            .height(4)
+    }
+
+    #[test]
+    fn the_legend_clears_the_plot_under_it_by_default() {
+        let chart = walled();
+        assert!(chart.legend_clear);
+        assert_eq!(
+            rows(&chart, 8),
+            vec!["....┌──┐", "....│a │", "....│bb│", "....└──┘"]
+        );
+        assert_eq!(rows(&chart.clone().legend_clear(true), 8), rows(&chart, 8));
+    }
+
+    #[test]
+    fn an_uncleared_legend_leaves_the_plot_unstyled_around_the_names() {
+        let chart = walled().legend_clear(false);
+        assert_eq!(
+            rows(&chart, 8),
+            vec!["....┌──┐", "....│a.│", "....│bb│", "....└──┘"]
+        );
+        let console = Console::builder().width(8).build();
+        let grid = chart.grid(&console, &console.options());
+        // The dot after "a" keeps its glyph, not its style.
+        assert_eq!(grid.style_at(1, 6), None);
+        assert_eq!(grid.style_at(1, 5), Style::parse("red").ok());
+        assert_eq!(grid.style_at(1, 2), Style::parse("red").ok());
     }
 
     #[test]

@@ -39,6 +39,27 @@ What rebuilding Yazi and scope-tui found the lists and tables lack
   gave everything to the second. It is as wide as its widest item now,
   with its symbol, marker, trailing text and scroll bar.
 
+### Charts drawn as ratatui 0.29 draws them (ext)
+
+Round 1 of the intuiTUIve demo gaps (see
+[what the rebuilt demos found missing](docs/design/intuituive-demo-gaps.md)):
+four `Chart` options the scope-tui clone needs to look like ratatui 0.29's
+`Chart`. Each default is the drawing as before.
+
+- **`out_of_bounds(OutOfBounds::Drop)`** leaves out a line, bar or area
+  segment with an end outside the bounds, as ratatui 0.29 does;
+  `OutOfBounds::Clip`, the default, draws the part inside.
+- **`layering(Layering::PerDataset)`** draws each dataset over the ones
+  before, as ratatui 0.29 draws a canvas per dataset: a cell a later
+  dataset draws in shows only its dots, so scope-tui's reference lines
+  break where the trace crosses them. `Layering::Merge`, the default,
+  shares the dots of a cell.
+- **`legend_style(..)`** gives the legend's box a style of its own; by
+  default it takes the x axis's.
+- **`legend_clear(false)`** leaves what the datasets drew under the
+  legend, unstyled around the names, as ratatui does; by default the box
+  clears it.
+
 ## 0.0.19 cohort
 
 ext 0.0.16 / micro 0.0.5 / record 0.0.7 / interact 0.0.7 / ratatui 0.0.4 /
