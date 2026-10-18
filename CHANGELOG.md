@@ -548,7 +548,10 @@ test.
   `FrameStats::frames` counts the frames drawn.
 - **The churn benchmark.** `tests/versus_ratatui.rs` reports two more
   scenes, not gated yet: every cell changing each frame (an RGB swatch, as
-  `colors-rgb`) and a chart redrawn each tick.
+  `colors-rgb`) and a chart redrawn each tick. ratatui is ahead on both: at
+  80x24 a churn frame costs 3,042 µs against its 326, and a chart 463 µs
+  against 81, with fewer bytes. The dashboard's three gated scenes still
+  pass.
 - **Changed:** `Column` and `TableOptions` gain public fields, and
   `FrameStats` gains `frames`, so code that builds them field by field
   needs the new ones.
