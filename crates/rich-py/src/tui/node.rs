@@ -841,6 +841,19 @@ impl PyNode {
         Ok(slf)
     }
 
+    /// For an `input` or a `text_area`: dimmed text while it is empty.
+    fn placeholder<'py>(slf: Bound<'py, Self>, text: &str) -> PyResult<Bound<'py, Self>> {
+        slf.borrow().map(|n| n.placeholder(text))?;
+        Ok(slf)
+    }
+
+    /// For an `input` or a `text_area`: the caret moves and text is
+    /// selected and copied, but not edited.
+    fn read_only(slf: Bound<'_, Self>) -> PyResult<Bound<'_, Self>> {
+        slf.borrow().map(Node::read_only)?;
+        Ok(slf)
+    }
+
     /// For an `input` or a `text_area`: show each character as `mask`.
     fn mask(slf: Bound<'_, Self>, mask: char) -> PyResult<Bound<'_, Self>> {
         slf.borrow().map(|n| n.mask(mask))?;

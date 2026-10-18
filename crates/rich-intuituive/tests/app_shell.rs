@@ -107,6 +107,21 @@ fn printed_lines_come_before_the_region_redraws() {
 }
 
 #[test]
+fn lines_printed_as_an_inline_app_quits_go_above_its_last_frame() {
+    let app = App::new(|| {
+        label("region").on_key("q", |cx| {
+            cx.print_above("goodbye");
+            cx.quit();
+        })
+    })
+    .inline(1);
+    let record = run(app, Script::new().keys("q"), 20, 5);
+    let out = record.output();
+    let bye = out.find("goodbye").expect("the line");
+    assert!(bye < out.rfind("region").expect("the region"), "{out:?}");
+}
+
+#[test]
 fn a_full_screen_app_prints_after_it_ends() {
     let app = App::new(|| {
         label("full")

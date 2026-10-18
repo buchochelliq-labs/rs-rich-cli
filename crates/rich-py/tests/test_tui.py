@@ -1988,8 +1988,9 @@ def test_list_options_and_an_empty_selection():
             text(lambda: str(first.get())).fixed(1),
         ]).on_key("q", lambda cx: cx.quit())
 
+    # Two items of two lines fit; the padding keeps item 3 in view below 2.
     out = screen(build_rest, ["down", "down", "q"], 10, 5)
-    assert out[0] == "item 1" and out[4] == "1"
+    assert out[0] == "item 2" and out[4] == "2"
 
 
 def test_table_options():
@@ -2013,10 +2014,10 @@ def test_table_options():
         return tui.table_with(columns, rows, signal(0), options).on_key("q", lambda cx: cx.quit())
 
     out = screen(build, ["q"], 26, 6)
-    assert out[0] == "  Food    Qty   Energy"
+    assert out[0] == "  Food   Qty   Energy"
     assert out[1] == ""
-    assert out[2] == "» Apple     1  95 kcal"
-    assert out[5] == "  Total     3 255 kcal"
+    assert out[2] == "» Apple    1  95 kcal"
+    assert out[5] == "  Total    3 255 kcal"
 
     def build_none():
         selected = signal(None)
@@ -2039,7 +2040,7 @@ def test_tab_strip_options():
         strip = tui.tabs(["A", "B"], signal(0)).titles_align("flex-end")
         return strip.on_key("q", lambda cx: cx.quit())
 
-    assert screen(build_end, ["q"], 10, 1)[0] == "   A │ B"
+    assert screen(build_end, ["q"], 10, 1)[0] == "    A │ B"
 
 
 def test_scrollbars():
@@ -2100,7 +2101,8 @@ def test_the_app_shell():
 
     driver = App(build_modal).driver(20, 6)
     driver.press("o")
-    assert "[dim]" in driver.styled() and "[on blue]" in driver.styled()
+    styled = driver.styled()
+    assert styled.startswith("[dim]below") and "on blue]" in styled
 
     def build_exit():
         return label("x").on_key("y", lambda cx: cx.quit_with({"picked": 2}))
