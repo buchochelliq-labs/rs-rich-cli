@@ -79,6 +79,34 @@ def test_markup_expands_tokens_and_reports_the_rest():
         micro.MicroMarkup("x", mode="sixel")
 
 
+def test_two_row_sizes(tmp_path):
+    # 0.0.19 workstream 17 (#711): up to 4x2 cells; a two-row asset renders
+    # its second row below the first.
+    icon = micro.MicroAsset("team/icon", "a blue square", text="[]", size="2x2")
+    assert (icon.size, icon.cols, icon.rows) == ("2x2", 2, 2)
+    assert capture(icon) == "[]\n⠀⠀\n"
+    assert micro.MicroAsset("team/one", "a dot", text="*", size="1x1").rows == 1
+    for refused in ["2x3", "5x2"]:
+        with pytest.raises(micro.MicroError, match="at most 4 columns and 2 rows"):
+            micro.MicroAsset("team/big", "too big", size=refused)
+    # The built-in examples, and markup that reserves the row below its line.
+    registry = micro.MicroRegistry()
+    assert registry.require("fun/trophy").size == "2x2"
+    assert registry.require("fun/campfire").size == "3x2"
+    shown = capture(micro.MicroMarkup("Won :micro:fun/trophy: today", preference="text"))
+    assert shown == "Won #1 today\n    ⠀⠀\n"
+    # The pipeline makes a package of the whole box.
+    flame = micro.micro_create_package(
+        BUILTIN / "fun" / "campfire" / "animation.gif",
+        tmp_path / "flame",
+        name="team/flame",
+        alt="a campfire",
+        text="(^)",
+        size="3x2",
+    )
+    assert (flame.size, flame.rows, flame.kind) == ("3x2", 2, "animated")
+
+
 def test_project_assets_load_only_when_trusted(tmp_path):
     project = tmp_path / "project"
     asset = micro.micro_create_package(

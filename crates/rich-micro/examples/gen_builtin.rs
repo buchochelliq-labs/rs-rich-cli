@@ -1,10 +1,12 @@
 //! The generator of rs-rich-micro's built-in library (#581).
 //!
 //! Every built-in asset is drawn here, in code, for this project: simple
-//! shapes (discs, rings, strokes, polygons) on a 16×16 grid, rendered at
-//! 64×64 with 4×4 supersampling, then run through the micro-asset
-//! [pipeline](rich_micro::pipeline) to its 2×1 cells (16×16 pixels at the
-//! default 8×16 cell). No third-party logos, and no names that are emoji
+//! shapes (discs, rings, strokes, polygons) on a grid of 8×16 units a cell
+//! (16×16 for the usual 2×1 asset), rendered at 4 pixels a unit with 4×4
+//! supersampling, then run through the micro-asset
+//! [pipeline](rich_micro::pipeline) to its cells (16×16 pixels at the
+//! default 8×16 cell for 2×1; 16×32 for the 2×2 trophy and 24×32 for the
+//! 3×2 campfire, #711). No third-party logos, and no names that are emoji
 //! codes: every asset lives in a namespace (`status/`, `dev/`, `fun/`).
 //!
 //! It writes, under `crates/rich-micro/builtin/`, one pack per set (a
@@ -31,9 +33,9 @@ pub const LICENSE: &str = "MIT";
 pub const AUTHOR: &str = "rs-rich-cli contributors";
 pub const VERSION: &str = "1.0.0";
 
-/// The drawing grid is 16 units square; the canvas is `SCALE` pixels a unit.
+/// The drawing grid is 8 units a column and 16 a row (16 units square for
+/// 2×1 cells); the canvas is `SCALE` pixels a unit.
 const SCALE: u32 = 4;
-const GRID: f32 = 16.0;
 /// Samples per pixel side.
 const SAMPLES: u32 = 4;
 
@@ -156,11 +158,17 @@ fn rect(x0: f32, y0: f32, x1: f32, y1: f32, radius: f32) -> Shape {
 /// Shapes painted in order, each over the ones before it.
 pub type Layers = Vec<(Shape, Color)>;
 
-/// Render `layers` to a 64×64 canvas with supersampled edges.
-fn render(layers: &Layers) -> RgbaImage {
-    let size = GRID as u32 * SCALE;
+/// The drawing grid of `size` cells, in units: 8 a column, 16 a row.
+fn grid(size: CellSize) -> (u32, u32) {
+    (8 * size.cols() as u32, 16 * size.rows() as u32)
+}
+
+/// Render `layers` to a canvas of `SCALE` pixels a grid unit (64×64 for
+/// 2×1 cells) with supersampled edges.
+fn render(layers: &Layers, size: CellSize) -> RgbaImage {
+    let (width, height) = grid(size);
     let unit = 1.0 / SCALE as f32;
-    RgbaImage::from_fn(size, size, |x, y| {
+    RgbaImage::from_fn(width * SCALE, height * SCALE, |x, y| {
         let mut sum = [0u32; 4];
         for sy in 0..SAMPLES {
             for sx in 0..SAMPLES {
@@ -202,6 +210,8 @@ pub struct Drawing {
     pub alt: &'static str,
     pub emoji: &'static str,
     pub text: &'static str,
+    /// Its cells: 2×1 for all but the two-row examples.
+    pub size: CellSize,
     /// `(layers, milliseconds)` per frame.
     pub frames: Vec<(Layers, u64)>,
 }
@@ -218,6 +228,7 @@ fn still(
         alt,
         emoji,
         text,
+        size: CellSize::default(),
         frames: vec![(layers, 100)],
     }
 }
@@ -315,6 +326,7 @@ fn status() -> Vec<Drawing> {
             alt: "ring of dots turning, for work in progress",
             emoji: "⏳",
             text: "..",
+            size: CellSize::default(),
             frames: loading,
         },
     ]
@@ -504,6 +516,7 @@ fn fun() -> Vec<Drawing> {
             alt: "red heart, beating",
             emoji: "💖",
             text: "<3",
+            size: CellSize::default(),
             frames: vec![
                 (heart(1.0, red), 500),
                 (heart(0.84, red), 180),
@@ -518,9 +531,124 @@ fn fun() -> Vec<Drawing> {
             alt: "steaming cup of coffee",
             emoji: "☕",
             text: "c[",
+            size: CellSize::default(),
             frames: coffee,
         },
+        // Two rows high (#711): a 2×2 icon and a 3×2 animation.
+        Drawing {
+            name: "fun/trophy",
+            alt: "gold trophy cup on a dark stand",
+            emoji: "🏆",
+            text: "#1",
+            size: CellSize::new(2, 2).expect("2x2"),
+            frames: vec![(trophy(), 100)],
+        },
+        Drawing {
+            name: "fun/campfire",
+            alt: "campfire of crossed logs with flickering flames",
+            emoji: "🔥",
+            text: "(^)",
+            size: CellSize::new(3, 2).expect("3x2"),
+            frames: (0..4).map(|frame| (campfire(frame), 150)).collect(),
+        },
     ]
+}
+
+/// A gold cup with two handles on a stem and a dark stand, on the 16×32
+/// grid of a 2×2 asset.
+fn trophy() -> Layers {
+    let gold = rgb(0xd4a72c);
+    let light = rgb(0xf2cc60);
+    let dark = rgb(0x9a6700);
+    let stand = rgb(0x57606a);
+    vec![
+        (
+            Shape::Ring {
+                x: 3.4,
+                y: 8.6,
+                r: 2.6,
+                width: 1.4,
+            },
+            dark,
+        ),
+        (
+            Shape::Ring {
+                x: 12.6,
+                y: 8.6,
+                r: 2.6,
+                width: 1.4,
+            },
+            dark,
+        ),
+        (
+            Shape::Polygon(vec![
+                (2.6, 3.0),
+                (13.4, 3.0),
+                (12.6, 11.0),
+                (10.2, 15.6),
+                (5.8, 15.6),
+                (3.4, 11.0),
+            ]),
+            dark,
+        ),
+        (
+            Shape::Polygon(vec![
+                (3.6, 3.8),
+                (12.4, 3.8),
+                (11.7, 10.8),
+                (9.6, 14.6),
+                (6.4, 14.6),
+                (4.3, 10.8),
+            ]),
+            gold,
+        ),
+        (line((5.6, 5.4), (6.0, 11.0), 1.0), light),
+        (rect(6.8, 15.0, 9.2, 21.0, 0.4), dark),
+        (rect(4.6, 20.6, 11.4, 23.4, 0.8), gold),
+        (rect(2.8, 23.2, 13.2, 29.4, 1.0), stand),
+        (rect(5.6, 25.2, 10.4, 27.4, 0.4), light),
+    ]
+}
+
+/// Crossed logs under three tongues of flame, frame `frame` of four: the
+/// tips sway and a spark rises, on the 24×32 grid of a 3×2 asset.
+fn campfire(frame: usize) -> Layers {
+    let sway = [0.0, 1.2, 0.4, -1.0][frame % 4];
+    let lift = [0.0, -1.6, -0.6, -2.2][frame % 4];
+    let flame = |x: f32, width: f32, top: f32, lean: f32| {
+        Shape::Polygon(vec![
+            (x - width, 24.0),
+            (x - width * 0.8, 17.0),
+            (x + lean, top),
+            (x + width * 0.8, 17.0),
+            (x + width, 24.0),
+        ])
+    };
+    let mut layers = vec![
+        (flame(12.0, 7.4, 2.6 + lift, sway), rgb(0xcf222e)),
+        (flame(12.0, 5.6, 6.4 + lift / 2.0, -sway), rgb(0xf0883e)),
+        (
+            flame(12.0, 3.6, 11.0 - lift / 3.0, sway / 2.0),
+            rgb(0xf2cc60),
+        ),
+        (
+            Shape::Ellipse {
+                x: 12.0,
+                y: 22.4,
+                rx: 2.6,
+                ry: 2.2,
+            },
+            rgb(0xfff8c5),
+        ),
+        (line((2.6, 29.4), (21.4, 24.6), 2.8), rgb(0x6f3b18)),
+        (line((2.6, 24.6), (21.4, 29.4), 2.8), rgb(0x8a4b20)),
+        (disc(2.6, 24.6, 1.3), rgb(0xd4a72c)),
+        (disc(21.4, 24.6, 1.3), rgb(0xd4a72c)),
+    ];
+    // A spark rising beside the flames.
+    let (x, y) = [(6.0, 12.0), (5.2, 8.0), (18.4, 10.0), (19.0, 5.6)][frame % 4];
+    layers.push((disc(x, y, 0.9), rgb(0xffd33d)));
+    layers
 }
 
 /// The sets, as packs: `(pack name, description, drawings)`.
@@ -536,7 +664,11 @@ pub fn sets() -> Vec<(&'static str, &'static str, Vec<Drawing>)> {
             "Developer icons: bug, branch, terminal, package",
             dev(),
         ),
-        ("fun", "Fun icons: heart, star, cat, coffee", fun()),
+        (
+            "fun",
+            "Fun icons: heart, star, cat, coffee, and two rows high, trophy and campfire",
+            fun(),
+        ),
     ]
 }
 
@@ -546,11 +678,11 @@ pub fn package(drawing: &Drawing) -> Vec<(&'static str, Vec<u8>)> {
         .frames
         .iter()
         .map(|(layers, ms)| AnimationFrame {
-            image: render(layers),
+            image: render(layers, drawing.size),
             delay: Duration::from_millis(*ms),
         })
         .collect();
-    let processed = Pipeline::new(CellSize::default()).process_frames(&frames);
+    let processed = Pipeline::new(drawing.size).process_frames(&frames);
     let spec = PackageSpec::new(drawing.name, drawing.alt)
         .emoji(drawing.emoji)
         .text(drawing.text)

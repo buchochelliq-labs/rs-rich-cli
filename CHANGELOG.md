@@ -783,6 +783,48 @@ test.
   CLI reference regenerated, the porting page, the Python pages, and
   `docs/tapes/log.tape` (not yet recorded).
 
+### Micro assets over two rows (micro 0.0.5)
+
+0.0.19 workstream 17 (#711).
+
+- **Two-row sizes.** A micro asset may now be any size up to 4×2 cells: 1
+  to 4 columns and 1 or 2 rows, such as a 2×2 icon or a 3×2 animation.
+  Anything larger is refused with an error that names the limit. The
+  manifest's `size` field takes the new values (`"2x2"`,
+  `{"cols": 3, "rows": 2}`); nothing else in the format changes, and old
+  packages load as before. A package with no `size` is 2×1, whatever its
+  image's shape: the size is never guessed.
+- **Rows reserved in any layout.** `MicroRows` (and `reserve_rows` for
+  rendered segments) adds a row below each line that holds a two-row
+  asset. The row is blank but for the asset's second row; the text beside
+  the asset stays on the first row, and the next line moves down, so
+  nothing is drawn over it. A table row or a panel grows to hold it, and
+  `MicroAssetRef` reserves its own rows. The output depends only on the
+  input, at every width.
+- **Drawn over both rows.** Kitty prints two rows of Unicode placeholders
+  for one image. iTerm2 and Sixel draw one image of the whole box from the
+  second row, moving the cursor up a row and back; Sixel's is twice the
+  cell height in pixels. Half-blocks draw two pixel rows a cell row. The
+  fallback is the emoji or text on the first row with a blank row below.
+  Animations play as one-row ones do. Where the second row was not
+  reserved (a bare `Text`, Markdown, a title), only the first row's
+  fallback shows.
+- **The tag carries the row.** The second row's cells are tagged
+  `[name, cols, rows, id, 1]`; `MicroMeta` has a `row` field and
+  `with_row`, and `fallback_row` gives any row's fallback. A placeholder is
+  never drawn at a size other than its asset's.
+- **Built-in library:** `fun/trophy` (2×2) and `fun/campfire` (3×2,
+  animated), drawn for this project.
+- **`rich micro`:** `create --size` takes the new sizes and refuses
+  `2x3`. `list`, `show` and `preview` give a two-row asset its row, and so
+  does `rich -p --emoji` text.
+- **Python:** `MicroAsset` takes the new sizes and has `rows`, and
+  `MicroMarkup` reserves the row below a two-row asset.
+- **Docs:** [Two rows](docs/guide/micro/index.md#two-rows) in the micro
+  assets guide, with a captured example; the authoring, terminals, CLI and
+  library pages; the CLI reference regenerated; and
+  `docs/tapes/micro-rows.tape` (not yet recorded).
+
 ### One process per browser session (web 0.0.2)
 
 0.0.19 workstream 3.

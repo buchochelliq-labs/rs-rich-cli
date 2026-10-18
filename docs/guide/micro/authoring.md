@@ -2,9 +2,11 @@
 
 A micro asset is small: 2×1 cells by default, which a terminal with the
 usual 8×16-pixel cells draws from a **16×16-pixel** image (1×1 is 8×16).
-Anything you give it is scaled to exactly that, so an asset reads best when
-it is drawn for that size: a bold silhouette, two or three colours, a
-one-pixel outline, nothing thinner than a pixel.
+An asset may take up to 4×2 cells: 1 to 4 columns and 1 or 2 rows, so a
+2×2 icon is **16×32 pixels** and a 3×2 animation **24×32**. Anything you
+give it is scaled to exactly that, so an asset reads best when it is drawn
+for that size: a bold silhouette, two or three colours, a one-pixel
+outline, nothing thinner than a pixel.
 
 This page covers making one: the pipeline (`rich micro create`, or
 `rich_micro::pipeline` in code), the package it writes, what to put in the
@@ -32,7 +34,7 @@ The pipeline, in order, for every frame:
 |---|---|---|
 | Adjust | `--brightness F`, `--contrast F`, `--gamma F`, `--grayscale` | as is |
 | Transparency from a background colour | `--transparency key:#rrggbb` | off |
-| Fit to the cells | `--fit contain\|cover\|stretch`, `--anchor center\|top\|…\|bottom-right`, `--size 2x1\|1x1`, `--cell WxH` | contain, 2x1, 8x16 |
+| Fit to the cells | `--fit contain\|cover\|stretch`, `--anchor center\|top\|…\|bottom-right`, `--size COLSxROWS` (up to `4x2`: `2x1`, `1x1`, `2x2`, `3x2`, …), `--cell WxH` | contain, 2x1, 8x16 |
 | Sharpen | `--sharpen RADIUS` (an unsharp mask, e.g. `0.8`) | off |
 | Transparency | `--transparency threshold[:ALPHA]\|keep\|flatten:#rrggbb` | `threshold:128` |
 | Palette | `--colors truecolor\|256\|16\|grayscale`, `--dither none\|floyd-steinberg\|bayer\|atkinson` | truecolor |
@@ -46,7 +48,12 @@ Some advice:
 
 - **Fit.** `contain` keeps the whole picture and leaves transparent margins;
   `cover` fills the cells and crops (use `--anchor` to keep the part that
-  matters); `stretch` distorts. A square source in 2×1 cells fits exactly.
+  matters); `stretch` distorts. A square source in 2×1 cells fits exactly;
+  2×2 cells are twice as tall as they are wide, and 3×2 cells three to four.
+- **Two rows.** `--size 2x2` or `3x2` makes an asset that also takes the row
+  below its line (see [Two rows](index.md#two-rows)): for an icon worth the
+  room, or a small animation. `--size 2x3` or `5x2` is refused: at most 4
+  columns and 2 rows.
 - **Downscaling blurs.** A 512-pixel logo shrunk to 16 pixels loses its
   edges; `--sharpen 0.6` to `1.0` brings them back. Better still, start from
   a source drawn small.
@@ -153,11 +160,17 @@ zip file ending `.richmicro`) holding `manifest.json` and its images:
   type, and a bare name like `rocket` reads like the emoji code `:rocket:`.
   None of the built-in names is an emoji code, and yours should not be one
   either.
+- **size**: `"COLSxROWS"`, 1 to 4 columns and 1 or 2 rows (`"2x2"`,
+  `"3x2"`), or `{"cols": 3, "rows": 2}`. Without it the asset is 2×1,
+  whatever its image's shape: the size is never guessed. The images should
+  have the box's shape (16×32 for 2×2 at 8×16-pixel cells); they are fitted
+  to it either way.
 - **alt**: mandatory, at most 200 characters, describing what the picture
   shows (`green circle with a white check mark`), not what it means. Screen
   readers, logs and plain exports show it where nothing else fits.
 - **fallback**: an emoji, a short text, or both. Each must fit the asset's
-  columns (two for 2×1) with no spaces. The emoji is what most terminals
+  columns (two for 2×1 and 2×2, three for 3×2) with no spaces; a two-row
+  asset shows it on its first row, with a blank row below. The emoji is what most terminals
   without graphics show; the text is for consoles that cannot show emoji.
   Give both.
 - **license**: an SPDX identifier. Say what you may share it under; do not
@@ -186,8 +199,9 @@ pack: it is reported, and the rest load.
 
 The built-in assets are drawn for this project, in code:
 `crates/rich-micro/examples/gen_builtin.rs` describes each one as shapes on
-a 16×16 grid, renders them at 64×64 with supersampling and runs the result
-through the same pipeline. Run it after changing a drawing:
+a grid of 8×16 units a cell (16×16 for 2×1, 16×32 for 2×2), renders them at
+four pixels a unit with supersampling and runs the result through the same
+pipeline. Run it after changing a drawing:
 
 ```sh
 cargo run -p rs-rich-micro --example gen_builtin
@@ -203,7 +217,7 @@ emoji code or a third-party logo.
 |---|---|
 | `status` | `status/success`, `status/warning`, `status/error`, `status/info`, `status/loading` (animated) |
 | `dev` | `dev/bug`, `dev/branch`, `dev/terminal`, `dev/package` |
-| `fun` | `fun/heart` (animated), `fun/star`, `fun/cat`, `fun/coffee` (animated) |
+| `fun` | `fun/heart` (animated), `fun/star`, `fun/cat`, `fun/coffee` (animated), `fun/trophy` (2×2), `fun/campfire` (3×2, animated) |
 
 [The built-in library](library.md) shows each one magnified, with its
 animation. All are MIT, like the rest of the project. There are no third-party logos
