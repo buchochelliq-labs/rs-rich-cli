@@ -38,9 +38,10 @@
 use std::fmt;
 use std::rc::Rc;
 
-use rich::{Color, Style};
+use rich::{Color, Overflow, Style};
 
-use crate::layout::{Align, AlignContent, Justify, Size};
+use crate::border::{Border, Edge, Sides, Title};
+use crate::layout::{Align, AlignContent, Justify, Size, TextAlign};
 use crate::reactive::NodeId;
 
 /// A parsed stylesheet: give it to [`App::stylesheet`](crate::App::stylesheet).
@@ -133,30 +134,6 @@ enum Paint {
     Var(String),
 }
 
-/// The box a border is drawn with.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub(crate) enum BoxKind {
-    #[default]
-    Round,
-    Square,
-    Heavy,
-    Double,
-    Ascii,
-}
-
-impl BoxKind {
-    /// Top left, top, top right, side, bottom left, bottom right.
-    pub(crate) fn chars(self) -> [&'static str; 6] {
-        match self {
-            BoxKind::Round => ["╭", "─", "╮", "│", "╰", "╯"],
-            BoxKind::Square => ["┌", "─", "┐", "│", "└", "┘"],
-            BoxKind::Heavy => ["┏", "━", "┓", "┃", "┗", "┛"],
-            BoxKind::Double => ["╔", "═", "╗", "║", "╚", "╝"],
-            BoxKind::Ascii => ["+", "-", "+", "|", "+", "+"],
-        }
-    }
-}
-
 /// Which edge a node keeps to in a [`column`](crate::column) (`top`,
 /// `bottom`) or [`row`](crate::row) (`left`, `right`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -173,8 +150,16 @@ struct Decls {
     background: Option<Paint>,
     text_style: Option<Style>,
     /// `Some(None)`: `border: none`.
-    border: Option<Option<(BoxKind, Option<Paint>)>>,
+    border: Option<Option<(Border, Option<Paint>)>>,
     border_title: Option<String>,
+    title_align: Option<Align>,
+    subtitle: Option<String>,
+    subtitle_align: Option<Align>,
+    sides: Option<Sides>,
+    collapse: Option<bool>,
+    text_align: Option<TextAlign>,
+    text_wrap: Option<bool>,
+    text_overflow: Option<Overflow>,
     size: Option<Size>,
     min: Option<u16>,
     max: Option<u16>,
@@ -200,10 +185,23 @@ pub(crate) struct Layout {
     pub max: Option<u16>,
     /// Top, right, bottom, left.
     pub padding: [u16; 4],
-    pub border: Option<(BoxKind, Style)>,
+    pub border: Option<(Border, Style)>,
     /// `border: none` was said, which takes a panel's own border away.
     pub no_border: bool,
     pub border_title: Option<String>,
+    /// `border-title-align`, `border-subtitle` (the bottom edge's title)
+    /// and `border-subtitle-align`.
+    pub title_align: Option<Align>,
+    pub subtitle: Option<String>,
+    pub subtitle_align: Option<Align>,
+    /// `border-sides`.
+    pub sides: Option<Sides>,
+    /// `border-collapse: collapse`.
+    pub collapse: Option<bool>,
+    /// `text-align`, `text-wrap` and `text-overflow`.
+    pub text_align: Option<TextAlign>,
+    pub text_wrap: Option<bool>,
+    pub text_overflow: Option<Overflow>,
     pub hidden: bool,
     pub dock: Option<Dock>,
     pub gap: Option<u16>,
@@ -217,11 +215,39 @@ pub(crate) struct Layout {
 }
 
 impl Layout {
-    /// Cells the border and padding take: top, right, bottom, left.
+    /// Cells the border and padding take: top, right, bottom, left. Only a
+    /// node with a border has a box (and titles on it), each side of it a
+    /// cell when it is drawn or holds a title.
     pub(crate) fn insets(&self) -> [u16; 4] {
-        let edge = u16::from(self.border.is_some());
+        let frame = match &self.border {
+            Some((kind, _)) => crate::border::insets(*kind, self.sides(), &self.titles()),
+            None => [0; 4],
+        };
         let [t, r, b, l] = self.padding;
-        [t, r, b, l].map(|side| side.saturating_add(edge))
+        let mut out = [t, r, b, l];
+        for (side, edge) in out.iter_mut().zip(frame) {
+            *side = side.saturating_add(edge);
+        }
+        out
+    }
+
+    /// The sides its border draws: all, unless `border-sides` says.
+    pub(crate) fn sides(&self) -> Sides {
+        self.sides.unwrap_or_default()
+    }
+
+    /// Its `border-title` and `border-subtitle`, on the top and bottom
+    /// edges.
+    pub(crate) fn titles(&self) -> Vec<Title> {
+        let title = |text: &Option<String>, edge, align: Option<Align>| {
+            text.as_ref()
+                .filter(|text| !text.is_empty())
+                .map(|text| Title::new(edge, align.unwrap_or(Align::Start), text.clone()))
+        };
+        title(&self.border_title, Edge::Top, self.title_align)
+            .into_iter()
+            .chain(title(&self.subtitle, Edge::Bottom, self.subtitle_align))
+            .collect()
     }
 }
 
@@ -330,7 +356,7 @@ impl Stylesheet {
     /// the last node of `chain`, at `viewport`.
     pub(crate) fn layout(&self, chain: &[Element], vars: Vars, viewport: (u16, u16)) -> Layout {
         let mut out = Layout::default();
-        let mut border: Option<Option<(BoxKind, Option<Paint>)>> = None;
+        let mut border: Option<Option<(Border, Option<Paint>)>> = None;
         for rule in self.rules.iter().filter(|rule| rule.applies(viewport)) {
             if !rule.selector.matches(chain, Mode::Fixed) {
                 continue;
@@ -346,6 +372,16 @@ impl Stylesheet {
             if d.border_title.is_some() {
                 out.border_title = d.border_title.clone();
             }
+            if d.subtitle.is_some() {
+                out.subtitle = d.subtitle.clone();
+            }
+            out.title_align = d.title_align.or(out.title_align);
+            out.subtitle_align = d.subtitle_align.or(out.subtitle_align);
+            out.sides = d.sides.or(out.sides);
+            out.collapse = d.collapse.or(out.collapse);
+            out.text_align = d.text_align.or(out.text_align);
+            out.text_wrap = d.text_wrap.or(out.text_wrap);
+            out.text_overflow = d.text_overflow.or(out.text_overflow);
             out.hidden = d.hidden.unwrap_or(out.hidden);
             out.dock = d.dock.or(out.dock);
             out.gap = d.gap.or(out.gap);
@@ -839,9 +875,14 @@ fn paint(value: &str) -> Result<Paint, String> {
 }
 
 fn size(value: &str) -> Result<Size, String> {
-    let bad = || format!("`{value}` is not a size (3, 50%, 2fr or auto)");
+    let bad = || format!("`{value}` is not a size (3, 50%, 1/3, 2fr or auto)");
     if value == "auto" {
         Ok(Size::Auto)
+    } else if let Some((a, b)) = value.split_once('/') {
+        match (a.trim().parse(), b.trim().parse()) {
+            (Ok(a), Ok(b)) => Ok(Size::Ratio(a, b)),
+            _ => Err(bad()),
+        }
     } else if let Some(n) = value.strip_suffix('%') {
         n.parse().map(Size::Percent).map_err(|_| bad())
     } else if let Some(n) = value.strip_suffix("fr") {
@@ -897,15 +938,15 @@ fn declare(decls: &mut Decls, property: &str, value: &str) -> Result<(), String>
                     decls.border = Some(None);
                     return Ok(());
                 }
-                Some("round") => BoxKind::Round,
-                Some("square" | "solid") => BoxKind::Square,
-                Some("heavy") => BoxKind::Heavy,
-                Some("double") => BoxKind::Double,
-                Some("ascii") => BoxKind::Ascii,
+                Some(word) if Border::parse(word).is_some() => {
+                    Border::parse(word).expect("checked")
+                }
                 _ => {
                     return Err(format!(
-                        "`{value}`: a border is none, round, square, heavy, double or ascii, then a colour"
-                    ))
+                    "`{value}`: a border is none, round, square, heavy, double, ascii, a dashed \
+                         kind (dashed, light-triple-dashed, ...) or quadrant-inside or \
+                         quadrant-outside, then a colour"
+                ))
                 }
             };
             let color = words.next().map(paint).transpose()?;
@@ -914,9 +955,88 @@ fn declare(decls: &mut Decls, property: &str, value: &str) -> Result<(), String>
             }
             decls.border = Some(Some((kind, color)));
         }
-        "border-title" => {
-            let title = value.trim_matches(|c| c == '"' || c == '\'');
-            decls.border_title = Some(title.to_string());
+        "border-title" | "border-subtitle" => {
+            let title = value.trim_matches(|c| c == '"' || c == '\'').to_string();
+            if property == "border-title" {
+                decls.border_title = Some(title);
+            } else {
+                decls.subtitle = Some(title);
+            }
+        }
+        "border-title-align" | "border-subtitle-align" => {
+            let align = match value {
+                "left" | "start" => Align::Start,
+                "center" => Align::Center,
+                "right" | "end" => Align::End,
+                _ => return Err(format!("`{value}`: {property} is left, center or right")),
+            };
+            if property == "border-title-align" {
+                decls.title_align = Some(align);
+            } else {
+                decls.subtitle_align = Some(align);
+            }
+        }
+        "border-sides" => {
+            let mut sides = Sides::NONE;
+            for word in value.split_whitespace() {
+                sides |= match word {
+                    "top" => Sides::TOP,
+                    "right" => Sides::RIGHT,
+                    "bottom" => Sides::BOTTOM,
+                    "left" => Sides::LEFT,
+                    "all" => Sides::ALL,
+                    "none" => Sides::NONE,
+                    _ => {
+                        return Err(format!(
+                            "`{word}`: border-sides names top, right, bottom and left (or all, or none)"
+                        ))
+                    }
+                };
+            }
+            decls.sides = Some(sides);
+        }
+        "border-collapse" => {
+            decls.collapse = Some(match value {
+                "collapse" => true,
+                "separate" => false,
+                _ => {
+                    return Err(format!(
+                        "`{value}`: border-collapse is collapse or separate"
+                    ))
+                }
+            })
+        }
+        "text-align" => {
+            decls.text_align = Some(match value {
+                "left" | "start" => TextAlign::Left,
+                "center" => TextAlign::Center,
+                "right" | "end" => TextAlign::Right,
+                "justify" => TextAlign::Justify,
+                _ => {
+                    return Err(format!(
+                        "`{value}`: text-align is left, center, right or justify"
+                    ))
+                }
+            })
+        }
+        "text-wrap" => {
+            decls.text_wrap = Some(match value {
+                "wrap" => true,
+                "nowrap" => false,
+                _ => return Err(format!("`{value}`: text-wrap is wrap or nowrap")),
+            })
+        }
+        "text-overflow" => {
+            decls.text_overflow = Some(match value {
+                "clip" => Overflow::Crop,
+                "ellipsis" => Overflow::Ellipsis,
+                "fold" => Overflow::Fold,
+                _ => {
+                    return Err(format!(
+                        "`{value}`: text-overflow is clip, ellipsis or fold"
+                    ))
+                }
+            })
         }
         "size" => decls.size = Some(size(value)?),
         "min-size" => decls.min = Some(cells(value)?),
@@ -1142,6 +1262,67 @@ mod tests {
     }
 
     #[test]
+    fn borders_titles_text_and_ratios_take_css_names() {
+        let sheet = Stylesheet::parse(
+            "panel { border: thick red; border-title: Files; border-title-align: center; \
+             border-subtitle: \"q quits\"; border-subtitle-align: right; border-sides: top bottom; } \
+             row { border-collapse: collapse; size: 1/3; } \
+             label { text-align: justify; text-wrap: nowrap; text-overflow: ellipsis; } \
+             .dashed { border: light-triple-dashed; } .plain { border: plain; } \
+             grid { grid-columns: 1/3 2/3; }",
+        )
+        .unwrap();
+        let panel = sheet.layout(&[element("panel", None, &[])], &no_vars, WIDE);
+        assert_eq!(panel.border.as_ref().map(|b| b.0), Some(Border::Thick));
+        assert_eq!(panel.title_align, Some(Align::Center));
+        assert_eq!(panel.subtitle.as_deref(), Some("q quits"));
+        assert_eq!(panel.subtitle_align, Some(Align::End));
+        assert_eq!(panel.sides, Some(Sides::TOP | Sides::BOTTOM));
+        // Top and bottom each hold a line and a title; no sides.
+        assert_eq!(panel.insets(), [1, 0, 1, 0]);
+        let row = sheet.layout(&[element("row", None, &[])], &no_vars, WIDE);
+        assert_eq!(
+            (row.collapse, row.size),
+            (Some(true), Some(Size::Ratio(1, 3)))
+        );
+        let label = sheet.layout(&[element("label", None, &[])], &no_vars, WIDE);
+        assert_eq!(label.text_align, Some(TextAlign::Justify));
+        assert_eq!(label.text_wrap, Some(false));
+        assert_eq!(label.text_overflow, Some(Overflow::Ellipsis));
+        let dashed = sheet.layout(&[element("text", None, &["dashed"])], &no_vars, WIDE);
+        assert_eq!(dashed.border.map(|b| b.0), Some(Border::LightTripleDashed));
+        let plain = sheet.layout(&[element("text", None, &["plain"])], &no_vars, WIDE);
+        assert_eq!(plain.border.map(|b| b.0), Some(Border::Plain));
+        let grid = sheet.layout(&[element("grid", None, &[])], &no_vars, WIDE);
+        assert_eq!(
+            grid.grid_columns,
+            Some(vec![Size::Ratio(1, 3), Size::Ratio(2, 3)])
+        );
+        for (css, message) in [
+            ("panel { border-sides: up; }", "border-sides names top"),
+            ("label { text-align: middle; }", "text-align is left"),
+            (
+                "label { text-wrap: balance; }",
+                "text-wrap is wrap or nowrap",
+            ),
+            ("label { text-overflow: cut; }", "text-overflow is clip"),
+            (
+                "row { border-collapse: yes; }",
+                "border-collapse is collapse",
+            ),
+            (
+                "panel { border-title-align: top; }",
+                "is left, center or right",
+            ),
+            ("panel { border: wavy; }", "a border is none, round"),
+            ("row { size: 1/x; }", "is not a size"),
+        ] {
+            let error = Stylesheet::parse(css).unwrap_err().to_string();
+            assert!(error.contains(message), "{css}: {error}");
+        }
+    }
+
+    #[test]
     fn values_parse_and_errors_say_where() {
         let sheet = Stylesheet::parse(
             "/* top */ grid { grid-columns: 1fr 20 50%; gap: 1; padding: 1 2; border: heavy $accent; dock: top; display: none; }",
@@ -1157,14 +1338,14 @@ mod tests {
         assert_eq!(layout.insets(), [2, 3, 2, 3]);
         assert_eq!(
             layout.border,
-            Some((BoxKind::Heavy, Style::parse("bold magenta").unwrap()))
+            Some((Border::Thick, Style::parse("bold magenta").unwrap()))
         );
         assert!(layout.hidden);
         assert_eq!(layout.dock, Some(Dock::Top));
         for (css, message) in [
             (
                 "label { size: big; }",
-                "`big` is not a size (3, 50%, 2fr or auto)",
+                "`big` is not a size (3, 50%, 1/3, 2fr or auto)",
             ),
             ("label:active { color: red; }", "unknown state `:active`"),
             (

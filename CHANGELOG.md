@@ -543,6 +543,65 @@ test.
   note in [PLUGINS.md](docs/PLUGINS.md#document-formats-0019), and
   `docs/tapes/documents.tape` (not yet recorded).
 
+### Blocks, text and layout, after ratatui (intuituive 0.0.4)
+
+0.0.19 gap batch A (see [intuiTUIve against ratatui](docs/design/intuituive-vs-ratatui.md)).
+
+- **Panel titles:** `.title_align(Align)`, `.title_right(..)`,
+  `.title_bottom(..)` and `.add_title(Edge, Align, markup)` put several
+  titles on the top and bottom lines. Titles take markup, styled by
+  `.title_style(..)`. When they do not fit, the left ones win, then the
+  centred, then the right; a lone title is cut with `…`.
+- **Borders in code:** `.border(Border::Thick)` (also `Plain`, `Double`,
+  `Ascii`, dashed, quadrant and `Custom(BorderSet)`), `.borders(Sides::TOP
+  | Sides::BOTTOM)` for some sides, `.border_style(..)` and
+  `.focus_border(..)`. `Border::None` keeps the title rows.
+- **Shadows:** `.shadow(Shadow::MediumShade)` (or `Dim`, `Block`, a
+  symbol) draws one under the right and bottom edges, styled by the
+  theme's `shadow`.
+- **A style on any node:** `.style(..)`, `.bg(..)` and `.fg(..)` fill the
+  node's area under its children. Code wins over the sheet.
+- **Text:** `.text_align(TextAlign::Center | Right | Justify)`,
+  `.no_wrap()` and `.overflow(Overflow::Ellipsis)` on `text(..)` nodes.
+- **Ratio sizes:** `Size::Ratio(1, 3)` and `.ratio(1, 3)`. Ratios share a
+  track exactly: three thirds of 10 fill all 10.
+- **Laying out by hand:** `layout::split(rect, axis, tracks, flow)` and
+  `split_with_spacers` return the rectangles a row or column would give,
+  and the room between them. `Track` is public. rs-rich-ext's `Rect`
+  gains `inset`, `centered`, `offset`, `union`, `intersects`, `rows` and
+  `columns`, and `Screen::get` reads a cell.
+- **Collapsed borders:** `.collapse_borders()` on a row, column or grid
+  draws one line between neighbours, joined with `┬`, `┼` and `┤`, as
+  ratatui's collapsed borders do. The focused child's box is lit.
+  Collapsed containers can nest and share their lines.
+- **Drawing over children:** `Widget::draw_over` draws after a widget's
+  children. `Canvas::cell(x, y)` reads what was drawn (a `CellView`),
+  and `set_cell` and `fill_with` write cells. `effect(child, |canvas,
+  cx| ..)` wraps any node, and `fill(symbol, style)` fills its area.
+- **Layers:** `layers([..])` stacks children in one area, later ones on
+  top. `.inset(..)` and `.place(across, down)` position a layer. Clicks
+  go to the top layer, and the accessibility text leaves out what is
+  covered.
+- **Theme styles for a subtree:** `.theme_styles([("warning", "bold
+  red")])` overrides theme styles for a node and its children, markup
+  and widgets alike. A theme switch keeps the override.
+- **In the stylesheet**, with CSS's names: `border` takes every kind
+  (`thick`, `double`, `dashed`, `dotted`, …), with `border-subtitle`,
+  `border-title-align`, `border-subtitle-align`, `border-sides` and
+  `border-collapse`; `text-align`, `text-wrap` and `text-overflow`; and
+  `width: 1/3`.
+- **Nothing changes by default:** every existing snapshot and guide
+  picture is unchanged. A title too long for its panel is now cut with
+  `…`.
+- **Python:** `Border`, `Shadow`, `Edge`, `Sides`, `TextAlign`,
+  `Overflow`, `Track`, `CellView`, `layers`, `effect`, `fill`,
+  `layout_split` and `layout_split_with_spacers`, the new `Node` builders,
+  `Widget.draw_over` and `overlapping`, `Canvas.cell`, `set_cell` and
+  `fill_with`, `Size.Ratio` and `Rect`'s helpers.
+- **Docs:** the intuiTUIve guide's panels, text, layers, laying out by
+  hand, effects and theme sections, its Python page, and the rows closed
+  in the ratatui comparison.
+
 ### One process per browser session (web 0.0.2)
 
 0.0.19 workstream 3.

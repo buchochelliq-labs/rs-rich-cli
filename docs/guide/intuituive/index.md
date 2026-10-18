@@ -72,10 +72,37 @@ including Ctrl+C and a panic.
 | `log.view()` | A streaming [`Log`](#logs) |
 | `component(Input::new("Name"), on_done)` | A `rich-interact` component (see [Components](#components)) |
 | `repeating(\|\| Input::new("Add"), on_done)` | The same, built fresh after each answer (an entry box) |
+| `layers([...])` | Children stacked on one rectangle, later ones on top (see [Layers](#layers)) |
+| `effect(node, \|canvas, cx\| …)` | A node, with a closure drawing over what it drew (see [Effects](#effects)) |
+| `fill("·", "bright_black")` | Its area filled with a glyph: ratatui's `Fill` |
 
 `.panel("Title")` wraps a node in a rounded border that is highlighted
-while the focus is inside it, and `.padding(1, 2)` leaves space round it
+while the focus is inside it (see [Panels](#panels) for titles, kinds of
+border, sides and shadows), and `.padding(1, 2)` leaves space round it
 (rows above and below, columns either side).
+
+### Text alignment, wrapping and overflow
+
+A `text`, `label` or `text!` node wraps its lines at its width. Three
+builders change that, as ratatui's `Paragraph` options do:
+
+```rust
+label("The quick brown\nfox jumps over\nthe lazy dog")
+    .text_align(TextAlign::Center)     // Left (the default), Center, Right or Justify
+    .panel("Centred")
+label("a line too long for its node")
+    .no_wrap()                         // cut at the edge, not wrapped
+    .overflow(Overflow::Ellipsis)      // with `…`; Fold (the default) or Crop
+```
+
+```text
+--8<-- "crates/rich-intuituive/tests/snapshots/text_centered.txt"
+```
+
+Alignment does not change a text's natural width: an `.auto()` node is
+as wide as its longest line. A stylesheet sets the same with
+`text-align`, `text-wrap: nowrap` and `text-overflow: ellipsis` (or `clip`,
+or `fold`).
 
 ## Layout
 
@@ -83,6 +110,9 @@ A child's size along its parent's axis:
 
 - `.fixed(3)`: exactly 3 cells;
 - `.percent(40)`: 40% of the parent;
+- `.ratio(1, 3)`: a third of the parent, ratatui's `Constraint::Ratio`.
+  Each is rounded down, and the cells that leaves go to the last ratio, so
+  three thirds fill the parent exactly;
 - `.auto()`: as big as its content (the lines a text wraps to, a panel's
   content and border, a list's rows). When a signal the content reads
   changes, the parent lays out again, and the nodes after it move;
@@ -171,6 +201,55 @@ grid(
   `.rows([...])` sizes them, and rows past the last size given take that
   size, so `.rows([Size::Auto])` makes every row as tall as its content.
 
+### Layers
+
+`layers([...])` stacks its children on one rectangle, each later one over
+the ones before: content over a background, a badge over a chart, a panel
+over a board that ticks. A layer takes the whole rectangle, less
+`.inset(top, right, bottom, left)` (CSS's `inset`), or, with
+`.place(across, down)`, only its content's size, where the two `Align`s
+put it.
+
+```rust
+layers([
+    board,                                            // redraws every tick
+    label("on top").panel("Badge").inset(1, 2, 1, 10),
+    label("[b]3[/]").place(Align::End, Align::Start), // the top right corner
+])
+```
+
+```text
+--8<-- "crates/rich-intuituive/tests/snapshots/layers_badge.txt"
+```
+
+A layer draws again wherever one under it drew, so the board's ticks never
+show through the panel. A click goes to the top layer under the pointer,
+and the Tab order and the accessibility tree follow the children's order
+(a lower layer's text, read from the screen, leaves out what is over it).
+
+### Laying out by hand
+
+A widget that places its own parts (a pop-up beside a cell, a gauge's
+ticks) uses the same solver as columns and rows:
+`intuituive::layout::split(rect, axis, &tracks, flow)`, ratatui's
+`Layout::split`. Each `Track` is a `Size` with its clamps, and `flow` (a
+`StackLayout`) gives the gap and the justification.
+`split_with_spacers` returns the rooms between and around them too:
+
+```rust
+use intuituive::layout::{split_with_spacers, Track};
+
+let tracks = [Track::new(Size::Fixed(4)), Track::new(Size::Fixed(4)).min(2)];
+let flow = StackLayout { justify: Justify::Center, ..StackLayout::default() };
+let (areas, spacers) = split_with_spacers(rect, Axis::Horizontal, &tracks, flow);
+// spacers[0] and spacers[2] are the room left at the two ends.
+```
+
+`Rect` (`intuituive::screen::Rect`, rs-rich-ext's) has the helpers such a
+widget needs: `centered(width, height)`, `inset(top, right, bottom, left)`,
+`inner(n)`, `offset(dx, dy)`, `union`, `intersection`, `intersects`,
+`contains`, and `rows()` and `columns()` to go through it a line at a time.
+
 ### Responsive layout
 
 A layout can follow the terminal's size. The size is the app's
@@ -224,6 +303,93 @@ resizes it between the two):
 
 `hide_below(60)` and `@media (max-width: 59)` are the same breakpoint:
 CSS's bounds are inclusive.
+
+## Panels
+
+`.panel(title)` wraps a node in a box: rounded, its title at the top left,
+lit in the theme's `border.focused` while the focus is inside. Titles are
+console markup. Builders after `.panel` change the rest, as ratatui's
+`Block` options do (on any other node they do nothing):
+
+```rust
+label("3 open, 1 merged")
+    .panel("[b]Pull requests[/]")
+    .title_align(Align::Center)                    // where .panel's title sits
+    .title_right("[dim]loading…")                  // another title on the top edge
+    .title_bottom("[dim]q quits")                  // a title on the bottom edge
+    .add_title(Edge::Bottom, Align::End, "1/20")   // the general form
+    .border(Border::Thick)                         // or Plain, Double, Ascii, the dashed kinds, None…
+    .borders(Sides::TOP | Sides::BOTTOM)           // Sides::ALL is the default
+    .border_style("bright_black")                  // while the focus is elsewhere
+    .title_style("bold white")
+    .shadow(Shadow::MediumShade)                   // or LightShade, DarkShade, Block, Dim, Symbol('$')
+```
+
+- **Titles** keep the look of `.panel`'s: ` Title `, one glyph of line in
+  from the corner. Several with the same alignment sit side by side, one
+  cell apart. When they do not fit, the right-hand ones give way first,
+  then the centred ones, and the left ones are cut with `…`. An edge with a
+  title keeps its row even when its line is not drawn, so
+  `.border(Border::None)` gives a heading above the content, as ratatui's
+  `Block::new().title(..)` does. The first top title, as plain text, is the
+  panel's accessible name.
+- **Sides.** The inside grows into the sides that are not drawn.
+- **Shadows** take a strip on the right and the bottom of the panel's own
+  rectangle, in the theme's `shadow` style; the box is a cell narrower and
+  shorter for it.
+
+Titles at the left, the centre and the right, and two at the bottom:
+
+```text
+--8<-- "crates/rich-intuituive/tests/snapshots/panel_titles.txt"
+```
+
+Each kind of border, `Border::Custom(BorderSet { .. })` (glyphs of your
+own) last, then three shadows:
+
+```text
+--8<-- "crates/rich-intuituive/tests/snapshots/panel_kinds.txt"
+```
+
+```text
+--8<-- "crates/rich-intuituive/tests/snapshots/panel_shadow.txt"
+```
+
+A stylesheet sets the same: `border: thick` (and every kind by name),
+`border-title`, `border-title-align`, `border-subtitle` (the bottom
+title), `border-subtitle-align` and `border-sides: top bottom`. Code wins
+over the sheet.
+
+### Collapsed borders
+
+`.collapse_borders()` on a `row`, `column` or `grid` of panels draws one
+frame for them all: neighbours share their edges, joined where lines meet.
+Each panel's titles sit on its own edges and its content between the
+lines. The lines round the panel with the focus are lit in
+`border.focused`, and `.focus_border(Border::Thick)` draws them thick, as
+ratatui's `collapsed-borders` example does for the selected pane:
+
+```rust
+column([
+    pane("Top"),
+    row([pane("Left"), pane("Right")]).collapse_borders(),
+    pane("Bottom"),
+])
+.collapse_borders()
+.border(Border::Plain)
+.focus_border(Border::Thick)
+```
+
+```text
+--8<-- "crates/rich-intuituive/tests/snapshots/collapsed_focus_left.txt"
+```
+
+A collapsed container inside another shares its lines and takes its look;
+a `grid` whose top and bottom panes `.span(2, 1)` draws the same.
+`.border(..)` and `.border_style(..)` on the container set its lines, gaps
+are ignored, and a hidden child gives its room to the others. In a
+stylesheet: `border-collapse: collapse`, with the container's `border` for
+its lines.
 
 ## State
 
@@ -774,11 +940,19 @@ impl Widget for Counter {
 What a widget can do:
 
 - **`draw`** writes cells on a `Canvas`, the widget's rectangle in its own
-  coordinates. It writes with `print`, `set`, `fill`, `clear`, `lines`
-  (rendered rich segments) and `render` (any rich renderable). It can also
-  write one row of markup with `markup`, draw a rounded edge with `border`,
-  lay a style over cells with `restyle`, and move everything up with
-  `scroll_up`. Signals read here make it draw again.
+  coordinates. It writes with `print`, `set`, `set_cell`, `fill`,
+  `fill_with` (a glyph), `clear`, `lines` (rendered rich segments) and
+  `render` (any rich renderable). It can also write one row of markup with
+  `markup`, draw a rounded edge with `border`, lay a style over cells with
+  `restyle`, and move everything up with `scroll_up`. `cell(x, y)` reads
+  what is there now (its `symbol()` and `style()`). Signals read here make
+  it draw again.
+- **`draw_over`** draws after its children, over what they drew, in every
+  frame where the widget or a node inside it drew: a badge, a highlight,
+  an effect. Its canvas is not cleared, and what it writes is sent. When
+  only a child drew, the rest of the canvas still holds what `draw_over`
+  wrote before, so an overlay should come out the same when it runs twice
+  (restyling cells does), or the widget should not be `retained`.
 - **`event`** gets these events:
   - keys while the focus is on it or inside it (with nothing focused,
     while the pointer is over it), and `KeyUp` when one is let go (from a
@@ -819,6 +993,9 @@ What a widget can do:
   are laid out at their full size, drawn offscreen with their own damage,
   and copied out where the widget looks. Clicks and the caret are
   translated through it.
+- **`overlapping`** lets its children overlap, later ones on top, as
+  [`layers`](#layers) does: a child draws again wherever an earlier one
+  drew in the same frame, and a click goes to the later one.
 - **`caret`** places the text caret while it has the focus.
 
 Every built-in node is a widget built on this trait: text, labels,
@@ -837,6 +1014,43 @@ holds them sees keys first (`previews_keys`), and while it is paused it
 keeps them from the meters.
 
 ![Four meters, each a widget of its own](../../media/tapes/intuituive/meters.png)
+
+### Effects
+
+`effect(node, |canvas, cx| …)` runs a closure over what a node drew, with
+no widget to write: ratatui's post-processing of `frame.buffer_mut()`. The
+closure reads cells with `canvas.cell(x, y)` and writes them back. It runs
+whenever the node or anything inside it drew, always over what the node
+drew afresh, so an effect that moves cells comes out the same each time.
+The signals it reads draw it again, so a timer or an animation drives it:
+
+```rust
+let phase = signal(0u16);
+every(Duration::from_millis(16), move |_| phase.update(|p| *p += 1));
+effect(app_body, move |canvas, _cx| {
+    // Each column drips a little further down every frame.
+    let phase = phase.get();
+    for x in 0..canvas.width() {
+        let drop = (phase * (x % 3 + 1) / 2).min(canvas.height());
+        let column: Vec<_> = (0..canvas.height())
+            .map(|y| canvas.cell(x, y).map(|c| (c.symbol().to_string(), c.style().cloned())))
+            .collect();
+        for y in 0..canvas.height() {
+            let (symbol, style) = match y.checked_sub(drop) {
+                Some(from) => column[from as usize].clone().unwrap_or_default(),
+                None => (" ".to_string(), None),
+            };
+            canvas.set_cell(x, y, &symbol, style.as_ref());
+        }
+    }
+})
+```
+
+Three frames in (`tests/effects.rs`):
+
+```text
+--8<-- "crates/rich-intuituive/tests/snapshots/effect_drip.txt"
+```
 
 ## Screens and modals
 
@@ -1051,6 +1265,55 @@ leaves the last good styles in place, and the [inspector](#inspector) shows
 the error. `Theme::load(path)` and `theme.with_config(text)` read the same
 format without watching.
 
+### A style on a node
+
+`.style("white on #101830")` draws any node in a style, ratatui's
+`Block::style`; `.bg(colour)` and `.fg(colour)` set one colour. Each takes
+a theme style's name too (`.style("accent")`, `.bg("bad")`), looked up
+again when the theme changes. The style goes under what the node and its
+children draw, as a stylesheet's `color` and `background` do, and fills the
+rest of the node's rectangle, gaps and borders included. Code wins over a
+stylesheet, and markup inside wins over both:
+
+```rust
+column([label("one"), label("[yellow]two[/] and more"), row([..]).gap(2)])
+    .gap(1)
+    .bg("blue")
+```
+
+```text
+--8<-- "crates/rich-intuituive/tests/snapshots/node_style_fill.styled.txt"
+```
+
+Only what drew is restyled: a tick that redraws one child sends its cells,
+not the whole fill.
+
+### Theme styles for a subtree
+
+`.theme_styles([(name, style), ..])` gives a node and everything inside it
+theme styles of its own, over the app's, as CSS custom properties do. They
+hold for markup (`[selected]…[/]`) and for the widgets inside, which look
+their styles up by name: a list's `selected`, a table's `table.header`, a
+tab strip's `tabs.selected`, a panel's `border` and `title`. It is the
+per-instance answer to ratatui's `highlight_style` and the like, with no
+style option on each widget:
+
+```rust
+row([
+    list(items, a),
+    list(items, b).theme_styles([("selected", "underline")]),
+])
+```
+
+```text
+--8<-- "crates/rich-intuituive/tests/snapshots/theme_styles_list.styled.txt"
+```
+
+A style may name another theme style (`("selected", "accent")`), which
+follows a theme switch. The node keeps one copy of the console and theme
+with its styles, made again only when the theme changes; a node without
+theme styles makes none.
+
 ## Stylesheets
 
 A stylesheet styles and lays out nodes from outside the code, in a subset
@@ -1111,8 +1374,12 @@ and other `@` rules are an error.
 |---|---|
 | `color`, `background` | a colour (`red`, `#ff8800`, `grey23`) or a theme style's colour (`$accent`) |
 | `text-style` | `bold`, `dim`, `italic`, `underline`, `reverse`, `strike`, `blink`, `none` (every one off); a later rule's replaces an earlier one's |
-| `border`, `border-title` | `round`, `square`, `heavy`, `double`, `ascii` or `none` (which takes a panel's own border and its cells away), then a colour; a title |
-| `size`, `min-size`, `max-size` | `3`, `50%`, `2fr`, `auto`, along the parent's axis |
+| `border`, `border-title` | `round`, `square` (or `plain`), `heavy` (or `thick`), `double`, `ascii`, `dashed` and the other dashed kinds (`light-triple-dashed`, `heavy-quadruple-dashed`, …), `quadrant-inside`, `quadrant-outside`, or `none` (which takes a panel's own border, its titles and their cells away), then a colour; a title (markup) |
+| `border-title-align`, `border-subtitle`, `border-subtitle-align` | `left`, `center` or `right`; a title on the bottom edge, and where it sits |
+| `border-sides` | the sides drawn: `top`, `right`, `bottom`, `left` (several), `all` or `none` |
+| `border-collapse` | `collapse` draws one frame for a row's, column's or grid's panels (see [Collapsed borders](#collapsed-borders)), or `separate` |
+| `text-align`, `text-wrap`, `text-overflow` | a text's `left`, `center`, `right` or `justify`; `wrap` or `nowrap`; `fold`, `clip` or `ellipsis` |
+| `size`, `min-size`, `max-size` | `3`, `50%`, `1/3`, `2fr`, `auto`, along the parent's axis |
 | `padding` | one to four numbers, as in CSS |
 | `gap`, `grid-columns`, `grid-rows` | a stack's or grid's spacing; a grid's tracks |
 | `display` | `none` hides the node and what is inside, in any container (a split's pane, a scroll's or a switch's child), takes it out of the Tab order, and out of a grid's cells |
@@ -1126,15 +1393,18 @@ and other `@` rules are an error.
 - **Colours inherit, as in CSS.** They go under what a node draws, so a
   widget's own colours and markup's `[green]` stay, and they fill in the
   rest of the node's area, gaps included.
-- **Code wins.** `.fixed(3)` beats `size: 5`, and `.focus_style()` and
-  `.hover_style()` go over the sheet's colours. A node whose code sets no
-  size takes the sheet's.
+- **Code wins.** `.fixed(3)` beats `size: 5`, `.style()` and `.bg()` beat
+  `background`, and `.focus_style()` and `.hover_style()` go over the
+  sheet's colours. A node whose code sets no size takes the sheet's.
 - **What follows states.** States and `class_when` change colours and text
   styles. Layout is decided by a node's kind, name and fixed classes, and
   decided again when a resize crosses an `@media` rule's bounds (then
   everything draws once). A resize that crosses none matches nothing again.
 - **Borders.** A `border` on a panel restyles the panel's own box. On
-  another node it draws a box round it, inside its area.
+  another node it draws a box round it, inside its area, with its
+  `border-title`, `border-subtitle` and `border-sides`. On a container
+  with `border-collapse: collapse` it is the kind and colour of the shared
+  lines.
 - **Live.** A sheet file is read again whenever it changes. One that does
   not parse is reported in a toast with its line and column, and the last
   good sheet stays. `App::stylesheet(css)` takes a string.

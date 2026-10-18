@@ -65,6 +65,128 @@ impl Rect {
             self.height.saturating_sub(n * 2),
         )
     }
+
+    /// This rectangle without `top`, `right`, `bottom` and `left` cells on
+    /// those sides (CSS's order), never less than empty.
+    ///
+    /// ```
+    /// use rich_ext::surface::Rect;
+    ///
+    /// assert_eq!(Rect::new(0, 0, 10, 5).inset(1, 2, 0, 3), Rect::new(3, 1, 5, 4));
+    /// assert!(Rect::new(0, 0, 4, 4).inset(0, 3, 0, 3).is_empty());
+    /// ```
+    pub fn inset(&self, top: u16, right: u16, bottom: u16, left: u16) -> Rect {
+        let width = self.width.saturating_sub(left.saturating_add(right));
+        let height = self.height.saturating_sub(top.saturating_add(bottom));
+        Rect::new(
+            self.x.saturating_add(left.min(self.width)),
+            self.y.saturating_add(top.min(self.height)),
+            width,
+            height,
+        )
+    }
+
+    /// A rectangle `width` x `height` in the middle of this one, cut to it
+    /// when it is larger (an odd cell left over goes after it): where a
+    /// pop-up or a dialog goes.
+    ///
+    /// ```
+    /// use rich_ext::surface::Rect;
+    ///
+    /// assert_eq!(Rect::new(0, 0, 20, 10).centered(8, 3), Rect::new(6, 3, 8, 3));
+    /// assert_eq!(Rect::new(2, 2, 4, 4).centered(10, 2), Rect::new(2, 3, 4, 2));
+    /// ```
+    pub fn centered(&self, width: u16, height: u16) -> Rect {
+        let (width, height) = (width.min(self.width), height.min(self.height));
+        Rect::new(
+            self.x + (self.width - width) / 2,
+            self.y + (self.height - height) / 2,
+            width,
+            height,
+        )
+    }
+
+    /// This rectangle moved `dx` columns right and `dy` rows down (left and
+    /// up when negative), its size kept and its corner kept on the grid:
+    /// at least 0, and no further than its size allows.
+    ///
+    /// ```
+    /// use rich_ext::surface::Rect;
+    ///
+    /// assert_eq!(Rect::new(5, 5, 2, 2).offset(3, -2), Rect::new(8, 3, 2, 2));
+    /// assert_eq!(Rect::new(1, 1, 2, 2).offset(-4, 0), Rect::new(0, 1, 2, 2));
+    /// ```
+    pub fn offset(&self, dx: i32, dy: i32) -> Rect {
+        let moved = |at: u16, by: i32, size: u16| {
+            (i32::from(at) + by).clamp(0, i32::from(u16::MAX - size)) as u16
+        };
+        Rect::new(
+            moved(self.x, dx, self.width),
+            moved(self.y, dy, self.height),
+            self.width,
+            self.height,
+        )
+    }
+
+    /// The smallest rectangle holding both. An empty rectangle holds
+    /// nothing, so it adds nothing.
+    ///
+    /// ```
+    /// use rich_ext::surface::Rect;
+    ///
+    /// let a = Rect::new(0, 0, 2, 2);
+    /// assert_eq!(a.union(Rect::new(5, 1, 1, 4)), Rect::new(0, 0, 6, 5));
+    /// assert_eq!(a.union(Rect::default()), a);
+    /// ```
+    pub fn union(&self, other: Rect) -> Rect {
+        if other.is_empty() {
+            return *self;
+        }
+        if self.is_empty() {
+            return other;
+        }
+        let (x, y) = (self.x.min(other.x), self.y.min(other.y));
+        let right = self.right().max(other.right());
+        let bottom = self.bottom().max(other.bottom());
+        Rect::new(x, y, right - x, bottom - y)
+    }
+
+    /// Whether the two share a cell.
+    ///
+    /// ```
+    /// use rich_ext::surface::Rect;
+    ///
+    /// let a = Rect::new(0, 0, 4, 4);
+    /// assert!(a.intersects(Rect::new(3, 3, 2, 2)));
+    /// assert!(!a.intersects(Rect::new(4, 0, 2, 2)), "touching is not sharing");
+    /// ```
+    pub fn intersects(&self, other: Rect) -> bool {
+        !self.intersection(other).is_empty()
+    }
+
+    /// Each of its rows, top to bottom, as a rectangle one cell tall.
+    ///
+    /// ```
+    /// use rich_ext::surface::Rect;
+    ///
+    /// let rows: Vec<Rect> = Rect::new(1, 2, 3, 2).rows().collect();
+    /// assert_eq!(rows, [Rect::new(1, 2, 3, 1), Rect::new(1, 3, 3, 1)]);
+    /// ```
+    pub fn rows(self) -> impl DoubleEndedIterator<Item = Rect> + ExactSizeIterator {
+        (self.y..self.bottom()).map(move |y| Rect::new(self.x, y, self.width, 1))
+    }
+
+    /// Each of its columns, left to right, as a rectangle one cell wide.
+    ///
+    /// ```
+    /// use rich_ext::surface::Rect;
+    ///
+    /// let columns: Vec<Rect> = Rect::new(1, 2, 2, 3).columns().collect();
+    /// assert_eq!(columns, [Rect::new(1, 2, 1, 3), Rect::new(2, 2, 1, 3)]);
+    /// ```
+    pub fn columns(self) -> impl DoubleEndedIterator<Item = Rect> + ExactSizeIterator {
+        (self.x..self.right()).map(move |x| Rect::new(x, self.y, 1, self.height))
+    }
 }
 
 /// One cell: a grapheme and its style. A wide grapheme's second column is a
@@ -124,6 +246,24 @@ impl Screen {
 
     pub fn cell(&self, x: u16, y: u16) -> &Cell {
         &self.cells[y as usize * self.width as usize + x as usize]
+    }
+
+    /// The cell at `x`, `y`, if it is on the screen; its style is
+    /// [`style`](Self::style) of its id.
+    ///
+    /// ```
+    /// use rich::{Segment, Style};
+    /// use rich_ext::surface::{Rect, Screen};
+    ///
+    /// let mut screen = Screen::new(4, 1);
+    /// let bold = Style::parse("bold").unwrap();
+    /// screen.write_lines(Rect::new(0, 0, 4, 1), &[vec![Segment::new("ab", Some(bold.clone()))]]);
+    /// let cell = screen.get(1, 0).unwrap();
+    /// assert_eq!((cell.text.as_str(), screen.style(cell.style)), ("b", Some(&bold)));
+    /// assert!(screen.get(4, 0).is_none());
+    /// ```
+    pub fn get(&self, x: u16, y: u16) -> Option<&Cell> {
+        (x < self.width && y < self.height).then(|| self.cell(x, y))
     }
 
     fn cell_mut(&mut self, x: u16, y: u16) -> &mut Cell {

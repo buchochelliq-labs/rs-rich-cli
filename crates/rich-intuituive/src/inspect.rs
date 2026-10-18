@@ -1911,6 +1911,7 @@ fn size_name(size: Size) -> String {
     match size {
         Size::Fixed(n) => format!("fixed {n}"),
         Size::Percent(p) => format!("{p}%"),
+        Size::Ratio(a, b) => format!("{a}/{b}"),
         Size::Flex(w) => format!("flex {w}"),
         Size::Auto => "auto".to_string(),
     }

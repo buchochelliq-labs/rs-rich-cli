@@ -11,9 +11,20 @@
 //!
 //! [`grid`](crate::grid) places children in rows and columns, each a track
 //! solved the same way, with children spanning several tracks.
+//!
+//! The solver is also a function of its own: [`split`] lays [`Track`]s out
+//! in a rectangle, as a column or row does its children, and
+//! [`split_with_spacers`] gives the room between them too, for a widget
+//! that places its own parts (a pop-up beside a cell, a gauge's ticks).
+
+use crate::node::Axis;
+use crate::screen::Rect;
 
 /// How much of its parent's axis a child takes.
+///
+/// More kinds may come: match with a wildcard arm.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum Size {
     /// Exactly this many cells.
     Fixed(u16),
@@ -25,6 +36,72 @@ pub enum Size {
     /// panel's content and border, a list's rows. Measured again when a
     /// signal the content reads changes.
     Auto,
+    /// `a / b` of the parent, as a percentage is: ratatui's
+    /// `Constraint::Ratio`. Of the room after gaps, rounded down; the cells
+    /// that rounding leaves go to the last ratio of the parent, so three
+    /// `Ratio(1, 3)` fill it exactly. A zero `b` is no room at all, and a
+    /// ratio over one is the whole parent.
+    Ratio(u32, u32),
+}
+
+/// `total × a / b` cells, rounded down: none when `b` is 0, at most
+/// `total`.
+pub(crate) fn ratio_of(total: u32, a: u32, b: u32) -> u32 {
+    if b == 0 {
+        return 0;
+    }
+    (u64::from(total) * u64::from(a) / u64::from(b)).min(u64::from(total)) as u32
+}
+
+/// The cells a group of ratios takes of `total` together, rounded down
+/// once: `total × Σ a / b`, worked out exactly (each ratio at most one).
+fn ratios_of(total: u32, ratios: &[(u32, u32)]) -> u32 {
+    fn gcd(mut a: u128, mut b: u128) -> u128 {
+        while b != 0 {
+            (a, b) = (b, a % b);
+        }
+        a.max(1)
+    }
+    let (mut num, mut den) = (0u128, 1u128);
+    for &(a, b) in ratios.iter().filter(|(_, b)| *b != 0) {
+        let (a, b) = (u128::from(a.min(b)), u128::from(b));
+        let sum = num
+            .checked_mul(b)
+            .and_then(|n| a.checked_mul(den).and_then(|m| n.checked_add(m)));
+        match (sum, den.checked_mul(b)) {
+            (Some(n), Some(d)) => {
+                let g = gcd(n, d);
+                (num, den) = (n / g, d / g);
+            }
+            // Denominators too large to add exactly (many large primes):
+            // near enough.
+            _ => {
+                let exact: f64 = ratios
+                    .iter()
+                    .filter(|(_, b)| *b != 0)
+                    .map(|&(a, b)| f64::from(a.min(b)) / f64::from(b))
+                    .sum();
+                return (f64::from(total) * exact).floor().min(f64::from(total)) as u32;
+            }
+        }
+    }
+    (u128::from(total) * num / den).min(u128::from(total)) as u32
+}
+
+/// How the lines of a text sit across its width: CSS's `text-align`, and
+/// ratatui's `Alignment` on a paragraph.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum TextAlign {
+    /// At the left: the default.
+    #[default]
+    Left,
+    /// Each line centred.
+    Center,
+    /// Each line at the right.
+    Right,
+    /// Each line but the last spread to the whole width, the words spaced
+    /// out evenly.
+    Justify,
 }
 
 /// Where a child sits across its parent's axis: across a
@@ -94,17 +171,28 @@ pub struct StackLayout {
     pub align_content: AlignContent,
 }
 
-/// One track to solve: a size and its clamps.
-#[derive(Clone, Copy, Debug)]
-pub(crate) struct Track {
-    pub size: Size,
-    pub min: u16,
-    pub max: u16,
+/// One track to lay out with [`split`]: a [`Size`] and its clamps, as a
+/// child of a column or row has them.
+///
+/// ```
+/// use intuituive::layout::Track;
+/// use intuituive::Size;
+///
+/// let sidebar = Track::new(Size::Percent(25)).min(20).max(40);
+/// let status = Track::new(Size::Auto).content(3); // three rows of content
+/// # let _ = (sidebar, status);
+/// ```
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Track {
+    pub(crate) size: Size,
+    pub(crate) min: u16,
+    pub(crate) max: u16,
     /// The measured content, for [`Size::Auto`].
-    pub content: u16,
+    pub(crate) content: u16,
 }
 
 impl Track {
+    /// A track of `size`, unclamped, with no content.
     pub fn new(size: Size) -> Track {
         Track {
             size,
@@ -112,6 +200,24 @@ impl Track {
             max: u16::MAX,
             content: 0,
         }
+    }
+
+    /// Never less than `cells`, while there is room (CSS's `min-width`).
+    pub fn min(mut self, cells: u16) -> Track {
+        self.min = cells;
+        self
+    }
+
+    /// Never more than `cells`.
+    pub fn max(mut self, cells: u16) -> Track {
+        self.max = cells;
+        self
+    }
+
+    /// For [`Size::Auto`]: the cells its content needs.
+    pub fn content(mut self, cells: u16) -> Track {
+        self.content = cells;
+        self
     }
 
     fn clamp(&self, value: u32) -> u32 {
@@ -128,11 +234,39 @@ pub(crate) fn solve(total: u16, gap: u16, tracks: &[Track]) -> Vec<u16> {
         return Vec::new();
     }
     let total = (total as u32).saturating_sub(gap as u32 * (n as u32 - 1));
+    // Ratios are rounded down each, and what that loses of the group's
+    // exact total goes to the last of them, as a flexible share's
+    // remainder does.
+    let ratios: Vec<(u32, u32)> = tracks
+        .iter()
+        .filter_map(|t| match t.size {
+            Size::Ratio(a, b) => Some((a, b)),
+            _ => None,
+        })
+        .collect();
+    let mut ratio_rest = ratios_of(total, &ratios).saturating_sub(
+        ratios
+            .iter()
+            .map(|&(a, b)| ratio_of(total, a, b))
+            .sum::<u32>(),
+    );
+    let last_ratio = tracks
+        .iter()
+        .rposition(|t| matches!(t.size, Size::Ratio(..)));
     let mut sizes: Vec<u32> = tracks
         .iter()
-        .map(|t| match t.size {
+        .enumerate()
+        .map(|(i, t)| match t.size {
             Size::Fixed(cells) => t.clamp(cells as u32),
             Size::Percent(p) => t.clamp(total * p.min(100) as u32 / 100),
+            Size::Ratio(a, b) => {
+                let rest = if Some(i) == last_ratio {
+                    std::mem::take(&mut ratio_rest)
+                } else {
+                    0
+                };
+                t.clamp(ratio_of(total, a, b) + rest)
+            }
             Size::Auto => t.clamp(t.content as u32),
             Size::Flex(_) => 0,
         })
@@ -235,6 +369,7 @@ pub(crate) fn grow_for_span(
             Size::Auto => t.content as u32,
             Size::Fixed(cells) => cells as u32,
             Size::Percent(p) => total as u32 * p.min(100) as u32 / 100,
+            Size::Ratio(a, b) => ratio_of(total as u32, a, b),
             Size::Flex(_) => 0,
         })
         .sum::<u32>()
@@ -454,12 +589,179 @@ pub(crate) fn place(columns: usize, spans: &[(u16, u16)]) -> (Vec<Cellspan>, usi
     (places, taken.len())
 }
 
+/// Lay `tracks` out along `axis` in `rect`, as a [`column`](crate::column)
+/// or [`row`](crate::row) lays out its children: each by its [`Size`] within
+/// its clamps, the flexible ones sharing what is left, `flow.gap` cells
+/// apart, and what they leave over placed by `flow.justify`. Each takes the
+/// whole of `rect` across the axis (tracks have no content across it, so
+/// `flow.align_items` and wrapping do not apply). ratatui's `Layout::split`.
+///
+/// ```
+/// use intuituive::layout::{split, Track};
+/// use intuituive::node::Axis;
+/// use intuituive::screen::Rect;
+/// use intuituive::{Size, StackLayout};
+///
+/// let tracks = [Track::new(Size::Fixed(3)), Track::new(Size::Flex(1))];
+/// let areas = split(Rect::new(0, 0, 20, 10), Axis::Vertical, &tracks, StackLayout::default());
+/// assert_eq!(areas, [Rect::new(0, 0, 20, 3), Rect::new(0, 3, 20, 7)]);
+/// ```
+pub fn split(rect: Rect, axis: Axis, tracks: &[Track], flow: StackLayout) -> Vec<Rect> {
+    split_with_spacers(rect, axis, tracks, flow).0
+}
+
+/// [`split`], and the room around the tracks: one spacer before the first,
+/// one between each two, and one after the last (`tracks.len() + 1` in all,
+/// some of them empty), as ratatui's `Layout::split_with_spacers`. With
+/// [`Justify::SpaceBetween`] the spacers between are the gaps and the ends
+/// are empty; with [`Justify::Center`] the ends hold the room left over.
+///
+/// ```
+/// use intuituive::layout::{split_with_spacers, Track};
+/// use intuituive::node::Axis;
+/// use intuituive::screen::Rect;
+/// use intuituive::{Justify, Size, StackLayout};
+///
+/// let flow = StackLayout { justify: Justify::Center, ..StackLayout::default() };
+/// let tracks = [Track::new(Size::Fixed(4)), Track::new(Size::Fixed(4))];
+/// let (areas, spacers) = split_with_spacers(Rect::new(0, 0, 20, 1), Axis::Horizontal, &tracks, flow);
+/// assert_eq!(areas, [Rect::new(6, 0, 4, 1), Rect::new(10, 0, 4, 1)]);
+/// assert_eq!(spacers[0], Rect::new(0, 0, 6, 1));
+/// assert_eq!(spacers[2], Rect::new(14, 0, 6, 1));
+/// ```
+pub fn split_with_spacers(
+    rect: Rect,
+    axis: Axis,
+    tracks: &[Track],
+    flow: StackLayout,
+) -> (Vec<Rect>, Vec<Rect>) {
+    let (start, total, across, breadth) = match axis {
+        Axis::Vertical => (rect.y, rect.height, rect.x, rect.width),
+        Axis::Horizontal => (rect.x, rect.width, rect.y, rect.height),
+    };
+    let piece = |at: u16, length: u16| match axis {
+        Axis::Vertical => Rect::new(across, at, breadth, length),
+        Axis::Horizontal => Rect::new(at, across, length, breadth),
+    };
+    let sizes = solve(total, flow.gap, tracks);
+    let at = justify_offsets(start, total, flow.gap, &sizes, flow.justify);
+    let end = start.saturating_add(total);
+    let areas: Vec<Rect> = at
+        .iter()
+        .zip(&sizes)
+        .map(|(&at, &size)| {
+            let at = at.min(end);
+            piece(at, size.min(end - at))
+        })
+        .collect();
+    // Between the end of each area (or the start) and the start of the
+    // next (or the end).
+    let mut spacers = Vec::with_capacity(areas.len() + 1);
+    let mut from = start;
+    for (&at, &size) in at.iter().zip(&sizes) {
+        let to = at.clamp(from, end);
+        spacers.push(piece(from, to - from));
+        from = at.saturating_add(size).clamp(to, end);
+    }
+    spacers.push(piece(from, end - from));
+    (areas, spacers)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     fn track(size: Size) -> Track {
         Track::new(size)
+    }
+
+    #[test]
+    fn three_thirds_fill_the_room_exactly() {
+        let third = track(Size::Ratio(1, 3));
+        assert_eq!(solve(100, 0, &[third, third, third]), vec![33, 33, 34]);
+        // Of the room after gaps, as a percentage is: 98 cells.
+        assert_eq!(solve(100, 1, &[third, third, third]), vec![32, 32, 34]);
+        // A zero denominator is no room; over one is the whole parent.
+        assert_eq!(solve(10, 0, &[track(Size::Ratio(1, 0))]), vec![0]);
+        assert_eq!(solve(10, 0, &[track(Size::Ratio(3, 2))]), vec![10]);
+    }
+
+    #[test]
+    fn ratios_mix_with_fixed_and_flexible_tracks() {
+        let tracks = [
+            track(Size::Fixed(10)),
+            track(Size::Ratio(1, 4)),
+            track(Size::Flex(1)),
+            track(Size::Ratio(1, 4)),
+        ];
+        // 25 each of 100, and the flexible track takes what is left.
+        assert_eq!(solve(100, 0, &tracks), vec![10, 25, 40, 25]);
+        // 1/3 and 1/6 of 50: 16 and 8, and the half-cell lost to rounding
+        // goes to the last ratio (25 together).
+        let tracks = [track(Size::Ratio(1, 3)), track(Size::Ratio(1, 6))];
+        assert_eq!(solve(50, 0, &tracks), vec![16, 9]);
+        let mut capped = track(Size::Ratio(1, 2));
+        capped.max = 10;
+        assert_eq!(solve(40, 0, &[capped, track(Size::Flex(1))]), vec![10, 30]);
+    }
+
+    #[test]
+    fn spacers_are_the_room_between_and_around() {
+        let rect = Rect::new(0, 0, 20, 1);
+        let tracks = [track(Size::Fixed(4)), track(Size::Fixed(6))];
+        let flow = |justify| StackLayout {
+            justify,
+            ..StackLayout::default()
+        };
+        let (areas, spacers) =
+            split_with_spacers(rect, Axis::Horizontal, &tracks, flow(Justify::SpaceBetween));
+        assert_eq!(areas, [Rect::new(0, 0, 4, 1), Rect::new(14, 0, 6, 1)]);
+        // The ends are empty, and the gap is the room between.
+        assert_eq!(
+            spacers,
+            [
+                Rect::new(0, 0, 0, 1),
+                Rect::new(4, 0, 10, 1),
+                Rect::new(20, 0, 0, 1)
+            ]
+        );
+        let (areas, spacers) =
+            split_with_spacers(rect, Axis::Horizontal, &tracks, flow(Justify::Center));
+        assert_eq!(areas, [Rect::new(5, 0, 4, 1), Rect::new(9, 0, 6, 1)]);
+        assert_eq!(
+            spacers,
+            [
+                Rect::new(0, 0, 5, 1),
+                Rect::new(9, 0, 0, 1),
+                Rect::new(15, 0, 5, 1)
+            ]
+        );
+        // A gap is a spacer too, and down the axis the spacers are rows.
+        let flow = StackLayout {
+            gap: 1,
+            ..StackLayout::default()
+        };
+        let (areas, spacers) = split_with_spacers(
+            Rect::new(2, 1, 5, 10),
+            Axis::Vertical,
+            &[track(Size::Fixed(2)), track(Size::Flex(1))],
+            flow,
+        );
+        assert_eq!(areas, [Rect::new(2, 1, 5, 2), Rect::new(2, 4, 5, 7)]);
+        assert_eq!(spacers[1], Rect::new(2, 3, 5, 1));
+        assert_eq!(spacers[2], Rect::new(2, 11, 5, 0));
+        // No tracks: one spacer, the whole rectangle.
+        assert_eq!(
+            split_with_spacers(rect, Axis::Horizontal, &[], flow).1,
+            [rect]
+        );
+    }
+
+    #[test]
+    fn a_grid_of_ratio_tracks_shares_its_width() {
+        let third = track(Size::Ratio(1, 3));
+        // Three columns, a gap of 2 between: 56 of 60, 18, 18 and 20.
+        assert_eq!(solve(60, 2, &[third, third, third]), vec![18, 18, 20]);
     }
 
     #[test]

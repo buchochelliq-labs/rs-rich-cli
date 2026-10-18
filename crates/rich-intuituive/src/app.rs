@@ -1621,6 +1621,8 @@ impl App {
         let top = self.top();
         let text_mode = self.text_mode();
         let hidden = self.hidden_rects();
+        // A layer's text leaves out the layers over it.
+        let covered = crate::node::covered(&top.root);
         let mut out = Vec::new();
         let mut included: Vec<NodeId> = Vec::new();
         // Nodes whose insides are left out: hidden ones, and ones named by
@@ -1648,7 +1650,10 @@ impl App {
                 .iter()
                 .filter(|id| included.contains(id))
                 .count();
-            let shown = || screen_text(screen, rect, &hidden);
+            let shown = || match covered.get(&id) {
+                Some(over) => screen_text(screen, rect, &[&hidden[..], &over[..]].concat()),
+                None => screen_text(screen, rect, &hidden),
+            };
             let named_by_text = label.is_none()
                 && match role {
                     Role::Text
@@ -1876,6 +1881,7 @@ impl App {
             hidden_rects: Vec::new(),
             timings: panel.map(|_| Vec::new()),
             time_stack: Vec::new(),
+            scoped: Vec::new(),
         };
         if full {
             // A screen opened or closed: nothing on screen can be trusted.
@@ -4112,6 +4118,7 @@ fn popup_rect(
         match size {
             Size::Fixed(n) => n,
             Size::Percent(p) => (total as u32 * p.min(100) as u32 / 100) as u16,
+            Size::Ratio(a, b) => crate::layout::ratio_of(total as u32, a, b) as u16,
             Size::Auto => measure(),
             Size::Flex(_) => total,
         }
@@ -4169,6 +4176,7 @@ fn modal_rect(console: &Console, root: &Node, area: Rect, width: Size, height: S
         match size {
             Size::Fixed(n) => n,
             Size::Percent(p) => (total as u32 * p.min(100) as u32 / 100) as u16,
+            Size::Ratio(a, b) => crate::layout::ratio_of(total as u32, a, b) as u16,
             Size::Auto => measure(),
             Size::Flex(_) => total,
         }
