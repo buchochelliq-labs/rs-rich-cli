@@ -79,6 +79,96 @@ def test_vertical_bars():
     )
 
 
+def test_sparklines_after_ratatui():
+    assert drawn(chart.Sparkline([1, 4, 7, 10], rows=3)) == "   █\n ▁██\n▁███\n"
+    assert drawn(chart.Sparkline([1, 4, 7, 10], direction="right_to_left"), 10) == "      █▆▃▁\n"
+    assert drawn(chart.Sparkline([1, None, 3], absent="·"), 10) == "▁·█\n"
+    assert drawn(chart.Sparkline([1, None, 3], absent=("x", "red")), 10) == "▁x█\n"
+    assert drawn(chart.Sparkline([0, 1, 2, 3, 4], levels="three"), 10) == " ▄▄▄█\n"
+    # One style a value; None keeps the sparkline's own (`chart.bar`, cyan).
+    assert coloured(chart.Sparkline([1, 2], styles=["red", None]), 10) == "\x1b[31m▁\x1b[0m\x1b[36m█\x1b[0m\n"
+    with pytest.raises(ValueError, match="rows"):
+        chart.Sparkline([1], rows=0)
+    with pytest.raises(ValueError, match="direction"):
+        chart.Sparkline([1], direction="up")
+    with pytest.raises(ValueError, match="levels"):
+        chart.Sparkline([1], levels="two")
+
+
+def test_grouped_bars():
+    q1 = chart.BarGroup("Q1", [chart.ChartBar("a", 4.0), chart.ChartBar("b", 2.0)])
+    q2 = chart.BarGroup("Q2", [("a", 3.0), ("b", 1.0)])
+    assert (q1.label, len(q1)) == ("Q1", 2)
+    assert repr(q2) == "<BarGroup 'Q2' with 2 bars>"
+    assert drawn(chart.BarChart(groups=[q1, q2], bar_width=8), 30) == (
+        "a ████████ 4\n"
+        "b ████     2\n"
+        "  Q1        \n"
+        "            \n"
+        "a ██████   3\n"
+        "b ██       1\n"
+        "  Q2        \n"
+    )
+    vertical = chart.BarChart(groups=[q1, q2], orientation="vertical", bar_width=4, thickness=2)
+    assert drawn(vertical, 30) == (
+        "4           \n"
+        "██     3    \n"
+        "██ 2   ██   \n"
+        "██ ██  ██ 1 \n"
+        "██ ██  ██ ██\n"
+        "a  b   a  b \n"
+        " Q1     Q2  \n"
+    )
+    with pytest.raises(TypeError, match="BarGroup"):
+        chart.BarChart(groups=[1])
+
+
+def test_thick_bars_text_values_and_values_inside():
+    assert drawn(chart.BarChart([("a", 4.0), ("b", 2.0)], bar_width=8, thickness=3, bar_gap=1), 30) == (
+        "  ████████  \na ████████ 4\n  ████████  \n            \n  ████      \nb ████     2\n  ████      \n"
+    )
+    text = chart.BarChart([chart.ChartBar("a", 4.0, text="four"), chart.ChartBar("b", 2.0)], bar_width=8)
+    assert drawn(text, 30) == "a ████████ four\nb ████        2\n"
+    assert chart.ChartBar("a", 1.0, text="x").text == "x"
+    assert chart.ChartBar("a", 1.0).text is None
+    inside = chart.BarChart([("spring", 4.0), ("summer", 2.0)], bar_width=10, values_inside=True)
+    assert drawn(inside, 30) == "spring 4█████████\nsummer 2████     \n"
+    styled = chart.BarChart([chart.ChartBar("a", 4.0, value_style="red", label_style="blue")], bar_width=4)
+    assert coloured(styled, 20) == "\x1b[34ma\x1b[0m \x1b[36m██\x1b[0m   \x1b[31m4\x1b[0m\n"
+    with pytest.raises(ValueError, match="thickness"):
+        chart.BarChart([("a", 1)], thickness=0)
+
+
+def test_fill_gauge():
+    assert drawn(chart.FillGauge(0.42, height=3), 20) == (
+        "████████            \n████████42%         \n████████            \n"
+    )
+    assert drawn(chart.FillGauge(0.42, label="42.00%", unicode=True), 20) == "███████42.00%       \n"
+    # Where the bar runs under the label, the label's colours swap.
+    assert coloured(chart.FillGauge(0.5, style="green"), 10) == (
+        "\x1b[32m███\x1b[0m\x1b[39;42m50\x1b[0m\x1b[32m%    \x1b[0m\n"
+    )
+    assert (chart.FillGauge(7).ratio, chart.FillGauge(-1).ratio) == (1.0, 0.0)
+    with pytest.raises(ValueError, match="NaN"):
+        chart.FillGauge(float("nan"))
+
+
+def test_line_gauge():
+    assert drawn(chart.LineGauge(0.42, label="Downloading: 42%", line="thick"), 30) == (
+        "Downloading: 42% ━━━━━━━━━━━━━\n"
+    )
+    assert drawn(chart.LineGauge(0.5, width=12)) == " 50% ───────\n"
+    assert drawn(chart.LineGauge(0.99, label="cpu", symbols=("▰", "▱")), 20) == "cpu ▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▱\n"
+    assert coloured(chart.LineGauge(0.5, filled_style="red", unfilled_style="blue", width=10), 10) == (
+        " 50% \x1b[31m──\x1b[0m\x1b[34m───\x1b[0m\n"
+    )
+    assert chart.LineGauge(0.25).ratio == 0.25
+    with pytest.raises(ValueError, match="line"):
+        chart.LineGauge(0.5, line="dotted")
+    with pytest.raises(ValueError, match="one character"):
+        chart.LineGauge(0.5, symbols=("ab", "c"))
+
+
 def test_histogram():
     latencies = [12.0, 14.0, 15.0, 21.0, 22.0, 23.0, 24.0, 38.0]
     histogram = chart.Histogram(latencies, bins=3, range=(10.0, 40.0), bar_width=8)
@@ -297,6 +387,11 @@ def test_no_chart_draws_past_its_width(width):
         chart.Heatmap([("r", [1, 2, 3])], columns=["a", "b", "c"]),
         chart.KpiCard("k", 1.0, trend=[1, 2]),
         chart.Timeline([("t", 0, 10)]),
+        chart.Sparkline(range(30), rows=3, direction="right_to_left"),
+        chart.BarChart(groups=[chart.BarGroup("g", [("a", 1.0), ("b", 2.0)])], thickness=2, values_inside=True),
+        chart.BarChart([("a", 1.0), ("b", 2.0)], orientation="vertical", thickness=3),
+        chart.FillGauge(0.5, label="half way there"),
+        chart.LineGauge(0.5, label="half way there"),
     ]:
         out = io.StringIO()
         Console(file=out, width=width, color_system=None).print(renderable)
