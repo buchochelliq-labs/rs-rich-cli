@@ -1932,3 +1932,335 @@ def test_date_and_time_pickers():
     out = screen(build_moment, ["left", "q"], 20, 12)
     assert out[9] == "✗ the earliest is"
     assert out[11] == "2026-10-17 12:00:00"
+
+
+# ---------------------------------------------------------------------------
+# Blocks, text and layout (0.0.19 gap batch A): the screens are the ones
+# crates/rich-intuituive/tests/snapshots pins for the same apps.
+
+
+def test_panel_titles_on_both_edges():
+    def build():
+        return column([
+            label("left").panel("Left"),
+            label("centre").panel("Centre").title_align("center"),
+            label("right").panel("Right").title_align("right"),
+            label("two titles at the bottom")
+            .panel("")
+            .title_bottom("q quits")
+            .add_title(tui.Edge.Bottom, "right", "1/20"),
+        ])
+
+    assert screen(build, [], 30, 12) == [
+        "╭─ Left ─────────────────────╮",
+        "│left                        │",
+        "╰────────────────────────────╯",
+        "╭────────── Centre ──────────╮",
+        "│centre                      │",
+        "╰────────────────────────────╯",
+        "╭──────────────────── Right ─╮",
+        "│right                       │",
+        "╰────────────────────────────╯",
+        "╭────────────────────────────╮",
+        "│two titles at the bottom    │",
+        "╰─ q quits ─────────── 1/20 ─╯",
+    ]
+    # Too narrow for both: the right one gives way, and the left one is cut.
+    out = screen(lambda: label("").panel("Left title").title_right("Right"), [], 12, 3)
+    assert out[0] == "╭─ Left … ─╮"
+    with pytest.raises(ValueError):
+        label("").add_title("middle", "left", "x")
+
+
+def test_panel_sides_kinds_and_shadows():
+    def sides():
+        return column([
+            label("top only").panel("Top").borders(tui.Sides.TOP),
+            label("left and right").panel("Sides").borders(tui.Sides.LEFT | tui.Sides.RIGHT),
+            label("bottom only").panel("").borders("bottom"),
+        ])
+
+    assert screen(sides, [], 20, 7) == [
+        "── Top ─────────────",
+        "top only",
+        "│Sides             │",
+        "│left and right    │",
+        "bottom only",
+        "",
+        "────────────────────",
+    ]
+
+    def kinds():
+        return row([
+            label("").panel("").border("thick"),
+            label("").panel("").border(tui.Border.Double),
+            label("").panel("").border(["+", "~", "+", "|", "|", "+", "~", "+"]),
+        ])
+
+    assert screen(kinds, [], 9, 2) == ["┏━┓╔═╗+~+", "┗━┛╚═╝+~+"]
+    with pytest.raises(ValueError):
+        label("").border(["+", "-"])
+
+    def shadows():
+        return row([
+            label("medium").panel("A").shadow(tui.Shadow.MediumShade),
+            label("block").panel("B").shadow("block"),
+            label("own").panel("C").shadow("$"),
+        ])
+
+    assert screen(shadows, [], 33, 4) == [
+        "╭─ A ────╮ ╭─ B ────╮ ╭─ C ────╮",
+        "│medium  │▒│block   │█│own     │$",
+        "╰────────╯▒╰────────╯█╰────────╯$",
+        " ▒▒▒▒▒▒▒▒▒▒ ██████████ $$$$$$$$$$",
+    ]
+    with pytest.raises(ValueError):
+        label("").shadow("ab")
+
+
+def test_titles_and_borders_take_styles():
+    def build():
+        return label("x").panel("[bold]Pull[/] requests").border_style("red").title_style("green")
+
+    driver = App(build).driver(20, 3)
+    turn(driver)
+    assert driver.styled().splitlines()[0] == (
+        "[red]╭─[/][green] [/][bold green]Pull[/][green] requests [/][red]──╮[/]"
+    )
+    assert driver.screen()[0] == "╭─ Pull requests ──╮"
+
+
+def test_collapsed_borders():
+    def build():
+        return row([
+            label("one").panel("One"),
+            label("two").panel("Two").fixed(10),
+            label("three").panel("Three").title_bottom("3"),
+        ]).collapse_borders()
+
+    assert screen(build, [], 32, 4) == [
+        "╭─ One ────┬─ Two ──┬─ Three ──╮",
+        "│one       │two     │three     │",
+        "│          │        │          │",
+        "╰──────────┴────────┴─ 3 ──────╯",
+    ]
+
+
+def test_a_style_on_a_node():
+    def build():
+        return column([
+            label("one"),
+            label("[yellow]two[/] and more"),
+            row([label("a").fixed(2), label("b").fixed(2)]).gap(2),
+        ]).gap(1).bg("blue")
+
+    driver = App(build).driver(14, 6)
+    turn(driver)
+    assert driver.styled().splitlines()[2] == "[yellow on blue]two[/][on blue] and more  [/]"
+    driver = App(lambda: label("x").style("bold").fg("red")).driver(3, 1)
+    turn(driver)
+    assert driver.styled() == "[bold red]x  [/]\n"
+
+
+POEM = "The quick brown\nfox jumps over\nthe lazy dog"
+
+
+def test_text_alignment_wrapping_and_overflow():
+    out = screen(lambda: label(POEM).text_align("center").panel("Centred"), [], 22, 5)
+    assert out == [
+        "╭─ Centred ──────────╮",
+        "│  The quick brown   │",
+        "│   fox jumps over   │",
+        "│    the lazy dog    │",
+        "╰────────────────────╯",
+    ]
+    out = screen(lambda: label(POEM).text_align(tui.TextAlign.Right).panel("Right"), [], 22, 5)
+    assert out[3] == "│        the lazy dog│"
+    def cut():
+        return column([
+            label("cut at the edge, not wrapped").no_wrap(),
+            label("cut with an ellipsis instead").no_wrap().overflow(tui.Overflow.Ellipsis),
+            label("wrapped as before, a word at a time"),
+        ])
+
+    assert screen(cut, [], 16, 4) == [
+        "cut at the edge,",
+        "cut with an ell…",
+        "wrapped as",
+        "before, a word",
+    ]
+    with pytest.raises(ValueError):
+        label("").text_align("middle")
+    with pytest.raises(ValueError):
+        label("").overflow("spill")
+
+
+def test_ratio_sizes_and_laying_out_by_hand():
+    assert Size.Ratio(1, 3) == Size.Ratio(1, 3)
+    assert repr(Size.Ratio(1, 3)) == "Size.Ratio(1, 3)"
+
+    def build():
+        return row([
+            text("a").ratio(1, 3).bg("red"),
+            text("b").size("1/3").bg("green"),
+            text("c").size(Size.Ratio(1, 3)).bg("blue"),
+        ])
+
+    # Three thirds of 10 fill all 10: the last one takes the remainder.
+    driver = App(build).driver(10, 1)
+    turn(driver)
+    assert driver.styled() == "[on red]a  [/][on green]b  [/][on blue]c   [/]\n"
+
+    room = tui.Rect(0, 0, 10, 1)
+    thirds = [tui.Track(Size.Ratio(1, 3))] * 3
+    assert [r.width for r in tui.layout_split(room, "horizontal", thirds)] == [3, 3, 4]
+    cells, spacers = tui.layout_split_with_spacers(
+        tui.Rect(0, 0, 12, 1),
+        Axis.Horizontal,
+        [tui.Track(2), tui.Track(4, min=3)],
+        gap=2,
+        justify="center",
+    )
+    assert cells == [tui.Rect(2, 0, 2, 1), tui.Rect(6, 0, 4, 1)]
+    assert spacers == [tui.Rect(0, 0, 2, 1), tui.Rect(4, 0, 2, 1), tui.Rect(10, 0, 2, 1)]
+    with pytest.raises(ValueError):
+        tui.layout_split(room, "horizontal", thirds, justify="sideways")
+
+
+def test_rect_helpers():
+    room = tui.Rect(2, 1, 10, 4)
+    assert room.inset(1, 2, 1, 2) == tui.Rect(4, 2, 6, 2)
+    assert room.centered(4, 2) == tui.Rect(5, 2, 4, 2)
+    assert room.offset(-2, 1) == tui.Rect(0, 2, 10, 4)
+    assert room.union(tui.Rect(0, 0, 1, 1)) == tui.Rect(0, 0, 12, 5)
+    assert room.intersects(tui.Rect(11, 4, 3, 3))
+    assert not room.intersects(tui.Rect(12, 1, 3, 3))
+    assert [r.y for r in room.rows()] == [1, 2, 3, 4]
+    assert [r.x for r in room.columns()][:3] == [2, 3, 4]
+
+
+def test_sides():
+    both = tui.Sides.TOP | tui.Sides.BOTTOM
+    assert both == tui.Sides.BOTTOM | tui.Sides.TOP
+    assert hash(both) == hash(tui.Sides.BOTTOM | tui.Sides.TOP)
+    assert repr(both) == "Sides.TOP | Sides.BOTTOM"
+    assert both.contains(tui.Sides.TOP) and not both.contains(tui.Sides.LEFT)
+    assert tui.Sides.ALL.contains(both) and not tui.Sides.NONE.contains(tui.Sides.TOP)
+    with pytest.raises(ValueError):
+        label("").borders("up")
+
+
+def test_layers_stack_children_later_on_top():
+    def build():
+        board = "\n".join(f"{f'row {r} ':-<24}" for r in range(6))
+        return tui.layers([
+            text(board),
+            label("on top").panel("Badge").inset(1, 2, 1, 10),
+        ])
+
+    assert screen(build, [], 24, 6) == [
+        "row 0 ------------------",
+        "row 1 ----╭─ Badge ──╮--",
+        "row 2 ----│on top    │--",
+        "row 3 ----│          │--",
+        "row 4 ----╰──────────╯--",
+        "row 5 ------------------",
+    ]
+
+    def placed():
+        return tui.layers([
+            tui.fill("·", ""),
+            label("tl").place("start", "start"),
+            label("c").place("center", "center"),
+            label("br").place("end", "end"),
+        ])
+
+    assert screen(placed, [], 7, 3) == ["tl·····", "···c···", "·····br"]
+
+
+def test_effects_read_and_write_cells():
+    seen = []
+
+    def shout(canvas, cx):
+        for x in range(canvas.width):
+            cell = canvas.cell(x, 0)
+            seen.append(cell)
+            if cell.symbol():
+                canvas.set_cell(x, 0, cell.symbol().upper(), "bold")
+
+    def build():
+        return column([tui.effect(label("quiet 界"), shout), tui.fill("·", "bright_black")])
+
+    driver = App(build).driver(9, 2)
+    turn(driver)
+    assert driver.screen() == ["QUIET 界 ", "·········"]
+    wide = next(cell for cell in seen if cell.symbol() == "界")
+    assert wide.width() == 2 and not wide.is_continuation()
+    assert any(cell.is_continuation() and cell.width() == 0 for cell in seen)
+    assert driver.styled().splitlines()[0] == "[bold]QUIET 界 [/]"
+
+    out = screen(lambda: row([tui.fill("界", "").fixed(5), tui.fill("=", "accent")]), [], 9, 1)
+    assert out == ["界界 ===="]
+
+
+def test_a_widget_draws_over_its_children():
+    class Badge(Widget):
+        def children(self):
+            return [label("hello")]
+
+        def layout(self, cx, rect):
+            return [rect]
+
+        def draw(self, cx, canvas):
+            pass
+
+        def draw_over(self, cx, canvas):
+            first = canvas.cell(0, 0)
+            canvas.set_cell(0, 0, first.symbol().upper(), "reverse")
+            canvas.fill_with(5, 0, 2, 1, "!")
+            assert canvas.cell(99, 0) is None
+
+    driver = App(lambda: widget(Badge())).driver(8, 1)
+    turn(driver)
+    assert driver.screen()[0].rstrip() == "Hello!!"
+    assert driver.styled().startswith("[reverse]H[/]")
+
+    class Stack(Widget):
+        def children(self):
+            return [label("under"), label("[b]over")]
+
+        def layout(self, cx, rect):
+            return [rect, rect]
+
+        def draw(self, cx, canvas):
+            pass
+
+        def overlapping(self):
+            return True
+
+    # The later child is on top, over its whole area.
+    assert screen(lambda: widget(Stack()), [], 6, 1) == ["over"]
+
+
+def test_theme_styles_for_a_subtree():
+    def build():
+        a, b = signal(0), signal(1)
+        items = lambda: ["first", "second"]  # noqa: E731
+        return row([list_(items, a), list_(items, b).theme_styles({"selected": "underline"})])
+
+    driver = App(build).driver(16, 2)
+    turn(driver)
+    assert driver.styled().splitlines() == [
+        "[reverse]first   [/]first",
+        "second  [underline]second  [/]",
+    ]
+
+    def markup():
+        return column([
+            label("[warning]a[/]"),
+            label("[warning]b[/]").theme_styles([("warning", "bold red")]),
+        ])
+
+    driver = App(markup).driver(4, 2)
+    turn(driver)
+    assert driver.styled().splitlines()[1] == "[bold red]b[/]"

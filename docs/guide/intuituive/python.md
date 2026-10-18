@@ -42,6 +42,12 @@ As in Rust, `build` runs once and returns the root node. `text` reads
 | `Easing::EaseOut`, `Placement::Below`, `Role::MenuBar` | `Easing.EaseOut`, `Placement.Below`, `Role.MenuBar`, or `"ease_out"`, `"below"`, `"menubar"` |
 | `.align_items(Align::Center)`, `.justify(Justify::SpaceBetween)`, `.align_content(AlignContent::Stretch)` | `.align_items("center")`, `.justify("space-between")`, `.align_content("stretch")`: the stylesheet's CSS names |
 | `Rect::new(x, y, w, h)` | `Rect(x, y, w, h)`, or a tuple `(x, y, w, h)` |
+| `Size::Ratio(1, 3)`, `.ratio(1, 3)` | `Size.Ratio(1, 3)` or `"1/3"`, `.ratio(1, 3)` |
+| `.border(Border::Thick)`, `.shadow(Shadow::Dim)`, `.text_align(TextAlign::Center)`, `.overflow(Overflow::Ellipsis)` | `.border("thick")`, `.shadow("dim")`, `.text_align("center")`, `.overflow("ellipsis")`, or `Border.Thick` and so on (`Border.None_`, since `None` is a keyword) |
+| `.borders(Sides::TOP \| Sides::BOTTOM)` | `.borders(Sides.TOP \| Sides.BOTTOM)`, or `.borders("top bottom")` |
+| `.add_title(Edge::Bottom, Align::End, "v1")` | `.add_title("bottom", "right", "v1")`; a title's alignment is `"left"`, `"center"` or `"right"` |
+| `.theme_styles([("warning", "bold red")])` | `.theme_styles({"warning": "bold red"})`, or a list of pairs |
+| `layout::split(rect, Axis::Row, &tracks, flow)` | `layout_split(rect, "row", tracks, gap=1, justify="center")`: `split` is the split pane |
 | `Date::new(2026, 10, 7)` | `datetime.date(2026, 10, 7)` |
 | `Duration::from_millis(200)` | `0.2` (seconds), or a `timedelta` |
 | `text_area(text).language("rust").line_numbers()` | `text_area(text, language="rust", line_numbers=True)`: the options are keywords |
@@ -120,7 +126,11 @@ App(lambda: widget(Counter()).on_key("q", lambda cx: cx.quit())).run()
 - `draw(cx, canvas)` is the one method to write. The `Canvas` has the
   trait's methods: `print`, `set`, `fill`, `clear`, `markup`, `render` (any
   renderable), `lines` (rows of `Segment`s), `restyle`, `border` and
-  `scroll_up`.
+  `scroll_up`, with `cell(x, y)` (a `CellView`, or `None` off the
+  canvas), `set_cell` and `fill_with` for single cells.
+- `draw_over(cx, canvas)` draws after the widget's children, and
+  `overlapping()` returning `True` lets children share an area, later
+  ones on top, as `layers` does.
 - `event(cx, event)` returns whether it used the event. `event.kind` is
   `"key"`, `"key_up"`, `"preview"`, `"mouse"`, `"paste"`, `"focus"`,
   `"hover"` or `"resize"`. `cx.app()` is the `Ctx`, to quit, open a screen
@@ -136,6 +146,23 @@ App(lambda: widget(Counter()).on_key("q", lambda cx: cx.quit())).run()
 
 `cx`, `canvas` and every `Ctx` a handler gets are lent for that one call. A
 widget may keep one, but using it after the call raises `RuntimeError`.
+
+### Effects
+
+`effect(child, f)` calls `f(canvas, cx)` after the child draws, with the
+same canvas and context a widget's `draw` gets:
+
+```python
+from rs_rich.tui import effect, label
+
+def shout(canvas, cx):
+    for x in range(canvas.width):
+        cell = canvas.cell(x, 0)
+        if cell is not None:
+            canvas.set_cell(x, 0, cell.symbol().upper(), "bold")
+
+effect(label("quiet"), shout)
+```
 
 ## Threads and asyncio
 
