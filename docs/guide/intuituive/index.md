@@ -685,6 +685,12 @@ table_with(
   down the rows in the theme's `selected.column` style.
 - **`.scroll_padding(n)`** keeps `n` rows in view either side of the
   selection, where they fit.
+- **`.header(false)`** leaves the header out: the rows start at the top.
+  Names with their sizes beside them are one table this way.
+- **`.offset(signal)`** puts the first row in view in a signal you can
+  read, or set to scroll, as a list's does.
+- **`Column::overflow(Overflow::Crop)`** cuts the column's cells at its
+  edge, as ratatui's table does, rather than with `…`.
 - **`table_optional(columns, rows, selected, options)`** takes a
   `Signal<Option<usize>>`: `None` selects nothing and shows no highlight,
   and ↓ selects the first row.
@@ -722,6 +728,45 @@ them on the list itself (or a reorderable one), before `.panel(..)`.
   read, or set to scroll; the selection is still kept in view.
 - **`list_optional(items, selected)`** takes a `Signal<Option<usize>>`, as
   `table_optional` does.
+- **`list_lazy(len, item, selected)`** asks only for the items it draws,
+  where `list`'s closure builds every item on each draw: use it for a
+  directory of a hundred thousand files. It takes every option below.
+- A list sized `.auto()` is as wide as its widest item, with its symbol,
+  marker and trailing columns (it looks at every item to know).
+
+#### Rows as a file manager draws them
+
+```rust
+use intuituive::widgets::RowRects;
+
+let rects = RowRects::new();
+list(move || names.get(), cursor)
+    .trailing(move |i| sizes.with(|s| s[i].clone()))
+    .marker(move |i| marked.with(|m| m.contains(&i)).then(|| "on yellow".into()))
+    .row_style(move |i| Some(colour(i).into()))
+    .selected_style_for(move |i| Some(format!("reverse {}", colour(i))))
+    .scroll_padding(5)
+    .row_rects(&rects)
+// later, in a handler: a popup under the selected row
+// cx.popup(rects.get(cursor.get()).unwrap(), Placement::Below, ..)
+```
+
+- **`.trailing(|i| markup)`** draws markup at the right of item `i`'s
+  row, right-aligned, and cuts the item short of it: Yazi's line mode
+  (sizes, times) in the same list as the names. It is inside the row, so
+  the row's style and the highlight cover it. Empty markup shows none.
+- **`.marker(|i| Option<style>)`** keeps a one-cell column at the left of
+  the rows, outside the row style and the highlight, and fills item `i`'s
+  cell with the style it returns (or leaves it blank): selected, visual
+  and yanked markers. The column is kept with nothing marked, so the text
+  never moves when a mark comes or goes.
+- **`.selected_style_for(|i| Option<style>)`** is the highlight's style
+  when item `i` is selected, instead of the theme's `selected`: a hovered
+  directory reversed in its own blue.
+- **`.row_rects(&rects)`** records where each row in view was drawn on
+  the screen, so a handler can open a popup at a row:
+  `rects.get(i)` is item `i`'s rectangle, or `None` out of view. Tables
+  and `virtual_list` take it too.
 
 #### How a tab strip looks
 
@@ -859,7 +904,13 @@ hsplit(
   grid([Size::Fixed(22); 3], months)
   ```
 - **`virtual_list(len, row, selected)`** is the list form of
-  `virtual_table`: it asks only for the rows in view.
+  `virtual_table`: it asks only for the rows in view. `.scroll_padding(n)`,
+  `.row_style(|i| …)`, `.offset(signal)` and `.row_rects(&rects)` work on
+  it as on a list.
+- **`cell(markup)`** is a table cell outside a table: one line, cut at its
+  edge, never wrapped. A `row` of cells with `.percent(..)` widths and
+  `.gap(1)` is a one-row table, each cell drawing only when what it reads
+  changes, as scope-tui's header.
 - **`tree_lazy(roots, children, selected)`** loads each level when it is
   opened. `children(key)` runs on another thread, so it can read a
   directory or ask a server, and returns the level's `LazyItem`s

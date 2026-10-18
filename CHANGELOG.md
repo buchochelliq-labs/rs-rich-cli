@@ -9,6 +9,36 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### intuiTUIve: list and table rows (rs-rich-intuituive)
+
+What rebuilding Yazi and scope-tui found the lists and tables lack
+(round 1 of [the demo gaps](docs/design/intuituive-demo-gaps.md)).
+
+- **Row controls on `list`.** `.trailing(|i| markup)` puts right-aligned
+  markup at the right of a row, inside its style and highlight, and cuts
+  the item short of it. `.marker(|i| Option<style>)` keeps a one-cell
+  column at the left, outside the highlight, that never moves the text.
+  `.selected_style_for(|i| Option<style>)` is the highlight's style per
+  item. Yazi's names and line mode are one list now, not two on one
+  cursor.
+- **`list_lazy(len, item, selected)`** asks only for the items it draws,
+  with every list option; `list`'s closure builds every item each draw.
+- **A table without a header:** `TableOptions::header(false)`. A table
+  also takes `TableOptions::offset(signal)`, and
+  `Column::overflow(Overflow::Crop)` cuts its cells at the edge with no
+  `…`, as ratatui's do.
+- **`virtual_list` options:** `.scroll_padding(n)`, `.row_style(..)` and
+  `.offset(signal)` work on a `virtual_list` (and any table) as on a list.
+- **`widgets::cell(markup)`**: a text that keeps one line and is cut at
+  its edge, ratatui's table cell, for a `row` of cells as a one-row table.
+- **The screen rect of a row:** `.row_rects(&RowRects)` on a list, a
+  table or a `virtual_list` records where each row in view was drawn, so
+  a popup can open at one (`rects.get(i)`).
+- **Fixed: a `list` sized `Size::Auto` took the full width.** It measured
+  as wide as it was offered, so `row([list(a).flex(1), list(b).auto()])`
+  gave everything to the second. It is as wide as its widest item now,
+  with its symbol, marker, trailing text and scroll bar.
+
 ## 0.0.19 cohort
 
 ext 0.0.16 / micro 0.0.5 / record 0.0.7 / interact 0.0.7 / ratatui 0.0.4 /

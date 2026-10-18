@@ -1,4 +1,4 @@
-//! Lists: [`list`] and [`list_optional`], markup items with one selected
+//! Lists: [`list`], [`list_optional`] and [`list_lazy`], markup items with one selected
 //! (or none), and their options, as builders on the node.
 
 use std::cell::{Cell, RefCell};
@@ -131,11 +131,136 @@ pub(crate) struct ListOptions {
     multiline: bool,
     row_style: Option<RowStyle>,
     offset: Option<Signal<usize>>,
+    /// Markup at the right of item `i`'s first line; empty for none.
+    trailing: Option<Box<dyn Fn(usize) -> String>>,
+    /// The style of item `i`'s cell in the marker column, or none (blank).
+    marker: Option<RowStyle>,
+    /// The selection's style when item `i` is selected, or none (the
+    /// theme's `selected`).
+    selected_style: Option<RowStyle>,
+    /// Where the rows in view were drawn, on the screen.
+    rects: Option<RowRects>,
+}
+
+/// Where a list's items come from: every item from one closure, or a count
+/// and one item at a time ([`list_lazy`]).
+#[derive(Clone)]
+pub(crate) enum Items {
+    All(Rc<dyn Fn() -> Vec<String>>),
+    Lazy {
+        len: Rc<dyn Fn() -> usize>,
+        item: Rc<dyn Fn(usize) -> String>,
+    },
+}
+
+impl Items {
+    fn len(&self) -> usize {
+        match self {
+            Items::All(items) => items().len(),
+            Items::Lazy { len, .. } => len(),
+        }
+    }
+
+    /// The items one draw or measure looks at: all of them, once, or each
+    /// as it is asked for.
+    fn fetch(&self) -> Fetched<'_> {
+        match self {
+            Items::All(items) => Fetched::All(items()),
+            Items::Lazy { len, item } => Fetched::Lazy {
+                len: len(),
+                item: &**item,
+                cache: RefCell::new(HashMap::new()),
+            },
+        }
+    }
+}
+
+/// A draw's items, from [`Items::fetch`].
+enum Fetched<'a> {
+    All(Vec<String>),
+    Lazy {
+        len: usize,
+        item: &'a dyn Fn(usize) -> String,
+        cache: RefCell<HashMap<usize, String>>,
+    },
+}
+
+impl Fetched<'_> {
+    fn len(&self) -> usize {
+        match self {
+            Fetched::All(items) => items.len(),
+            Fetched::Lazy { len, .. } => *len,
+        }
+    }
+
+    fn get(&self, i: usize) -> String {
+        match self {
+            Fetched::All(items) => items.get(i).cloned().unwrap_or_default(),
+            Fetched::Lazy { item, cache, .. } => cache
+                .borrow_mut()
+                .entry(i)
+                .or_insert_with(|| item(i))
+                .clone(),
+        }
+    }
+}
+
+/// Where a list's (or a table's) rows were drawn on the screen at its last
+/// draw: give one to [`Node::row_rects`] and ask it in a handler, to place a
+/// popup at a row.
+///
+/// Each row in view has its item's index and its rectangle in screen cells:
+/// the cells its highlight takes, without a [marker](Node::marker) column
+/// or a scroll bar. Rows out of view have none.
+///
+/// ```
+/// use intuituive::prelude::*;
+/// use intuituive::widgets::RowRects;
+///
+/// let rects = RowRects::new();
+/// let shown = rects.clone();
+/// let app = App::new(move || {
+///     let items = || (0..20).map(|n| format!("item {n}")).collect();
+///     column([label("title").fixed(1), list(items, signal(4)).row_rects(&shown)])
+/// });
+/// let mut driver = app.driver(12, 4);
+/// driver.settle();
+/// // Item 4 is on the list's last row, the screen's fourth.
+/// let rect = rects.get(4).unwrap();
+/// assert_eq!((rect.x, rect.y, rect.width, rect.height), (0, 3, 12, 1));
+/// assert_eq!(rects.get(0), None);
+/// ```
+#[derive(Clone, Default)]
+pub struct RowRects(Rc<RefCell<Vec<(usize, Rect)>>>);
+
+impl RowRects {
+    /// A handle with no rows yet.
+    pub fn new() -> RowRects {
+        RowRects::default()
+    }
+
+    /// Where item `item`'s rows were drawn, if it was in view.
+    pub fn get(&self, item: usize) -> Option<Rect> {
+        self.0
+            .borrow()
+            .iter()
+            .find(|(i, _)| *i == item)
+            .map(|(_, rect)| *rect)
+    }
+
+    /// Every row in view: its item and where it was drawn, top to bottom.
+    pub fn shown(&self) -> Vec<(usize, Rect)> {
+        self.0.borrow().clone()
+    }
+
+    pub(crate) fn set(&self, rows: Vec<(usize, Rect)>) {
+        *self.0.borrow_mut() = rows;
+    }
 }
 
 /// A list of markup items: [`list`] and [`list_optional`].
 pub(crate) struct List {
-    items: Rc<dyn Fn() -> Vec<String>>,
+    items: Items,
     selection: Selection,
     options: Rc<RefCell<ListOptions>>,
     /// The first item shown, and the items on screen at the last draw (a
@@ -170,9 +295,13 @@ pub(crate) struct List {
 /// Its options are builders on the node: [`Node::symbol`] (a highlight
 /// symbol, with [`Node::highlight_spacing`] and [`Node::repeat_symbol`]),
 /// [`Node::direction`], [`Node::scroll_padding`], [`Node::multiline`],
-/// [`Node::row_style`], [`Node::offset`] and
-/// [`Node::scrollbar`](crate::Node::scrollbar). For a list with nothing
-/// selected, see [`list_optional`].
+/// [`Node::row_style`], [`Node::offset`],
+/// [`Node::scrollbar`](crate::Node::scrollbar), and the row controls
+/// [`Node::trailing`], [`Node::marker`], [`Node::selected_style_for`] and
+/// [`Node::row_rects`]. Sized [`Size::Auto`](crate::Size::Auto) across, it
+/// is as wide as its widest item with those columns. For a list with
+/// nothing selected, see [`list_optional`]; for one that asks only for the
+/// items it draws, [`list_lazy`].
 ///
 /// ```
 /// use intuituive::prelude::*;
@@ -189,7 +318,7 @@ pub(crate) struct List {
 /// assert_eq!(screen[4].trim_end(), "item 8");
 /// ```
 pub fn list(items: impl Fn() -> Vec<String> + 'static, selected: Signal<usize>) -> Node {
-    list_of(Rc::new(items), Selection::One(selected))
+    list_of(Items::All(Rc::new(items)), Selection::One(selected))
 }
 
 /// A [`list`] whose selection may be empty, as ratatui's
@@ -231,10 +360,43 @@ pub fn list_optional(
     items: impl Fn() -> Vec<String> + 'static,
     selected: Signal<Option<usize>>,
 ) -> Node {
-    list_of(Rc::new(items), Selection::Maybe(selected))
+    list_of(Items::All(Rc::new(items)), Selection::Maybe(selected))
 }
 
-fn list_of(items: Rc<dyn Fn() -> Vec<String>>, selection: Selection) -> Node {
+/// A [`list`] that asks only for the items it draws: `len` is how many
+/// there are and `item` makes one, so a list of a million items costs a
+/// screenful each draw, where [`list`]'s closure builds every item. It
+/// takes every option a list does; with [`multiline`](Node::multiline),
+/// or sized [`Size::Auto`](crate::Size::Auto) across, it asks for every
+/// item to measure them.
+///
+/// ```
+/// use intuituive::prelude::*;
+/// use intuituive::widgets::list_lazy;
+///
+/// let app = App::new(|| {
+///     let selected = signal(0usize);
+///     list_lazy(|| 1_000_000, |i| format!("item {i}"), selected)
+///         .scroll_padding(1)
+///         .on_key("q", |cx| cx.quit())
+/// });
+/// let screen = app.render_with(&["end", "q"], 16, 3).unwrap();
+/// assert_eq!(screen[0].trim_end(), "item 999997");
+/// assert_eq!(screen[2].trim_end(), "item 999999");
+/// ```
+pub fn list_lazy(
+    len: impl Fn() -> usize + 'static,
+    item: impl Fn(usize) -> String + 'static,
+    selected: Signal<usize>,
+) -> Node {
+    let items = Items::Lazy {
+        len: Rc::new(len),
+        item: Rc::new(item),
+    };
+    list_of(items, Selection::One(selected))
+}
+
+fn list_of(items: Items, selection: Selection) -> Node {
     let options = Rc::new(RefCell::new(ListOptions::default()));
     let first = Rc::new(Cell::new(0usize));
     let rows = Rc::new(Cell::new(1usize));
@@ -243,7 +405,7 @@ fn list_of(items: Rc<dyn Fn() -> Vec<String>>, selection: Selection) -> Node {
     let reversed = Rc::new(Cell::new(false));
     let len: Rc<dyn Fn() -> usize> = {
         let items = items.clone();
-        Rc::new(move || items().len())
+        Rc::new(move || items.len())
     };
     // The item a press on a row selects; and the item a drag on a row
     // carries to, a row past the far end of the items reaching one more.
@@ -435,6 +597,54 @@ pub(crate) fn over(line: Vec<Segment>, style: &Style, width: u16) -> Vec<Segment
     out
 }
 
+/// Item `markup`'s lines at `width`, with `trailing` markup (when it is not
+/// empty) at the right of the first line: the item is cut, or wraps, to the
+/// room the trailing text and a blank cell before it leave.
+fn row_lines(
+    console: &Console,
+    markup: &str,
+    trailing: Option<&str>,
+    width: u16,
+    wrap: bool,
+) -> Vec<Vec<Segment>> {
+    let Some(trailing) = trailing.filter(|t| !t.is_empty()) else {
+        return item_lines(console, markup, width, wrap);
+    };
+    let wide = crate::widget::markup_width(trailing).min(width);
+    let tail = crate::widget::markup_line(console, trailing, wide);
+    let room = width.saturating_sub(wide + 1);
+    if room == 0 {
+        // No room for the item: the trailing text, at the right.
+        let mut line = vec![Segment::new(" ".repeat((width - wide) as usize), None)];
+        line.extend(tail);
+        return vec![line];
+    }
+    let mut lines = item_lines(console, markup, room, wrap);
+    let first = &mut lines[0];
+    let used: usize = first.iter().map(Segment::cell_length).sum();
+    first.push(Segment::new(
+        " ".repeat(room as usize + 1 - used.min(room as usize)),
+        None,
+    ));
+    first.extend(tail);
+    lines
+}
+
+/// The cells markup `markup` takes on its widest line (its first, unless
+/// `all` lines count).
+fn natural_width(markup: &str, all: bool) -> u16 {
+    let plain = rich::Text::from_markup(markup)
+        .map(|text| text.plain().to_string())
+        .unwrap_or_else(|_| markup.to_string());
+    let mut lines = plain.split('\n').map(rich::cells::cell_len);
+    let widest = if all {
+        lines.max().unwrap_or(0)
+    } else {
+        lines.next().unwrap_or(0)
+    };
+    widest.min(u16::MAX as usize) as u16
+}
+
 /// One draw's layout of a list: the items in view and their lines.
 struct Laid {
     first: usize,
@@ -443,27 +653,48 @@ struct Laid {
 }
 
 impl List {
+    /// Item `i`'s lines at `width`, its trailing text included.
+    fn lines_of(
+        &self,
+        console: &Console,
+        items: &Fetched,
+        i: usize,
+        width: u16,
+    ) -> Vec<Vec<Segment>> {
+        let options = self.options.borrow();
+        let trailing = options.trailing.as_ref().map(|trailing| trailing(i));
+        row_lines(
+            console,
+            &items.get(i),
+            trailing.as_deref(),
+            width,
+            options.multiline,
+        )
+    }
+
     /// Lay the list out `width` x `height`: its items' lines, rendered
     /// only for the items it looks at.
     fn lay(
         &self,
         console: &Console,
-        items: &[String],
+        items: &Fetched,
         width: u16,
         height: u16,
         first: usize,
         selected: Option<usize>,
     ) -> Laid {
-        let options = self.options.borrow();
         let len = items.len();
+        let (multiline, padding) = {
+            let options = self.options.borrow();
+            (options.multiline, options.padding)
+        };
         let mut cache: HashMap<usize, Vec<Vec<Segment>>> = HashMap::new();
         let mut lines = |i: usize| -> Vec<Vec<Segment>> {
             cache
                 .entry(i)
-                .or_insert_with(|| item_lines(console, &items[i], width, options.multiline))
+                .or_insert_with(|| self.lines_of(console, items, i, width))
                 .clone()
         };
-        let multiline = options.multiline;
         let first = {
             let mut height_of = |i: usize| if multiline { lines(i).len() } else { 1 };
             first_in_view(
@@ -471,7 +702,7 @@ impl List {
                 height as usize,
                 first,
                 selected,
-                options.padding,
+                padding,
                 &mut height_of,
             )
         };
@@ -492,20 +723,20 @@ impl List {
     }
 
     /// Lines all `items` take at `width`.
-    fn total_lines(&self, console: &Console, items: &[String], width: u16) -> usize {
+    fn total_lines(&self, console: &Console, items: &Fetched, width: u16) -> usize {
         if self.options.borrow().multiline {
-            items
-                .iter()
-                .map(|item| item_lines(console, item, width, true).len())
+            (0..items.len())
+                .map(|i| self.lines_of(console, items, i, width).len())
                 .sum()
         } else {
             items.len()
         }
     }
 
-    /// The cells before an item's text: the text mode's marker (or a carried
+    /// The cells before an item's text: the marker column (with
+    /// [`marker`](Node::marker)), the text mode's marker (or a carried
     /// item's `↕`), and the highlight symbol's column.
-    fn indents(&self, selected: bool) -> (u16, u16) {
+    fn indents(&self, selected: bool) -> (u16, u16, u16) {
         let carrying = self.carried.get().is_some_and(|carried| carried.get());
         let marker = if crate::a11y::text_mode() || carrying {
             2
@@ -517,7 +748,8 @@ impl List {
             Some(symbol) if options.spacing.keeps(selected) => crate::widget::markup_width(symbol),
             _ => 0,
         };
-        (marker, symbol)
+        let gutter = u16::from(options.marker.is_some());
+        (gutter, marker, symbol)
     }
 }
 
@@ -536,25 +768,62 @@ impl Widget for List {
 
     fn access_state(&self) -> crate::a11y::AccessState {
         match self.selection.get_untracked() {
-            Some(selected) => crate::a11y::AccessState::item(selected, (self.items)().len()),
+            Some(selected) => crate::a11y::AccessState::item(selected, self.items.len()),
             None => crate::a11y::AccessState::default(),
         }
     }
 
     fn measure(&mut self, cx: &MeasureCx, axis: Axis, width: u16, height: u16) -> u16 {
-        let items = (self.items)();
+        let source = self.items.clone();
+        let items = source.fetch();
+        let len = items.len();
+        let selected = self.selection.get_untracked().is_some();
+        let (gutter, marker, symbol) = self.indents(selected);
+        let indent = gutter + marker + symbol;
         match axis {
+            // As wide as its widest row, with the columns before the text,
+            // the trailing text and a scroll bar's column: every item is
+            // looked at.
             Axis::Horizontal => {
-                if items.is_empty() {
-                    0
+                if len == 0 {
+                    return 0;
+                }
+                let options = self.options.borrow();
+                let widest = (0..len)
+                    .map(|i| {
+                        let text = natural_width(&items.get(i), options.multiline);
+                        let trailing = options
+                            .trailing
+                            .as_ref()
+                            .map(|trailing| trailing(i))
+                            .filter(|t| !t.is_empty())
+                            .map_or(0, |t| crate::widget::markup_width(&t).saturating_add(1));
+                        text.saturating_add(trailing)
+                    })
+                    .max()
+                    .unwrap_or(0);
+                let view = if height == 0 {
+                    usize::MAX
                 } else {
-                    width.max(1)
+                    height as usize
+                };
+                let bar = self
+                    .bar
+                    .look
+                    .as_ref()
+                    .is_some_and(|look| look.is_vertical() && look.wanted(len, view));
+                let wanted = widest
+                    .saturating_add(indent)
+                    .saturating_add(u16::from(bar))
+                    .max(1);
+                if width == 0 {
+                    wanted
+                } else {
+                    wanted.min(width)
                 }
             }
             Axis::Vertical => {
-                let selected = self.selection.get_untracked().is_some();
-                let (marker, symbol) = self.indents(selected);
-                let room = width.max(1).saturating_sub(marker + symbol).max(1);
+                let room = width.max(1).saturating_sub(indent).max(1);
                 let total = self.total_lines(cx.console(), &items, room);
                 let total = if height == 0 {
                     total
@@ -568,7 +837,8 @@ impl Widget for List {
 
     fn draw(&mut self, cx: &mut DrawCx, canvas: &mut Canvas) {
         let console = cx.console();
-        let items = (self.items)();
+        let source = self.items.clone();
+        let items = source.fetch();
         let len = items.len();
         let (width, height) = (canvas.width(), canvas.height());
         let selected = self
@@ -585,8 +855,8 @@ impl Widget for List {
                 self.seen.set(Some(value));
             }
         }
-        let (marker, symbol) = self.indents(selected.is_some());
-        let indent = marker + symbol;
+        let (gutter, marker, symbol) = self.indents(selected.is_some());
+        let indent = gutter + marker + symbol;
         let first = self.first.get();
         // The bar, when there is one, keeps a column (or row) once the
         // items do not all fit.
@@ -639,6 +909,10 @@ impl Widget for List {
                 (line, " ".repeat((symbol as usize).saturating_sub(used)))
             });
         let blank_symbol = " ".repeat(symbol as usize);
+        // The row's cells after the marker column: its style and the
+        // highlight fill them.
+        let row_width = area.width.saturating_sub(gutter);
+        let style_of = |name: String| crate::widget::theme_style(console, &name, &name);
         let mut rows: Vec<(Option<usize>, Vec<Segment>)> = Vec::new();
         let mut cursor = None;
         for (i, lines) in &laid.items {
@@ -648,7 +922,22 @@ impl Widget for List {
                 .row_style
                 .as_ref()
                 .and_then(|style| style(i))
-                .map(|name| crate::widget::theme_style(console, &name, &name));
+                .map(style_of);
+            let row_highlight = is_selected.then(|| {
+                options
+                    .selected_style
+                    .as_ref()
+                    .and_then(|style| style(i))
+                    .map_or_else(|| highlight.clone(), style_of)
+            });
+            let mark = (gutter > 0).then(|| {
+                let style = options
+                    .marker
+                    .as_ref()
+                    .and_then(|marker| marker(i))
+                    .map(style_of);
+                Segment::new(" ", style)
+            });
             let top = rows.len();
             for (n, line) in lines.iter().enumerate() {
                 let mut out = Vec::new();
@@ -670,10 +959,13 @@ impl Widget for List {
                 }
                 out.extend(line.iter().cloned());
                 if let Some(style) = &row_style {
-                    out = under(out, style, area.width);
+                    out = under(out, style, row_width);
                 }
-                if is_selected {
-                    out = over(out, &highlight, area.width);
+                if let Some(style) = &row_highlight {
+                    out = over(out, style, row_width);
+                }
+                if let Some(mark) = &mark {
+                    out.insert(0, mark.clone());
                 }
                 rows.push((Some(i), out));
             }
@@ -712,7 +1004,7 @@ impl Widget for List {
         rows.truncate(area.height as usize);
         // The cursor: the selected item's rows, after the symbol (with
         // one).
-        let skip = if symbol > 0 { marker + symbol } else { 0 };
+        let skip = gutter + if symbol > 0 { marker + symbol } else { 0 };
         self.cursor.set(cursor.and_then(|(top, count)| {
             (top < rows.len()).then(|| {
                 Rect::new(
@@ -723,6 +1015,27 @@ impl Widget for List {
                 )
             })
         }));
+        // Where each item's rows are on the screen, for a popup at one.
+        if let Some(rects) = &options.rects {
+            let mut placed: Vec<(usize, Rect)> = Vec::new();
+            for (y, (item, _)) in rows.iter().enumerate() {
+                let Some(item) = *item else { continue };
+                match placed.last_mut() {
+                    Some((last, rect)) if *last == item => rect.height += 1,
+                    _ => placed.push((
+                        item,
+                        Rect::new(area.x + gutter, area.y + y as u16, row_width, 1),
+                    )),
+                }
+            }
+            let shift = (cx.rect.x as i32 - cx.shift.0, cx.rect.y as i32 - cx.shift.1);
+            rects.set(
+                placed
+                    .into_iter()
+                    .map(|(item, rect)| (item, crate::node::translate(rect, shift)))
+                    .collect(),
+            );
+        }
         let mut map: Vec<Option<usize>> = vec![None; area.y as usize];
         map.extend(rows.iter().map(|(item, _)| *item));
         *self.shown.borrow_mut() = map;
@@ -800,7 +1113,7 @@ impl Widget for List {
                     ListDirection::TopToBottom => down,
                     ListDirection::BottomToTop => -down,
                 };
-                self.selection.step((self.items)().len(), by);
+                self.selection.step(self.items.len(), by);
                 Used::Yes
             }
             _ => Used::No,
@@ -844,8 +1157,10 @@ impl Node {
     }
 
     /// Keep `items` items in view either side of the selected one, where
-    /// they fit: ratatui's `scroll_padding`.
+    /// they fit: ratatui's `scroll_padding`, Vim's `scrolloff`. On a
+    /// [`virtual_list`](crate::widgets::virtual_list) or a table too.
     pub fn scroll_padding(self, items: usize) -> Node {
+        self.table_options(|options| options.scroll_padding = items);
         self.list_options(|options| options.padding = items)
     }
 
@@ -857,15 +1172,112 @@ impl Node {
 
     /// A style (or theme style name) for item `i`'s whole rows, under the
     /// item's own markup and the selection's: zebra stripes,
-    /// `.row_style(|i| (i % 2 == 1).then(|| "on grey15".into()))`.
+    /// `.row_style(|i| (i % 2 == 1).then(|| "on grey15".into()))`. On a
+    /// [`virtual_list`](crate::widgets::virtual_list) or a table too.
     pub fn row_style(self, style: impl Fn(usize) -> Option<String> + 'static) -> Node {
-        self.list_options(|options| options.row_style = Some(Box::new(style)))
+        let style: Rc<dyn Fn(usize) -> Option<String>> = Rc::new(style);
+        let for_table = style.clone();
+        self.table_options(move |options| {
+            options.row_style = Some(Box::new(move |i| for_table(i)));
+        });
+        self.list_options(|options| options.row_style = Some(Box::new(move |i| style(i))))
     }
 
     /// The first item in view, in `first`: read it, or set it to scroll.
-    /// The selected item is still kept in view.
+    /// The selected item is still kept in view. On a
+    /// [`virtual_list`](crate::widgets::virtual_list) or a table too.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    /// use intuituive::widgets::virtual_list;
+    ///
+    /// let app = App::new(|| {
+    ///     let first = signal(0usize);
+    ///     column([
+    ///         virtual_list(|| 100, |i| format!("row {i}"), signal(10)).offset(first),
+    ///         text!("first {first}").fixed(1),
+    ///     ])
+    /// });
+    /// let mut driver = app.driver(10, 5);
+    /// driver.settle();
+    /// // Row 10 is selected: the view scrolled to show it at the bottom.
+    /// assert_eq!(driver.screen().plain()[4].trim_end(), "first 7");
+    /// ```
     pub fn offset(self, first: Signal<usize>) -> Node {
+        self.table_options(|options| options.offset = Some(first));
         self.list_options(|options| options.offset = Some(first))
+    }
+
+    /// Console markup at the right of item `i`'s row, right-aligned, its
+    /// text cut (or wrapped) short of it with a blank cell between: Yazi's
+    /// line mode (sizes, times) beside the names, in one list. The trailing
+    /// text is inside the row, so its style and the highlight cover it. An
+    /// empty string shows none. Asked only for the items drawn (and, for a
+    /// list sized [`Size::Auto`](crate::Size::Auto) across, for every item
+    /// when it is measured).
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| {
+    ///     let names = || vec!["notes.txt".to_string(), "src".into()];
+    ///     let sizes = ["12K", "4"];
+    ///     list(names, signal(0)).trailing(move |i| sizes[i].to_string())
+    /// });
+    /// let mut driver = app.driver(14, 2);
+    /// driver.settle();
+    /// assert_eq!(driver.screen().plain()[0], "notes.txt  12K");
+    /// assert_eq!(driver.screen().plain()[1], "src          4");
+    /// ```
+    pub fn trailing(self, markup: impl Fn(usize) -> String + 'static) -> Node {
+        self.list_options(|options| options.trailing = Some(Box::new(markup)))
+    }
+
+    /// A one-cell marker column at the left of the rows, before the item's
+    /// text, outside its row style and the highlight: a blank cell in the
+    /// style (or theme style name) `style(i)` returns for item `i`, or an
+    /// unstyled one for `None`. Yazi's selected, visual-range and yanked
+    /// markers. The column is kept with no item marked, so the text never
+    /// moves.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| {
+    ///     let items = || vec!["a.txt".to_string(), "b.txt".into()];
+    ///     list(items, signal(0)).marker(|i| (i == 1).then(|| "on yellow".into()))
+    /// });
+    /// let mut driver = app.driver(8, 2);
+    /// driver.settle();
+    /// assert_eq!(driver.screen().plain()[1].trim_end(), " b.txt");
+    /// ```
+    pub fn marker(self, style: impl Fn(usize) -> Option<String> + 'static) -> Node {
+        self.list_options(|options| options.marker = Some(Box::new(style)))
+    }
+
+    /// The selection's style (or theme style name) when item `i` is
+    /// selected, over its row style and its markup, instead of the theme's
+    /// `selected`; `None` keeps the theme's. Yazi reverses the hovered row
+    /// in the entry's own colour, so a hovered directory is a blue bar:
+    /// `.selected_style_for(|i| Some(format!("reverse {}", colour(i))))`.
+    pub fn selected_style_for(self, style: impl Fn(usize) -> Option<String> + 'static) -> Node {
+        self.list_options(|options| options.selected_style = Some(Box::new(style)))
+    }
+
+    /// Record where the rows in view are drawn on the screen in `rects`, at
+    /// every draw: to place a popup at a row (`cx.popup(rect, ..)`). On a
+    /// [`virtual_list`](crate::widgets::virtual_list) or a table too. See
+    /// [`RowRects`].
+    pub fn row_rects(self, rects: &RowRects) -> Node {
+        let for_table = rects.clone();
+        self.widget_mut(|table: &mut crate::widgets::Table| table.rects = Some(for_table));
+        self.list_options(|options| options.rects = Some(rects.clone()))
+    }
+
+    /// Run `f` on the options of a table or a
+    /// [`virtual_list`](crate::widgets::virtual_list) this node is.
+    fn table_options(&self, f: impl FnOnce(&mut crate::widgets::TableOptions)) {
+        self.widget_mut(|table: &mut crate::widgets::Table| f(table.options_mut()));
     }
 
     fn list_options(self, f: impl FnOnce(&mut ListOptions)) -> Node {
