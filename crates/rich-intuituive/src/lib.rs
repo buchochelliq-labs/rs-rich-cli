@@ -127,7 +127,6 @@ pub use reactive::{memo, signal, viewport, watch, Memo, Proxy, Signal};
 pub use rich::Overflow;
 pub use rule::rule;
 pub use sheet::{SheetError, Stylesheet};
-pub use task::{resource, spawn, spawn_future, Load, Resource, Task};
 #[cfg(feature = "watch")]
 pub use watch::{
     watch_path, watch_path_with, ChangeKind, PathChange, PathEvent, PathWatch, WatchOptions,
