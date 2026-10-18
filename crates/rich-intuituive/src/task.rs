@@ -258,3 +258,118 @@ where
         start: signal(start),
     }
 }
+
+/// The sending end of a [`latest`] signal, for its thread.
+pub struct Latest<T> {
+    /// The newest value not yet delivered.
+    slot: Arc<std::sync::Mutex<Option<T>>>,
+    /// A delivery is on its way to the app's thread; it takes the newest.
+    queued: Arc<AtomicBool>,
+    /// The app has gone: a delivery was dropped unrun.
+    closed: Arc<AtomicBool>,
+    proxy: crate::reactive::Proxy,
+    signal: Signal<Option<T>>,
+}
+
+/// Marks the app gone if the delivery it rides with is dropped unrun.
+struct Delivery {
+    /// `None` once it ran.
+    closed: Option<Arc<AtomicBool>>,
+}
+
+impl Delivery {
+    fn ran(&mut self) {
+        self.closed = None;
+    }
+}
+
+impl Drop for Delivery {
+    fn drop(&mut self) {
+        if let Some(closed) = &self.closed {
+            closed.store(true, Ordering::SeqCst);
+        }
+    }
+}
+
+impl<T: Send + 'static> Latest<T> {
+    /// Make `value` the signal's value: on the app's thread, between
+    /// frames, unless a newer one is sent before it gets there (nothing
+    /// queues: the newest wins). Returns `false` once the app has finished,
+    /// so the thread knows to stop.
+    pub fn send(&self, value: T) -> bool {
+        if self.closed.load(Ordering::SeqCst) {
+            return false;
+        }
+        *self.slot.lock().unwrap_or_else(|e| e.into_inner()) = Some(value);
+        if self.queued.swap(true, Ordering::SeqCst) {
+            // The delivery on its way takes this value.
+            return true;
+        }
+        let (slot, queued, signal) = (self.slot.clone(), self.queued.clone(), self.signal);
+        let mut delivery = Delivery {
+            closed: Some(self.closed.clone()),
+        };
+        let sent = self.proxy.send(Box::new(move |_: &mut Ctx| {
+            delivery.ran();
+            queued.store(false, Ordering::SeqCst);
+            let value = slot.lock().unwrap_or_else(|e| e.into_inner()).take();
+            if let Some(value) = value {
+                signal.update(|slot| *slot = Some(value));
+            }
+        }));
+        if !sent {
+            self.closed.store(true, Ordering::SeqCst);
+        }
+        sent
+    }
+}
+
+/// A signal holding the newest value a thread of its own produces: `run`
+/// gets the [`Latest`] to send them with, and runs until it returns.
+/// `None` until the first value arrives. Values are not queued: when the
+/// app is busy, the ones it had no time for are skipped, and the next
+/// frame shows the newest (an audio buffer, a sensor, a log's tail). Each
+/// delivery wakes the app's loop, which picks it up on its next turn.
+/// `send` returns `false` once the app has finished; stop then. The thread
+/// is not a [task](spawn): [`App::wait_for_tasks`](crate::App::wait_for_tasks)
+/// does not wait for it.
+///
+/// ```
+/// use intuituive::prelude::*;
+///
+/// let app = App::new(|| {
+///     let reading = latest(|tx| {
+///         for sample in 0..=1000 {
+///             if !tx.send(sample) {
+///                 return;
+///             }
+///         }
+///     });
+///     text(move || match reading.get() {
+///         Some(n) => format!("last {n}"),
+///         None => "waiting".into(),
+///     })
+/// });
+/// let mut driver = app.driver(12, 1);
+/// while driver.screen().plain()[0].trim_end() != "last 1000" {
+///     std::thread::sleep(std::time::Duration::from_millis(1));
+///     driver.settle();
+/// }
+/// ```
+///
+/// # Panics
+/// Outside a running or building app.
+#[track_caller]
+pub fn latest<T: Send + 'static>(run: impl FnOnce(Latest<T>) + Send + 'static) -> Signal<Option<T>> {
+    let runtime = Runtime::current_for("latest()");
+    let value = signal(None);
+    let sender = Latest {
+        slot: Arc::new(std::sync::Mutex::new(None)),
+        queued: Arc::new(AtomicBool::new(false)),
+        closed: Arc::new(AtomicBool::new(false)),
+        proxy: runtime.proxy(),
+        signal: value,
+    };
+    std::thread::spawn(move || run(sender));
+    value
+}

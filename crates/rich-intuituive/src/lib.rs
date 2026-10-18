@@ -94,7 +94,7 @@ pub use rich;
 pub use rich_interact as interact;
 
 pub use app::{
-    every, Anchor, App, Ctx, Driver, Easing, FrameStats, ModalOptions, Placement, Theme,
+    every, Anchor, App, Ctx, Driver, Easing, FrameStats, Handoff, ModalOptions, Placement, Theme,
 };
 pub use border::{Border, BorderSet, Edge, Shadow, Sides};
 pub use effect::{effect, fill};
@@ -111,7 +111,7 @@ pub use reactive::{memo, signal, viewport, watch, Memo, Proxy, Signal};
 /// What a text does with what does not fit a line: rich's.
 pub use rich::Overflow;
 pub use sheet::{SheetError, Stylesheet};
-pub use task::{resource, spawn, spawn_future, Load, Resource, Task};
+pub use task::{latest, resource, spawn, spawn_future, Latest, Load, Resource, Task};
 pub use widget::{widget, Widget};
 pub use notify::{Corner, Level};
 pub use place::{Offset, Origin, RectHandle};
@@ -124,7 +124,7 @@ pub mod prelude {
     // `text` is both the function and the `text!` macro.
     pub use crate::described;
     pub use crate::{
-        column, component, each, effect, every, fill, grid, input, label, layers, leaf, list,
+        column, component, each, effect, every, fill, grid, input, label, latest, layers, leaf, list,
         list_optional, memo, number_input, renderable, repeating, resource, row, scroll,
         scroll_both, scroll_with, scroll_x, signal, spawn, switch, text, text_area, viewport,
         watch, widget, Align, App, Border, Ctx, Edge, Justify, Load, Log, Memo, Node, Overflow,

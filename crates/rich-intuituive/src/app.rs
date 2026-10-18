@@ -72,6 +72,29 @@ pub struct Ctx {
     error: Option<io::Error>,
     /// Lines to print above an inline app.
     printed: Vec<String>,
+    /// Programs to give the terminal to, in turn.
+    handoffs: Vec<Handoff>,
+}
+
+/// What [`handoff_then`](Ctx::handoff_then) runs once the program is done.
+type HandedBack = Box<dyn FnOnce(io::Result<Option<i32>>, &mut Ctx)>;
+
+/// A program the app gives the terminal to ([`Ctx::handoff`]): what a loop
+/// of your own takes with [`Driver::take_handoff`], runs with the terminal
+/// as it was before the app, and gives back with
+/// [`Driver::handed_back`].
+pub struct Handoff {
+    /// The program, its arguments, its directory and environment.
+    pub command: std::process::Command,
+    then: Option<HandedBack>,
+}
+
+impl std::fmt::Debug for Handoff {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Handoff")
+            .field("command", &self.command)
+            .finish_non_exhaustive()
+    }
 }
 
 /// How a [modal](Ctx::modal_with) or a [pop-up](Ctx::popup_with) looks
@@ -221,7 +244,50 @@ impl Ctx {
             exit: None,
             error: None,
             printed: Vec::new(),
+            handoffs: Vec::new(),
         }
+    }
+
+    /// Give the terminal to `command` (an editor, a pager, a shell) once
+    /// this handler returns: the app leaves the alternate screen and raw
+    /// mode, runs it and waits for it, then takes the terminal back and
+    /// draws everything again. Yazi's Enter on a file. Under the headless
+    /// driver the program is recorded, not run. A loop of your own takes it
+    /// with [`Driver::take_handoff`].
+    ///
+    /// ```
+    /// use intuituive::interact::headless::{Headless, Script};
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| {
+    ///     label("notes.txt")
+    ///         .on_key("enter", |cx| cx.handoff(std::process::Command::new("vi")))
+    ///         .on_key("q", |cx| cx.quit())
+    /// });
+    /// let mut backend = Headless::new(Script::new().keys("enter q"), 20, 2);
+    /// let record = backend.record();
+    /// app.run_on(&mut backend).unwrap();
+    /// assert_eq!(record.borrow().handoffs, ["vi"]);
+    /// ```
+    pub fn handoff(&mut self, command: std::process::Command) {
+        self.handoffs.push(Handoff {
+            command,
+            then: None,
+        });
+    }
+
+    /// [`handoff`](Self::handoff), then run `then` with how the program
+    /// ended (its exit code, `None` when a signal ended it, or why it could
+    /// not run), back on the app's thread with the terminal the app's again.
+    pub fn handoff_then(
+        &mut self,
+        command: std::process::Command,
+        then: impl FnOnce(io::Result<Option<i32>>, &mut Ctx) + 'static,
+    ) {
+        self.handoffs.push(Handoff {
+            command,
+            then: Some(Box::new(then)),
+        });
     }
 
     /// Open a screen built by `build` over the current one, which is kept
@@ -927,6 +993,8 @@ pub struct App {
     poke: bool,
     /// The stylesheet generation the last frame matched nodes against.
     sheet_drawn: Option<u64>,
+    /// Programs handlers asked to give the terminal to, not yet run.
+    handoffs: Vec<Handoff>,
     /// A key sequence under way, the which-key pop-up's delay (`None`:
     /// off), and where it was last drawn.
     pending: Option<crate::sequence::Pending>,
@@ -1088,6 +1156,7 @@ impl App {
             caret_at: None,
             poke: false,
             sheet_drawn: None,
+            handoffs: Vec::new(),
             pending: None,
             which_key: None,
             which_key_at: None,
@@ -1655,10 +1724,34 @@ impl App {
                 }
             }
         }
+        // Programs handlers gave the terminal to: run each with the
+        // terminal as it was, then draw everything again.
+        fn hand_off(
+            driver: &mut Driver,
+            backend: &mut impl Backend,
+            linear: bool,
+            inline: bool,
+        ) -> io::Result<()> {
+            while let Some(mut handoff) = driver.take_handoff() {
+                put(backend, linear, &driver.suspend())?;
+                let result = backend.handoff(&mut handoff.command);
+                if linear {
+                    backend.write("\x1b[?25h")?;
+                }
+                let (columns, rows) = backend.size();
+                if inline {
+                    driver.set_origin(backend.origin());
+                }
+                driver.resize(columns, rows);
+                driver.handed_back(handoff, result);
+            }
+            Ok(())
+        }
         let result = (|| -> io::Result<()> {
             loop {
                 driver.update(backend.elapsed());
                 copy_all(&mut driver, backend);
+                hand_off(&mut driver, backend, linear, inline)?;
                 if driver.is_done() {
                     return Ok(());
                 }
@@ -1714,6 +1807,7 @@ impl App {
                 }
                 driver.event(event);
                 copy_all(&mut driver, backend);
+                hand_off(&mut driver, backend, linear, inline)?;
                 if driver.is_done() {
                     return Ok(());
                 }
@@ -2570,6 +2664,7 @@ impl App {
             self.printed.extend(cx.printed);
         }
         self.copies.extend(cx.copies);
+        self.handoffs.extend(cx.handoffs);
         for (note, duration) in cx.toasts {
             self.push_toast(note, self.now + duration);
         }
@@ -4533,6 +4628,35 @@ impl Driver {
         self.app.motion.1 = false;
         self.app.caret_shown = false;
         out
+    }
+
+    /// The next program a handler asked to give the terminal to
+    /// ([`Ctx::handoff`]), taken. A loop of your own writes
+    /// [`suspend`](Self::suspend)'s bytes, runs the command with the
+    /// terminal as it was before the app (out of raw mode, off the
+    /// alternate screen: rs-rich-interact's [`Backend::handoff`]), takes the
+    /// terminal back, calls [`resize`](Self::resize) with its size, then
+    /// [`handed_back`](Self::handed_back). [`App::run`] does all this.
+    pub fn take_handoff(&mut self) -> Option<Handoff> {
+        (!self.app.handoffs.is_empty()).then(|| self.app.handoffs.remove(0))
+    }
+
+    /// `handoff`'s program ended with `result`: its
+    /// [`handoff_then`](Ctx::handoff_then) runs, and everything draws
+    /// again.
+    pub fn handed_back(&mut self, handoff: Handoff, result: io::Result<Option<i32>>) {
+        self.first = true;
+        self.painter.invalidate();
+        let Some(then) = handoff.then else {
+            return;
+        };
+        let app = &mut self.app;
+        let mut cx = app.ctx();
+        let runtime = app.runtime.clone();
+        runtime.enter(|| then(result, &mut cx));
+        if app.apply(cx) {
+            self.done = true;
+        }
     }
 
     /// Inline: the terminal row the app's region starts on, for placing
