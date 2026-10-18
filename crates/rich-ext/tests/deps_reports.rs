@@ -261,7 +261,10 @@ fn source_sizes_leave_out_target_and_nested_packages() {
     assert_eq!(source("serde_derive"), Some(2000));
     assert_eq!(sizes.source_total(), Some(1200 + 5 * 2000));
     let out = plain(100, &SizeReport::new(sizes));
-    assert!(out.contains(", 10.9 KiB of source"), "{out}");
+    // The heading names the target directory, so where it wraps depends on
+    // that path's length.
+    let flat = out.split_whitespace().collect::<Vec<_>>().join(" ");
+    assert!(flat.contains(", 10.9 KiB of source"), "{out}");
     assert!(out.contains("Source"), "{out}");
 }
 
