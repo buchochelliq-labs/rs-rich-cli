@@ -1,0 +1,23 @@
+Build times against the baseline
+2 regressions, 1 improvement, 8 unchanged, 0 new, 1 removed
+total 23.27s → 24.82s: +1.55s (+6.7%)
+regression: over 10% and over 0.50s
+
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━┳━━━━━━━━━┳━━━━━━━━┳━━━━━━━━━┳━━━━━━━━━━━━━┓
+┃ Unit                           ┃ Baseline ┃ Current ┃ Change ┃       % ┃ Verdict     ┃
+┡━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━╇━━━━━━━━━╇━━━━━━━━╇━━━━━━━━━╇━━━━━━━━━━━━━┩
+│ syn                            │   10.22s │  11.96s │ +1.74s │  +17.0% │ regression  │
+│ thiserror-impl                 │        – │   1.18s │ +1.18s │     new │ regression  │
+│ serde                          │    3.10s │   2.25s │ -0.85s │  -27.4% │ improvement │
+│ once_cell                      │    0.52s │       – │ -0.52s │ removed │ removed     │
+│ demo-app demo "bin"            │    0.94s │   0.94s │  0.00s │    0.0% │ unchanged   │
+│ proc-macro2                    │    1.37s │   1.37s │  0.00s │    0.0% │ unchanged   │
+│ proc-macro2 build-script       │    0.41s │   0.41s │  0.00s │    0.0% │ unchanged   │
+│ proc-macro2 build-script (run) │    0.12s │   0.12s │  0.00s │    0.0% │ unchanged   │
+│ quote                          │    0.66s │   0.66s │  0.00s │    0.0% │ unchanged   │
+│ serde_derive                   │    3.91s │   3.91s │  0.00s │    0.0% │ unchanged   │
+│ strum_macros                   │    1.64s │   1.64s │  0.00s │    0.0% │ unchanged   │
+│ unicode-ident                  │    0.38s │   0.38s │  0.00s │    0.0% │ unchanged   │
+├────────────────────────────────┼──────────┼─────────┼────────┼─────────┼─────────────┤
+│ total                          │   23.27s │  24.82s │ +1.55s │   +6.7% │ unchanged   │
+└────────────────────────────────┴──────────┴─────────┴────────┴─────────┴─────────────┘

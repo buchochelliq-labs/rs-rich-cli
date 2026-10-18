@@ -1054,6 +1054,97 @@ project's `./rich.toml` cannot turn them on. `--mermaid-backend off` and
 `--dot-backend off` leave the fences as code blocks, as upstream renders
 them.
 
+### Dependency sizes, baselines and licence policy (0.0.19)
+
+`rich deps` reads what Cargo and its tools already wrote; none of these
+options runs a build or a scanner, or reaches the network.
+
+**Sizes.** `--sizes` shows each crate's artifact size as bars and a table,
+largest first, with the total. With no value it reads the target directory
+`cargo metadata` names; give a directory to read another. Artifacts are
+matched to packages through `cargo metadata` (`--metadata FILE` or a
+manifest, as for the tree), and of each package's artifacts the newest is
+taken. `--build-profile NAME` picks the profile (default: `debug` if it was
+built, else `release`), `--source-sizes` adds each package's source files,
+`--no-dev` leaves out the dev-only crates and `--top N` sets how many are
+shown (20 by default). A file instead of a directory is read as `cargo
+bloat --crates --message-format json` output, or a report saved with
+`--save` (`-` for stdin). Put a manifest before `--sizes`, since the
+argument after it is its value.
+
+```bash
+rich deps --sizes                                   # target/debug, matched to cargo metadata
+rich deps ../app/Cargo.toml --sizes --build-profile release --source-sizes
+cargo bloat --release --crates --message-format json > bloat.json
+rich deps --sizes bloat.json --top 10               # each crate's share of the binary
+```
+
+**Baselines.** `--baseline FILE` compares `--timings` or `--sizes` with an
+older report, unit by unit: deltas, new and removed units, and the
+regressions flagged. A unit regresses when it grows by more than a
+percentage *and* by more than a floor: by default 10% and 0.5s for build
+times, 10% and 64KiB for sizes. `--threshold` sets either (`15%`, `2s`,
+`500ms`, `100KiB`, `1MB`); give it twice for both, and `0s` or `0B` to drop
+the floor. A new unit larger than the floor is a regression; so is the
+total, compared the same way. `--save FILE` writes the report as JSON, to
+keep as the next baseline; the baseline can also be the original input (a
+timings report, cargo-bloat JSON or a target directory). Like `--audit`,
+a regression exits 5 once the comparison is shown.
+
+```bash
+rich deps --sizes bloat.json --save sizes.json                  # on main: keep it
+rich deps --sizes bloat.json --baseline sizes.json              # on a branch: compare
+rich deps --timings target/cargo-timings/cargo-timing.html \
+  --baseline timings.json --threshold 15% --threshold 1s
+```
+
+```text
+$ rich deps --sizes bloat.json --baseline bloat-baseline.json --top 3
+Sizes against the baseline (bloat-baseline.json → bloat.json)
+2 regressions, 1 improvement, 13 unchanged, 1 new, 2 removed
+total 1.7 MiB → 1.9 MiB: +263.5 KiB (+15.2%), a regression
+regression: over 10% and over 64.0 KiB
+…
+rich: 3 regressions against the baseline (over 10% and over 64.0 KiB): toml_edit, regex_automata, the total
+```
+
+**Licence policy.** `--policy FILE` checks every crate's licence against an
+allow and deny list, from a TOML file of rich's own (`allow`, `deny`,
+`exceptions`, `conflicts`) or cargo-deny's `deny.toml` (its `[licenses]`
+section), told apart by shape. Each SPDX expression is evaluated: an `OR`
+passes when any choice is allowed, an `AND` when every part is, and `WITH`
+exceptions are kept. It lists each violation (crate, version, expression,
+why) and exits 5 when there is one. It also flags dependency licences that
+conflict with the root crate's own (GPL code in an MIT crate, say),
+clearly a heuristic and not legal advice; they fail the check only with
+`conflicts = "deny"`. `--licenses --policy FILE` shows the licence groups
+first.
+
+```toml
+# policy.toml
+allow = ["MIT", "Apache-2.0", "Apache-2.0 WITH LLVM-exception", "Unicode-DFS-2016"]
+deny = ["GPL-3.0", "AGPL-3.0"]
+exceptions = [{ name = "ring", allow = ["OpenSSL"] }]
+conflicts = "warn"   # "deny" fails the check on a conflict; "ignore" hides them
+```
+
+```bash
+rich deps --policy policy.toml               # the crates cargo metadata lists
+rich deps --policy deny.toml --no-dev        # cargo-deny's configuration
+```
+
+**SBOMs.** `--sbom FILE`, with `--licenses` or `--policy`, reads the
+packages and licences from an SPDX (2.2, 2.3) or CycloneDX (1.4 to 1.6)
+JSON document instead of `cargo metadata`, so the report and the policy
+work for anything an SBOM describes. The document's root (what it
+describes, or CycloneDX's `metadata.component`) is the crate conflicts are
+checked against.
+
+```bash
+rich deps --licenses --sbom bom.cdx.json
+rich deps --policy policy.toml --sbom bom.spdx.json
+```
+
 ### Schemas: JSON Schema, SQL DDL and Arrow (0.0.16)
 
 `rich schema` reads three formats into one model, so each draws the same
@@ -1255,7 +1346,7 @@ Exit codes are stable by failure class:
 | `2` | Usage/config error, such as an invalid flag or unsupported combination. |
 | `3` | Input/read/write error, such as a missing file or failed output write. |
 | `4` | Parse/render data error, such as malformed JSON or JSONL. |
-| `5` | Threshold/gate failure, such as `--diff --threshold` exceeded or a vulnerability in `rich deps --audit FILE`. |
+| `5` | Threshold/gate failure, such as `--diff --threshold` exceeded, a vulnerability in `rich deps --audit FILE`, a regression in `rich deps --baseline FILE` or a violation of `rich deps --policy FILE`. |
 | `130` | Batch interrupted with Ctrl+C. Started workers are stopped and reaped. |
 
 `rich capture -- CMD` is the exception: once its output is shown and exported

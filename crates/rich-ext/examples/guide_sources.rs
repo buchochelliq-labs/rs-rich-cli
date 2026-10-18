@@ -1,17 +1,19 @@
-//! Guide: Dependency graphs and JSON Schemas — run: cargo run -p rs-rich-ext --example guide_sources --features data [-- --svg docs/media/guide]
+//! Guide: Dependency graphs and JSON Schemas — run: cargo run -p rs-rich-ext --example guide_sources --features data,toml [-- --svg docs/media/guide]
 //!
 //! The pictures on `docs/guide/ext/sources.md` come from this file. It reads
-//! the fixtures the crate's tests read, in `tests/fixtures/sources` and
-//! `tests/fixtures/supply-chain`.
+//! the fixtures the crate's tests read, in `tests/fixtures/sources`,
+//! `tests/fixtures/supply-chain` and `tests/fixtures/deps`.
 
 use std::error::Error;
 use std::path::PathBuf;
 
 use rich::{ColorSystem, Console};
 use rich_ext::deps::audit::AdvisoryReport;
+use rich_ext::deps::compare::{Comparison, Thresholds};
 use rich_ext::deps::duplicates::Consolidation;
 use rich_ext::deps::features::{FeatureGraph, FeatureTree};
-use rich_ext::deps::licenses::LicenseReport;
+use rich_ext::deps::licenses::{LicenseReport, Policy, PolicyReport, Sbom};
+use rich_ext::deps::sizes::{SizeReport, Sizes};
 use rich_ext::deps::timings::{Timings, TimingsReport};
 use rich_ext::deps::{DepGraph, DepTree, WhyTree};
 use rich_ext::schema::{self, SchemaDiff, SchemaTree};
@@ -94,6 +96,51 @@ fn licenses(console: &Console) -> Result {
 }
 // --8<-- [end:licenses]
 
+// --8<-- [start:sizes]
+fn sizes(console: &Console) -> Result {
+    // `cargo bloat --crates --message-format json > bloat.json`; a target
+    // directory reads with `Sizes::from_target_dir(dir, metadata, options)`.
+    let sizes = Sizes::parse(&fixture("deps/bloat.json"))?;
+    console.print(&SizeReport::new(sizes).limit(6));
+    Ok(())
+}
+// --8<-- [end:sizes]
+
+// --8<-- [start:comparison]
+fn comparison(console: &Console) -> Result {
+    // A baseline kept from an earlier build (`Sizes::to_json` saves one).
+    let old = Sizes::parse(&fixture("deps/bloat-baseline.json"))?;
+    let new = Sizes::parse(&fixture("deps/bloat.json"))?;
+    let comparison = Comparison::sizes(&old, &new, Thresholds::SIZES)
+        .names("bloat-baseline.json", "bloat.json")
+        .limit(6);
+    let regressed: Vec<&str> = comparison
+        .regressions()
+        .iter()
+        .map(|row| row.key.as_str())
+        .collect();
+    assert_eq!(regressed, ["toml_edit", "regex_automata"]);
+    console.print(&comparison);
+    Ok(())
+}
+// --8<-- [end:comparison]
+
+// --8<-- [start:policy]
+fn policy(console: &Console) -> Result {
+    // rich's policy TOML, or cargo-deny's deny.toml.
+    let policy = Policy::from_toml(&fixture("deps/policy.toml"))?;
+    // The packages of a CycloneDX document; `LicenseReport::from_json` reads
+    // `cargo metadata` instead.
+    let sbom = Sbom::parse(&fixture("deps/sbom.cdx.json"))?;
+    let mut report = PolicyReport::new(sbom.report(), &policy).named("policy.toml");
+    if let Some(root) = sbom.root() {
+        report = report.root(root);
+    }
+    console.print(&report);
+    Ok(())
+}
+// --8<-- [end:policy]
+
 // --8<-- [start:schema]
 fn schema_tree(console: &Console) -> Result {
     let json = fixture("sources/order-v1.schema.json");
@@ -122,6 +169,9 @@ fn main() {
     shots.shot("timings", 80, timings);
     shots.shot("audit", 100, audit);
     shots.shot("licenses", 100, licenses);
+    shots.shot("sizes", 72, sizes);
+    shots.shot("comparison", 90, comparison);
+    shots.shot("policy", 100, policy);
     shots.shot("schema", 90, schema_tree);
     shots.shot("schema-diff", 80, schema_diff);
 }

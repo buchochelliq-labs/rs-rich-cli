@@ -110,6 +110,15 @@ fn command_options(name: &str) -> Vec<ArgSpec> {
             "timings",
             "audit",
             "licenses",
+            "sizes",
+            "build-profile",
+            "source-sizes",
+            "top",
+            "baseline",
+            "threshold",
+            "save",
+            "policy",
+            "sbom",
             "width",
         ],
         "schema" => &["er", "width"],
@@ -649,6 +658,58 @@ fn mode_options() -> Vec<ArgSpec> {
              licences",
         ),
         flag(
+            "sizes",
+            SOURCES,
+            "With `rich deps`, show artifact sizes per crate as bars and a table: from the target \
+             directory given next (default: the one `cargo metadata` names), matched to packages \
+             through `cargo metadata`, or from a file given next: `cargo bloat --crates \
+             --message-format json` output or a report saved with --save (`-` for stdin)",
+        ),
+        option(
+            "build-profile",
+            "NAME",
+            SOURCES,
+            "With `rich deps --sizes`, read this profile's artifacts: debug (dev), release, or a \
+             custom profile (default: debug if it was built, else release)",
+        ),
+        flag(
+            "source-sizes",
+            SOURCES,
+            "With `rich deps --sizes`, also add up each package's source files (its manifest \
+             directory, without target/, .git/ and nested packages)",
+        ),
+        option(
+            "baseline",
+            "FILE",
+            SOURCES,
+            "With `rich deps --timings` or `--sizes`, compare with an older report, unit by unit \
+             (a report saved with --save, or the original format: a timings report, cargo-bloat \
+             JSON or a target directory); exits 5 when a unit or the total regressed past \
+             --threshold",
+        ),
+        option(
+            "save",
+            "FILE",
+            SOURCES,
+            "With `rich deps --timings` or `--sizes`, also write the report as JSON to FILE, to \
+             keep as a --baseline",
+        ),
+        option(
+            "policy",
+            "FILE",
+            SOURCES,
+            "With `rich deps`, check every crate's licence against a policy: a TOML allow and deny \
+             list, or cargo-deny's deny.toml; conflicts with the root crate's licence are shown \
+             too (a heuristic, not legal advice). Exits 5 on a violation",
+        ),
+        option(
+            "sbom",
+            "FILE",
+            SOURCES,
+            "With `rich deps --licenses` or `--policy`, read the packages from an SPDX (2.2, 2.3) \
+             or CycloneDX (1.4 to 1.6) JSON document instead of `cargo metadata`",
+        ),
+        flag(
             "er",
             SOURCES,
             "With `rich schema`, draw the schema as an ER diagram: a box per table with its \
@@ -700,7 +761,8 @@ fn mode_options() -> Vec<ArgSpec> {
             "N",
             PROFILE,
             "With `rich profile`, the most common values shown for a column that is not \
-             numeric (default 5)",
+             numeric (default 5); with `rich deps --sizes`, `--timings` or `--baseline`, the \
+             units shown (default 20)",
         ),
         option(
             "highlighter",
@@ -880,7 +942,10 @@ fn image_options() -> Vec<ArgSpec> {
             "PCT",
             IMAGE,
             "With --diff, exit non-zero above PCT% changed (pixels for images, lines for \
-             text). Also sets the exit code: 0 within, 5 over.",
+             text). Also sets the exit code: 0 within, 5 over. With `rich deps --baseline`, what \
+             counts as a regression: a percentage (default 10%) and a floor the change must \
+             also pass, a time (`0.5s`, the default for --timings) or a size (`64KiB`, the \
+             default for --sizes); give it twice for both",
         ),
     ]
 }
@@ -1557,7 +1622,8 @@ pub(crate) fn spec() -> CommandSpec {
             .about(
                 "A Cargo dependency tree from `cargo metadata`, crates resolved at several \
                  versions marked; --why CRATE for what pulls a crate in, --graph to draw it; \
-                 --features, --licenses, --timings FILE and --audit FILE for supply-chain reports",
+                 --features, --licenses, --policy FILE, --timings FILE, --sizes and --audit FILE \
+                 for supply-chain reports, --baseline FILE to compare timings or sizes",
             )
             .usage("deps [OPTIONS] [MANIFEST]")
             .arg(ArgSpec::positional("manifest").value(ValueHint::Path).help(

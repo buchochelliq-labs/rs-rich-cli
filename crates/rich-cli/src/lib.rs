@@ -1117,6 +1117,11 @@ const VALUE_OPTIONS: &[&str] = &[
     "--package",
     "--timings",
     "--audit",
+    "--build-profile",
+    "--baseline",
+    "--save",
+    "--policy",
+    "--sbom",
     "--depth",
     "--kind",
     "--x",
@@ -1949,6 +1954,9 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
     // names. Data formats stay with `data`; the last `--format` wins.
     let mut document_format: Option<(String, Mode)> = None;
 
+    // `rich deps` takes `--top` and `--threshold` from `rich profile` and
+    // `--diff`, which share their names.
+    let deps_mode = explicit_mode(args) == Some(Mode::Deps);
     let mut iter = args.iter();
     while let Some(arg) = iter.next() {
         if end_of_options {
@@ -1986,7 +1994,7 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
         if viewer_options.parse_option(arg, &mut iter)? {
             continue;
         }
-        if graph_sources.parse_option(arg, &mut iter)? {
+        if graph_sources.parse_option(arg, &mut iter, deps_mode)? {
             continue;
         }
         if chart.parse_option(arg, &mut iter)? {

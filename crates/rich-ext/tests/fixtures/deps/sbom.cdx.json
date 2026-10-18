@@ -1,0 +1,80 @@
+{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.5",
+  "serialNumber": "urn:uuid:3e671687-395b-41f5-a30f-a58921a69b79",
+  "version": 1,
+  "metadata": {
+    "component": {
+      "type": "application",
+      "bom-ref": "ledger 2.1.0",
+      "name": "ledger",
+      "version": "2.1.0",
+      "licenses": [{"expression": "MIT"}]
+    }
+  },
+  "components": [
+    {
+      "type": "library",
+      "bom-ref": "serde 1.0.210",
+      "name": "serde",
+      "version": "1.0.210",
+      "licenses": [{"expression": "MIT OR Apache-2.0"}]
+    },
+    {
+      "type": "library",
+      "bom-ref": "serde_json 1.0.128",
+      "name": "serde_json",
+      "version": "1.0.128",
+      "licenses": [{"expression": "MIT OR Apache-2.0"}]
+    },
+    {
+      "type": "library",
+      "bom-ref": "regex 1.11.0",
+      "name": "regex",
+      "version": "1.11.0",
+      "licenses": [{"license": {"id": "MIT"}}, {"license": {"id": "Apache-2.0"}}]
+    },
+    {
+      "type": "library",
+      "bom-ref": "unicode-ident 1.0.13",
+      "name": "unicode-ident",
+      "version": "1.0.13",
+      "licenses": [{"expression": "(MIT OR Apache-2.0) AND Unicode-DFS-2016"}]
+    },
+    {
+      "type": "library",
+      "bom-ref": "target-lexicon 0.12.16",
+      "name": "target-lexicon",
+      "version": "0.12.16",
+      "licenses": [{"expression": "Apache-2.0 WITH LLVM-exception"}]
+    },
+    {
+      "type": "library",
+      "bom-ref": "option-ext 0.2.0",
+      "name": "option-ext",
+      "version": "0.2.0",
+      "licenses": [{"license": {"id": "MPL-2.0"}}]
+    },
+    {
+      "type": "library",
+      "bom-ref": "acme-telemetry 1.2.0",
+      "name": "acme-telemetry",
+      "version": "1.2.0",
+      "licenses": [{"expression": "LicenseRef-Acme-EULA"}]
+    },
+    {
+      "type": "library",
+      "bom-ref": "gpl-widget 0.4.0",
+      "name": "gpl-widget",
+      "version": "0.4.0",
+      "licenses": [{"license": {"id": "GPL-3.0-only"}}]
+    },
+    {
+      "type": "library",
+      "bom-ref": "mystery-codec 0.1.0",
+      "name": "mystery-codec",
+      "version": "0.1.0",
+      "licenses": [{"license": {"name": "Mystery Public Licence"}}]
+    }
+  ]
+}
