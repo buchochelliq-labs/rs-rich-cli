@@ -334,6 +334,39 @@ column([
   that takes one entry after another, use `repeating(make, on_done)`: it
   builds a fresh component after each answer.
 
+### Inputs bound to signals
+
+```rust
+let first = signal(String::new());
+let password = signal(String::new());
+let age = signal(30i64);
+column([
+    input(first).placeholder("First name").fixed(1),
+    input(password).mask('•').max_length(40).fixed(1),
+    number_input(age, 0..=150).step(1).fixed(1),
+])
+.on_key("enter", move |cx| save(first.get(), age.get()))
+```
+
+- **`input(text)`** is a one-line text box on a `Signal<String>`, both
+  ways: typing sets the signal, and setting the signal replaces the text.
+  It is a `text_area` in a single-line mode, with the same editing keys,
+  undo and mouse. Enter goes to `.on_submit(|value, cx| …)`, which uses it,
+  or with none bubbles to your bindings (a form's own Enter). Tab moves the
+  focus on, pasted line breaks become spaces, and a long line scrolls
+  sideways to the caret.
+- **`.placeholder("…")`** shows dimmed text while it is empty,
+  **`.mask('•')`** shows each character as `•` while the signal holds the
+  text (nothing is copied out of it), and **`.max_length(n)`** stops
+  typing and pasting at `n` characters.
+- **`number_input(value, range)`** is a whole number on a `Signal<i64>`,
+  kept in `range`. ↑/↓ step it by `.step(n)`, PgUp/PgDn by ten steps,
+  Home/End go to the ends, and the wheel steps it. Digits type a new number
+  (a `-` first for a negative one), which is set on the signal at once,
+  clamped, and shown as typed until Enter or the focus leaves.
+- Both are text boxes for assistive technology, with their text as the
+  value. Validate them with `.error_when(..)`, as any node.
+
 ## Logs
 
 ```rust
@@ -436,6 +469,151 @@ table_with(
 
 `virtual_table_with(columns, len, row, selected, options)` takes the same
 options, but sorts nothing itself: its rows are never all in hand.
+
+#### How a table looks
+
+```rust
+use intuituive::widgets::{table_with, Column, HighlightSpacing, TableOptions};
+
+let columns = vec![
+    Column::new("Food", Size::Auto),
+    Column::new("Qty", Size::Fixed(5)).align(Align::End),
+    Column::new("Energy", Size::Auto).align(Align::End).min(8),
+];
+table_with(
+    columns,
+    move || meals.get(),
+    selected,
+    TableOptions::default()
+        .footer(move || vec!["Total".into(), "".into(), total.get()])
+        .header_gap(1)
+        .column_spacing(2)
+        .symbol("» ")
+        .highlight_spacing(HighlightSpacing::Always)
+        .row_style(|i| (i % 2 == 1).then(|| "on grey11".into()))
+        .multiline()
+        .scroll_padding(1),
+)
+```
+
+- **`Column::align(Align::End)`** puts a column's cells and title at the
+  end (numbers on the right), or `Align::Center`; **`.min(n)`** and
+  **`.max(n)`** bound its width.
+- **`.footer(cells)`** is a row under the rows that stays in view, in the
+  theme's `table.footer` style; `cells` may read signals.
+- **`.header_gap(n)`** leaves blank lines under the header and
+  **`.row_gap(n)`** after each row (ratatui's `bottom_margin`);
+  **`.column_spacing(n)`** puts `n` cells between columns (one by
+  default).
+- **`.symbol("» ")`** draws markup before the selected row, and the
+  other rows (the header and footer too) get blank cells in its column.
+  **`.highlight_spacing(..)`** says when the column is kept:
+  `WhenSelected` (the default), `Always` or `Never`.
+- **`.row_style(|i| …)`** styles row `i` whole, gaps included, under its
+  cells' own markup and the selection: zebra stripes, a row's colour.
+- **`.multiline()`** makes each row as tall as its tallest cell, the cells
+  wrapping to their columns; ↓ still moves a row, and PgDn a screenful of
+  rows. `.row_height(n)` makes every row `n` lines tall instead, which is
+  what a `virtual_table` takes, as its rows are never all in hand.
+- **`.column_highlight()`**, with a cell cursor, draws the cursor's column
+  down the rows in the theme's `selected.column` style.
+- **`.scroll_padding(n)`** keeps `n` rows in view either side of the
+  selection, where they fit.
+- **`table_optional(columns, rows, selected, options)`** takes a
+  `Signal<Option<usize>>`: `None` selects nothing and shows no highlight,
+  and ↓ selects the first row.
+
+#### How a list looks
+
+```rust
+use intuituive::widgets::{HighlightSpacing, ListDirection};
+
+list(move || messages.get(), selected)
+    .symbol("[red]>>[/] ")
+    .repeat_symbol()
+    .highlight_spacing(HighlightSpacing::Always)
+    .direction(ListDirection::BottomToTop)
+    .scroll_padding(1)
+    .multiline()
+    .row_style(|i| (i % 2 == 1).then(|| "on grey15".into()))
+    .offset(first)
+```
+
+A `list`'s options are builders on the node, as a text area's are. Call
+them on the list itself (or a reorderable one), before `.panel(..)`.
+
+- **`.symbol(markup)`**, **`.highlight_spacing(..)`** and
+  **`.repeat_symbol()`** (the symbol on every line of a multi-line item)
+  are a table's, for a list.
+- **`.direction(ListDirection::BottomToTop)`** puts the first item at the
+  bottom, the rest above it, as a chat or a log does. ↑ and ↓ still move
+  up and down the screen; Home and End go to the first and the last item.
+- **`.multiline()`** keeps each item's lines and wraps them, rather than
+  cutting the first with `…`.
+- **`.row_style(|i| …)`** styles item `i`'s whole rows, and
+  **`.scroll_padding(n)`** keeps items in view round the selection.
+- **`.offset(signal)`** puts the first item in view in a signal you can
+  read, or set to scroll; the selection is still kept in view.
+- **`list_optional(items, selected)`** takes a `Signal<Option<usize>>`, as
+  `table_optional` does.
+
+#### How a tab strip looks
+
+```rust
+tabs(|| vec!["Recipe".into(), "Email".into(), "Traceroute".into()], tab)
+    .divider(" • ")
+    .tab_padding("", "")
+    .titles_align(Align::Center)
+```
+
+**`.divider(markup)`** goes between the titles instead of `│` (`""` for
+none), in the theme's `tabs.divider` style; **`.tab_padding(left, right)`**
+replaces the space either side of each title; and **`.titles_align(..)`**
+puts the strip at the start, the centre or the end of its width. Clicks
+find the right title whatever the divider and padding.
+
+#### Scrollbars
+
+```rust
+use intuituive::widgets::{scrollbar, Scrollbar, ScrollbarSymbols, Show, Side};
+
+scroll(child).scrollbar(Scrollbar::new().thumb("▐"));
+list(items, selected).scrollbar(
+    Scrollbar::new()
+        .side(Side::Left)
+        .symbols(ScrollbarSymbols::VERTICAL)
+        .track(None)
+        .ends(Some("↑"), Some("↓"))
+        .show(Show::Always),
+);
+// A bar of its own, for a view of your own.
+row([my_view, scrollbar(top, move || lines.get().len(), || 0, Scrollbar::new())]);
+```
+
+- **`.scrollbar(bar)`** gives a `scroll`, a `list`, a table or
+  `virtual_list`, a `tree`, a `text_area` or a log's view a bar. It keeps a
+  column of the widget while it shows: by default (`Show::Auto`) only while
+  the content does not fit; `Show::Always` keeps it with a full thumb, and
+  `Show::Never` keeps no column. A `scroll` without one still draws today's
+  bar.
+- **`.side(..)`** puts it on the right (the default) or the left; on a
+  `scroll_x` or `scroll_both`, a bar on the top or the bottom is the one
+  across.
+- **`.symbols(..)`** draws it in a set: `ScrollbarSymbols::THIN` (the
+  default, `┃` on `│`, and `THIN_HORIZONTAL` across), `VERTICAL`,
+  `DOUBLE_VERTICAL`, `HORIZONTAL` or `DOUBLE_HORIZONTAL` (ratatui's).
+  **`.thumb(..)`**, **`.track(..)`** (`None` for a blank track) and
+  **`.ends(begin, end)`** change single symbols.
+- The theme's `scrollbar`, `scrollbar.thumb` and `scrollbar.arrow` styles
+  draw it.
+- With the mouse, a press on the track pages, a press on an arrow steps,
+  and dragging the thumb scrolls. On a list, a table or a tree the
+  selection comes along into the view.
+- **`scrollbar(position, len, view, bar)`** is a bar on its own: it shows
+  `view` of `len` from the `position` signal (a `view` of 0 is the bar's
+  length), and the mouse and the wheel set `position`.
+- In text mode a bar keeps its column, blank: it is nothing for a screen
+  reader to read.
 
 The `tables` example sorts a process table in its rows closure, so its
 status line can name the selected process and the cell under the cursor
@@ -879,6 +1057,42 @@ A modal is a screen in a box over the one below, which keeps drawing:
 Its width and height are cells (`Size::Fixed`), a share of the screen
 (`Size::Percent`), the content's size (`Size::Auto`), or the whole screen
 (`Size::Flex`). Keys and clicks reach only the top screen.
+
+`cx.modal_with(width, height, options, build)` takes `ModalOptions`: a
+shadow, and a backdrop.
+
+```rust
+use intuituive::ModalOptions;
+
+let look = ModalOptions::new().shadow("on grey11").backdrop("dim");
+cx.modal_with(Size::Fixed(40), Size::Fixed(8), look, || confirm())
+```
+
+- **`.shadow(style)`** restyles a strip one cell right and down of the
+  box, as ratatui's `Shadow::overlay().style(..)` does.
+- **`.backdrop(style)`** restyles the whole screen below while the box is
+  open, as it goes on drawing.
+- Styles are console styles or theme names. `cx.popup_with(..)` takes the
+  same options for a pop-up.
+
+### Ending with a value, or an error
+
+```rust
+let picked: Option<usize> = App::new(|| {
+    let selected = signal(0usize);
+    list(colours, selected).on_key("enter", move |cx| cx.quit_with(selected.get()))
+})
+.run_for()?;
+```
+
+- **`cx.quit_with(value)`** ends the app with a value of any type, which
+  **`App::run_for::<T>()`** returns (`None` when the app ended otherwise,
+  or with another type). `App::run_on_for` does the same on any backend,
+  and **`Driver::take_exit::<T>()`** gives it to a loop of your own.
+- **`cx.fail(error)`** ends the app with an error, which `App::run` (and
+  `run_on`) returns once the terminal is given back. An `io::Error` keeps
+  its kind; anything else (a `String`, your own error) is `Other`.
+  `Driver::take_error()` gives it to a loop of your own.
 
 ### Pop-ups
 
@@ -1381,6 +1595,26 @@ drawn, with cursor moves relative to them, so the scrollback above is left
 alone. When the app ends, its last frame stays, and the prompt continues
 below it. The mouse is left to the terminal.
 
+```rust
+every(Duration::from_millis(200), move |cx| {
+    if let Some(name) = finished.take() {
+        cx.print_above(format!("[green]✓[/] downloaded {name}"));
+    }
+});
+```
+
+- **`cx.print_above(markup)`** prints lines into the scrollback above the
+  region, which moves down under them, as ratatui's `insert_before`
+  does: a download's done line over its progress bars.
+  `Proxy::print_above` does it from another thread.
+- Full-screen, the lines print once the app ends and the terminal is
+  back. A loop of your own takes them with `Driver::take_printed()`, to
+  print when it gives the terminal back.
+- **`App::mouse(Some(true))`** captures the mouse inline too (clicks, the
+  wheel and hover reach the app); **`App::mouse(Some(false))`** leaves it to
+  the terminal full-screen. `None`, the default, is the rule above.
+  `App::session_options(backend)` shows what `run` asks the terminal for.
+
 ## Backends
 
 `App::run` drives the terminal with crossterm. `App::run_with` picks the
@@ -1498,6 +1732,11 @@ out.write_all(driver.finish().as_bytes())?;
 - **`suspend()`** returns the bytes to write before you give the terminal
   away for a while (Ctrl+Z, a command run in it); once it is back, call
   `resize(w, h)` and the next `render` draws everything again.
+- **`stats()`** is the last frame's numbers: the nodes that drew, the
+  bytes, and `frames`, how many frames have been drawn (ratatui's
+  `Frame::count`).
+- **`take_exit::<T>()`**, **`take_error()`** and **`take_printed()`** give
+  you what the app ended with, and the lines it printed above itself.
 
 Reading termion or termwiz instead of crossterm, translate with
 `event::from_termion` or `event::from_termwiz`, which take a `HeldButton`
