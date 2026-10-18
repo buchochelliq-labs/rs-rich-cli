@@ -583,7 +583,9 @@ fn follow_reads_appended_lines_through_rotation_and_truncation() {
     running.wait_for("was replaced; following the new file");
     // Truncation, as copytruncate rotates.
     std::fs::write(&path, "").unwrap();
-    std::thread::sleep(Duration::from_millis(400));
+    // A longer file written before the truncation is seen would read as an
+    // append, so wait for it.
+    running.wait_for("was truncated; reading it from the start");
     std::fs::write(&path, "INFO after truncation\n").unwrap();
     running.wait_for("INFO after truncation");
     // Repeats fold while following; piped, the count is written when the

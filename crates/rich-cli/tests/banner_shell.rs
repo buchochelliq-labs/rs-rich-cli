@@ -590,10 +590,12 @@ mod shell {
             Some(String::from_utf8(out.stdout).unwrap())
         };
         let bash = init("bash", &["--no-completions", "--no-status"]);
+        // The scripts need bash 4.4+; macOS's /bin/bash is 3.2.
         let script = format!(
-            "{bash}\n__rich_shell_url \"$RICH_TEST_DIR\"; printf '%s' \"$__rich_shell_path\""
+            "(( BASH_VERSINFO[0] * 100 + BASH_VERSINFO[1] >= 404 )) || {{ printf old; exit 0; }}\n\
+             {bash}\n__rich_shell_url \"$RICH_TEST_DIR\"; printf '%s' \"$__rich_shell_path\""
         );
-        if let Some(out) = run("bash", &["--norc", "-c", &script]) {
+        if let Some(out) = run("bash", &["--norc", "-c", &script]).filter(|out| out != "old") {
             assert_eq!(out, want);
         }
         let zsh = init("zsh", &["--no-completions", "--no-status"]);
