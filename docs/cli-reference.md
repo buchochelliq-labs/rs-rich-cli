@@ -154,6 +154,10 @@ Choose at most one; the default auto-detects .md/.rst/.json/.csv/.tsv/.ipynb, .m
 | `--sample <N>` | With `rich profile`, the most rows kept for types, statistics and distributions (default 10000): a longer input is sampled uniformly, the sample size is printed, and nulls still count every row. |
 | `--columns <COLUMN[,COLUMN...]>...` | With `rich profile`, profile only these columns, by header, in this order; repeatable. |
 | `--top <N>` | With `rich profile`, the most common values shown for a column that is not numeric (default 5); with `rich deps --sizes`, `--timings` or `--baseline`, the units shown (default 20) |
+| `--max-paths <N>` | With `rich profile` of JSON Lines, profile at most N paths (default 200), in the order first seen; the rest are noted. |
+| `--flat` | With `rich profile` of JSON Lines, profile rows of the top-level keys (nested values as JSON text) instead of every nested path. |
+| `--style-rule <RULE>...` | Style the cells, rows or columns of a data table by value: COLUMN OP VALUE:STYLE or COLUMN OP VALUE:row:STYLE (e.g. 'latency>500:bold red', 'status=failed:row:on red'); OP is == != < <= > >= *= ^= $= or a word such as contains or empty. Repeatable; applies to --csv, `rich profile`'s table and `rich inspect --table`, and has no effect elsewhere. Config: `rules`. |
+| `--rules <FILE>...` | Read style rules from FILE's [[rules]] tables (column, op, value, style, target), after the rules before it. |
 
 ### Log
 
@@ -169,10 +173,6 @@ Choose at most one; the default auto-detects .md/.rst/.json/.csv/.tsv/.ipynb, .m
 | `--output <FORMAT>` | With `rich log`, write the records kept as text, or as one JSON object a line (jsonl) for another program. Default: `text`. Possible values: `text`, `jsonl`. |
 | `--summary`, `--no-summary` | With `rich log`, end with a summary: records shown, counts by level and, with --group, the groups with errors; on by default with --group (on standard error with --output jsonl) |
 | `-i`, `--interactive` | With `rich log` on a terminal, show the records in a live view that follows the end: / filters, Space pauses, Enter shows a record's fields, q quits; without a terminal the records stream as usual. |
-| `--max-paths <N>` | With `rich profile` of JSON Lines, profile at most N paths (default 200), in the order first seen; the rest are noted. |
-| `--flat` | With `rich profile` of JSON Lines, profile rows of the top-level keys (nested values as JSON text) instead of every nested path. |
-| `--style-rule <RULE>...` | Style the cells, rows or columns of a data table by value: COLUMN OP VALUE:STYLE or COLUMN OP VALUE:row:STYLE (e.g. 'latency>500:bold red', 'status=failed:row:on red'); OP is == != < <= > >= *= ^= $= or a word such as contains or empty. Repeatable; applies to --csv, `rich profile`'s table and `rich inspect --table`, and has no effect elsewhere. Config: `rules`. |
-| `--rules <FILE>...` | Read style rules from FILE's [[rules]] tables (column, op, value, style, target), after the rules before it. |
 
 ### Image
 
