@@ -1043,6 +1043,39 @@ impl CellGrid {
 mod tests {
     use super::*;
 
+    #[test]
+    fn accessible_text_says_what_was_drawn() {
+        use crate::a11y::AccessibleText;
+        let canvas = Canvas::new()
+            .x_bounds(-1.0, 1.0)
+            .y_bounds(-1.0, 1.0)
+            .paint(|p| {
+                p.circle(0.0, 0.0, 0.8, "cyan");
+                p.line(-1.0, -1.0, 1.0, 1.0, "red");
+                p.points(&[(0.0, 0.0), (0.5, 0.5)], "");
+                p.layer();
+                p.print(-0.2, 0.0, "hi", "bold");
+            });
+        assert_eq!(
+            canvas.accessible_text(80),
+            "Canvas, x from -1 to 1, y from -1 to 1: 2 points, 1 line, 1 circle\nText: hi"
+        );
+        let world = Canvas::new()
+            .x_bounds(-180.0, 180.0)
+            .y_bounds(-90.0, 90.0)
+            .paint(|p| {
+                p.map(MapResolution::Low, "green");
+            });
+        assert_eq!(
+            world.accessible_text(80),
+            "Canvas, x from -180 to 180, y from -90 to 90: a world map"
+        );
+        assert_eq!(
+            Canvas::new().accessible_text(80),
+            "Canvas, x from 0 to 1, y from 0 to 1: empty"
+        );
+    }
+
     fn console(width: usize) -> Console {
         Console::builder().width(width).color_system(None).build()
     }

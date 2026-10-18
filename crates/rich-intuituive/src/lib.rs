@@ -90,6 +90,7 @@ pub use border::{Border, BorderSet, Edge, Shadow, Sides};
 pub use effect::{effect, fill};
 pub use layout::{Align, AlignContent, Justify, Size, StackLayout, TextAlign};
 pub use log::Log;
+pub use node::described;
 pub use node::{
     column, component, each, grid, label, layers, leaf, list, renderable, repeating, row, scroll,
     scroll_both, scroll_both_with, scroll_with, scroll_x, switch, text, Node,
@@ -105,6 +106,7 @@ pub use widgets::text_area;
 /// Everything an app usually needs.
 pub mod prelude {
     // `text` is both the function and the `text!` macro.
+    pub use crate::described;
     pub use crate::{
         column, component, each, effect, every, fill, grid, label, layers, leaf, list, memo,
         renderable, repeating, resource, row, scroll, scroll_both, scroll_with, scroll_x, signal,

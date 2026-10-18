@@ -87,6 +87,32 @@ def timeline(console):
     # --8<-- [end:timeline]
 
 
+def distribution(console):
+    # --8<-- [start:distribution]
+    latency = [12, 15, 14, 18, 25, 31, 28, 22, 35, 41, 38, 30, 26, 33, 47, 52, 140, None]
+    console.print(chart.Distribution(latency, label="latency", unit="ms", format=0))
+    console.print(chart.DistributionSet(
+        {"api": latency, "web": [v * 0.6 for v in latency[:-1]], "worker": [v * 1.5 for v in latency[:-1]]},
+        strip_width=24,
+        numbers=False,
+    ))
+    print(round(chart.quantile(latency, 0.95), 2), chart.summary(latency)["ignored"])
+    # --8<-- [end:distribution]
+
+
+def multiples(console):
+    # --8<-- [start:multiples]
+    requests = [12, 15, 14, 18, 25, 31, 28, 22, 35, 41, 38, 30, 26, 33, 47, 52]
+    services = {"api": 1.0, "web": 0.6, "worker": 0.3, "cron": 0.1}
+    grid = chart.SmallMultiples(
+        {name: chart.Sparkline([v * share for v in requests]) for name, share in services.items()},
+        min_cell_width=18,
+    )
+    console.print(grid)
+    print(chart.describe(grid))
+    # --8<-- [end:multiples]
+
+
 shots = Shots("chart")
 shots.shot("bars", bars, width=40)
 shots.shot("ratatui-bars", ratatui_bars, width=40)
@@ -96,4 +122,6 @@ shots.shot("ratatui-gauges", ratatui_gauges, width=40)
 shots.shot("heatmap", heatmap, width=80)
 shots.shot("kpi", kpi, width=80)
 shots.shot("timeline", timeline, width=80)
+shots.shot("distribution", distribution, width=100)
+shots.shot("multiples", multiples, width=80)
 shots.finish()

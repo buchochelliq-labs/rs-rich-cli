@@ -174,7 +174,8 @@ ResultSet(rows, *, offset=0, limit=1000, elapsed=None, null_marker="NULL",
           title=None)
 VirtualTable(rows, *, offset=0, height=20, row_numbers=False, null_marker=None,
              show_position=True, wrap=False, max_column_width=40, fit_window=False,
-             title=None)
+             title=None, column_offset=0, visible_columns=None, fit_columns=False,
+             frozen_columns=0)
 ```
 
 `ResultSet` draws rows the way a database shell does: columns aligned by
@@ -188,6 +189,14 @@ moves; `fit_window=True` also widens them to the rows shown, for a window
 printed once. `scroll_by(n)`
 moves it within the rows, `offset` and `height` can be set, `window()` is
 the `(start, end)` shown and `position()` the line under the table.
+
+A wide table gets a window of columns too: `column_offset` (after the
+frozen ones), `visible_columns` (how many) or `fit_columns=True` (as many as
+fit the width), and `frozen_columns` kept on the left. Only the columns
+shown are sampled and laid out, and the position line adds `columns 7-8 of
+12`. `scroll_columns_by(n)` moves the window across, `column_offset` can be
+set, `shown_columns(width)` is the columns shown at a width and
+`column_position(width)` the words, or `None` when every column shows.
 
 ```python
 console.print(data.ResultSet(rows, elapsed=0.012))

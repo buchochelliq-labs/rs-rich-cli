@@ -1114,7 +1114,10 @@ impl Chart {
         if let Some([a, b]) = self.y_axis.bounds {
             return Some((a.min(b), a.max(b)));
         }
-        let ys = self.datasets.iter().flat_map(|d| d.points.iter().map(|p| p.1));
+        let ys = self
+            .datasets
+            .iter()
+            .flat_map(|d| d.points.iter().map(|p| p.1));
         super::describe::extent(ys.filter(|v| self.y_axis.map(*v).is_some()))
     }
 
@@ -1141,6 +1144,34 @@ impl Renderable for Chart {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn accessible_text_names_the_axes_and_each_dataset() {
+        use crate::a11y::AccessibleText;
+        let cpu = Dataset::new([(0.0, 0.0), (5.0, 4.0), (10.0, 1.0)])
+            .name("cpu")
+            .graph_type(GraphType::Line);
+        let chart = Chart::new(vec![cpu, Dataset::new([(1.0, 2.0)])])
+            .x_axis(Axis::default().bounds(0.0, 10.0).title("t"))
+            .y_axis(Axis::default().bounds(0.0, 4.0).title("%"));
+        assert_eq!(
+            chart.accessible_text(80),
+            "Chart, 2 datasets, x (t) from 0 to 10, y (%) from 0 to 4\n\
+             cpu, line: 3 points, min 0, max 4, last 1, trend up\n\
+             dataset 2, points: 1 point, min 2, max 2, last 2"
+        );
+        // Without bounds, the data's range; a log axis says so.
+        let log = Chart::new(vec![Dataset::new([(1.0, 1.0), (2.0, 100.0)])
+            .name("hz")
+            .graph_type(GraphType::Area)])
+        .y_axis(Axis::default().scale(AxisScale::Log));
+        assert_eq!(
+            log.accessible_text(80),
+            "Chart, 1 dataset, x from 1 to 2, y from 1 to 100, log scale\n\
+             hz, area: 2 points, min 1, max 100, last 100, trend up"
+        );
+        assert_eq!(Chart::default().accessible_text(80), "Chart, no datasets");
+    }
 
     fn rows(chart: &Chart, width: usize) -> Vec<String> {
         let console = Console::builder().width(width).color_system(None).build();

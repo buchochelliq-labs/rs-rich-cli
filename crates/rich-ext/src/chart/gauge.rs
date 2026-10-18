@@ -660,10 +660,7 @@ mod tests {
             "Gauge cpu: 72%, 72 percent of 0% to 100%, band high, target 80%"
         );
         let plain = Gauge::new("", 3.0).range(0.0, 12.0);
-        assert_eq!(
-            plain.accessible_text(80),
-            "Gauge: 3, 25 percent of 0 to 12"
-        );
+        assert_eq!(plain.accessible_text(80), "Gauge: 3, 25 percent of 0 to 12");
         assert_eq!(
             Gauge::new("x", f64::NAN).accessible_text(80),
             "Gauge x: no value"

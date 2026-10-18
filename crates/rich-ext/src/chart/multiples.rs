@@ -5,8 +5,8 @@ use rich::measure::Measurement;
 use rich::{Console, ConsoleOptions, Renderable, Segment};
 
 use super::{
-    has_colour, lines_to_segments, theme_style, truncate, wrap_entries, BarChart, Charset,
-    Chart, Line, LineChart, Scale, Sparkline, ValueFormat,
+    has_colour, lines_to_segments, theme_style, truncate, wrap_entries, BarChart, Charset, Chart,
+    Line, LineChart, Scale, Sparkline, ValueFormat,
 };
 
 /// The narrowest cell [`SmallMultiples`] picks its columns by, by default.
@@ -160,8 +160,8 @@ impl crate::a11y::AccessibleText for Facet {
 /// assert_eq!(
 ///     console.render_export(&grid),
 ///     concat!(
-///         "low        high      \n",
-///         "▁▂▃        ▆▇█       \n",
+///         "low             high          \n",
+///         "▁▂▃             ▆▇█           \n",
 ///         "scale 1 to 9 in every chart   \n",
 ///     )
 /// );
@@ -553,13 +553,13 @@ mod tests {
             rows(40, &grid),
             vec![
                 "api                                     ",
-                "▂▄▆█                                    ",
+                "▂▄▅▇                                    ",
                 "                                        ",
                 "web                                     ",
-                "▁▁▂▃                                    ",
+                "▂▂▂▃                                    ",
                 "                                        ",
                 "worker                                  ",
-                "█▆▄█                                    ",
+                "▇▅▄█                                    ",
                 "                                        ",
                 "cron                                    ",
                 "▁▁▁▁                                    ",
@@ -570,9 +570,10 @@ mod tests {
         assert_eq!(
             rows(120, &grid),
             vec![
-                "api                            web                            worker                         cron                           ",
-                "▂▄▆█                           ▁▁▂▃                           █▆▄█                           ▁▁▁▁                           ",
-                "scale 0 to 50 in every chart                                                                                            ",
+                // Four cells of 28, two apart: 118 cells.
+                format!("{:<30}{:<30}{:<30}{:<28}", "api", "web", "worker", "cron"),
+                format!("{:<30}{:<30}{:<30}{:<28}", "▂▄▅▇", "▂▂▂▃", "▇▅▄█", "▁▁▁▁"),
+                format!("{:<118}", "scale 0 to 50 in every chart"),
             ]
         );
     }
@@ -584,7 +585,7 @@ mod tests {
         let own = grid.clone().shared_scale(false);
         assert_eq!(own.scale(), None);
         // Each on its own: the low series fills its height.
-        assert_eq!(rows(120, &own)[1].split_whitespace().last(), Some("▁▄▁█"));
+        assert_eq!(rows(120, &own)[1].split_whitespace().last(), Some("▁▅▁█"));
         assert_eq!(grid.clone().range(0.0, 100.0).scale(), Some((0.0, 100.0)));
         // Bars include zero; a line chart's axis rounds out.
         let mixed = SmallMultiples::new([
@@ -606,15 +607,19 @@ mod tests {
                 .charset(Charset::Ascii)
                 .height(3)
         };
-        let grid = SmallMultiples::new([("a", chart([1.0, 2.0, 3.0])), ("b", chart([2.0, 2.0, 2.0]))])
-            .min_cell_width(16);
+        let grid =
+            SmallMultiples::new([("a", chart([1.0, 2.0, 3.0])), ("b", chart([2.0, 2.0, 2.0]))])
+                .min_cell_width(16);
         let out = rows(48, &grid);
         assert_eq!(
             out.last().map(|l| l.trim_end()),
-            Some("scale 0 to 6 in every chart  * p50  + p99")
+            Some("scale 1 to 6 in every chart  * p50  + p99")
         );
         // No chart drew its own legend.
-        assert!(!out[..out.len() - 1].iter().any(|l| l.contains("p50")), "{out:#?}");
+        assert!(
+            !out[..out.len() - 1].iter().any(|l| l.contains("p50")),
+            "{out:#?}"
+        );
     }
 
     #[test]

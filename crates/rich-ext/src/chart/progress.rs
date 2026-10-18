@@ -531,7 +531,10 @@ mod tests {
     #[test]
     fn accessible_text_says_how_full() {
         use crate::a11y::AccessibleText;
-        assert_eq!(FillGauge::new(0.424).accessible_text(80), "Gauge: 42 percent");
+        assert_eq!(
+            FillGauge::new(0.424).accessible_text(80),
+            "Gauge: 42 percent"
+        );
         assert_eq!(
             FillGauge::percent(50.0)
                 .label("50/100 GB")

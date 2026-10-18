@@ -210,6 +210,10 @@ struct Group {
 ///   whole-cell precision, their values under them. Given less width the
 ///   values go, then the labels are cut (and dropped below two cells),
 ///   then the gaps, and bars that still do not fit are left off the right.
+///   An explicit [`thickness`](Self::thickness), [`bar_gap`](Self::bar_gap)
+///   or [`group_gap`](Self::group_gap) is kept, as ratatui keeps them: the
+///   slots narrow to the thickness, then as many whole bars as fit are
+///   drawn, from the first, and the rest are left off.
 ///
 /// What ratatui's `BarChart` has, by our names:
 ///
@@ -627,6 +631,32 @@ impl BarChart {
         let without = label.max(floor);
         if fits(without) {
             return full(without, label > 0, values && self.values_inside);
+        }
+        // An explicit thickness or gap is kept, as ratatui keeps them: the
+        // slots narrow to the thickness, then the bars that do not fit are
+        // left off the right.
+        if self.thickness.is_some() || self.bar_gap.is_some() || self.group_gap.is_some() {
+            if fits(floor) {
+                let slot = (width - gaps) / n;
+                return full(slot, label > 0 && slot > 1, values && self.values_inside);
+            }
+            let mut shown = 0;
+            for (group, (_, range)) in self.spans().iter().enumerate() {
+                for index in range.clone() {
+                    let left = index
+                        .saturating_mul(floor.saturating_add(gap))
+                        .saturating_add(group.saturating_mul(group_gap));
+                    if left.saturating_add(floor) > width {
+                        break;
+                    }
+                    shown = index + 1;
+                }
+            }
+            let shows_values = self.values_inside || value <= floor;
+            return Columns {
+                shown: shown.max(1).min(self.bars.len()),
+                ..full(floor, label > 0 && floor > 1, values && shows_values)
+            };
         }
         if width >= gaps.saturating_add(n) {
             let slot = (width - gaps) / n;
@@ -1229,7 +1259,10 @@ impl BarChart {
         }
         let missing = self.bars.iter().filter(|b| !b.value.is_finite()).count();
         if missing > 0 {
-            head.push_str(&format!(", {} without a value", super::describe::count(missing)));
+            head.push_str(&format!(
+                ", {} without a value",
+                super::describe::count(missing)
+            ));
         }
         let group_of = |i: usize| {
             groups
@@ -1508,6 +1541,104 @@ fn bin_step(x: f64) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn an_explicit_thickness_and_gap_keep_and_leave_bars_off() {
+        let labels = "abcdefghijklmnopqrstuvwx";
+        let bars = |chart: BarChart| {
+            labels
+                .chars()
+                .fold(chart, |c, l| c.bar(l.to_string(), 5.0))
+                .max(5.0)
+                .orientation(Orientation::Vertical)
+                .show_values(false)
+                .bar_width(2)
+        };
+        // 24 bars 3 cells thick, 2 apart, in 40 cells: the first 8.
+        let kept = bars(BarChart::new()).thickness(3).bar_gap(2);
+        let row = ["███"; 8].join("  ");
+        assert_eq!(
+            rows(40, &kept),
+            vec![
+                row.clone(),
+                row,
+                " a    b    c    d    e    f    g    h ".to_string(),
+            ]
+        );
+        // Without them, every bar is squeezed in, one cell each.
+        let squeezed = bars(BarChart::new());
+        assert_eq!(rows(40, &squeezed)[0], "█".repeat(24));
+        // Room for every bar: the slots narrow, the thickness stays.
+        let narrow = bars(BarChart::new()).thickness(1).bar_gap(1);
+        assert_eq!(rows(47, &narrow)[0], ["█"; 24].join(" "));
+        // Group gaps are kept too: two whole groups of three fit 20 cells.
+        let group = |label: &str| {
+            BarGroup::new("").bars((0..3).map(|i| Bar::new(format!("{label}{i}"), 1.0)))
+        };
+        let grouped = ["p", "q", "r", "s"]
+            .into_iter()
+            .fold(BarChart::new(), |c, l| c.group(group(l)))
+            .max(1.0)
+            .orientation(Orientation::Vertical)
+            .show_values(false)
+            .bar_width(1)
+            .thickness(2)
+            .bar_gap(1)
+            .group_gap(3);
+        assert_eq!(rows(20, &grouped)[0], "██ ██ ██    ██ ██ ██");
+    }
+
+    #[test]
+    fn accessible_text_lists_few_bars_and_ranks_many() {
+        use crate::a11y::AccessibleText;
+        let chart = BarChart::new()
+            .bar("api", 412.0)
+            .bar("web", 268.5)
+            .bar("worker", 97.0)
+            .push(Bar::new("cron", 12.0).text("12 jobs"));
+        assert_eq!(
+            chart.accessible_text(80),
+            "Bar chart, 4 bars, values from 12 to 412\n\
+             api 412, web 268.5, worker 97, cron 12 jobs"
+        );
+        let months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul"];
+        let values = [30.0, 42.0, 35.0, 51.0, 48.0, 20.0, 44.0];
+        let many = BarChart::from_pairs(months.into_iter().zip(values));
+        assert_eq!(
+            many.accessible_text(80),
+            "Bar chart, 7 bars, values from 20 to 51\n\
+             Largest: Apr 51, May 48, Jul 44\n\
+             Smallest: Jun 20"
+        );
+        let grouped = BarChart::new()
+            .group(
+                BarGroup::new("Q1")
+                    .bar(Bar::new("a", 4.0))
+                    .bar(Bar::new("b", 2.0)),
+            )
+            .group(
+                BarGroup::new("Q2")
+                    .bar(Bar::new("a", 3.0))
+                    .bar(Bar::new("b", f64::NAN)),
+            );
+        assert_eq!(
+            grouped.accessible_text(80),
+            "Bar chart, 4 bars in 2 groups, values from 2 to 4, 1 without a value\n\
+             Q1 a 4, Q1 b 2, Q2 a 3, Q2 b no value"
+        );
+        assert_eq!(BarChart::new().accessible_text(80), "Bar chart, no bars");
+        let latencies = [12.0, 14.0, 15.0, 21.0, 22.0, 23.0, 24.0, 38.0, f64::NAN];
+        let histogram = Histogram::new(latencies).bins(3).range(10.0, 40.0);
+        assert_eq!(
+            histogram.accessible_text(80),
+            "Histogram, 8 values in 3 bins from 10 to 40, 1 ignored\n\
+             [10, 20) 3, [20, 30) 4, [30, 40] 1"
+        );
+        assert_eq!(
+            Histogram::new([f64::NAN]).accessible_text(80),
+            "Histogram, 0 values, 1 ignored"
+        );
+    }
 
     fn rows(width: usize, chart: &BarChart) -> Vec<String> {
         let console = Console::builder().width(width).color_system(None).build();

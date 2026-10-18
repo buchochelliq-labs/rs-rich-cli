@@ -61,13 +61,18 @@ impl Summary {
 
     fn of_sorted(sorted: &[f64], ignored: usize) -> Summary {
         let q = |p| quantile(sorted, p).unwrap_or(f64::NAN);
-        // The mean of the halves, so a sum of large values cannot overflow.
         let mean = if sorted.is_empty() {
             f64::NAN
         } else {
             let n = sorted.len() as f64;
-            let sum: f64 = sorted.iter().map(|v| v / n).sum();
-            sum.clamp(sorted[0], sorted[sorted.len() - 1])
+            let sum: f64 = sorted.iter().sum();
+            // Values so large their sum overflows: add each one's share.
+            let mean = if sum.is_finite() {
+                sum / n
+            } else {
+                sorted.iter().map(|v| v / n).sum()
+            };
+            mean.clamp(sorted[0], sorted[sorted.len() - 1])
         };
         Summary {
             count: sorted.len(),
@@ -166,11 +171,11 @@ pub fn quantile(sorted: &[f64], q: f64) -> Option<f64> {
 /// let d = Distribution::new(values).label("x").strip_width(12);
 /// assert_eq!(
 ///     console.render_export(&d),
-///     "x ├──▒▒▒█▒▒▒─┼┤ n 20 min 1 p25 5.75 p50 10.5 p75 15.25 p95 19.05 max 20 mean 10.5\n"
+///     "x ├──▒▒▒█▒▒▒─┤ n 20 min 1 p25 5.75 p50 10.5 p75 15.25 p95 19.05 max 20 mean 10.5\n"
 /// );
 /// assert_eq!(
 ///     console.render_export(&d.clone().charset(Charset::Ascii).numbers(false)),
-///     "x |--===#===-+|\n"
+///     "x |--===#===-|\n"
 /// );
 /// ```
 #[derive(Clone, Debug, PartialEq)]
@@ -350,8 +355,14 @@ impl Distribution {
             let t = scale.normalize(v).unwrap_or(0.0);
             ((t * width as f64).floor() as usize).min(width - 1)
         };
-        let (lo, p25, p50, p75, p95, hi) =
-            (at(s.min), at(s.p25), at(s.p50), at(s.p75), at(s.p95), at(s.max));
+        let (lo, p25, p50, p75, p95, hi) = (
+            at(s.min),
+            at(s.p25),
+            at(s.p50),
+            at(s.p75),
+            at(s.p95),
+            at(s.max),
+        );
         let [end_l, end_r, whisker, tick, shade, median] = if ascii {
             ['|', '|', '-', '+', '=', '#']
         } else {
@@ -418,7 +429,13 @@ fn numbers_line(console: &Console, row: &Distribution, short: bool, widths: &[us
             line.pad(1);
         }
         line.push(key, key_style.clone());
-        line.pad(1 + widths.get(i).copied().unwrap_or(0).saturating_sub(cells(&value)));
+        line.pad(
+            1 + widths
+                .get(i)
+                .copied()
+                .unwrap_or(0)
+                .saturating_sub(cells(&value)),
+        );
         line.push(&value, value_style.clone());
     }
     if !short && row.summary.ignored > 0 {
@@ -463,12 +480,20 @@ fn fit(rows: &[&Distribution], width: usize, strip: usize, numbers: bool) -> Fit
             };
         }
     }
-    // Cut the label, keeping the narrowest strip.
-    let keep = MIN_STRIP.min(strip).min(width.max(1));
-    let label = label.min(width.saturating_sub(keep + 1));
+    // Cut the label, keeping the narrowest strip; a label cut below two
+    // cells goes.
+    let keep = MIN_STRIP.min(strip);
+    let room = width.saturating_sub(keep + 1);
+    if label > 0 && room >= 2 {
+        return Fit {
+            label: label.min(room),
+            strip: keep,
+            numbers: None,
+        };
+    }
     Fit {
-        label,
-        strip: width.saturating_sub(gap(label)).clamp(1, keep.max(1)),
+        label: 0,
+        strip: strip.min(width).max(1),
         numbers: None,
     }
 }
@@ -593,8 +618,8 @@ impl crate::a11y::AccessibleText for Distribution {
 ///     .charset(Charset::Ascii);
 /// assert_eq!(
 ///     console.render_export(&set),
-///     "a |-==#==-+|\n\
-///      b     ##=+| \n  0        8\n"
+///     "a |-==#==-|\n\
+///      b     |#=  \n  0       8\n"
 /// );
 /// ```
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -694,7 +719,10 @@ impl DistributionSet {
 
     /// The scale's ends under the strips.
     fn scale_line(&self, console: &Console, fit: &Fit, scale: &Scale) -> Line {
-        let format = self.items.first().map_or(ValueFormat::Compact, |d| d.format);
+        let format = self
+            .items
+            .first()
+            .map_or(ValueFormat::Compact, |d| d.format);
         let unit = self.items.first().map_or("", |d| d.unit.as_str());
         let lo = format!("{}{unit}", format.format(scale.min()));
         let hi = format!("{}{unit}", format.format(scale.max()));
@@ -798,35 +826,6 @@ mod tests {
     }
 
     #[test]
-    fn zz_debug() {
-        let d = Distribution::new((0..=100).map(f64::from))
-            .label("ms")
-            .strip_width(21);
-        for w in [90, 70, 68, 60, 40, 24, 12, 10, 6, 3] {
-            println!("{w}: {:?}", rows(w, &d));
-        }
-        let gaps = Distribution::new([1.0, f64::NAN, 3.0]).strip_width(8);
-        println!("{:?}", rows(80, &gaps));
-        println!("{:?}", rows(40, &Distribution::new([]).label("x").strip_width(8)));
-        println!("{:?}", rows(40, &Distribution::new([5.0]).strip_width(9).numbers(false)));
-        let values = (1..=20).map(f64::from);
-        let d = Distribution::new(values).label("x").strip_width(12);
-        println!("{:?}", rows(80, &d));
-        let set = DistributionSet::new()
-            .push(Distribution::new([0.0, 2.0, 4.0, 6.0, 8.0]).label("a"))
-            .push(Distribution::new([4.0, 5.0, 6.0]).label("b"))
-            .strip_width(9)
-            .numbers(false)
-            .charset(Charset::Ascii);
-        println!("{:?}", rows(40, &set));
-        let set = DistributionSet::new()
-            .distribution("api", (10..=50).map(f64::from))
-            .distribution("worker", (30..=90).map(f64::from))
-            .strip_width(16);
-        println!("{:?}", rows(40, &set.clone().shared_scale(false).numbers(false)));
-    }
-
-    #[test]
     fn quantiles_match_numpy_linear() {
         // numpy.quantile([1, 2, 3, 4, 5, 6, 7, 8, 9, 10], q)
         let sorted: Vec<f64> = (1..=10).map(f64::from).collect();
@@ -876,21 +875,28 @@ mod tests {
             .strip_width(21);
         assert_eq!(
             rows(90, &d),
-            vec!["ms ├────▒▒▒▒▒█▒▒▒▒▒───┼┤ n 101 min 0 p25 25 p50 50 p75 75 p95 95 max 100 mean 50"]
+            vec![
+                "ms ├────▒▒▒▒▒█▒▒▒▒▒───┼┤ n 101 min 0 p25 25 p50 50 p75 75 p95 95 max 100 mean 50"
+            ]
         );
-        // Narrower: the strip shrinks, then the numbers shorten, then go.
+        // Narrower: the strip shrinks, then the numbers shorten, then go,
+        // then the strip shrinks again, then the label goes.
+        assert_eq!(
+            rows(70, &d),
+            vec!["ms ├─▒▒▒█▒▒▒─┤ n 101 min 0 p25 25 p50 50 p75 75 p95 95 max 100 mean 50"]
+        );
         assert_eq!(
             rows(60, &d),
-            vec!["ms ├▒▒█▒▒┼┤ n 101 min 0 p25 25 p50 50 p75 75 p95 95 max 100 mean 50"]
+            vec!["ms ├────▒▒▒▒▒█▒▒▒▒▒───┼┤ min 0 p50 50 max 100"]
         );
-        assert_eq!(rows(40, &d), vec!["ms ├────▒▒▒▒▒█▒▒▒▒▒───┼┤ min 0 p50 50 max 100"]);
         assert_eq!(rows(24, &d), vec!["ms ├────▒▒▒▒▒█▒▒▒▒▒───┼┤"]);
-        assert_eq!(rows(10, &d), vec!["m ├▒▒█▒┼┤"]);
+        assert_eq!(rows(12, &d), vec!["ms ├─▒▒█▒▒─┤"]);
+        assert_eq!(rows(10, &d), vec!["├─▒▒▒█▒▒─┤"]);
         // Ignored values are counted.
         let gaps = Distribution::new([1.0, f64::NAN, 3.0]).strip_width(8);
         assert_eq!(
             rows(80, &gaps),
-            vec!["├──█───┤ n 2 min 1 p25 1.5 p50 2 p75 2.5 p95 2.9 max 3 mean 2 1 ignored"]
+            vec!["├─▒▒█▒▒┤ n 2 min 1 p25 1.5 p50 2 p75 2.5 p95 2.9 max 3 mean 2 1 ignored"]
         );
         // No values: no strip, a count of 0.
         assert_eq!(
@@ -914,7 +920,7 @@ mod tests {
             .color_system(None)
             .ascii_only(true)
             .build();
-        assert_eq!(ascii.render_export(&d), "|--==#==-+|\n");
+        assert_eq!(ascii.render_export(&d), "|-===#===-|\n");
         let coloured = Console::builder()
             .width(40)
             .force_terminal(true)
@@ -935,16 +941,16 @@ mod tests {
         assert_eq!(
             rows(100, &set),
             vec![
-                "api    ├──▒▒█▒▒─┼┤        n 41 min 10 p25 20 p50 30 p75 40 p95 48 max 50 mean 30",
-                "worker      ├─▒▒▒█▒▒▒─┼┤  n 61 min 30 p25 45 p50 60 p75 75 p95 87 max 90 mean 60",
-                "       10            90",
+                "api    ├─▒▒█▒▒┼┤        n 41 min 10 p25 20 p50 30 p75 40 p95 48 max 50 mean 30",
+                "worker     ├──▒▒▒█▒▒▒─┤ n 61 min 30 p25 45 p50 60 p75 75 p95 87 max 90 mean 60",
+                "       10            90                                                       ",
             ]
         );
         // Each on its own scale: no scale line.
         let own = set.clone().shared_scale(false).numbers(false);
         assert_eq!(
             rows(40, &own),
-            vec!["api    ├───▒▒▒▒█▒▒▒──┼┤", "worker ├───▒▒▒▒█▒▒▒──┼┤"]
+            vec!["api    ├───▒▒▒▒█▒▒▒▒──┤", "worker ├───▒▒▒▒█▒▒▒▒──┤"]
         );
         assert_eq!(
             set.accessible_text(80),

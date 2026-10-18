@@ -536,10 +536,7 @@ impl crate::a11y::AccessibleText for LineChart {
         if self.series.is_empty() {
             return format!("{what}, no series");
         }
-        let mut head = format!(
-            "{what}, {}",
-            counted(self.series.len(), "series", "series")
-        );
+        let mut head = format!("{what}, {}", counted(self.series.len(), "series", "series"));
         let finite = || self.series.iter().flat_map(|s| s.finite());
         let axis = |fixed: (Option<f64>, Option<f64>), data: Option<(f64, f64)>, format| {
             let lo = fixed.0.or(data.map(|d| d.0))?;
@@ -582,11 +579,8 @@ impl LineChart {
     /// The finite y values' range, or the fixed one: what a shared scale
     /// unifies.
     pub(crate) fn y_extent(&self) -> Option<(f64, f64)> {
-        let data = super::describe::extent(
-            self.series
-                .iter()
-                .flat_map(|s| s.finite().map(|p| p.1)),
-        );
+        let data =
+            super::describe::extent(self.series.iter().flat_map(|s| s.finite().map(|p| p.1)));
         let lo = self.y_min.or(data.map(|d| d.0))?;
         let hi = self.y_max.or(data.map(|d| d.1))?;
         Some((lo.min(hi), lo.max(hi)))
@@ -622,5 +616,37 @@ impl Renderable for LineChart {
         Measurement::new(max.min(12), max)
             .with_maximum(options.max_width)
             .normalize()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::a11y::AccessibleText;
+
+    #[test]
+    fn accessible_text_reads_each_series() {
+        let chart = LineChart::new()
+            .series(Series::from_values("api", [1.0, 3.0, 2.0, 5.0]))
+            .series(Series::scatter("p99", [(0.0, 9.0), (3.0, 7.0)]));
+        assert_eq!(
+            chart.accessible_text(80),
+            "Line and scatter chart, 2 series, x from 0 to 3, y from 1 to 9\n\
+             api, line: 4 points, min 1, max 5, last 5, trend up\n\
+             p99, points: 2 points, min 7, max 9, last 7, trend down"
+        );
+        // A fixed range is the axis's; a series without a name is numbered.
+        let fixed = LineChart::new()
+            .series(Series::from_values("", [4.0, 4.0, f64::NAN]))
+            .y_range(0.0, 10.0);
+        assert_eq!(
+            fixed.accessible_text(80),
+            "Line chart, 1 series, x from 0 to 1, y from 0 to 10\n\
+             series 1, line: 3 points, 1 missing, min 4, max 4, last 4, trend flat"
+        );
+        assert_eq!(
+            LineChart::new().accessible_text(80),
+            "Line chart, no series"
+        );
     }
 }

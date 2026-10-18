@@ -17,6 +17,10 @@
 //! | `ChartState`, `StatusMatrix` | `State`, `StatusMatrix` |
 //! | `KpiCard` | `KpiCard` (its `status` by name) |
 //! | `TimelineSpan`, `Timeline` | `Span`, `Timeline` |
+//! | `Distribution`, `DistributionSet` | `Distribution`, `DistributionSet` (0.0.19) |
+//! | `SmallMultiples` | `SmallMultiples` of `Sparkline`s, `BarChart`s and `LineChart`s (0.0.19) |
+//! | `chart_quantile`, `chart_summary` | `quantile`, `Summary::of` (0.0.19) |
+//! | `chart_describe` | each chart's `a11y::AccessibleText` (0.0.19) |
 
 use pyo3::exceptions::{PyTypeError, PyValueError};
 use pyo3::prelude::*;
@@ -25,12 +29,13 @@ use pyo3::types::{PyDict, PyList, PySequence, PyString};
 use rich::protocol::Renderable;
 use rich_ext::chart::{
     Band as CoreBand, Bar as CoreBar, BarChart as CoreBarChart, BarGroup as CoreBarGroup,
-    BulletChart as CoreBulletChart, Charset, Direction, FillGauge as CoreFillGauge,
-    Gauge as CoreGauge, Heatmap as CoreHeatmap, Histogram as CoreHistogram, KpiCard as CoreKpiCard,
-    Levels, LineChart as CoreLineChart, LineGauge as CoreLineGauge, LineSet, Orientation,
-    Series as CoreSeries, SeriesKind, Span as CoreSpan, Sparkline as CoreSparkline,
-    State as CoreState, Status, StatusMatrix as CoreStatusMatrix, Timeline as CoreTimeline,
-    ValueFormat,
+    BulletChart as CoreBulletChart, Charset, Direction, Distribution as CoreDistribution,
+    DistributionSet as CoreDistributionSet, Facet, FillGauge as CoreFillGauge, Gauge as CoreGauge,
+    Heatmap as CoreHeatmap, Histogram as CoreHistogram, KpiCard as CoreKpiCard, Levels,
+    LineChart as CoreLineChart, LineGauge as CoreLineGauge, LineSet, Orientation,
+    Series as CoreSeries, SeriesKind, SmallMultiples as CoreSmallMultiples, Span as CoreSpan,
+    Sparkline as CoreSparkline, State as CoreState, Status, StatusMatrix as CoreStatusMatrix,
+    Summary as CoreSummary, Timeline as CoreTimeline, ValueFormat,
 };
 
 use crate::art::repr_str;
@@ -1484,6 +1489,350 @@ impl Timeline {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Distributions, small multiples and accessible text (0.0.19 workstream 14)
+
+/// A `Summary` as a dict: `count`, `ignored`, and `min`, `p25`, `p50`,
+/// `p75`, `p95`, `max` and `mean` (`None` when there are no values).
+fn summary_dict<'py>(py: Python<'py>, s: &CoreSummary) -> PyResult<Bound<'py, PyDict>> {
+    let out = PyDict::new(py);
+    out.set_item("count", s.count)?;
+    out.set_item("ignored", s.ignored)?;
+    for (key, value) in [
+        ("min", s.min),
+        ("p25", s.p25),
+        ("p50", s.p50),
+        ("p75", s.p75),
+        ("p95", s.p95),
+        ("max", s.max),
+        ("mean", s.mean),
+    ] {
+        out.set_item(key, (!s.is_empty()).then_some(value))?;
+    }
+    Ok(out)
+}
+
+/// The count, quantiles and mean of values, drawn as a box-and-whisker
+/// strip and the numbers on one line (`rich_ext::chart::Distribution`).
+#[pyclass(name = "Distribution", module = "rs_rich.chart", frozen)]
+pub(crate) struct Distribution {
+    inner: CoreDistribution,
+}
+renders!(Distribution);
+
+#[pymethods]
+impl Distribution {
+    /// `values`: numbers; `None`, NaN and infinities are left out and
+    /// counted. `range`: fix the strip's scale as `(min, max)`.
+    /// `strip_width`: cells for the strip (default 20). `unit`: written
+    /// after every value. `numbers`: write the numbers after the strip.
+    #[new]
+    #[pyo3(signature = (values, *, label=None, range=None, strip_width=None, format=None, unit=None, charset="auto", style=None, numbers=true))]
+    #[allow(clippy::too_many_arguments)]
+    fn new(
+        values: &Bound<'_, PyAny>,
+        label: Option<String>,
+        range: Option<(f64, f64)>,
+        strip_width: Option<usize>,
+        format: Option<&Bound<'_, PyAny>>,
+        unit: Option<String>,
+        charset: &str,
+        style: Option<String>,
+        numbers: bool,
+    ) -> PyResult<Self> {
+        let mut inner = CoreDistribution::new(self::numbers(values)?)
+            .format(value_format(format)?)
+            .charset(self::charset(charset)?)
+            .numbers(numbers);
+        if let Some(label) = label {
+            inner = inner.label(label);
+        }
+        if let Some((lo, hi)) = range {
+            inner = inner.range(lo, hi);
+        }
+        if let Some(width) = strip_width {
+            if width == 0 {
+                return Err(PyValueError::new_err("strip_width must be at least 1"));
+            }
+            inner = inner.strip_width(width);
+        }
+        if let Some(unit) = unit {
+            inner = inner.unit(unit);
+        }
+        if let Some(style) = style {
+            inner = inner.style(style);
+        }
+        Ok(Distribution { inner })
+    }
+
+    /// `count`, `ignored`, `min`, `p25`, `p50`, `p75`, `p95`, `max` and
+    /// `mean` (`None` without values).
+    #[getter]
+    fn summary<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
+        summary_dict(py, &self.inner.summary())
+    }
+
+    /// The finite values, sorted.
+    #[getter]
+    fn values(&self) -> Vec<f64> {
+        self.inner.values().to_vec()
+    }
+
+    #[getter]
+    fn label(&self) -> &str {
+        self.inner.label_text()
+    }
+
+    /// The `q` quantile (0 to 1), interpolated linearly (numpy's default);
+    /// `None` without values.
+    fn quantile(&self, q: f64) -> Option<f64> {
+        self.inner.quantile(q)
+    }
+
+    fn __repr__(&self) -> String {
+        format!("<Distribution {} values>", self.inner.summary().count)
+    }
+}
+
+/// Distributions stacked on one scale, their columns aligned
+/// (`rich_ext::chart::DistributionSet`).
+#[pyclass(name = "DistributionSet", module = "rs_rich.chart", frozen)]
+pub(crate) struct DistributionSet {
+    inner: CoreDistributionSet,
+}
+renders!(DistributionSet);
+
+#[pymethods]
+impl DistributionSet {
+    /// `distributions`: `Distribution`s, `(label, values)` pairs, or a
+    /// dict of label to values. `range`: fix the shared scale.
+    /// `shared_scale`: draw every row on one scale with a scale line.
+    #[new]
+    #[pyo3(signature = (distributions=None, *, range=None, strip_width=None, numbers=true, charset="auto", shared_scale=true))]
+    fn new(
+        distributions: Option<&Bound<'_, PyAny>>,
+        range: Option<(f64, f64)>,
+        strip_width: Option<usize>,
+        numbers: bool,
+        charset: &str,
+        shared_scale: bool,
+    ) -> PyResult<Self> {
+        let mut inner = CoreDistributionSet::new()
+            .numbers(numbers)
+            .charset(self::charset(charset)?)
+            .shared_scale(shared_scale);
+        if let Some(distributions) = distributions.filter(|d| !d.is_none()) {
+            for item in items(distributions)? {
+                let row = if let Ok(d) = item.cast::<Distribution>() {
+                    d.get().inner.clone()
+                } else {
+                    let bad = || {
+                        PyTypeError::new_err(
+                            "a distribution is a Distribution or a (label, values) pair",
+                        )
+                    };
+                    let (label, values) = pair(&item).ok_or_else(bad)?;
+                    let label: String = label.extract().map_err(|_| bad())?;
+                    CoreDistribution::new(self::numbers(&values)?).label(label)
+                };
+                inner = inner.push(row);
+            }
+        }
+        if let Some((lo, hi)) = range {
+            inner = inner.range(lo, hi);
+        }
+        if let Some(width) = strip_width {
+            if width == 0 {
+                return Err(PyValueError::new_err("strip_width must be at least 1"));
+            }
+            inner = inner.strip_width(width);
+        }
+        Ok(DistributionSet { inner })
+    }
+
+    /// The shared scale, `(min, max)`.
+    #[getter]
+    fn scale(&self) -> (f64, f64) {
+        let scale = self.inner.scale();
+        (scale.min(), scale.max())
+    }
+
+    /// The rows' labels.
+    #[getter]
+    fn labels(&self) -> Vec<String> {
+        self.inner
+            .distributions()
+            .iter()
+            .map(|d| d.label_text().to_string())
+            .collect()
+    }
+
+    fn __repr__(&self) -> String {
+        format!(
+            "<DistributionSet {} distributions>",
+            self.inner.distributions().len()
+        )
+    }
+}
+
+/// A chart a `SmallMultiples` grid can hold: a `Sparkline`, a `BarChart`
+/// or a `LineChart`.
+fn facet(chart: &Bound<'_, PyAny>) -> PyResult<Facet> {
+    if let Ok(c) = chart.cast::<Sparkline>() {
+        return Ok(c.get().inner.clone().into());
+    }
+    if let Ok(c) = chart.cast::<BarChart>() {
+        return Ok(c.get().inner.clone().into());
+    }
+    if let Ok(c) = chart.cast::<LineChart>() {
+        return Ok(c.get().inner.clone().into());
+    }
+    Err(PyTypeError::new_err(
+        "a small multiple is a Sparkline, a BarChart or a LineChart",
+    ))
+}
+
+/// A grid of titled charts on one value scale, fitted to the width
+/// (`rich_ext::chart::SmallMultiples`).
+#[pyclass(name = "SmallMultiples", module = "rs_rich.chart", frozen)]
+pub(crate) struct SmallMultiples {
+    inner: CoreSmallMultiples,
+}
+renders!(SmallMultiples);
+
+#[pymethods]
+impl SmallMultiples {
+    /// `items`: `(title, chart)` pairs or a dict of title to chart, each a
+    /// `Sparkline`, `BarChart` or `LineChart`. `columns`: how many columns
+    /// (default: as many cells of `min_cell_width` as fit). `range`: fix
+    /// the shared scale. `height`: each chart's rows. `note`: the scale and
+    /// the one legend under the grid.
+    #[new]
+    #[pyo3(signature = (items, *, columns=None, min_cell_width=24, gap=2, shared_scale=true, range=None, height=None, note=true, charset="auto"))]
+    #[allow(clippy::too_many_arguments)]
+    fn new(
+        items: &Bound<'_, PyAny>,
+        columns: Option<usize>,
+        min_cell_width: usize,
+        gap: usize,
+        shared_scale: bool,
+        range: Option<(f64, f64)>,
+        height: Option<usize>,
+        note: bool,
+        charset: &str,
+    ) -> PyResult<Self> {
+        let mut pairs: Vec<(String, Facet)> = Vec::new();
+        for item in self::items(items)? {
+            let bad = || PyTypeError::new_err("an item is a (title, chart) pair");
+            let (title, chart) = pair(&item).ok_or_else(bad)?;
+            pairs.push((title.extract().map_err(|_| bad())?, facet(&chart)?));
+        }
+        let mut inner = CoreSmallMultiples::new(pairs)
+            .min_cell_width(min_cell_width)
+            .gap(gap)
+            .shared_scale(shared_scale)
+            .note(note)
+            .charset(self::charset(charset)?);
+        if let Some(columns) = columns {
+            if columns == 0 {
+                return Err(PyValueError::new_err("columns must be at least 1"));
+            }
+            inner = inner.columns(columns);
+        }
+        if let Some((lo, hi)) = range {
+            inner = inner.range(lo, hi);
+        }
+        if let Some(height) = height {
+            if height == 0 {
+                return Err(PyValueError::new_err("height must be at least 1"));
+            }
+            inner = inner.height(height);
+        }
+        Ok(SmallMultiples { inner })
+    }
+
+    /// How many columns the grid has at `width` cells.
+    fn columns_at(&self, width: usize) -> usize {
+        self.inner.columns_at(width)
+    }
+
+    /// The shared scale, `(min, max)`, or `None` when not shared.
+    #[getter]
+    fn scale(&self) -> Option<(f64, f64)> {
+        self.inner.scale()
+    }
+
+    /// The titles, in order.
+    #[getter]
+    fn titles(&self) -> Vec<String> {
+        self.inner.items().iter().map(|(t, _)| t.clone()).collect()
+    }
+
+    fn __repr__(&self) -> String {
+        format!("<SmallMultiples {} charts>", self.inner.items().len())
+    }
+}
+
+/// The `q` quantile (0 to 1) of `values` (`None`, NaN and infinities left
+/// out), interpolated linearly as numpy's default does; `None` without
+/// values.
+#[pyfunction]
+fn chart_quantile(values: &Bound<'_, PyAny>, q: f64) -> PyResult<Option<f64>> {
+    let mut sorted: Vec<f64> = numbers(values)?
+        .into_iter()
+        .filter(|v| v.is_finite())
+        .collect();
+    sorted.sort_by(f64::total_cmp);
+    Ok(rich_ext::chart::quantile(&sorted, q))
+}
+
+/// The summary of `values`: `count`, `ignored`, `min`, `p25`, `p50`,
+/// `p75`, `p95`, `max` and `mean`.
+#[pyfunction]
+fn chart_summary<'py>(py: Python<'py>, values: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyDict>> {
+    summary_dict(py, &CoreSummary::of(numbers(values)?))
+}
+
+/// What a chart of this module says to a screen reader, or `None` for
+/// anything else.
+pub(crate) fn accessible_text_of(chart: &Bound<'_, PyAny>, width: usize) -> Option<String> {
+    use rich_ext::a11y::AccessibleText;
+    macro_rules! each {
+        ($($ty:ty),*) => {$(
+            if let Ok(c) = chart.cast::<$ty>() {
+                return Some(c.get().inner.accessible_text(width));
+            }
+        )*};
+    }
+    each!(
+        Sparkline,
+        BarChart,
+        Histogram,
+        LineChart,
+        Gauge,
+        BulletChart,
+        FillGauge,
+        LineGauge,
+        Heatmap,
+        StatusMatrix,
+        KpiCard,
+        Timeline,
+        Distribution,
+        DistributionSet,
+        SmallMultiples
+    );
+    None
+}
+
+/// A chart's accessible text: a few lines of plain words for a screen
+/// reader (what it is, its ranges and key values).
+#[pyfunction]
+#[pyo3(signature = (chart, width=80))]
+fn chart_describe(chart: &Bound<'_, PyAny>, width: usize) -> PyResult<String> {
+    accessible_text_of(chart, width)
+        .ok_or_else(|| PyTypeError::new_err("chart_describe takes a chart of rs_rich.chart"))
+}
+
 /// `value` as a chart writes it: `format` as for the charts.
 #[pyfunction]
 #[pyo3(signature = (value, format=None))]
@@ -1510,6 +1859,12 @@ pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     renderable::add_renderable_class::<KpiCard>(m)?;
     m.add_class::<TimelineSpan>()?;
     renderable::add_renderable_class::<Timeline>(m)?;
+    renderable::add_renderable_class::<Distribution>(m)?;
+    renderable::add_renderable_class::<DistributionSet>(m)?;
+    renderable::add_renderable_class::<SmallMultiples>(m)?;
+    m.add_function(pyo3::wrap_pyfunction!(chart_quantile, m)?)?;
+    m.add_function(pyo3::wrap_pyfunction!(chart_summary, m)?)?;
+    m.add_function(pyo3::wrap_pyfunction!(chart_describe, m)?)?;
     m.add_function(pyo3::wrap_pyfunction!(chart_format, m)?)?;
     m.add(
         "CHART_STYLES",

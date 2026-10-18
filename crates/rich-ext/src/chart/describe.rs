@@ -224,7 +224,11 @@ mod tests {
             "0 values"
         );
         assert_eq!(
-            series(&indexed(&[f64::NAN]), ValueFormat::Compact, ("value", "values")),
+            series(
+                &indexed(&[f64::NAN]),
+                ValueFormat::Compact,
+                ("value", "values")
+            ),
             "1 value, 1 missing, no values to show"
         );
     }
@@ -234,7 +238,13 @@ mod tests {
         let e = |n: &str, v: f64| (n.to_string(), ValueFormat::Compact.format(v), v);
         let few = [e("a", 1.0), e("b", 3.0)];
         assert_eq!(ranked(&few, 6), vec!["a 1, b 3"]);
-        let many = [e("a", 1.0), e("b", 3.0), e("c", 2.0), e("d", 5.0), e("e", 0.5)];
+        let many = [
+            e("a", 1.0),
+            e("b", 3.0),
+            e("c", 2.0),
+            e("d", 5.0),
+            e("e", 0.5),
+        ];
         assert_eq!(
             ranked(&many, 3),
             vec!["Largest: d 5, b 3, c 2", "Smallest: e 0.5"]

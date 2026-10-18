@@ -1270,7 +1270,9 @@ impl ResultSet {
 /// `height` rows from `offset` are laid out, column widths come from a
 /// sample of the first rows (`fit_window` widens them to the rows shown),
 /// and a position line (`rows 41-60 of 1,000`) says where the window is.
-/// `scroll_by` moves it.
+/// `scroll_by` moves it. A column window (`column_offset`,
+/// `visible_columns`, `fit_columns`, `frozen_columns`) shows some of the
+/// columns of a wide table, and `scroll_columns_by` moves it across.
 #[pyclass(name = "VirtualTable", module = "rs_rich.data")]
 pub(crate) struct VirtualTable {
     /// Shared with every table `core` builds, so a call copies no rows.
@@ -1284,6 +1286,10 @@ pub(crate) struct VirtualTable {
     max_column_width: usize,
     fit_window: bool,
     title: Option<String>,
+    column_offset: usize,
+    visible_columns: Option<usize>,
+    fit_columns: bool,
+    frozen_columns: usize,
 }
 
 impl VirtualTable {
@@ -1297,7 +1303,13 @@ impl VirtualTable {
             .show_position(self.show_position)
             .wrap(self.wrap)
             .max_column_width(self.max_column_width)
-            .fit_window(self.fit_window);
+            .fit_window(self.fit_window)
+            .column_offset(self.column_offset)
+            .fit_columns(self.fit_columns)
+            .frozen_columns(self.frozen_columns);
+        if let Some(count) = self.visible_columns {
+            table = table.visible_columns(count);
+        }
         if let Some(marker) = &self.null_marker {
             table = table.null_marker(marker.clone());
         }
@@ -1321,7 +1333,8 @@ impl VirtualTable {
         rows, *, offset=0, height=20, row_numbers=false, null_marker=None,
         show_position=true, wrap=false,
         max_column_width=rich_ext::table::virtualized::DEFAULT_MAX_COLUMN_WIDTH,
-        fit_window=false, title=None
+        fit_window=false, title=None, column_offset=0, visible_columns=None,
+        fit_columns=false, frozen_columns=0
     ))]
     #[allow(clippy::too_many_arguments)]
     fn new(
@@ -1335,8 +1348,15 @@ impl VirtualTable {
         max_column_width: usize,
         fit_window: bool,
         title: Option<String>,
-    ) -> Self {
-        VirtualTable {
+        column_offset: usize,
+        visible_columns: Option<usize>,
+        fit_columns: bool,
+        frozen_columns: usize,
+    ) -> PyResult<Self> {
+        if visible_columns == Some(0) {
+            return Err(PyValueError::new_err("visible_columns must be at least 1"));
+        }
+        Ok(VirtualTable {
             rows: Arc::new(rows.inner.clone()),
             offset,
             height: height.min(rich_ext::table::virtualized::MAX_HEIGHT),
@@ -1347,7 +1367,45 @@ impl VirtualTable {
             max_column_width,
             fit_window,
             title,
-        }
+            column_offset,
+            visible_columns,
+            fit_columns,
+            frozen_columns,
+        })
+    }
+
+    /// The first column of the column window (0-based, after the frozen
+    /// ones).
+    #[getter]
+    fn get_column_offset(&self) -> usize {
+        self.column_offset
+    }
+
+    #[setter]
+    fn set_column_offset(&mut self, offset: usize) {
+        self.column_offset = offset;
+    }
+
+    /// Move the column window by `columns` (negative moves left), within
+    /// the columns.
+    fn scroll_columns_by(&mut self, columns: isize) {
+        let mut table = self.core();
+        table.scroll_columns_by(columns);
+        self.column_offset = table.window_column_offset();
+    }
+
+    /// The 0-based columns a render `width` cells wide shows: the frozen
+    /// ones, then the window's.
+    #[pyo3(signature = (width=80))]
+    fn shown_columns(&self, width: usize) -> Vec<usize> {
+        self.core().shown_columns(width)
+    }
+
+    /// Where the column window is, `columns 41-60 of 2,000`, or `None`
+    /// when every column is shown at `width`.
+    #[pyo3(signature = (width=80, *, ascii=false))]
+    fn column_position(&self, width: usize, ascii: bool) -> Option<String> {
+        self.core().page_at(width).column_position(ascii)
     }
 
     /// The first row shown (0-based).
