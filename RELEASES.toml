@@ -63,7 +63,7 @@ version = "0.0.3"
 name = "rs-rich-ext"
 registry = "crates.io"
 manifest = "crates/rich-ext/Cargo.toml"
-version = "0.0.16"
+version = "0.0.17"
 
 [[package]]
 name = "rs-rich-micro"

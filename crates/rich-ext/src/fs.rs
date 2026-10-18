@@ -123,12 +123,20 @@ mod sys {
                 size *= 4;
                 continue;
             }
-            if code != 0 || found.is_null() {
+            // Found, it is `record` that was filled in; anything else is
+            // read as not found rather than followed.
+            if code != 0 || found != record.as_mut_ptr() {
                 return None;
             }
-            // SAFETY: the call succeeded and `found` points at `record`,
-            // whose name points into `buffer`, both alive here.
-            let text = unsafe { CStr::from_ptr(name(&*found)) };
+            // SAFETY: the call succeeded and filled in `record`.
+            let record = unsafe { record.assume_init_ref() };
+            let pointer = name(record);
+            if pointer.is_null() {
+                return None;
+            }
+            // SAFETY: a non-null name points at a string in `buffer`,
+            // alive here.
+            let text = unsafe { CStr::from_ptr(pointer) };
             return Some(text.to_string_lossy().into_owned());
         }
     }

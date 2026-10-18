@@ -198,7 +198,7 @@ Each crate versions independently; see [Branching and releases](BRANCHING.md).
 | [`rs-rich`](https://crates.io/crates/rs-rich) | `0.0.9` |
 | [`rs-rich-plugin-api`](https://crates.io/crates/rs-rich-plugin-api) | `0.0.3` |
 | [`rs-rich-macros`](https://crates.io/crates/rs-rich-macros) | `0.0.3` |
-| [`rs-rich-ext`](https://crates.io/crates/rs-rich-ext) | `0.0.16` |
+| [`rs-rich-ext`](https://crates.io/crates/rs-rich-ext) | `0.0.17` |
 | [`rs-rich-cli`](https://crates.io/crates/rs-rich-cli) | `0.0.19` |
 | [`rs-rich-art`](https://crates.io/crates/rs-rich-art) | `0.0.12` |
 | [`rs-rich-mermaid`](https://crates.io/crates/rs-rich-mermaid) | `0.0.5` |

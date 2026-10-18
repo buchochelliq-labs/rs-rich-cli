@@ -716,6 +716,8 @@ version = "0.17.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ed5909b6e89a2db4456e54cd5f673791d7eca6732202bbf2a9cc504fe2f9b84a"
 dependencies = [
+ "allocator-api2",
+ "equivalent",
  "foldhash 0.2.0",
  "serde",
  "serde_core",
@@ -859,6 +861,17 @@ name = "itoa"
 version = "1.0.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8f42a60cbdf9a97f5d2305f08a87dc4e09308d1276d28c869c684d7777685682"
+
+[[package]]
+name = "kasuari"
+version = "0.4.13"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "72f14c90e40a6133f4805b83542a7ed7364f56070b447f56e7f4e90297122209"
+dependencies = [
+ "hashbrown 0.17.1",
+ "portable-atomic",
+ "thiserror 2.0.21",
+]
 
 [[package]]
 name = "kqueue"
@@ -1691,7 +1704,7 @@ dependencies = [
 
 [[package]]
 name = "rs-rich-ext"
-version = "0.0.16"
+version = "0.0.17"
 dependencies = [
  "fancy-regex 0.19.2",
  "libc",
@@ -1723,6 +1736,7 @@ dependencies = [
 name = "rs-rich-intuituive"
 version = "0.0.4"
 dependencies = [
+ "kasuari",
  "rs-rich",
  "rs-rich-ext",
  "rs-rich-interact",

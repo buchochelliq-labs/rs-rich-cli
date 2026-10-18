@@ -336,7 +336,9 @@ fn capture_redacts_before_showing_exporting_or_recording() {
         ("svg", &svg),
         ("html", &html),
     ] {
-        assert_no_leaks(name, body, &[token, "hunter2", "ter2", "1234"]);
+        // The order number with its tail: the cast's nanosecond timestamps
+        // can hold a bare "1234" by chance.
+        assert_no_leaks(name, body, &[token, "hunter2", "ter2", "1234-5678"]);
     }
     // Masks keep the width of what they replace, so the panel stays aligned.
     let stars = "*".repeat(token.len());

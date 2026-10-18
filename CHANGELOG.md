@@ -60,7 +60,7 @@ four `Chart` options the scope-tui clone needs to look like ratatui 0.29's
   legend, unstyled around the names, as ratatui does; by default the box
   clears it.
 
-### The outside world in intuiTUIve: files, sound and images (intuituive 0.0.4, ext 0.0.16, ratatui 0.0.4)
+### The outside world in intuiTUIve: files, sound and images (intuituive 0.0.4, ext 0.0.17, ratatui 0.0.4)
 
 What the Yazi and scope-tui rebuilds found missing from the plugin side
 (`docs/design/intuituive-demo-gaps.md`, "Data, sources and the outside
