@@ -4,7 +4,6 @@
 
 use std::io::Write;
 use std::process::{Command, Output, Stdio};
-use std::time::{Duration, Instant};
 
 fn rich(args: &[&str], stdin: &str, env: &[(&str, &str)]) -> Output {
     let mut command = Command::new(env!("CARGO_BIN_EXE_rich"));
@@ -221,6 +220,7 @@ mod banner {
 #[cfg(feature = "art")]
 mod gif_controls {
     use super::*;
+    use std::time::{Duration, Instant};
 
     const BALL: &str = concat!(
         env!("CARGO_MANIFEST_DIR"),
