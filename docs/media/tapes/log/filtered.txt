@@ -1,0 +1,34 @@
+❯ rich log app.log --level warn+ --where 'service=api'
+2026-10-18T10:00:01.100Z WARN upstream slow {"service":"api","trace_id":"4bf92f3577b34da6","latency_ms":812}
+2026-10-18T10:00:01.900Z ERROR upstream timed out {"service":"api","trace_id":"4bf92f3577b34da6","latency_ms":3000}
+  Traceback (most recent call last):
+    File "checkout/cart.py", line 42, in total
+  TimeoutError: inventory did not answer in 3s
+❯
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

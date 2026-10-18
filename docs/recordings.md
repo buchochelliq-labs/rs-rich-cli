@@ -39,6 +39,7 @@ motion turned on in your system settings the cards stay still.
 [![A dashboard drawn in place below the prompt](media/tapes/surface/done.png){ data-gif="surface.gif" loading=lazy }<span class="tape-card-title">A surface</span>](#a-surface){ .tape-card }
 [![rich date: a day picked on a month grid within a range](media/tapes/date/grid.png){ data-gif="date.gif" loading=lazy }<span class="tape-card-title">Dates and times</span>](#dates-and-times){ .tape-card }
 [![A man page rendered by rich, its sections and tagged paragraphs](media/tapes/documents/man.png){ data-gif="documents.gif" loading=lazy }<span class="tape-card-title">Org, AsciiDoc and man pages</span>](#org-asciidoc-and-man-pages){ .tape-card }
+[![rich log grouping records under a header for each trace id](media/tapes/log/groups.png){ data-gif="log.gif" loading=lazy }<span class="tape-card-title">Filter and group a log</span>](#filter-and-group-a-log){ .tape-card }
 [![rich serve printing its address, and sessions asked for](media/tapes/serve/sessions.png){ data-gif="serve.gif" loading=lazy }<span class="tape-card-title">Serve a program to a browser</span>](#serve-a-program-to-a-browser){ .tape-card }
 [![A shell in a terminal pane beside a web view](media/tapes/embed/pane.png){ data-gif="embed.gif" loading=lazy }<span class="tape-card-title">A terminal pane</span>](#a-terminal-pane){ .tape-card }
 [![A CSV file drawn as a line chart by rich chart](media/tapes/chart/lines.png){ data-gif="chart.gif" loading=lazy }<span class="tape-card-title">Charts from data</span>](#charts-from-data){ .tape-card }
@@ -482,6 +483,24 @@ source with `--syntax`. See
 | ![An Org file with TODO keywords, tags and a table](media/tapes/documents/org.png) | ![An AsciiDoc file with its header, admonitions and a listing](media/tapes/documents/asciidoc.png) | ![A man page with its header, sections and tagged paragraphs](media/tapes/documents/man.png) | ![The man page's roff highlighted](media/tapes/documents/source.png) |
 
 [Tape](tapes/documents.tape) · [Cast](media/tapes/documents/documents.cast) · [GIF](media/tapes/documents/documents.gif) · [Page](media/tapes/documents/documents.html)
+
+## Filter and group a log
+
+`rich log` (0.0.19) on one log in four formats (JSON Lines, logfmt, a
+timestamped line and an access log, with a stack trace after an error),
+read as records; then filtered by level and field, folded where a message
+repeats, and grouped by trace id with a summary of the levels and the
+traces that failed. See [Logs: `rich log`](cli.md#logs-rich-log).
+
+<div class="tape-player" data-cast="../media/tapes/log/log.cast" data-poster="npt:0:3">
+  <img src="../media/tapes/log/log.gif" alt="rich log reading a mixed log, filtering it, folding repeats and grouping by trace">
+</div>
+
+| Records | Filtered | Folded | Groups |
+|---|---|---|---|
+| ![Four formats read as records](media/tapes/log/records.png) | ![Warnings and above from one service](media/tapes/log/filtered.png) | ![Repeated messages folded with a count](media/tapes/log/folded.png) | ![Records grouped under a header for each trace id](media/tapes/log/groups.png) |
+
+[Tape](tapes/log.tape) · [Cast](media/tapes/log/log.cast) · [GIF](media/tapes/log/log.gif) · [Page](media/tapes/log/log.html)
 
 ## Serve a program to a browser
 

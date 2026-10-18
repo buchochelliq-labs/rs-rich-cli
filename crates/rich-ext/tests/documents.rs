@@ -679,8 +679,16 @@ fn rendering_time_grows_linearly() {
             .collect();
         let small = body.repeat(64 * 1024 / body.len() + 1);
         let large = body.repeat(4 * (64 * 1024 / body.len() + 1));
-        let (small_time, small_out) = timed(format, &small);
-        let (large_time, large_out) = timed(format, &large);
+        // The fastest of three runs, so that other tests running beside
+        // this one, or a busy machine, do not count as the renderer's time.
+        let fastest = |source: &str| {
+            (0..3)
+                .map(|_| timed(format, source))
+                .min_by_key(|(elapsed, _)| *elapsed)
+                .unwrap()
+        };
+        let (small_time, small_out) = fastest(&small);
+        let (large_time, large_out) = fastest(&large);
         assert!(large_out >= 3 * small_out, "{format}: output did not grow");
         // Four times the input; linear is about four times the time.
         assert!(
