@@ -217,6 +217,32 @@ own](index.md#owning-the-loop). It has `update(now)`, `render()`,
 `AccessNode`s), `take_announcements()` and `finish()`. In linear mode,
 `render()` returns the lines a screen reader would read.
 
+For a test, as in [Rust](index.md#testing), the driver also has
+`press("tab enter")` and `type_text("Ada")` (each draws until there is
+nothing left to draw, as `settle()` does), `assert_focused(name)`, which
+raises `AssertionError` saying where the focus is, `focused()` and
+`focused_name()`. Snapshots take a path, since Python has no crate
+directory:
+
+```python
+from pathlib import Path
+
+from rs_rich.tui import App, assert_screen, assert_screen_styled
+
+SNAPSHOTS = Path(__file__).parent / "snapshots"
+
+def test_the_counter_counts():
+    driver = App(counter).driver(20, 1)
+    driver.press("+ +")
+    assert_screen(driver, SNAPSHOTS / "counter_two.txt")
+```
+
+`UPDATE_SNAPSHOTS=1 pytest` writes the files instead of comparing. A
+difference raises `AssertionError` with a unified diff.
+`assert_screen_styled(driver, path)` also keeps `<name>.styled.txt`, the
+rows as console markup, and `assert_snapshot(path, text)` compares any
+text; `driver.plain()` and `driver.styled()` are the texts they store.
+
 ## Serving to a browser
 
 ```python

@@ -43,8 +43,12 @@
 //!   for markup; [`Ctx::set_theme`] switches at run time.
 //! - **Inline**: [`App::inline`] runs in a few rows below the prompt
 //!   instead of the alternate screen.
+//! - **Responsive**: [`Node::hide_below`] and a stylesheet's `@media`
+//!   rules follow the terminal's size; [`viewport`] reads it.
 //! - **Tests**: [`App::render_with`] and [`App::run_on`] with
-//!   `rich-interact`'s headless driver run an app without a terminal.
+//!   `rich-interact`'s headless driver run an app without a terminal;
+//!   [`App::driver`] steps one, and [`assert_screen!`] compares its screen
+//!   with a snapshot (see [`testing`]).
 //!
 //! The design, and how it compares with ratatui, is in
 //! `docs/design/intuituive.md`.
@@ -63,6 +67,7 @@ pub mod screen;
 mod sheet;
 mod split;
 pub mod task;
+pub mod testing;
 mod text_area;
 mod tree;
 pub mod widget;
@@ -82,7 +87,7 @@ pub use node::{
     column, component, each, grid, label, leaf, list, renderable, repeating, row, scroll,
     scroll_both, scroll_both_with, scroll_with, scroll_x, switch, text, Node,
 };
-pub use reactive::{memo, signal, watch, Memo, Proxy, Signal};
+pub use reactive::{memo, signal, viewport, watch, Memo, Proxy, Signal};
 pub use sheet::{SheetError, Stylesheet};
 pub use task::{resource, spawn, spawn_future, Load, Resource, Task};
 pub use widget::{widget, Widget};
@@ -94,8 +99,8 @@ pub mod prelude {
     pub use crate::{
         column, component, each, every, grid, label, leaf, list, memo, renderable, repeating,
         resource, row, scroll, scroll_both, scroll_with, scroll_x, signal, spawn, switch, text,
-        text_area, watch, widget, Align, App, Ctx, Justify, Load, Log, Memo, Node, Proxy, Resource,
-        Signal, Size, Task, Theme, Widget,
+        text_area, viewport, watch, widget, Align, App, Ctx, Justify, Load, Log, Memo, Node, Proxy,
+        Resource, Signal, Size, Task, Theme, Widget,
     };
 }
 

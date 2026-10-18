@@ -7,7 +7,7 @@ use std::ptr::NonNull;
 use std::time::Duration;
 
 use pyo3::create_exception;
-use pyo3::exceptions::{PyOSError, PyRuntimeError, PyTypeError, PyValueError};
+use pyo3::exceptions::{PyAssertionError, PyOSError, PyRuntimeError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyList, PyTuple};
 
@@ -335,8 +335,8 @@ impl PyStylesheet {
 // Accessibility
 
 /// `AccessState`: ARIA's states of a node: `expanded` and `checked`
-/// (`None` when it cannot be), `selected`, `busy`, and `position`, the
-/// selected item's place `(at, of)`.
+/// (`None` when it cannot be), `selected`, `busy`, `invalid`, and
+/// `position`, the selected item's place `(at, of)`.
 #[pyclass(
     name = "AccessState",
     module = "rs_rich.tui",
@@ -350,19 +350,21 @@ pub(crate) struct PyAccessState(pub(crate) intuituive::a11y::AccessState);
 impl PyAccessState {
     /// For a widget's `access_state()`.
     #[new]
-    #[pyo3(signature = (*, expanded=None, checked=None, selected=false, busy=false, position=None))]
+    #[pyo3(signature = (*, expanded=None, checked=None, selected=false, busy=false, position=None, invalid=false))]
     fn new(
         expanded: Option<bool>,
         checked: Option<bool>,
         selected: bool,
         busy: bool,
         position: Option<(usize, usize)>,
+        invalid: bool,
     ) -> PyAccessState {
         PyAccessState(intuituive::a11y::AccessState {
             expanded,
             checked,
             selected,
             busy,
+            invalid,
             position,
         })
     }
@@ -391,6 +393,12 @@ impl PyAccessState {
     #[getter]
     fn busy(&self) -> bool {
         self.0.busy
+    }
+
+    /// In error (`Node.error_when`): ARIA's `aria-invalid`.
+    #[getter]
+    fn invalid(&self) -> bool {
+        self.0.invalid
     }
 
     #[getter]
@@ -1103,6 +1111,52 @@ impl PyDriver {
         self.read(intuituive::Driver::is_done)
     }
 
+    /// Bring the app up to date at the last `update`'s time and draw until
+    /// nothing is left to draw.
+    fn settle(&self, py: Python<'_>) -> PyResult<()> {
+        self.step(py, intuituive::Driver::settle)
+    }
+
+    /// Keys by name, separated by spaces, each followed by `settle()`.
+    fn press(&self, py: Python<'_>, keys: &str) -> PyResult<()> {
+        // Checked here, so a bad name is a ValueError, not a panic.
+        self::keys(keys)?;
+        self.step(py, move |driver| driver.press(keys))
+    }
+
+    /// Type `text`, a key a character, then `settle()`.
+    fn type_text(&self, py: Python<'_>, text: &str) -> PyResult<()> {
+        self.step(py, move |driver| driver.type_text(text))
+    }
+
+    /// The id of the node with the focus on the top screen, or `None`.
+    fn focused(&self) -> PyResult<Option<u64>> {
+        self.read(intuituive::Driver::focused)
+    }
+
+    /// The focused node's name, else its accessible name, or `None`.
+    fn focused_name(&self) -> PyResult<Option<String>> {
+        self.read(intuituive::Driver::focused_name)
+    }
+
+    /// Raise `AssertionError`, saying where the focus is, unless it is on
+    /// the node with that name (or accessible name).
+    fn assert_focused(&self, name: &str) -> PyResult<()> {
+        self.read(|driver| driver.check_focused(name))?
+            .map_err(PyAssertionError::new_err)
+    }
+
+    /// The screen as a snapshot stores it: plain rows, trailing spaces
+    /// trimmed, one a line.
+    fn plain(&self) -> PyResult<String> {
+        self.read(intuituive::testing::plain)
+    }
+
+    /// The screen as console markup, one row a line.
+    fn styled(&self) -> PyResult<String> {
+        self.read(intuituive::testing::styled)
+    }
+
     /// The frame as drawn, as plain rows.
     fn screen(&self) -> PyResult<Vec<String>> {
         self.read(|driver| driver.screen().plain())
@@ -1188,8 +1242,55 @@ impl PyDriver {
     }
 }
 
+/// Compare `text` with the snapshot file at `path`, or write it there when
+/// `UPDATE_SNAPSHOTS` is set; `AssertionError` with a diff when they differ.
+#[pyfunction]
+fn tui_assert_snapshot(path: std::path::PathBuf, text: &str) -> PyResult<()> {
+    intuituive::testing::check_snapshot(path, text).map_err(PyAssertionError::new_err)
+}
+
+/// The rows a snapshot of `screen` stores: a `Driver`'s screen, or rows.
+fn screen_text(screen: &Bound<'_, PyAny>) -> PyResult<String> {
+    if let Ok(driver) = screen.cast::<PyDriver>() {
+        return driver.borrow().plain();
+    }
+    let rows: Vec<String> = screen
+        .extract()
+        .map_err(|_| PyTypeError::new_err("a screen is a Driver, or rows (a list of str)"))?;
+    Ok(intuituive::testing::plain(&rows))
+}
+
+/// `assert_screen(screen, path)`: the screen (a `Driver`, or rows such as
+/// `render_with` returns) against the snapshot file at `path`.
+#[pyfunction]
+fn tui_assert_screen(screen: &Bound<'_, PyAny>, path: std::path::PathBuf) -> PyResult<()> {
+    tui_assert_snapshot(path, &screen_text(screen)?)
+}
+
+/// `assert_screen_styled(driver, path)`: `assert_screen`, and the screen as
+/// console markup against `<name>.styled.txt` next to `path`.
+#[pyfunction]
+fn tui_assert_screen_styled(
+    driver: &Bound<'_, PyDriver>,
+    path: std::path::PathBuf,
+) -> PyResult<()> {
+    let driver = driver.borrow();
+    tui_assert_snapshot(path.clone(), &driver.plain()?)?;
+    let stem = path
+        .file_stem()
+        .map(|s| s.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    tui_assert_snapshot(
+        path.with_file_name(format!("{stem}.styled.txt")),
+        &driver.styled()?,
+    )
+}
+
 pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     let py = m.py();
+    m.add_function(wrap_pyfunction!(tui_assert_snapshot, m)?)?;
+    m.add_function(wrap_pyfunction!(tui_assert_screen, m)?)?;
+    m.add_function(wrap_pyfunction!(tui_assert_screen_styled, m)?)?;
     for (name, class) in [
         ("TuiCtx", py.get_type::<PyCtx>()),
         ("TuiTheme", py.get_type::<PyTheme>()),

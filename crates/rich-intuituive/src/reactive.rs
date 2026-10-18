@@ -93,6 +93,8 @@ pub(crate) struct Runtime {
     /// The nodes that asked about hover or the pointer; a node leaves when
     /// it is forgotten.
     pub(crate) watchers: crate::widget::Watchers,
+    /// The slot of the app's [`viewport`], once made.
+    viewport: Cell<Option<usize>>,
 }
 
 thread_local! {
@@ -118,6 +120,7 @@ impl Runtime {
                 batch: Cell::new(0),
                 queued: RefCell::new(Vec::new()),
                 watchers: Default::default(),
+                viewport: Cell::new(None),
             });
             all.push(Some(runtime.clone()));
             runtime
@@ -153,6 +156,24 @@ impl Runtime {
                 )
             })
         })
+    }
+
+    /// The signal behind [`viewport`]: the cells the app lays out in, as
+    /// its driver last set them ((0, 0) until it has a size).
+    pub(crate) fn viewport(&self) -> Signal<(u16, u16)> {
+        let slot = match self.viewport.get() {
+            Some(slot) => slot,
+            None => {
+                let slot = self.insert(Box::new((0u16, 0u16)));
+                self.viewport.set(Some(slot));
+                slot
+            }
+        };
+        Signal {
+            runtime: self.id,
+            slot,
+            _type: PhantomData,
+        }
     }
 
     /// Run `f` with this runtime current.
@@ -596,6 +617,35 @@ impl<T> Clone for Memo<T> {
 }
 
 impl<T> Copy for Memo<T> {}
+
+/// The width and height, in cells, that the current app lays out in: the
+/// terminal's columns, less the [inspector](crate::App::inspector) while it
+/// is shown, and its rows (an [inline](crate::App::inline) app's region).
+/// It changes when the terminal is resized, and a node that reads it draws
+/// again then, so a closure can reflow on it:
+///
+/// ```
+/// use intuituive::prelude::*;
+/// use intuituive::viewport;
+///
+/// let app = App::new(|| {
+///     let size = viewport();
+///     text(move || {
+///         let (columns, _) = size.get();
+///         if columns < 40 { "narrow".into() } else { "wide".into() }
+///     })
+///     .on_key("q", |cx| cx.quit())
+/// });
+/// assert_eq!(app.render_with(&["q"], 30, 1).unwrap()[0].trim_end(), "narrow");
+/// ```
+///
+/// [`Node::hide_below`](crate::Node::hide_below) and a stylesheet's
+/// `@media` rules read it too.
+pub fn viewport() -> Memo<(u16, u16)> {
+    Memo {
+        inner: Runtime::current_for("viewport()").viewport(),
+    }
+}
 
 /// A memo computing `f`, in the current app.
 pub fn memo<T: PartialEq + 'static>(f: impl Fn() -> T + 'static) -> Memo<T> {

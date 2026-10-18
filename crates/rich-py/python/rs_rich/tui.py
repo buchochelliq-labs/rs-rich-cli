@@ -29,14 +29,17 @@ The same API as the Rust crate, name for name, so one guide serves both::
   (``TreeItem``, ``LazyItem``), ``text_area``, ``calendar``, ``calendar_with``, ``split``,
   ``split_with``, ``hsplit``, ``vsplit``, menus (``menu_bar``, ``Menu``,
   ``MenuItem``, ``open_menu``, ``context_menu``).
-- **State**: ``signal``, ``memo``, ``watch``, ``every``; background work with
+- **State**: ``signal``, ``memo``, ``watch``, ``every``, ``viewport`` (the
+  size the app lays out in); background work with
   ``spawn`` (a thread), ``spawn_async`` (a coroutine on an asyncio loop),
   ``resource`` and ``Proxy``.
 - **The app**: ``App`` (themes, stylesheets, the palette and help keys,
   accessibility and linear mode, inline), ``Ctx`` (what handlers get:
   screens, modals, pop-ups, toasts, animations, focus), ``Theme``,
   ``Stylesheet``; ``Driver`` for a loop of your own; ``run`` with a
-  ``Script`` for headless tests.
+  ``Script`` for headless tests, and ``assert_screen``,
+  ``assert_screen_styled`` and ``assert_snapshot`` for snapshots
+  (``UPDATE_SNAPSHOTS=1`` writes them).
 - **Elsewhere**: ``serve`` and ``Server`` put apps in a browser
   (``rs-rich-web``); ``terminal`` and ``web_view`` embed a program or a web
   page (``rs-rich-embed``).
@@ -101,6 +104,9 @@ from ._native import (
     TuiWebView,
     TuiWidget,
     TuiWidgetEvent,
+    tui_assert_screen,
+    tui_assert_screen_styled,
+    tui_assert_snapshot,
     tui_calendar,
     tui_calendar_with,
     tui_column,
@@ -145,6 +151,7 @@ from ._native import (
     tui_tree_with,
     tui_virtual_list,
     tui_virtual_table,
+    tui_viewport,
     tui_vsplit,
     tui_watch,
     tui_web_view,
@@ -208,6 +215,7 @@ DEFAULT_SCROLLBACK = TUI_DEFAULT_SCROLLBACK
 
 signal = tui_signal
 memo = tui_memo
+viewport = tui_viewport
 watch = tui_watch
 every = tui_every
 spawn = tui_spawn
@@ -254,6 +262,9 @@ serve = tui_serve
 terminal = tui_terminal
 terminal_with = tui_terminal_with
 web_view = tui_web_view
+assert_screen = tui_assert_screen
+assert_screen_styled = tui_assert_screen_styled
+assert_snapshot = tui_assert_snapshot
 
 
 async def _awaited(awaitable):
@@ -317,6 +328,7 @@ __all__ = [
     "DEFAULT_SCROLLBACK",
     "signal",
     "memo",
+    "viewport",
     "watch",
     "every",
     "spawn",
@@ -363,4 +375,7 @@ __all__ = [
     "terminal",
     "terminal_with",
     "web_view",
+    "assert_screen",
+    "assert_screen_styled",
+    "assert_snapshot",
 ]

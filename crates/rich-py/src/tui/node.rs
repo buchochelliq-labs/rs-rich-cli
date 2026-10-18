@@ -362,6 +362,42 @@ impl PyNode {
         Ok(slf)
     }
 
+    /// In error while `condition()` holds: the theme's error look, a
+    /// stylesheet's `:error` (or `:invalid`), and `invalid` for assistive
+    /// technology (ARIA's `aria-invalid`).
+    fn error_when<'py>(
+        slf: Bound<'py, Self>,
+        condition: &Bound<'py, PyAny>,
+    ) -> PyResult<Bound<'py, Self>> {
+        let condition = self::condition(Callback::checked(condition, "the condition")?);
+        slf.borrow().map(|n| n.error_when(condition))?;
+        Ok(slf)
+    }
+
+    /// Hidden while the app is narrower than `columns` cells.
+    fn hide_below(slf: Bound<'_, Self>, columns: u16) -> PyResult<Bound<'_, Self>> {
+        slf.borrow().map(|n| n.hide_below(columns))?;
+        Ok(slf)
+    }
+
+    /// Shown only while the app is narrower than `columns` cells.
+    fn show_below(slf: Bound<'_, Self>, columns: u16) -> PyResult<Bound<'_, Self>> {
+        slf.borrow().map(|n| n.show_below(columns))?;
+        Ok(slf)
+    }
+
+    /// Hidden while the app is shorter than `rows` cells.
+    fn hide_below_height(slf: Bound<'_, Self>, rows: u16) -> PyResult<Bound<'_, Self>> {
+        slf.borrow().map(|n| n.hide_below_height(rows))?;
+        Ok(slf)
+    }
+
+    /// Shown only while the app is shorter than `rows` cells.
+    fn show_below_height(slf: Bound<'_, Self>, rows: u16) -> PyResult<Bound<'_, Self>> {
+        slf.borrow().map(|n| n.show_below_height(rows))?;
+        Ok(slf)
+    }
+
     /// Size it along its parent's axis (a `Size`, an int or a str).
     fn size<'py>(slf: Bound<'py, Self>, size: &Bound<'py, PyAny>) -> PyResult<Bound<'py, Self>> {
         let size = size_arg(size)?;

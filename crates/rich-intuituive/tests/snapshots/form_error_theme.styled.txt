@@ -1,0 +1,5 @@
+[bold red]Age: forty      [/]
+Name: Ada
+[bold red]╭─ Status ─────╮[/]
+[bold red]│[/]ok            [bold red]│[/]
+[bold red]╰──────────────╯[/]

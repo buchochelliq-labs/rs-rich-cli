@@ -84,10 +84,12 @@ from rs_rich.tui import (
     tree_with,
     virtual_list,
     virtual_table,
+    viewport,
     vsplit,
     watch,
     widget,
 )
+from rs_rich.tui import assert_screen, assert_screen_styled, assert_snapshot
 from rs_rich.tui import list as list_
 
 from conftest import in_thread
@@ -732,6 +734,111 @@ def test_access_states_and_classes():
     driver.key("space")
     turn(driver)
     assert driver.accessibility()[0].state.checked is False
+
+
+def test_hide_below_media_rules_and_viewport_follow_the_size():
+    def build():
+        size = viewport()
+        return column(
+            [
+                row([label("nav").fixed(5).hide_below(20), label("main").name("main")]).fixed(1),
+                text(lambda: f"{size.get()}").fixed(1),
+                label("compact").show_below(20).fixed(1),
+                label("tall").hide_below_height(4).fixed(1),
+            ]
+        )
+
+    app = App(build).stylesheet("@media (max-width: 15) { #main { display: none; } }")
+    driver = app.driver(24, 4)
+    driver.settle()
+    assert rows(driver) == ["nav  main", "(24, 4)", "tall", ""]
+    driver.resize(16, 3)
+    driver.settle()
+    assert rows(driver) == ["main", "(16, 3)", "compact"]
+    driver.resize(12, 3)
+    driver.settle()
+    assert rows(driver) == ["", "(12, 3)", "compact"]
+
+
+def test_error_when_is_styled_and_told_as_invalid():
+    def build():
+        age = signal("forty")
+        return column(
+            [
+                text(lambda: f"Age: {age.get()}")
+                .label("Age")
+                .error_when(lambda: not age.get().isdigit())
+                .focusable()
+                .on_key("f", lambda cx: age.set("40")),
+                label("ok").panel("Status").error_when(lambda: not age.get().isdigit()),
+            ]
+        )
+
+    app = App(build).stylesheet(":error { text-style: underline; }")
+    driver = app.driver(12, 4)
+    driver.settle()
+    node = driver.accessibility()[0]
+    assert node.state.invalid is True
+    assert node.describe() == "Age, invalid"
+    assert ("aria-invalid", "true") in node.aria_attributes()
+    assert driver.styled().splitlines()[0] == "[bold underline red]Age: forty  [/]"
+    driver.press("f")
+    assert driver.accessibility()[0].state.invalid is False
+    assert driver.styled().splitlines()[0] == "Age: 40"
+    assert tui.AccessState(invalid=True).invalid is True
+
+
+def test_driver_helpers_press_type_and_assert_the_focus():
+    def build():
+        name = signal("")
+        return column(
+            [
+                component(Input("Name"), lambda answer, cx: name.set(answer)),
+                text(lambda: f"Hello, {name.get()}"),
+                label("Quit").name("quit").focusable(),
+            ]
+        )
+
+    driver = App(build).driver(30, 4)
+    driver.type_text("Ada")
+    driver.press("enter")
+    assert any("Hello, Ada" in line for line in driver.screen())
+    driver.press("tab")
+    driver.assert_focused("quit")
+    assert driver.focused_name() == "quit"
+    assert isinstance(driver.focused(), int)
+    with pytest.raises(AssertionError, match="expected the focus on `nope`, but it is on `quit`"):
+        driver.assert_focused("nope")
+    with pytest.raises(ValueError, match="unknown key"):
+        driver.press("ctrl-q")
+
+
+def test_screen_snapshots_write_compare_and_diff(tmp_path, monkeypatch):
+    def build():
+        count = signal(0)
+        return text(lambda: f"[b]Count:[/] {count.get()}").on_key(
+            "+", lambda cx: count.update(lambda c: c + 1)
+        )
+
+    driver = App(build).driver(12, 1)
+    driver.press("+ +")
+    path = tmp_path / "snapshots" / "counter.txt"
+    monkeypatch.setenv("UPDATE_SNAPSHOTS", "1")
+    assert_screen_styled(driver, path)
+    assert path.read_text() == "Count: 2\n"
+    assert (tmp_path / "snapshots" / "counter.styled.txt").read_text() == "[bold]Count:[/] 2\n"
+    monkeypatch.delenv("UPDATE_SNAPSHOTS")
+    assert_screen(driver, path)
+    assert_screen(driver.screen(), str(path))
+    assert_screen_styled(driver, path)
+    driver.press("+")
+    with pytest.raises(AssertionError, match="UPDATE_SNAPSHOTS=1") as raised:
+        assert_screen(driver, path)
+    assert "-Count: 2\n+Count: 3\n" in str(raised.value)
+    with pytest.raises(AssertionError, match="missing snapshot"):
+        assert_snapshot(tmp_path / "nope.txt", "x\n")
+    with pytest.raises(TypeError, match="a screen is a Driver"):
+        assert_screen(42, path)
 
 
 def test_a_node_is_used_once():

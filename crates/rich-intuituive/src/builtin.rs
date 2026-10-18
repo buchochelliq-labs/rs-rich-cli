@@ -363,6 +363,9 @@ pub(crate) struct Panel {
     shown_focus: Option<bool>,
     /// What a stylesheet says about it.
     pub look: PanelLook,
+    /// In [error](crate::Node::error_when): its border in the theme's
+    /// `border.error` style.
+    pub invalid: bool,
 }
 
 /// A stylesheet's border, title and padding for a [`Panel`].
@@ -388,6 +391,7 @@ impl Panel {
             child,
             shown_focus: None,
             look: PanelLook::default(),
+            invalid: false,
         }
     }
 
@@ -462,11 +466,14 @@ impl Widget for Panel {
         if cx.repaint() || self.shown_focus != Some(focused) {
             // A stylesheet's border sets the box, and the colour while the
             // focus is elsewhere.
-            let (kind, style) = match &self.look.border {
+            let (kind, mut style) = match &self.look.border {
                 Some((kind, style)) if !focused && !style.is_null() => (*kind, style.clone()),
                 Some((kind, _)) => (*kind, cx.theme().border(focused)),
                 None => (crate::sheet::BoxKind::Round, cx.theme().border(focused)),
             };
+            if self.invalid {
+                style = style.combine(&cx.theme().error_style("border.error"));
+            }
             let title_style = style.combine(&cx.theme().title);
             let title = self.title().to_string();
             canvas.border_box(kind, &title, &style, &title_style);

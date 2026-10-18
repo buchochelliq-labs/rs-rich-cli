@@ -153,6 +153,48 @@ per browser session](#one-process-per-browser-session-web-002).
   **Docs:** [Text areas](docs/guide/intuituive/index.md#text-areas), the
   `editor` example and its recording.
 
+### Responsive layout, an error state and snapshot tests in intuiTUIve (intuituive 0.0.4)
+
+0.0.19 workstream 8 (#712, #713).
+
+- **Responsive nodes:** `.hide_below(columns)` hides a node while the app
+  is narrower than that, and `.show_below(columns)` shows one only then;
+  `.hide_below_height(rows)` and `.show_below_height(rows)` do the same for
+  the height. A hidden node is as if a stylesheet said `display: none`: it
+  takes no room, leaves the Tab order and the accessibility tree, and
+  gives up the focus.
+- **`@media` in stylesheets**, with CSS's names: `@media (max-width: 80) {
+  … }`, and `min-width`, `min-height` and `max-height`, in cells,
+  inclusive, joined with `and`. A resize that crosses a rule's bounds
+  matches every node again and draws everything once; one that crosses
+  none matches nothing again.
+- **`viewport()`**: the columns and rows the app lays out in (the
+  terminal's, less the inspector while it is shown), read like a signal,
+  so a node can reflow on it. Every resize sets it.
+- **An error state:** `.error_when(condition)`. The theme gives the node
+  a look of its own (a panel's border in `border.error`, other text in
+  `error`, each the theme's `bad` style unless named); a stylesheet
+  matches it with `:error`, or CSS's `:invalid`; and assistive technology
+  is told it is invalid (`AccessState::invalid`, `invalid` in linear mode,
+  `aria-invalid` in a browser).
+- **Snapshot tests:** `assert_screen!(driver, "name")` compares the screen
+  with `tests/snapshots/name.txt`, plain text with one line a row, and
+  fails with a unified diff. `UPDATE_SNAPSHOTS=1` writes the files, as
+  every snapshot test in the repository does. `assert_screen_styled!` also
+  keeps the rows as console markup. `intuituive::testing` has the
+  functions behind them.
+- **Driver helpers:** `settle()`, `press("tab enter")`, `type_text("Ada")`,
+  `focused()`, `focused_name()`, and `assert_focused(name)`, which says
+  where the focus is when it is not on `name`.
+- Apps that use none of this behave as before.
+- **Python:** `Node.hide_below`, `show_below`, `hide_below_height`,
+  `show_below_height` and `error_when`; `viewport()`; `AccessState.invalid`;
+  the driver helpers; `assert_screen(screen, path)`,
+  `assert_screen_styled` and `assert_snapshot`.
+- **Docs:** "Responsive layout", `@media` and "Errors" in the intuiTUIve
+  guide; its Testing section shows a component test and an end-to-end
+  test with snapshots, as does the Python page.
+
 ### One process per browser session (web 0.0.2)
 
 0.0.19 workstream 3.

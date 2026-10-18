@@ -574,6 +574,28 @@ fn tui_memo(f: &Bound<'_, PyAny>) -> PyResult<PyMemo> {
     })
 }
 
+/// `viewport()`: the `(width, height)` in cells the app lays out in, as a
+/// `Memo`: a node that reads it draws again when the terminal is resized.
+#[pyfunction]
+fn tui_viewport() -> PyResult<PyMemo> {
+    let app = require("viewport()")?;
+    let size = intuituive::viewport();
+    let memo = intuituive::memo(move || {
+        let (width, height) = size.get();
+        Python::attach(|py| {
+            (width, height)
+                .into_pyobject(py)
+                .map(|tuple| PyValue(tuple.into_any().unbind()))
+                .unwrap_or_else(|_| PyValue(py.None()))
+        })
+    });
+    Ok(PyMemo {
+        memo,
+        app: Some(app),
+        home: Home::here(),
+    })
+}
+
 /// `watch(source, on_change)`: call `on_change(value, cx)` with the value
 /// of `source()` whenever it changes (`==`), and once at the start,
 /// between frames. A watch made while a screen is built stops with it.
@@ -1018,6 +1040,7 @@ pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     }
     m.add_function(wrap_pyfunction!(tui_signal, m)?)?;
     m.add_function(wrap_pyfunction!(tui_memo, m)?)?;
+    m.add_function(wrap_pyfunction!(tui_viewport, m)?)?;
     m.add_function(wrap_pyfunction!(tui_watch, m)?)?;
     m.add_function(wrap_pyfunction!(tui_every, m)?)?;
     m.add_function(wrap_pyfunction!(tui_spawn, m)?)?;
