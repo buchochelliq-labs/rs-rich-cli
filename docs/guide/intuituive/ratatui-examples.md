@@ -143,4 +143,165 @@ The widget, chart and layout galleries come with the next batch of ports.
 
 ## The apps
 
-The smaller apps come with the batch after.
+Seven smaller apps, each after one or two of ratatui's. Every one has `?`
+for its keys and Ctrl+P for a command palette, from the bindings'
+descriptions.
+
+### `colors`: colours
+
+```bash
+cargo run -p rs-rich-intuituive --example colors
+cargo run -p rs-rich-intuituive --example colors -- --frozen
+```
+
+ratatui's `color-explorer`, `colors-rgb` and `modifiers` as five tabs:
+
+- **Named.** The sixteen named colours as a foreground on five
+  backgrounds, and as a background under five foregrounds.
+- **Indexed.** The 256 indexed colours as `color-explorer` lays them out:
+  the sixteen named ones, the 6×6×6 cube in six squares, the greys.
+- **RGB.** Every hue across and light to dark down, an Okhsv swatch in half
+  blocks that turns at 60 frames a second, with the frames a second it
+  draws above it. `--frozen` stops it.
+- **Modifiers.** Each text modifier on five colours.
+- **Palettes.** Tailwind's 22 palettes beside Material's, from
+  rs-rich-ext's `palette` module.
+
+```text
+--8<-- "crates/rich-intuituive/tests/snapshots/colors_named.txt"
+```
+
+←/→ (h/l, Tab) change tabs and 1 to 5 pick one; a click picks one too; q
+quits. The swatch is a widget that draws every cell every frame, and the
+read-out above it draws once a second: on the other tabs the clock moves
+and nothing draws at all, which `tests/colors.rs` checks.
+
+### `canvas`: the canvas
+
+```bash
+cargo run -p rs-rich-intuituive --example canvas
+cargo run -p rs-rich-intuituive --example canvas -- --frozen
+```
+
+ratatui's `canvas` and `mouse-drawing` as four canvases, each
+rs-rich-ext's `Canvas` in a node: the world map with "You are here", which
+h/j/k/l move; a ball bouncing round its box at 60 frames a second; a pad
+to draw on with the mouse (press and drag; Space changes the pen's colour,
+c clears it); and squares growing along a line with the axes numbered.
+Enter changes the marker all four draw with, round all eight: Braille,
+half blocks, quadrants, sextants, octants, blocks, bars and dots.
+
+```text
+--8<-- "crates/rich-intuituive/tests/snapshots/canvas_drawn.txt"
+```
+
+Each canvas reads only its own signals, so a frame of pong draws the pong
+panel alone and a stroke draws the pad alone. ratatui's
+`volatility-surface`, a Surface tab in the plan, is left for later.
+
+### `form`: forms
+
+```bash
+cargo run -p rs-rich-intuituive --example form
+```
+
+ratatui's `input-form` and `user-input` as two tabs (F1 and F2, or a
+click):
+
+- **Form.** A first name, a last name and an age (↑/↓ or digits), with Tab
+  or Enter between them. A field is in error while it is wrong: a name
+  with a digit or a symbol at once, an empty field once the form was
+  tried. Enter on the age sends it: the app ends with the form, and `main`
+  prints it. Esc quits without it.
+- **Chat.** An input with two modes: e starts editing, Enter records the
+  message, Esc stops; the messages are listed above it, and q quits while
+  not editing.
+
+```text
+--8<-- "crates/rich-intuituive/tests/snapshots/form_error.txt"
+```
+
+Each field is an `input` (or a `number_input`) bound to a signal; the
+errors are `error_when`, which the theme draws red, a stylesheet can match
+as `:error`, and a screen reader hears as "invalid"; and the form comes
+back from `App::run_for` as a value. The chat's input is
+`disabled_when` it is not editing, so the keys reach the app.
+
+### `calendar`: a year
+
+```bash
+cargo run -p rs-rich-intuituive --example calendar
+cargo run -p rs-rich-intuituive --example calendar -- --today 2026-10-17
+```
+
+ratatui's `calendar-explorer`: twelve `month` nodes, four across and three
+down, with today, the selected day, a few international days and the
+seasons marked, and the selected day's name below. h/l move a day, j/k a
+week, n/p a month, t goes back to today, s goes round six looks; a click
+selects a day and the wheel turns the month.
+
+```text
+--8<-- "crates/rich-intuituive/tests/snapshots/calendar_app_year_surrounding.txt"
+```
+
+Each month reads only whether the selection is in it, through a `memo`,
+so moving it draws the months it leaves and enters, not the year. ratatui's
+looks also hide the month and weekday headers; a `month` node always draws
+them, so here the looks style them instead.
+
+### `downloads`: an inline app
+
+```bash
+cargo run -p rs-rich-intuituive --example downloads
+cargo run -p rs-rich-intuituive --example downloads -- --downloads 30 --seed 7
+```
+
+ratatui's `inline`: eight rows under the prompt, not the whole screen.
+Four workers on threads of their own download a queue of pretend files
+and report through a `Proxy`; the region shows the total as a line gauge
+and each worker's file as a gauge. Each finished file is printed above the
+region with `print_above`, as "Finished 7 (34 KB) in 1.2s", and when all
+are done the app ends and its last frame stays in the scrollback.
+
+```text
+--8<-- "crates/rich-intuituive/tests/snapshots/downloads_running.txt"
+```
+
+`--clock` runs the workers on the app's timer instead of threads, so a run
+is the same every time: the tests use it on a virtual clock, and run the
+threads once as well.
+
+### `pulls`: loading in the background
+
+```bash
+cargo run -p rs-rich-intuituive --example pulls
+cargo run -p rs-rich-intuituive --example pulls -- --delay 3000
+cargo run -p rs-rich-intuituive --example pulls -- --fail
+```
+
+ratatui's `async-github`: a table of pull requests loaded in the
+background, the panel's right-hand title saying Loading, Loaded or Failed.
+j/k move, a click picks a row, r loads again. The crate has no HTTP
+client, so the pull requests are a made-up fixture behind a delay.
+
+```text
+--8<-- "crates/rich-intuituive/tests/snapshots/pulls_loaded.txt"
+```
+
+The load is a `resource`, read like a signal, so there is no channel or
+state machine to keep; reloading drops a result still on its way. The
+title that changes is a layer over the panel's top edge, since a panel's
+own titles are fixed when it is made.
+
+### `panic`: panics and errors
+
+```bash
+cargo run -p rs-rich-intuituive --example panic
+```
+
+ratatui's `panic`: p panics in a key handler, e ends the app with an error
+(`cx.fail`), q quits. On a panic the terminal is given back (the main
+screen, the cursor, the keyboard) before the message prints, with nothing
+for the app to set up; an error comes back from `run` once the terminal is
+back, and `main` prints it. `tests/panic.rs` checks the first in a real
+terminal (a PTY), and the second headless.

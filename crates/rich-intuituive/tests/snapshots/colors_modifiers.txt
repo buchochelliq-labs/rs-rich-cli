@@ -1,0 +1,32 @@
+╭─ Colours ────────────────────────────────────────────────────────────────────────────────────────╮
+│ Named │ Indexed │ RGB │ Modifiers │ Palettes                                                     │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭─ Modifiers ──────────────────────────────────────────────────────────────────────────────────────╮
+│                default        red         green       yellow        blue                         │
+│Bold             Bold         Bold         Bold         Bold         Bold                         │
+│                                                                                                  │
+│Dim               Dim          Dim          Dim          Dim          Dim                         │
+│                                                                                                  │
+│Italic          Italic       Italic       Italic       Italic       Italic                        │
+│                                                                                                  │
+│Underlined    Underlined   Underlined   Underlined   Underlined   Underlined                      │
+│                                                                                                  │
+│Slow blink    Slow blink   Slow blink   Slow blink   Slow blink   Slow blink                      │
+│                                                                                                  │
+│Rapid blink   Rapid blink  Rapid blink  Rapid blink  Rapid blink  Rapid blink                     │
+│                                                                                                  │
+│Reversed       Reversed     Reversed     Reversed     Reversed     Reversed                       │
+│                                                                                                  │
+│Hidden          Hidden       Hidden       Hidden       Hidden       Hidden                        │
+│                                                                                                  │
+│Crossed out   Crossed out  Crossed out  Crossed out  Crossed out  Crossed out                     │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯

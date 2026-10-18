@@ -102,6 +102,13 @@ More examples (`cargo run -p rs-rich-intuituive --example <name>`):
 | `in_ratatui` | an app inside a ratatui program, which owns the loop |
 | `demo` | ratatui's classic demo rebuilt: gauges, a sparkline, lists, bars, a sine chart, a server table on a world map, colours; a tick redraws only what moves |
 | `demo2` | ratatui's showcase rebuilt: a recipe, an inbox, a traceroute on a map, the weather, and destroy, an effect; its colours in a stylesheet |
+| `colors` | ratatui's colour explorers rebuilt: named, indexed and RGB colours (a swatch at 60 fps), the modifiers, Tailwind's and Material's palettes |
+| `canvas` | ratatui's canvas rebuilt: a world map, pong at 60 fps, a pad to draw on with the mouse, boxes; every marker |
+| `form` | ratatui's input form and chat rebuilt: fields in error while wrong, a form handed back from `run_for`, an input with modes |
+| `calendar` | ratatui's calendar explorer rebuilt: a year of `month` nodes, six looks, today, the seasons and a selected day |
+| `downloads` | ratatui's inline demo rebuilt: workers on threads report through a `Proxy`, finished lines printed above the region |
+| `pulls` | ratatui's async GitHub table rebuilt: a `resource` loaded in the background, Loading, Loaded or Failed in the title |
+| `panic` | ratatui's panic demo rebuilt: the terminal given back before a panic's message, an error returned from `run` |
 
 ## Against ratatui
 

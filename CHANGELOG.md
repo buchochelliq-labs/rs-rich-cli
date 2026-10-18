@@ -857,6 +857,25 @@ test.
 - **Docs:** [ratatui's examples, rebuilt](docs/guide/intuituive/ratatui-examples.md),
   a new guide page; ratatui in the porting guide's credits;
   `docs/tapes/demo.tape` and `docs/tapes/demo2.tape` (not yet recorded).
+- **The apps (batch D3).** Seven of ratatui's smaller apps rebuilt, each
+  with its tests and snapshots, and a section of
+  [ratatui's examples, rebuilt](docs/guide/intuituive/ratatui-examples.md#the-apps):
+    - `colors`: the named, indexed and RGB colours (an Okhsv swatch at 60
+      fps, with its frames a second), the modifiers, and Tailwind's and
+      Material's palettes;
+    - `canvas`: a world map you move about on, pong at 60 fps, a pad to
+      draw on with the mouse and growing boxes, in every marker;
+    - `form`: a form whose fields are in error while they are wrong and
+      which comes back from `run_for`, and a chat input with modes;
+    - `calendar`: a year of `month` nodes in six looks, a move drawing
+      only the months it touches;
+    - `downloads`: an inline region whose workers report from threads
+      through a `Proxy` and print each finished file above it;
+    - `pulls`: a table loaded by a `resource`, its state in the panel's
+      title;
+    - `panic`: the terminal given back before a panic's message (checked
+      in a PTY), and an error returned from `run`.
+- **Docs:** `docs/tapes/apps.tape`, four of the apps (not yet recorded).
 
 ### Charts that read aloud, distributions and small multiples; wide tables by column (ext 0.0.16)
 

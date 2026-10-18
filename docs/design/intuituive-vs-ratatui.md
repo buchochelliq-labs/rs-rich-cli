@@ -1483,6 +1483,12 @@ build differs from the sketch below:
 
 #### D3.1 `colors`: colours
 
+**Status: built** (0.0.19, `examples/colors.rs`). Where the build differs
+from the sketch below: the Indexed, Modifiers and Palettes snapshots are
+plain text, with the styles checked where they matter (the modifiers);
+the read-out counts the frames the swatch drew in the last second, so on
+the virtual clock it reads about 60; 1 to 5 pick a tab.
+
 - **Mirrors** ratatui's `color-explorer`, `colors-rgb` and `modifiers`.
 - **Named:** the 16 colours as foreground on five backgrounds, and as
   background under five foregrounds.
@@ -1497,6 +1503,12 @@ build differs from the sketch below:
   `colors_palettes`, and `colors_rgb` stopped.
 
 #### D3.2 `canvas`: the canvas
+
+**Status: built** (0.0.19, `examples/canvas.rs`). Where the build differs
+from the sketch below: the optional Surface tab is left for later; c
+clears the pad; the snapshots are `canvas_marker_<name>` for the eight
+markers' names (`braille`, `half_blocks`, `quadrants`, `sextants`,
+`octants`, `blocks`, `bars`, `dots`), at 80×24.
 
 - **Mirrors** ratatui's `canvas` and `mouse-drawing`.
 - **Panels:**
@@ -1514,6 +1526,12 @@ build differs from the sketch below:
 
 #### D3.3 `form`: forms
 
+**Status: built** (0.0.19, `examples/form.rs`). Where the build differs
+from the sketch below: F1 and F2 change tabs, since ←/→ belong to the
+inputs; an empty field is in error only once the form was tried, so the
+empty form is not red; the chat's input is `disabled_when` it is not
+editing, which leaves the keys to the app.
+
 - **Mirrors** ratatui's `input-form` and `user-input`.
 - **Form:**
     - first name, last name and age (↑/↓ or digits), with Tab between them;
@@ -1529,6 +1547,18 @@ build differs from the sketch below:
 
 #### D3.4 `calendar`: a year
 
+**Status: built** (0.0.19, `examples/calendar.rs`). Where the build
+differs from the sketch below:
+
+- A `month` node always draws its month and weekday headers, so the six
+  looks style them rather than hide them as ratatui's do (a gap after
+  C7).
+- The snapshots are `calendar_app_year`, `calendar_app_year_surrounding`
+  and `calendar_app_year_headers`, at 88×26: `calendar_year` was taken by
+  `tests/calendar_options.rs`.
+- The days marked are international days of our own choice; t goes back
+  to today, and a click selects a day.
+
 - **Mirrors** ratatui's `calendar-explorer`.
 - **Shows:** twelve `month` nodes in a four-by-three grid; holidays and
   seasons styled; today; the selected day.
@@ -1539,6 +1569,12 @@ build differs from the sketch below:
   `calendar_year_surrounding`, `calendar_year_headers`.
 
 #### D3.5 `downloads`: an inline app
+
+**Status: built** (0.0.19, `examples/downloads.rs`). Where the build
+differs from the sketch below: `--clock` runs the workers on the app's
+timer rather than threads, and the tests use it, so a run is the same
+every time; one test runs the threads too. The app ends a tick after the
+last file, so its last frame shows them all done.
 
 - **Mirrors** ratatui's `inline`.
 - **Shows:** an inline region of eight rows: a total `LineGauge`, and a
@@ -1556,6 +1592,12 @@ build differs from the sketch below:
 
 #### D3.6 `pulls`: loading in the background
 
+**Status: built** (0.0.19, `examples/pulls.rs`). Where the build differs
+from the sketch below: a panel's titles are fixed when it is made, so the
+right-hand title that changes is a text layered over the panel's top
+edge; `--from` is left out; `pulls_loading` holds the load at a gate
+rather than waiting for it.
+
 - **Mirrors** ratatui's `async-github`.
 - **Shows:** a table of pull requests loaded in the background (`resource`),
   the panel's right-hand title saying Loading, Loaded or Failed. j/k move,
@@ -1568,6 +1610,9 @@ build differs from the sketch below:
   `pulls_loading`, `pulls_loaded`, `pulls_failed`.
 
 #### D3.7 `panic`: panics and errors
+
+**Status: built** (0.0.19, `examples/panic.rs`), as sketched, with a
+snapshot of its screen, `panic_screen`.
 
 - **Mirrors** ratatui's `panic`.
 - **Keys:** `p` panics in a handler, and the terminal is given back before
