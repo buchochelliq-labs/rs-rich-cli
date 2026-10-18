@@ -466,9 +466,9 @@ pub(crate) fn keys(names: &str) -> PyResult<Vec<Key>> {
 }
 
 /// `Size`: how a node is sized along its parent's axis. `Size.Fixed(3)`,
-/// `Size.Percent(40)`, `Size.Flex(1)` and `Size.Auto`, as in Rust;
-/// anywhere a size is taken, an `int` is `Fixed` and a `str` is a
-/// stylesheet's size (`"3"`, `"40%"`, `"2fr"`, `"auto"`).
+/// `Size.Percent(40)`, `Size.Ratio(1, 3)`, `Size.Flex(1)` and `Size.Auto`,
+/// as in Rust; anywhere a size is taken, an `int` is `Fixed` and a `str`
+/// is a stylesheet's size (`"3"`, `"40%"`, `"1/3"`, `"2fr"`, `"auto"`).
 #[pyclass(name = "Size", module = "rs_rich.tui", frozen, skip_from_py_object)]
 #[derive(Clone, Copy)]
 pub(crate) struct PySize(pub(crate) Size);
@@ -489,6 +489,12 @@ impl PySize {
     #[staticmethod]
     fn Flex(weight: u16) -> PySize {
         PySize(Size::Flex(weight))
+    }
+
+    /// `a / b` of the parent; three `Ratio(1, 3)` fill it exactly.
+    #[staticmethod]
+    fn Ratio(a: u32, b: u32) -> PySize {
+        PySize(Size::Ratio(a, b))
     }
 
     #[classattr]
@@ -514,6 +520,8 @@ impl PySize {
             Size::Percent(n) => 1 << 20 | u64::from(n),
             Size::Flex(n) => 2 << 20 | u64::from(n),
             Size::Auto => 3 << 20,
+            Size::Ratio(a, b) => 4 << 60 | u64::from(a) << 30 | u64::from(b),
+            _ => 5 << 60,
         }
     }
 
@@ -528,21 +536,27 @@ pub(crate) fn size_repr(size: Size) -> String {
         Size::Percent(n) => format!("Size.Percent({n})"),
         Size::Flex(n) => format!("Size.Flex({n})"),
         Size::Auto => "Size.Auto".to_string(),
+        Size::Ratio(a, b) => format!("Size.Ratio({a}, {b})"),
+        other => format!("{other:?}"),
     }
 }
 
 fn parse_size(text: &str) -> PyResult<Size> {
     let text = text.trim();
-    let number = |digits: &str| {
-        digits.trim().parse::<u16>().map_err(|_| {
-            PyValueError::new_err(format!(
-                "invalid size {text:?}: expected cells (\"3\"), a percentage (\"40%\"), a share \
-                 (\"2fr\") or \"auto\""
-            ))
-        })
+    let bad = || {
+        PyValueError::new_err(format!(
+            "invalid size {text:?}: expected cells (\"3\"), a percentage (\"40%\"), a ratio \
+             (\"1/3\"), a share (\"2fr\") or \"auto\""
+        ))
     };
+    let number = |digits: &str| digits.trim().parse::<u16>().map_err(|_| bad());
     if text.eq_ignore_ascii_case("auto") {
         Ok(Size::Auto)
+    } else if let Some((a, b)) = text.split_once('/') {
+        match (a.trim().parse::<u32>(), b.trim().parse::<u32>()) {
+            (Ok(a), Ok(b)) => Ok(Size::Ratio(a, b)),
+            _ => Err(bad()),
+        }
     } else if let Some(n) = text.strip_suffix('%') {
         Ok(Size::Percent(number(n)?))
     } else if let Some(n) = text.strip_suffix("fr") {
@@ -735,6 +749,340 @@ py_enum! {
     }
 }
 
+py_enum! {
+    /// The kind of box a panel draws: `Border.Rounded` (the default),
+    /// `Plain`, `Thick`, `Double`, `Ascii`, the dashed kinds,
+    /// `QuadrantInside`, `QuadrantOutside`, or `None_` (`"none"`: no lines,
+    /// the titles keep their rows). Wherever one is taken, a stylesheet's
+    /// name is too (`"round"`, `"heavy"`, `"light-triple-dashed"`), and
+    /// eight glyphs make a border of your own.
+    Border = "Border" for intuituive::Border {
+        Rounded = "rounded" => intuituive::Border::Rounded,
+        Plain = "plain" => intuituive::Border::Plain,
+        Thick = "thick" => intuituive::Border::Thick,
+        Double = "double" => intuituive::Border::Double,
+        Ascii = "ascii" => intuituive::Border::Ascii,
+        LightDoubleDashed = "light_double_dashed" => intuituive::Border::LightDoubleDashed,
+        HeavyDoubleDashed = "heavy_double_dashed" => intuituive::Border::HeavyDoubleDashed,
+        LightTripleDashed = "light_triple_dashed" => intuituive::Border::LightTripleDashed,
+        HeavyTripleDashed = "heavy_triple_dashed" => intuituive::Border::HeavyTripleDashed,
+        LightQuadrupleDashed = "light_quadruple_dashed" => intuituive::Border::LightQuadrupleDashed,
+        HeavyQuadrupleDashed = "heavy_quadruple_dashed" => intuituive::Border::HeavyQuadrupleDashed,
+        QuadrantInside = "quadrant_inside" => intuituive::Border::QuadrantInside,
+        QuadrantOutside = "quadrant_outside" => intuituive::Border::QuadrantOutside,
+        None_ = "none" => intuituive::Border::None,
+    }
+    border_kind_arg
+}
+
+/// A border argument: a `Border`, its name (or a stylesheet's), or eight
+/// glyphs, `(top_left, top, top_right, left, right, bottom_left, bottom,
+/// bottom_right)`, for a border of your own.
+pub(crate) fn border_arg(value: &Bound<'_, PyAny>) -> PyResult<intuituive::Border> {
+    if let Ok(text) = value.cast::<PyString>() {
+        let text = text.to_cow()?.trim().to_ascii_lowercase().replace(['-', ' '], "_");
+        let name = match text.as_str() {
+            "round" => "rounded",
+            "square" | "solid" => "plain",
+            "heavy" => "thick",
+            "dashed" => "light_double_dashed",
+            "dotted" => "light_quadruple_dashed",
+            "inner" => "quadrant_inside",
+            "outer" => "quadrant_outside",
+            other => other,
+        };
+        return border_kind_arg(PyString::new(value.py(), name).as_any());
+    }
+    if value.extract::<Border>().is_ok() {
+        return border_kind_arg(value);
+    }
+    let glyphs: Vec<String> = value.extract().map_err(|_| {
+        PyTypeError::new_err("a border is a Border, its name, or a sequence of eight glyphs")
+    })?;
+    let glyphs: [String; 8] = glyphs.try_into().map_err(|glyphs: Vec<String>| {
+        PyValueError::new_err(format!(
+            "a border of your own takes eight glyphs (top_left, top, top_right, left, right, \
+             bottom_left, bottom, bottom_right), got {}",
+            glyphs.len()
+        ))
+    })?;
+    let [top_left, top, top_right, left, right, bottom_left, bottom, bottom_right] =
+        glyphs.map(|glyph| widget::intern(&glyph));
+    Ok(intuituive::Border::Custom(intuituive::BorderSet {
+        top_left,
+        top,
+        top_right,
+        left,
+        right,
+        bottom_left,
+        bottom,
+        bottom_right,
+    }))
+}
+
+py_enum! {
+    /// A panel's shadow: `Shadow.LightShade`, `MediumShade`, `DarkShade`,
+    /// `Block` or `Dim`; wherever one is taken, a single character is a
+    /// shadow of that glyph (Rust's `Shadow::Symbol`).
+    Shadow = "Shadow" for intuituive::Shadow {
+        LightShade = "light_shade" => intuituive::Shadow::LightShade,
+        MediumShade = "medium_shade" => intuituive::Shadow::MediumShade,
+        DarkShade = "dark_shade" => intuituive::Shadow::DarkShade,
+        Block = "block" => intuituive::Shadow::Block,
+        Dim = "dim" => intuituive::Shadow::Dim,
+    }
+    shadow_kind_arg
+}
+
+/// A shadow argument: a `Shadow`, its name, or one character.
+pub(crate) fn shadow_arg(value: &Bound<'_, PyAny>) -> PyResult<intuituive::Shadow> {
+    if let Ok(text) = value.cast::<PyString>() {
+        let text = text.to_cow()?;
+        let mut chars = text.chars();
+        if let (Some(c), None) = (chars.next(), chars.next()) {
+            return Ok(intuituive::Shadow::Symbol(c));
+        }
+    }
+    shadow_kind_arg(value)
+}
+
+py_enum! {
+    /// The edge of a box a title sits on.
+    Edge = "Edge" for intuituive::Edge {
+        Top = "top" => intuituive::Edge::Top,
+        Bottom = "bottom" => intuituive::Edge::Bottom,
+    }
+    edge_arg
+}
+
+py_enum! {
+    /// How a text's lines sit across its width.
+    TextAlign = "TextAlign" for intuituive::TextAlign {
+        Left = "left" => intuituive::TextAlign::Left,
+        Center = "center" => intuituive::TextAlign::Center,
+        Right = "right" => intuituive::TextAlign::Right,
+        Justify = "justify" => intuituive::TextAlign::Justify,
+    }
+    text_align_arg
+}
+
+py_enum! {
+    /// What a text does with what does not fit a line: `Fold` (break long
+    /// words, the default), `Crop`, `Ellipsis` (cut, with `…`) or
+    /// `Ignore`.
+    Overflow = "Overflow" for intuituive::Overflow {
+        Fold = "fold" => intuituive::Overflow::Fold,
+        Crop = "crop" => intuituive::Overflow::Crop,
+        Ellipsis = "ellipsis" => intuituive::Overflow::Ellipsis,
+        Ignore = "ignore" => intuituive::Overflow::Ignore,
+    }
+    overflow_arg
+}
+
+/// `Sides`: the sides of a box a panel draws. `Sides.ALL` (the default),
+/// `NONE`, `TOP`, `RIGHT`, `BOTTOM` and `LEFT`, joined with `|`; wherever
+/// one is taken, names separated by spaces are too (`"top left"`).
+#[pyclass(name = "Sides", module = "rs_rich.tui", frozen, skip_from_py_object)]
+#[derive(Clone, Copy)]
+pub(crate) struct PySides(pub(crate) intuituive::Sides);
+
+const SIDE_NAMES: [(intuituive::Sides, &str); 4] = [
+    (intuituive::Sides::TOP, "top"),
+    (intuituive::Sides::RIGHT, "right"),
+    (intuituive::Sides::BOTTOM, "bottom"),
+    (intuituive::Sides::LEFT, "left"),
+];
+
+#[pymethods]
+#[allow(non_snake_case)]
+impl PySides {
+    #[classattr]
+    fn NONE() -> PySides {
+        PySides(intuituive::Sides::NONE)
+    }
+
+    #[classattr]
+    fn TOP() -> PySides {
+        PySides(intuituive::Sides::TOP)
+    }
+
+    #[classattr]
+    fn RIGHT() -> PySides {
+        PySides(intuituive::Sides::RIGHT)
+    }
+
+    #[classattr]
+    fn BOTTOM() -> PySides {
+        PySides(intuituive::Sides::BOTTOM)
+    }
+
+    #[classattr]
+    fn LEFT() -> PySides {
+        PySides(intuituive::Sides::LEFT)
+    }
+
+    #[classattr]
+    fn ALL() -> PySides {
+        PySides(intuituive::Sides::ALL)
+    }
+
+    /// Whether every side of `other` is in these.
+    fn contains(&self, other: &Bound<'_, PyAny>) -> PyResult<bool> {
+        Ok(self.0.contains(sides_arg(other)?))
+    }
+
+    fn __or__(&self, other: &Bound<'_, PyAny>) -> PyResult<PySides> {
+        Ok(PySides(self.0 | sides_arg(other)?))
+    }
+
+    fn __ror__(&self, other: &Bound<'_, PyAny>) -> PyResult<PySides> {
+        self.__or__(other)
+    }
+
+    fn __eq__(&self, other: &Bound<'_, PyAny>) -> bool {
+        sides_arg(other).is_ok_and(|other| other == self.0)
+    }
+
+    fn __hash__(&self) -> u64 {
+        SIDE_NAMES
+            .iter()
+            .enumerate()
+            .filter(|(_, (side, _))| self.0.contains(*side))
+            .map(|(i, _)| 1u64 << i)
+            .sum()
+    }
+
+    fn __repr__(&self) -> String {
+        let names: Vec<String> = SIDE_NAMES
+            .iter()
+            .filter(|(side, _)| self.0.contains(*side))
+            .map(|(_, name)| format!("Sides.{}", name.to_ascii_uppercase()))
+            .collect();
+        match names.len() {
+            0 => "Sides.NONE".to_string(),
+            4 => "Sides.ALL".to_string(),
+            _ => names.join(" | "),
+        }
+    }
+}
+
+/// A sides argument: `Sides`, or names separated by spaces (`"top
+/// bottom"`, `"all"`, `"none"`).
+pub(crate) fn sides_arg(value: &Bound<'_, PyAny>) -> PyResult<intuituive::Sides> {
+    if let Ok(sides) = value.cast::<PySides>() {
+        return Ok(sides.get().0);
+    }
+    let text: String = value
+        .extract()
+        .map_err(|_| PyTypeError::new_err("sides are Sides, or names such as \"top left\""))?;
+    let mut sides = intuituive::Sides::NONE;
+    for word in text.split_whitespace() {
+        sides |= match word.to_ascii_lowercase().as_str() {
+            "all" => intuituive::Sides::ALL,
+            "none" => intuituive::Sides::NONE,
+            name => SIDE_NAMES
+                .iter()
+                .find(|(_, n)| *n == name)
+                .map(|(side, _)| *side)
+                .ok_or_else(|| {
+                    PyValueError::new_err(format!(
+                        "invalid side {word:?}; expected top, right, bottom, left, all or none"
+                    ))
+                })?,
+        };
+    }
+    Ok(sides)
+}
+
+/// `Track(size, min=0, max=65535, content=0)`: a size and its clamps, for
+/// `layout_split`: as a child of a column or row has them; `content` is
+/// what an `Auto` track's content needs.
+#[pyclass(name = "Track", module = "rs_rich.tui", frozen, skip_from_py_object)]
+#[derive(Clone, Copy)]
+pub(crate) struct PyTrack(pub(crate) intuituive::layout::Track);
+
+#[pymethods]
+impl PyTrack {
+    #[new]
+    #[pyo3(signature = (size, min=0, max=u16::MAX, content=0))]
+    fn new(size: &Bound<'_, PyAny>, min: u16, max: u16, content: u16) -> PyResult<PyTrack> {
+        let track = intuituive::layout::Track::new(size_arg(size)?)
+            .min(min)
+            .max(max)
+            .content(content);
+        Ok(PyTrack(track))
+    }
+
+    fn __repr__(&self) -> String {
+        format!("{:?}", self.0)
+    }
+}
+
+/// Tracks from an iterable of `Track`s or sizes.
+fn tracks(value: &Bound<'_, PyAny>) -> PyResult<Vec<intuituive::layout::Track>> {
+    value
+        .try_iter()?
+        .map(|item| {
+            let item = item?;
+            match item.cast::<PyTrack>() {
+                Ok(track) => Ok(track.get().0),
+                Err(_) => Ok(intuituive::layout::Track::new(size_arg(&item)?)),
+            }
+        })
+        .collect()
+}
+
+/// A column's or row's flow for `layout_split`: its gap and justification.
+fn flow(gap: u16, justify: &str) -> PyResult<intuituive::StackLayout> {
+    Ok(intuituive::StackLayout {
+        gap,
+        justify: node::justify_arg(justify)?,
+        ..intuituive::StackLayout::default()
+    })
+}
+
+/// `layout_split(rect, axis, tracks, gap=0, justify="flex-start")`: lay
+/// `tracks` (`Track`s or sizes) out along `axis` in `rect`, as a column or
+/// row lays out its children: Rust's `intuituive::layout::split`.
+#[pyfunction]
+#[pyo3(signature = (rect, axis, tracks, gap=0, justify="flex-start"))]
+fn tui_layout_split(
+    rect: &Bound<'_, PyAny>,
+    axis: &Bound<'_, PyAny>,
+    tracks: &Bound<'_, PyAny>,
+    gap: u16,
+    justify: &str,
+) -> PyResult<Vec<PyRect>> {
+    let areas = intuituive::layout::split(
+        rect_arg(rect)?,
+        axis_arg(axis)?,
+        &self::tracks(tracks)?,
+        flow(gap, justify)?,
+    );
+    Ok(areas.into_iter().map(PyRect).collect())
+}
+
+/// `layout_split_with_spacers(...)`: `layout_split`, and the rooms around
+/// and between the tracks (one more than the tracks).
+#[pyfunction]
+#[pyo3(signature = (rect, axis, tracks, gap=0, justify="flex-start"))]
+fn tui_layout_split_with_spacers(
+    rect: &Bound<'_, PyAny>,
+    axis: &Bound<'_, PyAny>,
+    tracks: &Bound<'_, PyAny>,
+    gap: u16,
+    justify: &str,
+) -> PyResult<(Vec<PyRect>, Vec<PyRect>)> {
+    let (areas, spacers) = intuituive::layout::split_with_spacers(
+        rect_arg(rect)?,
+        axis_arg(axis)?,
+        &self::tracks(tracks)?,
+        flow(gap, justify)?,
+    );
+    let rects = |rects: Vec<intuituive::screen::Rect>| rects.into_iter().map(PyRect).collect();
+    Ok((rects(areas), rects(spacers)))
+}
+
 /// `Rect(x, y, width, height)`: a rectangle of cells; anywhere one is
 /// taken, a 4-tuple is one too.
 #[pyclass(name = "Rect", module = "rs_rich.tui", frozen, skip_from_py_object)]
@@ -766,6 +1114,72 @@ impl PyRect {
     #[getter]
     fn height(&self) -> u16 {
         self.0.height
+    }
+
+    /// The column after its right edge, and the row after its bottom one.
+    #[getter]
+    fn right(&self) -> u16 {
+        self.0.right()
+    }
+
+    #[getter]
+    fn bottom(&self) -> u16 {
+        self.0.bottom()
+    }
+
+    fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    /// Whether the cell at `column`, `row` is in it.
+    fn contains(&self, column: u16, row: u16) -> bool {
+        self.0.contains(column, row)
+    }
+
+    /// The part of it inside `other`.
+    fn intersection(&self, other: &Bound<'_, PyAny>) -> PyResult<PyRect> {
+        Ok(PyRect(self.0.intersection(rect_arg(other)?)))
+    }
+
+    /// Whether the two share a cell.
+    fn intersects(&self, other: &Bound<'_, PyAny>) -> PyResult<bool> {
+        Ok(self.0.intersects(rect_arg(other)?))
+    }
+
+    /// The smallest rectangle holding both (an empty one adds nothing).
+    fn union(&self, other: &Bound<'_, PyAny>) -> PyResult<PyRect> {
+        Ok(PyRect(self.0.union(rect_arg(other)?)))
+    }
+
+    /// It without a border of `n` cells on each side.
+    fn inner(&self, n: u16) -> PyRect {
+        PyRect(self.0.inner(n))
+    }
+
+    /// It without `top`, `right`, `bottom` and `left` cells (CSS's order).
+    fn inset(&self, top: u16, right: u16, bottom: u16, left: u16) -> PyRect {
+        PyRect(self.0.inset(top, right, bottom, left))
+    }
+
+    /// A rectangle `width` x `height` in its middle, cut to it.
+    fn centered(&self, width: u16, height: u16) -> PyRect {
+        PyRect(self.0.centered(width, height))
+    }
+
+    /// It moved `dx` columns and `dy` rows (left and up when negative),
+    /// kept on the grid.
+    fn offset(&self, dx: i32, dy: i32) -> PyRect {
+        PyRect(self.0.offset(dx, dy))
+    }
+
+    /// Each of its rows, as a rectangle one cell tall.
+    fn rows(&self) -> Vec<PyRect> {
+        self.0.rows().map(PyRect).collect()
+    }
+
+    /// Each of its columns, as a rectangle one cell wide.
+    fn columns(&self) -> Vec<PyRect> {
+        self.0.columns().map(PyRect).collect()
     }
 
     fn __iter__<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
@@ -812,9 +1226,18 @@ pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
         ("TuiAxis", py.get_type::<Axis>()),
         ("TuiOrder", py.get_type::<Order>()),
         ("TuiRole", py.get_type::<Role>()),
+        ("TuiBorder", py.get_type::<Border>()),
+        ("TuiShadow", py.get_type::<Shadow>()),
+        ("TuiEdge", py.get_type::<Edge>()),
+        ("TuiTextAlign", py.get_type::<TextAlign>()),
+        ("TuiOverflow", py.get_type::<Overflow>()),
+        ("TuiSides", py.get_type::<PySides>()),
+        ("TuiTrack", py.get_type::<PyTrack>()),
     ] {
         m.add(name, class)?;
     }
+    m.add_function(wrap_pyfunction!(tui_layout_split, m)?)?;
+    m.add_function(wrap_pyfunction!(tui_layout_split_with_spacers, m)?)?;
     reactive::register(m)?;
     node::register(m)?;
     widgets::register(m)?;

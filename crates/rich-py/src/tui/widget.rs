@@ -40,12 +40,13 @@ use crate::renderable;
 // The base class
 
 /// `Widget`: subclass it to write a widget. Override `draw(cx, canvas)`
-/// (required) and any of `event(cx, event)` (return `True` when it used
-/// the event), `measure(cx, axis, width, height)`, `layout(cx, rect)`,
-/// `scroll(cx)`, `caret()`, `role()`, `cursor()`, `access_state()`,
-/// `describe()`; and, read once when `widget(w)` makes its node, `name()`,
-/// `children()` (the nodes it holds), `focusable()`, `retained()`,
-/// `viewport()` and `previews_keys()`.
+/// (required) and any of `draw_over(cx, canvas)` (after the children),
+/// `event(cx, event)` (return `True` when it used the event),
+/// `measure(cx, axis, width, height)`, `layout(cx, rect)`, `scroll(cx)`,
+/// `caret()`, `role()`, `cursor()`, `access_state()`, `describe()`; and,
+/// read once when `widget(w)` makes its node, `name()`, `children()` (the
+/// nodes it holds), `focusable()`, `retained()`, `viewport()`,
+/// `overlapping()` and `previews_keys()`.
 #[pyclass(name = "Widget", module = "rs_rich.tui", subclass, unsendable)]
 pub(crate) struct PyWidgetBase;
 
@@ -107,11 +108,22 @@ impl PyWidgetBase {
         )))
     }
 
+    /// Draw over what its children drew, in every frame where it or one of
+    /// them drew. Default: nothing.
+    fn draw_over(&self, cx: &Bound<'_, PyAny>, canvas: &Bound<'_, PyAny>) {
+        let _ = (cx, canvas);
+    }
+
     fn retained(&self) -> bool {
         false
     }
 
     fn viewport(&self) -> bool {
+        false
+    }
+
+    /// Whether its children may overlap, later ones on top.
+    fn overlapping(&self) -> bool {
         false
     }
 
@@ -378,6 +390,112 @@ impl PyCanvas {
         let title_style = opt_style(title_style)?.unwrap_or_default();
         self.with(|c| c.border(title, &style, &title_style))
     }
+
+    /// What is on the screen at `x`, `y` now (what its children drew, in
+    /// `draw_over`), or `None` off the canvas.
+    fn cell(&self, x: u16, y: u16) -> PyResult<Option<PyCellView>> {
+        self.with(|c| {
+            c.cell(x, y).map(|cell| PyCellView {
+                symbol: cell.symbol().to_string(),
+                style: cell.style().cloned(),
+                width: cell.width(),
+            })
+        })
+    }
+
+    /// Set the cell at `x`, `y` to `symbol` (one grapheme) in `style`.
+    #[pyo3(signature = (x, y, symbol, style=None))]
+    fn set_cell(
+        &self,
+        x: u16,
+        y: u16,
+        symbol: &str,
+        style: Option<&Bound<'_, PyAny>>,
+    ) -> PyResult<()> {
+        let style = opt_style(style)?;
+        self.with(|c| c.set_cell(x, y, symbol, style.as_ref()))
+    }
+
+    /// Fill a part with `symbol` (one grapheme) in `style`.
+    #[pyo3(signature = (x, y, width, height, symbol, style=None))]
+    fn fill_with(
+        &self,
+        x: u16,
+        y: u16,
+        width: u16,
+        height: u16,
+        symbol: &str,
+        style: Option<&Bound<'_, PyAny>>,
+    ) -> PyResult<()> {
+        let style = opt_style(style)?;
+        self.with(|c| c.fill_with(x, y, width, height, symbol, style.as_ref()))
+    }
+}
+
+/// `CellView`: one cell of the screen, as `Canvas.cell` reads it.
+#[pyclass(name = "CellView", module = "rs_rich.tui", frozen)]
+pub(crate) struct PyCellView {
+    symbol: String,
+    style: Option<CoreStyle>,
+    width: u16,
+}
+
+#[pymethods]
+impl PyCellView {
+    /// Its grapheme: empty for the second column of a wide one.
+    fn symbol(&self) -> &str {
+        &self.symbol
+    }
+
+    /// Its style, if it has one.
+    fn style(&self) -> Option<crate::style::Style> {
+        self.style.clone().map(crate::style::Style::from_core)
+    }
+
+    /// The columns its grapheme takes: 2 for a wide one, 0 for its second
+    /// column.
+    fn width(&self) -> u16 {
+        self.width
+    }
+
+    /// Whether it is the second column of a wide grapheme.
+    fn is_continuation(&self) -> bool {
+        self.width == 0
+    }
+
+    fn __repr__(&self) -> String {
+        let style = self
+            .style
+            .as_ref()
+            .map(CoreStyle::definition)
+            .unwrap_or_default();
+        format!("CellView({:?}, {style:?})", self.symbol)
+    }
+}
+
+/// Call `callback(canvas, cx)`, the two lent for the call: an effect's
+/// function.
+pub(crate) fn call_with_canvas(callback: &super::Callback, cx: &mut DrawCx, canvas: &mut Canvas) {
+    let loan = Loan::new();
+    let cx: NonNull<DrawCx<'static>> = NonNull::from(cx).cast();
+    let canvas: NonNull<Canvas<'static>> = NonNull::from(canvas).cast();
+    callback.call(
+        |py| {
+            // SAFETY: `loan` is dropped below, before `cx` and `canvas` go
+            // back to the caller.
+            let (cx, canvas) = unsafe {
+                (
+                    Rc::new(Lent::new(cx, loan.token())),
+                    Lent::new(canvas, loan.token()),
+                )
+            };
+            let draw_cx = Bound::new(py, PyDrawCx { cx: cx.clone() })?;
+            let canvas = Bound::new(py, PyCanvas { canvas, cx })?;
+            PyTuple::new(py, [canvas.into_any(), draw_cx.into_any()])
+        },
+        |_| Ok(()),
+    );
+    drop(loan);
 }
 
 /// `EventCx`: what a widget can do while it handles an event: `app()` is
@@ -602,9 +720,10 @@ fn widget_event(py: Python<'_>, event: &WidgetEvent) -> PyResult<PyWidgetEvent> 
 // ---------------------------------------------------------------------------
 // The bridge
 
-/// Names given to widgets, kept for the program's life (the trait returns
-/// `&'static str`); each distinct name once.
-fn intern(name: &str) -> &'static str {
+/// Names given to widgets (and a border's own glyphs), kept for the
+/// program's life (the trait returns `&'static str`); each distinct name
+/// once.
+pub(crate) fn intern(name: &str) -> &'static str {
     static NAMES: Mutex<Option<HashSet<&'static str>>> = Mutex::new(None);
     let mut names = NAMES.lock().unwrap_or_else(|p| p.into_inner());
     let names = names.get_or_insert_with(HashSet::new);
@@ -620,6 +739,7 @@ fn intern(name: &str) -> &'static str {
 #[derive(Default)]
 struct Overrides {
     describe: bool,
+    draw_over: bool,
     measure: bool,
     layout: bool,
     scroll: bool,
@@ -639,6 +759,7 @@ struct PyWidget {
     focusable: bool,
     retained: bool,
     viewport: bool,
+    overlapping: bool,
     previews_keys: bool,
     app: Option<Handle>,
 }
@@ -778,12 +899,43 @@ impl CoreWidget for PyWidget {
         drop(loan);
     }
 
+    fn draw_over(&mut self, cx: &mut DrawCx, canvas: &mut Canvas) {
+        if !self.overrides.draw_over {
+            return;
+        }
+        let loan = Loan::new();
+        let cx: NonNull<DrawCx<'static>> = NonNull::from(cx).cast();
+        let canvas: NonNull<Canvas<'static>> = NonNull::from(canvas).cast();
+        self.call(
+            "draw_over",
+            |py| {
+                // SAFETY: `loan` is dropped below, before `cx` and `canvas`
+                // go back to the caller.
+                let (cx, canvas) = unsafe {
+                    (
+                        Rc::new(Lent::new(cx, loan.token())),
+                        Lent::new(canvas, loan.token()),
+                    )
+                };
+                let draw_cx = Bound::new(py, PyDrawCx { cx: cx.clone() })?;
+                let canvas = Bound::new(py, PyCanvas { canvas, cx })?;
+                PyTuple::new(py, [draw_cx.into_any(), canvas.into_any()])
+            },
+            |_| Ok(()),
+        );
+        drop(loan);
+    }
+
     fn retained(&self) -> bool {
         self.retained
     }
 
     fn viewport(&self) -> bool {
         self.viewport
+    }
+
+    fn overlapping(&self) -> bool {
+        self.overlapping
     }
 
     fn scroll(&mut self, cx: &ScrollCx) -> (Rect, (u16, u16)) {
@@ -927,6 +1079,7 @@ pub(crate) fn node_of(object: &Bound<'_, PyAny>) -> PyResult<Node> {
         children,
         overrides: Overrides {
             describe: overrides("describe")?,
+            draw_over: overrides("draw_over")?,
             measure: overrides("measure")?,
             layout: overrides("layout")?,
             scroll: overrides("scroll")?,
@@ -939,6 +1092,7 @@ pub(crate) fn node_of(object: &Bound<'_, PyAny>) -> PyResult<Node> {
         focusable: flag("focusable")?,
         retained: flag("retained")?,
         viewport: flag("viewport")?,
+        overlapping: flag("overlapping")?,
         previews_keys: flag("previews_keys")?,
         app: current(),
     };
@@ -951,6 +1105,7 @@ pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
         ("TuiWidget", py.get_type::<PyWidgetBase>()),
         ("TuiDrawCx", py.get_type::<PyDrawCx>()),
         ("TuiCanvas", py.get_type::<PyCanvas>()),
+        ("TuiCellView", py.get_type::<PyCellView>()),
         ("TuiEventCx", py.get_type::<PyEventCx>()),
         ("TuiMeasureCx", py.get_type::<PyMeasureCx>()),
         ("TuiScrollCx", py.get_type::<PyScrollCx>()),

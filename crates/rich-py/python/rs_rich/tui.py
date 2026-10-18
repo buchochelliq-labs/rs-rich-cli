@@ -21,9 +21,12 @@ The same API as the Rust crate, name for name, so one guide serves both::
   ``column``, ``row``, ``grid``, ``each``, ``switch``, ``list``, ``scroll``
   (and ``scroll_with``, ``scroll_x``, ``scroll_both``, ``scroll_both_with``),
   ``component`` and ``repeating`` (``rs_rich.interact`` components),
-  ``Log(...).view()``, and ``widget`` for a ``Widget`` subclass. Builders on
-  ``Node`` chain (``.panel``, ``.fixed``, ``.on_key``, ``.focus_style``, ...);
-  ``class_`` is Rust's ``class``.
+  ``Log(...).view()``, ``layers``, ``effect``, ``fill``, and ``widget`` for a
+  ``Widget`` subclass. Builders on ``Node`` chain (``.panel``, ``.fixed``,
+  ``.on_key``, ``.focus_style``, ``.title_align``, ``.border``, ``.style``,
+  ``.text_align``, ``.theme_styles``, ...); ``class_`` is Rust's ``class``.
+  ``layout_split`` and ``layout_split_with_spacers`` are Rust's
+  ``layout::split`` and ``split_with_spacers``.
 - **Widgets**: ``table``, ``table_with`` (``TableOptions``), ``virtual_table``,
   ``virtual_list``, ``tabs``, ``tree``, ``tree_with``, ``tree_lazy``
   (``TreeItem``, ``LazyItem``), ``text_area``, ``calendar``, ``calendar_with``
@@ -61,11 +64,14 @@ from ._native import (
     TuiAnnouncement,
     TuiApp,
     TuiAxis,
+    TuiBorder,
     TuiCanvas,
+    TuiCellView,
     TuiColumn,
     TuiCtx,
     TuiDrawCx,
     TuiDriver,
+    TuiEdge,
     TuiEasing,
     TuiEventCx,
     TuiExitStatus,
@@ -81,6 +87,7 @@ from ._native import (
     TuiNode,
     TuiNodeTiming,
     TuiOrder,
+    TuiOverflow,
     TuiPlacement,
     TuiProgramEngine,
     TuiProxy,
@@ -93,15 +100,19 @@ from ._native import (
     TuiScrollCx,
     TuiServer,
     TuiServerHandle,
+    TuiShadow,
     TuiSheetError,
+    TuiSides,
     TuiSignal,
     TuiSize,
     TuiStylesheet,
     TuiTableOptions,
     TuiTask,
     TuiTerminalPane,
+    TuiTextAlign,
     TuiTheme,
     TuiTraceEntry,
+    TuiTrack,
     TuiTreeItem,
     TuiWebHandle,
     TuiWebView,
@@ -117,10 +128,15 @@ from ._native import (
     tui_component,
     tui_context_menu,
     tui_each,
+    tui_effect,
     tui_every,
+    tui_fill,
     tui_grid,
     tui_hsplit,
     tui_label,
+    tui_layers,
+    tui_layout_split,
+    tui_layout_split_with_spacers,
     tui_leaf,
     tui_list,
     tui_memo,
@@ -180,6 +196,13 @@ Easing = TuiEasing
 Placement = TuiPlacement
 Order = TuiOrder
 Role = TuiRole
+Border = TuiBorder
+Shadow = TuiShadow
+Edge = TuiEdge
+Sides = TuiSides
+TextAlign = TuiTextAlign
+Overflow = TuiOverflow
+Track = TuiTrack
 Mouse = TuiMouse
 Signal = TuiSignal
 Memo = TuiMemo
@@ -197,6 +220,7 @@ MenuItem = TuiMenuItem
 Widget = TuiWidget
 DrawCx = TuiDrawCx
 Canvas = TuiCanvas
+CellView = TuiCellView
 EventCx = TuiEventCx
 MeasureCx = TuiMeasureCx
 ScrollCx = TuiScrollCx
@@ -246,6 +270,11 @@ scroll_both_with = tui_scroll_both_with
 component = tui_component
 repeating = tui_repeating
 widget = tui_widget
+layers = tui_layers
+effect = tui_effect
+fill = tui_fill
+layout_split = tui_layout_split
+layout_split_with_spacers = tui_layout_split_with_spacers
 table = tui_table
 table_with = tui_table_with
 virtual_table = tui_virtual_table
@@ -298,6 +327,13 @@ __all__ = [
     "Placement",
     "Order",
     "Role",
+    "Border",
+    "Shadow",
+    "Edge",
+    "Sides",
+    "TextAlign",
+    "Overflow",
+    "Track",
     "Mouse",
     "Signal",
     "Memo",
@@ -315,6 +351,7 @@ __all__ = [
     "Widget",
     "DrawCx",
     "Canvas",
+    "CellView",
     "EventCx",
     "MeasureCx",
     "ScrollCx",
@@ -363,6 +400,11 @@ __all__ = [
     "component",
     "repeating",
     "widget",
+    "layers",
+    "effect",
+    "fill",
+    "layout_split",
+    "layout_split_with_spacers",
     "table",
     "table_with",
     "virtual_table",
