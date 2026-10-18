@@ -1,0 +1,40 @@
+❯ rich --force-terminal greet.1 | head -36
+GREET(1)                                   User Commands                                    GREET(1)
+
+NAME
+
+greet - print a friendly greeting
+
+SYNOPSIS
+
+greet [-n count] [--shout] name...
+
+DESCRIPTION
+
+greet writes a greeting for each name to standard output. The greeting is “Hello” unless --shout
+says otherwise — then it is louder.
+
+Options
+
+-n, --count=N
+    Repeat each greeting N times.
+
+-s, --shout
+    Write the greeting in capitals.
+
+         • Works with every name.
+         • Ignores the locale.
+
+EXAMPLES
+
+
+ $ greet -n 2 world
+ Hello, world
+ Hello, world
+
+
+FILES
+
+❯
+
+

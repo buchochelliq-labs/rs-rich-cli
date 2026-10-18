@@ -1,0 +1,40 @@
+❯ rich --force-terminal --syntax greet.1 | head -14
+.\" A sample man page for rs-rich-ext's document tests.
+.TH GREET 1 "October 2026" "greet 1.0" "User Commands"
+.SH NAME
+greet \- print a friendly greeting
+.SH SYNOPSIS
+.B greet
+[\fB\-n\fR \fIcount\fR]
+[\fB\-\-shout\fR]
+.IR name ...
+.SH DESCRIPTION
+.B greet
+writes a greeting for each
+.I name
+to standard output.
+❯
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
