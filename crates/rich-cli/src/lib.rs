@@ -15,7 +15,9 @@
 //! demo — i.e. the whole common rich-cli surface.
 //!
 //! On top of that it has documented binary-boundary conveniences that upstream
-//! lacks (see `docs/PORTING.md`): JSONL/log streaming, images and GIFs (behind
+//! lacks (see `docs/PORTING.md`): Org, AsciiDoc and man pages (`--org`,
+//! `--asciidoc`, `--man`, detected by extension and content), JSONL/log
+//! streaming, images and GIFs (behind
 //! the default `art` feature), `--watch`, `--batch`, config profiles and
 //! `--theme-file`, and the tool commands `inspect`, `diff` (images, text and
 //! patches), `view`, `hex`, `unicode`, `env`, `capture`, `ansi explain`,
@@ -44,6 +46,7 @@ mod config;
 mod controls;
 mod demo;
 mod doctor;
+mod documents;
 mod inspect;
 #[cfg(feature = "interact")]
 mod interactive;
@@ -110,6 +113,13 @@ enum Mode {
     Ipynb,
     /// `--rst`: render reStructuredText, as upstream's `rich-rst` does.
     Rst,
+    /// `--org`: render an Org document (not upstream; see `documents.rs`).
+    Org,
+    /// `--asciidoc`: render AsciiDoc (not upstream; see `documents.rs`).
+    AsciiDoc,
+    /// `--man`: render a man page from its roff source (not upstream; see
+    /// `documents.rs`).
+    Man,
     /// `--gif`: animate one or more GIFs in place.
     Gif,
     /// `--diff`: perceptually compare two images (takes exactly two resources).
@@ -222,6 +232,21 @@ const MODE_SPECS: &[ModeSpec] = &[
         aliases: &["rst"],
     },
     ModeSpec {
+        mode: Mode::Org,
+        primary: "org",
+        aliases: &["org"],
+    },
+    ModeSpec {
+        mode: Mode::AsciiDoc,
+        primary: "asciidoc",
+        aliases: &["asciidoc", "adoc"],
+    },
+    ModeSpec {
+        mode: Mode::Man,
+        primary: "man",
+        aliases: &["man", "roff"],
+    },
+    ModeSpec {
         mode: Mode::Gif,
         primary: "gif",
         aliases: &["gif"],
@@ -319,7 +344,7 @@ const MODE_SPECS: &[ModeSpec] = &[
 ];
 
 const RENDER_MODE_FLAGS: &str =
-    "--print/--markdown/--rst/--json/--syntax/--csv/--ipynb/--rule/--gif/--diff/--image/--jsonl/--log/--inspect/--ansi-explain";
+    "--print/--markdown/--rst/--org/--asciidoc/--man/--json/--syntax/--csv/--ipynb/--rule/--gif/--diff/--image/--jsonl/--log/--inspect/--ansi-explain";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ReportFormat {
@@ -1260,6 +1285,9 @@ fn mode_flag_alias(arg: &str) -> Option<&'static str> {
         "--csv" => "--csv",
         "--ipynb" => "--ipynb",
         "--rst" => "--rst",
+        "--org" => "--org",
+        "--asciidoc" | "--adoc" => "--asciidoc",
+        "--man" | "--roff" => "--man",
         "--jsonl" | "--ndjson" => "--jsonl",
         "--log" => "--log",
         "--rule" | "-u" => "--rule",
@@ -1917,6 +1945,9 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
     // printed or opened at all — `rich -p -- "-5 degrees"` and `rich -- -weird.md`
     // both died with "unknown option".
     let mut end_of_options = false;
+    // `--format NAME` for a document format (`org`, `man`, …): the mode it
+    // names. Data formats stay with `data`; the last `--format` wins.
+    let mut document_format: Option<(String, Mode)> = None;
 
     let mut iter = args.iter();
     while let Some(arg) = iter.next() {
@@ -1927,7 +1958,26 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
         if extensions.parse_option(arg, &mut iter)? {
             continue;
         }
-        if data.parse_option(arg, &mut iter)? {
+        if arg == "--format" {
+            let named = iter
+                .clone()
+                .next()
+                .and_then(|value| documents::format_mode(value).map(|mode| (value.clone(), mode)));
+            if let Some(named) = named {
+                iter.next();
+                document_format = Some(named);
+                data.format = None;
+                continue;
+            }
+            document_format = None;
+        }
+        if data
+            .parse_option(arg, &mut iter)
+            .map_err(|err| match arg.as_str() {
+                "--format" => documents::FORMAT_USAGE.to_string(),
+                _ => err,
+            })?
+        {
             continue;
         }
         if tool_options.parse_option(arg, &mut iter)? {
@@ -1981,6 +2031,9 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
             "--csv" => set_mode(&mut mode, Mode::Csv)?,
             "--ipynb" => set_mode(&mut mode, Mode::Ipynb)?,
             "--rst" => set_mode(&mut mode, Mode::Rst)?,
+            "--org" => set_mode(&mut mode, Mode::Org)?,
+            "--asciidoc" | "--adoc" => set_mode(&mut mode, Mode::AsciiDoc)?,
+            "--man" | "--roff" => set_mode(&mut mode, Mode::Man)?,
             "--gif" => set_mode(&mut mode, Mode::Gif)?,
             "--diff" => set_mode(&mut mode, Mode::Diff)?,
             "--image" => set_mode(&mut mode, Mode::Image)?,
@@ -2418,6 +2471,18 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
         }
     }
 
+    // A document `--format` is that document's mode flag: it may not be
+    // combined with another mode, and like any input mode it reads stdin when
+    // there is no RESOURCE.
+    if let Some((name, document)) = document_format {
+        if mode != Mode::Auto && mode != document {
+            return Err(format!(
+                "--format {name} cannot be combined with --{}",
+                mode_name(mode)
+            ));
+        }
+        mode = document;
+    }
     // `--format` makes automatic mode an input mode: with no RESOURCE it reads
     // stdin, as `--json` does, instead of showing the demo.
     if data.format.is_some() {
@@ -2660,8 +2725,12 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
         (
             "--lexer",
             source.lexer.is_some(),
-            "--syntax, --ipynb or --rst",
-            source_mode || effective_mode == Mode::Rst,
+            "--syntax, --ipynb, --rst, --org, --asciidoc or --man",
+            source_mode
+                || matches!(
+                    effective_mode,
+                    Mode::Rst | Mode::Org | Mode::AsciiDoc | Mode::Man
+                ),
         ),
         (
             "--no-wrap",
@@ -3345,6 +3414,11 @@ fn content_type_mode(content_type: &str) -> Option<Mode> {
     match mime.as_str() {
         "text/markdown" | "text/x-markdown" => Some(Mode::Markdown),
         "text/x-rst" | "text/prs.fallenstein.rst" => Some(Mode::Rst),
+        "text/org" | "text/x-org" => Some(Mode::Org),
+        "text/asciidoc" | "text/x-asciidoc" => Some(Mode::AsciiDoc),
+        "text/troff" | "application/x-troff" | "application/x-troff-man" | "text/x-troff-man" => {
+            Some(Mode::Man)
+        }
         "application/json" | "text/json" => Some(Mode::Json),
         "text/csv" => Some(Mode::Csv),
         _ => None,
@@ -3437,6 +3511,11 @@ fn detect_mode(resource: Option<&str>) -> Mode {
         Some("csv") | Some("tsv") => Mode::Csv,
         Some("ipynb") => Mode::Ipynb,
         Some("rst") => Mode::Rst,
+        // Not upstream (documents.rs). A URL with no path has no extension:
+        // `https://example.org` is a web page, not an Org file.
+        Some("org") if !resource.is_some_and(documents::bare_host) => Mode::Org,
+        Some("adoc" | "asciidoc") => Mode::AsciiDoc,
+        Some("man" | "roff" | "mdoc") => Mode::Man,
         Some("gif") => Mode::Gif,
         Some("mmd") | Some("mermaid") if cfg!(feature = "mermaid") => Mode::Mermaid,
         Some("dot") | Some("gv") => Mode::Dot,
@@ -4087,6 +4166,16 @@ fn run_once_with_fetch(mut cli: Cli, prefetched: Option<(String, Option<String>)
     if let Some(message) = transform_misplaced_in(&cli, mode) {
         return fail(&cli, ExitClass::Usage, message);
     }
+    // A compressed man page (`ls.1.gz`) would print as binary noise.
+    if matches!(cli.mode, Mode::Auto | Mode::Man) {
+        if let Some(message) = cli
+            .resource
+            .as_deref()
+            .and_then(documents::compressed_man_page)
+        {
+            return fail(&cli, ExitClass::Input, message);
+        }
+    }
 
     // `view` decides what to show from the resource itself: an existing
     // renderer, a numbered source view, or a hex dump of binary input. The
@@ -4515,6 +4604,20 @@ fn run_once_with_fetch(mut cli: Cli, prefetched: Option<(String, Option<String>)
         }
     }
 
+    // Documents by content (documents.rs): a man page named for its section
+    // (`ls.1`), an extensionless file that is unmistakably Org, AsciiDoc or
+    // roff, and, with `--format auto`, piped input that is likely one. Never
+    // when a flag chose the mode, nor when a source option asks for syntax.
+    if cli.mode == Mode::Auto
+        && !cli.source.wants_syntax()
+        && (mode == Mode::Auto || (mode == Mode::Syntax && !routed))
+    {
+        let auto = cli.data.format == Some(inspect::InputFormat::Auto);
+        if let Some(document) = documents::by_content(cli.resource.as_deref(), &content, auto) {
+            mode = document;
+        }
+    }
+
     // For a URL that neither a flag nor a telltale extension resolved: upstream
     // renders fetched content as syntax-highlighted source by default, unless the
     // Content-Type marks it markdown / json / csv.
@@ -4657,6 +4760,16 @@ fn run_once_with_fetch(mut cli: Cli, prefetched: Option<(String, Option<String>)
             let lexer = cli.source.lexer.as_deref().unwrap_or("python");
             let document = rich_ext::rst::RestructuredText::new(&content).default_lexer(lexer);
             (Box::new(document), None)
+        }
+        // Not upstream (documents.rs); like `Markdown`, measured as the whole
+        // width. Mermaid and DOT source blocks draw as diagrams, as fences do.
+        Mode::Org | Mode::AsciiDoc | Mode::Man => {
+            let fences = plugin_registry_with(
+                cli.mermaid_backend.unwrap_or(MermaidBackend::Text),
+                cli.dot_backend != Some(sources::DotBackend::Off),
+            )
+            .fences();
+            (documents::render(mode, &content, &cli, fences), None)
         }
         #[cfg(feature = "mermaid")]
         Mode::Mermaid => {

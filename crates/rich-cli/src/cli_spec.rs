@@ -37,8 +37,8 @@ const GENERAL: &str = "General";
 
 /// The render modes a `mode` config value (and the command word) may name.
 pub(crate) const MODES: &[&str] = &[
-    "print", "markdown", "rst", "json", "syntax", "csv", "ipynb", "jsonl", "log", "rule", "image",
-    "gif", "diff", "inspect", "ansi",
+    "print", "markdown", "rst", "org", "asciidoc", "man", "json", "syntax", "csv", "ipynb",
+    "jsonl", "log", "rule", "image", "gif", "diff", "inspect", "ansi",
 ];
 
 fn flag(long: &str, heading: &str, help: &str) -> ArgSpec {
@@ -174,6 +174,26 @@ fn render_modes() -> Vec<ArgSpec> {
         ),
         mode("markdown", Some('m'), "Render RESOURCE as Markdown"),
         mode("rst", None, "Render RESOURCE as reStructuredText"),
+        mode(
+            "org",
+            None,
+            "Render RESOURCE as an Org document (headlines, TODO keywords, lists, blocks, \
+             tables, drawers)",
+        ),
+        mode(
+            "asciidoc",
+            None,
+            "Render RESOURCE as AsciiDoc (sections, attributes, lists, source blocks with \
+             callouts, tables, admonitions)",
+        )
+        .alias("adoc"),
+        mode(
+            "man",
+            None,
+            "Render RESOURCE as a man page from its roff source (man and mdoc macros, tbl \
+             tables)",
+        )
+        .alias("roff"),
         mode("json", Some('j'), "Pretty-print RESOURCE as JSON").short_alias('J'),
         mode(
             "syntax",
@@ -328,10 +348,15 @@ fn input_options() -> Vec<ArgSpec> {
         INPUT,
         "Input format. With --inspect, the parser (default auto-detect); otherwise `auto` \
          detects piped or extensionless input and routes it (JSON to --json, other formats \
-         to highlighting, anything else to plain text), and a named format overrides the \
-         extension",
+         to highlighting, likely Markdown, reStructuredText, Org, AsciiDoc and man pages to \
+         their renderers, anything else to plain text), and a named format overrides the \
+         extension. A document format (markdown, rst, org, asciidoc, man) is the same as its \
+         mode flag",
     )
-    .choices(["auto", "json", "yaml", "toml", "xml", "ini", "env"])
+    .choices([
+        "auto", "json", "yaml", "toml", "xml", "ini", "env", "markdown", "rst", "org", "asciidoc",
+        "man",
+    ])
     .default_value("auto")
     .config_key("format")];
     args.extend(
@@ -489,7 +514,7 @@ fn source_options() -> Vec<ArgSpec> {
             "LEXER",
             SOURCE,
             "Highlight source as LEXER instead of guessing from the file name; with --rst, \
-             highlight code blocks that name no language as LEXER",
+             --org, --asciidoc or --man, highlight code blocks that name no language as LEXER",
         ),
         flag(
             "no-wrap",
@@ -1415,8 +1440,11 @@ pub(crate) fn spec() -> CommandSpec {
         .heading_note(
             RENDER_MODE,
             "Choose at most one; the default auto-detects .md/.rst/.json/.csv/.tsv/.ipynb, \
-             .mmd/.mermaid and .dot/.gv by extension — anything else with a file extension \
-             is syntax-highlighted.",
+             .mmd/.mermaid and .dot/.gv by extension, and .org, .adoc/.asciidoc and \
+             .man/.roff/.mdoc documents; a man page's section extension (.1 to .9) or .asc \
+             counts when the content agrees, and a file with no extension that is plainly \
+             Org, AsciiDoc or roff renders as one — anything else with a file extension is \
+             syntax-highlighted.",
         )
         .heading_note(
             DEMO,
@@ -1430,6 +1458,13 @@ pub(crate) fn spec() -> CommandSpec {
         ),
         ("markdown", &["md"][..], "Render Markdown (`--markdown`)"),
         ("rst", &[][..], "Render reStructuredText (`--rst`)"),
+        ("org", &[][..], "Render an Org document (`--org`)"),
+        ("asciidoc", &["adoc"][..], "Render AsciiDoc (`--asciidoc`)"),
+        (
+            "man",
+            &["roff"][..],
+            "Render a man page from its roff source (`--man`)",
+        ),
         (
             "syntax",
             &["code"][..],

@@ -1,0 +1,36 @@
+[2mCATALOG(1)                  General Commands Manual                   CATALOG(1)[0m
+
+[4;35mNAME[0m                                                                            
+
+[1mcatalog [0m— concatenate and number files                                          
+
+[4;35mSYNOPSIS[0m                                                                        
+
+[1mcatalog [0m[[1m-bn[0m] [[1m-o [0m[3moutput[0m] [[3mfile ...[0m]                                            
+
+[4;35mDESCRIPTION[0m                                                                     
+
+The [1mcatalog [0mutility reads each [3mfile [0min turn and writes it to the standard       
+output. The options are as follows:                                             
+
+[1m-b[0m
+    Number the non-blank lines.                                                 
+
+[1m-o [0m[1;3moutput[0m
+    Write to [3moutput [0minstead of “standard output”.                               
+
+[4;35mEXAMPLES[0m                                                                        
+
+[48;2;43;48;59m                                                                                [0m
+[48;2;43;48;59m [0m[38;2;192;197;206;48;2;43;48;59m$ catalog -n notes.txt[0m[48;2;43;48;59m                                                        [0m[48;2;43;48;59m [0m
+[48;2;43;48;59m                                                                                [0m
+
+[4;35mEXIT STATUS[0m                                                                     
+
+The [1mcatalog[0m utility exits 0 on success, and >0 if an error occurs.              
+
+[4;35mSEE ALSO[0m                                                                        
+
+[1mcat[0m(1), [1mnl[0m(1)                                                                   
+
+[2m                                October 1, 2026                       CATALOG(1)[0m
