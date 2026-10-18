@@ -90,7 +90,11 @@ mod pty {
             .expect("the alternate screen was left");
         let message = output.rfind(PANIC).expect("the message printed");
         assert!(left < message, "{output:?}");
-        assert!(parser.screen().contents().contains(PANIC));
+        // On the screen too, wherever its line wrapped (macOS's terminal
+        // driver can leave the cursor mid-line when the message prints).
+        let squeeze = |text: &str| text.split_whitespace().collect::<String>();
+        let screen = parser.screen().contents();
+        assert!(squeeze(&screen).contains(&squeeze(PANIC)), "{screen}");
         assert!(!output.contains("OUTCOME"), "the app did not return");
     }
 }
