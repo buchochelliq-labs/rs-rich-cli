@@ -78,6 +78,7 @@ always available. The `use` path is `rich_ext::<module>`.
 |---|---|---|---|
 | `data` | One document tree for JSON, INI and dotenv; `Explorer`, tables, flatten, search, diff, redaction; `print_json`/`print_table`/`print_tree` for `serde` values | `data`; `yaml`, `toml`, `xml` for those formats; `jsonpath` for JSONPath selectors | [Structured data](structured-data.md) |
 | `deps`, `schema` | `DepTree`/`WhyTree`: `cargo metadata` as a dependency tree with duplicate versions marked, and what pulls a crate in; `SchemaTree`/`SchemaDiff`: a JSON Schema as a tree with local `$ref`s resolved, and what changed between two; the format-neutral schema model they read, with JSON Schema and SQL DDL (`schema::sql`) mapped into it, `SchemaDiff::models` for any two, and `SchemaTimeline` for a series of versions | `data` | [Dependency graphs and JSON Schemas](sources.md) |
+| `document` | `DocumentRegistry` and `DocumentFormat`: Markdown, reStructuredText, Org, AsciiDoc and man pages (man, mdoc, tbl) behind one interface, detected by file name and content; `DocumentView` draws the shared model in Markdown's look | `syntax` (default) | [Documents](documents.md) |
 | `cli_doc` | From one `CommandSpec`: help, errors as diagnostics, shell completions, Markdown and man pages, config reference and precedence | none; `clap` for `CommandSpec::from_clap` and `cli_doc::clap` | [CLI authoring](cli-authoring.md) |
 | `cli` | The `rich` binary's extension options (`--encoding`, `--gif-mode`) | none | [CLI authoring](cli-authoring.md) |
 
@@ -109,7 +110,7 @@ needs them); every other feature is off.
 
 | Feature | Enables | Extra dependencies |
 |---|---|---|
-| `syntax`, `markdown` (default) | Highlighted `source_view`, `SourceDiff` and `PatchView`; `rst`, `cli_doc::markdown_view` | `rs-rich`'s `syntax` and `markdown` (syntect, pulldown-cmark) |
+| `syntax`, `markdown` (default) | Highlighted `source_view`, `SourceDiff` and `PatchView`; `rst`, `document` (its Markdown provider with `markdown`), `cli_doc::markdown_view` | `rs-rich`'s `syntax` and `markdown` (syntect, pulldown-cmark) |
 | `macros` | `richf!`, `style!`, `theme_key!`, `markup!`, `#[derive(Rich)]`, print macros | `rs-rich-macros` |
 | `anyhow` | `Diagnostic::from_anyhow` | `anyhow` |
 | `log` | `adapters::LogAdapter`; `RichHandler` as an `EventSink` | `log` |
@@ -137,6 +138,7 @@ cargo run -p rs-rich-ext --example guide_live_layout
 cargo run -p rs-rich-ext --example guide_macros --features macros
 cargo run -p rs-rich-ext --example guide_charts
 cargo run -p rs-rich-ext --example guide_sources --features data
+cargo run -p rs-rich-ext --example guide_documents
 cargo run -p rs-rich-ext --example guide_transforms --features jsonpath
 cargo run -p rs-rich-ext --example guide_highlighters --features testing,syntax
 ```

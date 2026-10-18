@@ -1,0 +1,37 @@
+.\" A sample mdoc page for rs-rich-ext's document tests.
+.Dd October 1, 2026
+.Dt CATALOG 1
+.Os
+.Sh NAME
+.Nm catalog
+.Nd concatenate and number files
+.Sh SYNOPSIS
+.Nm
+.Op Fl bn
+.Op Fl o Ar output
+.Op Ar
+.Sh DESCRIPTION
+The
+.Nm
+utility reads each
+.Ar file
+in turn and writes it to the standard output.
+The options are as follows:
+.Bl -tag -width Ds
+.It Fl b
+Number the non-blank lines.
+.It Fl o Ar output
+Write to
+.Ar output
+instead of
+.Dq standard output .
+.El
+.Sh EXAMPLES
+.Bd -literal -offset indent
+$ catalog -n notes.txt
+.Ed
+.Sh EXIT STATUS
+.Ex -std
+.Sh SEE ALSO
+.Xr cat 1 ,
+.Xr nl 1

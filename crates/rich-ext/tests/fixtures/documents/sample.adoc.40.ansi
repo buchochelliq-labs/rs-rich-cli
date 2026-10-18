@@ -1,0 +1,76 @@
+            [1;4mThe Field Guide[0m             
+ [2mAda Lovelace <ada@example.com> · v2.1,[0m 
+               [2m2026-10-01[0m               
+
+The Analytical Engine reads [1mstrong[0m,     
+[3memphasis[0m, [1;36;40mmonospace[0m and [30;43mhighlighted[0m     
+text, with [1mun[0mconstrained marks, ©       
+symbols — and a footnote.[2m[1][0m            
+
+[4;35mGetting started[0m                         
+
+[1;36m╭─[0m[1;36m Note [0m[1;36m──────────────────────────────[0m[1;36m─╮[0m
+[1;36m│[0m Read the whole guide before you      [1;36m│[0m
+[1;36m│[0m begin.                               [1;36m│[0m
+[1;36m╰──────────────────────────────────────╯[0m
+
+[2;3mInstall it[0m
+[48;2;43;48;59m                                        [0m
+[48;2;43;48;59m [0m[38;2;143;161;179;48;2;43;48;59mcargo[0m[38;2;192;197;206;48;2;43;48;59m install rs-rich-cli [0m[38;2;101;115;126;48;2;43;48;59m#[0m[38;2;101;115;126;48;2;43;48;59m [0m[1;7;38;2;101;115;126;48;2;43;48;59m<1>[0m[48;2;43;48;59m       [0m[48;2;43;48;59m [0m
+[48;2;43;48;59m [0m[38;2;143;161;179;48;2;43;48;59mrich[0m[38;2;191;97;106;48;2;43;48;59m --[0m[38;2;191;97;106;48;2;43;48;59mversion            [0m[38;2;101;115;126;48;2;43;48;59m#[0m[38;2;101;115;126;48;2;43;48;59m [0m[1;7;38;2;101;115;126;48;2;43;48;59m<2>[0m[48;2;43;48;59m       [0m[48;2;43;48;59m [0m
+[48;2;43;48;59m                                        [0m
+
+[1;7m <1> [0mInstalls the [1;36;40mrich[0m binary.          
+[1;7m <2> [0mPrints its version.                
+
+[1;35mLists[0m                                   
+
+[1m • [0mUnordered                            
+   [1m • [0mNested deeper                     
+[1m • [0m[1;32m[x] [0mChecked off                      
+[1m • [0m[1m[ ] [0mStill to do                      
+
+[36m 1 [0mFirst                                
+[36m 2 [0mSecond                               
+                                        
+   A paragraph attached with a list     
+   continuation.                        
+
+[1mCPU[0m
+    The processing unit                 
+
+[1mRAM[0m
+    Working memory                      
+
+[4;35mReference[0m                               
+
+[36m                     [0m
+[36m [0m[36mName[0m[1m [0m[1m [0m[36m [0m[36mSize[0m[1m [0m[36m [0m[36mNotes[0m[1m [0m[36m [0m
+[36m ─────────────────── [0m
+[36m [0malpha [36m [0m  10 [36m [0mfirst [36m [0m
+[36m [0mbeta  [36m [0m 200 [36m [0msecond[36m [0m
+[36m                     [0m
+
+[1;33m╭─[0m[1;33m Warning [0m[1;33m───────────────────────────[0m[1;33m─╮[0m
+[1;33m│[0m Mind the gap between the train and   [1;33m│[0m
+[1;33m│[0m the platform.                        [1;33m│[0m
+[1;33m╰──────────────────────────────────────╯[0m
+
+[35m▌ [0m[35mErrors using inadequate data are    [0m
+[35m▌ [0m[35mmuch less than those using no data  [0m
+[35m▌ [0m[35mat all.                             [0m
+[35m▌ [0m[3;35m— [0m[3;35mCharles Babbage, Passages[0m[35m         [0m
+
+See [94mthe AsciiDoc site[0m                   
+([4;34mhttps://asciidoc.org[0m), press [1;93mCtrl+C[0m and
+open [1mFile › Save[0m.                       
+
+🌆 Engine diagram 
+
+[2m----------------------------------------[0m
+
+[2minclude::appendix.adoc[][0m
+
+[2m----------------------------------------[0m
+
+[36m 1 [0mFootnotes collect at the end.        

@@ -77,6 +77,8 @@ and `--pager`.
 On top of that it adds, without changing the mirrored behaviour:
 
 - subcommands (`rich markdown FILE`) alongside the flags;
+- documentation formats upstream has no renderer for: Org, AsciiDoc and man
+  pages, detected by extension and, carefully, by content;
 - new modes: JSON Lines and logs, `inspect` for structured data, text and
   patch diffs, perceptual image diffs, still images and GIFs, `ansi explain`,
   and the viewers `view`, `hex`, `unicode`, `env` and `capture`;
@@ -99,6 +101,9 @@ records exactly which parts are upstream and which are additions.
 | `print` | `-p`, `--print` | Render the RESOURCE as console markup text | [Markup](walkthrough.md#markup-and-rules) |
 | `markdown`, `md` | `-m`, `--markdown` | Render Markdown | [Rendering files](walkthrough.md#markdown) |
 | `rst` | `--rst` | Render reStructuredText | [Command-line guide](../../cli.md#restructuredtext) |
+| `org` | `--org` | Render an Org document | [Org, AsciiDoc and man pages](../../cli.md#org-asciidoc-and-man-pages) |
+| `asciidoc`, `adoc` | `--asciidoc` | Render AsciiDoc | [Org, AsciiDoc and man pages](../../cli.md#org-asciidoc-and-man-pages) |
+| `man`, `roff` | `--man` | Render a man page from its roff source (man and mdoc macros) | [Org, AsciiDoc and man pages](../../cli.md#org-asciidoc-and-man-pages) |
 | `syntax`, `code` | `-x`, `--syntax` | Syntax-highlight source code | [Rendering files](walkthrough.md#source-code) |
 | `json` | `-j`, `--json` | Pretty-print JSON | [Rendering files](walkthrough.md#json) |
 | `csv`, `tsv` | `--csv` | Render CSV/TSV as a table | [Rendering files](walkthrough.md#csv-and-tsv) |
@@ -107,7 +112,7 @@ records exactly which parts are upstream and which are additions.
 | `log`, `logs` | `--log` | Stream structured-log records as log lines | [Streams](walkthrough.md#json-lines-and-logs) |
 | `rule` | `--rule` | Draw a horizontal rule with a title | [Markup](walkthrough.md#markup-and-rules) |
 | `inspect` | `--inspect` | Explore JSON, YAML, TOML, XML, INI or dotenv as a tree | [Structured data](walkthrough.md#structured-data) |
-| — | `--format auto` | Detect the format of piped or extensionless input | [Piped input](walkthrough.md#detecting-piped-input) |
+| — | `--format auto` | Detect the format of piped or extensionless input (data, or a document) | [Piped input](walkthrough.md#detecting-piped-input) |
 | `diff` | `--diff` | Compare two text files, render a patch, or compare two images | [Diffs](walkthrough.md#comparing-text-and-patches) |
 | `image` | `--image` | Draw a still image | [Images](walkthrough.md#images-gifs-and-image-diffs) |
 | `gif` | `--gif` | Play animated GIFs | [Images](walkthrough.md#images-gifs-and-image-diffs) |

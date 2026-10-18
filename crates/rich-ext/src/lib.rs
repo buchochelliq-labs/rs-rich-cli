@@ -28,6 +28,8 @@
 //!   gauges, heatmaps, status matrices, KPI cards and timelines).
 //! - Inspectors: [`source_view`], [`hex`], [`unicode_inspect`],
 //!   [`env_inspect`].
+//! - Documents: `document` (Org, AsciiDoc and man pages beside Markdown and
+//!   `rst`, with format detection; `syntax` feature).
 //! - Layout and live output: [`layout`], [`live`], [`surface`] (positioned
 //!   drawing that writes only what changed).
 //! - Pipelines: [`transform`], and `data::transform` (`jsonpath` feature).
@@ -56,6 +58,9 @@ pub mod capabilities;
 pub mod chart;
 pub mod cli;
 pub mod clipboard;
+// Documentation formats (Markdown, reStructuredText, Org, AsciiDoc, man).
+#[cfg(feature = "syntax")]
+pub mod document;
 pub mod encoding;
 pub mod env_inspect;
 pub mod fidelity;

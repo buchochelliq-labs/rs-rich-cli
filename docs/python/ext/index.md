@@ -27,6 +27,7 @@ Each Rust module `rich_ext::<name>` is `rs_rich.ext.<name>`, and
 |---|---|
 | [Diagnostics and logs](diagnostics.md) | `diagnostic`, `stacktrace`, `dashboard`, `hyperlink`, `highlighter`, `event`, `log_handler` |
 | [Structured data](data.md) | `data` |
+| [Documents](documents.md) | `document` (Org, AsciiDoc and man pages, beside Markdown and reStructuredText) |
 | [Diffs and test reports](diffs.md) | `diff` |
 | [Transforms](transforms.md) | `transform` (and the data, table and patch transforms) |
 | [Workflows and status](workflows.md) | `workflow`, `cancel`, `transfer`, `countdown`, `notify` |

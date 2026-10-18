@@ -21,7 +21,7 @@ SUBMODULES = sorted(m.name for m in pkgutil.iter_modules(rs_rich.ext.__path__))
 def test_every_rust_module_has_a_python_module():
     rust = {
         "a11y", "ansi_explain", "badge", "cancel", "capabilities", "cli_doc", "countdown", "dashboard", "data",
-        "derive", "diagnostic", "diff", "encoding", "env_inspect", "event", "fidelity", "format", "hex",
+        "derive", "diagnostic", "diff", "document", "encoding", "env_inspect", "event", "fidelity", "format", "hex",
         "highlighter", "hyperlink", "layout", "live", "log_handler", "notify", "qa", "redact", "registry",
         "sanitize", "size_bar", "source_view", "stacktrace", "table", "target", "testing", "theme",
         "transfer", "transform", "unicode_inspect", "workflow",

@@ -115,6 +115,7 @@ nav:
           - Dependency graphs and JSON Schemas: guide/ext/sources.md
           - Macros and derive: guide/ext/macros.md
           - Structured data: guide/ext/structured-data.md
+          - Documents (Org, AsciiDoc, man pages): guide/ext/documents.md
           - Transforms: guide/ext/transforms.md
           - CLI authoring: guide/ext/cli-authoring.md
           - Diffs and test reports: guide/ext/diffs-and-test-reports.md

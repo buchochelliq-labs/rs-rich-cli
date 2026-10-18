@@ -111,6 +111,7 @@ nav:
       - ext/index.md
       - Diagnostics and logs: ext/diagnostics.md
       - Structured data: ext/data.md
+      - Documents (Org, AsciiDoc, man pages): ext/documents.md
       - Diffs and test reports: ext/diffs.md
       - Transforms: ext/transforms.md
       - Workflows and status: ext/workflows.md

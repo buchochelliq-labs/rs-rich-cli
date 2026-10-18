@@ -1,0 +1,48 @@
+GREET(1)                         User Commands                          GREET(1)
+
+NAME                                                                            
+
+greet - print a friendly greeting                                               
+
+SYNOPSIS                                                                        
+
+greet [-n count] [--shout] name...                                              
+
+DESCRIPTION                                                                     
+
+greet writes a greeting for each name to standard output. The greeting is       
+“Hello” unless --shout says otherwise — then it is louder.                      
+
+Options                                                                         
+
+-n, --count=N
+    Repeat each greeting N times.                                               
+
+-s, --shout
+    Write the greeting in capitals.                                             
+                                                                                
+         • Works with every name.                                               
+         • Ignores the locale.                                                  
+
+EXAMPLES                                                                        
+
+                                                                                
+ $ greet -n 2 world                                                             
+ Hello, world                                                                   
+ Hello, world                                                                   
+                                                                                
+
+FILES                                                                           
+
+                               
+ Path          Purpose         
+ ───────────────────────────── 
+ ~/.greetrc    User settings   
+ /etc/greetrc  System settings 
+                               
+
+SEE ALSO                                                                        
+
+echo(1), printf(1). Project page: https://example.com/greet.                    
+
+greet 1.0                         October 2026                          GREET(1)

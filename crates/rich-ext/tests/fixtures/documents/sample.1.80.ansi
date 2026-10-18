@@ -1,0 +1,48 @@
+[2mGREET(1)                         User Commands                          GREET(1)[0m
+
+[4;35mNAME[0m                                                                            
+
+greet - print a friendly greeting                                               
+
+[4;35mSYNOPSIS[0m                                                                        
+
+[1mgreet [0m[[1m-n [0m[3mcount[0m] [[1m--shout[0m] [3mname[0m...                                              
+
+[4;35mDESCRIPTION[0m                                                                     
+
+[1mgreet [0mwrites a greeting for each [3mname [0mto standard output. The greeting is       
+“Hello” unless [1m--shout [0msays otherwise — then it is louder.                      
+
+[1;35mOptions[0m                                                                         
+
+[1m-n[0m[1m, [0m[1m--count[0m[1m=[0m[1;3mN[0m
+    Repeat each greeting [3mN [0mtimes.                                               
+
+[1m-s[0m[1m, [0m[1m--shout[0m
+    Write the greeting in capitals.                                             
+                                                                                
+        [1m • [0mWorks with every name.                                               
+        [1m • [0mIgnores the locale.                                                  
+
+[4;35mEXAMPLES[0m                                                                        
+
+[48;2;43;48;59m                                                                                [0m
+[48;2;43;48;59m [0m[38;2;192;197;206;48;2;43;48;59m$ greet -n 2 world[0m[48;2;43;48;59m                                                            [0m[48;2;43;48;59m [0m
+[48;2;43;48;59m [0m[38;2;192;197;206;48;2;43;48;59mHello, world[0m[48;2;43;48;59m                                                                  [0m[48;2;43;48;59m [0m
+[48;2;43;48;59m [0m[38;2;192;197;206;48;2;43;48;59mHello, world[0m[48;2;43;48;59m                                                                  [0m[48;2;43;48;59m [0m
+[48;2;43;48;59m                                                                                [0m
+
+[4;35mFILES[0m                                                                           
+
+[36m                               [0m
+[36m [0m[36mPath[0m[1m        [0m[1m [0m[36m [0m[36mPurpose[0m[1m        [0m[36m [0m
+[36m ───────────────────────────── [0m
+[36m [0m~/.greetrc   [36m [0mUser settings  [36m [0m
+[36m [0m/etc/greetrc [36m [0mSystem settings[36m [0m
+[36m                               [0m
+
+[4;35mSEE ALSO[0m                                                                        
+
+[1mecho[0m(1), [3mprintf[0m(1). Project page: [4;34mhttps://example.com/greet[0m.                    
+
+[2mgreet 1.0                         October 2026                          GREET(1)[0m

@@ -145,6 +145,35 @@ feature) registers DOT the same way: `dot` and `graphviz` fence renderers and a
 `rich doctor` lists the registered plugins and the API version (and includes
 them in `--report json`).
 
+## Document formats (0.0.19)
+
+`rich_ext::document` keeps documentation formats in a `DocumentRegistry` of
+its own, beside the extension registry: Markdown, reStructuredText, Org,
+AsciiDoc and man pages are built in, and a host adds a format with
+`DocumentRegistry::register(Arc<dyn DocumentFormat>)`. A format names its id,
+aliases and extensions, sniffs content (a confidence from 0 to 1), and
+renders source to a renderable with diagnostics; see
+[Documents](guide/ext/documents.md).
+
+A plugin cannot declare a document format through `PluginRegistrar` in this
+API version: that needs a registrar method (and the extensions and sniffer it
+would carry) in `rich-plugin-api`, which is left for a later version rather
+than forced into `renderer`. Today a plugin registers a `SourceRenderer` with
+`renderer(name, …)` as before, and a host that wants it as a document format
+wraps it:
+
+```rust
+use rich_ext::document::{DocumentRegistry, SourceRendererFormat};
+
+let renderer = extensions.renderer("textile").expect("the plugin's renderer");
+let mut documents = DocumentRegistry::with_builtins();
+documents.register(std::sync::Arc::new(
+    SourceRendererFormat::new("textile", renderer).extensions(&["textile"]),
+))?;
+```
+
+The `rich` binary uses the built-in formats only.
+
 ## Third-party plugins (0.0.13)
 
 Beyond `add_plugin`, a plugin can reach a registry in three more ways, each

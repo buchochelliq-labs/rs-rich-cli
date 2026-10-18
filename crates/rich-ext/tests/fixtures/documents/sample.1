@@ -1,0 +1,54 @@
+.\" A sample man page for rs-rich-ext's document tests.
+.TH GREET 1 "October 2026" "greet 1.0" "User Commands"
+.SH NAME
+greet \- print a friendly greeting
+.SH SYNOPSIS
+.B greet
+[\fB\-n\fR \fIcount\fR]
+[\fB\-\-shout\fR]
+.IR name ...
+.SH DESCRIPTION
+.B greet
+writes a greeting for each
+.I name
+to standard output.
+The greeting is \(lqHello\(rq unless
+.B \-\-shout
+says otherwise \(em then it is louder.
+.SS Options
+.TP
+.BR \-n ", " \-\-count =\fIN\fR
+Repeat each greeting
+.I N
+times.
+.TP
+\fB\-s\fR, \fB\-\-shout\fR
+Write the greeting in capitals.
+.RS
+.IP \(bu 2
+Works with every name.
+.IP \(bu 2
+Ignores the locale.
+.RE
+.SH EXAMPLES
+.EX
+$ greet \-n 2 world
+Hello, world
+Hello, world
+.EE
+.SH FILES
+.TS
+tab(;);
+lb lb
+l l.
+Path;Purpose
+_
+~/.greetrc;User settings
+/etc/greetrc;System settings
+.TE
+.SH "SEE ALSO"
+.BR echo (1),
+.MR printf 1 .
+Project page:
+.UR https://example.com/greet
+.UE .

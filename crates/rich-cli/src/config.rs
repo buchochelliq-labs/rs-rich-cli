@@ -250,6 +250,10 @@ pub(crate) fn validate_value(key: &str, value: &Value) -> Result<(), String> {
                     v,
                     "print"
                         | "markdown"
+                        | "rst"
+                        | "org"
+                        | "asciidoc"
+                        | "man"
                         | "json"
                         | "syntax"
                         | "csv"
@@ -283,9 +287,10 @@ pub(crate) fn validate_value(key: &str, value: &Value) -> Result<(), String> {
             // `rich.toml` may set it; the name is checked when rich runs, with
             // the choices in the error.
             "highlighter" | "code_theme" => value.as_str().is_some_and(|v| !v.is_empty()),
-            "format" => value
-                .as_str()
-                .is_some_and(|v| crate::inspect::InputFormat::parse(v).is_ok()),
+            "format" => value.as_str().is_some_and(|v| {
+                crate::inspect::InputFormat::parse(v).is_ok()
+                    || crate::documents::format_mode(v).is_some()
+            }),
             "image_color" => value
                 .as_str()
                 .is_some_and(|v| matches!(v, "truecolor" | "ansi256" | "ansi16" | "grayscale")),
@@ -673,6 +678,8 @@ fn overrides(args: &[String]) -> Settings {
                     "md" => "markdown",
                     "code" => "syntax",
                     "ndjson" => "jsonl",
+                    "adoc" => "asciidoc",
+                    "roff" => "man",
                     _ => arg,
                 };
                 result.insert("mode".into(), Value::String(mode.into()));

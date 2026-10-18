@@ -1,0 +1,76 @@
+            The Field Guide             
+ Ada Lovelace <ada@example.com> · v2.1, 
+               2026-10-01               
+
+The Analytical Engine reads strong,     
+emphasis, monospace and highlighted     
+text, with unconstrained marks, ©       
+symbols — and a footnote.[1]            
+
+Getting started                         
+
+╭─ Note ───────────────────────────────╮
+│ Read the whole guide before you      │
+│ begin.                               │
+╰──────────────────────────────────────╯
+
+Install it
+                                        
+ cargo install rs-rich-cli # <1>        
+ rich --version            # <2>        
+                                        
+
+ <1> Installs the rich binary.          
+ <2> Prints its version.                
+
+Lists                                   
+
+ • Unordered                            
+    • Nested deeper                     
+ • [x] Checked off                      
+ • [ ] Still to do                      
+
+ 1 First                                
+ 2 Second                               
+                                        
+   A paragraph attached with a list     
+   continuation.                        
+
+CPU
+    The processing unit                 
+
+RAM
+    Working memory                      
+
+Reference                               
+
+                     
+ Name   Size  Notes  
+ ─────────────────── 
+ alpha    10  first  
+ beta    200  second 
+                     
+
+╭─ Warning ────────────────────────────╮
+│ Mind the gap between the train and   │
+│ the platform.                        │
+╰──────────────────────────────────────╯
+
+▌ Errors using inadequate data are    
+▌ much less than those using no data  
+▌ at all.                             
+▌ — Charles Babbage, Passages         
+
+See the AsciiDoc site                   
+(https://asciidoc.org), press Ctrl+C and
+open File › Save.                       
+
+🌆 Engine diagram 
+
+----------------------------------------
+
+include::appendix.adoc[]
+
+----------------------------------------
+
+ 1 Footnotes collect at the end.        

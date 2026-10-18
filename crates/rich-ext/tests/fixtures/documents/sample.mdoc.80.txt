@@ -1,0 +1,36 @@
+CATALOG(1)                  General Commands Manual                   CATALOG(1)
+
+NAME                                                                            
+
+catalog — concatenate and number files                                          
+
+SYNOPSIS                                                                        
+
+catalog [-bn] [-o output] [file ...]                                            
+
+DESCRIPTION                                                                     
+
+The catalog utility reads each file in turn and writes it to the standard       
+output. The options are as follows:                                             
+
+-b
+    Number the non-blank lines.                                                 
+
+-o output
+    Write to output instead of “standard output”.                               
+
+EXAMPLES                                                                        
+
+                                                                                
+ $ catalog -n notes.txt                                                         
+                                                                                
+
+EXIT STATUS                                                                     
+
+The catalog utility exits 0 on success, and >0 if an error occurs.              
+
+SEE ALSO                                                                        
+
+cat(1), nl(1)                                                                   
+
+                                October 1, 2026                       CATALOG(1)
