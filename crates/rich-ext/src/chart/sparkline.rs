@@ -595,9 +595,76 @@ impl Renderable for Sparkline {
     }
 }
 
+/// `Sparkline, 24 values: min 12, max 52, last 14, trend up`, with the
+/// gaps counted and how many values are over the threshold.
+impl crate::a11y::AccessibleText for Sparkline {
+    fn accessible_text(&self, _width: usize) -> String {
+        self.facts("Sparkline")
+    }
+}
+
+impl Sparkline {
+    /// The finite values' range, with a fixed bound in place of its end:
+    /// what a shared scale unifies.
+    pub(crate) fn value_extent(&self) -> Option<(f64, f64)> {
+        let data = super::describe::extent(self.values.iter().copied());
+        let lo = self.min.or(data.map(|d| d.0))?;
+        let hi = self.max.or(data.map(|d| d.1))?;
+        Some((lo.min(hi), lo.max(hi)))
+    }
+
+    /// `what`, the count and the series' facts.
+    pub(crate) fn facts(&self, what: &str) -> String {
+        if self.values.is_empty() {
+            return format!("{what}, no values");
+        }
+        let points = super::describe::indexed(&self.values);
+        let facts = super::describe::series(&points, self.format, ("value", "values"));
+        // "24 values, 1 missing, min …": the count goes before the colon.
+        let (count, rest) = facts.split_once(", ").unwrap_or((facts.as_str(), ""));
+        let mut out = format!("{what}, {count}");
+        if !rest.is_empty() {
+            out.push_str(": ");
+            out.push_str(rest);
+        }
+        if let Some(t) = self.threshold {
+            let over = self
+                .values
+                .iter()
+                .filter(|v| v.is_finite() && **v > t)
+                .count();
+            out.push_str(&format!(
+                ", {} above {}",
+                super::describe::count(over),
+                self.format.format(t)
+            ));
+        }
+        out
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn accessible_text_names_the_extremes_and_the_trend() {
+        use crate::a11y::AccessibleText;
+        let spark = Sparkline::new([2.0, 4.0, 3.0, 9.0, 6.0, 5.0]);
+        assert_eq!(
+            spark.accessible_text(80),
+            "Sparkline, 6 values: min 2, max 9, last 5, trend up"
+        );
+        let gaps = Sparkline::optional([Some(9.0), None, Some(4.0), Some(1.0)]).threshold(3.0);
+        assert_eq!(
+            gaps.accessible_text(80),
+            "Sparkline, 4 values: 1 missing, min 1, max 9, last 1, trend down, 2 above 3"
+        );
+        assert_eq!(
+            Sparkline::new([]).accessible_text(80),
+            "Sparkline, no values"
+        );
+    }
 
     fn rows(width: usize, spark: &Sparkline) -> Vec<String> {
         let console = Console::builder().width(width).color_system(None).build();

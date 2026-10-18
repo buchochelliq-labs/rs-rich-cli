@@ -461,6 +461,59 @@ impl Renderable for Canvas {
     }
 }
 
+/// `Canvas, x from -180 to 180, y from -90 to 90: a world map, 4 points, 3
+/// lines`, then the text printed on it (`Text: London, Paris`). A canvas
+/// holds shapes rather than data, so it says what it drew.
+impl crate::a11y::AccessibleText for Canvas {
+    fn accessible_text(&self, _width: usize) -> String {
+        use super::describe::counted;
+        let format = super::ValueFormat::Compact;
+        let axis = |[a, b]: [f64; 2]| super::describe::range(a.min(b), a.max(b), format);
+        let mut head = format!(
+            "Canvas, x {}, y {}",
+            axis(self.x_bounds),
+            axis(self.y_bounds)
+        );
+        let (mut points, mut lines, mut areas, mut circles) = (0, 0, 0, 0);
+        let mut map = false;
+        let mut text = Vec::new();
+        for op in &self.ops {
+            match op {
+                Op::Points(p, _) => points += p.len(),
+                Op::Line(..) => lines += 1,
+                Op::Area(..) => areas += 1,
+                Op::Circle(..) => circles += 1,
+                Op::Map(..) => map = true,
+                Op::Print(_, t, _) if !t.trim().is_empty() => text.push(t.trim().to_string()),
+                _ => {}
+            }
+        }
+        let mut drawn = Vec::new();
+        if map {
+            drawn.push("a world map".to_string());
+        }
+        for (n, one, many) in [
+            (points, "point", "points"),
+            (lines, "line", "lines"),
+            (areas, "area segment", "area segments"),
+            (circles, "circle", "circles"),
+        ] {
+            if n > 0 {
+                drawn.push(counted(n, one, many));
+            }
+        }
+        if drawn.is_empty() {
+            head.push_str(": empty");
+        } else {
+            head.push_str(&format!(": {}", drawn.join(", ")));
+        }
+        if !text.is_empty() {
+            head.push_str(&format!("\nText: {}", text.join(", ")));
+        }
+        head
+    }
+}
+
 /// Whether to draw in ASCII only on `console`.
 pub(crate) fn is_ascii(console: &Console, options: &ConsoleOptions) -> bool {
     Charset::Auto.resolve(console, options, Charset::Braille) == Charset::Ascii

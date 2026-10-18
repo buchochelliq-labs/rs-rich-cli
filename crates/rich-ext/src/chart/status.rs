@@ -529,3 +529,75 @@ impl Renderable for StatusMatrix {
             .normalize()
     }
 }
+
+/// `Status matrix, 3 rows by 4 columns: 9 pass, 2 fail, 1 skip`, then the
+/// cells of every state but `pass` and `skip`, each `row on column` (`fail:
+/// unit on windows, lint on macos`), ten at most.
+impl crate::a11y::AccessibleText for StatusMatrix {
+    fn accessible_text(&self, _width: usize) -> String {
+        use super::describe::{capped, count, counted};
+        let columns = self.column_count();
+        if self.rows.is_empty() || columns == 0 {
+            return "Status matrix, no cells".to_string();
+        }
+        let counts = self.counts();
+        let tally: Vec<String> = counts
+            .iter()
+            .map(|(name, n)| format!("{} {name}", count(*n)))
+            .collect();
+        let mut out = vec![format!(
+            "Status matrix, {} by {}: {}",
+            counted(self.rows.len(), "row", "rows"),
+            counted(columns, "column", "columns"),
+            tally.join(", ")
+        )];
+        let header = |c: usize| match self.columns.get(c).filter(|h| !h.is_empty()) {
+            Some(h) => h.clone(),
+            None => format!("column {}", c + 1),
+        };
+        for (name, _) in counts.iter().filter(|(n, _)| n != "pass" && n != "skip") {
+            let cells: Vec<String> = self
+                .rows
+                .iter()
+                .flat_map(|(label, states)| {
+                    states
+                        .iter()
+                        .enumerate()
+                        .filter(|(_, s)| *s == name)
+                        .map(move |(c, _)| match label.as_str() {
+                            "" => header(c),
+                            row => format!("{row} on {}", header(c)),
+                        })
+                })
+                .collect();
+            out.push(format!("{name}: {}", capped(&cells, 10)));
+        }
+        out.join("\n")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::a11y::AccessibleText;
+
+    #[test]
+    fn accessible_text_counts_and_names_the_failures() {
+        let matrix = StatusMatrix::new()
+            .columns(["linux", "macos", "windows"])
+            .row("unit", ["pass", "pass", "fail"])
+            .row("lint", ["pass", "flaky", "skip"])
+            .row("docs", ["pass", "fail", "blocked"]);
+        assert_eq!(
+            matrix.accessible_text(80),
+            "Status matrix, 3 rows by 3 columns: 4 pass, 2 fail, 1 skip, 1 flaky, 1 blocked\n\
+             fail: unit on windows, docs on macos\n\
+             flaky: lint on macos\n\
+             blocked: docs on windows"
+        );
+        assert_eq!(
+            StatusMatrix::new().accessible_text(80),
+            "Status matrix, no cells"
+        );
+    }
+}

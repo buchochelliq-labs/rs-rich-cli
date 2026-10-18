@@ -501,9 +501,48 @@ impl Renderable for LineGauge {
     }
 }
 
+/// `Gauge 42 of 100 GB: 42 percent`: the label, if it has one, and how full.
+fn gauge_text(label: Option<&str>, ratio: f64) -> String {
+    let percent = super::describe::percent(ratio);
+    match label.map(str::trim).filter(|l| !l.is_empty()) {
+        Some(label) => format!("Gauge {label}: {percent}"),
+        None => format!("Gauge: {percent}"),
+    }
+}
+
+/// `Gauge: 42 percent`, or `Gauge <label>: 42 percent` with a label.
+impl crate::a11y::AccessibleText for FillGauge {
+    fn accessible_text(&self, _width: usize) -> String {
+        gauge_text(self.label.as_deref(), self.ratio)
+    }
+}
+
+/// `Gauge: 42 percent`, or `Gauge <label>: 42 percent` with a label.
+impl crate::a11y::AccessibleText for LineGauge {
+    fn accessible_text(&self, _width: usize) -> String {
+        gauge_text(self.label.as_deref(), self.ratio)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn accessible_text_says_how_full() {
+        use crate::a11y::AccessibleText;
+        assert_eq!(FillGauge::new(0.424).accessible_text(80), "Gauge: 42 percent");
+        assert_eq!(
+            FillGauge::percent(50.0)
+                .label("50/100 GB")
+                .accessible_text(80),
+            "Gauge 50/100 GB: 50 percent"
+        );
+        assert_eq!(
+            LineGauge::new(1.0).label("done").accessible_text(80),
+            "Gauge done: 100 percent"
+        );
+    }
 
     fn plain(width: usize) -> Console {
         Console::builder().width(width).color_system(None).build()

@@ -1188,6 +1188,78 @@ impl Renderable for BarChart {
     }
 }
 
+/// `Bar chart, 4 bars, values from 12 to 412`, then every bar (up to six)
+/// or the three largest and the smallest. A grouped bar is named with its
+/// group's label first.
+impl crate::a11y::AccessibleText for BarChart {
+    fn accessible_text(&self, _width: usize) -> String {
+        self.facts("Bar chart", ("bar", "bars"))
+    }
+}
+
+impl BarChart {
+    /// The scale's range (zero included, fixed bounds kept), when there is
+    /// a value or a bound: what a shared scale unifies.
+    pub(crate) fn value_extent(&self) -> Option<(f64, f64)> {
+        let any = self.bars.iter().any(|b| b.value.is_finite());
+        if !any && self.min.is_none() && self.max.is_none() {
+            return None;
+        }
+        let scale = self.scale();
+        Some((scale.min(), scale.max()))
+    }
+
+    /// `what`, the count, the range and the bars ranked.
+    fn facts(&self, what: &str, noun: (&str, &str)) -> String {
+        use super::describe::{counted, extent, range, ranked};
+        if self.bars.is_empty() {
+            return format!("{what}, no {}", noun.1);
+        }
+        let mut head = format!("{what}, {}", counted(self.bars.len(), noun.0, noun.1));
+        let groups: Vec<(&str, Range<usize>)> = self
+            .spans()
+            .into_iter()
+            .filter(|_| !self.groups.is_empty())
+            .collect();
+        if groups.len() > 1 {
+            head.push_str(&format!(" in {} groups", groups.len()));
+        }
+        if let Some((lo, hi)) = extent(self.bars.iter().map(|b| b.value)) {
+            head.push_str(&format!(", values {}", range(lo, hi, self.format)));
+        }
+        let missing = self.bars.iter().filter(|b| !b.value.is_finite()).count();
+        if missing > 0 {
+            head.push_str(&format!(", {} without a value", super::describe::count(missing)));
+        }
+        let group_of = |i: usize| {
+            groups
+                .iter()
+                .find(|(_, r)| r.contains(&i))
+                .map_or("", |(label, _)| label)
+        };
+        let entries: Vec<(String, String, f64)> = self
+            .bars
+            .iter()
+            .enumerate()
+            .map(|(i, bar)| {
+                let name = match group_of(i) {
+                    "" => bar.label.clone(),
+                    group => format!("{group} {}", bar.label).trim_end().to_string(),
+                };
+                let text = if bar.value.is_finite() {
+                    self.value_text(bar)
+                } else {
+                    "no value".to_string()
+                };
+                (name, text, bar.value)
+            })
+            .collect();
+        let mut out = vec![head];
+        out.extend(ranked(&entries, 6));
+        out.join("\n")
+    }
+}
+
 /// Raw values counted into equal-width bins and drawn as a [`BarChart`],
 /// one bar per bin labelled with its range.
 ///
@@ -1346,14 +1418,7 @@ impl Histogram {
             };
         }
         let edges = self.edges();
-        let written = exact_labels(ValueFormat::Compact, &edges)
-            .map(|(labels, _)| labels)
-            .unwrap_or_else(|| {
-                edges
-                    .iter()
-                    .map(|&e| ValueFormat::Compact.format(e))
-                    .collect()
-            });
+        let written = edge_labels(&edges);
         let counts = self.counts();
         let mut chart = BarChart {
             bars: Vec::new(),
@@ -1375,6 +1440,55 @@ impl Renderable for Histogram {
 
     fn measure(&self, console: &Console, options: &ConsoleOptions) -> Measurement {
         self.to_bar_chart().measure(console, options)
+    }
+}
+
+/// The bin edges as the labels write them: exactly, in full when the
+/// compact form would round one.
+fn edge_labels(edges: &[f64]) -> Vec<String> {
+    exact_labels(ValueFormat::Compact, edges)
+        .map(|(labels, _)| labels)
+        .unwrap_or_else(|| {
+            edges
+                .iter()
+                .map(|&e| ValueFormat::Compact.format(e))
+                .collect()
+        })
+}
+
+/// `Histogram, 8 values in 3 bins from 10 to 40`, then each bin's count
+/// (up to six bins) or the three largest bins and the smallest.
+impl crate::a11y::AccessibleText for Histogram {
+    fn accessible_text(&self, _width: usize) -> String {
+        use super::describe::{count, counted, ranked};
+        let finite = self.values.iter().filter(|v| v.is_finite()).count();
+        let ignored = self.values.len() - finite;
+        let mut head = format!("Histogram, {}", counted(finite, "value", "values"));
+        if finite == 0 {
+            if ignored > 0 {
+                head.push_str(&format!(", {} ignored", count(ignored)));
+            }
+            return head;
+        }
+        let written = edge_labels(&self.edges());
+        let chart = self.to_bar_chart();
+        head.push_str(&format!(
+            " in {} from {} to {}",
+            counted(self.bins, "bin", "bins"),
+            written[0],
+            written[self.bins]
+        ));
+        if ignored > 0 {
+            head.push_str(&format!(", {} ignored", count(ignored)));
+        }
+        let entries: Vec<(String, String, f64)> = chart
+            .bars
+            .iter()
+            .map(|b| (b.label.clone(), count(b.value as usize), b.value))
+            .collect();
+        let mut out = vec![head];
+        out.extend(ranked(&entries, 6));
+        out.join("\n")
     }
 }
 
