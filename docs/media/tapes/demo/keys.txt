@@ -1,0 +1,32 @@
+╭─ intuiTUIve demo ────────────────────────────────────────────────────────────────────────────────╮
+│ Graphs │ World │ Colours                                                                         │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭─ Colours ──────────────────────────────────────╮
+│default:        Foreground      Background      │
+│black:        ╭─ Help ─────────────────────────────────────────────────────────────╮
+│red:          │? Search keys ›                                                     │
+│green:        │                                                                    │
+│yellow:       │  ←/h  the tab before                                               │
+│blue:         │  →/l  the next tab                                                 │
+│magenta:      │  ↑/k  the task before                                              │
+│cyan:         │  ↓/j  the next task                                                │
+│white:        │  t    show or hide the chart                                       │
+│bright_black: │  q    quit                                                         │
+│bright_red:   │                                                                    │
+│bright_green: │                                                                    │
+│bright_yellow:│                                                                    │
+│bright_blue:  │                                                                    │
+│bright_magenta│                                                                    │
+│bright_cyan:  │                                                                    │
+│bright_white: │                                                                    │
+│              │                                                                    │
+│              │                                                                    │
+│              │                                                                    │
+│              │                                                                    │
+│              │  6 keys · type to search · ↑↓ scroll · esc close                   │
+│              ╰────────────────────────────────────────────────────────────────────╯
+│                                                │
+│                                                │
+│                                                │
+│                                                │
+╰────────────────────────────────────────────────╯
