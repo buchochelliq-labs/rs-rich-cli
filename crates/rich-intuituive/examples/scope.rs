@@ -2,8 +2,9 @@
 //! style of [scope-tui](https://github.com/alemidev/scope-tui), a ratatui
 //! app, rebuilt on intuiTUIve. It reuses none of scope-tui's code: it is a
 //! rebuild of the behaviour, showing how an app that redraws twenty or more
-//! times a second maps. The plot is rich-ext's `Chart`, which lays out as
-//! ratatui's does; the header is a row of text nodes.
+//! times a second maps. The plot is rich-ext's `Chart`, which lays out and
+//! draws as ratatui's does; the header is a row of `cell`s laid out by
+//! ratatui's solver, as scope-tui's one-row `Table` is.
 //!
 //! Ported from scope-tui 0.3.5 (<https://github.com/alemidev/scope-tui>),
 //! by alemi, MIT licence. Its design, keys, options and display layout are
@@ -13,17 +14,21 @@
 //!     cargo run -p rs-rich-intuituive --example scope -- file PATH # raw PCM
 //!     parec --format=s16le --rate=48000 --channels=2 \
 //!         | cargo run -p rs-rich-intuituive --example scope -- file -
+//!     cargo run -p rs-rich-intuituive --example scope --features audio -- audio
 //!
 //! Options, as scope-tui's: `-c N` channels, `-b SIZE` buffer, `-r HZ`
 //! sample rate, `-t NOTE` tune the buffer to a note, `-s X` scale,
 //! `--scatter`, `--no-reference`, `--no-ui`, `--no-braille`,
 //! `--palette-color a,b,…`, `--labels-color c`, `--axis-color c` (colours
-//! as ratatui reads them: `red`, `LightRed`, `DarkGray`, `#ff8800`, `208`);
-//! `file PATH` takes `-l` to play a file at its sample rate. Without a
-//! source it draws a test signal; `--still` makes it stand still.
-//! `--backend NAME` (or `INTUITUIVE_BACKEND=NAME`) drives the terminal with
-//! termion or termwiz instead of crossterm, when built with the crate's
-//! feature of that name:
+//! as ratatui reads them: `red`, `LightRed`, `DarkGray`, `#ff8800`, `208`).
+//! Sources, as scope-tui's subcommands: `file PATH [-l]` plays a file or a
+//! pipe (at its sample rate with `-l`); with the crate's `audio` feature,
+//! `audio [DEVICE] [--list] [--timeout S]` captures a sound card and `pulse
+//! [DEVICE]` PulseAudio's default source, through ALSA. Without a source it
+//! draws a test signal; `--still` makes it stand still. `--backend NAME`
+//! (or `INTUITUIVE_BACKEND=NAME`) drives the terminal with termion or
+//! termwiz instead of crossterm, when built with the crate's feature of
+//! that name:
 //!
 //!     cargo run -p rs-rich-intuituive --example scope --features termwiz -- --backend termwiz
 //!
@@ -34,37 +39,31 @@
 use std::collections::VecDeque;
 use std::f64::consts::PI;
 use std::io::Read;
-use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
+#[cfg(feature = "audio")]
+use intuituive::audio;
 use intuituive::interact::BackendKind;
 use intuituive::prelude::*;
-use rich_ext::chart::{Axis, AxisScale, Chart, Dataset, GraphType, Labels, LegendPosition, Marker};
+use intuituive::widgets::cell;
+use intuituive::{Latest, Solver};
+use rich_ext::chart::{
+    Axis, AxisScale, Chart, Dataset, GraphType, Labels, Layering, LegendPosition, Marker,
+    OutOfBounds,
+};
+use rich_ext::dsp;
+use rich_ratatui::style_from_color_name;
 
 /// One buffer of samples, one row per channel, each in -1 to 1.
 pub type Matrix = Vec<Vec<f64>>;
 
-/// What a [`Source`] has for the app.
-pub enum Pull {
-    /// The next buffer.
-    Frame(Matrix),
-    /// Nothing new yet.
-    Wait,
-    /// The input has ended.
-    End,
-}
-
-/// Where the samples come from.
-pub trait Source {
-    fn pull(&mut self) -> Pull;
-}
-
 /// A test signal: two tones a fifth apart (2 and 3 cycles a buffer), one
 /// per channel, each with overtones, faint high partials and a little
 /// noise, so the vectorscope draws a Lissajous figure and the spectroscope
-/// peaks along a noise floor. Every tone is a whole number of cycles a buffer; unless
-/// `still`, the right channel's phase drifts from one buffer to the next
-/// and the figure turns. Still, every buffer is the same, noise included.
+/// peaks along a noise floor. Every tone is a whole number of cycles a
+/// buffer; unless `still`, the right channel's phase drifts from one buffer
+/// to the next and the figure turns. Still, every buffer is the same, noise
+/// included. It never ends.
 pub struct Demo {
     pub channels: usize,
     pub buffer: usize,
@@ -83,8 +82,10 @@ impl Demo {
     }
 }
 
-impl Source for Demo {
-    fn pull(&mut self) -> Pull {
+impl Iterator for Demo {
+    type Item = Matrix;
+
+    fn next(&mut self) -> Option<Matrix> {
         let n = self.buffer as f64;
         let frame = if self.still { 0 } else { self.frame };
         self.frame += 1;
@@ -121,12 +122,13 @@ impl Source for Demo {
                 })
                 .collect()
         };
-        Pull::Frame((0..self.channels).map(&mut channel).collect())
+        Some((0..self.channels).map(&mut channel).collect())
     }
 }
 
 /// Signed 16-bit little-endian PCM, channels interleaved (`L R L R …`), as
-/// `parec --format=s16le` writes it: a file, a pipe or stdin.
+/// `parec --format=s16le` writes it: a file, a pipe or stdin, a buffer at
+/// a time. A short last buffer is padded with silence; then it ends.
 pub struct Pcm<R> {
     reader: R,
     channels: usize,
@@ -154,9 +156,10 @@ pub fn deinterleave(bytes: &[u8], channels: usize) -> Matrix {
     out
 }
 
-impl<R: Read> Source for Pcm<R> {
-    fn pull(&mut self) -> Pull {
-        // Fill the buffer; a short last one is padded with silence.
+impl<R: Read> Iterator for Pcm<R> {
+    type Item = Matrix;
+
+    fn next(&mut self) -> Option<Matrix> {
         let mut filled = 0;
         while filled < self.bytes.len() {
             match self.reader.read(&mut self.bytes[filled..]) {
@@ -167,57 +170,61 @@ impl<R: Read> Source for Pcm<R> {
             }
         }
         if filled == 0 {
-            return Pull::End;
+            return None;
         }
         self.bytes[filled..].fill(0);
-        Pull::Frame(deinterleave(&self.bytes, self.channels))
+        Some(deinterleave(&self.bytes, self.channels))
     }
 }
 
-/// A source read on a thread of its own, so a slow pipe never holds up the
-/// app: the app takes the newest buffer, and one it was too slow for is
-/// dropped rather than queued.
-pub struct Threaded {
-    /// The newest buffer not yet taken, and whether the input has ended.
-    shared: Arc<Mutex<(Option<Matrix>, bool)>>,
+/// A buffer as the app gets it from a thread: numbered, so two that hold
+/// the same samples (the still test signal, or silence) are still two
+/// frames.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Frame {
+    pub number: u64,
+    pub data: Matrix,
 }
 
-impl Threaded {
-    /// Read `source`, waiting `pace` after each buffer if it is set (to play
-    /// a file at its sample rate rather than all at once).
-    pub fn new(mut source: impl Source + Send + 'static, pace: Option<Duration>) -> Threaded {
-        let shared = Arc::new(Mutex::new((None, false)));
-        let slot = shared.clone();
-        std::thread::spawn(move || loop {
-            match source.pull() {
-                Pull::Frame(frame) => slot.lock().unwrap().0 = Some(frame),
-                // The end never replaces a buffer the app has not taken.
-                Pull::End => {
-                    slot.lock().unwrap().1 = true;
-                    break;
-                }
-                Pull::Wait => std::thread::sleep(Duration::from_millis(1)),
-            }
-            if Arc::strong_count(&slot) == 1 {
-                break;
+/// Where the app's buffers come from, started when the app is.
+pub enum Input {
+    /// Buffers made on the app's own clock, one every period: the test
+    /// signal. A timer, not a thread, so a headless test sees the same
+    /// frames on every run.
+    Clock(Box<dyn Iterator<Item = Matrix>>, Duration),
+    /// Buffers read on a thread of their own (see [`play`]).
+    Thread(Box<dyn FnOnce(Latest<Frame>) + Send>),
+    /// A sound card, through intuiTUIve's `audio` feature (`None` for the
+    /// default input).
+    #[cfg(feature = "audio")]
+    Audio(Option<String>),
+}
+
+/// Send `frames` to the app on a thread, one every `pace` if it is set (a
+/// file played at its sample rate), else as fast as they come (a pipe). When they end, the scope goes on with
+/// `silence`, a buffer every `period`, as scope-tui's file source does.
+/// The newest buffer wins: one the app had no time for is dropped.
+pub fn play(
+    frames: impl Iterator<Item = Matrix> + Send + 'static,
+    silence: Matrix,
+    pace: Option<Duration>,
+    period: Duration,
+) -> Input {
+    Input::Thread(Box::new(move |tx: Latest<Frame>| {
+        let mut due = Instant::now();
+        let silent = std::iter::repeat(silence).map(|data| (data, Some(period)));
+        let frames = frames.map(|data| (data, pace)).chain(silent);
+        for (number, (data, pace)) in (0..).zip(frames) {
+            if !tx.send(Frame { number, data }) {
+                return;
             }
             if let Some(pace) = pace {
-                std::thread::sleep(pace);
+                // Keep to the beat, however long a buffer took to make.
+                due = (due + pace).max(Instant::now());
+                std::thread::sleep(due.saturating_duration_since(Instant::now()));
             }
-        });
-        Threaded { shared }
-    }
-}
-
-impl Source for Threaded {
-    fn pull(&mut self) -> Pull {
-        let mut shared = self.shared.lock().unwrap();
-        match shared.0.take() {
-            Some(frame) => Pull::Frame(frame),
-            None if shared.1 => Pull::End,
-            None => Pull::Wait,
         }
-    }
+    }))
 }
 
 /// The settings every mode shares, as scope-tui's `GraphConfig`.
@@ -498,100 +505,6 @@ pub fn vectorscope(g: &Graph, data: &Matrix) -> Plot {
     }
 }
 
-/// `samples` under a Hann window.
-pub fn hann(samples: &[f64]) -> Vec<f64> {
-    let n = samples.len() as f64;
-    samples
-        .iter()
-        .enumerate()
-        .map(|(i, s)| s * 0.5 * (1.0 - (2.0 * PI * i as f64 / n).cos()))
-        .collect()
-}
-
-/// A complex number, as (real, imaginary).
-pub type Complex = (f64, f64);
-
-fn mul((a, b): Complex, (c, d): Complex) -> Complex {
-    (a * c - b * d, a * d + b * c)
-}
-
-/// An in-place radix-2 FFT; `data`'s length is a power of two.
-fn radix2(data: &mut [Complex]) {
-    let n = data.len();
-    if n < 2 {
-        return;
-    }
-    let bits = n.trailing_zeros();
-    for i in 0..n {
-        let j = i.reverse_bits() >> (usize::BITS - bits);
-        if i < j {
-            data.swap(i, j);
-        }
-    }
-    let mut len = 2;
-    while len <= n {
-        let angle = -2.0 * PI / len as f64;
-        for start in (0..n).step_by(len) {
-            for k in 0..len / 2 {
-                let w = ((angle * k as f64).cos(), (angle * k as f64).sin());
-                let (a, b) = (data[start + k], mul(data[start + k + len / 2], w));
-                data[start + k] = (a.0 + b.0, a.1 + b.1);
-                data[start + k + len / 2] = (a.0 - b.0, a.1 - b.1);
-            }
-        }
-        len *= 2;
-    }
-}
-
-/// The discrete Fourier transform of `samples`, of their own length as
-/// scope-tui's is: radix 2 for a power of two, else Bluestein's chirp over
-/// one (so the example needs no FFT crate).
-pub fn fft(samples: &[f64]) -> Vec<Complex> {
-    let n = samples.len();
-    if n.is_power_of_two() {
-        let mut data: Vec<Complex> = samples.iter().map(|s| (*s, 0.0)).collect();
-        radix2(&mut data);
-        return data;
-    }
-    // X[k] = w[k] Σ x[j] w[j] conj(w[k - j]), with w[j] = e^(-iπj²/n): a
-    // convolution, worked with a power-of-two FFT.
-    let m = (2 * n).saturating_sub(1).next_power_of_two();
-    let chirp: Vec<Complex> = (0..n)
-        .map(|j| {
-            // j² mod 2n keeps the angle small, so precise.
-            let angle = -PI * ((j * j) % (2 * n)) as f64 / n as f64;
-            (angle.cos(), angle.sin())
-        })
-        .collect();
-    let mut a = vec![(0.0, 0.0); m];
-    for (j, s) in samples.iter().enumerate() {
-        a[j] = (s * chirp[j].0, s * chirp[j].1);
-    }
-    let mut b = vec![(0.0, 0.0); m];
-    for (j, w) in chirp.iter().enumerate() {
-        b[j] = (w.0, -w.1);
-        if j > 0 {
-            b[m - j] = (w.0, -w.1);
-        }
-    }
-    radix2(&mut a);
-    radix2(&mut b);
-    // The inverse FFT: the conjugate of the forward FFT of the conjugate.
-    let mut c: Vec<Complex> = a
-        .iter()
-        .zip(&b)
-        .map(|(x, y)| {
-            let p = mul(*x, *y);
-            (p.0, -p.1)
-        })
-        .collect();
-    radix2(&mut c);
-    let scale = m as f64;
-    (0..n)
-        .map(|k| mul((c[k].0 / scale, -c[k].1 / scale), chirp[k]))
-        .collect()
-}
-
 /// Where scope-tui draws its frequency reference lines: every 10 Hz from
 /// 20 to 90, every 100 to 900, every 1 kHz to 10 kHz, and 20 kHz.
 fn reference_frequencies() -> impl Iterator<Item = f64> {
@@ -620,7 +533,8 @@ pub fn spectroscope(g: &Graph, s: &Spectroscope, history: &[VecDeque<Vec<f64>>])
             sets.push(DataSet::reference(g, (hz, 0.0), (hz, upper)));
         }
     }
-    let phase = |(re, im): &Complex| {
+    // scope-tui's phase: atan2 with its arguments as it passes them.
+    let phase = |(re, im): &dsp::Complex| {
         let p = re.atan2(*im);
         if p.is_normal() {
             p
@@ -635,17 +549,19 @@ pub fn spectroscope(g: &Graph, s: &Spectroscope, history: &[VecDeque<Vec<f64>>])
             continue;
         }
         if s.window {
-            chunk = hann(&chunk);
+            chunk = dsp::hann(&chunk);
         }
         let peak = chunk.iter().copied().fold(1.0, f64::max);
         chunk.iter_mut().for_each(|x| *x /= peak);
-        let bins = fft(&chunk);
+        // The whole transform, not `dsp::spectrum`'s half up to the Nyquist
+        // frequency: scope-tui plots every bin, the mirrored half too.
+        let bins = dsp::fft(&chunk);
         let resolution = g.rate as f64 / bins.len() as f64;
         let points = bins
             .iter()
             .enumerate()
-            .map(|(i, (re, im))| {
-                let magnitude = (re * re + im * im).sqrt();
+            .map(|(i, bin)| {
+                let magnitude = dsp::magnitude(*bin);
                 let level = if s.log_y { magnitude.ln() } else { magnitude };
                 (i as f64 * resolution, level)
             })
@@ -713,23 +629,13 @@ pub fn chart(plot: &Plot, g: &Graph) -> Chart {
     } else {
         Marker::Dot
     };
-    // ratatui's canvas leaves out a point outside the bounds and a line
-    // with an end outside them, where the chart would clip the line; the
-    // chart skips a point that is not a number, and the lines to it.
-    let inside = |(x, y): (f64, f64)| {
-        if (plot.x.0..=plot.x.1).contains(&x) && (plot.y.0..=plot.y.1).contains(&y) {
-            (x, y)
-        } else {
-            (f64::NAN, f64::NAN)
-        }
-    };
     let datasets = plot.sets.iter().map(|set| {
         let kind = if set.scatter {
             GraphType::Scatter
         } else {
             GraphType::Line
         };
-        let dataset = Dataset::new(set.points.iter().copied().map(inside))
+        let dataset = Dataset::new(set.points.iter().copied())
             .graph_type(kind)
             .marker(marker)
             .style(set.style.clone());
@@ -738,15 +644,13 @@ pub fn chart(plot: &Plot, g: &Graph) -> Chart {
             None => dataset,
         }
     });
-    // No labels, so no axis lines. The axis style is left empty: the
-    // legend's box takes it, and ratatui's is in the terminal's colour.
-    // Titles only with the interface shown; the legend always.
+    // No labels, so no axis lines. Titles only with the interface shown;
+    // the legend always.
     let axis = |(min, max): (f64, f64), title: &str, scale: AxisScale| {
         let axis = Axis::default()
             .bounds(min, max)
             .scale(scale)
-            .labels(Labels::None)
-            .style("");
+            .labels(Labels::None);
         if g.show_ui {
             axis.title(title).title_style(g.labels.clone())
         } else {
@@ -762,6 +666,15 @@ pub fn chart(plot: &Plot, g: &Graph) -> Chart {
         .x_axis(axis(plot.x, plot.x_title, x_scale))
         .y_axis(axis(plot.y, plot.y_title, AxisScale::Linear))
         .legend(LegendPosition::TopRight)
+        // As ratatui 0.29 draws: its canvas leaves out a line with an end
+        // outside the bounds, draws each dataset over the ones before (so
+        // the trace breaks the reference lines it crosses), and draws the
+        // legend's box in the chart's own style, the terminal's colours,
+        // over what the datasets drew.
+        .out_of_bounds(OutOfBounds::Drop)
+        .layering(Layering::PerDataset)
+        .legend_style("")
+        .legend_clear(false)
 }
 
 /// The options scope-tui takes on its command line.
@@ -775,7 +688,7 @@ pub struct Options {
     pub references: bool,
     pub show_ui: bool,
     pub braille: bool,
-    /// Console styles (see [`color`]).
+    /// Console styles, read from ratatui's colour names.
     pub palette: Vec<String>,
     pub labels: String,
     pub axis: String,
@@ -799,40 +712,6 @@ impl Default for Options {
             axis: "bright_black".into(),
         }
     }
-}
-
-/// A colour as ratatui reads one (`Red`, `light red`, `bright_red`,
-/// `DarkGray`, `grey`, `#ff8800`, `208`), as the console style of the same
-/// terminal colour: ratatui's `Gray` is ANSI white, its `DarkGray` bright
-/// black and its `White` bright white.
-pub fn color(name: &str) -> Option<String> {
-    let key = name
-        .to_lowercase()
-        .replace([' ', '-', '_'], "")
-        .replace("bright", "light")
-        .replace("grey", "gray")
-        .replace("silver", "gray")
-        .replace("lightblack", "darkgray")
-        .replace("lightwhite", "white")
-        .replace("lightgray", "white");
-    let base = ["black", "red", "green", "yellow", "blue", "magenta", "cyan"];
-    let light = key.strip_prefix("light").filter(|c| base[1..].contains(c));
-    Some(match key.as_str() {
-        "reset" => "default".into(),
-        "gray" => "white".into(),
-        "darkgray" => "bright_black".into(),
-        "white" => "bright_white".into(),
-        k if base.contains(&k) => k.into(),
-        _ if light.is_some() => format!("bright_{}", light.unwrap_or_default()),
-        _ if name.parse::<u8>().is_ok() => format!("color({name})"),
-        _ if name.len() == 7
-            && name.starts_with('#')
-            && name[1..].chars().all(|c| c.is_ascii_hexdigit()) =>
-        {
-            name.to_lowercase()
-        }
-        _ => return None,
-    })
 }
 
 /// The buffer size scope-tui's `--tune` picks for `note` (`A4`, `C#3`,
@@ -877,9 +756,8 @@ fn nudge(value: f64, step: f64, magnitude: f64, range: (f64, f64)) -> f64 {
 /// The modifiers scope-tui scales a step by: shift ×10, ctrl ×5, alt ×⅕.
 const MAGNITUDES: [(&str, f64); 4] = [("", 1.0), ("shift+", 10.0), ("ctrl+", 5.0), ("alt+", 0.2)];
 
-/// The app, drawing what `source` delivers, taking a buffer from it every
-/// `frame_every`.
-pub fn scope_app(options: Options, mut source: Box<dyn Source>, frame_every: Duration) -> App {
+/// The app, drawing the buffers `input` delivers.
+pub fn scope_app(options: Options, input: Input) -> App {
     App::new(move || {
         let graph = signal(Graph {
             samples: options.buffer,
@@ -903,21 +781,10 @@ pub fn scope_app(options: Options, mut source: Box<dyn Source>, frame_every: Dur
         let frames = signal(0u32);
         let fps = signal(0u32);
 
-        // Take the source's newest buffer at its own pace. Past the end of
-        // the input the scope goes on with silence, as scope-tui's file
-        // source does. Paused, it still reads the source and counts the
-        // frames, as scope-tui does, but shows nothing new.
-        let (channels, buffer) = (options.channels.max(1), options.buffer as usize);
-        let mut ended = false;
-        every(frame_every, move |_| {
-            let data = match source.pull() {
-                Pull::Frame(data) => data,
-                Pull::Wait if !ended => return,
-                _ => {
-                    ended = true;
-                    vec![vec![0.0; buffer]; channels]
-                }
-            };
+        // Each buffer the source delivers. Paused, the scope still takes
+        // them and counts the frames, as scope-tui does, but shows nothing
+        // new; an identical buffer (the still test signal) draws nothing.
+        let take = move |data: Matrix| {
             frames.update(|n| *n += 1);
             if graph.with_untracked(|g| g.pause) {
                 return;
@@ -933,7 +800,50 @@ pub fn scope_app(options: Options, mut source: Box<dyn Source>, frame_every: Dur
                 }
             });
             frame.set(data);
-        });
+        };
+        match input {
+            Input::Clock(mut frames, period) => every(period, move |_| {
+                if let Some(data) = frames.next() {
+                    take(data);
+                }
+            }),
+            Input::Thread(run) => {
+                let feed = latest(run);
+                // Watched by number: a watch runs only when what it reads
+                // changes, and two silent buffers are equal.
+                watch(
+                    move || feed.with(|f| f.as_ref().map(|f| f.number)),
+                    move |_, _| {
+                        if let Some(data) =
+                            feed.with_untracked(|f| f.as_ref().map(|f| f.data.clone()))
+                        {
+                            take(data);
+                        }
+                    },
+                );
+            }
+            #[cfg(feature = "audio")]
+            Input::Audio(device) => {
+                let (channels, buffer) = (options.channels.max(1) as u16, options.buffer as usize);
+                match audio::input(device.as_deref(), options.rate, channels, buffer) {
+                    Ok(samples) => {
+                        // It starts as empty rows, before the first buffer.
+                        // A watch skips a buffer equal to the last (digital
+                        // silence), so silence counts no frames.
+                        watch(
+                            move || samples.get(),
+                            move |data, _| {
+                                if data.iter().any(|row| !row.is_empty()) {
+                                    take(data);
+                                }
+                            },
+                        );
+                    }
+                    // The builder cannot fail: end the app on its first turn.
+                    Err(error) => watch(|| (), move |_, cx| cx.fail(error.to_string())),
+                }
+            }
+        }
         every(Duration::from_secs(1), move |_| {
             fps.set(frames.get_untracked());
             frames.set(0);
@@ -962,13 +872,25 @@ pub fn scope_app(options: Options, mut source: Box<dyn Source>, frame_every: Dur
         );
 
         let mut root = column([shown_header.auto(), plot])
-            .on_key("q ctrl+q ctrl+w", |cx| cx.quit())
-            .on_key("space", move |_| graph.update(|g| g.pause = !g.pause))
-            .on_key("s", move |_| graph.update(|g| g.scatter = !g.scatter))
-            .on_key("h", move |_| graph.update(|g| g.show_ui = !g.show_ui))
-            .on_key("r", move |_| graph.update(|g| g.references = !g.references))
-            .on_key("tab", move |_| mode.update(|m| *m = m.next()))
-            .on_key("esc", move |_| {
+            .bind("q ctrl+q ctrl+w", "quit", |cx| cx.quit())
+            .bind("space", "pause", move |_| {
+                graph.update(|g| g.pause = !g.pause)
+            })
+            .bind("s", "scatter or lines", move |_| {
+                graph.update(|g| g.scatter = !g.scatter)
+            })
+            .bind("h", "hide the interface", move |_| {
+                graph.update(|g| g.show_ui = !g.show_ui)
+            })
+            .bind("r", "reference lines", move |_| {
+                graph.update(|g| g.references = !g.references)
+            })
+            .bind(
+                "tab",
+                "oscilloscope, vectorscope, spectroscope",
+                move |_| mode.update(|m| *m = m.next()),
+            )
+            .bind("esc", "reset the view (and stop triggering)", move |_| {
                 graph.update(|g| {
                     g.samples = g.width;
                     g.scale = 1.0;
@@ -979,40 +901,54 @@ pub fn scope_app(options: Options, mut source: Box<dyn Source>, frame_every: Dur
                     osc.update(|o| o.triggering = false);
                 }
             })
-            .on_key("t", move |_| {
+            .bind("t", "oscilloscope: trigger", move |_| {
                 if mode.get_untracked() == Mode::Oscilloscope {
                     osc.update(|o| o.triggering = !o.triggering);
                 }
             })
-            .on_key("e", move |_| {
+            .bind("e", "oscilloscope: rising or falling edge", move |_| {
                 if mode.get_untracked() == Mode::Oscilloscope {
                     osc.update(|o| o.falling_edge = !o.falling_edge);
                 }
             })
-            .on_key("p", move |_| match mode.get_untracked() {
-                Mode::Oscilloscope => osc.update(|o| o.peaks = !o.peaks),
-                Mode::Spectroscope => spec.update(|s| s.phase_diff = !s.phase_diff),
-                Mode::Vectorscope => {}
-            })
-            .on_key("w", move |_| {
+            .bind(
+                "p",
+                "oscilloscope: peaks · spectroscope: phase difference",
+                move |_| match mode.get_untracked() {
+                    Mode::Oscilloscope => osc.update(|o| o.peaks = !o.peaks),
+                    Mode::Spectroscope => spec.update(|s| s.phase_diff = !s.phase_diff),
+                    Mode::Vectorscope => {}
+                },
+            )
+            .bind("w", "spectroscope: Hann window", move |_| {
                 if mode.get_untracked() == Mode::Spectroscope {
                     spec.update(|s| s.window = !s.window);
                 }
             })
-            .on_key("l", move |_| {
+            .bind("l", "spectroscope: linear or log level", move |_| {
                 if mode.get_untracked() == Mode::Spectroscope {
                     spec.update(|s| s.log_y = !s.log_y);
                 }
             })
-            .on_key("?", |cx| cx.modal(Size::Auto, Size::Auto, help));
-        for (key, step) in [("=", 1), ("-", -1), ("+", 10), ("_", -10)] {
-            root = root.on_key(&format!("{key:?}"), move |_| {
+            // The framework's help lists the described bindings; scope-tui has
+            // none.
+            .bind("?", "these keys", |cx| cx.help());
+        let debounce = [
+            ("=", 1, "oscilloscope: debounce up (+ by 10)"),
+            ("-", -1, "oscilloscope: debounce down (_ by 10)"),
+            ("+", 10, ""),
+            ("_", -10, ""),
+        ];
+        for (key, step, description) in debounce {
+            root = root.bind(&format!("{key:?}"), description, move |_| {
                 if mode.get_untracked() == Mode::Oscilloscope {
                     osc.update(|o| o.depth = (o.depth as i64 + step).clamp(1, 65535) as u32);
                 }
             });
         }
         for (modifier, magnitude) in MAGNITUDES {
+            // Described once, without a modifier: the help would list each.
+            let describe = |what: &'static str| if modifier.is_empty() { what } else { "" };
             // scope-tui steps the samples by whole cells: alt's fifth of 25 is 5.
             let samples = move |sign: f64| {
                 graph.update(|g| {
@@ -1022,20 +958,40 @@ pub fn scope_app(options: Options, mut source: Box<dyn Source>, frame_every: Dur
                 })
             };
             root = root
-                .on_key(&format!("{modifier}up"), move |_| {
-                    graph.update(|g| g.scale = nudge(g.scale, 0.01, magnitude, (0.0, 10.0)))
-                })
-                .on_key(&format!("{modifier}down"), move |_| {
-                    graph.update(|g| g.scale = nudge(g.scale, -0.01, magnitude, (0.0, 10.0)))
-                })
-                .on_key(&format!("{modifier}right"), move |_| samples(1.0))
-                .on_key(&format!("{modifier}left"), move |_| samples(-1.0))
-                .on_key(&format!("{modifier}pageup"), move |_| {
-                    page(mode, osc, spec, 1.0, magnitude)
-                })
-                .on_key(&format!("{modifier}pagedown"), move |_| {
-                    page(mode, osc, spec, -1.0, magnitude)
-                });
+                .bind(
+                    &format!("{modifier}up"),
+                    describe("scale up (shift ×10, ctrl ×5, alt ×⅕)"),
+                    move |_| {
+                        graph.update(|g| g.scale = nudge(g.scale, 0.01, magnitude, (0.0, 10.0)))
+                    },
+                )
+                .bind(
+                    &format!("{modifier}down"),
+                    describe("scale down"),
+                    move |_| {
+                        graph.update(|g| g.scale = nudge(g.scale, -0.01, magnitude, (0.0, 10.0)))
+                    },
+                )
+                .bind(
+                    &format!("{modifier}right"),
+                    describe("more samples"),
+                    move |_| samples(1.0),
+                )
+                .bind(
+                    &format!("{modifier}left"),
+                    describe("fewer samples"),
+                    move |_| samples(-1.0),
+                )
+                .bind(
+                    &format!("{modifier}pageup"),
+                    describe("oscilloscope: threshold up · spectroscope: average more"),
+                    move |_| page(mode, osc, spec, 1.0, magnitude),
+                )
+                .bind(
+                    &format!("{modifier}pagedown"),
+                    describe("oscilloscope: threshold down · spectroscope: average less"),
+                    move |_| page(mode, osc, spec, -1.0, magnitude),
+                );
         }
         root
     })
@@ -1062,9 +1018,10 @@ fn page(
     }
 }
 
-/// The header: a row of cells sized as scope-tui's table columns, each
-/// redrawn only when what it shows changes, and cut at its edge as a
-/// table cell is.
+/// The header: scope-tui's one-row `Table`, as a row of cells laid out by
+/// ratatui's solver (percentages of the whole width, a column between
+/// cells), each cut at its edge and drawn again only when what it shows
+/// changes. The row's style is the table's: the labels' colour.
 fn header(
     graph: Signal<Graph>,
     mode: Signal<Mode>,
@@ -1072,92 +1029,64 @@ fn header(
     spec: Signal<Spectroscope>,
     fps: Signal<u32>,
 ) -> Node {
-    let labels = memo(move || graph.with(|g| g.labels.clone()));
-    let cell = move |percent: u16, markup: Box<dyn Fn() -> String>| {
-        text(move || format!("[{}]{}", labels.get(), markup()))
-            .no_wrap()
-            .percent(percent)
+    let flag = move |on: fn(&Graph) -> bool, yes: &'static str, no: &'static str| {
+        cell(move || (if graph.with(on) { yes } else { no }).into())
     };
+    let labels = graph.with_untracked(|g| g.labels.clone());
     row([
-        text(move || {
+        cell(move || {
             let colour = graph.with(|g| g.palette(0).to_string());
-            format!("[bold {colour}]{}::scope-tui[/]", mode.get().name())
+            format!("[bold {colour}]{}::scope-tui", mode.get().name())
         })
-        .no_wrap()
         .percent(35),
-        cell(
-            25,
-            Box::new(move || match mode.get() {
-                Mode::Oscilloscope => osc.with(oscilloscope_header),
-                Mode::Vectorscope => "live".into(),
-                Mode::Spectroscope => graph.with(|g| spec.with(|s| spectroscope_header(g, s))),
-            }),
-        ),
-        cell(
-            7,
-            Box::new(move || format!("-{:.2}x+", graph.with(|g| g.scale))),
-        ),
-        cell(
-            13,
-            Box::new(move || graph.with(|g| format!("{}/{} spf", g.samples, g.width))),
-        ),
-        cell(6, Box::new(move || format!("{}fps", fps.get()))),
-        cell(
-            6,
-            Box::new(move || {
-                (if graph.with(|g| g.scatter) {
-                    "***"
-                } else {
-                    "---"
-                })
-                .into()
-            }),
-        ),
-        cell(
-            6,
-            Box::new(move || (if graph.with(|g| g.pause) { "||" } else { "|>" }).into()),
-        ),
+        cell(move || match mode.get() {
+            Mode::Oscilloscope => osc.with(oscilloscope_header),
+            Mode::Vectorscope => "live".into(),
+            Mode::Spectroscope => graph.with(|g| spec.with(|s| spectroscope_header(g, s))),
+        })
+        .percent(25),
+        cell(move || format!("-{:.2}x+", graph.with(|g| g.scale))).percent(7),
+        cell(move || graph.with(|g| format!("{}/{} spf", g.samples, g.width))).percent(13),
+        cell(move || format!("{}fps", fps.get())).percent(6),
+        flag(|g| g.scatter, "***", "---").percent(6),
+        flag(|g| g.pause, "||", "|>").percent(6),
     ])
+    .solver(Solver::Ratatui)
     // ratatui's tables leave a column between cells.
     .gap(1)
+    .style(&labels)
     .fixed(1)
 }
 
-/// The keys, in a modal (scope-tui has none: this one is ours).
-fn help() -> Node {
-    label(
-        "[b]q[/] [b]ctrl+c[/]   quit\n\
-         [b]space[/]      pause\n\
-         [b]tab[/]        oscilloscope, vectorscope, spectroscope\n\
-         [b]s[/]          scatter or lines\n\
-         [b]h[/]          hide the interface\n\
-         [b]r[/]          reference lines\n\
-         [b]↑ ↓[/]        scale\n\
-         [b]← →[/]        samples shown\n\
-         [b]esc[/]        reset the view\n\
-         [dim]shift ×10 · ctrl ×5 · alt ×⅕[/]\n\
-         \n\
-         [b]oscilloscope[/]\n\
-         [b]t[/] trigger · [b]e[/] edge · [b]p[/] peaks\n\
-         [b]pgup pgdn[/] threshold · [b]- = _ +[/] debounce\n\
-         [b]spectroscope[/]\n\
-         [b]pgup pgdn[/] averaging · [b]l[/] log · [b]w[/] window\n\
-         [b]p[/] phase difference",
-    )
-    .padding(0, 1)
-    .panel("Keys")
-    .on_key("esc ? q", |cx| cx.pop())
+/// Where the samples come from: scope-tui's subcommands, and the test
+/// signal.
+#[derive(Clone, Debug, PartialEq)]
+pub enum Source {
+    /// No subcommand, or `demo`: the test signal, held still with `--still`.
+    Demo { still: bool },
+    /// `file PATH [-l]`: PCM from a file, a pipe or stdin (`-`), played at
+    /// its sample rate with `-l`.
+    File { path: String, limit_rate: bool },
+    /// `audio [DEVICE] [--timeout S] [--list]`: a sound card, the default
+    /// input without a name; `--list` prints the inputs instead.
+    Audio {
+        device: Option<String>,
+        timeout: u64,
+        list: bool,
+    },
+    /// `pulse [DEVICE] [--server-buffer N]`: PulseAudio, reached through
+    /// ALSA's `pulse` device.
+    Pulse {
+        device: Option<String>,
+        server_buffer: u32,
+    },
 }
 
-/// What `main` parsed: the options, the source, and whether to play a
-/// file at its sample rate.
+/// What `main` parsed: the options and the source.
 #[derive(Debug, PartialEq)]
 pub struct Command {
     pub options: Options,
-    /// `None` for the test signal, `Some("-")` for stdin.
-    pub file: Option<String>,
-    pub limit_rate: bool,
-    pub still: bool,
+    pub source: Source,
     /// The backend `--backend NAME` chose; without it, `INTUITUIVE_BACKEND`
     /// names one, else crossterm drives the terminal.
     pub backend: Option<BackendKind>,
@@ -1186,8 +1115,10 @@ a simple oscilloscope/vectorscope/spectroscope for your terminal
 Usage: scope [OPTIONS] [COMMAND]
 
 Commands:
-  file  use a file from filesystem and read its content
-  demo  draw a test signal (the default)
+  pulse  use PulseAudio's default source, through ALSA (the audio feature)
+  file   use a file from filesystem and read its content
+  audio  capture from a sound card (the audio feature)
+  demo   draw a test signal (the default)
 
 Options:
   -c, --channels <N>                   number of channels to open [default: 2]
@@ -1209,74 +1140,105 @@ Options:
 
 file <PATH> [-l]: PATH is a file or pipe of signed 16-bit little-endian PCM,
 or - for stdin; -l, --limit-rate limits data flow to match the sample rate.
+audio [DEVICE] [--list] [--timeout S]: DEVICE is a name --list prints, or a
+part of one; the default input without it.
+pulse [DEVICE] [--server-buffer N]: DEVICE is an ALSA device, `pulse` by default.
 ";
 
 /// Parse scope-tui's command line (without the program's name). Options
 /// may come before or after the source.
 pub fn parse(args: &[String]) -> Result<Command, String> {
     let mut options = Options::default();
-    let (mut file, mut limit_rate, mut still, mut note) = (None, false, false, None);
+    let (mut source, mut still, mut note) = (None, false, None);
     let (mut backend, mut print) = (None, None);
-    let mut args = args.iter();
+    let mut args = args.iter().peekable();
     let number = |name: &str, value: Option<&String>| -> Result<f64, String> {
         value
             .and_then(|v| v.parse().ok())
             .ok_or_else(|| format!("{name} takes a number"))
     };
     let colour = |name: &str, value: &str| -> Result<String, String> {
-        color(value.trim()).ok_or_else(|| format!("invalid colour {value:?} for {name}"))
+        style_from_color_name(value.trim())
+            .ok_or_else(|| format!("invalid colour {value:?} for {name}"))
     };
     while let Some(arg) = args.next() {
-        match arg.as_str() {
-            "-c" | "--channels" => options.channels = number(arg, args.next())?.max(1.0) as usize,
-            "-b" | "--buffer" => options.buffer = number(arg, args.next())?.max(16.0) as u32,
-            "-r" | "--sample-rate" => options.rate = number(arg, args.next())?.max(1.0) as u32,
-            "-s" | "--scale" => options.scale = number(arg, args.next())?.max(0.0),
-            "-t" | "--tune" => note = Some(args.next().ok_or("--tune takes a note")?.clone()),
-            "--scatter" => options.scatter = true,
-            "--no-reference" => options.references = false,
-            "--no-ui" => options.show_ui = false,
-            "--no-braille" => options.braille = false,
-            "--palette-color" => {
+        // A device or a path: the next word, unless it is an option.
+        let operand = |args: &mut std::iter::Peekable<std::slice::Iter<String>>| {
+            args.next_if(|a| !a.starts_with('-') || a.as_str() == "-")
+                .cloned()
+        };
+        match (arg.as_str(), &mut source) {
+            ("-c" | "--channels", _) => {
+                options.channels = number(arg, args.next())?.max(1.0) as usize
+            }
+            ("-b" | "--buffer", _) => options.buffer = number(arg, args.next())?.max(16.0) as u32,
+            ("-r" | "--sample-rate", _) => options.rate = number(arg, args.next())?.max(1.0) as u32,
+            ("-s" | "--scale", _) => options.scale = number(arg, args.next())?.max(0.0),
+            ("-t" | "--tune", _) => note = Some(args.next().ok_or("--tune takes a note")?.clone()),
+            ("--scatter", _) => options.scatter = true,
+            ("--no-reference", _) => options.references = false,
+            ("--no-ui", _) => options.show_ui = false,
+            ("--no-braille", _) => options.braille = false,
+            ("--palette-color", _) => {
                 let list = args.next().ok_or("--palette-color takes colours")?;
                 options.palette = list
                     .split(',')
                     .map(|c| colour(arg, c))
                     .collect::<Result<_, _>>()?;
             }
-            "--labels-color" => {
+            ("--labels-color", _) => {
                 options.labels = colour(arg, args.next().ok_or("--labels-color takes a colour")?)?
             }
-            "--axis-color" => {
+            ("--axis-color", _) => {
                 options.axis = colour(arg, args.next().ok_or("--axis-color takes a colour")?)?
             }
-            "-l" | "--limit-rate" if file.is_some() => limit_rate = true,
-            "--still" => still = true,
-            "--backend" => {
+            ("--still", _) => still = true,
+            ("--backend", _) => {
                 let name = args
                     .next()
                     .ok_or("--backend takes a name: crossterm, termion or termwiz")?;
                 backend = Some(backend_named(name)?);
             }
-            "-h" | "--help" | "help" => print = Some(USAGE.to_string()),
-            "-V" | "--version" => print = Some("scope 0.3.5 (scope-tui on intuiTUIve)\n".into()),
-            "demo" => {}
-            "file" => {
+            ("-h" | "--help" | "help", _) => print = Some(USAGE.to_string()),
+            ("-V" | "--version", _) => {
+                print = Some("scope 0.3.5 (scope-tui on intuiTUIve)\n".into())
+            }
+            // Each subcommand's own options, after it.
+            ("-l" | "--limit-rate", Some(Source::File { limit_rate, .. })) => *limit_rate = true,
+            ("--list", Some(Source::Audio { list, .. })) => *list = true,
+            ("--timeout", Some(Source::Audio { timeout, .. })) => {
+                *timeout = number(arg, args.next())?.max(0.0) as u64
+            }
+            ("--server-buffer", Some(Source::Pulse { server_buffer, .. })) => {
+                *server_buffer = number(arg, args.next())?.max(1.0) as u32
+            }
+            ("demo" | "file" | "audio" | "pulse", Some(_)) => {
+                return Err(format!("unexpected {arg:?}: there is one source"))
+            }
+            ("demo", None) => source = Some(Source::Demo { still: false }),
+            ("file", None) => {
                 // -l may come before the path, as clap lets it.
-                let path = args.by_ref().find(|a| {
-                    let flag = matches!(a.as_str(), "-l" | "--limit-rate");
-                    limit_rate |= flag;
-                    !flag
+                let limit_rate = args.next_if(|a| matches!(a.as_str(), "-l" | "--limit-rate"));
+                let path = operand(&mut args).ok_or("file takes a path, or - for stdin")?;
+                source = Some(Source::File {
+                    path,
+                    limit_rate: limit_rate.is_some(),
                 });
-                file = Some(path.ok_or("file takes a path, or - for stdin")?.clone());
             }
-            "audio" | "pulse" => {
-                return Err(format!(
-                    "this rebuild reads no audio device (no `{arg}`): pipe one into \
-                     `file -`, as in parec --format=s16le --rate=48000 --channels=2 | scope file -"
-                ))
+            ("audio", None) => {
+                source = Some(Source::Audio {
+                    device: operand(&mut args),
+                    timeout: 5,
+                    list: false,
+                })
             }
-            other => return Err(format!("unknown argument {other:?}")),
+            ("pulse", None) => {
+                source = Some(Source::Pulse {
+                    device: operand(&mut args),
+                    server_buffer: 32,
+                })
+            }
+            (other, _) => return Err(format!("unknown argument {other:?}")),
         }
     }
     if let Some(note) = note {
@@ -1285,14 +1247,70 @@ pub fn parse(args: &[String]) -> Result<Command, String> {
             None => eprintln!("[!] Unrecognized note '{note}', ignoring option"),
         }
     }
+    let source = match source {
+        None | Some(Source::Demo { .. }) => Source::Demo { still },
+        Some(other) => other,
+    };
     Ok(Command {
         options,
-        file,
-        limit_rate,
-        still,
+        source,
         backend,
         print,
     })
+}
+
+/// The input for `source`: the test signal and files on a thread of their
+/// own, a sound card through intuiTUIve's `audio` feature. A buffer's worth
+/// of time is scope-tui's frame.
+pub fn input(source: &Source, options: &Options) -> std::io::Result<Input> {
+    let (channels, buffer) = (options.channels.max(1), options.buffer as usize);
+    let period = Duration::from_secs_f64(buffer as f64 / options.rate.max(1) as f64);
+    let silence = vec![vec![0.0; buffer]; channels];
+    Ok(match source {
+        Source::Demo { still } => {
+            Input::Clock(Box::new(Demo::new(channels, buffer, *still)), period)
+        }
+        Source::File { path, limit_rate } => {
+            let reader: Box<dyn Read + Send> = if path == "-" {
+                Box::new(std::io::stdin())
+            } else {
+                Box::new(std::fs::File::open(path)?)
+            };
+            let pcm = Pcm::new(reader, channels, buffer);
+            play(pcm, silence, limit_rate.then_some(period), period)
+        }
+        #[cfg(feature = "audio")]
+        Source::Audio { device, .. } => Input::Audio(device.clone()),
+        #[cfg(feature = "audio")]
+        Source::Pulse { device, .. } => {
+            Input::Audio(Some(device.clone().unwrap_or_else(|| "pulse".into())))
+        }
+        #[cfg(not(feature = "audio"))]
+        Source::Audio { .. } | Source::Pulse { .. } => {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::Unsupported,
+                "audio and pulse need the audio feature: cargo run -p rs-rich-intuituive \
+                 --example scope --features audio -- audio; or pipe PCM into `file -`, as in \
+                 parec --format=s16le --rate=48000 --channels=2 | scope file -",
+            ))
+        }
+    })
+}
+
+/// `audio --list`: the inputs, the default marked, as scope-tui lists them.
+#[cfg(feature = "audio")]
+pub fn list_devices() -> String {
+    let devices = audio::devices();
+    if devices.is_empty() {
+        return "no audio inputs\n".into();
+    }
+    devices
+        .iter()
+        .map(|d| {
+            let default = if d.default { " (default)" } else { "" };
+            format!("> {}{default}\n", d.name)
+        })
+        .collect()
 }
 
 #[allow(dead_code)]
@@ -1304,6 +1322,11 @@ fn main() -> std::io::Result<()> {
         print!("{text}");
         return Ok(());
     }
+    #[cfg(feature = "audio")]
+    if let Source::Audio { list: true, .. } = command.source {
+        print!("{}", list_devices());
+        return Ok(());
+    }
     let backend = match command.backend {
         Some(kind) => kind,
         None => match std::env::var("INTUITUIVE_BACKEND") {
@@ -1311,25 +1334,6 @@ fn main() -> std::io::Result<()> {
             _ => BackendKind::default(),
         },
     };
-    let options = command.options.clone();
-    // A buffer's worth of time: scope-tui draws a frame a buffer.
-    let period = Duration::from_secs_f64(options.buffer as f64 / options.rate as f64);
-    let source: Box<dyn Source> = match &command.file {
-        None => Box::new(Demo::new(
-            options.channels,
-            options.buffer as usize,
-            command.still,
-        )),
-        Some(path) => {
-            let reader: Box<dyn Read + Send> = if path == "-" {
-                Box::new(std::io::stdin())
-            } else {
-                Box::new(std::fs::File::open(path)?)
-            };
-            let pcm = Pcm::new(reader, options.channels, options.buffer as usize);
-            let pace = command.limit_rate.then_some(period);
-            Box::new(Threaded::new(pcm, pace))
-        }
-    };
-    scope_app(options, source, period.max(Duration::from_millis(5))).run_with(backend)
+    let input = input(&command.source, &command.options)?;
+    scope_app(command.options, input).run_with(backend)
 }

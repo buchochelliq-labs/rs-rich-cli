@@ -42,7 +42,7 @@ Wait /spectro::scope-tui/
 Sleep 300ms
 Screenshot spectroscope
 Type "?"
-Wait /Keys/
+Wait /Help/
 Sleep 300ms
 Screenshot keys
 Escape

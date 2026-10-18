@@ -1,5 +1,5 @@
-//! The scope-tui rebuild (examples/scope.rs): its signal processing, and
-//! the app driven by keys on the test signal.
+//! The scope-tui rebuild (examples/scope.rs): its signal processing, its
+//! sources, and the app driven by keys on the test signal.
 
 mod common;
 
@@ -14,6 +14,8 @@ use std::time::Duration;
 use common::{row_of, run, screen};
 use intuituive::interact::BackendKind;
 use intuituive::App;
+use ratatui::layout::{Constraint, Flex, Layout, Rect};
+use rich::Console;
 use rich_interact::headless::Script;
 use scope::*;
 
@@ -21,11 +23,17 @@ fn args(text: &str) -> Vec<String> {
     text.split_whitespace().map(String::from).collect()
 }
 
+const PERIOD: Duration = Duration::from_millis(40);
+
+fn silence(channels: usize, buffer: usize) -> Matrix {
+    vec![vec![0.0; buffer]; channels]
+}
+
 /// The app on the test signal, standing still, one buffer every 40 ms.
 fn app() -> App {
     let options = Options::default();
     let demo = Demo::new(2, options.buffer as usize, true);
-    scope_app(options, Box::new(demo), Duration::from_millis(40))
+    scope_app(options, Input::Clock(Box::new(demo), PERIOD))
 }
 
 /// Run `keys` after the first buffers have arrived, then quit.
@@ -65,11 +73,10 @@ fn a_short_last_buffer_is_padded_and_then_the_input_ends() {
         .flat_map(|s| s.to_le_bytes())
         .collect();
     let mut pcm = Pcm::new(Cursor::new(bytes), 1, 4);
-    match pcm.pull() {
-        Pull::Frame(m) => assert_eq!(m[0].len(), 4, "padded to the buffer: {m:?}"),
-        _ => panic!("expected a frame"),
-    }
-    assert!(matches!(pcm.pull(), Pull::End));
+    let m = pcm.next().expect("a frame");
+    assert_eq!(m[0].len(), 4, "padded to the buffer: {m:?}");
+    assert_eq!(m[0][3], 0.0);
+    assert!(pcm.next().is_none());
 }
 
 #[test]
@@ -84,40 +91,23 @@ fn the_trigger_finds_a_debounced_crossing() {
 }
 
 #[test]
-fn the_fft_finds_a_tone_in_its_bin() {
-    let n = 256;
-    let tone: Vec<f64> = (0..n)
-        .map(|i| (2.0 * std::f64::consts::PI * 10.0 * i as f64 / n as f64).sin())
-        .collect();
-    let bins = fft(&tone);
-    let magnitude = |(re, im): (f64, f64)| (re * re + im * im).sqrt();
-    let peak = (0..n / 2)
-        .max_by(|a, b| magnitude(bins[*a]).total_cmp(&magnitude(bins[*b])))
-        .unwrap();
-    assert_eq!(peak, 10);
-    assert!((magnitude(bins[10]) - n as f64 / 2.0).abs() < 1e-6);
-}
-
-#[test]
-fn the_fft_of_any_length_is_the_dft() {
-    // Not a power of two: Bluestein's, of the samples' own length, as
-    // scope-tui's FFT is.
-    for n in [3usize, 100, 109, 1000] {
-        let x: Vec<f64> = (0..n).map(|i| ((i * 7919) % 13) as f64 - 6.0).collect();
-        let bins = fft(&x);
-        assert_eq!(bins.len(), n);
-        for k in [0, 1, n / 3, n - 1] {
-            let (mut re, mut im) = (0.0, 0.0);
-            for (j, s) in x.iter().enumerate() {
-                let a = -2.0 * std::f64::consts::PI * (j * k) as f64 / n as f64;
-                re += s * a.cos();
-                im += s * a.sin();
-            }
-            assert!(
-                (bins[k].0 - re).abs() < 1e-6 && (bins[k].1 - im).abs() < 1e-6,
-                "{n} {k}"
-            );
-        }
+fn the_spectroscope_plots_every_bin_of_rich_exts_fft() {
+    // scope-tui plots the whole transform, the mirrored half above the
+    // Nyquist frequency too, where `dsp::spectrum` stops at it.
+    let g = Graph {
+        references: false,
+        ..graph()
+    };
+    let tone: Vec<f64> = (0..100).map(|i| (i as f64 * 0.7).sin() * 0.5).collect();
+    let s = Spectroscope {
+        log_y: false,
+        ..Spectroscope::default()
+    };
+    let plot = spectroscope(&g, &s, &[VecDeque::from([tone.clone()])]);
+    let bins = rich_ext::dsp::fft(&tone);
+    assert_eq!(plot.sets[0].points.len(), bins.len());
+    for (point, bin) in plot.sets[0].points.iter().zip(&bins) {
+        assert!((point.1 - rich_ext::dsp::magnitude(*bin)).abs() < 1e-9);
     }
 }
 
@@ -127,9 +117,9 @@ fn the_spectroscope_peaks_at_the_test_tones() {
         references: false,
         ..graph()
     };
-    let Pull::Frame(frame) = Demo::new(2, 2048, true).pull() else {
-        panic!("the demo always has a frame");
-    };
+    let frame = Demo::new(2, 2048, true)
+        .next()
+        .expect("the demo never ends");
     let history: Vec<VecDeque<Vec<f64>>> = frame.into_iter().map(|c| VecDeque::from([c])).collect();
     let plot = spectroscope(&g, &Spectroscope::default(), &history);
     // R is drawn first (channels in reverse, as scope-tui).
@@ -182,11 +172,15 @@ fn the_command_line_reads_as_scope_tuis() {
         ),
         (1, 1024, 44100, 0.5)
     );
-    assert!(c.options.scatter && !c.options.braille && c.limit_rate);
-    assert_eq!(c.file.as_deref(), Some("-"));
+    assert!(c.options.scatter && !c.options.braille);
+    let file = |path: &str, limit_rate| Source::File {
+        path: path.into(),
+        limit_rate,
+    };
+    assert_eq!(c.source, file("-", true));
     let c = parse(&args("--palette-color Green,blue --still")).unwrap();
     assert_eq!(c.options.palette, ["green", "blue"]);
-    assert!(c.still && c.file.is_none());
+    assert_eq!(c.source, Source::Demo { still: true });
     // Colours as ratatui reads them, as the console's names for the same.
     let colours = "--palette-color LightRed,dark_gray,Gray,#FF8800,208 --axis-color White";
     let c = parse(&args(colours)).unwrap();
@@ -213,10 +207,32 @@ fn the_command_line_reads_as_scope_tuis() {
     assert_eq!(tune("H2", 48000, 2), None);
     // -l before or after the path, options after the source.
     let c = parse(&args("file -l x.pcm --scatter")).unwrap();
-    assert!(c.limit_rate && c.options.scatter && c.file.as_deref() == Some("x.pcm"));
+    assert!(c.options.scatter && c.source == file("x.pcm", true));
     assert!(parse(&args("-l")).is_err(), "-l belongs to file");
-    let error = parse(&args("audio")).unwrap_err();
-    assert!(error.contains("file -"), "{error}");
+    assert!(parse(&args("file a file b")).is_err(), "one source");
+    // The sound card sources, with their own options.
+    let audio = |device: Option<&str>, timeout, list| Source::Audio {
+        device: device.map(String::from),
+        timeout,
+        list,
+    };
+    assert_eq!(parse(&args("audio")).unwrap().source, audio(None, 5, false));
+    assert_eq!(
+        parse(&args("audio --list -c 1")).unwrap().source,
+        audio(None, 5, true)
+    );
+    assert_eq!(
+        parse(&args("audio USB --timeout 2")).unwrap().source,
+        audio(Some("USB"), 2, false)
+    );
+    assert_eq!(
+        parse(&args("pulse --server-buffer 8")).unwrap().source,
+        Source::Pulse {
+            device: None,
+            server_buffer: 8
+        }
+    );
+    assert!(parse(&args("--list")).is_err(), "--list belongs to audio");
     assert!(parse(&args("--help"))
         .unwrap()
         .print
@@ -379,10 +395,10 @@ fn r_removes_the_reference_line() {
 
 #[test]
 fn lines_leaving_the_bounds_are_left_out_as_ratatuis_are() {
-    let plot = Plot {
+    let plot = |points| Plot {
         sets: vec![DataSet {
             name: None,
-            points: vec![(0.0, 0.0), (1.0, 5.0), (2.0, 0.5)],
+            points,
             scatter: false,
             style: "red".into(),
         }],
@@ -392,11 +408,15 @@ fn lines_leaving_the_bounds_are_left_out_as_ratatuis_are() {
         y_title: "",
         x_log: false,
     };
-    let chart = chart(&plot, &graph());
-    let points = chart.datasets()[0].points();
-    assert_eq!(points[0], (0.0, 0.0));
-    assert!(points[1].0.is_nan() && points[1].1.is_nan());
-    assert_eq!(points[2], (2.0, 0.5));
+    let console = Console::builder().width(20).color_system(None).build();
+    let draw = |points| {
+        let chart = chart(&plot(points), &graph()).width(20).height(6);
+        console.render_export(&chart)
+    };
+    let dots = |text: String| braille(&[text]);
+    // Inside, a line; with an end outside, only the points inside.
+    assert!(dots(draw(vec![(0.0, 0.0), (2.0, 0.5)])) > 10);
+    assert_eq!(dots(draw(vec![(0.0, 0.0), (1.0, 5.0), (2.0, 0.5)])), 2);
 }
 
 #[test]
@@ -427,11 +447,13 @@ fn past_the_end_of_the_input_the_scope_draws_silence() {
         references: false,
         ..Options::default()
     };
-    let app = scope_app(options, Box::new(pcm), Duration::from_millis(40));
+    // Read as fast as it comes, then silence every 40 ms.
+    let app = scope_app(options, play(pcm, silence(2, 16), None, PERIOD));
     let script = Script::new().wait(Duration::from_millis(1100)).keys("q");
     let rows = screen(&run(app, script, 100, 24));
-    // Still counting frames, and every channel flat on the zero line.
-    assert!(rows[0].contains("25fps"), "{:?}", rows[0]);
+    // Every channel flat on the zero line. (The reader thread keeps the
+    // wall clock and the headless script a clock of its own, so how many
+    // frames it has counted by then is not fixed.)
     let drawn: Vec<_> = rows[1..]
         .iter()
         .filter(|r| braille(&[r.to_string()]) > 0)
@@ -445,27 +467,81 @@ fn question_mark_lists_the_keys() {
         .wait(Duration::from_millis(100))
         .keys("?")
         .wait(Duration::from_millis(100));
-    let rows = screen(&common::run_open(app(), script, 100, 30));
-    assert!(row_of(&rows, "Keys").is_some());
-    assert!(row_of(&rows, "phase difference").is_some());
+    let rows = screen(&common::run_open(app(), script, 120, 44));
+    // The framework's help, from the bindings' descriptions.
+    assert!(row_of(&rows, "Help").is_some(), "{rows:#?}");
+    assert!(row_of(&rows, "phase difference").is_some(), "{rows:#?}");
+    assert!(row_of(&rows, "scale up").is_some(), "{rows:#?}");
 }
 
 #[test]
-fn a_threaded_source_hands_over_the_newest_buffer_then_the_end() {
-    let bytes: Vec<u8> = (0..8i16).flat_map(|s| (s * 1000).to_le_bytes()).collect();
-    // Two buffers of two samples on two channels, read on a thread.
-    let mut source = Threaded::new(Pcm::new(Cursor::new(bytes), 2, 2), None);
-    let mut seen = Vec::new();
-    for _ in 0..500 {
-        match source.pull() {
-            Pull::Frame(m) => seen.push(m),
-            Pull::End => break,
-            Pull::Wait => std::thread::sleep(Duration::from_millis(2)),
+fn the_header_cells_sit_where_ratatuis_table_puts_them() {
+    // scope-tui's header is a one-row Table: its columns are a Layout of
+    // percentages of the whole width, one column apart, from the start.
+    let percents = [35, 25, 7, 13, 6, 6, 6];
+    for width in [60u16, 80, 100, 110, 140, 200] {
+        let rows = after_at("", width);
+        let header = &rows[0];
+        let layout = Layout::horizontal(percents.map(Constraint::Percentage))
+            .flex(Flex::Start)
+            .spacing(1)
+            .split(Rect::new(0, 0, width, 1));
+        let column = |text: &str| header.find(text);
+        // What every cell shows of itself even when cut to three columns.
+        let cells = ["osc", "liv", "-1", "20", "fps", "--", "|>"];
+        for (index, (part, area)) in cells.iter().zip(layout.iter()).enumerate() {
+            let at = if *part == "fps" {
+                // The fps cell starts at its number.
+                let end = column(part).unwrap();
+                header[..end].rfind(' ').map_or(0, |space| space + 1)
+            } else {
+                column(part).unwrap_or_else(|| panic!("{part:?} at {width}: {header:?}"))
+            };
+            // Character offsets: the header is ASCII.
+            assert_eq!(
+                at,
+                usize::from(area.x),
+                "cell {index} at {width}: {header:?}"
+            );
         }
     }
-    assert!(matches!(source.pull(), Pull::End), "still the end");
-    // The thread may outrun the reader, which then sees only the newest
-    // buffer, but the end never hides the last one.
-    let last = seen.last().expect("the last buffer");
-    assert_eq!(last[0], vec![4000.0 / 32768.0, 6000.0 / 32768.0]);
+}
+
+#[test]
+fn the_header_is_cut_as_a_table_cell_is() {
+    // At 60 columns the 25 % cell holds 14: the spectroscope's text is cut,
+    // with no ellipsis, and the row stays one line.
+    let rows = after_at("tab tab", 60);
+    assert!(rows[0].contains("live  ---  23."), "{:?}", rows[0]);
+    assert!(!rows[0].contains('…'), "{:?}", rows[0]);
+    assert!(rows[1].starts_with("| level"), "{:?}", rows[1]);
+}
+
+#[cfg(feature = "audio")]
+#[test]
+fn an_audio_input_that_cannot_open_ends_the_app_with_why() {
+    let input = Input::Audio(Some("no such sound card, surely".into()));
+    let mut backend = rich_interact::headless::Headless::new(
+        Script::new().wait(Duration::from_millis(500)),
+        80,
+        24,
+    );
+    let error = scope_app(Options::default(), input)
+        .run_on(&mut backend)
+        .expect_err("no such device");
+    assert!(
+        error.to_string().contains("no audio input named"),
+        "{error}"
+    );
+}
+
+#[cfg(not(feature = "audio"))]
+#[test]
+fn without_the_audio_feature_the_sound_sources_say_how_to_get_it() {
+    let command = parse(&args("audio")).unwrap();
+    let error = input(&command.source, &command.options)
+        .err()
+        .expect("no audio in this build");
+    assert!(error.to_string().contains("--features audio"), "{error}");
+    assert!(error.to_string().contains("file -"), "{error}");
 }

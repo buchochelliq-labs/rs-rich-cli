@@ -36,7 +36,8 @@ covers both. Three complete ports show where it leads:
   or more times a second. It is rebuilt in
   [`examples/scope.rs`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/crates/rich-intuituive/examples/scope.rs)
   (`cargo run -p rs-rich-intuituive --example scope`), with its keys,
-  options, trigger, averaging and Braille plots. See
+  options, trigger, averaging, Braille plots and live capture (with the
+  `audio` feature). See
   [the walkthrough](#worked-example-scope-tui-an-oscilloscope) below.
 
 ## What changes, in one table
@@ -375,12 +376,13 @@ a key, this app redraws whenever a new buffer of audio arrives.
 
 | scope-tui does | The rebuild uses |
 |---|---|
-| A loop that blocks on the audio source, then draws | `every(buffer period)` pulls the source's newest buffer into a `frame` signal |
-| Audio from PulseAudio or cpal | raw PCM from a file or stdin (audio piped from `parec`), read on its own thread; a built-in test signal |
+| A loop that blocks on the audio source, then draws | each source becomes a signal of the newest buffer, and a `watch` takes each one in: the test signal is made on the app's clock with `every(buffer period)`, a file or a pipe is read on a thread of its own with `latest(…)`, and a sound card is `audio::input(…)` |
+| Audio from cpal (`audio`) and PulseAudio (`pulse`) | intuiTUIve's `audio` feature, on cpal: `audio [DEVICE] [--list]`, and `pulse` as ALSA's `pulse` device; raw PCM from a file or stdin; a built-in test signal |
 | Three `DisplayMode` trait objects, mutated by key handlers | one signal per mode's settings, and one per shared setting (`Graph`) |
-| The header, a `Table` with percentage columns | a `row` of `text` cells with `.percent(…)` and `.gap(1)` |
-| `Chart` with Braille `Dataset`s, axis titles and a legend, and axes without labels (so without lines) | rs-rich-ext's `Chart`, laid out as ratatui's, with the same `Dataset`s and `Labels::None`; the spectroscope's frequencies on a log `Axis`; points outside the bounds turned into NaN, so lines to them are left out as ratatui's canvas leaves them |
-| `rustfft` for the spectrum | a radix-2 FFT, with Bluestein's for other lengths, in the example |
+| The header, a one-row `Table` with percentage columns | a `row` of `widgets::cell`s with `.percent(…)`, `.gap(1)` and `.solver(Solver::Ratatui)`, styled as the table is with `.style(…)` |
+| `Chart` with Braille `Dataset`s, axis titles and a legend, and axes without labels (so without lines) | rs-rich-ext's `Chart`, laid out as ratatui's, with the same `Dataset`s and `Labels::None`, and drawn as ratatui 0.29 draws: `out_of_bounds(OutOfBounds::Drop)`, `layering(Layering::PerDataset)`, `legend_style("")` and `legend_clear(false)`; the spectroscope's frequencies on a log `Axis` |
+| `rustfft` for the spectrum | `rich_ext::dsp::fft`, `hann` and `magnitude` |
+| Colours parsed by ratatui (`--axis-color DarkGray`) | `rich_ratatui::style_from_color_name` |
 | Shift ×10, Ctrl ×5, Alt ×⅕ on every step | the same bindings, made in a loop over the modifiers |
 | `h` hides the interface | `switch` on the `show_ui` setting |
 
@@ -393,23 +395,31 @@ What the port shows:
    draws once a second, and the other cells draw only when a key changes
    them. While the scope is paused nothing draws at all, and identical
    buffers (the `--still` test signal) draw nothing either.
-2. **Take the newest frame from a stream rather than queueing them.** A
-   reader thread keeps only the latest buffer. When the terminal falls
-   behind, the app skips old buffers rather than drawing a backlog.
+2. **Take the newest frame from a stream rather than queueing them.**
+   `latest` and `audio::input` both keep only the newest buffer. When the
+   terminal falls behind, the app skips old buffers rather than drawing a
+   backlog. A thread's buffers are numbered, because a `watch` runs only
+   when what it reads changes, and two buffers of silence are equal.
+3. **Ported layouts can keep ratatui's arithmetic.** `Solver::Ratatui`
+   places the header's cells in the same columns as scope-tui's table at
+   every width, and `cell` cuts them as a table cell is cut.
 
 It differs from scope-tui in a few deliberate ways:
 
-- It has no audio-device backends (`audio`, `pulse`): pipe audio into
-  `file -` instead. Without a source it draws a test signal.
+- `audio` and `pulse` need the crate's `audio` feature (and ALSA's headers
+  on Linux); without it they say so and point at `file -`. `pulse` opens
+  ALSA's `pulse` device, so it reads PulseAudio's default source: a named
+  PulseAudio source, a sink's monitor among them, cannot be chosen, and
+  `--server-buffer` is read but has no effect. `audio --timeout` is read
+  but not enforced, and `audio --list` lists names without their
+  configurations.
 - Its `file` source reads a whole buffer per channel. scope-tui 0.3.5's
   reads half of one, so its waveform fills half the width and its
   spectroscope stops at the first frame; this one draws what scope-tui's
   audio sources do.
 - The trigger threshold keeps scope-tui's 16-bit units, and compares them
   with the samples scaled back up, so it triggers on every source.
-- `?` lists the keys, options may follow the source, and the header's
-  columns are intuiTUIve's percentages, which can differ from ratatui's
-  table by a cell or two.
+- `?` lists the keys, and options may follow the source.
 
 ![The spectroscope: each channel's spectrum on a log frequency axis](../../media/tapes/scope/spectroscope.png)
 
