@@ -164,8 +164,8 @@ API the matrix names lives:
 | underline colour (the `underline-color` feature) | none | ≠ the core mirrors Python rich, which has none; adding it is a divergence behind a flag (AGENTS.md), for little gain | — |
 | `Stylize` shorthands: `"x".red().bold()` | markup and theme names | ≠ styles stay in markup, themes and stylesheets, where a theme file can change them | — |
 | `Color::Reset`, the 16 named, `Indexed(n)`, `Rgb(..)` | `default`, the names, `color(n)`, `#rrggbb`, `rgb(..)` | ✓ beyond: downgraded to what the terminal shows | — |
-| `style::palette::tailwind`, `material` | none | ✗ | S · C6 |
-| `Color::from_hsl`, `from_hsluv` (the `palette` feature) | none (rich's `blend_rgb` only) | ✗ | S · C6 |
+| `style::palette::tailwind`, `material` | `rich_ext::palette::{tailwind, material}` (0.0.19) | ✓ | — |
+| `Color::from_hsl`, `from_hsluv` (the `palette` feature) | `rich_ext::palette::{hsl, hsv, okhsv, oklab, blend, gradient}` (0.0.19) | ✓ ≠ Okhsv in place of HSLuv | — |
 | ANSI text (the third-party `ansi-to-tui`) | `rich::Text::from_ansi` in `renderable(..)` | ✓ beyond | — |
 | hyperlinks (OSC 8 by hand: the `hyperlink` example) | `[link=https://..]text[/link]`; cells keep the link | ✓ beyond | — |
 | `Masked` | `Input::masked` for inputs; nothing for display text | ◐ rarely needed | — |
@@ -267,30 +267,30 @@ API the matrix names lives:
 
 | ratatui | intuiTUIve | Status | Fix |
 |---|---|---|---|
-| `Gauge`: fills its area; the label centred, its colours swapped over the filled part; `ratio`, `percent`, `use_unicode`, `gauge_style` | `rich_ext::chart::Gauge` is one line: a bar with bands, a target, the value and its band; `meters` draws its own | ◐ no area fill, no centred label | M · C1 |
-| `LineGauge`: the label, then `━━━───` in filled and unfilled styles and symbols | the compact `Gauge` has the form, with block glyphs | ◐ | C1 |
+| `Gauge`: fills its area; the label centred, its colours swapped over the filled part; `ratio`, `percent`, `use_unicode`, `gauge_style` | `rich_ext::chart::FillGauge` (`chart/progress.rs`): `new(ratio)`, `percent`, `label`, `label_style`, `style`, `unicode`, `height` (0.0.19); the one-line `Gauge` keeps its bands and target | ✓ | — |
+| `LineGauge`: the label, then `━━━───` in filled and unfilled styles and symbols | `LineGauge`: `label`, `filled_style`, `unfilled_style`, `line(LineSet::Thin/Thick/Double)`, `symbols(filled, unfilled)` (0.0.19) | ✓ | — |
 
 #### Sparkline
 
 | ratatui | intuiTUIve | Status | Fix |
 |---|---|---|---|
 | `data`, `max`, `style` | `rich_ext::chart::Sparkline`: values, `range`, `min`, `max`, `style`, and minimum, maximum and threshold marks | ✓ beyond | — |
-| as tall as its area | one row | ✗ | M · C2 |
-| `RenderDirection::RightToLeft` | none | ✗ | C2 |
-| absent values (`None`), `absent_value_symbol`, `absent_value_style` | NaN draws a space | ◐ | C2 |
-| a style per bar (`SparklineBar::style`) | none | ✗ | C2 |
-| `bar_set` (`THREE_LEVELS`, `NINE_LEVELS`), `Marker::Braille` | `Charset::Blocks` (nine levels), `Braille`, `Ascii` | ◐ no three-level set | C2 |
+| as tall as its area | `.rows(n)`, or the height it is given (0.0.19) | ✓ | — |
+| `RenderDirection::RightToLeft` | `.direction(Direction::RightToLeft)` (0.0.19) | ✓ | — |
+| absent values (`None`), `absent_value_symbol`, `absent_value_style` | `Sparkline::optional(..)`, `.absent(symbol, style)` (0.0.19) | ✓ | — |
+| a style per bar (`SparklineBar::style`) | `.styles(vec![..])` (0.0.19) | ✓ | — |
+| `bar_set` (`THREE_LEVELS`, `NINE_LEVELS`), `Marker::Braille` | `.levels(Levels::Three/Nine)`; `Charset::Blocks`, `Braille`, `Ascii` (0.0.19) | ✓ | — |
 
 #### BarChart
 
 | ratatui | intuiTUIve | Status | Fix |
 |---|---|---|---|
 | `Bar` with a label and a value; `bar_style`, `max`, `direction` | `BarChart`, `Bar::style`, `max`, `Orientation::Horizontal`, `Vertical` | ✓ | — |
-| `BarGroup` with a label; `group_gap` | none | ✗ | M · C3 |
-| `bar_width` (thickness), `bar_gap` | up to 3 cells thick, chosen by the chart; no gap setting | ◐ | C3 |
-| `Bar::text_value` | none | ✗ | C3 |
-| `value_style`, `label_style` (the chart's and a bar's) | the theme's `chart.value`, `chart.label` | ◐ | C3 |
-| vertical bars as tall as the area | `bar_width` rows, 8 by default | ◐ | C0 |
+| `BarGroup` with a label; `group_gap` | `BarGroup`, `BarChart::group(..)`, `.group_gap(n)` (0.0.19) | ✓ | — |
+| `bar_width` (thickness), `bar_gap` | `.thickness(n)` (`bar_width` stays a bar's length or a column's height), `.bar_gap(n)` (0.0.19) | ✓ | — |
+| `Bar::text_value` | `Bar::text(..)` (0.0.19) | ✓ | — |
+| `value_style`, `label_style` (the chart's and a bar's) | `.value_style(..)`, `.label_style(..)` on the chart and on a `Bar`; `.values_inside(true)` for values on the bars (0.0.19) | ✓ | — |
+| vertical bars as tall as the area | the height it is given, or `bar_width` rows (0.0.19) | ✓ | — |
 
 #### Chart
 
@@ -298,12 +298,12 @@ API the matrix names lives:
 |---|---|---|---|
 | datasets with a name, a style and a marker | `rich_ext::chart::{Chart, Dataset}`, laid out as ratatui's | ✓ | — |
 | `GraphType::Scatter`, `Line`, `Bar` | the same | ✓ | — |
-| `GraphType::Area` with `fill_to_y` (0.30.1) | none | ✗ | S · C4 |
+| `GraphType::Area` with `fill_to_y` (0.30.1) | `GraphType::Area` with `Dataset::fill_to(y)` (0.0.19) | ✓ | — |
 | `Axis` bounds, title, labels, style | `Axis::bounds`, `title`, `labels`, `style`; `Labels::Auto`, `AxisScale::Log` | ✓ beyond | — |
-| labels as styled spans | plain text in the axis style | ◐ | C4 |
-| `labels_alignment` | none | ✗ | C4 |
+| labels as styled spans | `Labels::Markup(..)`: console markup (0.0.19) | ✓ | — |
+| `labels_alignment` | `Axis::labels_align(HorizontalAlign)` (0.0.19) | ✓ | — |
 | `legend_position`, `hidden_legend_constraints` | `LegendPosition` (eight places and `None`), `hidden_legend_fraction` | ✓ | — |
-| as tall as its area | `height(n)`, 15 by default; `scope` passes the height through a `leaf` | ◐ | S · C0 |
+| as tall as its area | the height it is given (`renderable(..)` passes a node's), or `height(n)` (0.0.19) | ✓ | — |
 
 #### Canvas
 
@@ -311,23 +311,23 @@ API the matrix names lives:
 |---|---|---|---|
 | bounds, `paint(..)` with a closure, `ctx.layer()` | `rich_ext::chart::Canvas::x_bounds`, `y_bounds`, `paint`; `CanvasPainter::layer` | ✓ | — |
 | `Points`, `Line`, `Rectangle`, `Circle`, `ctx.print` | `points`, `line`, `rect`, `circle`, `print`, and `polyline` | ✓ beyond | — |
-| `Map` with `MapResolution::Low`, `High` | none | ✗ | M · C5 |
+| `Map` with `MapResolution::Low`, `High` | `CanvasPainter::map(MapResolution::Low/High, style)`: our own data from Natural Earth's public-domain coastlines, drawn as lines (0.0.19) | ✓ | — |
 | `Marker::Dot`, `Block`, `Braille`, `HalfBlock`, `Custom(c)` | `Marker::Dot`, `Block`, `Braille`, `HalfBlock`, `Ascii(c)` | ✓ | — |
-| `Marker::Bar`, `Quadrant`, `Sextant`, `Octant` (0.30) | none | ✗ | C5 |
-| `background_color` | none | ✗ | C5 |
-| custom shapes (`Shape`, `Painter::get_point`, `paint`) | the painter's fixed set | ✗ | C5 |
-| as tall as its area | `height(n)`, 10 by default | ◐ | C0 |
+| `Marker::Bar`, `Quadrant`, `Sextant`, `Octant` (0.30) | `Marker::Bar`, `Quadrant`, `Sextant`, `Octant` (0.0.19) | ✓ | — |
+| `background_color` | `Canvas::background(style)` (0.0.19) | ✓ | — |
+| custom shapes (`Shape`, `Painter::get_point`, `paint`) | `Shape` and `CanvasPainter::shape`, `point` and `area` (0.0.19) | ✓ ≠ shapes draw in world coordinates, not grid pixels | — |
+| as tall as its area | the height it is given, or `height(n)` (0.0.19) | ✓ | — |
 
 #### Calendar
 
 | ratatui | intuiTUIve | Status | Fix |
 |---|---|---|---|
 | `calendar::Monthly` (display only) | `calendar(selected)` (`calendar.rs`): keys, clicks, the wheel, a range, today | ✓ beyond: interactive | — |
-| `CalendarEventStore` (styled dates) | `today` only | ✗ | M · C7 |
-| `show_surrounding(style)` | none | ✗ | C7 |
-| `show_weekdays_header(style)`, `show_month_header(style)` | always shown, in theme styles, Monday first | ◐ no Sunday first, no style per calendar | C7 |
-| `default_style` | the theme | ◐ | C7 |
-| a month that only shows (twelve make a year) | every calendar takes the focus and selects | ◐ | C7 |
+| `CalendarEventStore` (styled dates) | `CalendarOptions::event(date, style)`, `events(fn)` (0.0.19) | ✓ | — |
+| `show_surrounding(style)` | `.surrounding(style)`; a click selects a surrounding day (0.0.19) | ✓ beyond | — |
+| `show_weekdays_header(style)`, `show_month_header(style)` | `.weekday_style(..)`, `.month_style(..)`, `.first_weekday(Weekday::Sunday)` (0.0.19) | ◐ the headers cannot be hidden | — |
+| `default_style` | `.day_style(..)` (0.0.19) | ✓ | — |
+| a month that only shows (twelve make a year) | `month(shown, options)`: no focus, no keys (0.0.19) | ✓ | — |
 
 #### Scrollbar
 
@@ -971,6 +971,27 @@ touches `ScrollView`) and `lib.rs`. **Overlap with the inspector work:**
 
 Mostly rs-rich-ext. Size: about 13 points; making C5's map data is the
 longest part.
+
+**Status: built** (0.0.19; the matrix rows above say how). Where the build
+differs from the sketch below:
+
+- **C1:** `FillGauge` also takes `percent`, `label_style`, `width` and
+  `height`; `LineGauge` takes `symbols(filled, unfilled)` as well as a
+  `LineSet`, for the `line-gauge` example's `▰▱` look.
+- **C2:** a value's own style wins over the `min_max` and `threshold`
+  marks; right to left, the sparkline sits against the right edge of its
+  width, its summary before the bars.
+- **C3:** `bar_gap` defaults to a cell vertical and no rows horizontal,
+  `group_gap` to a cell or two rows; a horizontal group's label takes the
+  first row between groups, as ratatui's does. Values on their bars are
+  the bar's colour reversed unless a value style is set.
+- **C5:** the map is drawn as lines, not points, so its simplified coasts
+  stay whole at any size; the data is about 5 KB (1:110m) and 22 KB
+  (1:50m). Custom shapes draw in world coordinates; `CanvasPainter::area`
+  is public too.
+- **C7:** `today`, `min` and `max` stay public fields; the new settings are
+  builders. `Weekday` is intuiTUIve's, and a click on a surrounding day
+  selects it.
 
 **Files:**
 

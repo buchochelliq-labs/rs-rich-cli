@@ -109,6 +109,78 @@ impl DotCanvas {
     }
 }
 
+/// The block-element character for a 2×2 pattern of quarters. Bit
+/// `x + 2 * y` is the quarter at column `x` and row `y`, from the top left.
+pub(crate) fn quadrant(bits: u8) -> char {
+    // Unicode's Block Elements, which hold every pattern of quarters.
+    const BY_PATTERN: [char; 16] = [
+        ' ', '▘', '▝', '▀', '▖', '▌', '▞', '▛', '▗', '▚', '▐', '▜', '▄', '▙', '▟', '█',
+    ];
+    BY_PATTERN[usize::from(bits & 0x0f)]
+}
+
+/// The character for a 2×3 pattern of sixths, bit `x + 2 * y` set for the
+/// sixth at column `x` and row `y`: Symbols for Legacy Computing (Unicode
+/// 13), which encode the patterns in order from U+1FB00 and leave out the
+/// four that Block Elements already has (blank, the two halves, full).
+pub(crate) fn sextant(bits: u8) -> char {
+    const LEFT: u8 = 0b01_0101;
+    const RIGHT: u8 = 0b10_1010;
+    match bits & 0x3f {
+        0 => ' ',
+        LEFT => '▌',
+        RIGHT => '▐',
+        0x3f => '█',
+        pattern => {
+            let before = 1 + u32::from(pattern > LEFT) + u32::from(pattern > RIGHT);
+            char::from_u32(0x1FB00 + u32::from(pattern) - before).unwrap_or(' ')
+        }
+    }
+}
+
+/// Octant patterns that Unicode 16 did not encode again, because a block
+/// character already draws them, sorted by pattern (bit `x + 2 * y` for the
+/// eighth at column `x` and row `y`).
+const SHARED_OCTANTS: [(u8, char); 26] = [
+    (0x00, ' '),
+    (0x01, '\u{1CEA8}'),
+    (0x02, '\u{1CEAB}'),
+    (0x03, '\u{1FB82}'),
+    (0x05, '▘'),
+    (0x0a, '▝'),
+    (0x0f, '▀'),
+    (0x14, '\u{1FBE6}'),
+    (0x28, '\u{1FBE7}'),
+    (0x3f, '\u{1FB85}'),
+    (0x40, '\u{1CEA3}'),
+    (0x50, '▖'),
+    (0x55, '▌'),
+    (0x5a, '▞'),
+    (0x5f, '▛'),
+    (0x80, '\u{1CEA0}'),
+    (0xa0, '▗'),
+    (0xa5, '▚'),
+    (0xaa, '▐'),
+    (0xaf, '▜'),
+    (0xc0, '▂'),
+    (0xf0, '▄'),
+    (0xf5, '▙'),
+    (0xfa, '▟'),
+    (0xfc, '▆'),
+    (0xff, '█'),
+];
+
+/// The character for a 2×4 pattern of eighths, bit `x + 2 * y` set for the
+/// eighth at column `x` and row `y`: the block octants of Unicode 16
+/// (U+1CD00 to U+1CDE5, in pattern order), or the older block character
+/// that already draws the pattern.
+pub(crate) fn octant(bits: u8) -> char {
+    match SHARED_OCTANTS.binary_search_by_key(&bits, |(pattern, _)| *pattern) {
+        Ok(i) => SHARED_OCTANTS[i].1,
+        Err(before) => char::from_u32(0x1CD00 + u32::from(bits) - before as u32).unwrap_or(' '),
+    }
+}
+
 /// The points on the line from `a` to `b`, both ends included.
 pub(crate) fn bresenham(a: (i64, i64), b: (i64, i64)) -> Vec<(i64, i64)> {
     let (mut x0, mut y0) = a;
@@ -167,6 +239,42 @@ mod tests {
         let mut c = DotCanvas::new(2, 1);
         c.line((0, 3), (3, 0), 0);
         assert_eq!(c.row_string(0), "⡠⠊");
+    }
+
+    #[test]
+    fn pattern_glyphs_follow_unicode() {
+        // Quadrants: each corner, the halves, full.
+        assert_eq!(quadrant(0b0001), '▘');
+        assert_eq!(quadrant(0b1000), '▗');
+        assert_eq!(quadrant(0b0101), '▌');
+        assert_eq!(quadrant(0b1100), '▄');
+        assert_eq!(quadrant(0b1111), '█');
+        // Sextants: U+1FB00 is the top left sixth, U+1FB3B the last.
+        assert_eq!(sextant(0b00_0001), '\u{1FB00}');
+        assert_eq!(sextant(0b01_0100), '\u{1FB13}');
+        assert_eq!(sextant(0b01_0110), '\u{1FB14}');
+        assert_eq!(sextant(0b11_1110), '\u{1FB3B}');
+        assert_eq!(sextant(0b01_0101), '▌');
+        assert_eq!(sextant(0b11_1111), '█');
+        // Octants: U+1CD00 is the first pattern without an older glyph,
+        // U+1CDE5 the last; 230 in all, each once.
+        assert_eq!(octant(0b0000_0100), '\u{1CD00}');
+        assert_eq!(octant(0b1111_1110), '\u{1CDE5}');
+        assert_eq!(octant(0b0000_1111), '▀');
+        assert_eq!(octant(0b1100_0000), '▂');
+        let glyphs: std::collections::BTreeSet<char> = (0..=255u8).map(octant).collect();
+        assert_eq!(glyphs.len(), 256);
+        let new = glyphs
+            .iter()
+            .filter(|c| ('\u{1CD00}'..='\u{1CDE5}').contains(*c))
+            .count();
+        assert_eq!(new, 230);
+        // Every glyph is one cell wide.
+        for bits in 0..=255u8 {
+            for c in [quadrant(bits), sextant(bits), octant(bits)] {
+                assert_eq!(rich::cells::char_cell_width(c), 1, "{c:?}");
+            }
+        }
     }
 
     #[test]

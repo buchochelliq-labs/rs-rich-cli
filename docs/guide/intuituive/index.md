@@ -485,7 +485,27 @@ hsplit(
   `calendar_options(selected, CalendarOptions::new().min(..).max(..))`
   keeps the selection in a range: days outside it are dimmed (the theme's
   `calendar.disabled` style), and the keys, the wheel and clicks stop at
-  its ends.
+  its ends. The same options do what ratatui's `calendar::Monthly` does:
+  `.event(date, "red underline")` styles a date, and `.events(|date| ..)`
+  styles them by a function; `.surrounding("dim")` shows the days of the
+  months either side, which a click selects; `.first_weekday(Weekday::Sunday)`
+  starts the weeks on another day; and `.weekday_style(..)`,
+  `.month_style(..)` and `.day_style(..)` style this calendar's headers and
+  days. `CalendarOptions` is `Clone`, no longer `Copy`.
+- **`month(shown, options)`** is a month that only shows: no focus, no
+  keys, no selection, and the month of the date `shown` returns, which may
+  read a signal. Twelve in a `grid` make a year:
+
+  ```rust
+  use intuituive::widgets::{month, CalendarOptions, Date};
+
+  let year = signal(2026);
+  let months = (1..=12).map(move |m| {
+      let options = CalendarOptions::new().event(Date::new(2026, 12, 25), "red");
+      month(move || Date::new(year.get(), m, 1), options).padding(0, 1)
+  });
+  grid([Size::Fixed(22); 3], months)
+  ```
 - **`virtual_list(len, row, selected)`** is the list form of
   `virtual_table`: it asks only for the rows in view.
 - **`tree_lazy(roots, children, selected)`** loads each level when it is

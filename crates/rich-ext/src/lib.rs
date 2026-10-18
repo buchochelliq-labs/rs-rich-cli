@@ -25,7 +25,10 @@
 //!   [`cancel`], [`table`], [`badge`], [`size_bar`], [`format`](mod@format), [`redact`]
 //!   (experimental).
 //! - Charts: [`chart`] (sparklines, bars, histograms, line and scatter plots,
-//!   gauges, heatmaps, status matrices, KPI cards and timelines).
+//!   gauges, heatmaps, status matrices, KPI cards and timelines; ratatui's
+//!   chart, canvas with a world map, and gauges).
+//! - Colour: [`palette`] (Tailwind's and Material's palettes; HSL, HSV,
+//!   Okhsv and Oklab colours, blends and gradients).
 //! - Inspectors: [`source_view`], [`hex`], [`unicode_inspect`],
 //!   [`env_inspect`].
 //! - Layout and live output: [`layout`], [`live`], [`surface`] (positioned
@@ -64,6 +67,7 @@ pub mod frame;
 pub mod graphics;
 pub mod hex;
 pub mod highlighter;
+pub mod palette;
 pub mod plugin_loading;
 pub mod redact;
 pub mod registry;

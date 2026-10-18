@@ -3,13 +3,14 @@
 //! legend.
 
 use rich::measure::Measurement;
-use rich::{Console, ConsoleOptions, Renderable, Segment, Style};
+use rich::{Console, ConsoleOptions, HorizontalAlign, Renderable, Segment, Style};
 
 use super::plot_canvas::{is_ascii, raster, spec_style, CellGrid, Marker, Op, View};
 use super::{cell_units, cells, lines_to_segments, series_key, Scale, ValueFormat};
 use crate::fidelity::ascii_text;
 
-/// Rows a [`Chart`] takes unless [`Chart::height`] says otherwise.
+/// Rows a [`Chart`] takes when it is given no height and [`Chart::height`]
+/// is not set.
 const DEFAULT_HEIGHT: usize = 15;
 /// The tallest chart drawn, in rows.
 const MAX_HEIGHT: usize = u16::MAX as usize;
@@ -42,6 +43,10 @@ pub enum Labels {
     /// Text spread evenly along the axis, as ratatui places its labels: the
     /// first at the start, the last at the end.
     Text(Vec<String>),
+    /// Console markup spread evenly, as [`Text`](Self::Text) is:
+    /// `"[bold]0[/]"` is a bold label, as a ratatui label of styled spans
+    /// is. The markup's styles go over the axis style.
+    Markup(Vec<String>),
 }
 
 /// One axis of a [`Chart`]: its bounds, title, labels and scale.
@@ -62,6 +67,7 @@ pub struct Axis {
     title: Option<String>,
     title_style: Option<String>,
     labels: Labels,
+    labels_align: Option<HorizontalAlign>,
     scale: AxisScale,
     style: Option<String>,
     label_format: ValueFormat,
@@ -92,6 +98,22 @@ impl Axis {
     /// The labels (default [`Labels::None`]: no labels and no axis line).
     pub fn labels(mut self, labels: Labels) -> Self {
         self.labels = labels;
+        self
+    }
+
+    /// How the labels sit, as ratatui's `labels_alignment`.
+    ///
+    /// - **On the y axis**, in the column left of the axis line. By
+    ///   default [`Labels::Auto`] and [`Labels::Values`] are right-aligned
+    ///   and [`Labels::Text`] and [`Labels::Markup`] left-aligned, as in
+    ///   ratatui.
+    /// - **On the x axis**, the first text label against the y axis line:
+    ///   `Left` (the default) ends it under the line, `Center` centres it
+    ///   on the line, `Right` starts it there. A label placed at a value
+    ///   ([`Labels::Auto`], [`Labels::Values`]) starts at its value
+    ///   (`Left`), is centred on it (the default) or ends at it (`Right`).
+    pub fn labels_align(mut self, align: HorizontalAlign) -> Self {
+        self.labels_align = Some(align);
         self
     }
 
@@ -166,7 +188,7 @@ impl Axis {
         }
     }
 
-    fn resolve(&self, data: impl Iterator<Item = f64>, ascii: bool) -> Resolved {
+    fn resolve(&self, data: impl Iterator<Item = f64>, console: &Console, ascii: bool) -> Resolved {
         let scale = self.span(data);
         let text = |s: &str| {
             if ascii && !s.is_ascii() {
@@ -175,13 +197,20 @@ impl Axis {
                 s.to_string()
             }
         };
+        let plain = |s: &str| Label::plain(text(s));
         let labels = match &self.labels {
             Labels::None => Placed::None,
-            Labels::Text(labels) => Placed::Even(labels.iter().map(|l| text(l)).collect()),
+            Labels::Text(labels) => Placed::Even(labels.iter().map(|l| plain(l)).collect()),
+            Labels::Markup(labels) => Placed::Even(
+                labels
+                    .iter()
+                    .map(|l| Label::markup(console, l, ascii))
+                    .collect(),
+            ),
             _ => Placed::At(
                 self.values(&scale)
                     .into_iter()
-                    .filter_map(|v| Some((self.map(v)?, text(&self.label_format.format(v)))))
+                    .filter_map(|v| Some((self.map(v)?, plain(&self.label_format.format(v)))))
                     .collect(),
             ),
         };
@@ -230,9 +259,61 @@ struct Resolved {
 enum Placed {
     None,
     /// Labels at mapped values.
-    At(Vec<(f64, String)>),
+    At(Vec<(f64, Label)>),
     /// Labels spread evenly.
-    Even(Vec<String>),
+    Even(Vec<Label>),
+}
+
+/// An axis label: runs of text, each in its own style over the axis style
+/// (`None`: the axis style alone).
+#[derive(Clone, Debug, Default)]
+struct Label {
+    runs: Vec<(String, Option<Style>)>,
+}
+
+impl Label {
+    fn plain(text: String) -> Label {
+        Label {
+            runs: vec![(text, None)],
+        }
+    }
+
+    /// The first line of console `markup`, as styled runs; markup that does
+    /// not parse is plain text.
+    fn markup(console: &Console, markup: &str, ascii: bool) -> Label {
+        let text = rich::Text::from_markup(markup).unwrap_or_else(|_| rich::Text::new(markup));
+        let mut options = console.options().update_width(cells(text.plain()).max(1));
+        options.no_wrap = Some(true);
+        let mut runs = Vec::new();
+        for segment in console.render(&text, Some(&options)) {
+            if segment.control || segment.text.is_empty() {
+                continue;
+            }
+            if segment.text.contains('\n') {
+                break;
+            }
+            let run = if ascii && !segment.text.is_ascii() {
+                ascii_text(&segment.text)
+            } else {
+                segment.text
+            };
+            runs.push((run, segment.style));
+        }
+        Label { runs }
+    }
+
+    fn width(&self) -> usize {
+        self.runs.iter().map(|(text, _)| cells(text)).sum()
+    }
+}
+
+/// A run's style over the axis style.
+fn over(base: &Option<Style>, own: &Option<Style>) -> Option<Style> {
+    match (base, own) {
+        (_, None) => base.clone(),
+        (None, Some(own)) => Some(own.clone()),
+        (Some(base), Some(own)) => Some(base.combine(own)),
+    }
 }
 
 impl Resolved {
@@ -240,11 +321,11 @@ impl Resolved {
         !matches!(self.labels, Placed::None)
     }
 
-    fn texts(&self) -> Vec<&str> {
+    fn texts(&self) -> Vec<&Label> {
         match &self.labels {
             Placed::None => Vec::new(),
-            Placed::At(labels) => labels.iter().map(|(_, l)| l.as_str()).collect(),
-            Placed::Even(labels) => labels.iter().map(String::as_str).collect(),
+            Placed::At(labels) => labels.iter().map(|(_, l)| l).collect(),
+            Placed::Even(labels) => labels.iter().collect(),
         }
     }
 
@@ -268,6 +349,11 @@ pub enum GraphType {
     Line,
     /// A vertical line from zero (the bottom, on a log axis) to each point.
     Bar,
+    /// Points joined by lines, as [`Line`](Self::Line), with the area
+    /// between the lines and [`Dataset::fill_to`] filled in (ratatui's
+    /// `GraphType::Area`, 0.30.1). A level the axis cannot show (not
+    /// positive on a log axis) fills to the bottom.
+    Area,
 }
 
 /// One named set of `(x, y)` points in a [`Chart`].
@@ -278,6 +364,7 @@ pub struct Dataset {
     graph_type: GraphType,
     marker: Marker,
     style: Option<String>,
+    fill_to: f64,
 }
 
 impl Dataset {
@@ -290,6 +377,7 @@ impl Dataset {
             graph_type: GraphType::Scatter,
             marker: Marker::Dot,
             style: None,
+            fill_to: 0.0,
         }
     }
 
@@ -315,6 +403,14 @@ impl Dataset {
     /// definition (default `chart.series.N`, by position).
     pub fn style(mut self, style: impl Into<String>) -> Self {
         self.style = Some(style.into());
+        self
+    }
+
+    /// The level a [`GraphType::Area`] fills to (default 0): below the
+    /// points that are above it, above those below it. ratatui calls it
+    /// `fill_to_y`.
+    pub fn fill_to(mut self, y: f64) -> Self {
+        self.fill_to = y;
         self
     }
 
@@ -363,10 +459,13 @@ pub enum LegendPosition {
 ///   a corner of the plot ([`LegendPosition::TopRight`] by default). It
 ///   hides itself when it would take more than a share of the plot: a
 ///   quarter of the width and a quarter of the height by default.
-/// - It is [`height`](Self::height) rows (15 by default) by the width it is
-///   given (or [`width`](Self::width)). As in ratatui, a short chart gives
-///   up the x axis line, then the x labels; a narrow one cuts the y labels
-///   to a third of the width; the titles and the legend show only when the
+/// - It fills the height it is given, as ratatui's fills its area: a
+///   `Layout` region, a `Panel` with a height, an intuiTUIve node through
+///   `renderable(..)`. [`height`](Self::height) fixes it instead; given no
+///   height, it is 15 rows. It is as wide as the width it is given (or
+///   [`width`](Self::width)). As in ratatui, a short chart gives up the x
+///   axis line, then the x labels; a narrow one cuts the y labels to a
+///   third of the width; the titles and the legend show only when the
 ///   plot has room for them.
 ///
 /// ```
@@ -405,7 +504,7 @@ pub struct Chart {
     legend: LegendPosition,
     hidden_legend: (f64, f64),
     width: Option<usize>,
-    height: usize,
+    height: Option<usize>,
 }
 
 impl Default for Chart {
@@ -424,7 +523,7 @@ impl Chart {
             legend: LegendPosition::TopRight,
             hidden_legend: (0.25, 0.25),
             width: None,
-            height: DEFAULT_HEIGHT,
+            height: None,
         }
     }
 
@@ -472,10 +571,11 @@ impl Chart {
         self
     }
 
-    /// Height in rows, axes and labels included (default 15, at most
-    /// 65535).
+    /// Height in rows, axes and labels included (at most 65535), whatever
+    /// height it is given. Without it, the chart fills the height it is
+    /// given, or takes 15 rows.
     pub fn height(mut self, rows: usize) -> Self {
-        self.height = rows.min(MAX_HEIGHT);
+        self.height = Some(rows.min(MAX_HEIGHT));
         self
     }
 
@@ -484,15 +584,19 @@ impl Chart {
             .width
             .map_or(options.max_width, |v| v.min(options.max_width))
             .min(MAX_HEIGHT);
-        let h = self.height;
+        let h = self
+            .height
+            .or(options.height)
+            .unwrap_or(DEFAULT_HEIGHT)
+            .min(MAX_HEIGHT);
         let mut grid = CellGrid::new(w, h);
         if w == 0 || h == 0 {
             return grid;
         }
         let ascii = is_ascii(console, options);
         let points = || self.datasets.iter().flat_map(|d| d.points.iter());
-        let x = self.x_axis.resolve(points().map(|p| p.0), ascii);
-        let y = self.y_axis.resolve(points().map(|p| p.1), ascii);
+        let x = self.x_axis.resolve(points().map(|p| p.0), console, ascii);
+        let y = self.y_axis.resolve(points().map(|p| p.1), console, ascii);
         let style_of = |spec: &Option<String>, default: &str| {
             spec_style(console, spec.as_deref().unwrap_or(default))
         };
@@ -512,7 +616,8 @@ impl Chart {
             bottom -= 1;
             bottom + 1
         });
-        let mut left = left_width(w, &x, &y);
+        let x_align = self.x_axis.labels_align;
+        let mut left = left_width(w, &x, &y, x_align);
         let axis_x = (x.has_labels() && bottom > 0).then(|| {
             bottom -= 1;
             bottom + 1
@@ -535,26 +640,42 @@ impl Chart {
                 Placed::At(labels) => {
                     let mut free = 0;
                     for (value, label) in labels {
-                        let len = cells(label);
+                        let len = label.width();
                         if len > w {
                             continue;
                         }
-                        let centre = gx + x.cell(*value, gw, per_x);
-                        let start = centre.saturating_sub(len / 2).min(w - len);
+                        let tick = gx + x.cell(*value, gw, per_x);
+                        let start = match x_align {
+                            Some(HorizontalAlign::Left) => tick,
+                            Some(HorizontalAlign::Right) => (tick + 1).saturating_sub(len),
+                            _ => tick.saturating_sub(len / 2),
+                        }
+                        .min(w - len);
                         if start < free {
                             continue;
                         }
-                        grid.put_text(row, start, label, x_style.clone(), w);
+                        put_runs(&mut grid, row, start, w, label, &x_style);
                         free = start + len + 1;
                     }
                 }
                 Placed::Even(labels) if labels.len() >= 2 => {
                     let n = labels.len();
                     let between = gw / n;
-                    let put = |grid: &mut CellGrid, col, width, text: &str, align| {
-                        put_aligned(grid, row, col, width, text, x_style.clone(), align);
+                    let put = |grid: &mut CellGrid, col, width, label: &Label, align| {
+                        put_aligned(grid, row, col, width, label, &x_style, align);
                     };
-                    put(&mut grid, 0, gx, &labels[0], Align::Right);
+                    // The first label against the y axis line, as ratatui
+                    // places it for each alignment.
+                    let (col, width, align) = match x_align {
+                        Some(HorizontalAlign::Center) => {
+                            (0, gx + between.min(labels[0].width()), Align::Centre)
+                        }
+                        Some(HorizontalAlign::Right) => {
+                            (gx.saturating_sub(1), between + 1, Align::Left)
+                        }
+                        _ => (0, gx, Align::Right),
+                    };
+                    put(&mut grid, col, width, &labels[0], align);
                     for (i, label) in labels[1..n - 1].iter().enumerate() {
                         let col = gx + (i + 1) * between + 1;
                         put(
@@ -578,21 +699,15 @@ impl Chart {
         }
         if y.has_labels() {
             let width = gx.saturating_sub(1);
+            let align = self.y_axis.labels_align.map(Align::from);
             match &y.labels {
                 Placed::At(labels) => {
                     let mut used = vec![false; gh];
                     for (value, label) in labels {
                         let row = gh - 1 - y.cell(*value, gh, per_y);
                         if !std::mem::replace(&mut used[row], true) {
-                            put_aligned(
-                                &mut grid,
-                                row,
-                                0,
-                                width,
-                                label,
-                                y_style.clone(),
-                                Align::Right,
-                            );
+                            let align = align.unwrap_or(Align::Right);
+                            put_aligned(&mut grid, row, 0, width, label, &y_style, align);
                         }
                     }
                 }
@@ -602,15 +717,8 @@ impl Chart {
                         let dy = if n > 1 { i * (gh - 1) / (n - 1) } else { 0 };
                         if dy < gh {
                             let row = gh - 1 - dy;
-                            put_aligned(
-                                &mut grid,
-                                row,
-                                0,
-                                width,
-                                label,
-                                y_style.clone(),
-                                Align::Left,
-                            );
+                            let align = align.unwrap_or(Align::Left);
+                            put_aligned(&mut grid, row, 0, width, label, &y_style, align);
                         }
                     }
                 }
@@ -747,6 +855,14 @@ impl Chart {
                         ops.push(Op::Line((px, base), (px, py), style.clone()));
                     }
                 }
+                GraphType::Area => {
+                    let level = self.y_axis.map(dataset.fill_to).unwrap_or(y.scale.min());
+                    for pair in mapped.windows(2) {
+                        if let [Some(a), Some(b)] = pair {
+                            ops.push(Op::Area(*a, *b, level, style.clone()));
+                        }
+                    }
+                }
             }
         }
         ops
@@ -756,13 +872,18 @@ impl Chart {
 /// How wide the labels left of the y axis line are, as ratatui works it
 /// out: the widest y label, or as much of the first x label as hangs left
 /// of the plot, whichever is wider, and at most a third of `width`.
-fn left_width(width: usize, x: &Resolved, y: &Resolved) -> usize {
-    let mut widest = y.texts().iter().map(|l| cells(l)).max().unwrap_or(0);
+fn left_width(width: usize, x: &Resolved, y: &Resolved, x_align: Option<HorizontalAlign>) -> usize {
+    let mut widest = y.texts().iter().map(|l| l.width()).max().unwrap_or(0);
     if let Some(first) = x.texts().first() {
-        let first = cells(first);
-        let hangs = match x.labels {
+        let first = first.width();
+        let hangs = match (&x.labels, x_align) {
             // The label ends under the y axis line, when there is one.
-            Placed::Even(_) => first.saturating_sub(usize::from(y.has_labels())),
+            (Placed::Even(_), None | Some(HorizontalAlign::Left)) => {
+                first.saturating_sub(usize::from(y.has_labels()))
+            }
+            (Placed::Even(_), Some(HorizontalAlign::Right)) => 0,
+            (_, Some(HorizontalAlign::Left)) => 0,
+            (_, Some(HorizontalAlign::Right)) => first.saturating_sub(1),
             _ => first / 2,
         };
         widest = widest.max(hangs);
@@ -777,21 +898,50 @@ enum Align {
     Right,
 }
 
-/// `text` in the `width` cells from `col` of `row`, aligned; when it is
+impl From<HorizontalAlign> for Align {
+    fn from(align: HorizontalAlign) -> Align {
+        match align {
+            HorizontalAlign::Left => Align::Left,
+            HorizontalAlign::Center => Align::Centre,
+            HorizontalAlign::Right => Align::Right,
+        }
+    }
+}
+
+/// `label`'s runs from `col` of `row`, over `base`, stopping before `end`.
+fn put_runs(
+    grid: &mut CellGrid,
+    row: usize,
+    col: usize,
+    end: usize,
+    label: &Label,
+    base: &Option<Style>,
+) {
+    let mut at = col;
+    for (text, style) in &label.runs {
+        if at >= end {
+            break;
+        }
+        grid.put_text(row, at, text, over(base, style), end);
+        at += cells(text);
+    }
+}
+
+/// `label` in the `width` cells from `col` of `row`, aligned; when it is
 /// wider it is cut on the right, or on the left when right-aligned.
 fn put_aligned(
     grid: &mut CellGrid,
     row: usize,
     col: usize,
     width: usize,
-    text: &str,
-    style: Option<Style>,
+    label: &Label,
+    base: &Option<Style>,
     align: Align,
 ) {
     if width == 0 {
         return;
     }
-    let len = cells(text);
+    let len = label.width();
     let end = col + width;
     if len <= width {
         let offset = match align {
@@ -799,17 +949,25 @@ fn put_aligned(
             Align::Centre => (width - len) / 2,
             Align::Right => width - len,
         };
-        grid.put_text(row, col + offset, text, style, end);
+        put_runs(grid, row, col + offset, end, label, base);
     } else if let Align::Right = align {
-        let units = cell_units(text);
-        let kept: String = units[len - width..]
+        // The last `width` cells, each in its run's style.
+        let units: Vec<(String, Option<Style>)> = label
+            .runs
             .iter()
-            .enumerate()
-            .map(|(i, u)| if i == 0 && u.is_empty() { " " } else { u })
+            .flat_map(|(text, style)| {
+                let style = over(base, style);
+                cell_units(text)
+                    .into_iter()
+                    .map(move |u| (u, style.clone()))
+            })
             .collect();
-        grid.put_text(row, col, &kept, style, end);
+        for (i, (unit, style)) in units[len - width..].iter().enumerate() {
+            let unit = if i == 0 && unit.is_empty() { " " } else { unit };
+            grid.set(row, col + i, unit.to_string(), style.clone());
+        }
     } else {
-        grid.put_text(row, col, text, style, end);
+        put_runs(grid, row, col, end, label, base);
     }
 }
 
@@ -1225,6 +1383,166 @@ mod tests {
                 "+---------\n",
             )
         );
+    }
+
+    #[test]
+    fn area_charts_fill_to_their_level() {
+        let points = [(0.0, 1.0), (2.0, 3.0), (4.0, 2.0), (6.0, 4.0)];
+        let area = |fill: f64| {
+            Chart::new(vec![Dataset::new(points)
+                .graph_type(GraphType::Area)
+                .marker(Marker::Ascii('#'))
+                .fill_to(fill)])
+            .x_axis(Axis::default().bounds(0.0, 6.0))
+            .y_axis(Axis::default().bounds(0.0, 4.0))
+            .height(5)
+            .width(7)
+        };
+        assert_eq!(
+            rows(&area(0.0), 7),
+            vec!["      #", "  #  ##", " ######", "#######", "#######"]
+        );
+        // Filled to a level above some points: the strips between the line
+        // and the level, on either side of it.
+        assert_eq!(
+            rows(&area(2.0), 7),
+            vec!["      #", "  #  ##", "#######", "#      ", "       "]
+        );
+        // On a log axis, a level it cannot show fills to the bottom.
+        let log = Chart::new(vec![Dataset::new([(0.0, 10.0), (2.0, 10.0)])
+            .graph_type(GraphType::Area)
+            .marker(Marker::Ascii('#'))])
+        .x_axis(Axis::default().bounds(0.0, 2.0))
+        .y_axis(Axis::default().bounds(1.0, 100.0).scale(AxisScale::Log))
+        .height(3)
+        .width(3);
+        assert_eq!(rows(&log, 3), vec!["   ", "###", "###"]);
+    }
+
+    #[test]
+    fn markup_labels_keep_their_styles() {
+        let chart = Chart::new(Vec::new())
+            .x_axis(Axis::default().style("blue").labels(Labels::Markup(vec![
+                "[bold]0[/]".into(),
+                "5".into(),
+                "[bold]10[/]".into(),
+            ])))
+            .height(3)
+            .width(12);
+        assert_eq!(
+            rows(&chart, 12),
+            vec!["            ", " ───────────", "0    5    10"]
+        );
+        let console = Console::builder().width(12).build();
+        let grid = chart.grid(&console, &console.options());
+        let bold_blue = Style::parse("bold blue").ok();
+        assert_eq!(grid.style_at(2, 0), bold_blue);
+        assert_eq!(grid.style_at(2, 5), Style::parse("blue").ok());
+        assert_eq!(grid.style_at(2, 10), bold_blue);
+        assert_eq!(grid.style_at(2, 11), bold_blue);
+        // Markup that does not parse is written as it is.
+        let broken = Chart::new(Vec::new())
+            .y_axis(Axis::default().labels(Labels::Markup(vec!["[/x]".into(), "b".into()])))
+            .height(2)
+            .width(8);
+        assert_eq!(rows(&broken, 8), vec!["b │     ", "[/│     "]);
+    }
+
+    #[test]
+    fn labels_align_as_asked() {
+        let chart = |align: Option<HorizontalAlign>| {
+            let mut y = Axis::default()
+                .bounds(0.0, 100.0)
+                .labels(Labels::Values(vec![0.0, 50.0, 100.0]));
+            if let Some(align) = align {
+                y = y.labels_align(align);
+            }
+            Chart::new(Vec::new())
+                .y_axis(y.labels(Labels::Text(vec!["0".into(), "fifty".into(), "100".into()])))
+                .height(3)
+                .width(15)
+        };
+        // Text labels are left-aligned by default, as in ratatui.
+        assert_eq!(
+            rows(&chart(None), 15),
+            vec!["100  │         ", "fifty│         ", "0    │         "]
+        );
+        assert_eq!(
+            rows(&chart(Some(HorizontalAlign::Right)), 15),
+            vec!["  100│         ", "fifty│         ", "    0│         "]
+        );
+        assert_eq!(
+            rows(&chart(Some(HorizontalAlign::Center)), 15),
+            vec![" 100 │         ", "fifty│         ", "  0  │         "]
+        );
+        // Values are right-aligned by default; left on asking.
+        let values = |align: Option<HorizontalAlign>| {
+            let mut y = Axis::default()
+                .bounds(0.0, 100.0)
+                .labels(Labels::Values(vec![0.0, 100.0]));
+            if let Some(align) = align {
+                y = y.labels_align(align);
+            }
+            rows(&Chart::new(Vec::new()).y_axis(y).height(2).width(12), 12)
+        };
+        assert_eq!(values(None), vec!["100│        ", "  0│        "]);
+        assert_eq!(
+            values(Some(HorizontalAlign::Left)),
+            vec!["100│        ", "0  │        "]
+        );
+    }
+
+    #[test]
+    fn the_first_x_label_sits_against_the_y_axis_as_asked() {
+        let chart = |align: Option<HorizontalAlign>| {
+            let mut x = Axis::default().labels(Labels::Text(vec!["start".into(), "end".into()]));
+            if let Some(align) = align {
+                x = x.labels_align(align);
+            }
+            let y = Axis::default().labels(Labels::Text(vec!["abc".into(), "d".into()]));
+            rows(
+                &Chart::new(Vec::new())
+                    .x_axis(x)
+                    .y_axis(y)
+                    .height(4)
+                    .width(16),
+                16,
+            )
+        };
+        // Left (the default): it ends under the y axis line.
+        assert_eq!(chart(None)[2], "    └───────────");
+        assert_eq!(chart(None)[3], "start        end");
+        // Centre: about the line; right: it starts there.
+        assert_eq!(chart(Some(HorizontalAlign::Center))[3], "  start      end");
+        assert_eq!(chart(Some(HorizontalAlign::Right))[2], "   └────────────");
+        assert_eq!(chart(Some(HorizontalAlign::Right))[3], "   start     end");
+    }
+
+    #[test]
+    fn a_chart_fills_the_height_it_is_given() {
+        let chart = Chart::new(vec![
+            dot(&[(0.0, 0.0), (1.0, 1.0)]).graph_type(GraphType::Line)
+        ])
+        .x_axis(Axis::default().bounds(0.0, 1.0).labels(Labels::Auto(2)))
+        .y_axis(Axis::default().bounds(0.0, 1.0).labels(Labels::Auto(2)));
+        let console = Console::builder().width(20).color_system(None).build();
+        let lines = console.render_lines(&chart, &console.options().update_height(7), false);
+        assert_eq!(lines.len(), 7);
+        let text: Vec<String> = lines
+            .iter()
+            .map(|l| l.iter().map(|s| s.text.as_str()).collect())
+            .collect();
+        // The axes take the last two rows, the plot the five above.
+        assert!(
+            text[5].starts_with(" └") || text[5].contains('└'),
+            "{text:?}"
+        );
+        assert!(text[0].contains('1') && text[4].contains('0'), "{text:?}");
+        // An explicit height wins; no height at all is 15 rows.
+        let fixed = chart.clone().height(4);
+        let lines = console.render_lines(&fixed, &console.options().update_height(7), false);
+        assert_eq!(lines.iter().filter(|l| !l.is_empty()).count(), 4);
+        assert_eq!(console.render_export(&chart).lines().count(), 15);
     }
 
     #[test]

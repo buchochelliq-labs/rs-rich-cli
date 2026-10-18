@@ -485,6 +485,7 @@ pub fn datetime_picker(selected: Signal<DateTime>, options: DateTimeOptions) -> 
             today: options.today,
             min: min.map(|at| at.date),
             max: max.map(|at| at.date),
+            ..CalendarOptions::default()
         },
     );
     let time = widget(TimeField {
