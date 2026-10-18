@@ -18,6 +18,7 @@ const RENDER_MODE: &str = "Render mode";
 const INPUT: &str = "Input";
 const LAYOUT: &str = "Layout";
 const MODE_OPTIONS: &str = "Mode options";
+const LOG: &str = "Log";
 const SOURCE: &str = "Source";
 const IMAGE: &str = "Image";
 const INSPECT: &str = "Inspect";
@@ -37,8 +38,8 @@ const GENERAL: &str = "General";
 
 /// The render modes a `mode` config value (and the command word) may name.
 pub(crate) const MODES: &[&str] = &[
-    "print", "markdown", "rst", "json", "syntax", "csv", "ipynb", "jsonl", "log", "rule", "image",
-    "gif", "diff", "inspect", "ansi",
+    "print", "markdown", "rst", "org", "asciidoc", "man", "json", "syntax", "csv", "ipynb",
+    "jsonl", "log", "rule", "image", "gif", "diff", "inspect", "ansi",
 ];
 
 fn flag(long: &str, heading: &str, help: &str) -> ArgSpec {
@@ -110,13 +111,59 @@ fn command_options(name: &str) -> Vec<ArgSpec> {
             "timings",
             "audit",
             "licenses",
+            "sizes",
+            "build-profile",
+            "source-sizes",
+            "top",
+            "baseline",
+            "threshold",
+            "save",
+            "policy",
+            "sbom",
             "width",
         ],
         "schema" => &["er", "width"],
         "chart" => &["kind", "x", "y", "width"],
-        "profile" => &["sample", "columns", "top", "report", "width"],
+        "profile" => &[
+            "sample",
+            "columns",
+            "top",
+            "depth",
+            "max-paths",
+            "flat",
+            "style-rule",
+            "rules",
+            "report",
+            "width",
+        ],
         "env" => &["show-secrets", "width"],
-        "capture" => &["cast", "redact", "redact-pattern", "sanitize", "width"],
+        "capture" => &[
+            "cast",
+            "redact",
+            "redact-pattern",
+            "redact-preview",
+            "sanitize",
+            "width",
+        ],
+        "log" => &[
+            "log-presentation",
+            "level",
+            "where",
+            "follow",
+            "collapse",
+            "group",
+            "fields",
+            "parser",
+            "time",
+            "output",
+            "summary",
+            "interactive",
+            "redact",
+            "redact-pattern",
+            "redact-preview",
+            "sanitize",
+            "width",
+        ],
         "inspect" => &[
             "format",
             "select",
@@ -153,6 +200,20 @@ fn command_options(name: &str) -> Vec<ArgSpec> {
                 .unwrap_or_else(|| panic!("no --{long} option"))
                 .clone();
             arg.config_key = None;
+            // `rich deps` borrows `--top` and `--threshold` from other
+            // commands; its help lists them with its own options.
+            if name == "deps" && long != &"width" {
+                arg.heading = Some(SOURCES.into());
+            }
+            // `--depth` is `rich deps`'s too; in `rich profile --help` it
+            // sits with the profile's own options.
+            if name == "profile" && *long == "depth" {
+                arg = arg.heading(PROFILE).help(
+                    "With `rich profile` of JSON Lines, profile paths at most N steps deep \
+                     (default 4), a key or [] each; an object or array at the last step \
+                     counts as its JSON text",
+                );
+            }
             arg
         })
         .collect()
@@ -174,6 +235,26 @@ fn render_modes() -> Vec<ArgSpec> {
         ),
         mode("markdown", Some('m'), "Render RESOURCE as Markdown"),
         mode("rst", None, "Render RESOURCE as reStructuredText"),
+        mode(
+            "org",
+            None,
+            "Render RESOURCE as an Org document (headlines, TODO keywords, lists, blocks, \
+             tables, drawers)",
+        ),
+        mode(
+            "asciidoc",
+            None,
+            "Render RESOURCE as AsciiDoc (sections, attributes, lists, source blocks with \
+             callouts, tables, admonitions)",
+        )
+        .alias("adoc"),
+        mode(
+            "man",
+            None,
+            "Render RESOURCE as a man page from its roff source (man and mdoc macros, tbl \
+             tables)",
+        )
+        .alias("roff"),
         mode("json", Some('j'), "Pretty-print RESOURCE as JSON").short_alias('J'),
         mode(
             "syntax",
@@ -183,7 +264,12 @@ fn render_modes() -> Vec<ArgSpec> {
         mode("csv", None, "Render RESOURCE as a CSV/TSV table"),
         mode("ipynb", None, "Render RESOURCE as a Jupyter notebook"),
         mode("jsonl", None, "Stream JSON Lines / NDJSON records").alias("ndjson"),
-        mode("log", None, "Stream common structured-log JSONL records"),
+        mode(
+            "log",
+            None,
+            "Stream log records: JSON Lines, logfmt and common text formats, filtered, followed \
+             and grouped",
+        ),
         mode(
             "gif",
             None,
@@ -292,7 +378,14 @@ fn viewer_options() -> Vec<ArgSpec> {
             VIEWERS,
             "With `rich hex`, bytes on each line (default: fit the width, up to 16)",
         ),
-        option("group", "N", VIEWERS, "With `rich hex`, bytes per group").default_value("8"),
+        option(
+            "group",
+            "N|BY",
+            VIEWERS,
+            "With `rich hex`, bytes per group (default 8); with `rich log`, group records by \
+             trace, span or correlation id (trace_id, span_id, correlation_id, request_id, ...) \
+             under a header each, with a summary at the end",
+        ),
         option(
             "limit",
             "N",
@@ -314,10 +407,20 @@ fn viewer_options() -> Vec<ArgSpec> {
             "redact-pattern",
             "REGEX",
             VIEWERS,
-            "With `rich capture`, also mask matches of REGEX (only its `secret` group when it \
-             has one); repeatable. Experimental: check the output before sharing it",
+            "With `rich capture` and `rich log`, also mask matches of REGEX (only its `secret` \
+             group when it has one); repeatable. Experimental: check the output before sharing \
+             it",
         )
         .multiple(true),
+        flag(
+            "redact-preview",
+            VIEWERS,
+            "With `rich capture` or `rich log` and --redact or --redact-pattern, show each \
+             match on its line, highlighted, with its rule and replacement, and a summary, \
+             instead of the output; write nothing (no cast, export or log output) and name on \
+             stderr what would have been written. The preview shows the secrets unmasked. With \
+             --report json, the findings as one JSON document on stdout",
+        ),
     ]
 }
 
@@ -328,10 +431,15 @@ fn input_options() -> Vec<ArgSpec> {
         INPUT,
         "Input format. With --inspect, the parser (default auto-detect); otherwise `auto` \
          detects piped or extensionless input and routes it (JSON to --json, other formats \
-         to highlighting, anything else to plain text), and a named format overrides the \
-         extension",
+         to highlighting, likely Markdown, reStructuredText, Org, AsciiDoc and man pages to \
+         their renderers, anything else to plain text), and a named format overrides the \
+         extension. A document format (markdown, rst, org, asciidoc, man) is the same as its \
+         mode flag",
     )
-    .choices(["auto", "json", "yaml", "toml", "xml", "ini", "env"])
+    .choices([
+        "auto", "json", "yaml", "toml", "xml", "ini", "env", "markdown", "rst", "org", "asciidoc",
+        "man",
+    ])
     .default_value("auto")
     .config_key("format")];
     args.extend(
@@ -489,7 +597,7 @@ fn source_options() -> Vec<ArgSpec> {
             "LEXER",
             SOURCE,
             "Highlight source as LEXER instead of guessing from the file name; with --rst, \
-             highlight code blocks that name no language as LEXER",
+             --org, --asciidoc or --man, highlight code blocks that name no language as LEXER",
         ),
         flag(
             "no-wrap",
@@ -503,6 +611,95 @@ fn source_options() -> Vec<ArgSpec> {
              boolean, date, timestamp, text) and show it under the heading; number columns \
              right-align even with null tokens such as NA. Without it the table is rich-cli's",
         ),
+    ]
+}
+
+fn log_options() -> Vec<ArgSpec> {
+    vec![
+        option(
+            "level",
+            "LEVEL",
+            LOG,
+            "With `rich log`, keep only records at LEVEL (trace, debug, info, warn, error or \
+             fatal), or at it and above with a `+` (`warn+`); several with commas or by \
+             repeating it",
+        )
+        .multiple(true),
+        option(
+            "where",
+            "EXPR",
+            LOG,
+            "With `rich log`, keep only records whose fields pass EXPR: FIELD=VALUE, \
+             FIELD!=VALUE, FIELD>N (and >=, <, <=), FIELD~REGEX, FIELD!~REGEX, FIELD (it is \
+             there) or !FIELD (it is not); numbers, levels and times compare as such, dots \
+             reach nested fields; repeatable, and every one must pass",
+        )
+        .multiple(true),
+        flag(
+            "follow",
+            LOG,
+            "With `rich log`, read FILE, then what is appended to it, starting again when it \
+             is truncated or replaced (log rotation), until Ctrl+C",
+        )
+        .short('f'),
+        flag(
+            "collapse",
+            LOG,
+            "With `rich log`, fold a run of identical records (their times aside) into the \
+             first and a `× N` count; on by default with --follow and --interactive",
+        )
+        .alias("no-collapse"),
+        flag(
+            "fields",
+            LOG,
+            "With `rich log`, list each record's fields under it, one a line, instead of on \
+             its line",
+        ),
+        option(
+            "parser",
+            "NAME",
+            LOG,
+            "With `rich log`, how lines that are not JSON are read: auto tries each format; \
+             logfmt, level (`LEVEL message`), timestamp (a line that starts with a time) and \
+             access (nginx and Apache) read one; text reads none. A line no parser reads \
+             joins the record before it, or is shown as text",
+        )
+        .choices(["auto", "logfmt", "level", "timestamp", "access", "text"])
+        .default_value("auto"),
+        option(
+            "time",
+            "MODE",
+            LOG,
+            "With `rich log`, show each time as written (absolute), since the first record \
+             shown (relative), or not at all (none)",
+        )
+        .choices(["absolute", "relative", "none"])
+        .default_value("absolute"),
+        option(
+            "output",
+            "FORMAT",
+            LOG,
+            "With `rich log`, write the records kept as text, or as one JSON object a line \
+             (jsonl) for another program",
+        )
+        .choices(["text", "jsonl"])
+        .default_value("text"),
+        flag(
+            "summary",
+            LOG,
+            "With `rich log`, end with a summary: records shown, counts by level and, with \
+             --group, the groups with errors; on by default with --group (on standard error \
+             with --output jsonl)",
+        )
+        .alias("no-summary"),
+        flag(
+            "interactive",
+            LOG,
+            "With `rich log` on a terminal, show the records in a live view that follows the \
+             end: / filters, Space pauses, Enter shows a record's fields, q quits; without a \
+             terminal the records stream as usual",
+        )
+        .short('i'),
     ]
 }
 
@@ -575,7 +772,9 @@ fn mode_options() -> Vec<ArgSpec> {
             "depth",
             "N",
             SOURCES,
-            "With `rich deps`, show at most N levels below each workspace member",
+            "With `rich deps`, show at most N levels below each workspace member; with `rich \
+             profile`, profile JSON paths at most N steps deep (default 4), an object or array \
+             at the last step counting as its JSON text",
         ),
         flag(
             "duplicates",
@@ -622,6 +821,58 @@ fn mode_options() -> Vec<ArgSpec> {
             SOURCES,
             "With `rich deps`, group the crates by licence, marking copyleft, unknown and missing \
              licences",
+        ),
+        flag(
+            "sizes",
+            SOURCES,
+            "With `rich deps`, show artifact sizes per crate as bars and a table: from the target \
+             directory given next (default: the one `cargo metadata` names), matched to packages \
+             through `cargo metadata`, or from a file given next: `cargo bloat --crates \
+             --message-format json` output or a report saved with --save (`-` for stdin)",
+        ),
+        option(
+            "build-profile",
+            "NAME",
+            SOURCES,
+            "With `rich deps --sizes`, read this profile's artifacts: debug (dev), release, or a \
+             custom profile (default: debug if it was built, else release)",
+        ),
+        flag(
+            "source-sizes",
+            SOURCES,
+            "With `rich deps --sizes`, also add up each package's source files (its manifest \
+             directory, without target/, .git/ and nested packages)",
+        ),
+        option(
+            "baseline",
+            "FILE",
+            SOURCES,
+            "With `rich deps --timings` or `--sizes`, compare with an older report, unit by unit \
+             (a report saved with --save, or the original format: a timings report, cargo-bloat \
+             JSON or a target directory); exits 5 when a unit or the total regressed past \
+             --threshold",
+        ),
+        option(
+            "save",
+            "FILE",
+            SOURCES,
+            "With `rich deps --timings` or `--sizes`, also write the report as JSON to FILE, to \
+             keep as a --baseline",
+        ),
+        option(
+            "policy",
+            "FILE",
+            SOURCES,
+            "With `rich deps`, check every crate's licence against a policy: a TOML allow and deny \
+             list, or cargo-deny's deny.toml; conflicts with the root crate's licence are shown \
+             too (a heuristic, not legal advice). Exits 5 on a violation",
+        ),
+        option(
+            "sbom",
+            "FILE",
+            SOURCES,
+            "With `rich deps --licenses` or `--policy`, read the packages from an SPDX (2.2, 2.3) \
+             or CycloneDX (1.4 to 1.6) JSON document instead of `cargo metadata`",
         ),
         flag(
             "er",
@@ -675,8 +926,43 @@ fn mode_options() -> Vec<ArgSpec> {
             "N",
             PROFILE,
             "With `rich profile`, the most common values shown for a column that is not \
-             numeric (default 5)",
+             numeric (default 5); with `rich deps --sizes`, `--timings` or `--baseline`, the \
+             units shown (default 20)",
         ),
+        option(
+            "max-paths",
+            "N",
+            PROFILE,
+            "With `rich profile` of JSON Lines, profile at most N paths (default 200), in the \
+             order first seen; the rest are noted",
+        ),
+        flag(
+            "flat",
+            PROFILE,
+            "With `rich profile` of JSON Lines, profile rows of the top-level keys (nested \
+             values as JSON text) instead of every nested path",
+        ),
+        option(
+            "style-rule",
+            "RULE",
+            PROFILE,
+            "Style the cells, rows or columns of a data table by value: COLUMN OP VALUE:STYLE \
+             or COLUMN OP VALUE:row:STYLE (e.g. 'latency>500:bold red', \
+             'status=failed:row:on red'); OP is == != < <= > >= *= ^= $= or a word such as \
+             contains or empty. Repeatable; applies to --csv, `rich profile`'s table and \
+             `rich inspect --table`, and has no effect elsewhere",
+        )
+        .multiple(true)
+        .config_key("rules"),
+        option(
+            "rules",
+            "FILE",
+            PROFILE,
+            "Read style rules from FILE's [[rules]] tables (column, op, value, style, target), \
+             after the rules before it",
+        )
+        .value(ValueHint::Path)
+        .multiple(true),
         option(
             "highlighter",
             "NAME",
@@ -698,6 +984,30 @@ fn mode_options() -> Vec<ArgSpec> {
             "N",
             MODE_OPTIONS,
             "With --gif, repeat N times (default 1; 0 = forever)",
+        ),
+        option(
+            "speed",
+            "X",
+            MODE_OPTIONS,
+            "With --gif, play X times as fast (0.5 = half speed; default 1)",
+        ),
+        option(
+            "fps",
+            "N",
+            MODE_OPTIONS,
+            "With --gif, draw at most N frames a second (default 30)",
+        ),
+        option(
+            "max-frames",
+            "N",
+            MODE_OPTIONS,
+            "With --gif, stop each animation after N frames, even with --loop 0",
+        ),
+        option(
+            "max-duration",
+            "SECS",
+            MODE_OPTIONS,
+            "With --gif, stop after SECS seconds, whatever is still playing",
         ),
     ];
     args.extend(
@@ -855,7 +1165,10 @@ fn image_options() -> Vec<ArgSpec> {
             "PCT",
             IMAGE,
             "With --diff, exit non-zero above PCT% changed (pixels for images, lines for \
-             text). Also sets the exit code: 0 within, 5 over.",
+             text). Also sets the exit code: 0 within, 5 over. With `rich deps --baseline`, what \
+             counts as a regression: a percentage (default 10%) and a floor the change must \
+             also pass, a time (`0.5s`, the default for --timings) or a size (`64KiB`, the \
+             default for --sizes); give it twice for both",
         ),
     ]
 }
@@ -928,8 +1241,9 @@ fn inspect_options() -> Vec<ArgSpec> {
             "Mask secret-looking keys such as password, token and api_key. With `rich \
              capture`, mask secrets in the output before it is shown, exported or recorded: \
              secret-named `key=value` values, bearer tokens, GitHub/GitLab/Slack/Stripe/npm/`sk-` \
-             tokens, AWS key ids, JWTs and URL passwords. Capture redaction is experimental \
-             and best effort: check the output before sharing it",
+             tokens, AWS key ids, JWTs and URL passwords; with `rich log`, the same in each \
+             record's fields and lines. Capture redaction is experimental and best effort: \
+             check the output before sharing it",
         ),
         option(
             "compare",
@@ -961,6 +1275,15 @@ fn export_options() -> Vec<ArgSpec> {
         )
         .value(ValueHint::File)
         .config_key("export_svg"),
+        option(
+            "export-png",
+            "PATH",
+            EXPORT,
+            "Also write a PNG image of the output to PATH: the terminal's width, rich's SVG \
+             export theme, in a window titled like the SVG's, drawn with an embedded DejaVu \
+             Sans Mono so it is the same on every machine (the png feature; not with --batch)",
+        )
+        .value(ValueHint::File),
     ]
 }
 
@@ -1167,8 +1490,8 @@ fn output_options() -> Vec<ArgSpec> {
             "sanitize",
             OUTPUT,
             "Replace input terminal controls, JSON/notebook strings, titles and captions \
-             with visible inert text. On by default for `rich view`, `rich schema` and \
-             text `rich diff`; --no-sanitize turns it off there",
+             with visible inert text. On by default for `rich view`, `rich schema`, `rich log` \
+             and text `rich diff`; --no-sanitize turns it off there",
         ),
         option(
             "report",
@@ -1252,6 +1575,7 @@ fn root_args() -> Vec<ArgSpec> {
         layout_options(),
         source_options(),
         mode_options(),
+        log_options(),
         image_options(),
         inspect_options(),
         diff_options(),
@@ -1415,8 +1739,11 @@ pub(crate) fn spec() -> CommandSpec {
         .heading_note(
             RENDER_MODE,
             "Choose at most one; the default auto-detects .md/.rst/.json/.csv/.tsv/.ipynb, \
-             .mmd/.mermaid and .dot/.gv by extension — anything else with a file extension \
-             is syntax-highlighted.",
+             .mmd/.mermaid and .dot/.gv by extension, and .org, .adoc/.asciidoc and \
+             .man/.roff/.mdoc documents; a man page's section extension (.1 to .9) or .asc \
+             counts when the content agrees, and a file with no extension that is plainly \
+             Org, AsciiDoc or roff renders as one — anything else with a file extension is \
+             syntax-highlighted.",
         )
         .heading_note(
             DEMO,
@@ -1430,6 +1757,13 @@ pub(crate) fn spec() -> CommandSpec {
         ),
         ("markdown", &["md"][..], "Render Markdown (`--markdown`)"),
         ("rst", &[][..], "Render reStructuredText (`--rst`)"),
+        ("org", &[][..], "Render an Org document (`--org`)"),
+        ("asciidoc", &["adoc"][..], "Render AsciiDoc (`--asciidoc`)"),
+        (
+            "man",
+            &["roff"][..],
+            "Render a man page from its roff source (`--man`)",
+        ),
         (
             "syntax",
             &["code"][..],
@@ -1450,7 +1784,8 @@ pub(crate) fn spec() -> CommandSpec {
         (
             "log",
             &["logs"][..],
-            "Stream common structured-log JSONL records (`--log`)",
+            "Stream log records (`--log`): JSON Lines, logfmt and common text formats; filter \
+             with --level and --where, follow a file with -f, group with --group",
         ),
         ("gif", &[][..], "Animate GIFs (`--gif`)"),
         (
@@ -1522,7 +1857,8 @@ pub(crate) fn spec() -> CommandSpec {
             .about(
                 "A Cargo dependency tree from `cargo metadata`, crates resolved at several \
                  versions marked; --why CRATE for what pulls a crate in, --graph to draw it; \
-                 --features, --licenses, --timings FILE and --audit FILE for supply-chain reports",
+                 --features, --licenses, --policy FILE, --timings FILE, --sizes and --audit FILE \
+                 for supply-chain reports, --baseline FILE to compare timings or sizes",
             )
             .usage("deps [OPTIONS] [MANIFEST]")
             .arg(ArgSpec::positional("manifest").value(ValueHint::Path).help(
@@ -1583,13 +1919,19 @@ pub(crate) fn spec() -> CommandSpec {
     for command in super::interactive::commands() {
         spec = spec.subcommand(command);
     }
+    #[cfg(feature = "interact")]
+    for command in super::approve_jump::commands() {
+        spec = spec.subcommand(command);
+    }
     for command in authoring_commands() {
         spec = spec.subcommand(command);
     }
     #[cfg(feature = "art")]
     {
         spec = spec.subcommand(super::micro::command());
+        spec = spec.subcommand(super::banner::command());
     }
+    spec = spec.subcommand(super::shell::command());
     #[cfg(feature = "serve")]
     {
         spec = spec.subcommand(super::serve::command());
@@ -1662,13 +2004,13 @@ pub(crate) fn spec() -> CommandSpec {
         "Exit codes",
         "- 0: success\n\
          - 1: cancelled, or answered no (choose, filter, input, confirm, write, file, color, \
-           asset)\n\
+           asset, date)\n\
          - 2: usage/config error\n\
          - 3: input/read/write error\n\
          - 4: parse/render data error\n\
          - 5: threshold/gate failure\n\
          - 130: interrupted with Ctrl+C (choose, filter, input, confirm, pager, write, file, \
-           color, asset)",
+           color, asset, date)",
     )
 }
 
@@ -1715,6 +2057,7 @@ pub(crate) fn config_reference() -> ConfigReference {
             "watch_interval" | "watch_debounce" | "image_brightness" | "image_contrast"
             | "image_gamma" => "number",
             "plugins" => "list of paths",
+            "rules" => "array of rule tables",
             _ => continue,
         };
         entry.kind = kind.to_string();
@@ -1811,12 +2154,19 @@ mod tests {
     const SOURCES_RS: &str = include_str!("sources.rs");
     const CHART_RS: &str = include_str!("chart.rs");
     const PROFILE_RS: &str = include_str!("profile.rs");
+    const LOGS_RS: &str = include_str!("logs.rs");
+    const STYLE_RULES_RS: &str = include_str!("style_rules.rs");
     #[cfg(feature = "interact")]
     const INTERACTIVE: &str = include_str!("interactive.rs");
+    #[cfg(feature = "interact")]
+    const APPROVE_JUMP: &str = include_str!("approve_jump.rs");
     #[cfg(feature = "art")]
     const MICRO: &str = include_str!("micro.rs");
     #[cfg(feature = "serve")]
     const SERVE: &str = include_str!("serve.rs");
+    #[cfg(feature = "art")]
+    const BANNER: &str = include_str!("banner.rs");
+    const SHELL: &str = include_str!("shell.rs");
 
     /// The source of the item that starts with `start`, up to the next
     /// top-level item.
@@ -1872,13 +2222,20 @@ mod tests {
             item(SOURCES_RS, "impl SchemaOptions {"),
             item(CHART_RS, "impl ChartOptions {"),
             item(PROFILE_RS, "impl ProfileOptions {"),
+            item(LOGS_RS, "impl LogOptions {"),
+            item(STYLE_RULES_RS, "impl RuleOptions {"),
         ] {
             out.extend(option_literals(source));
         }
         #[cfg(feature = "interact")]
         out.extend(option_literals(item(INTERACTIVE, "fn parse_args(")));
+        #[cfg(feature = "interact")]
+        out.extend(option_literals(item(APPROVE_JUMP, "fn parse_args(")));
         #[cfg(feature = "serve")]
         out.extend(option_literals(item(SERVE, "fn parse_args(")));
+        #[cfg(feature = "art")]
+        out.extend(option_literals(item(BANNER, "fn parse_args(")));
+        out.extend(option_literals(item(SHELL, "fn parse_args(")));
         #[cfg(feature = "art")]
         for start in ["const CREATE_VALUES", "const CREATE_FLAGS", "fn request("] {
             out.extend(option_literals(item(MICRO, start)));
@@ -2034,7 +2391,14 @@ mod tests {
                 assert!(spec.find_subcommand(alias).is_some(), "{alias}");
             }
         }
-        for name in ["config", "completions", "docs", "doctor", "inspect"] {
+        for name in [
+            "config",
+            "completions",
+            "docs",
+            "doctor",
+            "inspect",
+            "shell",
+        ] {
             assert!(spec.find_subcommand(name).is_some(), "{name}");
         }
     }

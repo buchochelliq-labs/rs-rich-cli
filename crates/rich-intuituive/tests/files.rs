@@ -27,7 +27,13 @@ fn tree(name: &str) -> PathBuf {
     std::fs::write(root.join("notes.md"), "# Title\n\nhello notes\n").unwrap();
     std::fs::write(root.join("data.bin"), [0u8, 1, 2, 3, 0, 9]).unwrap();
     std::fs::write(root.join("z.txt"), "zzz ".repeat(300)).unwrap();
-    root.canonicalize().unwrap()
+    // As the app shows it: on Windows, not the verbatim `\\?\` form
+    // `canonicalize` gives.
+    let full = root.canonicalize().unwrap();
+    match full.to_string_lossy().strip_prefix(r"\\?\") {
+        Some(rest) if rest.as_bytes().get(1) == Some(&b':') => PathBuf::from(rest),
+        _ => full,
+    }
 }
 
 fn app(root: &Path) -> App {
@@ -81,7 +87,10 @@ fn opening_and_going_up_keep_the_place() {
     let name = root.file_name().unwrap().to_string_lossy().into_owned();
     // Into alpha: the header shows it, the parent column lists root.
     let rows = screen(&run(app(&root), Script::new().keys("l q"), 80, 10));
-    assert!(rows[0].ends_with(&format!("{name}/alpha")), "{rows:?}");
+    let sep = std::path::MAIN_SEPARATOR;
+    assert!(rows[0].ends_with(&format!("{name}{sep}alpha")), "{rows:?}");
+    // On Windows, an ordinary drive path, not a verbatim one.
+    assert!(!rows[0].contains(r"\\?\"), "{rows:?}");
     assert!(middle(&rows, 11, 50)[0].starts_with("a.txt"), "{rows:?}");
     assert!(rows[1].starts_with("alpha/"), "parent column: {rows:?}");
     // Back up: alpha is selected again.
@@ -133,19 +142,21 @@ fn hidden_files_sorting_and_filtering() {
 #[test]
 fn tabs_open_switch_and_close() {
     let root = tree("tabs");
+    // The header shows the path as the system writes it.
+    let alpha = format!("{}alpha", std::path::MAIN_SEPARATOR);
     // A tab in alpha: the strip shows both, numbered.
     let rows = screen(&run(app(&root), Script::new().keys("t l q"), 80, 10));
     assert!(
         rows[1].contains("1 ") && rows[1].contains("2 alpha"),
         "{rows:?}"
     );
-    assert!(rows[0].ends_with("/alpha"), "{rows:?}");
+    assert!(rows[0].ends_with(&alpha), "{rows:?}");
     // Back to the first tab: its own directory.
     let rows = screen(&run(app(&root), Script::new().keys("t l 1 q"), 80, 10));
-    assert!(!rows[0].ends_with("/alpha"), "{rows:?}");
+    assert!(!rows[0].ends_with(&alpha), "{rows:?}");
     // Closing the second leaves one tab and no strip.
     let rows = screen(&run(app(&root), Script::new().keys("t l ctrl+w q"), 80, 10));
-    assert!(!rows[0].ends_with("/alpha"), "{rows:?}");
+    assert!(!rows[0].ends_with(&alpha), "{rows:?}");
     assert!(rows[1].contains("Name"), "no strip: {rows:?}");
 }
 

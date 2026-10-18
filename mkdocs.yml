@@ -115,6 +115,7 @@ nav:
           - Dependency graphs and JSON Schemas: guide/ext/sources.md
           - Macros and derive: guide/ext/macros.md
           - Structured data: guide/ext/structured-data.md
+          - Documents (Org, AsciiDoc, man pages): guide/ext/documents.md
           - Transforms: guide/ext/transforms.md
           - CLI authoring: guide/ext/cli-authoring.md
           - Diffs and test reports: guide/ext/diffs-and-test-reports.md
@@ -133,10 +134,12 @@ nav:
           - Building your own components: guide/interact/custom-components.md
           - Overlays and chrome: guide/interact/overlays.md
           - Explorers, copying and live lists: guide/interact/explorers.md
+          - Approval queues and jumping to anything: guide/interact/review-and-jump.md
       - Terminal apps (rs-rich-intuituive):
           - guide/intuituive/index.md
           - "Tutorial: a to-do app": guide/intuituive/tutorial.md
           - Porting a ratatui app: guide/intuituive/porting.md
+          - "ratatui's examples, rebuilt": guide/intuituive/ratatui-examples.md
           - Serving an app to a browser: guide/intuituive/web.md
           - "Embedding programs and pages (rs-rich-embed)": guide/intuituive/embed.md
           - Testing with screen readers: guide/intuituive/screen-readers.md
@@ -183,6 +186,7 @@ nav:
       - CLI usability: plans/0.0.7.md
       - Performance and confidence: plans/0.0.6.md
   - Releases:
+      - 0.0.19: releases/0.0.19.md
       - 0.0.18: releases/0.0.18.md
       - 0.0.17: releases/0.0.17.md
       - 0.0.16: releases/0.0.16.md
@@ -216,3 +220,4 @@ nav:
       - "Design: plugin loading (#14, #232)": design/plugin-loading.md
       - "Design: intuiTUIve spike (milestone 11)": design/intuituive.md
       - "Design: intuiTUIve widgets": design/intuituive-widgets.md
+      - "Design: intuiTUIve against ratatui": design/intuituive-vs-ratatui.md

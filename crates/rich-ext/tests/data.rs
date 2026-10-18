@@ -1622,3 +1622,50 @@ mod jsonpath_hardening {
         assert_eq!(select(&node, "$..*..*").unwrap().len(), 3200);
     }
 }
+
+/// Conditional styles on records (#701): a rule names a header and compares
+/// the record's value, numbers as numbers and a missing key as null.
+#[test]
+fn table_view_records_take_style_rules() {
+    use rich_ext::table::{StyleRule, StyleRules};
+    let node =
+        json(r#"[{"name": "web", "p99": 120}, {"name": "api", "p99": 612}, {"name": "db"}]"#);
+    let rules = StyleRules::new()
+        .rule(StyleRule::parse("p99>500:bold red").unwrap())
+        .rule(StyleRule::parse("p99 empty:row:dim").unwrap());
+    let console = Console::builder()
+        .width(40)
+        .color_system(Some(ColorSystem::Standard))
+        .force_terminal(true)
+        .build();
+    let styled = console.render_to_string(&TableView::new(&node).style_rules(rules.clone()));
+    let line = |word: &str| {
+        styled
+            .lines()
+            .find(|l| l.contains(word))
+            .unwrap()
+            .to_string()
+    };
+    assert!(line("api").contains("\x1b[1;31m612"), "{styled:?}");
+    assert!(!line("web").contains("31m"), "{styled:?}");
+    assert!(line("db").contains("\x1b[2m"), "{styled:?}");
+    // The explorer's table view passes them on; its tree ignores them.
+    let explorer = console.render_to_string(
+        &Explorer::new(&node)
+            .view(View::Table)
+            .style_rules(rules.clone()),
+    );
+    assert_eq!(explorer, styled);
+    let tree = console.render_to_string(&Explorer::new(&node).style_rules(rules));
+    assert_eq!(tree, console.render_to_string(&Explorer::new(&node)));
+    // Rules restyle; they never change the text.
+    assert_eq!(
+        plain(
+            40,
+            &TableView::new(&node).style_rules(
+                StyleRules::new().rule(StyleRule::parse("name=api:row:reverse").unwrap())
+            )
+        ),
+        plain(40, &TableView::new(&node))
+    );
+}

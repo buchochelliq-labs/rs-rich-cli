@@ -3,9 +3,10 @@
 use std::borrow::Cow;
 use std::collections::HashMap;
 
-use rich::{Console, ConsoleOptions, Justify, Renderable, Segment, Table, Text};
+use rich::{Cell, Console, ConsoleOptions, Justify, Renderable, Segment, Table, Text};
 
 use super::{escape_controls, scalar_text, style, truncate_chars, Node, Value};
+use crate::table::{StyleRules, Value as CellValue};
 
 /// How nested values are cut in a cell when no `max_string` is set.
 const INLINE_LIMIT: usize = 40;
@@ -81,6 +82,7 @@ impl TableOptions {
 pub struct TableView<'a> {
     node: Cow<'a, Node>,
     options: TableOptions,
+    rules: StyleRules,
 }
 
 impl<'a> TableView<'a> {
@@ -88,6 +90,7 @@ impl<'a> TableView<'a> {
         TableView {
             node: node.into(),
             options: TableOptions::default(),
+            rules: StyleRules::new(),
         }
     }
     /// Replace all options.
@@ -120,6 +123,14 @@ impl<'a> TableView<'a> {
     }
     pub fn max_string(mut self, max_string: usize) -> Self {
         self.options = self.options.max_string(max_string);
+        self
+    }
+    /// Style cells, rows and columns by value
+    /// ([`table::rules`](crate::table::rules)). A rule names a column by
+    /// its header; it compares the record's value (a number as a number,
+    /// `true`/`false` and nested values as their text), not the cut cell.
+    pub fn style_rules(mut self, rules: StyleRules) -> Self {
+        self.rules = rules;
         self
     }
 
@@ -170,6 +181,7 @@ impl<'a> TableView<'a> {
         if shown < records.len() {
             table = table.caption(format!("… {} more", records.len() - shown));
         }
+        let mut headers: Vec<String> = Vec::with_capacity(columns.len());
         for column in &columns {
             let justify = self
                 .options
@@ -198,18 +210,63 @@ impl<'a> TableView<'a> {
                 .get(column)
                 .map_or(column.as_str(), String::as_str);
             table.add_column_text(Text::new(escape_controls(header)), justify);
+            headers.push(header.to_string());
         }
-        for record in records.iter().take(shown) {
-            let row = columns
+        let values = |record: &Node| -> Vec<CellValue> {
+            columns
+                .iter()
+                .map(|column| cell(record, column).map_or(CellValue::Null, cell_value))
+                .collect()
+        };
+        let rows: Vec<Vec<CellValue>> = if self.rules.is_empty() {
+            Vec::new()
+        } else {
+            records.iter().take(shown).copied().map(&values).collect()
+        };
+        let headers: Vec<&str> = headers.iter().map(String::as_str).collect();
+        let rules = (!self.rules.is_empty()).then(|| self.rules.resolve(&headers, &rows));
+        for (index, record) in records.iter().take(shown).enumerate() {
+            let mut row: Vec<Text> = columns
                 .iter()
                 .map(|column| match cell(record, column) {
                     Some(node) => cell_text(console, node, self.options.max_string),
                     None => Text::new(""),
                 })
                 .collect();
-            table.add_row_text(row);
+            match (&rules, rows.get(index)) {
+                (Some(rules), Some(values)) => {
+                    for (column, text) in row.iter_mut().enumerate() {
+                        if let Some(style) = rules.cell_style(values, column) {
+                            let len = text.plain().len();
+                            text.stylize(style, 0, len);
+                        }
+                    }
+                    table.add_row_with(
+                        row.into_iter().map(Cell::Text).collect(),
+                        rules.row_style(values).map(Into::into),
+                        false,
+                    );
+                }
+                _ => {
+                    table.add_row_text(row);
+                }
+            }
         }
         table
+    }
+}
+
+/// A record's value as a rule compares it: numbers as numbers, null as
+/// null, anything else as its text (nested values as compact JSON).
+fn cell_value(node: &Node) -> CellValue {
+    match &node.value {
+        Value::Null => CellValue::Null,
+        Value::Int(n) => CellValue::Int(*n),
+        Value::UInt(n) => i64::try_from(*n).map_or(CellValue::Float(*n as f64), CellValue::Int),
+        Value::Float(f) => CellValue::Float(*f),
+        Value::Bool(b) => CellValue::Str(b.to_string()),
+        Value::String(s) | Value::DateTime(s) => CellValue::Str(s.clone()),
+        Value::Seq(_) | Value::Map(_) => CellValue::Str(node.to_json().to_string()),
     }
 }
 

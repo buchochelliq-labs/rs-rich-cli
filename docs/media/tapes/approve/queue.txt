@@ -1,0 +1,22 @@
+❯ rich approve --header Requests --require-reason < requests.jsonl > decisions.jsonl
+? Requests › 0/5 decided · 0 approved · 0 rejected · 0 skipped · 5 pending
+❯   · Raise the API rate limit                    │ Raise the API rate limit
+    · Drop the legacy sessions table              │ id: 101
+    · Rotate the CDN certificate                  │ author: ada
+    · Enable the new search index                 │ env: prod
+    · Purge stale feature flags                   │ risk: low
+  [a] approve  [r] reject  [s] skip  [u] undo  [enter] submit
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -19,7 +19,7 @@ describes the same API from Rust.
 | `Rows` | rows in memory: column names, an optional `Schema`, cells |
 | `infer(rows)`, `Rows.infer()` | each column's type, with the evidence (`Inference`) |
 | `Stats` | per-column statistics |
-| `Profile` | a bounded profile of rows, text or a file |
+| `Profile` | a bounded profile of rows, text or a file; JSON path by path |
 | `CheckResult`, `QualityReport`, `check_not_null`, `check_unique` | data-quality results as a report |
 | `ResultSet` | rows drawn as a SQL query result |
 | `VirtualTable` | one window of rows, with a position line |
@@ -133,6 +133,49 @@ wide.print(profile)
 
 ![A profile: a table of column statistics, a bar per common value or histogram bin, and a map of missing values](media/data-profile.svg)
 
+### Nested JSON (0.0.7)
+
+```text
+Profile.from_path(path, *, ..., flat=False, depth=4, max_paths=200)
+Profile.from_text(text, *, format="jsonl", ..., flat=False, depth=4, max_paths=200)
+Profile.from_records(records, *, name=None, ..., depth=4, max_paths=200)
+```
+
+JSON Lines (and Python records, with `from_records`) are profiled **path by
+path**, as `rich profile` draws them: `user.plan` for a key in an object,
+`tags[]` for an array's items, `items[].sku` for a key of the objects in one,
+and `["http.status"]` for a key holding a `.`. Each path's dict adds
+`present` and `absent` (records with and without it, an explicit `null`
+being present), `values`, `types` (a count per JSON type) and `mixed` (more
+than one type besides `null`). `depth` bounds the steps and `max_paths` the
+paths (`paths` says whether the cap was met, and names the paths past it); a
+line that is not JSON is counted in `malformed` and `malformed_lines` rather
+than raised. `flat=True` profiles rows of the top-level keys, as before.
+
+```python
+lines = (
+    '{"id": 1, "user": {"plan": "pro"}, "tags": ["web"]}\n'
+    '{"id": "2", "user": null, "tags": []}\n'
+    "not json\n"
+    '{"id": 3, "tags": ["api", "beta"]}\n'
+)
+nested = data.Profile.from_text(lines, format="jsonl", name="events.jsonl")
+print(nested.heading, nested.is_nested, nested.malformed_lines)
+print([c["name"] for c in nested.columns])
+plan = nested.column("user.plan")
+print(plan["present"], plan["absent"], nested.column("id")["types"], nested.column("id")["mixed"])
+```
+
+```text
+events.jsonl: 3 records, 5 paths True [3]
+['id', 'user', 'user.plan', 'tags', 'tags[]']
+1 2 {'string': 1, 'number': 2} True
+```
+
+`style_rules(rules)` returns the profile with its table of columns styled by
+[conditional styles](ext/tables.md#conditional-styles), naming the headings
+in `table_headers`.
+
 ## Data quality
 
 ```text
@@ -174,7 +217,8 @@ ResultSet(rows, *, offset=0, limit=1000, elapsed=None, null_marker="NULL",
           title=None)
 VirtualTable(rows, *, offset=0, height=20, row_numbers=False, null_marker=None,
              show_position=True, wrap=False, max_column_width=40, fit_window=False,
-             title=None)
+             title=None, column_offset=0, visible_columns=None, fit_columns=False,
+             frozen_columns=0)
 ```
 
 `ResultSet` draws rows the way a database shell does: columns aligned by
@@ -188,6 +232,14 @@ moves; `fit_window=True` also widens them to the rows shown, for a window
 printed once. `scroll_by(n)`
 moves it within the rows, `offset` and `height` can be set, `window()` is
 the `(start, end)` shown and `position()` the line under the table.
+
+A wide table gets a window of columns too: `column_offset` (after the
+frozen ones), `visible_columns` (how many) or `fit_columns=True` (as many as
+fit the width), and `frozen_columns` kept on the left. Only the columns
+shown are sampled and laid out, and the position line adds `columns 7-8 of
+12`. `scroll_columns_by(n)` moves the window across, `column_offset` can be
+set, `shown_columns(width)` is the columns shown at a width and
+`column_position(width)` the words, or `None` when every column shows.
 
 ```python
 console.print(data.ResultSet(rows, elapsed=0.012))

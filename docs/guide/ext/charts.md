@@ -19,10 +19,36 @@ And the pieces of a dashboard:
 - **`Timeline`**: labelled ranges on a numeric or seconds scale, overlaps
   stacked, with milestones; a Gantt strip when every range has its own row.
 
+And for comparing ([below](#distributions)):
+
+- **`Distribution`** and **`DistributionSet`**: the count, quantiles and
+  mean of a set of values, with a box-and-whisker strip on one line;
+  several stacked on one scale.
+- **`SmallMultiples`**: a grid of titled charts on one value scale, fitted
+  to the width.
+
+Every chart also says what it shows in words, for a screen reader
+([accessible text](#accessible-text)).
+
+And laid out as ratatui's widgets, so a ported app looks the same
+([below](#ratatui-style-charts-and-canvases)):
+
+- **`Chart`**: datasets on two axes, as lines, points, bars or areas.
+- **`Canvas`**: shapes, text and a world map in world coordinates.
+- **`FillGauge`** and **`LineGauge`**: ratatui's `Gauge` and `LineGauge`.
+
 Each chart is a renderable. It measures itself, so it works in a `Table`
 cell, a `Panel` or a `Live` display. It never writes a line wider than the
 width it is given: when space is short it drops labels, values and axes
 before it drops data.
+
+A `Chart`, a `Canvas`, a vertical `BarChart`, a `Sparkline` and a
+`FillGauge` also **fill the height they are given**, as ratatui's widgets
+fill their area: a `Layout` region, a `Panel` with a height, or an
+[intuiTUIve](../intuituive/index.md) node through
+`renderable(move || chart(..))`. Their own height (`.height(n)`,
+`.rows(n)`, `.bar_width(n)`) wins; printed on their own, with no height
+given, they keep their defaults.
 
 The examples come from
 [`guide_charts.rs`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/crates/rich-ext/examples/guide_charts.rs).
@@ -64,6 +90,28 @@ it falls between the smallest and largest value:
   colour. They are the first thing left out when the line does not fit.
 - `.range(min, max)`, `.min(v)` and `.max(v)` fix the scale; values outside
   it are clamped. NaN and infinite values are gaps.
+
+### Taller, backwards, with gaps
+
+What ratatui's `Sparkline` has, and more rows than one:
+
+```rust
+--8<-- "crates/rich-ext/examples/guide_charts.rs:ratatui_sparklines"
+```
+
+![A three-row sparkline, one right to left with gaps, and one in Braille](../../media/guide/guide_charts-ratatui-sparklines.svg)
+
+- `.rows(n)` makes it `n` rows tall, eight heights a row in blocks and
+  four in Braille. Without it, it fills the height it is given.
+- `.direction(Direction::RightToLeft)` puts the first value at the right
+  edge, and the summary before the bars.
+- `Sparkline::optional(values)` takes `Option<f64>`s: each `None` is a gap.
+  `.absent(symbol, style)` draws gaps with a symbol down the whole column,
+  as ratatui's `absent_value_symbol`.
+- `.styles(vec![..])` gives each value a style of its own; it wins over
+  the marks of `.min_max` and `.threshold`.
+- `.levels(Levels::Three)` draws with ratatui's three-level set (` ▄█`),
+  for fonts without the eighths.
 
 ## Bars
 
@@ -114,7 +162,42 @@ the labels underneath:
 - When the width is short the values go first, then the labels are cut
   (and left out below two cells), then the gaps between bars. Bars that
   still do not fit are left off the right.
+- An explicit `.thickness(n)`, `.bar_gap(n)` or `.group_gap(n)` is kept, as
+  ratatui keeps them: the slots narrow to the thickness, then as many whole
+  bars as fit (with their gaps) are drawn, from the first, and the rest are
+  left off. 24 bars 3 cells thick and 2 apart show the first 8 in 40
+  cells.
+- Without `.bar_width(..)` a vertical chart fills the height it is given,
+  less its labels and values.
 - `Histogram` takes `.orientation(..)` too.
+
+### Groups, text values and styles
+
+What ratatui's `BarChart` has, by this crate's names:
+
+```rust
+--8<-- "crates/rich-ext/examples/guide_charts.rs:ratatui_bars"
+```
+
+![Revenue in grouped vertical bars, and seasons along horizontal bars](../../media/guide/guide_charts-ratatui-bars.svg)
+
+- `.group(BarGroup::new("Jan").bar(..))` adds bars with a label: centred
+  under the group when vertical, on the row after it when horizontal.
+  `.group_gap(n)` sets them apart (1 cell, or 2 rows, by default).
+- `.thickness(n)` is ratatui's `bar_width`: how many cells wide a vertical
+  bar is, or rows tall a horizontal one (a horizontal bar's label and value
+  sit on its middle row). `.bar_width(n)` keeps its meaning here: the
+  longest bar's length, or the tallest column's height.
+- `.bar_gap(n)` is the space between bars: 1 cell vertical, no rows
+  horizontal, by default.
+- `Bar::new(..).text("76°")` writes text instead of the value.
+- `.label_style(..)` and `.value_style(..)` style the labels and values,
+  and a bar's own `.label_style(..)` and `.value_style(..)` go over them.
+- `.values_inside(true)` writes each value on its bar, as ratatui does:
+  from the start of a horizontal bar, running on past its end in the bar's
+  colour; on the bottom row of a vertical one, centred and cut to its
+  thickness. Without a value style, a value on its bar is the bar's colour
+  reversed.
 
 ## Histograms
 
@@ -220,6 +303,8 @@ character above U+007F:
 | `StatusMatrix` | each state's ASCII symbol: `+` pass, `X` fail, `-` skip, `~` flaky |
 | `KpiCard` | a border of `+`, `-` and vertical bars, `^` and `v` for the delta, the status's ASCII symbol |
 | `Timeline` | `#` and `=` for ranges, `*` for milestones, `~` where a gap is cut |
+| `Chart`, `Canvas` | `#` for the block markers, `*` for the others; axes and legends of `-`, `+` and vertical bars |
+| `FillGauge`, `LineGauge` | `#` and `=` for the bar; `-` for the line |
 
 Labels with characters above U+007F are written with `?` in their place, as
 [`fidelity::ascii_text`](capabilities.md) does.
@@ -258,8 +343,12 @@ let chart = Chart::new(vec![cpu])
 - **`Axis`**:
   - bounds (or the data's extent);
   - a title and its style;
-  - labels: `None` (no axis line), `Auto(n)`, `Values` at given values, or
-    `Text` spread evenly;
+  - labels: `None` (no axis line), `Auto(n)`, `Values` at given values,
+    `Text` spread evenly, or `Markup` spread evenly with styles of their
+    own (`"[bold]0[/]"`, as ratatui's labels of styled spans);
+  - `labels_align(HorizontalAlign::..)`, ratatui's `labels_alignment`: the
+    y labels' alignment in their column, and how the first x label sits
+    against the y axis line;
   - a scale: `Linear` or `Log`, where log labels fall on powers of ten;
   - a style.
 
@@ -268,9 +357,12 @@ let chart = Chart::new(vec![cpu])
 - **`Dataset`**:
   - points;
   - a name for the legend;
-  - a graph type: `Scatter`, `Line`, or `Bar` (a line down to zero);
-  - a marker: `Braille` (2×4 dots a cell), `HalfBlock`, `Block`, `Dot`, or
-    `Ascii(c)`;
+  - a graph type: `Scatter`, `Line`, `Bar` (a line down to zero), or
+    `Area` (a line with the area between it and `.fill_to(y)` filled,
+    0 by default; ratatui's `fill_to_y`);
+  - a marker: `Braille` (2×4 dots a cell), `Octant` (2×4, solid),
+    `Sextant` (2×3), `Quadrant` (2×2), `HalfBlock`, `Bar` (`▄`), `Block`,
+    `Dot`, or `Ascii(c)`;
   - a style.
 
   Later datasets win a cell.
@@ -282,6 +374,16 @@ let chart = Chart::new(vec![cpu])
   - the y title sits at the top of the plot, and the x title at the right
     of its last row;
   - a short or narrow chart gives up parts in ratatui's order.
+- **The height** is the height it is given, as ratatui's fills its area,
+  or `.height(n)`; printed with no height, 15 rows.
+
+An area chart, its end labels in bold and its y labels centred:
+
+```rust
+--8<-- "crates/rich-ext/examples/guide_charts.rs:ratatui_area"
+```
+
+![An area chart with bold end labels](../../media/guide/guide_charts-ratatui-area.svg)
 
 `Canvas` draws shapes in world coordinates, as ratatui's `Canvas` does:
 
@@ -301,12 +403,70 @@ let canvas = Canvas::new()
     });
 ```
 
-`points`, `line`, `polyline`, `rect`, `circle` and `print` are clipped to
-the bounds; `layer()` starts a layer drawn over the ones before, and text
-is drawn last. Both are renderables: print them, put them in a table or a
-panel, or show them in an [intuiTUIve](../intuituive/index.md) app with
-`renderable(move || chart(...))`, which draws again when the signals it
-reads change.
+`points`, `point`, `line`, `polyline`, `rect`, `circle`, `area` and
+`print` are clipped to the bounds; `layer()` starts a layer drawn over the
+ones before, and text is drawn last. Both are renderables: print them, put
+them in a table or a panel, or show them in an
+[intuiTUIve](../intuituive/index.md) app with
+`renderable(move || chart(...))`, which fills its node and draws again when
+the signals it reads change.
+
+What the canvas adds to ratatui's, and what it shares:
+
+- **A world map:** `p.map(MapResolution::Low, style)` draws the world's
+  coastlines in longitude (`x`, -180 to 180) and latitude (`y`, -90 to
+  90); narrower bounds show a region. `Low` is Natural Earth's 1:110m
+  coastlines, simplified to about 1,200 points; `High` its 1:50m ones, to
+  about 5,000 points, with more islands. The lines are joined, so the
+  coasts stay whole at any size.
+- **Markers:** `Quadrant` (2×2 a cell), `Sextant` (2×3), `Octant` (2×4)
+  and `Bar` (`▄`), with the others. Quadrants are in every terminal font;
+  sextants need one with Symbols for Legacy Computing (Unicode 13) and
+  octants one with its supplement (Unicode 16). A font without them shows
+  boxes, so choose them for terminals you know. An ASCII console gets `#`.
+- **A background:** `.background("on #101828")` styles the cells nothing
+  drew in and goes under what is drawn; a plain colour is taken as the
+  background.
+- **Shapes of your own:** implement `Shape` (`fn draw(&self, painter:
+  &mut CanvasPainter)`) and draw it with `p.shape(&it)`: a wireframe, a
+  sprite, a gauge of your own.
+
+```rust
+--8<-- "crates/rich-ext/examples/guide_charts.rs:map"
+```
+
+![A world map with four cities joined by lines](../../media/guide/guide_charts-map.svg)
+
+The map's data is our own, made from
+[Natural Earth](https://www.naturalearthdata.com)'s public-domain
+coastlines by `scripts/world_map.py`, which simplifies them and writes the
+two small files (about 5 KB and 22 KB) the crate includes. Made with
+Natural Earth.
+
+### Gauges
+
+`FillGauge` is ratatui's `Gauge` and `LineGauge` its `LineGauge`:
+
+```rust
+--8<-- "crates/rich-ext/examples/guide_charts.rs:ratatui_gauges"
+```
+
+![A gauge filling three rows, and three line gauges](../../media/guide/guide_charts-ratatui-gauges.svg)
+
+- **`FillGauge::new(ratio)`** (or `::percent(p)`) fills the width and
+  height it is given, left to right: whole cells, or eighths at the edge
+  with `.unicode(true)`. The label sits centred on the middle row,
+  the percentage (`42%`) without one; over the filled part its colours are
+  swapped, so it reads on the bar. `.style(..)` is ratatui's
+  `gauge_style`: the foreground colours the bar, the background the rest.
+  `.height(n)` fixes its height; printed on its own, it is one row.
+- **`LineGauge::new(ratio)`** writes the label (` 42%` by default), a
+  space, then a line to the edge: `.line(LineSet::Thin | Thick | Double)`
+  or `.symbols('▰', '▱')`, the part up to the ratio in `.filled_style(..)`
+  and the rest in `.unfilled_style(..)`.
+- Both default to the theme keys `chart.gauge.filled` and
+  `chart.gauge.unfilled`. On an ASCII console the bar is `#` (`=` for a
+  half) and the line `-`.
 
 ## In tables and panels
 
@@ -478,6 +638,125 @@ Cards take `.expand(true)` to fill their region. The layout fills the
 console's height, so give `Live` a console with a fixed `.height(n)` or let
 it take the terminal's.
 
+## Distributions
+
+`Distribution::new(values)` sums a set of values up on one line: a
+box-and-whisker strip, then the numbers. A `DistributionSet` stacks several
+on one scale:
+
+```rust
+--8<-- "crates/rich-ext/examples/guide_charts.rs:distribution"
+```
+
+![A latency distribution, and three on one scale](../../media/guide/guide_charts-distribution.svg)
+
+- **The strip** runs from the smallest value to the largest: `├` and `┤`
+  at the ends, `─` whiskers, a shaded box `▒` from the first quartile to the
+  third, the median `█`, and the 95th percentile a `┼` on the whisker when
+  it has a cell of its own. In ASCII: `|`, `-`, `=`, `#` and `+`. The
+  glyphs carry it, so it reads without colour. With colour, the box and the
+  median are `chart.bar` (or `.style(..)`) and the whiskers `chart.axis`.
+- **The numbers** are the count `n`, `min`, `p25`, `p50` (the median),
+  `p75`, `p95`, `max` and `mean`, in `.format(..)` with `.unit(..)` after
+  each value. NaN and infinite values are left out and counted
+  (`2 ignored`).
+- **Quantiles** are numpy's default, linear interpolation (Hyndman and
+  Fan's type 7): for `n` sorted values, the `q` quantile sits at position
+  `(n - 1) q`, between the two values either side of it. One value is every
+  quantile. No values draw `no data` and `n 0`.
+- `.summary()` returns the numbers as a `Summary`. `Summary::of(values)`
+  and `quantile(&sorted, q)` compute them without drawing.
+- The strip is `.strip_width(n)` cells (20 by default). Given less width it
+  shrinks to 8 cells, then the numbers shorten to `min`, `p50` and `max`,
+  then they go, then the label is cut. `.range(min, max)` fixes the scale,
+  and `.numbers(false)` leaves the numbers out.
+- **`DistributionSet`** draws every row on one scale: the smallest to the
+  largest value of them all, or `.range(..)`. Labels, strips and numbers
+  sit in aligned columns, and the scale's two ends are written under the
+  strips. `.shared_scale(false)` gives each row its own scale.
+
+## Small multiples
+
+`SmallMultiples::new([(title, chart), …])` lays charts out in a grid, each
+under its title, all on one value scale, so they compare at a glance:
+
+```rust
+--8<-- "crates/rich-ext/examples/guide_charts.rs:multiples"
+```
+
+![Six sparklines on one scale, and three line charts with one legend](../../media/guide/guide_charts-multiples.svg)
+
+- **Columns:** `.columns(n)`, or as many as fit cells of at least
+  `.min_cell_width(n)` (24 by default) with `.gap(n)` cells between them
+  (2 by default). That is one column at 40 cells, three at 80 and four at
+  120, never more than there are charts. Every cell is as wide; what is
+  left over stays at the right. Charts fill the grid row by row.
+- **One scale:** a `Facet` is a chart whose value scale can be shared: a
+  `Sparkline` (its heights), a `BarChart` (its bars' lengths, from zero), a
+  `LineChart` or a `Chart` (the y axis). Each converts with `.into()`. The
+  grid fixes every chart's scale to the range of them all, so a taller bar
+  is a larger value whichever chart it is in. When a chart has axis labels
+  the range is rounded out to round numbers. `.range(min, max)` fixes it,
+  and `.shared_scale(false)` leaves each chart its own.
+- **One note** under the grid says the scale (`scale 0 to 60 in every
+  chart`) and holds the one legend: the line charts' series, whose own
+  legends are left out. `.note(false)` leaves it out.
+- **Height:** `.height(rows)` makes each chart that many rows. Without it,
+  a grid given a height (a `Layout` region, an intuiTUIve node) shares it
+  among its rows of charts, less the titles, the gaps and the note.
+  Printed on its own, each chart keeps its own height.
+- Titles are `chart.title` (bold), cut to the cell. A blank line separates
+  the rows of charts.
+
+## Accessible text
+
+Every chart implements `rich_ext::a11y::AccessibleText`: a few short lines
+of plain words that say what the chart shows, for a screen reader, a log or
+a test. There are no glyphs or box lines in it, and it reads the same
+whatever the width or the console:
+
+```rust
+--8<-- "crates/rich-ext/examples/guide_charts.rs:accessible"
+```
+
+![What a sparkline, a line chart, a gauge and a histogram say](../../media/guide/guide_charts-accessible.svg)
+
+The first line says what the chart is, how much it holds and the ranges of
+its axes. The lines after it give the key values:
+
+| Chart | First line | Then |
+|---|---|---|
+| `Sparkline` | `Sparkline, 24 values: min 12, max 52, last 14, trend up`, with the gaps (`1 missing`) and a threshold (`4 above 40`) | |
+| `BarChart` | `Bar chart, 4 bars in 2 groups, values from 2 to 4, 1 without a value` | every bar, up to six; else `Largest:` the three largest and `Smallest:` the smallest |
+| `Histogram` | `Histogram, 400 values in 8 bins from 25 to 225` | each bin's count, up to six bins; else the largest and the smallest |
+| `LineChart` | `Line chart, 3 series, x from 0 to 59, y from 0 to 100` | a line per series: its name, `line` or `points`, then `60 points, min 20.02, max 79.96, last 76.62, trend down` |
+| `Chart` | `Chart, 2 datasets, x (t) from 0 to 10, y (%) from 0 to 4`, and `log scale` for a log axis | a line per dataset, as a line chart's |
+| `Gauge`, `BulletChart` | `Gauge cpu: 72%, 72 percent of 0% to 100%, band high, target 80%` | a bullet chart: a line per gauge |
+| `FillGauge`, `LineGauge` | `Gauge 50/100 GB: 50 percent` | |
+| `Heatmap` | `Heatmap, 2 rows by 4 columns, values from 0 to 9, 1 missing` | `Highest 9 at api, wed; lowest 0 at web, mon` |
+| `StatusMatrix` | `Status matrix, 3 rows by 3 columns: 4 pass, 2 fail, 1 skip` | the cells of each state but pass and skip: `fail: unit on windows, docs on macos` |
+| `KpiCard` | `KPI Errors: 42, down 25% vs yesterday, better, status warning` | its sparkline's text |
+| `Timeline` | `Timeline, 3 rows, 3 ranges, 1 milestone, from 0s to 52s` | each range (`compile from 4s to 31.5s, 27.5s`), twenty at most, and each milestone |
+| `Canvas` | `Canvas, x from -180 to 180, y from -90 to 90: a world map, 4 points, 3 lines` | `Text:` what it printed |
+| `Distribution` | `Distribution latency: 400 values, min 27, p25 64, median 81, …, mean 87` | |
+| `DistributionSet` | `Distributions, 3 on a shared scale from 27 to 287` | each distribution's line |
+| `SmallMultiples` | `Small multiples, 6 charts on a shared scale from 1.2 to 52` | each chart's title and text |
+
+- Values are written in the chart's own format, counts with thousands
+  separators.
+- A series' **trend** is the least-squares line through its finite
+  points: `up` or `down` when it rises or falls by at least a tenth of the
+  values' range across the series, `flat` otherwise. A hump that ends where
+  it began is flat.
+- **In an intuiTUIve app**, draw a chart with `described(move || ..)`
+  instead of `renderable(..)`. It looks the same, and its accessible name
+  is the chart's text, its lines joined with `. `. The accessibility tree,
+  [linear mode](../intuituive/index.md#linear-mode) and a screen reader
+  read the description, and read it again when the data changes.
+  `.label("CPU")` goes first: `CPU: Line chart, …`.
+- From Python: `rs_rich.chart.describe(chart)`, or
+  `rs_rich.ext.a11y.accessible_text(chart)`.
+
 ## From the shell: `rich chart`
 
 `rich chart` draws data from a file, a URL or stdin with these charts, so a
@@ -526,6 +805,37 @@ May █████████████████████████�
 [The recording](../../recordings.md#charts-from-data) shows it in a
 terminal.
 
+## Colours: palettes and helpers
+
+`rich_ext::palette` has the colours charts and apps are often drawn in, as
+ratatui's `style::palette` and its `palette` feature have:
+
+- **`palette::tailwind`**: Tailwind CSS's 22 palettes (`SLATE` to `ROSE`),
+  each with eleven shades from `c50` to `c950`, and `tailwind::ALL` with
+  their names.
+- **`palette::material`**: Material Design's 19 palettes, `c50` to `c900`,
+  and the accents `a100` to `a700` of the 16 that have them.
+- Each shade is a `#rrggbb` string, so it goes straight into markup
+  (`format!("[on {}]", SLATE.c900)`), a style or a theme.
+- **Colours from numbers**, each a truecolor `rich::Color`: `hsl(h, s, l)`
+  and `hsv(h, s, v)`, with the hue in degrees; `oklab(l, a, b)`; and
+  `okhsv(h, s, v)`, HSV whose hues are evenly spaced to the eye and whose
+  value looks the same lightness at every hue, so a swatch of it has no
+  bright bands.
+- **`blend(a, b, t)`** mixes two colours, and **`gradient(&stops, t)`**
+  picks a colour along several spaced evenly.
+
+```rust
+--8<-- "crates/rich-ext/examples/guide_charts.rs:palette"
+```
+
+![Tailwind's shades as markup, and an Okhsv swatch](../../media/guide/guide_charts-palette.svg)
+
+Credit: Tailwind CSS's palette is MIT licensed (Tailwind Labs); Material
+Design's colours come from Material Design Lite, Apache License 2.0
+(Google); Oklab and Okhsv are Björn Ottosson's, and the conversions are our
+own code for his published formulas.
+
 ## The shared pieces
 
 | Type | What it does |
@@ -537,6 +847,12 @@ terminal.
 | `Band`, `Span`, `Milestone` | A gauge's threshold band; a timeline's range and point |
 | `Charset` | `Auto`, `Blocks`, `Braille`, `Ascii` |
 | `DotCanvas` | The Braille canvas the line chart draws on: set dots, draw lines, read cells |
+| `Direction`, `Levels` | A sparkline's way (`LeftToRight`, `RightToLeft`) and block set (`Nine`, `Three`) |
+| `BarGroup` | Bars with a label, set apart from the others |
+| `Marker`, `Shape`, `MapResolution` | How a canvas marks what it draws; a shape of your own; the map's detail |
+| `LineSet` | A line gauge's glyphs: `Thin`, `Thick`, `Double` |
+| `Summary`, `quantile` | A distribution's numbers (`Summary::of(values)`), and one quantile of sorted values, interpolated linearly |
+| `Facet` | A chart a `SmallMultiples` grid can hold and put on its shared scale: `Sparkline`, `BarChart`, `LineChart` or `Chart` |
 
 Theme keys:
 
@@ -552,9 +868,11 @@ Theme keys:
 | `chart.series.1` … `.5` | `cyan`, `magenta`, `yellow`, `green`, `blue` | Series, by position (they cycle); timeline rows |
 | `chart.track` | `bright_black` | A gauge's track and band shades |
 | `chart.target` | `bold` | A gauge's target marker |
+| `chart.gauge.filled`, `chart.gauge.unfilled` | `cyan`, `bright_black` | A `FillGauge`'s bar and the rest; a `LineGauge`'s two parts |
 | `chart.ok`, `chart.warning`, `chart.critical`, `chart.unknown` | `green`, `yellow`, `bold red`, `bright_black` | `Status`, and bands that name them |
 | `chart.delta.good`, `chart.delta.bad`, `chart.delta.flat` | `green`, `red`, `bright_black` | A KPI card's change |
 | `chart.kpi.label`, `chart.kpi.value`, `chart.kpi.border` | none, `bold`, `bright_black` | A KPI card |
 | `chart.heat.1` … `.5` | `blue`, `cyan`, `green`, `yellow`, `red` | Heatmap steps, cold to hot |
 | `chart.state.pass`, `.fail`, `.skip`, `.flaky`, `.unknown` | `green`, `bold red`, `bright_black`, `yellow`, `magenta` | Status matrix states |
 | `chart.milestone` | `bold yellow` | Timeline milestones |
+| `chart.title` | `bold` | Small multiples' titles |

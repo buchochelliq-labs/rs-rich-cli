@@ -1,0 +1,26 @@
+# A licence policy for `rich deps --policy policy.toml`.
+#
+# Licences any crate may use. Each crate's licence expression is evaluated:
+# `MIT OR GPL-3.0-only` passes, because MIT is allowed.
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-3-Clause",
+    "ISC",
+    "Unicode-DFS-2016",
+    "Unicode-3.0",
+    "MPL-2.0",
+]
+
+# Refused whatever the allow list says, however suffixed (-only, -or-later).
+deny = ["GPL-3.0", "AGPL-3.0"]
+
+# One crate may use more.
+exceptions = [
+    { name = "acme-telemetry", allow = ["LicenseRef-Acme-EULA"] },
+]
+
+# Licences that conflict with the root crate's: "warn" (shown), "deny"
+# (they fail the check too) or "ignore".
+conflicts = "warn"

@@ -42,12 +42,25 @@ As in Rust, `build` runs once and returns the root node. `text` reads
 | `Easing::EaseOut`, `Placement::Below`, `Role::MenuBar` | `Easing.EaseOut`, `Placement.Below`, `Role.MenuBar`, or `"ease_out"`, `"below"`, `"menubar"` |
 | `.align_items(Align::Center)`, `.justify(Justify::SpaceBetween)`, `.align_content(AlignContent::Stretch)` | `.align_items("center")`, `.justify("space-between")`, `.align_content("stretch")`: the stylesheet's CSS names |
 | `Rect::new(x, y, w, h)` | `Rect(x, y, w, h)`, or a tuple `(x, y, w, h)` |
+| `Size::Ratio(1, 3)`, `.ratio(1, 3)` | `Size.Ratio(1, 3)` or `"1/3"`, `.ratio(1, 3)` |
+| `.border(Border::Thick)`, `.shadow(Shadow::Dim)`, `.text_align(TextAlign::Center)`, `.overflow(Overflow::Ellipsis)` | `.border("thick")`, `.shadow("dim")`, `.text_align("center")`, `.overflow("ellipsis")`, or `Border.Thick` and so on (`Border.None_`, since `None` is a keyword) |
+| `.borders(Sides::TOP \| Sides::BOTTOM)` | `.borders(Sides.TOP \| Sides.BOTTOM)`, or `.borders("top bottom")` |
+| `.add_title(Edge::Bottom, Align::End, "v1")` | `.add_title("bottom", "right", "v1")`; a title's alignment is `"left"`, `"center"` or `"right"` |
+| `.theme_styles([("warning", "bold red")])` | `.theme_styles({"warning": "bold red"})`, or a list of pairs |
+| `layout::split(rect, Axis::Row, &tracks, flow)` | `layout_split(rect, "row", tracks, gap=1, justify="center")`: `split` is the split pane |
 | `Date::new(2026, 10, 7)` | `datetime.date(2026, 10, 7)` |
 | `Duration::from_millis(200)` | `0.2` (seconds), or a `timedelta` |
 | `text_area(text).language("rust").line_numbers()` | `text_area(text, language="rust", line_numbers=True)`: the options are keywords |
 | `spawn_future(future, done)` | `spawn_async(coroutine, done)` |
 | `app.render_with(&["+", "q"], 30, 2)` | `app.render_with(["+", "q"], 30, 2)` |
 | `App::run_on(&mut Headless::new(script, w, h))` | `run(app, script, width=w, height=h)` |
+| `list(..).direction(ListDirection::BottomToTop).highlight_spacing(HighlightSpacing::Always)` | `.direction("bottom_to_top").highlight_spacing("always")`: the variants' names in snake case |
+| `Column::new("Qty", Size::Fixed(7)).align(Align::End).min(4)` | `Column("Qty", 7, align="flex-end", min=4)`, or `.align("end").min(4)`, which return a new column |
+| `Scrollbar::new().side(Side::Left).symbols(ScrollbarSymbols::VERTICAL)` | `Scrollbar().side("left").symbols("vertical")`: each builder returns a new bar |
+| `number_input(age, 0..=150)` | `number_input(age, 0, 150)`: both ends included |
+| `cx.modal_with(w, h, ModalOptions::new().shadow("on grey11"), build)` | `cx.modal_with(w, h, ModalOptions(shadow="on grey11"), build)` |
+| `cx.quit_with(value)` and `App::run_for::<T>()` | `cx.quit_with(value)` (any object) and `app.run_for()`; a headless `Run`'s `exit` |
+| `cx.fail(error)` | `cx.fail(error_or_message)`: `run()` raises it as an `OSError` |
 
 Import the names you use (`from rs_rich.tui import App, column, signal`), or
 the module (`from rs_rich import tui`): a `from rs_rich.tui import *` brings
@@ -74,9 +87,12 @@ to itself: use `update`.
 
 The widgets that need a signal of a particular type take one of yours: a
 list's or table's selection (an `int`), a split's ratio (a `float`), a
-calendar's day (a `datetime.date`), a text area's text (a `str`), a tree's path (a list of indices) and
-its expanded paths (a set of tuples), a table's sort (`None` or `(column,
-Order)`). The first time a signal goes to such a widget it becomes one of
+calendar's day (a `datetime.date`), a time picker's time (a naive
+`datetime.time`), a date-and-time picker's moment (a naive
+`datetime.datetime`; one with a time zone is a `TypeError`, and a picker's
+`min` after its `max` a `ValueError`), a text area's text (a `str`), a
+tree's path (a list of indices) and its expanded paths (a set of tuples), a
+table's sort (`None` or `(column, Order)`). The first time a signal goes to such a widget it becomes one of
 that type and keeps its value, and anything that read it before (a memo
 made earlier) follows it. From then on, setting it to a value of another
 type raises `TypeError`.
@@ -118,7 +134,11 @@ App(lambda: widget(Counter()).on_key("q", lambda cx: cx.quit())).run()
 - `draw(cx, canvas)` is the one method to write. The `Canvas` has the
   trait's methods: `print`, `set`, `fill`, `clear`, `markup`, `render` (any
   renderable), `lines` (rows of `Segment`s), `restyle`, `border` and
-  `scroll_up`.
+  `scroll_up`, with `cell(x, y)` (a `CellView`, or `None` off the
+  canvas), `set_cell` and `fill_with` for single cells.
+- `draw_over(cx, canvas)` draws after the widget's children, and
+  `overlapping()` returning `True` lets children share an area, later
+  ones on top, as `layers` does.
 - `event(cx, event)` returns whether it used the event. `event.kind` is
   `"key"`, `"key_up"`, `"preview"`, `"mouse"`, `"paste"`, `"focus"`,
   `"hover"` or `"resize"`. `cx.app()` is the `Ctx`, to quit, open a screen
@@ -134,6 +154,23 @@ App(lambda: widget(Counter()).on_key("q", lambda cx: cx.quit())).run()
 
 `cx`, `canvas` and every `Ctx` a handler gets are lent for that one call. A
 widget may keep one, but using it after the call raises `RuntimeError`.
+
+### Effects
+
+`effect(child, f)` calls `f(canvas, cx)` after the child draws, with the
+same canvas and context a widget's `draw` gets:
+
+```python
+from rs_rich.tui import effect, label
+
+def shout(canvas, cx):
+    for x in range(canvas.width):
+        cell = canvas.cell(x, 0)
+        if cell is not None:
+            canvas.set_cell(x, 0, cell.symbol().upper(), "bold")
+
+effect(label("quiet"), shout)
+```
 
 ## Threads and asyncio
 
@@ -215,7 +252,40 @@ own](index.md#owning-the-loop). It has `update(now)`, `render()`,
 `timeout(now)`, `key`, `text`, `paste`, `mouse`, `click`, `resize`,
 `screen()`, `lines()`, `accessibility()` (the accessibility tree, as
 `AccessNode`s), `take_announcements()` and `finish()`. In linear mode,
-`render()` returns the lines a screen reader would read.
+`render()` returns the lines a screen reader would read. With
+`App.inspector()` on, `inspector_trace()` returns what the
+[inspector](index.md#inspector)'s trace holds, as `TraceEntry`s (`frame`,
+`at` in seconds, `kind`, `text`), `inspector_timings()` each node's
+`NodeTiming` (`name`, `draws`, and `total` and `last` in seconds), and
+`inspector_selected()` the id of the node it has selected. Signals made
+and written from Python are named in the trace by where the bindings make
+and write them, not by the Python line.
+
+For a test, as in [Rust](index.md#testing), the driver also has
+`press("tab enter")` and `type_text("Ada")` (each draws until there is
+nothing left to draw, as `settle()` does), `assert_focused(name)`, which
+raises `AssertionError` saying where the focus is, `focused()` and
+`focused_name()`. Snapshots take a path, since Python has no crate
+directory:
+
+```python
+from pathlib import Path
+
+from rs_rich.tui import App, assert_screen, assert_screen_styled
+
+SNAPSHOTS = Path(__file__).parent / "snapshots"
+
+def test_the_counter_counts():
+    driver = App(counter).driver(20, 1)
+    driver.press("+ +")
+    assert_screen(driver, SNAPSHOTS / "counter_two.txt")
+```
+
+`UPDATE_SNAPSHOTS=1 pytest` writes the files instead of comparing. A
+difference raises `AssertionError` with a unified diff.
+`assert_screen_styled(driver, path)` also keeps `<name>.styled.txt`, the
+rows as console markup, and `assert_snapshot(path, text)` compares any
+text; `driver.plain()` and `driver.styled()` are the texts they store.
 
 ## Serving to a browser
 
@@ -284,7 +354,12 @@ counterpart, or a different one:
 - **Traits implemented in Python** other than `Widget`: a `PtyHost` or
   `WebEngine` of your own, and an `Announcer` other than a function
   (`App.announcer(f)`). The Chrome and Browsh engines are off in the wheel.
+- **The calendar's 0.0.19 options:** `CalendarOptions::event`, `events`,
+  `surrounding`, `first_weekday` and the header and day styles, and
+  `month`. `calendar_with` takes `today`, `min` and `max`.
 - **Smaller pieces:** `Widget::hidden_children`, `Widget::claims_key` and
-  `MeasureCx::stack_flow` (0.0.19), the cell-level `Screen`
+  `MeasureCx::stack_flow` (0.0.19), `App::session_options` (Python starts no
+  session of its own), `ScrollbarSymbols` as a type (its sets are named by
+  strings), the cell-level `Screen`
   (`Driver.screen()` gives the rows, `Driver.lines()` the styled
   segments), `widget::markup_width` and `markup_line`, and `Easing::at`.

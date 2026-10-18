@@ -12,6 +12,7 @@ use std::io::Cursor;
 use std::time::Duration;
 
 use common::{row_of, run, screen};
+use intuituive::interact::BackendKind;
 use intuituive::App;
 use rich_interact::headless::Script;
 use scope::*;
@@ -169,6 +170,18 @@ fn the_command_line_reads_as_scope_tuis() {
     assert_eq!(parse(&args("-t A4")).unwrap().options.buffer, 109);
     assert_eq!(tune("A5", 48000), Some(55));
     assert!(parse(&args("--bogus")).is_err());
+    // The backend, by name; crossterm is in every build.
+    assert_eq!(parse(&args("")).unwrap().backend, None);
+    assert_eq!(
+        parse(&args("--backend Crossterm")).unwrap().backend,
+        Some(BackendKind::Crossterm)
+    );
+    let error = parse(&args("--backend curses")).unwrap_err();
+    assert!(
+        error.contains("no backend \"curses\" in this build, which has crossterm"),
+        "{error}"
+    );
+    assert!(parse(&args("--backend")).is_err());
 }
 
 #[test]

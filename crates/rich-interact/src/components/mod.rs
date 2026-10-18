@@ -3,29 +3,39 @@
 //! [fuzzy](crate::fuzzy) matcher. Each works under both drivers, degrades to
 //! a line-based prompt without a terminal, and is styled by one [`Theme`].
 
+mod approve;
 mod asset;
 mod color;
 mod confirm;
+mod date;
 #[cfg(feature = "data")]
 mod explore;
 mod file;
 mod form;
 mod input;
+mod jump;
+mod log;
 mod pager;
+mod reorder;
 mod select;
 mod textarea;
 mod theme;
 mod views;
 
+pub use approve::{approve_keymap, ApprovalQueue, ApprovalReport, Decision, Verdict};
 pub use asset::{emoji, AssetKind, AssetPicker, BOX_STYLES};
 pub use color::{ColorFormat, ColorPicker};
 pub use confirm::{Choice, Confirm};
+pub use date::{date_keymap, DatePicker, DateTimePicker, TimePicker};
 #[cfg(feature = "data")]
 pub use explore::{explore_keymap, json_path, DataExplorer};
 pub use file::{display_name, display_path, FileMode, FilePicker};
 pub use form::{Answers, Form, Value};
 pub use input::{input_keymap, Input, Provider, Suggestion};
-pub use pager::{pager_keymap, pager_search_keymap, Pager};
+pub use jump::{jump_keymap, Jump, JumpGroup, JumpHit, JumpIndex, JumpSource, Jumped};
+pub use log::{log_filter_keymap, log_view_keymap, LogEvent, LogView};
+pub use pager::{pager_keymap, pager_search_keymap, table_header_rows, Pager};
+pub use reorder::{move_item, reorder_keymap, Reorder};
 pub use select::{select_keymap, MultiSelect, PreviewLayout, Select};
 pub use textarea::TextArea;
 pub use theme::{ThemePicker, THEME_SAMPLE};

@@ -1,9 +1,9 @@
 {
   "tape": "docs/tapes/micro.tape",
   "tape_fnv1a64": "2d52488f2ddc3beb",
-  "recorder": "rs-rich-record 0.0.2",
+  "recorder": "rs-rich-record 0.0.7",
   "rich": null,
-  "commit": "f71c19df49d71e1a87f2ddaed5b33b39fee6f039",
+  "commit": "ea42bea72df7ac2b01b609d134682f9ecc7c59ef",
   "screenshots": [
     "list",
     "preview",

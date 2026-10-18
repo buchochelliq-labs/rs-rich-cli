@@ -58,7 +58,9 @@ pub enum Message {
     Literal(String),
     Markup(String),
 }
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+/// How serious an event is. Variants are in increasing order, so `Warn <
+/// Error`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Severity {
     Trace,
     Debug,

@@ -5,8 +5,9 @@ from rs_rich.interact import Select, MultiSelect, Input, Confirm, Choice, Form, 
 ```
 
 `rs_rich.interact` is the port's `rs-rich-interact` crate from Python: fuzzy
-pickers, text input and multi-line text, confirmations, forms, a pager, and
-file, colour and asset pickers, between printing and a full TUI. Rich has none of these, so the reference is the Rust crate: the same
+pickers, text input and multi-line text, confirmations, forms, a pager,
+file, colour and asset pickers, a list to put in order, and date and time
+pickers, between printing and a full TUI. Rich has none of these, so the reference is the Rust crate: the same
 component, keys and terminal paint the same frames.
 
 Each component is a configuration. `ask()` runs it on the terminal and
@@ -314,6 +315,13 @@ width: the arrows, Space and PageUp/PageDown scroll, `/` searches, `n` and
 either way: closing a pager is not a cancel). Without a terminal it writes
 the content out.
 
+`sticky_header` keeps lines on top while the rest scroll: a number of lines,
+or `"table"` for the header of a table the content starts with (its title,
+top edge and header rows, down to the line under them). `Pager(table,
+sticky_header="table")` pages a long table with its header always in view.
+On a page too short for every sticky line, the last that fit stay and the
+ones before scroll away first. A negative number is a `ValueError`.
+
 ```python
 from rs_rich.interact import Pager
 from rs_rich.text import Text
@@ -332,6 +340,40 @@ lines 5–8 of 20 · match 1/1 ·
 ```
 
 ![A pager scrolled to the search match, with its status line](media/interact-pager.svg)
+
+## LogView
+
+`LogView(records=(), *, collapse=True, time="absolute", fields=False,
+filter=None, limit=200000)` is the view `rich log -i` shows: log records,
+newest at the bottom. Records are `rs_rich.ext.log_stream.LogRecord`s,
+dicts of fields, or lines (read by the same parsers as `rich log`). `/`
+types a filter: words match the text, and `status>=400` and the other
+`rich log --where` tests match fields. Enter shows a record's fields and
+the lines that followed it, Space pauses, and `q` closes (the answer is
+`None`). A run of identical records shows once, with a count. Without a
+terminal it writes the rows out.
+
+```python
+from rs_rich.interact import LogView, Script, degrade
+
+view = LogView([
+    "2026-10-18T10:00:00Z INFO started service=api",
+    "2026-10-18T10:00:01Z ERROR refused trace_id=t1",
+    "2026-10-18T10:00:02Z ERROR refused trace_id=t1",
+    "2026-10-18T10:00:04Z WARN slow status=503",
+], time="relative")
+print(degrade(view).prompts, end="")
+typed = Script().keys("/").text("status>=500").keys("enter q")
+print(view.headless(typed, width=60, height=4).last_frame)
+```
+
+```text
++0.000s INFO  started service=api
++1.000s ERROR ×2 refused trace_id=t1
++4.000s WARN  slow status=503
+❯ +4.000s WARN  slow status=503
+4 records · 1 matching "status>=500" · at the end · / filter
+```
 
 ## TextArea
 
@@ -442,6 +484,121 @@ print(AssetPicker("box").headless(Script().text("double").keys("enter")).value)
 👍
 double
 ```
+
+## Reorder
+
+`Reorder(prompt, items, *, height=10, mouse=False)` puts the items in order.
+Alt+↑/↓ (or Ctrl+↑/↓, or `K`/`J` in any terminal) moves the focused item;
+Space grabs it for the arrows to carry, Space drops it and Esc puts it
+back; with `mouse=True` a drag carries a row. The answer is the items'
+values in the new order. Without a terminal it reads the new order as
+numbers (`3 1`: those first, the rest keeping theirs).
+
+```python
+from rs_rich.interact import Reorder, degrade
+
+steps = Reorder("Order", ["build", "test", "deploy"])
+print(steps.headless("down alt+down enter").value)
+print(steps.headless("space end space enter").value)
+print(degrade(steps, ["3 1"]).value)
+```
+
+```text
+['build', 'deploy', 'test']
+['test', 'deploy', 'build']
+['deploy', 'build', 'test']
+```
+
+## DatePicker, TimePicker and DateTimePicker
+
+`DatePicker(prompt="Date", *, value=None, default=None, min=None, max=None,
+today=None, validate=None, mouse=False)` picks a `datetime.date` on a month
+grid: the arrows move a day and a week, PgUp/PgDn a month, `t` goes to
+today. `TimePicker(prompt="Time", ..., seconds=False, twelve_hour=False)`
+picks a `datetime.time` field by field (←/→ between the fields, ↑/↓ to
+change one, digits to type it), and `DateTimePicker("Date and time", ...)` a
+naive `datetime.datetime`, with Tab between the grid and the time. Days
+outside `min` and `max` are dimmed and cannot be reached; a time outside
+them, or a value `validate` refuses (it returns `None`/`True`, or a
+message), is refused on Enter with a message. Without a terminal each reads
+a line: `2026-10-17`, `14:30` or `2:30 pm`, `2026-10-17 14:30`.
+
+The values are naive: a `datetime` or `time` with a time zone is a
+`TypeError` (keeping its clock and dropping its offset would change the
+moment), and microseconds are dropped, since the pickers work to the
+second. Without `seconds` they work to the minute: the start, the default
+and a typed answer drop their seconds, and `min` rounds up to a minute.
+`value` is where a picker starts, `default` or not, and a `default` outside
+`min` and `max` (or one `validate` refuses, when it is asked for) is no
+answer: a `ValueError` when the picker is made, or `NotInteractive`. The
+days go from `datetime.date.min` to `datetime.date.max`.
+
+```python
+import datetime
+
+from rs_rich.interact import DatePicker, DateTimePicker, Script, TimePicker, degrade
+
+due = DatePicker("Due", value=datetime.date(2026, 10, 17), max=datetime.date(2026, 10, 20))
+print(due.headless("right down enter").value)
+start = TimePicker("Start", value=datetime.time(9, 0))
+print(start.headless(Script().text("1430").keys("enter")).value)
+meeting = DateTimePicker("Meeting", min=datetime.datetime(2026, 10, 17, 9, 0))
+print(degrade(meeting, ["2026-10-18 2:30 pm"]).value)
+```
+
+```text
+2026-10-20
+14:30:00
+2026-10-18 14:30:00
+```
+
+## ApprovalQueue and Jump
+
+`ApprovalQueue(prompt, items, *, height=10, preview="auto",
+require_reason=False, auto_submit=False, advance=True, mouse=False)`
+reviews the items one by one or in bulk. `a`, `r` and `s` approve, reject
+and skip the focused item and move on to the next pending one; `A`, `R` and
+`S` ask for a reason first. Space marks items and Ctrl+A every pending one,
+for one decision on all of them; `u` takes a decision back; Enter submits.
+The answer is a list of dicts, one per item in order, pending ones
+included: `index`, `value`, `label`, `decision` (`"approved"`,
+`"rejected"`, `"skipped"` or `"pending"`) and `reason`. `require_reason`
+asks for a reason on every rejection. Without a terminal it asks item by
+item (`a`, `r` or `s`, a reason after a colon; `q` stops).
+
+`Jump(sources, prompt="Jump", *, query="", height=12, preview="auto",
+mouse=False)` is one fuzzy box over several `JumpSource(id, title, items,
+*, prefix=None, limit=5)`s, its results grouped by source. A source's
+`prefix` typed first searches only it, Tab narrows to one source and
+Shift+Tab widens, and Alt+↑/↓ jump between groups. The answer is a dict:
+`source` (its id), `index`, `label` and `value`. Without a terminal it
+answers with the best match for a line read, or, asked for a default, for
+`query`.
+
+```python
+from rs_rich.interact import ApprovalQueue, Item, Jump, JumpSource, Script, degrade
+
+queue = ApprovalQueue("Deploys", ["api", "web", "db"])
+record = queue.headless(Script().keys("a R").text("flaky").keys("enter s enter"))
+print([(d["label"], d["decision"], d["reason"]) for d in record.value])
+
+jump = Jump([
+    JumpSource("files", "Files", ["src/main.rs", "README.md"]),
+    JumpSource("commands", "Commands", [Item("cargo test", "Run the tests")], prefix=">"),
+])
+print(jump.headless(Script().text(">te").keys("enter")).value)
+print(degrade(jump, ["readme"]).value["value"])
+```
+
+```text
+[('api', 'approved', None), ('web', 'rejected', 'flaky'), ('db', 'skipped', None)]
+{'source': 'commands', 'index': 0, 'label': 'Run the tests', 'value': 'cargo test'}
+README.md
+```
+
+They are the components behind `rich approve` and `rich jump`; the
+[Rust guide](https://buchochelliq-labs.github.io/rs-rich-cli/guide/interact/review-and-jump/) has the keys and the
+theme keys in full.
 
 ## Headless runs
 

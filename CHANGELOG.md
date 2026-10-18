@@ -9,6 +9,15 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## 0.0.19 cohort
+
+ext 0.0.16 / micro 0.0.5 / record 0.0.7 / interact 0.0.7 / ratatui 0.0.4 /
+intuituive 0.0.4 / embed 0.0.2 / web 0.0.2 / data 0.0.3 / CLI 0.0.19, and
+`rs-rich` 0.0.7 on PyPI. Not published yet: the maintainer tags it.
+Unchanged and already published: core 0.0.9, macros 0.0.3, plugin API 0.0.3,
+art 0.0.12, diagram 0.0.2, mermaid 0.0.5, lumis 0.0.3. See
+[the release notes](docs/releases/0.0.19.md).
+
 ### 0.0.19 release test: fixes from three audits
 
 Three independent audits of the 0.0.19 delta (intuiTUIve and the surface;
@@ -55,6 +64,211 @@ per browser session](#one-process-per-browser-session-web-002).
   names `draw`'s argument `f`, as the method does.
 - **Docs:** the Python guide lists `Widget::claims_key` and
   `MeasureCx::stack_flow` among what is not bound yet.
+
+A second round of audits, over workstreams 7 to 10 (a session's process
+tree on Windows; responsive layout, the error state and snapshot tests;
+wide and long tables; reorderable lists and the date and time pickers),
+found the defects below. Each was reproduced first and has a regression
+test.
+
+- **A hidden node is hidden in every container.** A node hidden by
+  `hide_below`, `show_below` or `@media { display: none }` left the Tab
+  order, but inside a `split`, a `scroll` or a `switch` it was still drawn
+  and still took clicks. Now it is drawn nowhere and takes no clicks, and
+  the accessibility tree and linear mode leave it out, whatever holds it.
+  A hidden pane leaves the other the whole split, with no divider, and a
+  hidden row of an `each` takes no room. A page that a `switch` or an
+  `each` builds takes the stylesheet before it first draws, so
+  `display: none` holds there from the start.
+- **Typing an hour into a time picker keeps its minutes.** With 09:00 the
+  earliest and 09:05 shown, typing `1` wrote 01:05, which the range moved
+  to 09:00, and the `4` then made 14:00; the app's signal saw 09:00 on the
+  way. A first digit that would leave the range is no longer written
+  until the field is complete or left. A field typed past the range stops
+  at the range's end for that field and keeps the others where it can:
+  `08` typed into 12:45, with 09:30 the earliest, makes 09:45. Beside a
+  calendar, the line under the picker says why a field moved.
+- **A calendar or a time picker whose min is after its max says so.**
+  Every day or time was disabled with no word why, and the first key
+  moved the value to the max. Now "the range is empty: min is after max"
+  shows where the calendar's weeks go, after a time picker's fields and
+  under a date-and-time picker, as rs-rich-interact's pickers say it, and
+  nothing changes the value. Assistive technology is told it is in error.
+- **A table column squeezed to nothing can be dragged wider again.** The
+  check that keeps a column scrolled out of view from being resized
+  applied to every table, so in a resizable table that fits, a column
+  squeezed to no cells had no edge to drag. It applies only while the
+  table scrolls across.
+- **`@media(max-width: 80)` parses.** A query with no space after
+  `@media` was refused with "only `@media` rules are supported". It is
+  accepted, as in CSS.
+- **A stylesheet with more than 64 `@media` blocks follows the
+  terminal.** The 64th block and those after it shared one bit of the key
+  that tells when a resize crosses a bound, so crossing a later block's
+  bounds did not apply it. Each block now counts on its own.
+- **A snapshot file saved with a byte-order mark still matches.** The
+  mark was compared as text, so the file never matched, and the diff
+  showed two lines that looked the same. It is ignored, as line endings
+  and trailing spaces are.
+- **The wheel carries a grabbed item, as the arrows do.** With an item
+  grabbed, the wheel moved only the focus, so the item focused next showed
+  as carried and Esc moved it into the grabbed one's place. The wheel is ↑
+  and ↓ now, so Esc puts back the item that was grabbed.
+- **A click on a reorderable list lands on the row under it.** Clicks and
+  drags counted rows from the offset the last key left, not the one drawn,
+  so after `focus(..)` scrolled the first page, or after the terminal grew,
+  a click moved another item. Drawing and the mouse share one offset.
+- **A new order typed as numbers is read in one pass.** Each number was
+  checked against all those before it: 40,000 took 18 s in a debug build.
+  They take 0.15 s now.
+- **Tab leaves a time picker in a container.** `TimePicker` and
+  `DateTimePicker` took every Tab and went round their fields, so in a
+  `Column` the focus never reached the next field. Tab and Shift+Tab are
+  the containers' `focus-next` and `focus-previous` now (the `date`
+  keymap's `next-field` and `previous-field` are renamed): after the last
+  field the focus moves on, and Shift+Tab comes back in at the last. On
+  its own a picker still goes round.
+- **Sticky lines a page cannot hold are still shown.** On a page shorter
+  than them, the viewport kept the first that fit and never showed the
+  rest: `rich pager --sticky 6` in a six-row terminal never showed lines 5
+  and 6, a search found them without showing them, and the status line
+  counted lines that were not on screen. The last that fit stay now (a
+  table's column names) and the ones before scroll away first, so every
+  line is shown. `rows`, `visible`, `status`, `show` and the pager's search
+  agree, and `Viewport::top` says where the scrolling lines start.
+- **A table without a header has no header pinned.** A box such as
+  `SQUARE` draws the line between rows as it draws the one under a header,
+  so a headerless table with `show_lines` (which rich draws in `SQUARE`)
+  had its first row pinned by `rich pager`. Such a line marks a header
+  only when it does not come again now. A header with a line of its own,
+  as in rich's default `HEAVY_HEAD`, is still found.
+- **Without seconds a picker answers what it shows.** A time picker showed
+  14:30 and answered 14:30:45, and a limit with seconds refused the value
+  it named: `rich date --kind time --min now` refused 01:22 with "the
+  earliest is 01:22". Without seconds the pickers work to the minute now,
+  whatever order the builders come in. The start, the default and a typed
+  answer drop their seconds; the earliest rounds up to a minute and the
+  latest down. `rich date` checks `--default` the same way.
+- **A default the picker would refuse is no answer.** Without a terminal,
+  an empty line, or a run asked for defaults, answered the default even
+  outside `min` and `max` or refused by the validator. It is checked as a
+  typed answer is now. Python's pickers raise `ValueError` for a default
+  outside `min` and `max`, as `rich date` refuses one.
+- **A range the wrong way round says so.** A `min` after the `max` was
+  taken silently, and each answer was refused naming one limit. Every
+  answer is refused with "the range is empty" now, and
+  `rs_rich.tui.time_picker` and `datetime_picker` raise `ValueError`, as
+  `calendar_with` does.
+- **`--value` is where `rich date` starts, with `--default` or without.**
+  The default set the start too, so `--value 2026-10-01 --default
+  2026-10-17` opened on the 17th. An explicit value wins, in either order,
+  in the library and in Python too.
+- **`2026-10-17T2:30 pm` parses.** A date and time were split at the first
+  space, inside the time; the first `T` or space after the date splits
+  them now.
+- **A year is four digits.** `26-10-17` parsed as the year 26. A date needs
+  four year digits, 0001 to 9999, and the pickers stay within those
+  years, so every answer prints and parses back.
+- **Python's pickers stay within Python's dates.** At `date.max`, a day on
+  raised `ValueError: year 10000 is out of range`, and `0000-01-01` typed
+  raised it rather than `NotInteractive`. The days stop at the years 1 and
+  9999 now.
+- **Python's pickers refuse a value with a time zone.** One kept its clock
+  and lost its offset, and a `datetime_picker` rewrote the caller's signal
+  without it. It is a `TypeError` now. The docs say the pickers drop
+  microseconds.
+- **`help()` shows the pickers' prompts.** `DatePicker`, `TimePicker` and
+  `DateTimePicker` showed `prompt=Ellipsis` in their signatures.
+- **`Pager(sticky_header=-1)` is a `ValueError`**, not a `TypeError`.
+- **`rich date --seconds` and `--twelve-hour` need a time.** With
+  `--kind date` they were ignored; they are a usage error (exit 2) now.
+- **CI: every command of the Windows web job counts.** Its step ran two
+  commands in one PowerShell step, where only the last one's exit code
+  failed it. Each has a step of its own now.
+- **What a session runs on Windows serves as it would anywhere.** A
+  program the app ran that serves an app too took the inherited
+  `RS_RICH_WEB_SESSION` for its own and exited: Unix tells the two apart
+  by process group, Windows had nothing to. The session's process takes
+  the variable out of its environment before the app runs.
+- **CI: every command of the Windows pager job counts.** It ran three
+  commands in one PowerShell step, where only the last one's exit code
+  failed it; the step runs in bash now.
+
+A third round of audits, over the CLI's shell integration, `rich jump`,
+`rich log` and `rich deps`, found the defects below. Each was reproduced
+first and has a regression test.
+
+- **`rich deps --save` and `--baseline` may name one file.** The report
+  was saved before the baseline was read, so the comparison was against
+  itself and a regression passed. The baseline is read first now.
+- **`rich jump` no longer suggests `eval`.** Its help and docs piped the
+  place to `eval`, where a file named `$(…)` would run. `--print shell`
+  prints a safely quoted command instead: `cd -- 'DIR'`, `${EDITOR:-vi}
+  +LINE -- 'FILE'`, or a `>` command as it is.
+- **zsh prompts keep a link's `%`.** `rich shell link --prompt zsh`
+  doubled `%` only outside escape sequences, so a URL's `%20` was expanded
+  by the prompt; it is doubled inside them too.
+- **A directory name cannot drive the terminal from the prompt.** The init
+  scripts wrote `$PWD` into OSC 7 raw (zsh's `print` even read its
+  backslashes as escapes); every shell percent-encodes it now, and zsh
+  uses `print -rn --`.
+- **Huge durations are usage errors, not panics.** `rich shell status
+  --duration`/`--min-duration` and `--gif`'s `--speed`, `--fps` and
+  `--max-duration` are bounded (exit 2 outside), and playback delays are
+  computed without panicking.
+- **`rich banner --width` is at most 10000.**
+- **Python's `Jump` rejects two sources with one id** (a `ValueError`): the
+  answer's value was looked up by id, so the second source's pick gave the
+  first source's value.
+- **`rich log --output jsonl` keeps late continuation lines readable.**
+  Lines after a record written on a quiet spell are a
+  `{"continuation": [...]}` object, and reading JSONL back folds such an
+  object, and a record's `continuation` list, into continuation lines.
+- **`rich log` sanitizes by default**, as `rich view` does: a log is
+  untrusted, and an OSC 52 sequence in a field reached the terminal.
+  `--no-sanitize` turns it off.
+- **Sanitizing a log record covers its keys**, nested map keys included
+  (`Record::sanitize`).
+- **`rich log --follow` holds at most 1 MiB of an unfinished line** (more
+  is shown in pieces, with a notice) and scans each byte for a line break
+  once, not on every read.
+- **`rich jump --recent` keeps control characters out.** A place with a
+  newline split the recent file's entry in two, and an escape reached the
+  terminal: such a place is printed only by `--print json`, never
+  remembered, and skipped when read.
+- **PowerShell's status line shows the whole command.** The hook passed
+  `--command $last.CommandLine`, which legacy argument passing split at
+  quotes; it hands it over in `RICH_SHELL_COMMAND`, which `rich shell
+  status` reads when `--command` is not given.
+- **bash's status line never names the wrong command.** A command history
+  left out (`HISTCONTROL=ignorespace`) showed the one before it; the hook
+  passes `--command` only when the history number moved on.
+- **`rich shell link --tilde` matches a home reached through a symlink**
+  (macOS's /var is /private/var), and a bare `rich shell link` shows the
+  shell's `$PWD` when it names the working directory.
+- **`--watch-interval` is at most 86400 seconds**, so a huge value is a
+  usage error, not a panic.
+
+The same round, over the libraries:
+
+- **Documents cannot exhaust memory or the stack.** man's `\*` strings
+  expanded each reference again (16 references nested eight deep is about
+  10⁹ calls); a string is not expanded inside itself now, and a line takes
+  at most 64 KiB of them. AsciiDoc attributes are cut at 64 KiB, with a
+  warning. An Org `#+BEGIN:` with no `#+END:` recursed once per line; it
+  is a keyword line now, and a closed one has the nesting limit other
+  blocks have.
+- **Documents keep raw control characters off the terminal.** An escape
+  in an Org, AsciiDoc or man file is sanitized as it is read; tab and
+  newline stay.
+- **`LogView` keeps at most 1,000 continuation lines a record** and
+  counts the rest (`… N more lines`); it builds only the detail rows that
+  fit the page, and a time far before the first record no longer
+  overflows the relative clock.
+- **A horizontally scrolled table with zero-width columns** no longer
+  underflows (intuiTUIve).
+- **`SmallMultiples::gap`** is clamped like `bar_gap`, and its layout
+  arithmetic saturates.
 
 ### Flex alignment in intuiTUIve (intuituive 0.0.4)
 
@@ -144,6 +358,910 @@ per browser session](#one-process-per-browser-session-web-002).
   **Docs:** [Text areas](docs/guide/intuituive/index.md#text-areas), the
   `editor` example and its recording.
 
+### Responsive layout, an error state and snapshot tests in intuiTUIve (intuituive 0.0.4)
+
+0.0.19 workstream 8 (#712, #713).
+
+- **Responsive nodes:** `.hide_below(columns)` hides a node while the app
+  is narrower than that, and `.show_below(columns)` shows one only then;
+  `.hide_below_height(rows)` and `.show_below_height(rows)` do the same for
+  the height. A hidden node is as if a stylesheet said `display: none`: it
+  takes no room, leaves the Tab order and the accessibility tree, and
+  gives up the focus.
+- **`@media` in stylesheets**, with CSS's names: `@media (max-width: 80) {
+  … }`, and `min-width`, `min-height` and `max-height`, in cells,
+  inclusive, joined with `and`. A resize that crosses a rule's bounds
+  matches every node again and draws everything once; one that crosses
+  none matches nothing again.
+- **`viewport()`**: the columns and rows the app lays out in (the
+  terminal's, less the inspector while it is shown), read like a signal,
+  so a node can reflow on it. Every resize sets it.
+- **An error state:** `.error_when(condition)`. The theme gives the node
+  a look of its own (a panel's border in `border.error`, other text in
+  `error`, each the theme's `bad` style unless named); a stylesheet
+  matches it with `:error`, or CSS's `:invalid`; and assistive technology
+  is told it is invalid (`AccessState::invalid`, `invalid` in linear mode,
+  `aria-invalid` in a browser).
+- **Snapshot tests:** `assert_screen!(driver, "name")` compares the screen
+  with `tests/snapshots/name.txt`, plain text with one line a row, and
+  fails with a unified diff. `UPDATE_SNAPSHOTS=1` writes the files, as
+  every snapshot test in the repository does. `assert_screen_styled!` also
+  keeps the rows as console markup. `intuituive::testing` has the
+  functions behind them.
+- **Driver helpers:** `settle()`, `press("tab enter")`, `type_text("Ada")`,
+  `focused()`, `focused_name()`, and `assert_focused(name)`, which says
+  where the focus is when it is not on `name`.
+- Apps that use none of this behave as before.
+- **Python:** `Node.hide_below`, `show_below`, `hide_below_height`,
+  `show_below_height` and `error_when`; `viewport()`; `AccessState.invalid`;
+  the driver helpers; `assert_screen(screen, path)`,
+  `assert_screen_styled` and `assert_snapshot`.
+- **Docs:** "Responsive layout", `@media` and "Errors" in the intuiTUIve
+  guide; its Testing section shows a component test and an end-to-end
+  test with snapshots, as does the Python page.
+
+### Wide and long tables (interact 0.0.7, intuituive 0.0.4, cli 0.0.19)
+
+0.0.19 workstream 9 ([#717](https://github.com/buchochelliq-labs/rs-rich-cli/issues/717) and
+[#716](https://github.com/buchochelliq-labs/rs-rich-cli/issues/716)).
+
+- **Tables scroll across.** `TableOptions::scroll_x()` keeps an intuiTUIve
+  table's columns at their natural widths when they do not fit, and
+  `TableSelect::scroll_x(true)` does the same for rs-rich-interact's table.
+  Left and Right scroll a column at a time (Shift+Left and Shift+Right with
+  a cell cursor, which Left and Right move), Shift+Home and Shift+End go to
+  the ends, and Shift with the wheel scrolls too. A table that fits lays
+  out as before, and a table without the option is unchanged.
+- **The header stays over its columns.** It is cut where the rows are.
+  `‹` and `›` at its ends say that columns are out of view on that side,
+  readable without colour.
+- **The cursor stays in view.** The view follows an intuiTUIve table's
+  cell cursor and a `TableSelect`'s focused column.
+- **Frozen columns:** `freeze_columns(n)` keeps the first `n` columns in
+  place while the rest scroll, on both.
+- **`virtual_table_with(columns, len, row, selected, options)`** gives a
+  virtual table a cell cursor, resizable columns or a scroll across.
+- **Sticky table headers when paging.** `Pager::sticky_table_header(true)`
+  keeps a table's header on top while its rows scroll, when the content
+  starts with a table. `table_header_rows(lines)` finds the header (title,
+  top edge, header rows and the line under them) in rendered lines, so it
+  works on output rendered elsewhere. `Pager::sticky_header(n)` keeps the
+  first `n` lines instead, and `Viewport::sticky(n)` does the same for a
+  viewport. Content that does not start with a table, and output without a
+  terminal, are unchanged.
+- **`rich pager`** keeps a table's header on top by default; `--sticky
+  LINES` keeps the first LINES lines there instead, and `--sticky 0`
+  nothing. `rich ... --pager` still runs `MANPAGER`, `PAGER` or `less`;
+  with `PAGER='rich pager'` its tables page with their header on top.
+- **Python:** `TableOptions().scroll_x()` and `.freeze_columns(n)`,
+  `virtual_table(..., options=None)`, and `Pager(...,
+  sticky_header=None)`, which takes a number of lines or `"table"`.
+- **Docs:** [Wide tables](docs/guide/interact/explorers.md#wide-tables),
+  the [intuiTUIve table options](docs/guide/intuituive/index.md#sorting-resizing-and-a-cell-cursor),
+  the pager and viewport in the
+  [interact guide](docs/guide/interact/index.md#pager), and
+  [the CLI guide](docs/cli.md#ask-in-a-script).
+
+### Reorderable lists (interact 0.0.7, intuituive 0.0.4)
+
+0.0.19 workstream 10 (#720).
+
+- **`rich_interact::Reorder`**: put a list in order, then Enter returns the
+  items' values in the new order (`order()` has their first indices).
+  Alt+↑/↓ and Ctrl+↑/↓ move the focused item, and Alt or Ctrl with
+  Home/End to the top or the bottom. `K` and `J` do the same in any
+  terminal, and so does grabbing: Space grabs the item, the arrows carry
+  it, Space drops it and Esc puts it back. Ctrl+R restores the first
+  order. With the mouse on, a drag carries a row. The keys are in context
+  `reorder`. Without a terminal it reads the new order as numbers (`3 1`:
+  those first, the rest keeping theirs).
+- **intuiTUIve: `list(..).reorderable(on_reorder)`**, with the same keys
+  and a drag. Each `Move { from, to }` goes to `on_reorder` for the app to
+  make in its own items (`Move::apply`); the selection follows. The
+  carried row is marked `↕`.
+- **`rich_interact::components::move_item`** makes one move in a slice.
+- **Python:** `rs_rich.interact.Reorder(prompt, items, *, height=10,
+  mouse=False)`, and `Node.reorderable(handler)`, where
+  `handler((from, to), cx)` makes each move.
+
+### Date and time pickers (interact 0.0.7, intuituive 0.0.4, cli 0.0.19)
+
+0.0.19 workstream 10 (#719).
+
+- **`rich_interact::datetime`**: `Date` (moved from intuiTUIve, which
+  re-exports it unchanged), `Time` and `DateTime`. They are hand-rolled,
+  with no time zone and no dependency. Each parses and prints ISO 8601
+  (`2026-10-17`, `14:30`, `2026-10-17 14:30`), and a time also parses
+  `2:30 pm`. `today_utc()` and `now_utc()` are in UTC.
+- **`DatePicker`, `TimePicker` and `DateTimePicker`** in rs-rich-interact.
+  The date is picked on a month grid, the time field by field (seconds and
+  a 12-hour clock are options), and Tab moves between them. `min` and
+  `max` set a range: days outside it are dimmed and cannot be reached, and
+  a time outside it is refused on Enter with a message naming the limit.
+  `validate` refuses with a message of its own. The selected day is in
+  brackets as well as reversed, so it reads without colour. Without a
+  terminal each reads a typed line and checks it against the range.
+- **intuiTUIve:** `calendar_options` with `CalendarOptions` (today, `min`
+  and `max`; days outside are drawn in `calendar.disabled`), `time_picker`
+  and `time_picker_with` (`TimeOptions`), and `datetime_picker`
+  (`DateTimeOptions`): a calendar over a time picker on one `DateTime`
+  signal. A change past the range stops at its end, and a line says why.
+- **`rich date`** in the CLI picks a date, a time (`--kind time`) or both
+  (`--kind datetime`) and prints it in ISO 8601 form. It takes `--min`,
+  `--max`, `--value`, `--default`, `--seconds`, `--twelve-hour`, `--header`
+  and `--mouse`. Exit codes are those of the other interactive commands.
+  Without a terminal it reads a typed value, and one outside the range
+  exits 3. The CLI reference is regenerated, and `docs/tapes/date.tape` is
+  added (not yet recorded).
+- **Python:** `rs_rich.interact.DatePicker`, `TimePicker` and
+  `DateTimePicker`, on `datetime.date`, `datetime.time` and naive
+  `datetime.datetime`. In `rs_rich.tui`, `calendar_with(..., min=, max=)`,
+  `time_picker` and `datetime_picker`, whose signals hold a `datetime.time`
+  and a `datetime.datetime`.
+- **Docs:** [Reorder and the date pickers](docs/guide/interact/index.md#reorder),
+  [times and reorderable lists](docs/guide/intuituive/index.md#times-and-a-date-with-a-time)
+  in intuiTUIve, and `rich date` in [Ask in a script](docs/cli.md#ask-in-a-script).
+
+### The inspector: selection, timings and an event trace (intuituive 0.0.4)
+
+0.0.19 workstream 11 (#714, #721).
+
+- **The inspector takes the keys.** Shift+F12, or a click on its panel,
+  gives them to it; Esc, Shift+F12 again or a click on the app gives them
+  back. While it has them, no key or paste reaches the app. Ctrl+C still
+  quits, and F12 shows and hides it as before.
+- **Four panes:** tree, node, timings and trace, chosen with Tab, `1` to
+  `4` or a click on their names. The top of the panel says what the app's
+  last frame drew, as before; a frame drawn for the inspector alone leaves
+  it as it was.
+- **Selection:** the arrows (and `k`, `j`, PgUp, PgDn, Home, End) move
+  through the tree, ← and → go to a node's parent and first child, and a
+  click on a line selects it. Hidden nodes are in the tree too, marked
+  `hidden`. While the inspector has the keys, the selected node is outlined
+  on the app: its edge cells are restyled (`inspector.selected` in the
+  theme), so nothing moves.
+- **Picking:** `p` selects the node under the pointer, or under a cursor
+  the arrows move. A click or Enter keeps it, and the app does not see that
+  click; Esc puts the selection back.
+- **The node pane:** where the node is; its size and limits, and who set
+  them; a column's or row's gap, alignment and wrapping; a grid's tracks,
+  or a child's cell and span; `align-self`, `dock`, padding and border; its
+  focus; the responsive rule that hides it; its classes and states
+  (`:focus`, `:hover`, `:disabled`, `:error`, `:selected`); whether it was
+  dirty and drew; its timings, role, keys and handlers.
+- **Timings:** each node's draws and its own time (its children's are
+  theirs), in all and the last time, slowest first; the last frame's time,
+  and the average and slowest of the last 120. `s` sorts by another column,
+  and `c` starts again.
+- **The trace:** keys with their modifiers; presses, releases, drags and
+  the wheel with the node under the pointer; each with the handler that
+  took it and its node (`on_key`, `on_click`, `on_mouse`, `on_drop`, a
+  widget). Resizes, pastes, the focus moving, and screens opening and
+  closing. Signal writes, named by where the signal was made and where it
+  was written, with the nodes they made dirty. Timers, watches, tasks done
+  and jobs from other threads. Space pauses it, `c` clears it, and it keeps
+  the last 1,000 events.
+- **The redraw flash:** `f` marks what each frame drew on the app for
+  300 ms (`inspector.flash` in the theme).
+- **Nothing while closed:** nothing is measured or traced. Each hook
+  checks a flag first, and the app sends the same bytes, frame for frame,
+  as one without an inspector. In linear mode the inspector is off: it
+  takes no columns, and F12 is the app's.
+- **For tests:** `Driver::inspector_trace()`, `inspector_timings()` and
+  `inspector_selected()`, with `inspect::TraceEntry`, `TraceKind`,
+  `NodeTiming` and `TRACE_LIMIT`. `signal`, `Signal::update` and `set`,
+  `every`, `watch`, `spawn`, `spawn_future`, `resource` and `Proxy::run`
+  take where they were called (`#[track_caller]`), which the trace shows.
+- **The default look changed:** a line names the panes, and a help line is
+  at the bottom. The intuiTUIve tape's `inspector` screenshot needs
+  recording again.
+- **termwiz on Windows (#721):** CI builds rs-rich-interact and
+  rs-rich-intuituive with termwiz on Windows, every target, and runs their
+  headless suites there. The `files` and `scope` examples take `--backend
+  NAME`, or `INTUITUIVE_BACKEND=NAME`, through `BackendKind::from_name`.
+  The `files` example's test reads the path with the system's separator. A
+  pass in real terminals of the mouse, resizes and Ctrl+Z on the backends
+  is still the maintainer's.
+- **Python:** `Driver.inspector_trace()`, `inspector_timings()` and
+  `inspector_selected()`, with `TraceEntry` and `NodeTiming`.
+- **Docs:** the [inspector](docs/guide/intuituive/index.md#inspector) with
+  every key, [backends](docs/guide/intuituive/index.md#backends), the
+  tutorial's look inside, and the porting and Python pages.
+
+### Org-mode, AsciiDoc and man pages (ext 0.0.16, cli 0.0.19)
+
+0.0.19 workstream 19 (#594, #595, #591, #592, #593).
+
+- **`rich_ext::document`**: one interface for document formats. A
+  `DocumentFormat` has an id, aliases, extensions, a content sniffer that
+  returns a confidence, and a renderer that returns diagnostics with the
+  renderable. `DocumentRegistry::with_builtins()` holds Markdown,
+  reStructuredText, Org, AsciiDoc and man, and `detect` picks one from a
+  file name and the content. A plugin's `SourceRenderer` joins the registry
+  through `SourceRendererFormat`.
+- **One look.** Org, AsciiDoc and man pages parse into a small block and
+  inline model (`Document`, `Block`, `Inline`). `DocumentView` draws it in
+  the look of core's `Markdown`, with the same `markdown.*` styles. New
+  `document.*` styles cover TODO keywords, tags, admonitions and callouts.
+- **Org**: headlines with TODO keywords, priorities and tags; emphasis;
+  plain, numbered, description and checkbox lists; source, example, quote,
+  verse and special blocks; tables; links, footnotes and timestamps.
+  Comments, export blocks and `#+NAME` lines are not shown.
+- **AsciiDoc**: the header and its attributes; sections; constrained and
+  unconstrained quotes; every list kind, with `+` continuations; listing,
+  source (with callouts), literal, example, sidebar, quote and verse blocks;
+  admonitions; tables; links, footnotes and inline macros. `include::` is
+  not followed, and a warning says so.
+- **Man pages**: man(7) with its header and footer, sections, tagged and
+  indented paragraphs, fonts and escapes, `.if` and `.ie`, tbl tables, and
+  the common mdoc(7) macros. `eqn`, `pic` and `.so` are skipped with a
+  warning.
+- **Robust.** No input makes a parser panic. Nesting is capped and inline
+  parsing is linear. A megabyte of ordinary text renders in well under a
+  second in a release build. A deterministic stress test feeds garbled and
+  deeply nested input to all three parsers.
+- **`rich` (CLI)**: `--org`, `--asciidoc` (`--adoc`) and `--man` (`--roff`),
+  and the same names as subcommands. `--format` takes a document format as
+  well as a data format. `--syntax` still shows a file's source. The config
+  file accepts the new modes, and `mode = "rst"`, which it refused before.
+  The CLI reference is regenerated.
+- **Detection.** `.org`, `.adoc`, `.asciidoc`, `.man`, `.roff` and `.mdoc`
+  pick their format by name. `.1` to `.9` and `.asc` need the content to
+  agree. A file with no extension is a document only when its content is
+  unmistakable. Piped input is sniffed only with `--format auto`. A
+  compressed man page such as `ls.1.gz` exits 3 with a hint to decompress
+  it, since rich does not decode it.
+- **Python:** `rs_rich.ext.document`, with `DocumentView`, `render`,
+  `detect`, `sniff` and `formats`, and a
+  [Documents](docs/python/ext/documents.md) page in the Python docs.
+- **Docs:** a guide page, [Documents](docs/guide/ext/documents.md), a
+  section in [the CLI guide](docs/cli.md#org-asciidoc-and-man-pages), a
+  note in [PLUGINS.md](docs/PLUGINS.md#document-formats-0019), and
+  [a recording](docs/recordings.md#org-asciidoc-and-man-pages).
+
+### Blocks, text and layout, after ratatui (intuituive 0.0.4)
+
+0.0.19 gap batch A (see [intuiTUIve against ratatui](docs/design/intuituive-vs-ratatui.md)).
+
+- **Panel titles:** `.title_align(Align)`, `.title_right(..)`,
+  `.title_bottom(..)` and `.add_title(Edge, Align, markup)` put several
+  titles on the top and bottom lines. Titles take markup, styled by
+  `.title_style(..)`. When they do not fit, the left ones win, then the
+  centred, then the right; a lone title is cut with `…`.
+- **Borders in code:** `.border(Border::Thick)` (also `Plain`, `Double`,
+  `Ascii`, dashed, quadrant and `Custom(BorderSet)`), `.borders(Sides::TOP
+  | Sides::BOTTOM)` for some sides, `.border_style(..)` and
+  `.focus_border(..)`. `Border::None` keeps the title rows.
+- **Shadows:** `.shadow(Shadow::MediumShade)` (or `Dim`, `Block`, a
+  symbol) draws one under the right and bottom edges, styled by the
+  theme's `shadow`.
+- **A style on any node:** `.style(..)`, `.bg(..)` and `.fg(..)` fill the
+  node's area under its children. Code wins over the sheet.
+- **Text:** `.text_align(TextAlign::Center | Right | Justify)`,
+  `.no_wrap()` and `.overflow(Overflow::Ellipsis)` on `text(..)` nodes.
+- **Ratio sizes:** `Size::Ratio(1, 3)` and `.ratio(1, 3)`. Ratios share a
+  track exactly: three thirds of 10 fill all 10.
+- **Laying out by hand:** `layout::split(rect, axis, tracks, flow)` and
+  `split_with_spacers` return the rectangles a row or column would give,
+  and the room between them. `Track` is public. rs-rich-ext's `Rect`
+  gains `inset`, `centered`, `offset`, `union`, `intersects`, `rows` and
+  `columns`, and `Screen::get` reads a cell.
+- **Collapsed borders:** `.collapse_borders()` on a row, column or grid
+  draws one line between neighbours, joined with `┬`, `┼` and `┤`, as
+  ratatui's collapsed borders do. The focused child's box is lit.
+  Collapsed containers can nest and share their lines.
+- **Drawing over children:** `Widget::draw_over` draws after a widget's
+  children. `Canvas::cell(x, y)` reads what was drawn (a `CellView`),
+  and `set_cell` and `fill_with` write cells. `effect(child, |canvas,
+  cx| ..)` wraps any node, and `fill(symbol, style)` fills its area.
+- **Layers:** `layers([..])` stacks children in one area, later ones on
+  top. `.inset(..)` and `.place(across, down)` position a layer. Clicks
+  go to the top layer, and the accessibility text leaves out what is
+  covered.
+- **Theme styles for a subtree:** `.theme_styles([("warning", "bold
+  red")])` overrides theme styles for a node and its children, markup
+  and widgets alike. A theme switch keeps the override.
+- **In the stylesheet**, with CSS's names: `border` takes every kind
+  (`thick`, `double`, `dashed`, `dotted`, …), with `border-subtitle`,
+  `border-title-align`, `border-subtitle-align`, `border-sides` and
+  `border-collapse`; `text-align`, `text-wrap` and `text-overflow`; and
+  `width: 1/3`.
+- **Nothing changes by default:** every existing snapshot and guide
+  picture is unchanged. A title too long for its panel is now cut with
+  `…`.
+- **Python:** `Border`, `Shadow`, `Edge`, `Sides`, `TextAlign`,
+  `Overflow`, `Track`, `CellView`, `layers`, `effect`, `fill`,
+  `layout_split` and `layout_split_with_spacers`, the new `Node` builders,
+  `Widget.draw_over` and `overlapping`, `Canvas.cell`, `set_cell` and
+  `fill_with`, `Size.Ratio` and `Rect`'s helpers.
+- **Docs:** the intuiTUIve guide's panels, text, layers, laying out by
+  hand, effects and theme sections, its Python page, and the rows closed
+  in the ratatui comparison.
+
+### Charts, the canvas and colour, after ratatui (ext 0.0.16, intuituive 0.0.4)
+
+0.0.19 gap batch C (see [intuiTUIve against ratatui](docs/design/intuituive-vs-ratatui.md)).
+
+- **Charts fill their node.** A `Chart`, a `Canvas`, vertical bars, a
+  `Sparkline` and a `FillGauge` take the height they are given, as
+  ratatui's widgets fill their area: a `Layout` region, or an intuiTUIve
+  node through `renderable(..)`. Given no height, each draws as before.
+  `Chart::height` and `Canvas::height` still fix it, as `bar_width` does
+  for vertical bars.
+- **Gauges as ratatui draws them.** `FillGauge` fills whole cells (eighths
+  with `unicode(true)`), centres its label and swaps the label's colours
+  where the bar runs under it. `LineGauge` draws a label and a thin, thick
+  or double line (`LineSet`), or two symbols of your own. Both take a
+  ratio or a `percent`. The theme gains `chart.gauge.filled` and
+  `chart.gauge.unfilled`.
+- **Sparklines taller than a row.** `rows(n)` stacks eighths (or Braille
+  dots) over `n` rows. `direction(Direction::RightToLeft)` draws the
+  newest value on the left. `optional(..)` takes absent values, drawn with
+  `absent(symbol, style)`. `styles(..)` colours each value, and
+  `levels(Levels::Three)` draws halves and whole cells only.
+- **Grouped bars.** `BarGroup` holds bars under a label, added with
+  `BarChart::group`. `thickness`, `bar_gap` and `group_gap` set the bars'
+  size and the gaps between them. A `Bar` takes `text` to show in place
+  of its value, and `value_style` and `label_style`; the chart takes both
+  as defaults. `values_inside(true)` writes values on the bars, as
+  ratatui does.
+- **Area charts and styled labels.** `GraphType::Area` fills from a line
+  down (or up) to `Dataset::fill_to`, the bottom of the axis by default.
+  `Labels::Markup` styles axis labels, and `Axis::labels_align` places
+  them, the first x label against the y axis as ratatui does.
+- **The canvas.** `CanvasPainter::map` draws the world's coastlines at
+  `MapResolution::Low` or `High`. They are Natural Earth's public-domain
+  110m and 50m coastlines, simplified by `scripts/world_map.py` to about
+  28 KB in all. New markers are `Bar` (a lower half block), and
+  `Quadrant`, `Sextant` and `Octant`, which draw 2×2, 2×3 and 2×4 dots a
+  cell. `background(style)` colours every cell. `point` draws one dot,
+  `area` a line with the region below it filled, and the `Shape` trait
+  draws shapes of your own.
+- **Colour.** `rich_ext::palette` has the Tailwind CSS and Material Design
+  palettes, as `Color`s, and `hsl`, `hsv`, `oklab` and `okhsv` (Björn
+  Ottosson's Oklab colour space). `blend` and `gradient` mix colours.
+- **Calendars.** `CalendarOptions` takes `event(date, style)` and
+  `events(fn)` to mark days, `surrounding(style)` to show the days of the
+  months either side, and `first_weekday(Weekday::Sunday)`. It also takes
+  `weekday_style`, `month_style` and `day_style`. `month(shown, options)`
+  draws a month that cannot be focused, so a year is a grid of twelve.
+  **Breaking:** `CalendarOptions` is no longer `Copy`, as it holds a
+  function.
+- **Python:** `Sparkline(rows=, direction=, absent=, styles=, levels=)`,
+  `ChartBar(text=, value_style=, label_style=)`, `BarGroup`,
+  `BarChart(groups=, thickness=, bar_gap=, group_gap=, label_style=,
+  value_style=, values_inside=)`, `FillGauge` and `LineGauge` in
+  `rs_rich.chart`. Python has no canvas, xy chart or palette module yet,
+  and the calendar's new options are not bound.
+- **Docs:** the [charts guide](docs/guide/ext/charts.md) gains sections on
+  gauges, taller sparklines, grouped bars, area charts, the map and
+  palettes, with six new screenshots. The Python charts page gains two
+  sections and two pictures. The intuiTUIve guide covers the new calendar
+  options, and the ratatui matrix marks these rows as built.
+
+### Widgets, inputs and the app shell, after ratatui (intuituive 0.0.4)
+
+0.0.19 gap batch B (see [intuiTUIve against ratatui](docs/design/intuituive-vs-ratatui.md)).
+
+- **List options.** `list` moves to its own widget, with builders on the
+  node: `.symbol(markup)`, `.repeat_symbol()` and
+  `.highlight_spacing(HighlightSpacing::..)` for a highlight symbol;
+  `.direction(ListDirection::BottomToTop)`; `.scroll_padding(n)`;
+  `.multiline()` for items of several lines; `.row_style(|i| ..)` for whole
+  rows; and `.offset(signal)` for the first item in view. They work on a
+  reorderable list too.
+- **An empty selection.** `list_optional(items, Signal<Option<usize>>)` and
+  `table_optional(columns, rows, selected, options)`: `None` shows no
+  highlight, and ↓ selects the first item.
+- **Table options.** `TableOptions` gains `.footer(cells)`,
+  `.header_gap(n)`, `.row_gap(n)`, `.column_spacing(n)`, `.symbol(..)`
+  with `.highlight_spacing(..)`, `.row_style(..)`, `.multiline()`,
+  `.row_height(n)` (for virtual tables), `.column_highlight()` and
+  `.scroll_padding(n)`. `Column` gains `.align(Align::End)`, `.min(n)` and
+  `.max(n)`. With rows of several lines, ↓ still moves a row and PgDn a
+  screenful of rows. The theme names `table.footer` and `selected.column`
+  are new.
+- **Scrollbars everywhere.** `Scrollbar::new()` with `.side(Side::..)`,
+  `.show(Show::..)`, `.symbols(ScrollbarSymbols::..)`, `.thumb(..)`,
+  `.track(..)` and `.ends(..)`. `.scrollbar(bar)` puts one on a scroll, a
+  list, a table or virtual list, a tree, a text area or a log, in a column
+  it keeps while the bar shows. `scrollbar(position, len, view, bar)` is a
+  bar on its own. A press on the track pages, an arrow steps, and dragging
+  the thumb scrolls. In text mode the bar is blank. The default bar of a
+  scroll is unchanged.
+- **Tab strip options.** `.divider(markup)`, `.tab_padding(left, right)`
+  and `.titles_align(Align)` on `tabs`. Clicks and `measure` follow them.
+- **Inputs bound to signals.** `input(Signal<String>)` is a text area in a
+  single-line mode: Enter goes to `.on_submit(..)` (or bubbles), Tab moves
+  on, pasted lines join, and a long line scrolls to the caret. `.mask('•')`
+  and `.max_length(n)` work on it. `number_input(Signal<i64>, range)` with
+  `.step(n)` steps with the arrows, the page keys and the wheel, and takes
+  typed digits, clamped. Both are text boxes for assistive technology.
+- **Modal shadows and backdrops.** `cx.modal_with(width, height,
+  ModalOptions::new().shadow(style).backdrop(style), build)` and
+  `cx.popup_with(..)`. The shadow and the backdrop restyle the screen below
+  wherever it draws again.
+- **Printing above an inline app.** `cx.print_above(markup)` and
+  `Proxy::print_above` put lines into the scrollback above the region, which
+  moves down under them, as ratatui's `insert_before` does. Full-screen,
+  they print once the app ends; `Driver::take_printed()` gives them to a
+  loop of your own.
+- **Exit values and errors.** `cx.quit_with(value)` with `App::run_for::<T>()`,
+  `App::run_on_for` and `Driver::take_exit`; `cx.fail(error)`, which
+  `App::run` and `run_on` then return, with `Driver::take_error`.
+- **A mouse switch and a frame count.** `App::mouse(Some(true))` captures
+  the mouse inline, and `Some(false)` leaves it to the terminal
+  full-screen. `App::session_options(backend)` is what `run` asks for.
+  `FrameStats::frames` counts the frames drawn.
+- **The churn benchmark.** `tests/versus_ratatui.rs` reports two more
+  scenes, not gated yet: every cell changing each frame (an RGB swatch, as
+  `colors-rgb`) and a chart redrawn each tick. ratatui is ahead on both: at
+  80x24 a churn frame costs 3,042 µs against its 326, and a chart 463 µs
+  against 81, with fewer bytes. The dashboard's three gated scenes still
+  pass.
+- **Changed:** `Column` and `TableOptions` gain public fields, and
+  `FrameStats` gains `frames`, so code that builds them field by field
+  needs the new ones.
+- **Python:** the same options and functions in `rs_rich.tui`.
+- **Docs:** the guide's inputs, table, list, tab strip and scrollbar
+  options, modal shadows, exit values and printing above an inline app;
+  the porting guide's table.
+
+### `rich log`: filters, follow mode and groups (ext 0.0.16, interact 0.0.7, cli 0.0.19)
+
+0.0.19 workstream 13 (#724).
+
+- **Records from any log.** `rich_ext::log_stream::Record` holds a log
+  record's fields under the names the input gave them, and the lines that
+  followed it. `Record::to_event` reads it as a `StructuredEvent`.
+  `Parsers` reads logfmt, lines that start with a level, lines that start
+  with an ISO 8601 time, and nginx and Apache access logs, and JSON with
+  the `data` feature. A `LineParser` of your own plugs in. `Assembler`
+  joins a line no parser reads (a stack trace) to the record before it,
+  and keeps any other as a text record: nothing is dropped.
+- **Filters.** `LevelFilter` keeps a level (`error`) or a level and those
+  above it (`warn+`). `Predicate` is a small grammar: `=`, `!=`, `>`, `>=`,
+  `<`, `<=`, `~` (a regular expression), `!~`, `FIELD` and `!FIELD`, with
+  dots into nested fields. Levels compare by severity, numbers as numbers
+  and times as instants. `Filter` takes both and ANDs the predicates.
+- **Repeats, groups and a summary.** `Collapser` folds a run of identical
+  records (their times aside) into the first and a count. `GroupBy` finds
+  a trace, span or correlation id (`trace_id`, `request_id`, an event's
+  `correlation_id`, ...); `Groups`, `GroupHeader` and `Summary` gather and
+  draw them, the summary with counts by level and the groups with errors.
+  `Clock` shows a time as written, since the first record, or not at all,
+  and `parse_timestamp` reads RFC 3339, the access log's times and epoch
+  numbers.
+- **`rich log` takes them:** `--level`, `--where` (repeatable),
+  `-f`/`--follow` (a truncated or replaced file is read again from its
+  start), `--collapse` (on by default when following, the count growing in
+  place on a terminal), `--group trace|span|correlation` with a summary
+  (`--summary`, `--no-summary`), `--fields`, `--parser`, `--time
+  absolute|relative|none`, `--output jsonl`, and `--redact` and
+  `--redact-pattern` as `rich capture` has them. A line that is not JSON
+  used to fail the command; it is now parsed, or shown as text.
+- **The same output, faster.** With none of the options, JSON records print
+  as before, byte for byte. Plain text that is one cell a character wraps
+  without core's per-character measuring, which a test holds to core's
+  output: 100,000 records take 0.57 s in a release build, down from 1.5 s.
+- **A live view:** `rich_interact::LogView` shows records as they arrive,
+  following the end. `/` types a filter (words, or `--where` tests), Space
+  pauses, Enter shows a record's fields and lines. `rich log -i` runs it on
+  a terminal; without one the records stream as usual.
+- **Smaller things:** `Severity` is ordered (`Warn < Error`) and hashable.
+  `Redactor::redact_field` masks a field's value as `key=value` would be
+  masked. The `log.*` theme keys are in `STYLE_TABLES`.
+- **Python:** `rs_rich.ext.log_stream` has the records, parsers, filters,
+  folding, groups and summary (`LogRecord`, `LogAssembler`, `LogFilter`,
+  `LogSummary`, ..., and the Rust names too). `rs_rich.interact.LogView` is
+  the live view.
+- **Docs:** [`rich log`](docs/cli.md#logs-rich-log) with every option, the
+  CLI reference regenerated, the porting page, the Python pages, and
+  `docs/tapes/log.tape` (not yet recorded).
+
+### `rich deps`: sizes, baselines and licence policy (ext 0.0.16, cli 0.0.19)
+
+0.0.19 workstream 16 (#706, #704).
+
+- **`rich_ext::deps::sizes`**: what each crate adds to a build. `Sizes`
+  reads a target directory's profile, matched to `cargo metadata`'s
+  packages: rlibs (else the rmeta of a check build), proc-macros and dylibs,
+  static libraries and binaries. A crate at two versions is told apart by
+  its dep-info file. Of each package's artifacts the newest is taken, and
+  stale ones no package claims are counted. Source sizes are optional.
+  `Sizes::parse` reads `cargo bloat --crates --message-format json` too.
+  `SizeReport` draws bars, a table and the total.
+- **`rich_ext::deps::compare`**: two timings or size reports compared unit
+  by unit. A unit regresses when it grows past a percentage and an
+  absolute floor: 10% and 0.5s for build times, 10% and 64 KiB for sizes.
+  New and removed units are listed, a new one past the floor regresses,
+  and the totals are compared too. `Comparison::regressions()` feeds a
+  gate. `Timings::to_json` and `Sizes::to_json` save a report, and the
+  readers take it back.
+- **`rich_ext::deps::policy`**: an allow and deny list, from rich's own TOML
+  or cargo-deny's `deny.toml` (its `[licenses]` section, told apart by
+  shape). Each SPDX expression is evaluated: `OR` needs one allowed
+  choice, `AND` every part, and `WITH` exceptions are kept. Deny wins over
+  allow, and a crate's exception wins over both. `PolicyReport` lists each
+  violation with its reason.
+- **Conflicts**, a heuristic and not legal advice: each dependency's
+  licence set against the root crate's on a small table. GPL code in a
+  permissive or proprietary crate is a conflict; weak copyleft there is
+  worth a check; permissive code is fine anywhere. Within the GNU family,
+  `GPL-2.0-only` conflicts with Apache-2.0 and the version 3 licences.
+- **`rich_ext::deps::sbom`**: the packages and licences of an SPDX (2.2,
+  2.3) or CycloneDX (1.4 to 1.6) JSON document, told apart by content, so
+  the licence report and the policy work beyond Cargo.
+- **`rich deps`**: `--sizes [TARGET_DIR|FILE]` with `--build-profile`,
+  `--source-sizes` and `--top N`; `--baseline FILE` with `--threshold` (a
+  percentage, a time or a size) and `--save FILE`, for `--timings` and
+  `--sizes`; `--policy FILE`; and `--sbom FILE` with `--licenses` or
+  `--policy`. A regression or a violation exits 5 once the report is shown,
+  like `--audit`. Without the new options `rich deps` prints what it always
+  did.
+- **Robust.** Truncated JSON, odd TOML, unknown SPDX identifiers and
+  documents of the wrong kind are a clear error (exit 4) or a warning row.
+  Nothing panics, and directory walks are bounded.
+- **Docs:** sections in [the CLI guide](docs/cli.md#dependency-sizes-baselines-and-licence-policy-0019)
+  and [the ext guide](docs/guide/ext/sources.md#artifact-sizes) with three
+  new pictures, the regenerated CLI reference, fixtures in
+  `crates/rich-ext/tests/fixtures/deps`, and `docs/tapes/deps-policy.tape`
+  (not yet recorded). The Python package binds no `deps` API, so it has
+  nothing new.
+
+### ratatui's demos, rebuilt on intuiTUIve (intuituive 0.0.4)
+
+0.0.19 demo batch D1 (see [intuiTUIve against ratatui](docs/design/intuituive-vs-ratatui.md#3-the-demos)).
+
+- **`demo`, ratatui's classic demo.** `examples/demo.rs` rebuilds its three
+  tabs: gauges, a sparkline, lists, bars and a sine chart fed by a timer; a
+  server table beside a world map; the named colours. A tick redraws only
+  the parts that move, and a test checks it. The mouse picks tabs, tasks
+  and servers, `?` and Ctrl+P list the keys, and `--frozen` stops the
+  clock.
+- **`demo2`, ratatui's showcase.** `examples/demo2.rs` rebuilds its About,
+  Recipe, Email, Traceroute and Weather tabs over an Okhsv swatch, with a
+  recipe, emails, hosts and weather of our own. Its colours are in
+  `examples/demo2.tcss`, reloaded live. It fits any size, and destroy is an
+  effect over the whole app, on the virtual clock in the tests.
+- **A list takes the mouse.** A press on an item selects it, and the wheel
+  moves the selection three items, as on a table. The press still reaches
+  the node's own handler.
+- **An idle effect costs nothing.** An `effect` that wrote no cells the
+  last time it ran no longer draws everything inside it again when a child
+  changes: the child draws alone.
+- **Docs:** [ratatui's examples, rebuilt](docs/guide/intuituive/ratatui-examples.md),
+  a new guide page; ratatui in the porting guide's credits;
+  `docs/tapes/demo.tape` and `docs/tapes/demo2.tape` (not yet recorded).
+- **`widgets`, a widget gallery** (demo batch D2). `examples/widgets.rs`
+  rebuilds ratatui's widget examples, a tab each: blocks, text with a
+  masked secret and a link, lists (one bottom to top), a table and
+  ratatui's table app, tabs, scrollbars, a calendar, a pop-up over four
+  shadows, collapsed borders and buttons drawn by hand. The mouse picks
+  tabs, items, rows, panes and buttons.
+- **`charts`, a chart gallery.** `examples/charts.rs` rebuilds ratatui's
+  gauge, sparkline, bar, grouped bar, chart and canvas examples and its
+  `gauge`, `weather` and `chart` apps on rs-rich-ext's charts. A tick
+  draws only what moves, and `--frozen` stops the clock.
+- **`layout`, a layout explorer.** `examples/layout.rs` rebuilds
+  `constraint-explorer`, `constraints` and `flex`: a row of blocks you
+  edit, drawn in every `Justify` mode with its spacers; each kind of size
+  in real nodes; and `align_items` and wrapping, which ratatui lacks.
+- **Docs:** the galleries' section of the guide page, README rows, and
+  `docs/tapes/widgets.tape`, `charts.tape` and `layout.tape` (not yet
+  recorded).
+- **The apps (batch D3).** Seven of ratatui's smaller apps rebuilt, each
+  with its tests and snapshots, and a section of
+  [ratatui's examples, rebuilt](docs/guide/intuituive/ratatui-examples.md#the-apps):
+    - `colors`: the named, indexed and RGB colours (an Okhsv swatch at 60
+      fps, with its frames a second), the modifiers, and Tailwind's and
+      Material's palettes;
+    - `canvas`: a world map you move about on, pong at 60 fps, a pad to
+      draw on with the mouse and growing boxes, in every marker;
+    - `form`: a form whose fields are in error while they are wrong and
+      which comes back from `run_for`, and a chat input with modes;
+    - `calendar`: a year of `month` nodes in six looks, a move drawing
+      only the months it touches;
+    - `downloads`: an inline region whose workers report from threads
+      through a `Proxy` and print each finished file above it;
+    - `pulls`: a table loaded by a `resource`, its state in the panel's
+      title;
+    - `panic`: the terminal given back before a panic's message (checked
+      in a PTY), and an error returned from `run`.
+- **Docs:** `docs/tapes/apps.tape`, four of the apps (not yet recorded).
+
+### Charts that read aloud, distributions and small multiples; wide tables by column (ext 0.0.16)
+
+0.0.19 workstream 14 (#726, #702).
+
+- **Charts read aloud.** Every chart implements `a11y::AccessibleText`:
+  sparklines, bars and their groups, histograms, line, scatter and area
+  charts, gauges, heatmaps, status matrices, KPI cards, timelines and the
+  canvas. Each says what it is, its axes' ranges and its key values, in a
+  few lines of plain words: `Sparkline, 24 values: min 12, max 52, last
+  14, trend up`, `Gauge cpu: 72%, 72 percent of 0% to 100%, band high`. A
+  trend is the least-squares line through the values: up or down when it
+  moves by a tenth of their range, flat otherwise. The text is the same at
+  any width, on any console.
+- **In an intuiTUIve app** (intuituive 0.0.4), `described(move || ..)`
+  draws a chart as `renderable(..)` does, and names it by that text. The
+  accessibility tree, linear mode and a screen reader read the
+  description, and read it again when the data changes.
+- **Distributions.** `Distribution` sums values up on one line: a
+  box-and-whisker strip, then the count, `min`, `p25`, `p50`, `p75`,
+  `p95`, `max` and `mean`. NaN and infinite values are left out and
+  counted. Quantiles are numpy's default, linear interpolation;
+  `Summary::of` and `quantile` give them without drawing.
+  `DistributionSet` stacks several on one scale, their numbers in columns.
+- **Small multiples.** `SmallMultiples` lays charts out in a grid, each
+  under its title, fitted to the width: one column at 40 cells, three at
+  80, four at 120, or `columns(n)`. Sparklines, bar charts, line charts and
+  `Chart`s (a `Facet` each) share one value scale. A note under the grid
+  says the scale and holds the one legend. The theme gains `chart.title`.
+- **Wide tables by column.** `VirtualTable` gets a window of columns as
+  well as rows: `column_offset`, `visible_columns` or `fit_columns`, and
+  `frozen_columns` kept on the left. Only the columns shown are fetched,
+  sampled and laid out, through the new `VirtualRows::rows_columns`. Its
+  default picks cells from `rows`, so existing sources keep working. The
+  position line adds `columns 42–51 of 2,000`, and `scroll_columns_by`
+  moves the window across. `FnCells` makes each cell on demand. A
+  120-column window of 2,000 columns by 100,000 rows renders in about
+  20 ms in release, its width sample included (an ignored test times it).
+- **Explicit bar sizes are kept.** A vertical `BarChart` with an explicit
+  `thickness`, `bar_gap` or `group_gap` keeps them when the bars do not
+  all fit, as ratatui does. It draws as many whole bars as fit, from the
+  first, and leaves the rest off: 24 bars 3 cells thick and 2 apart show
+  the first 8 in 40 cells. Before, they were squeezed to one cell with no
+  gap. Charts that set neither squeeze as before.
+- **Python:** `Distribution`, `DistributionSet`, `SmallMultiples`,
+  `quantile`, `summary` and `describe` in `rs_rich.chart`.
+  `rs_rich.ext.a11y.accessible_text` reads charts too. `data.VirtualTable`
+  takes `column_offset`, `visible_columns`, `fit_columns` and
+  `frozen_columns`, with `scroll_columns_by`, `shown_columns` and
+  `column_position`.
+- **Docs:** the [charts guide](docs/guide/ext/charts.md) gains sections on
+  distributions, small multiples and accessible text, with three new
+  screenshots. The [tables guide](docs/guide/ext/tables.md) covers the
+  column window. The Python charts page gains three sections and two
+  pictures.
+
+### Nested JSON Lines profiles and style rules everywhere (data 0.0.3, ext 0.0.16, cli 0.0.19)
+
+0.0.19 workstream 15 (#705, #701).
+
+- **Nested paths:** `rich profile` profiles JSON Lines path by path. Each key
+  of a nested object is a path (`user.plan`), an array's items are
+  `tags[]`, and a key of the objects in an array is `items[].sku`. A key
+  holding `.`, `[`, `]`, a quote or a control character is written as a
+  JSON string in brackets: `["http.status"]`. `--depth N` (4) bounds the
+  steps and `--max-paths N` (200) the paths; the paths past the cap are
+  named in a note and a last table row.
+- **Presence and types:** each path counts the records that lack it apart
+  from an explicit `null`, and the JSON types its values had. The table
+  shows the mix (`str 89% · null 11%`) and the absent records, and marks a
+  path of more than one type with `!`.
+- **Malformed lines** are counted and skipped, with their line numbers in a
+  note, rather than ending the profile.
+- **`--report json`** adds `paths`, `malformed`, `malformed_lines`, and per
+  path `present`, `absent`, `values`, `types` and `mixed`. Every key of a
+  flat profile is kept.
+- **Migration:** JSON Lines are now profiled path by path by default.
+  `--flat` gives the 0.0.16 output, rows of the top-level keys, and still
+  stops at a line that is not JSON. CSV and TSV are unchanged. `--depth` is
+  shared with `rich deps`.
+- **`rs-rich-data`:** `JsonProfiler`, `Profile::from_json_lines`,
+  `TypeCounts`, `PathSummary` and `path_key`; `ProfileOptions` gains `depth`
+  and `max_paths`, and `ColumnProfile` gains the presence and type fields.
+  Time is linear in the input and memory is bounded by the paths and their
+  samples.
+- **Style rules from the command line:** `--style-rule 'latency>500:bold
+  red'` styles a cell, and `--style-rule 'status=failed:row:on red'` a row.
+  The grammar maps one to one onto `StyleRule`: a symbol (`==`, `!=`, `<`,
+  `<=`, `>`, `>=`, `*=`, `^=`, `$=`) or a comparison word, an optional
+  target, and quotes for a value that holds `:` or must stay text. `--rules
+  FILE` reads `[[rules]]` tables. Rules apply to `--csv` tables, `rich
+  profile`'s table and `rich inspect --table`, and nowhere else.
+- **Rules in config profiles:** `[[defaults.rules]]` and
+  `[[profiles.NAME.rules]]` hold rules. They add up: the defaults', then the
+  profile's, then the command line's.
+- **Clear errors:** a bad rule is a usage error that names it and says what
+  is wrong. A rule for a column the table lacks is a warning.
+- **`rs-rich-ext`:** `StyleRule::parse`, `to_spec` and `Display`,
+  `Comparison::name` and `symbol`, `Target::name`, and `style_rules` on
+  `data::TableView` and `data::Explorer`.
+- **Python:** `rs_rich.ext.table.StyleRule` and `StyleRules` (with `parse`,
+  `when` for a Python predicate, and `from_toml`), a `rules` argument on
+  `TableData` and `TableView`, and `Profile.style_rules`. `Profile.from_path`
+  and `from_text` profile JSON Lines path by path (`flat=True` for rows), and
+  `Profile.from_records` profiles Python records. Python can now use
+  conditional table styles, which 0.0.16 listed as missing.
+- **Docs:** [Style cells by value](docs/cli.md#style-cells-by-value-0019)
+  and [Nested JSON Lines](docs/cli.md#nested-json-lines-0019) in the CLI
+  guide, the [data guide](docs/guide/data/index.md#conditional-styles), the
+  [Python tables page](docs/python/ext/tables.md#conditional-styles), and
+  `docs/tapes/profile-nested.tape` (not yet recorded).
+
+### Micro assets over two rows (micro 0.0.5)
+
+0.0.19 workstream 17 (#711).
+
+- **Two-row sizes.** A micro asset may now be any size up to 4×2 cells: 1
+  to 4 columns and 1 or 2 rows, such as a 2×2 icon or a 3×2 animation.
+  Anything larger is refused with an error that names the limit. The
+  manifest's `size` field takes the new values (`"2x2"`,
+  `{"cols": 3, "rows": 2}`); nothing else in the format changes, and old
+  packages load as before. A package with no `size` is 2×1, whatever its
+  image's shape: the size is never guessed.
+- **Rows reserved in any layout.** `MicroRows` (and `reserve_rows` for
+  rendered segments) adds a row below each line that holds a two-row
+  asset. The row is blank but for the asset's second row; the text beside
+  the asset stays on the first row, and the next line moves down, so
+  nothing is drawn over it. A table row or a panel grows to hold it, and
+  `MicroAssetRef` reserves its own rows. The output depends only on the
+  input, at every width.
+- **Drawn over both rows.** Kitty prints two rows of Unicode placeholders
+  for one image. iTerm2 and Sixel draw one image of the whole box from the
+  second row, moving the cursor up a row and back; Sixel's is twice the
+  cell height in pixels. Half-blocks draw two pixel rows a cell row. The
+  fallback is the emoji or text on the first row with a blank row below.
+  Animations play as one-row ones do. Where the second row was not
+  reserved (a bare `Text`, Markdown, a title), only the first row's
+  fallback shows.
+- **The tag carries the row.** The second row's cells are tagged
+  `[name, cols, rows, id, 1]`; `MicroMeta` has a `row` field and
+  `with_row`, and `fallback_row` gives any row's fallback. A placeholder is
+  never drawn at a size other than its asset's.
+- **Built-in library:** `fun/trophy` (2×2) and `fun/campfire` (3×2,
+  animated), drawn for this project.
+- **`rich micro`:** `create --size` takes the new sizes and refuses
+  `2x3`. `list`, `show` and `preview` give a two-row asset its row, and so
+  does `rich -p --emoji` text.
+- **Python:** `MicroAsset` takes the new sizes and has `rows`, and
+  `MicroMarkup` reserves the row below a two-row asset.
+- **Docs:** [Two rows](docs/guide/micro/index.md#two-rows) in the micro
+  assets guide, with a captured example; the authoring, terminals, CLI and
+  library pages; the CLI reference regenerated; and
+  `docs/tapes/micro-rows.tape` (not yet recorded).
+
+### Banners, GIF playback controls and shell integration (cli 0.0.19)
+
+0.0.19 workstream 21 (#708, #715).
+
+- **`rich banner TEXT`** draws a FIGlet banner with rs-rich-art's FIGlet
+  renderer: `--font` takes the bundled `standard`, a `.flf` file or the
+  name of one in `$FIGLET_FONTDIR` or figlet's font directories
+  (`--list-fonts`); `--style`; `--gradient` with two or more colours or a
+  preset (`rainbow`, `sunset`, `ocean`, `forest`, `fire`) and `--direction
+  horizontal|vertical|diagonal`; `--align left|center|right`; `-w/--width`;
+  `--fit wrap|plain|none` for a banner wider than the width; and
+  `--force-terminal`. Text comes from stdin when none is given. Behind the
+  default `art` feature.
+- **GIF playback controls:** `--speed X`, `--fps N` (the 30 fps cap, which
+  was fixed), `--max-frames N` and `--max-duration SECS`, next to `--loop`.
+  Each needs `--gif` and a number above 0. Without `--speed` or
+  `--max-frames`, playback is rs-rich-art's `Stage` as before; redirected
+  output is still one frame.
+- **`rich shell init bash|zsh|fish|powershell`** prints a script for a
+  shell's startup file: the completions, OSC 133 prompt and command marks,
+  OSC 7 for the working directory, and a status line after each command
+  (`--no-completions`, `--no-marks`, `--no-status`, `--min-duration`, 2 s
+  by default). It keeps the shell's own prompt hooks and `$?`.
+- **`rich shell status --exit CODE --duration D --command TEXT`** decorates
+  a finished command in one line (`✖ error $ cargo test  exit 101  4.2s`)
+  with rs-rich-ext's `CommandView`, following `RICH_A11Y` or `--symbols`;
+  quiet for a success under `--min-duration`.
+- **`rich shell link [PATH[:LINE[:COL]]]...`** prints paths, the working
+  directory by default, as OSC 8 file links with rs-rich-ext's
+  `Hyperlinker`, plain off a terminal unless `--links always`; `--tilde`,
+  `--editor TEMPLATE`, and `--prompt bash|zsh` to mark the escapes as
+  zero-width in a prompt.
+- **Docs:** [Draw a banner](docs/cli.md#draw-a-banner-0019),
+  [speed, frame rate and limits](docs/cli.md#speed-frame-rate-and-limits-0019)
+  and [shell integration](docs/cli.md#shell-integration-0019) in the CLI
+  guide; the CLI reference regenerated; `docs/PORTING.md`; and
+  `docs/tapes/banner.tape` (not yet recorded).
+
+### Approval queues and jumping to anything (interact 0.0.7, cli 0.0.19)
+
+0.0.19 workstream 20 (#471, #484).
+
+- **`rich_interact::components::ApprovalQueue`**: review pending items one
+  by one or in bulk. `a`, `r` and `s` approve, reject and skip the focused
+  item and move on to the next pending one; `A`, `R` and `S` ask for a
+  reason first; Space and Ctrl+A mark items for one decision on all of
+  them; `u` takes a decision back; `p` hides the detail pane (label,
+  description, details, decision, then the item's preview); Enter submits
+  an `ApprovalReport` of every item's `Decision` (verdict and reason),
+  pending ones included. `require_reason(Verdict::Rejected)`,
+  `auto_submit`, `advance` and `decided` (resume a review) are options.
+  With the mouse on, rows, the mark cell and the buttons under the list
+  click. Decisions are drawn in the theme keys `approve.approved`,
+  `approve.rejected`, `approve.skipped` and `approve.pending`. Without a
+  terminal it asks item by item (`a`, `r` or `s`, a reason after a colon,
+  `q` stops). The keys are in context `approve`.
+- **`rich_interact::components::Jump`** over a **`JumpIndex`** of
+  **`JumpSource`s**: one fuzzy box over several sources, the results
+  grouped by source (each showing its best few, `limit`, and how many more
+  matched), the best match focused and previewed. A source's prefix typed
+  first searches only it, Tab and Shift+Tab narrow and widen, Alt+↑/↓
+  jump between groups, and a click on a group's title narrows to it. Enter
+  returns a `Jumped` (source id, index, label, value). `JumpIndex::search`
+  works without the component. Group titles use the theme keys
+  `jump.group` and `jump.more`. Without a terminal it answers with the best
+  match for a line read, or for its starting query. The keys are in
+  context `jump`.
+- **`rich approve`** reviews ITEMs, or lines or JSON Lines on stdin
+  (`--format`, `--label`), and prints one JSON line per item with its
+  decision and reason, or with `--print approved|rejected` those items as
+  they were read. `--require-reason`, `--auto-submit`, `--height` and
+  `--mouse`. Without a terminal, ITEMs are asked about line by line, and
+  items from stdin are printed as pending.
+- **`rich jump`** searches the files, Markdown headings (`#`) and code
+  symbols (`@`) under DIRs (`--files`, `--headings`, `--symbols`), a
+  commands file (`--commands`, `>`), a recent-places file (`--recent`,
+  which the pick is added to) or entries on stdin (lines or JSON), and
+  prints the place: `path`, `path:line` or the command (`--print json` for
+  more). `--value`, `--limit`, `--height` and `--mouse`; without a
+  terminal it prints the best match for `--value`. Both commands use the
+  exit codes of the other interactive commands.
+- **Python:** `rs_rich.interact.ApprovalQueue`, `Jump` and `JumpSource`;
+  a review answers with a list of dicts and a jump with a dict.
+- **Docs:** [Approval queues and jumping to anything](docs/guide/interact/review-and-jump.md),
+  [Review and jump](docs/cli.md#review-and-jump) in the CLI guide, the
+  Python guide, the CLI reference regenerated, and `docs/tapes/approve.tape`
+  and `docs/tapes/jump.tape` (not yet recorded). An intuiTUIve wrapper is
+  not part of this workstream.
+
+### Sharing output: PNG export and a redaction preview (record 0.0.7, ext 0.0.16, cli 0.0.19)
+
+0.0.19 workstream 19 (#723, #722).
+
+- **PNG of rendered output, without a tape (#723).** rs-rich-record's
+  screenshot rasteriser now draws any rendered output, not only a screen
+  recorded on a PTY. `rich_record::render::png` has `segments_png` (the
+  segments `Console::record_output` returns), `frame_png` and
+  `frame_canvas` (a rich-ext `Frame`), `image_size` and `PngOptions`
+  (theme, window frame and title, caption, text size, width in cells);
+  `Snapshot::from_frame` resolves the cells as rich's SVG export does
+  (reverse swaps, dim blends 40% towards the background). The glyphs are
+  the embedded DejaVu Sans Mono and Twemoji, so the same output gives the
+  same bytes on every machine. Too large an image is an error, not an
+  allocation that fails.
+- **`--export-png PATH`** beside `--export-html` and `--export-svg`,
+  wherever they apply, `rich capture` included: the console's width, rich's
+  SVG export theme, a window titled like the SVG's, 28-pixel text as the
+  screenshots. Not with `--batch` (a usage error for now). It needs the new
+  `png` feature, on by default, implied by `record`, and on in the Python
+  wheel's command line.
+- **Preview a redaction before anything is written (#722).**
+  `Redactor::preview` (plain text), `preview_ansi` (text with escapes,
+  positions in its visible text; a secret in an escape's body, such as a
+  hyperlink's URL, is a `hidden` finding) and `preview_args` (a command
+  line, as `redact_args` masks it) mask nothing and return a `Preview`:
+  each `Finding` with its line, cell column, byte span, rule, text and
+  replacement, plus `counts()` per rule and a `summary()`
+  (`3 matches on 2 of 40 lines (key-value 2, token 1)`). A `Preview` is a
+  renderable: each line with a match, the matches highlighted, one line per
+  match, and the summary. It shows the secrets unmasked, so it is for the
+  person about to share, not for sharing.
+- **`--redact-preview`** on `rich capture` and `rich log`, with `--redact`
+  or `--redact-pattern`: the preview instead of the output (for capture,
+  the command line and the output; for log, every line read once, so not
+  with `--follow` or `--interactive`). A dry run: no cast, export or log
+  output is written, and stderr names what a run without the flag would
+  write. With `--report json`, one JSON document on stdout. Exit 0; exit 2
+  without a redaction flag.
+- **Python:** `Redactor.preview`, `preview_ansi` and `preview_args`
+  (`title=` optional) return a renderable `RedactPreview` of
+  `RedactFinding`s, with character offsets; stubs updated.
+- **Docs:** [A PNG of the output](docs/cli.md#a-png-of-the-output-0019) and
+  [Preview a redaction before you
+  share](docs/cli.md#preview-a-redaction-before-you-share-0019) in the CLI
+  guide, [Preview what would be
+  masked](docs/guide/ext/badges-and-redaction.md#preview-what-would-be-masked)
+  in the redaction guide, the CLI reference regenerated, and
+  `docs/tapes/share.tape` (not yet recorded).
+
 ### One process per browser session (web 0.0.2)
 
 0.0.19 workstream 3.
@@ -158,15 +1276,20 @@ per browser session](#one-process-per-browser-session-web-002).
   ends that tab alone, and the page is told the session ended.
 - **Ending and limits:** a session's process is killed when its tab closes
   or the server stops, on Unix with its process group; should the server be
-  killed, the process ends its group itself. A program the app runs
-  inherits the variable but serves as it would anywhere. Connections to the
-  session's port are read side by side, each for 2 s at most, so none holds
-  up a session or the server stopping. `Server::session_memory(bytes)` and
+  killed, the process ends its group itself. On Windows the server puts the
+  process in a job object as soon as it starts (through `win32job`, a safe
+  API) and holds its only handle; the job kills the process and everything
+  it started when the session ends, or when the server dies, since the
+  system then closes the handle. A program the app runs inherits the
+  variable but serves as it would anywhere. Connections to the session's
+  port are read side by side, each for 2 s at most, so none holds up a
+  session or the server stopping. `Server::session_memory(bytes)` and
   `session_cpu(time)` cap each process on Unix (through rustix, so the
   crate keeps `unsafe_code = "deny"`): on Linux from the moment it starts
   (`prlimit` from the server, which refuses a process that took more before
   it was set), elsewhere from when it reaches `serve`;
-  macOS has no memory limit, so there only the CPU limit applies.
+  macOS has no memory limit, so there only the CPU limit applies, and on
+  Windows neither is applied.
 - **`Isolation::Threads`** keeps 0.0.18's behaviour, for tests and programs
   that cannot start themselves again; `Server::session_command(program,
   args)` starts the process some other way.
@@ -178,7 +1301,10 @@ per browser session](#one-process-per-browser-session-web-002).
   while tabs crash, hang and run out of memory on purpose; the others, new
   tabs and the server carry on, and a killed server takes its sessions
   with it; `session_probe` checks a killed server's orphans, a program the
-  app runs, strangers on the session's port, and limits on one CPU. **Docs:** [One process per
+  app runs, strangers on the session's port, and limits on one CPU. On
+  Windows, a new CI job checks that a closed tab, a stopped server and a
+  killed server each end the session's process and the program it started.
+  **Docs:** [One process per
   session](docs/guide/intuituive/web.md#one-process-per-session).
 
 ## 0.0.18 cohort

@@ -1,7 +1,8 @@
 # Using the CLI
 
-`rich` renders files that are painful to read in a terminal — Markdown, JSON,
-CSV, source code, notebooks, images — and compares images, text files and
+`rich` renders files that are painful to read in a terminal — Markdown, Org,
+AsciiDoc and man pages, JSON, CSV, source code, notebooks, images — and
+compares images, text files and
 patches. It also explores structured data (`inspect`), shows any file (`view`),
 looks inside bytes, characters and escape sequences (`hex`, `unicode`,
 `ansi explain`), lists the environment (`env`) and captures a command's output
@@ -62,7 +63,8 @@ optionally with `--demo-section`, `--demo-delay`, `--no-color` or
 ## Read a file
 
 Point `rich` at a file and it picks a renderer from the extension: `.md`,
-`.json`, `.csv`, `.tsv` and `.ipynb` get their own; **anything else with an
+`.rst`, `.org`, `.adoc`, `.json`, `.csv`, `.tsv` and `.ipynb` get their own (as
+do man pages, [below](#org-asciidoc-and-man-pages)); **anything else with an
 extension is syntax-highlighted**.
 
 ```bash
@@ -128,6 +130,56 @@ field lists as a table and code in a bordered `Syntax` panel. The port covers
 the common subset of reStructuredText; DIVERGENCES §35 lists what it leaves
 out.
 
+### Org, AsciiDoc and man pages
+
+*New in 0.0.19.* Upstream renders Markdown and reStructuredText only; this
+port also renders Org files, AsciiDoc and man pages from their roff source,
+in the same look as Markdown: the same heading styles, list markers, code
+panels and tables.
+
+```bash
+rich notes.org                    # headlines, TODO keywords, tags, drawers
+rich guide.adoc                   # sections, admonitions, source blocks
+rich ls.1                         # a man page's roff source
+rich --org TODO                   # force a format: --org, --asciidoc, --man
+rich asciidoc README.txt          # or as a subcommand (also adoc, roff)
+rich --format man page.txt        # or by name, as --format takes data formats
+zcat /usr/share/man/man1/ls.1.gz | rich --man -
+```
+
+Org covers the headline tree with `TODO`/`DONE` keywords (and those a
+`#+TODO:` line declares), priorities and tags, emphasis, lists with
+checkboxes, source, example, quote and verse blocks, tables, links, drawers
+and planning lines (shown dim and compact), and `#+TITLE` and the other
+keywords. AsciiDoc covers the document header and attributes (`{name}`
+references), sections, lists (with checklists, description and callout
+lists, and `+` continuations), source blocks with callouts, literal, example,
+sidebar and quote blocks, tables, admonitions, links and image placeholders;
+macros it does not draw are shown as written. Man pages cover the man macros
+(`.TH`, `.SH`, `.TP`, `.IP`, `.RS`, the font macros, `.nf`, `.EX`, `.UR`, …),
+font and special-character escapes, conditionals, tbl tables, and the common
+mdoc macros of BSD pages.
+
+Detection is careful, because these extensions are also used for other
+things. A flag always wins. Otherwise:
+
+| Input | Shown as |
+|---|---|
+| `.org`, `.adoc`/`.asciidoc`, `.man`/`.roff`/`.mdoc` | that document |
+| `.1` to `.9` (also `.3pm`, `.1ssl`, …) | a man page when it holds roff, else as before (`syslog.1` stays a log) |
+| `.asc` | AsciiDoc when the content says so (it is also a PGP signature) |
+| no extension (`TODO`, `LS`) | a document only when the content is unmistakably Org, AsciiDoc or roff |
+| any other extension | never a document: `gen.c` stays C even if it quotes `.TH` |
+| piped input | plain text, as upstream; `--format auto` detects a likely document |
+
+To see such a file's source instead, ask for it: `rich --syntax notes.org`
+(or any source option, such as `--line-numbers`). `--lexer LANG` names the
+language of code blocks that name none, such as a man page's examples. Links
+show their target after the text unless `-y/--hyperlinks` asks for terminal
+hyperlinks, as for Markdown. Content the renderer does not show (an
+`include::` it does not follow, an equation, a block that never closes) is
+named in a warning on stderr; `--report json` keeps stderr to its report.
+
 Read from standard input with `-` (including `-p -` for markup):
 
 ```bash
@@ -182,7 +234,7 @@ watched file keeps the full-viewport clear-and-repaint of earlier releases.
 |---|---|---|
 | `--watch-debounce SEC` | `0.1` | Quiet period that collapses a burst of events (an editor's write, rename and chmod) into one re-render. A file that keeps changing still refreshes at least every 10 debounce windows. `0` renders on every event. |
 | `--watch-poll` | off | Skip file events and poll local files every `--watch-interval`. Use it on network filesystems (NFS, SMB, some container mounts) where events are not delivered. |
-| `--watch-interval SEC` | `1` | Polling interval for `--watch-poll`, for the automatic polling fallback, and for URLs. |
+| `--watch-interval SEC` | `1` | Polling interval for `--watch-poll`, for the automatic polling fallback, and for URLs; at most 86400. |
 | `--watch-exit-on-error` | off | End the watch when a render fails, restoring the terminal, printing the error and exiting with that render's non-zero exit code. |
 
 If file events cannot be set up (for example the watch limit is exhausted or a
@@ -248,8 +300,9 @@ titles; and SVG document titles. It does not strip styling generated by `rich`
 itself, and the upstream modes' defaults remain unchanged when the option is
 absent.
 
-`rich view`, `rich schema` and the text `rich diff` (`--diff` on anything but
-two images) have no upstream behaviour to keep, so, like `less`, they sanitize
+`rich view`, `rich schema`, `rich log` and the text `rich diff` (`--diff` on
+anything but two images) have no upstream behaviour to keep, so, like `less`,
+they sanitize
 **by default**: a
 file that sets the window title, writes the clipboard (OSC 52) or hides a
 hyperlink shows those sequences as inert text instead. Pass `--no-sanitize` to
@@ -314,6 +367,49 @@ the rows shown. Inference is opt-in: without `--infer` the table is exactly
 rich-cli 1.8.1's, and with any other mode `--infer` is a usage error. For the
 evidence behind each type, use `rich profile`.
 
+### Style cells by value (0.0.19)
+
+`--style-rule` styles the cells, rows or columns of a data table by what they
+hold. It is repeatable, and each rule is `COLUMN OP VALUE:STYLE`, or
+`COLUMN OP VALUE:TARGET:STYLE` to style more than the cell:
+
+```bash
+rich --csv services.csv --style-rule 'latency>500:bold red'
+rich services.csv --style-rule 'status=failed:row:on red' --style-rule 'note empty:dim'
+rich services.csv --rules rules.toml
+```
+
+| Part | Written as |
+|---|---|
+| `COLUMN` | a header (`p99 ms`), a header in double quotes when it holds a comparison, a `:` or a comparison word (`"a<b"`), or `#N` for the 0-based column `N` |
+| `OP` | `==` or `=`, `!=`, `<`, `<=`, `>`, `>=`, `*=` (contains), `^=` (starts with), `$=` (ends with), or a word after a space: `eq`, `ne`, `lt`, `le`, `gt`, `ge`, `contains`, `starts_with`, `ends_with`, `empty`, `not_empty` |
+| `VALUE` | the text up to the next `:`, trimmed. A number compares as a number (a cell that is text parsing as a number counts; one that does not never matches an ordering); anything else compares as text. In double quotes it is always text and may hold a `:` (`when="12:30"`, `code="200"`; `\"` and `\\` escape). `empty` and `not_empty` take none |
+| `TARGET` | `cell` (the default), `row`, or `column` (every cell of the column, when any cell matches) |
+| `STYLE` | the rest: any style, which may itself hold a `:` (`link https://…`) |
+
+Where several rules match, their styles combine in order, the later one
+winning. Rules restyle; they never change the text, and without them the table
+is exactly rich-cli 1.8.1's. `--rules FILE` reads the same rules from TOML
+rule tables, after the rules before it on the command line:
+
+```toml
+[[rules]]
+column = "status"     # a header, or a 0-based index
+op = "eq"             # or ==, !=, <, <=, >, >=, contains, starts_with, ends_with, empty, not_empty
+value = "failed"
+style = "on red"
+target = "row"        # cell (default), row or column
+```
+
+Rules apply wherever the CLI draws a data table from a file: `--csv` (and
+`rich FILE.csv` or `FILE.tsv`), `rich profile`'s table of columns, and
+`rich inspect --table`'s records. Elsewhere they have no effect, so a
+[config profile](#config-profiles) can carry rules without stopping other
+commands. A rule that does not parse is a usage error (exit 2) that names it
+and says what is wrong (`rich: --style-rule: rule "latency>:red": no value
+after ...`), and a rule naming a column the table lacks is drawn without, with
+a warning on stderr.
+
 ## Profile a data file (0.0.16)
 
 `rich profile` says what each column of a CSV, TSV or JSON Lines file holds:
@@ -363,20 +459,109 @@ missing values (% null; rows top to bottom, 2 rows each)
 The format comes from the extension (`.csv`, `.tsv`, `.jsonl`, `.ndjson`),
 else from the first character (`{` or `[` is JSON Lines); CSV is sniffed as
 `--csv` sniffs it, and the first row is a header unless every cell in it is
-a number. Empty cells, `null`, `NULL`, `NA` and `N/A` count as null. A file
-or stdin is streamed, not read into memory: past `--sample N` rows (10,000
-by default) the types, statistics and distributions describe a uniform
-sample, the heading prints the sample size (`sampled 10,000 of 3,000,000
-rows`), and the null counts and the map still count every row. A row with
-more cells than the header is noted rather than refused.
+a number. Empty cells, `null`, `NULL`, `NA` and `N/A` count as null (JSON
+Lines, profiled path by path as [below](#nested-json-lines-0019), have JSON's
+own `null`). A file or stdin is streamed, not read into memory: past `--sample
+N` rows (10,000 by default) the types, statistics and distributions describe a
+uniform sample, the heading prints the sample size (`sampled 10,000 of
+3,000,000 rows`, or for JSON Lines `sampled to 10,000 values a path`), and the
+null counts and the map still count every row. A row with more cells than the
+header is noted rather than refused.
 
 `--columns a,b` profiles only those columns, in that order; `--top N` sets
 how many common values are shown (5). `--report json` writes the profile
 itself to stdout (`rows`, `sample`, `sampled`, and per column `type`,
 `nulls`, `null_rate`, `distinct`, the statistics and the `distribution`),
 as `doctor --report json` writes its diagnostics; a failure is the usual
-error envelope on stderr. A column `--columns` names that is not there, or a
-line that is not JSON, is a data error (exit 4).
+error envelope on stderr. A column `--columns` names that is not there is a
+data error (exit 4).
+
+`--style-rule` and `--rules` style the table of columns
+([Style cells by value](#style-cells-by-value-0019)). Rules name its headings
+and compare the profile's own values, so `nulls`, `absent` and `distinct` are
+counts: `rich profile orders.csv --style-rule 'nulls>0:row:yellow'`.
+
+### Nested JSON Lines (0.0.19)
+
+JSON Lines are profiled **path by path**: each key of a nested object is its
+own path (`user.plan`), the items of an array are `tags[]`, and a key of the
+objects in an array is `items[].sku`. A key that holds `.`, `[`, `]`, `"`,
+`\`, a control character or surrounding spaces, or is empty, is written as a
+JSON string in brackets, as jq and JSONPath write it: `["http.status"]`,
+`meta["k8s.io/name"]`. A record that is not an object is the path `value`.
+
+```text
+$ rich profile requests.jsonl --columns 'user.plan,["http.status"],items[].qty' --width 72
+requests.jsonl: 12 records, 3 paths
+! marks 2 paths holding more than one JSON type besides null:
+["http.status"], items[].qty
+1 line is not JSON and was skipped: line 13 (expected value)
+
+┏━━━━━━━━━━━━━━━━━┳━━━━━━━━━┳━━━━━━━━━┳━━━━━━━━━┳━━━━━━┳━━━━━━┳━━━━━━━━┓
+┃ path            ┃ types   ┃  absent ┃ distin… ┃  min ┃  max ┃   mean ┃
+┡━━━━━━━━━━━━━━━━━╇━━━━━━━━━╇━━━━━━━━━╇━━━━━━━━━╇━━━━━━╇━━━━━━╇━━━━━━━━┩
+│ user.plan       │ str 89% │ 3 (25%) │       3 │ free │ team │        │
+│                 │ · null  │         │         │      │      │        │
+│                 │ 11%     │         │         │      │      │        │
+│ ["http.status"] │ ! num   │  1 (8%) │       6 │  200 │  503 │ 303.1… │
+│                 │ 82% ·   │         │         │      │      │        │
+│                 │ str 18% │         │         │      │      │        │
+│ items[].qty     │ ! num   │ 9 (75%) │       4 │    1 │    5 │   2.75 │
+│                 │ 75% ·   │         │         │      │      │        │
+│                 │ str 25% │         │         │      │      │        │
+└─────────────────┴─────────┴─────────┴─────────┴──────┴──────┴────────┘
+
+user.plan · text · 3 absent (25%) · 1 null (11%) · 3 distinct
+  free ████████████████████████ 3
+  ...
+```
+
+For each path the table shows:
+
+- **types**: the mix of JSON types its values had (`str`, `num`, `bool`,
+  `obj`, `arr`, `null`), most common first. One type is its name alone; a
+  path with more than one type besides `null` is **mixed**, marked `!` and
+  named in a note, so a field that is sometimes a number and sometimes a
+  string shows as such rather than as one inferred type.
+- **absent**: the records that do not hold the path at all, counted apart
+  from an explicit `null` (which is in the mix, and under the path's heading
+  as `1 null`). The missing-value map counts a record as missing a path when
+  it lacks it or holds only `null` there.
+- **distinct**, **min**, **max**, **mean** and the distribution below: of the
+  path's values, as for a column (an array's items count one by one, so
+  `items[].qty` has more values than records). An object or array that is
+  walked into has none of its own.
+
+Paths are bounded. `--depth N` (4 by default) is the most steps a path has, a
+key or `[]` each: an object or array at the last step is not walked into, and
+its JSON text is its value, as in a flat profile. `--max-paths N` (200) is
+the most paths profiled, in the order first seen; the paths seen after that
+are not profiled (nor anything below them), and a note and a last table row
+say how many there were (`+ 12 more paths not profiled (max_paths 200)`),
+naming the first. Each path keeps at most `--sample N` values; presence, the
+type mix, nulls and the map count every record, so the input is read once, in
+linear time and bounded memory. `--columns` names paths, as written
+(`--columns 'user.plan,["http.status"]'`).
+
+A line that is not JSON is counted and skipped, never fatal: a note gives the
+count, the first line numbers and why (`malformed` and `malformed_lines` in
+the JSON). Input with no record at all is still a data error (exit 4).
+
+`--flat` profiles JSON Lines as 0.0.16 did: one row per record, the top-level
+keys as columns (nested values as their JSON text, absent keys as nulls), and
+a line that is not JSON a data error. CSV and TSV are always flat, and
+`--depth`, `--max-paths` and `--flat` with them are a usage error.
+
+`--report json` of a nested profile adds, without changing any key a flat
+profile has: `paths` (`depth`, `max_paths`, whether any path was `sampled`,
+whether the cap was met as `capped`, and the first hundred paths past it as
+`dropped`), `malformed` and `malformed_lines` when lines were skipped, and per
+column `present`, `absent`, `values` (every value seen, `null`s included),
+`types` (a count per JSON type seen: `string`, `number`, `boolean`, `object`,
+`array`, `null`) and `mixed`. A nested column's `nulls` counts explicit
+`null`s and its `null_rate` is over its values; `type` is the type inferred
+from its sampled values, or `object` or `array` for a path that only ever
+held one.
 
 ## Stream JSONL and logs
 
@@ -389,16 +574,180 @@ tail -f app.jsonl | rich jsonl -
 rich --jsonl events.ndjson
 ```
 
-Malformed records fail fast by default and report the line number. Use `log` /
-`--log` when records follow common structured-log shapes:
+Malformed records fail fast by default and report the line number.
+
+### Logs: `rich log`
+
+Use `log` / `--log` for logs: JSON Lines and the common text formats. Each
+record is written as it is read:
 
 ```bash
+rich log app.jsonl
 tail -f app.jsonl | rich log -
 ```
 
 Objects with `timestamp`, `time` or `@timestamp`, `level` or `severity`, and
 `message` or `msg` are flattened into a readable log line; remaining fields are
 printed as compact JSON. Other values fall back to compact JSON.
+`--log-presentation rich` shows typed fields and coloured levels instead (see
+[Rich log presentation](#rich-log-presentation)). With none of the options
+below, the output is what it has always been.
+
+**Text logs (0.0.19).** A line that is not JSON is read by the first parser
+that knows its format, and becomes a record with fields like a JSON one:
+
+| `--parser` | Reads | For example |
+|---|---|---|
+| `logfmt` | `key=value` pairs | `time=… level=info msg="cache warm" keys=12` |
+| `level` | a line that starts with a level | `ERROR request failed host=db`, `[warn] disk full`, `INFO:app.db:connected` |
+| `timestamp` (`rfc3339`) | a line that starts with an ISO 8601 time | `2026-10-18T10:00:01Z WARN app::db: pool low size=2` |
+| `access` (`nginx`, `apache`) | access logs, the level from the status (5xx error, 4xx warn) | `127.0.0.1 - - [18/Oct/2026:10:00:02 +0000] "GET / HTTP/1.1" 404 0` |
+
+`--parser auto`, the default, tries each in that order; `--parser logfmt`
+(or another name) reads with that one only, and `--parser text` with none.
+Words such as `host=db` at the end of a message become fields too. A line no
+parser reads is never dropped: after a record it joins it, as a stack trace
+does, and is written indented under it; before any record it is written as
+text. Blank lines are skipped, and colour codes are taken out before a line
+is read.
+
+```bash
+rich log app.log --parser logfmt
+```
+
+**Filters.** `--level LEVEL` keeps one level, `LEVEL+` that level and the
+ones above it (trace, debug, info, warn, error, fatal); give several with
+commas or by repeating it. A record keeps its continuation lines.
+
+```bash
+rich log app.jsonl --level warn+
+rich log app.jsonl --level debug,error
+```
+
+`--where EXPR` keeps the records whose fields pass a test. Repeat it: every
+test must pass.
+
+| `EXPR` | Keeps a record whose field… |
+|---|---|
+| `service=api` | equals the value (`==` works too) |
+| `service!=api` | is missing, or differs |
+| `latency_ms>500`, `>=`, `<`, `<=` | orders after (or before) the value |
+| `msg~time(d )?out` | matches the regular expression |
+| `msg!~retry` | is missing, or does not match |
+| `trace_id` | is there |
+| `!trace_id` | is missing |
+
+Dots reach into nested fields (`http.status`) and lists (`tags.0`), and
+`message`, `level` and `time` also find `msg`, `severity` and `timestamp`.
+Levels compare by severity (`level>=warn`), numbers as numbers (a logfmt
+value that is a number too), times as instants whatever their offsets
+(`time>=2026-10-18T10:00:00Z`), and anything else as text. A missing field
+fails every test but `!=`, `!~` and `!FIELD`. The value may be quoted.
+
+```bash
+rich log app.jsonl --where 'service=api' --where 'latency_ms>500'
+rich log app.jsonl --where 'msg~(?i)timeout'
+```
+
+**Follow a file.** `-f` / `--follow` reads FILE, then what is appended to
+it, until Ctrl+C (exit 130). When the file is truncated or replaced, as log
+rotation does, it says so on stderr and reads on from the start of the new
+content. Standard input needs no `--follow`: it is read until it ends. A
+line that grows past 1 MiB without ending is shown in 1 MiB pieces, with a
+notice on stderr, rather than held.
+
+```bash
+rich log -f /var/log/app.jsonl --level warn+
+```
+
+**Fold repeats.** `--collapse` writes a run of identical records (their
+times aside) once, with `× N (last TIME)` under it. It is on by default with
+`--follow` (where, on a terminal, the count grows in place) and in the live
+view; `--no-collapse` turns it off there.
+
+```bash
+rich log app.jsonl --collapse
+```
+
+**Groups and a summary.** `--group trace`, `span` or `correlation` gathers
+the records by their trace id (`trace_id`, `traceId`, `trace.id`, …), span id
+or correlation id (`correlation_id`, `request_id`, `x-request-id`, …): a
+header for each group with its records, errors, warnings and how long it
+took, its records indented under it, and the records without an id last.
+It ends with a summary: the records shown, counts by level, and the groups
+with errors. With `--follow`, a header is written whenever the group
+changes.
+
+```bash
+rich log app.jsonl --group trace
+```
+
+```text
+▸ trace 4bf92f3577b34da6 · 3 records · 1 error · 1 warning · 1.900s
+  2026-10-18T10:00:00.000Z INFO request started {"service":"api","trace_id":"4bf92f3577b34da6"}
+  …
+Summary: 12 records
+  error 2 · warn 3 · info 6 · no level 1
+  2 traces with errors: 4bf92f3577b34da6 (1 error), 00f067aa0ba902b7 (1 error)
+```
+
+`--summary` adds the summary without groups, and `--no-summary` leaves it
+out.
+
+**Fields and times.** `--fields` lists each record's fields under it, one a
+line, instead of on its line. `--time relative` shows each time since the
+first record shown (`+1.250s`), `--time none` leaves times out, and `--time
+absolute`, the default, shows them as written.
+
+```bash
+rich log app.jsonl --fields --time relative
+```
+
+**JSON out.** `--output jsonl` writes the records kept as JSON Lines, for
+another program: JSON records with their fields unchanged, text records as
+objects of their fields, and continuation lines as a `continuation` list.
+When the input goes quiet a record is written before it is known to be
+complete; continuation lines that come after that are written as an object
+of their own, `{"continuation": [LINE, ...]}`. Read back by `rich log`, a
+record's `continuation` list is its continuation lines again, such an
+object's lines join the record before it, and so a record shows as it did.
+With `--summary` the summary goes to stderr.
+
+```bash
+rich log app.log --level error --output jsonl | jq .msg
+```
+
+**Redaction.** `--redact` masks secrets as `rich capture --redact` does:
+values under secret-looking keys (`password`, `token`, …), and bearer tokens,
+API keys, JWTs and URL passwords in any text, with `********`.
+`--redact-pattern REGEX` masks what REGEX matches too; repeat it. Filters
+see the record before it is masked.
+
+**Untrusted text.** A log is untrusted input, so `rich log` sanitizes by
+default, as `rich view` does: terminal controls in keys (nested ones too),
+values and continuation lines, such as an OSC 52 clipboard write in a JSON
+field, are shown as inert symbols, in `--output jsonl` too. `--no-sanitize`
+lets them through.
+
+```bash
+rich log app.jsonl --redact --redact-pattern 'card=\d+'
+```
+
+`--redact-preview` shows what would be masked instead of the records, and
+writes nothing; see [Preview a redaction before you
+share](#preview-a-redaction-before-you-share-0019).
+
+**Live view.** `-i` / `--interactive`, on a terminal, shows the records in a
+view that follows the end as they arrive (with `-f`, or from a pipe). `/`
+types a filter that applies as you type: words that look like `--where`
+tests (`service=api`, `latency_ms>500`) test a field, and other words must
+appear in the record. Space pauses and resumes, Enter shows the record's
+fields and continuation lines, Up and Down move, End follows again, and `q`
+quits. Without a terminal the records are written as without `-i`.
+
+```bash
+rich log -i -f app.jsonl
+```
 
 If the delimiter cannot be determined and the file is not `.csv`/`.tsv`, `rich`
 reports it and **exits non-zero** rather than inventing a one-column table:
@@ -448,7 +797,7 @@ files show as a key table with their comments. These options change the view:
 | `--highlight EXPR` | Show the lines a JSONPath expression selects in reverse video |
 | `--find TEXT` | List keys and values containing TEXT (any case), with context |
 | `--flatten` | One `path` / `value` row per value |
-| `--table` | Records as a table, or a path/value table |
+| `--table` | Records as a table, or a path/value table; [`--style-rule`](#style-cells-by-value-0019) styles the records by key (0.0.19) |
 | `--max-depth N`, `--max-length N` | Fold deeper containers; show at most N items each |
 | `--show-paths` | Print each value's path next to it |
 | `--redact` | Mask values under keys such as `password`, `token` or `api_key` (also spelled with dashes, `api-key`), everything nested under such a key, and XML element text |
@@ -505,15 +854,19 @@ Libraries get the same stages from `rich_ext::transform` and
 
 Without a flag, piped text prints as plain text, as upstream does. Add
 `--format auto` to detect what it is: JSON goes to the JSON renderer, YAML,
-TOML, XML, INI and dotenv are highlighted, and anything else still prints as
-plain text. With `--format`, no RESOURCE means stdin.
+TOML, XML, INI and dotenv are highlighted, a likely Markdown,
+reStructuredText, Org, AsciiDoc or man page document is rendered (0.0.19),
+and anything else still prints as plain text. With `--format`, no RESOURCE
+means stdin.
 
 ```bash
 kubectl get pod web -o json | rich --format auto
 curl -s https://example.com/config | rich --format yaml
 ```
 
-A named format also overrides the file extension. To make detection the default,
+A named format also overrides the file extension, and a document format
+(`markdown`, `rst`, `org`, `asciidoc`, `man`) is the same as its mode flag. To
+make detection the default,
 set `format = "auto"` in your [config](#config-profiles); a mode you pick
 explicitly, such as `--markdown`, ignores it.
 
@@ -622,6 +975,25 @@ stdout is still printed once. Diff reports choose color blocks for HTML/SVG
 independently of redirected stdout, which stays readable ASCII. Explicit
 `--image-mode ascii`, `--image-mode none` and `--no-color` are respected; Sixel
 requests use blocks in exported documents.
+
+### A PNG of the output (0.0.19)
+
+```bash
+rich report.md --export-png report.png
+rich capture --redact --export-png build.png -- make test
+```
+
+`--export-png PATH` writes a PNG image of what was rendered, beside (or
+instead of reaching for) the SVG: no tape, no terminal emulator and no
+browser. It is drawn by the same rasteriser as `rich record`'s screenshots,
+with the same embedded DejaVu Sans Mono and Twemoji, so the same output gives
+the same pixels on every machine. The image is as wide as the console
+(`--width`), in rich's SVG export theme, inside a window frame titled like the
+SVG's (the file name), and at the screenshots' 28-pixel text size. It may be
+combined with `--export-html` and `--export-svg`, and works wherever they do,
+`rich capture` included, except with `--batch` (a usage error for now). It
+needs the `png` feature, on by default and implied by `record`; the library
+call is `rich_record::render::png::segments_png`.
 
 ## Compare two images
 
@@ -998,6 +1370,97 @@ project's `./rich.toml` cannot turn them on. `--mermaid-backend off` and
 `--dot-backend off` leave the fences as code blocks, as upstream renders
 them.
 
+### Dependency sizes, baselines and licence policy (0.0.19)
+
+`rich deps` reads what Cargo and its tools already wrote; none of these
+options runs a build or a scanner, or reaches the network.
+
+**Sizes.** `--sizes` shows each crate's artifact size as bars and a table,
+largest first, with the total. With no value it reads the target directory
+`cargo metadata` names; give a directory to read another. Artifacts are
+matched to packages through `cargo metadata` (`--metadata FILE` or a
+manifest, as for the tree), and of each package's artifacts the newest is
+taken. `--build-profile NAME` picks the profile (default: `debug` if it was
+built, else `release`), `--source-sizes` adds each package's source files,
+`--no-dev` leaves out the dev-only crates and `--top N` sets how many are
+shown (20 by default). A file instead of a directory is read as `cargo
+bloat --crates --message-format json` output, or a report saved with
+`--save` (`-` for stdin). Put a manifest before `--sizes`, since the
+argument after it is its value.
+
+```bash
+rich deps --sizes                                   # target/debug, matched to cargo metadata
+rich deps ../app/Cargo.toml --sizes --build-profile release --source-sizes
+cargo bloat --release --crates --message-format json > bloat.json
+rich deps --sizes bloat.json --top 10               # each crate's share of the binary
+```
+
+**Baselines.** `--baseline FILE` compares `--timings` or `--sizes` with an
+older report, unit by unit: deltas, new and removed units, and the
+regressions flagged. A unit regresses when it grows by more than a
+percentage *and* by more than a floor: by default 10% and 0.5s for build
+times, 10% and 64KiB for sizes. `--threshold` sets either (`15%`, `2s`,
+`500ms`, `100KiB`, `1MB`); give it twice for both, and `0s` or `0B` to drop
+the floor. A new unit larger than the floor is a regression; so is the
+total, compared the same way. `--save FILE` writes the report as JSON, to
+keep as the next baseline; the baseline can also be the original input (a
+timings report, cargo-bloat JSON or a target directory). Like `--audit`,
+a regression exits 5 once the comparison is shown.
+
+```bash
+rich deps --sizes bloat.json --save sizes.json                  # on main: keep it
+rich deps --sizes bloat.json --baseline sizes.json              # on a branch: compare
+rich deps --timings target/cargo-timings/cargo-timing.html \
+  --baseline timings.json --threshold 15% --threshold 1s
+```
+
+```text
+$ rich deps --sizes bloat.json --baseline bloat-baseline.json --top 3
+Sizes against the baseline (bloat-baseline.json → bloat.json)
+2 regressions, 1 improvement, 13 unchanged, 1 new, 2 removed
+total 1.7 MiB → 1.9 MiB: +263.5 KiB (+15.2%), a regression
+regression: over 10% and over 64.0 KiB
+…
+rich: 3 regressions against the baseline (over 10% and over 64.0 KiB): toml_edit, regex_automata, the total
+```
+
+**Licence policy.** `--policy FILE` checks every crate's licence against an
+allow and deny list, from a TOML file of rich's own (`allow`, `deny`,
+`exceptions`, `conflicts`) or cargo-deny's `deny.toml` (its `[licenses]`
+section), told apart by shape. Each SPDX expression is evaluated: an `OR`
+passes when any choice is allowed, an `AND` when every part is, and `WITH`
+exceptions are kept. It lists each violation (crate, version, expression,
+why) and exits 5 when there is one. It also flags dependency licences that
+conflict with the root crate's own (GPL code in an MIT crate, say),
+clearly a heuristic and not legal advice; they fail the check only with
+`conflicts = "deny"`. `--licenses --policy FILE` shows the licence groups
+first.
+
+```toml
+# policy.toml
+allow = ["MIT", "Apache-2.0", "Apache-2.0 WITH LLVM-exception", "Unicode-DFS-2016"]
+deny = ["GPL-3.0", "AGPL-3.0"]
+exceptions = [{ name = "ring", allow = ["OpenSSL"] }]
+conflicts = "warn"   # "deny" fails the check on a conflict; "ignore" hides them
+```
+
+```bash
+rich deps --policy policy.toml               # the crates cargo metadata lists
+rich deps --policy deny.toml --no-dev        # cargo-deny's configuration
+```
+
+**SBOMs.** `--sbom FILE`, with `--licenses` or `--policy`, reads the
+packages and licences from an SPDX (2.2, 2.3) or CycloneDX (1.4 to 1.6)
+JSON document instead of `cargo metadata`, so the report and the policy
+work for anything an SBOM describes. The document's root (what it
+describes, or CycloneDX's `metadata.component`) is the crate conflicts are
+checked against.
+
+```bash
+rich deps --licenses --sbom bom.cdx.json
+rich deps --policy policy.toml --sbom bom.spdx.json
+```
+
 ### Schemas: JSON Schema, SQL DDL and Arrow (0.0.16)
 
 `rich schema` reads three formats into one model, so each draws the same
@@ -1057,8 +1520,8 @@ terminal.
 ## Ask in a script
 
 `rich choose`, `rich filter`, `rich input`, `rich confirm`, `rich pager`,
-`rich write`, `rich file`, `rich color`, `rich asset` and `rich explore`
-([above](#explore-it-interactively)) are the interactive
+`rich write`, `rich file`, `rich color`, `rich asset`, `rich date` and
+`rich explore` ([above](#explore-it-interactively)) are the interactive
 components as shell commands, in the manner of gum. The
 answer goes to stdout and the component paints on stderr, so a script
 captures the answer with `$(…)`; keys come from the terminal even when stdin
@@ -1074,6 +1537,7 @@ message=$(rich write --header 'Commit message' --char-limit 500)
 $EDITOR "$(rich file src --extension rs)"
 accent=$(rich color --format name)
 icon=$(rich asset --value rocket)
+due=$(rich date --header Due --min today)
 ```
 
 - `choose` and `filter` take ITEMs as arguments or one per line on stdin;
@@ -1091,7 +1555,13 @@ icon=$(rich asset --value rocket)
   `--password`; `confirm` takes a QUESTION, `--default yes|no`,
   `--affirmative` and `--negative`.
 - `pager` pages a FILE or stdin, keeping its colours: `/` searches, `q`
-  quits.
+  quits. When the content starts with a table, its header stays on top
+  while the rows scroll; `--sticky LINES` keeps the first LINES lines there
+  instead, and `--sticky 0` nothing. On a terminal too short for them all,
+  the last that fit stay and the ones before scroll away first. A table
+  whose rows are divided by lines drawn like the one under a header
+  (`show_lines` in a square box, or a table without a header) keeps
+  nothing on top.
 - `write` reads several lines: Enter starts a line, Ctrl+D submits. It takes
   `--header`, `--placeholder`, `--value`, `--height`, `--char-limit` and
   `--show-line-numbers`; piped stdin is the text to start from, its last
@@ -1114,9 +1584,26 @@ icon=$(rich asset --value rocket)
   lower case) with `--kind emoji|box|spinner`. `--panel` takes every box
   style it offers. `--selected NAME` must be one it offers (exit 2
   otherwise).
+- `date` picks a day on a month grid (`--kind date`, the default), a time of
+  day (`--kind time`) or both (`--kind datetime`; Tab moves between them),
+  and prints it in ISO 8601 form: `2026-10-17`, `14:30` (`14:30:05` with
+  `--seconds`), `2026-10-17 14:30`. `--min` and `--max` limit it: days
+  outside are dimmed and cannot be reached, and a time outside is refused
+  with a message. `--value` starts somewhere other than today (in UTC),
+  `--default` is the answer to an empty line and without a terminal, and
+  the start unless `--value` is given; `--twelve-hour` shows AM and PM (the
+  answer stays on a 24-hour clock). Without `--seconds` everything is to the
+  minute: a value or a typed answer drops its seconds, and a limit is the
+  minute that can be picked (`--min 09:00:30` is 09:01). `--seconds` and
+  `--twelve-hour` need `--kind time` or `datetime`. The values are written
+  as the kind prints them (a four-digit year; a date alone is midnight for
+  `datetime`; `today` and `now` are understood), and one that does not
+  parse, `--min` after `--max`, a `--default` outside them, or `--seconds`
+  or `--twelve-hour` for a date is a usage error. The selected day is in
+  brackets as well as reversed, so it reads without colour.
 - `--height` (choose, filter, write, file, color, asset) is cut to the
   terminal's height.
-- `--mouse` (choose, filter, confirm, file, color, asset) turns mouse
+- `--mouse` (choose, filter, confirm, file, color, asset, date) turns mouse
   reporting on: click a row to focus it and again to pick it (a row focused
   from the keyboard, or from the start, too), click a button, drag the
   border beside a preview. It is off by default because it
@@ -1135,8 +1622,10 @@ name cannot retitle or recolour the terminal; the answer is the item as it
 came.
 
 Without a terminal (in CI, or with nothing to read keys from) they degrade
-instead of waiting: `input`, `confirm`, `color`, `asset` and `choose ITEM…`
-ask line by line on stderr and read the answer from stdin; `choose` from stdin
+instead of waiting: `input`, `confirm`, `color`, `asset`, `date` and
+`choose ITEM…` ask line by line on stderr and read the answer from stdin
+(`date` checks it against `--min` and `--max`, and exits 3 when it is
+outside or does not parse); `choose` from stdin
 and `file` answer with `--selected` (with `--multi`, nothing marked is no
 answer); `write` prints what stdin held; `filter` prints the lines that match `--value`, best first, blank lines
 included, so it works as a fuzzy `grep`; `pager` writes the content out,
@@ -1156,6 +1645,108 @@ terminal back before the command ends. Ctrl+Z suspends a command as it would
 any other program: the terminal is given back to the shell, and `fg` takes it
 again and repaints.
 
+## Review and jump
+
+`rich approve` and `rich jump` are two more interactive commands, with the
+conventions [above](#ask-in-a-script): they paint on stderr, print the
+answer on stdout, read keys from the terminal while stdin is the list, and
+exit 0 answered, 1 cancelled, 130 interrupted, 2 on a usage error and 3
+with no answer without a terminal.
+
+### Approve, reject or skip a list
+
+`rich approve` reviews ITEMs, or the lines on stdin, one by one or in bulk,
+and prints one JSON line per item with its decision:
+
+```bash
+git branch --format='%(refname:short)' | rich approve --print approved | xargs -r git branch -D
+rich approve --require-reason < requests.jsonl > decisions.jsonl
+```
+
+```json
+{"index":0,"decision":"approved","reason":null,"item":"feature/old-login"}
+{"index":1,"decision":"rejected","reason":"still in review","item":"fix/cache"}
+{"index":2,"decision":"pending","reason":null,"item":"spike/wasm"}
+```
+
+`a` approves the focused item, `r` rejects it and `s` skips it, each moving
+on to the next pending item; `A`, `R` and `S` ask for a reason first. `u`
+takes a decision back. Space marks items and Ctrl+A marks every pending
+one: a decision then applies to all the marked items. `p` hides the detail
+pane, and Enter submits; Esc cancels (exit 1, nothing printed). With
+`--mouse`, rows, the cell after the pointer (a mark) and the buttons under
+the list click.
+
+- Items are read as `--format lines` or `jsonl`; the default, `auto`, reads
+  JSON Lines when every line is a JSON object. An object's label is
+  `--label FIELD`, or the first of `title`, `name`, `label`, `summary` and
+  `id`; its `description` and other plain fields are shown beside it, and
+  one with nested values is previewed whole. `"item"` in the output is the
+  object, or the line as a string.
+- `--print approved` (or `rejected`) prints those items as they were read
+  instead, one per line, for `xargs`.
+- `--require-reason` asks for a reason on every rejection and refuses an
+  empty one. `--auto-submit` submits once nothing is pending.
+- Every item is in the output, pending ones too, so a script can tell what
+  was not reviewed. The decisions are only recorded: what they lead to is
+  the script's.
+- Without a terminal, ITEMs given as arguments are asked about line by line
+  on stderr (`a`, `r` or `s`, a reason after a colon: `r: not now`; an
+  empty line skips and `q` stops). Items read from stdin leave nothing to
+  ask on, so every item is printed as pending.
+
+### Jump to anything
+
+`rich jump` searches files, Markdown headings, code symbols, commands and
+recent places in one fuzzy box, and prints the place picked: a path,
+`path:line` for a heading or a symbol, or a command.
+
+```bash
+$EDITOR "$(rich jump --files --headings docs)"
+rich jump --print shell --commands ~/.commands --recent ~/.jump-recent
+```
+
+Do not pass the bare place to `eval`: a file name is data, and one named
+`$(…)` would run. `--print shell` prints a command that is safe to read
+back, with the place in single quotes.
+
+Results are grouped by source (Recent, Files, Headings, Symbols, Commands),
+each showing its best five (`--limit N`) and how many more there are, and
+the best match overall is focused, with a preview of the file at its line.
+↑ and ↓ move across the groups and Alt+↑ ↓ jump between them. Tab narrows
+the search to one source and Shift+Tab widens it again; typing `#` first
+searches headings only, `@` symbols and `>` commands. With `--mouse`, a
+click on a group's title narrows to it.
+
+- It searches the files, headings and symbols under each DIR (default
+  `.`), or those of them chosen with `--files`, `--headings` and
+  `--symbols`. Hidden entries, `target` and `node_modules` are left out, and
+  at most 20,000 files are listed and 1 MiB of each read.
+- Symbols are found by their keyword at the start of a line (`fn`,
+  `struct`, `enum`, `trait`, `mod`, `def`, `class`, `function`, `func`,
+  `interface`) in common code files: a quick index, not a parser.
+- `--commands FILE` adds FILE's commands, one per line, as `LABEL<TAB>COMMAND`
+  or the command alone; a pick prints the command.
+- `--recent FILE` shows FILE's places first, as Recent, and puts the pick at
+  its top (the latest 50 are kept); a FILE that is not there yet is made.
+- With `-` as DIR, or with stdin piped and no DIR, `--files`,
+  `--headings`, `--symbols` or `--commands`, the
+  entries come from stdin: lines, or JSON objects with `label` and
+  optionally `source` (the group), `location` (what is printed), `detail`
+  and `preview`.
+- `--print json` prints `{"source":…,"label":…,"location":…}` instead.
+- `--print shell` prints a POSIX shell command for the pick, the place
+  single-quoted (a `'` in it written `'\''`): `cd -- 'DIR'` for a
+  directory, `${EDITOR:-vi} +LINE -- 'FILE'` for `path:line` (without
+  `+LINE` for a file), and a `>` command as it is, since it is one. A
+  remembered command found in `--commands` is printed as a command too;
+  any other place is a file.
+- A place with a control character (a newline, an escape) is printed only
+  by `--print json`, which escapes it; otherwise it exits 3. Such a place is
+  never added to the `--recent` file, and one found there is skipped.
+- Without a terminal it prints the best match for `--value QUERY`, or for a
+  line read from stdin; with neither it exits 3.
+
 ## Use it in a script or CI
 
 `rich` writes rendered output to stdout and diagnostics to stderr, so the two
@@ -1173,7 +1764,7 @@ Exit codes are stable by failure class:
 | `2` | Usage/config error, such as an invalid flag or unsupported combination. |
 | `3` | Input/read/write error, such as a missing file or failed output write. |
 | `4` | Parse/render data error, such as malformed JSON or JSONL. |
-| `5` | Threshold/gate failure, such as `--diff --threshold` exceeded or a vulnerability in `rich deps --audit FILE`. |
+| `5` | Threshold/gate failure, such as `--diff --threshold` exceeded, a vulnerability in `rich deps --audit FILE`, a regression in `rich deps --baseline FILE` or a violation of `rich deps --policy FILE`. |
 | `130` | Batch interrupted with Ctrl+C. Started workers are stopped and reaped. |
 
 `rich capture -- CMD` is the exception: once its output is shown and exported
@@ -1217,6 +1808,14 @@ the console width (80 when neither terminal width nor the variable is available)
 terminal and output exceeds its viewport height; redirected stdout is never
 paged. `--no-pager` disables configured explicit and automatic paging, while
 `--no-auto-pager` disables only automatic paging.
+
+`less` scrolls a table's header away with its rows. With
+`PAGER='rich pager'`, the built-in pager pages the output instead and keeps
+the header of a table on top:
+
+```bash
+PAGER='rich pager' rich data.csv --pager
+```
 
 GIF playback repeats once by default; `--loop 0` repeats
 forever in a terminal. Pipes receive the first frame once, even with `--loop 0`.
@@ -1320,6 +1919,31 @@ inherited `true`. Inverse CLI flags such as `--no-watch`, `--no-overwrite`,
 `--no-batch`, `--no-continue-on-error`, `--no-sanitize` and `--color` override
 configured booleans. Option-looking values and operands after `--` remain data.
 Parse errors identify the config file. A quoted `#` remains part of the value.
+
+A profile (or `[defaults]`) can carry [style rules](#style-cells-by-value-0019)
+as `[[rules]]` tables, the shape `--rules` files hold (0.0.19):
+
+```toml
+[[defaults.rules]]
+column = "latency"
+op = ">"
+value = 500
+style = "bold red"
+
+[profiles.tables]
+[[profiles.tables.rules]]
+column = "status"
+value = "failed"
+style = "on red"
+target = "row"
+```
+
+Rules add up rather than replace: the defaults' rules apply first, then the
+selected profile's, then `--style-rule` and `--rules` on the command line, a
+later rule winning wherever two set the same thing. They only touch data
+tables, so `rich --profile tables README.md` is unaffected. A bad rule table
+fails validation, naming the table (`profiles.tables.rules[0]`) and what is
+wrong with it, and `config show` lists the rules in effect.
 
 Inspect and validate without rendering:
 
@@ -1438,7 +2062,7 @@ rich view FILE [--search TEXT] [--no-line-numbers] [--no-sanitize]  # detect, re
 rich hex FILE [--offset N] [--length N] [--bytes-per-line N] [--group N] [--search BYTES]
 rich unicode FILE [--limit N]                        # graphemes, code points, widths
 rich env [PATTERN...] [--show-secrets]               # variables; `rich env PATH` checks entries
-rich capture [--cast FILE] [--redact] [--redact-pattern REGEX]... -- COMMAND [ARGS...]
+rich capture [--cast FILE] [--redact] [--redact-pattern REGEX]... [--redact-preview] -- COMMAND [ARGS...]
                                                      # run, show, export or record
 ```
 
@@ -1517,6 +2141,41 @@ detectors are `rich_ext::redact`; see
 rich capture --redact --export-svg deploy.svg -- ./deploy.sh
 rich capture --redact-pattern 'order (?P<secret>\d{4})' --cast run.cast -- ./report.sh
 ```
+
+### Preview a redaction before you share (0.0.19)
+
+`--redact-preview` shows what `--redact` and `--redact-pattern` would mask,
+and writes nothing:
+
+```bash
+rich capture --redact --redact-preview --export-svg deploy.svg -- ./deploy.sh
+rich log app.log --redact --redact-preview
+```
+
+Each line with a match is shown with its number and the match highlighted,
+then one line per match: its position (line:column), the rule that matched
+(`key-value`, `token`, `jwt`, `pattern`, …), the text and its replacement. A
+summary per source ends it: `output: 3 matches on 2 of 40 lines (key-value 2,
+token 1)`. `rich capture` previews the command line (as its title and the
+cast header would be masked) and the output; a secret inside an escape
+sequence, such as a hyperlink's URL, is marked `(in an escape sequence)`.
+`rich log` previews each line of the log as read, to its end, so not with
+`--follow` or `--interactive`.
+
+It is a dry run: no cast, no `--export-*` file and no log output is written,
+and a line on stderr names what a run without the flag would write. The
+command still runs. With `--report json` the preview is one JSON document on
+stdout (`redact_preview.sources[].findings[]`, lines and columns from 1, with
+`would_write` and an empty `written`). It exits 0, and needs `--redact` or
+`--redact-pattern` (exit 2 without).
+
+!!! warning "The preview shows the secrets"
+    The preview is for you, before you share: it prints what it found
+    unmasked. Do not share the preview itself.
+
+The library calls are `Redactor::preview`, `preview_ansi` and `preview_args`
+in `rich_ext::redact`; see
+[Badges, size bars, formatters and redaction](guide/ext/badges-and-redaction.md#preview-what-would-be-masked).
 
 ## Inspect your environment
 
@@ -1623,6 +2282,103 @@ exit 3 when the file cannot be read, 2 otherwise (another ABI version, a name
 another plugin already provides, a build without the loader). See the
 [plugin guide](PLUGINS.md) for what plugins can do and the threat model.
 
+## Draw a banner (0.0.19)
+
+`rich banner` draws text as a FIGlet banner, with rs-rich-art's FIGlet
+renderer (byte-identical with `pyfiglet` for the bundled `standard` font).
+It needs the `art` feature, which a default build has.
+
+```bash
+rich banner Hello
+rich banner --gradient rainbow --align center "Ship it"
+rich banner --gradient '#ff5f6d,#ffc371' --direction vertical --style bold v0.0.19
+echo "Release notes" | rich banner --fit plain
+rich banner --font slant Deploy        # an installed figlet's slant.flf
+```
+
+| Option | What it does |
+|---|---|
+| `--font NAME\|FILE` | `standard` (bundled, the default), a FIGfont `.flf` file, or the name of one in `$FIGLET_FONTDIR`, `/usr/share/figlet` or `/usr/local/share/figlet`. `--list-fonts` lists them |
+| `--style STYLE` | A style for every row: `bold cyan`, `white on blue` |
+| `--gradient COLORS` | Colours the strokes along two or more comma-separated colours, or a preset: `rainbow`, `sunset`, `ocean`, `forest`, `fire` |
+| `--direction D` | `horizontal` (the default), `vertical` or `diagonal` |
+| `--align A` | `left` (the default), `center` or `right` within the width |
+| `-w, --width N` | Lay out to N columns (1 to 10000) instead of the terminal's width |
+| `--fit F` | When the banner is wider than the width: `wrap` at spaces onto more banner rows (the default, as figlet does), print the text `plain` instead, or `none` (let it overflow) |
+| `--force-terminal` | Colour and styles even when stdout is not a terminal |
+
+With no words, or `-`, the text comes from stdin; a newline starts a new
+banner row. Colour follows the terminal: a pipe gets the plain banner,
+`NO_COLOR` and `--no-color` drop the colour and keep the strokes, and a
+terminal with fewer colours shows each gradient colour as its nearest one.
+A missing font exits 3, one that is not a FIGfont exits 4.
+
+## Shell integration (0.0.19)
+
+`rich shell init SHELL` prints a script for a shell's startup file. It sets
+up the completions (the same script as `rich completions SHELL`), OSC 133
+marks for the prompt and each command (terminals such as WezTerm, kitty,
+iTerm2, Windows Terminal and VS Code use them to jump between prompts and
+flag failed commands), OSC 7 so a new tab opens in the same directory, and a
+status line after each command.
+
+```bash
+eval "$(rich shell init bash)"                            # ~/.bashrc, bash 4.4+
+eval "$(rich shell init zsh)"                             # ~/.zshrc, after compinit
+rich shell init fish | source                             # ~/.config/fish/config.fish
+rich shell init pwsh | Out-String | Invoke-Expression     # $PROFILE
+```
+
+The status line is `rich shell status`, which a shell hook can call on its
+own:
+
+```text
+$ cargo test
+…
+✖ error $ cargo test  exit 101  4.2s
+```
+
+Successes quicker than `--min-duration` (2 seconds in `init`, 0 when
+`status` is run directly) print nothing; a failure always shows. The command
+is shown as typed, with control characters made visible. Markers follow
+`RICH_A11Y` (`ascii-symbols`, `word-symbols`, `screen-reader`) or
+`--symbols unicode|ascii|words`. Leave parts out with `--no-completions`,
+`--no-marks` and `--no-status`.
+
+- Without `--command`, `status` shows `$RICH_SHELL_COMMAND`. The PowerShell
+  hook sets it for the call and removes it after, since Windows PowerShell's
+  legacy argument passing would split a command line with quotes in it.
+- bash names the command from its history, and only when the history
+  number moved on: a command history left out (`HISTCONTROL=ignorespace`,
+  `ignoredups`, `HISTIGNORE`) shows as `-` rather than as the one before it.
+- The OSC 7 directory is percent-encoded in every shell (bash and zsh
+  byte by byte, fish with `string escape --style=url`, PowerShell with
+  `[Uri]::EscapeDataString`), so a directory name with an escape or a BEL
+  in it cannot end the sequence or start another.
+- `--duration` and `--min-duration` take at most 10^9 seconds (exit 2
+  past that).
+
+`rich shell link [PATH[:LINE[:COL]]]...` prints paths, the working directory
+by default, as OSC 8 `file://` links (or through `--editor
+'vscode://file{path}:{line}'`); `--tilde` shows `$HOME` as `~`. Off a
+terminal the paths are plain, unless `--links always`, which a prompt's
+command substitution needs; `--prompt bash` or `--prompt zsh` marks the
+escape sequences as zero-width so the line editor measures the prompt right
+(for zsh, every `%`, a URL's `%20` included, is doubled so the prompt does
+not expand it):
+
+```bash
+PS1='$(rich shell link --tilde --links always --prompt bash) \$ '        # bash
+setopt prompt_subst
+PROMPT='$(rich shell link --tilde --links always --prompt zsh) %# '       # zsh
+```
+
+The scripts call `rich` from `PATH`. They guard against being loaded twice,
+keep the previous `PROMPT_COMMAND`, `PS0`, `PS1` and PowerShell `prompt`,
+and keep `$?` and `$LASTEXITCODE` for whatever runs after them. In bash an
+empty command line reports nothing. PowerShell gets no OSC 133 `C` mark
+(that needs a PSReadLine hook).
+
 ## Shell completions and generated docs
 
 ```bash
@@ -1698,6 +2454,23 @@ Sequential frames captured from actual `--gif-mode blocks` CLI playback:
 ![CLI GIF frame 5](assets/releases/0.0.4-gif-frame4.jpg)
 
 [Playback recordings and reproduction commands](https://github.com/buchochelliq-labs/rs-rich-cli/tree/main/.github/evidence/v0.0.4-gif).
+
+### Speed, frame rate and limits (0.0.19)
+
+```bash
+rich --gif spinner.gif --speed 2                 # twice as fast
+rich --gif spinner.gif --speed 0.5 --fps 12      # half speed, at most 12 frames a second
+rich --gif spinner.gif --loop 0 --max-frames 48  # endless, but stop after 48 frames
+rich --gif a.gif b.gif --loop 0 --max-duration 5 # stop after five seconds
+```
+
+`--speed X` divides every frame's delay by X; `--fps N` (default 30) caps
+the frame rate after that; `--max-frames N` stops each animation after N
+frames, holding the last one; `--max-duration SECS` stops the whole stage.
+Each needs `--gif` and a number above 0, within bounds: `--speed` 0.001 to
+1000, `--fps` 0.01 to 1000 and `--max-duration` up to 10^9 seconds (exit 2
+outside them). Redirected output is unchanged:
+one frame, whatever the controls.
 
 ## Optional syntax cache
 

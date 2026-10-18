@@ -9,13 +9,18 @@
 //! | Python | Rust |
 //! |---|---|
 //! | `Sparkline` | `rich_ext::chart::Sparkline` |
-//! | `ChartBar`, `BarChart`, `Histogram` | `Bar`, `BarChart`, `Histogram` |
+//! | `ChartBar`, `BarGroup`, `BarChart`, `Histogram` | `Bar`, `BarGroup`, `BarChart`, `Histogram` |
 //! | `Series`, `LineChart` | `Series`, `LineChart` |
 //! | `Band`, `Gauge`, `BulletChart` | `Band`, `Gauge`, `BulletChart` |
+//! | `FillGauge`, `LineGauge` | `FillGauge`, `LineGauge` (0.0.19) |
 //! | `Heatmap` | `Heatmap` |
 //! | `ChartState`, `StatusMatrix` | `State`, `StatusMatrix` |
 //! | `KpiCard` | `KpiCard` (its `status` by name) |
 //! | `TimelineSpan`, `Timeline` | `Span`, `Timeline` |
+//! | `Distribution`, `DistributionSet` | `Distribution`, `DistributionSet` (0.0.19) |
+//! | `SmallMultiples` | `SmallMultiples` of `Sparkline`s, `BarChart`s and `LineChart`s (0.0.19) |
+//! | `chart_quantile`, `chart_summary` | `quantile`, `Summary::of` (0.0.19) |
+//! | `chart_describe` | each chart's `a11y::AccessibleText` (0.0.19) |
 
 use pyo3::exceptions::{PyTypeError, PyValueError};
 use pyo3::prelude::*;
@@ -23,11 +28,14 @@ use pyo3::types::{PyDict, PyList, PySequence, PyString};
 
 use rich::protocol::Renderable;
 use rich_ext::chart::{
-    Band as CoreBand, Bar as CoreBar, BarChart as CoreBarChart, BulletChart as CoreBulletChart,
-    Charset, Gauge as CoreGauge, Heatmap as CoreHeatmap, Histogram as CoreHistogram,
-    KpiCard as CoreKpiCard, LineChart as CoreLineChart, Orientation, Series as CoreSeries,
-    SeriesKind, Span as CoreSpan, Sparkline as CoreSparkline, State as CoreState, Status,
-    StatusMatrix as CoreStatusMatrix, Timeline as CoreTimeline, ValueFormat,
+    Band as CoreBand, Bar as CoreBar, BarChart as CoreBarChart, BarGroup as CoreBarGroup,
+    BulletChart as CoreBulletChart, Charset, Direction, Distribution as CoreDistribution,
+    DistributionSet as CoreDistributionSet, Facet, FillGauge as CoreFillGauge, Gauge as CoreGauge,
+    Heatmap as CoreHeatmap, Histogram as CoreHistogram, KpiCard as CoreKpiCard, Levels,
+    LineChart as CoreLineChart, LineGauge as CoreLineGauge, LineSet, Orientation,
+    Series as CoreSeries, SeriesKind, SmallMultiples as CoreSmallMultiples, Span as CoreSpan,
+    Sparkline as CoreSparkline, State as CoreState, Status, StatusMatrix as CoreStatusMatrix,
+    Summary as CoreSummary, Timeline as CoreTimeline, ValueFormat,
 };
 
 use crate::art::repr_str;
@@ -49,6 +57,22 @@ names!(orientation, orientation_name, Orientation, "orientation", {
 names!(series_kind, series_kind_name, SeriesKind, "series kind", {
     "line" => SeriesKind::Line,
     "scatter" => SeriesKind::Scatter,
+});
+
+names!(direction, direction_name, Direction, "direction", {
+    "left_to_right" => Direction::LeftToRight,
+    "right_to_left" => Direction::RightToLeft,
+});
+
+names!(levels, levels_name, Levels, "levels", {
+    "nine" => Levels::Nine,
+    "three" => Levels::Three,
+});
+
+names!(line_set, line_set_name, LineSet, "line", {
+    "thin" => LineSet::Thin,
+    "thick" => LineSet::Thick,
+    "double" => LineSet::Double,
 });
 
 names!(status, status_name, Status, "status", {
@@ -205,9 +229,13 @@ renders!(Sparkline);
 impl Sparkline {
     /// `values`: numbers, `None` for a gap. `range`: fix the scale as
     /// `(min, max)`. `min_max`: name the extremes after the line.
-    /// `threshold`: count (and mark) the values above it.
+    /// `threshold`: count (and mark) the values above it. `rows`: how many
+    /// rows tall (default: the height it is given, or one). `direction`:
+    /// `"left_to_right"` or `"right_to_left"`. `absent`: draw gaps with a
+    /// symbol, or a `(symbol, style)` pair. `styles`: a style (or `None`)
+    /// for each value. `levels`: `"nine"` or `"three"` block heights.
     #[new]
-    #[pyo3(signature = (values, *, range=None, min=None, max=None, charset="auto", style=None, min_max=false, threshold=None, format=None))]
+    #[pyo3(signature = (values, *, range=None, min=None, max=None, charset="auto", style=None, min_max=false, threshold=None, format=None, rows=None, direction="left_to_right", absent=None, styles=None, levels="nine"))]
     #[allow(clippy::too_many_arguments)]
     fn new(
         values: &Bound<'_, PyAny>,
@@ -219,11 +247,48 @@ impl Sparkline {
         min_max: bool,
         threshold: Option<f64>,
         format: Option<&Bound<'_, PyAny>>,
+        rows: Option<usize>,
+        direction: &str,
+        absent: Option<&Bound<'_, PyAny>>,
+        styles: Option<&Bound<'_, PyAny>>,
+        levels: &str,
     ) -> PyResult<Self> {
         let mut inner = CoreSparkline::new(numbers(values)?)
             .charset(self::charset(charset)?)
             .min_max(min_max)
-            .format(value_format(format)?);
+            .format(value_format(format)?)
+            .direction(self::direction(direction)?)
+            .levels(self::levels(levels)?);
+        if let Some(rows) = rows {
+            if rows == 0 {
+                return Err(PyValueError::new_err("rows must be at least 1"));
+            }
+            inner = inner.rows(rows);
+        }
+        if let Some(absent) = absent.filter(|a| !a.is_none()) {
+            let (symbol, style) = if let Ok(symbol) = absent.extract::<String>() {
+                (symbol, String::new())
+            } else {
+                absent
+                    .extract::<(String, Option<String>)>()
+                    .map(|(symbol, style)| (symbol, style.unwrap_or_default()))
+                    .map_err(|_| {
+                        PyTypeError::new_err("absent is a symbol, or a (symbol, style) pair")
+                    })?
+            };
+            inner = inner.absent(symbol, style);
+        }
+        let styles = each(styles, "styles", |item| {
+            if item.is_none() {
+                return Ok(None);
+            }
+            item.extract::<String>()
+                .map(Some)
+                .map_err(|_| PyTypeError::new_err("styles must be strings or None"))
+        })?;
+        if !styles.is_empty() {
+            inner = inner.styles(styles);
+        }
         if let Some((lo, hi)) = range {
             inner = inner.range(lo, hi);
         }
@@ -272,13 +337,31 @@ pub(crate) struct ChartBar {
 
 #[pymethods]
 impl ChartBar {
+    /// `text`: written instead of the value (`"76°"`). `value_style` and
+    /// `label_style`: styles over the chart's for this bar.
     #[new]
-    #[pyo3(signature = (label, value, *, style=None))]
-    fn new(label: String, value: &Bound<'_, PyAny>, style: Option<String>) -> PyResult<Self> {
+    #[pyo3(signature = (label, value, *, style=None, text=None, value_style=None, label_style=None))]
+    fn new(
+        label: String,
+        value: &Bound<'_, PyAny>,
+        style: Option<String>,
+        text: Option<String>,
+        value_style: Option<String>,
+        label_style: Option<String>,
+    ) -> PyResult<Self> {
         let value = number(value)?;
         let mut inner = CoreBar::new(label.clone(), value);
         if let Some(style) = &style {
             inner = inner.style(style.clone());
+        }
+        if let Some(text) = text {
+            inner = inner.text(text);
+        }
+        if let Some(style) = value_style {
+            inner = inner.value_style(style);
+        }
+        if let Some(style) = label_style {
+            inner = inner.label_style(style);
         }
         Ok(ChartBar {
             inner,
@@ -286,6 +369,12 @@ impl ChartBar {
             value,
             style,
         })
+    }
+
+    /// What is written instead of the value, if anything.
+    #[getter]
+    fn text(&self) -> Option<&str> {
+        self.inner.text.as_deref()
     }
 
     #[getter]
@@ -319,6 +408,57 @@ fn bar(item: &Bound<'_, PyAny>) -> PyResult<CoreBar> {
     Ok(CoreBar::new(label, number(&value)?))
 }
 
+/// Bars with a label, set apart from the others in a `BarChart`
+/// (`rich_ext::chart::BarGroup`).
+#[pyclass(
+    name = "BarGroup",
+    module = "rs_rich.chart",
+    frozen,
+    skip_from_py_object
+)]
+#[derive(Clone)]
+pub(crate) struct BarGroup {
+    inner: CoreBarGroup,
+    label: String,
+    len: usize,
+}
+
+#[pymethods]
+impl BarGroup {
+    /// `label`: under (or after) the group; empty for none. `bars`:
+    /// `ChartBar`s, `(label, value)` pairs or a `{label: value}` mapping.
+    #[new]
+    #[pyo3(signature = (label, bars=None))]
+    fn new(label: String, bars: Option<&Bound<'_, PyAny>>) -> PyResult<Self> {
+        let mut inner = CoreBarGroup::new(label.clone());
+        let mut len = 0;
+        if let Some(bars) = bars.filter(|b| !b.is_none()) {
+            for item in items(bars)? {
+                inner = inner.bar(bar(&item)?);
+                len += 1;
+            }
+        }
+        Ok(BarGroup { inner, label, len })
+    }
+
+    #[getter]
+    fn label(&self) -> &str {
+        &self.label
+    }
+
+    fn __len__(&self) -> usize {
+        self.len
+    }
+
+    fn __repr__(&self) -> String {
+        format!(
+            "<BarGroup {} with {} bars>",
+            repr_str(&self.label),
+            self.len
+        )
+    }
+}
+
 /// A label, a bar and a value per row, or columns side by side
 /// (`rich_ext::chart::BarChart`).
 #[pyclass(name = "BarChart", module = "rs_rich.chart", frozen)]
@@ -330,12 +470,17 @@ renders!(BarChart);
 #[pymethods]
 impl BarChart {
     /// `bars`: `ChartBar`s, `(label, value)` pairs or a `{label: value}`
-    /// mapping. `orientation`: `"horizontal"` or `"vertical"`.
+    /// mapping; `groups`: `BarGroup`s, after them. `orientation`:
+    /// `"horizontal"` or `"vertical"`. `thickness` is ratatui's
+    /// `bar_width` (cells across, or rows down); `bar_width` is the longest
+    /// bar's length, or the tallest column's height. `values_inside`
+    /// writes each value on its bar.
     #[new]
-    #[pyo3(signature = (bars=None, *, range=None, max=None, charset="auto", orientation="horizontal", bar_width=None, show_values=true, format=None, style=None))]
+    #[pyo3(signature = (bars=None, *, groups=None, range=None, max=None, charset="auto", orientation="horizontal", bar_width=None, show_values=true, format=None, style=None, thickness=None, bar_gap=None, group_gap=None, label_style=None, value_style=None, values_inside=false))]
     #[allow(clippy::too_many_arguments)]
     fn new(
         bars: Option<&Bound<'_, PyAny>>,
+        groups: Option<&Bound<'_, PyAny>>,
         range: Option<(f64, f64)>,
         max: Option<f64>,
         charset: &str,
@@ -344,16 +489,49 @@ impl BarChart {
         show_values: bool,
         format: Option<&Bound<'_, PyAny>>,
         style: Option<String>,
+        thickness: Option<usize>,
+        bar_gap: Option<usize>,
+        group_gap: Option<usize>,
+        label_style: Option<String>,
+        value_style: Option<String>,
+        values_inside: bool,
     ) -> PyResult<Self> {
         let mut inner = CoreBarChart::new()
             .charset(self::charset(charset)?)
             .orientation(self::orientation(orientation)?)
             .show_values(show_values)
+            .values_inside(values_inside)
             .format(value_format(format)?);
         if let Some(bars) = bars.filter(|b| !b.is_none()) {
             for item in items(bars)? {
                 inner = inner.push(bar(&item)?);
             }
+        }
+        let groups = each(groups, "groups", |item| {
+            item.cast::<BarGroup>()
+                .map(|group| group.get().inner.clone())
+                .map_err(|_| PyTypeError::new_err("groups must be BarGroups"))
+        })?;
+        for group in groups {
+            inner = inner.group(group);
+        }
+        if let Some(thickness) = thickness {
+            if thickness == 0 {
+                return Err(PyValueError::new_err("thickness must be at least 1"));
+            }
+            inner = inner.thickness(thickness);
+        }
+        if let Some(gap) = bar_gap {
+            inner = inner.bar_gap(gap);
+        }
+        if let Some(gap) = group_gap {
+            inner = inner.group_gap(gap);
+        }
+        if let Some(style) = label_style {
+            inner = inner.label_style(style);
+        }
+        if let Some(style) = value_style {
+            inner = inner.value_style(style);
         }
         if let Some((lo, hi)) = range {
             inner = inner.range(lo, hi);
@@ -688,6 +866,154 @@ impl Gauge {
 
     fn __repr__(&self) -> String {
         format!("<Gauge {}>", self.inner.value())
+    }
+}
+
+/// A ratio from 0 to 1, clamped; NaN is refused.
+fn ratio(value: f64) -> PyResult<f64> {
+    if value.is_nan() {
+        return Err(PyValueError::new_err(
+            "a gauge's ratio must be a number, not NaN",
+        ));
+    }
+    Ok(value.clamp(0.0, 1.0))
+}
+
+/// ratatui's `Gauge`: a bar that fills its area, the label on the middle
+/// row (`rich_ext::chart::FillGauge`).
+#[pyclass(
+    name = "FillGauge",
+    module = "rs_rich.chart",
+    frozen,
+    skip_from_py_object
+)]
+#[derive(Clone)]
+pub(crate) struct FillGauge {
+    inner: CoreFillGauge,
+}
+renders!(FillGauge);
+
+#[pymethods]
+impl FillGauge {
+    /// `ratio`: from 0 to 1 (clamped). `label`: the text on the middle
+    /// row (default the percentage). `style`: ratatui's `gauge_style`, its
+    /// foreground the bar's colour and its background the rest's.
+    /// `unicode`: eighths of a cell at the bar's edge. `height`: rows
+    /// (default: the height given, or one).
+    #[new]
+    #[pyo3(signature = (ratio, *, label=None, label_style=None, style=None, unicode=false, width=None, height=None))]
+    #[allow(clippy::too_many_arguments)]
+    fn new(
+        ratio: f64,
+        label: Option<String>,
+        label_style: Option<String>,
+        style: Option<String>,
+        unicode: bool,
+        width: Option<usize>,
+        height: Option<usize>,
+    ) -> PyResult<Self> {
+        let mut inner = CoreFillGauge::new(self::ratio(ratio)?).unicode(unicode);
+        if let Some(label) = label {
+            inner = inner.label(label);
+        }
+        if let Some(style) = label_style {
+            inner = inner.label_style(style);
+        }
+        if let Some(style) = style {
+            inner = inner.style(style);
+        }
+        if let Some(width) = width {
+            inner = inner.width(width);
+        }
+        if let Some(height) = height {
+            inner = inner.height(height);
+        }
+        Ok(FillGauge { inner })
+    }
+
+    #[getter]
+    fn ratio(&self) -> f64 {
+        self.inner.ratio()
+    }
+
+    fn __repr__(&self) -> String {
+        format!("<FillGauge {}>", self.inner.ratio())
+    }
+}
+
+/// ratatui's `LineGauge`: a label and a line in two styles
+/// (`rich_ext::chart::LineGauge`).
+#[pyclass(
+    name = "LineGauge",
+    module = "rs_rich.chart",
+    frozen,
+    skip_from_py_object
+)]
+#[derive(Clone)]
+pub(crate) struct LineGauge {
+    inner: CoreLineGauge,
+}
+renders!(LineGauge);
+
+/// One character, for a gauge's symbols.
+fn glyph(text: &str, what: &str) -> PyResult<char> {
+    let mut chars = text.chars();
+    match (chars.next(), chars.next()) {
+        (Some(c), None) => Ok(c),
+        _ => Err(PyValueError::new_err(format!(
+            "{what} must be one character, got {}",
+            repr_str(text)
+        ))),
+    }
+}
+
+#[pymethods]
+impl LineGauge {
+    /// `ratio`: from 0 to 1 (clamped). `label`: before the line (default
+    /// the percentage, ` 42%`). `line`: `"thin"`, `"thick"` or `"double"`;
+    /// `symbols`: a `(filled, unfilled)` pair of characters instead.
+    #[new]
+    #[pyo3(signature = (ratio, *, label=None, label_style=None, filled_style=None, unfilled_style=None, line="thin", symbols=None, width=None))]
+    #[allow(clippy::too_many_arguments)]
+    fn new(
+        ratio: f64,
+        label: Option<String>,
+        label_style: Option<String>,
+        filled_style: Option<String>,
+        unfilled_style: Option<String>,
+        line: &str,
+        symbols: Option<(String, String)>,
+        width: Option<usize>,
+    ) -> PyResult<Self> {
+        let mut inner = CoreLineGauge::new(self::ratio(ratio)?).line(line_set(line)?);
+        if let Some(label) = label {
+            inner = inner.label(label);
+        }
+        if let Some(style) = label_style {
+            inner = inner.label_style(style);
+        }
+        if let Some(style) = filled_style {
+            inner = inner.filled_style(style);
+        }
+        if let Some(style) = unfilled_style {
+            inner = inner.unfilled_style(style);
+        }
+        if let Some((filled, unfilled)) = symbols {
+            inner = inner.symbols(glyph(&filled, "symbols")?, glyph(&unfilled, "symbols")?);
+        }
+        if let Some(width) = width {
+            inner = inner.width(width);
+        }
+        Ok(LineGauge { inner })
+    }
+
+    #[getter]
+    fn ratio(&self) -> f64 {
+        self.inner.ratio()
+    }
+
+    fn __repr__(&self) -> String {
+        format!("<LineGauge {}>", self.inner.ratio())
     }
 }
 
@@ -1163,6 +1489,350 @@ impl Timeline {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Distributions, small multiples and accessible text (0.0.19 workstream 14)
+
+/// A `Summary` as a dict: `count`, `ignored`, and `min`, `p25`, `p50`,
+/// `p75`, `p95`, `max` and `mean` (`None` when there are no values).
+fn summary_dict<'py>(py: Python<'py>, s: &CoreSummary) -> PyResult<Bound<'py, PyDict>> {
+    let out = PyDict::new(py);
+    out.set_item("count", s.count)?;
+    out.set_item("ignored", s.ignored)?;
+    for (key, value) in [
+        ("min", s.min),
+        ("p25", s.p25),
+        ("p50", s.p50),
+        ("p75", s.p75),
+        ("p95", s.p95),
+        ("max", s.max),
+        ("mean", s.mean),
+    ] {
+        out.set_item(key, (!s.is_empty()).then_some(value))?;
+    }
+    Ok(out)
+}
+
+/// The count, quantiles and mean of values, drawn as a box-and-whisker
+/// strip and the numbers on one line (`rich_ext::chart::Distribution`).
+#[pyclass(name = "Distribution", module = "rs_rich.chart", frozen)]
+pub(crate) struct Distribution {
+    inner: CoreDistribution,
+}
+renders!(Distribution);
+
+#[pymethods]
+impl Distribution {
+    /// `values`: numbers; `None`, NaN and infinities are left out and
+    /// counted. `range`: fix the strip's scale as `(min, max)`.
+    /// `strip_width`: cells for the strip (default 20). `unit`: written
+    /// after every value. `numbers`: write the numbers after the strip.
+    #[new]
+    #[pyo3(signature = (values, *, label=None, range=None, strip_width=None, format=None, unit=None, charset="auto", style=None, numbers=true))]
+    #[allow(clippy::too_many_arguments)]
+    fn new(
+        values: &Bound<'_, PyAny>,
+        label: Option<String>,
+        range: Option<(f64, f64)>,
+        strip_width: Option<usize>,
+        format: Option<&Bound<'_, PyAny>>,
+        unit: Option<String>,
+        charset: &str,
+        style: Option<String>,
+        numbers: bool,
+    ) -> PyResult<Self> {
+        let mut inner = CoreDistribution::new(self::numbers(values)?)
+            .format(value_format(format)?)
+            .charset(self::charset(charset)?)
+            .numbers(numbers);
+        if let Some(label) = label {
+            inner = inner.label(label);
+        }
+        if let Some((lo, hi)) = range {
+            inner = inner.range(lo, hi);
+        }
+        if let Some(width) = strip_width {
+            if width == 0 {
+                return Err(PyValueError::new_err("strip_width must be at least 1"));
+            }
+            inner = inner.strip_width(width);
+        }
+        if let Some(unit) = unit {
+            inner = inner.unit(unit);
+        }
+        if let Some(style) = style {
+            inner = inner.style(style);
+        }
+        Ok(Distribution { inner })
+    }
+
+    /// `count`, `ignored`, `min`, `p25`, `p50`, `p75`, `p95`, `max` and
+    /// `mean` (`None` without values).
+    #[getter]
+    fn summary<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
+        summary_dict(py, &self.inner.summary())
+    }
+
+    /// The finite values, sorted.
+    #[getter]
+    fn values(&self) -> Vec<f64> {
+        self.inner.values().to_vec()
+    }
+
+    #[getter]
+    fn label(&self) -> &str {
+        self.inner.label_text()
+    }
+
+    /// The `q` quantile (0 to 1), interpolated linearly (numpy's default);
+    /// `None` without values.
+    fn quantile(&self, q: f64) -> Option<f64> {
+        self.inner.quantile(q)
+    }
+
+    fn __repr__(&self) -> String {
+        format!("<Distribution {} values>", self.inner.summary().count)
+    }
+}
+
+/// Distributions stacked on one scale, their columns aligned
+/// (`rich_ext::chart::DistributionSet`).
+#[pyclass(name = "DistributionSet", module = "rs_rich.chart", frozen)]
+pub(crate) struct DistributionSet {
+    inner: CoreDistributionSet,
+}
+renders!(DistributionSet);
+
+#[pymethods]
+impl DistributionSet {
+    /// `distributions`: `Distribution`s, `(label, values)` pairs, or a
+    /// dict of label to values. `range`: fix the shared scale.
+    /// `shared_scale`: draw every row on one scale with a scale line.
+    #[new]
+    #[pyo3(signature = (distributions=None, *, range=None, strip_width=None, numbers=true, charset="auto", shared_scale=true))]
+    fn new(
+        distributions: Option<&Bound<'_, PyAny>>,
+        range: Option<(f64, f64)>,
+        strip_width: Option<usize>,
+        numbers: bool,
+        charset: &str,
+        shared_scale: bool,
+    ) -> PyResult<Self> {
+        let mut inner = CoreDistributionSet::new()
+            .numbers(numbers)
+            .charset(self::charset(charset)?)
+            .shared_scale(shared_scale);
+        if let Some(distributions) = distributions.filter(|d| !d.is_none()) {
+            for item in items(distributions)? {
+                let row = if let Ok(d) = item.cast::<Distribution>() {
+                    d.get().inner.clone()
+                } else {
+                    let bad = || {
+                        PyTypeError::new_err(
+                            "a distribution is a Distribution or a (label, values) pair",
+                        )
+                    };
+                    let (label, values) = pair(&item).ok_or_else(bad)?;
+                    let label: String = label.extract().map_err(|_| bad())?;
+                    CoreDistribution::new(self::numbers(&values)?).label(label)
+                };
+                inner = inner.push(row);
+            }
+        }
+        if let Some((lo, hi)) = range {
+            inner = inner.range(lo, hi);
+        }
+        if let Some(width) = strip_width {
+            if width == 0 {
+                return Err(PyValueError::new_err("strip_width must be at least 1"));
+            }
+            inner = inner.strip_width(width);
+        }
+        Ok(DistributionSet { inner })
+    }
+
+    /// The shared scale, `(min, max)`.
+    #[getter]
+    fn scale(&self) -> (f64, f64) {
+        let scale = self.inner.scale();
+        (scale.min(), scale.max())
+    }
+
+    /// The rows' labels.
+    #[getter]
+    fn labels(&self) -> Vec<String> {
+        self.inner
+            .distributions()
+            .iter()
+            .map(|d| d.label_text().to_string())
+            .collect()
+    }
+
+    fn __repr__(&self) -> String {
+        format!(
+            "<DistributionSet {} distributions>",
+            self.inner.distributions().len()
+        )
+    }
+}
+
+/// A chart a `SmallMultiples` grid can hold: a `Sparkline`, a `BarChart`
+/// or a `LineChart`.
+fn facet(chart: &Bound<'_, PyAny>) -> PyResult<Facet> {
+    if let Ok(c) = chart.cast::<Sparkline>() {
+        return Ok(c.get().inner.clone().into());
+    }
+    if let Ok(c) = chart.cast::<BarChart>() {
+        return Ok(c.get().inner.clone().into());
+    }
+    if let Ok(c) = chart.cast::<LineChart>() {
+        return Ok(c.get().inner.clone().into());
+    }
+    Err(PyTypeError::new_err(
+        "a small multiple is a Sparkline, a BarChart or a LineChart",
+    ))
+}
+
+/// A grid of titled charts on one value scale, fitted to the width
+/// (`rich_ext::chart::SmallMultiples`).
+#[pyclass(name = "SmallMultiples", module = "rs_rich.chart", frozen)]
+pub(crate) struct SmallMultiples {
+    inner: CoreSmallMultiples,
+}
+renders!(SmallMultiples);
+
+#[pymethods]
+impl SmallMultiples {
+    /// `items`: `(title, chart)` pairs or a dict of title to chart, each a
+    /// `Sparkline`, `BarChart` or `LineChart`. `columns`: how many columns
+    /// (default: as many cells of `min_cell_width` as fit). `range`: fix
+    /// the shared scale. `height`: each chart's rows. `note`: the scale and
+    /// the one legend under the grid.
+    #[new]
+    #[pyo3(signature = (items, *, columns=None, min_cell_width=24, gap=2, shared_scale=true, range=None, height=None, note=true, charset="auto"))]
+    #[allow(clippy::too_many_arguments)]
+    fn new(
+        items: &Bound<'_, PyAny>,
+        columns: Option<usize>,
+        min_cell_width: usize,
+        gap: usize,
+        shared_scale: bool,
+        range: Option<(f64, f64)>,
+        height: Option<usize>,
+        note: bool,
+        charset: &str,
+    ) -> PyResult<Self> {
+        let mut pairs: Vec<(String, Facet)> = Vec::new();
+        for item in self::items(items)? {
+            let bad = || PyTypeError::new_err("an item is a (title, chart) pair");
+            let (title, chart) = pair(&item).ok_or_else(bad)?;
+            pairs.push((title.extract().map_err(|_| bad())?, facet(&chart)?));
+        }
+        let mut inner = CoreSmallMultiples::new(pairs)
+            .min_cell_width(min_cell_width)
+            .gap(gap)
+            .shared_scale(shared_scale)
+            .note(note)
+            .charset(self::charset(charset)?);
+        if let Some(columns) = columns {
+            if columns == 0 {
+                return Err(PyValueError::new_err("columns must be at least 1"));
+            }
+            inner = inner.columns(columns);
+        }
+        if let Some((lo, hi)) = range {
+            inner = inner.range(lo, hi);
+        }
+        if let Some(height) = height {
+            if height == 0 {
+                return Err(PyValueError::new_err("height must be at least 1"));
+            }
+            inner = inner.height(height);
+        }
+        Ok(SmallMultiples { inner })
+    }
+
+    /// How many columns the grid has at `width` cells.
+    fn columns_at(&self, width: usize) -> usize {
+        self.inner.columns_at(width)
+    }
+
+    /// The shared scale, `(min, max)`, or `None` when not shared.
+    #[getter]
+    fn scale(&self) -> Option<(f64, f64)> {
+        self.inner.scale()
+    }
+
+    /// The titles, in order.
+    #[getter]
+    fn titles(&self) -> Vec<String> {
+        self.inner.items().iter().map(|(t, _)| t.clone()).collect()
+    }
+
+    fn __repr__(&self) -> String {
+        format!("<SmallMultiples {} charts>", self.inner.items().len())
+    }
+}
+
+/// The `q` quantile (0 to 1) of `values` (`None`, NaN and infinities left
+/// out), interpolated linearly as numpy's default does; `None` without
+/// values.
+#[pyfunction]
+fn chart_quantile(values: &Bound<'_, PyAny>, q: f64) -> PyResult<Option<f64>> {
+    let mut sorted: Vec<f64> = numbers(values)?
+        .into_iter()
+        .filter(|v| v.is_finite())
+        .collect();
+    sorted.sort_by(f64::total_cmp);
+    Ok(rich_ext::chart::quantile(&sorted, q))
+}
+
+/// The summary of `values`: `count`, `ignored`, `min`, `p25`, `p50`,
+/// `p75`, `p95`, `max` and `mean`.
+#[pyfunction]
+fn chart_summary<'py>(py: Python<'py>, values: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyDict>> {
+    summary_dict(py, &CoreSummary::of(numbers(values)?))
+}
+
+/// What a chart of this module says to a screen reader, or `None` for
+/// anything else.
+pub(crate) fn accessible_text_of(chart: &Bound<'_, PyAny>, width: usize) -> Option<String> {
+    use rich_ext::a11y::AccessibleText;
+    macro_rules! each {
+        ($($ty:ty),*) => {$(
+            if let Ok(c) = chart.cast::<$ty>() {
+                return Some(c.get().inner.accessible_text(width));
+            }
+        )*};
+    }
+    each!(
+        Sparkline,
+        BarChart,
+        Histogram,
+        LineChart,
+        Gauge,
+        BulletChart,
+        FillGauge,
+        LineGauge,
+        Heatmap,
+        StatusMatrix,
+        KpiCard,
+        Timeline,
+        Distribution,
+        DistributionSet,
+        SmallMultiples
+    );
+    None
+}
+
+/// A chart's accessible text: a few lines of plain words for a screen
+/// reader (what it is, its ranges and key values).
+#[pyfunction]
+#[pyo3(signature = (chart, width=80))]
+fn chart_describe(chart: &Bound<'_, PyAny>, width: usize) -> PyResult<String> {
+    accessible_text_of(chart, width)
+        .ok_or_else(|| PyTypeError::new_err("chart_describe takes a chart of rs_rich.chart"))
+}
+
 /// `value` as a chart writes it: `format` as for the charts.
 #[pyfunction]
 #[pyo3(signature = (value, format=None))]
@@ -1173,7 +1843,10 @@ fn chart_format(value: f64, format: Option<&Bound<'_, PyAny>>) -> PyResult<Strin
 pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     renderable::add_renderable_class::<Sparkline>(m)?;
     m.add_class::<ChartBar>()?;
+    m.add_class::<BarGroup>()?;
     renderable::add_renderable_class::<BarChart>(m)?;
+    renderable::add_renderable_class::<FillGauge>(m)?;
+    renderable::add_renderable_class::<LineGauge>(m)?;
     renderable::add_renderable_class::<Histogram>(m)?;
     m.add_class::<Series>()?;
     renderable::add_renderable_class::<LineChart>(m)?;
@@ -1186,6 +1859,12 @@ pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     renderable::add_renderable_class::<KpiCard>(m)?;
     m.add_class::<TimelineSpan>()?;
     renderable::add_renderable_class::<Timeline>(m)?;
+    renderable::add_renderable_class::<Distribution>(m)?;
+    renderable::add_renderable_class::<DistributionSet>(m)?;
+    renderable::add_renderable_class::<SmallMultiples>(m)?;
+    m.add_function(pyo3::wrap_pyfunction!(chart_quantile, m)?)?;
+    m.add_function(pyo3::wrap_pyfunction!(chart_summary, m)?)?;
+    m.add_function(pyo3::wrap_pyfunction!(chart_describe, m)?)?;
     m.add_function(pyo3::wrap_pyfunction!(chart_format, m)?)?;
     m.add(
         "CHART_STYLES",

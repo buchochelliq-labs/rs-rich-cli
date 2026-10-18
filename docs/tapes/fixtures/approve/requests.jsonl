@@ -1,0 +1,5 @@
+{"id": 101, "title": "Raise the API rate limit", "author": "ada", "env": "prod", "risk": "low"}
+{"id": 102, "title": "Drop the legacy sessions table", "author": "grace", "env": "prod", "risk": "high", "sql": ["DROP TABLE sessions_v1"]}
+{"id": 103, "title": "Rotate the CDN certificate", "author": "linus", "env": "prod", "risk": "low"}
+{"id": 104, "title": "Enable the new search index", "author": "ada", "env": "staging", "risk": "medium"}
+{"id": 105, "title": "Purge stale feature flags", "author": "barbara", "env": "prod", "risk": "low"}

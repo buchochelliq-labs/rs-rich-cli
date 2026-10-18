@@ -36,16 +36,21 @@ use std::collections::{HashMap, HashSet};
 use std::hash::Hash;
 use std::rc::Rc;
 
-use rich::{Console, Renderable, Segment, Style};
+use rich::{Console, Overflow, Renderable, Segment, Style};
 use rich_interact::{Component, Key, Mouse};
 
-use crate::app::Ctx;
-use crate::builtin::{Each, Grid, Host, HostWidget, Leaf, Pad, Panel, ScrollView, Stack, Switch};
+use crate::app::{Ctx, Theme};
+use crate::border::{Border, Edge, Shadow, Sides, Title};
+use crate::builtin::Described;
+use crate::builtin::{
+    Each, Grid, Host, HostWidget, Layers, Leaf, Pad, Panel, ScrollView, Stack, Switch, TextNode,
+};
 pub use crate::layout::Size;
-use crate::layout::{Align, AlignContent, Justify, StackLayout, Track};
+use crate::layout::{Align, AlignContent, Justify, StackLayout, TextAlign, Track};
+pub use crate::list::list;
 use crate::reactive::{next_node, NodeId, Runtime, Signal};
 use crate::screen::{Rect, Screen};
-use crate::sheet::{BoxKind, Dock, Element, Layout, States, Stylesheet};
+use crate::sheet::{Dock, Element, Layout, States, Stylesheet};
 use crate::widget::{Canvas, DrawCx, MeasureCx, ScrollCx, Watchers, Widget};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -123,6 +128,13 @@ pub struct Node {
     class_when: Vec<(String, Condition)>,
     selected_when: Option<Condition>,
     disabled_when: Option<Condition>,
+    error_when: Option<Condition>,
+    /// Conditions on the app's [`viewport`](crate::viewport()) that must
+    /// all hold for it to be shown ([`hide_below`](Node::hide_below) and
+    /// the like), each with the rule the inspector names it by.
+    shown_when: Vec<(String, Condition)>,
+    /// Whether it was last drawn in the theme's error look.
+    error_lit: Cell<bool>,
     /// What the stylesheet decided for it.
     sheet: RefCell<SheetNode>,
     /// Where its widget lays out and draws: its rectangle less the
@@ -134,15 +146,111 @@ pub struct Node {
     access_label: Option<String>,
     live: bool,
     last_live: RefCell<Option<String>>,
-    /// Where its selected item is, for widgets drawn from lines (a list).
-    cursor_cell: Option<Rc<Cell<Option<Rect>>>>,
     /// Left out, with what is inside, for assistive technology; and the
-    /// states code gave it, and its builder's (a list's selected row).
+    /// states code gave it.
     access_hidden: bool,
     expanded_when: Option<Condition>,
     checked_when: Option<Condition>,
     busy_when: Option<Condition>,
-    built_state: Option<Box<dyn Fn() -> crate::a11y::AccessState>>,
+    /// A [`list`]'s selection and scroll, for
+    /// [`reorderable`](Node::reorderable).
+    pub(crate) list_model: Option<Rc<crate::reorder::ListModel>>,
+    /// Its own colours and text style ([`style`](Node::style),
+    /// [`bg`](Node::bg), [`fg`](Node::fg)), under what it draws.
+    own_style: Option<OwnStyle>,
+    /// Theme styles that hold inside it ([`theme_styles`](Node::theme_styles)),
+    /// and the console and theme its subtree draws with, made from them.
+    theme_styles: Vec<(String, String)>,
+    scope: RefCell<Option<Rc<Scope>>>,
+    /// In [`layers`]: its inset from the layers' edges, and where it sits
+    /// at its content's size.
+    pub(crate) inset: Option<[u16; 4]>,
+    pub(crate) place: Option<(Align, Align)>,
+}
+
+/// A node's own style: a style (or theme style name), a foreground and a
+/// background, each a colour or a theme style's colour.
+#[derive(Clone, Debug, Default)]
+struct OwnStyle {
+    style: Option<String>,
+    fg: Option<String>,
+    bg: Option<String>,
+}
+
+impl OwnStyle {
+    /// The style, its names looked up in `console`'s theme.
+    fn resolve(&self, console: &Console) -> Style {
+        let mut out = match &self.style {
+            Some(name) => crate::widget::theme_style(console, name, ""),
+            None => Style::default(),
+        };
+        // A colour, or a theme style's: its colour, else its background,
+        // as a stylesheet's `$name` is.
+        let color = |name: &str, background: bool| {
+            let style = crate::widget::theme_style(console, name, "");
+            let (first, second) = match background {
+                true => (style.bgcolor(), style.color()),
+                false => (style.color(), style.bgcolor()),
+            };
+            first
+                .or(second)
+                .cloned()
+                .or_else(|| rich::Color::parse(name).ok())
+        };
+        if let Some(fg) = self.fg.as_deref().and_then(|name| color(name, false)) {
+            out = out.combine(&Style::from_color(Some(fg), None));
+        }
+        if let Some(bg) = self.bg.as_deref().and_then(|name| color(name, true)) {
+            out = out.combine(&Style::from_color(None, Some(bg)));
+        }
+        out
+    }
+}
+
+/// The console and theme a subtree draws with when a node gives it theme
+/// styles of its own ([`Node::theme_styles`]): copies made once, and again
+/// when what they were made over changes.
+pub(crate) struct Scope {
+    pub console: Console,
+    pub theme: Theme,
+    /// The theme it was made over (`None`: made while measuring, before a
+    /// theme was at hand), and its console's size.
+    made_over: Option<Theme>,
+    size: (usize, usize),
+}
+
+impl Scope {
+    fn new(console: &Console, theme: Option<&Theme>, styles: &[(String, String)]) -> Scope {
+        let mut scoped = console.clone();
+        let mut own = theme.cloned().unwrap_or_default();
+        let mut named = rich::Theme::new();
+        for (name, definition) in styles {
+            // Theme names in a definition are the ones around it.
+            let style = crate::widget::theme_style(console, definition, "");
+            named.insert(name.clone(), style.clone());
+            match name.as_str() {
+                "border" => own.border = style,
+                "border.focused" => own.border_focused = style,
+                "title" => own.title = style,
+                _ => own = own.style(name, style),
+            }
+        }
+        scoped.push_theme(named, true);
+        Scope {
+            console: scoped,
+            theme: own,
+            made_over: theme.cloned(),
+            size: (console.width(), console.height()),
+        }
+    }
+}
+
+/// Whether two themes style everything the same.
+fn same_theme(a: &Theme, b: &Theme) -> bool {
+    a.border == b.border
+        && a.border_focused == b.border_focused
+        && a.title == b.title
+        && a.styles == b.styles
 }
 
 /// A condition a node's class or state follows.
@@ -166,16 +274,18 @@ struct SheetNode {
     layout: Layout,
     /// Whether a rule with a state could match it, and which states.
     watch: (bool, bool, bool),
-    /// The border it draws round its widget (a panel draws its own).
-    decor: Option<(BoxKind, Style, String)>,
+    /// The border it draws round its widget (a panel draws its own); its
+    /// titles and sides are the layout's.
+    decor: Option<(Border, Style)>,
     insets: [u16; 4],
     /// The style it was last drawn in.
     style: Option<Style>,
-    /// Its conditional classes that held, and whether it was selected and
-    /// disabled, when it last drew.
+    /// Its conditional classes that held, and whether it was selected,
+    /// disabled and in error, when it last drew.
     active: Vec<String>,
     selected: bool,
     disabled: bool,
+    error: bool,
 }
 
 /// The stylesheet as a frame draws with it.
@@ -183,6 +293,8 @@ pub(crate) struct SheetCx<'a> {
     pub sheet: &'a Stylesheet,
     pub generation: u64,
     pub vars: &'a dyn Fn(&str) -> Option<Style>,
+    /// The app's [`viewport`](crate::viewport()), for `@media` rules.
+    pub viewport: (u16, u16),
 }
 
 /// A node's widget, and what the framework keeps for it between frames.
@@ -240,18 +352,25 @@ impl Node {
             class_when: Vec::new(),
             selected_when: None,
             disabled_when: None,
+            error_when: None,
+            shown_when: Vec::new(),
+            error_lit: Cell::new(false),
             sheet: RefCell::new(SheetNode::default()),
             inner: Cell::new(Rect::default()),
             role: None,
             access_label: None,
             live: false,
             last_live: RefCell::new(None),
-            cursor_cell: None,
             access_hidden: false,
             expanded_when: None,
             checked_when: None,
             busy_when: None,
-            built_state: None,
+            list_model: None,
+            own_style: None,
+            theme_styles: Vec::new(),
+            scope: RefCell::new(None),
+            inset: None,
+            place: None,
         }
     }
 
@@ -264,6 +383,11 @@ impl Node {
     pub fn name(mut self, name: &str) -> Node {
         self.name = Some(name.to_string());
         self
+    }
+
+    /// Its [name](Self::name), if it was given one.
+    pub(crate) fn given_name(&self) -> Option<&str> {
+        self.name.as_deref()
     }
 
     /// Its name, if it was given one: how the command palette and the help
@@ -350,17 +474,8 @@ impl Node {
         self
     }
 
-    /// The states its builder knows (a list's selected row and its place).
-    pub(crate) fn built_state(
-        mut self,
-        state: impl Fn() -> crate::a11y::AccessState + 'static,
-    ) -> Node {
-        self.built_state = Some(Box::new(state));
-        self
-    }
-
-    /// Its states: its widget's, or its builder's, with what code set over
-    /// them ([`selected_when`](Self::selected_when),
+    /// Its states: its widget's, with what code set over them
+    /// ([`selected_when`](Self::selected_when),
     /// [`expanded_when`](Self::expanded_when) and the like).
     pub fn access_state(&self) -> crate::a11y::AccessState {
         self.access_state_of(&*self.body.borrow().widget)
@@ -369,10 +484,7 @@ impl Node {
     /// [`access_state`](Self::access_state), with its widget in hand (while
     /// it draws, the body is borrowed).
     fn access_state_of(&self, widget: &dyn Widget) -> crate::a11y::AccessState {
-        let mut state = match &self.built_state {
-            Some(state) => state(),
-            None => widget.access_state(),
-        };
+        let mut state = widget.access_state();
         let holds = |condition: &Option<Condition>| condition.as_ref().map(|c| c());
         if let Some(open) = holds(&self.expanded_when) {
             state.expanded = Some(open);
@@ -382,6 +494,7 @@ impl Node {
         }
         state.selected |= holds(&self.selected_when).unwrap_or(false);
         state.busy |= holds(&self.busy_when).unwrap_or(false);
+        state.invalid |= holds(&self.error_when).unwrap_or(false);
         state
     }
 
@@ -411,21 +524,28 @@ impl Node {
         }
     }
 
-    /// Its accessible name, if code gave one; a panel's is its title.
+    /// Its accessible name, if code gave one; a panel's is its title. A
+    /// [`described`] node's is what it says, after the name code gave.
     pub(crate) fn access_label(&self) -> Option<String> {
-        self.access_label.clone().or_else(|| {
-            self.widget_mut(|panel: &mut Panel| panel.shown_title())
-                .filter(|title| !title.is_empty())
-        })
+        let says = self
+            .widget_ref(|d: &Described| d.text.clone())
+            .flatten()
+            .filter(|text| !text.is_empty());
+        match (self.access_label.clone(), says) {
+            (Some(label), Some(text)) => return Some(format!("{label}: {text}")),
+            (label, text) => {
+                if let Some(name) = label.or(text) {
+                    return Some(name);
+                }
+            }
+        }
+        self.widget_mut(|panel: &mut Panel| panel.shown_title())
+            .filter(|title| !title.is_empty())
     }
 
     /// Where its selected item is, on its widget's surface.
     pub(crate) fn cursor(&self) -> Option<Rect> {
-        self.body
-            .borrow()
-            .widget
-            .cursor()
-            .or_else(|| self.cursor_cell.as_ref().and_then(|c| c.get()))
+        self.body.borrow().widget.cursor()
     }
 
     /// For a [live](Self::live) node: what it shows now, when that changed
@@ -459,6 +579,167 @@ impl Node {
         match self.body.borrow().widget.describe() {
             Some(more) => format!("{base} {more}"),
             None => base,
+        }
+    }
+
+    /// How the inspector's trace and timings name it: its name, else its
+    /// builder and id (`text#7`).
+    pub(crate) fn short(&self) -> String {
+        match &self.name {
+            Some(name) => name.clone(),
+            None => format!("{}#{}", self.what, self.id),
+        }
+    }
+
+    /// The widget, if it is a `W`, read only: for a node whose children are
+    /// being visited, which holds its widget borrowed meanwhile.
+    pub(crate) fn widget_ref<W: Widget, R>(&self, f: impl FnOnce(&W) -> R) -> Option<R> {
+        let body = self.body.borrow();
+        let widget: &dyn std::any::Any = &*body.widget;
+        widget.downcast_ref::<W>().map(f)
+    }
+
+    /// Visit this node and every node inside it, depth first, with its
+    /// path and whether it is hidden: what [`walk`](Self::walk) leaves out
+    /// is visited too (for the inspector), but not what is inside it.
+    pub(crate) fn walk_all(&self, f: &mut dyn FnMut(&Node, &[NodeId], bool)) {
+        fn inner(node: &Node, path: &mut Vec<NodeId>, f: &mut dyn FnMut(&Node, &[NodeId], bool)) {
+            path.push(node.id);
+            let hidden = node.hidden();
+            f(node, path, hidden);
+            if !hidden {
+                node.each_child(&mut |child| inner(child, path, f));
+            }
+            path.pop();
+        }
+        inner(self, &mut Vec::new(), f);
+    }
+
+    /// For a [`grid`]: where its child `id` is placed, its first column and
+    /// row and how many of each it spans (0-based), if it is shown.
+    pub(crate) fn grid_place(&self, id: NodeId) -> Option<crate::layout::Cellspan> {
+        self.widget_ref(|grid: &Grid| {
+            let shown: Vec<&Node> = grid.children.iter().filter(|c| !c.hidden()).collect();
+            let spans: Vec<(u16, u16)> = shown.iter().map(|c| c.span).collect();
+            let (places, _) = crate::layout::place(grid.columns.len().max(1), &spans);
+            shown
+                .iter()
+                .position(|c| c.id == id)
+                .and_then(|at| places.get(at).copied())
+        })
+        .flatten()
+    }
+
+    /// What the inspector's node pane shows of it: its layout as code and
+    /// the stylesheet set it, its focus, its rules and states. Reads the
+    /// signals its conditions read (call it untracked).
+    pub(crate) fn facts(&self) -> crate::inspect::Facts {
+        let sheet = self.sheet.borrow();
+        let layout = &sheet.layout;
+        let (size, size_from) = match (self.set[SET_SIZE], layout.size) {
+            (true, _) => (self.size, Some("code")),
+            (false, Some(size)) => (size, Some("stylesheet")),
+            (false, None) => (self.size, None),
+        };
+        let min = if self.set[SET_MIN] {
+            self.min
+        } else {
+            layout.min.unwrap_or(self.min)
+        };
+        let max = if self.set[SET_MAX] {
+            self.max
+        } else {
+            layout.max.unwrap_or(self.max)
+        };
+        let dock = layout.dock.map(|dock| match dock {
+            Dock::Top => "top",
+            Dock::Bottom => "bottom",
+            Dock::Left => "left",
+            Dock::Right => "right",
+        });
+        let border = sheet.decor.as_ref().map(|(kind, _)| kind.css());
+        let padding = if sheet.decor.is_some() || sheet.insets != [0; 4] {
+            layout.padding
+        } else {
+            [0; 4]
+        };
+        let sheet_hidden = layout.hidden;
+        drop(sheet);
+        let flow = self.widget_ref(|stack: &Stack| (stack.axis, stack.flow));
+        let grid =
+            self.widget_ref(|grid: &Grid| (grid.columns.clone(), grid.rows.clone(), grid.gap));
+        let edges = self
+            .widget_ref(|pad: &Pad| pad.edges)
+            .or_else(|| self.widget_ref(|panel: &Panel| panel.look.padding));
+        let (active, selected, disabled, invalid) = self.conditions();
+        let inactive = self
+            .class_when
+            .iter()
+            .map(|(class, _)| class.clone())
+            .filter(|class| !active.contains(class))
+            .collect();
+        let (_, focus, hover) = self.sheet.borrow().watch;
+        let keys = self
+            .keys
+            .borrow()
+            .iter()
+            .map(|(keys, _, _)| {
+                keys.iter()
+                    .map(ToString::to_string)
+                    .collect::<Vec<_>>()
+                    .join("/")
+            })
+            .collect();
+        let mut handlers = Vec::new();
+        if self.click.borrow().is_some() {
+            handlers.push("on_click");
+        }
+        if self.mouse.borrow().is_some() {
+            handlers.push("on_mouse");
+        }
+        if self.drag.is_some() {
+            handlers.push("draggable");
+        }
+        if self.drop.is_some() {
+            handlers.push("on_drop");
+        }
+        if self.tooltip.is_some() {
+            handlers.push("tooltip");
+        }
+        crate::inspect::Facts {
+            size,
+            size_from,
+            min,
+            max,
+            span: self.span,
+            align_self: self.self_align(),
+            dock,
+            border,
+            padding,
+            flow,
+            grid,
+            edges,
+            focusable: self.focusable,
+            autofocus: self.autofocus,
+            disabled,
+            rules: self
+                .shown_when
+                .iter()
+                .map(|(rule, holds)| (rule.clone(), holds()))
+                .collect(),
+            sheet_hidden,
+            access_hidden: self.access_hidden,
+            classes: self.classes.clone(),
+            active,
+            inactive,
+            selected,
+            invalid,
+            watches: (focus, hover),
+            role: self.access_role(),
+            keys,
+            handlers,
+            focus_style: self.focus_style.clone(),
+            hover_style: self.hover_style.clone(),
         }
     }
 
@@ -635,6 +916,96 @@ impl Node {
         self.disabled_when
             .as_ref()
             .is_some_and(|condition| condition())
+    }
+
+    /// In error while `condition` holds: a field whose value is wrong, a
+    /// form that cannot be sent. It matches a stylesheet's `:error` (or
+    /// CSS's `:invalid`), and the theme gives it a look of its own: a
+    /// [panel](Self::panel)'s border in the theme's `border.error` style,
+    /// another node's text in its `error` style (under the text's own
+    /// colours, as a stylesheet's go), each the theme's `bad` style unless
+    /// the theme names it. Assistive technology is told it is invalid
+    /// (ARIA's `aria-invalid`). `condition` may read signals.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| {
+    ///     let age = signal(String::from("abc"));
+    ///     text!("Age: {age}")
+    ///         .label("Age")
+    ///         .error_when(move || age.with(|a| a.parse::<u8>().is_err()))
+    /// })
+    /// .stylesheet(":error { text-style: underline; }");
+    /// let mut driver = app.driver(12, 1);
+    /// driver.settle();
+    /// assert!(driver.accessibility()[0].state.invalid);
+    /// assert_eq!(driver.accessibility()[0].describe(), "Age, invalid");
+    /// ```
+    pub fn error_when(mut self, condition: impl Fn() -> bool + 'static) -> Node {
+        self.error_when = Some(Box::new(condition));
+        self
+    }
+
+    /// Whether it is [in error](Self::error_when) now.
+    pub(crate) fn invalid(&self) -> bool {
+        self.error_when
+            .as_ref()
+            .is_some_and(|condition| condition())
+    }
+
+    /// Hide this node while the app is narrower than `columns` cells (its
+    /// [`viewport`](crate::viewport())'s width): a sidebar that gives way
+    /// on a small terminal. Hidden, it is as if a stylesheet said
+    /// `display: none`: it takes no room, and it and what is inside it
+    /// leave the Tab order. It comes back when the terminal is wide enough.
+    /// `@media (max-width: N)` in a stylesheet does the same from outside
+    /// the code (`hide_below(80)` is `max-width: 79`).
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| row([label("nav").fixed(5).hide_below(20), label("main")]));
+    /// let mut driver = app.driver(24, 1);
+    /// driver.settle();
+    /// assert_eq!(driver.screen().plain()[0].trim_end(), "nav  main");
+    /// driver.resize(12, 1);
+    /// driver.settle();
+    /// assert_eq!(driver.screen().plain()[0].trim_end(), "main");
+    /// ```
+    pub fn hide_below(self, columns: u16) -> Node {
+        let rule = format!("hide_below {columns}");
+        self.when_viewport(rule, move |(width, _)| width >= columns)
+    }
+
+    /// Show this node only while the app is narrower than `columns` cells:
+    /// a compact stand-in for what [`hide_below`](Self::hide_below) hides
+    /// (`@media (min-width: N)` with `display: none` in a stylesheet).
+    pub fn show_below(self, columns: u16) -> Node {
+        let rule = format!("show_below {columns}");
+        self.when_viewport(rule, move |(width, _)| width < columns)
+    }
+
+    /// Hide this node while the app is shorter than `rows` cells, as
+    /// [`hide_below`](Self::hide_below) does for the width.
+    pub fn hide_below_height(self, rows: u16) -> Node {
+        let rule = format!("hide_below_height {rows}");
+        self.when_viewport(rule, move |(_, height)| height >= rows)
+    }
+
+    /// Show this node only while the app is shorter than `rows` cells.
+    pub fn show_below_height(self, rows: u16) -> Node {
+        let rule = format!("show_below_height {rows}");
+        self.when_viewport(rule, move |(_, height)| height < rows)
+    }
+
+    /// Shown only while `shown` holds of the app's viewport; `rule` is how
+    /// the inspector names the condition.
+    fn when_viewport(mut self, rule: String, shown: impl Fn((u16, u16)) -> bool + 'static) -> Node {
+        let viewport = crate::reactive::viewport();
+        self.shown_when
+            .push((rule, Box::new(move || shown(viewport.get()))));
+        self
     }
 
     /// Whether it can take the focus now.
@@ -869,16 +1240,360 @@ impl Node {
         )
     }
 
+    /// For a [panel](Self::panel): where its own title sits on the top edge,
+    /// [`Align::Start`] (the default), [`Align::Center`] or [`Align::End`].
+    /// A stylesheet's `border-title-align` does the same. Ignored on other
+    /// nodes.
+    pub fn title_align(self, align: Align) -> Node {
+        self.widget_mut(|panel: &mut Panel| panel.code.title_align = Some(align));
+        self
+    }
+
+    /// For a [panel](Self::panel): another title, console markup, at the
+    /// right of the top edge. Ignored on other nodes.
+    pub fn title_right(self, markup: impl Into<String>) -> Node {
+        self.add_title(Edge::Top, Align::End, markup)
+    }
+
+    /// For a [panel](Self::panel): a title, console markup, at the left of
+    /// the bottom edge (a stylesheet's `border-subtitle`). Ignored on other
+    /// nodes.
+    pub fn title_bottom(self, markup: impl Into<String>) -> Node {
+        self.add_title(Edge::Bottom, Align::Start, markup)
+    }
+
+    /// For a [panel](Self::panel): a title, console markup, on `edge`,
+    /// placed by `align`. Titles with the same alignment sit side by side,
+    /// one cell apart, in the order given. When they do not fit, the
+    /// right-hand ones give way first, then the centred ones, and the left
+    /// ones are cut with `…`. An edge with a title keeps its row even when
+    /// its line is not drawn. Ignored on other nodes.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| {
+    ///     label("…")
+    ///         .panel("Pull requests")
+    ///         .title_right("[dim]loading")
+    ///         .add_title(Edge::Bottom, Align::End, "1/20")
+    /// });
+    /// let mut driver = app.driver(32, 3);
+    /// driver.settle();
+    /// let rows = driver.screen().plain();
+    /// assert_eq!(rows[0], "╭─ Pull requests ──── loading ─╮");
+    /// assert!(rows[2].starts_with("╰───") && rows[2].ends_with("─ 1/20 ─╯"));
+    /// ```
+    pub fn add_title(self, edge: Edge, align: Align, markup: impl Into<String>) -> Node {
+        let title = Title::new(edge, align, markup);
+        self.widget_mut(|panel: &mut Panel| panel.code.titles.push(title));
+        self
+    }
+
+    /// For a [panel](Self::panel): the kind of box it draws, which wins over
+    /// a stylesheet's `border`. [`Border::None`] draws no lines, but its
+    /// titles keep their rows. For a container with
+    /// [collapsed borders](Self::collapse_borders): the kind of its lines.
+    /// Ignored on other nodes.
+    pub fn border(self, border: Border) -> Node {
+        self.widget_mut(|panel: &mut Panel| panel.code.border = Some(border));
+        self.widget_mut(|stack: &mut Stack| stack.collapse.border = Some(border));
+        self.widget_mut(|grid: &mut Grid| grid.collapse.border = Some(border));
+        self
+    }
+
+    /// For a [panel](Self::panel): the sides of the box it draws,
+    /// [`Sides::ALL`] by default, or some of them joined with `|`. The
+    /// inside grows into the sides it does not draw. A stylesheet's
+    /// `border-sides: top bottom` does the same. Ignored on other nodes.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| label("body").panel("Notes").borders(Sides::TOP));
+    /// let mut driver = app.driver(12, 2);
+    /// driver.settle();
+    /// assert_eq!(driver.screen().plain(), ["── Notes ───", "body        "]);
+    /// ```
+    pub fn borders(self, sides: Sides) -> Node {
+        self.widget_mut(|panel: &mut Panel| panel.code.sides = Some(sides));
+        self
+    }
+
+    /// For a [panel](Self::panel) or a container with
+    /// [collapsed borders](Self::collapse_borders): the border's style (or a
+    /// theme style's name) while the focus is elsewhere; with the focus
+    /// inside, it takes the theme's `border.focused`. Ignored on other
+    /// nodes.
+    pub fn border_style(self, style: &str) -> Node {
+        let style = style.to_string();
+        self.widget_mut(|panel: &mut Panel| panel.code.border_style = Some(style.clone()));
+        self.widget_mut(|stack: &mut Stack| stack.collapse.border_style = Some(style.clone()));
+        self.widget_mut(|grid: &mut Grid| grid.collapse.border_style = Some(style));
+        self
+    }
+
+    /// For a [panel](Self::panel): its titles' style (or a theme style's
+    /// name), over the border's colour, instead of the theme's `title`.
+    /// Markup in a title goes over it. Ignored on other nodes.
+    pub fn title_style(self, style: &str) -> Node {
+        let style = style.to_string();
+        self.widget_mut(|panel: &mut Panel| panel.code.title_style = Some(style));
+        self
+    }
+
+    /// For a [panel](Self::panel): a shadow down its right and along its
+    /// bottom, inside its own rectangle (the box is a cell narrower and
+    /// shorter for it), in the theme's `shadow` style. Ignored on other
+    /// nodes.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| label("hi").panel("").shadow(Shadow::MediumShade));
+    /// let mut driver = app.driver(6, 4);
+    /// driver.settle();
+    /// assert_eq!(driver.screen().plain(), ["╭───╮ ", "│hi │▒", "╰───╯▒", " ▒▒▒▒▒"]);
+    /// ```
+    pub fn shadow(self, shadow: Shadow) -> Node {
+        self.widget_mut(|panel: &mut Panel| panel.code.shadow = Some(shadow));
+        self
+    }
+
+    /// For a [`column`](fn@column), [`row`] or [`grid`] of
+    /// [panels](Self::panel): draw one frame for them all, each panel's box
+    /// sharing its edges with its neighbours', joined where lines meet
+    /// (`┬ ┴ ├ ┤ ┼`). Each panel's titles sit on its own edges and its
+    /// content between the lines; the lines round the panel with the focus
+    /// are lit in the theme's `border.focused` (and drawn in
+    /// [`focus_border`](Self::focus_border)'s kind). Gaps are ignored. A
+    /// stylesheet's `border-collapse: collapse` does the same. Ignored on
+    /// other nodes.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| {
+    ///     row([label("a").panel("A"), label("b").panel("B")]).collapse_borders()
+    /// });
+    /// let mut driver = app.driver(13, 3);
+    /// driver.settle();
+    /// assert_eq!(driver.screen().plain(), ["╭─ A ─┬─ B ─╮", "│a    │b    │", "╰─────┴─────╯"]);
+    /// ```
+    pub fn collapse_borders(self) -> Node {
+        let on = |collapse: &mut crate::builtin::Collapse| {
+            collapse.on = true;
+            collapse.code = true;
+        };
+        self.widget_mut(|stack: &mut Stack| on(&mut stack.collapse));
+        self.widget_mut(|grid: &mut Grid| on(&mut grid.collapse));
+        self
+    }
+
+    /// For a container with [collapsed borders](Self::collapse_borders):
+    /// the kind of the lines round the child with the focus
+    /// ([`Border::Thick`] makes it stand out, as ratatui's
+    /// `collapsed-borders` example does). Ignored on other nodes.
+    pub fn focus_border(self, border: Border) -> Node {
+        self.widget_mut(|stack: &mut Stack| stack.collapse.focus_border = Some(border));
+        self.widget_mut(|grid: &mut Grid| grid.collapse.focus_border = Some(border));
+        self
+    }
+
+    /// Draw this node in `style` (`"white on #101830"`, or a theme style's
+    /// name: `"accent"`): ratatui's `Block::style`. It goes under what the
+    /// node and its children draw, as a stylesheet's `color` and
+    /// `background` do, and fills the rest of the node's rectangle, gaps
+    /// and borders included. Code wins over a stylesheet; markup inside
+    /// wins over both.
+    pub fn style(mut self, style: &str) -> Node {
+        self.own_style.get_or_insert_with(OwnStyle::default).style = Some(style.to_string());
+        self
+    }
+
+    /// [`style`](Self::style) with only a background: a colour
+    /// (`"#101830"`, `"grey11"`) or a theme style's colour.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| column([label("a"), label("b")]).gap(1).bg("blue"));
+    /// let mut driver = app.driver(3, 3);
+    /// driver.settle();
+    /// // Every cell is blue, the gap included.
+    /// let blue = rich::Style::parse("on blue").unwrap();
+    /// let gap = driver.screen().cell(1, 1).style;
+    /// assert_eq!(driver.screen().style(gap), Some(&blue));
+    /// ```
+    pub fn bg(mut self, color: &str) -> Node {
+        self.own_style.get_or_insert_with(OwnStyle::default).bg = Some(color.to_string());
+        self
+    }
+
+    /// [`style`](Self::style) with only a foreground: a colour or a theme
+    /// style's colour.
+    pub fn fg(mut self, color: &str) -> Node {
+        self.own_style.get_or_insert_with(OwnStyle::default).fg = Some(color.to_string());
+        self
+    }
+
+    /// For a [`text`](fn@text) or [`label`]: how its lines sit across its
+    /// width, ratatui's `Paragraph::alignment`. A stylesheet's `text-align`
+    /// does the same. It does not change the text's natural width (an
+    /// [`auto`](Self::auto) node is as wide as its longest line). Ignored on
+    /// other nodes.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| label("hi").text_align(TextAlign::Center));
+    /// let mut driver = app.driver(6, 1);
+    /// driver.settle();
+    /// assert_eq!(driver.screen().plain()[0], "  hi  ");
+    /// ```
+    pub fn text_align(self, align: TextAlign) -> Node {
+        self.widget_mut(|text: &mut TextNode| {
+            text.align = Some(align);
+            text.code[0] = true;
+        });
+        self
+    }
+
+    /// For a [`text`](fn@text) or [`label`]: lines are cut at the edge
+    /// rather than wrapped (with `…` after [`overflow`](Self::overflow)'s
+    /// `Ellipsis`). A stylesheet's `text-wrap: nowrap` does the same.
+    /// Ignored on other nodes.
+    pub fn no_wrap(self) -> Node {
+        self.widget_mut(|text: &mut TextNode| {
+            text.no_wrap = Some(true);
+            text.code[1] = true;
+        });
+        self
+    }
+
+    /// For a [`text`](fn@text) or [`label`]: what happens to what does not
+    /// fit a line: [`Overflow::Fold`] (words longer than the line are
+    /// broken, the default), [`Overflow::Crop`] (cut) or
+    /// [`Overflow::Ellipsis`] (cut, with `…`). A stylesheet's
+    /// `text-overflow: fold`, `clip` or `ellipsis` does the same. Ignored on
+    /// other nodes.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| label("a long line").no_wrap().overflow(Overflow::Ellipsis));
+    /// let mut driver = app.driver(6, 1);
+    /// driver.settle();
+    /// assert_eq!(driver.screen().plain()[0], "a lon…");
+    /// ```
+    pub fn overflow(self, overflow: Overflow) -> Node {
+        self.widget_mut(|text: &mut TextNode| {
+            text.overflow = Some(overflow);
+            text.code[2] = true;
+        });
+        self
+    }
+
+    /// `a / b` of the parent's axis (see [`Size::Ratio`]): three
+    /// `.ratio(1, 3)` children fill it exactly.
+    pub fn ratio(self, a: u32, b: u32) -> Node {
+        self.size(Size::Ratio(a, b))
+    }
+
+    /// In [`layers`]: keep `top`, `right`, `bottom` and `left` cells
+    /// between this layer and the layers' edges, as CSS's `inset`. Ignored
+    /// elsewhere.
+    pub fn inset(mut self, top: u16, right: u16, bottom: u16, left: u16) -> Node {
+        self.inset = Some([top, right, bottom, left]);
+        self
+    }
+
+    /// In [`layers`]: make this layer as big as its content, placed by
+    /// `across` (left to right) and `down` ([`Align::Stretch`] takes the
+    /// whole width or height). Ignored elsewhere.
+    pub fn place(mut self, across: Align, down: Align) -> Node {
+        self.place = Some((across, down));
+        self
+    }
+
+    /// Theme styles that hold for this node and everything inside it, over
+    /// the app's theme, as CSS custom properties do: `[selected]…[/]` in
+    /// markup, a list's selected row, a table's `table.header`, a tab
+    /// strip's `tabs.selected`, a panel's `border` and `title`. The styles
+    /// are definitions or the names of the theme's other styles. It is the
+    /// one answer to ratatui's `highlight_style` and the like, per
+    /// instance, with no style option on each widget.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| {
+    ///     let selected = signal(0usize);
+    ///     list(|| vec!["one".into(), "two".into()], selected)
+    ///         .theme_styles([("selected", "bold yellow on #303030")])
+    /// });
+    /// let mut driver = app.driver(5, 2);
+    /// driver.settle();
+    /// let picked = rich::Style::parse("bold yellow on #303030").unwrap();
+    /// let cell = driver.screen().cell(0, 0).style;
+    /// assert_eq!(driver.screen().style(cell), Some(&picked));
+    /// ```
+    pub fn theme_styles<N: Into<String>, S: Into<String>>(
+        mut self,
+        styles: impl IntoIterator<Item = (N, S)>,
+    ) -> Node {
+        self.theme_styles
+            .extend(styles.into_iter().map(|(n, s)| (n.into(), s.into())));
+        *self.scope.get_mut() = None;
+        self
+    }
+
+    /// This node's [scope](Self::theme_styles) over `console` and `theme`,
+    /// made again when they changed; `None` without theme styles. While
+    /// measuring, `theme` is not at hand: any copy made already does.
+    fn scope_over(&self, console: &Console, theme: Option<&Theme>) -> Option<Rc<Scope>> {
+        if self.theme_styles.is_empty() {
+            return None;
+        }
+        let size = (console.width(), console.height());
+        if let Some(scope) = self.scope.borrow().as_ref() {
+            let current = match theme {
+                None => true,
+                Some(theme) => scope
+                    .made_over
+                    .as_ref()
+                    .is_some_and(|made| same_theme(made, theme)),
+            };
+            if current && scope.size == size {
+                return Some(scope.clone());
+            }
+        }
+        let scope = Rc::new(Scope::new(console, theme, &self.theme_styles));
+        *self.scope.borrow_mut() = Some(scope.clone());
+        Some(scope)
+    }
+
     /// A node of `widget` round this one, taking over its size and span.
-    fn wrap_in(self, widget: impl FnOnce(Node) -> Box<dyn Widget>, what: &'static str) -> Node {
+    pub(crate) fn wrap_in(
+        mut self,
+        widget: impl FnOnce(Node) -> Box<dyn Widget>,
+        what: &'static str,
+    ) -> Node {
         let (size, min, max, span, set) = (self.size, self.min, self.max, self.span, self.set);
         let align_self = self.align_self;
+        // Where it goes in layers is the box's place.
+        let (inset, place) = (self.inset.take(), self.place.take());
+        // Shown or hidden by the viewport as a whole, box and all.
+        let shown_when = std::mem::take(&mut self.shown_when);
         let mut outer = Node::from_widget(widget(self), what);
+        outer.shown_when = shown_when;
         outer.size = size;
         outer.min = min;
         outer.max = max;
         outer.span = span;
         outer.align_self = align_self;
+        outer.inset = inset;
+        outer.place = place;
         outer.set[SET_SIZE] = set[SET_SIZE];
         outer.set[SET_MIN] = set[SET_MIN];
         outer.set[SET_MAX] = set[SET_MAX];
@@ -903,11 +1618,11 @@ impl Node {
     /// Its size, minimum and maximum: what code set, else what the
     /// stylesheet says; nothing at all when the sheet hides it.
     fn dims(&self) -> (Size, u16, u16) {
-        let sheet = self.sheet.borrow();
-        let layout = &sheet.layout;
-        if layout.hidden {
+        if self.hidden() {
             return (Size::Fixed(0), 0, 0);
         }
+        let sheet = self.sheet.borrow();
+        let layout = &sheet.layout;
         fn pick<T>(set: bool, own: T, from: Option<T>) -> T {
             if set {
                 own
@@ -922,9 +1637,12 @@ impl Node {
         )
     }
 
-    /// Whether a stylesheet hides it (`display: none`).
+    /// Whether a stylesheet hides it (`display: none`), or the app's
+    /// viewport does ([`hide_below`](Self::hide_below) and the like). A
+    /// parent laying out reads the viewport, so it lays out again when the
+    /// terminal's size changes.
     pub(crate) fn hidden(&self) -> bool {
-        self.sheet.borrow().layout.hidden
+        self.sheet.borrow().layout.hidden || self.shown_when.iter().any(|(_, shown)| !shown())
     }
 
     /// The edge a stylesheet docks it to, if any.
@@ -963,19 +1681,21 @@ impl Node {
             classes,
             selected: sheet.selected,
             disabled: sheet.disabled,
+            error: sheet.error,
         }
     }
 
     /// Match the stylesheet's rules to this node, the last of `chain`'s
     /// descendants, once per sheet: its layout, the border it draws, what
     /// its widget takes (a stack's gap, a grid's tracks, a panel's look).
-    pub(crate) fn resolve(&self, cx: &SheetCx, chain: &mut Vec<Element>) {
+    /// Whether it was matched now, rather than already.
+    pub(crate) fn resolve(&self, cx: &SheetCx, chain: &mut Vec<Element>) -> bool {
         if self.sheet.borrow().generation == cx.generation {
-            return;
+            return false;
         }
         chain.push(self.element());
-        let layout = cx.sheet.layout(chain, cx.vars);
-        let watch = cx.sheet.watches(chain);
+        let layout = cx.sheet.layout(chain, cx.vars, cx.viewport);
+        let watch = cx.sheet.watches(chain, cx.viewport);
         chain.pop();
         if !self.set[SET_GAP] {
             let gap = layout.gap.unwrap_or(0);
@@ -1007,27 +1727,51 @@ impl Node {
                 grid.columns = layout.grid_columns.clone().unwrap_or_default();
             }
         });
-        let title = layout.border_title.clone().unwrap_or_default();
         let is_panel = self
             .widget_mut(|panel: &mut Panel| {
                 panel.look = crate::builtin::PanelLook {
                     border: layout.border.clone(),
                     no_border: layout.no_border,
                     title: layout.border_title.clone(),
+                    title_align: layout.title_align,
+                    subtitle: layout.subtitle.clone(),
+                    subtitle_align: layout.subtitle_align,
+                    sides: layout.sides,
                     padding: layout.padding,
                 };
             })
             .is_some();
+        self.widget_mut(|text: &mut TextNode| {
+            let [align, wrap, overflow] = text.code;
+            if !align {
+                text.align = layout.text_align;
+            }
+            if !wrap {
+                text.no_wrap = layout.text_wrap.map(|wrap| !wrap);
+            }
+            if !overflow {
+                text.overflow = layout.text_overflow;
+            }
+        });
+        // A container that collapses its children's borders takes a
+        // stylesheet's border as its lines', rather than a box round it.
+        let collapse = |collapse: &mut crate::builtin::Collapse| {
+            if !collapse.code {
+                collapse.on = layout.collapse.unwrap_or(false);
+            }
+            collapse.sheet = layout.border.clone().filter(|_| collapse.on);
+            collapse.on
+        };
+        let collapsed = self
+            .widget_mut(|stack: &mut Stack| collapse(&mut stack.collapse))
+            .or_else(|| self.widget_mut(|grid: &mut Grid| collapse(&mut grid.collapse)))
+            .unwrap_or(false);
         let (decor, insets) = if is_panel {
             (None, [0; 4])
+        } else if collapsed {
+            (None, layout.padding)
         } else {
-            (
-                layout
-                    .border
-                    .clone()
-                    .map(|(kind, style)| (kind, style, title)),
-                layout.insets(),
-            )
+            (layout.border.clone(), layout.insets())
         };
         let mut sheet = self.sheet.borrow_mut();
         sheet.generation = cx.generation;
@@ -1035,11 +1779,12 @@ impl Node {
         sheet.watch = watch;
         sheet.decor = decor;
         sheet.insets = insets;
+        true
     }
 
-    /// Its conditional classes that hold now, and whether it is selected
-    /// and disabled, reading the signals they read.
-    fn conditions(&self) -> (Vec<String>, bool, bool) {
+    /// Its conditional classes that hold now, and whether it is selected,
+    /// disabled and in error, reading the signals they read.
+    fn conditions(&self) -> (Vec<String>, bool, bool, bool) {
         (
             self.class_when
                 .iter()
@@ -1048,6 +1793,7 @@ impl Node {
                 .collect(),
             self.selected_when.as_ref().is_some_and(|c| c()),
             self.disabled_when.as_ref().is_some_and(|c| c()),
+            self.invalid(),
         )
     }
 
@@ -1112,19 +1858,19 @@ impl Node {
     /// How many cells of `axis` the content needs, given `width` x
     /// `height` to lay out in (a height of 0: as tall as it likes).
     pub(crate) fn measure(&self, console: &Console, axis: Axis, width: u16, height: u16) -> u16 {
-        let (hidden, [top, right, bottom, left]) = {
-            let sheet = self.sheet.borrow();
-            (sheet.layout.hidden, sheet.insets)
-        };
-        if hidden {
+        if self.hidden() {
             return 0;
         }
+        let [top, right, bottom, left] = self.sheet.borrow().insets;
         let height = if height == 0 {
             0
         } else {
             height.saturating_sub(top.saturating_add(bottom)).max(1)
         };
         let width = width.saturating_sub(left.saturating_add(right));
+        // With theme styles of its own, it measures with them.
+        let scope = self.scope_over(console, None);
+        let console = scope.as_ref().map_or(console, |scope| &scope.console);
         let inner =
             self.body
                 .borrow_mut()
@@ -1147,6 +1893,7 @@ impl Node {
         let cells = match size {
             Size::Fixed(n) => n,
             Size::Percent(p) => (along as u32 * p.min(100) as u32 / 100) as u16,
+            Size::Ratio(a, b) => crate::layout::ratio_of(along as u32, a, b) as u16,
             Size::Auto | Size::Flex(_) => self.measure(console, axis, width, height),
         };
         cells.min(max).max(min)
@@ -1162,6 +1909,19 @@ impl Node {
         screen: &mut Screen,
         force: bool,
     ) {
+        // Hidden (`display: none`, `hide_below` and the like): not drawn,
+        // whatever room its parent gave it (a split's pane, a scroll's or a
+        // switch's child), so nothing inside it is shown or clicked.
+        if self.hidden() {
+            self.hide();
+            return;
+        }
+        // While the inspector is open: how long this node takes, less what
+        // its children take.
+        let clock = frame.timings.is_some().then(|| {
+            frame.time_stack.push(std::time::Duration::ZERO);
+            std::time::Instant::now()
+        });
         self.rect.set(rect);
         // Hidden from assistive technology: nothing inside is announced,
         // and a live node holding it says what it shows without it.
@@ -1192,6 +1952,22 @@ impl Node {
         if styled {
             frame.chain.push(self.element());
         }
+        // With theme styles of its own, it and everything inside it draw
+        // with a console and theme that have them, over those around it.
+        let around = frame.scoped.last().cloned();
+        let own_scope = self.scope_over(
+            around
+                .as_ref()
+                .map_or(frame.console, |scope| &scope.console),
+            Some(around.as_ref().map_or(frame.theme, |scope| &scope.theme)),
+        );
+        if let Some(scope) = &own_scope {
+            frame.scoped.push(scope.clone());
+        }
+        let scope = own_scope.clone().or(around);
+        let (app_console, app_theme) = (frame.console, frame.theme);
+        let console: &Console = scope.as_ref().map_or(app_console, |scope| &scope.console);
+        let theme: &Theme = scope.as_ref().map_or(app_theme, |scope| &scope.theme);
         let mut body = self.body.borrow_mut();
         let Body {
             widget,
@@ -1200,7 +1976,6 @@ impl Node {
             view,
         } = &mut *body;
         let viewport = widget.viewport();
-        let console = frame.console;
         let focused = self.focus_style.is_some()
             && frame
                 .focus_path
@@ -1216,6 +1991,7 @@ impl Node {
         let mut cleared = false;
         let mut relaid = false;
         let mut restyled = false;
+        let mut invalid = self.error_lit.get();
         if redraw {
             // Told its size the first time it is laid out (or shown again),
             // and whenever the size changes.
@@ -1240,9 +2016,23 @@ impl Node {
             } else {
                 inner
             };
-            let new_areas = frame
+            let mut new_areas = frame
                 .runtime
                 .observe_node(id, || widget.layout(&MeasureCx { console }, space));
+            // Children the layout built (a switch's page, a new keyed row)
+            // match the stylesheet before they draw, and it lays out again
+            // with what that says (`display: none`, a size).
+            if let Some(sheet) = &frame.sheet {
+                let mut fresh = false;
+                for child in widget.children() {
+                    fresh |= child.resolve(sheet, &mut frame.chain);
+                }
+                if fresh {
+                    new_areas = frame
+                        .runtime
+                        .observe_node(id, || widget.layout(&MeasureCx { console }, space));
+                }
+            }
             let ids: Vec<NodeId> = widget.children().iter().map(|c| c.id).collect();
             relaid =
                 (!laid.is_empty() || !areas.is_empty()) && (ids != *laid || new_areas != *areas);
@@ -1260,6 +2050,15 @@ impl Node {
                 self.access_state_of(&**widget);
                 self.disabled();
             });
+            // In error: a panel draws its border in the theme's error
+            // style; another node's cells take it under their own.
+            if self.error_when.is_some() {
+                invalid = frame.runtime.observe_node_more(id, || self.invalid());
+                let any: &mut dyn Any = &mut **widget;
+                if let Some(panel) = any.downcast_mut::<Panel>() {
+                    panel.invalid = invalid;
+                }
+            }
             // A widget that keeps what it drew is cleared only when its own
             // children moved: when it moved, or was drawn over, whoever did
             // that cleared the area already.
@@ -1268,15 +2067,27 @@ impl Node {
             cleared = !widget.retained()
                 || focused != self.highlit.get()
                 || hovered != self.hover_lit.get()
+                || invalid != self.error_lit.get()
                 || restyled
                 || (relaid && !viewport);
             repaint = moved || force || cleared;
             if cleared {
                 screen.clear(rect);
             }
-            if let (true, Some((kind, style, title))) = (repaint, &decor) {
-                let title_style = style.combine(&frame.theme.title);
-                for edge in draw_box(screen, *kind, title, style, &title_style, rect) {
+            if let (true, Some((kind, style))) = (repaint, &decor) {
+                let title_style = style.combine(&theme.title);
+                let (sides, titles) = {
+                    let sheet = self.sheet.borrow();
+                    (sheet.layout.sides(), sheet.layout.titles())
+                };
+                let look = crate::border::Frame {
+                    border: *kind,
+                    sides,
+                    style,
+                    title_style: &title_style,
+                    titles: &titles,
+                };
+                for edge in crate::border::draw_frame(screen, console, &look, rect) {
                     frame.damage.push(edge);
                 }
             }
@@ -1307,7 +2118,7 @@ impl Node {
             let caret = {
                 let mut cx = DrawCx {
                     console,
-                    theme: frame.theme,
+                    theme,
                     id,
                     rect: inner,
                     repaint,
@@ -1369,23 +2180,96 @@ impl Node {
                 }
             }
             None => {
+                let overlapping = widget.overlapping();
+                let siblings = frame.damage.len();
                 for (i, child) in widget.children().iter().enumerate() {
                     match areas.get(i).map(|area| area.intersection(inner)) {
                         Some(area) if !area.is_empty() => {
                             // A child draws again where the widget drew over
-                            // it.
-                            let over = written.iter().any(|w| !w.intersection(area).is_empty());
-                            child.draw(frame, area, screen, repaint || over);
+                            // it, and, over its earlier siblings, where they
+                            // drew this frame, on a clear area.
+                            let over = written.iter().any(|w| w.intersects(area));
+                            let under = overlapping
+                                && frame.damage[siblings..].iter().any(|d| d.intersects(area));
+                            if under {
+                                screen.clear(area);
+                                frame.damage.push(area);
+                            }
+                            child.draw(frame, area, screen, repaint || over || under);
                         }
                         _ => child.hide(),
                     }
                 }
+                // An effect sees what is inside it whole: when a child
+                // drew and the effect did not, everything inside draws
+                // again before it runs, so that it never runs over what it
+                // wrote itself. An effect that wrote nothing last time left
+                // only what was drawn inside, so it runs over that as it is.
+                let effect = (&**widget as &dyn Any)
+                    .downcast_ref::<crate::effect::Effect>()
+                    .is_some_and(|effect| effect.wrote);
+                if effect && !repaint && frame.damage.len() > siblings {
+                    screen.clear(inner);
+                    frame.damage.push(inner);
+                    for (i, child) in widget.children().iter().enumerate() {
+                        if let Some(area) = areas.get(i).map(|area| area.intersection(inner)) {
+                            if !area.is_empty() {
+                                child.draw(frame, area, screen, true);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        // What it draws over its children, in a frame where it or one of
+        // them drew.
+        if redraw || frame.damage.len() > mark {
+            let mut over: Vec<Rect> = Vec::new();
+            {
+                let mut cx = DrawCx {
+                    console,
+                    theme,
+                    id,
+                    rect: inner,
+                    repaint,
+                    focus_path: frame.focus_path,
+                    hover_path: frame.hover_path,
+                    pointer: frame.pointer,
+                    shift: frame.shift,
+                    wants_hover: &frame.wants_hover,
+                    watchers: frame.watchers,
+                };
+                let mut canvas = Canvas {
+                    screen: &mut *screen,
+                    rect: inner,
+                    written: &mut over,
+                };
+                frame
+                    .runtime
+                    .observe_node_more(id, || widget.draw_over(&mut cx, &mut canvas));
+            }
+            if let Some(effect) =
+                (&mut **widget as &mut dyn Any).downcast_mut::<crate::effect::Effect>()
+            {
+                effect.wrote = !over.is_empty();
+            }
+            if !over.is_empty() {
+                if !redraw {
+                    frame.drew(id);
+                }
+                frame.damage.extend(over);
             }
         }
         // The stylesheet's colours go under everything drawn inside the
-        // node where nothing deeper set them, once its children have drawn.
+        // node where nothing deeper set them, once its children have drawn;
+        // the node's own style (code's) goes over the sheet's.
         let sheet_style = self.sheet.borrow().style.clone();
-        if let Some(style) = sheet_style {
+        let own_style = self.own_style.as_ref().map(|own| own.resolve(console));
+        let under = match (sheet_style, own_style) {
+            (Some(sheet), Some(own)) => Some(sheet.combine(&own)),
+            (sheet, own) => own.or(sheet),
+        };
+        if let Some(style) = under {
             let mut parts: Vec<Rect> = frame.damage[mark..]
                 .iter()
                 .map(|area| area.intersection(rect))
@@ -1403,6 +2287,28 @@ impl Node {
                 frame.damage.push(area);
             }
         }
+        // The theme's error look goes under what the stylesheet left, the
+        // same way (a panel shows it on its border instead).
+        if invalid && self.what != "panel" {
+            let style = theme.error_style("error");
+            let mut parts: Vec<Rect> = frame.damage[mark..]
+                .iter()
+                .map(|area| area.intersection(rect))
+                .filter(|area| !area.is_empty())
+                .collect();
+            if repaint {
+                parts = vec![rect];
+            }
+            for area in parts {
+                for row in area.y..area.bottom() {
+                    for column in area.x..area.right() {
+                        screen.underlay(column, row, &style);
+                    }
+                }
+                frame.damage.push(area);
+            }
+        }
+        self.error_lit.set(invalid);
         if styled {
             frame.chain.pop();
         }
@@ -1471,6 +2377,12 @@ impl Node {
         if self.access_hidden {
             frame.hidden -= 1;
         }
+        if own_scope.is_some() {
+            frame.scoped.pop();
+        }
+        if let Some(start) = clock {
+            frame.timed(id, start, redraw);
+        }
     }
 
     /// Read its conditions and states for the stylesheet (subscribing to
@@ -1481,18 +2393,22 @@ impl Node {
             return false;
         };
         let (any, focus, hover) = self.sheet.borrow().watch;
-        let (active, selected, disabled) = frame
+        let (active, selected, disabled, error) = frame
             .runtime
             .observe_node_more(self.id, || self.conditions());
         let changed = {
             let sheet = self.sheet.borrow();
-            sheet.active != active || sheet.selected != selected || sheet.disabled != disabled
+            sheet.active != active
+                || sheet.selected != selected
+                || sheet.disabled != disabled
+                || sheet.error != error
         };
         if changed {
             let mut sheet = self.sheet.borrow_mut();
             sheet.active = active;
             sheet.selected = selected;
             sheet.disabled = disabled;
+            sheet.error = error;
         }
         if let Some(top) = frame.chain.last_mut() {
             *top = self.element();
@@ -1516,7 +2432,7 @@ impl Node {
                 focus: &focus_path,
                 hover: &hover_path,
             };
-            cx.sheet.style(&frame.chain, &states, cx.vars)
+            cx.sheet.style(&frame.chain, &states, cx.vars, cx.viewport)
         } else {
             None
         };
@@ -1666,98 +2582,6 @@ pub(crate) fn edge_lines(lines: &[Vec<Segment>]) -> [Vec<Vec<Segment>>; 4] {
     ]
 }
 
-/// `lines` with `style` laid over every segment, each row filled out to
-/// the rectangle's width in it.
-fn highlight(lines: Vec<Vec<Segment>>, style: &Style, rect: Rect) -> Vec<Vec<Segment>> {
-    lines
-        .into_iter()
-        .take(rect.height as usize)
-        .map(|line| {
-            let width: usize = line.iter().map(Segment::cell_length).sum();
-            let mut line: Vec<Segment> = line
-                .into_iter()
-                .map(|segment| {
-                    let combined = match &segment.style {
-                        Some(own) => own.combine(style),
-                        None => style.clone(),
-                    };
-                    Segment::new(segment.text, Some(combined))
-                })
-                .collect();
-            let fill = (rect.width as usize).saturating_sub(width);
-            if fill > 0 {
-                line.push(Segment::new(" ".repeat(fill), Some(style.clone())));
-            }
-            line
-        })
-        .collect()
-}
-
-/// A one-column scrollbar `rows` tall for content `content` rows tall,
-/// scrolled to `top`.
-pub(crate) fn scrollbar(console: &Console, rows: u16, top: u16, content: u16) -> Vec<Vec<Segment>> {
-    let style = |name: &str, fallback: &str| {
-        console
-            .get_style(&rich::style::StyleType::Name(name.to_string()))
-            .ok()
-            .or_else(|| Style::parse(fallback).ok())
-    };
-    let (track, thumb) = (
-        style("scrollbar", "bright_black"),
-        style("scrollbar.thumb", "white"),
-    );
-    let (rows_f, content_f) = (rows as f64, content.max(1) as f64);
-    let size = (rows_f * rows_f / content_f).round().clamp(1.0, rows_f);
-    let start = (top as f64 * rows_f / content_f).round().min(rows_f - size);
-    (0..rows)
-        .map(|row| {
-            let on = (row as f64) >= start && (row as f64) < start + size;
-            if on {
-                vec![Segment::new("┃", thumb.clone())]
-            } else {
-                vec![Segment::new("│", track.clone())]
-            }
-        })
-        .collect()
-}
-
-/// A scrollbar along the bottom of a view `columns` wide, showing
-/// `left..left + columns` of `content` columns.
-pub(crate) fn scrollbar_across(
-    console: &Console,
-    columns: u16,
-    left: u16,
-    content: u16,
-) -> Vec<Segment> {
-    let style = |name: &str, fallback: &str| {
-        console
-            .get_style(&rich::style::StyleType::Name(name.to_string()))
-            .ok()
-            .or_else(|| Style::parse(fallback).ok())
-    };
-    let (track, thumb) = (
-        style("scrollbar", "bright_black"),
-        style("scrollbar.thumb", "white"),
-    );
-    let (columns_f, content_f) = (columns as f64, content.max(1) as f64);
-    let size = (columns_f * columns_f / content_f)
-        .round()
-        .clamp(1.0, columns_f);
-    let start = (left as f64 * columns_f / content_f)
-        .round()
-        .min(columns_f - size);
-    (0..columns)
-        .map(|column| {
-            let on = (column as f64) >= start && (column as f64) < start + size;
-            if on {
-                Segment::new("━", thumb.clone())
-            } else {
-                Segment::new("─", track.clone())
-            }
-        })
-        .collect()
-}
-
 /// A visit in [`walk_screen`]: the node, its path, the shift to screen
 /// coordinates and the part of the screen it can show in.
 pub(crate) type ScreenVisit<'a> = dyn FnMut(&Node, &[NodeId], (i32, i32), Rect) + 'a;
@@ -1773,6 +2597,11 @@ pub(crate) fn walk_screen(root: &Node, f: &mut ScreenVisit) {
         clip: Rect,
         f: &mut ScreenVisit,
     ) {
+        if node.hidden() {
+            // Not shown, nor anything inside: no clicks reach it, and
+            // assistive technology is not told of it.
+            return;
+        }
         path.push(node.id);
         f(node, path, shift, clip);
         let scrolled = node.body.borrow().view.as_ref().and_then(|view| {
@@ -1845,6 +2674,15 @@ pub(crate) struct FrameState<'a> {
     /// and where hidden nodes drew this frame.
     pub hidden: u32,
     pub hidden_rects: Vec<Rect>,
+    /// While the inspector is open: each node that drew, and the time it
+    /// took itself (its children's not counted); `None` measures nothing.
+    pub timings: Option<Vec<(NodeId, std::time::Duration)>>,
+    /// The time the children of each node being drawn took, innermost
+    /// last.
+    pub time_stack: Vec<std::time::Duration>,
+    /// The [theme styles](Node::theme_styles) of the nodes being drawn,
+    /// innermost last: the console and theme to draw with.
+    pub scoped: Vec<Rc<Scope>>,
 }
 
 impl FrameState<'_> {
@@ -1855,22 +2693,36 @@ impl FrameState<'_> {
             ids.push(id);
         }
     }
+
+    /// Node `id`, which started at `start`, is done: its own time is what
+    /// its children did not take, noted if it `drew`; all of it counts
+    /// towards its parent's children.
+    pub fn timed(&mut self, id: NodeId, start: std::time::Instant, drew: bool) {
+        let all = start.elapsed();
+        let inner = self.time_stack.pop().unwrap_or_default();
+        if let Some(outer) = self.time_stack.last_mut() {
+            *outer += all;
+        }
+        if let (true, Some(times)) = (drew, &mut self.timings) {
+            times.push((id, all.saturating_sub(inner)));
+        }
+    }
 }
 
-/// A rounded border round `rect`, with `title` in the top edge; the inside
-/// is left to the child.
+/// A rounded border round `rect`, with `title` (plain text) in the top
+/// edge; the inside is left to the child.
 pub(crate) fn border(
     title: &str,
     style: &Style,
     title_style: &Style,
     rect: Rect,
 ) -> Vec<Vec<Segment>> {
-    border_box(BoxKind::Round, title, style, title_style, rect)
+    border_box(Border::Rounded, title, style, title_style, rect)
 }
 
 /// [`border`] with a `kind` of box.
 pub(crate) fn border_box(
-    kind: BoxKind,
+    kind: Border,
     title: &str,
     style: &Style,
     title_style: &Style,
@@ -1878,11 +2730,19 @@ pub(crate) fn border_box(
 ) -> Vec<Vec<Segment>> {
     // In text mode a box is blank: a screen reader reads no lines, and the
     // title stays.
+    let set = kind.set().unwrap_or(crate::border::BorderSet::ROUNDED);
     let [top_left, across, top_right, side, bottom_left, bottom_right] = if crate::a11y::text_mode()
     {
         [" "; 6]
     } else {
-        kind.chars()
+        [
+            set.top_left,
+            set.top,
+            set.top_right,
+            set.left,
+            set.bottom_left,
+            set.bottom_right,
+        ]
     };
     let (w, h) = (rect.width as usize, rect.height as usize);
     if w < 2 || h < 2 {
@@ -1930,7 +2790,7 @@ pub(crate) fn border_box(
 /// edge; the edges written.
 pub(crate) fn draw_box(
     screen: &mut Screen,
-    kind: BoxKind,
+    kind: Border,
     title: &str,
     style: &Style,
     title_style: &Style,
@@ -1962,18 +2822,11 @@ pub fn leaf(draw: impl Fn(&Console, u16, u16) -> Vec<Vec<Segment>> + 'static) ->
 
 /// Console markup, from a closure that may read signals:
 /// `text(move || format!("[b]{}[/] items", count.get()))`. The
-/// [`text!`](crate::text!) macro writes the closure for you.
+/// [`text!`](crate::text!) macro writes the closure for you. Its lines
+/// wrap at its width; [`Node::text_align`], [`Node::no_wrap`] and
+/// [`Node::overflow`] change how they sit and where they are cut.
 pub fn text(markup: impl Fn() -> String + 'static) -> Node {
-    let node = leaf(move |console, width, _| {
-        let markup = markup();
-        let text = rich::Text::from_markup(&markup).unwrap_or_else(|_| rich::Text::new(markup));
-        console.render_lines(
-            &text,
-            &console.options().update_width(width.max(1) as usize),
-            false,
-        )
-    });
-    node.what("text")
+    Node::from_widget(Box::new(TextNode::new(Box::new(markup))), "text")
 }
 
 /// Console markup that never changes.
@@ -1996,6 +2849,63 @@ pub fn renderable<R: Renderable + 'static>(f: impl Fn() -> R + 'static) -> Node 
         console.render_lines(&f(), &options, false)
     })
     .what("renderable")
+}
+
+/// A [`renderable`] that says what it shows: a chart, a table, a tree, or
+/// anything else with rich-ext's
+/// [`AccessibleText`](rich_ext::a11y::AccessibleText). Its accessible name
+/// is that text at the width it was last drawn, its lines joined with
+/// `. `, so the accessibility tree, [linear](crate::App::linear) mode and
+/// a screen reader read `Line chart, 2 series, x from 0 to 23, …` instead
+/// of the glyphs. A [`label`](Node::label) goes first: `CPU: Line chart,
+/// …`.
+///
+/// ```
+/// use intuituive::prelude::*;
+/// use rich_ext::chart::Sparkline;
+///
+/// let app = App::new(|| {
+///     let load = signal(vec![2.0, 4.0, 3.0, 9.0]);
+///     described(move || Sparkline::new(load.get())).label("Load")
+/// });
+/// let mut driver = app.driver(20, 1);
+/// driver.update(std::time::Duration::ZERO);
+/// driver.render();
+/// let tree = driver.accessibility();
+/// assert_eq!(
+///     tree[0].describe(),
+///     "Load: Sparkline, 4 values: min 2, max 9, last 9, trend up"
+/// );
+/// ```
+pub fn described<R>(f: impl Fn() -> R + 'static) -> Node
+where
+    R: Renderable + rich_ext::a11y::AccessibleText + 'static,
+{
+    let draw = move |console: &Console, width: u16, height: u16, say: bool| {
+        let value = f();
+        let options = console.options().update_width(width.max(1) as usize);
+        let options = if height == 0 {
+            options
+        } else {
+            options.update_height(height as usize)
+        };
+        let lines = console.render_lines(&value, &options, false);
+        let text = say.then(|| {
+            value
+                .accessible_text(width.max(1) as usize)
+                .lines()
+                .map(str::trim)
+                .filter(|l| !l.is_empty())
+                .collect::<Vec<_>>()
+                .join(". ")
+        });
+        (lines, text)
+    };
+    let widget = Described {
+        draw: Box::new(draw),
+        text: None,
+    };
+    Node::from_widget(Box::new(widget), "described").what("renderable")
 }
 
 /// A `rich-interact` component as a node: an `Input`, a `Select`, a
@@ -2070,128 +2980,6 @@ pub fn repeating<C: Component + 'static>(
     );
     node.focusable = true;
     node.what("component")
-}
-
-/// A scrolling list of markup rows, one selected: ratatui's `List` and
-/// `ListState` in one node. `items` may read signals; `selected` is the
-/// index of the selected row, which you read and write like any signal.
-///
-/// The list keeps the selected row in view, scrolling only as far as it
-/// must, and draws it in the theme's `selected` style, filled to the full
-/// width. It is focusable, and while it has the focus ↑/k, ↓/j, Home/g,
-/// End/G, PageUp and PageDown move the selection; bind Enter (or anything
-/// else) yourself with [`on_key`](Node::on_key).
-///
-/// ```
-/// use intuituive::prelude::*;
-///
-/// let app = App::new(|| {
-///     let selected = signal(0usize);
-///     let items = || (1..=50).map(|n| format!("item {n}")).collect();
-///     list(items, selected).on_key("q", |cx| cx.quit())
-/// });
-/// // Down 7 times in a 5-row list: rows 4-8 (items 4-8) show, item 8 selected.
-/// let keys = ["j", "j", "j", "j", "j", "j", "j", "q"];
-/// let screen = app.render_with(&keys, 20, 5).unwrap();
-/// assert_eq!(screen[0].trim_end(), "item 4");
-/// assert_eq!(screen[4].trim_end(), "item 8");
-/// ```
-pub fn list(items: impl Fn() -> Vec<String> + 'static, selected: Signal<usize>) -> Node {
-    let items = Rc::new(items);
-    // The first row shown, and the height last drawn (for a page's size).
-    let offset = Rc::new(Cell::new(0usize));
-    let rows = Rc::new(Cell::new(1usize));
-    // Where the selected row is, for the cursor in accessible mode.
-    let cursor = Rc::new(Cell::new(None));
-    let draw = {
-        let (items, offset, rows, cursor) =
-            (items.clone(), offset.clone(), rows.clone(), cursor.clone());
-        move |console: &Console, width: u16, height: u16| {
-            let items = items();
-            let len = items.len();
-            let measuring = height == 0;
-            // Height 0 is a measurement: every row.
-            let height = if height == 0 { len } else { height as usize };
-            rows.set(height.max(1));
-            let selected = selected.get().min(len.saturating_sub(1));
-            let mut first = offset.get().min(len.saturating_sub(height));
-            if selected < first {
-                first = selected;
-            } else if selected >= first + height {
-                first = selected + 1 - height;
-            }
-            offset.set(first);
-            if !measuring {
-                let row = (selected - first) as u16;
-                cursor.set((len > 0).then(|| Rect::new(0, row, width, 1)));
-            }
-            // In text mode the selected row is marked, not only reversed.
-            let marked = crate::a11y::text_mode();
-            let indent = if marked { 2 } else { 0 };
-            let mut options = console
-                .options()
-                .update_width(width.saturating_sub(indent).max(1) as usize);
-            options.no_wrap = Some(true);
-            options.overflow = Some(rich::Overflow::Ellipsis);
-            let style = console
-                .get_style(&rich::style::StyleType::Name("selected".into()))
-                .unwrap_or_else(|_| Style::parse("reverse").expect("parses"));
-            items
-                .iter()
-                .enumerate()
-                .skip(first)
-                .take(height)
-                .map(|(i, markup)| {
-                    let text = rich::Text::from_markup(markup)
-                        .unwrap_or_else(|_| rich::Text::new(markup.clone()));
-                    let mut line = console
-                        .render_lines(&text, &options, false)
-                        .into_iter()
-                        .next()
-                        .unwrap_or_default();
-                    if marked {
-                        let marker = if i == selected { "> " } else { "  " };
-                        line.insert(0, Segment::new(marker, None));
-                    }
-                    if i == selected {
-                        let row = Rect::new(0, 0, width, 1);
-                        highlight(vec![line], &style, row).remove(0)
-                    } else {
-                        line
-                    }
-                })
-                .collect()
-        }
-    };
-    let len = {
-        let items = items.clone();
-        move || items().len()
-    };
-    let step = move |by: isize| {
-        let len = len();
-        let last = len.saturating_sub(1) as isize;
-        selected.update(|s| *s = (*s as isize + by).clamp(0, last.max(0)) as usize);
-    };
-    let (rows_up, rows_down) = (rows.clone(), rows);
-    let (up, down, pgup, pgdn) = (step.clone(), step.clone(), step.clone(), step);
-    // The selected row, and its place, for assistive technology.
-    let state = {
-        let items = items.clone();
-        move || crate::a11y::AccessState::item(selected.get_untracked(), items().len())
-    };
-    let mut node = leaf(draw).built_state(state);
-    node.cursor_cell = Some(cursor);
-    node.what("list")
-        .focusable()
-        .on_key("up k", move |_| up(-1))
-        .on_key("down j", move |_| down(1))
-        .on_key("pageup", move |_| pgup(-(rows_up.get() as isize)))
-        .on_key("pagedown", move |_| pgdn(rows_down.get() as isize))
-        .on_key("home g", move |_| selected.set(0))
-        .on_key("end G", move |_| {
-            let len = items().len();
-            selected.set(len.saturating_sub(1));
-        })
 }
 
 /// A viewport onto `child`, laid out at its full height (up to 4000 rows)
@@ -2274,8 +3062,40 @@ fn stack(axis: Axis, children: impl IntoIterator<Item = Node>) -> Node {
             axis,
             flow: StackLayout::default(),
             children: children.into_iter().collect(),
+            collapse: Default::default(),
         }),
         "stack",
+    )
+}
+
+/// Children stacked on one rectangle, later ones over earlier ones: a
+/// background under its content, a badge over a chart, a panel over a
+/// ticking board. Each takes the whole rectangle, less its
+/// [`inset`](Node::inset), or only its content's size where
+/// [`place`](Node::place) puts it. A layer draws again wherever one under
+/// it drew, so the one on top stays on top; a click goes to the top layer
+/// under the pointer. The Tab order, and what assistive technology reads,
+/// follow the order of the children.
+///
+/// ```
+/// use intuituive::prelude::*;
+///
+/// let app = App::new(|| {
+///     layers([
+///         label("........\n........\n........"),
+///         label("[b]3[/]").place(Align::End, Align::Start),
+///     ])
+/// });
+/// let mut driver = app.driver(8, 3);
+/// driver.settle();
+/// assert_eq!(driver.screen().plain()[0], ".......3");
+/// ```
+pub fn layers(children: impl IntoIterator<Item = Node>) -> Node {
+    Node::from_widget(
+        Box::new(Layers {
+            children: children.into_iter().collect(),
+        }),
+        "layers",
     )
 }
 
@@ -2315,6 +3135,7 @@ pub fn grid(
             rows: Vec::new(),
             gap: (0, 0),
             children: children.into_iter().collect(),
+            collapse: Default::default(),
         }),
         "grid",
     )
@@ -2395,15 +3216,36 @@ where
 
 /// The nodes under `column`, `row`, outermost first (the path to the
 /// deepest node whose shown rectangle holds the point), each with the
-/// translation from screen coordinates to its own.
+/// translation from screen coordinates to its own. Where children overlap
+/// ([`layers`]), the later one's path wins, however deep the earlier one's
+/// goes: it is on top.
 pub(crate) fn hit_path(root: &Node, column: u16, row: u16) -> Vec<(NodeId, (i32, i32))> {
     let mut found: Vec<(NodeId, (i32, i32))> = Vec::new();
     let mut shifts: Vec<(i32, i32)> = Vec::new();
+    // The nodes whose children overlap.
+    let mut overlapping: HashSet<NodeId> = HashSet::new();
     walk_screen(root, &mut |node, path, shift, clip| {
         shifts.truncate(path.len() - 1);
         shifts.push(shift);
+        if node.body.borrow().widget.overlapping() {
+            overlapping.insert(node.id);
+        }
         let shown = translate(node.rect(), shift).intersection(clip);
-        if shown.contains(column, row) && path.len() > found.len() {
+        if !shown.contains(column, row) {
+            return;
+        }
+        // Where this path leaves the one found: under a node whose
+        // children overlap, this one is the later child.
+        let common = found
+            .iter()
+            .zip(path)
+            .take_while(|((id, _), other)| id == *other)
+            .count();
+        let above = common > 0
+            && common < found.len()
+            && common < path.len()
+            && overlapping.contains(&path[common - 1]);
+        if path.len() > found.len() || above {
             found = path
                 .iter()
                 .zip(&shifts)
@@ -2412,6 +3254,37 @@ pub(crate) fn hit_path(root: &Node, column: u16, row: u16) -> Vec<(NodeId, (i32,
         }
     });
     found
+}
+
+/// For each node under a later layer ([`layers`]), where those layers are
+/// on the screen: what reading its text from the screen leaves out.
+pub(crate) fn covered(root: &Node) -> HashMap<NodeId, Vec<Rect>> {
+    // Each child of a node whose children overlap: its later siblings.
+    let mut over: HashMap<NodeId, Vec<Rect>> = HashMap::new();
+    let mut out = HashMap::new();
+    walk_screen(root, &mut |node, path, shift, clip| {
+        let body = node.body.borrow();
+        if body.widget.overlapping() {
+            let children = body.widget.children();
+            let rects: Vec<Rect> = children
+                .iter()
+                .map(|child| translate(child.rect(), shift).intersection(clip))
+                .collect();
+            for (i, child) in children.iter().enumerate() {
+                over.insert(child.id, rects[i + 1..].to_vec());
+            }
+        }
+        let mine: Vec<Rect> = path
+            .iter()
+            .filter_map(|id| over.get(id))
+            .flatten()
+            .copied()
+            .collect();
+        if !mine.is_empty() {
+            out.insert(node.id, mine);
+        }
+    });
+    out
 }
 
 /// Every node shown, with the translation from screen coordinates to its
@@ -2447,4 +3320,34 @@ pub(crate) fn with_node(root: &Node, id: NodeId, f: &mut dyn FnMut(&Node)) {
             done = true;
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_node_without_theme_styles_draws_with_no_copy_and_one_with_them_with_one() {
+        let console = Console::builder().width(10).build();
+        let (dark, light) = (Theme::dark(), Theme::light());
+        assert!(label("plain").scope_over(&console, Some(&dark)).is_none());
+        let styled = label("x").theme_styles([("x", "red")]);
+        let first = styled.scope_over(&console, Some(&dark)).expect("a scope");
+        // Made once, and kept while the theme and the console's size hold.
+        let again = styled.scope_over(&console, Some(&dark)).expect("a scope");
+        assert!(Rc::ptr_eq(&first, &again));
+        let measuring = styled.scope_over(&console, None).expect("measuring");
+        assert!(Rc::ptr_eq(&first, &measuring));
+        // Made again for another theme, or another size.
+        let other = styled.scope_over(&console, Some(&light)).expect("a scope");
+        assert!(!Rc::ptr_eq(&first, &other));
+        let wider = Console::builder().width(20).build();
+        let resized = styled.scope_over(&wider, Some(&light)).expect("a scope");
+        assert!(!Rc::ptr_eq(&other, &resized));
+        let named = rich::style::StyleType::Name("x".into());
+        assert_eq!(
+            resized.console.get_style(&named).ok(),
+            Style::parse("red").ok()
+        );
+    }
 }

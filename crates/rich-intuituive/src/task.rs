@@ -15,6 +15,7 @@
 
 use std::fmt::Display;
 use std::future::Future;
+use std::panic::Location;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -62,7 +63,18 @@ impl Task {
 ///
 /// # Panics
 /// Outside a running or building app.
+#[track_caller]
 pub fn spawn<T: Send + 'static>(
+    work: impl FnOnce() -> T + Send + 'static,
+    done: impl FnOnce(T, &mut Ctx) + Send + 'static,
+) -> Task {
+    spawn_at(Location::caller(), work, done)
+}
+
+/// [`spawn`], saying in the inspector's trace that it was started at
+/// `site`.
+fn spawn_at<T: Send + 'static>(
+    site: &'static Location<'static>,
     work: impl FnOnce() -> T + Send + 'static,
     done: impl FnOnce(T, &mut Ctx) + Send + 'static,
 ) -> Task {
@@ -87,11 +99,13 @@ pub fn spawn<T: Send + 'static>(
         let value = work();
         handle.finished.store(true, Ordering::SeqCst);
         let cancelled = handle.cancelled;
-        proxy.run_with(move |cx| {
-            if !cancelled.load(Ordering::SeqCst) {
+        proxy.send(Box::new(move |cx| {
+            let dropped = cancelled.load(Ordering::SeqCst);
+            crate::reactive::traced(|| crate::inspect::Traced::Task { at: site, dropped });
+            if !dropped {
                 done(value, cx);
             }
-        });
+        }));
     });
     task
 }
@@ -100,12 +114,13 @@ pub fn spawn<T: Send + 'static>(
 /// output on the app's thread. The future is polled with a waker that
 /// parks and unparks that thread, so it suits futures that do not need a
 /// specific async runtime.
+#[track_caller]
 pub fn spawn_future<F>(future: F, done: impl FnOnce(F::Output, &mut Ctx) + Send + 'static) -> Task
 where
     F: Future + Send + 'static,
     F::Output: Send + 'static,
 {
-    spawn(move || block_on(future), done)
+    spawn_at(Location::caller(), move || block_on(future), done)
 }
 
 /// Poll `future` on this thread until it is ready.
@@ -206,11 +221,13 @@ impl<T: Clone + 'static> Resource<T> {
 /// let screen = app.render_with(&["q"], 20, 1).unwrap();
 /// assert_eq!(screen[0].trim_end(), "Hello, Ada");
 /// ```
+#[track_caller]
 pub fn resource<T, E>(fetch: impl Fn() -> Result<T, E> + Send + Sync + 'static) -> Resource<T>
 where
     T: Send + 'static,
     E: Display,
 {
+    let site = Location::caller();
     let state = signal(Load::<T>::Loading);
     let generation = signal(0u64);
     let fetch = Arc::new(fetch);
@@ -219,7 +236,8 @@ where
         let mine = generation.get_untracked();
         state.update(|s| *s = Load::Loading);
         let fetch = fetch.clone();
-        spawn(
+        spawn_at(
+            site,
             move || fetch().map_err(|error| error.to_string()),
             move |result, _| {
                 // A later fetch started: this result is stale.

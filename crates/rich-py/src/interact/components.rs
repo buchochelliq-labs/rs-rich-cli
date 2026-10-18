@@ -24,7 +24,7 @@ use crate::renderable::{self, PyRenderable};
 
 type Shared = Arc<dyn Renderable + Send + Sync>;
 
-fn preview_layout(name: &str) -> PyResult<PreviewLayout> {
+pub(super) fn preview_layout(name: &str) -> PyResult<PreviewLayout> {
     Ok(match name {
         "auto" => PreviewLayout::Auto,
         "right" => PreviewLayout::Right,
@@ -103,7 +103,7 @@ impl Action {
 /// `str(value)`. `preview` is console markup (a `str`) or any renderable.
 #[pyclass(name = "Item", module = "rs_rich.interact", frozen)]
 pub(crate) struct Item {
-    value: Py<PyAny>,
+    pub(super) value: Py<PyAny>,
     #[pyo3(get)]
     label: String,
     #[pyo3(get)]
@@ -227,7 +227,7 @@ impl Item {
 }
 
 /// The items of a picker: `Item`s, or any objects (labelled with `str`).
-fn items(py: Python<'_>, values: &Bound<'_, PyAny>) -> PyResult<Vec<Py<Item>>> {
+pub(super) fn items(py: Python<'_>, values: &Bound<'_, PyAny>) -> PyResult<Vec<Py<Item>>> {
     if values.is_instance_of::<PyString>() {
         return Err(PyTypeError::new_err(
             "items must be an iterable of items, not a str",
@@ -257,7 +257,7 @@ fn items(py: Python<'_>, values: &Bound<'_, PyAny>) -> PyResult<Vec<Py<Item>>> {
         .collect()
 }
 
-fn core_items(py: Python<'_>, items: &[Py<Item>]) -> PyResult<Vec<CoreItem<usize>>> {
+pub(super) fn core_items(py: Python<'_>, items: &[Py<Item>]) -> PyResult<Vec<CoreItem<usize>>> {
     items
         .iter()
         .enumerate()
@@ -265,7 +265,10 @@ fn core_items(py: Python<'_>, items: &[Py<Item>]) -> PyResult<Vec<CoreItem<usize
         .collect()
 }
 
-fn item_values<'py>(py: Python<'py>, items: &[Py<Item>]) -> PyResult<Bound<'py, PyList>> {
+pub(super) fn item_values<'py>(
+    py: Python<'py>,
+    items: &[Py<Item>],
+) -> PyResult<Bound<'py, PyList>> {
     PyList::new(py, items.iter().map(|item| item.get().value.clone_ref(py)))
 }
 
@@ -1299,20 +1302,67 @@ fn answers(py: Python<'_>, answers: Answers) -> PyResult<Py<PyAny>> {
 // ---------------------------------------------------------------------------
 // Pager
 
-/// `Pager(renderable, *, search=None)`: page any renderable, rendered at
-/// the terminal's width. The arrows, Space and PageUp/PageDown scroll; `/`
-/// searches, `n` and `N` move between matches; `q` or Escape closes.
-/// Without a terminal the content is written out. The answer is `None`.
+/// `Pager(renderable, *, search=None, sticky_header=None)`: page any
+/// renderable, rendered at the terminal's width. The arrows, Space and
+/// PageUp/PageDown scroll; `/` searches, `n` and `N` move between matches;
+/// `q` or Escape closes. `sticky_header` keeps lines on top while the rest
+/// scroll: a number of lines, or `"table"` for a table's header when the
+/// content starts with one. Without a terminal the content is written out.
+/// The answer is `None`.
 #[pyclass(name = "Pager", module = "rs_rich.interact", frozen)]
 pub(crate) struct Pager {
     renderable: Py<PyAny>,
     #[pyo3(get)]
     search: Option<String>,
+    sticky: Sticky,
+}
+
+/// What a pager keeps on top while the rest scroll.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Sticky {
+    Lines(usize),
+    /// A table's header, found in the content.
+    Table,
+}
+
+impl Sticky {
+    fn parse(value: Option<&Bound<'_, PyAny>>) -> PyResult<Sticky> {
+        let Some(value) = value.filter(|value| !value.is_none()) else {
+            return Ok(Sticky::Lines(0));
+        };
+        if let Ok(text) = value.extract::<String>() {
+            return match text.as_str() {
+                "table" => Ok(Sticky::Table),
+                _ => Err(PyValueError::new_err(format!(
+                    "sticky_header: {text:?} is not a number of lines or \"table\""
+                ))),
+            };
+        }
+        // A negative number is the right type with the wrong value.
+        if value.extract::<i64>().is_ok_and(|lines| lines < 0) {
+            return Err(PyValueError::new_err(
+                "sticky_header: a number of lines is at least 0",
+            ));
+        }
+        value
+            .extract::<usize>()
+            .map(Sticky::Lines)
+            .map_err(|_| PyTypeError::new_err("sticky_header is a number of lines or \"table\""))
+    }
+
+    fn to_object(self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        Ok(match self {
+            Sticky::Lines(0) => py.None(),
+            Sticky::Lines(lines) => lines.into_pyobject(py)?.into_any().unbind(),
+            Sticky::Table => "table".into_pyobject(py)?.into_any().unbind(),
+        })
+    }
 }
 
 struct PagerBuild {
     renderable: Shared,
     search: Option<String>,
+    sticky: Sticky,
 }
 
 impl Build for PagerBuild {
@@ -1320,6 +1370,11 @@ impl Build for PagerBuild {
 
     fn build(self) -> CorePager {
         let pager = CorePager::new(ArcRenderable(self.renderable));
+        let pager = match self.sticky {
+            Sticky::Lines(0) => pager,
+            Sticky::Lines(lines) => pager.sticky_header(lines),
+            Sticky::Table => pager.sticky_table_header(true),
+        };
         match self.search {
             Some(query) => pager.search(query),
             None => pager,
@@ -1335,12 +1390,23 @@ impl Pager {
     }
 
     #[new]
-    #[pyo3(signature = (renderable, *, search=None))]
-    fn new(renderable: &Bound<'_, PyAny>, search: Option<String>) -> Self {
-        Pager {
+    #[pyo3(signature = (renderable, *, search=None, sticky_header=None))]
+    fn new(
+        renderable: &Bound<'_, PyAny>,
+        search: Option<String>,
+        sticky_header: Option<&Bound<'_, PyAny>>,
+    ) -> PyResult<Self> {
+        Ok(Pager {
             renderable: renderable.clone().unbind(),
             search,
-        }
+            sticky: Sticky::parse(sticky_header)?,
+        })
+    }
+
+    /// The lines kept on top: a number, `"table"`, or `None`.
+    #[getter]
+    fn sticky_header(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        self.sticky.to_object(py)
     }
 
     #[getter]
@@ -1822,10 +1888,20 @@ pub(super) fn leaf(py: Python<'_>, component: &Bound<'_, PyAny>) -> PyResult<Opt
         let build = PagerBuild {
             renderable: shared(pager.get().renderable.bind(py)),
             search: pager.get().search.clone(),
+            sticky: pager.get().sticky,
         };
         return Ok(Some(compose::leaf(build, |py, ()| Ok(py.None()))));
     }
     if let Some(node) = super::pickers::leaf(component)? {
+        return Ok(Some(node));
+    }
+    if let Some(node) = super::order_date::leaf(component)? {
+        return Ok(Some(node));
+    }
+    if let Some(node) = super::log_view::leaf(component)? {
+        return Ok(Some(node));
+    }
+    if let Some(node) = super::review_jump::leaf(component)? {
         return Ok(Some(node));
     }
     if component.is_instance_of::<compose::Base>() {
@@ -1885,11 +1961,24 @@ pub(crate) fn drive(py: Python<'_>, component: &Bound<'_, PyAny>, mode: Mode) ->
         let build = PagerBuild {
             renderable: shared(pager.renderable.bind(py)),
             search: pager.search.clone(),
+            sticky: pager.sticky,
         };
         let ran = execute(py, build, mode)?;
         return record(py, ran, |()| Ok(py.None()));
     }
     let mode = match super::pickers::drive(py, component, mode)? {
+        Ok(record) => return Ok(record),
+        Err(mode) => mode,
+    };
+    let mode = match super::order_date::drive(py, component, mode)? {
+        Ok(record) => return Ok(record),
+        Err(mode) => mode,
+    };
+    let mode = match super::log_view::drive(py, component, mode)? {
+        Ok(record) => return Ok(record),
+        Err(mode) => mode,
+    };
+    let mode = match super::review_jump::drive(py, component, mode)? {
         Ok(record) => return Ok(record),
         Err(mode) => mode,
     };

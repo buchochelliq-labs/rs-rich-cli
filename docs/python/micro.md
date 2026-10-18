@@ -74,6 +74,13 @@ which layer won. A `MicroAsset` is a renderable that always takes exactly
 its columns; `fallback()` and `placeholder()` give its cells as a `str` and
 a `Text`.
 
+A size may be anything up to `"4x2"`: 1 to 4 columns and 1 or 2 rows.
+`MicroAsset("team/icon", "a blue square", text="[]", size="2x2")` has
+`rows == 2`; rendered, it takes the row below its line too, and
+`MicroMarkup` text holding it gives it that row (blank but for the asset),
+so nothing is drawn over the next line. The built-in `fun/trophy` is 2×2
+and `fun/campfire` 3×2. `micro_create_package(..., size="3x2")` makes one.
+
 ## Making assets
 
 `micro_create_package` runs an image (a path, or PNG, APNG, GIF or JPEG

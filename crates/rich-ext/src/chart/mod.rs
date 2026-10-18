@@ -19,6 +19,23 @@
 //! | [`StatusMatrix`] | rows and columns of [`State`]s (pass, fail, skip, flaky, your own), each a symbol and a colour |
 //! | [`KpiCard`] | a label, a value, a delta with its direction, a sparkline and a [`Status`] |
 //! | [`Timeline`] | labelled ranges on a numeric or seconds scale, overlaps stacked, milestones |
+//! | [`Distribution`] | the count, quantiles and mean of values, and a box-and-whisker strip on one line |
+//! | [`DistributionSet`] | distributions stacked on one scale, their columns aligned |
+//! | [`SmallMultiples`] | a grid of titled charts ([`Facet`]s) on one value scale, fitted to the width |
+//!
+//! And laid out as ratatui's widgets, so a ported app looks the same:
+//!
+//! | Type | ratatui's | Draws |
+//! |---|---|---|
+//! | [`Chart`] | `Chart` | [`Dataset`]s on two [`Axis`] lines, with a legend |
+//! | [`Canvas`] | `Canvas` | points, lines, shapes, areas, text and a world map in world coordinates |
+//! | [`FillGauge`] | `Gauge` | a bar that fills its area, its label on the middle row |
+//! | [`LineGauge`] | `LineGauge` | a label and a line in two styles |
+//!
+//! A [`Chart`], a [`Canvas`], a vertical [`BarChart`], a [`Sparkline`] and
+//! a [`FillGauge`] fill the height they are given (a `Layout` region, a
+//! `Panel` with a height, an intuiTUIve node) unless their own height is
+//! set; given none, they keep their default.
 //!
 //! What they share:
 //!
@@ -31,6 +48,17 @@
 //!   UTF-8 or its [`Fidelity`](crate::fidelity::Fidelity) is
 //!   [`Ascii`](crate::fidelity::Fidelity::Ascii). An ASCII console never gets
 //!   anything else, whatever the chart asks for.
+//!
+//! Every chart also implements
+//! [`AccessibleText`](crate::a11y::AccessibleText): a few lines of plain
+//! words for a screen reader, the same for the same chart whatever the
+//! console. The first line says what it is, how much it holds and its axes'
+//! ranges; the next its key values: each series' `min`, `max`, `last` and
+//! trend, the largest bars, a gauge's place on its scale. A **trend** is
+//! the least-squares line through a series' finite points: `up` or `down`
+//! when it rises or falls by at least a tenth of the values' range across
+//! the series, `flat` otherwise. intuiTUIve's `described(..)` node reads
+//! it, so a chart in an app is read out as its description.
 //!
 //! Colour is never the only way to read a chart: heights and lengths carry
 //! the values, numbers are written out, thresholds and extremes are named in
@@ -57,28 +85,37 @@
 mod axis;
 mod bar;
 mod canvas;
+mod describe;
+mod distribution;
 mod gauge;
 mod heatmap;
 mod kpi;
 mod line;
+mod multiples;
 mod plot_canvas;
+mod progress;
 mod scale;
 mod sparkline;
 mod status;
 mod timeline;
+mod world;
 mod xy;
 
-pub use bar::{Bar, BarChart, Histogram, Orientation};
+pub use bar::{Bar, BarChart, BarGroup, Histogram, Orientation};
 pub use canvas::DotCanvas;
+pub use distribution::{quantile, Distribution, DistributionSet, Summary};
 pub use gauge::{Band, BulletChart, Gauge};
 pub use heatmap::Heatmap;
 pub use kpi::KpiCard;
 pub use line::{LineChart, Series, SeriesKind};
-pub use plot_canvas::{Canvas, CanvasPainter, Marker};
+pub use multiples::{Facet, SmallMultiples};
+pub use plot_canvas::{Canvas, CanvasPainter, Marker, Shape};
+pub use progress::{FillGauge, LineGauge, LineSet};
 pub use scale::{Scale, ValueFormat};
-pub use sparkline::Sparkline;
+pub use sparkline::{Direction, Levels, Sparkline};
 pub use status::{State, Status, StatusMatrix};
 pub use timeline::{Milestone, Span, Timeline};
+pub use world::MapResolution;
 pub use xy::{Axis, AxisScale, Chart, Dataset, GraphType, Labels, LegendPosition};
 
 use rich::cells::char_cell_width;
@@ -105,6 +142,8 @@ pub const STYLES: &[(&str, &str)] = &[
     ("chart.series.5", "blue"),
     ("chart.track", "bright_black"),
     ("chart.target", "bold"),
+    ("chart.gauge.filled", "cyan"),
+    ("chart.gauge.unfilled", "bright_black"),
     ("chart.ok", "green"),
     ("chart.warning", "yellow"),
     ("chart.critical", "bold red"),
@@ -126,6 +165,7 @@ pub const STYLES: &[(&str, &str)] = &[
     ("chart.state.flaky", "yellow"),
     ("chart.state.unknown", "magenta"),
     ("chart.milestone", "bold yellow"),
+    ("chart.title", "bold"),
 ];
 
 /// How many `chart.series.N` styles there are; series past it cycle.

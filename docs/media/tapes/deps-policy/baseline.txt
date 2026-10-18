@@ -1,0 +1,44 @@
+❯ rich deps --sizes bloat.json --baseline bloat-baseline.json --top 6
+Sizes against the baseline (bloat-baseline.json → bloat.json)
+2 regressions, 1 improvement, 13 unchanged, 1 new, 2 removed
+total 1.7 MiB → 1.9 MiB: +263.5 KiB (+15.2%), a regression
+regression: over 10% and over 64.0 KiB
+
+┏━━━━━━━━━━━━━━━━┳━━━━━━━━━━━┳━━━━━━━━━━━┳━━━━━━━━━━━━┳━━━━━━━━━┳━━━━━━━━━━━━━┓
+┃ Unit           ┃  Baseline ┃   Current ┃     Change ┃       % ┃ Verdict     ┃
+┡━━━━━━━━━━━━━━━━╇━━━━━━━━━━━╇━━━━━━━━━━━╇━━━━━━━━━━━━╇━━━━━━━━━╇━━━━━━━━━━━━━┩
+│ toml_edit      │         – │ 180.0 KiB │ +180.0 KiB │     new │ regression  │
+│ regex_automata │ 236.0 KiB │ 392.0 KiB │ +156.0 KiB │  +66.1% │ regression  │
+│ winnow         │         – │  60.0 KiB │  +60.0 KiB │     new │ new         │
+│ serde_json     │ 192.0 KiB │ 116.0 KiB │  -76.0 KiB │  -39.6% │ improvement │
+│ toml           │  68.0 KiB │         – │  -68.0 KiB │ removed │ removed     │
+│ toml_datetime  │  10.0 KiB │         – │  -10.0 KiB │ removed │ removed     │
+├────────────────┼───────────┼───────────┼────────────┼─────────┼─────────────┤
+│ and 13 more    │           │           │            │         │             │
+├────────────────┼───────────┼───────────┼────────────┼─────────┼─────────────┤
+│ total          │   1.7 MiB │   1.9 MiB │ +263.5 KiB │  +15.2% │ regression  │
+└────────────────┴───────────┴───────────┴────────────┴─────────┴─────────────┘
+rich: 3 regressions against the baseline (over 10% and over 64.0 KiB): toml_edit, regex_automata, th
+e total
+❯
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

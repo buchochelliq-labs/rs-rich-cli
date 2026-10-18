@@ -1,0 +1,24 @@
+ Block  Text  List  Table  Tabs  Scrollbar  Calendar  Popup  Borders  Custom
+
+  Three buttons, each a widget of its own: it draws its face and edges, takes
+  the pointer and the keys, and looks picked while it has the focus or the
+  pointer, a╭─ Help ───────────────────────────────────────────────╮
+            │? Search keys ›                                       │
+            │custom                                                │
+            │  ↓  the next button                                  │
+            │  ↑  the button before                                │
+            │                                                      │
+            │  ←  the tab before                                   │
+            │  →  the next tab                                     │
+            │  q  quit                                             │
+            │  1  the Block tab                                    │
+            │  2  the Text tab                                     │
+            │  3  the List tab                                     │
+            │  4  the Table tab                                    │
+            │  5  the Tabs tab                                     │
+            │  15 keys · more below · type to search · ↑↓ scroll · │
+            ╰──────────────────────────────────────────────────────╯
+
+
+
+←/→ or 1-9, 0 tabs · ? keys · Ctrl+P commands · q quit

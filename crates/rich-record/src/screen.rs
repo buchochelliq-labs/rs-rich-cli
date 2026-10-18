@@ -187,6 +187,76 @@ impl Snapshot {
         Snapshot { rows, cursor }
     }
 
+    /// Rendered output as a screen `columns` wide, without a terminal: each
+    /// cell of `frame` resolved through `theme` as rich's SVG export does
+    /// (reverse swaps the colours, dim blends the foreground 40% towards the
+    /// background; bold keeps its colour). Shorter rows are padded with
+    /// blanks and longer ones cropped, a wide character that would straddle
+    /// the edge becoming a blank. There is no cursor, and always at least
+    /// one row.
+    pub fn from_frame(frame: &Frame, theme: &Theme, columns: usize) -> Snapshot {
+        let terminal = theme.terminal_theme();
+        let rgb = |c: rich::ColorTriplet| (c.red, c.green, c.blue);
+        let mut rows = Vec::with_capacity(frame.height().max(1));
+        for y in 0..frame.height() {
+            let mut row: Vec<Cell> = Vec::with_capacity(columns);
+            let mut cropped = false;
+            for cell in frame.cells(y) {
+                if row.len() >= columns {
+                    break;
+                }
+                if cell.is_continuation() {
+                    if cropped {
+                        continue;
+                    }
+                    let lead = row.last().cloned().unwrap_or_else(|| Cell::blank(theme));
+                    row.push(Cell {
+                        text: String::new(),
+                        width: 0,
+                        ..lead
+                    });
+                    continue;
+                }
+                cropped = row.len() + usize::from(cell.width) > columns;
+                if cropped {
+                    row.push(Cell::blank(theme));
+                    continue;
+                }
+                let style = frame.styles().get(cell.style);
+                let mut fg = style
+                    .and_then(Style::color)
+                    .map_or(terminal.foreground, |c| terminal.resolve(c, true));
+                let mut bg = style
+                    .and_then(Style::bgcolor)
+                    .map_or(terminal.background, |c| terminal.resolve(c, false));
+                let attr = |index: usize| style.and_then(|s| s.attr(index)) == Some(true);
+                if attr(6) {
+                    std::mem::swap(&mut fg, &mut bg);
+                }
+                if attr(1) {
+                    fg = rich::terminal_theme::blend_rgb(fg, bg, 0.4);
+                }
+                row.push(Cell {
+                    text: cell.text.to_string(),
+                    width: cell.width,
+                    fg: rgb(fg),
+                    bg: rgb(bg),
+                    bold: attr(0),
+                    italic: attr(2),
+                    underline: attr(3) || attr(4),
+                });
+            }
+            while row.len() < columns {
+                row.push(Cell::blank(theme));
+            }
+            rows.push(row);
+        }
+        if rows.is_empty() {
+            rows.push(vec![Cell::blank(theme); columns]);
+        }
+        Snapshot { rows, cursor: None }
+    }
+
     pub fn columns(&self) -> usize {
         self.rows.first().map_or(0, Vec::len)
     }
@@ -373,6 +443,40 @@ mod tests {
             }
             assert_eq!(exported, Some(grid), "{line:?}");
         }
+    }
+
+    #[test]
+    fn from_frame_resolves_styles_and_fits_the_width() {
+        let theme = Theme::default();
+        let segments = [
+            Segment::new("ab", Some(Style::parse("bold red").unwrap())),
+            Segment::new("c", Some(Style::parse("reverse").unwrap())),
+            Segment::new("漢", None),
+            Segment::line(),
+            Segment::new("0123456789", None),
+            Segment::line(),
+        ];
+        let frame = Frame::from_segments(&segments);
+        let shot = Snapshot::from_frame(&frame, &theme, 6);
+        assert_eq!(shot.rows.len(), 2);
+        assert!(shot.rows.iter().all(|row| row.len() == 6));
+        let row = &shot.rows[0];
+        // Bold red stays red (theme colour 1), as in rich's SVG.
+        assert_eq!((row[0].fg, row[0].bold), (theme.ansi[1], true));
+        assert_eq!((row[2].fg, row[2].bg), (theme.background, theme.foreground));
+        assert_eq!((row[3].text.as_str(), row[3].width), ("漢", 2));
+        assert!(row[4].is_continuation());
+        assert_eq!(row[5].text, " ");
+        assert_eq!(shot.text_grid(), "abc漢\n012345\n");
+        // A wide character that would straddle the edge is dropped.
+        let narrow = Snapshot::from_frame(&frame, &theme, 4);
+        assert_eq!(narrow.text_grid(), "abc\n0123\n");
+        assert_eq!(
+            Snapshot::from_frame(&Frame::default(), &theme, 3)
+                .rows
+                .len(),
+            1
+        );
     }
 
     #[test]

@@ -227,6 +227,11 @@ const VALUE_KEYS: &[&str] = &[
 ];
 
 pub(crate) fn validate_value(key: &str, value: &Value) -> Result<(), String> {
+    // `[[rules]]` tables, as `--rules` files hold them; the error names the
+    // table (`rules[1]: unknown op `like``).
+    if key == "rules" {
+        return super::style_rules::config_specs(value).map(|_| ());
+    }
     let valid = if boolean_flags(key).is_some() {
         value.is_bool()
     } else {
@@ -250,6 +255,10 @@ pub(crate) fn validate_value(key: &str, value: &Value) -> Result<(), String> {
                     v,
                     "print"
                         | "markdown"
+                        | "rst"
+                        | "org"
+                        | "asciidoc"
+                        | "man"
                         | "json"
                         | "syntax"
                         | "csv"
@@ -283,9 +292,10 @@ pub(crate) fn validate_value(key: &str, value: &Value) -> Result<(), String> {
             // `rich.toml` may set it; the name is checked when rich runs, with
             // the choices in the error.
             "highlighter" | "code_theme" => value.as_str().is_some_and(|v| !v.is_empty()),
-            "format" => value
-                .as_str()
-                .is_some_and(|v| crate::inspect::InputFormat::parse(v).is_ok()),
+            "format" => value.as_str().is_some_and(|v| {
+                crate::inspect::InputFormat::parse(v).is_ok()
+                    || crate::documents::format_mode(v).is_some()
+            }),
             "image_color" => value
                 .as_str()
                 .is_some_and(|v| matches!(v, "truecolor" | "ansi256" | "ansi16" | "grayscale")),
@@ -430,7 +440,18 @@ fn decode_configuration(text: &str, selected: Option<&str>) -> Result<Configurat
     let name = selected.unwrap_or("default");
     let mut applied = None;
     if let Some(profile) = profiles.remove(name) {
+        // Rules add up: the defaults' first, then the profile's (and the
+        // command line's after both).
+        let rules = match (defaults.get("rules"), profile.get("rules")) {
+            (Some(Value::Array(base)), Some(Value::Array(more))) => {
+                Some(Value::Array(base.iter().chain(more).cloned().collect()))
+            }
+            _ => None,
+        };
         defaults.extend(profile.clone());
+        if let Some(rules) = rules {
+            defaults.insert("rules".into(), rules);
+        }
         applied = Some((name.to_string(), profile));
     } else if selected.is_some() {
         return Err(format!("unknown profile {name:?}"));
@@ -673,6 +694,8 @@ fn overrides(args: &[String]) -> Settings {
                     "md" => "markdown",
                     "code" => "syntax",
                     "ndjson" => "jsonl",
+                    "adoc" => "asciidoc",
+                    "roff" => "man",
                     _ => arg,
                 };
                 result.insert("mode".into(), Value::String(mode.into()));
@@ -847,6 +870,14 @@ pub(crate) fn config_args(args: &[String], roots: &ConfigRoots) -> Result<Vec<St
                 if let Some(path) = path.as_str() {
                     result.extend(["--plugin".to_string(), path.to_string()]);
                 }
+            }
+            continue;
+        }
+        if key == "rules" {
+            // Rule tables: one `--style-rule` each, in order, ahead of the
+            // command line's own, which add to them.
+            for spec in super::style_rules::config_specs(&value)? {
+                result.extend(["--style-rule".to_string(), spec]);
             }
             continue;
         }
@@ -1200,7 +1231,7 @@ pub(crate) const UNTRUSTED_MICRO_PROJECT: &str =
 /// Every key `validate_value` accepts.
 #[cfg(test)]
 pub(crate) fn all_keys() -> Vec<&'static str> {
-    let mut keys = vec!["mode", "theme"];
+    let mut keys = vec!["mode", "theme", "rules"];
     keys.extend(BOOLEAN_KEYS);
     keys.extend(VALUE_KEYS);
     keys

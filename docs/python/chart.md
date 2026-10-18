@@ -14,15 +14,21 @@ markers.
 
 | Class | Draws |
 |---|---|
-| `Sparkline` | one line, one cell per value (two in Braille) |
-| `BarChart`, `ChartBar` | a label, a bar and a value per row, or columns side by side |
+| `Sparkline` | one cell per value (two in Braille), on one row or several |
+| `BarChart`, `ChartBar`, `BarGroup` | a label, a bar and a value per row, or columns side by side; bars in labelled groups |
 | `Histogram` | raw values counted into bins, drawn as bars |
 | `LineChart`, `Series` | one or more series as lines or points, with axes and a legend |
 | `Gauge`, `Band`, `BulletChart` | a value against a range, with a target and threshold bands; several aligned |
+| `FillGauge`, `LineGauge` | ratatui's two gauges: a bar that fills its area, and a label with a line |
 | `Heatmap` | a labelled grid of values as shades, with a legend |
 | `StatusMatrix`, `ChartState` | rows and columns of states (pass, fail, skip, flaky, your own) |
 | `KpiCard` | a label, a value, a delta, a sparkline and a status |
 | `Timeline`, `TimelineSpan` | labelled ranges on a scale, overlaps stacked, milestones |
+| `Distribution`, `DistributionSet` | the count, quantiles and mean of values, with a box-and-whisker strip; several on one scale |
+| `SmallMultiples` | a grid of titled sparklines, bar charts or line charts on one value scale |
+
+Every chart also says what it shows in words: `describe(chart)` gives its
+accessible text ([below](#accessible-text)).
 
 Settings are keyword arguments. Three are shared:
 
@@ -50,9 +56,14 @@ has a screenshot of each chart.
 
 ```text
 Sparkline(values, *, range=None, min=None, max=None, charset="auto", style=None,
-          min_max=False, threshold=None, format=None)
-BarChart(bars=None, *, range=None, max=None, charset="auto", orientation="horizontal",
-         bar_width=None, show_values=True, format=None, style=None)
+          min_max=False, threshold=None, format=None, rows=None,
+          direction="left_to_right", absent=None, styles=None, levels="nine")
+ChartBar(label, value, *, style=None, text=None, value_style=None, label_style=None)
+BarGroup(label, bars=None)
+BarChart(bars=None, *, groups=None, range=None, max=None, charset="auto",
+         orientation="horizontal", bar_width=None, show_values=True, format=None,
+         style=None, thickness=None, bar_gap=None, group_gap=None, label_style=None,
+         value_style=None, values_inside=False)
 Histogram(values, *, bins=None, range=None, charset="auto", orientation="horizontal",
           bar_width=None, show_values=True, style=None)
 ```
@@ -74,6 +85,36 @@ console.print(chart.Histogram([12, 14, 15, 21, 22, 23, 24, 38], bins=3, range=(1
 ```
 
 ![Sparklines, a bar chart and a histogram](media/chart-bars.svg)
+
+### Taller sparklines and grouped bars
+
+These options follow ratatui's `Sparkline` and `BarChart`.
+
+- `rows` stacks a sparkline over that many rows. Without it, a sparkline
+  fills the height it is given (a `Layout` region, say), or one row.
+- `direction="right_to_left"` puts the newest value on the left.
+- `absent` draws the gaps (`None`): a symbol, or a `(symbol, style)` pair.
+- `styles` styles each value; `None` in it keeps the sparkline's style.
+- `levels="three"` draws empty, half and full cells only.
+- `groups` takes `BarGroup`s, each a label over its bars; `bars` and
+  `groups` can be given together, the plain bars first.
+- `thickness` is how many cells across a bar is, `bar_gap` the cells
+  between bars and `group_gap` the cells between groups.
+- A bar's `text` is written in place of its value. `value_style` and
+  `label_style` style the values and labels, on a bar or on the whole
+  chart; a bar's own wins.
+- `values_inside=True` writes each value on its bar, as ratatui does.
+
+```python
+console.print(chart.Sparkline([3, 5, 2, 8, 6, 9, 4, 7], rows=3))
+console.print(chart.Sparkline([3, None, 2, 8, 6, None, 4, 7], direction="right_to_left", absent="·"))
+console.print(chart.BarChart(groups=[
+    chart.BarGroup("Q1", [("north", 31), chart.ChartBar("south", 18, text="18 (low)")]),
+    chart.BarGroup("Q2", [("north", 27), ("south", 24)]),
+], bar_width=16))
+```
+
+![A three-row sparkline, one right to left with gaps, and grouped bars](media/chart-ratatui-bars.svg)
 
 ## Line and scatter charts
 
@@ -119,6 +160,31 @@ console.print(chart.BulletChart([
 ```
 
 ![A gauge with a target and bands, and a bullet chart](media/chart-gauges.svg)
+
+### Fill and line gauges
+
+```text
+FillGauge(ratio, *, label=None, label_style=None, style=None, unicode=False,
+          width=None, height=None)
+LineGauge(ratio, *, label=None, label_style=None, filled_style=None,
+          unfilled_style=None, line="thin", symbols=None, width=None)
+```
+
+These are ratatui's `Gauge` and `LineGauge`. The ratio is clamped to 0 to 1
+(`NaN` raises `ValueError`). A `FillGauge` fills whole cells, or eighths of
+one with `unicode=True`. Its label (the percentage by default) sits on the
+middle row, and its colours swap where the bar runs under it. Without a
+`height`, it fills the height it is given, or one row. A `LineGauge` draws
+its label, then a line: `"thin"`, `"thick"` or `"double"`, or `symbols`, a
+`(filled, unfilled)` pair of one-character strings.
+
+```python
+console.print(chart.FillGauge(0.42, height=3, style="green"))
+console.print(chart.LineGauge(0.42, label="Downloading", line="thick", filled_style="cyan"))
+console.print(chart.LineGauge(0.8, label="cpu", symbols=("▰", "▱")))
+```
+
+![A fill gauge three rows high and two line gauges](media/chart-ratatui-gauges.svg)
 
 ## Heatmaps and status matrices
 
@@ -191,3 +257,87 @@ console.print(chart.Timeline(
 ```
 
 ![A timeline with overlapping spans and a milestone](media/chart-timeline.svg)
+
+## Distributions
+
+```text
+Distribution(values, *, label=None, range=None, strip_width=None, format=None,
+             unit=None, charset="auto", style=None, numbers=True)
+DistributionSet(distributions=None, *, range=None, strip_width=None, numbers=True,
+                charset="auto", shared_scale=True)
+quantile(values, q) -> float | None
+summary(values) -> dict
+```
+
+A `Distribution` is a box-and-whisker strip on one line (`├` and `┤` at
+the smallest and largest value, a shaded box from the first quartile to the
+third, the median `█`, the 95th percentile a `┼`), then the count, `min`,
+`p25`, `p50`, `p75`, `p95`, `max` and `mean`. `None`, NaN and infinities are
+left out and counted (`1 ignored`). Quantiles are interpolated linearly,
+numpy's default, so `quantile(values, q)` matches `numpy.quantile`.
+`summary` (and a distribution's `.summary`) is a dict of the numbers, with
+`None` for each when there are no values.
+
+A `DistributionSet` stacks distributions on one scale: `Distribution`s,
+`(label, values)` pairs, or a dict of label to values. `shared_scale=False`
+gives each row its own.
+
+```python
+latency = [12, 15, 14, 18, 25, 31, 28, 22, 35, 41, 38, 30, 26, 33, 47, 52, 140, None]
+console.print(chart.Distribution(latency, label="latency", unit="ms", format=0))
+console.print(chart.DistributionSet(
+    {"api": latency, "web": [v * 0.6 for v in latency[:-1]], "worker": [v * 1.5 for v in latency[:-1]]},
+    strip_width=24,
+    numbers=False,
+))
+print(round(chart.quantile(latency, 0.95), 2), chart.summary(latency)["ignored"])
+```
+
+![A distribution with its numbers, three on one scale, and a quantile](media/chart-distribution.svg)
+
+## Small multiples
+
+```text
+SmallMultiples(items, *, columns=None, min_cell_width=24, gap=2, shared_scale=True,
+               range=None, height=None, note=True, charset="auto")
+```
+
+`items` are `(title, chart)` pairs or a dict of title to chart, each a
+`Sparkline`, `BarChart` or `LineChart`. The grid has `columns` columns, or as
+many cells of at least `min_cell_width` as fit the width (one at 40 cells,
+three at 80, four at 120). Every chart is put on one value scale, the range
+of them all (or `range`), so a taller bar is a larger value in any chart;
+`shared_scale=False` leaves each its own. A note under the grid says the
+scale and holds the line charts' one legend. `columns_at(width)` and
+`scale` say how it is laid out.
+
+```python
+requests = [12, 15, 14, 18, 25, 31, 28, 22, 35, 41, 38, 30, 26, 33, 47, 52]
+services = {"api": 1.0, "web": 0.6, "worker": 0.3, "cron": 0.1}
+grid = chart.SmallMultiples(
+    {name: chart.Sparkline([v * share for v in requests]) for name, share in services.items()},
+    min_cell_width=18,
+)
+console.print(grid)
+print(chart.describe(grid))
+```
+
+![Four sparklines on one scale, and what the grid says](media/chart-multiples.svg)
+
+## Accessible text
+
+```text
+describe(chart, width=80) -> str
+```
+
+`describe` gives what a chart says to a screen reader: a few lines of plain
+words, no glyphs. The first line says what it is, how much it holds and the
+ranges of its axes (`Line chart, 2 series, x from 0 to 23, y from 12 to
+52`); the next lines its key values: a series' `min`, `max`, `last` and
+trend, the largest bars, a gauge's place on its scale (`Gauge cpu: 72%, 72
+percent of 0% to 100%, band high, target 80%`). A trend is the
+least-squares line through the values: `up` or `down` when it rises or
+falls by a tenth of their range or more, else `flat`.
+`rs_rich.ext.a11y.accessible_text(chart)` gives the same. The
+[Rust guide](https://buchochelliq-labs.github.io/rs-rich-cli/guide/ext/charts/#accessible-text)
+lists what each chart says.

@@ -185,6 +185,10 @@ The same feature adds two trees drawn from real sources (0.0.15):
 - `deps`: the resolved graph from `cargo metadata --format-version 1` as
   `DepTree` (what `cargo tree` prints, with crates resolved at several
   versions marked `(duplicate)`) and `WhyTree` (what pulls a crate in).
+  Supply-chain reports sit beside it: features, build timings, advisories
+  and licences (0.0.16), and artifact sizes (`deps::sizes`), regression
+  baselines (`deps::compare`), a licence policy with conflict checks
+  (`deps::policy`) and SPDX/CycloneDX input (`deps::sbom`) (0.0.19).
 - `schema`: a JSON Schema as `SchemaTree` (types, `(required)`, constraints,
   local `$ref`s resolved with cycle protection, `oneOf`/`anyOf`/`allOf`), and
   `SchemaDiff` between two versions, with breaking changes marked. Both read
@@ -268,7 +272,9 @@ For build, deploy and release tools, all in the default build:
   retries and waits; `cancel::CancelToken` stops them.
 - `notify`: `Notifications` shows transient toasts.
 - `table`: `TableData` with sorting (`SortKey`) and grouping (`GroupBy`,
-  `Aggregate`), and a `StreamingTable` for rows that keep arriving.
+  `Aggregate`), a `StreamingTable` for rows that keep arriving, and a
+  `VirtualTable` that shows one window of rows and columns of a source too
+  large to hold.
 - `badge` (`Badge`, `Badges`), `size_bar` (`SizeBar`) and `format` (bytes,
   rates, durations, relative times, percentages, compact numbers).
 - `redact`: `Redactor` masks secrets (secret-named keys, bearer tokens, common
@@ -282,7 +288,10 @@ For build, deploy and release tools, all in the default build:
   against a target and threshold bands), `Heatmap`, `StatusMatrix` (states
   as symbols and colours), `KpiCard` (value, delta, sparkline, status) and
   `Timeline` (ranges, stacked overlaps, milestones, compressed gaps). See
-  the `kpi_dashboard` example.
+  the `kpi_dashboard` example. `Distribution` (quantiles on a
+  box-and-whisker strip) and `SmallMultiples` (a grid of charts on one
+  scale) compare data, and every chart reads aloud through
+  `a11y::AccessibleText`.
 
 ### Coordinated Live regions
 

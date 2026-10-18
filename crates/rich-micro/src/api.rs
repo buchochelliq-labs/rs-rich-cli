@@ -13,6 +13,7 @@ use crate::markup::{expand, Diagnostic, MicroTransform};
 use crate::model::MicroAsset;
 use crate::registry::MicroRegistry;
 use crate::render::{placeholder, FallbackPreference};
+use crate::rows::reserve_rows;
 
 /// Micro assets on [`Text`].
 ///
@@ -68,7 +69,10 @@ impl MicroExt for Text {
     }
 }
 
-/// One asset as a renderable: exactly its columns wide, in any layout.
+/// One asset as a renderable: exactly its columns wide, in any layout, and
+/// its rows high: a two-row asset renders both its rows (see
+/// [`MicroRows`](crate::MicroRows)), so a table row or a panel holding it
+/// grows to fit.
 ///
 /// ```
 /// use rich_micro::{MicroAsset, MicroAssetRef};
@@ -117,7 +121,7 @@ impl MicroAssetRef {
 
 impl Renderable for MicroAssetRef {
     fn rich_render(&self, console: &Console, options: &ConsoleOptions) -> Vec<Segment> {
-        self.text().rich_render(console, options)
+        reserve_rows(self.text().rich_render(console, options))
     }
 
     fn measure(&self, _console: &Console, options: &ConsoleOptions) -> Measurement {

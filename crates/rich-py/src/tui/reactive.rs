@@ -17,7 +17,7 @@ use pyo3::types::{PyList, PySet, PyTuple};
 
 use rich_embed::ExitStatus;
 use rich_intuituive as intuituive;
-use rich_intuituive::widgets::{Date, Order};
+use rich_intuituive::widgets::{Date, DateTime, Order, Time};
 use rich_intuituive::{Load, Memo, Resource, Signal};
 
 use super::app::PyCtx;
@@ -114,6 +114,14 @@ pub(crate) fn date_arg(value: &Bound<'_, PyAny>) -> PyResult<Date> {
     date_from(value)
 }
 
+fn time_from(value: &Bound<'_, PyAny>) -> PyResult<Time> {
+    crate::interact::time_from(value)
+}
+
+fn datetime_from(value: &Bound<'_, PyAny>) -> PyResult<DateTime> {
+    crate::interact::datetime_from(value)
+}
+
 fn path_from(value: &Bound<'_, PyAny>) -> PyResult<Vec<usize>> {
     value
         .extract::<Vec<usize>>()
@@ -174,6 +182,8 @@ pub(crate) enum Slot {
     U16(Signal<u16>),
     F64(Signal<f64>),
     Date(Signal<Date>),
+    Time(Signal<Time>),
+    DateTime(Signal<DateTime>),
     Path(Signal<Vec<usize>>),
     Paths(Signal<HashSet<Vec<usize>>>),
     Sort(Signal<Option<(usize, Order)>>),
@@ -181,6 +191,10 @@ pub(crate) enum Slot {
     Str(Signal<String>),
     Bool(Signal<bool>),
     Exit(Signal<Option<ExitStatus>>),
+    /// An index or none: `list_optional`'s and `table_optional`'s selection.
+    Maybe(Signal<Option<usize>>),
+    /// A whole number: `number_input`'s value.
+    I64(Signal<i64>),
 }
 
 impl Slot {
@@ -191,6 +205,8 @@ impl Slot {
             Slot::U16(_) => "an offset (int)",
             Slot::F64(_) => "a float",
             Slot::Date(_) => "a date",
+            Slot::Time(_) => "a time",
+            Slot::DateTime(_) => "a date and time",
             Slot::Path(_) => "a tree path",
             Slot::Paths(_) => "a set of tree paths",
             Slot::Sort(_) => "a sort",
@@ -198,6 +214,8 @@ impl Slot {
             Slot::Str(_) => "a str",
             Slot::Bool(_) => "a bool",
             Slot::Exit(_) => "an exit status",
+            Slot::Maybe(_) => "an index or None",
+            Slot::I64(_) => "an int",
         }
     }
 }
@@ -258,6 +276,8 @@ impl PySignal {
             Slot::U16(s) => read!(s, |v| Ok(v.into_pyobject(py)?.into_any().unbind())),
             Slot::F64(s) => read!(s, |v| Ok(v.into_pyobject(py)?.into_any().unbind())),
             Slot::Date(s) => read!(s, |v| date_to(py, *v)),
+            Slot::Time(s) => read!(s, |v| crate::interact::time_to(py, *v)),
+            Slot::DateTime(s) => read!(s, |v| crate::interact::datetime_to(py, *v)),
             Slot::Path(s) => read!(s, |v| Ok(PyList::new(py, v)?.into_any().unbind())),
             Slot::Paths(s) => read!(s, |v| paths_to(py, v)),
             Slot::Sort(s) => read!(s, |v| sort_to(py, *v)),
@@ -269,6 +289,8 @@ impl PySignal {
                 .into_any()
                 .unbind())),
             Slot::Exit(s) => read!(s, |v| exit_to(py, v)),
+            Slot::Maybe(s) => read!(s, |v| Ok(v.into_pyobject(py)?.into_any().unbind())),
+            Slot::I64(s) => read!(s, |v| Ok(v.into_pyobject(py)?.into_any().unbind())),
         }
     }
 
@@ -299,6 +321,8 @@ impl PySignal {
             ),
             Slot::F64(s) => write!(s, value.extract::<f64>().map_err(|e| typed("a float", e))?),
             Slot::Date(s) => write!(s, date_from(value)?),
+            Slot::Time(s) => write!(s, time_from(value)?),
+            Slot::DateTime(s) => write!(s, datetime_from(value)?),
             Slot::Path(s) => write!(s, path_from(value)?),
             Slot::Paths(s) => write!(s, paths_from(value)?),
             Slot::Sort(s) => write!(s, sort_from(value)?),
@@ -313,6 +337,13 @@ impl PySignal {
             Slot::Exit(_) => {
                 return Err(PyTypeError::new_err("a program's exit status is read only"))
             }
+            Slot::Maybe(s) => write!(
+                s,
+                value
+                    .extract::<Option<usize>>()
+                    .map_err(|e| typed("an index or None", e))?
+            ),
+            Slot::I64(s) => write!(s, value.extract::<i64>().map_err(|e| typed("an int", e))?),
         }
         Ok(())
     }
@@ -390,6 +421,22 @@ impl PySignal {
         self.typed(py, what, from, Slot::Date, date_from)
     }
 
+    pub(crate) fn time(&self, py: Python<'_>, what: &str) -> PyResult<Signal<Time>> {
+        let from = |s| match s {
+            Slot::Time(s) => Some(s),
+            _ => None,
+        };
+        self.typed(py, what, from, Slot::Time, time_from)
+    }
+
+    pub(crate) fn datetime(&self, py: Python<'_>, what: &str) -> PyResult<Signal<DateTime>> {
+        let from = |s| match s {
+            Slot::DateTime(s) => Some(s),
+            _ => None,
+        };
+        self.typed(py, what, from, Slot::DateTime, datetime_from)
+    }
+
     pub(crate) fn path(&self, py: Python<'_>, what: &str) -> PyResult<Signal<Vec<usize>>> {
         let from = |s| match s {
             Slot::Path(s) => Some(s),
@@ -430,6 +477,28 @@ impl PySignal {
         self.typed(py, what, from, Slot::Str, |v| {
             v.extract::<String>()
                 .map_err(|_| PyTypeError::new_err("its value must be a str"))
+        })
+    }
+
+    pub(crate) fn maybe(&self, py: Python<'_>, what: &str) -> PyResult<Signal<Option<usize>>> {
+        let from = |s| match s {
+            Slot::Maybe(s) => Some(s),
+            _ => None,
+        };
+        self.typed(py, what, from, Slot::Maybe, |v| {
+            v.extract::<Option<usize>>()
+                .map_err(|_| PyTypeError::new_err("its value must be an int, at least 0, or None"))
+        })
+    }
+
+    pub(crate) fn i64(&self, py: Python<'_>, what: &str) -> PyResult<Signal<i64>> {
+        let from = |s| match s {
+            Slot::I64(s) => Some(s),
+            _ => None,
+        };
+        self.typed(py, what, from, Slot::I64, |v| {
+            v.extract::<i64>()
+                .map_err(|_| PyTypeError::new_err("its value must be an int"))
         })
     }
 
@@ -567,6 +636,28 @@ fn tui_memo(f: &Bound<'_, PyAny>) -> PyResult<PyMemo> {
     let app = require("memo()")?;
     let f = Callback::checked(f, "memo's function")?;
     let memo = intuituive::memo(move || f.call0().map(PyValue).unwrap_or_else(PyValue::none));
+    Ok(PyMemo {
+        memo,
+        app: Some(app),
+        home: Home::here(),
+    })
+}
+
+/// `viewport()`: the `(width, height)` in cells the app lays out in, as a
+/// `Memo`: a node that reads it draws again when the terminal is resized.
+#[pyfunction]
+fn tui_viewport() -> PyResult<PyMemo> {
+    let app = require("viewport()")?;
+    let size = intuituive::viewport();
+    let memo = intuituive::memo(move || {
+        let (width, height) = size.get();
+        Python::attach(|py| {
+            (width, height)
+                .into_pyobject(py)
+                .map(|tuple| PyValue(tuple.into_any().unbind()))
+                .unwrap_or_else(|_| PyValue(py.None()))
+        })
+    });
     Ok(PyMemo {
         memo,
         app: Some(app),
@@ -1001,6 +1092,12 @@ impl PyProxy {
             call_with_ctx(&Callback::of(f, app), None, cx);
         }))
     }
+
+    /// Print console `markup` above the app (inline, into the scrollback
+    /// above it), from any thread.
+    fn print_above(&self, markup: &str) -> bool {
+        self.proxy.print_above(markup)
+    }
 }
 
 pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -1018,6 +1115,7 @@ pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     }
     m.add_function(wrap_pyfunction!(tui_signal, m)?)?;
     m.add_function(wrap_pyfunction!(tui_memo, m)?)?;
+    m.add_function(wrap_pyfunction!(tui_viewport, m)?)?;
     m.add_function(wrap_pyfunction!(tui_watch, m)?)?;
     m.add_function(wrap_pyfunction!(tui_every, m)?)?;
     m.add_function(wrap_pyfunction!(tui_spawn, m)?)?;

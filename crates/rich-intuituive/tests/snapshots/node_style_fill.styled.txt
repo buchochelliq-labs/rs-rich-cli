@@ -1,0 +1,6 @@
+[on blue]one           [/]
+[on blue]              [/]
+[yellow on blue]two[/][on blue] and more  [/]
+[on blue]              [/]
+[on blue]a   b         [/]
+[on blue]              [/]

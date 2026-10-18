@@ -215,6 +215,11 @@ fn confirm_input_and_pager_degrade() {
         out, "\x1b[1mbold\x1b[0m\nplain\n",
         "the content, as it came"
     );
+    // Sticky lines change nothing without a terminal (#716).
+    for sticky in ["2", "table", "0"] {
+        let (out, _, code) = piped(&["pager", "--sticky", sticky], "a\nb\nc\n");
+        assert_eq!((out.as_str(), code), ("a\nb\nc\n", 0), "{sticky}");
+    }
 }
 
 #[test]
@@ -224,6 +229,7 @@ fn usage_errors_exit_2() {
         &["input", "extra"],
         &["confirm", "--default", "maybe"],
         &["pager", "a", "b"],
+        &["pager", "--sticky", "some"],
     ] {
         let (_, err, code) = piped(args, "x\n");
         assert_eq!(code, 2, "{args:?}: {err}");
@@ -458,10 +464,126 @@ fn explore_reports_bad_documents_and_options() {
 }
 
 #[test]
+fn date_asks_line_by_line_without_a_terminal() {
+    let (out, err, code) = piped(&["date"], "2026-10-17\n");
+    assert_eq!((out.as_str(), code), ("2026-10-17\n", 0), "{err}");
+    assert!(
+        err.contains("Date (YYYY-MM-DD)"),
+        "the prompt goes to stderr: {err}"
+    );
+    let (out, err, code) = piped(&["date", "--kind", "time"], "2:30 pm\n");
+    assert_eq!((out.as_str(), code), ("14:30\n", 0), "{err}");
+    let args = ["date", "--kind", "datetime", "--seconds", "--twelve-hour"];
+    let (out, err, code) = piped(&args, "2026-10-17T14:30:05\n");
+    assert_eq!((out.as_str(), code), ("2026-10-17 14:30:05\n", 0), "{err}");
+    // An empty line, or the end of input, answers with the default.
+    let (out, _, code) = piped(&["date", "--default", "2026-10-17"], "\n");
+    assert_eq!((out.as_str(), code), ("2026-10-17\n", 0));
+    let (out, _, code) = piped(&["date", "--kind", "time", "--default", "9:05"], "");
+    assert_eq!((out.as_str(), code), ("09:05\n", 0));
+    // No answer, or one that is not a date: exit 3.
+    let (out, err, code) = piped(&["date"], "");
+    assert_eq!((out.as_str(), code), ("", 3), "{err}");
+    let (out, err, code) = piped(&["date"], "2026-02-30\n");
+    assert_eq!((out.as_str(), code), ("", 3), "{err}");
+}
+
+#[test]
+fn date_checks_its_range() {
+    let args = ["date", "--min", "2026-10-01", "--max", "2026-10-31"];
+    let (out, err, code) = piped(&args, "2026-11-01\n");
+    assert_eq!((out.as_str(), code), ("", 3), "{err}");
+    assert!(err.contains("the latest is 2026-10-31"), "{err}");
+    assert!(
+        err.contains("from 2026-10-01 to 2026-10-31"),
+        "the prompt says the range: {err}"
+    );
+    let args = ["date", "--kind", "datetime", "--min", "2026-10-17 09:00"];
+    let (out, err, code) = piped(&args, "2026-10-17 08:59\n");
+    assert_eq!((out.as_str(), code), ("", 3), "{err}");
+    assert!(err.contains("the earliest is 2026-10-17 09:00"), "{err}");
+    // Values that do not parse for the kind, a range the wrong way round,
+    // and a default outside it are usage errors.
+    for (args, message) in [
+        (
+            &["date", "--kind", "week"][..],
+            "is not date, time or datetime",
+        ),
+        (
+            &["date", "--value", "14:30"][..],
+            "--value: \"14:30\" is not a date",
+        ),
+        (
+            &["date", "--kind", "time", "--min", "25:00"][..],
+            "is not a time of day",
+        ),
+        (
+            &["date", "--min", "2026-10-31", "--max", "2026-10-01"][..],
+            "--min is after --max",
+        ),
+        (
+            &["date", "--max", "2026-10-01", "--default", "2026-10-02"][..],
+            "--default is outside",
+        ),
+        (&["date", "tomorrow"][..], "takes no arguments"),
+    ] {
+        let (out, err, code) = piped(args, "2026-10-01\n");
+        assert_eq!((out.as_str(), code), ("", 2), "{args:?}: {err}");
+        assert!(err.contains(message), "{args:?}: {err}");
+    }
+}
+
+/// Without `--seconds`, `rich date` works to the minute: a typed time and
+/// the limits are compared as printed, and the earliest rounds up (0.0.19
+/// release test). `--seconds` and `--twelve-hour` need a time.
+#[test]
+fn date_without_seconds_works_to_the_minute() {
+    let args = ["date", "--kind", "time", "--max", "14:30"];
+    let (out, err, code) = piped(&args, "14:30:45\n");
+    assert_eq!((out.as_str(), code), ("14:30\n", 0), "{err}");
+    let args = ["date", "--kind", "time", "--min", "09:00:30"];
+    let (out, err, code) = piped(&args, "09:00\n");
+    assert_eq!((out.as_str(), code), ("", 3), "{err}");
+    assert!(err.contains("the earliest is 09:01"), "{err}");
+    assert!(
+        err.contains("from 09:01"),
+        "the prompt says the range: {err}"
+    );
+    let (out, err, code) = piped(&args, "09:01\n");
+    assert_eq!((out.as_str(), code), ("09:01\n", 0), "{err}");
+    // A default earlier than --min once it drops its seconds.
+    let args = [
+        "date",
+        "--kind",
+        "time",
+        "--min",
+        "09:00:30",
+        "--default",
+        "09:00:30",
+    ];
+    let (out, err, code) = piped(&args, "");
+    assert_eq!((out.as_str(), code), ("", 2), "{err}");
+    assert!(err.contains("--default is outside"), "{err}");
+    // With --seconds the same default is in the range.
+    let mut seconds = args.to_vec();
+    seconds.push("--seconds");
+    let (out, err, code) = piped(&seconds, "");
+    assert_eq!((out.as_str(), code), ("09:00:30\n", 0), "{err}");
+    // A day has no seconds or clock to show.
+    for flag in ["--seconds", "--twelve-hour"] {
+        for args in [&["date", flag][..], &["date", "--kind", "date", flag][..]] {
+            let (out, err, code) = piped(args, "2026-10-17\n");
+            assert_eq!((out.as_str(), code), ("", 2), "{args:?}: {err}");
+            assert!(err.contains("needs --kind time or datetime"), "{err}");
+        }
+    }
+}
+
+#[test]
 fn every_command_has_help() {
     for command in [
         "choose", "filter", "input", "confirm", "pager", "write", "file", "color", "asset",
-        "explore",
+        "explore", "date",
     ] {
         let (out, _, code) = piped(&[command, "--help"], "");
         assert_eq!(code, 0);
@@ -814,6 +936,48 @@ mod pty {
         assert!(!out.contains("panicked"), "{out}");
     }
 
+    /// The screen's rows as the terminal shows them now.
+    fn rows(pty: &Pty) -> Vec<String> {
+        pty.screen().lines().map(str::to_string).collect()
+    }
+
+    /// `rich data.csv --pager`, paged by `rich pager` (as `PAGER`), keeps
+    /// the table's header on top past the first screen (#716).
+    #[test]
+    fn a_table_paged_with_pager_keeps_its_header_on_top() {
+        let file = std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join("sticky-pager.csv");
+        let mut csv = String::from("name,size\n");
+        for row in 1..=120 {
+            csv.push_str(&format!("file {row},{row}\n"));
+        }
+        std::fs::write(&file, csv).unwrap();
+        // `Pty::start` turns `rich ` into the quoted binary and
+        // `--no-config`; `echo` unquotes it for `PAGER`, which is split on
+        // spaces.
+        let mut pty = Pty::start(&format!(
+            r#"PAGER="$(echo rich ) pager" rich '{}' --pager; echo "code=$?""#,
+            file.display()
+        ));
+        pty.wait_for("file 1 ");
+        for _ in 0..2 {
+            pty.send("\x1b[6~");
+            std::thread::sleep(Duration::from_millis(60));
+        }
+        // 23 rows of content a page: three of header, twenty of rows.
+        pty.wait_for("file 41 ");
+        let screen = rows(&pty);
+        assert!(screen[0].starts_with('┏'), "{screen:#?}");
+        assert!(
+            screen[1].contains("name") && screen[1].contains("size"),
+            "{screen:#?}"
+        );
+        assert!(screen[2].starts_with('┡'), "{screen:#?}");
+        assert!(screen[3].contains("file 41 "), "{screen:#?}");
+        pty.send("q");
+        let out = pty.finish();
+        assert!(out.contains("code=0"), "{out}");
+    }
+
     #[test]
     fn controls_in_paged_content_are_shown_not_sent() {
         let mut pty =
@@ -1138,5 +1302,43 @@ mod pty {
                 "{env}: {out:?}"
             );
         }
+    }
+
+    /// `--value` says where the picker starts, `--default` or not (0.0.19
+    /// release test).
+    #[test]
+    fn date_starts_at_its_value_even_with_a_default() {
+        let mut pty = Pty::start(
+            r#"x=$(rich date --value 2026-10-01 --default 2026-10-17); echo "code=$? got=$x""#,
+        );
+        pty.wait_for("October 2026");
+        pty.send("\r");
+        let out = pty.finish();
+        assert!(out.contains("code=0 got=2026-10-01"), "{out}");
+    }
+
+    /// More sticky lines than the page holds: the first scroll away and
+    /// the last stay, so a search finds and shows a line among them (0.0.19
+    /// release test). 23 rows of content: 22 stay, one scrolls.
+    #[test]
+    fn pager_sticky_lines_taller_than_the_page_are_all_shown() {
+        let mut pty = Pty::start(r#"seq 1 60 | rich pager --sticky 30; echo "code=$?""#);
+        pty.wait_for("lines 1–23 of 60");
+        pty.send("/25\r");
+        pty.wait_for("lines 3–25 of 60");
+        let screen = rows(&pty);
+        assert_eq!(screen[0].trim(), "3", "{screen:#?}");
+        assert_eq!(screen[22].trim(), "25", "{screen:#?}");
+        pty.send("G");
+        pty.wait_for("lines 60–60 of 60");
+        let screen = rows(&pty);
+        assert_eq!(
+            (screen[0].trim(), screen[21].trim(), screen[22].trim()),
+            ("9", "30", "60"),
+            "{screen:#?}"
+        );
+        pty.send("q");
+        let out = pty.finish();
+        assert!(out.contains("code=0"), "{out}");
     }
 }

@@ -1,0 +1,30 @@
+ Explorer │ Sizes │ Flex │ Beyond
+ Fixed │ Percent │ Ratio │ Flex │ Min │ Max
+←/→ the kind · each block shows the width it got
+
+At most 20, the rest flex
+╭─ Max 20 ─────────╮╭─ Flex 1 ─────────────────────────────────────────────────────────────────────╮
+│     20 wide      ││                                   80 wide                                    │
+╰──────────────────╯╰──────────────────────────────────────────────────────────────────────────────╯
+
+Two maximums leave room over
+╭─ Max 20 ─────────╮╭─ Max 30 ───────────────────╮
+│     20 wide      ││          30 wide           │
+╰──────────────────╯╰────────────────────────────╯
+
+A maximum beside a fixed block
+╭─ Max… ─╮╭─ Fixed 30 ─────────────────╮
+│10 wide ││          30 wide           │
+╰────────╯╰────────────────────────────╯
+
+
+
+
+
+
+
+
+
+
+
+Tab/Shift+Tab tabs · ? keys · Ctrl+P commands · q quit

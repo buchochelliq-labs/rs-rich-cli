@@ -89,3 +89,16 @@ fn several_resources_require_local_files_and_no_exports() {
         assert!(stderr.contains(needle), "{args:?}: {stderr}");
     }
 }
+
+#[test]
+fn an_unbounded_watch_interval_is_a_usage_error_not_a_panic() {
+    for value in ["1e300", "86401"] {
+        let out = Command::new(env!("CARGO_BIN_EXE_rich"))
+            .args(["--watch", "--watch-interval", value, "a.json"])
+            .output()
+            .unwrap();
+        assert_eq!(out.status.code(), Some(2), "{value}: {out:?}");
+        let err = String::from_utf8_lossy(&out.stderr);
+        assert!(err.contains("at most 86400 seconds"), "{value}: {err}");
+    }
+}

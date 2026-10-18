@@ -594,3 +594,85 @@ impl Renderable for BulletChart {
             .normalize()
     }
 }
+
+/// `Gauge cpu: 72%, 72 percent of 0% to 100%, band high, target 80%`: the
+/// value, where it falls on the scale, the band it is in and the target.
+impl crate::a11y::AccessibleText for Gauge {
+    fn accessible_text(&self, _width: usize) -> String {
+        let what = if self.label.is_empty() {
+            "Gauge".to_string()
+        } else {
+            format!("Gauge {}", self.label)
+        };
+        if !self.value.is_finite() {
+            return format!("{what}: no value");
+        }
+        let scale = self.scale();
+        let mut parts = vec![
+            self.text(self.value),
+            format!(
+                "{} of {} to {}",
+                super::describe::percent(scale.normalize(self.value).unwrap_or(f64::NAN)),
+                self.text(scale.min()),
+                self.text(scale.max())
+            ),
+        ];
+        if let Some(band) = self.current_band().filter(|b| !b.label.is_empty()) {
+            parts.push(format!("band {}", band.label));
+        }
+        if let Some(target) = self.target.filter(|t| t.is_finite()) {
+            parts.push(format!("target {}", self.text(target)));
+        }
+        format!("{what}: {}", parts.join(", "))
+    }
+}
+
+/// `Bullet chart, 2 gauges`, then each gauge's text.
+impl crate::a11y::AccessibleText for BulletChart {
+    fn accessible_text(&self, width: usize) -> String {
+        if self.gauges.is_empty() {
+            return "Bullet chart, no gauges".to_string();
+        }
+        let mut out = vec![format!(
+            "Bullet chart, {}",
+            super::describe::counted(self.gauges.len(), "gauge", "gauges")
+        )];
+        out.extend(self.gauges.iter().map(|g| g.accessible_text(width)));
+        out.join("\n")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::a11y::AccessibleText;
+
+    #[test]
+    fn accessible_text_gives_the_value_its_place_and_band() {
+        let gauge = Gauge::new("cpu", 72.0)
+            .range(0.0, 100.0)
+            .target(80.0)
+            .band(Band::new(60.0, "ok"))
+            .band(Band::new(85.0, "high"))
+            .unit("%");
+        assert_eq!(
+            gauge.accessible_text(80),
+            "Gauge cpu: 72%, 72 percent of 0% to 100%, band high, target 80%"
+        );
+        let plain = Gauge::new("", 3.0).range(0.0, 12.0);
+        assert_eq!(plain.accessible_text(80), "Gauge: 3, 25 percent of 0 to 12");
+        assert_eq!(
+            Gauge::new("x", f64::NAN).accessible_text(80),
+            "Gauge x: no value"
+        );
+        let bullets = BulletChart::new()
+            .gauge(Gauge::new("revenue", 270.0).range(0.0, 300.0).target(250.0))
+            .gauge(Gauge::new("profit", 22.5).range(0.0, 30.0));
+        assert_eq!(
+            bullets.accessible_text(80),
+            "Bullet chart, 2 gauges\n\
+             Gauge revenue: 270, 90 percent of 0 to 300, target 250\n\
+             Gauge profit: 22.5, 75 percent of 0 to 30"
+        );
+    }
+}

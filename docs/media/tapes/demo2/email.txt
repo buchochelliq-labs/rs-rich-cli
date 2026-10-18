@@ -1,0 +1,18 @@
+intuiTUIve                             Recipe  Email  Traceroute  Weather
+▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+▀▀ Inbox  Sent  Drafts                                                         ▀▀
+▀▀  Priya <priya@example.com> Lunch on Friday?                                ▐▀▀
+▀▀>>Sam <sam@example.com>     Re: Lunch on Friday?                            ▐▀▀
+▀▀  Lena <lena@example.com>   Re: Lunch on Friday?                            ▐▀▀
+▀▀  Ops bot <ops@example.com> Disk at 81% on build-3                           ▀▀
+▀▀━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━▀▀
+▀▀  From: Sam <sam@example.com>                                                ▀▀
+▀▀  Subject: Re: Lunch on Friday?                                              ▀▀
+▀▀  -------------------------------------------------------------------------  ▀▀
+▀▀  Count me in, but I can only stay for an hour.                              ▀▀
+▀▀                                                                             ▀▀
+▀▀  Sam                                                                        ▀▀
+▀▀                                                                             ▀▀
+▀▀                                                                             ▀▀
+▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+     H/←  Left  L/→  Right  K/↑  Up  J/↓  Down  D/Del  Destroy  Q/Esc  Quit

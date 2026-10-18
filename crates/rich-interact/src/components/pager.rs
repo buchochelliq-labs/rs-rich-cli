@@ -5,6 +5,11 @@
 //! [`Viewport`] it is built on. `/` starts a search: matches are marked in
 //! place, `n` and `N` jump between them, and the status line counts them.
 //! `q` or Escape closes it.
+//!
+//! Since 0.0.7 a table's header can stay on top while its rows scroll
+//! (#716): the first lines given with [`Pager::sticky_header`], or a
+//! table's header found in the content with
+//! [`Pager::sticky_table_header`].
 
 use std::sync::Arc;
 
@@ -67,6 +72,16 @@ pub struct Pager {
     mouse: bool,
     /// Links clicked (#476), in order.
     clicked: Vec<String>,
+    /// Which first lines stay on top (#716).
+    sticky: Sticky,
+}
+
+/// Which of a pager's first lines stay on top.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Sticky {
+    Lines(usize),
+    /// A table's header, found in the content at each width.
+    Table,
 }
 
 impl Pager {
@@ -93,6 +108,7 @@ impl Pager {
             theme: Theme::default(),
             mouse: false,
             clicked: Vec::new(),
+            sticky: Sticky::Lines(0),
         };
         pager.set(lines);
         pager
@@ -126,6 +142,39 @@ impl Pager {
         &self.clicked
     }
 
+    /// Keep the first `lines` lines on top while the rest scroll (#716):
+    /// a header rendered with the content.
+    pub fn sticky_header(mut self, lines: usize) -> Self {
+        self.sticky = Sticky::Lines(lines);
+        self.stick();
+        self
+    }
+
+    /// Keep a table's header on top while its rows scroll (#716), when the
+    /// content starts with a table: its title, top edge and header rows,
+    /// down to the line under the header, as [`table_header_rows`] finds
+    /// them at each width. Content that does not start with a table
+    /// scrolls as it is.
+    pub fn sticky_table_header(mut self, on: bool) -> Self {
+        self.sticky = if on { Sticky::Table } else { Sticky::Lines(0) };
+        self.stick();
+        self
+    }
+
+    /// The lines that stay on top now.
+    pub fn sticky_rows(&self) -> usize {
+        self.viewport.sticky_rows()
+    }
+
+    /// Work out the sticky lines for the content.
+    fn stick(&mut self) {
+        let rows = match self.sticky {
+            Sticky::Lines(lines) => lines,
+            Sticky::Table => table_header_rows(self.viewport.lines()).unwrap_or(0),
+        };
+        self.viewport.set_sticky(rows);
+    }
+
     /// Start with this search.
     pub fn search(mut self, query: impl Into<String>) -> Self {
         self.query = Some(query.into());
@@ -143,6 +192,7 @@ impl Pager {
             .map(|line| line.iter().map(|s| s.text.as_str()).collect())
             .collect();
         self.viewport.set_lines(lines);
+        self.stick();
         self.find();
     }
 
@@ -230,6 +280,132 @@ impl Pager {
     }
 }
 
+/// The lines of a table's top, when `lines` start with one: its title,
+/// its top edge and its header rows, down to and including the line under
+/// the header (#716). `None` when the content does not start with a table
+/// whose header a line of its box marks off, such as rich's default
+/// `HEAVY_HEAD` table, or when nothing would be left under it, or when the
+/// box draws the lines between rows as it draws that one and the line comes
+/// again (a table without a header, or with `show_lines`, in `SQUARE`):
+/// pinning a row would be worse than pinning nothing. The text of each line
+/// is what is looked at, so it works on output rendered elsewhere
+/// (`rich data.csv --force-terminal | rich pager`).
+pub fn table_header_rows(lines: &[Vec<Segment>]) -> Option<usize> {
+    // A header taller than this is not looked for.
+    const LIMIT: usize = 16;
+    let plain: Vec<String> = lines
+        .iter()
+        .take(LIMIT)
+        .map(|line| {
+            let text: String = line
+                .iter()
+                .filter(|s| !s.control)
+                .map(|s| s.text.as_str())
+                .collect();
+            text.trim_matches(' ').to_string()
+        })
+        .collect();
+    for under in 1..plain.len() {
+        for set in BOXES.iter() {
+            if let Some(rows) = header_above(&plain, under, set) {
+                return (rows < lines.len()).then_some(rows);
+            }
+        }
+    }
+    None
+}
+
+/// The boxes whose header rows end with a line of their own: rich's, but
+/// those that mark the header off with a plain rule, which a rule in the
+/// content would look like.
+const BOXES: [rich::r#box::Box; 15] = {
+    use rich::r#box::*;
+    [
+        HEAVY_HEAD,
+        SQUARE,
+        ROUNDED,
+        HEAVY,
+        DOUBLE,
+        MINIMAL,
+        ASCII,
+        ASCII2,
+        ASCII_DOUBLE_HEAD,
+        SQUARE_DOUBLE_HEAD,
+        MINIMAL_HEAVY_HEAD,
+        MINIMAL_DOUBLE_HEAD,
+        HEAVY_EDGE,
+        DOUBLE_EDGE,
+        MARKDOWN,
+    ]
+};
+
+/// The lines down to `under` when `plain[under]` is the line under a
+/// header drawn with `set`, the header rows are above it, and above those
+/// at most a top edge and a title of three lines.
+fn header_above(plain: &[String], under: usize, set: &rich::r#box::Box) -> Option<usize> {
+    let line = &plain[under];
+    let (left, across, cross, right) = (
+        set.head_row_left,
+        set.head_row_horizontal,
+        set.head_row_cross,
+        set.head_row_right,
+    );
+    let ends = |text: &str, first: char, last: char| {
+        text.starts_with(first) && text.ends_with(last) && text.chars().count() > 1
+    };
+    let drawn = !line.is_empty()
+        && line.contains(across)
+        && line
+            .chars()
+            .all(|c| [left, across, cross, right].contains(&c) && c != ' ');
+    // Its edges, or a crossing, tell it from a rule.
+    let edged = left != ' ' && right != ' ' && ends(line, left, right);
+    if !drawn || !(edged || (cross != across && line.contains(cross))) {
+        return None;
+    }
+    // A box that draws the line between rows (`show_lines`) as it draws
+    // the one under the header (SQUARE, and so a headerless HEAVY_HEAD
+    // table): the line comes again in a table without a header, so it
+    // marks one only where it is the only such line. Better not to pin a
+    // header than to pin a row.
+    let between = (
+        set.row_left,
+        set.row_horizontal,
+        set.row_cross,
+        set.row_right,
+    );
+    if between == (left, across, cross, right)
+        && plain
+            .iter()
+            .enumerate()
+            .any(|(at, text)| at != under && text == line)
+    {
+        return None;
+    }
+    // With its edges, or (`show_edge=False`) its dividers.
+    let header = |text: &str| {
+        (set.head_left != ' ' && set.head_right != ' ' && ends(text, set.head_left, set.head_right))
+            || (set.head_vertical != ' ' && text.contains(set.head_vertical))
+    };
+    let mut top = under;
+    while top > 0 && header(&plain[top - 1]) {
+        top -= 1;
+    }
+    if top == under {
+        return None;
+    }
+    let edge = |text: &str| {
+        !text.is_empty()
+            && text
+                .chars()
+                .all(|c| [set.top_left, set.top, set.top_divider, set.top_right, ' '].contains(&c))
+    };
+    if top > 0 && edge(&plain[top - 1]) {
+        top -= 1;
+    }
+    (top <= 3).then_some(under + 1)
+}
+
 /// The byte ranges of `text` whose lower-cased characters are `needle`
 /// (already lower-cased), without overlaps. Lower-casing can change a
 /// character's length (`ẞ` to `ß`, `İ` to `i̇`), so the text is folded one
@@ -297,7 +473,10 @@ impl Component for Pager {
                     self.query = self.typing.take();
                     self.find();
                     // The first match at or after the top of the page.
-                    let top = self.viewport.offset();
+                    let top = match self.viewport.offset() {
+                        0 => 0,
+                        _ => self.viewport.top(page),
+                    };
                     let first = self
                         .hits
                         .iter()
@@ -357,23 +536,18 @@ impl Component for Pager {
         let theme = &self.theme;
         // Before the first event a renderable source is not rendered yet.
         let fresh;
-        let (lines, offset, plain_lines): (&[Vec<Segment>], usize, usize) =
+        let (rows, plain_lines): (Vec<(usize, &[Segment])>, usize) =
             match (&self.source, self.rendered_at) {
                 (Some(source), None) => {
                     fresh = context.lines_at(&**source, width);
-                    (&fresh, 0, fresh.len())
+                    let rows = fresh.iter().map(Vec::as_slice).enumerate();
+                    (rows.take(page).collect(), fresh.len())
                 }
-                _ => (
-                    self.viewport.lines(),
-                    self.viewport.offset(),
-                    self.viewport.len(),
-                ),
+                // The sticky lines, then those scrolled to.
+                _ => (self.viewport.rows(page), self.viewport.len()),
             };
-        let mut out: Vec<Vec<Segment>> = lines
-            .iter()
-            .enumerate()
-            .skip(offset)
-            .take(page)
+        let mut out: Vec<Vec<Segment>> = rows
+            .into_iter()
             .map(|(index, line)| fit(self.mark(line, index), width))
             .collect();
         out.resize_with(page.min(plain_lines.max(1)), Vec::new);

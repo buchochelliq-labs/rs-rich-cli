@@ -1,5 +1,6 @@
 //! `rich dot`, `rich deps` and `rich schema`: diagrams from real sources
-//! (0.0.15 workstream 4; SQL DDL, Arrow and `--er` in 0.0.16 workstream 7).
+//! (0.0.15 workstream 4; SQL DDL, Arrow and `--er` in 0.0.16 workstream 7;
+//! `rich deps --sizes`, `--baseline` and `--policy` in 0.0.19 workstream 16).
 //! Not upstream: binary-boundary conveniences that compose rs-rich-diagram
 //! (the DOT parser, the layout), rs-rich-ext (the dependency and schema
 //! trees) and rs-rich-data (Arrow schemas, ER diagrams); see
@@ -9,8 +10,12 @@ use super::*;
 use rich::containers::Renderables;
 use rich_diagram::{Diagram, Direction, Graph, Node, Shape, Stroke};
 use rich_ext::deps::audit::{AdvisoryKind, AdvisoryReport};
+use rich_ext::deps::compare::{Comparison, Quantity, Threshold, Thresholds, Verdict};
 use rich_ext::deps::features::{FeatureGraph, FeatureTree};
-use rich_ext::deps::licenses::LicenseReport;
+use rich_ext::deps::licenses::{LicenseReport, LicensedPackage};
+use rich_ext::deps::policy::{self, ConflictMode, Policy, PolicyReport};
+use rich_ext::deps::sbom::Sbom;
+use rich_ext::deps::sizes::{SizeOptions, SizeReport, Sizes};
 use rich_ext::deps::timings::{Timings, TimingsReport};
 use rich_ext::deps::{DepGraph, DepKind, DepTree, WhyTree};
 use rich_ext::schema::{Schema, SchemaDiff, SchemaTree};
@@ -65,14 +70,37 @@ pub(crate) struct GraphSourceOptions {
     audit: Option<String>,
     /// `--licenses`: the licences, grouped.
     licenses: bool,
+    /// `--sizes [TARGET_DIR|FILE]`: artifact sizes; `Some(None)` for the
+    /// target directory `cargo metadata` names.
+    sizes: Option<Option<String>>,
+    /// `--build-profile NAME`: with `--sizes`, whose artifacts.
+    build_profile: Option<String>,
+    /// `--source-sizes`: with `--sizes`, each package's sources too.
+    source_sizes: bool,
+    /// `--top N`: how many units `--sizes`, `--timings` and `--baseline`
+    /// show.
+    top: Option<usize>,
+    /// `--baseline FILE`: compare `--timings` or `--sizes` with it.
+    baseline: Option<String>,
+    /// `--threshold VALUE`, repeatable: with `--baseline`, what regresses.
+    thresholds: Vec<String>,
+    /// `--save FILE`: write the `--timings` or `--sizes` report as JSON.
+    save: Option<String>,
+    /// `--policy FILE`: a licence policy to check.
+    policy: Option<String>,
+    /// `--sbom FILE`: the packages of an SPDX or CycloneDX document.
+    sbom: Option<String>,
 }
 
 impl GraphSourceOptions {
     /// Consume one of these options; anything else stays with the main parser.
+    /// `--top` and `--threshold` are taken only for `rich deps` (`deps`):
+    /// elsewhere they are `rich profile`'s and `--diff`'s.
     pub(crate) fn parse_option<'a>(
         &mut self,
         arg: &str,
-        rest: &mut impl Iterator<Item = &'a String>,
+        rest: &mut (impl Iterator<Item = &'a String> + Clone),
+        deps: bool,
     ) -> Result<bool, String> {
         match arg {
             "--metadata" => {
@@ -103,6 +131,51 @@ impl GraphSourceOptions {
                 self.audit = Some(rest.next().ok_or("--audit requires a FILE")?.clone());
             }
             "--licenses" => self.licenses = true,
+            "--sizes" => {
+                // An optional value: the next argument, unless it is an option.
+                let value = rest
+                    .clone()
+                    .next()
+                    .filter(|value| *value == "-" || !value.starts_with('-'))
+                    .cloned();
+                if value.is_some() {
+                    rest.next();
+                }
+                self.sizes = Some(value);
+            }
+            "--build-profile" => {
+                let value = rest
+                    .next()
+                    .ok_or("--build-profile requires a profile name (debug, release, …)")?;
+                self.build_profile = Some(value.clone());
+            }
+            "--source-sizes" => self.source_sizes = true,
+            "--baseline" => {
+                self.baseline = Some(rest.next().ok_or("--baseline requires a FILE")?.clone());
+            }
+            "--save" => {
+                self.save = Some(rest.next().ok_or("--save requires a FILE")?.clone());
+            }
+            "--policy" => {
+                self.policy = Some(rest.next().ok_or("--policy requires a FILE")?.clone());
+            }
+            "--sbom" => {
+                self.sbom = Some(rest.next().ok_or("--sbom requires a FILE")?.clone());
+            }
+            "--top" if deps => {
+                self.top = Some(
+                    rest.next()
+                        .and_then(|v| v.trim().replace('_', "").parse::<usize>().ok())
+                        .filter(|n| *n > 0)
+                        .ok_or("--top requires a positive integer")?,
+                );
+            }
+            "--threshold" if deps => {
+                let value = rest
+                    .next()
+                    .ok_or("--threshold requires a value: a percentage (10%), a time (0.5s) or a size (100KiB)")?;
+                self.thresholds.push(value.clone());
+            }
             _ => return Ok(false),
         }
         Ok(true)
@@ -123,11 +196,25 @@ impl GraphSourceOptions {
             ("--timings", self.timings.is_some()),
             ("--audit", self.audit.is_some()),
             ("--licenses", self.licenses),
+            ("--sizes", self.sizes.is_some()),
+            ("--build-profile", self.build_profile.is_some()),
+            ("--source-sizes", self.source_sizes),
+            ("--top", self.top.is_some()),
+            ("--baseline", self.baseline.is_some()),
+            ("--threshold", !self.thresholds.is_empty()),
+            ("--save", self.save.is_some()),
+            ("--policy", self.policy.is_some()),
+            ("--sbom", self.sbom.is_some()),
         ]
         .into_iter()
         .filter(|(_, given)| *given)
         .map(|(flag, _)| (flag, &["deps"][..]))
         .collect()
+    }
+
+    /// Take `--depth` for `rich profile`, which shares the flag.
+    pub(crate) fn take_depth(&mut self) -> Option<usize> {
+        self.depth.take()
     }
 }
 
@@ -162,7 +249,8 @@ impl SchemaOptions {
 }
 
 /// What `rich deps` shows, and the gate it failed, if any: `--audit` with a
-/// vulnerability in the report exits 5 once the report is shown.
+/// vulnerability, `--baseline` with a regression and `--policy` with a
+/// violation exit 5 once the report is shown.
 pub(crate) struct DepsView {
     pub(crate) view: Box<dyn Renderable>,
     pub(crate) gate: Option<String>,
@@ -182,12 +270,20 @@ impl GraphSourceOptions {
     /// that do not apply to it: those are refused rather than ignored.
     fn check_combination(&self, cli: &Cli) -> Result<(), Failure> {
         let usage = |message: String| Err((ExitClass::Usage, message));
+        // `--licenses` and `--policy` are one report: the policy alone, or
+        // the licences then the policy.
+        let licences = if self.licenses {
+            "--licenses"
+        } else {
+            "--policy"
+        };
         let reports: Vec<&str> = [
             ("--why", self.why.is_some()),
             ("--features", self.features),
             ("--timings", self.timings.is_some()),
+            ("--sizes", self.sizes.is_some()),
             ("--audit", self.audit.is_some()),
-            ("--licenses", self.licenses),
+            (licences, self.licenses || self.policy.is_some()),
         ]
         .into_iter()
         .filter(|(_, given)| *given)
@@ -199,6 +295,72 @@ impl GraphSourceOptions {
         if self.package.is_some() && !self.features {
             return usage("--package only has an effect with --features".into());
         }
+        let measured = self.timings.is_some() || self.sizes.is_some();
+        for (flag, given, needs) in [
+            ("--top", self.top.is_some(), measured),
+            ("--baseline", self.baseline.is_some(), measured),
+            ("--save", self.save.is_some(), measured),
+        ] {
+            if given && !needs {
+                return usage(format!(
+                    "{flag} only has an effect with --timings or --sizes"
+                ));
+            }
+        }
+        if !self.thresholds.is_empty() && self.baseline.is_none() {
+            return usage("--threshold only has an effect with --baseline".into());
+        }
+        for (flag, given) in [
+            ("--build-profile", self.build_profile.is_some()),
+            ("--source-sizes", self.source_sizes),
+        ] {
+            if given && self.sizes.is_none() {
+                return usage(format!("{flag} only has an effect with --sizes"));
+            }
+        }
+        if self.sbom.is_some() {
+            if !(self.licenses || self.policy.is_some()) {
+                return usage("--sbom only has an effect with --licenses or --policy".into());
+            }
+            for (flag, given) in [
+                ("--metadata", self.metadata.is_some()),
+                ("a manifest", cli.resource.is_some()),
+                ("--no-dev", self.no_dev),
+            ] {
+                if given {
+                    return usage(format!("{flag} has no effect with --sbom"));
+                }
+            }
+        }
+        if let Some(save) = &self.save {
+            if save == "-" || save.is_empty() {
+                return usage("--save writes a file: give its path".into());
+            }
+        }
+        // Standard input can be read once.
+        let stdin: Vec<&str> = [
+            ("--timings", self.timings.as_deref()),
+            (
+                "--sizes",
+                self.sizes.as_ref().and_then(|input| input.as_deref()),
+            ),
+            ("--baseline", self.baseline.as_deref()),
+            ("--audit", self.audit.as_deref()),
+            ("--metadata", self.metadata.as_deref()),
+            ("--policy", self.policy.as_deref()),
+            ("--sbom", self.sbom.as_deref()),
+        ]
+        .into_iter()
+        .filter(|(_, file)| *file == Some("-"))
+        .map(|(flag, _)| flag)
+        .collect();
+        if stdin.len() > 1 {
+            return usage(format!(
+                "only one of {} can read standard input (`-`)",
+                stdin.join(", ")
+            ));
+        }
+        self.thresholds().map_err(|err| (ExitClass::Usage, err))?;
         let Some(report) = reports.first().filter(|r| **r != "--why") else {
             return Ok(());
         };
@@ -207,7 +369,10 @@ impl GraphSourceOptions {
             ("--graph", self.graph),
             ("--depth", self.depth.is_some()),
             ("--duplicates", self.duplicates),
-            ("--no-dev", self.no_dev && *report != "--licenses"),
+            (
+                "--no-dev",
+                self.no_dev && !matches!(*report, "--licenses" | "--policy" | "--sizes"),
+            ),
             ("--metadata", self.metadata.is_some() && reads_file),
             ("a manifest", cli.resource.is_some() && reads_file),
         ] {
@@ -216,6 +381,29 @@ impl GraphSourceOptions {
             }
         }
         Ok(())
+    }
+}
+
+impl GraphSourceOptions {
+    /// What `--baseline` counts as a regression: the defaults for the
+    /// report, with each `--threshold` in place.
+    fn thresholds(&self) -> Result<Thresholds, String> {
+        let quantity = self.quantity();
+        let mut thresholds = Thresholds::defaults(quantity);
+        for value in &self.thresholds {
+            thresholds = Threshold::parse(value)
+                .and_then(|threshold| thresholds.with(threshold, quantity))
+                .map_err(|err| format!("--threshold: {err}"))?;
+        }
+        Ok(thresholds)
+    }
+
+    fn quantity(&self) -> Quantity {
+        if self.timings.is_some() {
+            Quantity::Seconds
+        } else {
+            Quantity::Bytes
+        }
     }
 }
 
@@ -301,15 +489,20 @@ fn metadata(cli: &Cli) -> Result<String, Failure> {
 
 /// `rich deps`: the dependency tree, `--why CRATE`'s inverted tree, or with
 /// `--graph` either drawn through the layout; or one of the supply-chain
-/// reports (`--features`, `--timings FILE`, `--audit FILE`, `--licenses`),
-/// which read what Cargo and its tools wrote and run no scanner.
+/// reports (`--features`, `--timings FILE`, `--sizes`, `--audit FILE`,
+/// `--licenses`, `--policy FILE`), which read what Cargo and its tools
+/// wrote and run no scanner.
 pub(crate) fn deps(cli: &Cli) -> Result<DepsView, Failure> {
     let options = &cli.graph_sources;
     options.check_combination(cli)?;
     let data = |err: rich_ext::deps::DepsError| (ExitClass::Data, err.to_string());
     if let Some(file) = &options.timings {
         let timings = Timings::parse(&report_file(cli, file)?).map_err(data)?;
-        return Ok(DepsView::shown(TimingsReport::new(timings)));
+        return measured(cli, Measured::Timings(timings), shown_name(file));
+    }
+    if let Some(input) = &options.sizes {
+        let (sizes, name) = sizes(cli, input.as_deref())?;
+        return measured(cli, Measured::Sizes(sizes), name);
     }
     if let Some(file) = &options.audit {
         let report = AdvisoryReport::from_cargo_audit(&report_file(cli, file)?).map_err(data)?;
@@ -332,6 +525,9 @@ pub(crate) fn deps(cli: &Cli) -> Result<DepsView, Failure> {
             gate,
         });
     }
+    if options.licenses || options.policy.is_some() {
+        return licences(cli);
+    }
     let json = metadata(cli)?;
     if options.features {
         let graph = FeatureGraph::from_json(&json).map_err(data)?;
@@ -342,21 +538,6 @@ pub(crate) fn deps(cli: &Cli) -> Result<DepsView, Failure> {
     let mut kinds = vec![DepKind::Normal, DepKind::Build, DepKind::Dev];
     if options.no_dev {
         kinds.pop();
-    }
-    if options.licenses {
-        // The packages the kinds reach: with --no-dev, not the dev-only ones.
-        let reachable = graph.reachable(&kinds);
-        let ids: std::collections::HashSet<&str> = graph
-            .packages()
-            .iter()
-            .zip(&reachable)
-            .filter(|(_, reached)| **reached)
-            .map(|(package, _)| package.id.as_str())
-            .collect();
-        let report = LicenseReport::from_json(&json)
-            .map_err(data)?
-            .retain(|package| ids.contains(package.id.as_str()));
-        return Ok(DepsView::shown(report));
     }
     if let Some(spec) = &options.why {
         let reachable = graph.reachable(&[DepKind::Normal, DepKind::Build, DepKind::Dev]);
@@ -395,6 +576,348 @@ pub(crate) fn deps(cli: &Cli) -> Result<DepsView, Failure> {
         tree = tree.max_depth(depth);
     }
     Ok(DepsView::shown(tree))
+}
+
+/// A report `--baseline` compares and `--save` keeps.
+enum Measured {
+    Timings(Timings),
+    Sizes(Sizes),
+}
+
+impl Measured {
+    fn to_json(&self) -> String {
+        match self {
+            Measured::Timings(timings) => timings.to_json(),
+            Measured::Sizes(sizes) => sizes.to_json(),
+        }
+    }
+}
+
+/// `--timings` or `--sizes`: saved with `--save FILE`, then shown, or with
+/// `--baseline FILE` compared with that (exit 5 on a regression).
+fn measured(cli: &Cli, current: Measured, name: String) -> Result<DepsView, Failure> {
+    let options = &cli.graph_sources;
+    // `--save` is written only after `--baseline` has been read, so the two
+    // may name the same file: the comparison is against the old report.
+    let save = |current: &Measured| -> Result<(), Failure> {
+        if let Some(file) = &options.save {
+            std::fs::write(fs_path(file), current.to_json())
+                .map_err(|err| (ExitClass::Input, format!("cannot write {file}: {err}")))?;
+        }
+        Ok(())
+    };
+    let Some(file) = &options.baseline else {
+        save(&current)?;
+        let view: Box<dyn Renderable> = match current {
+            Measured::Timings(timings) => {
+                let report = TimingsReport::new(timings);
+                Box::new(match options.top {
+                    Some(top) => report.limit(top),
+                    None => report,
+                })
+            }
+            Measured::Sizes(sizes) => {
+                let report = SizeReport::new(sizes);
+                Box::new(match options.top {
+                    Some(top) => report.limit(top),
+                    None => report,
+                })
+            }
+        };
+        return Ok(DepsView { view, gate: None });
+    };
+    let thresholds = options
+        .thresholds()
+        .map_err(|err| (ExitClass::Usage, err))?;
+    let data =
+        |err: rich_ext::deps::DepsError| (ExitClass::Data, format!("{}: {err}", shown_name(file)));
+    let mut comparison = match &current {
+        Measured::Timings(current) => {
+            let baseline = Timings::parse(&report_file(cli, file)?).map_err(data)?;
+            Comparison::timings(&baseline, current, thresholds)
+        }
+        Measured::Sizes(current) => {
+            let baseline = if file != "-" && fs_path(file).is_dir() {
+                let json = metadata(cli)?;
+                size_dir(cli, file, &json)?
+            } else {
+                Sizes::parse(&report_file(cli, file)?).map_err(data)?
+            };
+            Comparison::sizes(&baseline, current, thresholds)
+        }
+    };
+    save(&current)?;
+    comparison = comparison.names(shown_name(file), name);
+    if let Some(top) = options.top {
+        comparison = comparison.limit(top);
+    }
+    let gate = comparison.failed().then(|| {
+        let mut names: Vec<String> = comparison
+            .regressions()
+            .iter()
+            .map(|row| row.key.clone())
+            .collect();
+        if comparison.total().verdict == Verdict::Regression {
+            names.push("the total".into());
+        }
+        format!(
+            "{} regression{} against the baseline ({}): {}",
+            names.len(),
+            if names.len() == 1 { "" } else { "s" },
+            thresholds.describe(comparison.quantity()),
+            names.join(", ")
+        )
+    });
+    Ok(DepsView {
+        view: Box::new(comparison),
+        gate,
+    })
+}
+
+/// The sizes `--sizes` reads, and the name the report goes by: a target
+/// directory (the one `cargo metadata` names when none is given) matched
+/// to the packages in `cargo metadata`, or a file of cargo-bloat JSON or a
+/// saved report.
+fn sizes(cli: &Cli, input: Option<&str>) -> Result<(Sizes, String), Failure> {
+    let options = &cli.graph_sources;
+    let directory = match input {
+        None => true,
+        Some("-") => false,
+        Some(path) => fs_path(path).is_dir(),
+    };
+    if !directory {
+        let file = input.unwrap_or("-");
+        if file != "-"
+            && fs_path(file)
+                .file_name()
+                .is_some_and(|name| name == "Cargo.toml")
+        {
+            return Err((
+                ExitClass::Usage,
+                format!(
+                    "{file} is a manifest, not a size report: give it before --sizes \
+                     (rich deps MANIFEST --sizes)"
+                ),
+            ));
+        }
+        let baseline_dir = options
+            .baseline
+            .as_deref()
+            .is_some_and(|b| b != "-" && fs_path(b).is_dir());
+        for (flag, given) in [
+            ("--build-profile", options.build_profile.is_some()),
+            ("--source-sizes", options.source_sizes),
+            ("--no-dev", options.no_dev),
+            ("--metadata", options.metadata.is_some() && !baseline_dir),
+            ("a manifest", cli.resource.is_some() && !baseline_dir),
+        ] {
+            if given {
+                return Err((
+                    ExitClass::Usage,
+                    format!(
+                        "{flag} has no effect with a size report file: it reads a target directory"
+                    ),
+                ));
+            }
+        }
+        let sizes = Sizes::parse(&report_file(cli, file)?)
+            .map_err(|err| (ExitClass::Data, format!("{}: {err}", shown_name(file))))?;
+        return Ok((sizes, shown_name(file)));
+    }
+    let json = metadata(cli)?;
+    let target = match input {
+        Some(path) => path.to_string(),
+        None => rich_ext::deps::sizes::target_directory(&json)
+            .map_err(|err| (ExitClass::Data, err.to_string()))?
+            .display()
+            .to_string(),
+    };
+    let sizes = size_dir(cli, &target, &json)?;
+    let name = match sizes.source() {
+        rich_ext::deps::sizes::SizeSource::TargetDir { dir, .. } => dir.clone(),
+        _ => target,
+    };
+    Ok((sizes, name))
+}
+
+/// The sizes in a target directory, matched to `json`'s packages; with
+/// `--no-dev`, not the dev-only ones.
+fn size_dir(cli: &Cli, target: &str, json: &str) -> Result<Sizes, Failure> {
+    let options = &cli.graph_sources;
+    let path = fs_path(target);
+    if !path.is_dir() {
+        return Err((
+            ExitClass::Input,
+            format!("{target}: not a directory (build first, or give the target directory)"),
+        ));
+    }
+    let mut size_options = SizeOptions::default().sources(options.source_sizes);
+    size_options.profile = options.build_profile.clone();
+    rich_ext::deps::sizes::profile_dir(&path, size_options.profile.as_deref())
+        .map_err(|err| (ExitClass::Input, err.to_string()))?;
+    let sizes = Sizes::from_target_dir(&path, json, &size_options)
+        .map_err(|err| (ExitClass::Data, err.to_string()))?;
+    if !options.no_dev {
+        return Ok(sizes);
+    }
+    let graph = DepGraph::from_json(json).map_err(|err| (ExitClass::Data, err.to_string()))?;
+    let reached = graph.reachable(&[DepKind::Normal, DepKind::Build]);
+    let ids: std::collections::HashSet<&str> = graph
+        .packages()
+        .iter()
+        .zip(&reached)
+        .filter(|(_, reached)| **reached)
+        .map(|(package, _)| package.id.as_str())
+        .collect();
+    Ok(sizes.retain(|entry| entry.id.as_deref().is_none_or(|id| ids.contains(id))))
+}
+
+/// `--licenses` and `--policy FILE`: the packages from `cargo metadata` (the
+/// ones the kinds reach) or from `--sbom FILE`, grouped by licence, checked
+/// against the policy, or both. A violation (or, under `conflicts =
+/// "deny"`, a conflict) exits 5 once the report is shown.
+fn licences(cli: &Cli) -> Result<DepsView, Failure> {
+    let options = &cli.graph_sources;
+    let data = |err: rich_ext::deps::DepsError| (ExitClass::Data, err.to_string());
+    let policy = match &options.policy {
+        Some(file) => {
+            let text = report_file(cli, file)?;
+            let policy = Policy::from_toml(&text)
+                .map_err(|err| (ExitClass::Data, format!("{}: {err}", shown_name(file))))?;
+            Some((policy, shown_name(file)))
+        }
+        None => None,
+    };
+    // The packages, and for each root the packages it ships with (its
+    // normal dependencies, all the way down), for the conflicts.
+    let (report, roots): (LicenseReport, Vec<(LicensedPackage, Vec<LicensedPackage>)>) =
+        match &options.sbom {
+            Some(file) => {
+                let sbom = Sbom::parse(&report_file(cli, file)?)
+                    .map_err(|err| (ExitClass::Data, format!("{}: {err}", shown_name(file))))?;
+                let roots = sbom
+                    .root()
+                    .map(|root| (root.clone(), sbom.report().packages().to_vec()))
+                    .into_iter()
+                    .collect();
+                (sbom.into_report(), roots)
+            }
+            None => {
+                let json = metadata(cli)?;
+                let graph = DepGraph::from_json(&json).map_err(data)?;
+                let mut kinds = vec![DepKind::Normal, DepKind::Build, DepKind::Dev];
+                if options.no_dev {
+                    kinds.pop();
+                }
+                // The packages the kinds reach: with --no-dev, not the dev-only ones.
+                let reachable = graph.reachable(&kinds);
+                let ids: std::collections::HashSet<&str> = graph
+                    .packages()
+                    .iter()
+                    .zip(&reachable)
+                    .filter(|(_, reached)| **reached)
+                    .map(|(package, _)| package.id.as_str())
+                    .collect();
+                let mut report = LicenseReport::from_json(&json)
+                    .map_err(data)?
+                    .retain(|package| ids.contains(package.id.as_str()));
+                if let Some((policy, _)) = policy.as_ref().filter(|(p, _)| p.ignores_private()) {
+                    let private =
+                        policy::unpublished(&json, policy.private_registries()).map_err(data)?;
+                    report = report.retain(|package| !private.contains(&package.id));
+                }
+                let mut roots = Vec::new();
+                let index: std::collections::HashMap<&str, usize> = graph
+                    .packages()
+                    .iter()
+                    .enumerate()
+                    .map(|(at, package)| (package.id.as_str(), at))
+                    .collect();
+                if policy
+                    .as_ref()
+                    .is_some_and(|(p, _)| p.conflict_mode() != ConflictMode::Ignore)
+                {
+                    for &root in graph.roots() {
+                        let id = &graph.packages()[root].id;
+                        let Some(package) = report.packages().iter().find(|p| &p.id == id) else {
+                            continue;
+                        };
+                        let mut alone = graph.clone();
+                        alone.set_roots(vec![root]);
+                        let ships = alone.reachable(&[DepKind::Normal]);
+                        let shipped: Vec<LicensedPackage> = report
+                            .packages()
+                            .iter()
+                            .filter(|p| index.get(p.id.as_str()).is_some_and(|&at| ships[at]))
+                            .cloned()
+                            .collect();
+                        roots.push((package.clone(), shipped));
+                    }
+                }
+                (report, roots)
+            }
+        };
+    let Some((policy, name)) = policy else {
+        return Ok(DepsView::shown(report));
+    };
+    let conflicts = roots
+        .iter()
+        .flat_map(|(root, shipped)| policy::conflicts(root, shipped))
+        .collect();
+    let mut checked = PolicyReport::new(&report, &policy)
+        .named(name)
+        .with_conflicts(conflicts);
+    if options.sbom.is_some() && policy.ignores_private() {
+        checked = checked.note("`private.ignore` needs cargo metadata to tell what is unpublished; not applied to an SBOM");
+    }
+    let gate = checked.failed().then(|| {
+        let violations = checked.violations();
+        let mut parts = Vec::new();
+        if !violations.is_empty() {
+            let named: Vec<String> = violations
+                .iter()
+                .map(|v| match v.license.as_str() {
+                    "(none)" => format!("{} v{} (no licence)", v.name, v.version),
+                    "(licence file)" => format!("{} v{} (a licence file)", v.name, v.version),
+                    license => format!("{} v{} ({license})", v.name, v.version),
+                })
+                .collect();
+            parts.push(format!(
+                "{} licence policy violation{}: {}",
+                violations.len(),
+                if violations.len() == 1 { "" } else { "s" },
+                named.join(", ")
+            ));
+        }
+        let conflicts: Vec<String> = checked
+            .conflicts()
+            .iter()
+            .filter(|c| {
+                policy.conflict_mode() == ConflictMode::Deny
+                    && c.severity == policy::Severity::Conflict
+            })
+            .map(|c| format!("{} v{} ({})", c.name, c.version, c.license))
+            .collect();
+        if !conflicts.is_empty() {
+            parts.push(format!(
+                "{} licence conflict{}: {}",
+                conflicts.len(),
+                if conflicts.len() == 1 { "" } else { "s" },
+                conflicts.join(", ")
+            ));
+        }
+        parts.join("; ")
+    });
+    let view: Box<dyn Renderable> = if options.licenses {
+        Box::new(Renderables::new(vec![
+            std::sync::Arc::new(report),
+            std::sync::Arc::new(Text::new("")),
+            std::sync::Arc::new(checked),
+        ]))
+    } else {
+        Box::new(checked)
+    };
+    Ok(DepsView { view, gate })
 }
 
 /// A package as a diagram node: workspace members rounded, crates resolved

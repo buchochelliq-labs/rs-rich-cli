@@ -94,12 +94,17 @@ fn malformed_manifests() {
         (without("alt"), "missing \"alt\""),
         (with("alt", json!("   ")), "alt text is required"),
         (with("name", json!("Bad Name")), "invalid micro asset name"),
-        (with("size", json!("2x2")), "rows must be 1"),
+        (
+            with("size", json!("2x3")),
+            "at most 4 columns and 2 rows (4x2)",
+        ),
         (
             with("size", json!({"cols": 2, "rows": 3})),
-            "rows must be 1",
+            "at most 4 columns and 2 rows (4x2)",
         ),
+        (with("size", json!("5x2")), "at most 4 columns and 2 rows"),
         (with("size", json!("9x1")), "at most 4 columns"),
+        (with("size", json!("2x0")), "at least 1"),
         (with("size", json!(2)), "size must be"),
         (
             with("fallback", json!({"text": "TOOLONG"})),

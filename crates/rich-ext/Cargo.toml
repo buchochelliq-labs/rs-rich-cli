@@ -200,4 +200,8 @@ required-features = ["serde"]
 
 [[example]]
 name = "guide_sources"
-required-features = ["data"]
+required-features = ["data", "toml"]
+
+[[example]]
+name = "guide_documents"
+required-features = ["syntax"]

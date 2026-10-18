@@ -1,9 +1,10 @@
 ╭─ New ────────────────────────────────────────────────────╮╭──────────────────────────────────────╮
 │? Add ›                                                   ││inspector · F12 hides                 │
-╰──────────────────────────────────────────────────────────╯│frame 3 · drew 2 of 4 dirty           │
-╭─ To do ──────────────────────────────────────────────────╮│damage 3 rects, 176 cells             │
-│✓ Read the intuiTUIve tutorial                            ││sent 1409 B last frame                │
-│• Build an app                                            ││                                      │
+╰──────────────────────────────────────────────────────────╯│tree node timings trace               │
+╭─ To do ──────────────────────────────────────────────────╮│frame 3 · drew 2 of 4 dirty           │
+│✓ Read the intuiTUIve tutorial                            ││damage 3 rects, 176 cells             │
+│• Build an app                                            ││sent 1416 B last frame                │
+│                                                          ││                                      │
 │                                                          ││screen 1                              │
 │                                                          ││  column 60x22                        │
 │                                                          ││    panel "New" 60x3                  │
@@ -17,6 +18,5 @@
 │                                                          ││                                      │
 │                                                          ││                                      │
 │                                                          ││                                      │
-│                                                          ││                                      │
-╰──────────────────────────────────────────────────────────╯│                                      │
+╰──────────────────────────────────────────────────────────╯│⇧F12 or a click to inspect            │
 1 left · space ticks · d deletes · ctrl+q quits             ╰──────────────────────────────────────╯

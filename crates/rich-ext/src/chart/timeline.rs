@@ -736,3 +736,80 @@ impl Renderable for Timeline {
             .normalize()
     }
 }
+
+/// `Timeline, 3 rows, 4 ranges, 1 milestone, from 0s to 95s`, then each
+/// range (`compile from 0s to 12s, 12s`), twenty at most, and each
+/// milestone (`Milestone release at 90s`).
+impl crate::a11y::AccessibleText for Timeline {
+    fn accessible_text(&self, _width: usize) -> String {
+        use super::describe::{count, counted};
+        if self.spans.is_empty() && self.milestones.is_empty() {
+            return "Timeline, no ranges".to_string();
+        }
+        let mut head = format!(
+            "Timeline, {}, {}",
+            counted(self.rows().len(), "row", "rows"),
+            counted(self.spans.len(), "range", "ranges")
+        );
+        if !self.milestones.is_empty() {
+            head.push_str(&format!(
+                ", {}",
+                counted(self.milestones.len(), "milestone", "milestones")
+            ));
+        }
+        if let Some((lo, hi)) = self.data() {
+            head.push_str(&format!(", from {} to {}", self.text(lo), self.text(hi)));
+        }
+        let mut out = vec![head];
+        const CAP: usize = 20;
+        for span in self.spans.iter().take(CAP) {
+            let row = if span.row.is_empty() {
+                "range".to_string()
+            } else {
+                span.row.clone()
+            };
+            if span.finite() {
+                out.push(format!(
+                    "{row} from {} to {}, {}",
+                    self.text(span.start),
+                    self.text(span.end),
+                    self.text(span.end - span.start)
+                ));
+            } else {
+                out.push(format!("{row}: no range"));
+            }
+        }
+        if self.spans.len() > CAP {
+            out.push(format!("and {} more ranges", count(self.spans.len() - CAP)));
+        }
+        for m in &self.milestones {
+            out.push(format!("Milestone {} at {}", m.label, self.text(m.at)));
+        }
+        out.join("\n")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::a11y::AccessibleText;
+
+    #[test]
+    fn accessible_text_lists_the_ranges() {
+        let build = Timeline::new()
+            .span("fetch", 0.0, 4.0)
+            .span("compile", 4.0, 31.5)
+            .span("test", 31.5, 52.0)
+            .milestone("tagged", 52.0)
+            .unit("s");
+        assert_eq!(
+            build.accessible_text(80),
+            "Timeline, 3 rows, 3 ranges, 1 milestone, from 0s to 52s\n\
+             fetch from 0s to 4s, 4s\n\
+             compile from 4s to 31.5s, 27.5s\n\
+             test from 31.5s to 52s, 20.5s\n\
+             Milestone tagged at 52s"
+        );
+        assert_eq!(Timeline::new().accessible_text(80), "Timeline, no ranges");
+    }
+}

@@ -6,6 +6,8 @@ No Rich counterpart: this is the port's own ``rs-rich-ext`` crate.
 from .._native import (
     Redactor,
     RedactMatch,
+    RedactFinding,
+    RedactPreview,
     Redacted,
     is_secret_key,
     REDACT_DETECTORS,
@@ -18,6 +20,8 @@ DETECTORS = REDACT_DETECTORS
 __all__ = [
     "Redactor",
     "RedactMatch",
+    "RedactFinding",
+    "RedactPreview",
     "Redacted",
     "is_secret_key",
     "REDACT_DETECTORS",

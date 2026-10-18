@@ -1,0 +1,18 @@
+intuiTUIve                             Recipe  Email  Traceroute  Weather
+▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+▀▀                           Tomato and lentil soup                            ▀▀
+▀▀                                                                             ▀▀
+▀▀  Step 1: Warm the oil in a deep pan over a   Qty     Ingredient             ▀▀
+▀▀  medium heat. Add the onion, carrot and      2 tbsp  olive oil           ▐  ▀▀
+▀▀  celery with a pinch of salt, and cook them  1       onion, finely       ▐  ▀▀
+▀▀  gently for ten minutes, until they are soft         chopped             ▐  ▀▀
+▀▀  but not brown.                              1       carrot, diced       ▐  ▀▀
+▀▀  Step 2: Stir in the garlic, cumin and       1       celery stick,       ▐  ▀▀
+▀▀  paprika for a minute. Add the lentils, the          diced               ▐  ▀▀
+▀▀  tomatoes and the stock, and simmer for      2       garlic cloves,         ▀▀
+▀▀  twenty-five minutes, until the lentils fall         crushed                ▀▀
+▀▀  apart. Season with the lemon juice and      1 tsp   ground cumin           ▀▀
+▀▀  plenty of pepper.                           1 tsp   smoked paprika         ▀▀
+▀▀                                                                             ▀▀
+▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+     H/←  Left  L/→  Right  K/↑  Up  J/↓  Down  D/Del  Destroy  Q/Esc  Quit

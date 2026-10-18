@@ -1,0 +1,22 @@
+❯ rich approve --header Requests --require-reason < requests.jsonl > decisions.jsonl
+? Requests › 4 approved · 1 rejected · 0 skipped · 0 pending
+❯ cat decisions.jsonl
+{"index":0,"decision":"approved","reason":null,"item":{"id":101,"title":"Raise the API rate limit","author":"a
+da","env":"prod","risk":"low"}}
+{"index":1,"decision":"rejected","reason":"needs a migration plan","item":{"id":102,"title":"Drop the legacy s
+essions table","author":"grace","env":"prod","risk":"high","sql":["DROP TABLE sessions_v1"]}}
+{"index":2,"decision":"approved","reason":null,"item":{"id":103,"title":"Rotate the CDN certificate","author":
+"linus","env":"prod","risk":"low"}}
+{"index":3,"decision":"approved","reason":null,"item":{"id":104,"title":"Enable the new search index","author"
+:"ada","env":"staging","risk":"medium"}}
+{"index":4,"decision":"approved","reason":null,"item":{"id":105,"title":"Purge stale feature flags","author":"
+barbara","env":"prod","risk":"low"}}
+❯
+
+
+
+
+
+
+
+

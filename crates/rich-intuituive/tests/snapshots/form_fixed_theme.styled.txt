@@ -1,0 +1,5 @@
+Age: 40
+Name: Ada
+[blue]╭─[/][bold blue] Status [/][blue]─────╮[/]
+[blue]│[/]ok            [blue]│[/]
+[blue]╰──────────────╯[/]

@@ -1,0 +1,32 @@
+╭─ Colours ────────────────────────────────────────────────────────────────────────────────────────╮
+│ Named │ Indexed │ RGB │ Modifiers │ Palettes                                                     │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭─ Named colours ──────────────────────────────────────────────────────────────────────────────────╮
+│               as a foreground on                        as a background under                    │
+│               default  black   white    blue  br.black  default  black   white   yellow br.white │
+│black            text    text    text    text    text      text    text    text    text    text   │
+│red              text    text    text    text    text      text    text    text    text    text   │
+│green            text    text    text    text    text      text    text    text    text    text   │
+│yellow           text    text    text    text    text      text    text    text    text    text   │
+│blue             text    text    text    text    text      text    text    text    text    text   │
+│magenta          text    text    text    text    text      text    text    text    text    text   │
+│cyan             text    text    text    text    text      text    text    text    text    text   │
+│white            text    text    text    text    text      text    text    text    text    text   │
+│bright_black     text    text    text    text    text      text    text    text    text    text   │
+│bright_red       text    text    text    text    text      text    text    text    text    text   │
+│bright_green     text    text    text    text    text      text    text    text    text    text   │
+│bright_yellow    text    text    text    text    text      text    text    text    text    text   │
+│bright_blue      text    text    text    text    text      text    text    text    text    text   │
+│bright_magenta   text    text    text    text    text      text    text    text    text    text   │
+│bright_cyan      text    text    text    text    text      text    text    text    text    text   │
+│bright_white     text    text    text    text    text      text    text    text    text    text   │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯

@@ -1,9 +1,9 @@
 {
   "tape": "docs/tapes/intuituive.tape",
   "tape_fnv1a64": "c9dc7219fe72bf8c",
-  "recorder": "rs-rich-record 0.0.5",
+  "recorder": "rs-rich-record 0.0.7",
   "rich": null,
-  "commit": "8158ab560c4e8d48e4d3b514a84cce8e67c2c38f",
+  "commit": "e24cffea41b9ba66bc338697dfc8d307363dcd68",
   "screenshots": [
     "todo",
     "inspector",

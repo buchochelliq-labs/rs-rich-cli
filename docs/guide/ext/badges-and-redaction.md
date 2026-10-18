@@ -222,6 +222,35 @@ function.
     as an inline image, can spoil the image. Eight-bit C1 controls are read
     as text, not as escapes.
 
+### Preview what would be masked
+
+Before you share, check what the rules will change. `preview` (plain text),
+`preview_ansi` (text with escapes, positions in its visible text) and
+`preview_args` (a command line, as `redact_args` masks it) mask nothing.
+They return a `Preview`: every `Finding` with its line, column, rule
+(`kind`), the text it covers and its replacement, plus `counts()` per rule
+and a one-line `summary()`. A `Preview` is a renderable. It draws each line
+that has a match, with the match highlighted and one line per match under
+it:
+
+```rust
+use rich::Console;
+use rich_ext::redact::Redactor;
+
+let redactor = Redactor::secrets();
+let preview = redactor.preview("user=ann\npassword=hunter2\n").title("config");
+for finding in preview.findings() {
+    println!("{}:{} {} -> {}", finding.line + 1, finding.column + 1,
+             finding.kind, finding.replacement);
+}
+assert_eq!(preview.summary(), "config: 1 match on 1 of 2 lines (key-value 1)");
+Console::new().print(&preview);
+```
+
+A secret inside an escape string (a hyperlink's URL) is a `hidden` finding,
+placed where the escape sits. The preview shows what it found **unmasked**:
+show it to the person about to share, never share it.
+
 ### From the command line
 
 `rich capture` takes the same detectors. Masking happens before the output
@@ -231,5 +260,9 @@ is shown, exported or recorded:
 rich capture --redact --export-svg run.svg --cast run.cast -- ./deploy.sh
 rich capture --redact-pattern 'order (?P<secret>\d{4})' -- ./report.sh
 ```
+
+`--redact-preview` (on `rich capture` and `rich log`) shows the preview
+instead of the output and writes nothing; with `--report json` it is a JSON
+document.
 
 See [Using the CLI](../../cli.md#viewers).

@@ -1,0 +1,24 @@
+╭─ Pull requests ───────────────────────────────────────────────────── Failed ─╮
+│#     Title                                      Author   State   Replies Age │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│Could not load them: the server said 503: try again later · r tries again     │
+╰─ j/k move · r reloads · q quits ─────────────────────────────────────────────╯

@@ -50,6 +50,44 @@ pub(super) fn event(input: &serde_json::Value) -> StructuredEvent {
     }
     event
 }
+/// A record as the JSON object its fields make, in order.
+pub(super) fn to_json(record: &rich_ext::log_stream::Record) -> serde_json::Value {
+    serde_json::Value::Object(
+        record
+            .fields
+            .iter()
+            .map(|(key, value)| (key.clone(), json(value)))
+            .collect(),
+    )
+}
+
+/// A typed value as JSON: [`typed`] undone. A float that JSON cannot hold
+/// (NaN, infinity) is `null`.
+pub(super) fn json(value: &Value) -> serde_json::Value {
+    match value {
+        Value::Null => serde_json::Value::Null,
+        Value::Bool(v) => serde_json::Value::Bool(*v),
+        Value::Integer(v) => (*v).into(),
+        Value::Unsigned(v) => (*v).into(),
+        Value::Integer128(v) => i64::try_from(*v)
+            .map(Into::into)
+            .unwrap_or_else(|_| serde_json::Value::from(*v as f64)),
+        Value::Unsigned128(v) => u64::try_from(*v)
+            .map(Into::into)
+            .unwrap_or_else(|_| serde_json::Value::from(*v as f64)),
+        Value::Float(v) => serde_json::Number::from_f64(*v)
+            .map(serde_json::Value::Number)
+            .unwrap_or(serde_json::Value::Null),
+        Value::String(v) => serde_json::Value::String(v.clone()),
+        Value::List(v) => serde_json::Value::Array(v.iter().map(json).collect()),
+        Value::Map(v) => serde_json::Value::Object(
+            v.iter()
+                .map(|(key, value)| (key.clone(), json(value)))
+                .collect(),
+        ),
+    }
+}
+
 fn typed(v: &serde_json::Value) -> Value {
     match v {
         serde_json::Value::Null => Value::Null,

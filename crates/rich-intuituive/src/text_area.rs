@@ -24,6 +24,7 @@ use rich_interact::{Button, Key, KeyCode, MouseKind};
 use crate::node::{Axis, Node};
 use crate::reactive::Signal;
 use crate::screen::Rect;
+use crate::scrollbar::Bar;
 use crate::widget::{widget, Canvas, DrawCx, EventCx, MeasureCx, Used, Widget, WidgetEvent};
 
 /// Two clicks this close together, on the same place, are a double click.
@@ -49,26 +50,13 @@ const DOUBLE_CLICK: Duration = Duration::from_millis(400);
 /// start and to its end. The mouse places the caret, drags a selection, and
 /// a double or triple click selects a word or a line.
 pub fn text_area(text: Signal<String>) -> Node {
-    let initial = text.get_untracked();
-    let area = TextArea {
-        buffer: Buffer::new(&initial),
-        seen: initial,
+    let area = TextArea::new(
         text,
-        options: Options {
+        Options {
             soft_wrap: true,
             ..Options::default()
         },
-        top: Cell::new((0, 0)),
-        left: Cell::new(0),
-        follow: Cell::new(true),
-        size: Cell::new((0, 0)),
-        rows: RefCell::new(Vec::new()),
-        caret: Cell::new(None),
-        highlight: RefCell::new(None),
-        click: Cell::new(None),
-        dragging: Cell::new(false),
-        escaped: false,
-    };
+    );
     widget(area).what("text_area")
 }
 
@@ -80,7 +68,15 @@ pub(crate) struct Options {
     pub soft_wrap: bool,
     pub read_only: bool,
     pub placeholder: Option<String>,
+    /// One line ([`input`](crate::input)): Enter submits, Tab moves on,
+    /// pasted lines join with spaces.
+    pub single_line: bool,
+    /// Each character shown as this one (a password).
+    pub mask: Option<char>,
 }
+
+/// What an [`input`](crate::input) calls on Enter.
+type Submit = Box<dyn FnMut(&str, &mut crate::app::Ctx)>;
 
 /// One row on screen: a piece of a line.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -126,9 +122,51 @@ pub(crate) struct TextArea {
     dragging: Cell<bool>,
     /// Escape was the last key, so Tab leaves rather than indents.
     escaped: bool,
+    /// Called with the text on Enter, in single-line mode.
+    pub(crate) on_submit: Option<Submit>,
+    pub(crate) bar: Bar,
+    /// Where the bar was drawn, the lines it showed and the view's height;
+    /// the column the text starts at.
+    bar_at: Cell<Option<(Rect, usize, usize)>>,
+    origin: Cell<u16>,
 }
 
 impl TextArea {
+    pub(crate) fn new(text: Signal<String>, options: Options) -> TextArea {
+        let mut initial = text.get_untracked();
+        if options.single_line {
+            initial = one_line(&initial);
+        }
+        TextArea {
+            buffer: Buffer::new(&initial),
+            seen: text.get_untracked(),
+            text,
+            options,
+            top: Cell::new((0, 0)),
+            left: Cell::new(0),
+            follow: Cell::new(true),
+            size: Cell::new((0, 0)),
+            rows: RefCell::new(Vec::new()),
+            caret: Cell::new(None),
+            highlight: RefCell::new(None),
+            click: Cell::new(None),
+            dragging: Cell::new(false),
+            escaped: false,
+            on_submit: None,
+            bar: Bar::default(),
+            bar_at: Cell::new(None),
+            origin: Cell::new(0),
+        }
+    }
+
+    /// The cells `text` takes as shown: one a character when masked.
+    fn shown_cells(&self, text: &str) -> usize {
+        match self.options.mask {
+            Some(_) => graphemes(text).len(),
+            None => cells(text),
+        }
+    }
+
     /// Columns the line numbers take.
     fn gutter(&self) -> u16 {
         if self.options.line_numbers {
@@ -201,7 +239,7 @@ impl TextArea {
             };
             self.top.set((top, 0));
             let text = (width.saturating_sub(self.gutter()) as usize).max(1);
-            let column = cells(&self.buffer.line(caret.line)[..caret.at]);
+            let column = self.shown_cells(&self.buffer.line(caret.line)[..caret.at]);
             let left = self.left.get();
             if column < left {
                 self.left.set(column);
@@ -314,7 +352,7 @@ impl TextArea {
             .buffer
             .lines()
             .iter()
-            .map(|line| cells(line))
+            .map(|line| self.shown_cells(line))
             .max()
             .unwrap_or(0);
         (widest + 1 + usize::from(self.gutter())).min(u16::MAX as usize) as u16
@@ -356,7 +394,9 @@ impl TextArea {
         let mut out: Vec<Segment> = Vec::new();
         let mut column = 0;
         let mut shown = 0;
+        let mask = self.options.mask.map(String::from);
         for (start, end, cell_width) in graphemes(&line[row.start..row.end]) {
+            let cell_width = if mask.is_some() { 1 } else { cell_width };
             let (start, end) = (row.start + start, row.start + end);
             if column + cell_width <= left {
                 column += cell_width;
@@ -367,7 +407,9 @@ impl TextArea {
             }
             let mut text = &line[start..end];
             let padded;
-            if text == "\t" || column < left {
+            if let Some(mask) = &mask {
+                text = mask;
+            } else if text == "\t" || column < left {
                 // A tab, or a wide character cut by the left edge.
                 padded = " ".repeat(cell_width.min(column + cell_width - left));
                 text = &padded;
@@ -424,10 +466,18 @@ impl TextArea {
         } else {
             self.left.get()
         };
-        let target = (column.saturating_sub(self.gutter()) as usize) + left;
+        let target = (column
+            .saturating_sub(self.origin.get())
+            .saturating_sub(self.gutter()) as usize)
+            + left;
         let mut at = shown.start;
         let mut used = 0;
         for (start, end, width) in graphemes(&line[shown.start..shown.end]) {
+            let width = if self.options.mask.is_some() {
+                1
+            } else {
+                width
+            };
             // Past the middle of a character: after it.
             if used + width.div_ceil(2) > target {
                 break;
@@ -460,6 +510,29 @@ impl TextArea {
         // never a trap; read-only, Tab always does.
         let escaped = std::mem::replace(&mut self.escaped, key.code == KeyCode::Escape);
         let edit = !self.options.read_only;
+        if self.options.single_line {
+            match key.code {
+                // Enter submits, with a handler; Tab moves on, and up, down
+                // and the page keys go to the app (a form).
+                KeyCode::Enter if !ctrl && !alt => {
+                    let Some(submit) = self.on_submit.as_mut() else {
+                        return false;
+                    };
+                    submit(&self.buffer.text(), cx.app());
+                    return true;
+                }
+                KeyCode::Enter
+                | KeyCode::Tab
+                | KeyCode::BackTab
+                | KeyCode::Up
+                | KeyCode::Down
+                | KeyCode::PageUp
+                | KeyCode::PageDown => return false,
+                _ => {}
+            }
+        }
+        // Masked, nothing is copied out.
+        let masked = self.options.mask.is_some();
         let b = &mut self.buffer;
         match key.code {
             KeyCode::Char(c) if !ctrl && !alt => {
@@ -470,6 +543,11 @@ impl TextArea {
                 b.insert(c.encode_utf8(&mut bytes));
             }
             KeyCode::Char('a') if ctrl => b.select_all(),
+            KeyCode::Char('c') | KeyCode::Char('x') if ctrl && masked => {
+                if b.selection().is_none() {
+                    return false;
+                }
+            }
             KeyCode::Char('c') if ctrl => match b.selected_text() {
                 Some(text) => cx.app().copy(text),
                 // Nothing selected: Ctrl+C is the app's (it quits).
@@ -545,6 +623,7 @@ impl Widget for TextArea {
     fn measure(&mut self, _cx: &MeasureCx, axis: Axis, width: u16, _height: u16) -> u16 {
         match axis {
             Axis::Horizontal => self.natural_width(),
+            Axis::Vertical if self.options.single_line => 1,
             Axis::Vertical => {
                 let room = self.room(width.max(1));
                 (0..self.buffer.line_count())
@@ -560,11 +639,26 @@ impl Widget for TextArea {
         let changed = self.text.with(|text| *text != self.seen);
         if changed {
             self.seen = self.text.get_untracked();
-            self.buffer.set_text(&self.seen);
+            if self.options.single_line {
+                self.buffer.set_text(&one_line(&self.seen));
+            } else {
+                self.buffer.set_text(&self.seen);
+            }
             self.top.set((0, 0));
             self.left.set(0);
         }
-        let (width, height) = (canvas.width(), canvas.height());
+        let (mut width, height) = (canvas.width(), canvas.height());
+        // The bar keeps a column while the lines do not all fit.
+        let look = (self.bar.look.clone())
+            .filter(|look| look.wanted(self.buffer.line_count(), height as usize));
+        let mut bar = None;
+        let mut origin = 0;
+        if let Some(look) = &look {
+            let (rest, at) = look.split(width, height);
+            (origin, width) = (rest.x, rest.width);
+            bar = Some(at);
+        }
+        self.origin.set(origin);
         self.size.set((width, height));
         if self.follow.replace(false) {
             self.follow_caret(width, height as usize);
@@ -627,11 +721,11 @@ impl Widget for TextArea {
                 let last_of_line = row.end == self.buffer.line(row.line).len();
                 let here = caret.at >= row.start && (caret.at < row.end || last_of_line);
                 if here {
-                    let column = cells(&self.buffer.line(row.line)[row.start..caret.at]);
+                    let column = self.shown_cells(&self.buffer.line(row.line)[row.start..caret.at]);
                     let column = column.saturating_sub(left);
                     if column <= text_width {
-                        caret_cell =
-                            Some((gutter + column.min(u16::MAX as usize) as u16, y as u16));
+                        let x = origin + gutter + column.min(u16::MAX as usize) as u16;
+                        caret_cell = Some((x, y as u16));
                     }
                 }
             }
@@ -644,20 +738,51 @@ impl Widget for TextArea {
                 lines.push(line);
             }
         }
-        canvas.lines(&lines);
+        match (look, bar) {
+            (Some(look), Some(at)) => {
+                canvas.lines_at(origin, 0, width, height, &lines);
+                let (top, _) = self.top.get();
+                let (count, view) = (self.buffer.line_count(), height as usize);
+                look.paint(cx.console(), canvas, at, top, count, view);
+                self.bar_at.set(Some((at, count, view)));
+            }
+            _ => {
+                canvas.lines(&lines);
+                self.bar_at.set(None);
+            }
+        }
         self.caret.set(caret_cell);
         *self.rows.borrow_mut() = rows;
     }
 
     fn event(&mut self, cx: &mut EventCx, event: &WidgetEvent) -> Used {
         let revision = self.buffer.revision();
+        // A press or a drag on the bar scrolls the view by lines.
+        if let (WidgetEvent::Mouse(mouse), Some((rect, count, view))) = (event, self.bar_at.get()) {
+            let (top, _) = self.top.get();
+            match self.bar.mouse(cx, mouse, rect, top, count, view) {
+                Some(Some(to)) => {
+                    self.top.set((to, 0));
+                    cx.redraw();
+                    return Used::Yes;
+                }
+                Some(None) => return Used::Yes,
+                None => {}
+            }
+        }
         match event {
             WidgetEvent::Key(key) => {
                 if !self.key(cx, *key) {
                     return Used::No;
                 }
             }
-            WidgetEvent::Paste(text) if !self.options.read_only => self.buffer.insert(text),
+            WidgetEvent::Paste(text) if !self.options.read_only => {
+                if self.options.single_line {
+                    self.buffer.insert(&one_line(text));
+                } else {
+                    self.buffer.insert(text);
+                }
+            }
             WidgetEvent::Mouse(mouse) => match mouse.kind {
                 MouseKind::Down(Button::Left) => {
                     let pos = self.pos_at(mouse.column, mouse.row);
@@ -749,8 +874,13 @@ impl Widget for TextArea {
     /// and in linear mode it is the line read out.
     fn cursor(&self) -> Option<Rect> {
         let (_, y) = self.caret.get()?;
-        Some(Rect::new(0, y, self.size.get().0, 1))
+        Some(Rect::new(self.origin.get(), y, self.size.get().0, 1))
     }
+}
+
+/// `text` on one line: line breaks become spaces.
+fn one_line(text: &str) -> String {
+    text.replace("\r\n", " ").replace(['\n', '\r'], " ")
 }
 
 /// A [`text_area`]'s options. On any other node they do nothing.
@@ -780,6 +910,26 @@ impl Node {
     /// Show `text`, dimmed, while it is empty.
     pub fn placeholder(self, text: &str) -> Node {
         self.text_area_options(|options| options.placeholder = Some(text.to_string()))
+    }
+
+    /// Show each character as `mask` (`'•'`, a password), while the signal
+    /// holds the text. Nothing is copied out of it.
+    pub fn mask(self, mask: char) -> Node {
+        self.text_area_options(|options| options.mask = Some(mask))
+    }
+
+    /// Take at most `chars` characters; typing and pasting stop there.
+    pub fn max_length(self, chars: usize) -> Node {
+        self.widget_mut(|area: &mut TextArea| area.buffer.set_limit(Some(chars)));
+        self
+    }
+
+    /// For an [`input`](crate::input): call `submit` with the text on Enter,
+    /// which it then uses, so Enter does not bubble to a binding. Without
+    /// one, Enter goes on to the app (a form's own binding).
+    pub fn on_submit(self, submit: impl FnMut(&str, &mut crate::app::Ctx) + 'static) -> Node {
+        self.widget_mut(|area: &mut TextArea| area.on_submit = Some(Box::new(submit)));
+        self
     }
 
     fn text_area_options(self, f: impl FnOnce(&mut Options)) -> Node {
@@ -815,6 +965,10 @@ mod tests {
             click: Cell::new(None),
             dragging: Cell::new(false),
             escaped: false,
+            on_submit: None,
+            bar: Bar::default(),
+            bar_at: Cell::new(None),
+            origin: Cell::new(0),
         }
     }
 

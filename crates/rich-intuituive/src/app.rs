@@ -31,6 +31,7 @@
 
 use std::collections::HashMap;
 use std::io;
+use std::panic::Location;
 use std::rc::Rc;
 use std::time::Duration;
 
@@ -39,7 +40,7 @@ use rich_interact::{
     Backend, BackendKind, Button, Event, Key, KeyCode, MouseKind, Session, SessionOptions,
 };
 
-use crate::inspect::Inspector;
+use crate::inspect::{Handled, Inspector, Names, NodeTiming, Probe, TraceEntry, Traced};
 use crate::layout::Size;
 use crate::node::{with_node, Axis, FrameState, Node};
 use crate::reactive::{signal, NodeId, Proxy, Runtime, Signal};
@@ -59,6 +60,55 @@ pub struct Ctx {
     announcements: Vec<crate::a11y::Announcement>,
     /// Where the mouse event being handled happened, on the screen.
     pub(crate) pointer: Option<(u16, u16)>,
+    /// What the app ends with: a value, or an error.
+    exit: Option<Box<dyn std::any::Any>>,
+    error: Option<io::Error>,
+    /// Lines to print above an inline app.
+    printed: Vec<String>,
+}
+
+/// How a [modal](Ctx::modal_with) or a [pop-up](Ctx::popup_with) looks
+/// over the screen below it: a shadow, and a backdrop. Styles are console
+/// styles or theme style names (`"on grey11"`, `"dim"`, `"muted"`).
+///
+/// ```
+/// use intuituive::prelude::*;
+/// use intuituive::ModalOptions;
+///
+/// let app = App::new(|| {
+///     label("below").on_key("o", |cx| {
+///         let look = ModalOptions::new().shadow("on grey11").backdrop("dim");
+///         cx.modal_with(Size::Fixed(8), Size::Fixed(3), look, || label("hi").panel(""))
+///     })
+/// });
+/// let mut driver = app.driver(20, 6);
+/// driver.press("o");
+/// assert!(driver.screen().plain()[2].contains("hi"));
+/// ```
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ModalOptions {
+    shadow: Option<String>,
+    backdrop: Option<String>,
+}
+
+impl ModalOptions {
+    pub fn new() -> ModalOptions {
+        ModalOptions::default()
+    }
+
+    /// A shadow one cell right and down of the box, restyling the screen
+    /// below in `style`: ratatui's `Shadow::overlay().style(..)`.
+    pub fn shadow(mut self, style: &str) -> ModalOptions {
+        self.shadow = Some(style.to_string());
+        self
+    }
+
+    /// The whole screen below restyled in `style` while the box is open
+    /// (`"dim"`).
+    pub fn backdrop(mut self, style: &str) -> ModalOptions {
+        self.backdrop = Some(style.to_string());
+        self
+    }
 }
 
 /// What a [pop-up](Ctx::popup) is placed next to: a node (by its
@@ -126,8 +176,8 @@ pub enum Placement {
 /// A change to the stack of screens.
 enum Nav {
     Push(Build),
-    Modal(Size, Size, Build),
-    Popup(Anchor, Placement, Size, Size, Build),
+    Modal(Size, Size, ModalOptions, Build),
+    Popup(Anchor, Placement, Size, Size, ModalOptions, Build),
     Pop,
     Replace(Build),
     /// The command palette, or the help, from the focused node's bindings.
@@ -150,6 +200,9 @@ impl Ctx {
             proxy,
             nav: Vec::new(),
             theme: None,
+            exit: None,
+            error: None,
+            printed: Vec::new(),
         }
     }
 
@@ -168,7 +221,20 @@ impl Ctx {
     /// ([`Size::Flex`]). Wrap the node in a [`panel`](crate::Node::panel)
     /// for a border, and bind Esc to [`pop`](Self::pop) to close it.
     pub fn modal(&mut self, width: Size, height: Size, build: impl FnOnce() -> Node + 'static) {
-        self.nav.push(Nav::Modal(width, height, Box::new(build)));
+        self.modal_with(width, height, ModalOptions::default(), build);
+    }
+
+    /// A [`modal`](Self::modal) with a shadow or a backdrop, as `options`
+    /// says.
+    pub fn modal_with(
+        &mut self,
+        width: Size,
+        height: Size,
+        options: ModalOptions,
+        build: impl FnOnce() -> Node + 'static,
+    ) {
+        self.nav
+            .push(Nav::Modal(width, height, options, Box::new(build)));
     }
 
     /// Open a pop-up: `build`'s node in a box `width` x `height` next to the
@@ -184,11 +250,33 @@ impl Ctx {
         height: Size,
         build: impl FnOnce() -> Node + 'static,
     ) {
+        self.popup_with(
+            anchor,
+            placement,
+            width,
+            height,
+            ModalOptions::default(),
+            build,
+        );
+    }
+
+    /// A [`popup`](Self::popup) with a shadow or a backdrop, as `options`
+    /// says.
+    pub fn popup_with(
+        &mut self,
+        anchor: impl Into<Anchor>,
+        placement: Placement,
+        width: Size,
+        height: Size,
+        options: ModalOptions,
+        build: impl FnOnce() -> Node + 'static,
+    ) {
         self.nav.push(Nav::Popup(
             anchor.into(),
             placement,
             width,
             height,
+            options,
             Box::new(build),
         ));
     }
@@ -275,6 +363,36 @@ impl Ctx {
     /// End the app after this event.
     pub fn quit(&mut self) {
         self.quit = true;
+    }
+
+    /// End the app after this event with `value`, which
+    /// [`App::run_for`] returns (and [`Driver::take_exit`] gives a loop of
+    /// your own): the choice a picker was opened for.
+    pub fn quit_with<T: 'static>(&mut self, value: T) {
+        self.exit = Some(Box::new(value));
+        self.quit = true;
+    }
+
+    /// End the app after this event with `error`, which [`App::run`] (and
+    /// its kin) then returns, once the terminal is given back. An
+    /// [`io::Error`] keeps its kind; anything else is
+    /// [`io::ErrorKind::Other`].
+    pub fn fail(&mut self, error: impl Into<Box<dyn std::error::Error + Send + Sync>>) {
+        let error = match error.into().downcast::<io::Error>() {
+            Ok(error) => *error,
+            Err(other) => io::Error::other(other),
+        };
+        self.error = Some(error);
+        self.quit = true;
+    }
+
+    /// Print console `markup` above the app: inline, into the terminal's
+    /// scrollback above the app's rows, which move down (ratatui's
+    /// `insert_before`); full-screen, once the app ends and the terminal
+    /// is back. A loop of your own takes them with
+    /// [`Driver::take_printed`].
+    pub fn print_above(&mut self, markup: impl Into<String>) {
+        self.printed.push(markup.into());
     }
 
     /// Move the focus to the next focusable node.
@@ -440,6 +558,18 @@ impl Theme {
             .unwrap_or_else(|| style(fallback))
     }
 
+    /// The style for a node in [error](crate::Node::error_when): the
+    /// theme's style named `name` (`error`, or `border.error` for a
+    /// panel's border), else its `bad` style, else bold red.
+    pub(crate) fn error_style(&self, name: &str) -> Style {
+        self.styles
+            .iter()
+            .find(|(n, _)| n == name)
+            .or_else(|| self.styles.iter().find(|(n, _)| n == "bad"))
+            .map(|(_, style)| style.clone())
+            .unwrap_or_else(|| style("bold red"))
+    }
+
     pub(crate) fn border(&self, focused: bool) -> Style {
         if focused {
             self.border_focused.clone()
@@ -464,17 +594,24 @@ struct Timer {
     every: Duration,
     next: Duration,
     tick: Box<dyn FnMut(&mut Ctx)>,
+    /// Where it was made, for the inspector's trace.
+    at: &'static Location<'static>,
 }
 
 impl Timer {
     /// A zero interval would never move the timer on (and spin the loop),
     /// so the shortest interval is one millisecond.
-    fn new(interval: Duration, tick: impl FnMut(&mut Ctx) + 'static) -> Timer {
+    fn new(
+        interval: Duration,
+        tick: impl FnMut(&mut Ctx) + 'static,
+        at: &'static Location<'static>,
+    ) -> Timer {
         let every = interval.max(Duration::from_millis(1));
         Timer {
             every,
             next: every,
             tick: Box::new(tick),
+            at,
         }
     }
 }
@@ -495,6 +632,8 @@ struct Layer {
     focus: Option<NodeId>,
     /// A modal's width and height; `None` for a full screen.
     modal: Option<(Size, Size)>,
+    /// A modal's shadow and backdrop.
+    look: ModalOptions,
     /// Where a modal was last drawn.
     drawn: Option<Rect>,
     /// For a pop-up: what it is next to, and on which side.
@@ -543,13 +682,15 @@ pub(crate) fn building_watch(id: usize) {
 ///
 /// # Panics
 /// Outside `App::new`'s closure or a screen's.
+#[track_caller]
 pub fn every(interval: Duration, tick: impl FnMut(&mut Ctx) + 'static) {
+    let at = Location::caller();
     BUILDING.with(|building| {
         building
             .borrow_mut()
             .as_mut()
             .expect("every() is called inside App::new's closure or a screen's")
-            .push(Timer::new(interval, tick))
+            .push(Timer::new(interval, tick, at))
     });
 }
 
@@ -560,6 +701,9 @@ pub struct FrameStats {
     pub drawn: usize,
     /// Bytes written to the terminal.
     pub bytes: usize,
+    /// Frames drawn since the app started, this one included: ratatui's
+    /// `Frame::count`.
+    pub frames: u64,
 }
 
 /// An intuiTUIve app.
@@ -617,6 +761,14 @@ pub struct App {
     selecting: bool,
     /// Where the mouse event being routed happened.
     pointer: Option<(u16, u16)>,
+    /// Whether [`run`](Self::run) captures the mouse; `None` is the rule
+    /// (full-screen yes, inline no).
+    mouse: Option<bool>,
+    /// What the app ended with, a value or an error, and lines printed
+    /// above it not yet written.
+    exit: Option<Box<dyn std::any::Any>>,
+    error: Option<io::Error>,
+    printed: Vec<String>,
     /// Where the pointer last was, for widgets that ask.
     last_pointer: Option<(u16, u16)>,
     /// The tooltip waiting for the pointer to rest, or showing.
@@ -665,6 +817,11 @@ pub struct App {
     caret_at: Option<(u16, u16)>,
     /// Draw a frame even if no node is dirty (the inspector has news).
     poke: bool,
+    /// The stylesheet generation the last frame matched nodes against.
+    sheet_drawn: Option<u64>,
+    /// While the inspector traces: the node that took the event being
+    /// routed, and how.
+    used: crate::inspect::Used,
 }
 
 /// A theme file the app reloads when it changes.
@@ -674,6 +831,40 @@ struct SheetSource {
     /// A new number each time it changes, so nodes match it again.
     generation: u64,
     file: Option<ThemeFile>,
+    /// With `@media` rules: the generation and media key the number nodes
+    /// match against was made for, and that number. A viewport that
+    /// crosses a rule's bounds makes a new one.
+    media: Option<(u64, Vec<bool>, u64)>,
+}
+
+impl SheetSource {
+    fn new(sheet: crate::Stylesheet, file: Option<ThemeFile>) -> SheetSource {
+        SheetSource {
+            sheet,
+            generation: sheet_generation(),
+            file,
+            media: None,
+        }
+    }
+
+    /// The number nodes match against at `viewport`: the sheet's
+    /// generation, or one for the `@media` blocks that hold there.
+    fn generation_at(&mut self, viewport: (u16, u16)) -> u64 {
+        if !self.sheet.has_media() {
+            return self.generation;
+        }
+        let key = self.sheet.media_key(viewport);
+        match &self.media {
+            Some((base, held, generation)) if *base == self.generation && *held == key => {
+                *generation
+            }
+            _ => {
+                let generation = sheet_generation();
+                self.media = Some((self.generation, key, generation));
+                generation
+            }
+        }
+    }
 }
 
 /// A number no stylesheet had before.
@@ -701,8 +892,11 @@ impl App {
         BUILDING.with(|building| *building.borrow_mut() = Some(Vec::new()));
         WATCHES.with(|watches| *watches.borrow_mut() = Some(Vec::new()));
         let (root, focus_path, hover_path) = runtime.enter(|| {
-            let focus_path = signal(Vec::new());
-            let hover_path = signal(Vec::new());
+            // The trace says when the focus moves and the pointer acts.
+            let focus_path = signal(Vec::new()).untraced();
+            let hover_path = signal(Vec::new()).untraced();
+            // Made now, so a node closure reading it later makes nothing.
+            crate::reactive::viewport();
             (build(), focus_path, hover_path)
         });
         let timers = BUILDING
@@ -718,6 +912,7 @@ impl App {
                 root,
                 focus: None,
                 modal: None,
+                look: ModalOptions::default(),
                 drawn: None,
                 anchor: None,
                 timers,
@@ -749,6 +944,10 @@ impl App {
             selection: None,
             selecting: false,
             pointer: None,
+            mouse: None,
+            exit: None,
+            error: None,
+            printed: Vec::new(),
             theme: Theme::default(),
             console: None,
             last_console: None,
@@ -773,13 +972,17 @@ impl App {
             opened: false,
             caret_at: None,
             poke: false,
+            sheet_drawn: None,
+            used: None,
         }
     }
 
     /// Dock the [inspector](crate::inspect) on the right: the node tree,
-    /// what drew in the last frame, the focus and the frame's cost. F12
-    /// shows and hides it. Setting `INTUITUIVE_INSPECT=1` turns it on for
-    /// any app without a code change.
+    /// what drew in the last frame, the focus and the frame's cost, a
+    /// selected node's layout and states, each node's timings and a trace
+    /// of what happened. F12 shows and hides it; Shift+F12 gives it the
+    /// keys. Setting `INTUITUIVE_INSPECT=1` turns it on for any app
+    /// without a code change.
     pub fn inspector(mut self, on: bool) -> App {
         self.inspector = on.then(|| Inspector::new(true));
         self
@@ -828,11 +1031,7 @@ impl App {
     pub fn stylesheet(mut self, css: &str) -> App {
         match crate::Stylesheet::parse(css) {
             Ok(sheet) => {
-                self.sheet = Some(SheetSource {
-                    sheet,
-                    generation: sheet_generation(),
-                    file: None,
-                })
+                self.sheet = Some(SheetSource::new(sheet, None));
             }
             Err(error) => self.sheet_error(&error.to_string()),
         }
@@ -843,17 +1042,16 @@ impl App {
     /// changes while the app runs. A change that does not parse is
     /// reported in a toast, and the last good sheet stays.
     pub fn stylesheet_file(mut self, path: impl Into<std::path::PathBuf>) -> App {
-        self.sheet = Some(SheetSource {
-            sheet: crate::Stylesheet::default(),
-            generation: sheet_generation(),
-            file: Some(ThemeFile {
+        self.sheet = Some(SheetSource::new(
+            crate::Stylesheet::default(),
+            Some(ThemeFile {
                 path: path.into(),
                 stamp: None,
                 good: None,
                 read: None,
                 error: None,
             }),
-        });
+        ));
         self.reload_sheet();
         self
     }
@@ -1022,8 +1220,10 @@ impl App {
     }
 
     /// Call `tick` every `interval` (a clock, a poll, an animation).
+    #[track_caller]
     pub fn every(mut self, interval: Duration, tick: impl FnMut(&mut Ctx) + 'static) -> App {
-        self.layers[0].timers.push(Timer::new(interval, tick));
+        let at = Location::caller();
+        self.layers[0].timers.push(Timer::new(interval, tick, at));
         self
     }
 
@@ -1031,10 +1231,52 @@ impl App {
     /// terminal is shorter), rather than on the alternate screen. What the
     /// app last showed stays in the scrollback when it ends, like a
     /// command's output. The mouse is left to the terminal, so its
-    /// scrollback and selection keep working.
+    /// scrollback and selection keep working (see [`mouse`](Self::mouse)).
+    /// [`Ctx::print_above`] prints lines into the scrollback above it.
     pub fn inline(mut self, height: u16) -> App {
         self.inline = Some(height.max(1));
         self
+    }
+
+    /// Whether [`run`](Self::run) captures the mouse: `Some(true)` even
+    /// inline (clicks, the wheel and hover reach the app, and the
+    /// terminal's own selection needs Shift), `Some(false)` never, even
+    /// full-screen (the terminal keeps its selection and scrollback).
+    /// `None`, the default, captures it full-screen and leaves it to the
+    /// terminal inline.
+    pub fn mouse(mut self, capture: Option<bool>) -> App {
+        self.mouse = capture;
+        self
+    }
+
+    /// Whether the app captures the mouse, by [`mouse`](Self::mouse) and
+    /// the rule.
+    fn captures_mouse(&self) -> bool {
+        self.mouse.unwrap_or(self.inline.is_none() && !self.linear)
+    }
+
+    /// The terminal options [`run_with`](Self::run_with) starts its
+    /// session with on `backend`: the alternate screen unless inline or
+    /// linear, the mouse as [`mouse`](Self::mouse) says, bracketed paste,
+    /// the keyboard and synchronized output as set. For a loop of your own
+    /// that starts its own [`Session`].
+    pub fn session_options(&self, backend: BackendKind) -> SessionOptions {
+        // Linear, lines are written where the terminal's cursor is.
+        let full = self.inline.is_none() && !self.linear;
+        SessionOptions {
+            alternate_screen: full,
+            mouse: self.captures_mouse(),
+            bracketed_paste: true,
+            output: Default::default(),
+            legacy_keys: self.legacy_keys,
+            backend,
+            // Linear, lines are appended as they come: nothing to hold.
+            synchronized_output: if self.linear {
+                Some(false)
+            } else {
+                self.synchronized_output
+            },
+        }
     }
 
     /// Before each event, wait for the [tasks](crate::spawn) in flight to
@@ -1142,29 +1384,51 @@ impl App {
     /// # Ok::<(), std::io::Error>(())
     /// ```
     pub fn run_with(self, backend: BackendKind) -> io::Result<()> {
-        // Linear, lines are written where the terminal's cursor is.
-        let full = self.inline.is_none() && !self.linear;
-        let mut session = Session::start(SessionOptions {
-            alternate_screen: full,
-            mouse: full,
-            bracketed_paste: true,
-            output: Default::default(),
-            legacy_keys: self.legacy_keys,
-            backend,
-            // Linear, lines are appended as they come: nothing to hold.
-            synchronized_output: if self.linear {
-                Some(false)
-            } else {
-                self.synchronized_output
-            },
-        })?;
+        self.run_terminal(backend).map(|_| ())
+    }
+
+    /// [`run`](Self::run), returning the value a handler ended the app with
+    /// ([`Ctx::quit_with`]): `None` when it ended otherwise, or with a value
+    /// that is not a `T`.
+    ///
+    /// ```no_run
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| {
+    ///     let selected = signal(0usize);
+    ///     let items = || vec!["red".to_string(), "green".into(), "blue".into()];
+    ///     list(items, selected).on_key("enter", move |cx| cx.quit_with(selected.get()))
+    /// });
+    /// let picked: Option<usize> = app.run_for()?;
+    /// # Ok::<(), std::io::Error>(())
+    /// ```
+    pub fn run_for<T: 'static>(self) -> io::Result<Option<T>> {
+        let exit = self.run_terminal(BackendKind::default())?;
+        Ok(exit.and_then(|value| value.downcast::<T>().ok().map(|value| *value)))
+    }
+
+    /// Run in a terminal session on `backend`; what the app ended with.
+    fn run_terminal(self, backend: BackendKind) -> io::Result<Option<Box<dyn std::any::Any>>> {
+        let mut session = Session::start(self.session_options(backend))?;
         if self.linear {
             // The cursor stays at the end of what was written.
             session.write("\x1b[?25h")?;
         }
         let mut app = self;
         app.text_frames = false;
-        app.run_on(&mut session)
+        let ended = app.run_loop(&mut session, false);
+        // Lines printed above a full-screen app go to the terminal once it
+        // is back.
+        drop(session);
+        if !ended.printed.is_empty() {
+            use std::io::Write;
+            let mut out = io::stdout().lock();
+            for row in &ended.printed {
+                let _ = writeln!(out, "{row}\x1b[0m");
+            }
+            let _ = out.flush();
+        }
+        ended.result
     }
 
     /// Run on `backend`: a terminal session, or the headless driver. The
@@ -1176,6 +1440,33 @@ impl App {
     /// on Unix), Ctrl+Z that no binding on the focused path uses suspends
     /// the app as the shell expects, and `fg` draws it again.
     pub fn run_on(self, backend: &mut impl Backend) -> io::Result<()> {
+        self.run_on_for::<()>(backend).map(|_| ())
+    }
+
+    /// [`run_on`](Self::run_on), returning the value a handler ended the
+    /// app with ([`Ctx::quit_with`]), if it is a `T`. Lines printed above a
+    /// full-screen app ([`Ctx::print_above`]) are written to `backend`
+    /// after the app's last frame.
+    ///
+    /// ```
+    /// use intuituive::interact::headless::{Headless, Script};
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| label("pick").on_key("y", |cx| cx.quit_with("yes")));
+    /// let mut backend = Headless::new(Script::new().keys("y"), 10, 1);
+    /// assert_eq!(app.run_on_for::<&str>(&mut backend).unwrap(), Some("yes"));
+    /// ```
+    pub fn run_on_for<T: 'static>(self, backend: &mut impl Backend) -> io::Result<Option<T>> {
+        let ended = self.run_loop(backend, true);
+        let exit = ended.result?;
+        Ok(exit.and_then(|value| value.downcast::<T>().ok().map(|value| *value)))
+    }
+
+    /// The loop of [`run_on`](Self::run_on): what the app ended with, and
+    /// the lines printed above a full-screen app, written to `backend`
+    /// after the last frame when `write_printed` (else for the caller to
+    /// write once the terminal is back).
+    fn run_loop(self, backend: &mut impl Backend, write_printed: bool) -> Ended {
         let (width, height) = backend.size();
         let inline = self.inline.is_some();
         let text_frames = self.text_frames;
@@ -1269,8 +1560,32 @@ impl App {
                 }
             }
         })();
+        // What the app ended with: an error from a handler wins over the
+        // loop's own end.
+        let failed = driver.take_error();
+        let exit = driver.app.exit.take();
+        // Inline, `finish` prints what is left above the region itself.
+        let printed = if inline {
+            Vec::new()
+        } else {
+            driver.take_printed()
+        };
+        let rows = driver.printed_rows(&printed);
         let _ = put(backend, linear, &driver.finish());
-        result
+        let mut printed = Vec::new();
+        if write_printed {
+            let text: String = rows.iter().map(|row| format!("{row}\x1b[0m\r\n")).collect();
+            if !text.is_empty() {
+                let _ = backend.write(&text);
+            }
+        } else {
+            printed = rows;
+        }
+        let result = match failed {
+            Some(error) => Err(error),
+            None => result.map(|()| exit),
+        };
+        Ended { result, printed }
     }
 
     /// Drive the app from a loop of your own, in a terminal `width` x
@@ -1305,6 +1620,7 @@ impl App {
     /// assert!(out.contains("count"));
     /// ```
     pub fn driver(mut self, width: u16, height: u16) -> Driver {
+        self.sync_tracer();
         let console = self.console_for(self.columns(width));
         self.last_console = Some(console.clone());
         let mut painter = Painter::new(None);
@@ -1318,6 +1634,7 @@ impl App {
             console.color_system()
         });
         let screen = Screen::new(self.columns(width), self.region(height));
+        self.set_viewport(screen.area(), height);
         // Focus what can be focused before the first frame (keyed children
         // appear only once drawn; `keep_focus` catches them after it).
         self.focus_first();
@@ -1330,6 +1647,7 @@ impl App {
             first: true,
             started: false,
             origin: 0,
+            shifted: 0,
             done: false,
             written: Vec::new(),
             written_focus: None,
@@ -1366,6 +1684,138 @@ impl App {
     /// The rows the app draws in: the terminal's, or the inline region's.
     fn region(&self, rows: u16) -> u16 {
         self.inline.map_or(rows, |height| height.min(rows))
+    }
+
+    /// Tell nodes the app's [`viewport`](crate::viewport()): `screen` (its
+    /// columns less the inspector's, while shown) and, in linear mode,
+    /// which lays out as tall as its content, the terminal's `rows`.
+    fn set_viewport(&self, screen: Rect, rows: u16) {
+        let panel = self.panel_width(screen.width).unwrap_or(0);
+        let height = if self.linear { rows } else { screen.height };
+        self.runtime
+            .viewport()
+            .set((screen.width.saturating_sub(panel), height));
+    }
+
+    /// The columns the inspector's panel takes from a screen `columns`
+    /// wide: none while it is closed, or the screen too narrow, or in
+    /// linear mode, which draws nothing for it to sit beside.
+    fn panel_width(&self, columns: u16) -> Option<u16> {
+        if self.linear {
+            return None;
+        }
+        self.inspector
+            .as_ref()
+            .and_then(|inspector| inspector.width(columns))
+    }
+
+    /// Trace while the inspector is open and its trace not paused; off,
+    /// the runtime notes nothing.
+    fn sync_tracer(&self) {
+        let on = !self.linear && self.inspector.as_ref().is_some_and(Inspector::tracing);
+        self.runtime.tracer.set_on(on);
+    }
+
+    /// Whether the inspector's trace, shown, has news: draw a frame.
+    fn trace_news(&self) -> bool {
+        self.inspector.as_ref().is_some_and(|inspector| {
+            inspector.open && inspector.shown && inspector.pane == crate::inspect::Pane::Trace
+        }) && self.runtime.tracer.has_pending()
+    }
+
+    /// The node that took the event being routed, and how, for the
+    /// inspector's trace.
+    fn note_used(&mut self, id: NodeId, how: &'static str) {
+        if self.used.is_none() && self.runtime.tracer.on() {
+            self.used = Some((id, how));
+        }
+    }
+
+    /// Whether `event` is the inspector's: F12 and Shift+F12, and every key
+    /// and paste while it has the keys. The mouse is sorted in
+    /// [`inspector_mouse`](Self::inspector_mouse).
+    fn inspector_owns(&self, event: &Event) -> bool {
+        let Some(inspector) = self.inspector.as_ref().filter(|_| !self.linear) else {
+            return false;
+        };
+        let keys = inspector.open && (inspector.keys || inspector.pick.is_some());
+        match event {
+            Event::Key(key) => key.code == KeyCode::F(12) || keys,
+            Event::KeyUp(_) | Event::Paste(_) => keys,
+            _ => false,
+        }
+    }
+
+    /// A key while the inspector has the keys.
+    fn inspector_key(&mut self, key: Key) {
+        let layers = &self.layers;
+        let focus = layers.last().and_then(|layer| layer.focus);
+        let Some(inspector) = self.inspector.as_mut() else {
+            return;
+        };
+        let hit = |x: u16, y: u16| node_at(layers, x, y);
+        let rect = |id: NodeId| node_rect(layers, id);
+        let probe = Probe {
+            focus,
+            area: inspector.area,
+            hit: &hit,
+            rect: &rect,
+        };
+        let handled = inspector.key(key, &probe);
+        self.after_inspector(handled);
+    }
+
+    /// Offer `mouse` to the inspector, while it is shown: picking, or on its
+    /// panel. Whether it was the inspector's.
+    fn inspector_mouse(&mut self, mouse: rich_interact::Mouse) -> bool {
+        if self.linear {
+            return false;
+        }
+        let layers = &self.layers;
+        let focus = layers.last().and_then(|layer| layer.focus);
+        let Some(inspector) = self.inspector.as_mut().filter(|i| i.open && i.shown) else {
+            return false;
+        };
+        let hit = |x: u16, y: u16| node_at(layers, x, y);
+        let rect = |id: NodeId| node_rect(layers, id);
+        let probe = Probe {
+            focus,
+            area: inspector.area,
+            hit: &hit,
+            rect: &rect,
+        };
+        let panel = inspector.panel;
+        let handled = inspector.mouse(mouse, panel, &probe);
+        self.after_inspector(handled);
+        handled.used
+    }
+
+    /// What the inspector asked for after an event.
+    fn after_inspector(&mut self, handled: Handled) {
+        if handled.redraw {
+            self.poke = true;
+        }
+        if handled.motion {
+            // Picking follows the pointer.
+            self.motion.0 = true;
+        }
+        if handled.retrace {
+            self.sync_tracer();
+        }
+    }
+
+    /// Note `mouse` in the inspector's trace (not the pointer moving), with
+    /// the node under it; its number, to say later who took it.
+    fn trace_mouse(&self, mouse: rich_interact::Mouse) -> Option<u64> {
+        if !self.runtime.tracer.on() || mouse.kind == MouseKind::Moved {
+            return None;
+        }
+        let target = node_at(&self.layers, mouse.column, mouse.row);
+        self.runtime.tracer.push(Traced::Mouse {
+            mouse,
+            target,
+            used: None,
+        })
     }
 
     /// The columns the app lays out in. Linear mode draws nothing, so a
@@ -1422,6 +1872,8 @@ impl App {
         let top = self.top();
         let text_mode = self.text_mode();
         let hidden = self.hidden_rects();
+        // A layer's text leaves out the layers over it.
+        let covered = crate::node::covered(&top.root);
         let mut out = Vec::new();
         let mut included: Vec<NodeId> = Vec::new();
         // Nodes whose insides are left out: hidden ones, and ones named by
@@ -1449,7 +1901,10 @@ impl App {
                 .iter()
                 .filter(|id| included.contains(id))
                 .count();
-            let shown = || screen_text(screen, rect, &hidden);
+            let shown = || match covered.get(&id) {
+                Some(over) => screen_text(screen, rect, &[&hidden[..], &over[..]].concat()),
+                None => screen_text(screen, rect, &hidden),
+            };
             let named_by_text = label.is_none()
                 && match role {
                     Role::Text
@@ -1568,13 +2023,19 @@ impl App {
     /// Draw what changed; returns the damage.
     fn frame(&mut self, console: &Console, screen: &mut Screen, full: bool) -> Vec<Rect> {
         crate::a11y::set_text_mode(self.text_mode());
+        // What the inspector drew over the app comes off first, so the
+        // app's cells are its own again before anything draws.
+        let restored = match &mut self.inspector {
+            Some(inspector) => inspector.restore(screen),
+            None => Vec::new(),
+        };
         let whole = screen.area();
         // The inspector, when shown, takes the right of the screen.
         let panel = self
-            .inspector
-            .as_ref()
-            .and_then(|inspector| inspector.width(whole.width))
+            .panel_width(whole.width)
             .map(|w| Rect::new(whole.right() - w, whole.y, w, whole.height));
+        // Only while it is shown is the frame timed.
+        let started = panel.map(|_| std::time::Instant::now());
         let area = match panel {
             Some(panel) => Rect::new(whole.x, whole.y, whole.width - panel.width, whole.height),
             None => whole,
@@ -1618,7 +2079,18 @@ impl App {
             .iter()
             .zip(&rects)
             .any(|(layer, rect)| layer.modal.is_some() && layer.drawn.is_some_and(|d| d != *rect));
-        let full = full || moved || std::mem::take(&mut self.restack);
+        let mut full = full || moved || std::mem::take(&mut self.restack);
+        // The stylesheet as it applies at this size: crossing an `@media`
+        // rule's bounds matches every node again and draws everything.
+        let viewport = self.runtime.viewport().get_untracked();
+        let generation = self
+            .sheet
+            .as_mut()
+            .map(|source| source.generation_at(viewport));
+        if generation != self.sheet_drawn {
+            full = true;
+            self.sheet_drawn = generation;
+        }
         // `$name` in the stylesheet: the theme's style of that name.
         let theme = &self.theme;
         let vars = |name: &str| -> Option<Style> {
@@ -1650,15 +2122,18 @@ impl App {
             drawn_ids: panel.map(|_| Vec::new()),
             sheet: self.sheet.as_ref().map(|source| crate::node::SheetCx {
                 sheet: &source.sheet,
-                generation: source.generation,
+                generation: generation.unwrap_or(source.generation),
                 vars: &vars,
+                viewport,
             }),
             chain: Vec::new(),
             announcements: Vec::new(),
             hidden: 0,
             hidden_rects: Vec::new(),
+            timings: panel.map(|_| Vec::new()),
+            time_stack: Vec::new(),
+            scoped: Vec::new(),
         };
-        let dirty = frame.dirty.len();
         if full {
             // A screen opened or closed: nothing on screen can be trusted.
             screen.clear(whole);
@@ -1666,6 +2141,40 @@ impl App {
         }
         runtime.enter(|| {
             for (layer, rect) in self.layers[base..].iter_mut().zip(&rects) {
+                // A modal's backdrop and shadow restyle what is below it,
+                // where it was drawn this frame (all of it in a full one).
+                if layer.modal.is_some() && layer.look != ModalOptions::default() {
+                    let damaged: Vec<Rect> = if full {
+                        vec![area]
+                    } else {
+                        frame
+                            .damage
+                            .iter()
+                            .map(|d| d.intersection(area))
+                            .filter(|d| !d.is_empty())
+                            .collect()
+                    };
+                    let style = |name: &String| crate::widget::theme_style(console, name, name);
+                    if let Some(backdrop) = layer.look.backdrop.as_ref().map(style) {
+                        for part in &damaged {
+                            restyle_rect(screen, *part, &backdrop);
+                        }
+                    }
+                    if let Some(shadow) = layer.look.shadow.as_ref().map(style) {
+                        let strips = [
+                            Rect::new(rect.right(), rect.y.saturating_add(1), 1, rect.height),
+                            Rect::new(rect.x.saturating_add(1), rect.bottom(), rect.width, 1),
+                        ];
+                        for strip in strips {
+                            for part in &damaged {
+                                let part = strip.intersection(*part);
+                                if !part.is_empty() {
+                                    restyle_rect(screen, part, &shadow);
+                                }
+                            }
+                        }
+                    }
+                }
                 let force = match layer.modal {
                     None => full,
                     Some(_) => {
@@ -1687,6 +2196,7 @@ impl App {
                 layer.drawn = Some(*rect);
             }
         });
+        let took = started.map(|start| start.elapsed()).unwrap_or_default();
         self.stats.drawn = frame.drawn;
         // A drag: its source dimmed, the drop target under the pointer lit.
         if let Some(drag) = self.drag.as_ref().filter(|drag| drag.active) {
@@ -1767,26 +2277,79 @@ impl App {
             ));
         }
         let mut damage = frame.damage;
+        // While the inspector is open its trace takes in what happened,
+        // whether its panel is shown or the terminal is too narrow for it.
+        if let Some(inspector) = self.inspector.as_mut().filter(|i| i.open) {
+            inspector.shown = panel.is_some();
+            if panel.is_some() {
+                inspector.frames += 1;
+            } else {
+                // No room for the panel: the keys are the app's.
+                inspector.keys = false;
+                inspector.pick = None;
+            }
+            let (events, gone) = self.runtime.tracer.take();
+            if !events.is_empty() {
+                // Named from every screen on the stack, and those that
+                // closed since: an event may be about any of them.
+                let names = Names::of(self.layers.iter().map(|layer| &layer.root)).with(&gone);
+                inspector.take_trace(events, &names);
+            }
+        }
         if let (Some(panel), Some(drawn)) = (panel, frame.drawn_ids) {
+            let theme = self.theme_status();
+            let looks = crate::inspect::Looks {
+                selected: self.theme.named("inspector.selected", "reverse magenta"),
+                cursor: self.theme.named("inspector.cursor", "reverse yellow"),
+                flash: self.theme.named("inspector.flash", "on dark_green"),
+            };
+            let focus_path = self.focus_path.get_untracked();
+            let hover = self.hover_path.get_untracked();
+            let viewport = self.runtime.viewport().get_untracked();
+            let all = &self.layers;
+            let shown: Vec<(&Node, bool)> = all[base..]
+                .iter()
+                .map(|layer| (&layer.root, layer.modal.is_some()))
+                .collect();
+            let rect = |id: NodeId| node_rect(all, id);
+            // A frame drawn for the inspector alone (its selection moving)
+            // is not the app's: its numbers stay those of the app's last.
+            let fresh = full || !drawn.is_empty() || !frame.dirty.is_empty() || !damage.is_empty();
             let inspector = self.inspector.as_mut().expect("a panel means an inspector");
-            inspector.frames += 1;
+            inspector.area = area;
+            inspector.panel = panel;
+            if fresh {
+                inspector.record(frame.timings.as_deref().unwrap_or_default(), took);
+            }
             let report = crate::inspect::Report {
-                layers: self.layers[base..]
-                    .iter()
-                    .map(|layer| (&layer.root, layer.modal.is_some()))
-                    .collect(),
+                layers: shown,
+                fresh,
                 drawn: &drawn,
-                dirty,
+                dirty: &frame.dirty,
                 damage: &damage,
-                focus: self.layers.last().and_then(|layer| layer.focus),
+                focus: all.last().and_then(|layer| layer.focus),
+                focus_path: &focus_path,
+                hover: &hover,
                 stats: self.stats,
                 frame: inspector.frames,
-                theme: self.theme_status(),
+                theme,
+                viewport,
+                rect: &rect,
             };
-            let lines = crate::inspect::render(console, &report, panel.width, panel.height);
+            // The node pane reads conditions (`class_when`, `disabled_when`),
+            // which may read signals: in the app, subscribing nobody.
+            let runtime = self.runtime.clone();
+            let lines = runtime.enter(|| {
+                runtime.untracked(|| inspector.render(console, &report, panel.width, panel.height))
+            });
             screen.write_lines(panel, &lines);
+            // Over the app: the redraw flash, the selected node's outline,
+            // the picking cursor. They come off at the next frame.
+            let over = inspector.overlay(screen, area, &damage, self.now, &looks, &rect);
             damage.push(panel);
+            damage.extend(over);
         }
+        damage.extend(restored);
         for announcement in live {
             self.announce(announcement, false);
         }
@@ -1816,6 +2379,23 @@ impl App {
     /// Apply what a handler asked for; whether to quit.
     fn apply(&mut self, cx: Ctx) -> bool {
         let mut quit = cx.quit;
+        if let Some(exit) = cx.exit {
+            self.exit = Some(exit);
+        }
+        if let Some(error) = cx.error {
+            self.error = Some(error);
+        }
+        if self.linear {
+            // Linear, they are lines like any other.
+            for markup in cx.printed {
+                let plain = rich::Text::from_markup(&markup)
+                    .map(|text| text.plain().to_string())
+                    .unwrap_or(markup);
+                self.unwritten.extend(plain.lines().map(str::to_string));
+            }
+        } else {
+            self.printed.extend(cx.printed);
+        }
         self.copies.extend(cx.copies);
         for (markup, duration) in cx.toasts {
             self.push_toast(markup, self.now + duration);
@@ -1860,12 +2440,30 @@ impl App {
 
     /// Whether to quit (a command run from the palette may quit).
     fn navigate(&mut self, nav: Nav) -> bool {
+        let what = match &nav {
+            Nav::Push(_) => Some("screen opened"),
+            Nav::Modal(..) => Some("modal opened"),
+            Nav::Popup(..) => Some("pop-up opened"),
+            Nav::Pop => (self.layers.len() > 1).then_some("screen closed"),
+            Nav::Replace(_) => Some("screen replaced"),
+            Nav::Palette => Some("command palette opened"),
+            Nav::Help => Some("help opened"),
+            Nav::Run(..) => None,
+        };
+        if let Some(what) = what {
+            self.runtime.tracer.push(Traced::Screen(what));
+        }
         match nav {
             Nav::Push(build) => self.open(build, None),
-            Nav::Modal(width, height, build) => self.open(build, Some((width, height))),
-            Nav::Popup(anchor, placement, width, height, build) => {
+            Nav::Modal(width, height, look, build) => {
                 self.open(build, Some((width, height)));
-                self.top_mut().anchor = Some((anchor, placement));
+                self.top_mut().look = look;
+            }
+            Nav::Popup(anchor, placement, width, height, look, build) => {
+                self.open(build, Some((width, height)));
+                let top = self.top_mut();
+                top.anchor = Some((anchor, placement));
+                top.look = look;
             }
             Nav::Pop => {
                 if self.layers.len() > 1 {
@@ -1876,13 +2474,16 @@ impl App {
             }
             Nav::Replace(build) => {
                 let (modal, anchor) = (self.top().modal, self.top().anchor);
+                let look = self.top().look.clone();
                 if self.layers.len() > 1 {
                     self.close();
                     self.open(build, modal);
                     self.top_mut().anchor = anchor;
+                    self.top_mut().look = look;
                 } else {
                     // The first screen: its timers go with it.
                     let old = self.layers.pop().expect("an app always has a screen");
+                    self.runtime.tracer.farewell(&old.root);
                     old.root.forget(&self.runtime);
                     for watch in old.watches {
                         self.runtime.drop_watch(watch);
@@ -1977,6 +2578,7 @@ impl App {
                 }
             });
         });
+        self.note_used(id, "on_key");
         self.apply(cx)
     }
 
@@ -2000,6 +2602,7 @@ impl App {
             root,
             focus: None,
             modal,
+            look: ModalOptions::default(),
             drawn: None,
             anchor: None,
             timers,
@@ -2017,6 +2620,7 @@ impl App {
     /// Take the top screen off, forgetting its subscriptions.
     fn close(&mut self) {
         let layer = self.layers.pop().expect("an app always has a screen");
+        self.runtime.tracer.farewell(&layer.root);
         layer.root.forget(&self.runtime);
         for watch in layer.watches {
             self.runtime.drop_watch(watch);
@@ -2221,6 +2825,7 @@ impl App {
             self.lifecycle
                 .extend(id.map(|id| (id, WidgetEvent::Focus(true))));
             self.focused = id;
+            self.runtime.tracer.push(Traced::Focus(id));
         }
         let top = self.top_mut();
         top.focus = id;
@@ -2291,10 +2896,30 @@ impl App {
             self.restack = true;
             return false;
         }
-        if let (Some(inspector), KeyCode::F(12)) = (&mut self.inspector, key.code) {
-            inspector.open = !inspector.open;
-            self.restack = true;
-            return false;
+        if let (Some(inspector), false) = (&mut self.inspector, self.linear) {
+            if key.code == KeyCode::F(12) {
+                if !key.modifiers.shift {
+                    // F12 shows and hides it; hidden, it gives the keys back.
+                    let open = !inspector.open;
+                    inspector.set_open(open);
+                    self.restack = true;
+                } else if inspector.open {
+                    // Shift+F12 gives it the keys, or gives them back.
+                    inspector.toggle_keys();
+                    self.poke = true;
+                } else {
+                    inspector.set_open(true);
+                    inspector.keys = true;
+                    self.restack = true;
+                }
+                self.sync_tracer();
+                return false;
+            }
+            if inspector.open && (inspector.keys || inspector.pick.is_some()) {
+                // Every key is the inspector's while it has them.
+                self.inspector_key(key);
+                return false;
+            }
         }
         // A focused node disabled since the last frame (nothing need have
         // drawn since) gives the focus up before the key is routed.
@@ -2350,6 +2975,7 @@ impl App {
                 });
             });
             if used {
+                self.note_used(id, "on_key");
                 return self.apply(cx);
             }
         }
@@ -2486,7 +3112,7 @@ impl App {
     /// deepest node under the pointer and bubbles up through its ancestors
     /// until one uses it. A press first focuses the deepest focusable node
     /// under the pointer. Whether to quit.
-    fn mouse(&mut self, mouse: rich_interact::Mouse) -> Option<bool> {
+    fn mouse_event(&mut self, mouse: rich_interact::Mouse) -> Option<bool> {
         let hits = crate::node::hit_path(&self.top().root, mouse.column, mouse.row);
         let path: Vec<NodeId> = hits.iter().map(|(id, _)| *id).collect();
         let old = self.hover_path.get_untracked();
@@ -2647,6 +3273,7 @@ impl App {
                         }
                     });
                 });
+                self.note_used(target, "on_drop");
                 Some(self.apply(cx))
             }
             _ => None,
@@ -2724,6 +3351,7 @@ impl App {
         }
         let mut cx = self.ctx();
         let mut used = false;
+        let mut how = "on_mouse";
         let runtime = self.runtime.clone();
         runtime.enter(|| {
             with_node(&self.top().root, id, &mut |node| {
@@ -2734,10 +3362,14 @@ impl App {
                     if let Some(handler) = node.click.borrow_mut().as_mut() {
                         handler(&mut cx);
                         used = true;
+                        how = "on_click";
                     }
                 }
             });
         });
+        if used {
+            self.note_used(id, how);
+        }
         used.then(|| self.apply(cx))
     }
 
@@ -2813,7 +3445,28 @@ impl App {
             Some(false) if self.capture.is_some_and(|(c, _)| c == id) => self.capture = None,
             _ => {}
         }
+        if used {
+            self.note_used(id, "widget");
+        }
         used.then(|| self.apply(cx))
+    }
+}
+
+/// What [`App::run_on`]'s loop ended with: the app's value or an error,
+/// and the rows printed above a full-screen app, left to write.
+struct Ended {
+    result: io::Result<Option<Box<dyn std::any::Any>>>,
+    printed: Vec<String>,
+}
+
+impl Proxy {
+    /// [`Ctx::print_above`] from any thread: print console `markup` above
+    /// the app (inline, into the scrollback above it). Returns `false` if
+    /// the app has finished.
+    #[track_caller]
+    pub fn print_above(&self, markup: impl Into<String>) -> bool {
+        let markup = markup.into();
+        self.run_with(move |cx| cx.print_above(markup))
     }
 }
 
@@ -2846,8 +3499,10 @@ pub struct Driver {
     first: bool,
     /// The cursor was hidden by the first frame.
     started: bool,
-    /// Inline: the terminal row the region starts on.
+    /// Inline: the terminal row the region starts on, and the rows lines
+    /// printed above it moved it down since.
     origin: u16,
+    shifted: u16,
     done: bool,
     /// Linear mode: each node's line as last written, a map for each
     /// screen on the stack, and what had the focus.
@@ -2875,12 +3530,19 @@ impl Driver {
         app.reload_theme();
         app.reload_sheet();
         app.now = now;
+        app.runtime.tracer.set_now(now);
         let mut cx = app.ctx();
         let runtime = app.runtime.clone();
         runtime.enter(|| {
             for layer in &mut app.layers {
                 for timer in &mut layer.timers {
                     if now >= timer.next {
+                        if runtime.tracer.on() {
+                            runtime.tracer.push(Traced::Timer {
+                                every: timer.every,
+                                at: timer.at,
+                            });
+                        }
                         (timer.tick)(&mut cx);
                         // Once, however far behind (the clock jumped, the
                         // laptop slept), and on to the next tick in step.
@@ -2932,6 +3594,15 @@ impl Driver {
                 app.restack = true;
             }
         }
+        // The inspector's redraw flash, over: it comes off the app.
+        if app
+            .inspector
+            .as_ref()
+            .and_then(Inspector::flash_ends)
+            .is_some_and(|ends| now >= ends)
+        {
+            app.poke = true;
+        }
         if app.restyled {
             app.restyled = false;
             self.console = app.console_for(self.screen.area().width);
@@ -2943,10 +3614,12 @@ impl Driver {
     /// Whether anything changed since the last frame.
     pub fn needs_render(&self) -> bool {
         self.first
+            || (self.app.inline.is_some() && !self.app.printed.is_empty())
             || self.app.restack
             || self.app.poke
             || self.app.runtime.has_dirty()
             || !self.app.unwritten.is_empty()
+            || self.app.trace_news()
     }
 
     /// Draw what changed and return the bytes that show it (they may be
@@ -2964,6 +3637,12 @@ impl Driver {
                 if !self.app.linear {
                     out.push_str("\x1b[?25l");
                 }
+            }
+            self.app.stats.frames += 1;
+            // Inline, lines printed above go into the scrollback before the
+            // region draws again below them.
+            if self.app.inline.is_some() && !self.app.printed.is_empty() {
+                out.push_str(&self.print_inline());
             }
             out.push_str(&self.paint(self.first));
             self.first = false;
@@ -3025,6 +3704,13 @@ impl Driver {
                     .map(|tip| (tip.since + TOOLTIP_DELAY).saturating_sub(now))
                     .unwrap_or(Duration::MAX),
             )
+            .min(
+                app.inspector
+                    .as_ref()
+                    .and_then(Inspector::flash_ends)
+                    .map(|ends| ends.saturating_sub(now))
+                    .unwrap_or(Duration::MAX),
+            )
     }
 
     /// Handle an event: a key pressed or let go, the mouse, pasted text, or
@@ -3035,6 +3721,24 @@ impl Driver {
         if self.done {
             return;
         }
+        // While the inspector is open, the trace says what came, and who
+        // took it (the mouse is noted in `mouse`); not what was its own.
+        let owned = self.app.inspector_owns(&event);
+        let tracer = &self.app.runtime.tracer;
+        let seq = match &event {
+            _ if owned || !tracer.on() => None,
+            Event::Key(key) => tracer.push(Traced::Key {
+                key: *key,
+                used: None,
+            }),
+            Event::Paste(text) => tracer.push(Traced::Paste {
+                chars: text.chars().count(),
+                used: None,
+            }),
+            Event::Resize { columns, rows } => tracer.push(Traced::Resize(*columns, *rows)),
+            _ => None,
+        };
+        self.app.used = None;
         let quit = match event {
             Event::Key(key) if key == Key::ctrl('c') && !self.app.binds(key) => true,
             Event::Resize { columns, rows } => {
@@ -3042,11 +3746,20 @@ impl Driver {
                 false
             }
             Event::Key(key) => self.app.key(key),
+            // While the inspector has the keys, none reaches the app.
+            Event::KeyUp(_) | Event::Paste(_) if owned => false,
             Event::KeyUp(key) => self.app.key_up(key),
             Event::Paste(text) => self.app.bubble(&WidgetEvent::Paste(text)),
             Event::Mouse(mouse) => self.mouse(mouse),
             _ => false,
         };
+        if let Some(seq) = seq {
+            let used = self.app.used.take();
+            self.app
+                .runtime
+                .tracer
+                .amend(seq, |event| event.set_used(used));
+        }
         if quit {
             self.done = true;
         }
@@ -3058,16 +3771,20 @@ impl Driver {
         self.console = self.app.console_for(self.app.columns(columns));
         self.app.last_console = Some(self.console.clone());
         self.screen = Screen::new(self.app.columns(columns), self.app.region(rows));
+        self.app.set_viewport(self.screen.area(), rows);
+        if let Some(inspector) = &mut self.app.inspector {
+            inspector.forget_overlay();
+        }
         self.painter.invalidate();
         self.first = true;
     }
 
     fn mouse(&mut self, mouse: rich_interact::Mouse) -> bool {
-        let app = &mut self.app;
         // Inline, the region starts where the session began, or higher if
         // it had to scroll to fit.
-        let top = if app.inline.is_some() {
+        let top = if self.app.inline.is_some() {
             self.origin
+                .saturating_add(self.shifted)
                 .min(self.rows.saturating_sub(self.screen.area().height))
         } else {
             0
@@ -3076,11 +3793,34 @@ impl Driver {
             return false;
         };
         let mouse = rich_interact::Mouse { row, ..mouse };
+        // Picking, or on the inspector's panel: the inspector's.
+        if self.app.inspector_mouse(mouse) {
+            return false;
+        }
+        let seq = self.app.trace_mouse(mouse);
+        self.app.used = None;
+        let quit = self.route_mouse(mouse);
+        if let Some(seq) = seq {
+            let used = self.app.used.take();
+            self.app
+                .runtime
+                .tracer
+                .amend(seq, |event| event.set_used(used));
+        }
+        quit
+    }
+
+    /// Route a mouse event in the app's rows: to a selection being made,
+    /// or to the nodes under it; a press nothing used may start a
+    /// selection. Whether to quit.
+    fn route_mouse(&mut self, mouse: rich_interact::Mouse) -> bool {
+        let app = &mut self.app;
+        let row = mouse.row;
         if app.selecting && app.select(mouse, &self.screen) {
             return false;
         }
         app.pointer = Some((mouse.column, row));
-        let routed = app.mouse(mouse);
+        let routed = app.mouse_event(mouse);
         app.pointer = None;
         match routed {
             Some(quit) => quit,
@@ -3104,6 +3844,161 @@ impl Driver {
         self.done
     }
 
+    /// Bring the app up to date at the time of the last
+    /// [`update`](Self::update) and draw until nothing is left to draw: a
+    /// test's step between events, where the bytes do not matter. It does
+    /// not advance the clock.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| text!("ready"));
+    /// let mut driver = app.driver(10, 1);
+    /// driver.settle();
+    /// assert_eq!(driver.screen().plain()[0].trim_end(), "ready");
+    /// ```
+    pub fn settle(&mut self) {
+        // A frame can leave work for the next (a watch set off by a
+        // lifecycle event); a few rounds settle any sane app.
+        for _ in 0..8 {
+            if self.done {
+                return;
+            }
+            self.update(self.app.now);
+            let drew = self.render().is_some();
+            if !drew && !self.needs_render() && self.app.lifecycle.is_empty() {
+                return;
+            }
+        }
+    }
+
+    /// Press keys by name, separated by spaces (`"down down enter"`,
+    /// `"ctrl+s"`; the space key is `space`), each followed by
+    /// [`settle`](Self::settle). Keys after the app quits are dropped.
+    ///
+    /// # Panics
+    /// On a name that is not a key.
+    pub fn press(&mut self, keys: &str) {
+        self.settle();
+        for key in rich_interact::keymap::keys(keys) {
+            if self.done {
+                return;
+            }
+            self.event(Event::Key(key));
+            self.settle();
+        }
+    }
+
+    /// Type `text`, one key a character, then [`settle`](Self::settle):
+    /// what a test does to fill in a text box.
+    ///
+    /// ```
+    /// use intuituive::interact::Input;
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| {
+    ///     let name = signal(String::new());
+    ///     column([
+    ///         component(Input::new("Name"), move |answer, _| name.set(answer)),
+    ///         text!("Hello, {name}"),
+    ///     ])
+    /// });
+    /// let mut driver = app.driver(30, 4);
+    /// driver.type_text("Ada");
+    /// driver.press("enter");
+    /// assert!(driver.screen().plain().iter().any(|row| row.contains("Hello, Ada")));
+    /// ```
+    pub fn type_text(&mut self, text: &str) {
+        self.settle();
+        for c in text.chars() {
+            if self.done {
+                return;
+            }
+            self.event(Event::Key(Key::char(c)));
+        }
+        self.settle();
+    }
+
+    /// The node that has the focus on the top screen, if any.
+    pub fn focused(&self) -> Option<NodeId> {
+        self.app.focus()
+    }
+
+    /// The focused node's [name](crate::Node::name), else its accessible
+    /// name (its [label](crate::Node::label), the text it shows, a panel's
+    /// title), if any.
+    pub fn focused_name(&self) -> Option<String> {
+        let id = self.focused()?;
+        let mut name = None;
+        with_node(&self.app.top().root, id, &mut |node| {
+            name = node.given_name().map(str::to_string);
+        });
+        name.or_else(|| {
+            self.accessibility()
+                .into_iter()
+                .find(|node| node.id == id)
+                .map(|node| node.name)
+                .filter(|name| !name.is_empty())
+        })
+    }
+
+    /// Assert that the focus is on the node called `name`: its
+    /// [name](crate::Node::name), or its accessible name (see
+    /// [`focused_name`](Self::focused_name)).
+    ///
+    /// # Panics
+    /// When the focus is elsewhere, or nowhere, saying where it is.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| {
+    ///     column([
+    ///         label("Save").name("save").focusable(),
+    ///         label("Quit").name("quit").focusable(),
+    ///     ])
+    /// });
+    /// let mut driver = app.driver(10, 2);
+    /// driver.settle();
+    /// driver.assert_focused("save");
+    /// driver.press("tab");
+    /// driver.assert_focused("quit");
+    /// ```
+    #[track_caller]
+    pub fn assert_focused(&self, name: &str) {
+        if let Err(message) = self.check_focused(name) {
+            panic!("{message}");
+        }
+    }
+
+    /// [`assert_focused`](Self::assert_focused) as a result: the message
+    /// it would panic with when the focus is not on `name`.
+    pub fn check_focused(&self, name: &str) -> Result<(), String> {
+        let Some(id) = self.focused() else {
+            return Err(format!(
+                "expected the focus on `{name}`, but nothing has the focus"
+            ));
+        };
+        let mut given = None;
+        with_node(&self.app.top().root, id, &mut |node| {
+            given = node.given_name().map(str::to_string);
+        });
+        let tree = self.accessibility();
+        let access = tree.iter().find(|node| node.id == id);
+        if given.as_deref() == Some(name) || access.is_some_and(|node| node.name == name) {
+            return Ok(());
+        }
+        let what = match (given, access) {
+            (Some(given), Some(node)) => format!("`{given}` ({})", node.describe()),
+            (Some(given), None) => format!("`{given}`"),
+            (None, Some(node)) if !node.describe().is_empty() => node.describe(),
+            _ => format!("node {id}"),
+        };
+        Err(format!(
+            "expected the focus on `{name}`, but it is on {what}"
+        ))
+    }
+
     /// The frame as drawn, cell by cell.
     pub fn screen(&self) -> &Screen {
         &self.screen
@@ -3121,6 +4016,61 @@ impl Driver {
     /// The last frame's numbers.
     pub fn stats(&self) -> FrameStats {
         self.app.stats
+    }
+
+    /// The node selected in the [inspector](crate::inspect), if any.
+    pub fn inspector_selected(&self) -> Option<NodeId> {
+        self.app.inspector.as_ref().and_then(|i| i.selected)
+    }
+
+    /// The inspector's event trace, oldest first: what happened while it
+    /// was open (nothing is traced while it is closed or its trace is
+    /// paused), the last [`TRACE_LIMIT`](crate::inspect::TRACE_LIMIT)
+    /// events at most. Events since the last frame are in it, numbered for
+    /// the next. Empty without an inspector.
+    ///
+    /// ```
+    /// use intuituive::inspect::TraceKind;
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| {
+    ///     let count = signal(0);
+    ///     text!("{count}").name("count").on_key("+", move |_| count.update(|n| *n += 1))
+    /// })
+    /// .inspector(true);
+    /// let mut driver = app.driver(80, 10);
+    /// driver.press("+");
+    /// let trace = driver.inspector_trace();
+    /// assert!(trace.iter().any(|e| e.kind == TraceKind::Key && e.text == "key + → count on_key"));
+    /// assert!(trace.iter().any(|e| e.kind == TraceKind::Signal && e.text.contains("→ count")));
+    /// ```
+    pub fn inspector_trace(&self) -> Vec<TraceEntry> {
+        let Some(inspector) = &self.app.inspector else {
+            return Vec::new();
+        };
+        let tracer = &self.app.runtime.tracer;
+        let pending = if tracer.has_pending() {
+            tracer.peek(&self.names(), inspector.frames + 1)
+        } else {
+            Vec::new()
+        };
+        inspector.trace_entries(pending)
+    }
+
+    /// What the inspector measured of each node while it was open, in the
+    /// order its timings pane shows them (by default, the most time first).
+    /// Empty without an inspector.
+    pub fn inspector_timings(&self) -> Vec<NodeTiming> {
+        match &self.app.inspector {
+            Some(inspector) => inspector.node_timings(&self.names()),
+            None => Vec::new(),
+        }
+    }
+
+    /// The nodes on every screen of the stack, named as the inspector
+    /// names them.
+    fn names(&self) -> Names {
+        Names::of(self.app.layers.iter().map(|layer| &layer.root))
     }
 
     /// Whether text selected with the mouse can be put on the clipboard
@@ -3213,6 +4163,8 @@ impl Driver {
         self.painter.invalidate();
         self.first = true;
         self.started = false;
+        // Back, an inline region starts where the cursor is then.
+        self.shifted = 0;
         // The terminal's modes come back without pointer movement reports:
         // asked for again once drawn.
         self.app.motion.1 = false;
@@ -3226,6 +4178,84 @@ impl Driver {
         self.origin = row;
     }
 
+    /// The value a handler ended the app with ([`Ctx::quit_with`]), if it
+    /// is a `T`; taken, so a second call returns `None`.
+    pub fn take_exit<T: 'static>(&mut self) -> Option<T> {
+        let value = self.app.exit.take()?;
+        match value.downcast::<T>() {
+            Ok(value) => Some(*value),
+            Err(value) => {
+                self.app.exit = Some(value);
+                None
+            }
+        }
+    }
+
+    /// The error a handler ended the app with ([`Ctx::fail`]), taken.
+    pub fn take_error(&mut self) -> Option<io::Error> {
+        self.app.error.take()
+    }
+
+    /// The console markup handlers printed above the app
+    /// ([`Ctx::print_above`]) that is waiting to be printed, taken: in a
+    /// full-screen app, to print once the terminal is given back. Inline,
+    /// [`render`](Self::render) writes them above the region itself, so
+    /// none wait.
+    pub fn take_printed(&mut self) -> Vec<String> {
+        std::mem::take(&mut self.app.printed)
+    }
+
+    /// `markup` lines as the terminal shows them: rendered at the app's
+    /// width, wrapped, one string of text and escape sequences a row.
+    fn printed_rows(&self, markup: &[String]) -> Vec<String> {
+        let system = self.console.color_system();
+        let width = self.screen.area().width.max(1) as usize;
+        let options = self.console.options().update_width(width);
+        let mut rows = Vec::new();
+        for markup in markup {
+            let text =
+                rich::Text::from_markup(markup).unwrap_or_else(|_| rich::Text::new(markup.clone()));
+            for line in self.console.render_lines(&text, &options, false) {
+                let mut row = String::new();
+                for segment in line {
+                    let mut text = [segment];
+                    rich_interact::paint::sanitize_line(&mut text);
+                    let [segment] = text;
+                    match &segment.style {
+                        Some(style) => row.push_str(&style.render(&segment.text, system)),
+                        None => row.push_str(&segment.text),
+                    }
+                }
+                rows.push(row);
+            }
+        }
+        rows
+    }
+
+    /// Inline: write the printed lines into the scrollback above the
+    /// region, which then starts below them; the next paint draws it all.
+    fn print_inline(&mut self) -> String {
+        let markup = std::mem::take(&mut self.app.printed);
+        let rows = self.printed_rows(&markup);
+        // From the region's first row, cleared to the end of the screen,
+        // the lines push the region down (scrolling the terminal when it
+        // is at the bottom).
+        let mut out = String::from("\x1b[?25l");
+        out.push_str(&self.painter.move_to(0, 0));
+        out.push_str("\x1b[0m\r\x1b[J");
+        for row in &rows {
+            out.push_str(row);
+            out.push_str("\x1b[0m\r\n");
+        }
+        self.app.caret_shown = false;
+        self.painter.invalidate();
+        self.first = true;
+        self.shifted = self
+            .shifted
+            .saturating_add(rows.len().min(u16::MAX as usize) as u16);
+        out
+    }
+
     /// Stop: the bytes that show the last change and leave the terminal
     /// as it was (styles reset, the cursor shown; inline, below the
     /// region, where the shell's prompt follows the app's last frame).
@@ -3237,8 +4267,11 @@ impl Driver {
             return out;
         }
         // Inline, the last frame stays in the scrollback: show what the
-        // last handler changed before leaving.
-        if self.app.inline.is_some() && (self.app.restack || self.app.runtime.has_dirty()) {
+        // last handler changed (and printed) before leaving.
+        if self.app.inline.is_some() && !self.app.printed.is_empty() {
+            out.push_str(&self.print_inline());
+            out.push_str(&self.paint(true));
+        } else if self.app.inline.is_some() && (self.app.restack || self.app.runtime.has_dirty()) {
             out.push_str(&self.paint(false));
         }
         out.push_str(&self.painter.finish());
@@ -3252,6 +4285,8 @@ impl Driver {
         let app = &mut self.app;
         app.poke = false;
         let screen = &mut self.screen;
+        // The inspector may have opened or closed since the last frame.
+        app.set_viewport(screen.area(), self.rows);
         if app.linear {
             let columns = screen.area().width;
             let rows = app.linear_rows(&self.console, columns, self.rows);
@@ -3283,7 +4318,7 @@ impl Driver {
             app.caret_shown = false;
         }
         out.push_str(&painted);
-        if app.motion.0 && !app.motion.1 && app.inline.is_none() {
+        if app.motion.0 && !app.motion.1 && app.captures_mouse() {
             // A widget reads hover: report the pointer's movement too. The
             // session turns it off with the rest of the mouse on the way out.
             out.push_str("\x1b[?1003h");
@@ -3450,6 +4485,33 @@ fn draw_tip(console: &Console, screen: &mut Screen, area: Rect, tip: &Tip, style
     rect
 }
 
+/// The screens drawn: the topmost full screen and the modals over it.
+fn shown_layers(layers: &[Layer]) -> &[Layer] {
+    let base = layers
+        .iter()
+        .rposition(|layer| layer.modal.is_none())
+        .unwrap_or(0);
+    &layers[base..]
+}
+
+/// The deepest node shown at `x`, `y`, on the topmost screen there (a
+/// point outside a modal is on the screen below it).
+fn node_at(layers: &[Layer], x: u16, y: u16) -> Option<NodeId> {
+    shown_layers(layers).iter().rev().find_map(|layer| {
+        crate::node::hit_path(&layer.root, x, y)
+            .last()
+            .map(|(id, _)| *id)
+    })
+}
+
+/// Where node `id` is on the screen, on whichever screen drawn holds it.
+fn node_rect(layers: &[Layer], id: NodeId) -> Option<Rect> {
+    shown_layers(layers)
+        .iter()
+        .rev()
+        .find_map(|layer| anchor_rect(&layer.root, id))
+}
+
 /// Where node `id` is on the screen, if it is in `root`'s tree and shown.
 fn anchor_rect(root: &Node, id: NodeId) -> Option<Rect> {
     let mut found = None;
@@ -3477,6 +4539,7 @@ fn popup_rect(
         match size {
             Size::Fixed(n) => n,
             Size::Percent(p) => (total as u32 * p.min(100) as u32 / 100) as u16,
+            Size::Ratio(a, b) => crate::layout::ratio_of(total as u32, a, b) as u16,
             Size::Auto => measure(),
             Size::Flex(_) => total,
         }
@@ -3534,6 +4597,7 @@ fn modal_rect(console: &Console, root: &Node, area: Rect, width: Size, height: S
         match size {
             Size::Fixed(n) => n,
             Size::Percent(p) => (total as u32 * p.min(100) as u32 / 100) as u16,
+            Size::Ratio(a, b) => crate::layout::ratio_of(total as u32, a, b) as u16,
             Size::Auto => measure(),
             Size::Flex(_) => total,
         }

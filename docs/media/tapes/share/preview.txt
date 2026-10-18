@@ -1,0 +1,30 @@
+❯ rich capture --redact --redact-preview --export-png deploy.png -- sh deploy.sh
+command
+command: no matches in 1 line
+
+output
+2 │ GITHUB_TOKEN=ghp_0123456789abcdefghijklmnopqrstuvwxyzAB
+  ╰ 2:14 key-value ghp_0123456789abcdefghijklmnopqrstuvwxyzAB →
+******************************************
+3 │ db: postgres://app:s3cret@db/app
+  ╰ 3:20 url-credentials s3cret → ******
+output: 2 matches on 2 of 4 lines (key-value 1, url-credentials 1)
+rich: --redact-preview: dry run, nothing was written (without it: deploy.png)
+❯
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

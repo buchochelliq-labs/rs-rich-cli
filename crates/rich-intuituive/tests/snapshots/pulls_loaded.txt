@@ -1,0 +1,24 @@
+╭─ Pull requests ────────────────────────────────────────────────── Loaded 12 ─╮
+│#     Title                                      Author   State   Replies Age │
+│                                                                              │
+│#212  Add a dark theme to the settings page      mira-k   open    4       2h  │
+│#211  Cache the parsed config between runs       tobias   open    9       5h  │
+│#210  Fix the off-by-one in the pager's last li… anaïs    merged  2       1d  │
+│#209  Draft: stream the log instead of reading … jun-w    draft   0       1d  │
+│#208  Document the plugin hooks                  olu      open    1       2d  │
+│#207  Retry the upload once on a timeout         mira-k   merged  6       3d  │
+│#206  Bump the minimum toolchain                 pavel    merged  3       4d  │
+│#205  Draft: a second look at the keymap         sana     draft   12      5d  │
+│#204  Speed up the table's sort                  tobias   open    7       1w  │
+│#203  Test the importer on empty files           olu      merged  0       1w  │
+│#202  Show the version in the about box          jun-w    open    2       2w  │
+│#201  Remove the unused colour helpers           pavel    merged  1       3w  │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+╰─ j/k move · r reloads · q quits ─────────────────────────────────────────────╯

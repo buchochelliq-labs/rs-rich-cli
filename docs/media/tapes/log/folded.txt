@@ -1,0 +1,34 @@
+❯ rich log app.log --where 'msg~health' --collapse --time relative
++0.000s INFO health check {"service":"web"}
+  × 3 (last +2.000s)
+❯
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

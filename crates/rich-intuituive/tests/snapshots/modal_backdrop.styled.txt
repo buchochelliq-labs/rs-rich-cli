@@ -1,0 +1,6 @@
+[dim]first row of the    [/]
+[dim]scree[/][blue]╭────────╮[/][dim]     [/]
+[dim]secon[/][blue]│[/]hi      [blue]│[/][dim]     [/]
+[dim]     [/][blue]╰────────╯[/][dim]     [/]
+[dim]third               [/]
+[dim]                    [/]

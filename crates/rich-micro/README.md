@@ -34,7 +34,8 @@ assert!(diagnostics.is_empty());
 
 A `MicroAsset` has a name (`[a-z0-9_-]` segments joined by `/`, like
 `status/success`), a kind (static or animated), a size in cells (2×1 by
-default, the footprint of an emoji; 1×1 allowed; one row only), images,
+default, the footprint of an emoji; up to 4×2, so 1×1, a 2×2 icon or a 3×2
+animation too), images,
 **mandatory alt text**, an emoji and/or text fallback that must fit its
 columns, aliases, and where it came from (layer, pack, version, licence,
 author).
@@ -88,6 +89,13 @@ padded with U+2800) under a style whose metadata holds `rich.micro =
 panels at exactly its width, and prints as plain fallback in pipes, logs and
 exports. `MicroView` offers each complete placement to `MicroRenderer`s,
 which may swap it for other cells of the same width.
+
+That is an asset's first row. A two-row asset (2×2, 3×2) also takes the row
+below its line: `MicroRows` reserves it after layout, blank but for the
+asset's second row, in wrapped text, table cells and panels, so nothing is
+ever drawn over the next line. Kitty, iTerm2, Sixel and half-blocks then
+draw over both rows; without the reserved row, the first row's fallback
+shows.
 
 ## Making assets
 

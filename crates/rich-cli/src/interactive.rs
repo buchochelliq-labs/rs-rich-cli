@@ -1,6 +1,7 @@
 //! `rich choose`, `rich filter`, `rich input`, `rich confirm`,
-//! `rich pager`, `rich write`, `rich file`, `rich color`, `rich asset` and
-//! `rich explore` (#493, #494, #465): the rs-rich-interact components as
+//! `rich pager`, `rich write`, `rich file`, `rich color`, `rich asset`,
+//! `rich explore` and `rich date` (#493, #494, #465, #719): the
+//! rs-rich-interact components as
 //! shell commands. Not upstream: a CLI convenience over the rs-rich-interact
 //! library.
 //!
@@ -13,7 +14,8 @@
 //!
 //! Without a terminal they follow rs-rich-interact's degradation policy:
 //! `input`, `confirm`, `color` and `asset`, and `choose` from arguments, ask
-//! line by line on standard error; `choose` from standard input and `file`
+//! (and `date`) line by line on standard error; `choose` from standard
+//! input and `file`
 //! answer with `--selected`; `filter` prints the lines that match `--value`,
 //! so it is a fuzzy `grep` in a pipeline; `pager` writes the content out;
 //! `write` answers with what standard input held; `explore` prints the
@@ -31,11 +33,12 @@ use std::time::{Duration, Instant};
 
 use rich_ext::cli_doc::{ArgSpec, CommandSpec};
 use rich_ext::sanitize_terminal_controls;
+use rich_interact::datetime::{Date, DateTime, Time};
 use rich_interact::{
-    AssetKind, AssetPicker, Choice, ColorFormat, ColorPicker, Confirm, DataExplorer,
-    Error as RunError, Fallback, FileMode, FilePicker, Input, Item, LoopOptions, MultiSelect,
-    NotInteractive, Outcome, Output, Pager, Policy, Preview, RunOptions, Select, SessionOptions,
-    TextArea,
+    AssetKind, AssetPicker, Choice, ColorFormat, ColorPicker, Confirm, DataExplorer, DatePicker,
+    DateTimePicker, Error as RunError, Fallback, FileMode, FilePicker, Input, Item, LoopOptions,
+    MultiSelect, NotInteractive, Outcome, Output, Pager, Policy, Preview, RunOptions, Select,
+    SessionOptions, TextArea, TimePicker,
 };
 
 use crate::inspect::InputFormat;
@@ -43,6 +46,7 @@ use crate::inspect::InputFormat;
 /// The commands, in the order help lists them.
 const COMMANDS: &[&str] = &[
     "choose", "filter", "input", "confirm", "pager", "write", "file", "color", "asset", "explore",
+    "date",
 ];
 
 /// The command word, when the first word that is not an option is one and
@@ -52,14 +56,14 @@ pub(super) fn requested(args: &[String]) -> Option<&'static str> {
     COMMANDS.iter().copied().find(|command| word == *command)
 }
 
-const EXIT_CANCELLED: u8 = 1;
-const EXIT_INTERRUPTED: u8 = 130;
+pub(super) const EXIT_CANCELLED: u8 = 1;
+pub(super) const EXIT_INTERRUPTED: u8 = 130;
 
 /// The most standard input (or a paged file) read, so an endless input such
 /// as `yes` ends with an error instead of exhausting memory.
 const MAX_INPUT_BYTES: usize = 64 * 1024 * 1024;
 /// The most items `choose` and `filter` read from standard input.
-const MAX_ITEMS: usize = 1_000_000;
+pub(super) const MAX_ITEMS: usize = 1_000_000;
 /// The most nodes `explore` lists. The explorer keeps a few hundred bytes a
 /// node, so 64 MiB of `[0,0,…]` (32 million nodes) would take gigabytes;
 /// past this a document is better narrowed first (`--inspect --select`).
@@ -220,7 +224,16 @@ pub(super) fn commands() -> Vec<CommandSpec> {
                     .value_name("QUERY")
                     .help("Start with QUERY searched"),
             )
-            .example("git log --color | rich pager", "Page coloured output"),
+            .arg(ArgSpec::option("sticky").value_name("LINES").help(
+                "Keep the first LINES lines on top while the rest scroll; `table` (the \
+                 default) keeps a table's header there when the content starts with one, 0 \
+                 nothing",
+            ))
+            .example("git log --color | rich pager", "Page coloured output")
+            .example(
+                "PAGER='rich pager' rich data.csv --pager",
+                "Page a table with its header on top",
+            ),
         CommandSpec::new("write")
             .about(
                 "Write several lines and print them: Enter starts a line, Ctrl+D submits, Esc \
@@ -421,6 +434,7 @@ pub(super) fn commands() -> Vec<CommandSpec> {
                 "kubectl get pods -o json | rich explore --print value",
                 "Pick a value from a command's output",
             ),
+        date_command(),
     ]
 }
 
@@ -444,6 +458,9 @@ struct Args {
     affirmative: Option<String>,
     negative: Option<String>,
     search: Option<String>,
+    /// `rich pager --sticky`: the lines kept on top; `None` is a table's
+    /// header.
+    sticky: Option<usize>,
     mouse: bool,
     char_limit: Option<usize>,
     line_numbers: bool,
@@ -461,6 +478,12 @@ struct Args {
     icons: bool,
     /// `--micro-project`: the project's micro assets are trusted.
     micro_project: bool,
+    /// `rich date --min` and `--max`.
+    min: Option<String>,
+    max: Option<String>,
+    /// `rich date --seconds` and `--twelve-hour`.
+    seconds: bool,
+    twelve_hour: bool,
     /// The global `--no-color`.
     no_color: bool,
 }
@@ -534,10 +557,21 @@ fn parse_args(command: &'static str, args: &[String]) -> Result<Args, String> {
             "--required",
         ],
         "confirm" => &["--default", "--affirmative", "--negative", "--mouse"],
+        "date" => &[
+            "--kind",
+            "--header",
+            "--value",
+            "--default",
+            "--min",
+            "--max",
+            "--seconds",
+            "--twelve-hour",
+            "--mouse",
+        ],
         "explore" => &[
             "--format", "--header", "--height", "--value", "--print", "--mouse", "--icons",
         ],
-        _ => &["--search"],
+        _ => &["--search", "--sticky"],
     };
     let mut seen_command = false;
     let mut options_done = false;
@@ -618,6 +652,17 @@ fn parse_args(command: &'static str, args: &[String]) -> Result<Args, String> {
                     }
                 }
             }
+            "--kind" if command == "date" => {
+                let kind = value()?;
+                if !matches!(kind.as_str(), "date" | "time" | "datetime") {
+                    return Err(format!("--kind: {kind:?} is not date, time or datetime"));
+                }
+                parsed.kind = Some(kind);
+            }
+            "--min" => parsed.min = Some(value()?),
+            "--max" => parsed.max = Some(value()?),
+            "--seconds" => parsed.seconds = true,
+            "--twelve-hour" => parsed.twelve_hour = true,
             "--format" if command == "explore" => {
                 parsed.data_format = Some(InputFormat::parse(&value()?)?);
             }
@@ -669,6 +714,15 @@ fn parse_args(command: &'static str, args: &[String]) -> Result<Args, String> {
             "--default" => parsed.default = Some(value()?),
             "--affirmative" => parsed.affirmative = Some(value()?),
             "--negative" => parsed.negative = Some(value()?),
+            "--sticky" => {
+                let lines = value()?;
+                parsed.sticky = match lines.as_str() {
+                    "table" => None,
+                    lines => Some(lines.parse::<usize>().map_err(|_| {
+                        format!("--sticky: {lines:?} is not a number of lines or table")
+                    })?),
+                };
+            }
             _ => parsed.search = Some(value()?),
         }
     }
@@ -690,6 +744,8 @@ fn parse_args(command: &'static str, args: &[String]) -> Result<Args, String> {
         &mut parsed.affirmative,
         &mut parsed.negative,
         &mut parsed.search,
+        &mut parsed.min,
+        &mut parsed.max,
     ]
     .into_iter()
     .flatten()
@@ -719,6 +775,7 @@ fn parse_args(command: &'static str, args: &[String]) -> Result<Args, String> {
         "explore" if parsed.positionals.len() > 1 => {
             return Err("`rich explore` explores one FILE".into())
         }
+        "date" => date_values(&parsed).map(|_| ())?,
         "write" | "color" | "asset" if !parsed.positionals.is_empty() => {
             return Err(format!(
                 "`rich {command}` takes no arguments; the prompt is --header"
@@ -770,6 +827,7 @@ pub(super) fn dispatch(command: &'static str, args: &[String]) -> ExitCode {
         "color" => color(&args),
         "asset" => asset(&args),
         "explore" => explore(&args),
+        "date" => date(&args),
         _ => pager(&args),
     });
     match result {
@@ -783,17 +841,17 @@ pub(super) fn dispatch(command: &'static str, args: &[String]) -> ExitCode {
 
 /// The report envelope, on standard error, for an answered command; an
 /// answer of no (exit 1) or an interrupt (130) is not a failure to report.
-fn report(json: bool, code: ExitCode) -> ExitCode {
+pub(super) fn report(json: bool, code: ExitCode) -> ExitCode {
     if json && code == ExitCode::SUCCESS {
         emit_success_report(ReportFormat::Json);
     }
     code
 }
 
-type Answer = Result<ExitCode, (ExitClass, String)>;
+pub(super) type Answer = Result<ExitCode, (ExitClass, String)>;
 
 /// Painted on standard error, inline below the cursor.
-fn run_options(fallback: Fallback, no_color: bool) -> RunOptions {
+pub(super) fn run_options(fallback: Fallback, no_color: bool) -> RunOptions {
     RunOptions {
         policy: Policy {
             fallback,
@@ -829,7 +887,7 @@ fn finish(outcome: Result<Outcome<Vec<String>>, RunError>) -> Answer {
     }
 }
 
-fn write_stdout(text: &str) -> Answer {
+pub(super) fn write_stdout(text: &str) -> Answer {
     use std::io::Write;
     let mut stdout = std::io::stdout().lock();
     match stdout
@@ -848,7 +906,7 @@ fn write_stdout(text: &str) -> Answer {
 
 /// At most `limit` bytes of `reader`, or an input error (exit 3) naming
 /// `what` when there is more.
-fn read_bounded(
+pub(super) fn read_bounded(
     reader: impl Read,
     limit: usize,
     what: &str,
@@ -869,7 +927,7 @@ fn read_bounded(
 
 /// Standard input, up to [`MAX_INPUT_BYTES`], as text: invalid UTF-8 is
 /// replaced rather than failing the command.
-fn read_stdin() -> Result<String, (ExitClass, String)> {
+pub(super) fn read_stdin() -> Result<String, (ExitClass, String)> {
     let bytes = read_bounded(std::io::stdin().lock(), MAX_INPUT_BYTES, "standard input")?;
     Ok(String::from_utf8_lossy(&bytes).into_owned())
 }
@@ -1111,7 +1169,11 @@ fn pager(args: &Args) -> Answer {
     // after it, as a pager such as `less` shows it.
     let source = source.strip_suffix('\n').unwrap_or(&source);
     let text = Text::from_ansi(source, rich::style::StyleType::default());
-    let mut pager = Pager::new(text);
+    // A table's header stays on top (#716), or the lines asked for.
+    let mut pager = match args.sticky {
+        None => Pager::new(text).sticky_table_header(true),
+        Some(lines) => Pager::new(text).sticky_header(lines),
+    };
     if let Some(query) = &args.search {
         pager = pager.search(query.clone());
     }
@@ -1455,6 +1517,233 @@ fn more_nodes_than(document: &rich_ext::data::Node, limit: usize) -> bool {
         }
     }
     false
+}
+
+/// `rich date`'s help (#719).
+fn date_command() -> CommandSpec {
+    CommandSpec::new("date")
+        .about(
+            "Pick a date on a month grid, a time of day, or both, and print it as 2026-10-17, \
+             14:30 or 2026-10-17 14:30; without a terminal, read one typed in",
+        )
+        .usage("date [OPTIONS]")
+        .arg(
+            ArgSpec::option("kind")
+                .value_name("KIND")
+                .choices(["date", "time", "datetime"])
+                .help("What to pick (default date): a day, a time of day, or a day and a time"),
+        )
+        .arg(
+            ArgSpec::option("header")
+                .value_name("TEXT")
+                .help("The prompt (default \"Date\", \"Time\" or \"Date and time\")"),
+        )
+        .arg(
+            ArgSpec::option("value")
+                .value_name("VALUE")
+                .help("Start at VALUE (default today, or now, in UTC)"),
+        )
+        .arg(ArgSpec::option("default").value_name("VALUE").help(
+            "The answer without a terminal and to an empty line; the start too, unless \
+             --value is given",
+        ))
+        .arg(ArgSpec::option("min").value_name("VALUE").help(
+            "The earliest that can be picked: earlier days are dimmed and cannot be reached, \
+             and an earlier time is refused with a message",
+        ))
+        .arg(
+            ArgSpec::option("max")
+                .value_name("VALUE")
+                .help("The latest that can be picked"),
+        )
+        .arg(ArgSpec::flag("seconds").help(
+            "Pick and print the seconds too (14:30:05), with --kind time or datetime; without \
+             it every value is to the minute, and --min rounds up to one",
+        ))
+        .arg(ArgSpec::flag("twelve-hour").help(
+            "Show a 12-hour clock with AM and PM, with --kind time or datetime (the answer is \
+             still printed on a 24-hour one)",
+        ))
+        .arg(ArgSpec::flag("mouse").help(
+            "Report the mouse: click a day to select it and again to pick it, click a time \
+             field; the wheel turns the month",
+        ))
+        .example(
+            "due=$(rich date --header Due --min today)",
+            "A day from today on",
+        )
+        .example(
+            "rich date --kind datetime --min '2026-10-17 09:00' --max '2026-10-31 17:00'",
+            "A meeting slot within a range",
+        )
+}
+
+/// What `rich date` picks.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum DateKind {
+    Date,
+    Time,
+    DateTime,
+}
+
+/// `rich date`'s values, parsed for its `--kind`: the start, the default,
+/// the earliest and the latest.
+struct DateValues {
+    kind: DateKind,
+    value: Option<DateTime>,
+    default: Option<DateTime>,
+    min: Option<DateTime>,
+    max: Option<DateTime>,
+}
+
+/// Parse `rich date`'s values for its kind, or say which is wrong (a usage
+/// error).
+fn date_values(args: &Args) -> Result<DateValues, String> {
+    if !args.positionals.is_empty() {
+        return Err("`rich date` takes no arguments; the prompt is --header".into());
+    }
+    let kind = match args.kind.as_deref() {
+        Some("time") => DateKind::Time,
+        Some("datetime") => DateKind::DateTime,
+        _ => DateKind::Date,
+    };
+    // A day has no seconds to pick and no clock to show.
+    for (flag, on) in [
+        ("--seconds", args.seconds),
+        ("--twelve-hour", args.twelve_hour),
+    ] {
+        if on && kind == DateKind::Date {
+            return Err(format!("{flag} needs --kind time or datetime"));
+        }
+    }
+    let parse = |name: &str, value: &Option<String>| -> Result<Option<DateTime>, String> {
+        let Some(text) = value else {
+            return Ok(None);
+        };
+        let parsed = match kind {
+            DateKind::Date => text.parse::<Date>().map(DateTime::from),
+            DateKind::Time => text.parse::<Time>().map(|time| Date::today_utc().at(time)),
+            DateKind::DateTime => text.parse::<DateTime>(),
+        };
+        parsed
+            .map(Some)
+            .map_err(|error| format!("--{name}: {error}"))
+    };
+    let values = DateValues {
+        kind,
+        value: parse("value", &args.value)?,
+        default: parse("default", &args.default)?,
+        min: parse("min", &args.min)?,
+        max: parse("max", &args.max)?,
+    };
+    // What the range compares: a day, a time, or both.
+    let key = |at: DateTime| match kind {
+        DateKind::Date => (Some(at.date), None),
+        DateKind::Time => (None, Some(at.time)),
+        DateKind::DateTime => (Some(at.date), Some(at.time)),
+    };
+    if let (Some(min), Some(max)) = (values.min, values.max) {
+        if key(min) > key(max) {
+            return Err("--min is after --max".into());
+        }
+    }
+    // Without --seconds the picker works to the minute: the default is
+    // compared as it is printed, so one before --min only by its seconds
+    // is outside.
+    let shown = |at: DateTime| match kind {
+        DateKind::Time | DateKind::DateTime if !args.seconds => at.date.at(Time {
+            second: 0,
+            ..at.time
+        }),
+        _ => at,
+    };
+    if let Some(default) = values.default.map(shown) {
+        let early = values.min.is_some_and(|min| key(default) < key(min));
+        let late = values.max.is_some_and(|max| key(default) > key(max));
+        if early || late {
+            return Err("--default is outside --min and --max".into());
+        }
+    }
+    Ok(values)
+}
+
+/// `rich date` (#719): a date, a time or both, printed in ISO 8601 form.
+fn date(args: &Args) -> Answer {
+    let values = date_values(args).map_err(|message| (ExitClass::Usage, message))?;
+    let options = run_options(Fallback::Prompt, args.no_color);
+    let header = |default: &str| args.header.clone().unwrap_or_else(|| default.to_string());
+    let seconds = args.seconds;
+    let answer = match values.kind {
+        DateKind::Date => {
+            // The default, then the value, as `rich color` takes them: an
+            // explicit --value says where to start.
+            let mut picker = DatePicker::new(header("Date")).with_mouse(args.mouse);
+            if let Some(default) = values.default {
+                picker = picker.default(default.date);
+            }
+            if let Some(value) = values.value {
+                picker = picker.value(value.date);
+            }
+            if let Some(min) = values.min {
+                picker = picker.min(min.date);
+            }
+            if let Some(max) = values.max {
+                picker = picker.max(max.date);
+            }
+            rich_interact::run(picker, &options)
+                .map(|outcome| answer_line(outcome, |date| date.to_string()))
+        }
+        DateKind::Time => {
+            let mut picker = TimePicker::new(header("Time"))
+                .seconds(seconds)
+                .twelve_hour(args.twelve_hour)
+                .with_mouse(args.mouse);
+            if let Some(default) = values.default {
+                picker = picker.default(default.time);
+            }
+            if let Some(value) = values.value {
+                picker = picker.value(value.time);
+            }
+            if let Some(min) = values.min {
+                picker = picker.min(min.time);
+            }
+            if let Some(max) = values.max {
+                picker = picker.max(max.time);
+            }
+            rich_interact::run(picker, &options)
+                .map(|outcome| answer_line(outcome, |time| time.format(seconds, false)))
+        }
+        DateKind::DateTime => {
+            let mut picker = DateTimePicker::new(header("Date and time"))
+                .seconds(seconds)
+                .twelve_hour(args.twelve_hour)
+                .with_mouse(args.mouse);
+            if let Some(default) = values.default {
+                picker = picker.default(default);
+            }
+            if let Some(value) = values.value {
+                picker = picker.value(value);
+            }
+            if let Some(min) = values.min {
+                picker = picker.min(min);
+            }
+            if let Some(max) = values.max {
+                picker = picker.max(max);
+            }
+            rich_interact::run(picker, &options)
+                .map(|outcome| answer_line(outcome, |at| at.format(seconds, false)))
+        }
+    };
+    finish(answer)
+}
+
+/// An outcome with its answer as the line to print.
+fn answer_line<T>(outcome: Outcome<T>, line: impl FnOnce(T) -> String) -> Outcome<Vec<String>> {
+    match outcome {
+        Outcome::Done(value) => Outcome::Done(vec![line(value)]),
+        Outcome::Cancelled => Outcome::Cancelled,
+        Outcome::Interrupted => Outcome::Interrupted,
+    }
 }
 
 /// How often a picker with `--preview` repaints, so a preview shows as

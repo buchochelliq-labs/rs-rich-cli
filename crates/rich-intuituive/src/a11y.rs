@@ -131,6 +131,9 @@ pub struct AccessState {
     pub selected: bool,
     /// Working: loading, a task running.
     pub busy: bool,
+    /// In [error](crate::Node::error_when): a value that is wrong (ARIA's
+    /// `aria-invalid`). It is the node's own, never an item's.
+    pub invalid: bool,
     /// The selected item's place among its widget's items: (from 1, of how
     /// many). ARIA's `aria-posinset` and `aria-setsize`.
     pub position: Option<(usize, usize)>,
@@ -213,6 +216,7 @@ impl AccessNode {
             (state.expanded == Some(false), "collapsed"),
             (state.busy, "busy"),
             (self.disabled, "disabled"),
+            (state.invalid, "invalid"),
         ];
         for (_, word) in words.iter().filter(|(on, _)| *on) {
             line.push_str(", ");
@@ -223,9 +227,9 @@ impl AccessNode {
 
     /// Its ARIA attributes, for a DOM renderer: `role`, `aria-label`, and
     /// each state that is set (`aria-expanded`, `aria-checked`,
-    /// `aria-selected`, `aria-busy`, `aria-disabled`, `aria-posinset` and
-    /// `aria-setsize`). A widget of items' states go on its selected
-    /// item's element.
+    /// `aria-selected`, `aria-busy`, `aria-disabled`, `aria-invalid`,
+    /// `aria-posinset` and `aria-setsize`). A widget of items' states go
+    /// on its selected item's element.
     pub fn aria_attributes(&self) -> Vec<(&'static str, String)> {
         let mut out = vec![("role", self.role.name().to_string())];
         if !self.name.is_empty() {
@@ -242,6 +246,7 @@ impl AccessNode {
             (state.selected, "aria-selected"),
             (state.busy, "aria-busy"),
             (self.disabled, "aria-disabled"),
+            (state.invalid, "aria-invalid"),
         ] {
             if on {
                 out.push((name, "true".to_string()));
@@ -447,6 +452,8 @@ mod tests {
         let mut off = node(Role::Button, "Send", None, none);
         off.disabled = true;
         assert_eq!(off.describe(), "Send, button, disabled");
+        off.state.invalid = true;
+        assert_eq!(off.describe(), "Send, button, disabled, invalid");
     }
 
     #[test]
@@ -460,6 +467,7 @@ mod tests {
                 checked: None,
                 selected: true,
                 busy: true,
+                invalid: true,
                 position: Some((1, 4)),
             },
         );
@@ -471,6 +479,7 @@ mod tests {
             ("aria-selected", "true"),
             ("aria-busy", "true"),
             ("aria-disabled", "true"),
+            ("aria-invalid", "true"),
             ("aria-posinset", "1"),
             ("aria-setsize", "4"),
         ];

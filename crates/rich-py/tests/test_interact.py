@@ -392,6 +392,45 @@ def test_pager_pages_any_renderable():
     assert "│ inside a panel" in record.frames[0]
 
 
+def test_pager_keeps_a_tables_header_on_top():
+    table = Table()
+    table.add_column("Name")
+    table.add_column("Size")
+    for row in range(1, 61):
+        table.add_row(f"file {row}", f"{row}K")
+    pager = Pager(table, sticky_header="table")
+    assert pager.sticky_header == "table"
+    record = pager.headless("pagedown pagedown q", width=30, height=12)
+    lines = record.last_frame.splitlines()
+    assert lines[0].startswith("┏") and "Name" in lines[1] and lines[2].startswith("┡")
+    assert "file 17" in lines[3]
+    # Without it the header scrolls away.
+    record = Pager(table).headless("pagedown pagedown q", width=30, height=12)
+    assert "Name" not in record.last_frame
+    # A number of lines, or nothing.
+    text = Text("\n".join(f"line {i}" for i in range(1, 51)))
+    record = Pager(text, sticky_header=2).headless("j j j q", width=30, height=6)
+    assert record.last_frame.splitlines()[:3] == ["line 1", "line 2", "line 6"]
+    assert Pager(text, sticky_header=2).sticky_header == 2
+    assert Pager(text).sticky_header is None
+    with pytest.raises(ValueError):
+        Pager(text, sticky_header="header")
+    with pytest.raises(TypeError):
+        Pager(text, sticky_header=1.5)
+
+
+def test_pager_shows_sticky_lines_a_short_page_cannot_hold():
+    # Six sticky lines on a page of five: the first scroll away, the last
+    # four stay, and every line is shown on the way down.
+    text = Text("\n".join(f"line {i}" for i in range(1, 41)))
+    record = Pager(text, sticky_header=6).headless("j " * 45 + "q", width=30, height=6)
+    shown = {line for frame in record.frames for line in frame.splitlines()}
+    assert {f"line {i}" for i in range(1, 41)} <= shown
+    assert record.last_frame.splitlines()[:5] == ["line 3", "line 4", "line 5", "line 6", "line 40"]
+    with pytest.raises(ValueError, match="at least 0"):
+        Pager(text, sticky_header=-1)
+
+
 # ---------------------------------------------------------------------------
 # Python components
 
@@ -909,3 +948,192 @@ def test_scripts_click_and_python_components_see_mouse_events():
         ("mouse", "scroll_down", 1, 0),
     ]
     assert len(Script().drag((0, 0), (3, 0))) == 5
+
+
+# ---------------------------------------------------------------------------
+# Reorder (#720) and the date and time pickers (#719)
+
+
+def test_reorder_returns_the_values_in_their_new_order():
+    from rs_rich.interact import Reorder
+
+    reorder = Reorder("Order", ["a", "b", "c", Item(4, "d")])
+    assert reorder.values == ["a", "b", "c", 4]
+    assert reorder.headless("down alt+down enter").value == ["a", "c", "b", 4]
+    # K and J, and Space to grab, work in any terminal; Esc puts it back.
+    assert reorder.headless("end K K enter").value == ["a", 4, "b", "c"]
+    assert reorder.headless("space down down space enter").value == ["b", "c", "a", 4]
+    assert reorder.headless("space end escape enter").value == ["a", "b", "c", 4]
+    record = reorder.headless("alt+down escape")
+    assert record.outcome.kind == "cancelled"
+    # Without a terminal: numbers, the rest keeping their order.
+    assert degrade(reorder, ["3 1"]).value == ["c", "a", "b", 4]
+    assert degrade(reorder, [""]).value == ["a", "b", "c", 4]
+    assert degrade(reorder, fallback="default").value == ["a", "b", "c", 4]
+    with pytest.raises(NotInteractive):
+        degrade(reorder, ["9"])
+    with pytest.raises(ValueError):
+        Reorder("Order", ["a"], height=0)
+
+
+def test_date_picker_moves_within_its_range():
+    import datetime
+
+    from rs_rich.interact import DatePicker
+
+    day = datetime.date(2026, 10, 17)
+    picker = DatePicker("Due", value=day, min=datetime.date(2026, 10, 10), max=datetime.date(2026, 10, 20))
+    assert picker.min == datetime.date(2026, 10, 10)
+    assert picker.headless("right enter").value == datetime.date(2026, 10, 18)
+    # A week on is past the end: the grid stops there.
+    assert picker.headless("down enter").value == datetime.date(2026, 10, 20)
+    record = picker.headless("escape")
+    assert "16[17]18" in record.frames[-2]
+    assert "from 2026-10-10 to 2026-10-20" in record.frames[-2]
+    assert degrade(picker, ["2026-10-12"]).value == datetime.date(2026, 10, 12)
+    with pytest.raises(NotInteractive, match="the latest is 2026-10-20"):
+        degrade(picker, ["2026-10-21"])
+    weekdays = DatePicker(value=day, validate=lambda date: None if date.weekday() < 5 else "not on a weekend")
+    record = weekdays.headless("enter left enter")
+    assert record.value == datetime.date(2026, 10, 16)
+    assert any("not on a weekend" in frame for frame in record.frames)
+    with pytest.raises(TypeError):
+        DatePicker(value="2026-10-17")
+    with pytest.raises(ValueError):
+        DatePicker(min=datetime.date(2026, 10, 2), max=datetime.date(2026, 10, 1))
+
+
+def test_time_and_date_time_pickers():
+    import datetime
+
+    from rs_rich.interact import DateTimePicker, TimePicker
+
+    picker = TimePicker("Start", value=datetime.time(9, 0))
+    assert picker.headless(Script().text("1430").keys("enter")).value == datetime.time(14, 30)
+    assert degrade(picker, ["2:30 pm"]).value == datetime.time(14, 30)
+    limited = TimePicker("Start", value=datetime.time(8, 0), min=datetime.time(9, 0), twelve_hour=True)
+    record = limited.headless("enter up enter")
+    assert record.value == datetime.time(9, 0)
+    assert any("the earliest is 9:00 AM" in frame for frame in record.frames)
+    start = datetime.datetime(2026, 10, 17, 9, 0)
+    picker = DateTimePicker("Meeting", value=start, seconds=True)
+    assert picker.headless(Script().keys("right tab").text("14").keys("enter")).value == datetime.datetime(2026, 10, 18, 14, 0)
+    assert degrade(picker, ["2026-10-17T08:30:15"]).value == datetime.datetime(2026, 10, 17, 8, 30, 15)
+    assert degrade(DateTimePicker(default=start), fallback="default").value == start
+
+
+def test_pickers_stay_within_pythons_dates():
+    import datetime
+
+    from rs_rich.interact import DatePicker, DateTimePicker
+
+    assert DatePicker(value=datetime.date.max).headless("right enter").value == datetime.date.max
+    assert DatePicker(value=datetime.date.max).headless("} enter").value == datetime.date.max
+    assert DatePicker(value=datetime.date.min).headless("left enter").value == datetime.date.min
+    last = datetime.datetime(9999, 12, 31, 9, 0)
+    assert DateTimePicker(value=last).headless("down enter").value == last
+    # A year is four digits, 0001 to 9999.
+    with pytest.raises(NotInteractive):
+        degrade(DatePicker(), ["0000-01-01"])
+
+
+def test_pickers_take_naive_values_and_drop_microseconds():
+    import datetime
+
+    from rs_rich.interact import DateTimePicker, TimePicker
+
+    plus_five = datetime.timezone(datetime.timedelta(hours=5))
+    with pytest.raises(TypeError, match="time zone"):
+        DateTimePicker(value=datetime.datetime(2026, 10, 17, 9, 0, tzinfo=plus_five))
+    with pytest.raises(TypeError, match="time zone"):
+        TimePicker(min=datetime.time(9, 0, tzinfo=plus_five))
+    assert TimePicker(value=datetime.time(9, 0, 5, 999_999), seconds=True).value == datetime.time(9, 0, 5)
+
+
+def test_a_picker_default_is_one_it_would_take():
+    import datetime
+
+    from rs_rich.interact import DatePicker, TimePicker
+
+    with pytest.raises(ValueError, match="default is outside min and max"):
+        DatePicker(default=datetime.date(2026, 1, 1), min=datetime.date(2026, 6, 1))
+    # Without seconds the picker works to the minute: 09:00:30 is 09:00,
+    # before the earliest.
+    with pytest.raises(ValueError, match="default is outside min and max"):
+        TimePicker(default=datetime.time(9, 0, 30), min=datetime.time(9, 0, 30))
+    picker = TimePicker(default=datetime.time(9, 0, 30), min=datetime.time(9, 0, 30), seconds=True)
+    assert degrade(picker, [""]).value == datetime.time(9, 0, 30)
+    never = DatePicker(default=datetime.date(2026, 10, 17), validate=lambda date: "never")
+    with pytest.raises(NotInteractive, match="never"):
+        degrade(never, [""])
+    with pytest.raises(NotInteractive):
+        degrade(never, fallback="default")
+
+
+def test_a_picker_starts_at_its_value_and_answers_what_it_shows():
+    import datetime
+    import inspect
+
+    from rs_rich.interact import DatePicker, DateTimePicker, TimePicker
+
+    picker = DatePicker(value=datetime.date(2026, 10, 1), default=datetime.date(2026, 10, 17))
+    assert picker.headless("enter").value == datetime.date(2026, 10, 1)
+    assert degrade(picker, [""]).value == datetime.date(2026, 10, 17)
+    # Without seconds, to the minute.
+    picker = TimePicker(value=datetime.time(14, 30, 45), max=datetime.time(14, 30))
+    record = picker.headless("enter")
+    assert record.value == datetime.time(14, 30)
+    assert not any("the latest is" in frame for frame in record.frames)
+    # Python 3.9's inspect reads no text signature from a native class.
+    if sys.version_info >= (3, 10):
+        for picker, prompt in [(DatePicker, "Date"), (TimePicker, "Time"), (DateTimePicker, "Date and time")]:
+            assert inspect.signature(picker).parameters["prompt"].default == prompt
+
+
+# ---------------------------------------------------------------------------
+# ApprovalQueue (#471) and Jump (#484)
+
+
+def test_approval_queue_reports_a_decision_for_every_item():
+    from rs_rich.interact import ApprovalQueue
+
+    queue = ApprovalQueue("Deploys", ["api", Item({"id": 2}, "web"), "db"], require_reason=True)
+    assert queue.values == ["api", {"id": 2}, "db"]
+    record = queue.headless(Script().keys("a r").text("flaky").keys("enter enter"))
+    decisions = record.value
+    assert [d["decision"] for d in decisions] == ["approved", "rejected", "pending"]
+    assert decisions[1] == {"index": 1, "value": {"id": 2}, "label": "web", "decision": "rejected", "reason": "flaky"}
+    assert "0/3 decided" in record.frames[0]
+    # Every pending item at once, then Esc cancels.
+    assert [d["decision"] for d in queue.headless("ctrl+a s enter").value] == ["skipped"] * 3
+    assert queue.headless("a escape").outcome.kind == "cancelled"
+    # Without a terminal: item by item, a reason after a colon.
+    record = degrade(queue, ["a", "r: no", "q"])
+    assert [(d["decision"], d["reason"]) for d in record.value] == [
+        ("approved", None),
+        ("rejected", "no"),
+        ("pending", None),
+    ]
+    assert all(d["decision"] == "pending" for d in degrade(queue, fallback="default").value)
+    with pytest.raises(ValueError):
+        ApprovalQueue("Deploys", ["a"], height=0)
+
+
+def test_jump_searches_sources_and_names_the_one_picked():
+    from rs_rich.interact import Jump, JumpSource
+
+    files = JumpSource("files", "Files", ["src/main.rs", "README.md"])
+    commands = JumpSource("commands", "Commands", [Item("cargo test", "Run the tests")], prefix=">")
+    assert (commands.prefix, len(files)) == (">", 2)
+    jump = Jump([files, commands])
+    record = jump.headless(Script().text(">te").keys("enter"))
+    assert record.value == {"source": "commands", "index": 0, "label": "Run the tests", "value": "cargo test"}
+    record = jump.headless("down enter")
+    assert record.value["value"] == "README.md"
+    assert "Files" in record.frames[0] and "Commands >" in record.frames[0]
+    assert degrade(jump, ["readme"]).value["value"] == "README.md"
+    assert degrade(Jump([files], query="main"), fallback="default").value["value"] == "src/main.rs"
+    with pytest.raises(TypeError):
+        Jump(["files"])
+    with pytest.raises(ValueError):
+        JumpSource("a", "A", [], prefix="ab")

@@ -362,6 +362,42 @@ impl PyNode {
         Ok(slf)
     }
 
+    /// In error while `condition()` holds: the theme's error look, a
+    /// stylesheet's `:error` (or `:invalid`), and `invalid` for assistive
+    /// technology (ARIA's `aria-invalid`).
+    fn error_when<'py>(
+        slf: Bound<'py, Self>,
+        condition: &Bound<'py, PyAny>,
+    ) -> PyResult<Bound<'py, Self>> {
+        let condition = self::condition(Callback::checked(condition, "the condition")?);
+        slf.borrow().map(|n| n.error_when(condition))?;
+        Ok(slf)
+    }
+
+    /// Hidden while the app is narrower than `columns` cells.
+    fn hide_below(slf: Bound<'_, Self>, columns: u16) -> PyResult<Bound<'_, Self>> {
+        slf.borrow().map(|n| n.hide_below(columns))?;
+        Ok(slf)
+    }
+
+    /// Shown only while the app is narrower than `columns` cells.
+    fn show_below(slf: Bound<'_, Self>, columns: u16) -> PyResult<Bound<'_, Self>> {
+        slf.borrow().map(|n| n.show_below(columns))?;
+        Ok(slf)
+    }
+
+    /// Hidden while the app is shorter than `rows` cells.
+    fn hide_below_height(slf: Bound<'_, Self>, rows: u16) -> PyResult<Bound<'_, Self>> {
+        slf.borrow().map(|n| n.hide_below_height(rows))?;
+        Ok(slf)
+    }
+
+    /// Shown only while the app is shorter than `rows` cells.
+    fn show_below_height(slf: Bound<'_, Self>, rows: u16) -> PyResult<Bound<'_, Self>> {
+        slf.borrow().map(|n| n.show_below_height(rows))?;
+        Ok(slf)
+    }
+
     /// Size it along its parent's axis (a `Size`, an int or a str).
     fn size<'py>(slf: Bound<'py, Self>, size: &Bound<'py, PyAny>) -> PyResult<Bound<'py, Self>> {
         let size = size_arg(size)?;
@@ -576,6 +612,31 @@ impl PyNode {
         Ok(slf)
     }
 
+    /// For a `list`: let the user reorder its items (Alt+Up/Down,
+    /// Ctrl+Up/Down, `K`/`J`, Space to grab, or a drag).
+    /// `handler((from, to), cx)` is called for each move, to make it in the
+    /// app's own items; the selection follows. On any other node it does
+    /// nothing.
+    fn reorderable<'py>(
+        slf: Bound<'py, Self>,
+        handler: &Bound<'py, PyAny>,
+    ) -> PyResult<Bound<'py, Self>> {
+        let handler = Callback::checked(handler, "the reorder handler")?;
+        slf.borrow().map(|n| {
+            n.reorderable(move |step: rich_intuituive::widgets::Move, cx| {
+                let value = Python::attach(|py| {
+                    PyTuple::new(py, [step.from, step.to])
+                        .map(|pair| PyValue(pair.into_any().unbind()))
+                });
+                match value {
+                    Ok(value) => call_with_ctx(&handler, Some(value), cx),
+                    Err(error) => Python::attach(|py| crate::renderable::report_error(py, error)),
+                }
+            })
+        })?;
+        Ok(slf)
+    }
+
     /// Run `handler(cx)` when one of `keys` (space-separated names) is
     /// pressed while the focus is on this node or inside it.
     fn on_key<'py>(
@@ -672,12 +733,388 @@ impl PyNode {
         Ok(slf)
     }
 
+    /// For a panel: where its own title sits on the top edge, `"left"`
+    /// (the default), `"center"` or `"right"`.
+    fn title_align<'py>(slf: Bound<'py, Self>, align: &str) -> PyResult<Bound<'py, Self>> {
+        let align = title_align_arg(align)?;
+        slf.borrow().map(|n| n.title_align(align))?;
+        Ok(slf)
+    }
+
+    /// For a panel: another title, markup, at the right of the top edge.
+    fn title_right<'py>(slf: Bound<'py, Self>, markup: &str) -> PyResult<Bound<'py, Self>> {
+        slf.borrow().map(|n| n.title_right(markup))?;
+        Ok(slf)
+    }
+
+    /// For a panel: a title, markup, at the left of the bottom edge.
+    fn title_bottom<'py>(slf: Bound<'py, Self>, markup: &str) -> PyResult<Bound<'py, Self>> {
+        slf.borrow().map(|n| n.title_bottom(markup))?;
+        Ok(slf)
+    }
+
+    /// For a panel: a title, markup, on `edge` (an `Edge` or its name),
+    /// placed by `align` (`"left"`, `"center"` or `"right"`).
+    fn add_title<'py>(
+        slf: Bound<'py, Self>,
+        edge: &Bound<'py, PyAny>,
+        align: &str,
+        markup: &str,
+    ) -> PyResult<Bound<'py, Self>> {
+        let (edge, align) = (super::edge_arg(edge)?, title_align_arg(align)?);
+        slf.borrow().map(|n| n.add_title(edge, align, markup))?;
+        Ok(slf)
+    }
+
+    /// For a panel: its kind of box (a `Border`, its name, or eight
+    /// glyphs); for a container with collapsed borders, its lines' kind.
+    fn border<'py>(
+        slf: Bound<'py, Self>,
+        border: &Bound<'py, PyAny>,
+    ) -> PyResult<Bound<'py, Self>> {
+        let border = super::border_arg(border)?;
+        slf.borrow().map(|n| n.border(border))?;
+        Ok(slf)
+    }
+
+    /// For a panel: the sides of its box (`Sides`, or `"top left"`).
+    fn borders<'py>(
+        slf: Bound<'py, Self>,
+        sides: &Bound<'py, PyAny>,
+    ) -> PyResult<Bound<'py, Self>> {
+        let sides = super::sides_arg(sides)?;
+        slf.borrow().map(|n| n.borders(sides))?;
+        Ok(slf)
+    }
+
+    /// For a panel or a container with collapsed borders: the border's
+    /// style while the focus is elsewhere.
+    fn border_style<'py>(slf: Bound<'py, Self>, style: &str) -> PyResult<Bound<'py, Self>> {
+        slf.borrow().map(|n| n.border_style(style))?;
+        Ok(slf)
+    }
+
+    /// For a panel: its titles' style, over the border's colour.
+    fn title_style<'py>(slf: Bound<'py, Self>, style: &str) -> PyResult<Bound<'py, Self>> {
+        slf.borrow().map(|n| n.title_style(style))?;
+        Ok(slf)
+    }
+
+    /// For a panel: a shadow (a `Shadow`, its name, or one character).
+    fn shadow<'py>(
+        slf: Bound<'py, Self>,
+        shadow: &Bound<'py, PyAny>,
+    ) -> PyResult<Bound<'py, Self>> {
+        let shadow = super::shadow_arg(shadow)?;
+        slf.borrow().map(|n| n.shadow(shadow))?;
+        Ok(slf)
+    }
+
+    /// For a column, row or grid of panels: one frame for them all,
+    /// neighbours sharing their edges.
+    fn collapse_borders(slf: Bound<'_, Self>) -> PyResult<Bound<'_, Self>> {
+        slf.borrow().map(Node::collapse_borders)?;
+        Ok(slf)
+    }
+
+    /// For a container with collapsed borders: the kind of the lines round
+    /// the child with the focus.
+    fn focus_border<'py>(
+        slf: Bound<'py, Self>,
+        border: &Bound<'py, PyAny>,
+    ) -> PyResult<Bound<'py, Self>> {
+        let border = super::border_arg(border)?;
+        slf.borrow().map(|n| n.focus_border(border))?;
+        Ok(slf)
+    }
+
+    /// Draw it in `style` (a style or a theme style's name), under what it
+    /// and its children draw, filling its rectangle.
+    fn style<'py>(slf: Bound<'py, Self>, style: &str) -> PyResult<Bound<'py, Self>> {
+        slf.borrow().map(|n| n.style(style))?;
+        Ok(slf)
+    }
+
+    /// `style` with only a background colour (or a theme style's).
+    fn bg<'py>(slf: Bound<'py, Self>, color: &str) -> PyResult<Bound<'py, Self>> {
+        slf.borrow().map(|n| n.bg(color))?;
+        Ok(slf)
+    }
+
+    /// `style` with only a foreground colour (or a theme style's).
+    fn fg<'py>(slf: Bound<'py, Self>, color: &str) -> PyResult<Bound<'py, Self>> {
+        slf.borrow().map(|n| n.fg(color))?;
+        Ok(slf)
+    }
+
+    /// For a text or label: how its lines sit (a `TextAlign` or its name).
+    fn text_align<'py>(
+        slf: Bound<'py, Self>,
+        align: &Bound<'py, PyAny>,
+    ) -> PyResult<Bound<'py, Self>> {
+        let align = super::text_align_arg(align)?;
+        slf.borrow().map(|n| n.text_align(align))?;
+        Ok(slf)
+    }
+
+    /// For a text or label: cut lines at the edge rather than wrap them.
+    fn no_wrap(slf: Bound<'_, Self>) -> PyResult<Bound<'_, Self>> {
+        slf.borrow().map(Node::no_wrap)?;
+        Ok(slf)
+    }
+
+    /// For a text or label: what happens to what does not fit a line (an
+    /// `Overflow` or its name).
+    fn overflow<'py>(
+        slf: Bound<'py, Self>,
+        overflow: &Bound<'py, PyAny>,
+    ) -> PyResult<Bound<'py, Self>> {
+        let overflow = super::overflow_arg(overflow)?;
+        slf.borrow().map(|n| n.overflow(overflow))?;
+        Ok(slf)
+    }
+
+    /// `a / b` of the parent's axis.
+    fn ratio(slf: Bound<'_, Self>, a: u32, b: u32) -> PyResult<Bound<'_, Self>> {
+        slf.borrow().map(|n| n.ratio(a, b))?;
+        Ok(slf)
+    }
+
+    /// In `layers`: keep `top`, `right`, `bottom` and `left` cells from the
+    /// layers' edges.
+    fn inset(
+        slf: Bound<'_, Self>,
+        top: u16,
+        right: u16,
+        bottom: u16,
+        left: u16,
+    ) -> PyResult<Bound<'_, Self>> {
+        slf.borrow().map(|n| n.inset(top, right, bottom, left))?;
+        Ok(slf)
+    }
+
+    /// In `layers`: as big as its content, placed by `across` and `down`
+    /// (`"flex-start"`, `"center"`, `"flex-end"` or `"stretch"`).
+    fn place<'py>(slf: Bound<'py, Self>, across: &str, down: &str) -> PyResult<Bound<'py, Self>> {
+        let (across, down) = (align_arg(across)?, align_arg(down)?);
+        slf.borrow().map(|n| n.place(across, down))?;
+        Ok(slf)
+    }
+
+    /// Theme styles for it and everything inside it: a dict, or pairs, of
+    /// names and styles (`{"selected": "bold yellow on #303030"}`).
+    fn theme_styles<'py>(
+        slf: Bound<'py, Self>,
+        styles: &Bound<'py, PyAny>,
+    ) -> PyResult<Bound<'py, Self>> {
+        let styles: Vec<(String, String)> = match styles.cast::<pyo3::types::PyDict>() {
+            Ok(dict) => dict
+                .iter()
+                .map(|(name, style)| Ok((name.extract()?, style.extract()?)))
+                .collect::<PyResult<_>>()?,
+            Err(_) => styles
+                .try_iter()?
+                .map(|pair| pair?.extract())
+                .collect::<PyResult<_>>()?,
+        };
+        slf.borrow().map(|n| n.theme_styles(styles))?;
+        Ok(slf)
+    }
+
+    /// For a `list`: draw `markup` (`"[red]>>[/] "`) before the selected
+    /// item; the others get blank cells in its column.
+    fn symbol<'py>(slf: Bound<'py, Self>, markup: &str) -> PyResult<Bound<'py, Self>> {
+        slf.borrow().map(|n| n.symbol(markup))?;
+        Ok(slf)
+    }
+
+    /// For a `list`: the symbol on every line of a multi-line item.
+    fn repeat_symbol(slf: Bound<'_, Self>) -> PyResult<Bound<'_, Self>> {
+        slf.borrow().map(Node::repeat_symbol)?;
+        Ok(slf)
+    }
+
+    /// For a `list`: when the symbol keeps its column: `"when_selected"`
+    /// (the default), `"always"` or `"never"`.
+    fn highlight_spacing<'py>(slf: Bound<'py, Self>, spacing: &str) -> PyResult<Bound<'py, Self>> {
+        let spacing = spacing_arg(spacing)?;
+        slf.borrow().map(|n| n.highlight_spacing(spacing))?;
+        Ok(slf)
+    }
+
+    /// For a `list`: `"top_to_bottom"` (the default) or `"bottom_to_top"`.
+    fn direction<'py>(slf: Bound<'py, Self>, direction: &str) -> PyResult<Bound<'py, Self>> {
+        use intuituive::widgets::ListDirection;
+        let direction = match direction {
+            "top_to_bottom" => ListDirection::TopToBottom,
+            "bottom_to_top" => ListDirection::BottomToTop,
+            other => {
+                return Err(PyValueError::new_err(format!(
+                    "{other:?}: expected 'top_to_bottom' or 'bottom_to_top'"
+                )))
+            }
+        };
+        slf.borrow().map(|n| n.direction(direction))?;
+        Ok(slf)
+    }
+
+    /// For a `list`: keep `items` items in view either side of the
+    /// selected one.
+    fn scroll_padding(slf: Bound<'_, Self>, items: usize) -> PyResult<Bound<'_, Self>> {
+        slf.borrow().map(|n| n.scroll_padding(items))?;
+        Ok(slf)
+    }
+
+    /// For a `list`: items keep their lines and wrap.
+    fn multiline(slf: Bound<'_, Self>) -> PyResult<Bound<'_, Self>> {
+        slf.borrow().map(Node::multiline)?;
+        Ok(slf)
+    }
+
+    /// For a `list`: `style(i)` is a style (or theme name) for item `i`'s
+    /// whole rows, or `None`.
+    fn row_style<'py>(
+        slf: Bound<'py, Self>,
+        style: &Bound<'py, PyAny>,
+    ) -> PyResult<Bound<'py, Self>> {
+        let style = row_style(style)?;
+        slf.borrow().map(|n| n.row_style(style))?;
+        Ok(slf)
+    }
+
+    /// For a `list`: the first item in view, in the signal `first`.
+    fn offset<'py>(slf: Bound<'py, Self>, first: &Bound<'py, PyAny>) -> PyResult<Bound<'py, Self>> {
+        let first = signal_arg(first, "a list's offset")?
+            .borrow()
+            .usize(first.py(), "a list's offset")?;
+        slf.borrow().map(|n| n.offset(first))?;
+        Ok(slf)
+    }
+
+    /// A scrollbar drawn as `bar` (a `Scrollbar`) says, on a `scroll`, a
+    /// `list`, a table, a tree, a text area or a log's view.
+    fn scrollbar<'py>(
+        slf: Bound<'py, Self>,
+        bar: &Bound<'py, super::widgets::PyScrollbar>,
+    ) -> PyResult<Bound<'py, Self>> {
+        let bar = bar.get().0.clone();
+        slf.borrow().map(|n| n.scrollbar(bar))?;
+        Ok(slf)
+    }
+
+    /// For `tabs`: `markup` between the titles instead of a line.
+    fn divider<'py>(slf: Bound<'py, Self>, markup: &str) -> PyResult<Bound<'py, Self>> {
+        slf.borrow().map(|n| n.divider(markup))?;
+        Ok(slf)
+    }
+
+    /// For `tabs`: the markup either side of each title.
+    fn tab_padding<'py>(
+        slf: Bound<'py, Self>,
+        left: &str,
+        right: &str,
+    ) -> PyResult<Bound<'py, Self>> {
+        slf.borrow().map(|n| n.tab_padding(left, right))?;
+        Ok(slf)
+    }
+
+    /// For `tabs`: where the titles sit: `"flex-start"`, `"center"` or
+    /// `"flex-end"`.
+    fn titles_align<'py>(slf: Bound<'py, Self>, align: &str) -> PyResult<Bound<'py, Self>> {
+        let align = align_arg(align)?;
+        slf.borrow().map(|n| n.titles_align(align))?;
+        Ok(slf)
+    }
+
+    /// For an `input` or a `text_area`: dimmed text while it is empty.
+    fn placeholder<'py>(slf: Bound<'py, Self>, text: &str) -> PyResult<Bound<'py, Self>> {
+        slf.borrow().map(|n| n.placeholder(text))?;
+        Ok(slf)
+    }
+
+    /// For an `input` or a `text_area`: the caret moves and text is
+    /// selected and copied, but not edited.
+    fn read_only(slf: Bound<'_, Self>) -> PyResult<Bound<'_, Self>> {
+        slf.borrow().map(Node::read_only)?;
+        Ok(slf)
+    }
+
+    /// For an `input` or a `text_area`: show each character as `mask`.
+    fn mask(slf: Bound<'_, Self>, mask: char) -> PyResult<Bound<'_, Self>> {
+        slf.borrow().map(|n| n.mask(mask))?;
+        Ok(slf)
+    }
+
+    /// For an `input` or a `text_area`: at most `chars` characters.
+    fn max_length(slf: Bound<'_, Self>, chars: usize) -> PyResult<Bound<'_, Self>> {
+        slf.borrow().map(|n| n.max_length(chars))?;
+        Ok(slf)
+    }
+
+    /// For an `input`: `handler(value, cx)` on Enter, which it uses.
+    fn on_submit<'py>(
+        slf: Bound<'py, Self>,
+        handler: &Bound<'py, PyAny>,
+    ) -> PyResult<Bound<'py, Self>> {
+        let handler = Callback::checked(handler, "the submit handler")?;
+        slf.borrow().map(|n| {
+            n.on_submit(move |value, cx| {
+                let value =
+                    Python::attach(|py| PyValue(PyString::new(py, value).into_any().unbind()));
+                call_with_ctx(&handler, Some(value), cx)
+            })
+        })?;
+        Ok(slf)
+    }
+
+    /// For a `number_input`: step by `by`.
+    fn step(slf: Bound<'_, Self>, by: i64) -> PyResult<Bound<'_, Self>> {
+        slf.borrow().map(|n| n.step(by))?;
+        Ok(slf)
+    }
+
     fn __repr__(&self) -> String {
         match &*self.node.borrow() {
             Some(_) => format!("<Node {}>", self.id),
             None => format!("<Node {} (in a tree)>", self.id),
         }
     }
+}
+
+/// A highlight symbol's spacing, by name.
+pub(crate) fn spacing_arg(value: &str) -> PyResult<intuituive::widgets::HighlightSpacing> {
+    use intuituive::widgets::HighlightSpacing;
+    Ok(match value {
+        "when_selected" => HighlightSpacing::WhenSelected,
+        "always" => HighlightSpacing::Always,
+        "never" => HighlightSpacing::Never,
+        other => {
+            return Err(PyValueError::new_err(format!(
+                "{other:?}: expected 'when_selected', 'always' or 'never'"
+            )))
+        }
+    })
+}
+
+/// A row style function: `style(i)` is a style or `None`.
+pub(crate) fn row_style(
+    style: &Bound<'_, PyAny>,
+) -> PyResult<impl Fn(usize) -> Option<String> + 'static> {
+    let style = Callback::checked(style, "the row style")?;
+    Ok(move |i: usize| {
+        style
+            .call(
+                |py| PyTuple::new(py, [i]),
+                |value| {
+                    if value.is_none() {
+                        Ok(None)
+                    } else {
+                        Ok(Some(value.str()?.to_cow()?.into_owned()))
+                    }
+                },
+            )
+            .flatten()
+    })
 }
 
 /// Put `node` in `slf` (a wrapper that has a new identity).
@@ -1077,6 +1514,45 @@ fn tui_list(items: &Bound<'_, PyAny>, selected: &Bound<'_, PyAny>) -> PyResult<P
     Ok(PyNode::new(intuituive::list(items, selected)))
 }
 
+/// `list_optional(items, selected)`: a `list` whose selection, in the
+/// signal `selected`, may be `None`: no highlight, and Down selects the
+/// first item.
+#[pyfunction]
+fn tui_list_optional(items: &Bound<'_, PyAny>, selected: &Bound<'_, PyAny>) -> PyResult<PyNode> {
+    let py = items.py();
+    let items = string_source(items, "list's items")?;
+    let selected = signal_arg(selected, "list's selected")?
+        .borrow()
+        .maybe(py, "a list's selection")?;
+    Ok(PyNode::new(intuituive::list_optional(items, selected)))
+}
+
+/// `input(text)`: a one-line text box on the str signal `text`, both ways.
+/// Enter goes to `.on_submit(handler)`, or on to the app.
+#[pyfunction]
+fn tui_input(text: &Bound<'_, PyAny>) -> PyResult<PyNode> {
+    let text = signal_arg(text, "input's text")?
+        .borrow()
+        .string(text.py(), "an input's text")?;
+    Ok(PyNode::new(intuituive::input(text)))
+}
+
+/// `number_input(value, min, max)`: a whole number in the int signal
+/// `value`, kept from `min` to `max` (both included). Up/Down step it,
+/// PgUp/PgDn by ten steps, and digits type it.
+#[pyfunction]
+fn tui_number_input(value: &Bound<'_, PyAny>, min: i64, max: i64) -> PyResult<PyNode> {
+    if min > max {
+        return Err(PyValueError::new_err(format!(
+            "number_input's min ({min}) is after its max ({max})"
+        )));
+    }
+    let value = signal_arg(value, "number_input's value")?
+        .borrow()
+        .i64(value.py(), "a number input's value")?;
+    Ok(PyNode::new(intuituive::number_input(value, min..=max)))
+}
+
 /// `scroll(child)`: a viewport onto `child`, scrolled with the keys, the
 /// wheel and a scrollbar.
 #[pyfunction]
@@ -1190,6 +1666,33 @@ fn tui_widget(widget: &Bound<'_, PyAny>) -> PyResult<PyNode> {
     super::widget::node_of(widget).map(PyNode::new)
 }
 
+/// `layers(children)`: children stacked on one rectangle, later ones on
+/// top; each takes it all, less its `inset`, or its content's size where
+/// `place` puts it.
+#[pyfunction]
+fn tui_layers(children: &Bound<'_, PyAny>) -> PyResult<PyNode> {
+    Ok(PyNode::new(intuituive::layers(take_nodes(children)?)))
+}
+
+/// `effect(child, f)`: `child`, with `f(canvas, cx)` run over what it drew
+/// (read cells with `canvas.cell(x, y)`, write them with
+/// `canvas.set_cell`), whenever it or anything inside it drew.
+#[pyfunction]
+fn tui_effect(child: &Bound<'_, PyAny>, f: &Bound<'_, PyAny>) -> PyResult<PyNode> {
+    let f = Callback::checked(f, "effect's function")?;
+    let child = take_node(child)?;
+    Ok(PyNode::new(intuituive::effect(child, move |canvas, cx| {
+        super::widget::call_with_canvas(&f, cx, canvas)
+    })))
+}
+
+/// `fill(symbol, style="")`: a node that fills its area with `symbol`.
+#[pyfunction]
+#[pyo3(signature = (symbol, style=""))]
+fn tui_fill(symbol: &str, style: &str) -> PyNode {
+    PyNode::new(intuituive::fill(symbol, style))
+}
+
 pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     let py = m.py();
     m.add("TuiNode", py.get_type::<PyNode>())?;
@@ -1204,6 +1707,9 @@ pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(tui_each, m)?)?;
     m.add_function(wrap_pyfunction!(tui_switch, m)?)?;
     m.add_function(wrap_pyfunction!(tui_list, m)?)?;
+    m.add_function(wrap_pyfunction!(tui_list_optional, m)?)?;
+    m.add_function(wrap_pyfunction!(tui_input, m)?)?;
+    m.add_function(wrap_pyfunction!(tui_number_input, m)?)?;
     m.add_function(wrap_pyfunction!(tui_scroll, m)?)?;
     m.add_function(wrap_pyfunction!(tui_scroll_with, m)?)?;
     m.add_function(wrap_pyfunction!(tui_scroll_x, m)?)?;
@@ -1212,11 +1718,29 @@ pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(tui_component, m)?)?;
     m.add_function(wrap_pyfunction!(tui_repeating, m)?)?;
     m.add_function(wrap_pyfunction!(tui_widget, m)?)?;
+    m.add_function(wrap_pyfunction!(tui_layers, m)?)?;
+    m.add_function(wrap_pyfunction!(tui_effect, m)?)?;
+    m.add_function(wrap_pyfunction!(tui_fill, m)?)?;
     Ok(())
 }
 
+/// A title's place on its edge: `"left"`, `"center"` or `"right"` (and
+/// the flexbox names).
+fn title_align_arg(value: &str) -> PyResult<intuituive::Align> {
+    Ok(match value {
+        "left" | "start" | "flex-start" => intuituive::Align::Start,
+        "center" => intuituive::Align::Center,
+        "right" | "end" | "flex-end" => intuituive::Align::End,
+        _ => {
+            return Err(pyo3::exceptions::PyValueError::new_err(format!(
+                "{value:?}: expected 'left', 'center' or 'right'"
+            )))
+        }
+    })
+}
+
 /// An `align_items` or `align_self` value, by its CSS name.
-fn align_arg(value: &str) -> PyResult<intuituive::Align> {
+pub(crate) fn align_arg(value: &str) -> PyResult<intuituive::Align> {
     Ok(match value {
         "start" | "flex-start" => intuituive::Align::Start,
         "center" => intuituive::Align::Center,
@@ -1231,7 +1755,7 @@ fn align_arg(value: &str) -> PyResult<intuituive::Align> {
 }
 
 /// A `justify` value, by its CSS name.
-fn justify_arg(value: &str) -> PyResult<intuituive::Justify> {
+pub(crate) fn justify_arg(value: &str) -> PyResult<intuituive::Justify> {
     Ok(match value {
         "start" | "flex-start" | "normal" => intuituive::Justify::Start,
         "center" => intuituive::Justify::Center,

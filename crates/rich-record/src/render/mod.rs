@@ -1,8 +1,10 @@
-//! Turning snapshots and timelines into files.
+//! Turning snapshots and timelines into files, and rendered output into
+//! PNG ([`png`]).
 
 pub mod cast;
 pub mod emoji;
 pub mod html;
+pub mod png;
 pub mod raster;
 pub mod svg;
 pub mod video;

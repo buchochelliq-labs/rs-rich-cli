@@ -1,0 +1,13 @@
+{
+  "tape": "docs/tapes/banner.tape",
+  "tape_fnv1a64": "050d09056776d6da",
+  "recorder": "rs-rich-record 0.0.7",
+  "rich": null,
+  "commit": "ea42bea72df7ac2b01b609d134682f9ecc7c59ef",
+  "screenshots": [
+    "gradient",
+    "vertical",
+    "fit-and-status"
+  ],
+  "note": "Every frame is real output of the program under test on a PTY."
+}

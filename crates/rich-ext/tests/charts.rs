@@ -8,8 +8,10 @@ use std::sync::Arc;
 use rich::cells::cell_len;
 use rich::{Cell, ColorSystem, Console, Live, Panel, Renderable, Table};
 use rich_ext::chart::{
-    Band, Bar, BarChart, BulletChart, Charset, Gauge, Heatmap, Histogram, KpiCard, LineChart,
-    Orientation, Series, SeriesKind, Sparkline, State, Status, StatusMatrix, Timeline, ValueFormat,
+    Axis, Band, Bar, BarChart, BarGroup, BulletChart, Canvas, Charset, Chart, Dataset, Direction,
+    FillGauge, Gauge, GraphType, Heatmap, Histogram, KpiCard, Labels, Levels, LineChart, LineGauge,
+    LineSet, MapResolution, Marker, Orientation, Series, SeriesKind, Sparkline, State, Status,
+    StatusMatrix, Timeline, ValueFormat,
 };
 
 fn plain(width: usize) -> Console {
@@ -737,7 +739,7 @@ fn default_height_fits_its_labels() {
 // ------------------------------------------------------------ properties
 
 fn every_chart() -> Vec<(&'static str, Box<dyn Renderable>)> {
-    [
+    let mut out: Vec<(&'static str, Box<dyn Renderable>)> = [
         Charset::Auto,
         Charset::Blocks,
         Charset::Braille,
@@ -745,7 +747,196 @@ fn every_chart() -> Vec<(&'static str, Box<dyn Renderable>)> {
     ]
     .into_iter()
     .flat_map(charts_for)
-    .collect()
+    .collect();
+    out.extend(ratatui_charts());
+    out
+}
+
+/// The charts laid out as ratatui's (0.0.19 gap batch C), with wide text,
+/// gaps and every option at once.
+fn ratatui_charts() -> Vec<(&'static str, Box<dyn Renderable>)> {
+    let wave: Vec<(f64, f64)> = (0..40)
+        .map(|i| (i as f64, (i as f64 / 5.0).sin() * 10.0))
+        .collect();
+    vec![
+        (
+            "fill-gauge",
+            Box::new(
+                FillGauge::new(0.42)
+                    .label("下载 42.00%")
+                    .style("magenta on black italic bold")
+                    .unicode(true)
+                    .height(3),
+            ),
+        ),
+        (
+            "line-gauge",
+            Box::new(
+                LineGauge::new(0.7)
+                    .label("Downloading: 70%")
+                    .line(LineSet::Thick)
+                    .symbols('▰', '▱'),
+            ),
+        ),
+        (
+            "area-chart",
+            Box::new(
+                Chart::new(vec![Dataset::new(wave.clone())
+                    .name("wave 波")
+                    .graph_type(GraphType::Area)
+                    .fill_to(-2.0)
+                    .marker(Marker::Octant)])
+                .x_axis(
+                    Axis::default()
+                        .bounds(0.0, 40.0)
+                        .labels(Labels::Markup(vec![
+                            "[b]0[/]".into(),
+                            "二十".into(),
+                            "[b]40[/]".into(),
+                        ]))
+                        .labels_align(rich::HorizontalAlign::Right),
+                )
+                .y_axis(
+                    Axis::default()
+                        .bounds(-10.0, 10.0)
+                        .labels(Labels::Auto(3))
+                        .labels_align(rich::HorizontalAlign::Center),
+                )
+                .height(6),
+            ),
+        ),
+        (
+            "map-canvas",
+            Box::new(
+                Canvas::new()
+                    .x_bounds(-180.0, 180.0)
+                    .y_bounds(-90.0, 90.0)
+                    .height(5)
+                    .marker(Marker::Sextant)
+                    .background("on grey11")
+                    .paint(|p| {
+                        p.map(MapResolution::Low, "green");
+                        p.marker(Marker::Quadrant);
+                        p.point(151.2, -33.9, "red");
+                        p.print(140.0, -40.0, "シドニー", "bold");
+                    }),
+            ),
+        ),
+        (
+            "tall-sparkline",
+            Box::new(
+                Sparkline::optional(
+                    (0..60).map(|i| (i % 7 != 3).then(|| (i as f64 / 4.0).cos() * 50.0)),
+                )
+                .rows(3)
+                .direction(Direction::RightToLeft)
+                .absent("░", "red")
+                .styles(vec![Some("green".into()); 30])
+                .levels(Levels::Three)
+                .min_max(true),
+            ),
+        ),
+        (
+            "grouped-bars",
+            Box::new(
+                BarChart::new()
+                    .group(
+                        BarGroup::new("一月 January")
+                            .bar(
+                                Bar::new("BITE", 8500.0)
+                                    .text("8.5M 百万")
+                                    .value_style("bold"),
+                            )
+                            .bar(Bar::new("TART", 6500.0).label_style("red")),
+                    )
+                    .group(BarGroup::new("Feb").bar(Bar::new("BITE", -900.0)))
+                    .thickness(2)
+                    .bar_gap(1)
+                    .group_gap(2)
+                    .values_inside(true),
+            ),
+        ),
+        (
+            "grouped-vertical",
+            Box::new(
+                BarChart::new()
+                    .group(
+                        BarGroup::new("Q1 第一")
+                            .bar(Bar::new("Mon", 76.0).text("76°"))
+                            .bar(Bar::new("Tue", -12.0).text("日本語")),
+                    )
+                    .group(BarGroup::new("Q2").bar(Bar::new("Wed", 30.0)))
+                    .orientation(Orientation::Vertical)
+                    .thickness(4)
+                    .bar_gap(2)
+                    .group_gap(3)
+                    .values_inside(true)
+                    .label_style("yellow")
+                    .value_style("black on green"),
+            ),
+        ),
+    ]
+}
+
+/// A chart, a canvas, a vertical bar chart, a sparkline and a fill gauge
+/// take the height they are given (C0); their own height wins.
+#[test]
+fn charts_fill_the_height_they_are_given() {
+    let console = plain(40);
+    let given = console.options().update_height(7);
+    let charts: Vec<(&str, Box<dyn Renderable>)> = vec![
+        (
+            "chart",
+            Box::new(
+                Chart::new(vec![Dataset::new([(0.0, 0.0), (1.0, 1.0)])])
+                    .x_axis(Axis::default().labels(Labels::Auto(2)))
+                    .y_axis(Axis::default().labels(Labels::Auto(2))),
+            ),
+        ),
+        ("canvas", Box::new(Canvas::new())),
+        (
+            "vertical bars",
+            Box::new(
+                BarChart::from_pairs([("a", 3.0), ("b", -1.0)]).orientation(Orientation::Vertical),
+            ),
+        ),
+        ("sparkline", Box::new(Sparkline::new(VALUES))),
+        ("fill gauge", Box::new(FillGauge::new(0.5))),
+    ];
+    for (name, chart) in &charts {
+        let lines = console.render_lines(chart.as_ref(), &given, false);
+        assert_eq!(lines.len(), 7, "{name}");
+        let drawn = lines.iter().filter(|l| !l.is_empty()).count();
+        assert_eq!(drawn, 7, "{name} draws every row");
+    }
+    // Without a height they keep their defaults: 15, 10, 8 rows of bars
+    // and their labels and values, one and one.
+    let heights: Vec<usize> = charts
+        .iter()
+        .map(|(_, chart)| console.render_export(chart.as_ref()).lines().count())
+        .collect();
+    assert_eq!(heights, vec![15, 10, 11, 1, 1]);
+    // Their own heights win.
+    let own: Vec<(&str, Box<dyn Renderable>)> = vec![
+        ("chart", Box::new(Chart::default().height(3))),
+        ("canvas", Box::new(Canvas::new().height(3))),
+        (
+            "vertical bars",
+            Box::new(
+                BarChart::from_pairs([("a", 3.0)])
+                    .orientation(Orientation::Vertical)
+                    .show_values(false)
+                    .bar_width(2),
+            ),
+        ),
+        ("sparkline", Box::new(Sparkline::new(VALUES).rows(3))),
+        ("fill gauge", Box::new(FillGauge::new(0.5).height(3))),
+    ];
+    for (name, chart) in &own {
+        let lines = console.render_lines(chart.as_ref(), &given, false);
+        let drawn = lines.iter().filter(|l| !l.is_empty()).count();
+        assert_eq!(drawn, 3, "{name}");
+    }
 }
 
 fn charts_for(charset: Charset) -> Vec<(&'static str, Box<dyn Renderable>)> {

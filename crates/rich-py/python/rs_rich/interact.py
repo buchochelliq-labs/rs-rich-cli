@@ -3,8 +3,14 @@
 Components: ``Select`` and ``MultiSelect`` (fuzzy pickers over ``Item``s whose
 values are any Python objects), ``Input`` (one line, masked with
 ``password=True``), ``TextArea`` (several lines), ``Confirm`` (with
-``Choice``s), ``Form``, ``Pager``, ``FilePicker`` (a path), ``ColorPicker`` (a
-colour string) and ``AssetPicker`` (an emoji, box style or spinner).
+``Choice``s), ``Form``, ``Pager``, ``LogView`` (log records, as
+``rich log -i`` shows them), ``FilePicker`` (a path), ``ColorPicker`` (a
+colour string), ``AssetPicker`` (an emoji, box style or spinner), ``Reorder``
+(the items in a new order), and ``DatePicker``, ``TimePicker`` and
+``DateTimePicker`` (a ``datetime.date``, ``datetime.time`` or naive
+``datetime.datetime``, within ``min`` and ``max``), ``ApprovalQueue`` (a
+decision on each item: a list of dicts) and ``Jump`` (one fuzzy box over
+several ``JumpSource``s: a dict naming the source and the item).
 Subclass ``Component`` (``render(context)``, ``handle(event)``, ``keymap()``) to
 write your own; any object with ``handle(event)`` and ``render(width, height)``
 is a component too (``Event``, ``Done``, ``Cancel``, ``Ignored``).
@@ -35,6 +41,7 @@ from ._native import (
     Cancelled,
     FuzzyMatch,
     InteractAction,
+    InteractApprovalQueue,
     InteractAssetPicker,
     InteractBinding,
     InteractCancel,
@@ -45,6 +52,8 @@ from ._native import (
     InteractConfirm,
     InteractContainer,
     InteractContext,
+    InteractDatePicker,
+    InteractDateTimePicker,
     InteractDone,
     InteractError,
     InteractEvent,
@@ -53,15 +62,19 @@ from ._native import (
     InteractIgnored,
     InteractInput,
     InteractItem,
+    InteractJump,
+    InteractJumpSource,
     InteractKeymap,
     InteractLabel,
     InteractLayer,
     InteractLayers,
+    InteractLogView,
     InteractMap,
     InteractMultiSelect,
     InteractOutcome,
     InteractPager,
     InteractRecord,
+    InteractReorder,
     InteractRow,
     InteractScript,
     InteractSelect,
@@ -69,6 +82,7 @@ from ._native import (
     InteractStack,
     InteractTabs,
     InteractTextArea,
+    InteractTimePicker,
     NotInteractive,
     fuzzy_match,
     fuzzy_rank,
@@ -89,10 +103,18 @@ Choice = InteractChoice
 Confirm = InteractConfirm
 Form = InteractForm
 Pager = InteractPager
+LogView = InteractLogView
 TextArea = InteractTextArea
 FilePicker = InteractFilePicker
 ColorPicker = InteractColorPicker
 AssetPicker = InteractAssetPicker
+Reorder = InteractReorder
+DatePicker = InteractDatePicker
+TimePicker = InteractTimePicker
+DateTimePicker = InteractDateTimePicker
+ApprovalQueue = InteractApprovalQueue
+Jump = InteractJump
+JumpSource = InteractJumpSource
 Event = InteractEvent
 Done = InteractDone
 Cancel = InteractCancel
@@ -133,10 +155,18 @@ __all__ = [
     "Confirm",
     "Form",
     "Pager",
+    "LogView",
     "TextArea",
     "FilePicker",
     "ColorPicker",
     "AssetPicker",
+    "Reorder",
+    "DatePicker",
+    "TimePicker",
+    "DateTimePicker",
+    "ApprovalQueue",
+    "Jump",
+    "JumpSource",
     "Event",
     "Done",
     "Cancel",

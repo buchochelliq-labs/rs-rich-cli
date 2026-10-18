@@ -67,5 +67,10 @@ where a tape sets `RICH_MICRO=blocks`). The per-protocol PTY tests in
 cursor positions through an emulator; the protocols themselves are checked
 by hand in real Kitty, iTerm2 and a Sixel terminal before a release.
 
-WebP and frame-sequence animations draw their still image in this release,
-and every asset is one row high.
+WebP and frame-sequence animations draw their still image in this release.
+A two-row asset (2×2, 3×2) draws over both its rows in every mode above:
+Kitty with two rows of placeholders, iTerm2 and Sixel with one image of the
+whole box drawn from the second row (the cursor moves up a row to draw it
+and comes back), half-blocks with two pixel rows a cell row. Where its
+second row was not reserved, every mode shows its first row's fallback
+instead, so no image reaches into the line below.

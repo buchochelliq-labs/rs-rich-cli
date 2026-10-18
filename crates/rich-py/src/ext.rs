@@ -1,6 +1,6 @@
 //! `rs_rich.ext`: the `rich-ext` crate's renderables and tools
 //! (diagnostics, structured data, diffs, transforms, workflow renderables,
-//! terminal capabilities, inspectors and the extension registry).
+//! terminal capabilities, inspectors, documents and the extension registry).
 //!
 //! Owner: the ext area. Each submodule wraps one group of `rich-ext`
 //! modules; the Python package `rs_rich.ext` has one submodule per Rust
@@ -15,9 +15,11 @@ pub(crate) mod common;
 pub(crate) mod data;
 mod diagnostic;
 mod diff;
+mod document;
 mod frame;
 mod inspect;
 mod layout;
+pub(crate) mod log_stream;
 mod qa;
 mod registry;
 mod status;
@@ -31,6 +33,7 @@ mod workflow;
 pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     common::register(m)?;
     diagnostic::register(m)?;
+    log_stream::register(m)?;
     data::register(m)?;
     transform::register(m)?;
     diff::register(m)?;
@@ -46,5 +49,6 @@ pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     registry::register(m)?;
     cli_doc::register(m)?;
     qa::register(m)?;
+    document::register(m)?;
     Ok(())
 }

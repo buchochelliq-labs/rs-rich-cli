@@ -8,14 +8,16 @@
 //! the [`rich`] library crate. It implements the rendering modes `--print`,
 //! `--markdown`, `--rst`, `--json`, `--syntax`, `--csv`, `--ipynb`, and `--rule`, plus
 //! width/justify, HTML/SVG export to a file (`--export-html PATH` / `-o PATH`,
-//! `--export-svg PATH`, which may be combined), the
+//! `--export-svg PATH`, which may be combined, and our `--export-png PATH`), the
 //! `--panel`/`--padding` decorators (with `--title`/`--caption`/`--style`), a
 //! plain-file printer (with extension auto-detection), **URL fetch** (`rich <url>`,
 //! behind the default `fetch` feature), **paging** (`--pager`), and a capability
 //! demo — i.e. the whole common rich-cli surface.
 //!
 //! On top of that it has documented binary-boundary conveniences that upstream
-//! lacks (see `docs/PORTING.md`): JSONL/log streaming, images and GIFs (behind
+//! lacks (see `docs/PORTING.md`): Org, AsciiDoc and man pages (`--org`,
+//! `--asciidoc`, `--man`, detected by extension and content), JSONL/log
+//! streaming, images and GIFs (behind
 //! the default `art` feature), `--watch`, `--batch`, config profiles and
 //! `--theme-file`, and the tool commands `inspect`, `diff` (images, text and
 //! patches), `view`, `hex`, `unicode`, `env`, `capture`, `ansi explain`,
@@ -23,16 +25,21 @@
 //! the diagram sources `mermaid`, `dot`, `deps` and `schema`, `chart` and
 //! `profile`;
 //! the interactive commands (`choose`, `filter`, `input`, `confirm`, `pager`,
-//! `write`, `file`, `color`, `asset`, `explore`); `micro`; `record`; and
-//! `serve` (behind the off-by-default `serve` feature). Each composes public
-//! `rich` / `rich-ext` / `rich-art` / `rich-diagram` / `rich-mermaid` /
-//! `rich-interact` / `rich-micro` / `rich-record` / `rich-web` APIs.
+//! `write`, `file`, `color`, `asset`, `explore`, `date`); `micro`; `record`;
+//! and `serve` (behind the off-by-default `serve` feature). Each composes
+//! public `rich` / `rich-ext` / `rich-art` / `rich-diagram` / `rich-mermaid`
+//! / `rich-interact` / `rich-micro` / `rich-record` / `rich-web` APIs.
 
 use std::io::{BufRead, IsTerminal, Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
+mod animation;
+#[cfg(feature = "interact")]
+mod approve_jump;
 mod authoring;
+#[cfg(feature = "art")]
+mod banner;
 mod batch;
 mod batch_output;
 mod batch_paths;
@@ -44,20 +51,25 @@ mod config;
 mod controls;
 mod demo;
 mod doctor;
+mod documents;
 mod inspect;
 #[cfg(feature = "interact")]
 mod interactive;
+mod logs;
 #[cfg(feature = "art")]
 mod micro;
 mod plugins;
 mod profile;
 #[cfg(feature = "record")]
 mod record;
+mod redact_preview;
 mod render_target;
 #[cfg(feature = "serve")]
 mod serve;
+mod shell;
 mod sources;
 mod structured_log;
+mod style_rules;
 mod tools;
 mod viewers;
 mod watch;
@@ -110,6 +122,13 @@ enum Mode {
     Ipynb,
     /// `--rst`: render reStructuredText, as upstream's `rich-rst` does.
     Rst,
+    /// `--org`: render an Org document (not upstream; see `documents.rs`).
+    Org,
+    /// `--asciidoc`: render AsciiDoc (not upstream; see `documents.rs`).
+    AsciiDoc,
+    /// `--man`: render a man page from its roff source (not upstream; see
+    /// `documents.rs`).
+    Man,
     /// `--gif`: animate one or more GIFs in place.
     Gif,
     /// `--diff`: perceptually compare two images (takes exactly two resources).
@@ -222,6 +241,21 @@ const MODE_SPECS: &[ModeSpec] = &[
         aliases: &["rst"],
     },
     ModeSpec {
+        mode: Mode::Org,
+        primary: "org",
+        aliases: &["org"],
+    },
+    ModeSpec {
+        mode: Mode::AsciiDoc,
+        primary: "asciidoc",
+        aliases: &["asciidoc", "adoc"],
+    },
+    ModeSpec {
+        mode: Mode::Man,
+        primary: "man",
+        aliases: &["man", "roff"],
+    },
+    ModeSpec {
         mode: Mode::Gif,
         primary: "gif",
         aliases: &["gif"],
@@ -319,7 +353,7 @@ const MODE_SPECS: &[ModeSpec] = &[
 ];
 
 const RENDER_MODE_FLAGS: &str =
-    "--print/--markdown/--rst/--json/--syntax/--csv/--ipynb/--rule/--gif/--diff/--image/--jsonl/--log/--inspect/--ansi-explain";
+    "--print/--markdown/--rst/--org/--asciidoc/--man/--json/--syntax/--csv/--ipynb/--rule/--gif/--diff/--image/--jsonl/--log/--inspect/--ansi-explain";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ReportFormat {
@@ -523,6 +557,9 @@ struct Cli {
     /// `--loop N`: how many times `--gif` repeats (0 = forever).
     #[cfg_attr(not(feature = "art"), allow(dead_code))]
     loops: Option<usize>,
+    /// `--speed`, `--fps`, `--max-frames`, `--max-duration`: `--gif` playback.
+    #[cfg_attr(not(feature = "art"), allow(dead_code))]
+    animation: animation::AnimationControls,
     /// `--threshold PCT`: with `--diff`, exit non-zero when the changed
     /// percentage of the canvas exceeds this. Makes the tool a CI gate.
     #[cfg_attr(not(feature = "art"), allow(dead_code))]
@@ -576,6 +613,9 @@ struct Cli {
     schema: sources::SchemaOptions,
     /// `rich profile` options: `--sample`, `--columns`, `--top`.
     profile: profile::ProfileOptions,
+    /// `--style-rule` and `--rules` (and a config's `[[rules]]`): conditional
+    /// styles for `--csv`, `rich profile` and `rich inspect --table`.
+    rules: style_rules::RuleOptions,
     /// `--highlighter NAME`: the console-wide code highlighter.
     highlighter: Option<String>,
     /// `--code-theme NAME`: a theme of the chosen code highlighter.
@@ -622,6 +662,9 @@ struct Cli {
     export_html: Option<String>,
     /// `--export-svg PATH`: also write a self-contained SVG document to PATH.
     export_svg: Option<String>,
+    /// `--export-png PATH`: also write a PNG image of the output to PATH
+    /// (rs-rich-record's rasteriser, the `png` feature; #723).
+    export_png: Option<String>,
     /// `--panel BOX`: wrap the output in a [`Panel`] with the named box.
     /// `--panel none` is upstream's default and means *no panel at all*, so it
     /// parses to `None` rather than to `box.NONE`.
@@ -677,6 +720,8 @@ struct Cli {
     data: inspect::DataOptions,
     tools: tools::ToolOptions,
     viewers: viewers::ViewerOptions,
+    /// `rich log`'s filters, follow mode, groups and live view.
+    logs: logs::LogOptions,
 }
 
 /// `--mermaid-backend`.
@@ -1008,12 +1053,23 @@ fn dispatch(args: Vec<String>) -> ExitCode {
         return plugins::dispatch(&args);
     }
     #[cfg(feature = "art")]
+    if banner::requested(&args) {
+        return banner::dispatch(&args);
+    }
+    if shell::requested(&args) {
+        return shell::dispatch(&args);
+    }
+    #[cfg(feature = "art")]
     if micro::requested(&args) {
         return micro::dispatch(&args);
     }
     #[cfg(feature = "interact")]
     if let Some(command) = interactive::requested(&args) {
         return interactive::dispatch(command, &args);
+    }
+    #[cfg(feature = "interact")]
+    if let Some(command) = approve_jump::requested(&args) {
+        return approve_jump::dispatch(command, &args);
     }
     #[cfg(feature = "record")]
     if record::requested(&args) {
@@ -1085,6 +1141,11 @@ const VALUE_OPTIONS: &[&str] = &[
     "--batch-input-root",
     "--batch-name-template",
     "--log-presentation",
+    "--level",
+    "--where",
+    "--parser",
+    "--time",
+    "--output",
     "--mermaid-backend",
     "--dot-backend",
     "--metadata",
@@ -1092,6 +1153,11 @@ const VALUE_OPTIONS: &[&str] = &[
     "--package",
     "--timings",
     "--audit",
+    "--build-profile",
+    "--baseline",
+    "--save",
+    "--policy",
+    "--sbom",
     "--depth",
     "--kind",
     "--x",
@@ -1099,6 +1165,9 @@ const VALUE_OPTIONS: &[&str] = &[
     "--sample",
     "--columns",
     "--top",
+    "--max-paths",
+    "--style-rule",
+    "--rules",
     "--highlighter",
     "--code-theme",
     "--plugin",
@@ -1107,6 +1176,7 @@ const VALUE_OPTIONS: &[&str] = &[
     "-o",
     "--export-html",
     "--export-svg",
+    "--export-png",
     "-a",
     "--panel",
     "-d",
@@ -1153,6 +1223,10 @@ const VALUE_OPTIONS: &[&str] = &[
     "--encoding",
     "--threshold",
     "--loop",
+    "--speed",
+    "--fps",
+    "--max-frames",
+    "--max-duration",
     "--jobs",
     "--collision",
     "--format",
@@ -1260,6 +1334,9 @@ fn mode_flag_alias(arg: &str) -> Option<&'static str> {
         "--csv" => "--csv",
         "--ipynb" => "--ipynb",
         "--rst" => "--rst",
+        "--org" => "--org",
+        "--asciidoc" | "--adoc" => "--asciidoc",
+        "--man" | "--roff" => "--man",
         "--jsonl" | "--ndjson" => "--jsonl",
         "--log" => "--log",
         "--rule" | "-u" => "--rule",
@@ -1830,6 +1907,7 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
     let mut mode = Mode::Auto;
     let mut resources: Vec<String> = Vec::new();
     let mut loops = None;
+    let mut animation = animation::AnimationControls::default();
     let mut diff_threshold = None;
     let mut image_mode = ImageMode::Auto;
     let mut image_fit = None;
@@ -1854,6 +1932,7 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
     let mut chart = chart::ChartOptions::default();
     let mut schema_options = sources::SchemaOptions::default();
     let mut profile_options = profile::ProfileOptions::default();
+    let mut rule_options = style_rules::RuleOptions::default();
     let mut highlighter: Option<String> = None;
     let mut plugins: Vec<String> = Vec::new();
     let mut code_theme: Option<String> = None;
@@ -1864,6 +1943,7 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
     let mut data = inspect::DataOptions::default();
     let mut tool_options = tools::ToolOptions::default();
     let mut viewer_options = viewers::ViewerOptions::default();
+    let mut log_options = logs::LogOptions::default();
     // Whether any paging flag was given: `view` pages automatically otherwise.
     let mut paging_explicit = false;
     // `rich ansi explain FILE`: the second word belongs to the command.
@@ -1873,6 +1953,7 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
     let mut no_color = std::env::var_os("NO_COLOR").is_some_and(|value| !value.is_empty());
     let mut export_html: Option<String> = None;
     let mut export_svg: Option<String> = None;
+    let mut export_png: Option<String> = None;
     let mut panel = None;
     let mut padding = None;
     let mut title = None;
@@ -1917,7 +1998,13 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
     // printed or opened at all — `rich -p -- "-5 degrees"` and `rich -- -weird.md`
     // both died with "unknown option".
     let mut end_of_options = false;
+    // `--format NAME` for a document format (`org`, `man`, …): the mode it
+    // names. Data formats stay with `data`; the last `--format` wins.
+    let mut document_format: Option<(String, Mode)> = None;
 
+    // `rich deps` takes `--top` and `--threshold` from `rich profile` and
+    // `--diff`, which share their names.
+    let deps_mode = explicit_mode(args) == Some(Mode::Deps);
     let mut iter = args.iter();
     while let Some(arg) = iter.next() {
         if end_of_options {
@@ -1927,16 +2014,40 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
         if extensions.parse_option(arg, &mut iter)? {
             continue;
         }
-        if data.parse_option(arg, &mut iter)? {
+        if arg == "--format" {
+            let named = iter
+                .clone()
+                .next()
+                .and_then(|value| documents::format_mode(value).map(|mode| (value.clone(), mode)));
+            if let Some(named) = named {
+                iter.next();
+                document_format = Some(named);
+                data.format = None;
+                continue;
+            }
+            document_format = None;
+        }
+        if data
+            .parse_option(arg, &mut iter)
+            .map_err(|err| match arg.as_str() {
+                "--format" => documents::FORMAT_USAGE.to_string(),
+                _ => err,
+            })?
+        {
             continue;
         }
         if tool_options.parse_option(arg, &mut iter)? {
             continue;
         }
+        // Before the viewer options: `--group trace` is `rich log`'s, and
+        // `--group 4` is left for `rich hex`.
+        if log_options.parse_option(arg, &mut iter)? {
+            continue;
+        }
         if viewer_options.parse_option(arg, &mut iter)? {
             continue;
         }
-        if graph_sources.parse_option(arg, &mut iter)? {
+        if graph_sources.parse_option(arg, &mut iter, deps_mode)? {
             continue;
         }
         if chart.parse_option(arg, &mut iter)? {
@@ -1946,6 +2057,9 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
             continue;
         }
         if profile_options.parse_option(arg, &mut iter)? {
+            continue;
+        }
+        if rule_options.parse_option(arg, &mut iter)? {
             continue;
         }
         if matches!(
@@ -1981,6 +2095,9 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
             "--csv" => set_mode(&mut mode, Mode::Csv)?,
             "--ipynb" => set_mode(&mut mode, Mode::Ipynb)?,
             "--rst" => set_mode(&mut mode, Mode::Rst)?,
+            "--org" => set_mode(&mut mode, Mode::Org)?,
+            "--asciidoc" | "--adoc" => set_mode(&mut mode, Mode::AsciiDoc)?,
+            "--man" | "--roff" => set_mode(&mut mode, Mode::Man)?,
             "--gif" => set_mode(&mut mode, Mode::Gif)?,
             "--diff" => set_mode(&mut mode, Mode::Diff)?,
             "--image" => set_mode(&mut mode, Mode::Image)?,
@@ -2203,6 +2320,12 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
                         .map_err(|_| format!("invalid loop count {value:?}"))?,
                 );
             }
+            "--speed" | "--fps" | "--max-frames" | "--max-duration" => {
+                let value = iter
+                    .next()
+                    .ok_or_else(|| format!("{arg} requires a value"))?;
+                animation.set(arg, value)?;
+            }
             "-u" | "--rule" => set_mode(&mut mode, Mode::Rule)?,
             "-l" | "--left" => justify = Some(Justify::Left),
             "-r" | "--right" if justify != Some(Justify::Left) => justify = Some(Justify::Right),
@@ -2312,8 +2435,12 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
                 watch_interval = value
                     .parse::<f64>()
                     .map_err(|_| format!("invalid watch interval {value:?}"))?;
-                if !watch_interval.is_finite() || watch_interval <= 0.0 {
-                    return Err("--watch-interval must be greater than zero".into());
+                if !watch_interval.is_finite() || watch_interval <= 0.0 || watch_interval > 86400.0
+                {
+                    return Err(
+                        "--watch-interval must be greater than zero and at most 86400 seconds"
+                            .into(),
+                    );
                 }
             }
             "--batch" => batch = true,
@@ -2358,6 +2485,9 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
             }
             "--export-svg" => {
                 export_svg = Some(iter.next().ok_or("--export-svg requires a PATH")?.clone());
+            }
+            "--export-png" => {
+                export_png = Some(iter.next().ok_or("--export-png requires a PATH")?.clone());
             }
             "-a" | "--panel" => {
                 let value = iter.next().ok_or("--panel requires a box name")?;
@@ -2418,6 +2548,18 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
         }
     }
 
+    // A document `--format` is that document's mode flag: it may not be
+    // combined with another mode, and like any input mode it reads stdin when
+    // there is no RESOURCE.
+    if let Some((name, document)) = document_format {
+        if mode != Mode::Auto && mode != document {
+            return Err(format!(
+                "--format {name} cannot be combined with --{}",
+                mode_name(mode)
+            ));
+        }
+        mode = document;
+    }
     // `--format` makes automatic mode an input mode: with no RESOURCE it reads
     // stdin, as `--json` does, instead of showing the demo.
     if data.format.is_some() {
@@ -2432,11 +2574,13 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
         }
     }
     if let Some(flag) = data
-        .inspect_only_option(mode == Mode::Capture)
+        .inspect_only_option(matches!(mode, Mode::Capture | Mode::Log))
         .filter(|_| mode != Mode::Inspect)
     {
         if flag == "--redact" {
-            return Err("--redact only has an effect with --inspect or `rich capture`".into());
+            return Err(
+                "--redact only has an effect with --inspect, `rich capture` or `rich log`".into(),
+            );
         }
         return Err(format!("{flag} only has an effect with --inspect"));
     }
@@ -2458,6 +2602,27 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
     {
         return Err(format!("{flag} only has an effect with --ansi-explain"));
     }
+    if mode == Mode::Log {
+        // `--group 4` went to `rich hex`'s options: say what `rich log` takes.
+        if viewer_options
+            .given()
+            .iter()
+            .any(|(flag, _)| *flag == "--group")
+        {
+            return Err("--group requires trace, span or correlation with `rich log`".into());
+        }
+        log_options.validate(resources.first().map(String::as_str))?;
+        if log_options.follows() && (watch || batch) {
+            return Err("--follow cannot be combined with --watch or --batch".into());
+        }
+    }
+    // `--depth` is `rich deps`'s flag and `rich profile`'s too: deps' options
+    // parse it, and hand it over here.
+    if mode == Mode::Profile {
+        if let Some(depth) = graph_sources.take_depth() {
+            profile_options.set_depth(depth)?;
+        }
+    }
     for (flag, commands) in viewer_options
         .given()
         .into_iter()
@@ -2465,6 +2630,7 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
         .chain(chart.given())
         .chain(schema_options.given())
         .chain(profile_options.given())
+        .chain(log_options.given())
     {
         if !commands.contains(&mode_name(mode)) {
             return Err(format!(
@@ -2600,7 +2766,13 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
             && !(mode == Mode::Auto && resources.is_empty())
             && !(mode == Mode::Print && resources.first().is_some_and(|r| r != "-" && !is_url(r))),
     )?;
-    let exporting = export_html.is_some() || export_svg.is_some();
+    if export_png.is_some() && !cfg!(feature = "png") {
+        return Err("--export-png needs a build with the png feature".into());
+    }
+    if export_png.is_some() && batch {
+        return Err("--export-png cannot be combined with --batch".into());
+    }
+    let exporting = export_html.is_some() || export_svg.is_some() || export_png.is_some();
     if exporting {
         let unsupported = if effective_mode == Mode::Gif {
             Some("--gif")
@@ -2610,7 +2782,9 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
             None
         };
         if let Some(what) = unsupported {
-            return Err(format!("--export-html/--export-svg cannot capture {what}"));
+            return Err(format!(
+                "--export-html/--export-svg/--export-png cannot capture {what}"
+            ));
         }
     }
 
@@ -2660,8 +2834,12 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
         (
             "--lexer",
             source.lexer.is_some(),
-            "--syntax, --ipynb or --rst",
-            source_mode || effective_mode == Mode::Rst,
+            "--syntax, --ipynb, --rst, --org, --asciidoc or --man",
+            source_mode
+                || matches!(
+                    effective_mode,
+                    Mode::Rst | Mode::Org | Mode::AsciiDoc | Mode::Man
+                ),
         ),
         (
             "--no-wrap",
@@ -2804,6 +2982,30 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
             "--gif",
             effective_mode == Mode::Gif,
         ),
+        (
+            "--speed",
+            animation.speed.is_some(),
+            "--gif",
+            effective_mode == Mode::Gif,
+        ),
+        (
+            "--fps",
+            animation.fps.is_some(),
+            "--gif",
+            effective_mode == Mode::Gif,
+        ),
+        (
+            "--max-frames",
+            animation.max_frames.is_some(),
+            "--gif",
+            effective_mode == Mode::Gif,
+        ),
+        (
+            "--max-duration",
+            animation.max_duration.is_some(),
+            "--gif",
+            effective_mode == Mode::Gif,
+        ),
         // `--title`/`--caption` are deliberately NOT here: upstream feeds them to
         // the CSV table as well as to the panel, so requiring `--panel` made
         // `rich --csv sales.csv --title Sales` — a documented upstream use —
@@ -2865,8 +3067,9 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
                     && (effective_mode == Mode::Gif || effective_mode.streams_records() || demo),
             ),
             (
-                "--export-html/--export-svg",
-                (export_html.is_some() || export_svg.is_some()) && effective_mode.streams_records(),
+                "--export-html/--export-svg/--export-png",
+                (export_html.is_some() || export_svg.is_some() || export_png.is_some())
+                    && effective_mode.streams_records(),
             ),
             ("--width", demo && width.is_some()),
             ("--theme-style", demo && !theme_styles.is_empty()),
@@ -2893,13 +3096,14 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
     if !mode.accepts_multiple_resources() && resources.len() > 1 && !batch && !watch {
         return Err("only one resource may be given (except with --gif or --watch)".into());
     }
-    // `view`, `schema` and the text diff are new here, with no upstream
-    // output to keep: like `less`, they show terminal controls in what they
-    // display instead of letting them act, unless `--no-sanitize` says
-    // otherwise.
+    // `view`, `schema`, `log` and the text diff are new here, with no
+    // upstream output to keep: like `less`, they show terminal controls in
+    // what they display instead of letting them act, unless `--no-sanitize`
+    // says otherwise. A log is untrusted input.
     let sanitize = sanitize.unwrap_or_else(|| {
         mode == Mode::View
             || mode == Mode::Schema
+            || mode == Mode::Log
             || (mode == Mode::Diff
                 && !(resources.len() == 2 && resources.iter().all(|r| looks_like_image(r))))
     });
@@ -2922,6 +3126,7 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
         resource,
         resources,
         loops,
+        animation,
         diff_threshold,
         image_mode,
         image_fit,
@@ -2946,6 +3151,7 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
         chart,
         schema: schema_options,
         profile: profile_options,
+        rules: rule_options,
         highlighter,
         code_theme,
         plugins,
@@ -2967,6 +3173,7 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
         no_color,
         export_html,
         export_svg,
+        export_png,
         panel,
         padding,
         title,
@@ -2997,6 +3204,7 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
         data,
         tools: tool_options,
         viewers: viewer_options,
+        logs: log_options,
     }))
 }
 
@@ -3345,6 +3553,11 @@ fn content_type_mode(content_type: &str) -> Option<Mode> {
     match mime.as_str() {
         "text/markdown" | "text/x-markdown" => Some(Mode::Markdown),
         "text/x-rst" | "text/prs.fallenstein.rst" => Some(Mode::Rst),
+        "text/org" | "text/x-org" => Some(Mode::Org),
+        "text/asciidoc" | "text/x-asciidoc" => Some(Mode::AsciiDoc),
+        "text/troff" | "application/x-troff" | "application/x-troff-man" | "text/x-troff-man" => {
+            Some(Mode::Man)
+        }
         "application/json" | "text/json" => Some(Mode::Json),
         "text/csv" => Some(Mode::Csv),
         _ => None,
@@ -3437,6 +3650,11 @@ fn detect_mode(resource: Option<&str>) -> Mode {
         Some("csv") | Some("tsv") => Mode::Csv,
         Some("ipynb") => Mode::Ipynb,
         Some("rst") => Mode::Rst,
+        // Not upstream (documents.rs). A URL with no path has no extension:
+        // `https://example.org` is a web page, not an Org file.
+        Some("org") if !resource.is_some_and(documents::bare_host) => Mode::Org,
+        Some("adoc" | "asciidoc") => Mode::AsciiDoc,
+        Some("man" | "roff" | "mdoc") => Mode::Man,
         Some("gif") => Mode::Gif,
         Some("mmd") | Some("mermaid") if cfg!(feature = "mermaid") => Mode::Mermaid,
         Some("dot") | Some("gv") => Mode::Dot,
@@ -3831,11 +4049,14 @@ fn run_watch(mut cli: Cli) -> ExitCode {
             );
         }
     }
-    if several && (cli.export_html.is_some() || cli.export_svg.is_some()) {
+    if several
+        && (cli.export_html.is_some() || cli.export_svg.is_some() || cli.export_png.is_some())
+    {
         return fail(
             &cli,
             ExitClass::Usage,
-            "--export-html/--export-svg cannot be combined with watching several files",
+            "--export-html/--export-svg/--export-png cannot be combined with watching several \
+             files",
         );
     }
     // Redirected output must be a finite, deterministic command. This also
@@ -4087,6 +4308,16 @@ fn run_once_with_fetch(mut cli: Cli, prefetched: Option<(String, Option<String>)
     if let Some(message) = transform_misplaced_in(&cli, mode) {
         return fail(&cli, ExitClass::Usage, message);
     }
+    // A compressed man page (`ls.1.gz`) would print as binary noise.
+    if matches!(cli.mode, Mode::Auto | Mode::Man) {
+        if let Some(message) = cli
+            .resource
+            .as_deref()
+            .and_then(documents::compressed_man_page)
+        {
+            return fail(&cli, ExitClass::Input, message);
+        }
+    }
 
     // `view` decides what to show from the resource itself: an existing
     // renderer, a numbered source view, or a hex dump of binary input. The
@@ -4221,6 +4452,7 @@ fn run_once_with_fetch(mut cli: Cli, prefetched: Option<(String, Option<String>)
     let mut export = Export {
         html_path: cli.export_html.as_deref(),
         svg_path: cli.export_svg.as_deref(),
+        png_path: cli.export_png.as_deref(),
         svg_title: &svg_title,
         pager: cli.pager,
         auto_pager: cli.auto_pager,
@@ -4320,6 +4552,14 @@ fn run_once_with_fetch(mut cli: Cli, prefetched: Option<(String, Option<String>)
             Ok(redactor) => redactor,
             Err(err) => return fail(&cli, ExitClass::Usage, err),
         };
+        let preview = viewers::redact_preview(&cli.viewers);
+        if preview && redactor.is_none() {
+            return fail(
+                &cli,
+                ExitClass::Usage,
+                "--redact-preview needs --redact or --redact-pattern",
+            );
+        }
         // The command draws inside the panel: its width, less the two
         // borders and their padding.
         let width = cli
@@ -4328,8 +4568,8 @@ fn run_once_with_fetch(mut cli: Cli, prefetched: Option<(String, Option<String>)
             .saturating_sub(4)
             .max(1);
         // A recording that cannot be written is found out before the
-        // command runs, not after.
-        let cast = match viewers::cast_path(&cli.viewers) {
+        // command runs, not after. A preview writes nothing.
+        let cast = match viewers::cast_path(&cli.viewers).filter(|_| !preview) {
             Some(path) => match std::fs::File::create(path) {
                 Ok(file) => Some((path, file)),
                 Err(err) => {
@@ -4348,6 +4588,20 @@ fn run_once_with_fetch(mut cli: Cli, prefetched: Option<(String, Option<String>)
         };
         if let Some(notice) = &captured.notice {
             eprintln!("rich: capture: {notice}");
+        }
+        if let (true, Some(redactor)) = (preview, &redactor) {
+            let would_write: Vec<String> = [
+                viewers::cast_path(&cli.viewers),
+                export.html_path,
+                export.svg_path,
+                export.png_path,
+            ]
+            .into_iter()
+            .flatten()
+            .map(str::to_string)
+            .collect();
+            let previews = redact_preview::capture(&captured, redactor);
+            return redact_preview::emit(&cli, &console, previews, &would_write);
         }
         // Before the panel, the exports and the cast see any of it.
         if let Some(redactor) = &redactor {
@@ -4515,6 +4769,20 @@ fn run_once_with_fetch(mut cli: Cli, prefetched: Option<(String, Option<String>)
         }
     }
 
+    // Documents by content (documents.rs): a man page named for its section
+    // (`ls.1`), an extensionless file that is unmistakably Org, AsciiDoc or
+    // roff, and, with `--format auto`, piped input that is likely one. Never
+    // when a flag chose the mode, nor when a source option asks for syntax.
+    if cli.mode == Mode::Auto
+        && !cli.source.wants_syntax()
+        && (mode == Mode::Auto || (mode == Mode::Syntax && !routed))
+    {
+        let auto = cli.data.format == Some(inspect::InputFormat::Auto);
+        if let Some(document) = documents::by_content(cli.resource.as_deref(), &content, auto) {
+            mode = document;
+        }
+    }
+
     // For a URL that neither a flag nor a telltale extension resolved: upstream
     // renders fetched content as syntax-highlighted source by default, unless the
     // Content-Type marks it markdown / json / csv.
@@ -4658,6 +4926,16 @@ fn run_once_with_fetch(mut cli: Cli, prefetched: Option<(String, Option<String>)
             let document = rich_ext::rst::RestructuredText::new(&content).default_lexer(lexer);
             (Box::new(document), None)
         }
+        // Not upstream (documents.rs); like `Markdown`, measured as the whole
+        // width. Mermaid and DOT source blocks draw as diagrams, as fences do.
+        Mode::Org | Mode::AsciiDoc | Mode::Man => {
+            let fences = plugin_registry_with(
+                cli.mermaid_backend.unwrap_or(MermaidBackend::Text),
+                cli.dot_backend != Some(sources::DotBackend::Off),
+            )
+            .fences();
+            (documents::render(mode, &content, &cli, fences), None)
+        }
         #[cfg(feature = "mermaid")]
         Mode::Mermaid => {
             // The command itself asks for a diagram, so it may use mmdc.
@@ -4732,13 +5010,15 @@ fn run_once_with_fetch(mut cli: Cli, prefetched: Option<(String, Option<String>)
             // `.tsv` only picks the fallback dialect; the sniffer reads the file
             // itself, so a comma-separated `.tsv` still renders as a table.
             let fallback = csv_fallback_delimiter(cli.resource.as_deref());
-            let table = match build_csv_table(
+            let rules = cli.rules.rules();
+            let table = match build_csv_table_with(
                 &content,
                 fallback,
                 cli.title.as_deref(),
                 cli.caption.as_deref(),
                 (cli.source.head, cli.source.tail),
                 cli.source.infer,
+                (!rules.is_empty()).then_some((&console, rules)),
             ) {
                 Some(table) => table,
                 // Upstream's `on_error(str(error))`. The message is CPython's,
@@ -4778,6 +5058,7 @@ fn run_once_with_fetch(mut cli: Cli, prefetched: Option<(String, Option<String>)
                 && !cli.auto_pager
                 && cli.export_html.is_none()
                 && cli.export_svg.is_none()
+                && cli.export_png.is_none()
                 && !watch::capturing()
                 && !micro_pending()
             {
@@ -4902,7 +5183,14 @@ fn run_once_with_fetch(mut cli: Cli, prefetched: Option<(String, Option<String>)
                 read_resource_limited(Some(path), encoding, Some(controls::INSPECT_LIMIT))
                     .map_err(|err| format!("cannot read {path}: {err}"))
             };
-            let view = match inspect::build(&cli.data, &content, cli.resource.as_deref(), read) {
+            let rules = cli.rules.rules();
+            let view = match inspect::build_with(
+                &cli.data,
+                &content,
+                cli.resource.as_deref(),
+                read,
+                rules,
+            ) {
                 Ok(view) => view,
                 Err(err) => return fail(&cli, ExitClass::Data, err),
             };
@@ -4948,7 +5236,12 @@ fn run_once_with_fetch(mut cli: Cli, prefetched: Option<(String, Option<String>)
                 Err(err) => return fail(&cli, ExitClass::Data, err),
             };
             let fit = text.measurement().1;
-            (Box::new(text), Some(fit))
+            // A two-row micro asset reserves the row below its line (#711).
+            #[cfg(feature = "art")]
+            let renderable = micro::rows(text);
+            #[cfg(not(feature = "art"))]
+            let renderable: Box<dyn Renderable> = Box::new(text);
+            (renderable, Some(fit))
         }
     };
     decorate_and_emit(&cli, &console, &export, renderable, fit)
@@ -4993,6 +5286,9 @@ fn run_json_lines(cli: &Cli, console: &Console, log_mode: bool) -> ExitCode {
             ExitClass::Usage,
             "streaming JSONL/log mode reads files or stdin, not URLs",
         );
+    }
+    if log_mode {
+        return logs::run(cli, console);
     }
 
     let mut input: Box<dyn BufRead> = match cli.resource.as_deref() {
@@ -5057,18 +5353,9 @@ fn run_json_lines(cli: &Cli, console: &Console, log_mode: bool) -> ExitCode {
         if cli.sanitize {
             sanitize_json_value(&mut value);
         }
-        let wrote = if log_mode {
-            if cli.log_presentation == "rich" {
-                write_rendered_stdout(console, &structured_log::event(&value))
-            } else {
-                let text = Text::new(format_log_record(&value));
-                write_rendered_stdout(console, &text)
-            }
-        } else {
-            let source = serde_json::to_string(&value).expect("JSON value serializes");
-            let json = Json::new(&source).expect("serialized JSON parses");
-            write_rendered_stdout(console, &json)
-        };
+        let source = serde_json::to_string(&value).expect("JSON value serializes");
+        let json = Json::new(&source).expect("serialized JSON parses");
+        let wrote = write_rendered_stdout(console, &json);
         if let Err(error) = wrote {
             if error.kind() == std::io::ErrorKind::BrokenPipe {
                 return success(cli);
@@ -5081,64 +5368,6 @@ fn run_json_lines(cli: &Cli, console: &Console, log_mode: bool) -> ExitCode {
         }
     }
     success(cli)
-}
-
-fn format_log_record(value: &serde_json::Value) -> String {
-    let Some(object) = value.as_object() else {
-        return serde_json::to_string(value).expect("JSON value serializes");
-    };
-    let take_value = |keys: &[&'static str]| {
-        keys.iter().find_map(|key| {
-            object.get(*key).map(|value| {
-                let display = value.as_str().map(str::to_string).unwrap_or_else(|| {
-                    serde_json::to_string(value).expect("JSON value serializes")
-                });
-                (*key, display, value.is_string())
-            })
-        })
-    };
-    let timestamp = take_value(&["timestamp", "time", "@timestamp"]);
-    let level = take_value(&["level", "severity"]);
-    let message = take_value(&["message", "msg"]);
-    let mut rest = serde_json::Map::new();
-    for (key, value) in object {
-        let consumed = timestamp
-            .as_ref()
-            .is_some_and(|(consumed, _, _)| consumed == key)
-            || level
-                .as_ref()
-                .is_some_and(|(consumed, _, _)| consumed == key)
-            || message
-                .as_ref()
-                .is_some_and(|(consumed, _, _)| consumed == key);
-        if !consumed {
-            rest.insert(key.clone(), value.clone());
-        }
-    }
-    let mut parts = Vec::new();
-    if let Some((_, timestamp, _)) = timestamp {
-        parts.push(timestamp);
-    }
-    if let Some((_, level, is_string)) = level {
-        parts.push(if is_string {
-            level.to_ascii_uppercase()
-        } else {
-            level
-        });
-    }
-    if let Some((_, message, _)) = message {
-        parts.push(message);
-    }
-    if !rest.is_empty() {
-        parts.push(
-            serde_json::to_string(&serde_json::Value::Object(rest)).expect("JSON value serializes"),
-        );
-    }
-    if parts.is_empty() {
-        serde_json::to_string(value).expect("JSON value serializes")
-    } else {
-        parts.join(" ")
-    }
 }
 
 /// Whether `value` matches rich-cli's `is_number`, i.e. Python's
@@ -5182,6 +5411,28 @@ fn build_csv_table(
     window: (Option<usize>, Option<usize>),
     infer: bool,
 ) -> Option<Table> {
+    build_csv_table_with(
+        content,
+        fallback_delimiter,
+        title,
+        caption,
+        window,
+        infer,
+        None,
+    )
+}
+
+/// [`build_csv_table`] with `--style-rule`/`--rules` (not upstream): the
+/// rules, and the console that renders a styled cell's markup.
+fn build_csv_table_with(
+    content: &str,
+    fallback_delimiter: Option<char>,
+    title: Option<&str>,
+    caption: Option<&str>,
+    window: (Option<usize>, Option<usize>),
+    infer: bool,
+    rules: Option<(&Console, &rich_ext::table::StyleRules)>,
+) -> Option<Table> {
     // The sniffer sees only the first 1024 *characters* — upstream's
     // `csv_data[:1024]` — however long the file is.
     let sample: String = content.chars().take(1024).collect();
@@ -5210,7 +5461,7 @@ fn build_csv_table(
         rows = header_row.into_iter().chain(data).collect();
     }
     let types = infer.then(|| infer_csv_types(&rows, header));
-    Some(render_csv(rows, header, title, caption, types))
+    Some(render_csv(rows, header, title, caption, types, rules))
 }
 
 /// Each column's inferred type, for `--infer`: the data rows (blank lines
@@ -5263,12 +5514,17 @@ fn csv_fallback_delimiter(resource: Option<&str>) -> Option<char> {
 /// an integer or a float, so null tokens (`NA`, `null`, …) no longer make a
 /// number column text, and each heading shows its type on a second, dim
 /// line; a table without a header row then shows a heading of types alone.
+///
+/// With `rules` (`--style-rule`, `--rules`; not upstream), the rules style
+/// the data rows by header (or `#N`), each cell compared as its text; a
+/// styled cell is its markup rendered by the console, then styled.
 fn render_csv(
     rows: Vec<Vec<String>>,
     has_header: bool,
     title: Option<&str>,
     caption: Option<&str>,
     types: Option<Vec<InferredType>>,
+    rules: Option<(&Console, &rich_ext::table::StyleRules)>,
 ) -> Table {
     let mut table = Table::new()
         .border_style(Style::parse("blue").expect("valid style"))
@@ -5344,13 +5600,78 @@ fn render_csv(
     // Measurement/style inference is complete. Move the parsed cells into the
     // table rather than retaining and cloning the complete input row set.
     drop(data);
-    table.extend_owned_rows(
-        rows.into_iter()
-            .skip(usize::from(has_header))
-            .filter(|row| !row.is_empty())
+    let headers: Vec<String> = match rules {
+        Some(_) => (0..columns)
+            .map(|index| header.get(index).cloned().unwrap_or_default())
             .collect(),
-    );
+        None => Vec::new(),
+    };
+    let body = rows
+        .into_iter()
+        .skip(usize::from(has_header))
+        .filter(|row| !row.is_empty());
+    match rules.filter(|(_, rules)| !rules.is_empty()) {
+        None => {
+            table.extend_owned_rows(body.collect());
+        }
+        Some((console, rules)) => {
+            add_styled_csv_rows(&mut table, console, rules, &headers, body.collect())
+        }
+    }
     table
+}
+
+/// Add CSV `rows` to `table` styled by `rules`, matched against `headers`;
+/// each cell is compared as its text (`Value::Str`, so a number in text
+/// compares as a number). An unstyled cell stays markup, as upstream's.
+fn add_styled_csv_rows(
+    table: &mut Table,
+    console: &Console,
+    rules: &rich_ext::table::StyleRules,
+    headers: &[String],
+    rows: Vec<Vec<String>>,
+) {
+    use rich_ext::table::{Target, Value};
+    let headers: Vec<&str> = headers.iter().map(String::as_str).collect();
+    let values = |row: &[String]| -> Vec<Value> { row.iter().cloned().map(Value::Str).collect() };
+    // Only a column rule needs every row before the first is drawn.
+    let resolved = if rules
+        .rules()
+        .iter()
+        .any(|r| r.target_kind() == Target::Column)
+    {
+        rules.resolve(&headers, rows.iter().map(|row| values(row)))
+    } else {
+        rules.resolve(&headers, std::iter::empty::<Vec<Value>>())
+    };
+    style_rules::warn_unresolved(&resolved, &headers);
+    for row in rows {
+        let cells: Vec<Value> = row.into_iter().map(Value::Str).collect();
+        let row_style = resolved.row_style(&cells);
+        let styles: Vec<Option<Style>> = (0..cells.len())
+            .map(|index| resolved.cell_style(&cells, index))
+            .collect();
+        let cells = cells
+            .into_iter()
+            .zip(styles)
+            .map(|(cell, style)| {
+                let markup = match cell {
+                    Value::Str(text) => text,
+                    other => other.plain(),
+                };
+                match style {
+                    None => rich::Cell::Markup(markup),
+                    Some(style) => {
+                        let mut text = console.render_str(&markup, Some(false));
+                        let len = text.plain().len();
+                        text.stylize(style, 0, len);
+                        rich::Cell::Text(text)
+                    }
+                }
+            })
+            .collect();
+        table.add_row_with(cells, row_style.map(Into::into), false);
+    }
 }
 
 /// Join a notebook cell/output `source` field (a JSON string, or an array of
@@ -5766,12 +6087,13 @@ fn run_image(cli: &Cli, console: &Console, export: &Export) -> ExitCode {
     let terminal_only = Export {
         html_path: None,
         svg_path: None,
+        png_path: None,
         ..*export
     };
     if let Err(message) = emit(console, &terminal_only, |c| c.print(&art)) {
         return fail(cli, ExitClass::Input, message);
     }
-    if export.html_path.is_some() || export.svg_path.is_some() {
+    if export.any_file() {
         use rich::protocol::RenderEnvironment;
         use rich_ext::target::{RenderTarget, TargetKind, TargetOverrides};
         let mut caps = render_target::observe(console, TargetOverrides::default()).capabilities;
@@ -5980,10 +6302,11 @@ fn run_diff(cli: &Cli, console: &Console, export: &Export) -> ExitCode {
     let terminal_only = Export {
         html_path: None,
         svg_path: None,
+        png_path: None,
         ..*export
     };
     let mut wrote = emit(console, &terminal_only, |c| render_report(c, false));
-    if export.html_path.is_some() || export.svg_path.is_some() {
+    if export.any_file() {
         // HTML/SVG support truecolor independently of stdout. Render the already
         // loaded report for that destination; never reread images or recompute
         // the comparison. A nonterminal console prevents Sixel control data.
@@ -6074,7 +6397,7 @@ fn image_color_processing(
 
 #[cfg(feature = "art")]
 fn play_gifs(cli: &Cli, console: &Console) -> ExitCode {
-    use rich_art::{AnimatedArt, Repeat, Stage};
+    use rich_art::{AnimatedArt, Repeat, Stage, Until};
 
     if cli.resources.is_empty() {
         return fail(cli, ExitClass::Usage, "--gif needs at least one GIF path");
@@ -6096,21 +6419,19 @@ fn play_gifs(cli: &Cli, console: &Console) -> ExitCode {
         None => Repeat::Times(1),
     };
 
-    let mut stage = Stage::new().gap(GAP);
+    let mut arts = Vec::with_capacity(count);
     for path in &cli.resources {
         match AnimatedArt::from_path(path) {
             Ok(art) => {
                 let (color_mode, dither, distance) = image_color_processing(cli);
-                stage = stage.with(
+                arts.push(
                     art.width(per_gif)
                         .blocks(cli.extensions.gif_blocks())
                         .color(!cli.no_color)
                         .color_mode(color_mode)
                         .dither(dither)
                         .color_distance(distance)
-                        .repeat(repeat)
-                        // Colour art is byte-heavy; keep it comfortable.
-                        .max_fps(30.0),
+                        .repeat(repeat),
                 );
             }
             Err(err) => {
@@ -6136,7 +6457,28 @@ fn play_gifs(cli: &Cli, console: &Console) -> ExitCode {
     if let Some(width) = cli.width {
         builder = builder.width(width);
     }
-    match stage.play_stdout(builder.build()) {
+    let console = builder.build();
+    let played = if cli.animation.needs_player() && console.is_terminal() {
+        // `--speed` and `--max-frames` need the CLI's own clock.
+        let passes = match repeat {
+            Repeat::Forever => None,
+            Repeat::Times(n) => Some(n),
+            Repeat::Once => Some(1),
+        };
+        animation::play(arts, GAP, passes, &cli.animation, console)
+    } else {
+        // Colour art is byte-heavy; `--fps` (default 30) keeps it comfortable.
+        let fps = cli.animation.fps();
+        let mut stage = Stage::new().gap(GAP);
+        for art in arts {
+            stage = stage.with(art.max_fps(fps));
+        }
+        if let Some(limit) = cli.animation.max_duration {
+            stage = stage.until(Until::Elapsed(limit));
+        }
+        stage.play_stdout(console)
+    };
+    match played {
         Ok(()) => success(cli),
         Err(err) => fail(cli, ExitClass::Input, format!("playback failed: {err}")),
     }
@@ -6159,7 +6501,9 @@ struct Export<'a> {
     html_path: Option<&'a str>,
     /// `--export-svg PATH`, if given.
     svg_path: Option<&'a str>,
-    /// Document title for the SVG frame (the resource's file name).
+    /// `--export-png PATH`, if given.
+    png_path: Option<&'a str>,
+    /// Document title for the SVG and PNG frames (the resource's file name).
     svg_title: &'a str,
     /// `--pager`: page the terminal output instead of writing it straight out.
     pager: bool,
@@ -6170,11 +6514,13 @@ impl Export<'_> {
     /// Whether the output goes straight to the terminal and nowhere else: no
     /// export, no pager, no watch capture.
     fn terminal_only(&self) -> bool {
-        !watch::capturing()
-            && self.html_path.is_none()
-            && self.svg_path.is_none()
-            && !self.pager
-            && !self.auto_pager
+        !watch::capturing() && !self.any_file() && !self.pager && !self.auto_pager
+    }
+
+    /// Whether any file export (`--export-html`, `--export-svg`,
+    /// `--export-png`) was asked for.
+    fn any_file(&self) -> bool {
+        self.html_path.is_some() || self.svg_path.is_some() || self.png_path.is_some()
     }
 }
 
@@ -6266,7 +6612,35 @@ fn save_exports(console: &Console, export: &Export, segments: &[Segment]) -> Res
             first_error.get_or_insert_with(|| format!("failed to save SVG: {err}"));
         }
     }
+    if let Some(path) = export.png_path {
+        if let Err(message) = save_png(path, segments, export.svg_title, console.width()) {
+            first_error.get_or_insert(message);
+        }
+    }
     first_error.map_or(Ok(()), Err)
+}
+
+/// `--export-png PATH`: the segments drawn by rs-rich-record's rasteriser,
+/// in rich's SVG export theme, in a window titled like the SVG's, as wide
+/// as the console (#723).
+#[cfg(feature = "png")]
+fn save_png(path: &str, segments: &[Segment], title: &str, width: usize) -> Result<(), String> {
+    use rich_record::render::png::{segments_png, PngOptions};
+    let options = PngOptions {
+        title,
+        columns: Some(width),
+        ..PngOptions::default()
+    };
+    let fonts = rich_record::render::raster::Fonts::embedded();
+    let png = segments_png(segments, &fonts, &options)
+        .map_err(|err| format!("failed to save PNG: {err}"))?;
+    std::fs::write(fs_path(path), png).map_err(|err| format!("failed to save PNG: {err}"))
+}
+
+/// Without the `png` feature the parser refuses `--export-png`.
+#[cfg(not(feature = "png"))]
+fn save_png(_: &str, _: &[Segment], _: &str, _: usize) -> Result<(), String> {
+    Err("--export-png needs a build with the png feature".into())
 }
 
 /// `--help`: the [`cli_spec`] help, through a stdout console.
@@ -6784,6 +7158,8 @@ mod tests {
             }
             #[cfg(feature = "interact")]
             words.extend(interactive::requested(args));
+            #[cfg(feature = "interact")]
+            words.extend(approve_jump::requested(args));
             if tools::bench_dispatch(args).unwrap_or(true) {
                 words.push("bench");
             }
@@ -6799,7 +7175,7 @@ mod tests {
         };
         let words = [
             "plugins", "doctor", "record", "serve", "choose", "filter", "input", "confirm",
-            "pager", "bench", "config",
+            "pager", "date", "bench", "config",
         ];
         for word in words {
             // Without a mode flag the word is the subcommand (where built).

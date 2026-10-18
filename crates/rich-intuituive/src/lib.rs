@@ -43,26 +43,39 @@
 //!   for markup; [`Ctx::set_theme`] switches at run time.
 //! - **Inline**: [`App::inline`] runs in a few rows below the prompt
 //!   instead of the alternate screen.
+//! - **Responsive**: [`Node::hide_below`] and a stylesheet's `@media`
+//!   rules follow the terminal's size; [`viewport`] reads it.
 //! - **Tests**: [`App::render_with`] and [`App::run_on`] with
-//!   `rich-interact`'s headless driver run an app without a terminal.
+//!   `rich-interact`'s headless driver run an app without a terminal;
+//!   [`App::driver`] steps one, and [`assert_screen!`] compares its screen
+//!   with a snapshot (see [`testing`]).
 //!
 //! The design, and how it compares with ratatui, is in
 //! `docs/design/intuituive.md`.
 
 pub mod a11y;
 pub mod app;
+pub mod border;
 mod builtin;
 mod calendar;
+mod datetime;
+mod effect;
+mod input;
 pub mod inspect;
 pub mod layout;
+mod list;
 pub mod log;
 pub mod menu;
 pub mod node;
 pub mod reactive;
+mod reorder;
 pub mod screen;
+mod scrollbar;
 mod sheet;
 mod split;
+mod table_scroll;
 pub mod task;
+pub mod testing;
 mod text_area;
 mod tree;
 pub mod widget;
@@ -75,14 +88,23 @@ pub use rich;
 /// `interact::Select`, …) and the headless test driver.
 pub use rich_interact as interact;
 
-pub use app::{every, Anchor, App, Ctx, Driver, Easing, FrameStats, Placement, Theme};
-pub use layout::{Align, AlignContent, Justify, Size, StackLayout};
+pub use app::{
+    every, Anchor, App, Ctx, Driver, Easing, FrameStats, ModalOptions, Placement, Theme,
+};
+pub use border::{Border, BorderSet, Edge, Shadow, Sides};
+pub use effect::{effect, fill};
+pub use input::{input, number_input};
+pub use layout::{Align, AlignContent, Justify, Size, StackLayout, TextAlign};
+pub use list::list_optional;
 pub use log::Log;
+pub use node::described;
 pub use node::{
-    column, component, each, grid, label, leaf, list, renderable, repeating, row, scroll,
+    column, component, each, grid, label, layers, leaf, list, renderable, repeating, row, scroll,
     scroll_both, scroll_both_with, scroll_with, scroll_x, switch, text, Node,
 };
-pub use reactive::{memo, signal, watch, Memo, Proxy, Signal};
+pub use reactive::{memo, signal, viewport, watch, Memo, Proxy, Signal};
+/// What a text does with what does not fit a line: rich's.
+pub use rich::Overflow;
 pub use sheet::{SheetError, Stylesheet};
 pub use task::{resource, spawn, spawn_future, Load, Resource, Task};
 pub use widget::{widget, Widget};
@@ -91,11 +113,13 @@ pub use widgets::text_area;
 /// Everything an app usually needs.
 pub mod prelude {
     // `text` is both the function and the `text!` macro.
+    pub use crate::described;
     pub use crate::{
-        column, component, each, every, grid, label, leaf, list, memo, renderable, repeating,
-        resource, row, scroll, scroll_both, scroll_with, scroll_x, signal, spawn, switch, text,
-        text_area, watch, widget, Align, App, Ctx, Justify, Load, Log, Memo, Node, Proxy, Resource,
-        Signal, Size, Task, Theme, Widget,
+        column, component, each, effect, every, fill, grid, input, label, layers, leaf, list,
+        list_optional, memo, number_input, renderable, repeating, resource, row, scroll,
+        scroll_both, scroll_with, scroll_x, signal, spawn, switch, text, text_area, viewport,
+        watch, widget, Align, App, Border, Ctx, Edge, Justify, Load, Log, Memo, Node, Overflow,
+        Proxy, Resource, Shadow, Sides, Signal, Size, Task, TextAlign, Theme, Widget,
     };
 }
 

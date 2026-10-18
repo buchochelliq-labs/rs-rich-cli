@@ -19,7 +19,7 @@
 //! substitution definitions) renders nothing, as docutils' own errors do
 //! with `show_errors=False`.
 
-mod entities;
+pub(crate) mod entities;
 mod inline;
 mod parse;
 mod render;

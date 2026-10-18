@@ -37,6 +37,15 @@ motion turned on in your system settings the cards stay still.
 [![An app in linear mode, written as lines of text](media/tapes/access/linear.png){ data-gif="access.gif" loading=lazy }<span class="tape-card-title">Text mode and linear mode</span>](#text-mode-and-linear-mode){ .tape-card }
 [![A line of Rust selected in a highlighted text area](media/tapes/editor/selected.png){ data-gif="editor.gif" loading=lazy }<span class="tape-card-title">A text area</span>](#a-text-area){ .tape-card }
 [![A dashboard drawn in place below the prompt](media/tapes/surface/done.png){ data-gif="surface.gif" loading=lazy }<span class="tape-card-title">A surface</span>](#a-surface){ .tape-card }
+[![ratatui's demo rebuilt on intuiTUIve](media/tapes/demo/graphs.png){ data-gif="demo.gif" loading=lazy }<span class="tape-card-title">ratatui's examples</span>](#ratatuis-examples-on-intuituive){ .tape-card }
+[![rich profile on nested JSON Lines](media/tapes/profile-nested/nested.png){ data-gif="profile-nested.gif" loading=lazy }<span class="tape-card-title">Nested JSON Lines</span>](#nested-json-lines-and-style-rules){ .tape-card }
+[![A two-row micro icon](media/tapes/micro-rows/icon.png){ data-gif="micro-rows.gif" loading=lazy }<span class="tape-card-title">Two-row micro assets</span>](#two-row-micro-assets){ .tape-card }
+[![rich approve reviewing a queue](media/tapes/approve/queue.png){ data-gif="approve.gif" loading=lazy }<span class="tape-card-title">Review and jump</span>](#review-a-queue-and-jump-to-anything){ .tape-card }
+[![A FIGlet banner in a gradient](media/tapes/banner/gradient.png){ data-gif="banner.gif" loading=lazy }<span class="tape-card-title">Banners and shell integration</span>](#banners-and-shell-integration){ .tape-card }
+[![A redaction preview](media/tapes/share/preview.png){ data-gif="share.gif" loading=lazy }<span class="tape-card-title">Preview, then share</span>](#preview-then-share){ .tape-card }
+[![rich date: a day picked on a month grid within a range](media/tapes/date/grid.png){ data-gif="date.gif" loading=lazy }<span class="tape-card-title">Dates and times</span>](#dates-and-times){ .tape-card }
+[![A man page rendered by rich, its sections and tagged paragraphs](media/tapes/documents/man.png){ data-gif="documents.gif" loading=lazy }<span class="tape-card-title">Org, AsciiDoc and man pages</span>](#org-asciidoc-and-man-pages){ .tape-card }
+[![rich log grouping records under a header for each trace id](media/tapes/log/groups.png){ data-gif="log.gif" loading=lazy }<span class="tape-card-title">Filter and group a log</span>](#filter-and-group-a-log){ .tape-card }
 [![rich serve printing its address, and sessions asked for](media/tapes/serve/sessions.png){ data-gif="serve.gif" loading=lazy }<span class="tape-card-title">Serve a program to a browser</span>](#serve-a-program-to-a-browser){ .tape-card }
 [![A shell in a terminal pane beside a web view](media/tapes/embed/pane.png){ data-gif="embed.gif" loading=lazy }<span class="tape-card-title">A terminal pane</span>](#a-terminal-pane){ .tape-card }
 [![A CSV file drawn as a line chart by rich chart](media/tapes/chart/lines.png){ data-gif="chart.gif" loading=lazy }<span class="tape-card-title">Charts from data</span>](#charts-from-data){ .tape-card }
@@ -44,6 +53,7 @@ motion turned on in your system settings the cards stay still.
 [![rich profile describing each column of a CSV file](media/tapes/profile/profile.png){ data-gif="profile.gif" loading=lazy }<span class="tape-card-title">Profile a data file</span>](#profile-a-data-file){ .tape-card }
 [![rich schema --er drawing SQL tables as an ER diagram](media/tapes/schema/er.png){ data-gif="schema.gif" loading=lazy }<span class="tape-card-title">Schemas and ER diagrams</span>](#schemas-and-er-diagrams){ .tape-card }
 [![rich deps --features showing what turned syn's features on](media/tapes/deps-features/features.png){ data-gif="deps-features.gif" loading=lazy }<span class="tape-card-title">Crate features</span>](#crate-features){ .tape-card }
+[![rich deps --baseline flagging a crate that grew](media/tapes/deps-policy/baseline.png){ data-gif="deps-policy.gif" loading=lazy }<span class="tape-card-title">Sizes, baselines and licence policy</span>](#sizes-baselines-and-licence-policy){ .tape-card }
 [![rich diff --conflicts showing ours, base and theirs side by side](media/tapes/conflicts/conflicts.png){ data-gif="conflicts.gif" loading=lazy }<span class="tape-card-title">Merge conflicts</span>](#merge-conflicts){ .tape-card }
 [![A DOT fence drawn in a Markdown document](media/tapes/dot-fence/drawn.png){ data-gif="dot-fence.gif" loading=lazy }<span class="tape-card-title">DOT in Markdown</span>](#dot-in-markdown){ .tape-card }
 [![fun/heart previewed, its frames magnified](media/tapes/micro-modes/modes.png){ data-gif="micro-modes.gif" loading=lazy }<span class="tape-card-title">Micro assets</span>](#micro-assets){ .tape-card }
@@ -445,6 +455,229 @@ screen when the program ends. See
 
 [Tape](tapes/surface.tape) · [Cast](media/tapes/surface/surface.cast) · [GIF](media/tapes/surface/surface.gif) · [Page](media/tapes/surface/surface.html)
 
+## Dates and times
+
+`rich date` (0.0.19): a day picked on a month grid, inside a range whose
+days outside are out of reach, then a date and time whose time is refused
+before the range's first moment, until it is moved into it. The answers
+are printed in ISO 8601 form, for a script to read. See
+[Ask in a script](cli.md#ask-in-a-script).
+
+<div class="tape-player" data-cast="../media/tapes/date/date.cast" data-poster="npt:0:2">
+  <img src="../media/tapes/date/date.gif" alt="rich date picking a day, then a date and time">
+</div>
+
+| A day | Refused | Answered |
+|---|---|---|
+| ![A month grid with the twentieth of November picked](media/tapes/date/grid.png) | ![A time before the range refused](media/tapes/date/refused.png) | ![The date and time printed](media/tapes/date/answer.png) |
+
+[Tape](tapes/date.tape) · [Cast](media/tapes/date/date.cast) · [GIF](media/tapes/date/date.gif) · [Page](media/tapes/date/date.html)
+
+## Org, AsciiDoc and man pages
+
+`rich FILE` (0.0.19) on an Org file, an AsciiDoc file and a man page, each
+found by its extension (the man page by its section number and the roff
+in it) and drawn in the look of rich's Markdown; then the man page's
+source with `--syntax`. See
+[Org, AsciiDoc and man pages](cli.md#org-asciidoc-and-man-pages).
+
+<div class="tape-player" data-cast="../media/tapes/documents/documents.cast" data-poster="npt:0:3">
+  <img src="../media/tapes/documents/documents.gif" alt="rich rendering an Org file, an AsciiDoc file and a man page, then the man page's source">
+</div>
+
+| Org | AsciiDoc | Man page | Source |
+|---|---|---|---|
+| ![An Org file with TODO keywords, tags and a table](media/tapes/documents/org.png) | ![An AsciiDoc file with its header, admonitions and a listing](media/tapes/documents/asciidoc.png) | ![A man page with its header, sections and tagged paragraphs](media/tapes/documents/man.png) | ![The man page's roff highlighted](media/tapes/documents/source.png) |
+
+[Tape](tapes/documents.tape) · [Cast](media/tapes/documents/documents.cast) · [GIF](media/tapes/documents/documents.gif) · [Page](media/tapes/documents/documents.html)
+
+## Filter and group a log
+
+`rich log` (0.0.19) on one log in four formats (JSON Lines, logfmt, a
+timestamped line and an access log, with a stack trace after an error),
+read as records; then filtered by level and field, folded where a message
+repeats, and grouped by trace id with a summary of the levels and the
+traces that failed. See [Logs: `rich log`](cli.md#logs-rich-log).
+
+<div class="tape-player" data-cast="../media/tapes/log/log.cast" data-poster="npt:0:3">
+  <img src="../media/tapes/log/log.gif" alt="rich log reading a mixed log, filtering it, folding repeats and grouping by trace">
+</div>
+
+| Records | Filtered | Folded | Groups |
+|---|---|---|---|
+| ![Four formats read as records](media/tapes/log/records.png) | ![Warnings and above from one service](media/tapes/log/filtered.png) | ![Repeated messages folded with a count](media/tapes/log/folded.png) | ![Records grouped under a header for each trace id](media/tapes/log/groups.png) |
+
+[Tape](tapes/log.tape) · [Cast](media/tapes/log/log.cast) · [GIF](media/tapes/log/log.gif) · [Page](media/tapes/log/log.html)
+
+## ratatui's examples on intuiTUIve
+
+ratatui's `demo` and `demo2`, its widget, chart and layout examples, and
+seven of its apps, rebuilt on intuiTUIve's API (0.0.19) with the mouse,
+help and a command palette added. The design, layout and keys are
+ratatui's (MIT, Florian Dehau and the Ratatui Developers); the code and
+the sample data are ours. See
+[ratatui's examples](guide/intuituive/ratatui-examples.md).
+
+### The classic demo
+
+<div class="tape-player" data-cast="../media/tapes/demo/demo.cast" data-poster="npt:0:3">
+  <img src="../media/tapes/demo/demo.gif" alt="ratatui's demo on intuiTUIve: gauges, a sparkline, lists, bars, a chart, a world map">
+</div>
+
+| Graphs | World | Colours |
+|---|---|---|
+| ![Gauges, a sparkline, lists, bars and a moving chart](media/tapes/demo/graphs.png) | ![A server table beside a world map](media/tapes/demo/world.png) | ![The sixteen named colours](media/tapes/demo/colours.png) |
+
+[Tape](tapes/demo.tape) · [Cast](media/tapes/demo/demo.cast) · [GIF](media/tapes/demo/demo.gif) · [Page](media/tapes/demo/demo.html)
+
+### The showcase
+
+<div class="tape-player" data-cast="../media/tapes/demo2/demo2.cast" data-poster="npt:0:3">
+  <img src="../media/tapes/demo2/demo2.gif" alt="ratatui's demo2 on intuiTUIve: about, recipe, email, traceroute and weather tabs">
+</div>
+
+| About | Email | Weather |
+|---|---|---|
+| ![A mark over a colour swatch](media/tapes/demo2/about.png) | ![An inbox and an open email](media/tapes/demo2/email.png) | ![A calendar, bars and a gauge](media/tapes/demo2/weather.png) |
+
+[Tape](tapes/demo2.tape) · [Cast](media/tapes/demo2/demo2.cast) · [GIF](media/tapes/demo2/demo2.gif) · [Page](media/tapes/demo2/demo2.html)
+
+### Widgets, charts and layout
+
+<div class="tape-player" data-cast="../media/tapes/widgets/widgets.cast" data-poster="npt:0:3">
+  <img src="../media/tapes/widgets/widgets.gif" alt="A gallery of intuiTUIve widgets in the style of ratatui's widget examples">
+</div>
+
+| Blocks | Table | Popup |
+|---|---|---|
+| ![Panels with titles, borders and a shadow](media/tapes/widgets/block.png) | ![A table with a footer and highlights](media/tapes/widgets/table.png) | ![A modal with a shadow](media/tapes/widgets/popup.png) |
+
+[Tape](tapes/widgets.tape) · [Cast](media/tapes/widgets/widgets.cast) · [GIF](media/tapes/widgets/widgets.gif) · [Page](media/tapes/widgets/widgets.html)
+
+<div class="tape-player" data-cast="../media/tapes/charts/charts.cast" data-poster="npt:0:3">
+  <img src="../media/tapes/charts/charts.gif" alt="A gallery of gauges, sparklines, bars, charts and the canvas">
+</div>
+
+| Gauges | Chart | Canvas |
+|---|---|---|
+| ![Fill and line gauges](media/tapes/charts/gauge.png) | ![Line, area and scatter charts](media/tapes/charts/chart.png) | ![The world map on the canvas](media/tapes/charts/canvas.png) |
+
+[Tape](tapes/charts.tape) · [Cast](media/tapes/charts/charts.cast) · [GIF](media/tapes/charts/charts.gif) · [Page](media/tapes/charts/charts.html)
+
+<div class="tape-player" data-cast="../media/tapes/layout/layout.cast" data-poster="npt:0:3">
+  <img src="../media/tapes/layout/layout.gif" alt="A layout explorer: sizes, flex modes and spacing">
+</div>
+
+| Explorer | Flex |
+|---|---|
+| ![Blocks sized and justified, with their widths](media/tapes/layout/explorer.png) | ![Each flex mode with and without a gap](media/tapes/layout/flex.png) |
+
+[Tape](tapes/layout.tape) · [Cast](media/tapes/layout/layout.cast) · [GIF](media/tapes/layout/layout.gif) · [Page](media/tapes/layout/layout.html)
+
+### Apps
+
+<div class="tape-player" data-cast="../media/tapes/apps/apps.cast" data-poster="npt:0:3">
+  <img src="../media/tapes/apps/apps.gif" alt="Four of ratatui's apps on intuiTUIve: colours, the canvas, a form and a calendar">
+</div>
+
+| Colours | Canvas | Form | Calendar |
+|---|---|---|---|
+| ![Named colours on backgrounds](media/tapes/apps/colors-named.png) | ![The canvas app](media/tapes/apps/canvas.png) | ![A form with a field in error](media/tapes/apps/form-error.png) | ![A year of months](media/tapes/apps/calendar.png) |
+
+[Tape](tapes/apps.tape) · [Cast](media/tapes/apps/apps.cast) · [GIF](media/tapes/apps/apps.gif) · [Page](media/tapes/apps/apps.html)
+
+## Nested JSON Lines and style rules
+
+`rich profile` (0.0.19) on JSON Lines, path by path with each path's mix
+of types, then a table styled by value with `--style-rule`. See
+[Nested JSON Lines](cli.md#nested-json-lines-0019).
+
+<div class="tape-player" data-cast="../media/tapes/profile-nested/profile-nested.cast" data-poster="npt:0:3">
+  <img src="../media/tapes/profile-nested/profile-nested.gif" alt="rich profile profiling nested JSON Lines, then style rules on a table">
+</div>
+
+| Nested | Rules |
+|---|---|
+| ![A profile of nested paths and their types](media/tapes/profile-nested/nested.png) | ![A table styled by value](media/tapes/profile-nested/rules.png) |
+
+[Tape](tapes/profile-nested.tape) · [Cast](media/tapes/profile-nested/profile-nested.cast) · [GIF](media/tapes/profile-nested/profile-nested.gif) · [Page](media/tapes/profile-nested/profile-nested.html)
+
+## Two-row micro assets
+
+Micro assets two rows high (0.0.19): a 2×2 icon in text and a table, and
+a 3×2 animation. See [Micro assets](guide/micro/index.md).
+
+<div class="tape-player" data-cast="../media/tapes/micro-rows/micro-rows.cast" data-poster="npt:0:3">
+  <img src="../media/tapes/micro-rows/micro-rows.gif" alt="A two-row micro icon in text and a table, and a two-row animation">
+</div>
+
+| Icon | Animation |
+|---|---|
+| ![A 2×2 icon with its row reserved](media/tapes/micro-rows/icon.png) | ![A 3×2 animation](media/tapes/micro-rows/animation.png) |
+
+[Tape](tapes/micro-rows.tape) · [Cast](media/tapes/micro-rows/micro-rows.cast) · [GIF](media/tapes/micro-rows/micro-rows.gif) · [Page](media/tapes/micro-rows/micro-rows.html)
+
+## Review a queue and jump to anything
+
+`rich approve` (0.0.19) walks a queue of items, approved, rejected with a
+reason or skipped, and prints the decisions as JSON Lines; `rich jump`
+finds a file, a heading, a symbol or a command from one fuzzy box. See
+[Review and jump](cli.md#review-and-jump).
+
+<div class="tape-player" data-cast="../media/tapes/approve/approve.cast" data-poster="npt:0:3">
+  <img src="../media/tapes/approve/approve.gif" alt="rich approve reviewing a queue of items">
+</div>
+
+| Queue | Reason | Decisions |
+|---|---|---|
+| ![A queue of items to review](media/tapes/approve/queue.png) | ![A rejection with a reason](media/tapes/approve/reason.png) | ![The decisions as JSON Lines](media/tapes/approve/output.png) |
+
+[Tape](tapes/approve.tape) · [Cast](media/tapes/approve/approve.cast) · [GIF](media/tapes/approve/approve.gif) · [Page](media/tapes/approve/approve.html)
+
+<div class="tape-player" data-cast="../media/tapes/jump/jump.cast" data-poster="npt:0:3">
+  <img src="../media/tapes/jump/jump.gif" alt="rich jump searching files, headings, symbols and commands">
+</div>
+
+| Groups | Narrowed | Answer |
+|---|---|---|
+| ![Results grouped by source](media/tapes/jump/groups.png) | ![A search narrowed to one source](media/tapes/jump/narrowed.png) | ![The picked location printed](media/tapes/jump/answer.png) |
+
+[Tape](tapes/jump.tape) · [Cast](media/tapes/jump/jump.cast) · [GIF](media/tapes/jump/jump.gif) · [Page](media/tapes/jump/jump.html)
+
+## Banners and shell integration
+
+`rich banner` (0.0.19) draws FIGlet text in a gradient, and `rich shell`
+prints a status line after a command and links to files. See
+[Draw a banner](cli.md#draw-a-banner-0019) and
+[Shell integration](cli.md#shell-integration-0019).
+
+<div class="tape-player" data-cast="../media/tapes/banner/banner.cast" data-poster="npt:0:3">
+  <img src="../media/tapes/banner/banner.gif" alt="rich banner drawing FIGlet text in gradients">
+</div>
+
+| Gradient | Vertical | Fit and status |
+|---|---|---|
+| ![A banner in a horizontal gradient](media/tapes/banner/gradient.png) | ![A banner in a vertical gradient](media/tapes/banner/vertical.png) | ![A banner fitted to the width, and a status line](media/tapes/banner/fit-and-status.png) |
+
+[Tape](tapes/banner.tape) · [Cast](media/tapes/banner/banner.cast) · [GIF](media/tapes/banner/banner.gif) · [Page](media/tapes/banner/banner.html)
+
+## Preview, then share
+
+`rich capture --redact --redact-preview` (0.0.19) shows each secret a
+redaction would mask, and its replacement, without writing anything; then
+the redacted capture is shared as a PNG. See
+[Preview a redaction before you share](cli.md#preview-a-redaction-before-you-share-0019).
+
+<div class="tape-player" data-cast="../media/tapes/share/share.cast" data-poster="npt:0:3">
+  <img src="../media/tapes/share/share.gif" alt="rich capture previewing a redaction, then sharing the output">
+</div>
+
+| Preview | Shared |
+|---|---|
+| ![Each match, its rule and its replacement](media/tapes/share/preview.png) | ![The redacted output, shared](media/tapes/share/shared.png) |
+
+[Tape](tapes/share.tape) · [Cast](media/tapes/share/share.cast) · [GIF](media/tapes/share/share.gif) · [Page](media/tapes/share/share.html)
+
 ## Serve a program to a browser
 
 `rich serve` (0.0.18, behind the CLI's `serve` feature) runs a program in
@@ -532,6 +765,24 @@ one crate; here `syn`, resolved at two versions.
 ![rich deps --features --package syn](media/tapes/deps-features/features.png)
 
 [Tape](tapes/deps-features.tape) · [Cast](media/tapes/deps-features/deps-features.cast) · [GIF](media/tapes/deps-features/deps-features.gif) · [Page](media/tapes/deps-features/deps-features.html)
+
+## Sizes, baselines and licence policy
+
+`rich deps` (0.0.19) as a CI gate: what each crate adds to a binary, from
+cargo-bloat's JSON; a size regression against a saved baseline, which
+exits 5; and a licence policy refusing a crate in an SBOM. Every input is
+a fixture in the repository. See
+[Dependency sizes, baselines and licence policy](cli.md#dependency-sizes-baselines-and-licence-policy-0019).
+
+<div class="tape-player" data-cast="../media/tapes/deps-policy/deps-policy.cast" data-poster="npt:0:3">
+  <img src="../media/tapes/deps-policy/deps-policy.gif" alt="rich deps reporting sizes, comparing them with a baseline, and checking a licence policy">
+</div>
+
+| Sizes | Baseline | Policy |
+|---|---|---|
+| ![Each crate's size as a bar, largest first](media/tapes/deps-policy/sizes.png) | ![A crate that grew past the threshold, flagged](media/tapes/deps-policy/baseline.png) | ![A crate whose licence the policy refuses](media/tapes/deps-policy/policy.png) |
+
+[Tape](tapes/deps-policy.tape) · [Cast](media/tapes/deps-policy/deps-policy.cast) · [GIF](media/tapes/deps-policy/deps-policy.gif) · [Page](media/tapes/deps-policy/deps-policy.html)
 
 ## Profile a data file
 

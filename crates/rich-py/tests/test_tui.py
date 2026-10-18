@@ -84,10 +84,12 @@ from rs_rich.tui import (
     tree_with,
     virtual_list,
     virtual_table,
+    viewport,
     vsplit,
     watch,
     widget,
 )
+from rs_rich.tui import assert_screen, assert_screen_styled, assert_snapshot
 from rs_rich.tui import list as list_
 
 from conftest import in_thread
@@ -496,6 +498,46 @@ def test_tables():
     assert screen(build_virtual, ["end", "q"], 16, 3)[-1] == "row 999"
 
 
+def test_a_wide_table_scrolls_across_with_frozen_columns():
+    people = [
+        ["1", "Ada Lovelace", "London", "United Kingdom"],
+        ["2", "Grace Hopper", "New York", "United States"],
+    ]
+    titles = ["id", "name", "city", "country"]
+
+    def build(options):
+        def build_():
+            cols = [Column(title, Size.Auto) for title in titles]
+            return table_with(cols, people, signal(0), options()).on_key("q", lambda cx: cx.quit())
+
+        return build_
+
+    # Natural widths 2, 12, 8 and 14: `›` says more are to the right.
+    out = screen(build(lambda: TableOptions().scroll_x()), ["q"], 24, 3)
+    assert out[0].startswith("id name") and out[0].endswith("›")
+    out = screen(build(lambda: TableOptions().scroll_x()), ["right", "q"], 24, 3)
+    assert out[0].startswith("‹name"), out
+    assert out[0].index("city") == out[1].index("London")
+    # The first column stays.
+    out = screen(build(lambda: TableOptions().freeze_columns(1)), ["right", "q"], 24, 3)
+    assert out[0].startswith("id ‹city"), out
+    assert out[1].startswith("1   London"), out
+
+    def build_virtual():
+        cols = [Column(f"column{i}", Size.Auto) for i in range(8)]
+        return virtual_table(
+            cols,
+            lambda: 100,
+            lambda r: [f"r{r}c{c}-cell" for c in range(8)],
+            signal(0),
+            TableOptions().freeze_columns(1),
+        ).on_key("q", lambda cx: cx.quit())
+
+    out = screen(build_virtual, ["shift+end", "q"], 30, 3)
+    assert out[0].startswith("column0   ‹column6   column7"), out
+    assert out[0].index("column7") == out[1].index("r0c7")
+
+
 def test_a_virtual_list_asks_only_for_the_rows_in_view():
     asked = []
 
@@ -732,6 +774,147 @@ def test_access_states_and_classes():
     driver.key("space")
     turn(driver)
     assert driver.accessibility()[0].state.checked is False
+
+
+def test_hide_below_media_rules_and_viewport_follow_the_size():
+    def build():
+        size = viewport()
+        return column(
+            [
+                row([label("nav").fixed(5).hide_below(20), label("main").name("main")]).fixed(1),
+                text(lambda: f"{size.get()}").fixed(1),
+                label("compact").show_below(20).fixed(1),
+                label("tall").hide_below_height(4).fixed(1),
+            ]
+        )
+
+    app = App(build).stylesheet("@media (max-width: 15) { #main { display: none; } }")
+    driver = app.driver(24, 4)
+    driver.settle()
+    assert rows(driver) == ["nav  main", "(24, 4)", "tall", ""]
+    driver.resize(16, 3)
+    driver.settle()
+    assert rows(driver) == ["main", "(16, 3)", "compact"]
+    driver.resize(12, 3)
+    driver.settle()
+    assert rows(driver) == ["", "(12, 3)", "compact"]
+
+
+def test_error_when_is_styled_and_told_as_invalid():
+    def build():
+        age = signal("forty")
+        return column(
+            [
+                text(lambda: f"Age: {age.get()}")
+                .label("Age")
+                .error_when(lambda: not age.get().isdigit())
+                .focusable()
+                .on_key("f", lambda cx: age.set("40")),
+                label("ok").panel("Status").error_when(lambda: not age.get().isdigit()),
+            ]
+        )
+
+    app = App(build).stylesheet(":error { text-style: underline; }")
+    driver = app.driver(12, 4)
+    driver.settle()
+    node = driver.accessibility()[0]
+    assert node.state.invalid is True
+    assert node.describe() == "Age, invalid"
+    assert ("aria-invalid", "true") in node.aria_attributes()
+    assert driver.styled().splitlines()[0] == "[bold underline red]Age: forty  [/]"
+    driver.press("f")
+    assert driver.accessibility()[0].state.invalid is False
+    assert driver.styled().splitlines()[0] == "Age: 40"
+    assert tui.AccessState(invalid=True).invalid is True
+
+
+def test_driver_helpers_press_type_and_assert_the_focus():
+    def build():
+        name = signal("")
+        return column(
+            [
+                component(Input("Name"), lambda answer, cx: name.set(answer)),
+                text(lambda: f"Hello, {name.get()}"),
+                label("Quit").name("quit").focusable(),
+            ]
+        )
+
+    driver = App(build).driver(30, 4)
+    driver.type_text("Ada")
+    driver.press("enter")
+    assert any("Hello, Ada" in line for line in driver.screen())
+    driver.press("tab")
+    driver.assert_focused("quit")
+    assert driver.focused_name() == "quit"
+    assert isinstance(driver.focused(), int)
+    with pytest.raises(AssertionError, match="expected the focus on `nope`, but it is on `quit`"):
+        driver.assert_focused("nope")
+    with pytest.raises(ValueError, match="unknown key"):
+        driver.press("ctrl-q")
+
+
+def test_the_inspector_traces_times_and_selects():
+    def build():
+        count = signal(0)
+        return (
+            text(lambda: f"count {count.get()}")
+            .name("count")
+            .on_key("+", lambda cx: count.update(lambda c: c + 1))
+        )
+
+    driver = App(build).inspector(True).driver(80, 10)
+    driver.press("+")
+    trace = driver.inspector_trace()
+    assert [e.text for e in trace if e.kind == "key"] == ["key + → count on_key"]
+    write = next(e for e in trace if e.kind == "signal")
+    assert "→ count" in write.text
+    assert write.frame >= 1 and write.at == 0.0
+    assert "TraceEntry(frame=" in repr(write)
+    timing = next(t for t in driver.inspector_timings() if t.name == "count")
+    # The first frame, and the one after `+`.
+    assert timing.draws == 2
+    assert timing.total >= timing.last >= 0.0
+    assert isinstance(timing.id, int)
+    # Shift+F12 gives the inspector the keys: the arrows select a node, and
+    # `+` does not reach the app until Esc gives them back.
+    assert driver.inspector_selected() is None
+    driver.press("shift+f12 down +")
+    assert driver.inspector_selected() == timing.id
+    assert driver.screen()[0].startswith("count 1")
+    driver.press("esc +")
+    assert driver.screen()[0].startswith("count 2")
+    # Without an inspector there is nothing.
+    plain = App(build).driver(20, 1)
+    plain.press("+")
+    assert plain.inspector_trace() == [] and plain.inspector_timings() == []
+
+
+def test_screen_snapshots_write_compare_and_diff(tmp_path, monkeypatch):
+    def build():
+        count = signal(0)
+        return text(lambda: f"[b]Count:[/] {count.get()}").on_key(
+            "+", lambda cx: count.update(lambda c: c + 1)
+        )
+
+    driver = App(build).driver(12, 1)
+    driver.press("+ +")
+    path = tmp_path / "snapshots" / "counter.txt"
+    monkeypatch.setenv("UPDATE_SNAPSHOTS", "1")
+    assert_screen_styled(driver, path)
+    assert path.read_text() == "Count: 2\n"
+    assert (tmp_path / "snapshots" / "counter.styled.txt").read_text() == "[bold]Count:[/] 2\n"
+    monkeypatch.delenv("UPDATE_SNAPSHOTS")
+    assert_screen(driver, path)
+    assert_screen(driver.screen(), str(path))
+    assert_screen_styled(driver, path)
+    driver.press("+")
+    with pytest.raises(AssertionError, match="UPDATE_SNAPSHOTS=1") as raised:
+        assert_screen(driver, path)
+    assert "-Count: 2\n+Count: 3\n" in str(raised.value)
+    with pytest.raises(AssertionError, match="missing snapshot"):
+        assert_snapshot(tmp_path / "nope.txt", "x\n")
+    with pytest.raises(TypeError, match="a screen is a Driver"):
+        assert_screen(42, path)
 
 
 def test_a_node_is_used_once():
@@ -1698,3 +1881,586 @@ def test_the_stubs_describe_every_tui_class_and_method():
         if issubclass(cls, BaseException):
             own &= {"line", "column", "message"}
         assert own <= stubbed[name], (name, sorted(own - stubbed[name]))
+
+
+def test_a_reorderable_list():
+    def build():
+        items = signal(["a", "b", "c"])
+
+        def move(step, cx):
+            source, target = step
+            items.update(lambda values: values.insert(target, values.pop(source)))
+
+        return column([
+            list_(lambda: items.get(), signal(0)).reorderable(move).fixed(3),
+            text(lambda: "".join(items.get())).fixed(1),
+        ]).on_key("q", lambda cx: cx.quit())
+
+    assert screen(build, ["alt+down", "J", "q"], 10, 4)[3] == "bca"
+    assert screen(build, ["space", "down", "q"], 10, 4)[1] == "↕ a"
+    assert screen(build, ["end", "space", "up", "escape", "q"], 10, 4)[3] == "abc"
+
+
+def test_date_and_time_pickers():
+    def build_range():
+        day = signal(datetime.date(2026, 10, 15))
+        return column([
+            calendar_with(day, min=datetime.date(2026, 10, 10), max=datetime.date(2026, 10, 20)).fixed(8),
+            text(lambda: day.get().isoformat()),
+        ]).on_key("q", lambda cx: cx.quit())
+
+    assert screen(build_range, ["down", "down", "q"], 20, 9)[8] == "2026-10-20"
+
+    def build_time():
+        at = signal(datetime.time(9, 5))
+        return column([
+            tui.time_picker(at, twelve_hour=True).fixed(1),
+            text(lambda: at.get().isoformat()),
+        ]).on_key("q", lambda cx: cx.quit())
+
+    out = screen(build_time, ["up", "right", "3", "0", "p", "q"], 20, 2)
+    assert out == ["10:30 PM", "22:30:00"]
+
+    def build_moment():
+        at = signal(datetime.datetime(2026, 10, 18, 9, 0))
+        earliest = datetime.datetime(2026, 10, 17, 12, 0)
+        return column([
+            tui.datetime_picker(at, min=earliest).fixed(11),
+            text(lambda: at.get().isoformat(" ")),
+        ]).on_key("q", lambda cx: cx.quit())
+
+    out = screen(build_moment, ["left", "q"], 20, 12)
+    assert out[9] == "✗ the earliest is"
+    assert out[11] == "2026-10-17 12:00:00"
+
+
+def test_time_pickers_refuse_an_inverted_range_and_a_time_zone():
+    nine, five = datetime.time(9, 0), datetime.time(17, 0)
+    with pytest.raises(ValueError, match="min is after max"):
+        App(lambda: tui.time_picker(signal(nine), min=five, max=nine)).render_with([], 20, 2)
+    first, last = datetime.datetime(2026, 10, 10), datetime.datetime(2026, 10, 20)
+    with pytest.raises(ValueError, match="min is after max"):
+        App(lambda: tui.datetime_picker(signal(first), min=last, max=first)).render_with([], 20, 12)
+    # The signal's value would be rewritten without its offset: refused.
+    aware = datetime.datetime(2026, 10, 18, 9, 0, tzinfo=datetime.timezone.utc)
+    with pytest.raises(TypeError, match="time zone"):
+        App(lambda: tui.datetime_picker(signal(aware))).render_with([], 20, 12)
+
+
+# ---------------------------------------------------------------------------
+# Blocks, text and layout (0.0.19 gap batch A): the screens are the ones
+# crates/rich-intuituive/tests/snapshots pins for the same apps.
+
+
+def test_panel_titles_on_both_edges():
+    def build():
+        return column([
+            label("left").panel("Left"),
+            label("centre").panel("Centre").title_align("center"),
+            label("right").panel("Right").title_align("right"),
+            label("two titles at the bottom")
+            .panel("")
+            .title_bottom("q quits")
+            .add_title(tui.Edge.Bottom, "right", "1/20"),
+        ])
+
+    assert screen(build, [], 30, 12) == [
+        "╭─ Left ─────────────────────╮",
+        "│left                        │",
+        "╰────────────────────────────╯",
+        "╭────────── Centre ──────────╮",
+        "│centre                      │",
+        "╰────────────────────────────╯",
+        "╭──────────────────── Right ─╮",
+        "│right                       │",
+        "╰────────────────────────────╯",
+        "╭────────────────────────────╮",
+        "│two titles at the bottom    │",
+        "╰─ q quits ─────────── 1/20 ─╯",
+    ]
+    # Too narrow for both: the right one gives way, and the left one is cut.
+    out = screen(lambda: label("").panel("Left title").title_right("Right"), [], 12, 3)
+    assert out[0] == "╭─ Left … ─╮"
+    with pytest.raises(ValueError):
+        label("").add_title("middle", "left", "x")
+
+
+def test_panel_sides_kinds_and_shadows():
+    def sides():
+        return column([
+            label("top only").panel("Top").borders(tui.Sides.TOP),
+            label("left and right").panel("Sides").borders(tui.Sides.LEFT | tui.Sides.RIGHT),
+            label("bottom only").panel("").borders("bottom"),
+        ])
+
+    assert screen(sides, [], 20, 7) == [
+        "── Top ─────────────",
+        "top only",
+        "│Sides             │",
+        "│left and right    │",
+        "bottom only",
+        "",
+        "────────────────────",
+    ]
+
+    def kinds():
+        return row([
+            label("").panel("").border("thick"),
+            label("").panel("").border(tui.Border.Double),
+            label("").panel("").border(["+", "~", "+", "|", "|", "+", "~", "+"]),
+        ])
+
+    assert screen(kinds, [], 9, 2) == ["┏━┓╔═╗+~+", "┗━┛╚═╝+~+"]
+    with pytest.raises(ValueError):
+        label("").border(["+", "-"])
+
+    def shadows():
+        return row([
+            label("medium").panel("A").shadow(tui.Shadow.MediumShade),
+            label("block").panel("B").shadow("block"),
+            label("own").panel("C").shadow("$"),
+        ])
+
+    assert screen(shadows, [], 33, 4) == [
+        "╭─ A ────╮ ╭─ B ────╮ ╭─ C ────╮",
+        "│medium  │▒│block   │█│own     │$",
+        "╰────────╯▒╰────────╯█╰────────╯$",
+        " ▒▒▒▒▒▒▒▒▒▒ ██████████ $$$$$$$$$$",
+    ]
+    with pytest.raises(ValueError):
+        label("").shadow("ab")
+
+
+def test_titles_and_borders_take_styles():
+    def build():
+        return label("x").panel("[bold]Pull[/] requests").border_style("red").title_style("green")
+
+    driver = App(build).driver(20, 3)
+    turn(driver)
+    assert driver.styled().splitlines()[0] == (
+        "[red]╭─[/][green] [/][bold green]Pull[/][green] requests [/][red]──╮[/]"
+    )
+    assert driver.screen()[0] == "╭─ Pull requests ──╮"
+
+
+def test_collapsed_borders():
+    def build():
+        return row([
+            label("one").panel("One"),
+            label("two").panel("Two").fixed(10),
+            label("three").panel("Three").title_bottom("3"),
+        ]).collapse_borders()
+
+    assert screen(build, [], 32, 4) == [
+        "╭─ One ────┬─ Two ──┬─ Three ──╮",
+        "│one       │two     │three     │",
+        "│          │        │          │",
+        "╰──────────┴────────┴─ 3 ──────╯",
+    ]
+
+
+def test_a_style_on_a_node():
+    def build():
+        return column([
+            label("one"),
+            label("[yellow]two[/] and more"),
+            row([label("a").fixed(2), label("b").fixed(2)]).gap(2),
+        ]).gap(1).bg("blue")
+
+    driver = App(build).driver(14, 6)
+    turn(driver)
+    assert driver.styled().splitlines()[2] == "[yellow on blue]two[/][on blue] and more  [/]"
+    driver = App(lambda: label("x").style("bold").fg("red")).driver(3, 1)
+    turn(driver)
+    assert driver.styled() == "[bold red]x  [/]\n"
+
+
+POEM = "The quick brown\nfox jumps over\nthe lazy dog"
+
+
+def test_text_alignment_wrapping_and_overflow():
+    out = screen(lambda: label(POEM).text_align("center").panel("Centred"), [], 22, 5)
+    assert out == [
+        "╭─ Centred ──────────╮",
+        "│  The quick brown   │",
+        "│   fox jumps over   │",
+        "│    the lazy dog    │",
+        "╰────────────────────╯",
+    ]
+    out = screen(lambda: label(POEM).text_align(tui.TextAlign.Right).panel("Right"), [], 22, 5)
+    assert out[3] == "│        the lazy dog│"
+    def cut():
+        return column([
+            label("cut at the edge, not wrapped").no_wrap(),
+            label("cut with an ellipsis instead").no_wrap().overflow(tui.Overflow.Ellipsis),
+            label("wrapped as before, a word at a time"),
+        ])
+
+    assert screen(cut, [], 16, 4) == [
+        "cut at the edge,",
+        "cut with an ell…",
+        "wrapped as",
+        "before, a word",
+    ]
+    with pytest.raises(ValueError):
+        label("").text_align("middle")
+    with pytest.raises(ValueError):
+        label("").overflow("spill")
+
+
+def test_ratio_sizes_and_laying_out_by_hand():
+    assert Size.Ratio(1, 3) == Size.Ratio(1, 3)
+    assert repr(Size.Ratio(1, 3)) == "Size.Ratio(1, 3)"
+
+    def build():
+        return row([
+            text("a").ratio(1, 3).bg("red"),
+            text("b").size("1/3").bg("green"),
+            text("c").size(Size.Ratio(1, 3)).bg("blue"),
+        ])
+
+    # Three thirds of 10 fill all 10: the last one takes the remainder.
+    driver = App(build).driver(10, 1)
+    turn(driver)
+    assert driver.styled() == "[on red]a  [/][on green]b  [/][on blue]c   [/]\n"
+
+    room = tui.Rect(0, 0, 10, 1)
+    thirds = [tui.Track(Size.Ratio(1, 3))] * 3
+    assert [r.width for r in tui.layout_split(room, "horizontal", thirds)] == [3, 3, 4]
+    cells, spacers = tui.layout_split_with_spacers(
+        tui.Rect(0, 0, 12, 1),
+        Axis.Horizontal,
+        [tui.Track(2), tui.Track(4, min=3)],
+        gap=2,
+        justify="center",
+    )
+    assert cells == [tui.Rect(2, 0, 2, 1), tui.Rect(6, 0, 4, 1)]
+    assert spacers == [tui.Rect(0, 0, 2, 1), tui.Rect(4, 0, 2, 1), tui.Rect(10, 0, 2, 1)]
+    with pytest.raises(ValueError):
+        tui.layout_split(room, "horizontal", thirds, justify="sideways")
+
+
+def test_rect_helpers():
+    room = tui.Rect(2, 1, 10, 4)
+    assert room.inset(1, 2, 1, 2) == tui.Rect(4, 2, 6, 2)
+    assert room.centered(4, 2) == tui.Rect(5, 2, 4, 2)
+    assert room.offset(-2, 1) == tui.Rect(0, 2, 10, 4)
+    assert room.union(tui.Rect(0, 0, 1, 1)) == tui.Rect(0, 0, 12, 5)
+    assert room.intersects(tui.Rect(11, 4, 3, 3))
+    assert not room.intersects(tui.Rect(12, 1, 3, 3))
+    assert [r.y for r in room.rows()] == [1, 2, 3, 4]
+    assert [r.x for r in room.columns()][:3] == [2, 3, 4]
+
+
+def test_sides():
+    both = tui.Sides.TOP | tui.Sides.BOTTOM
+    assert both == tui.Sides.BOTTOM | tui.Sides.TOP
+    assert hash(both) == hash(tui.Sides.BOTTOM | tui.Sides.TOP)
+    assert repr(both) == "Sides.TOP | Sides.BOTTOM"
+    assert both.contains(tui.Sides.TOP) and not both.contains(tui.Sides.LEFT)
+    assert tui.Sides.ALL.contains(both) and not tui.Sides.NONE.contains(tui.Sides.TOP)
+    with pytest.raises(ValueError):
+        label("").borders("up")
+
+
+def test_layers_stack_children_later_on_top():
+    def build():
+        board = "\n".join(f"{f'row {r} ':-<24}" for r in range(6))
+        return tui.layers([
+            text(board),
+            label("on top").panel("Badge").inset(1, 2, 1, 10),
+        ])
+
+    assert screen(build, [], 24, 6) == [
+        "row 0 ------------------",
+        "row 1 ----╭─ Badge ──╮--",
+        "row 2 ----│on top    │--",
+        "row 3 ----│          │--",
+        "row 4 ----╰──────────╯--",
+        "row 5 ------------------",
+    ]
+
+    def placed():
+        return tui.layers([
+            tui.fill("·", ""),
+            label("tl").place("start", "start"),
+            label("c").place("center", "center"),
+            label("br").place("end", "end"),
+        ])
+
+    assert screen(placed, [], 7, 3) == ["tl·····", "···c···", "·····br"]
+
+
+def test_effects_read_and_write_cells():
+    seen = []
+
+    def shout(canvas, cx):
+        for x in range(canvas.width):
+            cell = canvas.cell(x, 0)
+            seen.append(cell)
+            if cell.symbol():
+                canvas.set_cell(x, 0, cell.symbol().upper(), "bold")
+
+    def build():
+        return column([tui.effect(label("quiet 界"), shout), tui.fill("·", "bright_black")])
+
+    driver = App(build).driver(9, 2)
+    turn(driver)
+    assert driver.screen() == ["QUIET 界 ", "·········"]
+    wide = next(cell for cell in seen if cell.symbol() == "界")
+    assert wide.width() == 2 and not wide.is_continuation()
+    assert any(cell.is_continuation() and cell.width() == 0 for cell in seen)
+    assert driver.styled().splitlines()[0] == "[bold]QUIET 界 [/]"
+
+    out = screen(lambda: row([tui.fill("界", "").fixed(5), tui.fill("=", "accent")]), [], 9, 1)
+    assert out == ["界界 ===="]
+
+
+def test_a_widget_draws_over_its_children():
+    class Badge(Widget):
+        def children(self):
+            return [label("hello")]
+
+        def layout(self, cx, rect):
+            return [rect]
+
+        def draw(self, cx, canvas):
+            pass
+
+        def draw_over(self, cx, canvas):
+            first = canvas.cell(0, 0)
+            canvas.set_cell(0, 0, first.symbol().upper(), "reverse")
+            canvas.fill_with(5, 0, 2, 1, "!")
+            assert canvas.cell(99, 0) is None
+
+    driver = App(lambda: widget(Badge())).driver(8, 1)
+    turn(driver)
+    assert driver.screen()[0].rstrip() == "Hello!!"
+    assert driver.styled().startswith("[reverse]H[/]")
+
+    class Stack(Widget):
+        def children(self):
+            return [label("under"), label("[b]over")]
+
+        def layout(self, cx, rect):
+            return [rect, rect]
+
+        def draw(self, cx, canvas):
+            pass
+
+        def overlapping(self):
+            return True
+
+    # The later child is on top, over its whole area.
+    assert screen(lambda: widget(Stack()), [], 6, 1) == ["over"]
+
+
+def test_theme_styles_for_a_subtree():
+    def build():
+        a, b = signal(0), signal(1)
+        items = lambda: ["first", "second"]  # noqa: E731
+        return row([list_(items, a), list_(items, b).theme_styles({"selected": "underline"})])
+
+    driver = App(build).driver(16, 2)
+    turn(driver)
+    assert driver.styled().splitlines() == [
+        "[reverse]first   [/]first",
+        "second  [underline]second  [/]",
+    ]
+
+    def markup():
+        return column([
+            label("[warning]a[/]"),
+            label("[warning]b[/]").theme_styles([("warning", "bold red")]),
+        ])
+
+    driver = App(markup).driver(4, 2)
+    turn(driver)
+    assert driver.styled().splitlines()[1] == "[bold red]b[/]"
+
+
+def test_list_options_and_an_empty_selection():
+    fruit = ["apple", "banana", "cherry", "damson", "elder"]
+
+    def build_symbol():
+        return list_(fruit, signal(1)).symbol(">> ").on_key("q", lambda cx: cx.quit())
+
+    out = screen(build_symbol, ["q"], 12, 5)
+    assert out[:2] == ["   apple", ">> banana"]
+
+    def build_up():
+        selected = signal(0)
+        return column([
+            list_(fruit, selected).direction("bottom_to_top"),
+            text(lambda: str(selected.get())).fixed(1),
+        ]).on_key("q", lambda cx: cx.quit())
+
+    out = screen(build_up, ["up", "q"], 10, 7)
+    assert out[5] == "apple" and out[1] == "elder" and out[6] == "1"
+
+    def build_none():
+        selected = signal(None)
+        return column([
+            tui.list_optional(fruit, selected).symbol("> ").fixed(3),
+            text(lambda: repr(selected.get())).fixed(1),
+        ]).on_key("q", lambda cx: cx.quit())
+
+    assert screen(build_none, ["q"], 12, 4)[::3] == ["apple", "None"]
+    assert screen(build_none, ["down", "q"], 12, 4)[::3] == ["> apple", "0"]
+
+    def build_rest():
+        items = [f"item {n}\nmore" for n in range(10)]
+        first = signal(0)
+        return column([
+            list_(items, signal(0))
+            .multiline()
+            .scroll_padding(1)
+            .row_style(lambda i: "on blue" if i % 2 else None)
+            .offset(first),
+            text(lambda: str(first.get())).fixed(1),
+        ]).on_key("q", lambda cx: cx.quit())
+
+    # Two items of two lines fit; the padding keeps item 3 in view below 2.
+    out = screen(build_rest, ["down", "down", "q"], 10, 5)
+    assert out[0] == "item 2" and out[4] == "2"
+
+
+def test_table_options():
+    def build():
+        columns = [
+            Column("Food", Size.Auto),
+            Column("Qty", Size.Fixed(4), align="flex-end"),
+            Column("Energy", Size.Auto).align("end").min(8),
+        ]
+        rows = [["Apple", "1", "95 kcal"], ["Bread", "2", "160 kcal"]]
+        options = (
+            TableOptions()
+            .footer(lambda: ["Total", "3", "255 kcal"])
+            .symbol("» ")
+            .highlight_spacing("always")
+            .column_spacing(1)
+            .row_style(lambda i: "on blue" if i % 2 else None)
+            .header_gap(1)
+            .scroll_padding(1)
+        )
+        return tui.table_with(columns, rows, signal(0), options).on_key("q", lambda cx: cx.quit())
+
+    out = screen(build, ["q"], 26, 6)
+    assert out[0] == "  Food   Qty   Energy"
+    assert out[1] == ""
+    assert out[2] == "» Apple    1  95 kcal"
+    assert out[5] == "  Total    3 255 kcal"
+
+    def build_none():
+        selected = signal(None)
+        return column([
+            tui.table_optional(["Name"], [["a"], ["b"]], selected, TableOptions().multiline()).fixed(3),
+            text(lambda: repr(selected.get())).fixed(1),
+        ]).on_key("q", lambda cx: cx.quit())
+
+    assert screen(build_none, ["down", "q"], 10, 4)[3] == "0"
+
+
+def test_tab_strip_options():
+    def build():
+        strip = tui.tabs(["Recipe", "Email"], signal(0)).divider(" • ").tab_padding("", "")
+        return strip.on_key("q", lambda cx: cx.quit())
+
+    assert screen(build, ["q"], 20, 1)[0] == "Recipe • Email"
+
+    def build_end():
+        strip = tui.tabs(["A", "B"], signal(0)).titles_align("flex-end")
+        return strip.on_key("q", lambda cx: cx.quit())
+
+    assert screen(build_end, ["q"], 10, 1)[0] == "    A │ B"
+
+
+def test_scrollbars():
+    lines = [f"line {n}" for n in range(20)]
+
+    def build():
+        bar = (
+            tui.Scrollbar()
+            .side("left")
+            .symbols("vertical")
+            .track(None)
+            .ends("↑", "↓")
+            .show("always")
+        )
+        return list_(lines, signal(0)).scrollbar(bar).on_key("q", lambda cx: cx.quit())
+
+    out = screen(build, ["q"], 10, 4)
+    assert out[0] == "↑line 0" and out[3] == "↓line 3"
+
+    def build_own():
+        top = signal(0)
+        return tui.row([
+            text(lambda: f"from {top.get()}"),
+            tui.scrollbar(top, 100, lambda: 10, tui.Scrollbar()),
+        ]).on_key("j", lambda cx: top.set(50)).on_key("q", lambda cx: cx.quit())
+
+    out = screen(build_own, ["j", "q"], 10, 10)
+    assert out[0] == "from 50  │" and out[5] == "         ┃"
+    with pytest.raises(ValueError, match="'right', 'left'"):
+        tui.Scrollbar().side("middle")
+
+
+def test_inputs_bound_to_signals():
+    def build():
+        name = signal("")
+        said = signal("")
+        age = signal(30)
+        return column([
+            tui.input(name).placeholder("Name").on_submit(lambda value, cx: said.set(value)).fixed(1),
+            tui.input(signal("")).mask("•").max_length(3).fixed(1),
+            tui.number_input(age, 0, 150).step(5).fixed(1),
+            text(lambda: f"{said.get()}|{age.get()}").fixed(1),
+        ]).on_key("esc", lambda cx: cx.quit())
+
+    keys = ["A", "d", "a", "enter", "tab", "s", "e", "c", "r", "tab", "up", "esc"]
+    assert screen(build, keys, 20, 4) == ["Ada", "•••", "35", "Ada|35"]
+    with pytest.raises(ValueError, match="min"):
+        App(lambda: tui.number_input(signal(0), 5, 1)).render_with([], 10, 1)
+
+
+def test_the_app_shell():
+    def build_modal():
+        def open_(cx):
+            look = tui.ModalOptions().shadow("on blue").backdrop("dim")
+            cx.modal_with(Size.Fixed(8), Size.Fixed(3), look, lambda: label("hi").panel(""))
+
+        return label("below").on_key("o", open_)
+
+    driver = App(build_modal).driver(20, 6)
+    driver.press("o")
+    styled = driver.styled()
+    assert styled.startswith("[dim]below") and "on blue]" in styled
+
+    def build_exit():
+        return label("x").on_key("y", lambda cx: cx.quit_with({"picked": 2}))
+
+    ran = tui.run(App(build_exit), "y", width=10, height=1)
+    assert ran.finished and ran.exit == {"picked": 2}
+
+    def build_fail():
+        return label("x").on_key("f", lambda cx: cx.fail("bad config"))
+
+    with pytest.raises(OSError, match="bad config"):
+        tui.run(App(build_fail), "f", width=10, height=1)
+
+    def build_print():
+        return label("full").on_key("p", lambda cx: cx.print_above("[b]done[/]"))
+
+    driver = App(build_print).driver(20, 2)
+    driver.press("p")
+    assert driver.take_printed() == ["[b]done[/]"]
+    assert driver.stats().frames >= 1
+    driver = App(build_exit).driver(10, 1)
+    driver.press("y")
+    assert driver.take_exit() == {"picked": 2}
+    assert driver.take_error() is None
+
+    inline = App(lambda: label("region").on_key("p", lambda cx: cx.print_above("above"))).inline(1)
+    inline.mouse(True)
+    ran = tui.run(inline, "p", width=20, height=5)
+    assert ran.output.index("above") < ran.output.rindex("region")

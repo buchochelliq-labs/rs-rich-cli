@@ -1,0 +1,40 @@
+❯ rich --force-terminal notes.org | head -36
+                                           Release Notes
+                                     Ada Lovelace · 2026-10-01
+
+OPTIONS: toc:nil num:nil
+
+DONE [#A] Ship the parser  :parser:release:
+CLOSED: [2026-09-30 Wed 17:02]
+OWNER: ada · EFFORT: 2d
+
+The parser reads bold, italic, underlined, verbatim, code and struck text. Links look like the Org
+site (https://orgmode.org) or plain https://example.com, and a line ends here
+on purpose.
+
+NEXT Check the edge cases [1/3]
+
+ • [x] Unterminated blocks
+ • [ ] Deep nesting
+        1 lists inside lists
+        7 with a counter
+ • [-] Wide characters: 漢字 and emoji
+
+Glossary
+
+Headline
+    a line of stars and a title
+
+Drawer
+    metadata between :NAME: and :END:
+
+Examples
+
+    Sizes by kind
+
+ Kind   Count  Share
+ ───────────────────
+ lists     12   40%
+❯
+
+

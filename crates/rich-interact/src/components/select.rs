@@ -153,6 +153,9 @@ pub struct Select<T> {
     source: Option<Source<T>>,
     /// New items sent from elsewhere, taken on every event and tick.
     feed: Option<Receiver<Vec<Item<T>>>>,
+    /// A wide table's horizontal scroll (#717), set by the table before
+    /// each render: which cells of each label and of the heading show.
+    pub(crate) pan: Cell<Option<crate::components::views::Pan>>,
 }
 
 impl<T> Select<T> {
@@ -200,6 +203,7 @@ impl<T> Select<T> {
             status: None,
             source: None,
             feed: None,
+            pan: Cell::new(None),
         };
         select.refilter();
         select
@@ -798,6 +802,14 @@ impl<T> Select<T> {
         Some(((width - outer) / 2, self.top(), outer, rows + 2))
     }
 
+    /// The list's width in a view `width` wide: less a preview beside it.
+    pub(crate) fn list_width(&self, width: usize) -> usize {
+        match self.layout(width) {
+            (PreviewLayout::Right, left) => left,
+            _ => width,
+        }
+    }
+
     /// The preview's layout at `width` for the focused item, and the
     /// list's width when the preview is beside it.
     fn layout(&self, width: usize) -> (PreviewLayout, usize) {
@@ -889,7 +901,11 @@ impl<T> Select<T> {
         } else {
             focused.then_some(&theme.focused)
         };
-        line.extend(highlight(&item.label, positions, base, &theme.matched));
+        let label = highlight(&item.label, positions, base, &theme.matched);
+        match self.pan.get() {
+            Some(pan) => line.extend(pan.window(&label)),
+            None => line.extend(label),
+        }
         if let Some(description) = &item.description {
             line.push(text(format!("  {description}"), &theme.hint));
         }
@@ -950,9 +966,15 @@ impl<T> Select<T> {
         header.push(plain(query.to_string()));
         let mut lines = vec![fit(header, width)];
         if let Some(heading) = &self.heading {
-            let mut line = vec![plain(if self.multi { "    " } else { "  " })];
-            line.extend(heading.iter().cloned());
-            lines.push(fit(line, width));
+            let indent = if self.multi { "    " } else { "  " };
+            match self.pan.get() {
+                Some(pan) => lines.push(pan.heading(indent, heading, self.list_width(width))),
+                None => {
+                    let mut line = vec![plain(indent)];
+                    line.extend(heading.iter().cloned());
+                    lines.push(fit(line, width));
+                }
+            }
         }
         let footer = |this: &Self| match &this.status {
             Some(status) => vec![fit(status.clone(), width)],

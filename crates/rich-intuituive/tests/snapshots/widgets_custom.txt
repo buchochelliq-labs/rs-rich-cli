@@ -1,0 +1,24 @@
+ Block  Text  List  Table  Tabs  Scrollbar  Calendar  Popup  Borders  Custom
+
+  Three buttons, each a widget of its own: it draws its face and edges, takes
+  the pointer and the keys, and looks picked while it has the focus or the
+  pointer, and pressed while a button is held on it.
+
+              ▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔   ▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔   ▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔
+                    Red              Green             Blue
+              ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁   ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁   ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁
+
+                             Green pressed, 1 time.
+
+
+
+
+
+
+
+
+
+
+
+
+←/→ or 1-9, 0 tabs · ? keys · Ctrl+P commands · q quit

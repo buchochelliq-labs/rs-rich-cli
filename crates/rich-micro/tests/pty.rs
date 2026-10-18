@@ -4,7 +4,8 @@
 //! emulator. Wherever a protocol draws an asset, the screen outside the
 //! asset's cells and the cursor must be exactly where the text fallback
 //! puts them: through wrapping, inside a table, while the screen scrolls,
-//! and across a live redraw.
+//! and across a live redraw; and for an asset two rows high (#711), in the
+//! row it reserves below its line.
 #![cfg(unix)]
 
 mod common;
@@ -21,8 +22,8 @@ use rich_ext::live::LiveCoordinator;
 use rich_ext::target::{RenderTarget, TargetKind};
 use rich_micro::package::load_package;
 use rich_micro::{
-    render_markup, FallbackPreference, Layer, Limits, MicroGraphics, MicroMode, MicroRegistry,
-    Selection,
+    render_markup, CellSize, FallbackPreference, Layer, Limits, MicroAsset, MicroGraphics,
+    MicroMode, MicroRegistry, MicroRows, Selection,
 };
 
 const COLS: u16 = 24;
@@ -116,7 +117,7 @@ fn masked(screen: &vt100::Screen) -> Vec<String> {
                     let cell = screen.cell(row, col).unwrap();
                     let text = cell.contents();
                     let asset = cell.is_wide_continuation()
-                        || text.starts_with(['✅', '✨', '\u{2800}', '\u{10EEEE}']);
+                        || text.starts_with(['✅', '✨', '🧊', '\u{2800}', '\u{10EEEE}']);
                     if asset {
                         "#".to_string()
                     } else if text.is_empty() {
@@ -133,7 +134,11 @@ fn masked(screen: &vt100::Screen) -> Vec<String> {
 }
 
 fn graphics(mode: MicroMode) -> MicroGraphics {
-    MicroGraphics::new(registry(), Selection::forced(mode, CellPixels::new(8, 16)))
+    graphics_for(registry(), mode)
+}
+
+fn graphics_for(registry: Arc<MicroRegistry>, mode: MicroMode) -> MicroGraphics {
+    MicroGraphics::new(registry, Selection::forced(mode, CellPixels::new(8, 16)))
 }
 
 /// What printing `renderable` writes to the terminal.
@@ -152,8 +157,16 @@ impl Renderable for By<'_> {
 /// Play `renderable` through the PTY with `mode` and with the text
 /// fallback; the screens match outside the assets, and so do the cursors.
 fn same_layout(mode: MicroMode, renderable: &dyn Renderable) -> (Vec<u8>, vt100::Parser) {
+    same_layout_with(registry(), mode, renderable)
+}
+
+fn same_layout_with(
+    registry: Arc<MicroRegistry>,
+    mode: MicroMode,
+    renderable: &dyn Renderable,
+) -> (Vec<u8>, vt100::Parser) {
     let fallback = through_pty(&printed(renderable));
-    let bytes = printed(&graphics(mode).view(By(renderable)));
+    let bytes = printed(&graphics_for(registry, mode).view(By(renderable)));
     let drawn = through_pty(&bytes);
     assert_eq!(
         masked(drawn.screen()),
@@ -349,4 +362,66 @@ fn kitty_ids_do_not_leak_from_a_closed_live_view() {
     assert!(graphics.kitty_ids().is_empty());
     let text = String::from_utf8(out.0.lock().unwrap().clone()).unwrap();
     assert!(text.contains("\x1b_Ga=d,d=I,"));
+}
+
+/// The fixtures, and a 2×2 icon made through the pipeline under `dir`.
+fn with_icon(dir: &std::path::Path) -> Arc<MicroRegistry> {
+    use rich_art::image::{DynamicImage, Rgba, RgbaImage};
+    let image = DynamicImage::ImageRgba8(RgbaImage::from_pixel(16, 32, Rgba([20, 90, 200, 255])));
+    let processed =
+        rich_micro::pipeline::Pipeline::new(CellSize::new(2, 2).unwrap()).process_image(&image);
+    let spec = rich_micro::create::PackageSpec::new("team/icon", "blue square").emoji("🧊");
+    let icon: MicroAsset =
+        rich_micro::create::write_package(&dir.join("icon"), &spec, &processed, false).unwrap();
+    let mut registry = (*registry()).clone();
+    registry.add(Layer::Inline, icon).unwrap();
+    Arc::new(registry)
+}
+
+#[test]
+fn two_rows_in_wrapped_text() {
+    let dir = tempfile::tempdir().unwrap();
+    let registry = with_icon(dir.path());
+    let text = MicroRows::new(markup(
+        &registry,
+        "one :micro:team/icon: two three four five :micro:team/icon: six :micro:check:",
+    ));
+    for mode in PROTOCOLS {
+        let (bytes, parser) = same_layout_with(Arc::clone(&registry), mode, &text);
+        check_protocol_bytes(mode, &bytes, &parser);
+        // Each line with the icon has a row below it, blank but for the
+        // icon's second row; nothing is drawn over the next line.
+        assert_eq!(
+            &masked(parser.screen())[..5],
+            [
+                "one ## two three four",
+                "    ##",
+                "five ## six ##",
+                "     ##",
+                ""
+            ],
+            "{mode}"
+        );
+    }
+}
+
+#[test]
+fn two_rows_while_the_screen_scrolls() {
+    let dir = tempfile::tempdir().unwrap();
+    let registry = with_icon(dir.path());
+    // Twice the screen, two rows a line: every reserved row is printed on
+    // the bottom row and scrolls.
+    let lines: Vec<String> = (0..ROWS)
+        .map(|i| format!("line {i} :micro:team/icon: end"))
+        .collect();
+    let text = MicroRows::new(markup(&registry, &lines.join("\n")));
+    for mode in PROTOCOLS {
+        let (bytes, parser) = same_layout_with(Arc::clone(&registry), mode, &text);
+        check_protocol_bytes(mode, &bytes, &parser);
+        let screen = masked(parser.screen());
+        assert_eq!(
+            &screen[ROWS as usize - 3..],
+            ["line 7 ## end", "       ##", ""]
+        );
+    }
 }

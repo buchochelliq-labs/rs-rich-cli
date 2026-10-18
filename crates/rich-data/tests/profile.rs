@@ -11,6 +11,7 @@ use rich_data::{jsonl, RowSource};
 
 const ORDERS: &str = include_str!("fixtures/orders.csv");
 const EVENTS: &str = include_str!("fixtures/events.jsonl");
+const REQUESTS: &str = include_str!("fixtures/requests.jsonl");
 
 fn render(renderable: &dyn rich::Renderable, width: usize) -> String {
     let console = Console::builder().width(width).color_system(None).build();
@@ -85,6 +86,105 @@ fn the_jsonl_fixture_profiles_as_its_snapshot() {
     check("profile_events", &render(&profile, 80), 80);
 }
 
+fn requests() -> Profile {
+    Profile::from_json_lines(REQUESTS.as_bytes(), ProfileOptions::default())
+        .unwrap()
+        .with_name("requests.jsonl")
+}
+
+/// JSON Lines path by path (#705): nested objects and arrays, presence apart
+/// from null, type mixes, and the malformed last line counted.
+#[test]
+fn the_nested_fixture_profiles_as_its_snapshot() {
+    let profile = requests();
+    assert_eq!(profile.rows(), 12);
+    assert_eq!(profile.malformed(), 1);
+    let paths: Vec<&str> = profile.columns().iter().map(|c| c.name.as_str()).collect();
+    assert_eq!(
+        paths,
+        [
+            "id",
+            "ts",
+            "level",
+            "user",
+            "user.id",
+            "user.plan",
+            "tags",
+            "tags[]",
+            "[\"http.status\"]",
+            "latency_ms",
+            "error",
+            "error.code",
+            "error.retry",
+            "items",
+            "items[]",
+            "items[].sku",
+            "items[].qty"
+        ]
+    );
+    // `user` is null once and missing once; `user.plan` is missing from
+    // both of those records, and from the one that has no plan.
+    let user = profile.column("user").unwrap();
+    assert_eq!(
+        (user.present, user.absent, user.nulls),
+        (Some(11), Some(1), 1)
+    );
+    let plan = profile.column("user.plan").unwrap();
+    assert_eq!((plan.absent, plan.nulls), (Some(3), 1));
+    let status = profile.column("[\"http.status\"]").unwrap();
+    assert_eq!(status.mixed, Some(true));
+    assert_eq!(status.types.unwrap().mix(), "num 82% · str 18%");
+    let qty = profile.column("items[].qty").unwrap();
+    assert_eq!((qty.values, qty.present), (Some(4), Some(3)));
+    check("profile_requests", &render(&profile, 80), 80);
+    check("profile_requests_wide", &render(&profile, 100), 100);
+    check("profile_requests_narrow", &render(&profile, 50), 50);
+}
+
+#[test]
+fn the_nested_json_report_extends_the_model() {
+    let json = requests().to_json();
+    let path = format!(
+        "{}/tests/snapshots/profile_requests.json",
+        env!("CARGO_MANIFEST_DIR")
+    );
+    let actual = serde_json::to_string_pretty(&json).unwrap() + "\n";
+    if std::env::var_os("UPDATE_SNAPSHOTS").is_some() {
+        std::fs::write(&path, &actual).unwrap();
+    } else {
+        let expected = std::fs::read_to_string(&path).unwrap();
+        assert_eq!(actual, expected);
+    }
+    // Every key a flat profile has, and the nested ones.
+    for key in [
+        "rows",
+        "sample",
+        "sampled",
+        "columns",
+        "missing",
+        "paths",
+        "malformed",
+    ] {
+        assert!(json.get(key).is_some(), "{key}");
+    }
+    assert_eq!(json["paths"]["depth"], 4);
+    assert_eq!(json["paths"]["capped"], false);
+    assert_eq!(json["malformed_lines"], serde_json::json!([13]));
+    let user = &json["columns"][3];
+    assert_eq!(user["name"], "user");
+    assert_eq!(user["type"], "object");
+    assert_eq!(user["types"], serde_json::json!({"object": 10, "null": 1}));
+    assert_eq!(
+        (user["present"].clone(), user["absent"].clone()),
+        (11.into(), 1.into())
+    );
+    let back: Profile = serde_json::from_value(json).unwrap();
+    assert_eq!(back, requests());
+    // A flat profile's report is unchanged: no nested keys.
+    let flat = orders().to_json();
+    assert!(flat.get("paths").is_none() && flat["columns"][0].get("types").is_none());
+}
+
 #[test]
 fn the_json_report_is_the_model() {
     let json = orders().to_json();
@@ -157,6 +257,7 @@ fn a_narrow_profile_fits_its_width() {
     for (name, profile) in [
         ("orders", orders()),
         ("events", events()),
+        ("requests", requests()),
         (
             "long",
             Profile::from_source(

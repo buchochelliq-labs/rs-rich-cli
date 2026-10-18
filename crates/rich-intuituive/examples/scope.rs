@@ -18,7 +18,11 @@
 //! `--scatter`, `--no-reference`, `--no-ui`, `--no-braille`,
 //! `--palette-color a,b,…`, `--labels-color c`, `--axis-color c`; `file`
 //! takes `-l` to play a file at its sample rate. `--still` makes the test
-//! signal stand still.
+//! signal stand still. `--backend NAME` (or `INTUITUIVE_BACKEND=NAME`)
+//! drives the terminal with termion or termwiz instead of crossterm, when
+//! built with the crate's feature of that name:
+//!
+//!     cargo run -p rs-rich-intuituive --example scope --features termwiz -- --backend termwiz
 //!
 //! q quits · space pauses · tab changes mode · s scatter · h hides the
 //! interface · r reference lines · ↑ ↓ scale · ← → samples · esc resets ·
@@ -32,6 +36,7 @@ use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+use intuituive::interact::BackendKind;
 use intuituive::prelude::*;
 use intuituive::rich::{Console, Segment};
 use rich_ext::chart::{Axis, AxisScale, Chart, Dataset, GraphType, Labels, LegendPosition, Marker};
@@ -1030,12 +1035,29 @@ pub struct Command {
     pub file: Option<String>,
     pub limit_rate: bool,
     pub still: bool,
+    /// The backend `--backend NAME` chose; without it, `INTUITUIVE_BACKEND`
+    /// names one, else crossterm drives the terminal.
+    pub backend: Option<BackendKind>,
+}
+
+/// The backend called `name`, if this build has it: termion and termwiz
+/// are this crate's features of those names.
+pub fn backend_named(name: &str) -> Result<BackendKind, String> {
+    BackendKind::from_name(name).ok_or_else(|| {
+        let have: Vec<&str> = BackendKind::ALL.iter().map(|kind| kind.name()).collect();
+        format!(
+            "no backend {name:?} in this build, which has {} (termion and termwiz \
+             are features of rs-rich-intuituive)",
+            have.join(", ")
+        )
+    })
 }
 
 /// Parse scope-tui's command line (without the program's name).
 pub fn parse(args: &[String]) -> Result<Command, String> {
     let mut options = Options::default();
     let (mut file, mut limit_rate, mut still, mut note) = (None, false, false, None);
+    let mut backend = None;
     let mut args = args.iter();
     let number = |name: &str, value: Option<&String>| -> Result<f64, String> {
         value
@@ -1071,6 +1093,12 @@ pub fn parse(args: &[String]) -> Result<Command, String> {
             }
             "-l" | "--limit-rate" => limit_rate = true,
             "--still" => still = true,
+            "--backend" => {
+                let name = args
+                    .next()
+                    .ok_or("--backend takes a name: crossterm, termion or termwiz")?;
+                backend = Some(backend_named(name)?);
+            }
             "demo" => {}
             "file" => {
                 file = Some(
@@ -1093,14 +1121,22 @@ pub fn parse(args: &[String]) -> Result<Command, String> {
         file,
         limit_rate,
         still,
+        backend,
     })
 }
 
 #[allow(dead_code)]
 fn main() -> std::io::Result<()> {
+    let invalid = |error: String| std::io::Error::new(std::io::ErrorKind::InvalidInput, error);
     let args: Vec<String> = std::env::args().skip(1).collect();
-    let command =
-        parse(&args).map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e))?;
+    let command = parse(&args).map_err(invalid)?;
+    let backend = match command.backend {
+        Some(kind) => kind,
+        None => match std::env::var("INTUITUIVE_BACKEND") {
+            Ok(name) if !name.is_empty() => backend_named(&name).map_err(invalid)?,
+            _ => BackendKind::default(),
+        },
+    };
     let options = command.options.clone();
     let period = Duration::from_secs_f64(options.buffer as f64 / options.rate as f64);
     let (source, every): (Box<dyn Source>, Duration) = match &command.file {
@@ -1124,5 +1160,5 @@ fn main() -> std::io::Result<()> {
             (Box::new(Threaded::new(pcm, pace)), period / 2)
         }
     };
-    scope_app(options, source, every.max(Duration::from_millis(5))).run()
+    scope_app(options, source, every.max(Duration::from_millis(5))).run_with(backend)
 }

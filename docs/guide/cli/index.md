@@ -27,7 +27,7 @@ features can be turned off for a smaller, network-free binary:
 | `art` | images, GIFs and image diffs (`rich image`, `rich gif`, `rich diff a.png b.png`), and micro assets (`rich micro`) |
 | `mermaid` | `rich mermaid` and ```` ```mermaid ```` fences, drawn as text |
 | `record` | `rich record`: scripted terminal recordings |
-| `interact` | the interactive commands (`rich choose`, `filter`, `input`, `confirm`, `pager`, `write`, `file`, `color`, `asset`, `explore`) |
+| `interact` | the interactive commands (`rich choose`, `filter`, `input`, `confirm`, `pager`, `write`, `file`, `color`, `asset`, `explore`, `date`) |
 
 `rich chart`, `rich dot`, `rich deps` and `rich schema` are in every build.
 `lumis`, `mmdc`, `arrow`, `dylib-plugins`, `wasm-plugins` and `serve` (`rich
@@ -77,12 +77,14 @@ and `--pager`.
 On top of that it adds, without changing the mirrored behaviour:
 
 - subcommands (`rich markdown FILE`) alongside the flags;
+- documentation formats upstream has no renderer for: Org, AsciiDoc and man
+  pages, detected by extension and, carefully, by content;
 - new modes: JSON Lines and logs, `inspect` for structured data, text and
   patch diffs, perceptual image diffs, still images and GIFs, `ansi explain`,
   and the viewers `view`, `hex`, `unicode`, `env` and `capture`;
 - charts and diagrams: `chart`, `mermaid`, `dot`, `deps` and `schema`;
 - interactive commands for scripts (`choose`, `filter`, `input`, `confirm`,
-  `pager`, `write`, `file`, `color`, `asset`) and `explore`;
+  `pager`, `write`, `file`, `color`, `asset`, `date`) and `explore`;
 - micro assets (`micro`), terminal recordings (`record`) and `plugins`;
 - workflow features: `--watch`, `--batch`, config profiles and themes,
   `--report json`, stable exit codes, `doctor`, `bench compare`, generated
@@ -99,6 +101,9 @@ records exactly which parts are upstream and which are additions.
 | `print` | `-p`, `--print` | Render the RESOURCE as console markup text | [Markup](walkthrough.md#markup-and-rules) |
 | `markdown`, `md` | `-m`, `--markdown` | Render Markdown | [Rendering files](walkthrough.md#markdown) |
 | `rst` | `--rst` | Render reStructuredText | [Command-line guide](../../cli.md#restructuredtext) |
+| `org` | `--org` | Render an Org document | [Org, AsciiDoc and man pages](../../cli.md#org-asciidoc-and-man-pages) |
+| `asciidoc`, `adoc` | `--asciidoc` | Render AsciiDoc | [Org, AsciiDoc and man pages](../../cli.md#org-asciidoc-and-man-pages) |
+| `man`, `roff` | `--man` | Render a man page from its roff source (man and mdoc macros) | [Org, AsciiDoc and man pages](../../cli.md#org-asciidoc-and-man-pages) |
 | `syntax`, `code` | `-x`, `--syntax` | Syntax-highlight source code | [Rendering files](walkthrough.md#source-code) |
 | `json` | `-j`, `--json` | Pretty-print JSON | [Rendering files](walkthrough.md#json) |
 | `csv`, `tsv` | `--csv` | Render CSV/TSV as a table | [Rendering files](walkthrough.md#csv-and-tsv) |
@@ -107,7 +112,7 @@ records exactly which parts are upstream and which are additions.
 | `log`, `logs` | `--log` | Stream structured-log records as log lines | [Streams](walkthrough.md#json-lines-and-logs) |
 | `rule` | `--rule` | Draw a horizontal rule with a title | [Markup](walkthrough.md#markup-and-rules) |
 | `inspect` | `--inspect` | Explore JSON, YAML, TOML, XML, INI or dotenv as a tree | [Structured data](walkthrough.md#structured-data) |
-| — | `--format auto` | Detect the format of piped or extensionless input | [Piped input](walkthrough.md#detecting-piped-input) |
+| — | `--format auto` | Detect the format of piped or extensionless input (data, or a document) | [Piped input](walkthrough.md#detecting-piped-input) |
 | `diff` | `--diff` | Compare two text files, render a patch, or compare two images | [Diffs](walkthrough.md#comparing-text-and-patches) |
 | `image` | `--image` | Draw a still image | [Images](walkthrough.md#images-gifs-and-image-diffs) |
 | `gif` | `--gif` | Play animated GIFs | [Images](walkthrough.md#images-gifs-and-image-diffs) |
@@ -124,6 +129,7 @@ records exactly which parts are upstream and which are additions.
 | `schema` | — | A JSON Schema, SQL DDL or Arrow schema as a tree, what changed between two, or an ER diagram (`--er`) | [JSON Schemas](../ext/sources.md) |
 | `choose`, `filter`, `input`, `confirm`, `pager` | — | Ask in a script: answer on stdout, exit 1 when cancelled | [Ask in a script](../../cli.md#ask-in-a-script) |
 | `write`, `file`, `color`, `asset` | — | A text area, a file, colour or asset picker | [Ask in a script](../../cli.md#ask-in-a-script) |
+| `date` | — | A date, a time or both, within `--min` and `--max`, printed in ISO 8601 form | [Ask in a script](../../cli.md#ask-in-a-script) |
 | `explore` | — | Explore JSON, YAML, TOML, XML, INI or `.env` interactively | [Explore it interactively](../../cli.md#explore-it-interactively) |
 | `micro` | — | List, preview, add and create micro assets | [Micro assets in the CLI](../micro/cli.md) |
 | `record` | — | Run a tape and write screenshots, a cast, a GIF or an MP4 | [Terminal recordings](../../recordings.md#record-your-own) |

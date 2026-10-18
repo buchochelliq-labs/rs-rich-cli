@@ -1,0 +1,24 @@
+ Block  Text  List  Table  Tabs  Scrollbar  Calendar  Popup  Borders  Custom
+╭─ Centred ──────────────╮╭─ Right ────────────────╮╭─ Justified ──────────────╮
+│       Each line        ││               Each line││Each line but the last  is│
+│   sits in the middle   ││       sits at the right││spread to the whole width,│
+│     of the panel.      ││           of the panel.││the words spaced out.     │
+╰────────────────────────╯╰────────────────────────╯╰──────────────────────────╯
+╭─ Wrapped ────────────────────────────────────────╮╭─ No wrap ────────────────╮
+│Toasted barley salad. Toast a cup of pearl barley ││A line too long for its p…│
+│in a dry pan until it smells of popcorn, then     ││                          │
+│simmer it for half an hour. Drain it, dress it    ││                          │
+│while warm with lemon, olive oil and a little     ││                          │
+│honey, and fold in chopped parsley, cucumber and  ││                          │
+│feta. It keeps for three days, and tastes better  ││                          │
+│on the second.                                    ││                          │
+│                                                  ││                          │
+│                                                  ││                          │
+╰──────────────────────────────────────────────────╯╰──────────────────────────╯
+╭─ Masked ───────────────╮╭─ Hyperlink ────────────────────────────────────────╮
+│Password:               ││The project's home:                                 │
+│correct-horse-battery   ││rs-rich on GitHub                                   │
+│                        ││                                                    │
+│m shows or masks it     ││A terminal with OSC 8 links opens it.               │
+╰────────────────────────╯╰────────────────────────────────────────────────────╯
+←/→ or 1-9, 0 tabs · ? keys · Ctrl+P commands · q quit

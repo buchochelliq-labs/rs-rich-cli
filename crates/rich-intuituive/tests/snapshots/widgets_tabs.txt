@@ -1,0 +1,24 @@
+ Block  Text  List  Table  Tabs  Scrollbar  Calendar  Popup  Borders  Custom
+╭─ Default: a line between, a space each side ─────────────────────────────────╮
+│ Overview │ Logs │ Metrics │ Settings                                         │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ A dot between, a space each side ───────────────────────────────────────────╮
+│ Overview  •  Logs  •  Metrics  •  Settings                                   │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Nothing between, brackets each side ────────────────────────────────────────╮
+│[Overview][Logs][Metrics][Settings]                                           │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ In the middle ──────────────────────────────────────────────────────────────╮
+│                     Overview │ Logs │ Metrics │ Settings                     │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Content ────────────────────────────────────────────────────────────────────╮
+│                                                                              │
+│                                                                              │
+│                                   Metrics                                    │
+│                                                                              │
+│                  The content of the selected tab, centred.                   │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+╰──────────────────────────────────────────────────────────────────────────────╯
+←/→ or 1-9, 0 tabs · ? keys · Ctrl+P commands · q quit

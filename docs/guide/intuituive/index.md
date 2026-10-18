@@ -68,14 +68,41 @@ including Ctrl+C and a panic.
 | `grid([sizes], [...])` | Children in rows and columns (see [Grids](#grids)) |
 | `each(move \|\| keys, \|key\| node)` | One child per key, kept by key across reorders |
 | `switch(move \|\| key, \|key\| node)` | One child at a time, chosen by key; the others are kept (tabs, wizard steps) |
-| `list(move \|\| rows, selected)` | A scrolling list with a selected row (`selected` is a `Signal<usize>`); ↑↓ jk, Home/End and PageUp/PageDown move it |
+| `list(move \|\| rows, selected)` | A scrolling list with a selected row (`selected` is a `Signal<usize>`); ↑↓ jk, Home/End and PageUp/PageDown move it, a click selects a row and the wheel moves it |
 | `log.view()` | A streaming [`Log`](#logs) |
 | `component(Input::new("Name"), on_done)` | A `rich-interact` component (see [Components](#components)) |
 | `repeating(\|\| Input::new("Add"), on_done)` | The same, built fresh after each answer (an entry box) |
+| `layers([...])` | Children stacked on one rectangle, later ones on top (see [Layers](#layers)) |
+| `effect(node, \|canvas, cx\| …)` | A node, with a closure drawing over what it drew (see [Effects](#effects)) |
+| `fill("·", "bright_black")` | Its area filled with a glyph: ratatui's `Fill` |
 
 `.panel("Title")` wraps a node in a rounded border that is highlighted
-while the focus is inside it, and `.padding(1, 2)` leaves space round it
+while the focus is inside it (see [Panels](#panels) for titles, kinds of
+border, sides and shadows), and `.padding(1, 2)` leaves space round it
 (rows above and below, columns either side).
+
+### Text alignment, wrapping and overflow
+
+A `text`, `label` or `text!` node wraps its lines at its width. Three
+builders change that, as ratatui's `Paragraph` options do:
+
+```rust
+label("The quick brown\nfox jumps over\nthe lazy dog")
+    .text_align(TextAlign::Center)     // Left (the default), Center, Right or Justify
+    .panel("Centred")
+label("a line too long for its node")
+    .no_wrap()                         // cut at the edge, not wrapped
+    .overflow(Overflow::Ellipsis)      // with `…`; Fold (the default) or Crop
+```
+
+```text
+--8<-- "crates/rich-intuituive/tests/snapshots/text_centered.txt"
+```
+
+Alignment does not change a text's natural width: an `.auto()` node is
+as wide as its longest line. A stylesheet sets the same with
+`text-align`, `text-wrap: nowrap` and `text-overflow: ellipsis` (or `clip`,
+or `fold`).
 
 ## Layout
 
@@ -83,6 +110,9 @@ A child's size along its parent's axis:
 
 - `.fixed(3)`: exactly 3 cells;
 - `.percent(40)`: 40% of the parent;
+- `.ratio(1, 3)`: a third of the parent, ratatui's `Constraint::Ratio`.
+  Each is rounded down, and the cells that leaves go to the last ratio, so
+  three thirds fill the parent exactly;
 - `.auto()`: as big as its content (the lines a text wraps to, a panel's
   content and border, a list's rows). When a signal the content reads
   changes, the parent lays out again, and the nodes after it move;
@@ -170,6 +200,196 @@ grid(
 - Columns are the sizes given. Rows share the height evenly unless
   `.rows([...])` sizes them, and rows past the last size given take that
   size, so `.rows([Size::Auto])` makes every row as tall as its content.
+
+### Layers
+
+`layers([...])` stacks its children on one rectangle, each later one over
+the ones before: content over a background, a badge over a chart, a panel
+over a board that ticks. A layer takes the whole rectangle, less
+`.inset(top, right, bottom, left)` (CSS's `inset`), or, with
+`.place(across, down)`, only its content's size, where the two `Align`s
+put it.
+
+```rust
+layers([
+    board,                                            // redraws every tick
+    label("on top").panel("Badge").inset(1, 2, 1, 10),
+    label("[b]3[/]").place(Align::End, Align::Start), // the top right corner
+])
+```
+
+```text
+--8<-- "crates/rich-intuituive/tests/snapshots/layers_badge.txt"
+```
+
+A layer draws again wherever one under it drew, so the board's ticks never
+show through the panel. A click goes to the top layer under the pointer,
+and the Tab order and the accessibility tree follow the children's order
+(a lower layer's text, read from the screen, leaves out what is over it).
+
+### Laying out by hand
+
+A widget that places its own parts (a pop-up beside a cell, a gauge's
+ticks) uses the same solver as columns and rows:
+`intuituive::layout::split(rect, axis, &tracks, flow)`, ratatui's
+`Layout::split`. Each `Track` is a `Size` with its clamps, and `flow` (a
+`StackLayout`) gives the gap and the justification.
+`split_with_spacers` returns the rooms between and around them too:
+
+```rust
+use intuituive::layout::{split_with_spacers, Track};
+
+let tracks = [Track::new(Size::Fixed(4)), Track::new(Size::Fixed(4)).min(2)];
+let flow = StackLayout { justify: Justify::Center, ..StackLayout::default() };
+let (areas, spacers) = split_with_spacers(rect, Axis::Horizontal, &tracks, flow);
+// spacers[0] and spacers[2] are the room left at the two ends.
+```
+
+`Rect` (`intuituive::screen::Rect`, rs-rich-ext's) has the helpers such a
+widget needs: `centered(width, height)`, `inset(top, right, bottom, left)`,
+`inner(n)`, `offset(dx, dy)`, `union`, `intersection`, `intersects`,
+`contains`, and `rows()` and `columns()` to go through it a line at a time.
+
+### Responsive layout
+
+A layout can follow the terminal's size. The size is the app's
+**viewport**: the columns and rows it lays out in, which are the
+terminal's, less the [inspector](#inspector)'s columns while it is shown
+(an [inline](#inline-apps) app's rows are its region's). Every resize
+measures it again, and what depends on it lays out again.
+
+- `.hide_below(60)` hides a node while the viewport is narrower than 60
+  columns, and `.show_below(60)` shows one only then. Hidden, a node is as
+  if a stylesheet said `display: none`, in any container: it takes no room
+  (a hidden pane of a `split` leaves the other the whole split, with no
+  divider), it is not drawn and takes no clicks, and it and what is inside
+  it leave the Tab order, the accessibility tree and linear mode's lines.
+  A node that had the focus gives it to the next one.
+  `.hide_below_height(rows)` and `.show_below_height(rows)` do the same
+  for the height.
+- A [stylesheet](#stylesheets)'s `@media` rules change sizes, grid tracks,
+  padding, borders, `display` and the rest at a size, from outside the
+  code.
+- `viewport()` returns the size as a value that nodes read like a signal,
+  for anything else: a `switch` that picks a `row` or a `column`, a
+  shorter label.
+
+```rust
+column([
+    label("[b]ops[/] · 3 hosts").fixed(1),
+    row([
+        hosts.panel("Hosts").fixed(12).hide_below(60),
+        grid([], [cpu.panel("CPU"), memory.panel("Memory")]).name("meters"),
+    ]),
+    label("[dim]wider for hosts").show_below(60).fixed(1),
+])
+```
+
+```css
+#meters { grid-columns: 1fr 1fr; }
+@media (max-width: 59) { #meters { grid-columns: 1fr; } }
+```
+
+At 64 columns, then at 40 (the snapshots of `tests/responsive.rs`, which
+resizes it between the two):
+
+```text
+--8<-- "crates/rich-intuituive/tests/snapshots/dashboard_wide.txt"
+```
+
+```text
+--8<-- "crates/rich-intuituive/tests/snapshots/dashboard_narrow.txt"
+```
+
+`hide_below(60)` and `@media (max-width: 59)` are the same breakpoint:
+CSS's bounds are inclusive.
+
+## Panels
+
+`.panel(title)` wraps a node in a box: rounded, its title at the top left,
+lit in the theme's `border.focused` while the focus is inside. Titles are
+console markup. Builders after `.panel` change the rest, as ratatui's
+`Block` options do (on any other node they do nothing):
+
+```rust
+label("3 open, 1 merged")
+    .panel("[b]Pull requests[/]")
+    .title_align(Align::Center)                    // where .panel's title sits
+    .title_right("[dim]loading…")                  // another title on the top edge
+    .title_bottom("[dim]q quits")                  // a title on the bottom edge
+    .add_title(Edge::Bottom, Align::End, "1/20")   // the general form
+    .border(Border::Thick)                         // or Plain, Double, Ascii, the dashed kinds, None…
+    .borders(Sides::TOP | Sides::BOTTOM)           // Sides::ALL is the default
+    .border_style("bright_black")                  // while the focus is elsewhere
+    .title_style("bold white")
+    .shadow(Shadow::MediumShade)                   // or LightShade, DarkShade, Block, Dim, Symbol('$')
+```
+
+- **Titles** keep the look of `.panel`'s: ` Title `, one glyph of line in
+  from the corner. Several with the same alignment sit side by side, one
+  cell apart. When they do not fit, the right-hand ones give way first,
+  then the centred ones, and the left ones are cut with `…`. An edge with a
+  title keeps its row even when its line is not drawn, so
+  `.border(Border::None)` gives a heading above the content, as ratatui's
+  `Block::new().title(..)` does. The first top title, as plain text, is the
+  panel's accessible name.
+- **Sides.** The inside grows into the sides that are not drawn.
+- **Shadows** take a strip on the right and the bottom of the panel's own
+  rectangle, in the theme's `shadow` style; the box is a cell narrower and
+  shorter for it.
+
+Titles at the left, the centre and the right, and two at the bottom:
+
+```text
+--8<-- "crates/rich-intuituive/tests/snapshots/panel_titles.txt"
+```
+
+Each kind of border, `Border::Custom(BorderSet { .. })` (glyphs of your
+own) last, then three shadows:
+
+```text
+--8<-- "crates/rich-intuituive/tests/snapshots/panel_kinds.txt"
+```
+
+```text
+--8<-- "crates/rich-intuituive/tests/snapshots/panel_shadow.txt"
+```
+
+A stylesheet sets the same: `border: thick` (and every kind by name),
+`border-title`, `border-title-align`, `border-subtitle` (the bottom
+title), `border-subtitle-align` and `border-sides: top bottom`. Code wins
+over the sheet.
+
+### Collapsed borders
+
+`.collapse_borders()` on a `row`, `column` or `grid` of panels draws one
+frame for them all: neighbours share their edges, joined where lines meet.
+Each panel's titles sit on its own edges and its content between the
+lines. The lines round the panel with the focus are lit in
+`border.focused`, and `.focus_border(Border::Thick)` draws them thick, as
+ratatui's `collapsed-borders` example does for the selected pane:
+
+```rust
+column([
+    pane("Top"),
+    row([pane("Left"), pane("Right")]).collapse_borders(),
+    pane("Bottom"),
+])
+.collapse_borders()
+.border(Border::Plain)
+.focus_border(Border::Thick)
+```
+
+```text
+--8<-- "crates/rich-intuituive/tests/snapshots/collapsed_focus_left.txt"
+```
+
+A collapsed container inside another shares its lines and takes its look;
+a `grid` whose top and bottom panes `.span(2, 1)` draws the same.
+`.border(..)` and `.border_style(..)` on the container set its lines, gaps
+are ignored, and a hidden child gives its room to the others. In a
+stylesheet: `border-collapse: collapse`, with the container's `border` for
+its lines.
 
 ## State
 
@@ -280,6 +500,39 @@ column([
   that takes one entry after another, use `repeating(make, on_done)`: it
   builds a fresh component after each answer.
 
+### Inputs bound to signals
+
+```rust
+let first = signal(String::new());
+let password = signal(String::new());
+let age = signal(30i64);
+column([
+    input(first).placeholder("First name").fixed(1),
+    input(password).mask('•').max_length(40).fixed(1),
+    number_input(age, 0..=150).step(1).fixed(1),
+])
+.on_key("enter", move |cx| save(first.get(), age.get()))
+```
+
+- **`input(text)`** is a one-line text box on a `Signal<String>`, both
+  ways: typing sets the signal, and setting the signal replaces the text.
+  It is a `text_area` in a single-line mode, with the same editing keys,
+  undo and mouse. Enter goes to `.on_submit(|value, cx| …)`, which uses it,
+  or with none bubbles to your bindings (a form's own Enter). Tab moves the
+  focus on, pasted line breaks become spaces, and a long line scrolls
+  sideways to the caret.
+- **`.placeholder("…")`** shows dimmed text while it is empty,
+  **`.mask('•')`** shows each character as `•` while the signal holds the
+  text (nothing is copied out of it), and **`.max_length(n)`** stops
+  typing and pasting at `n` characters.
+- **`number_input(value, range)`** is a whole number on a `Signal<i64>`,
+  kept in `range`. ↑/↓ step it by `.step(n)`, PgUp/PgDn by ten steps,
+  Home/End go to the ends, and the wheel steps it. Digits type a new number
+  (a `-` first for a negative one), which is set on the signal at once,
+  clamped, and shown as typed until Enter or the focus leaves.
+- Both are text boxes for assistive technology, with their text as the
+  value. Validate them with `.error_when(..)`, as any node.
+
 ## Logs
 
 ```rust
@@ -367,6 +620,166 @@ table_with(
   the cell, and the theme's `selected.cell` style draws it.
 - **`.resizable()`** lets the columns be resized by dragging the gap after
   a header.
+- **`.scroll_x()`** keeps the columns at their natural widths when they do
+  not fit, and scrolls the table across, a column at a time:
+  - A `Size::Fixed` column keeps its cells; the others fit their title and
+    the cells in view. A table that fits shares the width as before.
+  - ←/→ (or h/l) scroll it, or Shift+←/→ with a cell cursor, since ←/→
+    move the cursor. Shift+Home and Shift+End go to the ends, and Shift
+    with the wheel scrolls too.
+  - The header is cut where the rows are, so it stays over its columns.
+    `‹` and `›` in it say that columns are out of view on that side.
+  - The view follows the cell cursor.
+- **`.freeze_columns(n)`** keeps the first `n` columns in place while the
+  rest scroll, and turns `.scroll_x()` on.
+
+`virtual_table_with(columns, len, row, selected, options)` takes the same
+options, but sorts nothing itself: its rows are never all in hand.
+
+#### How a table looks
+
+```rust
+use intuituive::widgets::{table_with, Column, HighlightSpacing, TableOptions};
+
+let columns = vec![
+    Column::new("Food", Size::Auto),
+    Column::new("Qty", Size::Fixed(5)).align(Align::End),
+    Column::new("Energy", Size::Auto).align(Align::End).min(8),
+];
+table_with(
+    columns,
+    move || meals.get(),
+    selected,
+    TableOptions::default()
+        .footer(move || vec!["Total".into(), "".into(), total.get()])
+        .header_gap(1)
+        .column_spacing(2)
+        .symbol("» ")
+        .highlight_spacing(HighlightSpacing::Always)
+        .row_style(|i| (i % 2 == 1).then(|| "on grey11".into()))
+        .multiline()
+        .scroll_padding(1),
+)
+```
+
+- **`Column::align(Align::End)`** puts a column's cells and title at the
+  end (numbers on the right), or `Align::Center`; **`.min(n)`** and
+  **`.max(n)`** bound its width.
+- **`.footer(cells)`** is a row under the rows that stays in view, in the
+  theme's `table.footer` style; `cells` may read signals.
+- **`.header_gap(n)`** leaves blank lines under the header and
+  **`.row_gap(n)`** after each row (ratatui's `bottom_margin`);
+  **`.column_spacing(n)`** puts `n` cells between columns (one by
+  default).
+- **`.symbol("» ")`** draws markup before the selected row, and the
+  other rows (the header and footer too) get blank cells in its column.
+  **`.highlight_spacing(..)`** says when the column is kept:
+  `WhenSelected` (the default), `Always` or `Never`.
+- **`.row_style(|i| …)`** styles row `i` whole, gaps included, under its
+  cells' own markup and the selection: zebra stripes, a row's colour.
+- **`.multiline()`** makes each row as tall as its tallest cell, the cells
+  wrapping to their columns; ↓ still moves a row, and PgDn a screenful of
+  rows. `.row_height(n)` makes every row `n` lines tall instead, which is
+  what a `virtual_table` takes, as its rows are never all in hand.
+- **`.column_highlight()`**, with a cell cursor, draws the cursor's column
+  down the rows in the theme's `selected.column` style.
+- **`.scroll_padding(n)`** keeps `n` rows in view either side of the
+  selection, where they fit.
+- **`table_optional(columns, rows, selected, options)`** takes a
+  `Signal<Option<usize>>`: `None` selects nothing and shows no highlight,
+  and ↓ selects the first row.
+
+#### How a list looks
+
+```rust
+use intuituive::widgets::{HighlightSpacing, ListDirection};
+
+list(move || messages.get(), selected)
+    .symbol("[red]>>[/] ")
+    .repeat_symbol()
+    .highlight_spacing(HighlightSpacing::Always)
+    .direction(ListDirection::BottomToTop)
+    .scroll_padding(1)
+    .multiline()
+    .row_style(|i| (i % 2 == 1).then(|| "on grey15".into()))
+    .offset(first)
+```
+
+A `list`'s options are builders on the node, as a text area's are. Call
+them on the list itself (or a reorderable one), before `.panel(..)`.
+
+- **`.symbol(markup)`**, **`.highlight_spacing(..)`** and
+  **`.repeat_symbol()`** (the symbol on every line of a multi-line item)
+  are a table's, for a list.
+- **`.direction(ListDirection::BottomToTop)`** puts the first item at the
+  bottom, the rest above it, as a chat or a log does. ↑ and ↓ still move
+  up and down the screen; Home and End go to the first and the last item.
+- **`.multiline()`** keeps each item's lines and wraps them, rather than
+  cutting the first with `…`.
+- **`.row_style(|i| …)`** styles item `i`'s whole rows, and
+  **`.scroll_padding(n)`** keeps items in view round the selection.
+- **`.offset(signal)`** puts the first item in view in a signal you can
+  read, or set to scroll; the selection is still kept in view.
+- **`list_optional(items, selected)`** takes a `Signal<Option<usize>>`, as
+  `table_optional` does.
+
+#### How a tab strip looks
+
+```rust
+tabs(|| vec!["Recipe".into(), "Email".into(), "Traceroute".into()], tab)
+    .divider(" • ")
+    .tab_padding("", "")
+    .titles_align(Align::Center)
+```
+
+**`.divider(markup)`** goes between the titles instead of `│` (`""` for
+none), in the theme's `tabs.divider` style; **`.tab_padding(left, right)`**
+replaces the space either side of each title; and **`.titles_align(..)`**
+puts the strip at the start, the centre or the end of its width. Clicks
+find the right title whatever the divider and padding.
+
+#### Scrollbars
+
+```rust
+use intuituive::widgets::{scrollbar, Scrollbar, ScrollbarSymbols, Show, Side};
+
+scroll(child).scrollbar(Scrollbar::new().thumb("▐"));
+list(items, selected).scrollbar(
+    Scrollbar::new()
+        .side(Side::Left)
+        .symbols(ScrollbarSymbols::VERTICAL)
+        .track(None)
+        .ends(Some("↑"), Some("↓"))
+        .show(Show::Always),
+);
+// A bar of its own, for a view of your own.
+row([my_view, scrollbar(top, move || lines.get().len(), || 0, Scrollbar::new())]);
+```
+
+- **`.scrollbar(bar)`** gives a `scroll`, a `list`, a table or
+  `virtual_list`, a `tree`, a `text_area` or a log's view a bar. It keeps a
+  column of the widget while it shows: by default (`Show::Auto`) only while
+  the content does not fit; `Show::Always` keeps it with a full thumb, and
+  `Show::Never` keeps no column. A `scroll` without one still draws today's
+  bar.
+- **`.side(..)`** puts it on the right (the default) or the left; on a
+  `scroll_x` or `scroll_both`, a bar on the top or the bottom is the one
+  across.
+- **`.symbols(..)`** draws it in a set: `ScrollbarSymbols::THIN` (the
+  default, `┃` on `│`, and `THIN_HORIZONTAL` across), `VERTICAL`,
+  `DOUBLE_VERTICAL`, `HORIZONTAL` or `DOUBLE_HORIZONTAL` (ratatui's).
+  **`.thumb(..)`**, **`.track(..)`** (`None` for a blank track) and
+  **`.ends(begin, end)`** change single symbols.
+- The theme's `scrollbar`, `scrollbar.thumb` and `scrollbar.arrow` styles
+  draw it.
+- With the mouse, a press on the track pages, a press on an arrow steps,
+  and dragging the thumb scrolls. On a list, a table or a tree the
+  selection comes along into the view.
+- **`scrollbar(position, len, view, bar)`** is a bar on its own: it shows
+  `view` of `len` from the `position` signal (a `view` of 0 is the bar's
+  length), and the mouse and the wheel set `position`.
+- In text mode a bar keeps its column, blank: it is nothing for a screen
+  reader to read.
 
 The `tables` example sorts a process table in its rows closure, so its
 status line can name the selected process and the cell under the cursor
@@ -410,11 +823,41 @@ hsplit(
 - **`hsplit(first, second, ratio)`** puts two panes side by side, and
   `vsplit` stacks them. Dragging the divider moves it, and so do Alt+←/→
   (Alt+↑/↓ when stacked) from inside either pane. `split_with` sets the
-  smallest size of a pane (three cells by default).
+  smallest size of a pane (three cells by default). A hidden pane
+  (`hide_below`, `display: none`) leaves the other the whole split, with
+  no divider.
 - **`calendar(selected)`** is a month grid of a `Date` signal: the arrows
   move by day and week, PgUp/PgDn by month, a click picks a day and the
-  wheel changes month. `Date` has the date arithmetic it needs (weekday,
-  adding days and months, month lengths).
+  wheel changes month. `Date` (rs-rich-interact's, shared with its date
+  pickers) has the date arithmetic it needs (weekday, adding days and
+  months, month lengths) and parses and prints `2026-10-07`.
+  `calendar_options(selected, CalendarOptions::new().min(..).max(..))`
+  keeps the selection in a range: days outside it are dimmed (the theme's
+  `calendar.disabled` style), and the keys, the wheel and clicks stop at
+  its ends. A range whose min is after its max is empty: the calendar
+  says so where the weeks go ("the range is empty: min is after max", as
+  rs-rich-interact's pickers say it), and nothing changes the day.
+  The same options do what ratatui's `calendar::Monthly` does:
+  `.event(date, "red underline")` styles a date, and `.events(|date| ..)`
+  styles them by a function; `.surrounding("dim")` shows the days of the
+  months either side, which a click selects; `.first_weekday(Weekday::Sunday)`
+  starts the weeks on another day; and `.weekday_style(..)`,
+  `.month_style(..)` and `.day_style(..)` style this calendar's headers and
+  days. `CalendarOptions` is `Clone`, no longer `Copy`.
+- **`month(shown, options)`** is a month that only shows: no focus, no
+  keys, no selection, and the month of the date `shown` returns, which may
+  read a signal. Twelve in a `grid` make a year:
+
+  ```rust
+  use intuituive::widgets::{month, CalendarOptions, Date};
+
+  let year = signal(2026);
+  let months = (1..=12).map(move |m| {
+      let options = CalendarOptions::new().event(Date::new(2026, 12, 25), "red");
+      month(move || Date::new(year.get(), m, 1), options).padding(0, 1)
+  });
+  grid([Size::Fixed(22); 3], months)
+  ```
 - **`virtual_list(len, row, selected)`** is the list form of
   `virtual_table`: it asks only for the rows in view.
 - **`tree_lazy(roots, children, selected)`** loads each level when it is
@@ -423,6 +866,74 @@ hsplit(
   (`LazyItem::leaf` or `LazyItem::branch`). The tree shows
   "loading…" until they arrive, and shows an error in red if loading
   fails. `selected` holds the key of the selected item.
+
+#### Times, and a date with a time
+
+```rust
+use intuituive::widgets::{datetime_picker, time_picker, DateTime, DateTimeOptions, Time};
+
+let start = signal(Time::new(9, 0, 0));
+let meeting = signal(DateTime::new(Date::new(2026, 10, 17), Time::new(9, 0, 0)));
+let opens = DateTime::new(Date::new(2026, 10, 17), Time::new(9, 0, 0));
+column([
+    time_picker(start).fixed(1),
+    datetime_picker(meeting, DateTimeOptions::new().min(opens)).fixed(11),
+])
+```
+
+- **`time_picker(selected)`** picks the `Time` in a signal field by field:
+  ←/→ move between the hour and the minute, ↑/↓ change the focused one,
+  wrapping round, and digits type it, two to a field. `time_picker_with`
+  takes `TimeOptions`: `.seconds()`, `.twelve_hour()` (AM and PM; `a` and
+  `p` set them), and `.min(..)`/`.max(..)`, where a step stops. A field
+  typed past them stops at the range's end for that field and keeps the
+  others where it can: with 09:30 the earliest, `08` typed into 12:45
+  makes 09:45. A first digit that would leave the range is not written
+  until the field is complete or left. With its min after its max, the
+  picker says the range is empty after its fields, and nothing changes the
+  time.
+- **`datetime_picker(selected, options)`** is a calendar over a time picker
+  on one `DateTime` signal, Tab moving between them, and two rows under
+  them for the range. `DateTimeOptions::min` is a moment: days before its
+  day cannot be selected, and on its day an earlier time moves up to it,
+  with a line saying why (`✗ the earliest is 2026-10-17 09:00`) until the
+  next change that needs none. A field typed past the range moves alone,
+  as in a time picker, and the line says why. An empty range (its min
+  after its max) is said there too, and nothing changes the moment.
+  Eleven rows, twenty cells wide.
+- The focused day and field are reversed, which reads without colour.
+
+#### Reorderable lists
+
+```rust
+use intuituive::widgets::Move;
+
+let items = signal(vec!["build".to_string(), "test".into(), "deploy".into()]);
+list(move || items.get(), signal(0usize))
+    .reorderable(move |step: Move, _| items.update(|items| step.apply(items)))
+```
+
+`.reorderable(on_reorder)` on a `list` lets the user put its items in
+order (#720). The app keeps the items, so each `Move { from, to }` comes to
+`on_reorder` to make in them (`Move::apply` does it on a `Vec`), and the
+selection follows the item.
+
+- Alt+↑/↓ or Ctrl+↑/↓ move the selected item a place, and Alt or Ctrl
+  with Home/End to the top or the bottom. These need a terminal that
+  reports modifiers on those keys: most do, and any with the kitty keyboard
+  protocol. `K` and `J` move it in any terminal.
+- Space grabs it: the arrows (`k`/`j`), PgUp/PgDn and Home/End then carry
+  it, Space drops it, Esc puts it back where it was, and any other key drops
+  it and does what it does (Enter reaches your binding).
+- A press selects a row and a drag carries it; below the last row shown,
+  the list scrolls. The mouse is held for the drag, so letting go outside
+  the list still ends it.
+- The carried row is marked `↕`, so it shows without colour.
+
+The keys are seen before the list's own (the reorder wraps the list and
+previews its keys), so the plain arrows still only select. Call it on the
+list itself, before `.panel(..)`: on a node that is not a `list` (a
+`virtual_list`, a table, a panel), `.reorderable` does nothing.
 
 The `planner` example puts them together under a menu bar: projects and
 their tasks in a tree, the selected task's due date on a calendar, and a
@@ -628,11 +1139,19 @@ impl Widget for Counter {
 What a widget can do:
 
 - **`draw`** writes cells on a `Canvas`, the widget's rectangle in its own
-  coordinates. It writes with `print`, `set`, `fill`, `clear`, `lines`
-  (rendered rich segments) and `render` (any rich renderable). It can also
-  write one row of markup with `markup`, draw a rounded edge with `border`,
-  lay a style over cells with `restyle`, and move everything up with
-  `scroll_up`. Signals read here make it draw again.
+  coordinates. It writes with `print`, `set`, `set_cell`, `fill`,
+  `fill_with` (a glyph), `clear`, `lines` (rendered rich segments) and
+  `render` (any rich renderable). It can also write one row of markup with
+  `markup`, draw a rounded edge with `border`, lay a style over cells with
+  `restyle`, and move everything up with `scroll_up`. `cell(x, y)` reads
+  what is there now (its `symbol()` and `style()`). Signals read here make
+  it draw again.
+- **`draw_over`** draws after its children, over what they drew, in every
+  frame where the widget or a node inside it drew: a badge, a highlight,
+  an effect. Its canvas is not cleared, and what it writes is sent. When
+  only a child drew, the rest of the canvas still holds what `draw_over`
+  wrote before, so an overlay should come out the same when it runs twice
+  (restyling cells does), or the widget should not be `retained`.
 - **`event`** gets these events:
   - keys while the focus is on it or inside it (with nothing focused,
     while the pointer is over it), and `KeyUp` when one is let go (from a
@@ -673,6 +1192,9 @@ What a widget can do:
   are laid out at their full size, drawn offscreen with their own damage,
   and copied out where the widget looks. Clicks and the caret are
   translated through it.
+- **`overlapping`** lets its children overlap, later ones on top, as
+  [`layers`](#layers) does: a child draws again wherever an earlier one
+  drew in the same frame, and a click goes to the later one.
 - **`caret`** places the text caret while it has the focus.
 
 Every built-in node is a widget built on this trait: text, labels,
@@ -691,6 +1213,43 @@ holds them sees keys first (`previews_keys`), and while it is paused it
 keeps them from the meters.
 
 ![Four meters, each a widget of its own](../../media/tapes/intuituive/meters.png)
+
+### Effects
+
+`effect(node, |canvas, cx| …)` runs a closure over what a node drew, with
+no widget to write: ratatui's post-processing of `frame.buffer_mut()`. The
+closure reads cells with `canvas.cell(x, y)` and writes them back. It runs
+whenever the node or anything inside it drew, always over what the node
+drew afresh, so an effect that moves cells comes out the same each time.
+The signals it reads draw it again, so a timer or an animation drives it:
+
+```rust
+let phase = signal(0u16);
+every(Duration::from_millis(16), move |_| phase.update(|p| *p += 1));
+effect(app_body, move |canvas, _cx| {
+    // Each column drips a little further down every frame.
+    let phase = phase.get();
+    for x in 0..canvas.width() {
+        let drop = (phase * (x % 3 + 1) / 2).min(canvas.height());
+        let column: Vec<_> = (0..canvas.height())
+            .map(|y| canvas.cell(x, y).map(|c| (c.symbol().to_string(), c.style().cloned())))
+            .collect();
+        for y in 0..canvas.height() {
+            let (symbol, style) = match y.checked_sub(drop) {
+                Some(from) => column[from as usize].clone().unwrap_or_default(),
+                None => (" ".to_string(), None),
+            };
+            canvas.set_cell(x, y, &symbol, style.as_ref());
+        }
+    }
+})
+```
+
+Three frames in (`tests/effects.rs`):
+
+```text
+--8<-- "crates/rich-intuituive/tests/snapshots/effect_drip.txt"
+```
 
 ## Screens and modals
 
@@ -733,6 +1292,42 @@ A modal is a screen in a box over the one below, which keeps drawing:
 Its width and height are cells (`Size::Fixed`), a share of the screen
 (`Size::Percent`), the content's size (`Size::Auto`), or the whole screen
 (`Size::Flex`). Keys and clicks reach only the top screen.
+
+`cx.modal_with(width, height, options, build)` takes `ModalOptions`: a
+shadow, and a backdrop.
+
+```rust
+use intuituive::ModalOptions;
+
+let look = ModalOptions::new().shadow("on grey11").backdrop("dim");
+cx.modal_with(Size::Fixed(40), Size::Fixed(8), look, || confirm())
+```
+
+- **`.shadow(style)`** restyles a strip one cell right and down of the
+  box, as ratatui's `Shadow::overlay().style(..)` does.
+- **`.backdrop(style)`** restyles the whole screen below while the box is
+  open, as it goes on drawing.
+- Styles are console styles or theme names. `cx.popup_with(..)` takes the
+  same options for a pop-up.
+
+### Ending with a value, or an error
+
+```rust
+let picked: Option<usize> = App::new(|| {
+    let selected = signal(0usize);
+    list(colours, selected).on_key("enter", move |cx| cx.quit_with(selected.get()))
+})
+.run_for()?;
+```
+
+- **`cx.quit_with(value)`** ends the app with a value of any type, which
+  **`App::run_for::<T>()`** returns (`None` when the app ended otherwise,
+  or with another type). `App::run_on_for` does the same on any backend,
+  and **`Driver::take_exit::<T>()`** gives it to a loop of your own.
+- **`cx.fail(error)`** ends the app with an error, which `App::run` (and
+  `run_on`) returns once the terminal is given back. An `io::Error` keeps
+  its kind; anything else (a `String`, your own error) is `Other`.
+  `Driver::take_error()` gives it to a loop of your own.
 
 ### Pop-ups
 
@@ -905,6 +1500,55 @@ leaves the last good styles in place, and the [inspector](#inspector) shows
 the error. `Theme::load(path)` and `theme.with_config(text)` read the same
 format without watching.
 
+### A style on a node
+
+`.style("white on #101830")` draws any node in a style, ratatui's
+`Block::style`; `.bg(colour)` and `.fg(colour)` set one colour. Each takes
+a theme style's name too (`.style("accent")`, `.bg("bad")`), looked up
+again when the theme changes. The style goes under what the node and its
+children draw, as a stylesheet's `color` and `background` do, and fills the
+rest of the node's rectangle, gaps and borders included. Code wins over a
+stylesheet, and markup inside wins over both:
+
+```rust
+column([label("one"), label("[yellow]two[/] and more"), row([..]).gap(2)])
+    .gap(1)
+    .bg("blue")
+```
+
+```text
+--8<-- "crates/rich-intuituive/tests/snapshots/node_style_fill.styled.txt"
+```
+
+Only what drew is restyled: a tick that redraws one child sends its cells,
+not the whole fill.
+
+### Theme styles for a subtree
+
+`.theme_styles([(name, style), ..])` gives a node and everything inside it
+theme styles of its own, over the app's, as CSS custom properties do. They
+hold for markup (`[selected]…[/]`) and for the widgets inside, which look
+their styles up by name: a list's `selected`, a table's `table.header`, a
+tab strip's `tabs.selected`, a panel's `border` and `title`. It is the
+per-instance answer to ratatui's `highlight_style` and the like, with no
+style option on each widget:
+
+```rust
+row([
+    list(items, a),
+    list(items, b).theme_styles([("selected", "underline")]),
+])
+```
+
+```text
+--8<-- "crates/rich-intuituive/tests/snapshots/theme_styles_list.styled.txt"
+```
+
+A style may name another theme style (`("selected", "accent")`), which
+follows a theme switch. The node keeps one copy of the console and theme
+with its styles, made again only when the theme changes; a node without
+theme styles makes none.
+
 ## Stylesheets
 
 A stylesheet styles and lays out nodes from outside the code, in a subset
@@ -929,7 +1573,9 @@ panel table:hover { text-style: underline; }
 - `:focus` and `:focus-within`;
 - `:hover`, for the node under the pointer and its ancestors;
 - `:selected` and `:disabled`, while `.selected_when(…)` or
-  `.disabled_when(…)` holds.
+  `.disabled_when(…)` holds;
+- `:error` (or CSS's `:invalid`), while `.error_when(…)` holds (see
+  [Errors](#errors)).
 
 Spaces separate a node from its ancestors (`panel label`). Sibling
 selectors and `!important` are not supported. The more specific rule wins,
@@ -939,17 +1585,39 @@ then the later one.
 `.class_when("danger", move || load.get() > 90)` gives it a class while a
 condition holds, following the signals the condition reads.
 
+**`@media`** rules hold at some sizes of the
+[viewport](#responsive-layout) only:
+
+```css
+@media (max-width: 80) {
+    #sidebar { display: none; }
+    #main { grid-columns: 1fr; }
+}
+@media (min-width: 120) and (max-height: 30) { #log { size: 50%; } }
+```
+
+The conditions are `min-width`, `max-width`, `min-height` and
+`max-height`, in cells, inclusive as in CSS, joined with `and`; the space
+after `@media` may be left out, as in CSS (`@media(max-width: 80)`). Inside,
+rules are written as anywhere else, and the more specific rule still wins,
+then the later one, whether it is in a block or not. Blocks do not nest,
+and other `@` rules are an error.
+
 **Properties:**
 
 | | |
 |---|---|
 | `color`, `background` | a colour (`red`, `#ff8800`, `grey23`) or a theme style's colour (`$accent`) |
 | `text-style` | `bold`, `dim`, `italic`, `underline`, `reverse`, `strike`, `blink`, `none` (every one off); a later rule's replaces an earlier one's |
-| `border`, `border-title` | `round`, `square`, `heavy`, `double`, `ascii` or `none` (which takes a panel's own border and its cells away), then a colour; a title |
-| `size`, `min-size`, `max-size` | `3`, `50%`, `2fr`, `auto`, along the parent's axis |
+| `border`, `border-title` | `round`, `square` (or `plain`), `heavy` (or `thick`), `double`, `ascii`, `dashed` and the other dashed kinds (`light-triple-dashed`, `heavy-quadruple-dashed`, …), `quadrant-inside`, `quadrant-outside`, or `none` (which takes a panel's own border, its titles and their cells away), then a colour; a title (markup) |
+| `border-title-align`, `border-subtitle`, `border-subtitle-align` | `left`, `center` or `right`; a title on the bottom edge, and where it sits |
+| `border-sides` | the sides drawn: `top`, `right`, `bottom`, `left` (several), `all` or `none` |
+| `border-collapse` | `collapse` draws one frame for a row's, column's or grid's panels (see [Collapsed borders](#collapsed-borders)), or `separate` |
+| `text-align`, `text-wrap`, `text-overflow` | a text's `left`, `center`, `right` or `justify`; `wrap` or `nowrap`; `fold`, `clip` or `ellipsis` |
+| `size`, `min-size`, `max-size` | `3`, `50%`, `1/3`, `2fr`, `auto`, along the parent's axis |
 | `padding` | one to four numbers, as in CSS |
 | `gap`, `grid-columns`, `grid-rows` | a stack's or grid's spacing; a grid's tracks |
-| `display` | `none` hides the node and what is inside, takes it out of the Tab order, and out of a grid's cells |
+| `display` | `none` hides the node and what is inside, in any container (a split's pane, a scroll's or a switch's child), takes it out of the Tab order, and out of a grid's cells |
 | `dock` | `top` or `bottom` in a column, `left` or `right` in a row: kept at that edge |
 | `align-items`, `align-self` | `flex-start`, `center`, `flex-end` or `stretch` (`align-self` also `auto`): where a stack's children sit across its axis |
 | `justify-content` | `flex-start`, `center`, `flex-end`, `space-between`, `space-around` or `space-evenly`: what a stack does with the room its children leave |
@@ -960,13 +1628,18 @@ condition holds, following the signals the condition reads.
 - **Colours inherit, as in CSS.** They go under what a node draws, so a
   widget's own colours and markup's `[green]` stay, and they fill in the
   rest of the node's area, gaps included.
-- **Code wins.** `.fixed(3)` beats `size: 5`, and `.focus_style()` and
-  `.hover_style()` go over the sheet's colours. A node whose code sets no
-  size takes the sheet's.
+- **Code wins.** `.fixed(3)` beats `size: 5`, `.style()` and `.bg()` beat
+  `background`, and `.focus_style()` and `.hover_style()` go over the
+  sheet's colours. A node whose code sets no size takes the sheet's.
 - **What follows states.** States and `class_when` change colours and text
-  styles. Layout is decided by a node's kind, name and fixed classes.
+  styles. Layout is decided by a node's kind, name and fixed classes, and
+  decided again when a resize crosses an `@media` rule's bounds (then
+  everything draws once). A resize that crosses none matches nothing again.
 - **Borders.** A `border` on a panel restyles the panel's own box. On
-  another node it draws a box round it, inside its area.
+  another node it draws a box round it, inside its area, with its
+  `border-title`, `border-subtitle` and `border-sides`. On a container
+  with `border-collapse: collapse` it is the kind and colour of the shared
+  lines.
 - **Live.** A sheet file is read again whenever it changes. One that does
   not parse is reported in a toast with its line and column, and the last
   good sheet stays. `App::stylesheet(css)` takes a string.
@@ -1010,6 +1683,36 @@ sheet stays.
 | **Reloaded** | **A mistake** |
 | ![Heavy borders and a magenta title after the edit](../../media/tapes/stylesheet/reloaded.png) | ![A toast naming the line and column](../../media/tapes/stylesheet/error.png) |
 
+### Errors
+
+`.error_when(condition)` puts a node in error while the condition holds: a
+field whose value is wrong, a form that cannot be sent. Three things
+follow, alongside the focus and `:disabled`:
+
+- **The theme** gives it a look of its own, for every app: a panel draws
+  its border in the theme's `border.error` style, and another node's text
+  takes the theme's `error` style, under the text's own colours as a
+  stylesheet's go. Both are the theme's `bad` style unless the theme (or a
+  [theme file](#theme-files-reloaded-live)) names them.
+- **The stylesheet** matches it with `:error`, or CSS's `:invalid`.
+- **Assistive technology** is told it is invalid: `AccessState::invalid`,
+  `invalid` in [linear mode](#linear-mode)'s line, `aria-invalid` in a
+  browser.
+
+```rust
+let age = signal(String::new());
+column([
+    component(Input::new("Age"), move |answer, _| age.set(answer)),
+    text!("Age: {age}")
+        .label("Age")
+        .error_when(move || age.with(|a| a.parse::<u8>().is_err())),
+])
+```
+
+```css
+:error { background: $bad; color: white; }
+```
+
 ## Accessibility
 
 There are two modes for assistive technology:
@@ -1047,7 +1750,12 @@ is in [Testing with screen readers](screen-readers.md).
   `TextArea`, …) and a name: `.label("Save")`, else the text it shows,
   else a panel's title. `.role(Role::MenuBar)` sets a role in code. A node
   named by the text it shows (a live row, a button) speaks for what is
-  inside it, so its children are not listed again.
+  inside it, so its children are not listed again. A chart (or any
+  renderable with rich-ext's `AccessibleText`) drawn with
+  `described(move || ..)` instead of `renderable(..)` is named by what it
+  shows in words (`Line chart, 2 series, x from 0 to 23, …`; see
+  [accessible text](../ext/charts.md#accessible-text)), after its
+  `.label(..)` if it has one.
   `Driver::accessibility()` returns the tree: depth, role, name, what is
   selected in it, focus, states and place. rs-rich-web's
   [DOM renderer](web.md#the-dom-renderer) carries it to a browser's screen
@@ -1067,11 +1775,13 @@ is in [Testing with screen readers](screen-readers.md).
 
     Code sets them with `.selected_when(…)`, `.expanded_when(…)`,
     `.checked_when(…)` (which makes the role `checkbox` unless one is set;
-    use `Role::Switch` for a toggle) and `.busy_when(…)`, each taking a
+    use `Role::Switch` for a toggle), `.busy_when(…)` and
+    `.error_when(…)` (`invalid`; see [Errors](#errors)), each taking a
     condition that may read signals. `Widget::access_state` is the hook
     for a widget of your own. `AccessNode::aria_attributes()` maps them to
     ARIA (`aria-expanded`, `aria-checked`, `aria-selected`, `aria-busy`,
-    `aria-disabled`, `aria-posinset`, `aria-setsize`) for a browser.
+    `aria-disabled`, `aria-invalid`, `aria-posinset`, `aria-setsize`) for
+    a browser.
 - **Hidden from assistive technology.** `.access_hidden(true)` (ARIA's
   `aria-hidden`) leaves a node, and everything inside it, out of the tree,
   linear mode's lines, announcements and the names of what holds it, and
@@ -1181,6 +1891,26 @@ drawn, with cursor moves relative to them, so the scrollback above is left
 alone. When the app ends, its last frame stays, and the prompt continues
 below it. The mouse is left to the terminal.
 
+```rust
+every(Duration::from_millis(200), move |cx| {
+    if let Some(name) = finished.take() {
+        cx.print_above(format!("[green]✓[/] downloaded {name}"));
+    }
+});
+```
+
+- **`cx.print_above(markup)`** prints lines into the scrollback above the
+  region, which moves down under them, as ratatui's `insert_before`
+  does: a download's done line over its progress bars.
+  `Proxy::print_above` does it from another thread.
+- Full-screen, the lines print once the app ends and the terminal is
+  back. A loop of your own takes them with `Driver::take_printed()`, to
+  print when it gives the terminal back.
+- **`App::mouse(Some(true))`** captures the mouse inline too (clicks, the
+  wheel and hover reach the app); **`App::mouse(Some(false))`** leaves it to
+  the terminal full-screen. `None`, the default, is the rule above.
+  `App::session_options(backend)` shows what `run` asks the terminal for.
+
 ## Backends
 
 `App::run` drives the terminal with crossterm. `App::run_with` picks the
@@ -1207,6 +1937,25 @@ not show; termwiz reads the kitty protocol's keys but not their releases,
 so widgets get no `WidgetEvent::KeyUp`. [The interact
 guide](../interact/index.md#backends-crossterm-termion-termwiz) compares
 them.
+
+`BackendKind::from_name("termwiz")` finds a backend by its name (in any
+case), for a flag or a setting, and `BackendKind::ALL` lists the ones the
+build has. The `files` and `scope` examples take `--backend NAME`, or
+`INTUITUIVE_BACKEND=NAME` (only these examples read it), and say which
+backends the build has when the name is not one of them:
+
+```bash
+cargo run -p rs-rich-intuituive --example files --features termwiz -- --backend termwiz
+INTUITUIVE_BACKEND=termion cargo run -p rs-rich-intuituive --example scope --features termion
+```
+
+termwiz runs on Windows too. CI builds both crates, and every target,
+with it on Linux, macOS and Windows; it runs the PTY conformance suites on
+Linux and macOS, and the headless suites on Windows, where the PTY suites
+do not run. A pass in real terminals of the mouse, resizes and Ctrl+Z on
+the termion and termwiz backends, and on termwiz in Windows Terminal, has
+not been made yet (see the [release
+notes](../../releases/0.0.19.md#not-yet-done-and-by-whom)).
 
 ## Synchronized output
 
@@ -1279,6 +2028,11 @@ out.write_all(driver.finish().as_bytes())?;
 - **`suspend()`** returns the bytes to write before you give the terminal
   away for a while (Ctrl+Z, a command run in it); once it is back, call
   `resize(w, h)` and the next `render` draws everything again.
+- **`stats()`** is the last frame's numbers: the nodes that drew, the
+  bytes, and `frames`, how many frames have been drawn (ratatui's
+  `Frame::count`).
+- **`take_exit::<T>()`**, **`take_error()`** and **`take_printed()`** give
+  you what the app ended with, and the lines it printed above itself.
 
 Reading termion or termwiz instead of crossterm, translate with
 `event::from_termion` or `event::from_termwiz`, which take a `HeldButton`
@@ -1314,10 +2068,64 @@ let screen = app.render_with(&["+", "+", "q"], 30, 2)?;
 assert_eq!(screen[0].trim_end(), "Count: 2");
 ```
 
-For more control, such as clicks, resizes, waits on a virtual clock, or the
-exact bytes sent, use `App::run_on` with `rs-rich-interact`'s `Headless`
-backend. `App::wait_for_tasks(true)` waits for background tasks before each
-scripted event, so a test sees a task's result however fast the machine is.
+`App::driver(width, height)` steps an app one event at a time, with no
+terminal and no clock of its own. For a test it has:
+
+- `press("tab tab enter")`: keys by name, each followed by `settle()`,
+  which draws until nothing is left to draw;
+- `type_text("Ada")`: a key a character, as a person types;
+- `resize(columns, rows)`, `event(…)` for the mouse and pastes, and
+  `update(now)` to move the clock;
+- `assert_focused("save")`: the focus is on the node with that
+  `.name("…")`, or that accessible name (its `.label("…")`, the text it
+  shows, a panel's title). When it is not, the message says where the
+  focus is. `focused()` and `focused_name()` return it;
+- `screen()` (the cells), `accessibility()` and `take_announcements()`.
+
+**Snapshots.** `assert_screen!(driver, "name")` compares the screen with
+`tests/snapshots/name.txt`: plain text, one line a row, trailing spaces
+trimmed, so a review reads it as the screen. A file saved with Windows
+line endings, trimmed lines or a byte-order mark still matches. When the
+screen differs, the test fails with a unified diff:
+
+```text
+snapshot tests/snapshots/counter_two.txt differs; run with UPDATE_SNAPSHOTS=1 to accept the change
+--- expected
++++ actual
+@@ -1 +1 @@
+-Count: 2
++Count: 3
+```
+
+Run the tests with `UPDATE_SNAPSHOTS=1` to write the files instead (a new
+snapshot is written the same way), then review them with `git diff`.
+`assert_screen_styled!(driver, "name")` also keeps `name.styled.txt`, each
+row as console markup (`[bold red]Age: forty[/]`), for a test about
+colours. Both take a `Driver`, a `Screen`, or the rows `render_with`
+returns; `intuituive::testing::assert_snapshot(path, text)` compares any
+text with any file.
+
+A component test builds the component in an app of its own:
+
+```rust
+--8<-- "crates/rich-intuituive/tests/testing.rs:component"
+```
+
+An end-to-end test drives the whole app, here the [tutorial](tutorial.md)'s
+to-do list:
+
+```rust
+--8<-- "crates/rich-intuituive/tests/testing.rs:app"
+```
+
+```text
+--8<-- "crates/rich-intuituive/tests/snapshots/todo_added.txt"
+```
+
+For the exact bytes sent, or a script of clicks and waits, use
+`App::run_on` with `rs-rich-interact`'s `Headless` backend.
+`App::wait_for_tasks(true)` waits for background tasks before each step,
+so a test sees a task's result however fast the machine is.
 
 ## Inspector
 
@@ -1328,20 +2136,94 @@ INTUITUIVE_INSPECT=1 cargo run      # any app, no code change
 ```
 
 or `App::inspector(true)` in code. The inspector docks on the right, and
-the app is laid out in the space to its left. F12 shows and hides it. It
-shows:
+the app is laid out in the space to its left. F12 shows and hides it.
+While it is shown the app keeps the keys, so you use the app and watch the
+inspector. Shift+F12, or a click on the panel, gives the inspector the
+keys; Esc, Shift+F12 again or a click on the app gives them back. Ctrl+C
+still quits.
 
-- the node tree as it is, each node's builder (or its `.name("…")`), what
-  it holds (a panel's title, a list's length, a grid's shape) and its size,
-  or `hidden`;
-- in yellow, the nodes that drew in the last frame; reversed, the focused
-  node;
-- the frame's cost: nodes drawn of those made dirty, damaged rectangles and
-  cells, and the bytes sent;
-- the theme file's state, and its error if the last edit did not parse.
+The top of the panel is always the last frame the app drew: its number,
+the nodes that drew of those made dirty, the damaged rectangles and cells,
+the bytes sent, and the theme file's state (and its error, if the last edit
+did not parse). A frame the inspector draws for itself, its selection
+moving, leaves it as it was. Below it is one of four panes, named on the
+line under the title:
+
+- **tree**: the node tree as it is, each node's builder (or its
+  `.name("…")`), what it holds (a panel's title, a list's length, a grid's
+  shape) and its size, or `hidden`. In yellow, the nodes that drew in the
+  last frame; reversed, the focused node; marked `›`, the selected one.
+- **node**: the selected node. Where it is on the screen (`at 0,2 ·
+  60x17`), and where its widget draws inside a stylesheet's border and
+  padding; its size and who set it (code, the stylesheet or the default),
+  its minimum and maximum; a column's or row's gap, alignment,
+  justification and wrapping where they differ from the defaults; a grid's
+  tracks, or a grid child's cell and span; `align-self` and `dock`; its
+  padding and border; whether it takes the focus and has it; whether it is
+  shown, or the rule that hides it (`hidden by hide_below 70 (app 60x20)`,
+  or a stylesheet's `display: none`); its classes, the conditional ones
+  that hold now and those that do not, and its states (`:focus`, `:hover`,
+  `:disabled`, `:error`, `:selected`); whether it was dirty and drew in the
+  last frame; its draws and times; its role, key bindings and handlers.
+- **timings**: the last frame's time and how many nodes drew, the average
+  and slowest of the last 120 frames, and each node's draws, its time in
+  all and the last time it drew, slowest first. A node's time is its own
+  layout and drawing: its children's are theirs.
+- **trace**: what happened, newest last, each line after the number of the
+  frame that drew next. Keys with their modifiers and what took them
+  (`key ctrl+s → editor on_key`, or `(unused)`); presses, releases, drags
+  and the wheel, with the node under the pointer and what took them
+  (`press left 12,3 on save → save on_click`); resizes and pastes; the
+  focus moving; screens, modals and pop-ups opening and closing; signal
+  writes, named by where the signal was made and where it was written, with
+  the nodes they made dirty (`signal main.rs:8 → count (i32, by
+  main.rs:14)`); timers, watches, tasks done and jobs from other threads,
+  each by where it was made. It keeps the last 1,000 events.
+
+While the inspector has the keys, its keys are these, and none reaches the
+app (the two help lines at the bottom of the panel list them):
+
+| Key | What it does |
+|---|---|
+| F12 | Show or hide the inspector (hidden, it gives the keys back) |
+| Shift+F12, Esc | Give the keys back (Esc while picking puts the selection back) |
+| Tab, Shift+Tab, `1` to `4` | The next pane, the one before, or that pane (a click on its name too) |
+| ↑ ↓, `k` `j`, PgUp PgDn, Home End, `g` `G` | Tree and node panes: select a node (a click on its line too); timings and trace: scroll |
+| ← →, `h` `l` | Select the node's parent, or its first child |
+| Enter | The node pane for the selected node, or back to the tree |
+| `p` | Pick: the pointer, or a cursor the arrows move (with Shift, five cells), selects the node under it; a click or Enter keeps it |
+| `f` | The redraw flash, on or off |
+| `s` | Timings: sort by time in all, the last time, or draws |
+| `c` | Timings: start again; trace: clear it |
+| Space | Trace: pause it, or take events in again |
+
+While the inspector has the keys, the selected node is outlined on the
+app: the cells of its edges are restyled in the theme's `inspector.selected`
+style (reverse magenta unless the theme names it), so nothing moves. The
+picking cursor is `inspector.cursor` (reverse yellow). The redraw flash
+marks what each frame drew, in `inspector.flash` (on dark green), for
+300 ms, so redraws show as they happen, keys given back or not; the flash
+is sent to the terminal like anything else, so the bytes count it. Each
+comes off at the next frame, and the app's cells are as they were.
+
+Nothing is measured or traced while the inspector is closed: each place
+that would note something checks a flag first, and the app sends the same
+bytes, frame for frame, as one without an inspector. A terminal narrower
+than 40 columns has no room for the panel: the app keeps the whole width
+and the keys, the trace goes on, and the panel is back when there is room.
+In linear mode, which draws nothing, the inspector is off: it takes no
+columns, and F12 is the app's.
+
+A test or a loop of your own reads the same with `Driver::inspector_trace()`
+(each entry's frame, time, kind and text), `inspector_timings()` and
+`inspector_selected()`:
+
+```rust
+--8<-- "crates/rich-intuituive/tests/inspector.rs:trace"
+```
 
 It is the quickest way to see that a change redraws what it should and
-nothing more.
+nothing more, and why.
 
 ## Against ratatui
 
@@ -1354,6 +2236,16 @@ bytes.
 | status tick | 95 µs, 37 B | **15 µs, 18 B** |
 | selection move | 97 µs, 184 B | **39 µs, 118 B** |
 | log append | 94 µs, 443 B | **47 µs, 428 B** |
+
+Two more scenes are reported, not gated: a frame where every cell changes
+(an RGB swatch, as ratatui's `colors-rgb`), and a braille chart redrawn each
+tick. There ratatui is ahead, as drawing only what changed saves nothing
+when everything does:
+
+| 80x24, release | ratatui | intuiTUIve |
+|---|---:|---:|
+| churn, every cell | **326 µs**, 62 kB | 3,042 µs, 66 kB |
+| a chart redrawn | **81 µs**, 4.2 kB | 463 µs, **3.1 kB** |
 
 [The design note](../../design/intuituive.md) explains why. It also lists
 the architectural problems in ratatui that intuiTUIve is built to avoid:

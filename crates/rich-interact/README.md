@@ -63,7 +63,11 @@ Ready-made components:
   files, a file/directory mode, extensions and an optional root jail;
 - `ColorPicker`: rich's named colours, the 256 palette, or hex and RGB, with
   a live swatch;
-- `AssetPicker`: emoji, box styles and spinners, with a preview.
+- `AssetPicker`: emoji, box styles and spinners, with a preview;
+- `Reorder`: put a list in order with Alt+↑/↓, `K`/`J`, Space to grab, or
+  a drag;
+- `DatePicker`, `TimePicker` and `DateTimePicker`: a month grid and time
+  fields, within a range, on the hand-rolled `datetime` types.
 
 Every list reloads its items while keeping the query, the focus and the
 marks (`Select::reload`, on a key or from a channel), and components copy

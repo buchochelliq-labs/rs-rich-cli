@@ -31,6 +31,18 @@
 //! - [`licenses`]: licences from `cargo metadata`, grouped, with unknown and
 //!   copyleft licences marked.
 //!
+//! Four more build on them (0.0.19 workstream 16):
+//!
+//! - [`sizes`]: artifact sizes per crate, from a target directory or from
+//!   cargo-bloat, as bars and a table.
+//! - [`compare`]: two timings or size reports compared unit by unit, with
+//!   regressions over a threshold flagged.
+//! - [`policy`]: an allow and deny list of licences (its own TOML, or
+//!   cargo-deny's `[licenses]`) checked against every package, and
+//!   dependency licences that conflict with the root crate's.
+//! - [`sbom`]: the packages and licences of an SPDX or CycloneDX JSON
+//!   document, so the licence report and the policy work beyond Cargo.
+//!
 //! Running `cargo` (or `cargo audit`) is the caller's business; this module
 //! only reads its output, and reaches no network.
 //!
@@ -66,9 +78,13 @@ use rich::{Console, ConsoleOptions, Renderable, Segment, Style, Text, Tree};
 use serde_json::Value;
 
 pub mod audit;
+pub mod compare;
 pub mod duplicates;
 pub mod features;
 pub mod licenses;
+pub mod policy;
+pub mod sbom;
+pub mod sizes;
 pub mod timings;
 
 /// The largest input the supply-chain readers ([`timings`], [`audit`])
@@ -101,7 +117,27 @@ pub const STYLES: &[(&str, &str)] = &[
     ("deps.medium", "yellow"),
     ("deps.low", "cyan"),
     ("deps.info", "dim"),
+    ("deps.regression", "bold red"),
+    ("deps.improvement", "green"),
+    ("deps.new", "yellow"),
+    ("deps.violation", "bold red"),
+    ("deps.warning", "yellow"),
+    ("deps.ok", "green"),
 ];
+
+/// The `format` of a report saved as JSON ([`timings::Timings::to_json`],
+/// [`sizes::Sizes::to_json`]), which the readers recognise.
+pub const SAVED_FORMAT: &str = "rich-deps";
+/// The `version` of the saved reports this module writes and reads.
+pub const SAVED_VERSION: u64 = 1;
+
+/// Which report a saved one is (`"timings"`, `"sizes"`), if `value` is one.
+pub(crate) fn saved_report(value: &Value) -> Option<&str> {
+    if value.get("format").and_then(Value::as_str) != Some(SAVED_FORMAT) {
+        return None;
+    }
+    Some(value.get("report").and_then(Value::as_str).unwrap_or(""))
+}
 
 pub(crate) fn theme_style(console: &Console, key: &str) -> Style {
     if let Some(style) = console.theme().get(key) {

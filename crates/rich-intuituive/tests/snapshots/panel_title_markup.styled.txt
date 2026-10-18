@@ -1,0 +1,3 @@
+[blue]╭─[/][italic blue] [/][bold italic blue]Pull[/][italic blue] [/][italic red]requests[/][italic blue] [/][blue]──[/][italic blue] [/][dim italic blue]loading[/][italic blue] [/][blue]─╮[/]
+[blue]│[/]body                        [blue]│[/]
+[blue]╰────────────────────────────╯[/]

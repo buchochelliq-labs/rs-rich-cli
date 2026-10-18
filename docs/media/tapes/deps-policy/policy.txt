@@ -1,0 +1,44 @@
+❯ rich deps --policy policy.toml --sbom sbom.cdx.json
+Licence policy (policy.toml): 10 crates checked, 2 violations, 1 conflict, 2 warnings
+
+┏━━━━━━━━━━━━━━━┳━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ Crate         ┃ Version ┃ Licence                ┃ Why                              ┃
+┡━━━━━━━━━━━━━━━╇━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
+│ gpl-widget    │ v0.4.0  │ GPL-3.0-only           │ GPL-3.0-only is denied (GPL-3.0) │
+│ mystery-codec │ v0.1.0  │ Mystery Public Licence │ not an SPDX expression           │
+└───────────────┴─────────┴────────────────────────┴──────────────────────────────────┘
+
+Licences against ledger v2.1.0 (MIT)
+a heuristic, not legal advice
+
+┏━━━━━━━━━━━━━━━━┳━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ Crate          ┃ Version ┃ Licence              ┃ Verdict  ┃ Why                                 ┃
+┡━━━━━━━━━━━━━━━━╇━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
+│ gpl-widget     │ v0.4.0  │ GPL-3.0-only         │ conflict │ copyleft in a permissive crate: the │
+│                │         │                      │          │ combined work falls under           │
+│                │         │                      │          │ GPL-3.0-only                        │
+│ acme-telemetry │ v1.2.0  │ LicenseRef-Acme-EULA │ check    │ LicenseRef-Acme-EULA: a licence     │
+│                │         │                      │          │ this reader does not know           │
+│ option-ext     │ v0.2.0  │ MPL-2.0              │ check    │ weak copyleft: changes to its own   │
+│                │         │                      │          │ files stay under MPL-2.0            │
+└────────────────┴─────────┴──────────────────────┴──────────┴─────────────────────────────────────┘
+rich: 2 licence policy violations: gpl-widget v0.4.0 (GPL-3.0-only), mystery-codec v0.1.0 (Mystery P
+ublic Licence)
+❯
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

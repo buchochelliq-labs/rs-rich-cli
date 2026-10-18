@@ -1,0 +1,24 @@
+ Block  Text  List  Table  Tabs  Scrollbar  Calendar  Popup  Borders  Custom
+╭─ Down the right, with arrows ────────────────────────────────────────────────╮
+│Line  3: the quick brown fox jumps over the lazy dog, 3 times over, and then ↑│
+│Line  4: the quick brown fox jumps over the lazy dog, 4 times over, and then █│
+│Line  5: the quick brown fox jumps over the lazy dog, 5 times over, and then ↓│
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Down the left, no track ────────────────────────────────────────────────────╮
+│┃Line  3: the quick brown fox jumps over the lazy dog, 3 times over, and then │
+│ Line  4: the quick brown fox jumps over the lazy dog, 4 times over, and then │
+│ Line  5: the quick brown fox jumps over the lazy dog, 5 times over, and then │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Along the bottom, a begin arrow and a thumb of its own ─────────────────────╮
+│ the quick brown fox jumps over the lazy dog, 1 times over, and then rests in │
+│ the quick brown fox jumps over the lazy dog, 2 times over, and then rests in │
+│◄─────▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬─────────────────────│
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Along the bottom, a track of its own ───────────────────────────────────────╮
+│ the quick brown fox jumps over the lazy dog, 1 times over, and then rests in │
+│ the quick brown fox jumps over the lazy dog, 2 times over, and then rests in │
+│ the quick brown fox jumps over the lazy dog, 3 times over, and then rests in │
+│ the quick brown fox jumps over the lazy dog, 4 times over, and then rests in │
+│-----####################################################---------------------│
+╰──────────────────────────────────────────────────────────────────────────────╯
+←/→ or 1-9, 0 tabs · ? keys · Ctrl+P commands · q quit

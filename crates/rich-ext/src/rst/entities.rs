@@ -1,8 +1,9 @@
 //! The HTML5 named character references, as Python's `html.entities.html5`
-//! holds them (keys with and without the trailing `;`), for `strip_tags`.
+//! holds them (keys with and without the trailing `;`), for `strip_tags` and
+//! AsciiDoc's character references (`crate::document`).
 //! Generated from CPython 3.11; do not edit by hand.
 
-pub(super) const ENTITIES: &[(&str, &str)] = &[
+pub(crate) const ENTITIES: &[(&str, &str)] = &[
     ("AElig", "\u{c6}"),
     ("AElig;", "\u{c6}"),
     ("AMP", "&"),

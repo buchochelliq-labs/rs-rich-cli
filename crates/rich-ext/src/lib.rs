@@ -11,7 +11,8 @@
 //!
 //! - Errors and logs: [`diagnostic`], [`dashboard`], [`stacktrace`],
 //!   [`hyperlink`], [`log_handler`] (`RichHandler`, `SpanView`), `adapters`
-//!   (`log` / `tracing` features), [`event`].
+//!   (`log` / `tracing` features), [`event`], [`log_stream`] (log records
+//!   parsed, filtered, collapsed and grouped).
 //! - Data and authoring: `data`, `deps` (Cargo dependency trees) and `schema`
 //!   (JSON Schema trees and diffs, and the format-neutral schema model), all
 //!   behind the `data` feature;
@@ -25,9 +26,14 @@
 //!   [`cancel`], [`table`], [`badge`], [`size_bar`], [`format`](mod@format), [`redact`]
 //!   (experimental).
 //! - Charts: [`chart`] (sparklines, bars, histograms, line and scatter plots,
-//!   gauges, heatmaps, status matrices, KPI cards and timelines).
+//!   gauges, heatmaps, status matrices, KPI cards and timelines; ratatui's
+//!   chart, canvas with a world map, and gauges).
+//! - Colour: [`palette`] (Tailwind's and Material's palettes; HSL, HSV,
+//!   Okhsv and Oklab colours, blends and gradients).
 //! - Inspectors: [`source_view`], [`hex`], [`unicode_inspect`],
 //!   [`env_inspect`].
+//! - Documents: `document` (Org, AsciiDoc and man pages beside Markdown and
+//!   `rst`, with format detection; `syntax` feature).
 //! - Layout and live output: [`layout`], [`live`], [`surface`] (positioned
 //!   drawing that writes only what changed).
 //! - Pipelines: [`transform`], and `data::transform` (`jsonpath` feature).
@@ -56,6 +62,9 @@ pub mod capabilities;
 pub mod chart;
 pub mod cli;
 pub mod clipboard;
+// Documentation formats (Markdown, reStructuredText, Org, AsciiDoc, man).
+#[cfg(feature = "syntax")]
+pub mod document;
 pub mod encoding;
 pub mod env_inspect;
 pub mod fidelity;
@@ -64,6 +73,7 @@ pub mod frame;
 pub mod graphics;
 pub mod hex;
 pub mod highlighter;
+pub mod palette;
 pub mod plugin_loading;
 pub mod redact;
 pub mod registry;
@@ -140,6 +150,9 @@ pub mod stacktrace;
 
 pub mod log_handler;
 pub use log_handler::{RichHandler, SpanView};
+
+// Log streams: parsing, filtering, collapsing and grouping records (#724).
+pub mod log_stream;
 
 #[cfg(any(feature = "log", feature = "tracing"))]
 pub mod adapters;

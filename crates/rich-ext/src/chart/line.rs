@@ -517,6 +517,95 @@ impl LineChart {
     }
 }
 
+/// `Line chart, 2 series, x from 0 to 23, y from 12 to 52`, then a line
+/// per series: its name and kind, then its facts (`24 points, min 12, max
+/// 52, last 14, trend up`). The ranges are the fixed ones, else the data's.
+impl crate::a11y::AccessibleText for LineChart {
+    fn accessible_text(&self, _width: usize) -> String {
+        use super::describe::{counted, extent, range, series};
+        let lines = self
+            .series
+            .iter()
+            .filter(|s| s.kind == SeriesKind::Line)
+            .count();
+        let what = match (lines, self.series.len() - lines) {
+            (_, 0) => "Line chart",
+            (0, _) => "Scatter chart",
+            _ => "Line and scatter chart",
+        };
+        if self.series.is_empty() {
+            return format!("{what}, no series");
+        }
+        let mut head = format!("{what}, {}", counted(self.series.len(), "series", "series"));
+        let finite = || self.series.iter().flat_map(|s| s.finite());
+        let axis = |fixed: (Option<f64>, Option<f64>), data: Option<(f64, f64)>, format| {
+            let lo = fixed.0.or(data.map(|d| d.0))?;
+            let hi = fixed.1.or(data.map(|d| d.1))?;
+            Some(range(lo.min(hi), lo.max(hi), format))
+        };
+        if let Some(x) = axis(
+            (self.x_min, self.x_max),
+            extent(finite().map(|p| p.0)),
+            self.x_format,
+        ) {
+            head.push_str(&format!(", x {x}"));
+        }
+        if let Some(y) = axis(
+            (self.y_min, self.y_max),
+            extent(finite().map(|p| p.1)),
+            self.y_format,
+        ) {
+            head.push_str(&format!(", y {y}"));
+        }
+        let mut out = vec![head];
+        for (index, s) in self.series.iter().enumerate() {
+            let name = if s.name.is_empty() {
+                format!("series {}", index + 1)
+            } else {
+                s.name.clone()
+            };
+            let kind = match s.kind {
+                SeriesKind::Line => "line",
+                SeriesKind::Scatter => "points",
+            };
+            let facts = series(&s.points, self.y_format, ("point", "points"));
+            out.push(format!("{name}, {kind}: {facts}"));
+        }
+        out.join("\n")
+    }
+}
+
+impl LineChart {
+    /// The finite y values' range, or the fixed one: what a shared scale
+    /// unifies.
+    pub(crate) fn y_extent(&self) -> Option<(f64, f64)> {
+        let data =
+            super::describe::extent(self.series.iter().flat_map(|s| s.finite().map(|p| p.1)));
+        let lo = self.y_min.or(data.map(|d| d.0))?;
+        let hi = self.y_max.or(data.map(|d| d.1))?;
+        Some((lo.min(hi), lo.max(hi)))
+    }
+
+    /// Whether it shows a legend.
+    pub(crate) fn has_legend(&self) -> bool {
+        self.legend && self.series.iter().any(|s| !s.name.is_empty())
+    }
+
+    /// Series `index`'s marker and style, for a legend drawn elsewhere.
+    pub(crate) fn legend_entry(
+        &self,
+        console: &Console,
+        options: &ConsoleOptions,
+        index: usize,
+    ) -> (char, Option<Style>) {
+        let ascii = self.charset.resolve(console, options, Charset::Braille) == Charset::Ascii;
+        (
+            self.marker(index, ascii),
+            has_colour(console).then(|| self.series_style(console, index)),
+        )
+    }
+}
+
 impl Renderable for LineChart {
     fn rich_render(&self, console: &Console, options: &ConsoleOptions) -> Vec<Segment> {
         lines_to_segments(self.lines(console, options), options.max_width)
@@ -527,5 +616,37 @@ impl Renderable for LineChart {
         Measurement::new(max.min(12), max)
             .with_maximum(options.max_width)
             .normalize()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::a11y::AccessibleText;
+
+    #[test]
+    fn accessible_text_reads_each_series() {
+        let chart = LineChart::new()
+            .series(Series::from_values("api", [1.0, 3.0, 2.0, 5.0]))
+            .series(Series::scatter("p99", [(0.0, 9.0), (3.0, 7.0)]));
+        assert_eq!(
+            chart.accessible_text(80),
+            "Line and scatter chart, 2 series, x from 0 to 3, y from 1 to 9\n\
+             api, line: 4 points, min 1, max 5, last 5, trend up\n\
+             p99, points: 2 points, min 7, max 9, last 7, trend down"
+        );
+        // A fixed range is the axis's; a series without a name is numbered.
+        let fixed = LineChart::new()
+            .series(Series::from_values("", [4.0, 4.0, f64::NAN]))
+            .y_range(0.0, 10.0);
+        assert_eq!(
+            fixed.accessible_text(80),
+            "Line chart, 1 series, x from 0 to 1, y from 0 to 10\n\
+             series 1, line: 3 points, 1 missing, min 4, max 4, last 4, trend flat"
+        );
+        assert_eq!(
+            LineChart::new().accessible_text(80),
+            "Line chart, no series"
+        );
     }
 }

@@ -1,0 +1,32 @@
+╭─ Colours ────────────────────────────────────────────────────────────────────────────────────────╮
+│ Named │ Indexed │ RGB │ Modifiers │ Palettes                                                     │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭─ Palettes ───────────────────────────────────────────────────────────────────────────────────────╮
+│Tailwind 50 to 950                Material    50 to 900, then A100 to A700                        │
+│slate                             red                                                             │
+│gray                              pink                                                            │
+│zinc                              purple                                                          │
+│neutral                           deep purple                                                     │
+│stone                             indigo                                                          │
+│red                               blue                                                            │
+│orange                            light blue                                                      │
+│amber                             cyan                                                            │
+│yellow                            teal                                                            │
+│lime                              green                                                           │
+│green                             light green                                                     │
+│emerald                           lime                                                            │
+│teal                              yellow                                                          │
+│cyan                              amber                                                           │
+│sky                               orange                                                          │
+│blue                              deep orange                                                     │
+│indigo                            brown                                                           │
+│violet                            grey                                                            │
+│purple                            blue grey                                                       │
+│fuchsia                                                                                           │
+│pink                                                                                              │
+│rose                                                                                              │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯

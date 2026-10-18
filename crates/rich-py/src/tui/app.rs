@@ -7,7 +7,7 @@ use std::ptr::NonNull;
 use std::time::Duration;
 
 use pyo3::create_exception;
-use pyo3::exceptions::{PyOSError, PyRuntimeError, PyTypeError, PyValueError};
+use pyo3::exceptions::{PyAssertionError, PyOSError, PyRuntimeError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyList, PyTuple};
 
@@ -17,7 +17,7 @@ use rich_intuituive::interact::{BackendKind, Event, Key};
 use rich_intuituive::{Anchor, Ctx};
 
 use super::node::{mouse_from, screen_builder, take_node, PyNode};
-use super::reactive::{call_with_ctx, signal_arg, PyProxy};
+use super::reactive::{call_with_ctx, signal_arg, PyProxy, PyValue};
 use super::{
     detached, easing_arg, keys, placement_arg, rect_arg, size_arg, Building, Callback, Enter,
     Handle, Lent, Loan, PyRect, Role, Shared,
@@ -114,6 +114,59 @@ impl PyCtx {
         let (width, height) = (size_arg(width)?, size_arg(height)?);
         let build = screen_builder(Callback::checked(build, "the pop-up's build")?);
         self.with(|cx| cx.popup(anchor, placement, width, height, build))
+    }
+
+    /// `modal`, with a shadow or a backdrop (a `ModalOptions`).
+    fn modal_with(
+        &self,
+        width: &Bound<'_, PyAny>,
+        height: &Bound<'_, PyAny>,
+        options: &Bound<'_, PyModalOptions>,
+        build: &Bound<'_, PyAny>,
+    ) -> PyResult<()> {
+        let (width, height) = (size_arg(width)?, size_arg(height)?);
+        let options = options.get().0.clone();
+        let build = screen_builder(Callback::checked(build, "the modal's build")?);
+        self.with(|cx| cx.modal_with(width, height, options, build))
+    }
+
+    /// `popup`, with a shadow or a backdrop (a `ModalOptions`).
+    #[allow(clippy::too_many_arguments)]
+    fn popup_with(
+        &self,
+        anchor: &Bound<'_, PyAny>,
+        placement: &Bound<'_, PyAny>,
+        width: &Bound<'_, PyAny>,
+        height: &Bound<'_, PyAny>,
+        options: &Bound<'_, PyModalOptions>,
+        build: &Bound<'_, PyAny>,
+    ) -> PyResult<()> {
+        let anchor = anchor_arg(anchor)?;
+        let placement = placement_arg(placement)?;
+        let (width, height) = (size_arg(width)?, size_arg(height)?);
+        let options = options.get().0.clone();
+        let build = screen_builder(Callback::checked(build, "the pop-up's build")?);
+        self.with(|cx| cx.popup_with(anchor, placement, width, height, options, build))
+    }
+
+    /// End the app after this event with `value`, which `App.run_for()`
+    /// (and a headless `Run`'s `exit`, and `Driver.take_exit()`) returns.
+    fn quit_with(&self, value: &Bound<'_, PyAny>) -> PyResult<()> {
+        let value = PyValue(value.clone().unbind());
+        self.with(|cx| cx.quit_with(value))
+    }
+
+    /// End the app after this event with `error` (an exception, or a
+    /// message): `App.run()` then raises it as an `OSError`.
+    fn fail(&self, error: &Bound<'_, PyAny>) -> PyResult<()> {
+        let message = error.str()?.to_cow()?.into_owned();
+        self.with(|cx| cx.fail(message))
+    }
+
+    /// Print console `markup` above the app: inline, into the scrollback
+    /// above it; full-screen, once it ends.
+    fn print_above(&self, markup: &str) -> PyResult<()> {
+        self.with(|cx| cx.print_above(markup))
     }
 
     /// Open the command palette: the bindings made with `bind`.
@@ -335,8 +388,8 @@ impl PyStylesheet {
 // Accessibility
 
 /// `AccessState`: ARIA's states of a node: `expanded` and `checked`
-/// (`None` when it cannot be), `selected`, `busy`, and `position`, the
-/// selected item's place `(at, of)`.
+/// (`None` when it cannot be), `selected`, `busy`, `invalid`, and
+/// `position`, the selected item's place `(at, of)`.
 #[pyclass(
     name = "AccessState",
     module = "rs_rich.tui",
@@ -350,19 +403,21 @@ pub(crate) struct PyAccessState(pub(crate) intuituive::a11y::AccessState);
 impl PyAccessState {
     /// For a widget's `access_state()`.
     #[new]
-    #[pyo3(signature = (*, expanded=None, checked=None, selected=false, busy=false, position=None))]
+    #[pyo3(signature = (*, expanded=None, checked=None, selected=false, busy=false, position=None, invalid=false))]
     fn new(
         expanded: Option<bool>,
         checked: Option<bool>,
         selected: bool,
         busy: bool,
         position: Option<(usize, usize)>,
+        invalid: bool,
     ) -> PyAccessState {
         PyAccessState(intuituive::a11y::AccessState {
             expanded,
             checked,
             selected,
             busy,
+            invalid,
             position,
         })
     }
@@ -391,6 +446,12 @@ impl PyAccessState {
     #[getter]
     fn busy(&self) -> bool {
         self.0.busy
+    }
+
+    /// In error (`Node.error_when`): ARIA's `aria-invalid`.
+    #[getter]
+    fn invalid(&self) -> bool {
+        self.0.invalid
     }
 
     #[getter]
@@ -496,19 +557,25 @@ impl From<intuituive::a11y::Announcement> for PyAnnouncement {
     }
 }
 
-/// `FrameStats`: the last frame's counts: nodes `drawn`, `bytes` written.
+/// `FrameStats`: the last frame's counts: nodes `drawn`, `bytes` written,
+/// and `frames` drawn since the app started.
 #[pyclass(name = "FrameStats", module = "rs_rich.tui", frozen)]
 pub(crate) struct PyFrameStats {
     #[pyo3(get)]
     drawn: usize,
     #[pyo3(get)]
     bytes: usize,
+    #[pyo3(get)]
+    frames: u64,
 }
 
 #[pymethods]
 impl PyFrameStats {
     fn __repr__(&self) -> String {
-        format!("FrameStats(drawn={}, bytes={})", self.drawn, self.bytes)
+        format!(
+            "FrameStats(drawn={}, bytes={}, frames={})",
+            self.drawn, self.bytes, self.frames
+        )
     }
 }
 
@@ -517,6 +584,123 @@ impl From<intuituive::FrameStats> for PyFrameStats {
         PyFrameStats {
             drawn: stats.drawn,
             bytes: stats.bytes,
+            frames: stats.frames,
+        }
+    }
+}
+
+/// `ModalOptions(shadow=None, backdrop=None)`: how a modal or a pop-up
+/// looks over the screen below: `shadow(style)`, a strip one cell right and
+/// down of the box, and `backdrop(style)`, the screen below restyled (each
+/// returns a new one).
+#[pyclass(
+    name = "ModalOptions",
+    module = "rs_rich.tui",
+    frozen,
+    skip_from_py_object
+)]
+#[derive(Clone, Default)]
+pub(crate) struct PyModalOptions(intuituive::ModalOptions);
+
+#[pymethods]
+impl PyModalOptions {
+    #[new]
+    #[pyo3(signature = (shadow=None, backdrop=None))]
+    fn new(shadow: Option<&str>, backdrop: Option<&str>) -> PyModalOptions {
+        let mut options = intuituive::ModalOptions::new();
+        if let Some(style) = shadow {
+            options = options.shadow(style);
+        }
+        if let Some(style) = backdrop {
+            options = options.backdrop(style);
+        }
+        PyModalOptions(options)
+    }
+
+    fn shadow(&self, style: &str) -> PyModalOptions {
+        PyModalOptions(self.0.clone().shadow(style))
+    }
+
+    fn backdrop(&self, style: &str) -> PyModalOptions {
+        PyModalOptions(self.0.clone().backdrop(style))
+    }
+
+    fn __repr__(&self) -> String {
+        format!("{:?}", self.0)
+    }
+}
+
+/// `TraceEntry`: a line of the inspector's event trace: the `frame` that
+/// drew after it, when it happened (`at`, seconds on the app's clock), its
+/// `kind` (`"key"`, `"mouse"`, `"signal"`, ...) and its `text`.
+#[pyclass(name = "TraceEntry", module = "rs_rich.tui", frozen)]
+pub(crate) struct PyTraceEntry {
+    #[pyo3(get)]
+    frame: u64,
+    #[pyo3(get)]
+    at: f64,
+    #[pyo3(get)]
+    kind: &'static str,
+    #[pyo3(get)]
+    text: String,
+}
+
+#[pymethods]
+impl PyTraceEntry {
+    fn __repr__(&self) -> String {
+        format!(
+            "TraceEntry(frame={}, kind={:?}, text={:?})",
+            self.frame, self.kind, self.text
+        )
+    }
+}
+
+impl From<intuituive::inspect::TraceEntry> for PyTraceEntry {
+    fn from(entry: intuituive::inspect::TraceEntry) -> PyTraceEntry {
+        PyTraceEntry {
+            frame: entry.frame,
+            at: entry.at.as_secs_f64(),
+            kind: entry.kind.name(),
+            text: entry.text,
+        }
+    }
+}
+
+/// `NodeTiming`: what the inspector measured of a node while it was open:
+/// its `id` and `name`, the frames it drew in (`draws`), and the seconds
+/// it took to draw itself, in all (`total`) and the last time (`last`).
+#[pyclass(name = "NodeTiming", module = "rs_rich.tui", frozen)]
+pub(crate) struct PyNodeTiming {
+    #[pyo3(get)]
+    id: u64,
+    #[pyo3(get)]
+    name: String,
+    #[pyo3(get)]
+    draws: u64,
+    #[pyo3(get)]
+    total: f64,
+    #[pyo3(get)]
+    last: f64,
+}
+
+#[pymethods]
+impl PyNodeTiming {
+    fn __repr__(&self) -> String {
+        format!(
+            "NodeTiming({:?}, draws={}, total={:.6}, last={:.6})",
+            self.name, self.draws, self.total, self.last
+        )
+    }
+}
+
+impl From<intuituive::inspect::NodeTiming> for PyNodeTiming {
+    fn from(timing: intuituive::inspect::NodeTiming) -> PyNodeTiming {
+        PyNodeTiming {
+            id: timing.id,
+            name: timing.name,
+            draws: timing.draws,
+            total: timing.total.as_secs_f64(),
+            last: timing.last.as_secs_f64(),
         }
     }
 }
@@ -609,7 +793,9 @@ impl PyApp {
         PyApp::build(py, build, Shared::new())
     }
 
-    /// Dock the inspector on the right (F12 shows and hides it).
+    /// Dock the inspector on the right (F12 shows and hides it, Shift+F12
+    /// gives it the keys): the node tree, a node's layout and states, each
+    /// node's timings and a trace of what happened.
     #[pyo3(signature = (on=true))]
     fn inspector(slf: Bound<'_, Self>, on: bool) -> PyResult<Bound<'_, Self>> {
         slf.borrow().map(|a| a.inspector(on))?;
@@ -701,6 +887,13 @@ impl PyApp {
         Ok(slf)
     }
 
+    /// Whether `run` captures the mouse: `True` even inline, `False` never,
+    /// `None` (the default) full-screen only.
+    fn mouse(slf: Bound<'_, Self>, capture: Option<bool>) -> PyResult<Bound<'_, Self>> {
+        slf.borrow().map(|a| a.mouse(capture))?;
+        Ok(slf)
+    }
+
     /// Before each event, wait for the tasks in flight (for tests).
     #[pyo3(signature = (on=true))]
     fn wait_for_tasks(slf: Bound<'_, Self>, on: bool) -> PyResult<Bound<'_, Self>> {
@@ -777,6 +970,18 @@ impl PyApp {
     /// thread, with the GIL released while it waits.
     fn run(&self, py: Python<'_>) -> PyResult<()> {
         self.run_with(py, "crossterm")
+    }
+
+    /// `run`, returning the value a handler ended the app with
+    /// (`cx.quit_with(value)`), or `None`.
+    fn run_for(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        let (app, shared) = self.take()?;
+        let result = drive(py, &shared, terminal_size(), true, move || {
+            app.run_for::<PyValue>()
+        });
+        shared.close();
+        let exit = result?.map_err(|error| PyOSError::new_err(error.to_string()))?;
+        Ok(exit.map_or_else(|| py.None(), |value| value.object(py)))
     }
 
     /// `run`, with the terminal driven by `backend`. This wheel has
@@ -860,6 +1065,9 @@ pub(crate) struct PyRun {
     copies: Vec<String>,
     #[pyo3(get)]
     finished: bool,
+    /// The value a handler ended the app with (`cx.quit_with`), or `None`.
+    #[pyo3(get)]
+    exit: Py<PyAny>,
 }
 
 impl PyRun {
@@ -915,15 +1123,18 @@ fn headless(
         let mut backend = Headless::new(script, width.max(1), height.max(1));
         backend.exact_keys = exact_keys;
         let record = backend.record();
-        let ran = app.run_on(&mut backend);
+        let ran = app.run_on_for::<PyValue>(&mut backend);
         let record = record.borrow().clone();
         (ran, record)
     });
     shared.close();
     let (ran, record) = result?;
-    let finished = match ran {
-        Ok(()) => true,
-        Err(error) if error.kind() == std::io::ErrorKind::UnexpectedEof => false,
+    let (finished, exit) = match ran {
+        Ok(exit) => (
+            true,
+            exit.map_or_else(|| py.None(), |value| value.object(py)),
+        ),
+        Err(error) if error.kind() == std::io::ErrorKind::UnexpectedEof => (false, py.None()),
         Err(error) => return Err(PyOSError::new_err(error.to_string())),
     };
     Ok(PyRun {
@@ -931,6 +1142,7 @@ fn headless(
         writes: record.writes,
         copies: record.copies,
         finished,
+        exit,
     })
 }
 
@@ -1103,6 +1315,52 @@ impl PyDriver {
         self.read(intuituive::Driver::is_done)
     }
 
+    /// Bring the app up to date at the last `update`'s time and draw until
+    /// nothing is left to draw.
+    fn settle(&self, py: Python<'_>) -> PyResult<()> {
+        self.step(py, intuituive::Driver::settle)
+    }
+
+    /// Keys by name, separated by spaces, each followed by `settle()`.
+    fn press(&self, py: Python<'_>, keys: &str) -> PyResult<()> {
+        // Checked here, so a bad name is a ValueError, not a panic.
+        self::keys(keys)?;
+        self.step(py, move |driver| driver.press(keys))
+    }
+
+    /// Type `text`, a key a character, then `settle()`.
+    fn type_text(&self, py: Python<'_>, text: &str) -> PyResult<()> {
+        self.step(py, move |driver| driver.type_text(text))
+    }
+
+    /// The id of the node with the focus on the top screen, or `None`.
+    fn focused(&self) -> PyResult<Option<u64>> {
+        self.read(intuituive::Driver::focused)
+    }
+
+    /// The focused node's name, else its accessible name, or `None`.
+    fn focused_name(&self) -> PyResult<Option<String>> {
+        self.read(intuituive::Driver::focused_name)
+    }
+
+    /// Raise `AssertionError`, saying where the focus is, unless it is on
+    /// the node with that name (or accessible name).
+    fn assert_focused(&self, name: &str) -> PyResult<()> {
+        self.read(|driver| driver.check_focused(name))?
+            .map_err(PyAssertionError::new_err)
+    }
+
+    /// The screen as a snapshot stores it: plain rows, trailing spaces
+    /// trimmed, one a line.
+    fn plain(&self) -> PyResult<String> {
+        self.read(intuituive::testing::plain)
+    }
+
+    /// The screen as console markup, one row a line.
+    fn styled(&self) -> PyResult<String> {
+        self.read(intuituive::testing::styled)
+    }
+
     /// The frame as drawn, as plain rows.
     fn screen(&self) -> PyResult<Vec<String>> {
         self.read(|driver| driver.screen().plain())
@@ -1129,6 +1387,35 @@ impl PyDriver {
         self.read(|driver| driver.stats().into())
     }
 
+    /// The id of the node selected in the inspector, or `None`.
+    fn inspector_selected(&self) -> PyResult<Option<u64>> {
+        self.read(intuituive::Driver::inspector_selected)
+    }
+
+    /// The inspector's event trace, oldest first: what happened while it
+    /// was open, the last 1000 events at most.
+    fn inspector_trace(&self) -> PyResult<Vec<PyTraceEntry>> {
+        self.read(|driver| {
+            driver
+                .inspector_trace()
+                .into_iter()
+                .map(PyTraceEntry::from)
+                .collect()
+        })
+    }
+
+    /// What the inspector measured of each node while it was open, the
+    /// most time first.
+    fn inspector_timings(&self) -> PyResult<Vec<PyNodeTiming>> {
+        self.read(|driver| {
+            driver
+                .inspector_timings()
+                .into_iter()
+                .map(PyNodeTiming::from)
+                .collect()
+        })
+    }
+
     /// Whether text can reach the clipboard (selections are then copied).
     fn set_clipboard(&self, py: Python<'_>, on: bool) -> PyResult<()> {
         self.step(py, move |driver| driver.set_clipboard(on))
@@ -1137,6 +1424,26 @@ impl PyDriver {
     /// Text put on the clipboard since the last call.
     fn take_copies(&self, py: Python<'_>) -> PyResult<Vec<String>> {
         self.step(py, intuituive::Driver::take_copies)
+    }
+
+    /// The value a handler ended the app with (`cx.quit_with`), taken, or
+    /// `None`.
+    fn take_exit(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        let exit = self.step(py, |driver| driver.take_exit::<PyValue>())?;
+        Ok(exit.map_or_else(|| py.None(), |value| value.object(py)))
+    }
+
+    /// The error a handler ended the app with (`cx.fail`), as a message,
+    /// taken, or `None`.
+    fn take_error(&self, py: Python<'_>) -> PyResult<Option<String>> {
+        let error = self.step(py, intuituive::Driver::take_error)?;
+        Ok(error.map(|error| error.to_string()))
+    }
+
+    /// The markup printed above the app (`cx.print_above`) waiting to be
+    /// printed, taken: full-screen, to print once the terminal is back.
+    fn take_printed(&self, py: Python<'_>) -> PyResult<Vec<String>> {
+        self.step(py, intuituive::Driver::take_printed)
     }
 
     /// `text` is on the clipboard: a toast says so.
@@ -1188,8 +1495,55 @@ impl PyDriver {
     }
 }
 
+/// Compare `text` with the snapshot file at `path`, or write it there when
+/// `UPDATE_SNAPSHOTS` is set; `AssertionError` with a diff when they differ.
+#[pyfunction]
+fn tui_assert_snapshot(path: std::path::PathBuf, text: &str) -> PyResult<()> {
+    intuituive::testing::check_snapshot(path, text).map_err(PyAssertionError::new_err)
+}
+
+/// The rows a snapshot of `screen` stores: a `Driver`'s screen, or rows.
+fn screen_text(screen: &Bound<'_, PyAny>) -> PyResult<String> {
+    if let Ok(driver) = screen.cast::<PyDriver>() {
+        return driver.borrow().plain();
+    }
+    let rows: Vec<String> = screen
+        .extract()
+        .map_err(|_| PyTypeError::new_err("a screen is a Driver, or rows (a list of str)"))?;
+    Ok(intuituive::testing::plain(&rows))
+}
+
+/// `assert_screen(screen, path)`: the screen (a `Driver`, or rows such as
+/// `render_with` returns) against the snapshot file at `path`.
+#[pyfunction]
+fn tui_assert_screen(screen: &Bound<'_, PyAny>, path: std::path::PathBuf) -> PyResult<()> {
+    tui_assert_snapshot(path, &screen_text(screen)?)
+}
+
+/// `assert_screen_styled(driver, path)`: `assert_screen`, and the screen as
+/// console markup against `<name>.styled.txt` next to `path`.
+#[pyfunction]
+fn tui_assert_screen_styled(
+    driver: &Bound<'_, PyDriver>,
+    path: std::path::PathBuf,
+) -> PyResult<()> {
+    let driver = driver.borrow();
+    tui_assert_snapshot(path.clone(), &driver.plain()?)?;
+    let stem = path
+        .file_stem()
+        .map(|s| s.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    tui_assert_snapshot(
+        path.with_file_name(format!("{stem}.styled.txt")),
+        &driver.styled()?,
+    )
+}
+
 pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     let py = m.py();
+    m.add_function(wrap_pyfunction!(tui_assert_snapshot, m)?)?;
+    m.add_function(wrap_pyfunction!(tui_assert_screen, m)?)?;
+    m.add_function(wrap_pyfunction!(tui_assert_screen_styled, m)?)?;
     for (name, class) in [
         ("TuiCtx", py.get_type::<PyCtx>()),
         ("TuiTheme", py.get_type::<PyTheme>()),
@@ -1198,6 +1552,9 @@ pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
         ("TuiAccessNode", py.get_type::<PyAccessNode>()),
         ("TuiAnnouncement", py.get_type::<PyAnnouncement>()),
         ("TuiFrameStats", py.get_type::<PyFrameStats>()),
+        ("TuiModalOptions", py.get_type::<PyModalOptions>()),
+        ("TuiTraceEntry", py.get_type::<PyTraceEntry>()),
+        ("TuiNodeTiming", py.get_type::<PyNodeTiming>()),
         ("TuiApp", py.get_type::<PyApp>()),
         ("TuiRun", py.get_type::<PyRun>()),
         ("TuiDriver", py.get_type::<PyDriver>()),

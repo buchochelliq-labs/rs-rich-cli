@@ -29,7 +29,9 @@ struct Split {
 /// stacked) nudge it by 5%; the split takes no focus, so the keys reach it
 /// from the focused node inside. The divider is drawn in the theme's
 /// `split.divider` style, and `split.divider.hover` while the pointer is on
-/// it or drags it.
+/// it or drags it. A pane that is hidden
+/// ([`hide_below`](Node::hide_below), a stylesheet's `display: none`)
+/// leaves the whole split to the other, with no divider.
 ///
 /// ```
 /// use intuituive::node::Axis;
@@ -146,6 +148,13 @@ impl Split {
             Axis::Vertical => row,
         }
     }
+
+    /// Whether each pane is shown: one hidden (`hide_below`, a
+    /// stylesheet's `display: none`) leaves the split to the other, with no
+    /// divider.
+    fn shown(&self) -> (bool, bool) {
+        (!self.children[0].hidden(), !self.children[1].hidden())
+    }
 }
 
 impl Widget for Split {
@@ -159,8 +168,12 @@ impl Widget for Split {
 
     fn layout(&mut self, _cx: &MeasureCx, rect: Rect) -> Vec<Rect> {
         let extent = self.extent(rect.width, rect.height);
-        if extent == 0 {
-            return Vec::new();
+        match self.shown() {
+            _ if extent == 0 => return Vec::new(),
+            (true, true) => {}
+            // A pane hidden: the other takes the lot.
+            (true, false) => return vec![rect, Rect::default()],
+            (false, _) => return vec![Rect::default(), rect],
         }
         let first = self.first(self.ratio.get(), extent);
         let second = extent - first - 1;
@@ -179,7 +192,7 @@ impl Widget for Split {
     fn draw(&mut self, cx: &mut DrawCx, canvas: &mut Canvas) {
         let (width, height) = (canvas.width(), canvas.height());
         let extent = self.extent(width, height);
-        if extent == 0 {
+        if extent == 0 || self.shown() != (true, true) {
             return;
         }
         let at = self.first(self.ratio.get(), extent);
@@ -210,6 +223,12 @@ impl Widget for Split {
     fn event(&mut self, cx: &mut EventCx, event: &WidgetEvent) -> Used {
         let (width, height) = cx.size();
         let extent = self.extent(width, height);
+        if self.shown() != (true, true) {
+            // No divider to drag, nudge or light up.
+            self.dragging = false;
+            self.over.set(false);
+            return Used::No;
+        }
         match event {
             WidgetEvent::Key(key) => {
                 if !key.modifiers.alt || key.modifiers.ctrl {

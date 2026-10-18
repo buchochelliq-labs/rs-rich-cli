@@ -35,19 +35,22 @@ rich --watch [OPTIONS] FILE...
 
 ### Render mode
 
-Choose at most one; the default auto-detects .md/.rst/.json/.csv/.tsv/.ipynb, .mmd/.mermaid and .dot/.gv by extension — anything else with a file extension is syntax-highlighted.
+Choose at most one; the default auto-detects .md/.rst/.json/.csv/.tsv/.ipynb, .mmd/.mermaid and .dot/.gv by extension, and .org, .adoc/.asciidoc and .man/.roff/.mdoc documents; a man page's section extension (.1 to .9) or .asc counts when the content agrees, and a file with no extension that is plainly Org, AsciiDoc or roff renders as one — anything else with a file extension is syntax-highlighted.
 
 | Option | Description |
 | --- | --- |
 | `-p`, `--print` | Treat RESOURCE as literal markup TEXT, not a file path. |
 | `-m`, `--markdown` | Render RESOURCE as Markdown. |
 | `--rst` | Render RESOURCE as reStructuredText. |
+| `--org` | Render RESOURCE as an Org document (headlines, TODO keywords, lists, blocks, tables, drawers) |
+| `--asciidoc`, `--adoc` | Render RESOURCE as AsciiDoc (sections, attributes, lists, source blocks with callouts, tables, admonitions) |
+| `--man`, `--roff` | Render RESOURCE as a man page from its roff source (man and mdoc macros, tbl tables) |
 | `-j`, `-J`, `--json` | Pretty-print RESOURCE as JSON. |
 | `-x`, `--syntax` | Syntax-highlight RESOURCE (language from its extension) |
 | `--csv` | Render RESOURCE as a CSV/TSV table. |
 | `--ipynb` | Render RESOURCE as a Jupyter notebook. |
 | `--jsonl`, `--ndjson` | Stream JSON Lines / NDJSON records. |
-| `--log` | Stream common structured-log JSONL records. |
+| `--log` | Stream log records: JSON Lines, logfmt and common text formats, filtered, followed and grouped. |
 | `--gif` | Animate GIFs side by side; pipes receive the first frame. |
 | `-u`, `--rule` | Draw a horizontal rule (RESOURCE is its title) |
 | `--diff` | Compare two images perceptually, two text files as a diff (syntax-aware; ANSI captures by visible text and style), or render one patch such as `git diff` output. |
@@ -59,7 +62,7 @@ Choose at most one; the default auto-detects .md/.rst/.json/.csv/.tsv/.ipynb, .m
 
 | Option | Description |
 | --- | --- |
-| `--format <F>` | Input format. With --inspect, the parser (default auto-detect); otherwise `auto` detects piped or extensionless input and routes it (JSON to --json, other formats to highlighting, anything else to plain text), and a named format overrides the extension. Default: `auto`. Config: `format`. Possible values: `auto`, `json`, `yaml`, `toml`, `xml`, `ini`, `env`. |
+| `--format <F>` | Input format. With --inspect, the parser (default auto-detect); otherwise `auto` detects piped or extensionless input and routes it (JSON to --json, other formats to highlighting, likely Markdown, reStructuredText, Org, AsciiDoc and man pages to their renderers, anything else to plain text), and a named format overrides the extension. A document format (markdown, rst, org, asciidoc, man) is the same as its mode flag. Default: `auto`. Config: `format`. Possible values: `auto`, `json`, `yaml`, `toml`, `xml`, `ini`, `env`, `markdown`, `rst`, `org`, `asciidoc`, `man`. |
 | `--encoding <E>` | Explicit text encoding: utf-8, utf-16 (BOM required), utf-16le or utf-16be. Strict; files, stdin and URLs only. Possible values: `utf-8`, `utf-16`, `utf-16le`, `utf-16be`. |
 
 ### Layout
@@ -94,7 +97,7 @@ Choose at most one; the default auto-detects .md/.rst/.json/.csv/.tsv/.ipynb, .m
 | `-t`, `--tail <LINES>` | Show the end of a source file or CSV (as upstream, --tail N shows the last N-1 source lines) |
 | `-n`, `--line-numbers` | Number the lines of source. |
 | `-g`, `--guides` | Draw indentation guides in source. |
-| `--lexer <LEXER>` | Highlight source as LEXER instead of guessing from the file name; with --rst, highlight code blocks that name no language as LEXER. |
+| `--lexer <LEXER>` | Highlight source as LEXER instead of guessing from the file name; with --rst, --org, --asciidoc or --man, highlight code blocks that name no language as LEXER. |
 | `--no-wrap` | Crop long lines of source instead of wrapping them; with --print, don't wrap text. |
 | `--infer` | With --csv (or a .csv/.tsv file), infer each column's type (integer, float, boolean, date, timestamp, text) and show it under the heading; number columns right-align even with null tokens such as NA. Without it the table is rich-cli's. |
 
@@ -110,6 +113,10 @@ Choose at most one; the default auto-detects .md/.rst/.json/.csv/.tsv/.ipynb, .m
 | `--highlighter <NAME>` | The code highlighter for source, Markdown code, view and diff: syntect (the default), or lumis in a build with the lumis feature. Config: `highlighter`. |
 | `--code-theme <NAME>` | A theme of the chosen code highlighter, e.g. ansi_dark (`rich doctor --report json` lists them) Config: `code_theme`. |
 | `--loop <N>` | With --gif, repeat N times (default 1; 0 = forever) |
+| `--speed <X>` | With --gif, play X times as fast (0.5 = half speed; default 1) |
+| `--fps <N>` | With --gif, draw at most N frames a second (default 30) |
+| `--max-frames <N>` | With --gif, stop each animation after N frames, even with --loop 0. |
+| `--max-duration <SECS>` | With --gif, stop after SECS seconds, whatever is still playing. |
 | `--gif-mode <M>` | With --gif: ascii or blocks (half-block pixels). Blocks fall back to ASCII without color or when piped. Default: `ascii`. Possible values: `ascii`, `blocks`. |
 
 ### Diagram sources
@@ -119,7 +126,7 @@ Choose at most one; the default auto-detects .md/.rst/.json/.csv/.tsv/.ipynb, .m
 | `--metadata <FILE>` | With `rich deps`, read `cargo metadata --format-version 1` JSON from FILE (`-` for stdin) instead of running cargo. |
 | `--why <CRATE>` | With `rich deps`, show what pulls CRATE (`name` or `name@version`) in: every path from the workspace to it. |
 | `--graph` | With `rich deps`, draw the dependencies (or --why's paths) as a diagram instead of a tree. |
-| `--depth <N>` | With `rich deps`, show at most N levels below each workspace member. |
+| `--depth <N>` | With `rich deps`, show at most N levels below each workspace member; with `rich profile`, profile JSON paths at most N steps deep (default 4), an object or array at the last step counting as its JSON text. |
 | `--duplicates` | With `rich deps`, keep only the branches that lead to a crate resolved at more than one version, and add a consolidation summary: who pulls each version, and which version most of them already use. |
 | `--no-dev` | With `rich deps`, leave dev-dependencies out. |
 | `--features` | With `rich deps`, show the features Cargo resolved for each crate: what each turns on, and which dependents asked for them; every crate with a feature, or only --package's. |
@@ -127,6 +134,13 @@ Choose at most one; the default auto-detects .md/.rst/.json/.csv/.tsv/.ipynb, .m
 | `--timings <FILE>` | With `rich deps`, show a `cargo build --timings` report (the HTML file, or timing-info JSON lines; `-` for stdin): the slowest units as bars and a table; runs nothing. |
 | `--audit <FILE>` | With `rich deps`, show `cargo audit --json` output from FILE (`-` for stdin) grouped by severity; exits 5 when it lists a vulnerability. Runs no scanner. |
 | `--licenses` | With `rich deps`, group the crates by licence, marking copyleft, unknown and missing licences. |
+| `--sizes` | With `rich deps`, show artifact sizes per crate as bars and a table: from the target directory given next (default: the one `cargo metadata` names), matched to packages through `cargo metadata`, or from a file given next: `cargo bloat --crates --message-format json` output or a report saved with --save (`-` for stdin) |
+| `--build-profile <NAME>` | With `rich deps --sizes`, read this profile's artifacts: debug (dev), release, or a custom profile (default: debug if it was built, else release) |
+| `--source-sizes` | With `rich deps --sizes`, also add up each package's source files (its manifest directory, without target/, .git/ and nested packages) |
+| `--baseline <FILE>` | With `rich deps --timings` or `--sizes`, compare with an older report, unit by unit (a report saved with --save, or the original format: a timings report, cargo-bloat JSON or a target directory); exits 5 when a unit or the total regressed past --threshold. |
+| `--save <FILE>` | With `rich deps --timings` or `--sizes`, also write the report as JSON to FILE, to keep as a --baseline. |
+| `--policy <FILE>` | With `rich deps`, check every crate's licence against a policy: a TOML allow and deny list, or cargo-deny's deny.toml; conflicts with the root crate's licence are shown too (a heuristic, not legal advice). Exits 5 on a violation. |
+| `--sbom <FILE>` | With `rich deps --licenses` or `--policy`, read the packages from an SPDX (2.2, 2.3) or CycloneDX (1.4 to 1.6) JSON document instead of `cargo metadata`. |
 | `--er` | With `rich schema`, draw the schema as an ER diagram: a box per table with its columns and keys, an edge per foreign key. |
 
 ### Chart
@@ -143,7 +157,26 @@ Choose at most one; the default auto-detects .md/.rst/.json/.csv/.tsv/.ipynb, .m
 | --- | --- |
 | `--sample <N>` | With `rich profile`, the most rows kept for types, statistics and distributions (default 10000): a longer input is sampled uniformly, the sample size is printed, and nulls still count every row. |
 | `--columns <COLUMN[,COLUMN...]>...` | With `rich profile`, profile only these columns, by header, in this order; repeatable. |
-| `--top <N>` | With `rich profile`, the most common values shown for a column that is not numeric (default 5) |
+| `--top <N>` | With `rich profile`, the most common values shown for a column that is not numeric (default 5); with `rich deps --sizes`, `--timings` or `--baseline`, the units shown (default 20) |
+| `--max-paths <N>` | With `rich profile` of JSON Lines, profile at most N paths (default 200), in the order first seen; the rest are noted. |
+| `--flat` | With `rich profile` of JSON Lines, profile rows of the top-level keys (nested values as JSON text) instead of every nested path. |
+| `--style-rule <RULE>...` | Style the cells, rows or columns of a data table by value: COLUMN OP VALUE:STYLE or COLUMN OP VALUE:row:STYLE (e.g. 'latency>500:bold red', 'status=failed:row:on red'); OP is == != < <= > >= *= ^= $= or a word such as contains or empty. Repeatable; applies to --csv, `rich profile`'s table and `rich inspect --table`, and has no effect elsewhere. Config: `rules`. |
+| `--rules <FILE>...` | Read style rules from FILE's [[rules]] tables (column, op, value, style, target), after the rules before it. |
+
+### Log
+
+| Option | Description |
+| --- | --- |
+| `--level <LEVEL>...` | With `rich log`, keep only records at LEVEL (trace, debug, info, warn, error or fatal), or at it and above with a `+` (`warn+`); several with commas or by repeating it. |
+| `--where <EXPR>...` | With `rich log`, keep only records whose fields pass EXPR: FIELD=VALUE, FIELD!=VALUE, FIELD>N (and >=, <, <=), FIELD~REGEX, FIELD!~REGEX, FIELD (it is there) or !FIELD (it is not); numbers, levels and times compare as such, dots reach nested fields; repeatable, and every one must pass. |
+| `-f`, `--follow` | With `rich log`, read FILE, then what is appended to it, starting again when it is truncated or replaced (log rotation), until Ctrl+C. |
+| `--collapse`, `--no-collapse` | With `rich log`, fold a run of identical records (their times aside) into the first and a `× N` count; on by default with --follow and --interactive. |
+| `--fields` | With `rich log`, list each record's fields under it, one a line, instead of on its line. |
+| `--parser <NAME>` | With `rich log`, how lines that are not JSON are read: auto tries each format; logfmt, level (`LEVEL message`), timestamp (a line that starts with a time) and access (nginx and Apache) read one; text reads none. A line no parser reads joins the record before it, or is shown as text. Default: `auto`. Possible values: `auto`, `logfmt`, `level`, `timestamp`, `access`, `text`. |
+| `--time <MODE>` | With `rich log`, show each time as written (absolute), since the first record shown (relative), or not at all (none) Default: `absolute`. Possible values: `absolute`, `relative`, `none`. |
+| `--output <FORMAT>` | With `rich log`, write the records kept as text, or as one JSON object a line (jsonl) for another program. Default: `text`. Possible values: `text`, `jsonl`. |
+| `--summary`, `--no-summary` | With `rich log`, end with a summary: records shown, counts by level and, with --group, the groups with errors; on by default with --group (on standard error with --output jsonl) |
+| `-i`, `--interactive` | With `rich log` on a terminal, show the records in a live view that follows the end: / filters, Space pauses, Enter shows a record's fields, q quits; without a terminal the records stream as usual. |
 
 ### Image
 
@@ -166,7 +199,7 @@ Choose at most one; the default auto-detects .md/.rst/.json/.csv/.tsv/.ipynb, .m
 | `--image-flip-horizontal`, `--no-image-flip-horizontal` | Flip still images horizontally, after rotation. Config: `image_flip_horizontal`. |
 | `--image-flip-vertical`, `--no-image-flip-vertical` | Flip still images vertically, after rotation. Config: `image_flip_vertical`. |
 | `--image-grayscale`, `--no-image-grayscale` | Composite and convert still images to grayscale. Config: `image_grayscale`. |
-| `--threshold <PCT>` | With --diff, exit non-zero above PCT% changed (pixels for images, lines for text). Also sets the exit code: 0 within, 5 over. |
+| `--threshold <PCT>` | With --diff, exit non-zero above PCT% changed (pixels for images, lines for text). Also sets the exit code: 0 within, 5 over. With `rich deps --baseline`, what counts as a regression: a percentage (default 10%) and a floor the change must also pass, a time (`0.5s`, the default for --timings) or a size (`64KiB`, the default for --sizes); give it twice for both. |
 
 ### Inspect
 
@@ -182,7 +215,7 @@ Choose at most one; the default auto-detects .md/.rst/.json/.csv/.tsv/.ipynb, .m
 | `--max-depth <N>` | Fold containers deeper than N levels. |
 | `--max-length <N>` | Show at most N items per container. |
 | `--show-paths` | Append each value's path. |
-| `--redact` | Mask secret-looking keys such as password, token and api_key. With `rich capture`, mask secrets in the output before it is shown, exported or recorded: secret-named `key=value` values, bearer tokens, GitHub/GitLab/Slack/Stripe/npm/`sk-` tokens, AWS key ids, JWTs and URL passwords. Capture redaction is experimental and best effort: check the output before sharing it. |
+| `--redact` | Mask secret-looking keys such as password, token and api_key. With `rich capture`, mask secrets in the output before it is shown, exported or recorded: secret-named `key=value` values, bearer tokens, GitHub/GitLab/Slack/Stripe/npm/`sk-` tokens, AWS key ids, JWTs and URL passwords; with `rich log`, the same in each record's fields and lines. Capture redaction is experimental and best effort: check the output before sharing it. |
 | `--compare <PATH>` | Show added, removed and changed values against another document. |
 
 ### Diff & ANSI
@@ -205,11 +238,12 @@ Choose at most one; the default auto-detects .md/.rst/.json/.csv/.tsv/.ipynb, .m
 | `--offset <N>` | With `rich hex`, start N bytes in (decimal or 0x hex) |
 | `--length <N>` | With `rich hex`, show at most N bytes. |
 | `--bytes-per-line <N>` | With `rich hex`, bytes on each line (default: fit the width, up to 16) |
-| `--group <N>` | With `rich hex`, bytes per group. Default: `8`. |
+| `--group <N\|BY>` | With `rich hex`, bytes per group (default 8); with `rich log`, group records by trace, span or correlation id (trace_id, span_id, correlation_id, request_id, ...) under a header each, with a summary at the end. |
 | `--limit <N>` | With `rich unicode`, show at most N graphemes. |
 | `--show-secrets` | With `rich env`, show values whose names look secret instead of masking them. |
 | `--cast <FILE>` | With `rich capture`, also write an asciicast v2 recording (`asciinema play FILE`) |
-| `--redact-pattern <REGEX>...` | With `rich capture`, also mask matches of REGEX (only its `secret` group when it has one); repeatable. Experimental: check the output before sharing it. |
+| `--redact-pattern <REGEX>...` | With `rich capture` and `rich log`, also mask matches of REGEX (only its `secret` group when it has one); repeatable. Experimental: check the output before sharing it. |
+| `--redact-preview` | With `rich capture` or `rich log` and --redact or --redact-pattern, show each match on its line, highlighted, with its rule and replacement, and a summary, instead of the output; write nothing (no cast, export or log output) and name on stderr what would have been written. The preview shows the secrets unmasked. With --report json, the findings as one JSON document on stdout. |
 
 ### Export
 
@@ -217,6 +251,7 @@ Choose at most one; the default auto-detects .md/.rst/.json/.csv/.tsv/.ipynb, .m
 | --- | --- |
 | `-o`, `--export-html <PATH>` | Also write a self-contained HTML document to PATH. Config: `export_html`. |
 | `--export-svg <PATH>` | Also write an SVG document to PATH. Unlike the HTML, it references its font from a CDN, so it is not self-contained offline. Config: `export_svg`. |
+| `--export-png <PATH>` | Also write a PNG image of the output to PATH: the terminal's width, rich's SVG export theme, in a window titled like the SVG's, drawn with an embedded DejaVu Sans Mono so it is the same on every machine (the png feature; not with --batch) |
 
 ### Paging
 
@@ -272,7 +307,7 @@ Choose at most one; the default auto-detects .md/.rst/.json/.csv/.tsv/.ipynb, .m
 | --- | --- |
 | `--no-color` | Disable colored output (as does a non-empty NO_COLOR) Environment: `NO_COLOR`. Config: `no_color`. |
 | `--color` | Override a config no_color setting (pipes remain plain) |
-| `--sanitize`, `--no-sanitize` | Replace input terminal controls, JSON/notebook strings, titles and captions with visible inert text. On by default for `rich view`, `rich schema` and text `rich diff`; --no-sanitize turns it off there. Config: `sanitize`. |
+| `--sanitize`, `--no-sanitize` | Replace input terminal controls, JSON/notebook strings, titles and captions with visible inert text. On by default for `rich view`, `rich schema`, `rich log` and text `rich diff`; --no-sanitize turns it off there. Config: `sanitize`. |
 | `--report <F>` | Emit a result/error envelope on stderr. Default: `human`. Possible values: `human`, `json`. |
 | `--machine-json` | Alias for --report json. |
 
@@ -302,12 +337,15 @@ Self-contained examples; ignores config; accepts --no-color.
 | `print` | Treat RESOURCE as literal markup TEXT (`--print`) |
 | `markdown`, `md` | Render Markdown (`--markdown`) |
 | `rst` | Render reStructuredText (`--rst`) |
+| `org` | Render an Org document (`--org`) |
+| `asciidoc`, `adoc` | Render AsciiDoc (`--asciidoc`) |
+| `man`, `roff` | Render a man page from its roff source (`--man`) |
 | `syntax`, `code` | Syntax-highlight source (`--syntax`) |
 | `json` | Pretty-print JSON (`--json`) |
 | `csv`, `tsv` | Render CSV/TSV as a table (`--csv`) |
 | `ipynb`, `notebook` | Render a Jupyter notebook (`--ipynb`) |
 | `jsonl`, `ndjson` | Stream JSON Lines / NDJSON records (`--jsonl`) |
-| `log`, `logs` | Stream common structured-log JSONL records (`--log`) |
+| `log`, `logs` | Stream log records (`--log`): JSON Lines, logfmt and common text formats; filter with --level and --where, follow a file with -f, group with --group |
 | `gif` | Animate GIFs (`--gif`) |
 | `diff` | Compare two images, two text files, or render one patch (`--diff`) |
 | `image` | Render a still image as ASCII/Braille/blocks/quadrants/Sixel (`--image`) |
@@ -321,7 +359,7 @@ Self-contained examples; ignores config; accepts --no-color.
 | `capture` | Run `rich capture -- COMMAND ARGS…` and show or export its output (--cast FILE records it, --redact masks secrets), then exit with the command's status |
 | `mermaid`, `mmd` | Draw a Mermaid diagram: flowcharts as text, every type through mmdc where built in (.mmd and .mermaid files are detected) |
 | `dot`, `graphviz` | Draw a DOT (Graphviz) graph as text (.dot and .gv files are detected); what the native parser does not support is refused with its line |
-| `deps` | A Cargo dependency tree from `cargo metadata`, crates resolved at several versions marked; --why CRATE for what pulls a crate in, --graph to draw it; --features, --licenses, --timings FILE and --audit FILE for supply-chain reports |
+| `deps` | A Cargo dependency tree from `cargo metadata`, crates resolved at several versions marked; --why CRATE for what pulls a crate in, --graph to draw it; --features, --licenses, --policy FILE, --timings FILE, --sizes and --audit FILE for supply-chain reports, --baseline FILE to compare timings or sizes |
 | `schema` | A JSON Schema, SQL DDL or Arrow schema as a tree: types, required markers, constraints, keys, $refs resolved; with two schemas (of any of these formats), what changed between them and which changes break; --er draws an ER diagram |
 | `chart` | A chart from CSV, JSON or stdin: a sparkline, bars, lines, points or a heatmap; --x and --y pick the columns, a missing column or a value that is not a number is refused with its row and column |
 | `profile` | A profile of CSV, TSV or JSON Lines: each column's type, nulls, distinct values, statistics and distribution, and a map of where the nulls are; a long input is sampled. --report json writes the profile as JSON to stdout |
@@ -336,10 +374,15 @@ Self-contained examples; ignores config; accepts --no-color.
 | `color` | Pick a colour and print it: rich's named colours, the 256 palette (Tab), or hex and rgb typed in, with a live swatch |
 | `asset` | Pick an emoji, a box style or a spinner, with a preview, and print it |
 | `explore` | Explore a JSON, YAML, TOML, XML, INI or .env document: ← → fold, type to search, Ctrl+Y copies the path and Alt+Y the value (OSC 52), Enter prints the path; without a terminal, print the tree |
+| `date` | Pick a date on a month grid, a time of day, or both, and print it as 2026-10-17, 14:30 or 2026-10-17 14:30; without a terminal, read one typed in |
+| `approve` | Review ITEMs (or lines, or JSON Lines, on standard input) one by one or in bulk: a approves, r rejects, s skips (A, R, S ask for a reason), Space marks, Enter submits; prints one JSON line per item with its decision |
+| `jump` | Jump to anything: one fuzzy box over files, Markdown headings (#), code symbols (@), commands (>) and recent places in DIRs, grouped by source with a preview; prints the place picked (`path`, `path:line` or the command) |
 | `completions` | Print a shell completion script |
 | `docs` | Print reference documentation generated from this help |
 | `bench` | Compare benchmark runs |
 | `micro` | Micro assets: emoji-sized images and animations written :micro:name: (with --emoji). List, show, preview, add, remove and create them; install packs |
+| `banner` | Draw TEXT as a FIGlet banner: a font, a style or colour gradient, alignment and width fitting. Built with the `art` feature |
+| `shell` | Shell integration: `init` prints a script with completions, OSC 133 prompt marks, OSC 7 and a status line after each command; `status` and `link` are its helpers |
 | `record` | Run tapes (scripted terminal sessions: type, press keys, wait for screen text, take screenshots) in a real terminal and write PNG, SVG and text screenshots, an asciinema cast, a GIF, an MP4 (with FFmpeg) and an HTML page with a player; --check compares screenshots with committed ones instead |
 | `plugins` | List the plugins this build has — built in, linked, and any --plugin PATH loads — with their source, version, ABI and capabilities |
 | `doctor` | Read-only build, terminal, config and pager diagnostics; --report json writes diagnostic data to stdout |
@@ -360,12 +403,12 @@ With no RESOURCE and no mode flag, a capability demo is shown. Layout, style, pa
 ### Exit codes
 
 - 0: success
-- 1: cancelled, or answered no (choose, filter, input, confirm, write, file, color, asset)
+- 1: cancelled, or answered no (choose, filter, input, confirm, write, file, color, asset, date)
 - 2: usage/config error
 - 3: input/read/write error
 - 4: parse/render data error
 - 5: threshold/gate failure
-- 130: interrupted with Ctrl+C (choose, filter, input, confirm, pager, write, file, color, asset)
+- 130: interrupted with Ctrl+C (choose, filter, input, confirm, pager, write, file, color, asset, date)
 
 ### rich print
 
@@ -407,6 +450,54 @@ Render reStructuredText (`--rst`)
 
 ```text
 rich rst [OPTIONS] [RESOURCE]
+```
+
+#### Arguments
+
+| Argument | Description |
+| --- | --- |
+| `[RESOURCE]` | A file path, an http(s) URL, or `-` for stdin; every `rich` option applies. |
+
+### rich org
+
+Render an Org document (`--org`)
+
+#### Usage
+
+```text
+rich org [OPTIONS] [RESOURCE]
+```
+
+#### Arguments
+
+| Argument | Description |
+| --- | --- |
+| `[RESOURCE]` | A file path, an http(s) URL, or `-` for stdin; every `rich` option applies. |
+
+### rich asciidoc
+
+Render AsciiDoc (`--asciidoc`)
+
+#### Usage
+
+```text
+rich asciidoc [OPTIONS] [RESOURCE]
+```
+
+#### Arguments
+
+| Argument | Description |
+| --- | --- |
+| `[RESOURCE]` | A file path, an http(s) URL, or `-` for stdin; every `rich` option applies. |
+
+### rich man
+
+Render a man page from its roff source (`--man`)
+
+#### Usage
+
+```text
+rich man [OPTIONS] [RESOURCE]
 ```
 
 #### Arguments
@@ -497,13 +588,60 @@ rich jsonl [OPTIONS] [RESOURCE]
 
 ### rich log
 
-Stream common structured-log JSONL records (`--log`)
+Stream log records (`--log`): JSON Lines, logfmt and common text formats; filter with --level and --where, follow a file with -f, group with --group
 
 #### Usage
 
 ```text
 rich log [OPTIONS] [RESOURCE]
 ```
+
+#### Mode options
+
+| Option | Description |
+| --- | --- |
+| `--log-presentation <MODE>` | With --log, select log presentation. Default: `plain`. Possible values: `plain`, `rich`. |
+
+#### Log
+
+| Option | Description |
+| --- | --- |
+| `--level <LEVEL>...` | With `rich log`, keep only records at LEVEL (trace, debug, info, warn, error or fatal), or at it and above with a `+` (`warn+`); several with commas or by repeating it. |
+| `--where <EXPR>...` | With `rich log`, keep only records whose fields pass EXPR: FIELD=VALUE, FIELD!=VALUE, FIELD>N (and >=, <, <=), FIELD~REGEX, FIELD!~REGEX, FIELD (it is there) or !FIELD (it is not); numbers, levels and times compare as such, dots reach nested fields; repeatable, and every one must pass. |
+| `-f`, `--follow` | With `rich log`, read FILE, then what is appended to it, starting again when it is truncated or replaced (log rotation), until Ctrl+C. |
+| `--collapse`, `--no-collapse` | With `rich log`, fold a run of identical records (their times aside) into the first and a `× N` count; on by default with --follow and --interactive. |
+| `--fields` | With `rich log`, list each record's fields under it, one a line, instead of on its line. |
+| `--parser <NAME>` | With `rich log`, how lines that are not JSON are read: auto tries each format; logfmt, level (`LEVEL message`), timestamp (a line that starts with a time) and access (nginx and Apache) read one; text reads none. A line no parser reads joins the record before it, or is shown as text. Default: `auto`. Possible values: `auto`, `logfmt`, `level`, `timestamp`, `access`, `text`. |
+| `--time <MODE>` | With `rich log`, show each time as written (absolute), since the first record shown (relative), or not at all (none) Default: `absolute`. Possible values: `absolute`, `relative`, `none`. |
+| `--output <FORMAT>` | With `rich log`, write the records kept as text, or as one JSON object a line (jsonl) for another program. Default: `text`. Possible values: `text`, `jsonl`. |
+| `--summary`, `--no-summary` | With `rich log`, end with a summary: records shown, counts by level and, with --group, the groups with errors; on by default with --group (on standard error with --output jsonl) |
+| `-i`, `--interactive` | With `rich log` on a terminal, show the records in a live view that follows the end: / filters, Space pauses, Enter shows a record's fields, q quits; without a terminal the records stream as usual. |
+
+#### Viewers
+
+| Option | Description |
+| --- | --- |
+| `--group <N\|BY>` | With `rich hex`, bytes per group (default 8); with `rich log`, group records by trace, span or correlation id (trace_id, span_id, correlation_id, request_id, ...) under a header each, with a summary at the end. |
+| `--redact-pattern <REGEX>...` | With `rich capture` and `rich log`, also mask matches of REGEX (only its `secret` group when it has one); repeatable. Experimental: check the output before sharing it. |
+| `--redact-preview` | With `rich capture` or `rich log` and --redact or --redact-pattern, show each match on its line, highlighted, with its rule and replacement, and a summary, instead of the output; write nothing (no cast, export or log output) and name on stderr what would have been written. The preview shows the secrets unmasked. With --report json, the findings as one JSON document on stdout. |
+
+#### Inspect
+
+| Option | Description |
+| --- | --- |
+| `--redact` | Mask secret-looking keys such as password, token and api_key. With `rich capture`, mask secrets in the output before it is shown, exported or recorded: secret-named `key=value` values, bearer tokens, GitHub/GitLab/Slack/Stripe/npm/`sk-` tokens, AWS key ids, JWTs and URL passwords; with `rich log`, the same in each record's fields and lines. Capture redaction is experimental and best effort: check the output before sharing it. |
+
+#### Output & reports
+
+| Option | Description |
+| --- | --- |
+| `--sanitize`, `--no-sanitize` | Replace input terminal controls, JSON/notebook strings, titles and captions with visible inert text. On by default for `rich view`, `rich schema`, `rich log` and text `rich diff`; --no-sanitize turns it off there. |
+
+#### Layout
+
+| Option | Description |
+| --- | --- |
+| `-w`, `--width <N>` | Render the output N columns wide (the console keeps its own width, so --left/--center/--right still use it) |
 
 #### Arguments
 
@@ -550,13 +688,13 @@ rich diff [OPTIONS] [RESOURCE]
 
 | Option | Description |
 | --- | --- |
-| `--threshold <PCT>` | With --diff, exit non-zero above PCT% changed (pixels for images, lines for text). Also sets the exit code: 0 within, 5 over. |
+| `--threshold <PCT>` | With --diff, exit non-zero above PCT% changed (pixels for images, lines for text). Also sets the exit code: 0 within, 5 over. With `rich deps --baseline`, what counts as a regression: a percentage (default 10%) and a floor the change must also pass, a time (`0.5s`, the default for --timings) or a size (`64KiB`, the default for --sizes); give it twice for both. |
 
 #### Output & reports
 
 | Option | Description |
 | --- | --- |
-| `--sanitize`, `--no-sanitize` | Replace input terminal controls, JSON/notebook strings, titles and captions with visible inert text. On by default for `rich view`, `rich schema` and text `rich diff`; --no-sanitize turns it off there. |
+| `--sanitize`, `--no-sanitize` | Replace input terminal controls, JSON/notebook strings, titles and captions with visible inert text. On by default for `rich view`, `rich schema`, `rich log` and text `rich diff`; --no-sanitize turns it off there. |
 
 #### Arguments
 
@@ -610,7 +748,7 @@ rich inspect [OPTIONS] [RESOURCE]
 
 | Option | Description |
 | --- | --- |
-| `--format <F>` | Input format. With --inspect, the parser (default auto-detect); otherwise `auto` detects piped or extensionless input and routes it (JSON to --json, other formats to highlighting, anything else to plain text), and a named format overrides the extension. Default: `auto`. Possible values: `auto`, `json`, `yaml`, `toml`, `xml`, `ini`, `env`. |
+| `--format <F>` | Input format. With --inspect, the parser (default auto-detect); otherwise `auto` detects piped or extensionless input and routes it (JSON to --json, other formats to highlighting, likely Markdown, reStructuredText, Org, AsciiDoc and man pages to their renderers, anything else to plain text), and a named format overrides the extension. A document format (markdown, rst, org, asciidoc, man) is the same as its mode flag. Default: `auto`. Possible values: `auto`, `json`, `yaml`, `toml`, `xml`, `ini`, `env`, `markdown`, `rst`, `org`, `asciidoc`, `man`. |
 
 #### Inspect
 
@@ -626,7 +764,7 @@ rich inspect [OPTIONS] [RESOURCE]
 | `--max-depth <N>` | Fold containers deeper than N levels. |
 | `--max-length <N>` | Show at most N items per container. |
 | `--show-paths` | Append each value's path. |
-| `--redact` | Mask secret-looking keys such as password, token and api_key. With `rich capture`, mask secrets in the output before it is shown, exported or recorded: secret-named `key=value` values, bearer tokens, GitHub/GitLab/Slack/Stripe/npm/`sk-` tokens, AWS key ids, JWTs and URL passwords. Capture redaction is experimental and best effort: check the output before sharing it. |
+| `--redact` | Mask secret-looking keys such as password, token and api_key. With `rich capture`, mask secrets in the output before it is shown, exported or recorded: secret-named `key=value` values, bearer tokens, GitHub/GitLab/Slack/Stripe/npm/`sk-` tokens, AWS key ids, JWTs and URL passwords; with `rich log`, the same in each record's fields and lines. Capture redaction is experimental and best effort: check the output before sharing it. |
 | `--compare <PATH>` | Show added, removed and changed values against another document. |
 
 #### Arguments
@@ -679,7 +817,7 @@ rich view [OPTIONS] [RESOURCE]
 
 | Option | Description |
 | --- | --- |
-| `--sanitize`, `--no-sanitize` | Replace input terminal controls, JSON/notebook strings, titles and captions with visible inert text. On by default for `rich view`, `rich schema` and text `rich diff`; --no-sanitize turns it off there. |
+| `--sanitize`, `--no-sanitize` | Replace input terminal controls, JSON/notebook strings, titles and captions with visible inert text. On by default for `rich view`, `rich schema`, `rich log` and text `rich diff`; --no-sanitize turns it off there. |
 
 #### Paging
 
@@ -724,7 +862,7 @@ rich hex [OPTIONS] [RESOURCE]
 | `--offset <N>` | With `rich hex`, start N bytes in (decimal or 0x hex) |
 | `--length <N>` | With `rich hex`, show at most N bytes. |
 | `--bytes-per-line <N>` | With `rich hex`, bytes on each line (default: fit the width, up to 16) |
-| `--group <N>` | With `rich hex`, bytes per group. Default: `8`. |
+| `--group <N\|BY>` | With `rich hex`, bytes per group (default 8); with `rich log`, group records by trace, span or correlation id (trace_id, span_id, correlation_id, request_id, ...) under a header each, with a summary at the end. |
 
 #### Layout
 
@@ -809,19 +947,20 @@ rich capture [OPTIONS] [RESOURCE]
 | Option | Description |
 | --- | --- |
 | `--cast <FILE>` | With `rich capture`, also write an asciicast v2 recording (`asciinema play FILE`) |
-| `--redact-pattern <REGEX>...` | With `rich capture`, also mask matches of REGEX (only its `secret` group when it has one); repeatable. Experimental: check the output before sharing it. |
+| `--redact-pattern <REGEX>...` | With `rich capture` and `rich log`, also mask matches of REGEX (only its `secret` group when it has one); repeatable. Experimental: check the output before sharing it. |
+| `--redact-preview` | With `rich capture` or `rich log` and --redact or --redact-pattern, show each match on its line, highlighted, with its rule and replacement, and a summary, instead of the output; write nothing (no cast, export or log output) and name on stderr what would have been written. The preview shows the secrets unmasked. With --report json, the findings as one JSON document on stdout. |
 
 #### Inspect
 
 | Option | Description |
 | --- | --- |
-| `--redact` | Mask secret-looking keys such as password, token and api_key. With `rich capture`, mask secrets in the output before it is shown, exported or recorded: secret-named `key=value` values, bearer tokens, GitHub/GitLab/Slack/Stripe/npm/`sk-` tokens, AWS key ids, JWTs and URL passwords. Capture redaction is experimental and best effort: check the output before sharing it. |
+| `--redact` | Mask secret-looking keys such as password, token and api_key. With `rich capture`, mask secrets in the output before it is shown, exported or recorded: secret-named `key=value` values, bearer tokens, GitHub/GitLab/Slack/Stripe/npm/`sk-` tokens, AWS key ids, JWTs and URL passwords; with `rich log`, the same in each record's fields and lines. Capture redaction is experimental and best effort: check the output before sharing it. |
 
 #### Output & reports
 
 | Option | Description |
 | --- | --- |
-| `--sanitize`, `--no-sanitize` | Replace input terminal controls, JSON/notebook strings, titles and captions with visible inert text. On by default for `rich view`, `rich schema` and text `rich diff`; --no-sanitize turns it off there. |
+| `--sanitize`, `--no-sanitize` | Replace input terminal controls, JSON/notebook strings, titles and captions with visible inert text. On by default for `rich view`, `rich schema`, `rich log` and text `rich diff`; --no-sanitize turns it off there. |
 
 #### Layout
 
@@ -899,7 +1038,7 @@ rich dot [OPTIONS] [RESOURCE]
 
 ### rich deps
 
-A Cargo dependency tree from `cargo metadata`, crates resolved at several versions marked; --why CRATE for what pulls a crate in, --graph to draw it; --features, --licenses, --timings FILE and --audit FILE for supply-chain reports
+A Cargo dependency tree from `cargo metadata`, crates resolved at several versions marked; --why CRATE for what pulls a crate in, --graph to draw it; --features, --licenses, --policy FILE, --timings FILE, --sizes and --audit FILE for supply-chain reports, --baseline FILE to compare timings or sizes
 
 #### Usage
 
@@ -914,7 +1053,7 @@ rich deps [OPTIONS] [MANIFEST]
 | `--metadata <FILE>` | With `rich deps`, read `cargo metadata --format-version 1` JSON from FILE (`-` for stdin) instead of running cargo. |
 | `--why <CRATE>` | With `rich deps`, show what pulls CRATE (`name` or `name@version`) in: every path from the workspace to it. |
 | `--graph` | With `rich deps`, draw the dependencies (or --why's paths) as a diagram instead of a tree. |
-| `--depth <N>` | With `rich deps`, show at most N levels below each workspace member. |
+| `--depth <N>` | With `rich deps`, show at most N levels below each workspace member; with `rich profile`, profile JSON paths at most N steps deep (default 4), an object or array at the last step counting as its JSON text. |
 | `--duplicates` | With `rich deps`, keep only the branches that lead to a crate resolved at more than one version, and add a consolidation summary: who pulls each version, and which version most of them already use. |
 | `--no-dev` | With `rich deps`, leave dev-dependencies out. |
 | `--features` | With `rich deps`, show the features Cargo resolved for each crate: what each turns on, and which dependents asked for them; every crate with a feature, or only --package's. |
@@ -922,6 +1061,15 @@ rich deps [OPTIONS] [MANIFEST]
 | `--timings <FILE>` | With `rich deps`, show a `cargo build --timings` report (the HTML file, or timing-info JSON lines; `-` for stdin): the slowest units as bars and a table; runs nothing. |
 | `--audit <FILE>` | With `rich deps`, show `cargo audit --json` output from FILE (`-` for stdin) grouped by severity; exits 5 when it lists a vulnerability. Runs no scanner. |
 | `--licenses` | With `rich deps`, group the crates by licence, marking copyleft, unknown and missing licences. |
+| `--sizes` | With `rich deps`, show artifact sizes per crate as bars and a table: from the target directory given next (default: the one `cargo metadata` names), matched to packages through `cargo metadata`, or from a file given next: `cargo bloat --crates --message-format json` output or a report saved with --save (`-` for stdin) |
+| `--build-profile <NAME>` | With `rich deps --sizes`, read this profile's artifacts: debug (dev), release, or a custom profile (default: debug if it was built, else release) |
+| `--source-sizes` | With `rich deps --sizes`, also add up each package's source files (its manifest directory, without target/, .git/ and nested packages) |
+| `--top <N>` | With `rich profile`, the most common values shown for a column that is not numeric (default 5); with `rich deps --sizes`, `--timings` or `--baseline`, the units shown (default 20) |
+| `--baseline <FILE>` | With `rich deps --timings` or `--sizes`, compare with an older report, unit by unit (a report saved with --save, or the original format: a timings report, cargo-bloat JSON or a target directory); exits 5 when a unit or the total regressed past --threshold. |
+| `--threshold <PCT>` | With --diff, exit non-zero above PCT% changed (pixels for images, lines for text). Also sets the exit code: 0 within, 5 over. With `rich deps --baseline`, what counts as a regression: a percentage (default 10%) and a floor the change must also pass, a time (`0.5s`, the default for --timings) or a size (`64KiB`, the default for --sizes); give it twice for both. |
+| `--save <FILE>` | With `rich deps --timings` or `--sizes`, also write the report as JSON to FILE, to keep as a --baseline. |
+| `--policy <FILE>` | With `rich deps`, check every crate's licence against a policy: a TOML allow and deny list, or cargo-deny's deny.toml; conflicts with the root crate's licence are shown too (a heuristic, not legal advice). Exits 5 on a violation. |
+| `--sbom <FILE>` | With `rich deps --licenses` or `--policy`, read the packages from an SPDX (2.2, 2.3) or CycloneDX (1.4 to 1.6) JSON document instead of `cargo metadata`. |
 
 #### Layout
 
@@ -1010,7 +1158,12 @@ rich profile [OPTIONS] [FILE]
 | --- | --- |
 | `--sample <N>` | With `rich profile`, the most rows kept for types, statistics and distributions (default 10000): a longer input is sampled uniformly, the sample size is printed, and nulls still count every row. |
 | `--columns <COLUMN[,COLUMN...]>...` | With `rich profile`, profile only these columns, by header, in this order; repeatable. |
-| `--top <N>` | With `rich profile`, the most common values shown for a column that is not numeric (default 5) |
+| `--top <N>` | With `rich profile`, the most common values shown for a column that is not numeric (default 5); with `rich deps --sizes`, `--timings` or `--baseline`, the units shown (default 20) |
+| `--depth <N>` | With `rich profile` of JSON Lines, profile paths at most N steps deep (default 4), a key or [] each; an object or array at the last step counts as its JSON text. |
+| `--max-paths <N>` | With `rich profile` of JSON Lines, profile at most N paths (default 200), in the order first seen; the rest are noted. |
+| `--flat` | With `rich profile` of JSON Lines, profile rows of the top-level keys (nested values as JSON text) instead of every nested path. |
+| `--style-rule <RULE>...` | Style the cells, rows or columns of a data table by value: COLUMN OP VALUE:STYLE or COLUMN OP VALUE:row:STYLE (e.g. 'latency>500:bold red', 'status=failed:row:on red'); OP is == != < <= > >= *= ^= $= or a word such as contains or empty. Repeatable; applies to --csv, `rich profile`'s table and `rich inspect --table`, and has no effect elsewhere. |
+| `--rules <FILE>...` | Read style rules from FILE's [[rules]] tables (column, op, value, style, target), after the rules before it. |
 
 #### Output & reports
 
@@ -1085,7 +1238,7 @@ rich config explain [OPTIONS] [KEY]
 
 | Argument | Description |
 | --- | --- |
-| `[KEY]` | Explain one setting instead of all of them. Possible values: `mode`, `format`, `width`, `panel`, `padding`, `log_presentation`, `mermaid_backend`, `dot_backend`, `highlighter`, `code_theme`, `height`, `image_fit`, `image_anchor`, `image_max_width`, `image_max_height`, `image_background`, `image_color`, `image_dither`, `image_color_distance`, `image_brightness`, `image_contrast`, `image_gamma`, `image_rotate`, `image_flip_horizontal`, `image_flip_vertical`, `image_grayscale`, `export_html`, `export_svg`, `pager`, `auto_pager`, `watch`, `watch_interval`, `watch_debounce`, `watch_poll`, `watch_exit_on_error`, `watch_cache`, `batch`, `batch_input_root`, `batch_preserve_dirs`, `batch_name_template`, `jobs`, `progress`, `continue_on_error`, `overwrite`, `collision`, `theme`, `theme_file`, `plugins`, `micro_project`, `no_color`, `sanitize`. |
+| `[KEY]` | Explain one setting instead of all of them. Possible values: `mode`, `format`, `width`, `panel`, `padding`, `log_presentation`, `mermaid_backend`, `dot_backend`, `rules`, `highlighter`, `code_theme`, `height`, `image_fit`, `image_anchor`, `image_max_width`, `image_max_height`, `image_background`, `image_color`, `image_dither`, `image_color_distance`, `image_brightness`, `image_contrast`, `image_gamma`, `image_rotate`, `image_flip_horizontal`, `image_flip_vertical`, `image_grayscale`, `export_html`, `export_svg`, `pager`, `auto_pager`, `watch`, `watch_interval`, `watch_debounce`, `watch_poll`, `watch_exit_on_error`, `watch_cache`, `batch`, `batch_input_root`, `batch_preserve_dirs`, `batch_name_template`, `jobs`, `progress`, `continue_on_error`, `overwrite`, `collision`, `theme`, `theme_file`, `plugins`, `micro_project`, `no_color`, `sanitize`. |
 
 #### rich config reference
 
@@ -1263,6 +1416,7 @@ rich pager [OPTIONS] [FILE]
 | Option | Description |
 | --- | --- |
 | `--search <QUERY>` | Start with QUERY searched. |
+| `--sticky <LINES>` | Keep the first LINES lines on top while the rest scroll; `table` (the default) keeps a table's header there when the content starts with one, 0 nothing. |
 
 #### Arguments
 
@@ -1276,6 +1430,12 @@ Page coloured output
 
 ```sh
 git log --color | rich pager
+```
+
+Page a table with its header on top
+
+```sh
+PAGER='rich pager' rich data.csv --pager
 ```
 
 ### rich write
@@ -1462,6 +1622,133 @@ Pick a value from a command's output
 
 ```sh
 kubectl get pods -o json | rich explore --print value
+```
+
+### rich date
+
+Pick a date on a month grid, a time of day, or both, and print it as 2026-10-17, 14:30 or 2026-10-17 14:30; without a terminal, read one typed in
+
+#### Usage
+
+```text
+rich date [OPTIONS]
+```
+
+#### Options
+
+| Option | Description |
+| --- | --- |
+| `--kind <KIND>` | What to pick (default date): a day, a time of day, or a day and a time. Possible values: `date`, `time`, `datetime`. |
+| `--header <TEXT>` | The prompt (default "Date", "Time" or "Date and time") |
+| `--value <VALUE>` | Start at VALUE (default today, or now, in UTC) |
+| `--default <VALUE>` | The answer without a terminal and to an empty line; the start too, unless --value is given. |
+| `--min <VALUE>` | The earliest that can be picked: earlier days are dimmed and cannot be reached, and an earlier time is refused with a message. |
+| `--max <VALUE>` | The latest that can be picked. |
+| `--seconds` | Pick and print the seconds too (14:30:05), with --kind time or datetime; without it every value is to the minute, and --min rounds up to one. |
+| `--twelve-hour` | Show a 12-hour clock with AM and PM, with --kind time or datetime (the answer is still printed on a 24-hour one) |
+| `--mouse` | Report the mouse: click a day to select it and again to pick it, click a time field; the wheel turns the month. |
+
+#### Examples
+
+A day from today on
+
+```sh
+due=$(rich date --header Due --min today)
+```
+
+A meeting slot within a range
+
+```sh
+rich date --kind datetime --min '2026-10-17 09:00' --max '2026-10-31 17:00'
+```
+
+### rich approve
+
+Review ITEMs (or lines, or JSON Lines, on standard input) one by one or in bulk: a approves, r rejects, s skips (A, R, S ask for a reason), Space marks, Enter submits; prints one JSON line per item with its decision
+
+#### Usage
+
+```text
+rich approve [OPTIONS] [ITEM...]
+```
+
+#### Options
+
+| Option | Description |
+| --- | --- |
+| `--header <TEXT>` | The prompt above the queue (default "Approve") |
+| `--format <FORMAT>` | How items are read: one per line, or a JSON object per line (default auto: JSON Lines when every line is an object) Possible values: `auto`, `lines`, `jsonl`. |
+| `--label <FIELD>` | The JSON field to show as an item's label (default the first of title, name, label, summary and id) |
+| `--require-reason` | Ask for a reason on every rejection, and refuse an empty one. |
+| `--auto-submit` | Submit as soon as nothing is pending, without Enter. |
+| `--print <WHAT>` | What to print: a JSON line per item with its decision and reason (default), or the approved (or rejected) items as they were read. Possible values: `decisions`, `approved`, `rejected`. |
+| `--height <ROWS>` | Show at most ROWS at once, fewer when the terminal is shorter. |
+| `--mouse` | Report the mouse: click rows and buttons, scroll with the wheel (off by default: it takes text selection from the terminal) |
+
+#### Arguments
+
+| Argument | Description |
+| --- | --- |
+| `[ITEM]...` | The items; without any, one per line from standard input. |
+
+#### Examples
+
+Delete the branches approved
+
+```sh
+git branch --format='%(refname:short)' | rich approve --print approved | xargs -r git branch -D
+```
+
+Review JSON requests, with a reason for each rejection
+
+```sh
+rich approve --require-reason < requests.jsonl > decisions.jsonl
+```
+
+### rich jump
+
+Jump to anything: one fuzzy box over files, Markdown headings (#), code symbols (@), commands (>) and recent places in DIRs, grouped by source with a preview; prints the place picked (`path`, `path:line` or the command)
+
+#### Usage
+
+```text
+rich jump [OPTIONS] [DIR...]
+```
+
+#### Options
+
+| Option | Description |
+| --- | --- |
+| `--header <TEXT>` | The prompt (default "Jump") |
+| `--files` | Search file names. |
+| `--headings` | Search Markdown headings. |
+| `--symbols` | Search code symbols: functions, types, classes and modules, found by their keywords. |
+| `--commands <FILE>` | Search the commands in FILE, one per line (`LABEL<TAB>COMMAND` or just the command); a pick prints the command. |
+| `--recent <FILE>` | Show FILE's places first, as Recent, and add the pick to it (the latest 50 kept) |
+| `--value <QUERY>` | Start with QUERY typed; without a terminal, print its best match. |
+| `--limit <N>` | Results each source shows until Tab narrows to it (default 5) |
+| `--print <WHAT>` | What to print: the place (default), a JSON object with its source, label and place, or a shell command, safely quoted: `cd -- 'DIR'`, `${EDITOR:-vi} [+LINE] -- 'FILE'`, or a `>` command as it is. Possible values: `location`, `json`, `shell`. |
+| `--height <ROWS>` | Show at most ROWS at once, fewer when the terminal is shorter. |
+| `--mouse` | Report the mouse: click rows and buttons, scroll with the wheel (off by default: it takes text selection from the terminal) |
+
+#### Arguments
+
+| Argument | Description |
+| --- | --- |
+| `[DIR]...` | Where to look (default the current directory); `-` reads entries from standard input instead. |
+
+#### Examples
+
+Open a file, or a Markdown file at a heading's line (an editor that takes `path:line`)
+
+```sh
+$EDITOR "$(rich jump --files --headings)"
+```
+
+Print what to run for the pick: a saved command, `cd` to a directory, or the editor at a file's line
+
+```sh
+rich jump --print shell --commands ~/.commands --recent ~/.jump-recent src
 ```
 
 ### rich completions
@@ -1705,7 +1992,7 @@ rich micro preview NAME|PACKAGE|IMAGE [PIPELINE OPTIONS] [--report json]
 | Option | Description |
 | --- | --- |
 | `--report <FORMAT>` | json: write data to stdout (also --json) Possible values: `human`, `json`. |
-| `--size <COLSxROWS>` | Cells the asset takes: 2x1 (default, an emoji's footprint) or 1x1. |
+| `--size <COLSxROWS>` | Cells the asset takes: 2x1 (default, an emoji's footprint), 1 to 4 columns, and 1 or 2 rows: 2x2 for an icon, 3x2 for a mini animation (at most 4x2) |
 | `--fit <FIT>` | contain (default) keeps the whole image; cover fills and crops. Possible values: `contain`, `cover`, `stretch`. |
 | `--anchor <ANCHOR>` | What cover keeps: center (default), top, bottom, left, right, …. |
 | `--brightness <F>` | Multiply brightness (1 = as is) |
@@ -1796,7 +2083,7 @@ rich micro create IMAGE --name NAME --alt TEXT [--emoji E] [--text T] [OPTIONS]
 | `--add` | Write it into the user (or --project) layer. |
 | `--project` | Use the project's ./.rich/micro/ instead of the user layer. |
 | `--report <FORMAT>` | json: write data to stdout (also --json) Possible values: `human`, `json`. |
-| `--size <COLSxROWS>` | Cells the asset takes: 2x1 (default, an emoji's footprint) or 1x1. |
+| `--size <COLSxROWS>` | Cells the asset takes: 2x1 (default, an emoji's footprint), 1 to 4 columns, and 1 or 2 rows: 2x2 for an icon, 3x2 for a mini animation (at most 4x2) |
 | `--fit <FIT>` | contain (default) keeps the whole image; cover fills and crops. Possible values: `contain`, `cover`, `stretch`. |
 | `--anchor <ANCHOR>` | What cover keeps: center (default), top, bottom, left, right, …. |
 | `--brightness <F>` | Multiply brightness (1 = as is) |
@@ -1885,6 +2172,186 @@ rich micro packs [--micro-project] [--report json]
 | --- | --- |
 | `--report <FORMAT>` | json: write data to stdout (also --json) Possible values: `human`, `json`. |
 
+### rich banner
+
+Draw TEXT as a FIGlet banner: a font, a style or colour gradient, alignment and width fitting. Built with the `art` feature
+
+#### Usage
+
+```text
+rich banner [OPTIONS] [TEXT]...
+```
+
+#### Options
+
+| Option | Description |
+| --- | --- |
+| `--font <NAME\|FILE>` | standard (bundled, the default), a FIGfont .flf file, or the name of one in $FIGLET_FONTDIR, /usr/share/figlet or /usr/local/share/figlet. |
+| `--list-fonts` | List the bundled font and the .flf fonts found in those directories, then exit. |
+| `--style <STYLE>` | A style for every row, such as `bold cyan` or `white on blue`. |
+| `--gradient <COLORS>` | Colour the strokes along a gradient: two or more comma-separated colours (`#ff0000,blue`), or a preset: rainbow, sunset, ocean, forest, fire. Overrides --style's colour. |
+| `--direction <D>` | Which way --gradient runs (default horizontal) Possible values: `horizontal`, `vertical`, `diagonal`. |
+| `--align <A>` | Position the banner within the width (default left) Possible values: `left`, `center`, `right`. |
+| `-w`, `--width <N>` | Lay the banner out to N columns (default: the terminal's width) |
+| `--fit <F>` | When the banner is wider than the width: wrap it at spaces onto more rows (the default, as figlet does), print TEXT as plain text instead (plain), or let it overflow (none) Possible values: `wrap`, `plain`, `none`. |
+| `--force-terminal` | Write colour and styles even when stdout is not a terminal (for a pager or a file) |
+
+#### Arguments
+
+| Argument | Description |
+| --- | --- |
+| `[TEXT]...` | The words to draw, joined with spaces; none (or `-`) reads stdin. A newline starts a new banner row. |
+
+#### Examples
+
+A banner in the standard font
+
+```sh
+rich banner Hello
+```
+
+Centred, in rainbow colours
+
+```sh
+rich banner --gradient rainbow --align center 'Ship it'
+```
+
+An installed figlet font; plain text on a narrow terminal
+
+```sh
+rich banner --font slant --fit plain Release
+```
+
+### rich shell
+
+Shell integration: `init` prints a script with completions, OSC 133 prompt marks, OSC 7 and a status line after each command; `status` and `link` are its helpers
+
+#### Usage
+
+```text
+rich shell init|status|link [OPTIONS]
+```
+
+#### Commands
+
+| Command | Description |
+| --- | --- |
+| `init` | Print the integration script for SHELL, to eval from its startup file |
+| `status` | One line for a finished command: a status marker, the command, `exit N` and how long it took |
+| `link` | Print paths (default: the working directory) as OSC 8 file links, plain where links are off |
+
+#### rich shell init
+
+Print the integration script for SHELL, to eval from its startup file
+
+##### Usage
+
+```text
+rich shell init SHELL [--no-completions] [--no-marks] [--no-status] [--min-duration SECS]
+```
+
+##### Options
+
+| Option | Description |
+| --- | --- |
+| `--no-completions` | Leave out the completion script. |
+| `--no-marks` | Leave out the OSC 133 prompt and command marks and the OSC 7 directory. |
+| `--no-status` | Do not print a status line after each command. |
+| `--min-duration <SECS>` | Stay quiet after a success quicker than SECS (default 2) |
+
+##### Arguments
+
+| Argument | Description |
+| --- | --- |
+| `<SHELL>` | The shell (pwsh is accepted for powershell) Possible values: `bash`, `zsh`, `fish`, `powershell`. |
+
+##### Examples
+
+In ~/.bashrc (bash 4.4+)
+
+```sh
+eval "$(rich shell init bash)"
+```
+
+In ~/.zshrc
+
+```sh
+eval "$(rich shell init zsh)"
+```
+
+In ~/.config/fish/config.fish
+
+```sh
+rich shell init fish | source
+```
+
+In $PROFILE
+
+```sh
+rich shell init pwsh | Out-String | Invoke-Expression
+```
+
+#### rich shell status
+
+One line for a finished command: a status marker, the command, `exit N` and how long it took
+
+##### Usage
+
+```text
+rich shell status --exit CODE [--duration D] [--command TEXT] [--min-duration SECS] [--symbols unicode|ascii|words]
+```
+
+##### Options
+
+| Option | Description |
+| --- | --- |
+| `--exit <CODE>` | The command's exit status (0 = success) |
+| `--duration <D>` | How long it ran: seconds, or with a unit (1500ms, 1.5s, 2m) |
+| `--command <TEXT>` | The command line as typed (default $RICH_SHELL_COMMAND) |
+| `--min-duration <SECS>` | Print nothing for a success quicker than SECS (default 0) |
+| `--symbols <SET>` | Status markers (default unicode, or as RICH_A11Y says) Possible values: `unicode`, `ascii`, `words`. |
+
+##### Examples
+
+✖ error $ cargo test  exit 101  4.2s
+
+```sh
+rich shell status --exit 101 --duration 4.2 --command 'cargo test'
+```
+
+#### rich shell link
+
+Print paths (default: the working directory) as OSC 8 file links, plain where links are off
+
+##### Usage
+
+```text
+rich shell link [PATH[:LINE[:COL]]]... [--tilde] [--editor TEMPLATE] [--links auto|always|never] [--prompt bash|zsh]
+```
+
+##### Options
+
+| Option | Description |
+| --- | --- |
+| `--tilde` | Show paths under $HOME as ~/…. |
+| `--editor <TEMPLATE>` | Link through an editor URL instead of file://, e.g. vscode://file{path}:{line}:{column}. |
+| `--links <WHEN>` | auto (links on a terminal, the default), always (as in a prompt's command substitution) or never. Possible values: `auto`, `always`, `never`. |
+| `--prompt <SHELL>` | Mark escape sequences as zero-width for a bash (\001…\002) or zsh (%{…%}) prompt. Possible values: `bash`, `zsh`. |
+
+##### Arguments
+
+| Argument | Description |
+| --- | --- |
+| `[PATH]...` | Paths to link, one per line; relative ones resolve here. |
+
+##### Examples
+
+A bash prompt with a clickable working directory
+
+```sh
+PS1='$(rich shell link --tilde --links always --prompt bash) \$ '
+```
+
 ### rich record
 
 Run tapes (scripted terminal sessions: type, press keys, wait for screen text, take screenshots) in a real terminal and write PNG, SVG and text screenshots, an asciinema cast, a GIF, an MP4 (with FFmpeg) and an HTML page with a player; --check compares screenshots with committed ones instead
@@ -1966,14 +2433,15 @@ Settings are read from these sources, lowest precedence first; a later source ov
 
 | Key | Type | Default | Environment | Flag | Description |
 | --- | --- | --- | --- | --- | --- |
-| `mode` | enum: `print`, `markdown`, `rst`, `json`, `syntax`, `csv`, `ipynb`, `jsonl`, `log`, `rule`, `image`, `gif`, `diff`, `inspect`, `ansi` | `auto` | | `--print, --markdown, ... or a command word` | Render mode, as the flag or command of the same name |
-| `format` | enum: `auto`, `json`, `yaml`, `toml`, `xml`, `ini`, `env` | `auto` | | `--format` | Input format. With --inspect, the parser (default auto-detect); otherwise `auto` detects piped or extensionless input and routes it (JSON to --json, other formats to highlighting, anything else to plain text), and a named format overrides the extension |
+| `mode` | enum: `print`, `markdown`, `rst`, `org`, `asciidoc`, `man`, `json`, `syntax`, `csv`, `ipynb`, `jsonl`, `log`, `rule`, `image`, `gif`, `diff`, `inspect`, `ansi` | `auto` | | `--print, --markdown, ... or a command word` | Render mode, as the flag or command of the same name |
+| `format` | enum: `auto`, `json`, `yaml`, `toml`, `xml`, `ini`, `env`, `markdown`, `rst`, `org`, `asciidoc`, `man` | `auto` | | `--format` | Input format. With --inspect, the parser (default auto-detect); otherwise `auto` detects piped or extensionless input and routes it (JSON to --json, other formats to highlighting, likely Markdown, reStructuredText, Org, AsciiDoc and man pages to their renderers, anything else to plain text), and a named format overrides the extension. A document format (markdown, rst, org, asciidoc, man) is the same as its mode flag |
 | `width` | positive integer | | | `--width` | Render the output N columns wide (the console keeps its own width, so --left/--center/--right still use it) |
 | `panel` | enum: `ascii`, `ascii2`, `square`, `rounded`, `heavy`, `double`, `ascii_double_head`, `square_double_head`, `minimal`, `minimal_heavy_head`, `minimal_double_head`, `simple`, `simple_head`, `simple_heavy`, `horizontals`, `heavy_edge`, `heavy_head`, `double_edge`, `markdown`, `none` | | | `--panel` | Wrap output in a panel, shrunk to fit its content (none = no panel) |
 | `padding` | string | | | `--padding` | Wrap output in padding (1, 2, or 4 comma-separated ints) |
 | `log_presentation` | enum: `plain`, `rich` | `plain` | | `--log-presentation` | With --log, select log presentation |
 | `mermaid_backend` | enum: `text`, `mmdc`, `off` | | | `--mermaid-backend` | How Mermaid diagrams (`rich mermaid`, ```mermaid fences in Markdown) are drawn: text draws flowcharts as text, mmdc uses Mermaid's own CLI (a build with the mmdc feature; `rich mermaid` tries it first there), off leaves fences as code |
 | `dot_backend` | enum: `text`, `graphviz`, `off` | | | `--dot-backend` | How DOT graphs (`rich dot`, ```dot fences in Markdown) are drawn: text draws them natively, graphviz also makes --export-svg write Graphviz's own SVG (the `dot` program, installed separately), off leaves fences as code |
+| `rules` | array of rule tables | | | `--style-rule` | Style the cells, rows or columns of a data table by value: COLUMN OP VALUE:STYLE or COLUMN OP VALUE:row:STYLE (e.g. 'latency>500:bold red', 'status=failed:row:on red'); OP is == != < <= > >= *= ^= $= or a word such as contains or empty. Repeatable; applies to --csv, `rich profile`'s table and `rich inspect --table`, and has no effect elsewhere |
 | `highlighter` | string | | | `--highlighter` | The code highlighter for source, Markdown code, view and diff: syntect (the default), or lumis in a build with the lumis feature |
 | `code_theme` | string | | | `--code-theme` | A theme of the chosen code highlighter, e.g. ansi_dark (`rich doctor --report json` lists them) |
 | `height` | positive integer | | | `--height` | With --image, render this many rows instead of the backend's default |
@@ -2016,7 +2484,7 @@ Settings are read from these sources, lowest precedence first; a later source ov
 | `plugins` | list of paths | | | `--plugin` | Load a runtime plugin: a WASM module (.wasm, sandboxed) or a native library (.so, .dylib, .dll, which runs its own code), in a build with the wasm-plugins or dylib-plugins feature; repeatable. `rich plugins list` shows what is loaded |
 | `micro_project` | bool | | | `--micro-project` | Load micro assets from the project's .rich/micro/ (off by default: a project's assets load only when you trust it; ./rich.toml cannot turn this on) |
 | `no_color` | bool | | `NO_COLOR` | `--no-color` | Disable colored output (as does a non-empty NO_COLOR) |
-| `sanitize` | bool | | | `--sanitize` | Replace input terminal controls, JSON/notebook strings, titles and captions with visible inert text. On by default for `rich view`, `rich schema` and text `rich diff`; --no-sanitize turns it off there |
+| `sanitize` | bool | | | `--sanitize` | Replace input terminal controls, JSON/notebook strings, titles and captions with visible inert text. On by default for `rich view`, `rich schema`, `rich log` and text `rich diff`; --no-sanitize turns it off there |
 
 `rich` writes diagnostics to stderr and rendered output to stdout, so
 `rich --csv data.csv > table.txt` keeps the two apart.

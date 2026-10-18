@@ -10,6 +10,11 @@ move it to intuiTUIve. You do not have to move all of it at once:
 | **3. Port fully** | Everything | A new major version, or a small app |
 | **4. Host intuiTUIve in ratatui** | One pane | ratatui keeps the terminal and the loop, and an intuiTUIve app runs in part of the frame |
 
+!!! tip "Coming from ratatui, and looking for a feature?"
+    [intuiTUIve against ratatui](../../design/intuituive-vs-ratatui.md)
+    compares the two feature by feature: what intuiTUIve does the same way,
+    what it does differently and why, and what is still missing and planned.
+
 Paths 2 and 3 are the same work done at different speeds, so the recipe below
 covers both. Three complete ports show where it leads:
 
@@ -46,13 +51,16 @@ covers both. Three complete ports show where it leads:
 | Content-sized rows (measured by hand) | `.auto()` |
 | `Block::bordered().title(t)` | `.panel(t)`; `.padding(v, h)` for space |
 | `Paragraph`, `Line`, `Span` | `text!("…{signal}…")`, `label("…")`, console markup |
-| `List` + `ListState` | `list(items, selected)` (scrolls, highlights, binds ↑↓ jk) |
-| `Table` + `TableState` | `table(columns, rows, selected)` (sized columns, a sticky header, keys, clicks); `virtual_table` for huge ones |
-| `Tabs` | `tabs(titles, selected)` with `switch(\|\| tab.get(), build)` for the content |
-| `Scrollbar` and a scroll offset | `scroll(child)`: a viewport with keys, the wheel and a scrollbar |
+| `List` + `ListState` | `list(items, selected)` (scrolls, highlights, binds ↑↓ jk); `list_optional` for `select(None)` |
+| `highlight_symbol`, `HighlightSpacing`, `ListDirection`, `scroll_padding`, `ListItem::style` | `.symbol(..)`, `.highlight_spacing(..)`, `.direction(..)`, `.scroll_padding(n)`, `.row_style(\|i\| ..)` on the list; `.multiline()` for items of several lines |
+| `Table` + `TableState` | `table(columns, rows, selected)` (sized columns, a sticky header, keys, clicks); `virtual_table` for huge ones; `table_optional` for `select(None)` |
+| `footer`, `column_spacing`, `Row::height`, `Row::style`, `column_highlight_style`, a cell's alignment | `TableOptions::footer(..)`, `.column_spacing(n)`, `.multiline()` or `.row_height(n)`, `.row_style(..)`, `.column_highlight()`; `Column::align(Align::End)` |
+| `Tabs` | `tabs(titles, selected)` with `switch(\|\| tab.get(), build)` for the content; `.divider(..)`, `.tab_padding(..)` |
+| `Scrollbar` and a scroll offset | `scroll(child)`: a viewport with keys, the wheel and a scrollbar; `.scrollbar(Scrollbar::new()..)` on lists, tables, trees, text areas and logs; `scrollbar(position, len, view, bar)` on its own |
+| An input field (`tui-input`, by hand) | `input(signal)`, `number_input(signal, range)` |
 | `Chart`, `Canvas` | `rich_ext::chart::{Chart, Canvas}` (laid out as ratatui's) via `renderable` |
 | `Gauge`, `Sparkline`, `BarChart` | `rich_ext::chart` (`Gauge`, `Sparkline`, `BarChart`) via `renderable` |
-| `Clear` + a centred popup | `cx.modal(width, height, build)` |
+| `Clear` + a centred popup | `cx.modal(width, height, build)`; `cx.modal_with(.., ModalOptions::new().shadow(..).backdrop(..), ..)` for a shadow |
 | A popup placed next to a widget | `cx.popup(anchor, Placement::Below, width, height, build)` |
 | A custom `Widget` | `impl Widget` and `widget(w)` (cells, events, children, focus); `leaf` for drawing only; or keep the widget (path 2) |
 | `crossterm::event::read()` + `match` | `.on_key("q", …)` on the node that owns the key; keys bubble. Or keep your loop and feed an `App::driver` (path 4) |
@@ -62,7 +70,11 @@ covers both. Three complete ports show where it leads:
 | Threads and channels into the loop | `spawn(work, done)`, `resource(fetch)`, `Proxy::run` |
 | "When X changes, do Y" in the loop | `watch(\|\| x.get(), \|x, cx\| …)` |
 | `ratatui::init()` / `restore()` | `App::run()` (restores on every exit, panics included) |
+| Returning a choice or an error from the loop | `cx.quit_with(value)` and `App::run_for::<T>()`; `cx.fail(error)` |
 | `Viewport::Inline(n)` | `App::inline(n)` |
+| `Terminal::insert_before(n, ..)` | `cx.print_above(markup)`, `Proxy::print_above` |
+| `EnableMouseCapture` at the app's choice | `App::mouse(Some(true))` or `Some(false)` |
+| `Frame::count()` | `FrameStats::frames` (`Driver::stats()`) |
 | `TestBackend` and buffer asserts | Headless scripts: keys, clicks, resizes, a virtual clock |
 
 ## Path 1: rich inside ratatui
@@ -255,7 +267,9 @@ states are deterministic.
 Run the port with `INTUITUIVE_INSPECT=1`. The [inspector](index.md#inspector)
 shows which nodes drew in each frame. A key press should redraw what it
 changed and nothing else. If a whole panel redraws on every tick, a closure
-inside it reads a signal it does not need.
+inside it reads a signal it does not need: the inspector's trace (Shift+F12,
+then 4) names each signal written and the nodes it made dirty, and its
+timings (3) show which nodes take the time.
 
 ## Path 4: keep your loop
 
@@ -378,6 +392,17 @@ original must also keep the original's copyright and licence notice with
 that code, as MIT and Apache-2.0 require. The ports here reuse none, so
 the credit is all they carry. Port your own app the same way.
 
+The ports so far, and whose they are:
+
+- **[Yazi](https://github.com/sxyazi/yazi)**, by sxyazi and its
+  contributors, MIT licence: `files`.
+- **[scope-tui](https://github.com/alemidev/scope-tui)**, by alemi, MIT
+  licence: `scope`.
+- **[ratatui](https://github.com/ratatui/ratatui)**'s example apps, by
+  Florian Dehau and the Ratatui Developers, MIT licence: rebuilt from
+  ratatui 0.30, with sample data of our own, and listed in
+  [ratatui's examples, rebuilt](ratatui-examples.md).
+
 ## Common questions
 
 **Where did my `Frame` go?** There is none. Nodes draw themselves into the
@@ -386,8 +411,9 @@ returning rich segments is the closest thing to a custom `Widget::render`.
 
 **Can I keep my ratatui backend?** `App::run` uses rs-rich-interact's
 terminal session (crossterm). To keep your own terminal and loop, ratatui's
-included, drive the app with `App::driver` (path 4). termion and termwiz
-backends are planned (#677, #678).
+included, drive the app with `App::driver` (path 4). `App::run_with` drives
+it with termion or termwiz instead, behind this crate's features of those
+names (see [Backends](index.md#backends)).
 
 **Do I lose performance?** No: [the benchmark](index.md#against-ratatui) has
 intuiTUIve ahead on every scenario it measures, because it redraws and sends

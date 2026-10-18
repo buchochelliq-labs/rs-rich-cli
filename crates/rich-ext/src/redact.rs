@@ -26,6 +26,11 @@
 //!   export in one call ([`Redactor::export_svg`], [`Redactor::export_html`],
 //!   [`Redactor::export_text`], …) and a [`Redacted`] renderable.
 //!
+//! To see what would change before anything is written, [`Redactor::preview`]
+//! (and [`Redactor::preview_ansi`], [`Redactor::preview_args`]) list every
+//! match with its rule, position and replacement as a [`Preview`], a
+//! renderable that highlights them.
+//!
 //! Rules match on a line's text, so a secret split over several segments with
 //! different styles is still found. In segments each part of the mask keeps
 //! the style of the cells it covers and the line keeps its width, so borders
@@ -75,6 +80,9 @@
 
 use std::fmt;
 use std::sync::OnceLock;
+
+mod preview;
+pub use preview::{Finding, Preview};
 
 use fancy_regex::Regex;
 use rich::cells::{cell_len, char_cell_width};
@@ -492,6 +500,39 @@ impl Redactor {
             out.push_str(&line[at..]);
         }
         out
+    }
+
+    /// `value`, a field's value under the name `key`, masked as it would be
+    /// in `key=value`: whole when the [`Detector::KeyValue`] detector is on
+    /// and `key` is secret ([`is_secret_key`]), else what the rules match
+    /// in it ([`redact_str`](Self::redact_str)). For structured records,
+    /// where a value is not written next to its key.
+    ///
+    /// ```
+    /// use rich_ext::redact::Redactor;
+    ///
+    /// let redactor = Redactor::secrets();
+    /// assert_eq!(redactor.redact_field("password", "hunter 2"), "********");
+    /// assert_eq!(redactor.redact_field("user", "ann"), "ann");
+    /// assert_eq!(
+    ///     redactor.redact_field("note", "token=ghp_0123456789abcdefghijklmnopqrstuvwxyzAB"),
+    ///     "token=********"
+    /// );
+    /// ```
+    pub fn redact_field(&self, key: &str, value: &str) -> String {
+        let key_value = self
+            .rules
+            .iter()
+            .any(|rule| matches!(rule, Rule::Detector(Detector::KeyValue)));
+        if key_value && !value.is_empty() && is_secret_key(key) {
+            let whole = Match {
+                start: 0,
+                end: value.len(),
+                kind: Detector::KeyValue.name().to_string(),
+            };
+            return self.replacement(&whole, value, self.preserve_width);
+        }
+        self.redact_str(value)
     }
 
     /// `text` holding ANSI escape sequences with every match masked. Rules

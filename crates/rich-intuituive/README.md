@@ -55,8 +55,16 @@ fn main() -> std::io::Result<()> {
   (`[accent]…[/]`), switched at run time with `cx.set_theme`.
 - **Inline apps:** `App::inline(rows)` runs in a few rows under the prompt
   and leaves its last frame in the scrollback.
+- **Responsive:** `.hide_below(cols)` and `.show_below(cols)` on a node,
+  and `@media (max-width: 80)` in a stylesheet, follow the terminal's size;
+  `viewport()` reads it.
+- **Errors:** `.error_when(…)` puts a node in error, styled by the theme and
+  a stylesheet's `:error`, and told to screen readers as invalid.
 - **Testing:** `App::render_with(keys, width, height)` and `App::run_on` with
   `rs-rich-interact`'s headless driver run an app without a terminal.
+  `App::driver` steps one (`press`, `type_text`, `assert_focused`), and
+  `assert_screen!(driver, "name")` compares its screen with a snapshot in
+  `tests/snapshots` (`UPDATE_SNAPSHOTS=1` writes it).
 - **Inspector:** `INTUITUIVE_INSPECT=1` (or `App::inspector(true)`) docks a
   live view of the node tree, what drew in the last frame, the focus and
   the frame's cost; F12 toggles it.
@@ -75,6 +83,9 @@ Coming from ratatui? The
 maps every concept, and `examples/files.rs` rebuilds the core of
 [Yazi](https://github.com/sxyazi/yazi), the most-starred ratatui app:
 three columns, vim keys, previews highlighted in the background.
+ratatui's own example apps are rebuilt too, starting with `demo` and
+`demo2`: see
+[ratatui's examples, rebuilt](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/docs/guide/intuituive/ratatui-examples.md).
 
 More examples (`cargo run -p rs-rich-intuituive --example <name>`):
 
@@ -89,6 +100,18 @@ More examples (`cargo run -p rs-rich-intuituive --example <name>`):
 | `scope` | an oscilloscope ported from scope-tui, on the chart widget |
 | `dashboard` | an ops dashboard: a service list, a detail pane, a streaming log (the benchmark measures it) |
 | `in_ratatui` | an app inside a ratatui program, which owns the loop |
+| `demo` | ratatui's classic demo rebuilt: gauges, a sparkline, lists, bars, a sine chart, a server table on a world map, colours; a tick redraws only what moves |
+| `demo2` | ratatui's showcase rebuilt: a recipe, an inbox, a traceroute on a map, the weather, and destroy, an effect; its colours in a stylesheet |
+| `widgets` | ratatui's widget examples as a gallery: blocks, text, lists, tables, tabs, scrollbars, a calendar, a pop-up, collapsed borders, buttons of your own |
+| `charts` | ratatui's chart examples as a gallery: gauges, sparklines, bars, grouped bars, line, area and scatter charts, the canvas and its map |
+| `layout` | ratatui's constraint explorer rebuilt: sizes and justify modes with their spacers, each kind of size, flex, alignment and wrapping |
+| `colors` | ratatui's colour explorers rebuilt: named, indexed and RGB colours (a swatch at 60 fps), the modifiers, Tailwind's and Material's palettes |
+| `canvas` | ratatui's canvas rebuilt: a world map, pong at 60 fps, a pad to draw on with the mouse, boxes; every marker |
+| `form` | ratatui's input form and chat rebuilt: fields in error while wrong, a form handed back from `run_for`, an input with modes |
+| `calendar` | ratatui's calendar explorer rebuilt: a year of `month` nodes, six looks, today, the seasons and a selected day |
+| `downloads` | ratatui's inline demo rebuilt: workers on threads report through a `Proxy`, finished lines printed above the region |
+| `pulls` | ratatui's async GitHub table rebuilt: a `resource` loaded in the background, Loading, Loaded or Failed in the title |
+| `panic` | ratatui's panic demo rebuilt: the terminal given back before a panic's message, an error returned from `run` |
 
 ## Against ratatui
 
@@ -105,6 +128,17 @@ the bytes sent per frame:
 At 200x60 the gap widens: a tick costs 18 µs against 339, a selection move
 50 against 360, and a log append 248 against 333. intuiTUIve's version is 56
 lines of app code against ratatui's 79.
+
+Two more scenes are measured and reported, not gated: a full-screen churn,
+where every cell changes each frame (an RGB swatch, as ratatui's
+`colors-rgb`), and a braille line chart redrawn each tick. There ratatui is
+ahead, since nothing is saved by drawing only what changed when everything
+does:
+
+| 80x24, release | ratatui | intuiTUIve |
+|---|---:|---:|
+| churn, every cell | **326 µs**, 62 kB | 3,042 µs, 66 kB |
+| a chart redrawn | **81 µs**, 4.2 kB | 463 µs, **3.1 kB** |
 
 The test asserts this bar, and CI runs it. The design, and the ratatui
 problems it is built to avoid, are in

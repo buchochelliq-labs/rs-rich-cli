@@ -32,6 +32,7 @@ pub(crate) struct ViewerOptions {
     show_secrets: bool,
     cast: Option<String>,
     redact_patterns: Vec<String>,
+    redact_preview: bool,
 }
 
 fn number<'a, T: std::str::FromStr>(
@@ -85,6 +86,7 @@ impl ViewerOptions {
             "--limit" => self.limit = Some(number(arg, rest)?),
             "--show-secrets" => self.show_secrets = true,
             "--cast" => self.cast = Some(rest.next().ok_or("--cast requires a file")?.clone()),
+            "--redact-preview" => self.redact_preview = true,
             "--redact-pattern" => self.redact_patterns.push(
                 rest.next()
                     .ok_or("--redact-pattern requires a regular expression")?
@@ -121,8 +123,9 @@ impl ViewerOptions {
             (
                 "--redact-pattern",
                 !self.redact_patterns.is_empty(),
-                &["capture"],
+                &["capture", "log"],
             ),
+            ("--redact-preview", self.redact_preview, &["capture", "log"]),
         ]
         .into_iter()
         .filter(|(_, given, _)| *given)
@@ -690,6 +693,12 @@ pub(crate) fn env(options: &ViewerOptions, patterns: &[String]) -> Box<dyn Rende
 
 pub(crate) fn cast_path(options: &ViewerOptions) -> Option<&str> {
     options.cast.as_deref()
+}
+
+/// `--redact-preview`: show what redaction would mask instead of the
+/// output, and write nothing (#722).
+pub(crate) fn redact_preview(options: &ViewerOptions) -> bool {
+    options.redact_preview
 }
 
 /// The redactor `--redact` (parsed with the `--inspect` options, which share

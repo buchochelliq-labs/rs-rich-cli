@@ -464,6 +464,10 @@ fn markdown_literal(source: &str) -> Vec<Range<usize>> {
 /// definitions) stay as written; so does `\:micro:`, whose backslash
 /// Markdown drops itself. Link text expands.
 ///
+/// Markdown's layout (quotes, lists, tables) is core's, with no room for a
+/// row below a line, so an asset two rows high shows its first row: its
+/// fallback, never an image over the line below.
+///
 /// ```
 /// use rich::markdown::Markdown;
 /// use rich_micro::{FallbackPreference, Layer, MicroAsset, MicroRegistry, PreparedMarkdown};
