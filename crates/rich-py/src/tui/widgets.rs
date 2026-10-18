@@ -623,11 +623,12 @@ fn tui_calendar_with(
         .date(selected.py(), "a calendar's day")?;
     let date =
         |value: Option<&Bound<'_, PyAny>>| value.filter(|v| !v.is_none()).map(date_arg).transpose();
-    let options = core::CalendarOptions {
-        today: date(today)?,
-        min: date(min)?,
-        max: date(max)?,
-    };
+    // `CalendarOptions` has more settings than these since 0.0.19, so it is
+    // built rather than written out.
+    let mut options = core::CalendarOptions::new();
+    options.today = date(today)?;
+    options.min = date(min)?;
+    options.max = date(max)?;
     if let (Some(min), Some(max)) = (options.min, options.max) {
         if min > max {
             return Err(pyo3::exceptions::PyValueError::new_err("min is after max"));
