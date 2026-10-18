@@ -501,12 +501,7 @@ fn tui_scrollbar(
     let len = count_source(len, "len")?;
     let view = count_source(view, "view")?;
     let bar = bar.map(|bar| bar.get().0.clone()).unwrap_or_default();
-    Ok(PyNode::new(core::scrollbar(
-        position,
-        move || len(),
-        move || view(),
-        bar,
-    )))
+    Ok(PyNode::new(core::scrollbar(position, len, view, bar)))
 }
 
 /// `table(columns, rows, selected)`: markup cells under a header that stays
