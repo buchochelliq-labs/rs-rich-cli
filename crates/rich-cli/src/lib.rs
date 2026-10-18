@@ -8,7 +8,7 @@
 //! the [`rich`] library crate. It implements the rendering modes `--print`,
 //! `--markdown`, `--rst`, `--json`, `--syntax`, `--csv`, `--ipynb`, and `--rule`, plus
 //! width/justify, HTML/SVG export to a file (`--export-html PATH` / `-o PATH`,
-//! `--export-svg PATH`, which may be combined), the
+//! `--export-svg PATH`, which may be combined, and our `--export-png PATH`), the
 //! `--panel`/`--padding` decorators (with `--title`/`--caption`/`--style`), a
 //! plain-file printer (with extension auto-detection), **URL fetch** (`rich <url>`,
 //! behind the default `fetch` feature), **paging** (`--pager`), and a capability
@@ -34,7 +34,12 @@ use std::io::{BufRead, IsTerminal, Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
+mod animation;
+#[cfg(feature = "interact")]
+mod approve_jump;
 mod authoring;
+#[cfg(feature = "art")]
+mod banner;
 mod batch;
 mod batch_output;
 mod batch_paths;
@@ -57,9 +62,11 @@ mod plugins;
 mod profile;
 #[cfg(feature = "record")]
 mod record;
+mod redact_preview;
 mod render_target;
 #[cfg(feature = "serve")]
 mod serve;
+mod shell;
 mod sources;
 mod structured_log;
 mod style_rules;
@@ -550,6 +557,9 @@ struct Cli {
     /// `--loop N`: how many times `--gif` repeats (0 = forever).
     #[cfg_attr(not(feature = "art"), allow(dead_code))]
     loops: Option<usize>,
+    /// `--speed`, `--fps`, `--max-frames`, `--max-duration`: `--gif` playback.
+    #[cfg_attr(not(feature = "art"), allow(dead_code))]
+    animation: animation::AnimationControls,
     /// `--threshold PCT`: with `--diff`, exit non-zero when the changed
     /// percentage of the canvas exceeds this. Makes the tool a CI gate.
     #[cfg_attr(not(feature = "art"), allow(dead_code))]
@@ -652,6 +662,9 @@ struct Cli {
     export_html: Option<String>,
     /// `--export-svg PATH`: also write a self-contained SVG document to PATH.
     export_svg: Option<String>,
+    /// `--export-png PATH`: also write a PNG image of the output to PATH
+    /// (rs-rich-record's rasteriser, the `png` feature; #723).
+    export_png: Option<String>,
     /// `--panel BOX`: wrap the output in a [`Panel`] with the named box.
     /// `--panel none` is upstream's default and means *no panel at all*, so it
     /// parses to `None` rather than to `box.NONE`.
@@ -1040,12 +1053,23 @@ fn dispatch(args: Vec<String>) -> ExitCode {
         return plugins::dispatch(&args);
     }
     #[cfg(feature = "art")]
+    if banner::requested(&args) {
+        return banner::dispatch(&args);
+    }
+    if shell::requested(&args) {
+        return shell::dispatch(&args);
+    }
+    #[cfg(feature = "art")]
     if micro::requested(&args) {
         return micro::dispatch(&args);
     }
     #[cfg(feature = "interact")]
     if let Some(command) = interactive::requested(&args) {
         return interactive::dispatch(command, &args);
+    }
+    #[cfg(feature = "interact")]
+    if let Some(command) = approve_jump::requested(&args) {
+        return approve_jump::dispatch(command, &args);
     }
     #[cfg(feature = "record")]
     if record::requested(&args) {
@@ -1152,6 +1176,7 @@ const VALUE_OPTIONS: &[&str] = &[
     "-o",
     "--export-html",
     "--export-svg",
+    "--export-png",
     "-a",
     "--panel",
     "-d",
@@ -1198,6 +1223,10 @@ const VALUE_OPTIONS: &[&str] = &[
     "--encoding",
     "--threshold",
     "--loop",
+    "--speed",
+    "--fps",
+    "--max-frames",
+    "--max-duration",
     "--jobs",
     "--collision",
     "--format",
@@ -1878,6 +1907,7 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
     let mut mode = Mode::Auto;
     let mut resources: Vec<String> = Vec::new();
     let mut loops = None;
+    let mut animation = animation::AnimationControls::default();
     let mut diff_threshold = None;
     let mut image_mode = ImageMode::Auto;
     let mut image_fit = None;
@@ -1923,6 +1953,7 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
     let mut no_color = std::env::var_os("NO_COLOR").is_some_and(|value| !value.is_empty());
     let mut export_html: Option<String> = None;
     let mut export_svg: Option<String> = None;
+    let mut export_png: Option<String> = None;
     let mut panel = None;
     let mut padding = None;
     let mut title = None;
@@ -2289,6 +2320,12 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
                         .map_err(|_| format!("invalid loop count {value:?}"))?,
                 );
             }
+            "--speed" | "--fps" | "--max-frames" | "--max-duration" => {
+                let value = iter
+                    .next()
+                    .ok_or_else(|| format!("{arg} requires a value"))?;
+                animation.set(arg, value)?;
+            }
             "-u" | "--rule" => set_mode(&mut mode, Mode::Rule)?,
             "-l" | "--left" => justify = Some(Justify::Left),
             "-r" | "--right" if justify != Some(Justify::Left) => justify = Some(Justify::Right),
@@ -2444,6 +2481,9 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
             }
             "--export-svg" => {
                 export_svg = Some(iter.next().ok_or("--export-svg requires a PATH")?.clone());
+            }
+            "--export-png" => {
+                export_png = Some(iter.next().ok_or("--export-png requires a PATH")?.clone());
             }
             "-a" | "--panel" => {
                 let value = iter.next().ok_or("--panel requires a box name")?;
@@ -2722,7 +2762,13 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
             && !(mode == Mode::Auto && resources.is_empty())
             && !(mode == Mode::Print && resources.first().is_some_and(|r| r != "-" && !is_url(r))),
     )?;
-    let exporting = export_html.is_some() || export_svg.is_some();
+    if export_png.is_some() && !cfg!(feature = "png") {
+        return Err("--export-png needs a build with the png feature".into());
+    }
+    if export_png.is_some() && batch {
+        return Err("--export-png cannot be combined with --batch".into());
+    }
+    let exporting = export_html.is_some() || export_svg.is_some() || export_png.is_some();
     if exporting {
         let unsupported = if effective_mode == Mode::Gif {
             Some("--gif")
@@ -2732,7 +2778,9 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
             None
         };
         if let Some(what) = unsupported {
-            return Err(format!("--export-html/--export-svg cannot capture {what}"));
+            return Err(format!(
+                "--export-html/--export-svg/--export-png cannot capture {what}"
+            ));
         }
     }
 
@@ -2930,6 +2978,30 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
             "--gif",
             effective_mode == Mode::Gif,
         ),
+        (
+            "--speed",
+            animation.speed.is_some(),
+            "--gif",
+            effective_mode == Mode::Gif,
+        ),
+        (
+            "--fps",
+            animation.fps.is_some(),
+            "--gif",
+            effective_mode == Mode::Gif,
+        ),
+        (
+            "--max-frames",
+            animation.max_frames.is_some(),
+            "--gif",
+            effective_mode == Mode::Gif,
+        ),
+        (
+            "--max-duration",
+            animation.max_duration.is_some(),
+            "--gif",
+            effective_mode == Mode::Gif,
+        ),
         // `--title`/`--caption` are deliberately NOT here: upstream feeds them to
         // the CSV table as well as to the panel, so requiring `--panel` made
         // `rich --csv sales.csv --title Sales` — a documented upstream use —
@@ -2991,8 +3063,9 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
                     && (effective_mode == Mode::Gif || effective_mode.streams_records() || demo),
             ),
             (
-                "--export-html/--export-svg",
-                (export_html.is_some() || export_svg.is_some()) && effective_mode.streams_records(),
+                "--export-html/--export-svg/--export-png",
+                (export_html.is_some() || export_svg.is_some() || export_png.is_some())
+                    && effective_mode.streams_records(),
             ),
             ("--width", demo && width.is_some()),
             ("--theme-style", demo && !theme_styles.is_empty()),
@@ -3048,6 +3121,7 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
         resource,
         resources,
         loops,
+        animation,
         diff_threshold,
         image_mode,
         image_fit,
@@ -3094,6 +3168,7 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
         no_color,
         export_html,
         export_svg,
+        export_png,
         panel,
         padding,
         title,
@@ -3969,11 +4044,14 @@ fn run_watch(mut cli: Cli) -> ExitCode {
             );
         }
     }
-    if several && (cli.export_html.is_some() || cli.export_svg.is_some()) {
+    if several
+        && (cli.export_html.is_some() || cli.export_svg.is_some() || cli.export_png.is_some())
+    {
         return fail(
             &cli,
             ExitClass::Usage,
-            "--export-html/--export-svg cannot be combined with watching several files",
+            "--export-html/--export-svg/--export-png cannot be combined with watching several \
+             files",
         );
     }
     // Redirected output must be a finite, deterministic command. This also
@@ -4369,6 +4447,7 @@ fn run_once_with_fetch(mut cli: Cli, prefetched: Option<(String, Option<String>)
     let mut export = Export {
         html_path: cli.export_html.as_deref(),
         svg_path: cli.export_svg.as_deref(),
+        png_path: cli.export_png.as_deref(),
         svg_title: &svg_title,
         pager: cli.pager,
         auto_pager: cli.auto_pager,
@@ -4468,6 +4547,14 @@ fn run_once_with_fetch(mut cli: Cli, prefetched: Option<(String, Option<String>)
             Ok(redactor) => redactor,
             Err(err) => return fail(&cli, ExitClass::Usage, err),
         };
+        let preview = viewers::redact_preview(&cli.viewers);
+        if preview && redactor.is_none() {
+            return fail(
+                &cli,
+                ExitClass::Usage,
+                "--redact-preview needs --redact or --redact-pattern",
+            );
+        }
         // The command draws inside the panel: its width, less the two
         // borders and their padding.
         let width = cli
@@ -4476,8 +4563,8 @@ fn run_once_with_fetch(mut cli: Cli, prefetched: Option<(String, Option<String>)
             .saturating_sub(4)
             .max(1);
         // A recording that cannot be written is found out before the
-        // command runs, not after.
-        let cast = match viewers::cast_path(&cli.viewers) {
+        // command runs, not after. A preview writes nothing.
+        let cast = match viewers::cast_path(&cli.viewers).filter(|_| !preview) {
             Some(path) => match std::fs::File::create(path) {
                 Ok(file) => Some((path, file)),
                 Err(err) => {
@@ -4496,6 +4583,20 @@ fn run_once_with_fetch(mut cli: Cli, prefetched: Option<(String, Option<String>)
         };
         if let Some(notice) = &captured.notice {
             eprintln!("rich: capture: {notice}");
+        }
+        if let (true, Some(redactor)) = (preview, &redactor) {
+            let would_write: Vec<String> = [
+                viewers::cast_path(&cli.viewers),
+                export.html_path,
+                export.svg_path,
+                export.png_path,
+            ]
+            .into_iter()
+            .flatten()
+            .map(str::to_string)
+            .collect();
+            let previews = redact_preview::capture(&captured, redactor);
+            return redact_preview::emit(&cli, &console, previews, &would_write);
         }
         // Before the panel, the exports and the cast see any of it.
         if let Some(redactor) = &redactor {
@@ -4952,6 +5053,7 @@ fn run_once_with_fetch(mut cli: Cli, prefetched: Option<(String, Option<String>)
                 && !cli.auto_pager
                 && cli.export_html.is_none()
                 && cli.export_svg.is_none()
+                && cli.export_png.is_none()
                 && !watch::capturing()
                 && !micro_pending()
             {
@@ -5980,12 +6082,13 @@ fn run_image(cli: &Cli, console: &Console, export: &Export) -> ExitCode {
     let terminal_only = Export {
         html_path: None,
         svg_path: None,
+        png_path: None,
         ..*export
     };
     if let Err(message) = emit(console, &terminal_only, |c| c.print(&art)) {
         return fail(cli, ExitClass::Input, message);
     }
-    if export.html_path.is_some() || export.svg_path.is_some() {
+    if export.any_file() {
         use rich::protocol::RenderEnvironment;
         use rich_ext::target::{RenderTarget, TargetKind, TargetOverrides};
         let mut caps = render_target::observe(console, TargetOverrides::default()).capabilities;
@@ -6194,10 +6297,11 @@ fn run_diff(cli: &Cli, console: &Console, export: &Export) -> ExitCode {
     let terminal_only = Export {
         html_path: None,
         svg_path: None,
+        png_path: None,
         ..*export
     };
     let mut wrote = emit(console, &terminal_only, |c| render_report(c, false));
-    if export.html_path.is_some() || export.svg_path.is_some() {
+    if export.any_file() {
         // HTML/SVG support truecolor independently of stdout. Render the already
         // loaded report for that destination; never reread images or recompute
         // the comparison. A nonterminal console prevents Sixel control data.
@@ -6288,7 +6392,7 @@ fn image_color_processing(
 
 #[cfg(feature = "art")]
 fn play_gifs(cli: &Cli, console: &Console) -> ExitCode {
-    use rich_art::{AnimatedArt, Repeat, Stage};
+    use rich_art::{AnimatedArt, Repeat, Stage, Until};
 
     if cli.resources.is_empty() {
         return fail(cli, ExitClass::Usage, "--gif needs at least one GIF path");
@@ -6310,21 +6414,19 @@ fn play_gifs(cli: &Cli, console: &Console) -> ExitCode {
         None => Repeat::Times(1),
     };
 
-    let mut stage = Stage::new().gap(GAP);
+    let mut arts = Vec::with_capacity(count);
     for path in &cli.resources {
         match AnimatedArt::from_path(path) {
             Ok(art) => {
                 let (color_mode, dither, distance) = image_color_processing(cli);
-                stage = stage.with(
+                arts.push(
                     art.width(per_gif)
                         .blocks(cli.extensions.gif_blocks())
                         .color(!cli.no_color)
                         .color_mode(color_mode)
                         .dither(dither)
                         .color_distance(distance)
-                        .repeat(repeat)
-                        // Colour art is byte-heavy; keep it comfortable.
-                        .max_fps(30.0),
+                        .repeat(repeat),
                 );
             }
             Err(err) => {
@@ -6350,7 +6452,28 @@ fn play_gifs(cli: &Cli, console: &Console) -> ExitCode {
     if let Some(width) = cli.width {
         builder = builder.width(width);
     }
-    match stage.play_stdout(builder.build()) {
+    let console = builder.build();
+    let played = if cli.animation.needs_player() && console.is_terminal() {
+        // `--speed` and `--max-frames` need the CLI's own clock.
+        let passes = match repeat {
+            Repeat::Forever => None,
+            Repeat::Times(n) => Some(n),
+            Repeat::Once => Some(1),
+        };
+        animation::play(arts, GAP, passes, &cli.animation, console)
+    } else {
+        // Colour art is byte-heavy; `--fps` (default 30) keeps it comfortable.
+        let fps = cli.animation.fps();
+        let mut stage = Stage::new().gap(GAP);
+        for art in arts {
+            stage = stage.with(art.max_fps(fps));
+        }
+        if let Some(limit) = cli.animation.max_duration {
+            stage = stage.until(Until::Elapsed(limit));
+        }
+        stage.play_stdout(console)
+    };
+    match played {
         Ok(()) => success(cli),
         Err(err) => fail(cli, ExitClass::Input, format!("playback failed: {err}")),
     }
@@ -6373,7 +6496,9 @@ struct Export<'a> {
     html_path: Option<&'a str>,
     /// `--export-svg PATH`, if given.
     svg_path: Option<&'a str>,
-    /// Document title for the SVG frame (the resource's file name).
+    /// `--export-png PATH`, if given.
+    png_path: Option<&'a str>,
+    /// Document title for the SVG and PNG frames (the resource's file name).
     svg_title: &'a str,
     /// `--pager`: page the terminal output instead of writing it straight out.
     pager: bool,
@@ -6384,11 +6509,13 @@ impl Export<'_> {
     /// Whether the output goes straight to the terminal and nowhere else: no
     /// export, no pager, no watch capture.
     fn terminal_only(&self) -> bool {
-        !watch::capturing()
-            && self.html_path.is_none()
-            && self.svg_path.is_none()
-            && !self.pager
-            && !self.auto_pager
+        !watch::capturing() && !self.any_file() && !self.pager && !self.auto_pager
+    }
+
+    /// Whether any file export (`--export-html`, `--export-svg`,
+    /// `--export-png`) was asked for.
+    fn any_file(&self) -> bool {
+        self.html_path.is_some() || self.svg_path.is_some() || self.png_path.is_some()
     }
 }
 
@@ -6480,7 +6607,35 @@ fn save_exports(console: &Console, export: &Export, segments: &[Segment]) -> Res
             first_error.get_or_insert_with(|| format!("failed to save SVG: {err}"));
         }
     }
+    if let Some(path) = export.png_path {
+        if let Err(message) = save_png(path, segments, export.svg_title, console.width()) {
+            first_error.get_or_insert(message);
+        }
+    }
     first_error.map_or(Ok(()), Err)
+}
+
+/// `--export-png PATH`: the segments drawn by rs-rich-record's rasteriser,
+/// in rich's SVG export theme, in a window titled like the SVG's, as wide
+/// as the console (#723).
+#[cfg(feature = "png")]
+fn save_png(path: &str, segments: &[Segment], title: &str, width: usize) -> Result<(), String> {
+    use rich_record::render::png::{segments_png, PngOptions};
+    let options = PngOptions {
+        title,
+        columns: Some(width),
+        ..PngOptions::default()
+    };
+    let fonts = rich_record::render::raster::Fonts::embedded();
+    let png = segments_png(segments, &fonts, &options)
+        .map_err(|err| format!("failed to save PNG: {err}"))?;
+    std::fs::write(fs_path(path), png).map_err(|err| format!("failed to save PNG: {err}"))
+}
+
+/// Without the `png` feature the parser refuses `--export-png`.
+#[cfg(not(feature = "png"))]
+fn save_png(_: &str, _: &[Segment], _: &str, _: usize) -> Result<(), String> {
+    Err("--export-png needs a build with the png feature".into())
 }
 
 /// `--help`: the [`cli_spec`] help, through a stdout console.
@@ -6998,6 +7153,8 @@ mod tests {
             }
             #[cfg(feature = "interact")]
             words.extend(interactive::requested(args));
+            #[cfg(feature = "interact")]
+            words.extend(approve_jump::requested(args));
             if tools::bench_dispatch(args).unwrap_or(true) {
                 words.push("bench");
             }

@@ -137,7 +137,14 @@ fn command_options(name: &str) -> Vec<ArgSpec> {
             "width",
         ],
         "env" => &["show-secrets", "width"],
-        "capture" => &["cast", "redact", "redact-pattern", "sanitize", "width"],
+        "capture" => &[
+            "cast",
+            "redact",
+            "redact-pattern",
+            "redact-preview",
+            "sanitize",
+            "width",
+        ],
         "log" => &[
             "log-presentation",
             "level",
@@ -153,6 +160,7 @@ fn command_options(name: &str) -> Vec<ArgSpec> {
             "interactive",
             "redact",
             "redact-pattern",
+            "redact-preview",
             "sanitize",
             "width",
         ],
@@ -404,6 +412,15 @@ fn viewer_options() -> Vec<ArgSpec> {
              it",
         )
         .multiple(true),
+        flag(
+            "redact-preview",
+            VIEWERS,
+            "With `rich capture` or `rich log` and --redact or --redact-pattern, show each \
+             match on its line, highlighted, with its rule and replacement, and a summary, \
+             instead of the output; write nothing (no cast, export or log output) and name on \
+             stderr what would have been written. The preview shows the secrets unmasked. With \
+             --report json, the findings as one JSON document on stdout",
+        ),
     ]
 }
 
@@ -968,6 +985,30 @@ fn mode_options() -> Vec<ArgSpec> {
             MODE_OPTIONS,
             "With --gif, repeat N times (default 1; 0 = forever)",
         ),
+        option(
+            "speed",
+            "X",
+            MODE_OPTIONS,
+            "With --gif, play X times as fast (0.5 = half speed; default 1)",
+        ),
+        option(
+            "fps",
+            "N",
+            MODE_OPTIONS,
+            "With --gif, draw at most N frames a second (default 30)",
+        ),
+        option(
+            "max-frames",
+            "N",
+            MODE_OPTIONS,
+            "With --gif, stop each animation after N frames, even with --loop 0",
+        ),
+        option(
+            "max-duration",
+            "SECS",
+            MODE_OPTIONS,
+            "With --gif, stop after SECS seconds, whatever is still playing",
+        ),
     ];
     args.extend(
         rich_ext::cli::arg_specs()
@@ -1234,6 +1275,15 @@ fn export_options() -> Vec<ArgSpec> {
         )
         .value(ValueHint::File)
         .config_key("export_svg"),
+        option(
+            "export-png",
+            "PATH",
+            EXPORT,
+            "Also write a PNG image of the output to PATH: the terminal's width, rich's SVG \
+             export theme, in a window titled like the SVG's, drawn with an embedded DejaVu \
+             Sans Mono so it is the same on every machine (the png feature; not with --batch)",
+        )
+        .value(ValueHint::File),
     ]
 }
 
@@ -1869,13 +1919,19 @@ pub(crate) fn spec() -> CommandSpec {
     for command in super::interactive::commands() {
         spec = spec.subcommand(command);
     }
+    #[cfg(feature = "interact")]
+    for command in super::approve_jump::commands() {
+        spec = spec.subcommand(command);
+    }
     for command in authoring_commands() {
         spec = spec.subcommand(command);
     }
     #[cfg(feature = "art")]
     {
         spec = spec.subcommand(super::micro::command());
+        spec = spec.subcommand(super::banner::command());
     }
+    spec = spec.subcommand(super::shell::command());
     #[cfg(feature = "serve")]
     {
         spec = spec.subcommand(super::serve::command());
@@ -2102,10 +2158,15 @@ mod tests {
     const STYLE_RULES_RS: &str = include_str!("style_rules.rs");
     #[cfg(feature = "interact")]
     const INTERACTIVE: &str = include_str!("interactive.rs");
+    #[cfg(feature = "interact")]
+    const APPROVE_JUMP: &str = include_str!("approve_jump.rs");
     #[cfg(feature = "art")]
     const MICRO: &str = include_str!("micro.rs");
     #[cfg(feature = "serve")]
     const SERVE: &str = include_str!("serve.rs");
+    #[cfg(feature = "art")]
+    const BANNER: &str = include_str!("banner.rs");
+    const SHELL: &str = include_str!("shell.rs");
 
     /// The source of the item that starts with `start`, up to the next
     /// top-level item.
@@ -2168,8 +2229,13 @@ mod tests {
         }
         #[cfg(feature = "interact")]
         out.extend(option_literals(item(INTERACTIVE, "fn parse_args(")));
+        #[cfg(feature = "interact")]
+        out.extend(option_literals(item(APPROVE_JUMP, "fn parse_args(")));
         #[cfg(feature = "serve")]
         out.extend(option_literals(item(SERVE, "fn parse_args(")));
+        #[cfg(feature = "art")]
+        out.extend(option_literals(item(BANNER, "fn parse_args(")));
+        out.extend(option_literals(item(SHELL, "fn parse_args(")));
         #[cfg(feature = "art")]
         for start in ["const CREATE_VALUES", "const CREATE_FLAGS", "fn request("] {
             out.extend(option_literals(item(MICRO, start)));
@@ -2325,7 +2391,14 @@ mod tests {
                 assert!(spec.find_subcommand(alias).is_some(), "{alias}");
             }
         }
-        for name in ["config", "completions", "docs", "doctor", "inspect"] {
+        for name in [
+            "config",
+            "completions",
+            "docs",
+            "doctor",
+            "inspect",
+            "shell",
+        ] {
             assert!(spec.find_subcommand(name).is_some(), "{name}");
         }
     }

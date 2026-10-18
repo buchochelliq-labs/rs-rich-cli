@@ -368,6 +368,16 @@ let at = run(picker, &RunOptions::default())?;
 `rich date` runs these from the shell: see
 [Ask in a script](../../cli.md#ask-in-a-script).
 
+### ApprovalQueue and Jump
+
+`ApprovalQueue` (#471) reviews pending items one by one or in bulk:
+approve, reject or skip each, with a reason when one is wanted, then submit
+an `ApprovalReport`. `Jump` (#484) is one fuzzy box over several sources
+(files, headings, symbols, commands, recent places), its results grouped by
+source, over a `JumpIndex` that searches without the component too. Both
+are in [Approval queues and jumping to anything](review-and-jump.md), and
+`rich approve` and `rich jump` run them from the shell.
+
 ## Mouse
 
 Mouse reporting is off unless a component asks for it

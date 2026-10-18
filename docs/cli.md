@@ -720,6 +720,10 @@ see the record before it is masked.
 rich log app.jsonl --redact --redact-pattern 'card=\d+'
 ```
 
+`--redact-preview` shows what would be masked instead of the records, and
+writes nothing; see [Preview a redaction before you
+share](#preview-a-redaction-before-you-share-0019).
+
 **Live view.** `-i` / `--interactive`, on a terminal, shows the records in a
 view that follows the end as they arrive (with `-f`, or from a pipe). `/`
 types a filter that applies as you type: words that look like `--where`
@@ -958,6 +962,25 @@ stdout is still printed once. Diff reports choose color blocks for HTML/SVG
 independently of redirected stdout, which stays readable ASCII. Explicit
 `--image-mode ascii`, `--image-mode none` and `--no-color` are respected; Sixel
 requests use blocks in exported documents.
+
+### A PNG of the output (0.0.19)
+
+```bash
+rich report.md --export-png report.png
+rich capture --redact --export-png build.png -- make test
+```
+
+`--export-png PATH` writes a PNG image of what was rendered, beside (or
+instead of reaching for) the SVG: no tape, no terminal emulator and no
+browser. It is drawn by the same rasteriser as `rich record`'s screenshots,
+with the same embedded DejaVu Sans Mono and Twemoji, so the same output gives
+the same pixels on every machine. The image is as wide as the console
+(`--width`), in rich's SVG export theme, inside a window frame titled like the
+SVG's (the file name), and at the screenshots' 28-pixel text size. It may be
+combined with `--export-html` and `--export-svg`, and works wherever they do,
+`rich capture` included, except with `--batch` (a usage error for now). It
+needs the `png` feature, on by default and implied by `record`; the library
+call is `rich_record::render::png::segments_png`.
 
 ## Compare two images
 
@@ -1609,6 +1632,95 @@ terminal back before the command ends. Ctrl+Z suspends a command as it would
 any other program: the terminal is given back to the shell, and `fg` takes it
 again and repaints.
 
+## Review and jump
+
+`rich approve` and `rich jump` are two more interactive commands, with the
+conventions [above](#ask-in-a-script): they paint on stderr, print the
+answer on stdout, read keys from the terminal while stdin is the list, and
+exit 0 answered, 1 cancelled, 130 interrupted, 2 on a usage error and 3
+with no answer without a terminal.
+
+### Approve, reject or skip a list
+
+`rich approve` reviews ITEMs, or the lines on stdin, one by one or in bulk,
+and prints one JSON line per item with its decision:
+
+```bash
+git branch --format='%(refname:short)' | rich approve --print approved | xargs -r git branch -D
+rich approve --require-reason < requests.jsonl > decisions.jsonl
+```
+
+```json
+{"index":0,"decision":"approved","reason":null,"item":"feature/old-login"}
+{"index":1,"decision":"rejected","reason":"still in review","item":"fix/cache"}
+{"index":2,"decision":"pending","reason":null,"item":"spike/wasm"}
+```
+
+`a` approves the focused item, `r` rejects it and `s` skips it, each moving
+on to the next pending item; `A`, `R` and `S` ask for a reason first. `u`
+takes a decision back. Space marks items and Ctrl+A marks every pending
+one: a decision then applies to all the marked items. `p` hides the detail
+pane, and Enter submits; Esc cancels (exit 1, nothing printed). With
+`--mouse`, rows, the cell after the pointer (a mark) and the buttons under
+the list click.
+
+- Items are read as `--format lines` or `jsonl`; the default, `auto`, reads
+  JSON Lines when every line is a JSON object. An object's label is
+  `--label FIELD`, or the first of `title`, `name`, `label`, `summary` and
+  `id`; its `description` and other plain fields are shown beside it, and
+  one with nested values is previewed whole. `"item"` in the output is the
+  object, or the line as a string.
+- `--print approved` (or `rejected`) prints those items as they were read
+  instead, one per line, for `xargs`.
+- `--require-reason` asks for a reason on every rejection and refuses an
+  empty one. `--auto-submit` submits once nothing is pending.
+- Every item is in the output, pending ones too, so a script can tell what
+  was not reviewed. The decisions are only recorded: what they lead to is
+  the script's.
+- Without a terminal, ITEMs given as arguments are asked about line by line
+  on stderr (`a`, `r` or `s`, a reason after a colon: `r: not now`; an
+  empty line skips and `q` stops). Items read from stdin leave nothing to
+  ask on, so every item is printed as pending.
+
+### Jump to anything
+
+`rich jump` searches files, Markdown headings, code symbols, commands and
+recent places in one fuzzy box, and prints the place picked: a path,
+`path:line` for a heading or a symbol, or a command.
+
+```bash
+$EDITOR "$(rich jump --files --headings docs)"
+eval "$(rich jump --commands ~/.commands --recent ~/.jump-recent)"
+```
+
+Results are grouped by source (Recent, Files, Headings, Symbols, Commands),
+each showing its best five (`--limit N`) and how many more there are, and
+the best match overall is focused, with a preview of the file at its line.
+↑ and ↓ move across the groups and Alt+↑ ↓ jump between them. Tab narrows
+the search to one source and Shift+Tab widens it again; typing `#` first
+searches headings only, `@` symbols and `>` commands. With `--mouse`, a
+click on a group's title narrows to it.
+
+- It searches the files, headings and symbols under each DIR (default
+  `.`), or those of them chosen with `--files`, `--headings` and
+  `--symbols`. Hidden entries, `target` and `node_modules` are left out, and
+  at most 20,000 files are listed and 1 MiB of each read.
+- Symbols are found by their keyword at the start of a line (`fn`,
+  `struct`, `enum`, `trait`, `mod`, `def`, `class`, `function`, `func`,
+  `interface`) in common code files: a quick index, not a parser.
+- `--commands FILE` adds FILE's commands, one per line, as `LABEL<TAB>COMMAND`
+  or the command alone; a pick prints the command.
+- `--recent FILE` shows FILE's places first, as Recent, and puts the pick at
+  its top (the latest 50 are kept); a FILE that is not there yet is made.
+- With `-` as DIR, or with stdin piped and no DIR, `--files`,
+  `--headings`, `--symbols` or `--commands`, the
+  entries come from stdin: lines, or JSON objects with `label` and
+  optionally `source` (the group), `location` (what is printed), `detail`
+  and `preview`.
+- `--print json` prints `{"source":…,"label":…,"location":…}` instead.
+- Without a terminal it prints the best match for `--value QUERY`, or for a
+  line read from stdin; with neither it exits 3.
+
 ## Use it in a script or CI
 
 `rich` writes rendered output to stdout and diagnostics to stderr, so the two
@@ -1924,7 +2036,7 @@ rich view FILE [--search TEXT] [--no-line-numbers] [--no-sanitize]  # detect, re
 rich hex FILE [--offset N] [--length N] [--bytes-per-line N] [--group N] [--search BYTES]
 rich unicode FILE [--limit N]                        # graphemes, code points, widths
 rich env [PATTERN...] [--show-secrets]               # variables; `rich env PATH` checks entries
-rich capture [--cast FILE] [--redact] [--redact-pattern REGEX]... -- COMMAND [ARGS...]
+rich capture [--cast FILE] [--redact] [--redact-pattern REGEX]... [--redact-preview] -- COMMAND [ARGS...]
                                                      # run, show, export or record
 ```
 
@@ -2003,6 +2115,41 @@ detectors are `rich_ext::redact`; see
 rich capture --redact --export-svg deploy.svg -- ./deploy.sh
 rich capture --redact-pattern 'order (?P<secret>\d{4})' --cast run.cast -- ./report.sh
 ```
+
+### Preview a redaction before you share (0.0.19)
+
+`--redact-preview` shows what `--redact` and `--redact-pattern` would mask,
+and writes nothing:
+
+```bash
+rich capture --redact --redact-preview --export-svg deploy.svg -- ./deploy.sh
+rich log app.log --redact --redact-preview
+```
+
+Each line with a match is shown with its number and the match highlighted,
+then one line per match: its position (line:column), the rule that matched
+(`key-value`, `token`, `jwt`, `pattern`, …), the text and its replacement. A
+summary per source ends it: `output: 3 matches on 2 of 40 lines (key-value 2,
+token 1)`. `rich capture` previews the command line (as its title and the
+cast header would be masked) and the output; a secret inside an escape
+sequence, such as a hyperlink's URL, is marked `(in an escape sequence)`.
+`rich log` previews each line of the log as read, to its end, so not with
+`--follow` or `--interactive`.
+
+It is a dry run: no cast, no `--export-*` file and no log output is written,
+and a line on stderr names what a run without the flag would write. The
+command still runs. With `--report json` the preview is one JSON document on
+stdout (`redact_preview.sources[].findings[]`, lines and columns from 1, with
+`would_write` and an empty `written`). It exits 0, and needs `--redact` or
+`--redact-pattern` (exit 2 without).
+
+!!! warning "The preview shows the secrets"
+    The preview is for you, before you share: it prints what it found
+    unmasked. Do not share the preview itself.
+
+The library calls are `Redactor::preview`, `preview_ansi` and `preview_args`
+in `rich_ext::redact`; see
+[Badges, size bars, formatters and redaction](guide/ext/badges-and-redaction.md#preview-what-would-be-masked).
 
 ## Inspect your environment
 
@@ -2109,6 +2256,88 @@ exit 3 when the file cannot be read, 2 otherwise (another ABI version, a name
 another plugin already provides, a build without the loader). See the
 [plugin guide](PLUGINS.md) for what plugins can do and the threat model.
 
+## Draw a banner (0.0.19)
+
+`rich banner` draws text as a FIGlet banner, with rs-rich-art's FIGlet
+renderer (byte-identical with `pyfiglet` for the bundled `standard` font).
+It needs the `art` feature, which a default build has.
+
+```bash
+rich banner Hello
+rich banner --gradient rainbow --align center "Ship it"
+rich banner --gradient '#ff5f6d,#ffc371' --direction vertical --style bold v0.0.19
+echo "Release notes" | rich banner --fit plain
+rich banner --font slant Deploy        # an installed figlet's slant.flf
+```
+
+| Option | What it does |
+|---|---|
+| `--font NAME\|FILE` | `standard` (bundled, the default), a FIGfont `.flf` file, or the name of one in `$FIGLET_FONTDIR`, `/usr/share/figlet` or `/usr/local/share/figlet`. `--list-fonts` lists them |
+| `--style STYLE` | A style for every row: `bold cyan`, `white on blue` |
+| `--gradient COLORS` | Colours the strokes along two or more comma-separated colours, or a preset: `rainbow`, `sunset`, `ocean`, `forest`, `fire` |
+| `--direction D` | `horizontal` (the default), `vertical` or `diagonal` |
+| `--align A` | `left` (the default), `center` or `right` within the width |
+| `-w, --width N` | Lay out to N columns instead of the terminal's width |
+| `--fit F` | When the banner is wider than the width: `wrap` at spaces onto more banner rows (the default, as figlet does), print the text `plain` instead, or `none` (let it overflow) |
+| `--force-terminal` | Colour and styles even when stdout is not a terminal |
+
+With no words, or `-`, the text comes from stdin; a newline starts a new
+banner row. Colour follows the terminal: a pipe gets the plain banner,
+`NO_COLOR` and `--no-color` drop the colour and keep the strokes, and a
+terminal with fewer colours shows each gradient colour as its nearest one.
+A missing font exits 3, one that is not a FIGfont exits 4.
+
+## Shell integration (0.0.19)
+
+`rich shell init SHELL` prints a script for a shell's startup file. It sets
+up the completions (the same script as `rich completions SHELL`), OSC 133
+marks for the prompt and each command (terminals such as WezTerm, kitty,
+iTerm2, Windows Terminal and VS Code use them to jump between prompts and
+flag failed commands), OSC 7 so a new tab opens in the same directory, and a
+status line after each command.
+
+```bash
+eval "$(rich shell init bash)"                            # ~/.bashrc, bash 4.4+
+eval "$(rich shell init zsh)"                             # ~/.zshrc, after compinit
+rich shell init fish | source                             # ~/.config/fish/config.fish
+rich shell init pwsh | Out-String | Invoke-Expression     # $PROFILE
+```
+
+The status line is `rich shell status`, which a shell hook can call on its
+own:
+
+```text
+$ cargo test
+…
+✖ error $ cargo test  exit 101  4.2s
+```
+
+Successes quicker than `--min-duration` (2 seconds in `init`, 0 when
+`status` is run directly) print nothing; a failure always shows. The command
+is shown as typed, with control characters made visible. Markers follow
+`RICH_A11Y` (`ascii-symbols`, `word-symbols`, `screen-reader`) or
+`--symbols unicode|ascii|words`. Leave parts out with `--no-completions`,
+`--no-marks` and `--no-status`.
+
+`rich shell link [PATH[:LINE[:COL]]]...` prints paths, the working directory
+by default, as OSC 8 `file://` links (or through `--editor
+'vscode://file{path}:{line}'`); `--tilde` shows `$HOME` as `~`. Off a
+terminal the paths are plain, unless `--links always`, which a prompt's
+command substitution needs; `--prompt bash` or `--prompt zsh` marks the
+escape sequences as zero-width so the line editor measures the prompt right:
+
+```bash
+PS1='$(rich shell link --tilde --links always --prompt bash) \$ '        # bash
+setopt prompt_subst
+PROMPT='$(rich shell link --tilde --links always --prompt zsh) %# '       # zsh
+```
+
+The scripts call `rich` from `PATH`. They guard against being loaded twice,
+keep the previous `PROMPT_COMMAND`, `PS0`, `PS1` and PowerShell `prompt`,
+and keep `$?` and `$LASTEXITCODE` for whatever runs after them. In bash an
+empty command line reports nothing. PowerShell gets no OSC 133 `C` mark
+(that needs a PSReadLine hook).
+
 ## Shell completions and generated docs
 
 ```bash
@@ -2184,6 +2413,21 @@ Sequential frames captured from actual `--gif-mode blocks` CLI playback:
 ![CLI GIF frame 5](assets/releases/0.0.4-gif-frame4.jpg)
 
 [Playback recordings and reproduction commands](https://github.com/buchochelliq-labs/rs-rich-cli/tree/main/.github/evidence/v0.0.4-gif).
+
+### Speed, frame rate and limits (0.0.19)
+
+```bash
+rich --gif spinner.gif --speed 2                 # twice as fast
+rich --gif spinner.gif --speed 0.5 --fps 12      # half speed, at most 12 frames a second
+rich --gif spinner.gif --loop 0 --max-frames 48  # endless, but stop after 48 frames
+rich --gif a.gif b.gif --loop 0 --max-duration 5 # stop after five seconds
+```
+
+`--speed X` divides every frame's delay by X; `--fps N` (default 30) caps
+the frame rate after that; `--max-frames N` stops each animation after N
+frames, holding the last one; `--max-duration SECS` stops the whole stage.
+Each needs `--gif` and a number above 0. Redirected output is unchanged:
+one frame, whatever the controls.
 
 ## Optional syntax cache
 

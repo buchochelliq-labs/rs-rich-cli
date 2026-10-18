@@ -26,6 +26,11 @@
 //!   export in one call ([`Redactor::export_svg`], [`Redactor::export_html`],
 //!   [`Redactor::export_text`], …) and a [`Redacted`] renderable.
 //!
+//! To see what would change before anything is written, [`Redactor::preview`]
+//! (and [`Redactor::preview_ansi`], [`Redactor::preview_args`]) list every
+//! match with its rule, position and replacement as a [`Preview`], a
+//! renderable that highlights them.
+//!
 //! Rules match on a line's text, so a secret split over several segments with
 //! different styles is still found. In segments each part of the mask keeps
 //! the style of the cells it covers and the line keeps its width, so borders
@@ -75,6 +80,9 @@
 
 use std::fmt;
 use std::sync::OnceLock;
+
+mod preview;
+pub use preview::{Finding, Preview};
 
 use fancy_regex::Regex;
 use rich::cells::{cell_len, char_cell_width};

@@ -94,6 +94,26 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 From the shell, the `rich` CLI (`rs-rich-cli`) has `rich record TAPE…`.
 
+## A PNG of rendered output
+
+The rasteriser also draws output that never ran on a PTY: the segments a
+`Console` recorded, or a rs-rich-ext `Frame`, in the screenshots' font,
+theme and window frame. The same output gives the same bytes everywhere.
+The `rich` CLI's `--export-png PATH` is this.
+
+```rust,no_run
+use rich::{Console, Text};
+use rich_record::render::png::{segments_png, PngOptions};
+use rich_record::render::raster::Fonts;
+
+let console = Console::builder().width(40).build();
+let segments = console.record_output(|c| c.print(&Text::new("hello")));
+let options = PngOptions { title: "hello", columns: Some(40), ..PngOptions::default() };
+let png = segments_png(&segments, &Fonts::embedded(), &options)?;
+std::fs::write("hello.png", png)?;
+# Ok::<(), Box<dyn std::error::Error>>(())
+```
+
 Linux and macOS are supported. Windows builds through ConPTY but needs `bash`
 on `PATH`, and is experimental.
 

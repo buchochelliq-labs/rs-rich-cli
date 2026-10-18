@@ -21,6 +21,11 @@
 //! [`record::check`] compares a new run's text grids with committed ones, so
 //! documentation media cannot drift from the program it shows.
 //!
+//! The PNG rasteriser also draws output that never ran on a PTY:
+//! [`render::png::segments_png`] takes the segments a [`rich::Console`]
+//! recorded (rich-cli's `--export-png`), and [`render::png::frame_png`] a
+//! rich-ext [`Frame`](rich_ext::frame::Frame).
+//!
 //! ```no_run
 //! use rich_record::{record, tape};
 //! let source = std::fs::read_to_string("demo.tape")?;

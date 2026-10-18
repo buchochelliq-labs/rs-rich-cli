@@ -552,6 +552,54 @@ print(degrade(meeting, ["2026-10-18 2:30 pm"]).value)
 2026-10-18 14:30:00
 ```
 
+## ApprovalQueue and Jump
+
+`ApprovalQueue(prompt, items, *, height=10, preview="auto",
+require_reason=False, auto_submit=False, advance=True, mouse=False)`
+reviews the items one by one or in bulk. `a`, `r` and `s` approve, reject
+and skip the focused item and move on to the next pending one; `A`, `R` and
+`S` ask for a reason first. Space marks items and Ctrl+A every pending one,
+for one decision on all of them; `u` takes a decision back; Enter submits.
+The answer is a list of dicts, one per item in order, pending ones
+included: `index`, `value`, `label`, `decision` (`"approved"`,
+`"rejected"`, `"skipped"` or `"pending"`) and `reason`. `require_reason`
+asks for a reason on every rejection. Without a terminal it asks item by
+item (`a`, `r` or `s`, a reason after a colon; `q` stops).
+
+`Jump(sources, prompt="Jump", *, query="", height=12, preview="auto",
+mouse=False)` is one fuzzy box over several `JumpSource(id, title, items,
+*, prefix=None, limit=5)`s, its results grouped by source. A source's
+`prefix` typed first searches only it, Tab narrows to one source and
+Shift+Tab widens, and Alt+↑/↓ jump between groups. The answer is a dict:
+`source` (its id), `index`, `label` and `value`. Without a terminal it
+answers with the best match for a line read, or, asked for a default, for
+`query`.
+
+```python
+from rs_rich.interact import ApprovalQueue, Item, Jump, JumpSource, Script, degrade
+
+queue = ApprovalQueue("Deploys", ["api", "web", "db"])
+record = queue.headless(Script().keys("a R").text("flaky").keys("enter s enter"))
+print([(d["label"], d["decision"], d["reason"]) for d in record.value])
+
+jump = Jump([
+    JumpSource("files", "Files", ["src/main.rs", "README.md"]),
+    JumpSource("commands", "Commands", [Item("cargo test", "Run the tests")], prefix=">"),
+])
+print(jump.headless(Script().text(">te").keys("enter")).value)
+print(degrade(jump, ["readme"]).value["value"])
+```
+
+```text
+[('api', 'approved', None), ('web', 'rejected', 'flaky'), ('db', 'skipped', None)]
+{'source': 'commands', 'index': 0, 'label': 'Run the tests', 'value': 'cargo test'}
+README.md
+```
+
+They are the components behind `rich approve` and `rich jump`; the
+[Rust guide](../guide/interact/review-and-jump.md) has the keys and the
+theme keys in full.
+
 ## Headless runs
 
 `headless(component, script=None, *, width=80, height=24)` (or

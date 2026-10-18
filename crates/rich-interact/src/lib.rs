@@ -31,7 +31,9 @@
 //!   [`ThemePicker`], [`Reorder`] (#720), and [`DatePicker`],
 //!   [`TimePicker`] and [`DateTimePicker`] (#719, on the [`datetime`]
 //!   types), [`LogView`] (#724, a live view of log records), built on
-//!   the above with a [`fuzzy`] matcher, and with
+//!   the above with a [`fuzzy`] matcher, [`ApprovalQueue`] (#471, a review
+//!   of pending items) and [`Jump`] (#484, one fuzzy box over several
+//!   sources), and with
 //!   the `data` feature `DataExplorer`, for JSON, YAML, TOML and the other
 //!   formats `rich_ext::data` reads;
 //! - [`clipboard`]: copy to the terminal's clipboard with OSC 52, when it
@@ -111,10 +113,11 @@ pub use component::{Component, Context, Flow, View};
 #[cfg(feature = "data")]
 pub use components::DataExplorer;
 pub use components::{
-    Answers, AssetKind, AssetPicker, Choice, ColorFormat, ColorPicker, Confirm, DatePicker,
-    DateTimePicker, FileMode, FilePicker, Form, Input, LogEvent, LogView, MultiSelect, Pager,
-    PreviewLayout, Reorder, Select, Suggestion, TableSelect, TextArea, Theme, ThemePicker,
-    TimePicker, TreeSelect, Value,
+    Answers, ApprovalQueue, ApprovalReport, AssetKind, AssetPicker, Choice, ColorFormat,
+    ColorPicker, Confirm, DatePicker, DateTimePicker, Decision, FileMode, FilePicker, Form, Input,
+    Jump, JumpIndex, JumpSource, Jumped, LogEvent, LogView, MultiSelect, Pager, PreviewLayout,
+    Reorder, Select, Suggestion, TableSelect, TextArea, Theme, ThemePicker, TimePicker, TreeSelect,
+    Value, Verdict,
 };
 pub use compose::{
     Axis, Column, ComponentExt, Label, Layer, LayerHandle, Layers, Rect, Row, Size, Split, Stack,

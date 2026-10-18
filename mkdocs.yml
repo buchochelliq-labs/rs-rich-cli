@@ -134,6 +134,7 @@ nav:
           - Building your own components: guide/interact/custom-components.md
           - Overlays and chrome: guide/interact/overlays.md
           - Explorers, copying and live lists: guide/interact/explorers.md
+          - Approval queues and jumping to anything: guide/interact/review-and-jump.md
       - Terminal apps (rs-rich-intuituive):
           - guide/intuituive/index.md
           - "Tutorial: a to-do app": guide/intuituive/tutorial.md

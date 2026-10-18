@@ -1047,6 +1047,145 @@ test.
   library pages; the CLI reference regenerated; and
   `docs/tapes/micro-rows.tape` (not yet recorded).
 
+### Banners, GIF playback controls and shell integration (cli 0.0.19)
+
+0.0.19 workstream 21 (#708, #715).
+
+- **`rich banner TEXT`** draws a FIGlet banner with rs-rich-art's FIGlet
+  renderer: `--font` takes the bundled `standard`, a `.flf` file or the
+  name of one in `$FIGLET_FONTDIR` or figlet's font directories
+  (`--list-fonts`); `--style`; `--gradient` with two or more colours or a
+  preset (`rainbow`, `sunset`, `ocean`, `forest`, `fire`) and `--direction
+  horizontal|vertical|diagonal`; `--align left|center|right`; `-w/--width`;
+  `--fit wrap|plain|none` for a banner wider than the width; and
+  `--force-terminal`. Text comes from stdin when none is given. Behind the
+  default `art` feature.
+- **GIF playback controls:** `--speed X`, `--fps N` (the 30 fps cap, which
+  was fixed), `--max-frames N` and `--max-duration SECS`, next to `--loop`.
+  Each needs `--gif` and a number above 0. Without `--speed` or
+  `--max-frames`, playback is rs-rich-art's `Stage` as before; redirected
+  output is still one frame.
+- **`rich shell init bash|zsh|fish|powershell`** prints a script for a
+  shell's startup file: the completions, OSC 133 prompt and command marks,
+  OSC 7 for the working directory, and a status line after each command
+  (`--no-completions`, `--no-marks`, `--no-status`, `--min-duration`, 2 s
+  by default). It keeps the shell's own prompt hooks and `$?`.
+- **`rich shell status --exit CODE --duration D --command TEXT`** decorates
+  a finished command in one line (`✖ error $ cargo test  exit 101  4.2s`)
+  with rs-rich-ext's `CommandView`, following `RICH_A11Y` or `--symbols`;
+  quiet for a success under `--min-duration`.
+- **`rich shell link [PATH[:LINE[:COL]]]...`** prints paths, the working
+  directory by default, as OSC 8 file links with rs-rich-ext's
+  `Hyperlinker`, plain off a terminal unless `--links always`; `--tilde`,
+  `--editor TEMPLATE`, and `--prompt bash|zsh` to mark the escapes as
+  zero-width in a prompt.
+- **Docs:** [Draw a banner](docs/cli.md#draw-a-banner-0019),
+  [speed, frame rate and limits](docs/cli.md#speed-frame-rate-and-limits-0019)
+  and [shell integration](docs/cli.md#shell-integration-0019) in the CLI
+  guide; the CLI reference regenerated; `docs/PORTING.md`; and
+  `docs/tapes/banner.tape` (not yet recorded).
+
+### Approval queues and jumping to anything (interact 0.0.7, cli 0.0.19)
+
+0.0.19 workstream 20 (#471, #484).
+
+- **`rich_interact::components::ApprovalQueue`**: review pending items one
+  by one or in bulk. `a`, `r` and `s` approve, reject and skip the focused
+  item and move on to the next pending one; `A`, `R` and `S` ask for a
+  reason first; Space and Ctrl+A mark items for one decision on all of
+  them; `u` takes a decision back; `p` hides the detail pane (label,
+  description, details, decision, then the item's preview); Enter submits
+  an `ApprovalReport` of every item's `Decision` (verdict and reason),
+  pending ones included. `require_reason(Verdict::Rejected)`,
+  `auto_submit`, `advance` and `decided` (resume a review) are options.
+  With the mouse on, rows, the mark cell and the buttons under the list
+  click. Decisions are drawn in the theme keys `approve.approved`,
+  `approve.rejected`, `approve.skipped` and `approve.pending`. Without a
+  terminal it asks item by item (`a`, `r` or `s`, a reason after a colon,
+  `q` stops). The keys are in context `approve`.
+- **`rich_interact::components::Jump`** over a **`JumpIndex`** of
+  **`JumpSource`s**: one fuzzy box over several sources, the results
+  grouped by source (each showing its best few, `limit`, and how many more
+  matched), the best match focused and previewed. A source's prefix typed
+  first searches only it, Tab and Shift+Tab narrow and widen, Alt+↑/↓
+  jump between groups, and a click on a group's title narrows to it. Enter
+  returns a `Jumped` (source id, index, label, value). `JumpIndex::search`
+  works without the component. Group titles use the theme keys
+  `jump.group` and `jump.more`. Without a terminal it answers with the best
+  match for a line read, or for its starting query. The keys are in
+  context `jump`.
+- **`rich approve`** reviews ITEMs, or lines or JSON Lines on stdin
+  (`--format`, `--label`), and prints one JSON line per item with its
+  decision and reason, or with `--print approved|rejected` those items as
+  they were read. `--require-reason`, `--auto-submit`, `--height` and
+  `--mouse`. Without a terminal, ITEMs are asked about line by line, and
+  items from stdin are printed as pending.
+- **`rich jump`** searches the files, Markdown headings (`#`) and code
+  symbols (`@`) under DIRs (`--files`, `--headings`, `--symbols`), a
+  commands file (`--commands`, `>`), a recent-places file (`--recent`,
+  which the pick is added to) or entries on stdin (lines or JSON), and
+  prints the place: `path`, `path:line` or the command (`--print json` for
+  more). `--value`, `--limit`, `--height` and `--mouse`; without a
+  terminal it prints the best match for `--value`. Both commands use the
+  exit codes of the other interactive commands.
+- **Python:** `rs_rich.interact.ApprovalQueue`, `Jump` and `JumpSource`;
+  a review answers with a list of dicts and a jump with a dict.
+- **Docs:** [Approval queues and jumping to anything](docs/guide/interact/review-and-jump.md),
+  [Review and jump](docs/cli.md#review-and-jump) in the CLI guide, the
+  Python guide, the CLI reference regenerated, and `docs/tapes/approve.tape`
+  and `docs/tapes/jump.tape` (not yet recorded). An intuiTUIve wrapper is
+  not part of this workstream.
+
+### Sharing output: PNG export and a redaction preview (record 0.0.7, ext 0.0.16, cli 0.0.19)
+
+0.0.19 workstream 19 (#723, #722).
+
+- **PNG of rendered output, without a tape (#723).** rs-rich-record's
+  screenshot rasteriser now draws any rendered output, not only a screen
+  recorded on a PTY. `rich_record::render::png` has `segments_png` (the
+  segments `Console::record_output` returns), `frame_png` and
+  `frame_canvas` (a rich-ext `Frame`), `image_size` and `PngOptions`
+  (theme, window frame and title, caption, text size, width in cells);
+  `Snapshot::from_frame` resolves the cells as rich's SVG export does
+  (reverse swaps, dim blends 40% towards the background). The glyphs are
+  the embedded DejaVu Sans Mono and Twemoji, so the same output gives the
+  same bytes on every machine. Too large an image is an error, not an
+  allocation that fails.
+- **`--export-png PATH`** beside `--export-html` and `--export-svg`,
+  wherever they apply, `rich capture` included: the console's width, rich's
+  SVG export theme, a window titled like the SVG's, 28-pixel text as the
+  screenshots. Not with `--batch` (a usage error for now). It needs the new
+  `png` feature, on by default, implied by `record`, and on in the Python
+  wheel's command line.
+- **Preview a redaction before anything is written (#722).**
+  `Redactor::preview` (plain text), `preview_ansi` (text with escapes,
+  positions in its visible text; a secret in an escape's body, such as a
+  hyperlink's URL, is a `hidden` finding) and `preview_args` (a command
+  line, as `redact_args` masks it) mask nothing and return a `Preview`:
+  each `Finding` with its line, cell column, byte span, rule, text and
+  replacement, plus `counts()` per rule and a `summary()`
+  (`3 matches on 2 of 40 lines (key-value 2, token 1)`). A `Preview` is a
+  renderable: each line with a match, the matches highlighted, one line per
+  match, and the summary. It shows the secrets unmasked, so it is for the
+  person about to share, not for sharing.
+- **`--redact-preview`** on `rich capture` and `rich log`, with `--redact`
+  or `--redact-pattern`: the preview instead of the output (for capture,
+  the command line and the output; for log, every line read once, so not
+  with `--follow` or `--interactive`). A dry run: no cast, export or log
+  output is written, and stderr names what a run without the flag would
+  write. With `--report json`, one JSON document on stdout. Exit 0; exit 2
+  without a redaction flag.
+- **Python:** `Redactor.preview`, `preview_ansi` and `preview_args`
+  (`title=` optional) return a renderable `RedactPreview` of
+  `RedactFinding`s, with character offsets; stubs updated.
+- **Docs:** [A PNG of the output](docs/cli.md#a-png-of-the-output-0019) and
+  [Preview a redaction before you
+  share](docs/cli.md#preview-a-redaction-before-you-share-0019) in the CLI
+  guide, [Preview what would be
+  masked](docs/guide/ext/badges-and-redaction.md#preview-what-would-be-masked)
+  in the redaction guide, the CLI reference regenerated, and
+  `docs/tapes/share.tape` (not yet recorded).
+
 ### One process per browser session (web 0.0.2)
 
 0.0.19 workstream 3.
