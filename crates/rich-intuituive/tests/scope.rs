@@ -96,8 +96,29 @@ fn the_fft_finds_a_tone_in_its_bin() {
         .unwrap();
     assert_eq!(peak, 10);
     assert!((magnitude(bins[10]) - n as f64 / 2.0).abs() < 1e-6);
-    // Not a power of two: padded.
-    assert_eq!(fft(&[1.0; 100]).len(), 128);
+}
+
+#[test]
+fn the_fft_of_any_length_is_the_dft() {
+    // Not a power of two: Bluestein's, of the samples' own length, as
+    // scope-tui's FFT is.
+    for n in [3usize, 100, 109, 1000] {
+        let x: Vec<f64> = (0..n).map(|i| ((i * 7919) % 13) as f64 - 6.0).collect();
+        let bins = fft(&x);
+        assert_eq!(bins.len(), n);
+        for k in [0, 1, n / 3, n - 1] {
+            let (mut re, mut im) = (0.0, 0.0);
+            for (j, s) in x.iter().enumerate() {
+                let a = -2.0 * std::f64::consts::PI * (j * k) as f64 / n as f64;
+                re += s * a.cos();
+                im += s * a.sin();
+            }
+            assert!(
+                (bins[k].0 - re).abs() < 1e-6 && (bins[k].1 - im).abs() < 1e-6,
+                "{n} {k}"
+            );
+        }
+    }
 }
 
 #[test]
@@ -114,9 +135,9 @@ fn the_spectroscope_peaks_at_the_test_tones() {
     // R is drawn first (channels in reverse, as scope-tui).
     let names: Vec<_> = plot.sets.iter().map(|s| s.name.clone().unwrap()).collect();
     assert_eq!(names, ["R", "L"]);
+    // Every bin is a point, the mirrored half too; the peak is in the first.
     let peak = |set: &DataSet| {
-        let (x, _) = set
-            .points
+        let (x, _) = set.points[..1024]
             .iter()
             .copied()
             .max_by(|a, b| a.1.total_cmp(&b.1))
@@ -166,9 +187,42 @@ fn the_command_line_reads_as_scope_tuis() {
     let c = parse(&args("--palette-color Green,blue --still")).unwrap();
     assert_eq!(c.options.palette, ["green", "blue"]);
     assert!(c.still && c.file.is_none());
+    // Colours as ratatui reads them, as the console's names for the same.
+    let colours = "--palette-color LightRed,dark_gray,Gray,#FF8800,208 --axis-color White";
+    let c = parse(&args(colours)).unwrap();
+    assert_eq!(
+        c.options.palette,
+        [
+            "bright_red",
+            "bright_black",
+            "white",
+            "#ff8800",
+            "color(208)"
+        ]
+    );
+    assert_eq!(c.options.axis, "bright_white");
+    assert!(parse(&args("--labels-color mauve")).is_err());
     // A4 is 440 Hz: 48000 / 440 samples a period.
     assert_eq!(parse(&args("-t A4")).unwrap().options.buffer, 109);
-    assert_eq!(tune("A5", 48000), Some(55));
+    assert_eq!(tune("A5", 48000, 2), Some(55));
+    // From scope-tui's table (C0 is 16.35 Hz, C4 261.6), then nudged off a
+    // multiple of channels × 2: A3 is 218 samples, and 219 on one channel.
+    assert_eq!(tune("C4", 48000, 2), Some(183));
+    assert_eq!(tune("A3", 48000, 2), Some(218));
+    assert_eq!(tune("A3", 48000, 1), Some(219));
+    assert_eq!(tune("H2", 48000, 2), None);
+    // -l before or after the path, options after the source.
+    let c = parse(&args("file -l x.pcm --scatter")).unwrap();
+    assert!(c.limit_rate && c.options.scatter && c.file.as_deref() == Some("x.pcm"));
+    assert!(parse(&args("-l")).is_err(), "-l belongs to file");
+    let error = parse(&args("audio")).unwrap_err();
+    assert!(error.contains("file -"), "{error}");
+    assert!(parse(&args("--help"))
+        .unwrap()
+        .print
+        .unwrap()
+        .contains("--palette-color"));
+    assert!(parse(&args("-V")).unwrap().print.unwrap().contains("0.3.5"));
     assert!(parse(&args("--bogus")).is_err());
     // The backend, by name; crossterm is in every build.
     assert_eq!(parse(&args("")).unwrap().backend, None);
@@ -198,10 +252,14 @@ fn it_opens_on_the_oscilloscope_with_its_header_and_legend() {
     ] {
         assert!(header.contains(part), "{part:?} in {header:?}");
     }
-    assert!(rows[1].starts_with("│| amplitude"), "{:?}", rows[1]);
-    // The x title ends the plot's last row, over the axis line.
-    assert!(rows[rows.len() - 2].ends_with("time -"), "{rows:#?}");
-    assert!(rows.last().unwrap().starts_with("└──"));
+    // scope-tui's axes have no labels, so ratatui draws no axis lines: the
+    // titles stand alone, over the plot's first and last rows.
+    assert!(rows[1].starts_with("| amplitude"), "{:?}", rows[1]);
+    assert_eq!(rows.len(), 24);
+    assert!(rows[23].ends_with("time -"), "{rows:#?}");
+    assert!(!rows
+        .iter()
+        .any(|r| r.starts_with('│') || r.starts_with('└')));
     // The legend lists R then L, boxed at the top right.
     assert!(rows[1].trim_end().ends_with('┐'));
     assert!(rows[2].trim_end().ends_with("│R│"), "{:?}", rows[2]);
@@ -213,8 +271,11 @@ fn it_opens_on_the_oscilloscope_with_its_header_and_legend() {
 fn tab_cycles_the_three_scopes() {
     let rows = after("tab");
     assert!(rows[0].contains("vector::scope-tui"));
-    assert!(rows[1].starts_with("│| right"));
-    assert!(rows[rows.len() - 2].ends_with("left -"));
+    assert!(rows[1].starts_with("| right"));
+    assert!(rows[23].ends_with("left -"));
+    // The vectorscope numbers its channels, as scope-tui's does.
+    assert!(rows[2].trim_end().ends_with("│1│"), "{:?}", rows[2]);
+    assert!(rows[3].trim_end().ends_with("│0│"), "{:?}", rows[3]);
     assert!(braille(&rows) > 100);
     let rows = after("tab tab");
     assert!(rows[0].contains("spectro::scope-tui"));
@@ -223,7 +284,8 @@ fn tab_cycles_the_three_scopes() {
         "{:?}",
         rows[0]
     );
-    assert!(rows[1].starts_with("│| level"));
+    assert!(rows[1].starts_with("| level"));
+    assert!(rows[2].trim_end().ends_with("│R│"), "{:?}", rows[2]);
     let rows = after("tab tab tab");
     assert!(rows[0].contains("oscillo::scope-tui"));
 }
@@ -236,11 +298,18 @@ fn settings_show_in_the_header() {
     assert!(header.contains("***"), "scatter: {header}");
     assert!(header.contains("-1.01x+"), "scale: {header}");
     assert!(header.contains("1798/2048 spf"), "samples: {header}");
-    assert!(header.contains("^ 0.01 trigger"), "trigger: {header}");
+    // The threshold in 16-bit units, as scope-tui counts it.
+    assert!(header.contains("^ 250 trigger"), "trigger: {header}");
+    let rows = after("t e shift+pageup = = +");
+    assert!(rows[0].contains("v 2500:13 trigger"), "{:?}", rows[0]);
+    assert!(rows[2].trim_end().ends_with("│T│"), "{:?}", rows[2]);
     // Esc puts the view back and stops triggering.
     let rows = after("up shift+left t esc");
     assert!(rows[0].contains("-1.00x+") && rows[0].contains("2048/2048 spf"));
     assert!(rows[0].contains("live"));
+    // Only the scope showing gets it: in the vectorscope, the trigger stays.
+    let rows = after("t tab esc tab tab");
+    assert!(rows[0].contains("^ 0 trigger"), "{:?}", rows[0]);
 }
 
 #[test]
@@ -248,47 +317,48 @@ fn the_spectroscope_averages_and_windows() {
     // A wide screen: the header's second cell is a quarter of it.
     let rows = after_at("tab tab pageup pageup w l", 160);
     assert!(
-        rows[0].contains("3x avg (0.1s)  -|-  5.859Hz bins"),
+        rows[0].contains("3x avg (0.1s)  -|-  7.812Hz bins"),
         "{:?}",
         rows[0]
     );
-    assert!(rows[1].starts_with("│| amplitude"), "linear: {:?}", rows[1]);
-    // Shift steps the averaging by 10, ctrl by 5; alt's fifth of a step is
-    // nothing.
+    assert!(rows[1].starts_with("| amplitude"), "linear: {:?}", rows[1]);
+    // The averaging steps by one whatever the modifier, as scope-tui's.
     let rows = after_at(
         "tab tab shift+pageup ctrl+pageup alt+pageup ctrl+pagedown",
         160,
     );
-    assert!(rows[0].contains("11x avg"), "{:?}", rows[0]);
+    assert!(rows[0].contains("3x avg"), "{:?}", rows[0]);
 }
 
 #[test]
-fn the_header_reports_the_padded_bin_width() {
-    // -t A4: 109 samples, padded to 128 for the FFT: 375 Hz bins at 48 kHz.
+fn the_header_reports_the_bin_width_of_the_buffer() {
+    // -t A4: 109 samples, transformed as they are: 440.367 Hz bins at 48 kHz.
     let g = Graph {
         width: 109,
         samples: 109,
         ..graph()
     };
     let header = spectroscope_header(&g, &Spectroscope::default());
-    assert_eq!(header, "live  ---  375.000Hz bins");
+    assert_eq!(header, "live  ---  440.367Hz bins");
     let g = Graph {
         references: false,
         ..g
     };
     let tone: Vec<f64> = (0..109).map(|i| (i as f64 * 0.3).sin()).collect();
     let plot = spectroscope(&g, &Spectroscope::default(), &[VecDeque::from([tone])]);
-    // The first bin plotted is one bin width up.
-    assert!((plot.sets[0].points[0].0 - 375.0).abs() < 1e-6);
+    assert_eq!(plot.sets[0].points.len(), 109);
+    assert!((plot.sets[0].points[1].0 - 48000.0 / 109.0).abs() < 1e-6);
 }
 
 #[test]
-fn h_hides_the_interface() {
+fn h_hides_the_interface_but_not_the_legend() {
     let rows = after("h");
     assert!(row_of(&rows, "scope-tui").is_none());
     assert!(row_of(&rows, "amplitude").is_none());
-    assert!(!rows.iter().any(|r| r.contains("│R│")), "no legend");
-    assert!(rows[0].starts_with('│'), "the plot takes the whole screen");
+    assert!(row_of(&rows, "time -").is_none());
+    // ratatui draws a legend whether or not the axes have titles.
+    assert!(rows[0].trim_end().ends_with('┐'), "{:?}", rows[0]);
+    assert!(rows[1].trim_end().ends_with("│R│"), "{:?}", rows[1]);
 }
 
 #[test]
@@ -300,19 +370,42 @@ fn r_removes_the_reference_line() {
             .max()
             .unwrap()
     };
-    // Not the header or the axis line, which run the full width too.
-    let plot = |rows: Vec<String>| rows[1..rows.len() - 1].to_vec();
+    // Not the header, which runs the full width too.
+    let plot = |rows: Vec<String>| rows[1..].to_vec();
     let with = plot(after("p"));
     let without = plot(after("p r"));
     assert!(middle(&without) < middle(&with), "{without:#?}");
 }
 
 #[test]
-fn the_fps_counter_counts_frames_shown() {
+fn lines_leaving_the_bounds_are_left_out_as_ratatuis_are() {
+    let plot = Plot {
+        sets: vec![DataSet {
+            name: None,
+            points: vec![(0.0, 0.0), (1.0, 5.0), (2.0, 0.5)],
+            scatter: false,
+            style: "red".into(),
+        }],
+        x: (0.0, 2.0),
+        y: (-1.0, 1.0),
+        x_title: "",
+        y_title: "",
+        x_log: false,
+    };
+    let chart = chart(&plot, &graph());
+    let points = chart.datasets()[0].points();
+    assert_eq!(points[0], (0.0, 0.0));
+    assert!(points[1].0.is_nan() && points[1].1.is_nan());
+    assert_eq!(points[2], (2.0, 0.5));
+}
+
+#[test]
+fn the_fps_counter_counts_frames_paused_or_not() {
     let script = Script::new().wait(Duration::from_millis(2100)).keys("q");
     let rows = screen(&run(app(), script, 100, 24));
     // A buffer every 40 ms: 25 a second.
     assert!(rows[0].contains("25fps"), "{:?}", rows[0]);
+    // Paused, scope-tui still reads its source a frame at a time.
     let script = Script::new()
         .wait(Duration::from_millis(500))
         .keys("space")
@@ -320,20 +413,30 @@ fn the_fps_counter_counts_frames_shown() {
         .keys("q");
     let rows = screen(&run(app(), script, 100, 24));
     assert!(
-        rows[0].contains("0fps") && rows[0].contains("||"),
+        rows[0].contains("25fps") && rows[0].contains("||"),
         "{:?}",
         rows[0]
     );
 }
 
 #[test]
-fn the_end_of_the_input_shows_in_the_header() {
-    let bytes = vec![0u8; 64];
+fn past_the_end_of_the_input_the_scope_draws_silence() {
+    let bytes: Vec<u8> = (0..64i16).flat_map(|s| (s * 300).to_le_bytes()).collect();
     let pcm = Pcm::new(Cursor::new(bytes), 2, 16);
-    let app = scope_app(Options::default(), Box::new(pcm), Duration::from_millis(40));
-    let script = Script::new().wait(Duration::from_millis(200)).keys("q");
+    let options = Options {
+        references: false,
+        ..Options::default()
+    };
+    let app = scope_app(options, Box::new(pcm), Duration::from_millis(40));
+    let script = Script::new().wait(Duration::from_millis(1100)).keys("q");
     let rows = screen(&run(app, script, 100, 24));
-    assert!(rows[0].contains("end of input"), "{:?}", rows[0]);
+    // Still counting frames, and every channel flat on the zero line.
+    assert!(rows[0].contains("25fps"), "{:?}", rows[0]);
+    let drawn: Vec<_> = rows[1..]
+        .iter()
+        .filter(|r| braille(&[r.to_string()]) > 0)
+        .collect();
+    assert_eq!(drawn.len(), 1, "{drawn:#?}");
 }
 
 #[test]
