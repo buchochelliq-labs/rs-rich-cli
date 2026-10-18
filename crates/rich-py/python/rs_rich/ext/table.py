@@ -1,4 +1,4 @@
-"""``rs_rich.ext.table``: typed, sortable, groupable tables and streaming tables (``rich_ext::table``).
+"""``rs_rich.ext.table``: typed, sortable, groupable tables, streaming tables and conditional styles (``rich_ext::table``).
 
 No Rich counterpart: this is the port's own ``rs-rich-ext`` crate.
 """
@@ -12,6 +12,8 @@ from .._native import (
     TableSort,
     TableGroup,
     StreamingTable,
+    StyleRule,
+    StyleRules,
     TABLE_STYLES,
 )
 
@@ -30,6 +32,8 @@ __all__ = [
     "TableSort",
     "TableGroup",
     "StreamingTable",
+    "StyleRule",
+    "StyleRules",
     "TABLE_STYLES",
     "Column",
     "Sort",

@@ -16,8 +16,9 @@ use rich::segment::Segment as CoreSegment;
 use rich::table::ColumnOptions;
 use rich_ext::table::transform::{Group as CoreGroupTransform, Sort as CoreSortTransform};
 use rich_ext::table::{
-    Aggregate as CoreAggregate, Column as CoreColumn, GroupBy as CoreGroupBy, SortKey as CoreKey,
-    StreamingTable as CoreStream, TableData as CoreData, Value, Window,
+    Aggregate as CoreAggregate, Column as CoreColumn, ColumnRef, Comparison,
+    GroupBy as CoreGroupBy, SortKey as CoreKey, StreamingTable as CoreStream,
+    StyleRule as CoreRule, StyleRules as CoreRules, TableData as CoreData, Target, Value, Window,
 };
 use rich_ext::transform::Transform;
 
@@ -436,7 +437,7 @@ impl TableData {
     #[pyo3(signature = (
         columns, rows=None, *, sort=None, group_by=None, totals=None, totals_label="total",
         title=None, caption=None, r#box=BoxArg::Default, show_edge=None, expand=None,
-        border_style=None
+        border_style=None, rules=None
     ))]
     #[allow(clippy::too_many_arguments)]
     fn new(
@@ -452,6 +453,7 @@ impl TableData {
         show_edge: Option<bool>,
         expand: Option<bool>,
         border_style: Option<&Bound<'_, PyAny>>,
+        rules: Option<&Bound<'_, PyAny>>,
     ) -> PyResult<Self> {
         let frame = frame_args(title, caption, r#box, show_edge, expand, border_style)?;
         let mut inner = apply_frame!(CoreData::new(self::columns(columns)?), &frame);
@@ -469,7 +471,22 @@ impl TableData {
         if let Some(totals) = totals {
             inner = inner.totals(totals_label, aggregates(totals)?);
         }
+        if let Some(rules) = rules.filter(|r| !r.is_none()) {
+            inner = inner.style_rules(rules_arg(rules)?);
+        }
         Ok(TableData { inner })
+    }
+
+    /// Replace the conditional styles (a `StyleRules`, a `StyleRule`, a spec
+    /// string or a list of them). Returns the table.
+    fn style_rules<'py>(
+        mut slf: PyRefMut<'py, Self>,
+        rules: &Bound<'py, PyAny>,
+    ) -> PyResult<PyRefMut<'py, Self>> {
+        let rules = rules_arg(rules)?;
+        let inner = std::mem::replace(&mut slf.inner, CoreData::new(Vec::<CoreColumn>::new()));
+        slf.inner = inner.style_rules(rules);
+        Ok(slf)
     }
 
     /// Add a row (missing cells are empty). Returns the table.
@@ -872,7 +889,287 @@ impl StreamingTable {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Conditional styles
+
+fn column_ref(value: &Bound<'_, PyAny>) -> PyResult<ColumnRef> {
+    if !value.is_instance_of::<PyBool>() {
+        if let Ok(index) = value.extract::<usize>() {
+            return Ok(ColumnRef::Index(index));
+        }
+    }
+    value.extract::<String>().map(ColumnRef::Name).map_err(|_| {
+        pyo3::exceptions::PyTypeError::new_err("column is a header (str) or a 0-based index (int)")
+    })
+}
+
+fn comparison(name: &str) -> PyResult<Comparison> {
+    Comparison::parse(name).ok_or_else(|| {
+        PyValueError::new_err(format!(
+            "unknown op {name:?}: expected eq, ne, lt, le, gt, ge, contains, starts_with, \
+             ends_with, empty or not_empty (or ==, !=, <, <=, >, >=)"
+        ))
+    })
+}
+
+fn target(name: &str) -> PyResult<Target> {
+    Target::parse(name).ok_or_else(|| {
+        PyValueError::new_err(format!(
+            "unknown target {name:?}: expected \"cell\", \"row\" or \"column\""
+        ))
+    })
+}
+
+/// `StyleRule(column, op="eq", value=None, style="bold", *, target="cell")`:
+/// style a cell, its row or its whole column when a column's value compares
+/// to `value` by `op` (`eq`, `ne`, `lt`, `le`, `gt`, `ge`, `contains`,
+/// `starts_with`, `ends_with`, `empty`, `not_empty`, or `==`, `!=`, `<`,
+/// `<=`, `>`, `>=`). `column` is a header or a 0-based index; a number
+/// `value` compares numerically (text that parses as a number counts).
+/// `StyleRule.parse("latency>500:bold red")` reads the `--style-rule`
+/// grammar, and `StyleRule.when(column, predicate, style)` takes a Python
+/// predicate.
+#[pyclass(
+    name = "StyleRule",
+    module = "rs_rich.ext.table",
+    frozen,
+    skip_from_py_object
+)]
+#[derive(Clone)]
+pub(crate) struct StyleRule {
+    inner: CoreRule,
+}
+
+#[pymethods]
+impl StyleRule {
+    #[new]
+    #[pyo3(signature = (column, op="eq", value=None, style=None, *, target="cell"))]
+    fn new(
+        column: &Bound<'_, PyAny>,
+        op: &str,
+        value: Option<&Bound<'_, PyAny>>,
+        style: Option<&Bound<'_, PyAny>>,
+        target: &str,
+    ) -> PyResult<Self> {
+        let operand = match value {
+            Some(value) => self::value(value)?,
+            None => Value::Null,
+        };
+        let style = match style {
+            Some(style) => common::required_style(style)?,
+            None => rich::style::Style::parse("bold").expect("a valid style"),
+        };
+        Ok(StyleRule {
+            inner: CoreRule::new(column_ref(column)?, comparison(op)?, operand, style)
+                .target(self::target(target)?),
+        })
+    }
+
+    /// Read a rule spec, `COLUMN OP VALUE:STYLE` or `COLUMN OP
+    /// VALUE:TARGET:STYLE`, as `rich --style-rule` does. Raises `ValueError`
+    /// naming the spec.
+    #[staticmethod]
+    fn parse(spec: &str) -> PyResult<Self> {
+        CoreRule::parse(spec)
+            .map(|inner| StyleRule { inner })
+            .map_err(|err| PyValueError::new_err(err.to_string()))
+    }
+
+    /// A rule whose condition is `predicate(value)` (a cell's value as given:
+    /// `None`, `int`, `float`, `str` or `Text`). An exception counts as no
+    /// match and is reported as unraisable.
+    #[staticmethod]
+    #[pyo3(signature = (column, predicate, style, *, target="cell"))]
+    fn when(
+        column: &Bound<'_, PyAny>,
+        predicate: Py<PyAny>,
+        style: &Bound<'_, PyAny>,
+        target: &str,
+    ) -> PyResult<Self> {
+        let predicate = Arc::new(predicate);
+        let test = move |value: &Value| {
+            Python::attach(|py| {
+                let result = value_to_py(py, value)
+                    .and_then(|value| predicate.call1(py, (value,)))
+                    .and_then(|result| result.bind(py).is_truthy());
+                result.unwrap_or_else(|err| {
+                    err.write_unraisable(py, None);
+                    false
+                })
+            })
+        };
+        Ok(StyleRule {
+            inner: CoreRule::when(column_ref(column)?, test, common::required_style(style)?)
+                .target(self::target(target)?),
+        })
+    }
+
+    /// The column: a header (`str`) or an index (`int`).
+    #[getter]
+    fn column(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        Ok(match self.inner.column() {
+            ColumnRef::Name(name) => name.into_pyobject(py)?.into_any().unbind(),
+            ColumnRef::Index(index) => index.into_pyobject(py)?.into_any().unbind(),
+        })
+    }
+
+    /// The comparison's word (`"gt"`), or `None` for a predicate.
+    #[getter]
+    fn op(&self) -> Option<&'static str> {
+        self.inner.comparison().map(|(op, _)| op.name())
+    }
+
+    /// The value compared with, or `None` (also for a predicate).
+    #[getter]
+    fn value(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        match self.inner.comparison() {
+            Some((_, value)) => value_to_py(py, value),
+            None => Ok(py.None()),
+        }
+    }
+
+    /// The style, as a definition (`"bold red"`).
+    #[getter]
+    fn style(&self) -> String {
+        self.inner.style().definition()
+    }
+
+    /// `"cell"`, `"row"` or `"column"`.
+    #[getter]
+    fn target(&self) -> &'static str {
+        self.inner.target_kind().name()
+    }
+
+    /// The rule as a spec `parse` reads back, or `None` for a predicate.
+    #[getter]
+    fn spec(&self) -> Option<String> {
+        self.inner.to_spec()
+    }
+
+    /// Whether `value` meets the condition.
+    fn matches(&self, value: &Bound<'_, PyAny>) -> PyResult<bool> {
+        Ok(self.inner.matches(&self::value(value)?))
+    }
+
+    fn __str__(&self) -> String {
+        self.inner.to_string()
+    }
+
+    fn __repr__(&self) -> String {
+        format!(
+            "StyleRule.parse({})",
+            crate::art::repr_str(&self.inner.to_string())
+        )
+    }
+}
+
+/// `StyleRules(rules=())`: an ordered set of `StyleRule`s (or spec strings);
+/// where several match, their styles combine in order, a later one winning.
+/// `StyleRules.from_toml(text)` reads `[[rules]]` tables (`column`, `op`,
+/// `value`, `style`, `target`), as `rich --rules FILE` does.
+#[pyclass(
+    name = "StyleRules",
+    module = "rs_rich.ext.table",
+    frozen,
+    skip_from_py_object
+)]
+#[derive(Clone)]
+pub(crate) struct StyleRules {
+    pub(crate) inner: CoreRules,
+}
+
+#[pymethods]
+impl StyleRules {
+    #[new]
+    #[pyo3(signature = (rules=None))]
+    fn new(rules: Option<&Bound<'_, PyAny>>) -> PyResult<Self> {
+        Ok(StyleRules {
+            inner: match rules {
+                Some(rules) => rules_arg(rules)?,
+                None => CoreRules::new(),
+            },
+        })
+    }
+
+    /// Read the `[[rules]]` tables of a TOML document. Raises `ValueError`
+    /// naming the table (`rules[1]: unknown op \`like\``).
+    #[staticmethod]
+    fn from_toml(text: &str) -> PyResult<Self> {
+        CoreRules::from_toml(text)
+            .map(|inner| StyleRules { inner })
+            .map_err(|err| PyValueError::new_err(err.to_string()))
+    }
+
+    /// These rules and `rule` (a `StyleRule` or a spec) after them, as a new
+    /// set.
+    fn add(&self, rule: &Bound<'_, PyAny>) -> PyResult<Self> {
+        let mut inner = self.inner.clone();
+        for rule in rules_arg(rule)?.rules() {
+            inner.push(rule.clone());
+        }
+        Ok(StyleRules { inner })
+    }
+
+    /// The rules, in order.
+    #[getter]
+    fn rules(&self) -> Vec<StyleRule> {
+        self.inner
+            .rules()
+            .iter()
+            .map(|rule| StyleRule {
+                inner: rule.clone(),
+            })
+            .collect()
+    }
+
+    fn __len__(&self) -> usize {
+        self.inner.len()
+    }
+
+    fn __iter__(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        let rules = PyList::new(py, self.rules())?;
+        Ok(rules.try_iter()?.into_any().unbind())
+    }
+
+    fn __repr__(&self) -> String {
+        let specs: Vec<String> = self
+            .inner
+            .rules()
+            .iter()
+            .map(|rule| crate::art::repr_str(&rule.to_string()))
+            .collect();
+        format!("StyleRules([{}])", specs.join(", "))
+    }
+}
+
+/// Rules from Python: a `StyleRules`, a `StyleRule`, a spec string, or an
+/// iterable of rules and specs.
+pub(crate) fn rules_arg(value: &Bound<'_, PyAny>) -> PyResult<CoreRules> {
+    if let Ok(rules) = value.cast::<StyleRules>() {
+        return Ok(rules.get().inner.clone());
+    }
+    if let Ok(rule) = value.cast::<StyleRule>() {
+        return Ok(CoreRules::new().rule(rule.get().inner.clone()));
+    }
+    if let Ok(spec) = value.cast::<PyString>() {
+        return Ok(CoreRules::new().rule(StyleRule::parse(&spec.to_cow()?)?.inner));
+    }
+    let mut rules = CoreRules::new();
+    for item in value.try_iter().map_err(|_| {
+        pyo3::exceptions::PyTypeError::new_err(
+            "rules are a StyleRules, a StyleRule, a spec string or a list of them",
+        )
+    })? {
+        for rule in rules_arg(&item?)?.rules() {
+            rules.push(rule.clone());
+        }
+    }
+    Ok(rules)
+}
+
 pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_class::<StyleRule>()?;
+    m.add_class::<StyleRules>()?;
     m.add_class::<DataColumn>()?;
     m.add_class::<SortKey>()?;
     m.add_class::<Aggregate>()?;

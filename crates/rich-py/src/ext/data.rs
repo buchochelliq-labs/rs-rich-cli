@@ -582,7 +582,9 @@ fn justify(name: &str) -> PyResult<Justify> {
 }
 
 /// `TableView(data, *, columns=None, headers=None, justify=None, title=None,
-/// max_rows=None, max_string=None)`: records (a list of maps) as a table.
+/// max_rows=None, max_string=None, rules=None)`: records (a list of maps) as
+/// a table; `rules` (`rs_rich.ext.table.StyleRules`, a `StyleRule`, a spec or
+/// a list) style its cells, rows and columns by value.
 #[pyclass(name = "TableView", module = "rs_rich.ext.data")]
 pub(crate) struct TableView {
     node: Node,
@@ -592,11 +594,12 @@ pub(crate) struct TableView {
     title: Option<String>,
     max_rows: Option<usize>,
     max_string: Option<usize>,
+    rules: rich_ext::table::StyleRules,
 }
 
 impl AsRenderable for TableView {
     fn to_renderable(&self, _py: Python<'_>) -> PyResult<Box<dyn Renderable>> {
-        let mut view = CoreTableView::new(self.node.clone());
+        let mut view = CoreTableView::new(self.node.clone()).style_rules(self.rules.clone());
         if let Some(columns) = &self.columns {
             view = view.columns(columns.clone());
         }
@@ -622,7 +625,7 @@ impl AsRenderable for TableView {
 #[pymethods]
 impl TableView {
     #[new]
-    #[pyo3(signature = (data, *, columns=None, headers=None, justify=None, title=None, max_rows=None, max_string=None))]
+    #[pyo3(signature = (data, *, columns=None, headers=None, justify=None, title=None, max_rows=None, max_string=None, rules=None))]
     #[allow(clippy::too_many_arguments)]
     fn new(
         data: &Bound<'_, PyAny>,
@@ -632,6 +635,7 @@ impl TableView {
         title: Option<String>,
         max_rows: Option<usize>,
         max_string: Option<usize>,
+        rules: Option<&Bound<'_, PyAny>>,
     ) -> PyResult<Self> {
         let headers = match headers {
             Some(value) => common::pairs(value)?
@@ -655,6 +659,10 @@ impl TableView {
             title,
             max_rows,
             max_string,
+            rules: match rules.filter(|r| !r.is_none()) {
+                Some(rules) => super::tables::rules_arg(rules)?,
+                None => rich_ext::table::StyleRules::new(),
+            },
         })
     }
 }
