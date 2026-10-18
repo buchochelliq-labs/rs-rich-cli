@@ -8,6 +8,8 @@ use rich_interact::{Button, Key, KeyCode, MouseKind};
 
 use crate::node::{Axis, Node};
 use crate::reactive::{signal, Signal};
+use crate::screen::Rect;
+use crate::scrollbar::Bar;
 use crate::widget::{widget, Canvas, DrawCx, EventCx, MeasureCx, Used, Widget, WidgetEvent};
 use crate::widgets::{cell_line, over};
 
@@ -47,13 +49,17 @@ struct Row {
     parent: bool,
 }
 
-struct Tree {
+pub(crate) struct Tree {
     items: Box<dyn Fn() -> Vec<TreeItem>>,
     selected: Signal<Vec<usize>>,
     expanded: Signal<HashSet<Vec<usize>>>,
     /// The first row in view, and the rows last drawn.
     first: Cell<usize>,
     height: Cell<usize>,
+    pub(crate) bar: Bar,
+    /// Where the bar was drawn, and the rows; the column the rows start at.
+    bar_at: Cell<Option<(Rect, usize)>>,
+    left: Cell<u16>,
 }
 
 /// A tree of markup items, one selected. `selected` is the path to the
@@ -121,6 +127,9 @@ pub fn tree_with(
         expanded,
         first: Cell::new(0),
         height: Cell::new(1),
+        bar: Bar::default(),
+        bar_at: Cell::new(None),
+        left: Cell::new(0),
     })
 }
 
@@ -258,7 +267,7 @@ impl Widget for Tree {
         // text mode): what is selected is the item, not its arrow.
         let depth = rows.get(at).map_or(1, |row| row.path.len());
         let marker = if crate::a11y::text_mode() { 2 } else { 0 };
-        let x = (marker + 2 * depth).min(u16::MAX as usize) as u16;
+        let x = (marker + 2 * depth).min(u16::MAX as usize) as u16 + self.left.get();
         (row < self.height.get().max(1)).then_some(crate::screen::Rect::new(
             x,
             row as u16,
@@ -286,9 +295,23 @@ impl Widget for Tree {
     }
 
     fn draw(&mut self, cx: &mut DrawCx, canvas: &mut Canvas) {
-        let (width, height) = (canvas.width(), canvas.height() as usize);
+        let (mut width, height) = (canvas.width(), canvas.height() as usize);
         self.height.set(height.max(1));
         let rows = self.rows();
+        // The bar keeps a column once the rows do not all fit.
+        let look = self
+            .bar
+            .look
+            .clone()
+            .filter(|look| look.wanted(rows.len(), height));
+        let mut left = 0;
+        let mut bar = None;
+        if let Some(look) = &look {
+            let (rest, at) = look.split(width, canvas.height());
+            (left, width) = (rest.x, rest.width);
+            bar = Some(at);
+        }
+        self.left.set(left);
         let selected = self.selected.with(|s| index_of(&rows, s));
         // Keep the selection in view.
         let mut first = self
@@ -324,15 +347,49 @@ impl Widget for Tree {
             if i == selected {
                 line = over(line, &highlight);
             }
-            canvas.lines_at(0, (i - first) as u16, width, 1, &[line]);
+            canvas.lines_at(left, (i - first) as u16, width, 1, &[line]);
+        }
+        match (look, bar) {
+            (Some(look), Some(at)) => {
+                look.paint(console, canvas, at, first, rows.len(), height);
+                self.bar_at.set(Some((at, rows.len())));
+            }
+            _ => self.bar_at.set(None),
         }
     }
 
-    fn event(&mut self, _cx: &mut EventCx, event: &WidgetEvent) -> Used {
+    fn event(&mut self, cx: &mut EventCx, event: &WidgetEvent) -> Used {
+        // A press or a drag on the bar scrolls by it, carrying the
+        // selection into view.
+        if let (WidgetEvent::Mouse(mouse), Some((rect, len))) = (event, self.bar_at.get()) {
+            let view = self.height.get();
+            match self.bar.mouse(cx, mouse, rect, self.first.get(), len, view) {
+                Some(Some(to)) => {
+                    self.first.set(to);
+                    let rows = self.rows();
+                    let at = self.selected.with_untracked(|s| index_of(&rows, s));
+                    let inside = at.clamp(to, (to + view).saturating_sub(1).max(to));
+                    if inside != at {
+                        if let Some(row) = rows.get(inside) {
+                            self.select(row);
+                        }
+                    }
+                    cx.redraw();
+                    return Used::Yes;
+                }
+                Some(None) => return Used::Yes,
+                None => {}
+            }
+        }
         match event {
             WidgetEvent::Key(key) => self.key(key),
             WidgetEvent::Mouse(mouse) => {
                 let rows = self.rows();
+                let mouse = rich_interact::Mouse {
+                    column: mouse.column.saturating_sub(self.left.get()),
+                    ..*mouse
+                };
+                let mouse = &mouse;
                 match mouse.kind {
                     MouseKind::Down(button) => {
                         let Some(row) = rows.get(self.first.get() + mouse.row as usize) else {

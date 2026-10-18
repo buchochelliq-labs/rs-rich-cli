@@ -54,6 +54,13 @@ As in Rust, `build` runs once and returns the root node. `text` reads
 | `spawn_future(future, done)` | `spawn_async(coroutine, done)` |
 | `app.render_with(&["+", "q"], 30, 2)` | `app.render_with(["+", "q"], 30, 2)` |
 | `App::run_on(&mut Headless::new(script, w, h))` | `run(app, script, width=w, height=h)` |
+| `list(..).direction(ListDirection::BottomToTop).highlight_spacing(HighlightSpacing::Always)` | `.direction("bottom_to_top").highlight_spacing("always")`: the variants' names in snake case |
+| `Column::new("Qty", Size::Fixed(7)).align(Align::End).min(4)` | `Column("Qty", 7, align="flex-end", min=4)`, or `.align("end").min(4)`, which return a new column |
+| `Scrollbar::new().side(Side::Left).symbols(ScrollbarSymbols::VERTICAL)` | `Scrollbar().side("left").symbols("vertical")`: each builder returns a new bar |
+| `number_input(age, 0..=150)` | `number_input(age, 0, 150)`: both ends included |
+| `cx.modal_with(w, h, ModalOptions::new().shadow("on grey11"), build)` | `cx.modal_with(w, h, ModalOptions(shadow="on grey11"), build)` |
+| `cx.quit_with(value)` and `App::run_for::<T>()` | `cx.quit_with(value)` (any object) and `app.run_for()`; a headless `Run`'s `exit` |
+| `cx.fail(error)` | `cx.fail(error_or_message)`: `run()` raises it as an `OSError` |
 
 Import the names you use (`from rs_rich.tui import App, column, signal`), or
 the module (`from rs_rich import tui`): a `from rs_rich.tui import *` brings
@@ -351,6 +358,8 @@ counterpart, or a different one:
   `surrounding`, `first_weekday` and the header and day styles, and
   `month`. `calendar_with` takes `today`, `min` and `max`.
 - **Smaller pieces:** `Widget::hidden_children`, `Widget::claims_key` and
-  `MeasureCx::stack_flow` (0.0.19), the cell-level `Screen`
+  `MeasureCx::stack_flow` (0.0.19), `App::session_options` (Python starts no
+  session of its own), `ScrollbarSymbols` as a type (its sets are named by
+  strings), the cell-level `Screen`
   (`Driver.screen()` gives the rows, `Driver.lines()` the styled
   segments), `widget::markup_width` and `markup_line`, and `Easing::at`.

@@ -46,6 +46,7 @@ use crate::builtin::{
 };
 pub use crate::layout::Size;
 use crate::layout::{Align, AlignContent, Justify, StackLayout, TextAlign, Track};
+pub use crate::list::list;
 use crate::reactive::{next_node, NodeId, Runtime, Signal};
 use crate::screen::{Rect, Screen};
 use crate::sheet::{Dock, Element, Layout, States, Stylesheet};
@@ -144,15 +145,12 @@ pub struct Node {
     access_label: Option<String>,
     live: bool,
     last_live: RefCell<Option<String>>,
-    /// Where its selected item is, for widgets drawn from lines (a list).
-    cursor_cell: Option<Rc<Cell<Option<Rect>>>>,
     /// Left out, with what is inside, for assistive technology; and the
-    /// states code gave it, and its builder's (a list's selected row).
+    /// states code gave it.
     access_hidden: bool,
     expanded_when: Option<Condition>,
     checked_when: Option<Condition>,
     busy_when: Option<Condition>,
-    built_state: Option<Box<dyn Fn() -> crate::a11y::AccessState>>,
     /// A [`list`]'s selection and scroll, for
     /// [`reorderable`](Node::reorderable).
     pub(crate) list_model: Option<Rc<crate::reorder::ListModel>>,
@@ -362,12 +360,10 @@ impl Node {
             access_label: None,
             live: false,
             last_live: RefCell::new(None),
-            cursor_cell: None,
             access_hidden: false,
             expanded_when: None,
             checked_when: None,
             busy_when: None,
-            built_state: None,
             list_model: None,
             own_style: None,
             theme_styles: Vec::new(),
@@ -477,17 +473,8 @@ impl Node {
         self
     }
 
-    /// The states its builder knows (a list's selected row and its place).
-    pub(crate) fn built_state(
-        mut self,
-        state: impl Fn() -> crate::a11y::AccessState + 'static,
-    ) -> Node {
-        self.built_state = Some(Box::new(state));
-        self
-    }
-
-    /// Its states: its widget's, or its builder's, with what code set over
-    /// them ([`selected_when`](Self::selected_when),
+    /// Its states: its widget's, with what code set over them
+    /// ([`selected_when`](Self::selected_when),
     /// [`expanded_when`](Self::expanded_when) and the like).
     pub fn access_state(&self) -> crate::a11y::AccessState {
         self.access_state_of(&*self.body.borrow().widget)
@@ -496,10 +483,7 @@ impl Node {
     /// [`access_state`](Self::access_state), with its widget in hand (while
     /// it draws, the body is borrowed).
     fn access_state_of(&self, widget: &dyn Widget) -> crate::a11y::AccessState {
-        let mut state = match &self.built_state {
-            Some(state) => state(),
-            None => widget.access_state(),
-        };
+        let mut state = widget.access_state();
         let holds = |condition: &Option<Condition>| condition.as_ref().map(|c| c());
         if let Some(open) = holds(&self.expanded_when) {
             state.expanded = Some(open);
@@ -549,11 +533,7 @@ impl Node {
 
     /// Where its selected item is, on its widget's surface.
     pub(crate) fn cursor(&self) -> Option<Rect> {
-        self.body
-            .borrow()
-            .widget
-            .cursor()
-            .or_else(|| self.cursor_cell.as_ref().and_then(|c| c.get()))
+        self.body.borrow().widget.cursor()
     }
 
     /// For a [live](Self::live) node: what it shows now, when that changed
@@ -2581,98 +2561,6 @@ pub(crate) fn edge_lines(lines: &[Vec<Segment>]) -> [Vec<Vec<Segment>>; 4] {
     ]
 }
 
-/// `lines` with `style` laid over every segment, each row filled out to
-/// the rectangle's width in it.
-fn highlight(lines: Vec<Vec<Segment>>, style: &Style, rect: Rect) -> Vec<Vec<Segment>> {
-    lines
-        .into_iter()
-        .take(rect.height as usize)
-        .map(|line| {
-            let width: usize = line.iter().map(Segment::cell_length).sum();
-            let mut line: Vec<Segment> = line
-                .into_iter()
-                .map(|segment| {
-                    let combined = match &segment.style {
-                        Some(own) => own.combine(style),
-                        None => style.clone(),
-                    };
-                    Segment::new(segment.text, Some(combined))
-                })
-                .collect();
-            let fill = (rect.width as usize).saturating_sub(width);
-            if fill > 0 {
-                line.push(Segment::new(" ".repeat(fill), Some(style.clone())));
-            }
-            line
-        })
-        .collect()
-}
-
-/// A one-column scrollbar `rows` tall for content `content` rows tall,
-/// scrolled to `top`.
-pub(crate) fn scrollbar(console: &Console, rows: u16, top: u16, content: u16) -> Vec<Vec<Segment>> {
-    let style = |name: &str, fallback: &str| {
-        console
-            .get_style(&rich::style::StyleType::Name(name.to_string()))
-            .ok()
-            .or_else(|| Style::parse(fallback).ok())
-    };
-    let (track, thumb) = (
-        style("scrollbar", "bright_black"),
-        style("scrollbar.thumb", "white"),
-    );
-    let (rows_f, content_f) = (rows as f64, content.max(1) as f64);
-    let size = (rows_f * rows_f / content_f).round().clamp(1.0, rows_f);
-    let start = (top as f64 * rows_f / content_f).round().min(rows_f - size);
-    (0..rows)
-        .map(|row| {
-            let on = (row as f64) >= start && (row as f64) < start + size;
-            if on {
-                vec![Segment::new("┃", thumb.clone())]
-            } else {
-                vec![Segment::new("│", track.clone())]
-            }
-        })
-        .collect()
-}
-
-/// A scrollbar along the bottom of a view `columns` wide, showing
-/// `left..left + columns` of `content` columns.
-pub(crate) fn scrollbar_across(
-    console: &Console,
-    columns: u16,
-    left: u16,
-    content: u16,
-) -> Vec<Segment> {
-    let style = |name: &str, fallback: &str| {
-        console
-            .get_style(&rich::style::StyleType::Name(name.to_string()))
-            .ok()
-            .or_else(|| Style::parse(fallback).ok())
-    };
-    let (track, thumb) = (
-        style("scrollbar", "bright_black"),
-        style("scrollbar.thumb", "white"),
-    );
-    let (columns_f, content_f) = (columns as f64, content.max(1) as f64);
-    let size = (columns_f * columns_f / content_f)
-        .round()
-        .clamp(1.0, columns_f);
-    let start = (left as f64 * columns_f / content_f)
-        .round()
-        .min(columns_f - size);
-    (0..columns)
-        .map(|column| {
-            let on = (column as f64) >= start && (column as f64) < start + size;
-            if on {
-                Segment::new("━", thumb.clone())
-            } else {
-                Segment::new("─", track.clone())
-            }
-        })
-        .collect()
-}
-
 /// A visit in [`walk_screen`]: the node, its path, the shift to screen
 /// coordinates and the part of the screen it can show in.
 pub(crate) type ScreenVisit<'a> = dyn FnMut(&Node, &[NodeId], (i32, i32), Rect) + 'a;
@@ -3014,147 +2902,6 @@ pub fn repeating<C: Component + 'static>(
     );
     node.focusable = true;
     node.what("component")
-}
-
-/// A scrolling list of markup rows, one selected: ratatui's `List` and
-/// `ListState` in one node. `items` may read signals; `selected` is the
-/// index of the selected row, which you read and write like any signal.
-///
-/// The list keeps the selected row in view, scrolling only as far as it
-/// must, and draws it in the theme's `selected` style, filled to the full
-/// width. It is focusable, and while it has the focus ↑/k, ↓/j, Home/g,
-/// End/G, PageUp and PageDown move the selection; bind Enter (or anything
-/// else) yourself with [`on_key`](Node::on_key).
-///
-/// ```
-/// use intuituive::prelude::*;
-///
-/// let app = App::new(|| {
-///     let selected = signal(0usize);
-///     let items = || (1..=50).map(|n| format!("item {n}")).collect();
-///     list(items, selected).on_key("q", |cx| cx.quit())
-/// });
-/// // Down 7 times in a 5-row list: rows 4-8 (items 4-8) show, item 8 selected.
-/// let keys = ["j", "j", "j", "j", "j", "j", "j", "q"];
-/// let screen = app.render_with(&keys, 20, 5).unwrap();
-/// assert_eq!(screen[0].trim_end(), "item 4");
-/// assert_eq!(screen[4].trim_end(), "item 8");
-/// ```
-pub fn list(items: impl Fn() -> Vec<String> + 'static, selected: Signal<usize>) -> Node {
-    let items = Rc::new(items);
-    // The first row shown, and the height last drawn (for a page's size).
-    let offset = Rc::new(Cell::new(0usize));
-    let rows = Rc::new(Cell::new(1usize));
-    // Where the selected row is, for the cursor in accessible mode.
-    let cursor = Rc::new(Cell::new(None));
-    // Whether the selected row is being carried, once it is reorderable.
-    let carried: Rc<Cell<Option<Signal<bool>>>> = Rc::new(Cell::new(None));
-    let draw = {
-        let (items, offset, rows, cursor, carried) = (
-            items.clone(),
-            offset.clone(),
-            rows.clone(),
-            cursor.clone(),
-            carried.clone(),
-        );
-        move |console: &Console, width: u16, height: u16| {
-            let items = items();
-            let len = items.len();
-            let measuring = height == 0;
-            // Height 0 is a measurement: every row.
-            let height = if height == 0 { len } else { height as usize };
-            rows.set(height.max(1));
-            let selected = selected.get().min(len.saturating_sub(1));
-            let mut first = offset.get().min(len.saturating_sub(height));
-            if selected < first {
-                first = selected;
-            } else if selected >= first + height {
-                first = selected + 1 - height;
-            }
-            offset.set(first);
-            if !measuring {
-                let row = (selected - first) as u16;
-                cursor.set((len > 0).then(|| Rect::new(0, row, width, 1)));
-            }
-            // In text mode the selected row is marked, not only reversed;
-            // a carried row is marked in any mode.
-            let carrying = carried.get().is_some_and(|carried| carried.get());
-            let marked = crate::a11y::text_mode();
-            let indent = if marked || carrying { 2 } else { 0 };
-            let mut options = console
-                .options()
-                .update_width(width.saturating_sub(indent).max(1) as usize);
-            options.no_wrap = Some(true);
-            options.overflow = Some(rich::Overflow::Ellipsis);
-            let style = console
-                .get_style(&rich::style::StyleType::Name("selected".into()))
-                .unwrap_or_else(|_| Style::parse("reverse").expect("parses"));
-            items
-                .iter()
-                .enumerate()
-                .skip(first)
-                .take(height)
-                .map(|(i, markup)| {
-                    let text = rich::Text::from_markup(markup)
-                        .unwrap_or_else(|_| rich::Text::new(markup.clone()));
-                    let mut line = console
-                        .render_lines(&text, &options, false)
-                        .into_iter()
-                        .next()
-                        .unwrap_or_default();
-                    if carrying && i == selected {
-                        line.insert(0, Segment::new("↕ ", None));
-                    } else if marked {
-                        let marker = if i == selected { "> " } else { "  " };
-                        line.insert(0, Segment::new(marker, None));
-                    }
-                    if i == selected {
-                        let row = Rect::new(0, 0, width, 1);
-                        highlight(vec![line], &style, row).remove(0)
-                    } else {
-                        line
-                    }
-                })
-                .collect()
-        }
-    };
-    let len = {
-        let items = items.clone();
-        move || items().len()
-    };
-    let model = Rc::new(crate::reorder::ListModel {
-        selected,
-        len: Rc::new(len.clone()),
-        first: offset.clone(),
-        rows: rows.clone(),
-        carried,
-    });
-    let step = move |by: isize| {
-        let len = len();
-        let last = len.saturating_sub(1) as isize;
-        selected.update(|s| *s = (*s as isize + by).clamp(0, last.max(0)) as usize);
-    };
-    let (rows_up, rows_down) = (rows.clone(), rows);
-    let (up, down, pgup, pgdn) = (step.clone(), step.clone(), step.clone(), step);
-    // The selected row, and its place, for assistive technology.
-    let state = {
-        let items = items.clone();
-        move || crate::a11y::AccessState::item(selected.get_untracked(), items().len())
-    };
-    let mut node = leaf(draw).built_state(state);
-    node.cursor_cell = Some(cursor);
-    node.list_model = Some(model);
-    node.what("list")
-        .focusable()
-        .on_key("up k", move |_| up(-1))
-        .on_key("down j", move |_| down(1))
-        .on_key("pageup", move |_| pgup(-(rows_up.get() as isize)))
-        .on_key("pagedown", move |_| pgdn(rows_down.get() as isize))
-        .on_key("home g", move |_| selected.set(0))
-        .on_key("end G", move |_| {
-            let len = items().len();
-            selected.set(len.saturating_sub(1));
-        })
 }
 
 /// A viewport onto `child`, laid out at its full height (up to 4000 rows)

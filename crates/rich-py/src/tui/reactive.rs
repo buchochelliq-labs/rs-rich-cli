@@ -191,6 +191,10 @@ pub(crate) enum Slot {
     Str(Signal<String>),
     Bool(Signal<bool>),
     Exit(Signal<Option<ExitStatus>>),
+    /// An index or none: `list_optional`'s and `table_optional`'s selection.
+    Maybe(Signal<Option<usize>>),
+    /// A whole number: `number_input`'s value.
+    I64(Signal<i64>),
 }
 
 impl Slot {
@@ -210,6 +214,8 @@ impl Slot {
             Slot::Str(_) => "a str",
             Slot::Bool(_) => "a bool",
             Slot::Exit(_) => "an exit status",
+            Slot::Maybe(_) => "an index or None",
+            Slot::I64(_) => "an int",
         }
     }
 }
@@ -283,6 +289,8 @@ impl PySignal {
                 .into_any()
                 .unbind())),
             Slot::Exit(s) => read!(s, |v| exit_to(py, v)),
+            Slot::Maybe(s) => read!(s, |v| Ok(v.into_pyobject(py)?.into_any().unbind())),
+            Slot::I64(s) => read!(s, |v| Ok(v.into_pyobject(py)?.into_any().unbind())),
         }
     }
 
@@ -329,6 +337,13 @@ impl PySignal {
             Slot::Exit(_) => {
                 return Err(PyTypeError::new_err("a program's exit status is read only"))
             }
+            Slot::Maybe(s) => write!(
+                s,
+                value
+                    .extract::<Option<usize>>()
+                    .map_err(|e| typed("an index or None", e))?
+            ),
+            Slot::I64(s) => write!(s, value.extract::<i64>().map_err(|e| typed("an int", e))?),
         }
         Ok(())
     }
@@ -462,6 +477,28 @@ impl PySignal {
         self.typed(py, what, from, Slot::Str, |v| {
             v.extract::<String>()
                 .map_err(|_| PyTypeError::new_err("its value must be a str"))
+        })
+    }
+
+    pub(crate) fn maybe(&self, py: Python<'_>, what: &str) -> PyResult<Signal<Option<usize>>> {
+        let from = |s| match s {
+            Slot::Maybe(s) => Some(s),
+            _ => None,
+        };
+        self.typed(py, what, from, Slot::Maybe, |v| {
+            v.extract::<Option<usize>>()
+                .map_err(|_| PyTypeError::new_err("its value must be an int, at least 0, or None"))
+        })
+    }
+
+    pub(crate) fn i64(&self, py: Python<'_>, what: &str) -> PyResult<Signal<i64>> {
+        let from = |s| match s {
+            Slot::I64(s) => Some(s),
+            _ => None,
+        };
+        self.typed(py, what, from, Slot::I64, |v| {
+            v.extract::<i64>()
+                .map_err(|_| PyTypeError::new_err("its value must be an int"))
         })
     }
 
@@ -1054,6 +1091,12 @@ impl PyProxy {
         Ok(self.proxy.run_with(move |cx| {
             call_with_ctx(&Callback::of(f, app), None, cx);
         }))
+    }
+
+    /// Print console `markup` above the app (inline, into the scrollback
+    /// above it), from any thread.
+    fn print_above(&self, markup: &str) -> bool {
+        self.proxy.print_above(markup)
     }
 }
 

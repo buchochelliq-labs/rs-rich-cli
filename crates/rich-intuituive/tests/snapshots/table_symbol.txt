@@ -1,0 +1,4 @@
+  Food    Qty   Energy
+» Apple     1  95 kcal
+  Bread     2 160 kcal
+  Cheese   12 113 kcal

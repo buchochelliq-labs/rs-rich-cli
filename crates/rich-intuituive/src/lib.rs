@@ -60,14 +60,17 @@ mod builtin;
 mod calendar;
 mod datetime;
 mod effect;
+mod input;
 pub mod inspect;
 pub mod layout;
+mod list;
 pub mod log;
 pub mod menu;
 pub mod node;
 pub mod reactive;
 mod reorder;
 pub mod screen;
+mod scrollbar;
 mod sheet;
 mod split;
 mod table_scroll;
@@ -85,10 +88,14 @@ pub use rich;
 /// `interact::Select`, …) and the headless test driver.
 pub use rich_interact as interact;
 
-pub use app::{every, Anchor, App, Ctx, Driver, Easing, FrameStats, Placement, Theme};
+pub use app::{
+    every, Anchor, App, Ctx, Driver, Easing, FrameStats, ModalOptions, Placement, Theme,
+};
 pub use border::{Border, BorderSet, Edge, Shadow, Sides};
 pub use effect::{effect, fill};
+pub use input::{input, number_input};
 pub use layout::{Align, AlignContent, Justify, Size, StackLayout, TextAlign};
+pub use list::list_optional;
 pub use log::Log;
 pub use node::{
     column, component, each, grid, label, layers, leaf, list, renderable, repeating, row, scroll,
@@ -106,11 +113,11 @@ pub use widgets::text_area;
 pub mod prelude {
     // `text` is both the function and the `text!` macro.
     pub use crate::{
-        column, component, each, effect, every, fill, grid, label, layers, leaf, list, memo,
-        renderable, repeating, resource, row, scroll, scroll_both, scroll_with, scroll_x, signal,
-        spawn, switch, text, text_area, viewport, watch, widget, Align, App, Border, Ctx, Edge,
-        Justify, Load, Log, Memo, Node, Overflow, Proxy, Resource, Shadow, Sides, Signal, Size,
-        Task, TextAlign, Theme, Widget,
+        column, component, each, effect, every, fill, grid, input, label, layers, leaf, list,
+        list_optional, memo, number_input, renderable, repeating, resource, row, scroll,
+        scroll_both, scroll_with, scroll_x, signal, spawn, switch, text, text_area, viewport,
+        watch, widget, Align, App, Border, Ctx, Edge, Justify, Load, Log, Memo, Node, Overflow,
+        Proxy, Resource, Shadow, Sides, Signal, Size, Task, TextAlign, Theme, Widget,
     };
 }
 

@@ -1576,6 +1576,12 @@ pub(crate) struct ScrollView {
     view: (u16, u16),
     /// The focused node inside when it was last scrolled into view.
     focus: Option<NodeId>,
+    /// The bar down and the bar across, and where each was last drawn.
+    down: crate::scrollbar::Bar,
+    across_bar: crate::scrollbar::Bar,
+    bars: (Option<Rect>, Option<Rect>),
+    /// Its own size, as last laid out.
+    size: (u16, u16),
 }
 
 impl ScrollView {
@@ -1599,7 +1605,45 @@ impl ScrollView {
             content: (0, 0),
             view: (1, 1),
             focus: None,
+            down: crate::scrollbar::Bar::new(Some(crate::scrollbar::Scrollbar::new())),
+            across_bar: crate::scrollbar::Bar::new(Some(
+                crate::scrollbar::Scrollbar::new().side(crate::scrollbar::Side::Bottom),
+            )),
+            bars: (None, None),
+            size: (0, 0),
         }
+    }
+
+    /// Draw the bar down (a bar on the left or right) or the bar across (on
+    /// the top or bottom) as `bar` says.
+    pub(crate) fn set_bar(&mut self, bar: crate::scrollbar::Scrollbar) {
+        if bar.is_vertical() {
+            self.down = crate::scrollbar::Bar::new(Some(bar));
+        } else {
+            self.across_bar = crate::scrollbar::Bar::new(Some(bar));
+        }
+    }
+
+    fn down_look(&self) -> &crate::scrollbar::Scrollbar {
+        self.down.look.as_ref().expect("a scroll has a bar down")
+    }
+
+    fn across_look(&self) -> &crate::scrollbar::Scrollbar {
+        self.across_bar
+            .look
+            .as_ref()
+            .expect("a scroll has a bar across")
+    }
+
+    /// Where the window starts: after a bar on the left or the top.
+    fn window_origin(&self, width: u16, height: u16) -> (u16, u16) {
+        use crate::scrollbar::Side;
+        let x =
+            u16::from(self.vertical && self.view.0 < width && self.down_look().side == Side::Left);
+        let y = u16::from(
+            self.horizontal && self.view.1 < height && self.across_look().side == Side::Top,
+        );
+        (x, y)
     }
 
     fn by(&self, rows: i32) {
@@ -1683,11 +1727,12 @@ impl Widget for ScrollView {
         let mut h = tall(w);
         // The two bars can each make room the other needs: settle in two
         // passes.
+        let (down, across) = (self.down_look().clone(), self.across_look().clone());
         for _ in 0..2 {
-            if self.vertical && h > view_h && rect.width > 1 {
+            if self.vertical && down.wanted(h as usize, view_h as usize) && rect.width > 1 {
                 view_w = rect.width - 1;
             }
-            if self.horizontal && w > view_w && rect.height > 1 {
+            if self.horizontal && across.wanted(w as usize, view_w as usize) && rect.height > 1 {
                 view_h = rect.height - 1;
             }
             w = wide(view_w);
@@ -1696,6 +1741,7 @@ impl Widget for ScrollView {
         self.offset.get();
         self.x_offset.get();
         self.view = (view_w, view_h);
+        self.size = (rect.width, rect.height);
         self.content = (
             w.max(view_w),
             if self.vertical {
@@ -1724,28 +1770,82 @@ impl Widget for ScrollView {
                 }
             }
         }
+        let (x, y) = self.window_origin(self.size.0, self.size.1);
         (
-            Rect::new(0, 0, self.view.0, self.view.1),
+            Rect::new(x, y, self.view.0, self.view.1),
             (self.left(), self.top()),
         )
     }
 
     fn draw(&mut self, cx: &mut DrawCx, canvas: &mut Canvas) {
+        use crate::scrollbar::Side;
         // The focus moving inside may scroll the view.
         cx.focus_within();
         let (content_w, content_h) = self.content;
         let (view_w, view_h) = self.view;
-        if view_w < canvas.width() && content_h > view_h {
-            let lines = crate::node::scrollbar(cx.console(), view_h, self.top(), content_h);
-            canvas.lines_at(canvas.width() - 1, 0, 1, view_h, &lines);
+        let (width, height) = (canvas.width(), canvas.height());
+        let (x, y) = self.window_origin(width, height);
+        self.bars = (None, None);
+        if self.vertical && view_w < width {
+            let look = self.down_look().clone();
+            let column = if look.side == Side::Left {
+                0
+            } else {
+                width - 1
+            };
+            let rect = Rect::new(column, y, 1, view_h);
+            let (top, content) = (self.top() as usize, content_h as usize);
+            look.paint(cx.console(), canvas, rect, top, content, view_h as usize);
+            self.bars.0 = Some(rect);
         }
-        if view_h < canvas.height() && content_w > view_w {
-            let line = crate::node::scrollbar_across(cx.console(), view_w, self.left(), content_w);
-            canvas.lines_at(0, canvas.height() - 1, view_w, 1, &[line]);
+        if self.horizontal && view_h < height {
+            let look = self.across_look().clone();
+            let line = if look.side == Side::Top {
+                0
+            } else {
+                height - 1
+            };
+            let rect = Rect::new(x, line, view_w, 1);
+            let (left, content) = (self.left() as usize, content_w as usize);
+            look.paint(cx.console(), canvas, rect, left, content, view_w as usize);
+            self.bars.1 = Some(rect);
         }
     }
 
-    fn event(&mut self, _cx: &mut EventCx, event: &WidgetEvent) -> Used {
+    fn event(&mut self, cx: &mut EventCx, event: &WidgetEvent) -> Used {
+        // A press or a drag on a bar scrolls by it.
+        if let WidgetEvent::Mouse(mouse) = event {
+            let (content_w, content_h) = self.content;
+            let (view_w, view_h) = self.view;
+            if let Some(rect) = self.bars.0 {
+                let (top, content) = (self.top() as usize, content_h as usize);
+                match self
+                    .down
+                    .mouse(cx, mouse, rect, top, content, view_h as usize)
+                {
+                    Some(Some(to)) => {
+                        self.offset.set(to.min(u16::MAX as usize) as u16);
+                        return Used::Yes;
+                    }
+                    Some(None) => return Used::Yes,
+                    None => {}
+                }
+            }
+            if let Some(rect) = self.bars.1 {
+                let (left, content) = (self.left() as usize, content_w as usize);
+                match self
+                    .across_bar
+                    .mouse(cx, mouse, rect, left, content, view_w as usize)
+                {
+                    Some(Some(to)) => {
+                        self.x_offset.set(to.min(u16::MAX as usize) as u16);
+                        return Used::Yes;
+                    }
+                    Some(None) => return Used::Yes,
+                    None => {}
+                }
+            }
+        }
         let page = self.view.1.max(2) as i32 - 1;
         let page_across = self.view.0.max(2) as i32 - 1;
         match event {

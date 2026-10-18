@@ -8,6 +8,7 @@ use std::rc::Rc;
 use rich_interact::{Button, Key, KeyCode, Modifiers, MouseKind};
 
 use crate::app::Ctx;
+use crate::list::Selection;
 use crate::node::{Axis, Node};
 use crate::reactive::{signal, Signal};
 use crate::screen::Rect;
@@ -39,22 +40,25 @@ impl Move {
 }
 
 /// What a [`list`](crate::list) shares with its reorder: the selection, the
-/// item count, the first row shown and the rows on screen, and where it
-/// reads whether the selected row is being carried.
+/// item count, the items on screen, where it
+/// reads whether the selected item is being carried, whether its items run
+/// bottom to top, and which item a row shows (or a drag on it reaches).
 pub(crate) struct ListModel {
-    pub selected: Signal<usize>,
+    pub selection: Selection,
     pub len: Rc<dyn Fn() -> usize>,
-    pub first: Rc<Cell<usize>>,
     pub rows: Rc<Cell<usize>>,
     pub carried: Rc<Cell<Option<Signal<bool>>>>,
+    pub reversed: Rc<Cell<bool>>,
+    pub item_at: Rc<dyn Fn(u16) -> Option<usize>>,
+    pub drag_to: Rc<dyn Fn(u16) -> usize>,
 }
 
 type OnReorder = Box<dyn FnMut(Move, &mut Ctx)>;
 
 /// Round a reorderable list: it sees the keys before the list does, and the
 /// mouse the list does not use.
-struct Reorderable {
-    child: Node,
+pub(crate) struct Reorderable {
+    pub child: Node,
     model: Rc<ListModel>,
     on_reorder: OnReorder,
     /// Whether the selected row is being carried (grabbed with Space, or
@@ -85,14 +89,14 @@ impl Reorderable {
     /// app, and keep it selected.
     fn carry(&mut self, cx: &mut EventCx, to: usize) {
         let len = self.len();
-        if len == 0 {
+        let Some(selected) = self.model.selection.get_untracked().filter(|_| len > 0) else {
             return;
-        }
-        let from = self.model.selected.get_untracked().min(len - 1);
+        };
+        let from = selected.min(len - 1);
         let to = to.min(len - 1);
         if from != to {
             (self.on_reorder)(Move { from, to }, cx.app());
-            self.model.selected.set(to);
+            self.model.selection.set(to);
         }
     }
 
@@ -104,17 +108,35 @@ impl Reorderable {
 
     /// A key, before the list sees it.
     fn key(&mut self, cx: &mut EventCx, pressed: Key) -> Used {
-        let selected = self.model.selected.get_untracked();
+        let Some(selected) = self.model.selection.get_untracked() else {
+            return Used::No;
+        };
         let page = self.model.rows.get().max(1);
         let is = |code: KeyCode, alt: bool, ctrl: bool| pressed.matches(&key(code, alt, ctrl));
         let char_is = |c: char| pressed.matches(&Key::char(c));
+        // Up and down the screen: bottom to top, up is the next item.
+        let reversed = self.model.reversed.get();
+        let up = |by: usize| {
+            if reversed {
+                selected.saturating_add(by)
+            } else {
+                selected.saturating_sub(by)
+            }
+        };
+        let down = |by: usize| {
+            if reversed {
+                selected.saturating_sub(by)
+            } else {
+                selected.saturating_add(by)
+            }
+        };
         // Moves that carry the item, grabbed or not: Alt or Ctrl with an
         // arrow, Home or End, and K and J for any terminal.
         let target = if is(KeyCode::Up, true, false) || is(KeyCode::Up, false, true) || char_is('K')
         {
-            Some(selected.saturating_sub(1))
+            Some(up(1))
         } else if is(KeyCode::Down, true, false) || is(KeyCode::Down, false, true) || char_is('J') {
-            Some(selected + 1)
+            Some(down(1))
         } else if is(KeyCode::Home, true, false) || is(KeyCode::Home, false, true) {
             Some(0)
         } else if is(KeyCode::End, true, false) || is(KeyCode::End, false, true) {
@@ -140,13 +162,13 @@ impl Reorderable {
         };
         // Grabbed: the list's own moves carry the item.
         let to = if is(KeyCode::Up, false, false) || char_is('k') {
-            selected.saturating_sub(1)
+            up(1)
         } else if is(KeyCode::Down, false, false) || char_is('j') {
-            selected + 1
+            down(1)
         } else if is(KeyCode::PageUp, false, false) {
-            selected.saturating_sub(page)
+            up(page)
         } else if is(KeyCode::PageDown, false, false) {
-            selected + page
+            down(page)
         } else if is(KeyCode::Home, false, false) || char_is('g') {
             0
         } else if is(KeyCode::End, false, false) || char_is('G') {
@@ -169,30 +191,23 @@ impl Reorderable {
     }
 
     fn mouse(&mut self, cx: &mut EventCx, kind: MouseKind, row: u16) -> Used {
-        let first = self.model.first.get();
         let len = self.len();
         match kind {
             MouseKind::Down(Button::Left) => {
-                let at = first + row as usize;
-                if at >= len {
+                let Some(at) = (self.model.item_at)(row).filter(|&at| at < len) else {
                     return Used::No;
-                }
+                };
                 self.grabbed = None;
-                self.model.selected.set(at);
+                self.model.selection.set(at);
                 self.dragging = true;
                 cx.capture_mouse();
                 Used::Yes
             }
             MouseKind::Drag(Button::Left) if self.dragging => {
                 self.set_carried(true);
-                // Below the last row shown, a row further: the list
+                // Past the last item shown, an item further: the list
                 // scrolls to follow.
-                let shown = self.model.rows.get().max(1);
-                let to = if (row as usize) >= shown {
-                    first + shown
-                } else {
-                    first + row as usize
-                };
+                let to = (self.model.drag_to)(row);
                 self.carry(cx, to);
                 Used::Yes
             }
