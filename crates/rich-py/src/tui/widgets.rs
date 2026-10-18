@@ -4,7 +4,7 @@
 
 use std::cell::RefCell;
 
-use pyo3::exceptions::PyTypeError;
+use pyo3::exceptions::{PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyString, PyTuple};
 
@@ -20,8 +20,11 @@ use super::{axis_arg, placement_arg, size_arg, Callback, PySize};
 // ---------------------------------------------------------------------------
 // Tables
 
-/// `Column(title, size)`: a table column, sized like a child in a row
-/// (`Size.Auto` fits its title and the cells in view).
+/// `Column(title, size, *, align="flex-start", min=0, max=None)`: a table
+/// column, sized like a child in a row (`Size.Auto` fits its title and the
+/// cells in view), at least `min` and at most `max` cells, its cells and
+/// title at the start, `"center"` or `"flex-end"` (numbers on the right).
+/// `align(..)`, `min(..)` and `max(..)` return a changed column.
 #[pyclass(name = "Column", module = "rs_rich.tui", frozen, skip_from_py_object)]
 #[derive(Clone)]
 pub(crate) struct PyColumn(core::Column);
@@ -29,13 +32,40 @@ pub(crate) struct PyColumn(core::Column);
 #[pymethods]
 impl PyColumn {
     #[new]
-    #[pyo3(signature = (title, size=None))]
-    fn new(title: &str, size: Option<&Bound<'_, PyAny>>) -> PyResult<PyColumn> {
+    #[pyo3(signature = (title, size=None, *, align="flex-start", min=0, max=None))]
+    fn new(
+        title: &str,
+        size: Option<&Bound<'_, PyAny>>,
+        align: &str,
+        min: u16,
+        max: Option<u16>,
+    ) -> PyResult<PyColumn> {
         let size = match size {
             Some(size) => size_arg(size)?,
             None => intuituive::Size::Flex(1),
         };
-        Ok(PyColumn(core::Column::new(title, size)))
+        let column = core::Column::new(title, size)
+            .align(super::node::align_arg(align)?)
+            .min(min)
+            .max(max.unwrap_or(u16::MAX));
+        Ok(PyColumn(column))
+    }
+
+    /// The column with its cells at `align`.
+    fn align(&self, align: &str) -> PyResult<PyColumn> {
+        Ok(PyColumn(
+            self.0.clone().align(super::node::align_arg(align)?),
+        ))
+    }
+
+    /// The column at least `cells` wide.
+    fn min(&self, cells: u16) -> PyColumn {
+        PyColumn(self.0.clone().min(cells))
+    }
+
+    /// The column at most `cells` wide.
+    fn max(&self, cells: u16) -> PyColumn {
+        PyColumn(self.0.clone().max(cells))
     }
 
     #[getter]
@@ -124,7 +154,11 @@ fn selected(value: &Bound<'_, PyAny>, what: &str) -> PyResult<Signal<usize>> {
 /// (the table sorts plain rows), `.cells(signal)` (a cell cursor's column)
 /// `.resizable()`, `.scroll_x()` (columns keep their natural widths and the
 /// table scrolls across when they do not fit) and `.freeze_columns(n)`. A
-/// sort signal holds `None` or `(column, Order)`.
+/// sort signal holds `None` or `(column, Order)`. How it looks:
+/// `.footer(cells)`, `.header_gap(n)`, `.row_gap(n)`, `.column_spacing(n)`,
+/// `.symbol(markup)`, `.highlight_spacing(..)`, `.row_style(f)`,
+/// `.multiline()`, `.row_height(n)`, `.column_highlight()` and
+/// `.scroll_padding(n)`.
 #[pyclass(name = "TableOptions", module = "rs_rich.tui", unsendable)]
 #[derive(Default)]
 pub(crate) struct PyTableOptions {
@@ -133,6 +167,17 @@ pub(crate) struct PyTableOptions {
     resizable: std::cell::Cell<bool>,
     scroll_x: std::cell::Cell<bool>,
     freeze: std::cell::Cell<usize>,
+    footer: RefCell<Option<Py<PyAny>>>,
+    header_gap: std::cell::Cell<u16>,
+    row_gap: std::cell::Cell<u16>,
+    column_spacing: std::cell::Cell<Option<u16>>,
+    symbol: RefCell<Option<String>>,
+    spacing: std::cell::Cell<Option<core::HighlightSpacing>>,
+    row_style: RefCell<Option<Py<PyAny>>>,
+    multiline: std::cell::Cell<bool>,
+    row_height: std::cell::Cell<Option<u16>>,
+    column_highlight: std::cell::Cell<bool>,
+    scroll_padding: std::cell::Cell<usize>,
 }
 
 impl PyTableOptions {
@@ -157,6 +202,35 @@ impl PyTableOptions {
         }
         if self.freeze.get() > 0 {
             options = options.freeze_columns(self.freeze.get());
+        }
+        if let Some(footer) = &*self.footer.borrow() {
+            let footer = string_source(footer.bind(py), "the table's footer")?;
+            options = options.footer(footer);
+        }
+        options = options
+            .header_gap(self.header_gap.get())
+            .row_gap(self.row_gap.get())
+            .scroll_padding(self.scroll_padding.get());
+        if let Some(spacing) = self.column_spacing.get() {
+            options = options.column_spacing(spacing);
+        }
+        if let Some(symbol) = &*self.symbol.borrow() {
+            options = options.symbol(symbol);
+        }
+        if let Some(spacing) = self.spacing.get() {
+            options = options.highlight_spacing(spacing);
+        }
+        if let Some(style) = &*self.row_style.borrow() {
+            options = options.row_style(super::node::row_style(style.bind(py))?);
+        }
+        if self.multiline.get() {
+            options = options.multiline();
+        }
+        if let Some(height) = self.row_height.get() {
+            options = options.row_height(height);
+        }
+        if self.column_highlight.get() {
+            options = options.column_highlight();
         }
         Ok(options)
     }
@@ -214,6 +288,220 @@ impl PyTableOptions {
         slf.borrow().freeze.set(columns);
         slf
     }
+
+    /// A footer row under the rows: `cells()` (or the cells) as str.
+    fn footer<'py>(slf: Bound<'py, Self>, cells: &Bound<'py, PyAny>) -> Bound<'py, Self> {
+        *slf.borrow().footer.borrow_mut() = Some(cells.clone().unbind());
+        slf
+    }
+
+    /// `lines` blank lines between the header and the rows.
+    fn header_gap(slf: Bound<'_, Self>, lines: u16) -> Bound<'_, Self> {
+        slf.borrow().header_gap.set(lines);
+        slf
+    }
+
+    /// `lines` blank lines after each row.
+    fn row_gap(slf: Bound<'_, Self>, lines: u16) -> Bound<'_, Self> {
+        slf.borrow().row_gap.set(lines);
+        slf
+    }
+
+    /// `cells` between columns (one by default).
+    fn column_spacing(slf: Bound<'_, Self>, cells: u16) -> Bound<'_, Self> {
+        slf.borrow().column_spacing.set(Some(cells));
+        slf
+    }
+
+    /// `markup` before the selected row.
+    fn symbol<'py>(slf: Bound<'py, Self>, markup: &str) -> Bound<'py, Self> {
+        *slf.borrow().symbol.borrow_mut() = Some(markup.to_string());
+        slf
+    }
+
+    /// When the symbol keeps its column: `"when_selected"`, `"always"` or
+    /// `"never"`.
+    fn highlight_spacing<'py>(slf: Bound<'py, Self>, spacing: &str) -> PyResult<Bound<'py, Self>> {
+        let spacing = super::node::spacing_arg(spacing)?;
+        slf.borrow().spacing.set(Some(spacing));
+        Ok(slf)
+    }
+
+    /// `style(i)` is a style (or theme name) for row `i`, or `None`.
+    fn row_style<'py>(slf: Bound<'py, Self>, style: &Bound<'py, PyAny>) -> Bound<'py, Self> {
+        *slf.borrow().row_style.borrow_mut() = Some(style.clone().unbind());
+        slf
+    }
+
+    /// Rows as tall as their tallest cell.
+    fn multiline(slf: Bound<'_, Self>) -> Bound<'_, Self> {
+        slf.borrow().multiline.set(true);
+        slf
+    }
+
+    /// Every row `lines` tall (what a virtual table takes).
+    fn row_height(slf: Bound<'_, Self>, lines: u16) -> Bound<'_, Self> {
+        slf.borrow().row_height.set(Some(lines.max(1)));
+        slf
+    }
+
+    /// With a cell cursor, its column down the rows.
+    fn column_highlight(slf: Bound<'_, Self>) -> Bound<'_, Self> {
+        slf.borrow().column_highlight.set(true);
+        slf
+    }
+
+    /// Keep `rows` rows in view either side of the selected one.
+    fn scroll_padding(slf: Bound<'_, Self>, rows: usize) -> Bound<'_, Self> {
+        slf.borrow().scroll_padding.set(rows);
+        slf
+    }
+}
+
+/// `table_optional(columns, rows, selected, options=None)`: a `table` whose
+/// selection, in the signal `selected`, may be `None`.
+#[pyfunction]
+#[pyo3(signature = (columns, rows, selected, options=None))]
+fn tui_table_optional(
+    columns: &Bound<'_, PyAny>,
+    rows: &Bound<'_, PyAny>,
+    selected: &Bound<'_, PyAny>,
+    options: Option<&Bound<'_, PyTableOptions>>,
+) -> PyResult<PyNode> {
+    let py = columns.py();
+    let columns = self::columns(columns)?;
+    let rows = rows_source(rows)?;
+    let selected = signal_arg(selected, "a table's selection")?
+        .borrow()
+        .maybe(py, "a table's selection")?;
+    let options = match options {
+        Some(options) => options.borrow().build(py)?,
+        None => core::TableOptions::default(),
+    };
+    Ok(PyNode::new(core::table_optional(
+        columns, rows, selected, options,
+    )))
+}
+
+// ---------------------------------------------------------------------------
+// Scrollbars
+
+/// `Scrollbar()`: how a scrollbar looks and when it shows, for
+/// `Node.scrollbar(bar)` and `scrollbar(..)`. Each builder returns a new
+/// one: `side("right" | "left" | "bottom" | "top")`,
+/// `show("auto" | "always" | "never")`, `symbols("thin" |
+/// "thin_horizontal" | "vertical" | "double_vertical" | "horizontal" |
+/// "double_horizontal")`, `thumb(symbol)`, `track(symbol or None)` and
+/// `ends(begin, end)` (each a symbol or `None`).
+#[pyclass(
+    name = "Scrollbar",
+    module = "rs_rich.tui",
+    frozen,
+    skip_from_py_object
+)]
+#[derive(Clone, Default)]
+pub(crate) struct PyScrollbar(pub(crate) core::Scrollbar);
+
+#[pymethods]
+impl PyScrollbar {
+    #[new]
+    fn new() -> PyScrollbar {
+        PyScrollbar::default()
+    }
+
+    fn side(&self, side: &str) -> PyResult<PyScrollbar> {
+        let side = match side {
+            "right" => core::Side::Right,
+            "left" => core::Side::Left,
+            "bottom" => core::Side::Bottom,
+            "top" => core::Side::Top,
+            other => {
+                return Err(PyValueError::new_err(format!(
+                    "{other:?}: expected 'right', 'left', 'bottom' or 'top'"
+                )))
+            }
+        };
+        Ok(PyScrollbar(self.0.clone().side(side)))
+    }
+
+    fn show(&self, show: &str) -> PyResult<PyScrollbar> {
+        let show = match show {
+            "auto" => core::Show::Auto,
+            "always" => core::Show::Always,
+            "never" => core::Show::Never,
+            other => {
+                return Err(PyValueError::new_err(format!(
+                    "{other:?}: expected 'auto', 'always' or 'never'"
+                )))
+            }
+        };
+        Ok(PyScrollbar(self.0.clone().show(show)))
+    }
+
+    fn symbols(&self, symbols: &str) -> PyResult<PyScrollbar> {
+        use core::ScrollbarSymbols as Set;
+        let set = match symbols {
+            "thin" => Set::THIN,
+            "thin_horizontal" => Set::THIN_HORIZONTAL,
+            "vertical" => Set::VERTICAL,
+            "double_vertical" => Set::DOUBLE_VERTICAL,
+            "horizontal" => Set::HORIZONTAL,
+            "double_horizontal" => Set::DOUBLE_HORIZONTAL,
+            other => {
+                return Err(PyValueError::new_err(format!(
+                    "{other:?}: expected 'thin', 'thin_horizontal', 'vertical', \
+                     'double_vertical', 'horizontal' or 'double_horizontal'"
+                )))
+            }
+        };
+        Ok(PyScrollbar(self.0.clone().symbols(set)))
+    }
+
+    fn thumb(&self, symbol: &str) -> PyScrollbar {
+        PyScrollbar(self.0.clone().thumb(symbol))
+    }
+
+    fn track(&self, symbol: Option<&str>) -> PyScrollbar {
+        PyScrollbar(self.0.clone().track(symbol))
+    }
+
+    fn ends(&self, begin: Option<&str>, end: Option<&str>) -> PyScrollbar {
+        PyScrollbar(self.0.clone().ends(begin, end))
+    }
+
+    fn __repr__(&self) -> String {
+        format!("{:?}", self.0)
+    }
+}
+
+/// A count: an int, or a function returning one.
+fn count_source(value: &Bound<'_, PyAny>, what: &str) -> PyResult<Box<dyn Fn() -> usize>> {
+    if value.is_callable() {
+        return Ok(Box::new(len_source(value)?));
+    }
+    let count: usize = value.extract().map_err(|_| {
+        PyTypeError::new_err(format!("{what} is an int, or a function returning one"))
+    })?;
+    Ok(Box::new(move || count))
+}
+
+/// `scrollbar(position, len, view, bar=None)`: a scrollbar of its own: it
+/// shows `view` of `len` (ints, or functions returning them; a `view` of 0
+/// is the bar's length) from the int signal `position`, which the mouse
+/// and the wheel set.
+#[pyfunction]
+#[pyo3(signature = (position, len, view, bar=None))]
+fn tui_scrollbar(
+    position: &Bound<'_, PyAny>,
+    len: &Bound<'_, PyAny>,
+    view: &Bound<'_, PyAny>,
+    bar: Option<&Bound<'_, PyScrollbar>>,
+) -> PyResult<PyNode> {
+    let position = self::selected(position, "a scrollbar's position")?;
+    let len = count_source(len, "len")?;
+    let view = count_source(view, "view")?;
+    let bar = bar.map(|bar| bar.get().0.clone()).unwrap_or_default();
+    Ok(PyNode::new(core::scrollbar(position, len, view, bar)))
 }
 
 /// `table(columns, rows, selected)`: markup cells under a header that stays
@@ -900,6 +1188,7 @@ pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     for (name, class) in [
         ("TuiColumn", py.get_type::<PyColumn>()),
         ("TuiTableOptions", py.get_type::<PyTableOptions>()),
+        ("TuiScrollbar", py.get_type::<PyScrollbar>()),
         ("TuiTreeItem", py.get_type::<PyTreeItem>()),
         ("TuiLazyItem", py.get_type::<PyLazyItem>()),
         ("TuiMenuItem", py.get_type::<PyMenuItem>()),
@@ -909,6 +1198,8 @@ pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     }
     m.add_function(wrap_pyfunction!(tui_table, m)?)?;
     m.add_function(wrap_pyfunction!(tui_table_with, m)?)?;
+    m.add_function(wrap_pyfunction!(tui_table_optional, m)?)?;
+    m.add_function(wrap_pyfunction!(tui_scrollbar, m)?)?;
     m.add_function(wrap_pyfunction!(tui_virtual_table, m)?)?;
     m.add_function(wrap_pyfunction!(tui_virtual_list, m)?)?;
     m.add_function(wrap_pyfunction!(tui_tabs, m)?)?;

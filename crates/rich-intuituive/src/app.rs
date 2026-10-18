@@ -1564,7 +1564,12 @@ impl App {
         // loop's own end.
         let failed = driver.take_error();
         let exit = driver.app.exit.take();
-        let printed = driver.take_printed();
+        // Inline, `finish` prints what is left above the region itself.
+        let printed = if inline {
+            Vec::new()
+        } else {
+            driver.take_printed()
+        };
         let rows = driver.printed_rows(&printed);
         let _ = put(backend, linear, &driver.finish());
         let mut printed = Vec::new();

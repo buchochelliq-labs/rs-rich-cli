@@ -733,12 +733,200 @@ impl PyNode {
         Ok(slf)
     }
 
+    /// For a `list`: draw `markup` (`"[red]>>[/] "`) before the selected
+    /// item; the others get blank cells in its column.
+    fn symbol<'py>(slf: Bound<'py, Self>, markup: &str) -> PyResult<Bound<'py, Self>> {
+        slf.borrow().map(|n| n.symbol(markup))?;
+        Ok(slf)
+    }
+
+    /// For a `list`: the symbol on every line of a multi-line item.
+    fn repeat_symbol(slf: Bound<'_, Self>) -> PyResult<Bound<'_, Self>> {
+        slf.borrow().map(Node::repeat_symbol)?;
+        Ok(slf)
+    }
+
+    /// For a `list`: when the symbol keeps its column: `"when_selected"`
+    /// (the default), `"always"` or `"never"`.
+    fn highlight_spacing<'py>(slf: Bound<'py, Self>, spacing: &str) -> PyResult<Bound<'py, Self>> {
+        let spacing = spacing_arg(spacing)?;
+        slf.borrow().map(|n| n.highlight_spacing(spacing))?;
+        Ok(slf)
+    }
+
+    /// For a `list`: `"top_to_bottom"` (the default) or `"bottom_to_top"`.
+    fn direction<'py>(slf: Bound<'py, Self>, direction: &str) -> PyResult<Bound<'py, Self>> {
+        use intuituive::widgets::ListDirection;
+        let direction = match direction {
+            "top_to_bottom" => ListDirection::TopToBottom,
+            "bottom_to_top" => ListDirection::BottomToTop,
+            other => {
+                return Err(PyValueError::new_err(format!(
+                    "{other:?}: expected 'top_to_bottom' or 'bottom_to_top'"
+                )))
+            }
+        };
+        slf.borrow().map(|n| n.direction(direction))?;
+        Ok(slf)
+    }
+
+    /// For a `list`: keep `items` items in view either side of the
+    /// selected one.
+    fn scroll_padding(slf: Bound<'_, Self>, items: usize) -> PyResult<Bound<'_, Self>> {
+        slf.borrow().map(|n| n.scroll_padding(items))?;
+        Ok(slf)
+    }
+
+    /// For a `list`: items keep their lines and wrap.
+    fn multiline(slf: Bound<'_, Self>) -> PyResult<Bound<'_, Self>> {
+        slf.borrow().map(Node::multiline)?;
+        Ok(slf)
+    }
+
+    /// For a `list`: `style(i)` is a style (or theme name) for item `i`'s
+    /// whole rows, or `None`.
+    fn row_style<'py>(
+        slf: Bound<'py, Self>,
+        style: &Bound<'py, PyAny>,
+    ) -> PyResult<Bound<'py, Self>> {
+        let style = row_style(style)?;
+        slf.borrow().map(|n| n.row_style(style))?;
+        Ok(slf)
+    }
+
+    /// For a `list`: the first item in view, in the signal `first`.
+    fn offset<'py>(slf: Bound<'py, Self>, first: &Bound<'py, PyAny>) -> PyResult<Bound<'py, Self>> {
+        let first = signal_arg(first, "a list's offset")?
+            .borrow()
+            .usize(first.py(), "a list's offset")?;
+        slf.borrow().map(|n| n.offset(first))?;
+        Ok(slf)
+    }
+
+    /// A scrollbar drawn as `bar` (a `Scrollbar`) says, on a `scroll`, a
+    /// `list`, a table, a tree, a text area or a log's view.
+    fn scrollbar<'py>(
+        slf: Bound<'py, Self>,
+        bar: &Bound<'py, super::widgets::PyScrollbar>,
+    ) -> PyResult<Bound<'py, Self>> {
+        let bar = bar.get().0.clone();
+        slf.borrow().map(|n| n.scrollbar(bar))?;
+        Ok(slf)
+    }
+
+    /// For `tabs`: `markup` between the titles instead of a line.
+    fn divider<'py>(slf: Bound<'py, Self>, markup: &str) -> PyResult<Bound<'py, Self>> {
+        slf.borrow().map(|n| n.divider(markup))?;
+        Ok(slf)
+    }
+
+    /// For `tabs`: the markup either side of each title.
+    fn tab_padding<'py>(
+        slf: Bound<'py, Self>,
+        left: &str,
+        right: &str,
+    ) -> PyResult<Bound<'py, Self>> {
+        slf.borrow().map(|n| n.tab_padding(left, right))?;
+        Ok(slf)
+    }
+
+    /// For `tabs`: where the titles sit: `"flex-start"`, `"center"` or
+    /// `"flex-end"`.
+    fn titles_align<'py>(slf: Bound<'py, Self>, align: &str) -> PyResult<Bound<'py, Self>> {
+        let align = align_arg(align)?;
+        slf.borrow().map(|n| n.titles_align(align))?;
+        Ok(slf)
+    }
+
+    /// For an `input` or a `text_area`: dimmed text while it is empty.
+    fn placeholder<'py>(slf: Bound<'py, Self>, text: &str) -> PyResult<Bound<'py, Self>> {
+        slf.borrow().map(|n| n.placeholder(text))?;
+        Ok(slf)
+    }
+
+    /// For an `input` or a `text_area`: the caret moves and text is
+    /// selected and copied, but not edited.
+    fn read_only(slf: Bound<'_, Self>) -> PyResult<Bound<'_, Self>> {
+        slf.borrow().map(Node::read_only)?;
+        Ok(slf)
+    }
+
+    /// For an `input` or a `text_area`: show each character as `mask`.
+    fn mask(slf: Bound<'_, Self>, mask: char) -> PyResult<Bound<'_, Self>> {
+        slf.borrow().map(|n| n.mask(mask))?;
+        Ok(slf)
+    }
+
+    /// For an `input` or a `text_area`: at most `chars` characters.
+    fn max_length(slf: Bound<'_, Self>, chars: usize) -> PyResult<Bound<'_, Self>> {
+        slf.borrow().map(|n| n.max_length(chars))?;
+        Ok(slf)
+    }
+
+    /// For an `input`: `handler(value, cx)` on Enter, which it uses.
+    fn on_submit<'py>(
+        slf: Bound<'py, Self>,
+        handler: &Bound<'py, PyAny>,
+    ) -> PyResult<Bound<'py, Self>> {
+        let handler = Callback::checked(handler, "the submit handler")?;
+        slf.borrow().map(|n| {
+            n.on_submit(move |value, cx| {
+                let value =
+                    Python::attach(|py| PyValue(PyString::new(py, value).into_any().unbind()));
+                call_with_ctx(&handler, Some(value), cx)
+            })
+        })?;
+        Ok(slf)
+    }
+
+    /// For a `number_input`: step by `by`.
+    fn step(slf: Bound<'_, Self>, by: i64) -> PyResult<Bound<'_, Self>> {
+        slf.borrow().map(|n| n.step(by))?;
+        Ok(slf)
+    }
+
     fn __repr__(&self) -> String {
         match &*self.node.borrow() {
             Some(_) => format!("<Node {}>", self.id),
             None => format!("<Node {} (in a tree)>", self.id),
         }
     }
+}
+
+/// A highlight symbol's spacing, by name.
+pub(crate) fn spacing_arg(value: &str) -> PyResult<intuituive::widgets::HighlightSpacing> {
+    use intuituive::widgets::HighlightSpacing;
+    Ok(match value {
+        "when_selected" => HighlightSpacing::WhenSelected,
+        "always" => HighlightSpacing::Always,
+        "never" => HighlightSpacing::Never,
+        other => {
+            return Err(PyValueError::new_err(format!(
+                "{other:?}: expected 'when_selected', 'always' or 'never'"
+            )))
+        }
+    })
+}
+
+/// A row style function: `style(i)` is a style or `None`.
+pub(crate) fn row_style(
+    style: &Bound<'_, PyAny>,
+) -> PyResult<impl Fn(usize) -> Option<String> + 'static> {
+    let style = Callback::checked(style, "the row style")?;
+    Ok(move |i: usize| {
+        style
+            .call(
+                |py| PyTuple::new(py, [i]),
+                |value| {
+                    if value.is_none() {
+                        Ok(None)
+                    } else {
+                        Ok(Some(value.str()?.to_cow()?.into_owned()))
+                    }
+                },
+            )
+            .flatten()
+    })
 }
 
 /// Put `node` in `slf` (a wrapper that has a new identity).
@@ -1138,6 +1326,45 @@ fn tui_list(items: &Bound<'_, PyAny>, selected: &Bound<'_, PyAny>) -> PyResult<P
     Ok(PyNode::new(intuituive::list(items, selected)))
 }
 
+/// `list_optional(items, selected)`: a `list` whose selection, in the
+/// signal `selected`, may be `None`: no highlight, and Down selects the
+/// first item.
+#[pyfunction]
+fn tui_list_optional(items: &Bound<'_, PyAny>, selected: &Bound<'_, PyAny>) -> PyResult<PyNode> {
+    let py = items.py();
+    let items = string_source(items, "list's items")?;
+    let selected = signal_arg(selected, "list's selected")?
+        .borrow()
+        .maybe(py, "a list's selection")?;
+    Ok(PyNode::new(intuituive::list_optional(items, selected)))
+}
+
+/// `input(text)`: a one-line text box on the str signal `text`, both ways.
+/// Enter goes to `.on_submit(handler)`, or on to the app.
+#[pyfunction]
+fn tui_input(text: &Bound<'_, PyAny>) -> PyResult<PyNode> {
+    let text = signal_arg(text, "input's text")?
+        .borrow()
+        .string(text.py(), "an input's text")?;
+    Ok(PyNode::new(intuituive::input(text)))
+}
+
+/// `number_input(value, min, max)`: a whole number in the int signal
+/// `value`, kept from `min` to `max` (both included). Up/Down step it,
+/// PgUp/PgDn by ten steps, and digits type it.
+#[pyfunction]
+fn tui_number_input(value: &Bound<'_, PyAny>, min: i64, max: i64) -> PyResult<PyNode> {
+    if min > max {
+        return Err(PyValueError::new_err(format!(
+            "number_input's min ({min}) is after its max ({max})"
+        )));
+    }
+    let value = signal_arg(value, "number_input's value")?
+        .borrow()
+        .i64(value.py(), "a number input's value")?;
+    Ok(PyNode::new(intuituive::number_input(value, min..=max)))
+}
+
 /// `scroll(child)`: a viewport onto `child`, scrolled with the keys, the
 /// wheel and a scrollbar.
 #[pyfunction]
@@ -1265,6 +1492,9 @@ pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(tui_each, m)?)?;
     m.add_function(wrap_pyfunction!(tui_switch, m)?)?;
     m.add_function(wrap_pyfunction!(tui_list, m)?)?;
+    m.add_function(wrap_pyfunction!(tui_list_optional, m)?)?;
+    m.add_function(wrap_pyfunction!(tui_input, m)?)?;
+    m.add_function(wrap_pyfunction!(tui_number_input, m)?)?;
     m.add_function(wrap_pyfunction!(tui_scroll, m)?)?;
     m.add_function(wrap_pyfunction!(tui_scroll_with, m)?)?;
     m.add_function(wrap_pyfunction!(tui_scroll_x, m)?)?;
@@ -1277,7 +1507,7 @@ pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
 }
 
 /// An `align_items` or `align_self` value, by its CSS name.
-fn align_arg(value: &str) -> PyResult<intuituive::Align> {
+pub(crate) fn align_arg(value: &str) -> PyResult<intuituive::Align> {
     Ok(match value {
         "start" | "flex-start" => intuituive::Align::Start,
         "center" => intuituive::Align::Center,

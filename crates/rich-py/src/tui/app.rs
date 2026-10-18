@@ -17,7 +17,7 @@ use rich_intuituive::interact::{BackendKind, Event, Key};
 use rich_intuituive::{Anchor, Ctx};
 
 use super::node::{mouse_from, screen_builder, take_node, PyNode};
-use super::reactive::{call_with_ctx, signal_arg, PyProxy};
+use super::reactive::{call_with_ctx, signal_arg, PyProxy, PyValue};
 use super::{
     detached, easing_arg, keys, placement_arg, rect_arg, size_arg, Building, Callback, Enter,
     Handle, Lent, Loan, PyRect, Role, Shared,
@@ -114,6 +114,59 @@ impl PyCtx {
         let (width, height) = (size_arg(width)?, size_arg(height)?);
         let build = screen_builder(Callback::checked(build, "the pop-up's build")?);
         self.with(|cx| cx.popup(anchor, placement, width, height, build))
+    }
+
+    /// `modal`, with a shadow or a backdrop (a `ModalOptions`).
+    fn modal_with(
+        &self,
+        width: &Bound<'_, PyAny>,
+        height: &Bound<'_, PyAny>,
+        options: &Bound<'_, PyModalOptions>,
+        build: &Bound<'_, PyAny>,
+    ) -> PyResult<()> {
+        let (width, height) = (size_arg(width)?, size_arg(height)?);
+        let options = options.get().0.clone();
+        let build = screen_builder(Callback::checked(build, "the modal's build")?);
+        self.with(|cx| cx.modal_with(width, height, options, build))
+    }
+
+    /// `popup`, with a shadow or a backdrop (a `ModalOptions`).
+    #[allow(clippy::too_many_arguments)]
+    fn popup_with(
+        &self,
+        anchor: &Bound<'_, PyAny>,
+        placement: &Bound<'_, PyAny>,
+        width: &Bound<'_, PyAny>,
+        height: &Bound<'_, PyAny>,
+        options: &Bound<'_, PyModalOptions>,
+        build: &Bound<'_, PyAny>,
+    ) -> PyResult<()> {
+        let anchor = anchor_arg(anchor)?;
+        let placement = placement_arg(placement)?;
+        let (width, height) = (size_arg(width)?, size_arg(height)?);
+        let options = options.get().0.clone();
+        let build = screen_builder(Callback::checked(build, "the pop-up's build")?);
+        self.with(|cx| cx.popup_with(anchor, placement, width, height, options, build))
+    }
+
+    /// End the app after this event with `value`, which `App.run_for()`
+    /// (and a headless `Run`'s `exit`, and `Driver.take_exit()`) returns.
+    fn quit_with(&self, value: &Bound<'_, PyAny>) -> PyResult<()> {
+        let value = PyValue(value.clone().unbind());
+        self.with(|cx| cx.quit_with(value))
+    }
+
+    /// End the app after this event with `error` (an exception, or a
+    /// message): `App.run()` then raises it as an `OSError`.
+    fn fail(&self, error: &Bound<'_, PyAny>) -> PyResult<()> {
+        let message = error.str()?.to_cow()?.into_owned();
+        self.with(|cx| cx.fail(message))
+    }
+
+    /// Print console `markup` above the app: inline, into the scrollback
+    /// above it; full-screen, once it ends.
+    fn print_above(&self, markup: &str) -> PyResult<()> {
+        self.with(|cx| cx.print_above(markup))
     }
 
     /// Open the command palette: the bindings made with `bind`.
@@ -504,19 +557,25 @@ impl From<intuituive::a11y::Announcement> for PyAnnouncement {
     }
 }
 
-/// `FrameStats`: the last frame's counts: nodes `drawn`, `bytes` written.
+/// `FrameStats`: the last frame's counts: nodes `drawn`, `bytes` written,
+/// and `frames` drawn since the app started.
 #[pyclass(name = "FrameStats", module = "rs_rich.tui", frozen)]
 pub(crate) struct PyFrameStats {
     #[pyo3(get)]
     drawn: usize,
     #[pyo3(get)]
     bytes: usize,
+    #[pyo3(get)]
+    frames: u64,
 }
 
 #[pymethods]
 impl PyFrameStats {
     fn __repr__(&self) -> String {
-        format!("FrameStats(drawn={}, bytes={})", self.drawn, self.bytes)
+        format!(
+            "FrameStats(drawn={}, bytes={}, frames={})",
+            self.drawn, self.bytes, self.frames
+        )
     }
 }
 
@@ -525,7 +584,49 @@ impl From<intuituive::FrameStats> for PyFrameStats {
         PyFrameStats {
             drawn: stats.drawn,
             bytes: stats.bytes,
+            frames: stats.frames,
         }
+    }
+}
+
+/// `ModalOptions(shadow=None, backdrop=None)`: how a modal or a pop-up
+/// looks over the screen below: `shadow(style)`, a strip one cell right and
+/// down of the box, and `backdrop(style)`, the screen below restyled (each
+/// returns a new one).
+#[pyclass(
+    name = "ModalOptions",
+    module = "rs_rich.tui",
+    frozen,
+    skip_from_py_object
+)]
+#[derive(Clone, Default)]
+pub(crate) struct PyModalOptions(intuituive::ModalOptions);
+
+#[pymethods]
+impl PyModalOptions {
+    #[new]
+    #[pyo3(signature = (shadow=None, backdrop=None))]
+    fn new(shadow: Option<&str>, backdrop: Option<&str>) -> PyModalOptions {
+        let mut options = intuituive::ModalOptions::new();
+        if let Some(style) = shadow {
+            options = options.shadow(style);
+        }
+        if let Some(style) = backdrop {
+            options = options.backdrop(style);
+        }
+        PyModalOptions(options)
+    }
+
+    fn shadow(&self, style: &str) -> PyModalOptions {
+        PyModalOptions(self.0.clone().shadow(style))
+    }
+
+    fn backdrop(&self, style: &str) -> PyModalOptions {
+        PyModalOptions(self.0.clone().backdrop(style))
+    }
+
+    fn __repr__(&self) -> String {
+        format!("{:?}", self.0)
     }
 }
 
@@ -786,6 +887,13 @@ impl PyApp {
         Ok(slf)
     }
 
+    /// Whether `run` captures the mouse: `True` even inline, `False` never,
+    /// `None` (the default) full-screen only.
+    fn mouse(slf: Bound<'_, Self>, capture: Option<bool>) -> PyResult<Bound<'_, Self>> {
+        slf.borrow().map(|a| a.mouse(capture))?;
+        Ok(slf)
+    }
+
     /// Before each event, wait for the tasks in flight (for tests).
     #[pyo3(signature = (on=true))]
     fn wait_for_tasks(slf: Bound<'_, Self>, on: bool) -> PyResult<Bound<'_, Self>> {
@@ -862,6 +970,18 @@ impl PyApp {
     /// thread, with the GIL released while it waits.
     fn run(&self, py: Python<'_>) -> PyResult<()> {
         self.run_with(py, "crossterm")
+    }
+
+    /// `run`, returning the value a handler ended the app with
+    /// (`cx.quit_with(value)`), or `None`.
+    fn run_for(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        let (app, shared) = self.take()?;
+        let result = drive(py, &shared, terminal_size(), true, move || {
+            app.run_for::<PyValue>()
+        });
+        shared.close();
+        let exit = result?.map_err(|error| PyOSError::new_err(error.to_string()))?;
+        Ok(exit.map_or_else(|| py.None(), |value| value.object(py)))
     }
 
     /// `run`, with the terminal driven by `backend`. This wheel has
@@ -945,6 +1065,9 @@ pub(crate) struct PyRun {
     copies: Vec<String>,
     #[pyo3(get)]
     finished: bool,
+    /// The value a handler ended the app with (`cx.quit_with`), or `None`.
+    #[pyo3(get)]
+    exit: Py<PyAny>,
 }
 
 impl PyRun {
@@ -1000,15 +1123,18 @@ fn headless(
         let mut backend = Headless::new(script, width.max(1), height.max(1));
         backend.exact_keys = exact_keys;
         let record = backend.record();
-        let ran = app.run_on(&mut backend);
+        let ran = app.run_on_for::<PyValue>(&mut backend);
         let record = record.borrow().clone();
         (ran, record)
     });
     shared.close();
     let (ran, record) = result?;
-    let finished = match ran {
-        Ok(()) => true,
-        Err(error) if error.kind() == std::io::ErrorKind::UnexpectedEof => false,
+    let (finished, exit) = match ran {
+        Ok(exit) => (
+            true,
+            exit.map_or_else(|| py.None(), |value| value.object(py)),
+        ),
+        Err(error) if error.kind() == std::io::ErrorKind::UnexpectedEof => (false, py.None()),
         Err(error) => return Err(PyOSError::new_err(error.to_string())),
     };
     Ok(PyRun {
@@ -1016,6 +1142,7 @@ fn headless(
         writes: record.writes,
         copies: record.copies,
         finished,
+        exit,
     })
 }
 
@@ -1299,6 +1426,26 @@ impl PyDriver {
         self.step(py, intuituive::Driver::take_copies)
     }
 
+    /// The value a handler ended the app with (`cx.quit_with`), taken, or
+    /// `None`.
+    fn take_exit(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        let exit = self.step(py, |driver| driver.take_exit::<PyValue>())?;
+        Ok(exit.map_or_else(|| py.None(), |value| value.object(py)))
+    }
+
+    /// The error a handler ended the app with (`cx.fail`), as a message,
+    /// taken, or `None`.
+    fn take_error(&self, py: Python<'_>) -> PyResult<Option<String>> {
+        let error = self.step(py, intuituive::Driver::take_error)?;
+        Ok(error.map(|error| error.to_string()))
+    }
+
+    /// The markup printed above the app (`cx.print_above`) waiting to be
+    /// printed, taken: full-screen, to print once the terminal is back.
+    fn take_printed(&self, py: Python<'_>) -> PyResult<Vec<String>> {
+        self.step(py, intuituive::Driver::take_printed)
+    }
+
     /// `text` is on the clipboard: a toast says so.
     fn copied(&self, py: Python<'_>, text: &str) -> PyResult<()> {
         self.step(py, move |driver| driver.copied(text))
@@ -1405,6 +1552,7 @@ pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
         ("TuiAccessNode", py.get_type::<PyAccessNode>()),
         ("TuiAnnouncement", py.get_type::<PyAnnouncement>()),
         ("TuiFrameStats", py.get_type::<PyFrameStats>()),
+        ("TuiModalOptions", py.get_type::<PyModalOptions>()),
         ("TuiTraceEntry", py.get_type::<PyTraceEntry>()),
         ("TuiNodeTiming", py.get_type::<PyNodeTiming>()),
         ("TuiApp", py.get_type::<PyApp>()),

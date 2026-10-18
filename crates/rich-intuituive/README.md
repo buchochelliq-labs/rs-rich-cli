@@ -114,6 +114,17 @@ At 200x60 the gap widens: a tick costs 18 µs against 339, a selection move
 50 against 360, and a log append 248 against 333. intuiTUIve's version is 56
 lines of app code against ratatui's 79.
 
+Two more scenes are measured and reported, not gated: a full-screen churn,
+where every cell changes each frame (an RGB swatch, as ratatui's
+`colors-rgb`), and a braille line chart redrawn each tick. There ratatui is
+ahead, since nothing is saved by drawing only what changed when everything
+does:
+
+| 80x24, release | ratatui | intuiTUIve |
+|---|---:|---:|
+| churn, every cell | **326 µs**, 62 kB | 3,042 µs, 66 kB |
+| a chart redrawn | **81 µs**, 4.2 kB | 463 µs, **3.1 kB** |
+
 The test asserts this bar, and CI runs it. The design, and the ratatui
 problems it is built to avoid, are in
 [`docs/design/intuituive.md`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/docs/design/intuituive.md).
