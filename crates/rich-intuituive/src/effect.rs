@@ -50,6 +50,7 @@ pub fn effect(child: Node, f: impl FnMut(&mut Canvas, &mut DrawCx) + 'static) ->
             Box::new(Effect {
                 child,
                 draw: Box::new(f),
+                wrote: false,
             })
         },
         "effect",
@@ -60,6 +61,9 @@ pub fn effect(child: Node, f: impl FnMut(&mut Canvas, &mut DrawCx) + 'static) ->
 pub(crate) struct Effect {
     child: Node,
     draw: Draw,
+    /// Whether the closure wrote any cells the last time it ran: when it
+    /// did not, what is inside need not draw again before the next run.
+    pub(crate) wrote: bool,
 }
 
 impl Widget for Effect {

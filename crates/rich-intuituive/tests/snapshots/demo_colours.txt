@@ -1,0 +1,32 @@
+╭─ intuiTUIve demo ────────────────────────────────────────────────────────────────────────────────╮
+│ Graphs │ World │ Colours                                                                         │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭─ Colours ──────────────────────────────────────╮
+│default:        Foreground      Background      │
+│black:          Foreground      Background      │
+│red:            Foreground      Background      │
+│green:          Foreground      Background      │
+│yellow:         Foreground      Background      │
+│blue:           Foreground      Background      │
+│magenta:        Foreground      Background      │
+│cyan:           Foreground      Background      │
+│white:          Foreground      Background      │
+│bright_black:   Foreground      Background      │
+│bright_red:     Foreground      Background      │
+│bright_green:   Foreground      Background      │
+│bright_yellow:  Foreground      Background      │
+│bright_blue:    Foreground      Background      │
+│bright_magenta: Foreground      Background      │
+│bright_cyan:    Foreground      Background      │
+│bright_white:   Foreground      Background      │
+│                                                │
+│                                                │
+│                                                │
+│                                                │
+│                                                │
+│                                                │
+│                                                │
+│                                                │
+│                                                │
+│                                                │
+╰────────────────────────────────────────────────╯

@@ -68,7 +68,7 @@ including Ctrl+C and a panic.
 | `grid([sizes], [...])` | Children in rows and columns (see [Grids](#grids)) |
 | `each(move \|\| keys, \|key\| node)` | One child per key, kept by key across reorders |
 | `switch(move \|\| key, \|key\| node)` | One child at a time, chosen by key; the others are kept (tabs, wizard steps) |
-| `list(move \|\| rows, selected)` | A scrolling list with a selected row (`selected` is a `Signal<usize>`); ↑↓ jk, Home/End and PageUp/PageDown move it |
+| `list(move \|\| rows, selected)` | A scrolling list with a selected row (`selected` is a `Signal<usize>`); ↑↓ jk, Home/End and PageUp/PageDown move it, a click selects a row and the wheel moves it |
 | `log.view()` | A streaming [`Log`](#logs) |
 | `component(Input::new("Name"), on_done)` | A `rich-interact` component (see [Components](#components)) |
 | `repeating(\|\| Input::new("Add"), on_done)` | The same, built fresh after each answer (an entry box) |
