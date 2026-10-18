@@ -88,6 +88,25 @@ fn a_mismatch_fails_with_a_diff() {
 }
 
 #[test]
+fn a_snapshot_saved_with_a_bom_still_matches() {
+    if std::env::var_os("UPDATE_SNAPSHOTS").is_some() {
+        return;
+    }
+    // An editor on Windows may save the file with a byte-order mark.
+    let dir = std::env::temp_dir().join(format!("intuituive-bom-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("screen.txt");
+    std::fs::write(&path, "\u{feff}one\r\ntwo\r\n").unwrap();
+    let matched = intuituive::testing::check_snapshot(&path, "one\ntwo\n");
+    // A real difference shows as the lines that differ, not the first too.
+    let error = intuituive::testing::check_snapshot(&path, "one\nthree\n").unwrap_err();
+    let _ = std::fs::remove_dir_all(&dir);
+    assert_eq!(matched, Ok(()));
+    assert!(error.contains(" one\n-two\n+three\n"), "{error}");
+    assert!(!error.contains('\u{feff}'), "{error:?}");
+}
+
+#[test]
 fn focus_assertions_name_where_the_focus_is() {
     let app = App::new(|| {
         column([

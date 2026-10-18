@@ -691,7 +691,7 @@ struct SheetSource {
     /// With `@media` rules: the generation and media key the number nodes
     /// match against was made for, and that number. A viewport that
     /// crosses a rule's bounds makes a new one.
-    media: Option<(u64, u64, u64)>,
+    media: Option<(u64, Vec<bool>, u64)>,
 }
 
 impl SheetSource {
@@ -711,8 +711,10 @@ impl SheetSource {
             return self.generation;
         }
         let key = self.sheet.media_key(viewport);
-        match self.media {
-            Some((base, held, generation)) if base == self.generation && held == key => generation,
+        match &self.media {
+            Some((base, held, generation)) if *base == self.generation && *held == key => {
+                *generation
+            }
             _ => {
                 let generation = sheet_generation();
                 self.media = Some((self.generation, key, generation));

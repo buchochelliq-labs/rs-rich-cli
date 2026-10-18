@@ -535,8 +535,11 @@ impl Widget for Pad {
 }
 
 /// A row's height in an [`each`](crate::each) list: its fixed size, its
-/// content for [`Size::Auto`], otherwise one row.
+/// content for [`Size::Auto`], otherwise one row; none while it is hidden.
 fn row_height(cx: &MeasureCx, child: &Node, width: u16) -> u16 {
+    if child.hidden() {
+        return 0;
+    }
     let height = match child.size {
         Size::Fixed(n) => n,
         Size::Auto => cx.measure(child, Axis::Vertical, width, 0),

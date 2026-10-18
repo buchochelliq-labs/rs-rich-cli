@@ -3,8 +3,8 @@
 
 use rich_interact::{Button, KeyCode, MouseKind};
 
-use crate::calendar::{moment_calendar, set_moment, CalendarOptions, DaySource};
-use crate::calendar::{Date, DateTime, Time};
+use crate::calendar::{empty, into_range, moment_calendar, set_moment, CalendarOptions, DaySource};
+use crate::calendar::{Date, DateTime, Time, EMPTY};
 use crate::node::{column, label, row, text, Axis, Node};
 use crate::reactive::{signal, Signal};
 use crate::widget::{widget, Canvas, DrawCx, EventCx, MeasureCx, Used, Widget, WidgetEvent};
@@ -215,25 +215,91 @@ impl TimeField {
         });
     }
 
-    /// A digit typed into the focused part: two fill it, or one that no
-    /// second digit could follow, and the focus moves on.
-    fn digit(&mut self, digit: char) {
-        let part = self.focused_part();
-        if part == Part::Half {
-            return;
+    /// Whether the range holds no time: its min is after its max.
+    fn empty(&self) -> bool {
+        match self.source {
+            TimeSource::Time(_) => empty(self.options.min, self.options.max),
+            TimeSource::Moment { min, max, .. } => empty(min, max),
         }
-        self.typed.push(digit);
-        let number: u32 = self.typed.parse().unwrap_or(0);
-        let twelve = self.options.twelve_hour;
-        let full = self.typed.len() == 2
-            || match part {
-                Part::Hour if twelve => number >= 2,
-                Part::Hour => number >= 3,
-                _ => number >= 6,
-            };
+    }
+
+    /// The earliest and latest times the range allows (beside a calendar,
+    /// on the day picked).
+    fn bounds(&self) -> (Option<Time>, Option<Time>) {
+        match self.source {
+            TimeSource::Time(_) => (self.options.min, self.options.max),
+            TimeSource::Moment {
+                value, min, max, ..
+            } => {
+                let day = value.get_untracked().date;
+                let on = |at: Option<DateTime>| at.filter(|at| at.date == day).map(|at| at.time);
+                (on(min), on(max))
+            }
+        }
+    }
+
+    /// Whether `time` is inside the range.
+    fn within(&self, time: Time) -> bool {
+        let (min, max) = self.bounds();
+        min.is_none_or(|min| time >= min) && max.is_none_or(|max| time <= max)
+    }
+
+    /// `time`, its `part` just typed, moved toward the range by that part
+    /// alone: it stops at the range's end for that part (an hour typed too
+    /// early becomes the first hour, keeping its minutes).
+    /// [`set`](Self::set) moves the rest only if it must.
+    fn toward(&self, time: Time, part: Part) -> Time {
+        let to = |end: Time| match part {
+            Part::Hour => Time {
+                hour: end.hour,
+                ..time
+            },
+            Part::Minute if time.hour == end.hour => Time {
+                minute: end.minute,
+                ..time
+            },
+            Part::Second if (time.hour, time.minute) == (end.hour, end.minute) => Time {
+                second: end.second,
+                ..time
+            },
+            _ => time,
+        };
+        match self.bounds() {
+            (Some(min), _) if time < min => to(min),
+            (_, Some(max)) if time > max => to(max),
+            _ => time,
+        }
+    }
+
+    /// Write `time`, its `part` just typed, moved into the range by that
+    /// part where it can be. Beside a calendar, the line under the picker
+    /// says why it moved.
+    fn set_typed(&self, time: Time, part: Part) {
+        let moved = self.toward(time, part);
+        self.set(moved);
+        if let TimeSource::Moment {
+            value,
+            min,
+            max,
+            message,
+        } = self.source
+        {
+            if moved != time && message.get_untracked().is_none() {
+                let at = DateTime {
+                    time,
+                    ..value.get_untracked()
+                };
+                message.set(into_range(min, max, at).1);
+            }
+        }
+    }
+
+    /// The time with `number` typed into the focused part, which `full`
+    /// says is complete.
+    fn typed_time(&self, number: u32, full: bool) -> Time {
         let time = self.get_untracked();
-        self.set(match part {
-            Part::Hour if twelve => {
+        match self.focused_part() {
+            Part::Hour if self.options.twelve_hour => {
                 let pm = time.hour >= 12;
                 let hour = number.min(12);
                 let hour = if full { hour.max(1) } else { hour } % 12;
@@ -250,15 +316,62 @@ impl TimeField {
                 minute: number.min(59),
                 ..time
             },
-            _ => Time {
+            Part::Second => Time {
                 second: number.min(59),
                 ..time
             },
-        });
+            Part::Half => time,
+        }
+    }
+
+    /// A digit typed into the focused part: two fill it, or one that no
+    /// second digit could follow, and the focus moves on. A first digit
+    /// that would put the time outside the range is not written, nor moved
+    /// into it, until the part is complete or left; inside it, it is
+    /// written at once.
+    fn digit(&mut self, digit: char) {
+        let part = self.focused_part();
+        if part == Part::Half {
+            return;
+        }
+        self.typed.push(digit);
+        let number: u32 = self.typed.parse().unwrap_or(0);
+        let twelve = self.options.twelve_hour;
+        let full = self.typed.len() == 2
+            || match part {
+                Part::Hour if twelve => number >= 2,
+                Part::Hour => number >= 3,
+                _ => number >= 6,
+            };
+        let time = self.typed_time(number, full);
         if full {
             self.typed.clear();
+            self.set_typed(time, part);
             self.part = (self.part + 1).min(self.parts().len() - 1);
+        } else if self.within(time) {
+            self.set(time);
         }
+    }
+
+    /// The focused part is left (or the focus): a first digit typed into it
+    /// and not written yet is written, moved into the range.
+    fn commit(&mut self) {
+        if let Ok(number) = self.typed.parse() {
+            self.set_typed(self.typed_time(number, false), self.focused_part());
+        }
+        self.typed.clear();
+    }
+
+    /// The cells its fields take.
+    fn fields_width(&self) -> u16 {
+        self.parts().len() as u16 * 3 - 1
+    }
+
+    /// What it shows after its fields: why no time can be picked, when its
+    /// own range is empty. Beside a calendar the line under them says it.
+    fn note(&self) -> Option<String> {
+        (self.empty() && matches!(self.source, TimeSource::Time(_)))
+            .then(|| format!(" {}: {}", EMPTY[0], EMPTY[1]))
     }
 }
 
@@ -276,9 +389,20 @@ impl Widget for TimeField {
         Some(crate::screen::Rect::new(x, 0, width, 1))
     }
 
+    fn access_state(&self) -> crate::a11y::AccessState {
+        crate::a11y::AccessState {
+            invalid: self.empty(),
+            ..Default::default()
+        }
+    }
+
     fn measure(&mut self, _cx: &MeasureCx, axis: Axis, _width: u16, _height: u16) -> u16 {
         match axis {
-            Axis::Horizontal => self.parts().len() as u16 * 3 - 1,
+            Axis::Horizontal => {
+                let note = self.note().map_or(0, |note| rich::cells::cell_len(&note));
+                self.fields_width()
+                    .saturating_add(note.min(u16::MAX as usize) as u16)
+            }
             Axis::Vertical => 1,
         }
     }
@@ -309,10 +433,18 @@ impl Widget for TimeField {
             };
             canvas.print(x, 0, &shown, on.then_some(&highlight));
         }
+        if let Some(note) = self.note() {
+            let style = cx.theme().error_style("error");
+            canvas.print(self.fields_width(), 0, &note, Some(&style));
+        }
     }
 
     fn event(&mut self, cx: &mut EventCx, event: &WidgetEvent) -> Used {
         let count = self.parts().len();
+        if self.empty() {
+            // No time is in the range, so nothing changes it.
+            return Used::No;
+        }
         match event {
             WidgetEvent::Key(key) => {
                 if key.modifiers.ctrl || key.modifiers.alt {
@@ -330,19 +462,19 @@ impl Widget for TimeField {
                     }
                     // At the ends the arrows leave the key to the app.
                     KeyCode::Left if self.part > 0 => {
+                        self.commit();
                         self.part -= 1;
-                        self.typed.clear();
                     }
                     KeyCode::Right if self.part + 1 < count => {
+                        self.commit();
                         self.part += 1;
-                        self.typed.clear();
                     }
                     KeyCode::Up => {
-                        self.typed.clear();
+                        self.commit();
                         self.step(1);
                     }
                     KeyCode::Down => {
-                        self.typed.clear();
+                        self.commit();
                         self.step(-1);
                     }
                     _ => return Used::No,
@@ -357,15 +489,21 @@ impl Widget for TimeField {
                     let Some(at) = at else {
                         return Used::No;
                     };
+                    self.commit();
                     self.part = at;
-                    self.typed.clear();
                 }
-                MouseKind::ScrollUp => self.step(1),
-                MouseKind::ScrollDown => self.step(-1),
+                MouseKind::ScrollUp => {
+                    self.commit();
+                    self.step(1);
+                }
+                MouseKind::ScrollDown => {
+                    self.commit();
+                    self.step(-1);
+                }
                 _ => return Used::No,
             },
             WidgetEvent::Focus(false) => {
-                self.typed.clear();
+                self.commit();
                 return Used::No;
             }
             _ => return Used::No,
@@ -407,8 +545,14 @@ pub fn time_picker(selected: Signal<Time>) -> Node {
 }
 
 /// A [`time_picker`] with seconds, a 12-hour clock (`a` and `p` set AM and
-/// PM) or a range, as `options` asks. A change past the range stops at its
-/// end.
+/// PM) or a range, as `options` asks. A step past the range stops at its
+/// end. A field typed past it stops at the range's end for that field and
+/// keeps the others where it can (an hour typed too early becomes the
+/// first hour, keeping its minutes); a first digit that would leave the
+/// range is not written until the field is complete or left. A range whose
+/// min is after its max is empty: the picker says so after its fields, as
+/// rs-rich-interact's pickers do ("the range is empty: min is after max"),
+/// and nothing changes the time.
 ///
 /// ```
 /// use intuituive::prelude::*;
@@ -437,7 +581,8 @@ pub fn time_picker_with(selected: Signal<Time>, options: TimeOptions) -> Node {
 /// them two rows show the range, or, when a change went past it and
 /// stopped at its end, why. Days outside the range are dimmed and cannot
 /// be selected, and on the first and last days the time stops at the
-/// range's ends. Eleven rows, twenty cells wide.
+/// range's ends. A range whose min is after its max is empty: the two rows
+/// say so, and nothing changes the moment. Eleven rows, twenty cells wide.
 ///
 /// ```
 /// use intuituive::prelude::*;
@@ -474,6 +619,9 @@ pub fn time_picker_with(selected: Signal<Time>, options: TimeOptions) -> Node {
 pub fn datetime_picker(selected: Signal<DateTime>, options: DateTimeOptions) -> Node {
     let message = signal(None::<String>);
     let (min, max) = (options.min, options.max);
+    // An empty range: the lines under the picker say so, not the calendar
+    // too, and nothing changes the moment.
+    let empty_range = empty(min, max);
     let calendar = moment_calendar(
         DaySource::Moment {
             value: selected,
@@ -483,8 +631,8 @@ pub fn datetime_picker(selected: Signal<DateTime>, options: DateTimeOptions) -> 
         },
         CalendarOptions {
             today: options.today,
-            min: min.map(|at| at.date),
-            max: max.map(|at| at.date),
+            min: min.filter(|_| !empty_range).map(|at| at.date),
+            max: max.filter(|_| !empty_range).map(|at| at.date),
         },
     );
     let time = widget(TimeField {
@@ -505,6 +653,7 @@ pub fn datetime_picker(selected: Signal<DateTime>, options: DateTimeOptions) -> 
     });
     let shown = move |at: DateTime| at.format(options.seconds, options.twelve_hour);
     let range = match (min, max) {
+        _ if empty_range => format!("[bold]{}\n{}[/]", EMPTY[0], EMPTY[1]),
         (Some(min), Some(max)) => format!("[dim]{} to\n{}[/]", shown(min), shown(max)),
         (Some(min), None) => format!("[dim]earliest\n{}[/]", shown(min)),
         (None, Some(max)) => format!("[dim]latest\n{}[/]", shown(max)),

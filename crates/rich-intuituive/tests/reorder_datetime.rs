@@ -4,6 +4,7 @@
 mod common;
 
 use common::{run, screen};
+use intuituive::a11y::Role;
 use intuituive::interact::headless::Script;
 use intuituive::interact::{Button, Event, Key, MouseKind};
 use intuituive::prelude::*;
@@ -171,6 +172,71 @@ fn a_calendar_stops_at_its_range() {
     assert_eq!(on(Script::new().click(1, 5)), "on 2026-10-19");
 }
 
+/// A calendar whose min is after its max, over the day it holds.
+fn empty_range_app() -> App {
+    App::new(|| {
+        let day = signal(Date::new(2026, 10, 15));
+        let options = CalendarOptions::new()
+            .min(Date::new(2026, 10, 20))
+            .max(Date::new(2026, 10, 10));
+        column([
+            calendar_options(day, options).fixed(8),
+            text!("on {day}").fixed(1),
+        ])
+        .on_key("q", |cx| cx.quit())
+    })
+}
+
+#[test]
+fn a_calendar_with_an_empty_range_says_so_and_changes_nothing() {
+    let script = Script::new()
+        .keys("down end pageup")
+        .click(4, 4)
+        .scroll(true, 5, 5)
+        .keys("q");
+    let rows = screen(&run(empty_range_app(), script, 20, 9));
+    assert_eq!(rows[0], "    October 2026");
+    assert_eq!(rows[2..4], ["✗ the range is empty", "min is after max"]);
+    assert_eq!(rows[8], "on 2026-10-15");
+    // Assistive technology is told it is in error, with no day selected.
+    let mut driver = empty_range_app().driver(20, 9);
+    driver.settle();
+    let tree = driver.accessibility();
+    let grid = tree.iter().find(|node| node.role == Role::Grid).unwrap();
+    assert!(grid.state.invalid && !grid.state.selected, "{grid:?}");
+    assert_eq!(grid.value, None);
+}
+
+#[test]
+fn a_time_picker_with_an_empty_range_says_so_and_changes_nothing() {
+    let options = TimeOptions::new()
+        .min(Time::new(17, 0, 0))
+        .max(Time::new(9, 0, 0));
+    let script = Script::new().keys("1 4 up right down").scroll(true, 1, 0);
+    let rows = screen(&run(time_app(options), script.keys("q"), 50, 2));
+    assert_eq!(
+        rows,
+        ["09:05 ✗ the range is empty: min is after max", "at 09:05"]
+    );
+}
+
+#[test]
+fn a_date_and_time_picker_with_an_empty_range_says_so_and_changes_nothing() {
+    // The days the wrong way round, then only the times on one day.
+    for (min, max) in [
+        (moment(20, 9, 0), moment(16, 17, 0)),
+        (moment(17, 12, 0), moment(17, 9, 0)),
+    ] {
+        let options = DateTimeOptions::new().min(min).max(max);
+        let script = Script::new().keys("left down tab 1 4 up q");
+        let rows = screen(&run(picker_app(options), script, 24, 12));
+        assert_eq!(rows[9..11], ["✗ the range is empty", "min is after max"]);
+        assert_eq!(rows[11], "at 2026-10-17 09:00");
+        // Said once: the calendar shows its month as ever.
+        assert_eq!(rows[2], "          1  2  3  4");
+    }
+}
+
 // ---- The time picker ----
 
 fn time_app(options: TimeOptions) -> App {
@@ -209,8 +275,99 @@ fn a_time_stops_at_its_range() {
         .max(Time::new(17, 30, 0));
     let at = |script: Script| screen(&run(time_app(options), script.keys("q"), 16, 2))[1].clone();
     assert_eq!(at(Script::new().keys("down")), "at 09:00");
-    assert_eq!(at(Script::new().keys("2 0")), "at 17:30");
+    // Typed past the end, the hour stops at the last, keeping its minutes.
+    assert_eq!(at(Script::new().keys("2 0")), "at 17:05");
     assert_eq!(at(Script::new().keys("up")), "at 10:05");
+}
+
+#[test]
+fn typing_an_hour_keeps_the_minutes_inside_the_range() {
+    let app = App::new(|| {
+        let at = signal(Time::new(9, 5, 0));
+        let options = TimeOptions::new()
+            .min(Time::new(9, 0, 0))
+            .max(Time::new(17, 30, 0));
+        column([
+            time_picker_with(at, options).fixed(1),
+            text!("at {at}").fixed(1),
+        ])
+        .on_key("q", |cx| cx.quit())
+    });
+    let rows = app.render_with(&["1", "4", "q"], 16, 2).unwrap();
+    assert_eq!(rows[1].trim_end(), "at 14:05");
+}
+
+/// A time picker from `start` within 09:30 to 17:30, after `keys`: what it
+/// shows, and every time the app's signal held, in order.
+fn typed(start: Time, keys: &str) -> Vec<String> {
+    let app = App::new(move || {
+        let at = signal(start);
+        let held = signal(Vec::<String>::new());
+        watch(
+            move || at.get(),
+            move |time, _| held.update(|held| held.push(time.to_string())),
+        );
+        let options = TimeOptions::new()
+            .min(Time::new(9, 30, 0))
+            .max(Time::new(17, 30, 0));
+        column([
+            time_picker_with(at, options).fixed(1),
+            text(move || held.get().join(" ")).fixed(1),
+        ])
+        .on_key("q", |cx| cx.quit())
+    });
+    screen(&run(app, Script::new().keys(keys).keys("q"), 40, 2))
+}
+
+#[test]
+fn a_field_typed_past_the_range_stops_at_its_end_alone() {
+    // A first digit outside the range is not written, nor moved into it.
+    let rows = typed(Time::new(12, 45, 0), "0");
+    assert_eq!(rows, ["0_:45", "12:45"]);
+    // Complete, the hour stops at the range's first, keeping its minutes.
+    assert_eq!(typed(Time::new(12, 45, 0), "0 8")[1], "12:45 09:45");
+    // The minutes move too only when they must.
+    assert_eq!(typed(Time::new(12, 15, 0), "0 8")[1], "12:15 09:30");
+    assert_eq!(typed(Time::new(12, 45, 0), "1 9")[1], "12:45 17:30");
+    assert_eq!(typed(Time::new(12, 15, 0), "1 9")[1], "12:15 17:15");
+    // On the range's last hour, a minute typed past it stops there; its
+    // first digit was inside, so it was written at once, as without a
+    // range.
+    assert_eq!(typed(Time::new(17, 5, 0), "right 4")[0], "17:4_");
+    assert_eq!(
+        typed(Time::new(17, 5, 0), "right 4 5")[1],
+        "17:05 17:04 17:30"
+    );
+    // Leaving a field with a digit outside the range writes it, moved in.
+    assert_eq!(typed(Time::new(12, 45, 0), "0 right")[1], "12:45 09:45");
+    assert_eq!(typed(Time::new(12, 45, 0), "0 up")[1], "12:45 10:45");
+}
+
+#[test]
+fn typing_beside_a_calendar_keeps_the_minutes_and_says_why_a_field_moved() {
+    let options = DateTimeOptions::new()
+        .min(moment(17, 9, 30))
+        .max(moment(20, 17, 0));
+    let typed = |keys: &str| {
+        let app = App::new(move || {
+            let at = signal(moment(17, 9, 45));
+            column([
+                datetime_picker(at, options).fixed(11),
+                text!("at {at}").fixed(1),
+            ])
+            .on_key("q", |cx| cx.quit())
+        });
+        screen(&run(app, Script::new().keys(keys).keys("q"), 24, 12))
+    };
+    // `1` alone is too early on the first day: it waits for the `4`.
+    let rows = typed("tab 1 4");
+    assert_eq!(rows[8], "Time 14:45");
+    assert_eq!(rows[11], "at 2026-10-17 14:45");
+    // An hour typed too early moves up alone, and the line says why.
+    let rows = typed("tab 0 8");
+    assert_eq!(rows[8], "Time 09:45");
+    assert_eq!(rows[9..11], ["✗ the earliest is", "2026-10-17 09:30"]);
+    assert_eq!(rows[11], "at 2026-10-17 09:45");
 }
 
 #[test]

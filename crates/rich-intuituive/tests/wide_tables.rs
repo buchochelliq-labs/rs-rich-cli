@@ -5,6 +5,7 @@
 
 use std::time::Duration;
 
+use intuituive::interact::headless::{Headless, Script};
 use intuituive::interact::{Event, Modifiers, Mouse, MouseKind};
 use intuituive::prelude::*;
 use intuituive::widgets::{table, table_with, virtual_table_with, Column, TableOptions};
@@ -155,6 +156,57 @@ fn a_table_that_fits_lays_out_as_before() {
         .render_with(&["right", "q"], 24, 3)
         .unwrap();
     assert_eq!(rows[0], "id name         city    ");
+}
+
+/// The first row after `script`, on a table 20 cells wide.
+fn first_row(app: App, script: Script) -> String {
+    let mut backend = Headless::new(script, 20, 3);
+    let record = backend.record();
+    let _ = app.run_on(&mut backend);
+    let record = record.borrow();
+    record
+        .last_frame()
+        .lines()
+        .next()
+        .unwrap_or_default()
+        .to_string()
+}
+
+#[test]
+fn a_squeezed_column_can_be_dragged_wider() {
+    // `A` is squeezed to nothing by the wide title after it; the gap after
+    // it, at the left edge, is still its right edge.
+    let app = App::new(|| {
+        let columns = vec![
+            Column::new("A", Size::Flex(1)),
+            Column::new("Bbbbbbbbbbbbbbbbbbbb", Size::Auto),
+        ];
+        let rows = || vec![vec!["a".to_string(), "b".to_string()]];
+        table_with(
+            columns,
+            rows,
+            signal(0),
+            TableOptions::default().resizable(),
+        )
+    });
+    let row = first_row(app, Script::new().drag((0, 0), (5, 0)));
+    assert!(row.starts_with('A'), "{row:?}");
+}
+
+#[test]
+fn a_column_scrolled_out_of_view_has_no_edge() {
+    // Scrolled across, the left edge is `‹`, not the edge of `id`, which
+    // is out of view: dragging it resizes nothing.
+    let app = App::new(|| {
+        let options = TableOptions::default().scroll_x().resizable();
+        table_with(columns(), people, signal(0), options)
+    });
+    let script = Script::new()
+        .keys("right")
+        .drag((0, 0), (5, 0))
+        .keys("shift+home");
+    let row = first_row(app, script);
+    assert!(row.starts_with("id name"), "{row:?}");
 }
 
 #[test]
