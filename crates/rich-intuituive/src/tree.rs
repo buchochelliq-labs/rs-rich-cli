@@ -299,7 +299,11 @@ impl Widget for Tree {
         self.height.set(height.max(1));
         let rows = self.rows();
         // The bar keeps a column once the rows do not all fit.
-        let look = self.bar.look.clone().filter(|look| look.wanted(rows.len(), height));
+        let look = self
+            .bar
+            .look
+            .clone()
+            .filter(|look| look.wanted(rows.len(), height));
         let mut left = 0;
         let mut bar = None;
         if let Some(look) = &look {

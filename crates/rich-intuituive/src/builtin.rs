@@ -928,9 +928,8 @@ impl ScrollView {
     /// Where the window starts: after a bar on the left or the top.
     fn window_origin(&self, width: u16, height: u16) -> (u16, u16) {
         use crate::scrollbar::Side;
-        let x = u16::from(
-            self.vertical && self.view.0 < width && self.down_look().side == Side::Left,
-        );
+        let x =
+            u16::from(self.vertical && self.view.0 < width && self.down_look().side == Side::Left);
         let y = u16::from(
             self.horizontal && self.view.1 < height && self.across_look().side == Side::Top,
         );
@@ -1079,7 +1078,11 @@ impl Widget for ScrollView {
         self.bars = (None, None);
         if self.vertical && view_w < width {
             let look = self.down_look().clone();
-            let column = if look.side == Side::Left { 0 } else { width - 1 };
+            let column = if look.side == Side::Left {
+                0
+            } else {
+                width - 1
+            };
             let rect = Rect::new(column, y, 1, view_h);
             let (top, content) = (self.top() as usize, content_h as usize);
             look.paint(cx.console(), canvas, rect, top, content, view_h as usize);
@@ -1087,7 +1090,11 @@ impl Widget for ScrollView {
         }
         if self.horizontal && view_h < height {
             let look = self.across_look().clone();
-            let line = if look.side == Side::Top { 0 } else { height - 1 };
+            let line = if look.side == Side::Top {
+                0
+            } else {
+                height - 1
+            };
             let rect = Rect::new(x, line, view_w, 1);
             let (left, content) = (self.left() as usize, content_w as usize);
             look.paint(cx.console(), canvas, rect, left, content, view_w as usize);
@@ -1102,7 +1109,10 @@ impl Widget for ScrollView {
             let (view_w, view_h) = self.view;
             if let Some(rect) = self.bars.0 {
                 let (top, content) = (self.top() as usize, content_h as usize);
-                match self.down.mouse(cx, mouse, rect, top, content, view_h as usize) {
+                match self
+                    .down
+                    .mouse(cx, mouse, rect, top, content, view_h as usize)
+                {
                     Some(Some(to)) => {
                         self.offset.set(to.min(u16::MAX as usize) as u16);
                         return Used::Yes;
@@ -1113,7 +1123,10 @@ impl Widget for ScrollView {
             }
             if let Some(rect) = self.bars.1 {
                 let (left, content) = (self.left() as usize, content_w as usize);
-                match self.across_bar.mouse(cx, mouse, rect, left, content, view_w as usize) {
+                match self
+                    .across_bar
+                    .mouse(cx, mouse, rect, left, content, view_w as usize)
+                {
                     Some(Some(to)) => {
                         self.x_offset.set(to.min(u16::MAX as usize) as u16);
                         return Used::Yes;

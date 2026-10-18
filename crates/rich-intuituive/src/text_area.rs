@@ -473,7 +473,11 @@ impl TextArea {
         let mut at = shown.start;
         let mut used = 0;
         for (start, end, width) in graphemes(&line[shown.start..shown.end]) {
-            let width = if self.options.mask.is_some() { 1 } else { width };
+            let width = if self.options.mask.is_some() {
+                1
+            } else {
+                width
+            };
             // Past the middle of a character: after it.
             if used + width.div_ceil(2) > target {
                 break;
@@ -717,8 +721,7 @@ impl Widget for TextArea {
                 let last_of_line = row.end == self.buffer.line(row.line).len();
                 let here = caret.at >= row.start && (caret.at < row.end || last_of_line);
                 if here {
-                    let column =
-                        self.shown_cells(&self.buffer.line(row.line)[row.start..caret.at]);
+                    let column = self.shown_cells(&self.buffer.line(row.line)[row.start..caret.at]);
                     let column = column.saturating_sub(left);
                     if column <= text_width {
                         let x = origin + gutter + column.min(u16::MAX as usize) as u16;

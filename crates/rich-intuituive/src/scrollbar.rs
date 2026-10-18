@@ -265,6 +265,11 @@ impl Scrollbar {
         let track_style = style("scrollbar", "bright_black");
         let thumb_style = style("scrollbar.thumb", "white");
         let arrow_style = style("scrollbar.arrow", "bright_black");
+        // In text mode the bar is no text for a screen reader to read: its
+        // line is kept, blank.
+        if crate::a11y::text_mode() {
+            return vec![Segment::new(" ", None); length as usize];
+        }
         let (thumb, track, begin, end) = self.glyphs();
         let parts = self.parts(length, position, content, view);
         let mut out = Vec::with_capacity(length as usize);
@@ -339,12 +344,18 @@ impl Scrollbar {
         let rest = |w: u16, h: u16| (w.saturating_sub(1), h.saturating_sub(1));
         let (w, h) = rest(width, height);
         match self.side {
-            Side::Right => (Rect::new(0, 0, w, height), Rect::new(w, 0, 1.min(width), height)),
+            Side::Right => (
+                Rect::new(0, 0, w, height),
+                Rect::new(w, 0, 1.min(width), height),
+            ),
             Side::Left => (
                 Rect::new(1.min(width), 0, w, height),
                 Rect::new(0, 0, 1.min(width), height),
             ),
-            Side::Bottom => (Rect::new(0, 0, width, h), Rect::new(0, h, width, 1.min(height))),
+            Side::Bottom => (
+                Rect::new(0, 0, width, h),
+                Rect::new(0, h, width, 1.min(height)),
+            ),
             Side::Top => (
                 Rect::new(0, 1.min(height), width, h),
                 Rect::new(0, 0, width, 1.min(height)),
@@ -388,14 +399,17 @@ fn thumb(track: u16, position: usize, content: usize, view: usize) -> (u16, u16)
     (start as u16, size as u16)
 }
 
-/// The position that puts the thumb's start `start` cells into a track
-/// `track` long.
-fn position_at(start: u16, track: u16, content: usize, view: usize) -> usize {
-    if track == 0 {
+/// The position that puts a thumb `size` long `start` cells into a track
+/// `track` long: from the first position at the top to the last at the
+/// bottom.
+fn position_at(start: u16, track: u16, size: u16, content: usize, view: usize) -> usize {
+    let last = content.saturating_sub(view);
+    let room = track.saturating_sub(size);
+    if room == 0 {
         return 0;
     }
-    let position = (start as f64 * content as f64 / track as f64).round() as usize;
-    position.min(content.saturating_sub(view))
+    let position = (start.min(room) as f64 * last as f64 / room as f64).round() as usize;
+    position.min(last)
 }
 
 /// A widget's scrollbar: its look, if it has one, and a drag of its thumb
@@ -444,7 +458,13 @@ impl Bar {
                     let parts = look.parts(length, position, content, view);
                     let start = along.saturating_sub(parts.begin).saturating_sub(grab);
                     let start = start.min(parts.track.saturating_sub(parts.size));
-                    Some(Some(position_at(start, parts.track, content, view)))
+                    Some(Some(position_at(
+                        start,
+                        parts.track,
+                        parts.size,
+                        content,
+                        view,
+                    )))
                 }
                 MouseKind::Up(_) => {
                     self.grab.set(None);
@@ -581,7 +601,10 @@ impl Widget for Standalone {
         let (width, height) = cx.size();
         let length = self.length.get();
         let (content, view) = self.sizes(length);
-        let position = self.position.get_untracked().min(content.saturating_sub(view));
+        let position = self
+            .position
+            .get_untracked()
+            .min(content.saturating_sub(view));
         let rect = Rect::new(0, 0, width.max(1), height.max(1));
         let last = content.saturating_sub(view);
         let wheel = match mouse.kind {
@@ -660,8 +683,8 @@ mod tests {
     #[test]
     fn a_dragged_thumb_lands_where_it_shows() {
         for position in [0, 10, 45, 90] {
-            let (start, _) = thumb(10, position, 100, 10);
-            let back = position_at(start, 10, 100, 10);
+            let (start, size) = thumb(10, position, 100, 10);
+            let back = position_at(start, 10, size, 100, 10);
             assert_eq!(thumb(10, back, 100, 10).0, start, "{position}");
         }
     }

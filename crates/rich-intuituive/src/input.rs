@@ -94,7 +94,10 @@ pub(crate) struct NumberInput {
 
 impl NumberInput {
     fn clamp(&self, value: i64) -> i64 {
-        value.clamp(*self.range.start(), *self.range.end().max(self.range.start()))
+        value.clamp(
+            *self.range.start(),
+            *self.range.end().max(self.range.start()),
+        )
     }
 
     /// Set the value to `value`, kept in the range.

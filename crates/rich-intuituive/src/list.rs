@@ -82,7 +82,9 @@ impl Selection {
     pub(crate) fn step(self, len: usize, by: isize) {
         let last = len.saturating_sub(1) as isize;
         match self {
-            Selection::One(s) => s.update(|s| *s = (*s as isize + by).clamp(0, last.max(0)) as usize),
+            Selection::One(s) => {
+                s.update(|s| *s = (*s as isize + by).clamp(0, last.max(0)) as usize)
+            }
             Selection::Maybe(s) => s.update(|s| {
                 *s = match *s {
                     _ if len == 0 => None,
@@ -625,11 +627,15 @@ impl Widget for List {
         let carrying = self.carried.get().is_some_and(|carried| carried.get());
         let marked = crate::a11y::text_mode();
         let highlight = cx.style("selected", "reverse");
-        let symbol_lines = options.symbol.as_ref().filter(|_| symbol > 0).map(|markup| {
-            let line = crate::widget::markup_line(console, markup, symbol);
-            let used: usize = line.iter().map(Segment::cell_length).sum();
-            (line, " ".repeat((symbol as usize).saturating_sub(used)))
-        });
+        let symbol_lines = options
+            .symbol
+            .as_ref()
+            .filter(|_| symbol > 0)
+            .map(|markup| {
+                let line = crate::widget::markup_line(console, markup, symbol);
+                let used: usize = line.iter().map(Segment::cell_length).sum();
+                (line, " ".repeat((symbol as usize).saturating_sub(used)))
+            });
         let blank_symbol = " ".repeat(symbol as usize);
         let mut rows: Vec<(Option<usize>, Vec<Segment>)> = Vec::new();
         let mut cursor = None;
@@ -651,9 +657,7 @@ impl Widget for List {
                 }
                 if symbol > 0 {
                     match &symbol_lines {
-                        Some((symbol, pad))
-                            if is_selected && (n == 0 || options.repeat_symbol) =>
-                        {
+                        Some((symbol, pad)) if is_selected && (n == 0 || options.repeat_symbol) => {
                             out.extend(symbol.iter().cloned());
                             if !pad.is_empty() {
                                 out.push(Segment::new(pad.clone(), None));
@@ -695,7 +699,12 @@ impl Widget for List {
                 cursor = rows
                     .iter()
                     .position(|(item, _)| *item == Some(i))
-                    .map(|top| (top, rows.iter().filter(|(item, _)| *item == Some(i)).count()));
+                    .map(|top| {
+                        (
+                            top,
+                            rows.iter().filter(|(item, _)| *item == Some(i)).count(),
+                        )
+                    });
             }
         }
         rows.truncate(area.height as usize);
@@ -789,9 +798,7 @@ impl Node {
     /// down the screen, and Home and End go to the first and the last item.
     pub fn direction(self, direction: ListDirection) -> Node {
         if let Some(model) = &self.list_model {
-            model
-                .reversed
-                .set(direction == ListDirection::BottomToTop);
+            model.reversed.set(direction == ListDirection::BottomToTop);
         }
         self.list_options(|options| options.direction = direction)
     }

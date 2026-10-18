@@ -726,7 +726,10 @@ fn under(line: Vec<Segment>, style: &Style, width: u16) -> Vec<Segment> {
 /// The rows a draw looks at: all of them once, or one at a time.
 enum Fetch<'a> {
     All(Vec<Vec<String>>),
-    Lazy(&'a dyn Fn(usize) -> Vec<String>, HashMap<usize, Vec<String>>),
+    Lazy(
+        &'a dyn Fn(usize) -> Vec<String>,
+        HashMap<usize, Vec<String>>,
+    ),
 }
 
 impl Fetch<'_> {
@@ -1007,7 +1010,8 @@ impl Widget for Table {
                 let len = self.rows.len();
                 let lines = if self.options.single_line() {
                     len
-                } else if let (Some(height), false) = (self.options.row_height, self.options.multiline)
+                } else if let (Some(height), false) =
+                    (self.options.row_height, self.options.multiline)
                 {
                     len * (height as usize + self.options.row_gap as usize)
                 } else {
@@ -1215,7 +1219,9 @@ impl Widget for Table {
         // A header or footer line: blank where the marker and symbol go.
         let plain_line = |cells: &[String]| -> Vec<Segment> {
             let mut out: Vec<Segment> = blank_indent.iter().cloned().collect();
-            let line = self.row_lines(console, cells, &widths, 1, spacing).remove(0);
+            let line = self
+                .row_lines(console, cells, &widths, 1, spacing)
+                .remove(0);
             out.extend(line);
             match &window {
                 Some(window) => window.header(&out),
@@ -1234,7 +1240,10 @@ impl Widget for Table {
             if let Some(window) = &window {
                 // The footer has no `‹` and `›`: those are the header's.
                 let mut full: Vec<Segment> = blank_indent.iter().cloned().collect();
-                full.extend(self.row_lines(console, &cells, &widths, 1, spacing).remove(0));
+                full.extend(
+                    self.row_lines(console, &cells, &widths, 1, spacing)
+                        .remove(0),
+                );
                 line = window.cut(&full);
             }
             let y = height.saturating_sub(1);
@@ -1369,9 +1378,7 @@ impl Widget for Table {
                     (KeyCode::Down, true) | (KeyCode::Char('j'), true) => self.step(1),
                     (KeyCode::PageUp, true) => self.step(-page),
                     (KeyCode::PageDown, true) => self.step(page),
-                    (KeyCode::Home, true) | (KeyCode::Char('g'), true) => {
-                        self.selection.first(len)
-                    }
+                    (KeyCode::Home, true) | (KeyCode::Char('g'), true) => self.selection.first(len),
                     (KeyCode::End, true) => self.selection.last(len),
                     _ if *key == Key::char('G') => self.selection.last(len),
                     (KeyCode::Left, true) | (KeyCode::Char('h'), true)
@@ -1558,10 +1565,7 @@ impl Tabs {
 
     /// The cells each title takes with its padding.
     fn widths(&self, titles: &[String]) -> Vec<u16> {
-        let (left, right) = (
-            markup_width(&self.padding.0),
-            markup_width(&self.padding.1),
-        );
+        let (left, right) = (markup_width(&self.padding.0), markup_width(&self.padding.1));
         titles
             .iter()
             .map(|title| {

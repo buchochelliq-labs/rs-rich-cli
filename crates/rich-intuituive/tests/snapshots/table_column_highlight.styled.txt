@@ -1,0 +1,4 @@
+[bold]Food    Qty   Energy[/]
+[reverse]Apple  [/][bold reverse]   1[/][reverse]  95 kcal  [/]
+Bread  [bold]   2[/] 160 kcal
+Cheese [bold]  12[/] 113 kcal

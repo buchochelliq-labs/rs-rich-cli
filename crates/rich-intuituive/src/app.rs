@@ -1252,8 +1252,7 @@ impl App {
     /// Whether the app captures the mouse, by [`mouse`](Self::mouse) and
     /// the rule.
     fn captures_mouse(&self) -> bool {
-        self.mouse
-            .unwrap_or(self.inline.is_none() && !self.linear)
+        self.mouse.unwrap_or(self.inline.is_none() && !self.linear)
     }
 
     /// The terminal options [`run_with`](Self::run_with) starts its
@@ -4203,8 +4202,8 @@ impl Driver {
         let options = self.console.options().update_width(width);
         let mut rows = Vec::new();
         for markup in markup {
-            let text = rich::Text::from_markup(markup)
-                .unwrap_or_else(|_| rich::Text::new(markup.clone()));
+            let text =
+                rich::Text::from_markup(markup).unwrap_or_else(|_| rich::Text::new(markup.clone()));
             for line in self.console.render_lines(&text, &options, false) {
                 let mut row = String::new();
                 for segment in line {
@@ -4261,9 +4260,7 @@ impl Driver {
         if self.app.inline.is_some() && !self.app.printed.is_empty() {
             out.push_str(&self.print_inline());
             out.push_str(&self.paint(true));
-        } else if self.app.inline.is_some()
-            && (self.app.restack || self.app.runtime.has_dirty())
-        {
+        } else if self.app.inline.is_some() && (self.app.restack || self.app.runtime.has_dirty()) {
             out.push_str(&self.paint(false));
         }
         out.push_str(&self.painter.finish());
