@@ -693,7 +693,9 @@ fn bash_script(args: &InitArgs, completions: &str) -> String {
     let min = args.min_duration;
     let mut s = String::from(
         "# rich shell integration for bash (`rich shell init bash`); needs bash 4.4+.\n\
-         if [[ -z \"${__rich_shell_loaded-}\" ]]; then\n\
+         if (( BASH_VERSINFO[0] * 100 + BASH_VERSINFO[1] < 404 )); then\n\
+         \x20   printf 'rich shell init bash: needs bash 4.4 or newer, not %s\\n' \"$BASH_VERSION\" >&2\n\
+         elif [[ -z \"${__rich_shell_loaded-}\" ]]; then\n\
          __rich_shell_loaded=1\n",
     );
     if args.completions {

@@ -569,6 +569,8 @@ mod shell {
             "{bash}"
         );
         assert!(!bash.contains("@P}"), "{bash}");
+        // An older bash (macOS's 3.2) is told so, and nothing is set up.
+        assert!(bash.contains("BASH_VERSINFO[1] < 404 )); then"), "{bash}");
         assert!(bash.contains("if (( __rich_saved )) && [["), "{bash}");
         assert!(bash.contains("\"${__rich_cmd[@]}\""), "{bash}");
         assert!(!bash.contains("--command \"$__rich_cmd\""), "{bash}");
