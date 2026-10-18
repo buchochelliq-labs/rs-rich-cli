@@ -1,0 +1,6 @@
+first row of the
+scree[blue]╭────────╮[/]
+secon[blue]│[/]hi      [blue]│[/][on blue] [/]
+     [blue]╰────────╯[/][on blue] [/]
+third [on blue]          [/]
+
