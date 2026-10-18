@@ -1,0 +1,24 @@
+ Form │ Chat
+╭─ First name ─────────────────────────╮╭─ Last name ──────────────────────────╮
+│Ada1                                  ││Lovelace                              │
+╰──────────────────────────────────────╯╰──────────────────────────────────────╯
+╭─ Age ────╮
+│0         │
+╰──────────╯
+✗ The first name takes letters, spaces, hyphens and apostrophes.
+✗ The last name is empty.
+✗ The age is not given.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
