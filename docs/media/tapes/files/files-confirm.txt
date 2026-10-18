@@ -1,26 +1,26 @@
 ~/project
-  project   │ src                                            4│# orbit
-            │ tests                                          1│
-            │ r╭────────────────────── Trash 1 selected file? ──────────────────────╮o the document
-            │ C│ ~/project/README.md                                                │m and search.
-            │ r│                                                                    │
-            │ R│                                                                    │
-            │  │                                                                    │
-            │  │                                                                    │ hands each jo
-            │  │                                                                    │plain function
-            │  │                                                                    │at fails, and
-            │  │                                                                    │
-            │  │                                                                    │
-            │  │                                                                    │
-            │  │                                                                    │Meaning |
-            │  │                                                                    │
-            │  │                                                                    │ that run at o
-            │  │                                                                    │s before a job
-            │  │                                                                    │e the status p
-            │  │                                                                    │
-            │  │────────────────────────────────────────────────────────────────────│
-            │  │               [Y]es                              (N)o              │
-            │  ╰────────────────────────────────────────────────────────────────────╯
+  project   │ src                                           4 │# orbit
+            │ tests                                         1 │
+            │ run.sh                                      18B │A tiny service, here so the document
+            │ Cargo.toml                                 181B │page through, pick from and search.
+            │ logo.png                                   476B │
+            │ readme-link -> README.md                   1.4K │## What it does
+            │ README.md                                  1.4K │
+            │                                                 │orbit watches a queue, hands each jo
+            │                                                 │terminal. Workers are plain function
+            │            ╭──────────── Trash 1 selected file? ────────────╮s a job that fails, and
+            │            ├────────────────────────────────────────────────┤
+            │            │ ~/project/README.md                            │tion
+            │            ├────────────────────────────────────────────────┤
+            │            │            [Y]es              (N)o             │Default | Meaning |
+            │            ╰────────────────────────────────────────────────╯|
+            │                                                 │| `workers` | 4 | Jobs that run at o
+            │                                                 │| `retries` | 3 | Tries before a job
+            │                                                 │| `port` | 8080 | Where the status p
+            │                                                 │
+            │                                                 │## Running it
+            │                                                 │
+            │                                                 │```bash
             │                                                 │orbit --workers 8 queue.toml
             │                                                 │```
- NOR  1.4K  README.md                                                        -rw-r--r--  Bot   6/6
+ NOR  1.4K  README.md                                                        -rw-r--r--  Bot   7/7

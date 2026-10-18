@@ -1,19 +1,23 @@
 {
   "tape": "docs/tapes/files.tape",
-  "tape_fnv1a64": "0bfc2d8878401fd4",
+  "tape_fnv1a64": "c4b826c594e9470b",
   "recorder": "rs-rich-record 0.0.7",
   "rich": null,
-  "commit": "22da4688e93c84edf17531ec6a91ad5fad3fd9ec",
+  "commit": "e69737600dd336eebcad4c5ab0b3cae8c160717f",
   "screenshots": [
     "files",
     "files-which",
     "files-help",
     "files-select",
     "files-filter",
+    "files-image",
     "files-confirm",
+    "files-rename",
+    "files-open",
     "files-menu",
     "files-palette",
-    "files-tabs"
+    "files-tabs",
+    "files-notify"
   ],
   "note": "Every frame is real output of the program under test on a PTY."
 }

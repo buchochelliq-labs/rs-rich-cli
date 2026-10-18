@@ -1,0 +1,26 @@
+~/project
+  project   │ src                                           4 │# orbit
+            │ tests                                         1 │
+            │ run.sh                                      18B │A tiny service, here so the document
+            │ Cargo.toml                                 181B │page through, pick from and search.
+            │ logo.png                                   476B │
+            │ readme-link -> README.md                   1.4K │## What it does
+            │ README.md                                  1.4K │
+            │ ╭─ Open with: ───────────────────────────────────╮rbit watches a queue, hands each jo
+            │ │$EDITOR                                         │erminal. Workers are plain function
+            │ │Reveal                                          │nce, retries a job that fails, and
+            │ ╰────────────────────────────────────────────────╯
+            │                                                 │## Configuration
+            │                                                 │
+            │                                                 │| Setting | Default | Meaning |
+            │                                                 │|---|---|---|
+            │                                                 │| `workers` | 4 | Jobs that run at o
+            │                                                 │| `retries` | 3 | Tries before a job
+            │                                                 │| `port` | 8080 | Where the status p
+            │                                                 │
+            │                                                 │## Running it
+            │                                                 │
+            │                                                 │```bash
+            │                                                 │orbit --workers 8 queue.toml
+            │                                                 │```
+ NOR  1.4K  README.md                                                        -rw-r--r--  Bot   7/7

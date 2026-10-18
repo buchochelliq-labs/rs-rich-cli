@@ -86,3 +86,110 @@ is in [the porting guide](../guide/intuituive/porting.md).
 | A `list` sized `Size::Auto` measures as the full width | `row([list(a).flex(1), list(b).auto()])`: the second list takes everything | A `switch` on the measured width with `.fixed(w)` |
 | `.borders(Sides::BOTTOM)` draws nothing on a node without a panel | | A one-row `leaf` that draws a line |
 | A popup's bindings work only on its outermost node | Bindings on a node inside the popup's `.panel()` never fire | Bind after `.panel()` |
+
+## Round 2: Yazi on the new components
+
+`examples/files.rs` rebuilt on what round 1's gaps added (PR #752). It
+uses intuiTUIve's own components and plugins only, with no framework
+change in the round. Built with default features it follows the disk only
+through what it does itself and describes images; the crate's `watch` and
+`art` features (which CI's tapes job now builds the examples with) add the
+watcher and image previews. Local times come from rs-rich-ext's
+`local-time` feature, turned on for the examples and tests through a
+dev-dependency, so `files` needs no `required-features`.
+
+### Round-1 gaps now closed, and where files.rs uses them
+
+| Round-1 gap or workaround | Now | Where in files.rs |
+|---|---|---|
+| Per-prefix chord pop-ups (`which()`) | `bind_sequence` on the root for all 31 sequences; `App::which_key(true)` draws the pop-up; the help and the palette list them | `SEQUENCES`, `files_app_with` |
+| The root made focusable to own the keymap | `.previews_keys()` on the root column; the current list is focused (`autofocus`) | `files_app_with`, `current_column` |
+| Two synced lists for the line mode, the switch on the measured width | one `list_lazy` with `.trailing(..)` (Yazi's padding cell included) | `current_column`, `linemode_cell` |
+| Markers as a lead cell of the markup | `.marker(\|i\| style)` | `current_column`, `parent_column` |
+| The selected style per row | `row_style` + the theme's `reverse` was already right; `.selected_style_for` gives the preview's underline | `preview_column` |
+| `list` rebuilding every row | `list_lazy` in all three columns | the three columns |
+| Re-derived `hsplit` maths (`split_at`, `columns()`, `body()`, `top_center`, `hovered_rect`) | `popup_at(Origin::TopCenter, Offset::new(0, 2, 80, 3))`; `RowRects` for the hovered row (`Origin::At`); `rect_handle()` for the preview's width and the page size | `Prompt`, `Act::Rename`, `open`, `preview_column`, `Fm::page` |
+| The End-key caret workaround | `.caret(Caret::At(stem))`, Yazi's `--cursor=before_ext` | `Act::Rename` |
+| The hand-made confirm box | `cx.confirm(title, body, items, on_yes)` | `Act::Paste`, `Act::Remove` |
+| Toasts for errors | `cx.notify(Level, title, body)` + `App::toasts_at(Corner::TopRight)`, theme `notify.*` in Yazi's colours | `work`, the prompts |
+| The one-row `leaf` line | `rule()`, joined to the help's border | `help` |
+| Polling the directory every 2 s | `watch_path` on the directory and its parent, moved with it (`watch` feature) | `follow_disk` |
+| UTC times, numeric `uid:gid` | `rich_ext::fs::short_local_time`, `local_time`, `user_name`, `group_name` | `short_time`, `owner`, `spot` |
+| Hand-copied icons and type colours | `rich_ext::filetype::icon_with` (hovered flag), `style_for`, `mime_for_path`, `mime_from_bytes`, `mime_for` | `entity`, `row_style`, `load_preview`, `spot` |
+| Images described | `image_of(path, ImageView)` (`art` feature) | `image_pane` |
+| Opening files left to the shell | Yazi's `[open]` rules: `cx.handoff_then($EDITOR)` for text and folders, the system opener (`$OPENER`, `xdg-open`, `open`) in a `spawn`; `O` is Yazi's "Open with:" pick below the row | `openers_for`, `open`, `open_with` |
+| A first Markdown preview stalling | `rich_ext::syntax::preload` at start-up | `main` |
+| `Signal`-polled preview width | the pane's `rect_handle()` in the preview `watch` | `preview_column` |
+
+Kept on purpose: the empty-list end of visual mode, the trash never moved
+into itself, and tab clicks going through `switch_tab` (all tested).
+
+### New gaps and bugs
+
+| Gap or bug | Yazi feature that needs it | API sketch | Where |
+|---|---|---|---|
+| A list's highlight is drawn over the item's markup, so no cell of a selected row can escape it | Yazi's rounded indicator ends (U+E0B6, U+E0B4) on the hovered row with a Nerd Font: its spans patch over the line style, ratatui-fashion | `.highlight_layer(Layer::Under)`, so markup (`[not reverse blue]`) wins; or `.selected_caps(open, close)` | core |
+| No left-cut overflow | The header's path loses its start (`ui.truncate(.., rtl = true)`); the example cuts the string from `viewport()` width minus the count's | `Overflow::EllipsisStart`, or `text(..).truncate_start()` | core (rich's `Overflow` is a mirror, so an intuiTUIve text option) |
+| Which-key has no description style and no gap between its columns | Yazi's which: keys `bright_cyan`, `bright_black` separator, descriptions `bright_magenta`, columns padded; ours run into the next column's key (`(rever a Sort…`) | theme `which_key.desc`, `which_key.sep`; a cell of gap per column; right-aligned keys as Yazi | core (bug: the missing gap) |
+| `cx.confirm` has a fixed 50-wide box, and an empty body still takes a row and a rule | Yazi's trash/delete confirm is 70×20 with no body; overwrite 50×15 | `cx.confirm_with(ConfirmOptions { size, .. })`; an empty body draws nothing | core (bug: the empty body) |
+| `Signal::set` needs `PartialEq`; `RectHandle` and `PathWatch` are not | Keeping the watchers to stop them, keeping the column's handle in app state | derive `PartialEq` on both (compare by identity), or `Signal::replace` without the bound | core |
+| A `RectHandle` exists only after its node is made; `RowRects` can be made first | App state wants the column's rect before the view is built: the example stores `Signal<Option<RectHandle>>` | `RectHandle::new()` + `node.rect_into(&handle)` | core |
+| Image decoding is not a task `wait_for_tasks` waits for | Testing the image preview needs a polling `Driver` loop | count `image`'s decode as a task | core (`art`) |
+| The headless driver records only a handoff's program | Asserting that `$EDITOR` got the hovered file | `Record.handoffs: Vec<(program, args)>` | plugin (rs-rich-interact) |
+| A "keyed" resource | The preview: re-fetch when the hovered path or width changes, drop stale results, clear after a delay; the example keeps a generation counter and two `spawn`s | `resource_for(move \|\| key(), \|key\| fetch(key)).stale_after(150ms)` | core |
+| MIME by content in the background | Yazi's type colours come from `file`-style sniffing done by its fetchers; the listing uses the name only | `filetype::mime_batch(paths) -> Vec<&str>` run in a `spawn`, merged into the listing | plugin (rs-rich-ext) |
+| No archive extraction or system trash | Yazi's `extract` opener and its trash | see components below | plugin |
+| Kitty/Sixel images | Yazi's pixel-exact previews | screen pass-through for graphics escapes | core + rs-rich-art |
+
+### Friction with the new APIs
+
+- **`bind` vs `bind_sequence`**: in `bind("k up", ..)` a space separates
+  alternatives, in `bind_sequence("g g", ..)` keys pressed in turn. Easy to
+  mix up when moving a binding between the two tables; a sequence with
+  one key silently becomes a `bind`. A `"g>g"` or `["g", "g"]` form would
+  read unambiguously.
+- **The comma**: `"\",\" s"` for `,s` is hard to read; `"comma s"` would
+  be kinder.
+- **Pop-up title styles**: `popup.title` styles every pop-up's title, but
+  Yazi's confirm titles are blue and its input titles plain. Prompts set
+  `.title_style("default")` by hand; `cx.confirm` cannot take a style.
+- **`selected_style_for` was not needed** for Yazi's coloured bar:
+  `row_style` plus a `reverse` highlight already gives it. Its doc example
+  suggests it for that case; it earns its keep only for a different look
+  per row (the preview's underline here could equally be `theme_styles`).
+- **`rule()` joins the border only with no padding** between it and the
+  panel, so the help pads its field and list one by one instead of the
+  column; a `rule().inset(..)` or padding that rules ignore would help.
+- **`popup_at` with `Origin::At(rect)`** puts the box below the rect and
+  then clamps it on screen; at 80 columns an 80-wide rename box slides to
+  the left edge, away from the row (Yazi does the same, but a
+  `w: Size::Percent` or "shrink before moving" option would keep it
+  under the row).
+- **`notify` has no width or wrap control**: the 48-cell box wraps a
+  one-line error at 80 columns.
+- **`list_lazy`'s closures** re-read the same memos for `len`, `item`,
+  `trailing`, `marker` and `row_style`; a `list_of(memo, |entry, i| Row
+  { text, trailing, marker, style })` would read the data once per row.
+
+### Components that would help
+
+| Component | What it is | In files.rs it would replace or enable | API sketch | Where | Value |
+|---|---|---|---|---|---|
+| Miller columns | parent, current and preview panes over one cursor, with rails, remembered positions and click-to-navigate | `parent_column`, `current_column`, the preview's dir list, the `remember` map, three `on_mouse` handlers (~300 lines) | `miller(source: impl Tree, cursor).ratios(1, 4, 3).preview(\|node\| ..)` | core (or rs-rich-ext) | high |
+| File list | a lazy list of `Entry`s with icon, type colour, marker, line mode and find highlights built in | `entity`, `row_style`, `marker_style`, `linemode_cell` | `file_list(entries, cursor).linemode(Linemode::Size).icons(true).markers(\|p\| ..)` | plugin (rs-rich-ext `filetype` + intuituive) | high |
+| Status bar with segments | left/right segments with powerline caps between them, Yazi's and lualine's | `status`, the `cap` closures | `status_bar().left(seg(" NOR ", main)).right(..).caps(Caps::Rounded)` | core | medium |
+| Breadcrumb / path header | a path that cuts from the left, with `~`, and flags after it | `header`'s cwd text | `path_header(path).home_tilde().flags(..)` | core | medium |
+| Preview pane by type | picks a renderer from the MIME type: code, Markdown, image, directory, hex, archive listing; worker-loaded, stale-safe | `load_preview`, `Preview`, `preview_column`'s switch, the generation counter | `preview(path_signal).with(Previewer::code()).with(Previewer::image())` | plugin | high |
+| Tab strip that hides below two tabs | `tabs` that collapse with one tab, number titles, and report clicks as a change event | `tab_strip`'s `switch`, `clicked` signal and two watches | `tabs(titles, active).auto_hide().on_change(\|to, cx\| ..)` | core | medium |
+| Key-hint footer | the keys that work now, from the bindings (Bubbles' `help`, Textual's `Footer`) | the help modal for the common case | `key_hints().from_focus()` | core | medium |
+| Input prompt preset | a titled one-line input at an origin, with change/submit/cancel (Yazi's `input`, Bubbles' `textinput` in a box) | the `Prompt` builder (~80 lines) | `cx.prompt(title, Origin, Offset).text(..).caret(..).on_change(..).open(\|text, cx\| ..)` | core | high |
+| Pick menu at a point | a short list in a box at an origin, Enter picks (Yazi's `pick`) | `open`'s `popup_at` + `list` | `cx.pick(title, Origin, items, \|i, cx\| ..)` | core | medium |
+| Openers | Yazi's `[opener]`/`[open]` rules: MIME globs to commands, blocking (handoff) or in the background | `Opener`, `openers_for`, `open_with`, `system_opener` | `rich_ext::open::rules().matching(mime) -> Vec<Opener>`; `opener.run(cx, paths)` | plugin (rs-rich-ext) | medium |
+| Directory model | a watched, sorted, filtered listing with natural sort and stat caching (Yazi's `Folder`) | `read_dir`, `sort_entries`, `natural`, `follow_disk`, the listing memos | `dir_model(path).sort(..).hidden(false).watch()` -> `Memo<Vec<Entry>>` | plugin | high |
+| File operations | copy/move/trash/delete with progress, a free-name rule and "not into itself" checks (Yazi's scheduler) | `copy_all`, `move_to`, `paste`, `unique`, `work` | `fs_ops::paste(yank, dir, Conflict::Rename).spawn(progress)` | plugin (rs-rich-ext `fs`) | medium |
+| FreeDesktop trash | the XDG trash spec (and macOS/Windows bins), restore | the `.trash` folder stand-in | `rich_ext::trash::put(path)`, `list()`, `restore(item)` | plugin | medium |
+| Archive listing | list tar/zip/7z contents as a preview, extract (Yazi's `archive` previewer, `extract` opener) | the "binary data" note for archives | `archive::entries(path)`, `archive::extract(path, dir)` | plugin (new) | medium |
+| Git status per file | the `M`/`A`/`?` signs Yazi's git plugin shows | a line-mode column | `git::status(dir) -> HashMap<PathBuf, Status>` | plugin (new) | medium |
+| Fuzzy finder over the tree | fzf/`fd` as a component that streams results (Yazi's `z`, Television, Bubbles' `list` filter) | `jump`'s blocking 20,000-entry walk | `fuzzy_find(walk(root).hidden(false)).stream()` | plugin (rs-rich-interact `Jump` + a walker) | medium |
+| Task manager | running file jobs with progress (Yazi's `w`) | errors-only notifications; enables progress | `tasks_panel(scheduler)` | core | low |
+| Hex view | a hex dump previewer (ratatui's `hexyl`-style widgets) | the binary note | `hex_view(bytes)` | plugin (rs-rich-ext has `hex`) | low |
