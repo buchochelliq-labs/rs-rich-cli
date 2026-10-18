@@ -17,7 +17,11 @@ fn first(driver: &intuituive::Driver) -> String {
 fn wait_for(driver: &mut intuituive::Driver, want: &str) {
     let start = Instant::now();
     while first(driver) != want {
-        assert!(start.elapsed() < Duration::from_secs(10), "still {:?}", first(driver));
+        assert!(
+            start.elapsed() < Duration::from_secs(10),
+            "still {:?}",
+            first(driver)
+        );
         std::thread::sleep(Duration::from_millis(1));
         driver.settle();
     }
@@ -60,7 +64,11 @@ fn values_the_app_had_no_time_for_are_skipped() {
     let mut driver = app.driver(20, 1);
     wait_for(&mut driver, "Some(100000)");
     // Far fewer frames than values: nothing queued.
-    assert!(draws.load(Ordering::SeqCst) < 10_000, "{}", draws.load(Ordering::SeqCst));
+    assert!(
+        draws.load(Ordering::SeqCst) < 10_000,
+        "{}",
+        draws.load(Ordering::SeqCst)
+    );
 }
 
 #[test]
@@ -83,7 +91,10 @@ fn send_says_false_once_the_app_has_finished() {
     let _ = driver.finish();
     let start = Instant::now();
     while !stopped.load(Ordering::SeqCst) {
-        assert!(start.elapsed() < Duration::from_secs(10), "the thread went on");
+        assert!(
+            start.elapsed() < Duration::from_secs(10),
+            "the thread went on"
+        );
         std::thread::sleep(Duration::from_millis(1));
     }
 }
@@ -109,7 +120,10 @@ fn a_handoff_runs_the_program_and_redraws_after() {
     app.run_on(&mut backend).unwrap();
     let record = record.borrow();
     assert_eq!(record.handoffs, ["less", "vi"]);
-    assert_eq!(record.last_frame().lines().next().unwrap().trim_end(), "Some(3)");
+    assert_eq!(
+        record.last_frame().lines().next().unwrap().trim_end(),
+        "Some(3)"
+    );
 }
 
 #[test]

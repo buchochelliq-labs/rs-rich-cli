@@ -612,10 +612,7 @@ impl Help {
                     rows.push(Vec::new());
                     continue;
                 }
-                let keys = kit::pad(
-                    vec![kit::text(binding.hint(), &theme.prompt)],
-                    key_width,
-                );
+                let keys = kit::pad(vec![kit::text(binding.hint(), &theme.prompt)], key_width);
                 let mut line = vec![kit::plain("  ")];
                 line.extend(keys);
                 line.push(kit::plain("  "));
@@ -736,7 +733,6 @@ impl Component for Help {
 
 // ---------------------------------------------------------------------------
 // Shortcuts.
-
 
 /// The key a shortcut list shows for `binding`: its first, or a whole
 /// sequence (`g g`).

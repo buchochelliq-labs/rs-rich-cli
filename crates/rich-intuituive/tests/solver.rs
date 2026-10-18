@@ -44,10 +44,11 @@ fn compare(sizes: &[Size], gap: u16, justify: Justify, solver: Solver, widths: &
             .iter()
             .map(|r| (r.x, r.width))
             .collect();
-        let ours: Vec<(u16, u16)> = split(Rect::new(3, 0, width, 1), Axis::Horizontal, &tracks, flow)
-            .iter()
-            .map(|r| (r.x, r.width))
-            .collect();
+        let ours: Vec<(u16, u16)> =
+            split(Rect::new(3, 0, width, 1), Axis::Horizontal, &tracks, flow)
+                .iter()
+                .map(|r| (r.x, r.width))
+                .collect();
         // Fixed lengths that do not fit have no one answer: ratatui's then
         // depends on how many variables its solver made before (a hash
         // order), so it differs from run to run. Everything else matches.

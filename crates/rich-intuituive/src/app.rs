@@ -2457,7 +2457,8 @@ impl App {
                 for layer in &self.layers[base..] {
                     crate::node::walk_screen(&layer.root, &mut |node, _, shift, clip| {
                         if let Some(handle) = *node.rect_slot.borrow() {
-                            let rect = crate::node::translate(node.rect(), shift).intersection(clip);
+                            let rect =
+                                crate::node::translate(node.rect(), shift).intersection(clip);
                             let rect = (!rect.is_empty()).then_some(rect);
                             if handle.get_untracked() != rect {
                                 handle.set(rect);
@@ -2844,7 +2845,8 @@ impl App {
                 let palette = rich_interact::overlay::Palette::new(commands);
                 crate::node::component(palette, move |command, cx| {
                     cx.pop();
-                    if let Some((_, id, index, sequence)) = targets.iter().find(|t| t.0 == command.id)
+                    if let Some((_, id, index, sequence)) =
+                        targets.iter().find(|t| t.0 == command.id)
                     {
                         cx.nav.push(Nav::Run(*id, *index, *sequence));
                     }
@@ -2886,7 +2888,10 @@ impl App {
         // `popup.title`, unless code said otherwise.
         if modal.is_some() {
             root.widget_mut(|panel: &mut crate::builtin::Panel| {
-                panel.code.title_style.get_or_insert_with(|| POPUP_TITLE.to_string());
+                panel
+                    .code
+                    .title_style
+                    .get_or_insert_with(|| POPUP_TITLE.to_string());
             });
         }
         let mut timers = BUILDING
@@ -4154,14 +4159,12 @@ impl Driver {
                     .map(|tip| (tip.since + TOOLTIP_DELAY).saturating_sub(now))
                     .unwrap_or(Duration::MAX),
             )
-            .min(
-                match (app.which_key, &app.pending) {
-                    (Some(delay), Some(pending)) if !pending.shown => {
-                        (pending.since + delay).saturating_sub(now)
-                    }
-                    _ => Duration::MAX,
-                },
-            )
+            .min(match (app.which_key, &app.pending) {
+                (Some(delay), Some(pending)) if !pending.shown => {
+                    (pending.since + delay).saturating_sub(now)
+                }
+                _ => Duration::MAX,
+            })
             .min(
                 app.inspector
                     .as_ref()
@@ -4603,7 +4606,10 @@ impl Driver {
         let n = text.chars().count();
         let until = self.app.now + Duration::from_secs(2);
         self.app.push_toast(
-            Note::plain(format!("Copied {n} character{}", if n == 1 { "" } else { "s" })),
+            Note::plain(format!(
+                "Copied {n} character{}",
+                if n == 1 { "" } else { "s" }
+            )),
             until,
         );
         self.app.restack = true;

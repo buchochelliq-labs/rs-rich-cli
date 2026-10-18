@@ -17,7 +17,11 @@ fn a_plain_toast_still_sits_at_the_bottom_right() {
     driver.press("t");
     assert_eq!(
         rows(&driver)[2..],
-        ["          ╭───────╮ ", "          │ saved │ ", "          ╰───────╯ "]
+        [
+            "          ╭───────╮ ",
+            "          │ saved │ ",
+            "          ╰───────╯ "
+        ]
     );
 }
 
@@ -42,12 +46,25 @@ fn a_notification_has_its_title_on_the_edge_and_its_body_wrapped() {
     assert_eq!(shown[3], " ╰────────────────────────────────────╯ ");
     // In the error style, and said as an error.
     let title = driver.screen().cell(4, 0).style;
-    let bad = Theme::dark().styles.iter().find(|(n, _)| n == "bad").unwrap().1.clone();
+    let bad = Theme::dark()
+        .styles
+        .iter()
+        .find(|(n, _)| n == "bad")
+        .unwrap()
+        .1
+        .clone();
     assert_eq!(
-        driver.screen().style(title).and_then(|s| s.color().cloned()),
+        driver
+            .screen()
+            .style(title)
+            .and_then(|s| s.color().cloned()),
         bad.color().cloned()
     );
-    let said: Vec<String> = driver.take_announcements().into_iter().map(|a| a.text).collect();
+    let said: Vec<String> = driver
+        .take_announcements()
+        .into_iter()
+        .map(|a| a.text)
+        .collect();
     assert!(said.contains(
         &"Error: Copy failed: permission denied: /etc/shadow is not readable by you".to_string()
     ));
@@ -117,9 +134,15 @@ fn confirm_shows_the_title_the_body_the_items_and_the_answers() {
     let mut driver = trash().driver(60, 14);
     driver.press("d");
     let shown = rows(&driver);
-    let top = shown.iter().position(|r| r.contains("Trash 3 selected files?")).unwrap();
+    let top = shown
+        .iter()
+        .position(|r| r.contains("Trash 3 selected files?"))
+        .unwrap();
     // Centred, the title in the middle of the top edge.
-    assert!(shown[top].starts_with("     ╭─") && shown[top].ends_with("╮     "), "{shown:#?}");
+    assert!(
+        shown[top].starts_with("     ╭─") && shown[top].ends_with("╮     "),
+        "{shown:#?}"
+    );
     assert!(shown[top + 1].contains("They go to the trash."));
     assert!(shown[top + 2].contains("├────"));
     assert!(shown[top + 3].contains("│ notes.txt"));
@@ -141,7 +164,10 @@ fn y_and_enter_say_yes_n_and_escape_say_no() {
         let mut driver = trash().driver(60, 14);
         driver.press(keys);
         assert_eq!(rows(&driver)[0].trim_end(), after, "{keys}");
-        assert!(!rows(&driver).iter().any(|r| r.contains("Trash 3")), "{keys}");
+        assert!(
+            !rows(&driver).iter().any(|r| r.contains("Trash 3")),
+            "{keys}"
+        );
     }
 }
 
@@ -156,6 +182,9 @@ fn confirm_counts_the_items_it_does_not_list() {
     let mut driver = app.driver(60, 20);
     driver.press("d");
     let shown = rows(&driver).join("\n");
-    assert!(shown.contains("file 9") && !shown.contains("file 10"), "{shown}");
+    assert!(
+        shown.contains("file 9") && !shown.contains("file 10"),
+        "{shown}"
+    );
     assert!(shown.contains("… and 4 more"), "{shown}");
 }

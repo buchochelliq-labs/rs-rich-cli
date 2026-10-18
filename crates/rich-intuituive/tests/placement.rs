@@ -48,7 +48,11 @@ fn the_offset_moves_it_and_the_screen_keeps_it() {
         (9, 1)
     );
     assert_eq!(
-        corner(opener(Origin::BottomRight, Offset::new(-1, -1, 6, 3)), 20, 10),
+        corner(
+            opener(Origin::BottomRight, Offset::new(-1, -1, 6, 3)),
+            20,
+            10
+        ),
         (13, 6)
     );
     // Pushed off the screen, it is moved back inside.
@@ -65,7 +69,10 @@ fn the_offset_moves_it_and_the_screen_keeps_it() {
 #[test]
 fn at_a_rect_it_goes_below_or_above_when_there_is_no_room() {
     let below = Origin::At(Rect::new(3, 2, 10, 1));
-    assert_eq!(corner(opener(below, Offset::new(0, 0, 6, 3)), 20, 10), (3, 3));
+    assert_eq!(
+        corner(opener(below, Offset::new(0, 0, 6, 3)), 20, 10),
+        (3, 3)
+    );
     let low = Origin::At(Rect::new(3, 8, 10, 1));
     assert_eq!(corner(opener(low, Offset::new(0, 0, 6, 3)), 20, 10), (3, 5));
 }

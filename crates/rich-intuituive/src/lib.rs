@@ -108,17 +108,17 @@ pub use node::{
     column, component, each, grid, label, layers, leaf, list, renderable, repeating, row, scroll,
     scroll_both, scroll_both_with, scroll_with, scroll_x, switch, text, Node,
 };
+pub use notify::{Corner, Level};
+pub use place::{Offset, Origin, RectHandle};
 pub use reactive::{memo, signal, viewport, watch, Memo, Proxy, Signal};
 /// What a text does with what does not fit a line: rich's.
 pub use rich::Overflow;
+pub use rule::rule;
 pub use sheet::{SheetError, Stylesheet};
 pub use solver::Solver;
 pub use task::{latest, resource, spawn, spawn_future, Latest, Load, Resource, Task};
-pub use widget::{widget, Widget};
-pub use notify::{Corner, Level};
-pub use place::{Offset, Origin, RectHandle};
-pub use rule::rule;
 pub use text_area::Caret;
+pub use widget::{widget, Widget};
 pub use widgets::text_area;
 
 /// Everything an app usually needs.
@@ -126,8 +126,8 @@ pub mod prelude {
     // `text` is both the function and the `text!` macro.
     pub use crate::described;
     pub use crate::{
-        column, component, each, effect, every, fill, grid, input, label, latest, layers, leaf, list,
-        list_optional, memo, number_input, renderable, repeating, resource, row, scroll,
+        column, component, each, effect, every, fill, grid, input, label, latest, layers, leaf,
+        list, list_optional, memo, number_input, renderable, repeating, resource, row, scroll,
         scroll_both, scroll_with, scroll_x, signal, spawn, switch, text, text_area, viewport,
         watch, widget, Align, App, Border, Ctx, Edge, Justify, Load, Log, Memo, Node, Overflow,
         Proxy, Resource, Shadow, Sides, Signal, Size, Task, TextAlign, Theme, Widget,

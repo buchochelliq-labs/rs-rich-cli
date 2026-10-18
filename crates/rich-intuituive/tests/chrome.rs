@@ -15,7 +15,13 @@ fn a_rule_joins_the_border_of_the_panel_it_spans() {
     driver.settle();
     assert_eq!(
         rows(&driver),
-        ["╭─ Help ───╮", "│Keys      │", "├──────────┤", "│q quit    │", "╰──────────╯"]
+        [
+            "╭─ Help ───╮",
+            "│Keys      │",
+            "├──────────┤",
+            "│q quit    │",
+            "╰──────────╯"
+        ]
     );
 }
 
@@ -39,7 +45,11 @@ fn a_rule_takes_the_panels_kind_and_its_focus_colour() {
 
 #[test]
 fn a_rule_inside_padding_does_not_reach_the_border() {
-    let app = App::new(|| column([label("a"), rule(), label("b")]).padding(0, 1).panel(""));
+    let app = App::new(|| {
+        column([label("a"), rule(), label("b")])
+            .padding(0, 1)
+            .panel("")
+    });
     let mut driver = app.driver(7, 5);
     driver.settle();
     assert_eq!(rows(&driver)[2], "│ ─── │");
@@ -66,5 +76,8 @@ fn borders_on_a_node_without_a_panel_draw_its_sides() {
     });
     let mut driver = app.driver(8, 4);
     driver.settle();
-    assert_eq!(rows(&driver), ["Header  ", "────────", "body    ", "│left   "]);
+    assert_eq!(
+        rows(&driver),
+        ["Header  ", "────────", "body    ", "│left   "]
+    );
 }

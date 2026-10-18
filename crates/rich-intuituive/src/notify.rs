@@ -136,7 +136,9 @@ pub(crate) fn draw(
                     .max(title)
                     .min(NOTICE_WIDTH)
                     .min(area.width.saturating_sub(2));
-                let mut options = console.options().update_width(w.saturating_sub(4).max(1) as usize);
+                let mut options = console
+                    .options()
+                    .update_width(w.saturating_sub(4).max(1) as usize);
                 options.overflow = Some(rich::Overflow::Fold);
                 let rows = console.render_lines(&text, &options, false).len().max(1);
                 (w, rows.min(u16::MAX as usize) as u16)
@@ -158,8 +160,10 @@ pub(crate) fn draw(
                 options.no_wrap = Some(true);
                 options.overflow = Some(rich::Overflow::Ellipsis);
                 let shown = match &note.notice {
-                    Some((_, title)) => rich::Text::from_markup(&format!("{title}: {}", note.markup))
-                        .unwrap_or_else(|_| text.clone()),
+                    Some((_, title)) => {
+                        rich::Text::from_markup(&format!("{title}: {}", note.markup))
+                            .unwrap_or_else(|_| text.clone())
+                    }
                     None => text.clone(),
                 };
                 let line = console.render_lines(&shown, &options, false);

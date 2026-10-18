@@ -157,11 +157,10 @@ fn solve(
     let variables: Vec<Variable> = (0..tracks.len() * 2 + 2).map(|_| Variable::new()).collect();
     let pairs = |from: usize| -> Vec<Element> {
         variables[from..]
-            .chunks_exact(2)
-            .map(|pair| Element {
-                start: pair[0],
-                end: pair[1],
-            })
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .map(|&[start, end]| Element { start, end })
             .collect()
     };
     let spacers = pairs(0);
@@ -178,8 +177,8 @@ fn solve(
         solver.add_constraint(variable | GE(Strength::REQUIRED) | area.start)?;
         solver.add_constraint(variable | LE(Strength::REQUIRED) | area.end)?;
     }
-    for pair in variables[1..].chunks_exact(2) {
-        solver.add_constraint(pair[0] | LE(Strength::REQUIRED) | pair[1])?;
+    for &[left, right] in variables[1..].as_chunks::<2>().0 {
+        solver.add_constraint(left | LE(Strength::REQUIRED) | right)?;
     }
     flex_constraints(&mut solver, area, &spacers, flex, gap as i16)?;
     for (track, segment) in tracks.iter().zip(&segments) {

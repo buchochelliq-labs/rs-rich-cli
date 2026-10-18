@@ -360,7 +360,9 @@ impl<T: Send + 'static> Latest<T> {
 /// # Panics
 /// Outside a running or building app.
 #[track_caller]
-pub fn latest<T: Send + 'static>(run: impl FnOnce(Latest<T>) + Send + 'static) -> Signal<Option<T>> {
+pub fn latest<T: Send + 'static>(
+    run: impl FnOnce(Latest<T>) + Send + 'static,
+) -> Signal<Option<T>> {
     let runtime = Runtime::current_for("latest()");
     let value = signal(None);
     let sender = Latest {

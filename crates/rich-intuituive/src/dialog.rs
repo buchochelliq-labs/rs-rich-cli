@@ -84,7 +84,11 @@ fn dialog(title: String, body: String, items: Vec<String>, on_yes: OnYes) -> Nod
             );
         }
         if more > 0 {
-            parts.push(label(format!("[dim]… and {more} more")).fixed(1).padding(0, 1));
+            parts.push(
+                label(format!("[dim]… and {more} more"))
+                    .fixed(1)
+                    .padding(0, 1),
+            );
         }
         parts.push(crate::rule::rule());
     } else {

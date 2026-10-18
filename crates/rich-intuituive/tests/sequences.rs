@@ -18,7 +18,9 @@ fn files() -> App {
         text!("{ran}")
             .bind_sequence("g g", "Go to the top", move |_| ran.set("top".into()))
             .bind_sequence("g h", "Go home", move |_| ran.set("home".into()))
-            .bind_sequence("\",\" m t", "Sort by mtime", move |_| ran.set("mtime".into()))
+            .bind_sequence("\",\" m t", "Sort by mtime", move |_| {
+                ran.set("mtime".into())
+            })
             .bind("j", "Next file", move |_| ran.set("down".into()))
     })
 }
@@ -70,7 +72,9 @@ fn a_deeper_binding_of_the_first_key_wins_over_an_ancestors_sequence() {
     let app = App::new(|| {
         let ran = signal(String::from("-"));
         column([
-            label("list").focusable().on_key("g", move |_| ran.set("list g".into())),
+            label("list")
+                .focusable()
+                .on_key("g", move |_| ran.set("list g".into())),
             text!("{ran}"),
         ])
         .on_sequence("g g", move |_| ran.set("top".into()))
@@ -85,7 +89,9 @@ fn a_previewing_container_starts_its_sequence_before_the_focused_node() {
     let app = App::new(|| {
         let ran = signal(String::from("-"));
         column([
-            label("list").focusable().on_key("g", move |_| ran.set("list g".into())),
+            label("list")
+                .focusable()
+                .on_key("g", move |_| ran.set("list g".into())),
             text!("{ran}"),
         ])
         .previews_keys()
@@ -104,7 +110,10 @@ fn which_key_lists_what_can_follow_and_goes_when_the_sequence_ends() {
     driver.press("g");
     let rows = driver.screen().plain();
     // Bottom, a cell in from the edges: a box of one row of entries.
-    assert!(rows[4].starts_with(" ╭") && rows[4].ends_with("╮ "), "{rows:#?}");
+    assert!(
+        rows[4].starts_with(" ╭") && rows[4].ends_with("╮ "),
+        "{rows:#?}"
+    );
     assert!(rows[5].contains("g  Go to the top"), "{rows:#?}");
     assert!(rows[5].contains("h  Go home"), "{rows:#?}");
     assert!(rows[6].starts_with(" ╰"), "{rows:#?}");
@@ -134,7 +143,10 @@ fn which_key_fills_three_columns_top_to_bottom() {
     driver.press("g");
     let rows = driver.screen().plain();
     // Two rows, three columns of twenty cells: a b | c d.
-    assert!(rows[4].contains("a  one") && rows[5].contains("b  two"), "{rows:#?}");
+    assert!(
+        rows[4].contains("a  one") && rows[5].contains("b  two"),
+        "{rows:#?}"
+    );
     let c = rows[4].find("c  three").expect("c in the first row");
     let d = rows[5].find("d  four").expect("d in the second row");
     assert_eq!(c, d);
@@ -164,13 +176,27 @@ fn the_help_and_the_palette_list_sequences() {
     let mut driver = files().help_key("f1").palette_key("ctrl+p").driver(60, 20);
     driver.press("f1");
     let help = driver.screen().plain();
-    let line = |text: &str| help.iter().find(|r| r.contains(text)).cloned().unwrap_or_default();
-    assert!(line("Go to the top").contains("  g g    Go to the top"), "{help:#?}");
-    assert!(line("Sort by mtime").contains("  , m t  Sort by mtime"), "{help:#?}");
+    let line = |text: &str| {
+        help.iter()
+            .find(|r| r.contains(text))
+            .cloned()
+            .unwrap_or_default()
+    };
+    assert!(
+        line("Go to the top").contains("  g g    Go to the top"),
+        "{help:#?}"
+    );
+    assert!(
+        line("Sort by mtime").contains("  , m t  Sort by mtime"),
+        "{help:#?}"
+    );
     driver.press("esc esc");
     driver.press("ctrl+p");
     let palette = driver.screen().plain().join("\n");
-    assert!(palette.contains("Go home") && palette.contains("g h"), "{palette}");
+    assert!(
+        palette.contains("Go home") && palette.contains("g h"),
+        "{palette}"
+    );
     // Run from the palette, as its keys would.
     driver.type_text("home");
     driver.press("enter");
@@ -190,7 +216,10 @@ fn the_palette_cuts_a_long_description_to_show_its_key() {
     let mut driver = app.driver(60, 10);
     driver.press("ctrl+p");
     let rows = driver.screen().plain();
-    let line = rows.iter().find(|r| r.contains("Exit visual")).expect("listed");
+    let line = rows
+        .iter()
+        .find(|r| r.contains("Exit visual"))
+        .expect("listed");
     assert!(line.contains("… esc"), "{line}");
 }
 
@@ -245,7 +274,9 @@ fn a_pop_ups_title_takes_the_themes_popup_title_style() {
     let theme = Theme::dark().style("popup.title", rich::Style::parse("bold magenta").unwrap());
     let app = App::new(|| {
         column([label("x").panel("Plain")]).on_key("o", |cx| {
-            cx.modal(Size::Fixed(12), Size::Fixed(3), || label("hi").panel("Popup"))
+            cx.modal(Size::Fixed(12), Size::Fixed(3), || {
+                label("hi").panel("Popup")
+            })
         })
     })
     .theme(theme);
