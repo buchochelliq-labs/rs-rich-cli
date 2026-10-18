@@ -267,8 +267,12 @@ mod gif_controls {
 
     #[test]
     fn a_slower_speed_takes_longer() {
-        let (_, fast) = play(&["--max-frames", "4", "--speed", "8"]);
-        let (_, slow) = play(&["--max-frames", "4", "--speed", "0.5"]);
+        // ball.gif's frames are 40 ms: eight of them at a quarter speed
+        // sleep at least 1.28 s, at eight times 40 ms. A gap that wide is not
+        // lost to a busy runner's process start-up.
+        let (_, fast) = play(&["--max-frames", "8", "--speed", "8"]);
+        let (_, slow) = play(&["--max-frames", "8", "--speed", "0.25"]);
+        assert!(slow >= Duration::from_millis(1200), "slow {slow:?}");
         assert!(slow > fast, "fast {fast:?}, slow {slow:?}");
     }
 
