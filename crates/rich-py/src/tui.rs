@@ -780,7 +780,11 @@ py_enum! {
 /// bottom_right)`, for a border of your own.
 pub(crate) fn border_arg(value: &Bound<'_, PyAny>) -> PyResult<intuituive::Border> {
     if let Ok(text) = value.cast::<PyString>() {
-        let text = text.to_cow()?.trim().to_ascii_lowercase().replace(['-', ' '], "_");
+        let text = text
+            .to_cow()?
+            .trim()
+            .to_ascii_lowercase()
+            .replace(['-', ' '], "_");
         let name = match text.as_str() {
             "round" => "rounded",
             "square" | "solid" => "plain",
