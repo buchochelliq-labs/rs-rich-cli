@@ -187,3 +187,18 @@ fn a_server_that_dies_takes_a_hung_session_with_it() {
         !running(pid)
     });
 }
+
+/// A program the session runs that serves an app too binds as it would
+/// anywhere: the session's process does not pass the variable on.
+#[test]
+fn a_program_the_app_runs_can_still_serve() {
+    let probe = Probe::start("session_probe", &[]);
+    let (mut socket, _) = session(&probe);
+    socket.send(Message::text("dn")).unwrap();
+    let seen = read_until(&mut socket, "END");
+    // Only the changed cells are sent: the words come in pieces.
+    assert!(
+        seen.contains("code=0") && seen.contains("bound=true"),
+        "the nested server did not bind: {seen:?}"
+    );
+}

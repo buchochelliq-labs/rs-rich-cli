@@ -189,7 +189,9 @@ pub(crate) fn is_session_process() -> bool {
 /// leader whose parent is no longer the server is a session whose server
 /// has died, and exits. A `session_command` must therefore be the program,
 /// or `exec` it. (On Windows a session whose server has died is ended by
-/// its job object.)
+/// its job object, and the session's process takes the variable out of
+/// its environment before the app runs, so what the app starts does not
+/// see it.)
 fn own_spec() -> Option<Spec> {
     let spec = Spec::decode(&std::env::var(SESSION_ENV).ok()?)?;
     #[cfg(unix)]
@@ -209,6 +211,12 @@ fn own_spec() -> Option<Spec> {
 /// In a session's process: limit it, connect back, run the session, and
 /// give the exit code.
 pub(crate) fn run_child(spec: Spec, app: impl FnOnce() -> App) -> i32 {
+    // What this process starts from here on is not the session, and on
+    // Windows no process group tells them apart: it does not inherit the
+    // variable. (Windows guards its environment, so this is safe beside
+    // other threads; on Unix, `own_spec`'s group check does it.)
+    #[cfg(windows)]
+    std::env::remove_var(SESSION_ENV);
     // Should the server die without ending it, this process ends its whole
     // group. (Not Linux's parent-death signal: that would kill this process
     // alone, before it could end the rest.) On Windows the job object the
