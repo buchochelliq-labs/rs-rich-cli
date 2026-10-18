@@ -78,9 +78,9 @@ in the release notes; the crates.io links show available packages.
 | [`rs-rich-art`](https://crates.io/crates/rs-rich-art) | `0.0.12` |
 | [`rs-rich-mermaid`](https://crates.io/crates/rs-rich-mermaid) | `0.0.5` |
 | [`rs-rich-lumis`](https://crates.io/crates/rs-rich-lumis) | `0.0.3` |
-| [`rs-rich-record`](https://crates.io/crates/rs-rich-record) | `0.0.7` |
+| [`rs-rich-record`](https://crates.io/crates/rs-rich-record) | `0.0.8` |
 | [`rs-rich-interact`](https://crates.io/crates/rs-rich-interact) | `0.0.7` |
-| [`rs-rich-micro`](https://crates.io/crates/rs-rich-micro) | `0.0.5` |
+| [`rs-rich-micro`](https://crates.io/crates/rs-rich-micro) | `0.0.6` |
 | [`rs-rich-diagram`](https://crates.io/crates/rs-rich-diagram) | `0.0.2` |
 | [`rs-rich-data`](https://crates.io/crates/rs-rich-data) | `0.0.3` |
 | [`rs-rich-ratatui`](https://crates.io/crates/rs-rich-ratatui) | `0.0.4` |

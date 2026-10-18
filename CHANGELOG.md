@@ -65,6 +65,8 @@ four `Chart` options the scope-tui clone needs to look like ratatui 0.29's
 What the Yazi and scope-tui rebuilds found missing from the plugin side
 (`docs/design/intuituive-demo-gaps.md`, "Data, sources and the outside
 world"). Every new dependency is behind an off-by-default feature.
+rs-rich-micro 0.0.6 and rs-rich-record 0.0.8 change only their
+requirement on rs-rich-ext 0.0.17.
 
 - **intuiTUIve `watch` feature: `watch_path(path, |event, cx| …)`** wakes
   the app when files change, through notify (the version the CLI already

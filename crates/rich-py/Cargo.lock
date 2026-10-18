@@ -1763,7 +1763,7 @@ dependencies = [
 
 [[package]]
 name = "rs-rich-micro"
-version = "0.0.5"
+version = "0.0.6"
 dependencies = [
  "flate2",
  "pulldown-cmark",
@@ -1810,7 +1810,7 @@ dependencies = [
 
 [[package]]
 name = "rs-rich-record"
-version = "0.0.7"
+version = "0.0.8"
 dependencies = [
  "color_quant 2.0.0",
  "fancy-regex 0.19.2",
