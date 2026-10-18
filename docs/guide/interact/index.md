@@ -188,6 +188,11 @@ resize.
 - **Moving:** it scrolls like the viewport; `q` or Escape closes it.
 - **Searching:** `/` starts a search. Matches are marked in place, the current
   one in yellow, and `n` and `N` jump between them.
+- **A sticky header:** `sticky_table_header(true)` keeps a table's header on
+  top while its rows scroll, when the content starts with a table: its
+  title, top edge and header rows, down to the line under them, found again
+  at each width (`table_header_rows`). `sticky_header(n)` keeps the first
+  `n` lines instead. `rich pager` does the first by default.
 - **Without a terminal:** it writes the content out in full.
 
 ![Searching in the pager](../../media/tapes/components/pager.png)
@@ -251,8 +256,9 @@ terminal can; `run` shows their emoji.
 Pick a table's row (columns aligned under their headings, filtered by any
 cell) or a tree's node (guides drawn, Left and Right fold and unfold,
 searching finds nodes inside folded ones). Both are a `Select` underneath.
-A table copies its row or a cell as text, CSV or JSON, and a tree keeps each
-match's ancestors, shows breadcrumbs and copies a node's path: see
+A table copies its row or a cell as text, CSV or JSON, and scrolls across
+when it is wider than the list (`scroll_x`, `freeze_columns`). A tree keeps
+each match's ancestors, shows breadcrumbs and copies a node's path: see
 [Explorers, copying and live lists](explorers.md).
 
 ### DataExplorer and ThemePicker
@@ -590,8 +596,15 @@ painting on standard error ([the CLI guide](../../cli.md#ask-in-a-script)).
 - the mouse wheel.
 
 A component keeps one and renders its visible lines. Because repaints are
-cell diffs, scrolling rewrites only what moved. On its own it is a minimal
-pager:
+cell diffs, scrolling rewrites only what moved.
+
+`sticky(n)` keeps the first `n` lines on every page, above the lines that
+scroll: a table's header. `rows(page)` gives the lines shown with their
+indices, sticky ones first. The scroll position (`offset`, `scroll_to`)
+then counts the lines under them, and `show(line)` takes a line's index in
+the whole content.
+
+On its own it is a minimal pager:
 
 ```bash
 cargo run -p rs-rich-interact --example viewport -- README.md

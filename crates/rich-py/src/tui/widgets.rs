@@ -121,13 +121,17 @@ fn selected(value: &Bound<'_, PyAny>, what: &str) -> PyResult<Signal<usize>> {
 /// `TableOptions()`: what `table_with` adds to a table, set by chaining:
 /// `.sort(signal)` (the rows function sorts by it), `.sort_rows(signal)`
 /// (the table sorts plain rows), `.cells(signal)` (a cell cursor's column)
-/// and `.resizable()`. A sort signal holds `None` or `(column, Order)`.
+/// `.resizable()`, `.scroll_x()` (columns keep their natural widths and the
+/// table scrolls across when they do not fit) and `.freeze_columns(n)`. A
+/// sort signal holds `None` or `(column, Order)`.
 #[pyclass(name = "TableOptions", module = "rs_rich.tui", unsendable)]
 #[derive(Default)]
 pub(crate) struct PyTableOptions {
     sort: RefCell<Option<(Py<PySignal>, bool)>>,
     cells: RefCell<Option<Py<PySignal>>>,
     resizable: std::cell::Cell<bool>,
+    scroll_x: std::cell::Cell<bool>,
+    freeze: std::cell::Cell<usize>,
 }
 
 impl PyTableOptions {
@@ -146,6 +150,12 @@ impl PyTableOptions {
         }
         if self.resizable.get() {
             options = options.resizable();
+        }
+        if self.scroll_x.get() {
+            options = options.scroll_x();
+        }
+        if self.freeze.get() > 0 {
+            options = options.freeze_columns(self.freeze.get());
         }
         Ok(options)
     }
@@ -187,6 +197,22 @@ impl PyTableOptions {
         slf.borrow().resizable.set(true);
         slf
     }
+
+    /// Columns keep their natural widths when they do not fit, and the
+    /// table scrolls across: Left/Right (Shift+Left/Right with a cell
+    /// cursor), Shift+Home/End and Shift with the wheel.
+    fn scroll_x(slf: Bound<'_, Self>) -> Bound<'_, Self> {
+        slf.borrow().scroll_x.set(true);
+        slf
+    }
+
+    /// Keep the first `columns` columns in place while the rest scroll
+    /// across; turns `scroll_x` on.
+    fn freeze_columns(slf: Bound<'_, Self>, columns: usize) -> Bound<'_, Self> {
+        slf.borrow().scroll_x.set(true);
+        slf.borrow().freeze.set(columns);
+        slf
+    }
 }
 
 /// `table(columns, rows, selected)`: markup cells under a header that stays
@@ -223,20 +249,29 @@ fn tui_table_with(
     )))
 }
 
-/// `virtual_table(columns, len, row, selected)`: a table that asks only for
-/// the rows in view: `len()` is how many, `row(i)` makes one.
+/// `virtual_table(columns, len, row, selected, options=None)`: a table that
+/// asks only for the rows in view: `len()` is how many, `row(i)` makes one.
+/// `options` (a `TableOptions`) adds a cell cursor, resizable columns or a
+/// scroll across; a virtual table does not sort its rows itself.
 #[pyfunction]
+#[pyo3(signature = (columns, len, row, selected, options=None))]
 fn tui_virtual_table(
     columns: &Bound<'_, PyAny>,
     len: &Bound<'_, PyAny>,
     row: &Bound<'_, PyAny>,
     selected: &Bound<'_, PyAny>,
+    options: Option<&Bound<'_, PyTableOptions>>,
 ) -> PyResult<PyNode> {
+    let py = columns.py();
     let columns = self::columns(columns)?;
     let len = len_source(len)?;
     let row = Callback::checked(row, "virtual_table's row")?;
     let selected = self::selected(selected, "a table's selection")?;
-    Ok(PyNode::new(core::virtual_table(
+    let options = match options {
+        Some(options) => options.borrow().build(py)?,
+        None => core::TableOptions::default(),
+    };
+    Ok(PyNode::new(core::virtual_table_with(
         columns,
         len,
         move |i| {
@@ -244,6 +279,7 @@ fn tui_virtual_table(
                 .unwrap_or_default()
         },
         selected,
+        options,
     )))
 }
 

@@ -7,7 +7,11 @@
 //! JSON (#434), and a tree filters as a tree, keeping each match's
 //! ancestors (#428), shows the focused node's breadcrumbs and copies its
 //! path (#464), all through the terminal [clipboard](crate::clipboard).
+//!
+//! Since 0.0.7 a table wider than its list scrolls across (#717), with
+//! leading columns frozen if asked.
 
+use std::cell::Cell;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -16,8 +20,8 @@ use rich::{Segment, Style};
 
 use crate::clipboard::{self, CopyFormat};
 use crate::component::{Component, Context, Flow, View};
-use crate::components::{fit, plain, shown, text, PreviewLayout, Select, Theme};
-use crate::event::{Event, Key, KeyCode};
+use crate::components::{fit, pad, plain, shown, text, PreviewLayout, Select, Theme};
+use crate::event::{Event, Key, KeyCode, MouseKind};
 use crate::item::{Actions, Item, TargetKind};
 use crate::keymap::{keys, Keymap};
 use crate::policy::{LineIo, NotInteractive};
@@ -105,6 +109,66 @@ pub fn table_keymap() -> Keymap {
             "focus the previous column",
         )
         .bind("copy-format", keys("alt+f"), "copy as text, CSV or JSON")
+        .bind("scroll-left", keys("left"), "scroll a column left")
+        .bind("scroll-right", keys("right"), "scroll a column right")
+        .bind(
+            "scroll-start",
+            keys("shift+home"),
+            "scroll to the first column",
+        )
+        .bind("scroll-end", keys("shift+end"), "scroll to the last column")
+}
+
+/// The `table` actions that scroll across, live only with
+/// [`TableSelect::scroll_x`].
+const SCROLLING: [&str; 4] = ["scroll-left", "scroll-right", "scroll-start", "scroll-end"];
+
+/// A wide table's horizontal scroll (#717): the first `frozen` cells of a
+/// label (the frozen columns) stay, and the rest shows from cell
+/// `frozen + offset`. The heading is cut the same way, so it stays over
+/// its column.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) struct Pan {
+    frozen: usize,
+    offset: usize,
+    /// Whether columns are out of view to the left, and to the right.
+    left: bool,
+    right: bool,
+}
+
+impl Pan {
+    /// The cells of `line` in view.
+    pub(crate) fn window(&self, line: &[Segment]) -> Vec<Segment> {
+        if self.offset == 0 {
+            return line.to_vec();
+        }
+        let mut out = crate::kit::slice(line, 0, self.frozen);
+        out.extend(crate::kit::slice(
+            line,
+            self.frozen + self.offset,
+            usize::MAX,
+        ));
+        out
+    }
+
+    /// The heading line at most `width` wide: `‹` in its indent while
+    /// columns are out of view to the left, and `›` in its last cell while
+    /// they are to the right.
+    pub(crate) fn heading(&self, indent: &str, heading: &[Segment], width: usize) -> Vec<Segment> {
+        let indent = if self.left {
+            format!("‹{}", &indent[1..])
+        } else {
+            indent.to_string()
+        };
+        let mut line = vec![plain(indent)];
+        line.extend(self.window(heading));
+        if self.right && width > 1 {
+            let mut line = pad(line, width - 1);
+            line.push(plain("›"));
+            return line;
+        }
+        fit(line, width)
+    }
 }
 
 /// Pick a row of a table: columns aligned under their headings, rows
@@ -116,6 +180,13 @@ pub fn table_keymap() -> Keymap {
 /// cycled with Alt+F or set with [`copy_format`](Self::copy_format).
 /// Ctrl+Right and Ctrl+Left move the focused column, which the headings
 /// underline.
+///
+/// With [`scroll_x`](Self::scroll_x), a table wider than its list scrolls
+/// across (#717): Left and Right move a column at a time, Shift+Home and
+/// Shift+End go to the ends, Shift with the wheel scrolls, and the view
+/// follows the focused column. `‹` and `›` at the ends of the headings say
+/// that columns are out of view on that side.
+/// [`freeze_columns`](Self::freeze_columns) keeps leading columns in place.
 pub struct TableSelect<T> {
     select: Select<T>,
     /// The headings as drawn (controls shown as pictures).
@@ -128,6 +199,14 @@ pub struct TableSelect<T> {
     column: Option<usize>,
     format: CopyFormat,
     keymap: Keymap,
+    /// Scroll across when wider than the list (#717).
+    scroll: bool,
+    /// Leading columns that stay in place while the rest scroll.
+    freeze: usize,
+    /// The first column scrolled into view after the frozen ones.
+    left: usize,
+    /// The width of the list's labels at the last render.
+    span: Cell<usize>,
 }
 
 impl<T> TableSelect<T> {
@@ -197,6 +276,10 @@ impl<T> TableSelect<T> {
             column: None,
             format: CopyFormat::Text,
             keymap: table_keymap(),
+            scroll: false,
+            freeze: 0,
+            left: 0,
+            span: Cell::new(usize::MAX),
         };
         view.heading();
         view
@@ -213,6 +296,125 @@ impl<T> TableSelect<T> {
     /// The focused column, once one has been moved to.
     pub fn column(&self) -> Option<usize> {
         self.column
+    }
+
+    /// Scroll across when the table is wider than its list (#717), rather
+    /// than cutting it at the right edge: see the [type](Self)'s keys.
+    pub fn scroll_x(mut self, on: bool) -> Self {
+        self.scroll = on;
+        self.select.set_hints(on.then(|| "←→ scroll".to_string()));
+        self
+    }
+
+    /// Keep the first `columns` columns in place while the rest scroll
+    /// across; turns [`scroll_x`](Self::scroll_x) on.
+    pub fn freeze_columns(mut self, columns: usize) -> Self {
+        self.freeze = columns;
+        self.scroll_x(true)
+    }
+
+    /// The first column in view after the frozen ones, as of the last
+    /// render.
+    pub fn first_column(&self) -> usize {
+        self.left
+            .clamp(self.frozen_columns(), self.last_left(self.span.get()))
+    }
+
+    /// Where each column starts in a row's label.
+    fn starts(&self) -> Vec<usize> {
+        let mut at = 0;
+        self.widths
+            .iter()
+            .map(|width| {
+                let start = at;
+                at += width + 2;
+                start
+            })
+            .collect()
+    }
+
+    /// How wide a row's label is at most.
+    fn total(&self) -> usize {
+        let starts = self.starts();
+        match (starts.last(), self.widths.last()) {
+            (Some(start), Some(width)) => start + width,
+            _ => 0,
+        }
+    }
+
+    /// The frozen columns there are.
+    fn frozen_columns(&self) -> usize {
+        self.freeze.min(self.widths.len())
+    }
+
+    /// The cells the frozen columns take, the gap after them included.
+    fn frozen_cells(&self) -> usize {
+        match self.frozen_columns() {
+            0 => 0,
+            n if n == self.widths.len() => self.total(),
+            n => self.starts()[n],
+        }
+    }
+
+    /// The furthest the view scrolls in labels `span` wide: the first
+    /// column from which the rest of the table fits.
+    fn last_left(&self, span: usize) -> usize {
+        let first = self.frozen_columns();
+        let (starts, total, frozen) = (self.starts(), self.total(), self.frozen_cells());
+        (first..self.widths.len())
+            .find(|&left| total - (starts[left] - frozen) <= span)
+            .unwrap_or_else(|| self.widths.len().saturating_sub(1).max(first))
+    }
+
+    /// What of each label shows in labels `span` wide.
+    fn pan(&self, span: usize) -> Option<Pan> {
+        if !self.scroll {
+            return None;
+        }
+        let first = self.frozen_columns();
+        let left = self.left.clamp(first, self.last_left(span));
+        let frozen = self.frozen_cells();
+        let offset = match self.starts().get(left) {
+            Some(start) if left > first => start - frozen,
+            _ => 0,
+        };
+        Some(Pan {
+            frozen,
+            offset,
+            left: offset > 0,
+            right: self.total() - offset > span,
+        })
+    }
+
+    /// Scroll so that `column` is in view in labels `span` wide.
+    fn follow(&mut self, column: usize, span: usize) {
+        let first = self.frozen_columns();
+        if column < first {
+            return;
+        }
+        let (starts, frozen) = (self.starts(), self.frozen_cells());
+        let mut left = self.left.clamp(first, self.last_left(span));
+        if column < left {
+            left = column;
+        }
+        while left < column && starts[column] + self.widths[column] - (starts[left] - frozen) > span
+        {
+            left += 1;
+        }
+        self.left = left;
+    }
+
+    /// Scroll across for `action` in labels `span` wide.
+    fn scroll_by(&mut self, action: &str, span: usize) {
+        let first = self.frozen_columns();
+        let last = self.last_left(span);
+        let left = self.left.clamp(first, last);
+        self.left = match action {
+            "scroll-left" => left.saturating_sub(1).max(first),
+            "scroll-right" => (left + 1).min(last),
+            "scroll-start" => first,
+            _ => last,
+        };
     }
 
     /// Make `keys` do `action` (see [`table_keymap`]) on this table only.
@@ -283,20 +485,29 @@ impl<T> TableSelect<T> {
             .set_status(Some(clipboard::report(&what, &result)));
     }
 
-    /// Carry out a table key; `false` when `key` is not one.
-    fn table_key(&mut self, key: Key) -> bool {
+    /// Carry out a table key; `false` when `key` is not one. `span` is
+    /// how wide the list's labels are.
+    fn table_key(&mut self, key: Key, span: usize) -> bool {
         match self.keymap.action(key) {
             Some("copy-row") => self.copy(false),
             Some("copy-cell") => self.copy(true),
             Some(step @ ("next-column" | "previous-column")) => {
                 let columns = self.widths.len().max(1);
                 let at = self.column.unwrap_or(0);
-                self.column = Some(if step == "next-column" {
+                let column = if step == "next-column" {
                     (at + 1).min(columns - 1)
                 } else {
                     at.saturating_sub(1)
-                });
+                };
+                self.column = Some(column);
+                if self.scroll {
+                    self.follow(column, span);
+                }
                 self.heading();
+            }
+            Some(action) if self.scroll && SCROLLING.contains(&action) => {
+                let action = action.to_string();
+                self.scroll_by(&action, span);
             }
             Some("copy-format") => {
                 self.format = self.format.next();
@@ -315,16 +526,41 @@ impl<T: Clone> Component for TableSelect<T> {
     fn keymap(&self) -> Keymap {
         let mut keymap = if self.select.menu_open() {
             Keymap::default()
-        } else {
+        } else if self.scroll {
             self.keymap.clone()
+        } else {
+            let mut keymap = Keymap::new("table");
+            for binding in self.keymap.bindings() {
+                if !SCROLLING.contains(&binding.action.as_str()) {
+                    keymap.add(binding);
+                }
+            }
+            keymap
         };
         keymap.extend(self.select.visible_keymap());
         keymap
     }
 
     fn handle(&mut self, event: &Event, context: &Context<'_>) -> Flow<T> {
+        // The labels follow the pointer's two cells.
+        let span = self.select.list_width(context.width).saturating_sub(2);
+        self.span.set(span);
         if let Some(key) = event.key() {
-            if !self.select.menu_open() && self.table_key(key) {
+            if !self.select.menu_open() && self.table_key(key, span) {
+                return Flow::Continue;
+            }
+        }
+        // Shift with the wheel scrolls across.
+        if let Event::Mouse(mouse) = event {
+            let across = match mouse.kind {
+                MouseKind::ScrollUp => Some("scroll-left"),
+                MouseKind::ScrollDown => Some("scroll-right"),
+                _ => None,
+            };
+            if let Some(action) =
+                across.filter(|_| self.scroll && mouse.modifiers.shift && !self.select.menu_open())
+            {
+                self.scroll_by(action, span);
                 return Flow::Continue;
             }
         }
@@ -332,6 +568,9 @@ impl<T: Clone> Component for TableSelect<T> {
     }
 
     fn render(&self, context: &Context<'_>) -> View {
+        let span = self.select.list_width(context.width).saturating_sub(2);
+        self.span.set(span);
+        self.select.pan.set(self.pan(span));
         self.select.render(context)
     }
 

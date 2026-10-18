@@ -418,6 +418,21 @@ table_with(
   the cell, and the theme's `selected.cell` style draws it.
 - **`.resizable()`** lets the columns be resized by dragging the gap after
   a header.
+- **`.scroll_x()`** keeps the columns at their natural widths when they do
+  not fit, and scrolls the table across, a column at a time:
+  - A `Size::Fixed` column keeps its cells; the others fit their title and
+    the cells in view. A table that fits shares the width as before.
+  - ←/→ (or h/l) scroll it, or Shift+←/→ with a cell cursor, since ←/→
+    move the cursor. Shift+Home and Shift+End go to the ends, and Shift
+    with the wheel scrolls too.
+  - The header is cut where the rows are, so it stays over its columns.
+    `‹` and `›` in it say that columns are out of view on that side.
+  - The view follows the cell cursor.
+- **`.freeze_columns(n)`** keeps the first `n` columns in place while the
+  rest scroll, and turns `.scroll_x()` on.
+
+`virtual_table_with(columns, len, row, selected, options)` takes the same
+options, but sorts nothing itself: its rows are never all in hand.
 
 The `tables` example sorts a process table in its rows closure, so its
 status line can name the selected process and the cell under the cursor

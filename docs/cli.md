@@ -1091,7 +1091,9 @@ icon=$(rich asset --value rocket)
   `--password`; `confirm` takes a QUESTION, `--default yes|no`,
   `--affirmative` and `--negative`.
 - `pager` pages a FILE or stdin, keeping its colours: `/` searches, `q`
-  quits.
+  quits. When the content starts with a table, its header stays on top
+  while the rows scroll; `--sticky LINES` keeps the first LINES lines there
+  instead, and `--sticky 0` nothing.
 - `write` reads several lines: Enter starts a line, Ctrl+D submits. It takes
   `--header`, `--placeholder`, `--value`, `--height`, `--char-limit` and
   `--show-line-numbers`; piped stdin is the text to start from, its last
@@ -1217,6 +1219,14 @@ the console width (80 when neither terminal width nor the variable is available)
 terminal and output exceeds its viewport height; redirected stdout is never
 paged. `--no-pager` disables configured explicit and automatic paging, while
 `--no-auto-pager` disables only automatic paging.
+
+`less` scrolls a table's header away with its rows. With
+`PAGER='rich pager'`, the built-in pager pages the output instead and keeps
+the header of a table on top:
+
+```bash
+PAGER='rich pager' rich data.csv --pager
+```
 
 GIF playback repeats once by default; `--loop 0` repeats
 forever in a terminal. Pipes receive the first frame once, even with `--loop 0`.

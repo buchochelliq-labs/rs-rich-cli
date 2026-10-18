@@ -314,6 +314,11 @@ width: the arrows, Space and PageUp/PageDown scroll, `/` searches, `n` and
 either way: closing a pager is not a cancel). Without a terminal it writes
 the content out.
 
+`sticky_header` keeps lines on top while the rest scroll: a number of lines,
+or `"table"` for the header of a table the content starts with (its title,
+top edge and header rows, down to the line under them). `Pager(table,
+sticky_header="table")` pages a long table with its header always in view.
+
 ```python
 from rs_rich.interact import Pager
 from rs_rich.text import Text

@@ -220,7 +220,16 @@ pub(super) fn commands() -> Vec<CommandSpec> {
                     .value_name("QUERY")
                     .help("Start with QUERY searched"),
             )
-            .example("git log --color | rich pager", "Page coloured output"),
+            .arg(ArgSpec::option("sticky").value_name("LINES").help(
+                "Keep the first LINES lines on top while the rest scroll; `table` (the \
+                 default) keeps a table's header there when the content starts with one, 0 \
+                 nothing",
+            ))
+            .example("git log --color | rich pager", "Page coloured output")
+            .example(
+                "PAGER='rich pager' rich data.csv --pager",
+                "Page a table with its header on top",
+            ),
         CommandSpec::new("write")
             .about(
                 "Write several lines and print them: Enter starts a line, Ctrl+D submits, Esc \
@@ -444,6 +453,9 @@ struct Args {
     affirmative: Option<String>,
     negative: Option<String>,
     search: Option<String>,
+    /// `rich pager --sticky`: the lines kept on top; `None` is a table's
+    /// header.
+    sticky: Option<usize>,
     mouse: bool,
     char_limit: Option<usize>,
     line_numbers: bool,
@@ -537,7 +549,7 @@ fn parse_args(command: &'static str, args: &[String]) -> Result<Args, String> {
         "explore" => &[
             "--format", "--header", "--height", "--value", "--print", "--mouse", "--icons",
         ],
-        _ => &["--search"],
+        _ => &["--search", "--sticky"],
     };
     let mut seen_command = false;
     let mut options_done = false;
@@ -669,6 +681,15 @@ fn parse_args(command: &'static str, args: &[String]) -> Result<Args, String> {
             "--default" => parsed.default = Some(value()?),
             "--affirmative" => parsed.affirmative = Some(value()?),
             "--negative" => parsed.negative = Some(value()?),
+            "--sticky" => {
+                let lines = value()?;
+                parsed.sticky = match lines.as_str() {
+                    "table" => None,
+                    lines => Some(lines.parse::<usize>().map_err(|_| {
+                        format!("--sticky: {lines:?} is not a number of lines or table")
+                    })?),
+                };
+            }
             _ => parsed.search = Some(value()?),
         }
     }
@@ -1111,7 +1132,11 @@ fn pager(args: &Args) -> Answer {
     // after it, as a pager such as `less` shows it.
     let source = source.strip_suffix('\n').unwrap_or(&source);
     let text = Text::from_ansi(source, rich::style::StyleType::default());
-    let mut pager = Pager::new(text);
+    // A table's header stays on top (#716), or the lines asked for.
+    let mut pager = match args.sticky {
+        None => Pager::new(text).sticky_table_header(true),
+        Some(lines) => Pager::new(text).sticky_header(lines),
+    };
     if let Some(query) = &args.search {
         pager = pager.search(query.clone());
     }
