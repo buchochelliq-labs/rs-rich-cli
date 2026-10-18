@@ -5352,8 +5352,9 @@ class MicroError(Exception):
     """A micro asset, package or lookup was rejected."""
 
 class MicroAsset:
-    """An emoji-sized image or animation; renders as exactly its cells."""
-    def __init__(self, name: str, alt: str, *, emoji: Optional[str] = None, text: Optional[str] = None, size: Literal["2x1", "1x1"] = "2x1") -> None: ...
+    """An emoji-sized image or animation; renders as exactly its cells (both
+    rows of a two-row asset)."""
+    def __init__(self, name: str, alt: str, *, emoji: Optional[str] = None, text: Optional[str] = None, size: str = "2x1") -> None: ...
     @property
     def name(self) -> str: ...
     @property
@@ -5362,6 +5363,8 @@ class MicroAsset:
     def size(self) -> str: ...
     @property
     def cols(self) -> int: ...
+    @property
+    def rows(self) -> int: ...
     @property
     def kind(self) -> Literal["static", "animated"]: ...
     @property
@@ -5413,7 +5416,7 @@ def micro_create_package(
     alt: str,
     emoji: Optional[str] = None,
     text: Optional[str] = None,
-    size: Literal["2x1", "1x1"] = "2x1",
+    size: str = "2x1",
     fit: Literal["contain", "cover", "stretch"] = "contain",
     contrast: float = 1.0,
     brightness: float = 1.0,

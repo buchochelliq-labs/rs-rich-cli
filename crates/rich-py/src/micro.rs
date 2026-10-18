@@ -31,7 +31,7 @@ use rich_micro::create::{write_package, PackageSpec};
 use rich_micro::pipeline::{Pipeline, Transparency};
 use rich_micro::{
     CellSize, FallbackPreference, Layer, Limits, MicroAsset as CoreAsset, MicroAssetRef,
-    MicroError as CoreError, MicroGraphics, MicroRegistry as CoreRegistry, MicroRoots,
+    MicroError as CoreError, MicroGraphics, MicroRegistry as CoreRegistry, MicroRoots, MicroRows,
 };
 
 use crate::art::{bad_choice, buffer_bytes, path_arg, read_file};
@@ -80,7 +80,8 @@ fn optional_path(value: Option<&Bound<'_, PyAny>>) -> PyResult<Option<PathBuf>> 
 }
 
 /// A micro asset: an emoji-sized image or animation with alt text and a
-/// fallback. It renders as exactly its cells.
+/// fallback. It renders as exactly its cells: a two-row asset (`"2x2"`,
+/// `"3x2"`) renders both its rows.
 #[pyclass(name = "MicroAsset", module = "rs_rich.micro", frozen)]
 pub(crate) struct MicroAsset {
     inner: Arc<CoreAsset>,
@@ -101,7 +102,8 @@ impl AsRenderable for MicroAsset {
 #[pymethods]
 impl MicroAsset {
     /// An asset with no image (its fallback always shows), for the inline
-    /// layer. `alt` is mandatory; `emoji` and `text` must fit `size`.
+    /// layer. `alt` is mandatory; `emoji` and `text` must fit `size`'s
+    /// columns. `size` is `"COLSxROWS"`, up to `"4x2"`.
     #[new]
     #[pyo3(signature = (name, alt, *, emoji=None, text=None, size="2x1"))]
     fn new(
@@ -134,7 +136,7 @@ impl MicroAsset {
         self.inner.alt()
     }
 
-    /// `"2x1"` or `"1x1"`.
+    /// `"COLSxROWS"`: `"2x1"`, `"1x1"`, `"2x2"`, `"3x2"`, ... up to `"4x2"`.
     #[getter]
     fn size(&self) -> String {
         self.inner.size().to_string()
@@ -144,6 +146,13 @@ impl MicroAsset {
     #[getter]
     fn cols(&self) -> usize {
         self.inner.cols()
+    }
+
+    /// Rows it takes: 1, or 2 for an asset that reserves the row below its
+    /// line.
+    #[getter]
+    fn rows(&self) -> usize {
+        self.inner.rows()
     }
 
     /// `"static"` or `"animated"`.
@@ -397,7 +406,8 @@ impl Drawn {
 
 impl Renderable for Drawn {
     fn rich_render(&self, console: &CoreConsole, options: &CoreOptions) -> Vec<CoreSegment> {
-        let text = self.text(console);
+        // A two-row asset reserves the row below its line.
+        let text = MicroRows::new(self.text(console));
         if self.draw && console.is_terminal() {
             let graphics = self
                 .graphics

@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "name": "fun/trophy",
+  "alt": "gold trophy cup on a dark stand",
+  "size": "2x2",
+  "kind": "static",
+  "fallback": {
+    "emoji": "🏆",
+    "text": "#1"
+  },
+  "static": "static.png",
+  "version": "1.0.0",
+  "license": "MIT",
+  "author": "rs-rich-cli contributors"
+}

@@ -295,6 +295,78 @@ fn micro_markup_in_print_with_emoji() {
 }
 
 #[test]
+fn two_row_sizes() {
+    // 0.0.19 workstream 17 (#711): up to 4x2 cells, and the row below the
+    // line reserved wherever a two-row asset is printed.
+    let (_root, work, home) = dirs();
+    source(&work);
+    for (size, name) in [("2x2", "team/big"), ("3x2", "team/wide")] {
+        let created = json(&rich(
+            &work,
+            &home,
+            &[
+                "micro",
+                "create",
+                "heart.gif",
+                "--name",
+                name,
+                "--alt",
+                "a heart",
+                "--text",
+                "<3",
+                "--size",
+                size,
+                "--add",
+                "--json",
+            ],
+        ));
+        assert_eq!(created["asset"]["size"], size);
+    }
+    let out = rich(
+        &work,
+        &home,
+        &[
+            "micro",
+            "create",
+            "heart.gif",
+            "--name",
+            "team/tall",
+            "--alt",
+            "a heart",
+            "--size",
+            "2x3",
+        ],
+    );
+    assert_eq!(out.status.code(), Some(2), "{}", text(&out.stderr));
+    assert!(
+        text(&out.stderr).contains("at most 4 columns and 2 rows (4x2)"),
+        "{}",
+        text(&out.stderr)
+    );
+    // The list's row grows to hold the second row.
+    let out = rich(&work, &home, &["micro", "list", "--layer", "user"]);
+    let table = text(&out.stdout);
+    let lines: Vec<&str> = table.lines().collect();
+    let at = lines
+        .iter()
+        .position(|l| l.contains("team/big"))
+        .unwrap_or_else(|| panic!("{table}"));
+    assert!(lines[at].starts_with("│ <3  │ team/big "), "{table}");
+    assert!(lines[at + 1].starts_with("│ ⠀⠀  │           │"), "{table}");
+    // In --print text, the built-in 2x2 trophy reserves the row below.
+    let out = rich(
+        &work,
+        &home,
+        &[
+            "-p",
+            "--emoji",
+            "Won :micro:fun/trophy: today :micro:status/success:",
+        ],
+    );
+    assert_eq!(text(&out.stdout), "Won 🏆 today ✅\n    ⠀⠀\n");
+}
+
+#[test]
 fn preview_times_only_animation_frames() {
     // 0.0.15 workstream 6: a still image has no frame time to show.
     let (_root, work, home) = dirs();

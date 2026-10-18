@@ -57,8 +57,8 @@ pub struct Prepared {
     pub frames: Vec<AnimationFrame>,
     /// Per-frame protocol escapes, made on first use.
     pub(crate) escapes: OnceLock<Vec<String>>,
-    /// Per-frame block cells, made on first use.
-    pub(crate) blocks: OnceLock<Vec<Vec<Segment>>>,
+    /// Per-frame block cells, one line per row, made on first use.
+    pub(crate) blocks: OnceLock<Vec<Vec<Vec<Segment>>>>,
 }
 
 impl Prepared {

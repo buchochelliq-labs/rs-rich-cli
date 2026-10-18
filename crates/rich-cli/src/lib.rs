@@ -5129,7 +5129,12 @@ fn run_once_with_fetch(mut cli: Cli, prefetched: Option<(String, Option<String>)
                 Err(err) => return fail(&cli, ExitClass::Data, err),
             };
             let fit = text.measurement().1;
-            (Box::new(text), Some(fit))
+            // A two-row micro asset reserves the row below its line (#711).
+            #[cfg(feature = "art")]
+            let renderable = micro::rows(text);
+            #[cfg(not(feature = "art"))]
+            let renderable: Box<dyn Renderable> = Box::new(text);
+            (renderable, Some(fit))
         }
     };
     decorate_and_emit(&cli, &console, &export, renderable, fit)

@@ -13,7 +13,7 @@ use rich_micro::{AssetKind, Layer, MicroRegistry};
 fn every_builtin_asset_has_alt_text_a_fallback_and_a_licence() {
     let registry = MicroRegistry::builtin();
     let assets: Vec<_> = registry.layer(Layer::BuiltIn).collect();
-    assert_eq!(assets.len(), 13);
+    assert_eq!(assets.len(), 15);
     for asset in assets {
         let name = asset.name();
         assert!(!asset.alt().trim().is_empty(), "{name}: alt text");
@@ -23,9 +23,22 @@ fn every_builtin_asset_has_alt_text_a_fallback_and_a_licence() {
         assert_eq!(asset.license(), Some(generator::LICENSE), "{name}: licence");
         assert!(asset.author().is_some(), "{name}: author");
         assert!(asset.variants().static_image.is_some(), "{name}: image");
-        assert_eq!(asset.cols(), 2, "{name}: 2x1 by default");
+        // 2x1, but for one example of each two-row size (#711).
+        let size = match name {
+            "fun/trophy" => "2x2",
+            "fun/campfire" => "3x2",
+            _ => "2x1",
+        };
+        assert_eq!(asset.size().to_string(), size, "{name}");
+        // The image is drawn for exactly its cells at 8x16 pixels a cell.
+        let image = asset.variants().static_image.as_ref().unwrap();
+        assert_eq!(
+            (image.info.width as usize, image.info.height as usize),
+            (8 * asset.cols(), 16 * asset.rows()),
+            "{name}"
+        );
     }
-    for animated in ["status/loading", "fun/heart", "fun/coffee"] {
+    for animated in ["status/loading", "fun/heart", "fun/coffee", "fun/campfire"] {
         assert_eq!(
             registry.require(animated).unwrap().kind(),
             AssetKind::Animated,
