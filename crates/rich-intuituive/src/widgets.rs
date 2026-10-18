@@ -10,7 +10,7 @@
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 
-use rich::{Console, Segment, Style};
+use rich::{Console, Overflow, Segment, Style};
 use rich_interact::{Button, Key, KeyCode, MouseKind};
 
 use crate::layout::{solve, Align, Size, Track};
@@ -27,7 +27,7 @@ pub use crate::calendar::{
 pub use crate::datetime::{
     datetime_picker, time_picker, time_picker_with, DateTimeOptions, TimeOptions,
 };
-pub use crate::list::{list_optional, HighlightSpacing, ListDirection};
+pub use crate::list::{list_lazy, list_optional, HighlightSpacing, ListDirection, RowRects};
 pub use crate::reorder::Move;
 pub use crate::scrollbar::{scrollbar, Scrollbar, ScrollbarSymbols, Show, Side};
 pub use crate::split::{hsplit, split, split_with, vsplit};
@@ -49,6 +49,10 @@ pub struct Column {
     /// default), [`Align::Center`] or [`Align::End`] (numbers on the
     /// right). [`Align::Stretch`] is the start.
     pub align: Align,
+    /// How a cell too wide for the column is cut: [`Overflow::Ellipsis`]
+    /// (the default, with `…`) or [`Overflow::Crop`] (cut at the edge, as
+    /// ratatui's cells are). Others are the ellipsis.
+    pub overflow: Overflow,
 }
 
 impl Column {
@@ -59,7 +63,16 @@ impl Column {
             min: 0,
             max: u16::MAX,
             align: Align::Start,
+            overflow: Overflow::Ellipsis,
         }
+    }
+
+    /// How its cells are cut when they do not fit: `Column::new("Name",
+    /// Size::Percent(30)).overflow(Overflow::Crop)` cuts them at the edge,
+    /// with no `…`, as ratatui's table does.
+    pub fn overflow(mut self, overflow: Overflow) -> Column {
+        self.overflow = overflow;
+        self
     }
 
     /// Where its cells and title sit: `Column::new("Qty", Size::Fixed(7))
@@ -146,6 +159,12 @@ pub(crate) struct Table {
     /// Where the bar was drawn, and what it showed: the first row, the
     /// rows and the rows in view.
     bar_at: Cell<Option<(crate::screen::Rect, usize, usize, usize)>>,
+    /// The [`offset`](TableOptions::offset) signal's value as last read or
+    /// set.
+    seen: Cell<Option<usize>>,
+    /// Where the rows in view were drawn, on the screen
+    /// ([`Node::row_rects`]).
+    pub(crate) rects: Option<crate::list::RowRects>,
 }
 
 /// Which way a table's column is sorted.
@@ -224,6 +243,12 @@ pub struct TableOptions {
     pub column_highlight: bool,
     /// Rows kept in view either side of the selected one, where they fit.
     pub scroll_padding: usize,
+    /// No header row: the rows start at the top. For columns that need no
+    /// titles, such as names with their sizes beside them.
+    pub hide_header: bool,
+    /// The first row in view: read it, or set it to scroll. The selected
+    /// row is still kept in view.
+    pub offset: Option<Signal<usize>>,
 }
 
 impl TableOptions {
@@ -334,6 +359,35 @@ impl TableOptions {
         self
     }
 
+    /// Whether the header row is drawn (it is by default): `header(false)`
+    /// leaves it out, and the rows start at the top.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    /// use intuituive::widgets::{table_with, Column, TableOptions};
+    ///
+    /// let app = App::new(|| {
+    ///     let size = Column::new("Size", Size::Fixed(4)).align(Align::End);
+    ///     let columns = vec![Column::new("Name", Size::Flex(1)), size];
+    ///     let rows = || vec![vec!["a.txt".into(), "1K".into()], vec!["src".into(), "4".into()]];
+    ///     table_with(columns, rows, signal(0), TableOptions::default().header(false))
+    /// });
+    /// let mut driver = app.driver(10, 2);
+    /// driver.settle();
+    /// assert_eq!(driver.screen().plain()[0], "a.txt   1K");
+    /// assert_eq!(driver.screen().plain()[1], "src      4");
+    /// ```
+    pub fn header(mut self, shown: bool) -> TableOptions {
+        self.hide_header = !shown;
+        self
+    }
+
+    /// The first row in view, in `first`: read it, or set it to scroll.
+    pub fn offset(mut self, first: Signal<usize>) -> TableOptions {
+        self.offset = Some(first);
+        self
+    }
+
     /// Cells between columns.
     fn spacing(&self) -> u16 {
         self.column_spacing.unwrap_or(1)
@@ -344,6 +398,32 @@ impl TableOptions {
     fn single_line(&self) -> bool {
         !self.multiline && self.row_height.unwrap_or(1) == 1 && self.row_gap == 0
     }
+}
+
+/// A cell as ratatui's table draws one, outside a table: console markup
+/// (which may read signals) on one line, cut at its edge rather than
+/// wrapped, with no `…`. A [`row`](crate::row) of them, sized as the
+/// table's columns are and [`gap`](Node::gap) cells apart (ratatui's
+/// `column_spacing`, one by default there), is a one-row table whose cells
+/// each draw again only when what they read changes: scope-tui's header.
+///
+/// ```
+/// use intuituive::prelude::*;
+/// use intuituive::widgets::cell;
+///
+/// let app = App::new(|| {
+///     row([
+///         cell(|| "[bold]oscilloscope::scope-tui".into()).percent(50),
+///         cell(|| "60fps".into()).percent(50),
+///     ])
+///     .gap(1)
+/// });
+/// let mut driver = app.driver(21, 1);
+/// driver.settle();
+/// assert_eq!(driver.screen().plain()[0].trim_end(), "oscillosco 60fps");
+/// ```
+pub fn cell(markup: impl Fn() -> String + 'static) -> Node {
+    crate::node::text(markup).no_wrap().overflow(Overflow::Crop)
 }
 
 /// A table of markup cells under a header row that stays in view, with one
@@ -477,6 +557,8 @@ pub fn virtual_list(
         across: Default::default(),
         bar: Bar::default(),
         bar_at: Cell::new(None),
+        seen: Cell::new(None),
+        rects: None,
     })
 }
 
@@ -572,7 +654,7 @@ fn table_options(
         columns,
         rows,
         selection,
-        header: true,
+        header: !options.hide_header,
         blur: "table.selected",
         first: Cell::new(0),
         body: Cell::new(1),
@@ -584,6 +666,8 @@ fn table_options(
         across: Default::default(),
         bar: Bar::default(),
         bar_at: Cell::new(None),
+        seen: Cell::new(None),
+        rects: None,
     })
 }
 
@@ -605,6 +689,12 @@ fn compare_cells(a: &str, b: &str) -> std::cmp::Ordering {
 /// `markup` rendered on one line `width` cells wide, padded or cut with an
 /// ellipsis.
 pub(crate) fn cell_line(console: &Console, markup: &str, width: u16) -> Vec<Segment> {
+    cut_line(console, markup, width, Overflow::Ellipsis)
+}
+
+/// `markup` rendered on one line `width` cells wide, padded, or cut by
+/// `overflow`: at the edge for [`Overflow::Crop`], else with an ellipsis.
+fn cut_line(console: &Console, markup: &str, width: u16, overflow: Overflow) -> Vec<Segment> {
     if width == 0 {
         return Vec::new();
     }
@@ -612,7 +702,7 @@ pub(crate) fn cell_line(console: &Console, markup: &str, width: u16) -> Vec<Segm
         rich::Text::from_markup(markup).unwrap_or_else(|_| rich::Text::new(markup.to_string()));
     let mut options = console.options().update_width(width as usize);
     options.no_wrap = Some(true);
-    options.overflow = Some(rich::Overflow::Ellipsis);
+    options.overflow = Some(cut_by(overflow));
     let mut line = console
         .render_lines(&text, &options, true)
         .into_iter()
@@ -623,6 +713,15 @@ pub(crate) fn cell_line(console: &Console, markup: &str, width: u16) -> Vec<Segm
         line.push(Segment::new(" ".repeat(width as usize - used), None));
     }
     line
+}
+
+/// What a cell's overflow cuts with: the edge for [`Overflow::Crop`], else
+/// an ellipsis.
+fn cut_by(overflow: Overflow) -> Overflow {
+    match overflow {
+        Overflow::Crop => Overflow::Crop,
+        _ => Overflow::Ellipsis,
+    }
 }
 
 /// `line` padded to `width` cells, sitting at the start, centre or end.
@@ -653,10 +752,11 @@ fn cell_lines(
     markup: &str,
     width: u16,
     align: Align,
+    overflow: Overflow,
     wrap: bool,
 ) -> Vec<Vec<Segment>> {
     if !wrap && matches!(align, Align::Start | Align::Stretch) {
-        return vec![cell_line(console, markup, width)];
+        return vec![cut_line(console, markup, width, overflow)];
     }
     if width == 0 {
         return vec![Vec::new()];
@@ -666,7 +766,7 @@ fn cell_lines(
     let mut options = console.options().update_width(width as usize);
     if !wrap {
         options.no_wrap = Some(true);
-        options.overflow = Some(rich::Overflow::Ellipsis);
+        options.overflow = Some(cut_by(overflow));
     }
     let mut lines = console.render_lines(&text, &options, false);
     if !wrap {
@@ -743,6 +843,19 @@ impl Fetch<'_> {
 }
 
 impl Table {
+    pub(crate) fn options_mut(&mut self) -> &mut TableOptions {
+        &mut self.options
+    }
+
+    /// Where column `i`'s cells sit, and how they are cut.
+    fn cell_rules(&self, i: usize) -> (Align, Overflow) {
+        self.columns
+            .get(i)
+            .map_or((Align::Start, Overflow::Ellipsis), |c| {
+                (c.align, c.overflow)
+            })
+    }
+
     fn step(&self, by: isize) {
         self.selection.step(self.rows.len(), by);
     }
@@ -908,8 +1021,8 @@ impl Table {
                 .enumerate()
                 .map(|(i, w)| {
                     let markup = cells.get(i).map_or("", String::as_str);
-                    let align = self.columns.get(i).map_or(Align::Start, |c| c.align);
-                    cell_lines(console, markup, *w, align, true).len()
+                    let (align, overflow) = self.cell_rules(i);
+                    cell_lines(console, markup, *w, align, overflow, true).len()
                 })
                 .max()
                 .unwrap_or(1)
@@ -936,8 +1049,8 @@ impl Table {
             .enumerate()
             .map(|(i, w)| {
                 let markup = cells.get(i).map_or("", String::as_str);
-                let align = self.columns.get(i).map_or(Align::Start, |c| c.align);
-                cell_lines(console, markup, *w, align, wrap)
+                let (align, overflow) = self.cell_rules(i);
+                cell_lines(console, markup, *w, align, overflow, wrap)
             })
             .collect();
         (0..height.max(1))
@@ -965,7 +1078,7 @@ impl Widget for Table {
     }
 
     fn role(&self) -> crate::a11y::Role {
-        if self.header {
+        if self.header || self.name == "table" {
             crate::a11y::Role::Table
         } else {
             crate::a11y::Role::List
@@ -1043,6 +1156,14 @@ impl Widget for Table {
             .get()
             .filter(|_| len > 0)
             .map(|s| s.min(len - 1));
+        // The offset signal, set from outside, moves the view.
+        if let Some(offset) = self.options.offset {
+            let value = offset.get();
+            if self.seen.get() != Some(value) {
+                self.first.set(value);
+                self.seen.set(Some(value));
+            }
+        }
         let sort = self.options.sort.and_then(|sort| sort.get());
         // A sorted column's title ends with an arrow.
         let titles = self.titles(sort);
@@ -1119,6 +1240,12 @@ impl Widget for Table {
         }
         let left = bar_rect.map_or(0, |(x, _)| x);
         self.first.set(first);
+        if let Some(offset) = self.options.offset {
+            if self.seen.get() != Some(first) {
+                self.seen.set(Some(first));
+                crate::reactive::Runtime::current().untracked(|| offset.set(first));
+            }
+        }
         // The rows in view, and their heights.
         let mut placed: Vec<(usize, u16, u16)> = Vec::new();
         let rows: Vec<Vec<String>> = if single {
@@ -1328,6 +1455,22 @@ impl Widget for Table {
                     }
                 }
             }
+        }
+        // Where each row is on the screen, for a popup at one.
+        if let Some(rects) = &self.rects {
+            let shift = (cx.rect.x as i32 - cx.shift.0, cx.rect.y as i32 - cx.shift.1);
+            rects.set(
+                placed
+                    .iter()
+                    .filter(|(_, y, _)| *y < height.saturating_sub(footer_lines))
+                    .map(|&(i, y, h)| {
+                        let lines = h.saturating_sub(self.options.row_gap).max(1);
+                        let lines = lines.min(height.saturating_sub(y + footer_lines));
+                        let rect = crate::screen::Rect::new(left, y, content_width, lines);
+                        (i, crate::node::translate(rect, shift))
+                    })
+                    .collect(),
+            );
         }
         *self.placed.borrow_mut() = placed;
         match bar_rect {
