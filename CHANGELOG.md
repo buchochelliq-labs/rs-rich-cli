@@ -243,6 +243,32 @@ first and has a regression test.
 - **bash's status line never names the wrong command.** A command history
   left out (`HISTCONTROL=ignorespace`) showed the one before it; the hook
   passes `--command` only when the history number moved on.
+- **`rich shell link --tilde` matches a home reached through a symlink**
+  (macOS's /var is /private/var), and a bare `rich shell link` shows the
+  shell's `$PWD` when it names the working directory.
+- **`--watch-interval` is at most 86400 seconds**, so a huge value is a
+  usage error, not a panic.
+
+The same round, over the libraries:
+
+- **Documents cannot exhaust memory or the stack.** man's `\*` strings
+  expanded each reference again (16 references nested eight deep is about
+  10⁹ calls); a string is not expanded inside itself now, and a line takes
+  at most 64 KiB of them. AsciiDoc attributes are cut at 64 KiB, with a
+  warning. An Org `#+BEGIN:` with no `#+END:` recursed once per line; it
+  is a keyword line now, and a closed one has the nesting limit other
+  blocks have.
+- **Documents keep raw control characters off the terminal.** An escape
+  in an Org, AsciiDoc or man file is sanitized as it is read; tab and
+  newline stay.
+- **`LogView` keeps at most 1,000 continuation lines a record** and
+  counts the rest (`… N more lines`); it builds only the detail rows that
+  fit the page, and a time far before the first record no longer
+  overflows the relative clock.
+- **A horizontally scrolled table with zero-width columns** no longer
+  underflows (intuiTUIve).
+- **`SmallMultiples::gap`** is clamped like `bar_gap`, and its layout
+  arithmetic saturates.
 
 ### Flex alignment in intuiTUIve (intuituive 0.0.4)
 
