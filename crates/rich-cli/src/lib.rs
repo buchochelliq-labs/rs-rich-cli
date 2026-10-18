@@ -2435,8 +2435,12 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
                 watch_interval = value
                     .parse::<f64>()
                     .map_err(|_| format!("invalid watch interval {value:?}"))?;
-                if !watch_interval.is_finite() || watch_interval <= 0.0 {
-                    return Err("--watch-interval must be greater than zero".into());
+                if !watch_interval.is_finite() || watch_interval <= 0.0 || watch_interval > 86400.0
+                {
+                    return Err(
+                        "--watch-interval must be greater than zero and at most 86400 seconds"
+                            .into(),
+                    );
                 }
             }
             "--batch" => batch = true,

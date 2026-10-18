@@ -601,6 +601,12 @@ fn prompt_escape(text: &str, shell: Shell) -> String {
 
 fn run_link(args: &LinkArgs, no_color: bool) -> String {
     let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+    // The shell's `$PWD` keeps the path as typed (through symlinks), which is
+    // what a prompt shows; use it when it names the same directory.
+    let shown_cwd = std::env::var_os("PWD")
+        .map(PathBuf::from)
+        .filter(|pwd| pwd.canonicalize().ok() == cwd.canonicalize().ok())
+        .unwrap_or_else(|| cwd.clone());
     let mut linker = Hyperlinker::new()
         .base_dir(&cwd)
         .enabled(args.links != Links::Never);
@@ -608,8 +614,11 @@ fn run_link(args: &LinkArgs, no_color: bool) -> String {
         linker = linker.editor(template.clone());
     }
     let home = std::env::var_os("HOME").map(PathBuf::from);
+    // `$HOME` resolved too, for a home reached through a symlink (macOS's
+    // /var is /private/var).
+    let real_home = home.as_deref().and_then(|home| home.canonicalize().ok());
     let paths = if args.paths.is_empty() {
-        vec![cwd.to_string_lossy().into_owned()]
+        vec![shown_cwd.to_string_lossy().into_owned()]
     } else {
         args.paths.clone()
     };
@@ -622,7 +631,10 @@ fn run_link(args: &LinkArgs, no_color: bool) -> String {
     for path in paths {
         let (file, line, column) = location(&path);
         let mut label = if args.tilde {
-            tilde_label(&path, home.as_deref())
+            match tilde_label(&path, home.as_deref()) {
+                unchanged if unchanged == path => tilde_label(&path, real_home.as_deref()),
+                label => label,
+            }
         } else {
             path.clone()
         };

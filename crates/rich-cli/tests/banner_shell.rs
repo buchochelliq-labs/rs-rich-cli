@@ -482,6 +482,19 @@ mod shell {
             .output()
             .unwrap();
         assert_eq!(String::from_utf8(cwd_out.stdout).unwrap(), "~\n");
+        // A $HOME reached through a symlink (macOS's /var is /private/var).
+        #[cfg(unix)]
+        {
+            let link = dir.path().join("home-link");
+            std::os::unix::fs::symlink(dir.path(), &link).unwrap();
+            let linked_out = Command::new(env!("CARGO_BIN_EXE_rich"))
+                .args(["shell", "link", "--tilde"])
+                .current_dir(dir.path())
+                .env("HOME", &link)
+                .output()
+                .unwrap();
+            assert_eq!(String::from_utf8(linked_out.stdout).unwrap(), "~\n");
+        }
     }
 
     fn init(shell: &str, extra: &[&str]) -> String {
