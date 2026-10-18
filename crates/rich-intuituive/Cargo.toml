@@ -38,6 +38,9 @@ termwiz = ["rich-interact/termwiz"]
 rich.workspace = true
 rich-ext.workspace = true
 rich-interact.workspace = true
+# Node::solver(Solver::Ratatui): ratatui's constraint solver (its fork of
+# cassowary), so a row ported from ratatui lays out as it did.
+kasuari = "0.4"
 
 [dev-dependencies]
 # PTY tests: an app run on every backend gives the terminal back

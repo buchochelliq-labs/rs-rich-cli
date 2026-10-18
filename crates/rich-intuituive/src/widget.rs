@@ -390,6 +390,18 @@ impl MeasureCx<'_> {
             .map(|&i| self.main_track(&children[i], axis, rect))
             .collect();
         let (start, total) = main_span(axis, rect);
+        if flow.solver != crate::solver::Solver::Native {
+            // Ratatui's solver places them all, justified as its `Flex`.
+            let placed =
+                crate::solver::split(start, total, gap, &tracks, flow.solver, flow.justify);
+            let (across, room) = cross_span(axis, rect);
+            let mut areas = vec![Rect::default(); children.len()];
+            for ((at, n), &i) in placed.into_iter().zip(&order) {
+                let (c, cn) = self.cross(&children[i], axis, flow.align_items, n, across, room);
+                areas[i] = along(axis, at, n, c, cn);
+            }
+            return areas;
+        }
         let sizes = solve(total, gap, &tracks);
         let mut at = offsets(start, gap, &sizes);
         // Children docked to the far edge keep to it when the rest leave

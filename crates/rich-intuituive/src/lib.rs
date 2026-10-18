@@ -77,6 +77,7 @@ pub mod screen;
 mod scrollbar;
 mod sequence;
 mod sheet;
+mod solver;
 mod split;
 mod table_scroll;
 pub mod task;
@@ -111,6 +112,7 @@ pub use reactive::{memo, signal, viewport, watch, Memo, Proxy, Signal};
 /// What a text does with what does not fit a line: rich's.
 pub use rich::Overflow;
 pub use sheet::{SheetError, Stylesheet};
+pub use solver::Solver;
 pub use task::{latest, resource, spawn, spawn_future, Latest, Load, Resource, Task};
 pub use widget::{widget, Widget};
 pub use notify::{Corner, Level};

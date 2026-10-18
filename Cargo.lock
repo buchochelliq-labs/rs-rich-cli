@@ -2630,6 +2630,7 @@ dependencies = [
 name = "rs-rich-intuituive"
 version = "0.0.4"
 dependencies = [
+ "kasuari",
  "portable-pty",
  "ratatui",
  "rs-rich",

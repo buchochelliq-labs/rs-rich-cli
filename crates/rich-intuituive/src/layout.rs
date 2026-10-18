@@ -169,6 +169,8 @@ pub struct StackLayout {
     pub justify: Justify,
     pub wrap: bool,
     pub align_content: AlignContent,
+    /// How the lengths are solved ([`Solver::Native`] by default).
+    pub solver: crate::solver::Solver,
 }
 
 /// One track to lay out with [`split`]: a [`Size`] and its clamps, as a
@@ -594,7 +596,9 @@ pub(crate) fn place(columns: usize, spans: &[(u16, u16)]) -> (Vec<Cellspan>, usi
 /// its clamps, the flexible ones sharing what is left, `flow.gap` cells
 /// apart, and what they leave over placed by `flow.justify`. Each takes the
 /// whole of `rect` across the axis (tracks have no content across it, so
-/// `flow.align_items` and wrapping do not apply). ratatui's `Layout::split`.
+/// `flow.align_items` and wrapping do not apply). ratatui's `Layout::split`;
+/// with `flow.solver` [`Solver::Ratatui`](crate::Solver::Ratatui), solved as
+/// it solves it.
 ///
 /// ```
 /// use intuituive::layout::{split, Track};
@@ -643,8 +647,15 @@ pub fn split_with_spacers(
         Axis::Vertical => Rect::new(across, at, breadth, length),
         Axis::Horizontal => Rect::new(at, across, length, breadth),
     };
-    let sizes = solve(total, flow.gap, tracks);
-    let at = justify_offsets(start, total, flow.gap, &sizes, flow.justify);
+    let (at, sizes): (Vec<u16>, Vec<u16>) = if flow.solver == crate::solver::Solver::Native {
+        let sizes = solve(total, flow.gap, tracks);
+        let at = justify_offsets(start, total, flow.gap, &sizes, flow.justify);
+        (at, sizes)
+    } else {
+        crate::solver::split(start, total, flow.gap, tracks, flow.solver, flow.justify)
+            .into_iter()
+            .unzip()
+    };
     let end = start.saturating_add(total);
     let areas: Vec<Rect> = at
         .iter()

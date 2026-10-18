@@ -875,6 +875,36 @@ impl Node {
         self
     }
 
+    /// For a [`column`](fn@column) or [`row`]: how the lengths of its
+    /// children are solved. [`Solver::Ratatui`](crate::Solver::Ratatui)
+    /// solves them as ratatui's `Layout` does: percentages and ratios of
+    /// the whole length rather than of what the gaps leave, and what does
+    /// not fit squeezed as ratatui squeezes it, so a row ported from a
+    /// ratatui `Table` or `Layout` puts its cells in the same columns. The
+    /// [`justify`](Self::justify) is its `Flex` (`Start` by default). A
+    /// wrapping stack keeps the native solver. Ignored on other nodes.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    /// use intuituive::Solver;
+    ///
+    /// let cells = || [label("a").percent(50), label("b").percent(50)];
+    /// // Native: half each of the 19 cells the gap leaves.
+    /// let native = App::new(move || row(cells()).gap(1));
+    /// let mut driver = native.driver(20, 1);
+    /// driver.settle();
+    /// assert_eq!(driver.screen().plain()[0], "a         b         ");
+    /// // Ratatui: half each of the 20, the second squeezed by the gap.
+    /// let ratatui = App::new(move || row(cells()).gap(1).solver(Solver::Ratatui));
+    /// let mut driver = ratatui.driver(20, 1);
+    /// driver.settle();
+    /// assert_eq!(driver.screen().plain()[0], "a          b        ");
+    /// ```
+    pub fn solver(self, solver: crate::solver::Solver) -> Node {
+        self.widget_mut(|stack: &mut Stack| stack.flow.solver = solver);
+        self
+    }
+
     /// For a [`wrap`](Self::wrap)ping [`column`](fn@column) or [`row`]:
     /// where the lines sit across its axis when they leave room over.
     /// [`AlignContent::Stretch`], the default, grows them to share it.
