@@ -255,7 +255,9 @@ states are deterministic.
 Run the port with `INTUITUIVE_INSPECT=1`. The [inspector](index.md#inspector)
 shows which nodes drew in each frame. A key press should redraw what it
 changed and nothing else. If a whole panel redraws on every tick, a closure
-inside it reads a signal it does not need.
+inside it reads a signal it does not need: the inspector's trace (Shift+F12,
+then 4) names each signal written and the nodes it made dirty, and its
+timings (3) show which nodes take the time.
 
 ## Path 4: keep your loop
 
@@ -386,8 +388,9 @@ returning rich segments is the closest thing to a custom `Widget::render`.
 
 **Can I keep my ratatui backend?** `App::run` uses rs-rich-interact's
 terminal session (crossterm). To keep your own terminal and loop, ratatui's
-included, drive the app with `App::driver` (path 4). termion and termwiz
-backends are planned (#677, #678).
+included, drive the app with `App::driver` (path 4). `App::run_with` drives
+it with termion or termwiz instead, behind this crate's features of those
+names (see [Backends](index.md#backends)).
 
 **Do I lose performance?** No: [the benchmark](index.md#against-ratatui) has
 intuiTUIve ahead on every scenario it measures, because it redraws and sends

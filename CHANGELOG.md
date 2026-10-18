@@ -297,6 +297,72 @@ per browser session](#one-process-per-browser-session-web-002).
   [times and reorderable lists](docs/guide/intuituive/index.md#times-and-a-date-with-a-time)
   in intuiTUIve, and `rich date` in [Ask in a script](docs/cli.md#ask-in-a-script).
 
+### The inspector: selection, timings and an event trace (intuituive 0.0.4)
+
+0.0.19 workstream 11 (#714, #721).
+
+- **The inspector takes the keys.** Shift+F12, or a click on its panel,
+  gives them to it; Esc, Shift+F12 again or a click on the app gives them
+  back. While it has them, no key or paste reaches the app. Ctrl+C still
+  quits, and F12 shows and hides it as before.
+- **Four panes:** tree, node, timings and trace, chosen with Tab, `1` to
+  `4` or a click on their names. The top of the panel says what the app's
+  last frame drew, as before; a frame drawn for the inspector alone leaves
+  it as it was.
+- **Selection:** the arrows (and `k`, `j`, PgUp, PgDn, Home, End) move
+  through the tree, ← and → go to a node's parent and first child, and a
+  click on a line selects it. Hidden nodes are in the tree too, marked
+  `hidden`. While the inspector has the keys, the selected node is outlined
+  on the app: its edge cells are restyled (`inspector.selected` in the
+  theme), so nothing moves.
+- **Picking:** `p` selects the node under the pointer, or under a cursor
+  the arrows move. A click or Enter keeps it, and the app does not see that
+  click; Esc puts the selection back.
+- **The node pane:** where the node is; its size and limits, and who set
+  them; a column's or row's gap, alignment and wrapping; a grid's tracks,
+  or a child's cell and span; `align-self`, `dock`, padding and border; its
+  focus; the responsive rule that hides it; its classes and states
+  (`:focus`, `:hover`, `:disabled`, `:error`, `:selected`); whether it was
+  dirty and drew; its timings, role, keys and handlers.
+- **Timings:** each node's draws and its own time (its children's are
+  theirs), in all and the last time, slowest first; the last frame's time,
+  and the average and slowest of the last 120. `s` sorts by another column,
+  and `c` starts again.
+- **The trace:** keys with their modifiers; presses, releases, drags and
+  the wheel with the node under the pointer; each with the handler that
+  took it and its node (`on_key`, `on_click`, `on_mouse`, `on_drop`, a
+  widget). Resizes, pastes, the focus moving, and screens opening and
+  closing. Signal writes, named by where the signal was made and where it
+  was written, with the nodes they made dirty. Timers, watches, tasks done
+  and jobs from other threads. Space pauses it, `c` clears it, and it keeps
+  the last 1,000 events.
+- **The redraw flash:** `f` marks what each frame drew on the app for
+  300 ms (`inspector.flash` in the theme).
+- **Nothing while closed:** nothing is measured or traced. Each hook
+  checks a flag first, and the app sends the same bytes, frame for frame,
+  as one without an inspector. In linear mode the inspector is off: it
+  takes no columns, and F12 is the app's.
+- **For tests:** `Driver::inspector_trace()`, `inspector_timings()` and
+  `inspector_selected()`, with `inspect::TraceEntry`, `TraceKind`,
+  `NodeTiming` and `TRACE_LIMIT`. `signal`, `Signal::update` and `set`,
+  `every`, `watch`, `spawn`, `spawn_future`, `resource` and `Proxy::run`
+  take where they were called (`#[track_caller]`), which the trace shows.
+- **The default look changed:** a line names the panes, and a help line is
+  at the bottom. The intuiTUIve tape's `inspector` screenshot needs
+  recording again.
+- **termwiz on Windows (#721):** CI builds rs-rich-interact and
+  rs-rich-intuituive with termwiz on Windows, every target, and runs their
+  headless suites there. The `files` and `scope` examples take `--backend
+  NAME`, or `INTUITUIVE_BACKEND=NAME`, through `BackendKind::from_name`.
+  The `files` example's test reads the path with the system's separator. A
+  pass in real terminals of the mouse, resizes and Ctrl+Z on the backends
+  is still the maintainer's.
+- **Python:** `Driver.inspector_trace()`, `inspector_timings()` and
+  `inspector_selected()`, with `TraceEntry` and `NodeTiming`.
+- **Docs:** the [inspector](docs/guide/intuituive/index.md#inspector) with
+  every key, [backends](docs/guide/intuituive/index.md#backends), the
+  tutorial's look inside, and the porting and Python pages.
+
 ### One process per browser session (web 0.0.2)
 
 0.0.19 workstream 3.

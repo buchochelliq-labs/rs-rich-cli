@@ -21,6 +21,7 @@ use std::any::Any;
 use std::cell::{Cell, RefCell};
 use std::collections::{HashMap, HashSet};
 use std::marker::PhantomData;
+use std::panic::Location;
 use std::rc::Rc;
 use std::sync::atomic::AtomicUsize;
 use std::sync::{mpsc, Arc};
@@ -95,6 +96,12 @@ pub(crate) struct Runtime {
     pub(crate) watchers: crate::widget::Watchers,
     /// The slot of the app's [`viewport`], once made.
     viewport: Cell<Option<usize>>,
+    /// Where each slot's signal was made, for the inspector's trace.
+    sites: RefCell<Vec<Option<&'static Location<'static>>>>,
+    /// Where each watch was made.
+    watch_sites: RefCell<HashMap<usize, &'static Location<'static>>>,
+    /// What the inspector traces while it is open.
+    pub(crate) tracer: crate::inspect::Tracer,
 }
 
 thread_local! {
@@ -121,6 +128,9 @@ impl Runtime {
                 queued: RefCell::new(Vec::new()),
                 watchers: Default::default(),
                 viewport: Cell::new(None),
+                sites: RefCell::new(Vec::new()),
+                watch_sites: RefCell::new(HashMap::new()),
+                tracer: Default::default(),
             });
             all.push(Some(runtime.clone()));
             runtime
@@ -164,8 +174,10 @@ impl Runtime {
         let slot = match self.viewport.get() {
             Some(slot) => slot,
             None => {
-                let slot = self.insert(Box::new((0u16, 0u16)));
+                let slot = self.insert(Box::new((0u16, 0u16)), None);
                 self.viewport.set(Some(slot));
+                // A resize says so in the trace already.
+                self.tracer.quiet(slot);
                 slot
             }
         };
@@ -193,11 +205,17 @@ impl Runtime {
         });
     }
 
-    fn insert(&self, value: Box<dyn Any>) -> usize {
+    fn insert(&self, value: Box<dyn Any>, site: Option<&'static Location<'static>>) -> usize {
         let mut values = self.values.borrow_mut();
         values.push(value);
+        self.sites.borrow_mut().push(site);
         self.graph.borrow_mut().subscribers.push(HashSet::new());
         values.len() - 1
+    }
+
+    /// Where the signal in `slot` was made, if [`signal`] made it.
+    pub(crate) fn site(&self, slot: usize) -> Option<&'static Location<'static>> {
+        self.sites.borrow().get(slot).copied().flatten()
     }
 
     fn subscribe(&self, slot: usize) {
@@ -335,6 +353,7 @@ impl Runtime {
                 if !(drawing && graph.quiet.contains(&node)) {
                     graph.dirty.insert(node);
                 }
+                self.tracer.reached(node);
             }
             Observer::Memo(memo) => {
                 if self.recompute(memo) {
@@ -417,6 +436,10 @@ impl Runtime {
             for id in pending {
                 let watch = self.watches.borrow_mut().remove(&id);
                 if let Some(mut watch) = watch {
+                    if self.tracer.on() {
+                        let at = self.watch_sites.borrow().get(&id).copied();
+                        self.tracer.push(crate::inspect::Traced::Watch(at));
+                    }
                     self.observe(Observer::Watch(id), || watch(cx));
                     self.watches.borrow_mut().insert(id, watch);
                     ran = true;
@@ -429,6 +452,7 @@ impl Runtime {
     /// Stop the watch `id`.
     pub(crate) fn drop_watch(&self, id: usize) {
         self.watches.borrow_mut().remove(&id);
+        self.watch_sites.borrow_mut().remove(&id);
         let mut graph = self.graph.borrow_mut();
         Runtime::unsubscribe(&mut graph, self.id, Observer::Watch(id));
         graph.pending.retain(|w| *w != id);
@@ -519,12 +543,14 @@ impl<T> std::fmt::Debug for Signal<T> {
     }
 }
 
-/// A new signal holding `value`, in the current app.
+/// A new signal holding `value`, in the current app. The
+/// [inspector](crate::inspect)'s trace names it by where it was made.
+#[track_caller]
 pub fn signal<T: 'static>(value: T) -> Signal<T> {
     let runtime = Runtime::current_for("signal()");
     Signal {
         runtime: runtime.id,
-        slot: runtime.insert(Box::new(value)),
+        slot: runtime.insert(Box::new(value), Some(Location::caller())),
         _type: PhantomData,
     }
 }
@@ -532,6 +558,14 @@ pub fn signal<T: 'static>(value: T) -> Signal<T> {
 impl<T: 'static> Signal<T> {
     fn runtime(&self) -> Rc<Runtime> {
         Runtime::get(self.runtime)
+    }
+
+    /// Leave this signal's writes out of the inspector's trace: one the
+    /// framework writes for itself (the focus, the hover), whose changes
+    /// the trace says otherwise.
+    pub(crate) fn untraced(self) -> Signal<T> {
+        self.runtime().tracer.quiet(self.slot);
+        self
     }
 
     /// Read the value through `f`. A node drawing (or a memo computing)
@@ -556,9 +590,16 @@ impl<T: 'static> Signal<T> {
     ///
     /// # Panics
     /// While a memo computes: a memo only computes a value from others.
+    #[track_caller]
     pub fn update(&self, f: impl FnOnce(&mut T)) {
         let runtime = self.runtime();
         runtime.check_write();
+        // While the inspector traces: the nodes this write reaches. An
+        // update inside another's closure reaches them with the outer one.
+        let traced = runtime
+            .tracer
+            .on()
+            .then(|| runtime.tracer.start_write(runtime.batch.get() == 0));
         runtime.batch.set(runtime.batch.get() + 1);
         // Out of the table while `f` runs, so the table is not borrowed.
         let mut value = std::mem::replace(
@@ -569,6 +610,15 @@ impl<T: 'static> Signal<T> {
         runtime.values.borrow_mut()[self.slot] = value;
         runtime.batch.set(runtime.batch.get() - 1);
         runtime.changed(self.slot);
+        if let Some(outer) = traced {
+            runtime.tracer.end_write(crate::inspect::Write {
+                slot: self.slot,
+                ty: std::any::type_name::<T>(),
+                made: runtime.site(self.slot),
+                at: Location::caller(),
+                outer,
+            });
+        }
     }
 }
 
@@ -586,6 +636,7 @@ impl<T: Clone + 'static> Signal<T> {
 
 impl<T: PartialEq + 'static> Signal<T> {
     /// Replace the value. Readers update only if it changed.
+    #[track_caller]
     pub fn set(&self, value: T) {
         if self.with_untracked(|old| *old != value) {
             self.update(|slot| *slot = value);
@@ -654,7 +705,7 @@ pub fn memo<T: PartialEq + 'static>(f: impl Fn() -> T + 'static) -> Memo<T> {
     let equal: Equal = |a, b| a.downcast_ref::<T>() == b.downcast_ref::<T>();
     // Compute first with a placeholder slot, so the memo's reads are
     // recorded against its own slot.
-    let slot = runtime.insert(Box::new(()));
+    let slot = runtime.insert(Box::new(()), None);
     runtime.graph.borrow_mut().memos.insert(
         slot,
         MemoDef {
@@ -700,6 +751,7 @@ pub fn memo<T: PartialEq + 'static>(f: impl Fn() -> T + 'static) -> Memo<T> {
 /// let screen = app.render_with(&["+", "q"], 20, 1).unwrap();
 /// assert_eq!(screen[0].trim_end(), "1 is odd");
 /// ```
+#[track_caller]
 pub fn watch<T: PartialEq + Clone + 'static>(
     source: impl Fn() -> T + 'static,
     mut on_change: impl FnMut(T, &mut Ctx) + 'static,
@@ -708,6 +760,10 @@ pub fn watch<T: PartialEq + Clone + 'static>(
     let value = memo(source);
     let id = runtime.next_watch.get();
     runtime.next_watch.set(id + 1);
+    runtime
+        .watch_sites
+        .borrow_mut()
+        .insert(id, Location::caller());
     let mut last: Option<T> = None;
     runtime.watches.borrow_mut().insert(
         id,
@@ -766,20 +822,45 @@ pub struct Proxy(mpsc::Sender<Job>);
 type WatchStep = Box<dyn FnMut(&mut Ctx)>;
 
 /// A closure another thread sent to run on the app's thread.
-type Job = Box<dyn FnOnce(&mut Ctx) + Send>;
+pub(crate) type Job = Box<dyn FnOnce(&mut Ctx) + Send>;
 
 impl Proxy {
     /// Run `f` on the app's thread. Returns `false` if the app has finished.
+    #[track_caller]
     pub fn run(&self, f: impl FnOnce() + Send + 'static) -> bool {
-        self.0.send(Box::new(move |_: &mut Ctx| f())).is_ok()
+        let at = Location::caller();
+        self.send(Box::new(move |_: &mut Ctx| {
+            traced(|| crate::inspect::Traced::Proxy(at));
+            f()
+        }))
     }
 
     /// Run `f` on the app's thread with a [`Ctx`], so it can also move the
     /// focus, open a screen or quit. Returns `false` if the app has
     /// finished.
+    #[track_caller]
     pub fn run_with(&self, f: impl FnOnce(&mut Ctx) + Send + 'static) -> bool {
-        self.0.send(Box::new(f)).is_ok()
+        let at = Location::caller();
+        self.send(Box::new(move |cx: &mut Ctx| {
+            traced(|| crate::inspect::Traced::Proxy(at));
+            f(cx)
+        }))
     }
+
+    /// Send `job` as it is: a task's delivery, which traces itself.
+    pub(crate) fn send(&self, job: Job) -> bool {
+        self.0.send(job).is_ok()
+    }
+}
+
+/// Note an event in the trace of the app running on this thread, while
+/// its inspector is open; `event` is only made then.
+pub(crate) fn traced(event: impl FnOnce() -> crate::inspect::Traced) {
+    CURRENT.with(|current| {
+        if let Some(runtime) = current.borrow().last().filter(|r| r.tracer.on()) {
+            runtime.tracer.push(event());
+        }
+    });
 }
 
 thread_local! {

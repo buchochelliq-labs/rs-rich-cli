@@ -292,6 +292,13 @@ damaged cells and bytes sent. Tick a to-do and one row and the footer draw,
 nothing else. Name the nodes you care about with `.name("entry")` to find
 them in the tree.
 
+Shift+F12 gives the inspector the keys (Esc gives them back). The arrows
+select a node, outlined on the app, and Enter shows where it is, its size,
+its focus and its states; `p` picks one by pointing at it. Pane 4 is the
+trace: tick a to-do and it shows the key, the binding that took it, and the
+signal it wrote, with the nodes that write made dirty. The
+[inspector](index.md#inspector) section has every key.
+
 ## Where next
 
 - [Terminal apps](index.md): every node, layout option and feature.

@@ -126,8 +126,8 @@ pub struct Node {
     error_when: Option<Condition>,
     /// Conditions on the app's [`viewport`](crate::viewport()) that must
     /// all hold for it to be shown ([`hide_below`](Node::hide_below) and
-    /// the like).
-    shown_when: Vec<Condition>,
+    /// the like), each with the rule the inspector names it by.
+    shown_when: Vec<(String, Condition)>,
     /// Whether it was last drawn in the theme's error look.
     error_lit: Cell<bool>,
     /// What the stylesheet decided for it.
@@ -485,6 +485,173 @@ impl Node {
         }
     }
 
+    /// How the inspector's trace and timings name it: its name, else its
+    /// builder and id (`text#7`).
+    pub(crate) fn short(&self) -> String {
+        match &self.name {
+            Some(name) => name.clone(),
+            None => format!("{}#{}", self.what, self.id),
+        }
+    }
+
+    /// The widget, if it is a `W`, read only: for a node whose children are
+    /// being visited, which holds its widget borrowed meanwhile.
+    fn widget_ref<W: Widget, R>(&self, f: impl FnOnce(&W) -> R) -> Option<R> {
+        let body = self.body.borrow();
+        let widget: &dyn std::any::Any = &*body.widget;
+        widget.downcast_ref::<W>().map(f)
+    }
+
+    /// Visit this node and every node inside it, depth first, with its
+    /// path and whether it is hidden: what [`walk`](Self::walk) leaves out
+    /// is visited too (for the inspector), but not what is inside it.
+    pub(crate) fn walk_all(&self, f: &mut dyn FnMut(&Node, &[NodeId], bool)) {
+        fn inner(node: &Node, path: &mut Vec<NodeId>, f: &mut dyn FnMut(&Node, &[NodeId], bool)) {
+            path.push(node.id);
+            let hidden = node.hidden();
+            f(node, path, hidden);
+            if !hidden {
+                node.each_child(&mut |child| inner(child, path, f));
+            }
+            path.pop();
+        }
+        inner(self, &mut Vec::new(), f);
+    }
+
+    /// For a [`grid`]: where its child `id` is placed, its first column and
+    /// row and how many of each it spans (0-based), if it is shown.
+    pub(crate) fn grid_place(&self, id: NodeId) -> Option<crate::layout::Cellspan> {
+        self.widget_ref(|grid: &Grid| {
+            let shown: Vec<&Node> = grid.children.iter().filter(|c| !c.hidden()).collect();
+            let spans: Vec<(u16, u16)> = shown.iter().map(|c| c.span).collect();
+            let (places, _) = crate::layout::place(grid.columns.len().max(1), &spans);
+            shown
+                .iter()
+                .position(|c| c.id == id)
+                .and_then(|at| places.get(at).copied())
+        })
+        .flatten()
+    }
+
+    /// What the inspector's node pane shows of it: its layout as code and
+    /// the stylesheet set it, its focus, its rules and states. Reads the
+    /// signals its conditions read (call it untracked).
+    pub(crate) fn facts(&self) -> crate::inspect::Facts {
+        let sheet = self.sheet.borrow();
+        let layout = &sheet.layout;
+        let (size, size_from) = match (self.set[SET_SIZE], layout.size) {
+            (true, _) => (self.size, Some("code")),
+            (false, Some(size)) => (size, Some("stylesheet")),
+            (false, None) => (self.size, None),
+        };
+        let min = if self.set[SET_MIN] {
+            self.min
+        } else {
+            layout.min.unwrap_or(self.min)
+        };
+        let max = if self.set[SET_MAX] {
+            self.max
+        } else {
+            layout.max.unwrap_or(self.max)
+        };
+        let dock = layout.dock.map(|dock| match dock {
+            Dock::Top => "top",
+            Dock::Bottom => "bottom",
+            Dock::Left => "left",
+            Dock::Right => "right",
+        });
+        let border = sheet.decor.as_ref().map(|(kind, _, _)| match kind {
+            BoxKind::Round => "round",
+            BoxKind::Square => "square",
+            BoxKind::Heavy => "heavy",
+            BoxKind::Double => "double",
+            BoxKind::Ascii => "ascii",
+        });
+        let padding = if sheet.decor.is_some() || sheet.insets != [0; 4] {
+            layout.padding
+        } else {
+            [0; 4]
+        };
+        let sheet_hidden = layout.hidden;
+        drop(sheet);
+        let flow = self.widget_ref(|stack: &Stack| (stack.axis, stack.flow));
+        let grid =
+            self.widget_ref(|grid: &Grid| (grid.columns.clone(), grid.rows.clone(), grid.gap));
+        let edges = self
+            .widget_ref(|pad: &Pad| pad.edges)
+            .or_else(|| self.widget_ref(|panel: &Panel| panel.look.padding));
+        let (active, selected, disabled, invalid) = self.conditions();
+        let inactive = self
+            .class_when
+            .iter()
+            .map(|(class, _)| class.clone())
+            .filter(|class| !active.contains(class))
+            .collect();
+        let (_, focus, hover) = self.sheet.borrow().watch;
+        let keys = self
+            .keys
+            .borrow()
+            .iter()
+            .map(|(keys, _, _)| {
+                keys.iter()
+                    .map(ToString::to_string)
+                    .collect::<Vec<_>>()
+                    .join("/")
+            })
+            .collect();
+        let mut handlers = Vec::new();
+        if self.click.borrow().is_some() {
+            handlers.push("on_click");
+        }
+        if self.mouse.borrow().is_some() {
+            handlers.push("on_mouse");
+        }
+        if self.drag.is_some() {
+            handlers.push("draggable");
+        }
+        if self.drop.is_some() {
+            handlers.push("on_drop");
+        }
+        if self.tooltip.is_some() {
+            handlers.push("tooltip");
+        }
+        crate::inspect::Facts {
+            size,
+            size_from,
+            min,
+            max,
+            span: self.span,
+            align_self: self.self_align(),
+            dock,
+            border,
+            padding,
+            flow,
+            grid,
+            edges,
+            focusable: self.focusable,
+            autofocus: self.autofocus,
+            disabled,
+            rules: self
+                .shown_when
+                .iter()
+                .map(|(rule, holds)| (rule.clone(), holds()))
+                .collect(),
+            sheet_hidden,
+            access_hidden: self.access_hidden,
+            classes: self.classes.clone(),
+            active,
+            inactive,
+            selected,
+            invalid,
+            watches: (focus, hover),
+            role: self.access_role(),
+            keys,
+            handlers,
+            focus_style: self.focus_style.clone(),
+            hover_style: self.hover_style.clone(),
+        }
+    }
+
     /// The widget, if it is a `W`.
     pub(crate) fn widget_mut<W: Widget, R>(&self, f: impl FnOnce(&mut W) -> R) -> Option<R> {
         let mut body = self.body.borrow_mut();
@@ -716,32 +883,37 @@ impl Node {
     /// assert_eq!(driver.screen().plain()[0].trim_end(), "main");
     /// ```
     pub fn hide_below(self, columns: u16) -> Node {
-        self.when_viewport(move |(width, _)| width >= columns)
+        let rule = format!("hide_below {columns}");
+        self.when_viewport(rule, move |(width, _)| width >= columns)
     }
 
     /// Show this node only while the app is narrower than `columns` cells:
     /// a compact stand-in for what [`hide_below`](Self::hide_below) hides
     /// (`@media (min-width: N)` with `display: none` in a stylesheet).
     pub fn show_below(self, columns: u16) -> Node {
-        self.when_viewport(move |(width, _)| width < columns)
+        let rule = format!("show_below {columns}");
+        self.when_viewport(rule, move |(width, _)| width < columns)
     }
 
     /// Hide this node while the app is shorter than `rows` cells, as
     /// [`hide_below`](Self::hide_below) does for the width.
     pub fn hide_below_height(self, rows: u16) -> Node {
-        self.when_viewport(move |(_, height)| height >= rows)
+        let rule = format!("hide_below_height {rows}");
+        self.when_viewport(rule, move |(_, height)| height >= rows)
     }
 
     /// Show this node only while the app is shorter than `rows` cells.
     pub fn show_below_height(self, rows: u16) -> Node {
-        self.when_viewport(move |(_, height)| height < rows)
+        let rule = format!("show_below_height {rows}");
+        self.when_viewport(rule, move |(_, height)| height < rows)
     }
 
-    /// Shown only while `shown` holds of the app's viewport.
-    fn when_viewport(mut self, shown: impl Fn((u16, u16)) -> bool + 'static) -> Node {
+    /// Shown only while `shown` holds of the app's viewport; `rule` is how
+    /// the inspector names the condition.
+    fn when_viewport(mut self, rule: String, shown: impl Fn((u16, u16)) -> bool + 'static) -> Node {
         let viewport = crate::reactive::viewport();
         self.shown_when
-            .push(Box::new(move || shown(viewport.get())));
+            .push((rule, Box::new(move || shown(viewport.get()))));
         self
     }
 
@@ -1042,7 +1214,7 @@ impl Node {
     /// parent laying out reads the viewport, so it lays out again when the
     /// terminal's size changes.
     pub(crate) fn hidden(&self) -> bool {
-        self.sheet.borrow().layout.hidden || self.shown_when.iter().any(|shown| !shown())
+        self.sheet.borrow().layout.hidden || self.shown_when.iter().any(|(_, shown)| !shown())
     }
 
     /// The edge a stylesheet docks it to, if any.
@@ -1279,6 +1451,12 @@ impl Node {
         screen: &mut Screen,
         force: bool,
     ) {
+        // While the inspector is open: how long this node takes, less what
+        // its children take.
+        let clock = frame.timings.is_some().then(|| {
+            frame.time_stack.push(std::time::Duration::ZERO);
+            std::time::Instant::now()
+        });
         self.rect.set(rect);
         // Hidden from assistive technology: nothing inside is announced,
         // and a live node holding it says what it shows without it.
@@ -1620,6 +1798,9 @@ impl Node {
         self.drawn.set(Some(rect));
         if self.access_hidden {
             frame.hidden -= 1;
+        }
+        if let Some(start) = clock {
+            frame.timed(id, start, redraw);
         }
     }
 
@@ -1999,6 +2180,12 @@ pub(crate) struct FrameState<'a> {
     /// and where hidden nodes drew this frame.
     pub hidden: u32,
     pub hidden_rects: Vec<Rect>,
+    /// While the inspector is open: each node that drew, and the time it
+    /// took itself (its children's not counted); `None` measures nothing.
+    pub timings: Option<Vec<(NodeId, std::time::Duration)>>,
+    /// The time the children of each node being drawn took, innermost
+    /// last.
+    pub time_stack: Vec<std::time::Duration>,
 }
 
 impl FrameState<'_> {
@@ -2007,6 +2194,20 @@ impl FrameState<'_> {
         self.drawn += 1;
         if let Some(ids) = &mut self.drawn_ids {
             ids.push(id);
+        }
+    }
+
+    /// Node `id`, which started at `start`, is done: its own time is what
+    /// its children did not take, noted if it `drew`; all of it counts
+    /// towards its parent's children.
+    pub fn timed(&mut self, id: NodeId, start: std::time::Instant, drew: bool) {
+        let all = start.elapsed();
+        let inner = self.time_stack.pop().unwrap_or_default();
+        if let Some(outer) = self.time_stack.last_mut() {
+            *outer += all;
+        }
+        if let (true, Some(times)) = (drew, &mut self.timings) {
+            times.push((id, all.saturating_sub(inner)));
         }
     }
 }

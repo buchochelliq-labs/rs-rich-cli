@@ -254,7 +254,9 @@ jobs:
   # rs-rich-interact's termion and termwiz backends (#677, #678), each on its
   # own, on Linux and macOS: the PTY conformance suites (interact's
   # `pty_backends`, intuiTUIve's `backends`) run every test against crossterm
-  # and the feature's backend.
+  # and the feature's backend. termwiz also on Windows (#721): both crates
+  # and every target built with it, and their suites, headless there (the PTY
+  # suites are Unix only, as is termion).
   backends:
     name: interact backend (${{ matrix.feature }}, ${{ matrix.os }})
     runs-on: ${{ matrix.os }}
@@ -264,6 +266,9 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest]
         feature: [termion, termwiz]
+        include:
+          - os: windows-latest
+            feature: termwiz
     steps:
       - uses: actions/checkout@v7
         with:
