@@ -1,0 +1,24 @@
+17 crates: 1.9 MiB of code in a 5.2 MiB binary (2.0 MiB of .text)
+
+std             475.5 KiB ████████████████████████████████████████
+regex_automata  392.0 KiB █████████████████████████████████       
+clap_builder    262.0 KiB ██████████████████████                  
+toml_edit       180.0 KiB ███████████████▏                        
+ledger          148.0 KiB ████████████▌                           
+serde_json      116.0 KiB █████████▊                              
+regex_syntax    110.0 KiB █████████▎                              
+aho_corasick     96.0 KiB ████████▏                               
+
+┏━━━━━━━━━━━━━━━━┳━━━━━━━━━━━┳━━━━━━━┓
+┃ Crate          ┃      Size ┃ Share ┃
+┡━━━━━━━━━━━━━━━━╇━━━━━━━━━━━╇━━━━━━━┩
+│ std            │ 475.5 KiB │ 23.9% │
+│ regex_automata │ 392.0 KiB │ 19.7% │
+│ clap_builder   │ 262.0 KiB │ 13.2% │
+│ toml_edit      │ 180.0 KiB │  9.0% │
+│ ledger         │ 148.0 KiB │  7.4% │
+│ serde_json     │ 116.0 KiB │  5.8% │
+│ regex_syntax   │ 110.0 KiB │  5.5% │
+│ aho_corasick   │  96.0 KiB │  4.8% │
+└────────────────┴───────────┴───────┘
+and 9 more, 212.0 KiB in all          

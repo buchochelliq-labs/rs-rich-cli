@@ -130,6 +130,13 @@ Choose at most one; the default auto-detects .md/.rst/.json/.csv/.tsv/.ipynb, .m
 | `--timings <FILE>` | With `rich deps`, show a `cargo build --timings` report (the HTML file, or timing-info JSON lines; `-` for stdin): the slowest units as bars and a table; runs nothing. |
 | `--audit <FILE>` | With `rich deps`, show `cargo audit --json` output from FILE (`-` for stdin) grouped by severity; exits 5 when it lists a vulnerability. Runs no scanner. |
 | `--licenses` | With `rich deps`, group the crates by licence, marking copyleft, unknown and missing licences. |
+| `--sizes` | With `rich deps`, show artifact sizes per crate as bars and a table: from the target directory given next (default: the one `cargo metadata` names), matched to packages through `cargo metadata`, or from a file given next: `cargo bloat --crates --message-format json` output or a report saved with --save (`-` for stdin) |
+| `--build-profile <NAME>` | With `rich deps --sizes`, read this profile's artifacts: debug (dev), release, or a custom profile (default: debug if it was built, else release) |
+| `--source-sizes` | With `rich deps --sizes`, also add up each package's source files (its manifest directory, without target/, .git/ and nested packages) |
+| `--baseline <FILE>` | With `rich deps --timings` or `--sizes`, compare with an older report, unit by unit (a report saved with --save, or the original format: a timings report, cargo-bloat JSON or a target directory); exits 5 when a unit or the total regressed past --threshold. |
+| `--save <FILE>` | With `rich deps --timings` or `--sizes`, also write the report as JSON to FILE, to keep as a --baseline. |
+| `--policy <FILE>` | With `rich deps`, check every crate's licence against a policy: a TOML allow and deny list, or cargo-deny's deny.toml; conflicts with the root crate's licence are shown too (a heuristic, not legal advice). Exits 5 on a violation. |
+| `--sbom <FILE>` | With `rich deps --licenses` or `--policy`, read the packages from an SPDX (2.2, 2.3) or CycloneDX (1.4 to 1.6) JSON document instead of `cargo metadata`. |
 | `--er` | With `rich schema`, draw the schema as an ER diagram: a box per table with its columns and keys, an edge per foreign key. |
 
 ### Chart
@@ -146,7 +153,7 @@ Choose at most one; the default auto-detects .md/.rst/.json/.csv/.tsv/.ipynb, .m
 | --- | --- |
 | `--sample <N>` | With `rich profile`, the most rows kept for types, statistics and distributions (default 10000): a longer input is sampled uniformly, the sample size is printed, and nulls still count every row. |
 | `--columns <COLUMN[,COLUMN...]>...` | With `rich profile`, profile only these columns, by header, in this order; repeatable. |
-| `--top <N>` | With `rich profile`, the most common values shown for a column that is not numeric (default 5) |
+| `--top <N>` | With `rich profile`, the most common values shown for a column that is not numeric (default 5); with `rich deps --sizes`, `--timings` or `--baseline`, the units shown (default 20) |
 
 ### Image
 
@@ -169,7 +176,7 @@ Choose at most one; the default auto-detects .md/.rst/.json/.csv/.tsv/.ipynb, .m
 | `--image-flip-horizontal`, `--no-image-flip-horizontal` | Flip still images horizontally, after rotation. Config: `image_flip_horizontal`. |
 | `--image-flip-vertical`, `--no-image-flip-vertical` | Flip still images vertically, after rotation. Config: `image_flip_vertical`. |
 | `--image-grayscale`, `--no-image-grayscale` | Composite and convert still images to grayscale. Config: `image_grayscale`. |
-| `--threshold <PCT>` | With --diff, exit non-zero above PCT% changed (pixels for images, lines for text). Also sets the exit code: 0 within, 5 over. |
+| `--threshold <PCT>` | With --diff, exit non-zero above PCT% changed (pixels for images, lines for text). Also sets the exit code: 0 within, 5 over. With `rich deps --baseline`, what counts as a regression: a percentage (default 10%) and a floor the change must also pass, a time (`0.5s`, the default for --timings) or a size (`64KiB`, the default for --sizes); give it twice for both. |
 
 ### Inspect
 
@@ -327,7 +334,7 @@ Self-contained examples; ignores config; accepts --no-color.
 | `capture` | Run `rich capture -- COMMAND ARGS…` and show or export its output (--cast FILE records it, --redact masks secrets), then exit with the command's status |
 | `mermaid`, `mmd` | Draw a Mermaid diagram: flowcharts as text, every type through mmdc where built in (.mmd and .mermaid files are detected) |
 | `dot`, `graphviz` | Draw a DOT (Graphviz) graph as text (.dot and .gv files are detected); what the native parser does not support is refused with its line |
-| `deps` | A Cargo dependency tree from `cargo metadata`, crates resolved at several versions marked; --why CRATE for what pulls a crate in, --graph to draw it; --features, --licenses, --timings FILE and --audit FILE for supply-chain reports |
+| `deps` | A Cargo dependency tree from `cargo metadata`, crates resolved at several versions marked; --why CRATE for what pulls a crate in, --graph to draw it; --features, --licenses, --policy FILE, --timings FILE, --sizes and --audit FILE for supply-chain reports, --baseline FILE to compare timings or sizes |
 | `schema` | A JSON Schema, SQL DDL or Arrow schema as a tree: types, required markers, constraints, keys, $refs resolved; with two schemas (of any of these formats), what changed between them and which changes break; --er draws an ER diagram |
 | `chart` | A chart from CSV, JSON or stdin: a sparkline, bars, lines, points or a heatmap; --x and --y pick the columns, a missing column or a value that is not a number is refused with its row and column |
 | `profile` | A profile of CSV, TSV or JSON Lines: each column's type, nulls, distinct values, statistics and distribution, and a map of where the nulls are; a long input is sampled. --report json writes the profile as JSON to stdout |
@@ -605,7 +612,7 @@ rich diff [OPTIONS] [RESOURCE]
 
 | Option | Description |
 | --- | --- |
-| `--threshold <PCT>` | With --diff, exit non-zero above PCT% changed (pixels for images, lines for text). Also sets the exit code: 0 within, 5 over. |
+| `--threshold <PCT>` | With --diff, exit non-zero above PCT% changed (pixels for images, lines for text). Also sets the exit code: 0 within, 5 over. With `rich deps --baseline`, what counts as a regression: a percentage (default 10%) and a floor the change must also pass, a time (`0.5s`, the default for --timings) or a size (`64KiB`, the default for --sizes); give it twice for both. |
 
 #### Output & reports
 
@@ -954,7 +961,7 @@ rich dot [OPTIONS] [RESOURCE]
 
 ### rich deps
 
-A Cargo dependency tree from `cargo metadata`, crates resolved at several versions marked; --why CRATE for what pulls a crate in, --graph to draw it; --features, --licenses, --timings FILE and --audit FILE for supply-chain reports
+A Cargo dependency tree from `cargo metadata`, crates resolved at several versions marked; --why CRATE for what pulls a crate in, --graph to draw it; --features, --licenses, --policy FILE, --timings FILE, --sizes and --audit FILE for supply-chain reports, --baseline FILE to compare timings or sizes
 
 #### Usage
 
@@ -977,6 +984,15 @@ rich deps [OPTIONS] [MANIFEST]
 | `--timings <FILE>` | With `rich deps`, show a `cargo build --timings` report (the HTML file, or timing-info JSON lines; `-` for stdin): the slowest units as bars and a table; runs nothing. |
 | `--audit <FILE>` | With `rich deps`, show `cargo audit --json` output from FILE (`-` for stdin) grouped by severity; exits 5 when it lists a vulnerability. Runs no scanner. |
 | `--licenses` | With `rich deps`, group the crates by licence, marking copyleft, unknown and missing licences. |
+| `--sizes` | With `rich deps`, show artifact sizes per crate as bars and a table: from the target directory given next (default: the one `cargo metadata` names), matched to packages through `cargo metadata`, or from a file given next: `cargo bloat --crates --message-format json` output or a report saved with --save (`-` for stdin) |
+| `--build-profile <NAME>` | With `rich deps --sizes`, read this profile's artifacts: debug (dev), release, or a custom profile (default: debug if it was built, else release) |
+| `--source-sizes` | With `rich deps --sizes`, also add up each package's source files (its manifest directory, without target/, .git/ and nested packages) |
+| `--top <N>` | With `rich profile`, the most common values shown for a column that is not numeric (default 5); with `rich deps --sizes`, `--timings` or `--baseline`, the units shown (default 20) |
+| `--baseline <FILE>` | With `rich deps --timings` or `--sizes`, compare with an older report, unit by unit (a report saved with --save, or the original format: a timings report, cargo-bloat JSON or a target directory); exits 5 when a unit or the total regressed past --threshold. |
+| `--threshold <PCT>` | With --diff, exit non-zero above PCT% changed (pixels for images, lines for text). Also sets the exit code: 0 within, 5 over. With `rich deps --baseline`, what counts as a regression: a percentage (default 10%) and a floor the change must also pass, a time (`0.5s`, the default for --timings) or a size (`64KiB`, the default for --sizes); give it twice for both. |
+| `--save <FILE>` | With `rich deps --timings` or `--sizes`, also write the report as JSON to FILE, to keep as a --baseline. |
+| `--policy <FILE>` | With `rich deps`, check every crate's licence against a policy: a TOML allow and deny list, or cargo-deny's deny.toml; conflicts with the root crate's licence are shown too (a heuristic, not legal advice). Exits 5 on a violation. |
+| `--sbom <FILE>` | With `rich deps --licenses` or `--policy`, read the packages from an SPDX (2.2, 2.3) or CycloneDX (1.4 to 1.6) JSON document instead of `cargo metadata`. |
 
 #### Layout
 
@@ -1065,7 +1081,7 @@ rich profile [OPTIONS] [FILE]
 | --- | --- |
 | `--sample <N>` | With `rich profile`, the most rows kept for types, statistics and distributions (default 10000): a longer input is sampled uniformly, the sample size is printed, and nulls still count every row. |
 | `--columns <COLUMN[,COLUMN...]>...` | With `rich profile`, profile only these columns, by header, in this order; repeatable. |
-| `--top <N>` | With `rich profile`, the most common values shown for a column that is not numeric (default 5) |
+| `--top <N>` | With `rich profile`, the most common values shown for a column that is not numeric (default 5); with `rich deps --sizes`, `--timings` or `--baseline`, the units shown (default 20) |
 
 #### Output & reports
 

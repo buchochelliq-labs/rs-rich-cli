@@ -1,0 +1,34 @@
+{
+  "spdxVersion": "SPDX-2.3",
+  "dataLicense": "CC0-1.0",
+  "SPDXID": "SPDXRef-DOCUMENT",
+  "name": "ledger-2.1.0",
+  "documentNamespace": "https://example.com/spdx/ledger-2.1.0",
+  "creationInfo": {"created": "2026-10-01T00:00:00Z", "creators": ["Tool: example"]},
+  "packages": [
+    {"SPDXID": "SPDXRef-Package-ledger", "name": "ledger", "versionInfo": "2.1.0",
+     "downloadLocation": "NOASSERTION", "licenseConcluded": "MIT", "licenseDeclared": "MIT"},
+    {"SPDXID": "SPDXRef-Package-serde", "name": "serde", "versionInfo": "1.0.210",
+     "downloadLocation": "NOASSERTION", "licenseConcluded": "NOASSERTION",
+     "licenseDeclared": "MIT OR Apache-2.0"},
+    {"SPDXID": "SPDXRef-Package-unicode-ident", "name": "unicode-ident", "versionInfo": "1.0.13",
+     "downloadLocation": "NOASSERTION",
+     "licenseConcluded": "(MIT OR Apache-2.0) AND Unicode-DFS-2016",
+     "licenseDeclared": "(MIT OR Apache-2.0) AND Unicode-DFS-2016"},
+    {"SPDXID": "SPDXRef-Package-option-ext", "name": "option-ext", "versionInfo": "0.2.0",
+     "downloadLocation": "NOASSERTION", "licenseConcluded": "MPL-2.0",
+     "licenseDeclared": "MPL-2.0"},
+    {"SPDXID": "SPDXRef-Package-gpl-widget", "name": "gpl-widget", "versionInfo": "0.4.0",
+     "downloadLocation": "NOASSERTION", "licenseConcluded": "GPL-3.0-only",
+     "licenseDeclared": "GPL-3.0-only"},
+    {"SPDXID": "SPDXRef-Package-mystery", "name": "mystery-codec", "versionInfo": "0.1.0",
+     "downloadLocation": "NOASSERTION", "licenseConcluded": "NOASSERTION",
+     "licenseDeclared": "NONE"}
+  ],
+  "relationships": [
+    {"spdxElementId": "SPDXRef-DOCUMENT", "relationshipType": "DESCRIBES",
+     "relatedSpdxElement": "SPDXRef-Package-ledger"},
+    {"spdxElementId": "SPDXRef-Package-ledger", "relationshipType": "DEPENDS_ON",
+     "relatedSpdxElement": "SPDXRef-Package-serde"}
+  ]
+}

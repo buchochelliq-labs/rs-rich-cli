@@ -1,0 +1,127 @@
+{
+  "format": "rich-deps",
+  "report": "timings",
+  "version": 1,
+  "units": [
+    {
+      "name": "proc-macro2",
+      "version": "1.0.86",
+      "target": "build-script",
+      "mode": "todo",
+      "start": 0.0,
+      "duration": 0.41,
+      "rmeta": null,
+      "codegen": null
+    },
+    {
+      "name": "proc-macro2",
+      "version": "1.0.86",
+      "target": "build-script (run)",
+      "mode": "run-custom-build",
+      "start": 0.41,
+      "duration": 0.12,
+      "rmeta": null,
+      "codegen": null
+    },
+    {
+      "name": "unicode-ident",
+      "version": "1.0.13",
+      "target": "",
+      "mode": "todo",
+      "start": 0.0,
+      "duration": 0.38,
+      "rmeta": 0.21,
+      "codegen": 0.17
+    },
+    {
+      "name": "proc-macro2",
+      "version": "1.0.86",
+      "target": "",
+      "mode": "todo",
+      "start": 0.53,
+      "duration": 1.37,
+      "rmeta": 0.92,
+      "codegen": 0.45000000000000007
+    },
+    {
+      "name": "quote",
+      "version": "1.0.37",
+      "target": "",
+      "mode": "todo",
+      "start": 1.9,
+      "duration": 0.66,
+      "rmeta": 0.4,
+      "codegen": 0.26
+    },
+    {
+      "name": "syn",
+      "version": "2.0.79",
+      "target": "",
+      "mode": "todo",
+      "start": 2.56,
+      "duration": 5.1,
+      "rmeta": 2.95,
+      "codegen": 2.15
+    },
+    {
+      "name": "syn",
+      "version": "1.0.109",
+      "target": "",
+      "mode": "todo",
+      "start": 2.56,
+      "duration": 5.12,
+      "rmeta": 2.9,
+      "codegen": 2.22
+    },
+    {
+      "name": "serde_derive",
+      "version": "1.0.210",
+      "target": "",
+      "mode": "todo",
+      "start": 9.4,
+      "duration": 3.91,
+      "rmeta": 1.73,
+      "codegen": 2.18
+    },
+    {
+      "name": "strum_macros",
+      "version": "0.25.3",
+      "target": "",
+      "mode": "todo",
+      "start": 7.68,
+      "duration": 1.64,
+      "rmeta": 0.88,
+      "codegen": 0.7599999999999999
+    },
+    {
+      "name": "serde",
+      "version": "1.0.210",
+      "target": "",
+      "mode": "todo",
+      "start": 13.31,
+      "duration": 3.1,
+      "rmeta": 2.2,
+      "codegen": 0.9
+    },
+    {
+      "name": "demo-app",
+      "version": "0.3.0",
+      "target": "demo \"bin\"",
+      "mode": "todo",
+      "start": 15.56,
+      "duration": 0.94,
+      "rmeta": null,
+      "codegen": null
+    },
+    {
+      "name": "once_cell",
+      "version": "1.20.2",
+      "target": "",
+      "mode": "todo",
+      "start": 0.5,
+      "duration": 0.52,
+      "rmeta": 0.3,
+      "codegen": 0.22
+    }
+  ]
+}
