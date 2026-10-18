@@ -719,6 +719,13 @@ impl DrawCx<'_> {
     }
 }
 
+/// A theme style by name, if the console's theme has it.
+pub(crate) fn named_style(console: &Console, name: &str) -> Option<Style> {
+    console
+        .get_style(&rich::style::StyleType::Name(name.to_string()))
+        .ok()
+}
+
 /// A theme style by name, or `fallback` parsed.
 pub(crate) fn theme_style(console: &Console, name: &str, fallback: &str) -> Style {
     console

@@ -69,6 +69,7 @@ pub mod menu;
 pub mod node;
 pub mod reactive;
 mod reorder;
+mod rule;
 pub mod screen;
 mod scrollbar;
 mod sheet;
@@ -108,6 +109,7 @@ pub use rich::Overflow;
 pub use sheet::{SheetError, Stylesheet};
 pub use task::{resource, spawn, spawn_future, Load, Resource, Task};
 pub use widget::{widget, Widget};
+pub use rule::rule;
 pub use text_area::Caret;
 pub use widgets::text_area;
 

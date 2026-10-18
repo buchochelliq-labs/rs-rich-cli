@@ -47,6 +47,11 @@ use crate::reactive::{signal, NodeId, Proxy, Runtime, Signal};
 use crate::screen::{Painter, Rect, Screen};
 use crate::widget::{Used, WidgetEvent};
 
+/// The theme style a pop-up's title is drawn in: the palette's, the
+/// help's, a modal's or pop-up's panel, a [confirm](Ctx::confirm) dialog's.
+/// The theme's `title` when it does not name it.
+pub(crate) const POPUP_TITLE: &str = "popup.title";
+
 /// What a key or click handler can do.
 pub struct Ctx {
     quit: bool,

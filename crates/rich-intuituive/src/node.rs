@@ -1294,9 +1294,11 @@ impl Node {
     /// a stylesheet's `border`. [`Border::None`] draws no lines, but its
     /// titles keep their rows. For a container with
     /// [collapsed borders](Self::collapse_borders): the kind of its lines.
+    /// For a [`rule`](crate::rule()) on its own: the kind of its line.
     /// Ignored on other nodes.
     pub fn border(self, border: Border) -> Node {
         self.widget_mut(|panel: &mut Panel| panel.code.border = Some(border));
+        self.widget_mut(|rule: &mut crate::rule::Rule| rule.kind = Some(border));
         self.widget_mut(|stack: &mut Stack| stack.collapse.border = Some(border));
         self.widget_mut(|grid: &mut Grid| grid.collapse.border = Some(border));
         self
@@ -1305,7 +1307,9 @@ impl Node {
     /// For a [panel](Self::panel): the sides of the box it draws,
     /// [`Sides::ALL`] by default, or some of them joined with `|`. The
     /// inside grows into the sides it does not draw. A stylesheet's
-    /// `border-sides: top bottom` does the same. Ignored on other nodes.
+    /// `border-sides: top bottom` does the same. On a node that is not a
+    /// panel, it puts the node in a panel without a title first, so
+    /// `.borders(Sides::BOTTOM)` underlines anything.
     ///
     /// ```
     /// use intuituive::prelude::*;
@@ -1314,8 +1318,16 @@ impl Node {
     /// let mut driver = app.driver(12, 2);
     /// driver.settle();
     /// assert_eq!(driver.screen().plain(), ["── Notes ───", "body        "]);
+    ///
+    /// let app = App::new(|| column([label("Header").borders(Sides::BOTTOM).fixed(2), label("body")]));
+    /// let mut driver = app.driver(8, 3);
+    /// driver.settle();
+    /// assert_eq!(driver.screen().plain(), ["Header  ", "────────", "body    "]);
     /// ```
     pub fn borders(self, sides: Sides) -> Node {
+        if self.widget_ref(|_: &Panel| ()).is_none() {
+            return self.panel("").borders(sides);
+        }
         self.widget_mut(|panel: &mut Panel| panel.code.sides = Some(sides));
         self
     }
