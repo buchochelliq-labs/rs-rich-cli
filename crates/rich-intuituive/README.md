@@ -105,6 +105,13 @@ More examples (`cargo run -p rs-rich-intuituive --example <name>`):
 | `widgets` | ratatui's widget examples as a gallery: blocks, text, lists, tables, tabs, scrollbars, a calendar, a pop-up, collapsed borders, buttons of your own |
 | `charts` | ratatui's chart examples as a gallery: gauges, sparklines, bars, grouped bars, line, area and scatter charts, the canvas and its map |
 | `layout` | ratatui's constraint explorer rebuilt: sizes and justify modes with their spacers, each kind of size, flex, alignment and wrapping |
+| `colors` | ratatui's colour explorers rebuilt: named, indexed and RGB colours (a swatch at 60 fps), the modifiers, Tailwind's and Material's palettes |
+| `canvas` | ratatui's canvas rebuilt: a world map, pong at 60 fps, a pad to draw on with the mouse, boxes; every marker |
+| `form` | ratatui's input form and chat rebuilt: fields in error while wrong, a form handed back from `run_for`, an input with modes |
+| `calendar` | ratatui's calendar explorer rebuilt: a year of `month` nodes, six looks, today, the seasons and a selected day |
+| `downloads` | ratatui's inline demo rebuilt: workers on threads report through a `Proxy`, finished lines printed above the region |
+| `pulls` | ratatui's async GitHub table rebuilt: a `resource` loaded in the background, Loading, Loaded or Failed in the title |
+| `panic` | ratatui's panic demo rebuilt: the terminal given back before a panic's message, an error returned from `run` |
 
 ## Against ratatui
 

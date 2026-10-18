@@ -1,0 +1,24 @@
+╭─ Panics and errors ──────────────────────────────────────────────────────────╮
+│                                                                              │
+│  p  panic in a key handler. The terminal is given back first,                │
+│     then the panic's message prints below the shell's prompt.                │
+│                                                                              │
+│  e  end the app with an error. run returns it once the                       │
+│     terminal is back, and main prints it.                                    │
+│                                                                              │
+│  q  quit, with no error.                                                     │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+╰─ ? lists the keys ───────────────────────────────────────────────────────────╯

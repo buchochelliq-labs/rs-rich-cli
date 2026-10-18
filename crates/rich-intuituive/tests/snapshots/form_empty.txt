@@ -1,0 +1,24 @@
+ Form │ Chat
+╭─ First name ─────────────────────────╮╭─ Last name ──────────────────────────╮
+│Ada                                   ││Lovelace                              │
+╰──────────────────────────────────────╯╰──────────────────────────────────────╯
+╭─ Age ────╮
+│0         │
+╰──────────╯
+Tab or Enter moves to the next field · ↑/↓ or digits set the age
+Enter on the age sends the form · Esc quits
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

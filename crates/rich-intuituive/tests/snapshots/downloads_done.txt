@@ -1,0 +1,8 @@
+ Downloads  10 of 10 done · 638 of 638 KB
+ 100% ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+ worker 1 idle                                0%
+ worker 2 idle                                0%
+ worker 3 idle                                0%
+ worker 4 idle                                0%
+ q stops
