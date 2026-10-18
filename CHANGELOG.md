@@ -783,6 +783,81 @@ test.
   CLI reference regenerated, the porting page, the Python pages, and
   `docs/tapes/log.tape` (not yet recorded).
 
+### `rich deps`: sizes, baselines and licence policy (ext 0.0.16, cli 0.0.19)
+
+0.0.19 workstream 16 (#706, #704).
+
+- **`rich_ext::deps::sizes`**: what each crate adds to a build. `Sizes`
+  reads a target directory's profile, matched to `cargo metadata`'s
+  packages: rlibs (else the rmeta of a check build), proc-macros and dylibs,
+  static libraries and binaries. A crate at two versions is told apart by
+  its dep-info file. Of each package's artifacts the newest is taken, and
+  stale ones no package claims are counted. Source sizes are optional.
+  `Sizes::parse` reads `cargo bloat --crates --message-format json` too.
+  `SizeReport` draws bars, a table and the total.
+- **`rich_ext::deps::compare`**: two timings or size reports compared unit
+  by unit. A unit regresses when it grows past a percentage and an
+  absolute floor: 10% and 0.5s for build times, 10% and 64 KiB for sizes.
+  New and removed units are listed, a new one past the floor regresses,
+  and the totals are compared too. `Comparison::regressions()` feeds a
+  gate. `Timings::to_json` and `Sizes::to_json` save a report, and the
+  readers take it back.
+- **`rich_ext::deps::policy`**: an allow and deny list, from rich's own TOML
+  or cargo-deny's `deny.toml` (its `[licenses]` section, told apart by
+  shape). Each SPDX expression is evaluated: `OR` needs one allowed
+  choice, `AND` every part, and `WITH` exceptions are kept. Deny wins over
+  allow, and a crate's exception wins over both. `PolicyReport` lists each
+  violation with its reason.
+- **Conflicts**, a heuristic and not legal advice: each dependency's
+  licence set against the root crate's on a small table. GPL code in a
+  permissive or proprietary crate is a conflict; weak copyleft there is
+  worth a check; permissive code is fine anywhere. Within the GNU family,
+  `GPL-2.0-only` conflicts with Apache-2.0 and the version 3 licences.
+- **`rich_ext::deps::sbom`**: the packages and licences of an SPDX (2.2,
+  2.3) or CycloneDX (1.4 to 1.6) JSON document, told apart by content, so
+  the licence report and the policy work beyond Cargo.
+- **`rich deps`**: `--sizes [TARGET_DIR|FILE]` with `--build-profile`,
+  `--source-sizes` and `--top N`; `--baseline FILE` with `--threshold` (a
+  percentage, a time or a size) and `--save FILE`, for `--timings` and
+  `--sizes`; `--policy FILE`; and `--sbom FILE` with `--licenses` or
+  `--policy`. A regression or a violation exits 5 once the report is shown,
+  like `--audit`. Without the new options `rich deps` prints what it always
+  did.
+- **Robust.** Truncated JSON, odd TOML, unknown SPDX identifiers and
+  documents of the wrong kind are a clear error (exit 4) or a warning row.
+  Nothing panics, and directory walks are bounded.
+- **Docs:** sections in [the CLI guide](docs/cli.md#dependency-sizes-baselines-and-licence-policy-0019)
+  and [the ext guide](docs/guide/ext/sources.md#artifact-sizes) with three
+  new pictures, the regenerated CLI reference, fixtures in
+  `crates/rich-ext/tests/fixtures/deps`, and `docs/tapes/deps-policy.tape`
+  (not yet recorded). The Python package binds no `deps` API, so it has
+  nothing new.
+
+### ratatui's demos, rebuilt on intuiTUIve (intuituive 0.0.4)
+
+0.0.19 demo batch D1 (see [intuiTUIve against ratatui](docs/design/intuituive-vs-ratatui.md#3-the-demos)).
+
+- **`demo`, ratatui's classic demo.** `examples/demo.rs` rebuilds its three
+  tabs: gauges, a sparkline, lists, bars and a sine chart fed by a timer; a
+  server table beside a world map; the named colours. A tick redraws only
+  the parts that move, and a test checks it. The mouse picks tabs, tasks
+  and servers, `?` and Ctrl+P list the keys, and `--frozen` stops the
+  clock.
+- **`demo2`, ratatui's showcase.** `examples/demo2.rs` rebuilds its About,
+  Recipe, Email, Traceroute and Weather tabs over an Okhsv swatch, with a
+  recipe, emails, hosts and weather of our own. Its colours are in
+  `examples/demo2.tcss`, reloaded live. It fits any size, and destroy is an
+  effect over the whole app, on the virtual clock in the tests.
+- **A list takes the mouse.** A press on an item selects it, and the wheel
+  moves the selection three items, as on a table. The press still reaches
+  the node's own handler.
+- **An idle effect costs nothing.** An `effect` that wrote no cells the
+  last time it ran no longer draws everything inside it again when a child
+  changes: the child draws alone.
+- **Docs:** [ratatui's examples, rebuilt](docs/guide/intuituive/ratatui-examples.md),
+  a new guide page; ratatui in the porting guide's credits;
+  `docs/tapes/demo.tape` and `docs/tapes/demo2.tape` (not yet recorded).
+
 ### One process per browser session (web 0.0.2)
 
 0.0.19 workstream 3.

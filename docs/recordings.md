@@ -39,6 +39,7 @@ motion turned on in your system settings the cards stay still.
 [![A dashboard drawn in place below the prompt](media/tapes/surface/done.png){ data-gif="surface.gif" loading=lazy }<span class="tape-card-title">A surface</span>](#a-surface){ .tape-card }
 [![rich date: a day picked on a month grid within a range](media/tapes/date/grid.png){ data-gif="date.gif" loading=lazy }<span class="tape-card-title">Dates and times</span>](#dates-and-times){ .tape-card }
 [![A man page rendered by rich, its sections and tagged paragraphs](media/tapes/documents/man.png){ data-gif="documents.gif" loading=lazy }<span class="tape-card-title">Org, AsciiDoc and man pages</span>](#org-asciidoc-and-man-pages){ .tape-card }
+[![rich log grouping records under a header for each trace id](media/tapes/log/groups.png){ data-gif="log.gif" loading=lazy }<span class="tape-card-title">Filter and group a log</span>](#filter-and-group-a-log){ .tape-card }
 [![rich serve printing its address, and sessions asked for](media/tapes/serve/sessions.png){ data-gif="serve.gif" loading=lazy }<span class="tape-card-title">Serve a program to a browser</span>](#serve-a-program-to-a-browser){ .tape-card }
 [![A shell in a terminal pane beside a web view](media/tapes/embed/pane.png){ data-gif="embed.gif" loading=lazy }<span class="tape-card-title">A terminal pane</span>](#a-terminal-pane){ .tape-card }
 [![A CSV file drawn as a line chart by rich chart](media/tapes/chart/lines.png){ data-gif="chart.gif" loading=lazy }<span class="tape-card-title">Charts from data</span>](#charts-from-data){ .tape-card }
@@ -46,6 +47,7 @@ motion turned on in your system settings the cards stay still.
 [![rich profile describing each column of a CSV file](media/tapes/profile/profile.png){ data-gif="profile.gif" loading=lazy }<span class="tape-card-title">Profile a data file</span>](#profile-a-data-file){ .tape-card }
 [![rich schema --er drawing SQL tables as an ER diagram](media/tapes/schema/er.png){ data-gif="schema.gif" loading=lazy }<span class="tape-card-title">Schemas and ER diagrams</span>](#schemas-and-er-diagrams){ .tape-card }
 [![rich deps --features showing what turned syn's features on](media/tapes/deps-features/features.png){ data-gif="deps-features.gif" loading=lazy }<span class="tape-card-title">Crate features</span>](#crate-features){ .tape-card }
+[![rich deps --baseline flagging a crate that grew](media/tapes/deps-policy/baseline.png){ data-gif="deps-policy.gif" loading=lazy }<span class="tape-card-title">Sizes, baselines and licence policy</span>](#sizes-baselines-and-licence-policy){ .tape-card }
 [![rich diff --conflicts showing ours, base and theirs side by side](media/tapes/conflicts/conflicts.png){ data-gif="conflicts.gif" loading=lazy }<span class="tape-card-title">Merge conflicts</span>](#merge-conflicts){ .tape-card }
 [![A DOT fence drawn in a Markdown document](media/tapes/dot-fence/drawn.png){ data-gif="dot-fence.gif" loading=lazy }<span class="tape-card-title">DOT in Markdown</span>](#dot-in-markdown){ .tape-card }
 [![fun/heart previewed, its frames magnified](media/tapes/micro-modes/modes.png){ data-gif="micro-modes.gif" loading=lazy }<span class="tape-card-title">Micro assets</span>](#micro-assets){ .tape-card }
@@ -483,6 +485,24 @@ source with `--syntax`. See
 
 [Tape](tapes/documents.tape) · [Cast](media/tapes/documents/documents.cast) · [GIF](media/tapes/documents/documents.gif) · [Page](media/tapes/documents/documents.html)
 
+## Filter and group a log
+
+`rich log` (0.0.19) on one log in four formats (JSON Lines, logfmt, a
+timestamped line and an access log, with a stack trace after an error),
+read as records; then filtered by level and field, folded where a message
+repeats, and grouped by trace id with a summary of the levels and the
+traces that failed. See [Logs: `rich log`](cli.md#logs-rich-log).
+
+<div class="tape-player" data-cast="../media/tapes/log/log.cast" data-poster="npt:0:3">
+  <img src="../media/tapes/log/log.gif" alt="rich log reading a mixed log, filtering it, folding repeats and grouping by trace">
+</div>
+
+| Records | Filtered | Folded | Groups |
+|---|---|---|---|
+| ![Four formats read as records](media/tapes/log/records.png) | ![Warnings and above from one service](media/tapes/log/filtered.png) | ![Repeated messages folded with a count](media/tapes/log/folded.png) | ![Records grouped under a header for each trace id](media/tapes/log/groups.png) |
+
+[Tape](tapes/log.tape) · [Cast](media/tapes/log/log.cast) · [GIF](media/tapes/log/log.gif) · [Page](media/tapes/log/log.html)
+
 ## Serve a program to a browser
 
 `rich serve` (0.0.18, behind the CLI's `serve` feature) runs a program in
@@ -570,6 +590,24 @@ one crate; here `syn`, resolved at two versions.
 ![rich deps --features --package syn](media/tapes/deps-features/features.png)
 
 [Tape](tapes/deps-features.tape) · [Cast](media/tapes/deps-features/deps-features.cast) · [GIF](media/tapes/deps-features/deps-features.gif) · [Page](media/tapes/deps-features/deps-features.html)
+
+## Sizes, baselines and licence policy
+
+`rich deps` (0.0.19) as a CI gate: what each crate adds to a binary, from
+cargo-bloat's JSON; a size regression against a saved baseline, which
+exits 5; and a licence policy refusing a crate in an SBOM. Every input is
+a fixture in the repository. See
+[Dependency sizes, baselines and licence policy](cli.md#dependency-sizes-baselines-and-licence-policy-0019).
+
+<div class="tape-player" data-cast="../media/tapes/deps-policy/deps-policy.cast" data-poster="npt:0:3">
+  <img src="../media/tapes/deps-policy/deps-policy.gif" alt="rich deps reporting sizes, comparing them with a baseline, and checking a licence policy">
+</div>
+
+| Sizes | Baseline | Policy |
+|---|---|---|
+| ![Each crate's size as a bar, largest first](media/tapes/deps-policy/sizes.png) | ![A crate that grew past the threshold, flagged](media/tapes/deps-policy/baseline.png) | ![A crate whose licence the policy refuses](media/tapes/deps-policy/policy.png) |
+
+[Tape](tapes/deps-policy.tape) · [Cast](media/tapes/deps-policy/deps-policy.cast) · [GIF](media/tapes/deps-policy/deps-policy.gif) · [Page](media/tapes/deps-policy/deps-policy.html)
 
 ## Profile a data file
 

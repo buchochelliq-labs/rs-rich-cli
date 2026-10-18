@@ -164,7 +164,10 @@ Diagram sources
   `./rich.toml` cannot turn on. `rich deps [MANIFEST]` draws `cargo metadata`
   as a tree (`--metadata FILE`, `--why CRATE`, `--graph`, `--depth N`,
   `--duplicates`, `--no-dev`), and `rich schema FILE [NEW]` a JSON Schema, or
-  what changed between two.
+  what changed between two. `rich deps --sizes`, `--baseline FILE` and
+  `--policy FILE` show artifact sizes, regressions against a saved report
+  and licence-policy violations; a regression or a violation exits 5
+  (0.0.19).
 
 Charts
 : `rich chart [FILE]` draws CSV, TSV, JSON, JSON Lines or bare numbers (from

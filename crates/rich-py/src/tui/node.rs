@@ -918,6 +918,8 @@ impl PyNode {
                 .collect::<PyResult<_>>()?,
         };
         slf.borrow().map(|n| n.theme_styles(styles))?;
+        Ok(slf)
+    }
 
     /// For a `list`: draw `markup` (`"[red]>>[/] "`) before the selected
     /// item; the others get blank cells in its column.

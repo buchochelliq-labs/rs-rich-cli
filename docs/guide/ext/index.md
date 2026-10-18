@@ -137,7 +137,7 @@ cargo run -p rs-rich-ext --example guide_logging --features log,tracing
 cargo run -p rs-rich-ext --example guide_live_layout
 cargo run -p rs-rich-ext --example guide_macros --features macros
 cargo run -p rs-rich-ext --example guide_charts
-cargo run -p rs-rich-ext --example guide_sources --features data
+cargo run -p rs-rich-ext --example guide_sources --features data,toml
 cargo run -p rs-rich-ext --example guide_documents
 cargo run -p rs-rich-ext --example guide_transforms --features jsonpath
 cargo run -p rs-rich-ext --example guide_highlighters --features testing,syntax

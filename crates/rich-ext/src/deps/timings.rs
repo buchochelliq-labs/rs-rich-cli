@@ -8,7 +8,9 @@
 //! - that array on its own;
 //! - the JSON lines `cargo build --timings=json -Zunstable-options` wrote
 //!   on older nightly toolchains (`"reason": "timing-info"` messages; other
-//!   messages and lines that are not JSON objects are skipped).
+//!   messages and lines that are not JSON objects are skipped);
+//! - a report [`Timings::to_json`] saved (0.0.19), to keep as a baseline
+//!   for [`compare`](super::compare).
 //!
 //! Each [`Unit`] is one compilation: a crate's library, a binary, a build
 //! script or a build script's run. Its time splits into the frontend (until
@@ -41,7 +43,10 @@ use rich::table::Table;
 use rich::{Console, ConsoleOptions, Justify, Renderable, Segment, Text};
 use serde_json::Value;
 
-use super::{check_count, check_size, clean, stack, stack_measure, theme_style, DepsError};
+use super::{
+    check_count, check_size, clean, saved_report, stack, stack_measure, theme_style, DepsError,
+    SAVED_FORMAT, SAVED_VERSION,
+};
 use crate::chart::{BarChart, ValueFormat};
 
 /// The slowest units [`TimingsReport`] shows by default.
@@ -99,6 +104,21 @@ impl Timings {
     pub fn parse(input: &str) -> Result<Self, DepsError> {
         check_size(input, "the timings report")?;
         let trimmed = input.trim_start_matches('\u{feff}').trim_start();
+        if trimmed.starts_with('{') {
+            // A saved report is one JSON object; timing-info lines are many.
+            if let Ok(value) = serde_json::from_str::<Value>(trimmed) {
+                match saved_report(&value) {
+                    Some("timings") => return Self::from_saved(&value),
+                    Some(other) => {
+                        return Err(DepsError::new(format!(
+                            "a saved {} report, not timings",
+                            clean(other)
+                        )))
+                    }
+                    None => {}
+                }
+            }
+        }
         if trimmed.starts_with('[') {
             let value: Value = serde_json::from_str(trimmed)
                 .map_err(|e| DepsError::new(format!("not a timings unit list: {e}")))?;
@@ -237,6 +257,72 @@ impl Timings {
     /// Timings of these units.
     pub fn new(units: Vec<Unit>) -> Self {
         Timings { units }
+    }
+
+    /// The units as JSON, to keep (say, as a CI baseline) and read back
+    /// with [`Timings::parse`].
+    pub fn to_json(&self) -> String {
+        let units: Vec<Value> = self
+            .units
+            .iter()
+            .map(|unit| {
+                serde_json::json!({
+                    "name": unit.name,
+                    "version": unit.version,
+                    "target": unit.target,
+                    "mode": unit.mode,
+                    "start": unit.start,
+                    "duration": unit.duration,
+                    "rmeta": unit.rmeta,
+                    "codegen": unit.codegen,
+                })
+            })
+            .collect();
+        let value = serde_json::json!({
+            "format": SAVED_FORMAT,
+            "report": "timings",
+            "version": SAVED_VERSION,
+            "units": units,
+        });
+        let mut out = serde_json::to_string_pretty(&value).unwrap_or_default();
+        out.push('\n');
+        out
+    }
+
+    fn from_saved(value: &Value) -> Result<Self, DepsError> {
+        let version = value.get("version").and_then(Value::as_u64).unwrap_or(0);
+        if version != SAVED_VERSION {
+            return Err(DepsError::new(format!(
+                "a saved timings report of version {version}; this reads version {SAVED_VERSION}"
+            )));
+        }
+        let list = value
+            .get("units")
+            .and_then(Value::as_array)
+            .ok_or_else(|| DepsError::new("a saved timings report with no `units`"))?;
+        check_count(list.len(), "timing units")?;
+        let mut units = Vec::with_capacity(list.len());
+        for unit in list {
+            let text = |key: &str| unit.get(key).and_then(Value::as_str);
+            let (Some(name), Some(version), Some(duration)) =
+                (text("name"), text("version"), seconds(unit.get("duration")))
+            else {
+                return Err(DepsError::new(
+                    "a saved timings report: a unit has no name, version or duration",
+                ));
+            };
+            units.push(Unit {
+                name: name.to_string(),
+                version: version.to_string(),
+                target: text("target").unwrap_or_default().to_string(),
+                mode: text("mode").unwrap_or("todo").to_string(),
+                start: seconds(unit.get("start")),
+                duration,
+                rmeta: seconds(unit.get("rmeta")),
+                codegen: seconds(unit.get("codegen")),
+            });
+        }
+        Ok(Timings { units })
     }
 
     /// The units, in the report's order.
@@ -496,6 +582,21 @@ mod tests {
         let late = r#"[{"name": "a", "version": "1", "duration": 1, "start": 1e308}]"#;
         let late = Timings::parse(late).unwrap();
         assert_eq!((late.units()[0].start, late.wall_clock()), (None, None));
+    }
+
+    #[test]
+    fn a_saved_report_reads_back() {
+        let lines = r#"{"reason":"timing-info","package_id":"syn 2.0.79 (registry+x)","target":{"kind":["lib"],"name":"syn"},"mode":"build","duration":2.5,"rmeta_time":1.0}"#;
+        let timings = Timings::parse(lines).unwrap();
+        let saved = timings.to_json();
+        assert_eq!(Timings::parse(&saved).unwrap(), timings);
+        let sizes = r#"{"format": "rich-deps", "report": "sizes", "version": 1, "units": []}"#;
+        let err = Timings::parse(sizes).unwrap_err().to_string();
+        assert!(err.contains("a saved sizes report"), "{err}");
+        let newer = r#"{"format": "rich-deps", "report": "timings", "version": 2, "units": []}"#;
+        assert!(Timings::parse(newer).is_err());
+        let bad = r#"{"format": "rich-deps", "report": "timings", "version": 1, "units": [{}]}"#;
+        assert!(Timings::parse(bad).is_err());
     }
 
     #[test]

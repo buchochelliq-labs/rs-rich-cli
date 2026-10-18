@@ -6,12 +6,17 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 use rich::{Console, Segment, Style};
+use rich_interact::{Button, MouseKind};
 
 use crate::node::{Axis, Node};
 use crate::reactive::{Runtime, Signal};
 use crate::screen::Rect;
 use crate::scrollbar::Bar;
 use crate::widget::{Canvas, DrawCx, EventCx, MeasureCx, Used, Widget, WidgetEvent};
+
+/// Items a turn of the mouse wheel moves a list's selection, as a table's
+/// rows.
+const WHEEL_STEP: isize = 3;
 
 /// When a list's or a table's highlight symbol keeps its column: ratatui's
 /// `HighlightSpacing`.
@@ -159,7 +164,8 @@ pub(crate) struct List {
 /// must, and draws it in the theme's `selected` style, filled to the full
 /// width. It is focusable, and while it has the focus ↑/k, ↓/j, Home/g,
 /// End/G, PageUp and PageDown move the selection; bind Enter (or anything
-/// else) yourself with [`on_key`](Node::on_key).
+/// else) yourself with [`on_key`](Node::on_key). A press on an item selects
+/// it, and the wheel moves the selection three items, as on a table.
 ///
 /// Its options are builders on the node: [`Node::symbol`] (a highlight
 /// symbol, with [`Node::highlight_spacing`] and [`Node::repeat_symbol`]),
@@ -741,25 +747,63 @@ impl Widget for List {
         let WidgetEvent::Mouse(mouse) = event else {
             return Used::No;
         };
-        let Some((rect, first, len, view)) = self.bar_at.get() else {
-            return Used::No;
-        };
-        match self.bar.mouse(cx, mouse, rect, first, len, view) {
-            Some(Some(to)) => {
-                // The view moves, and the selection with it, into view.
-                self.first.set(to);
-                if let Some(selected) = self.selection.get_untracked() {
-                    let last = (to + view).saturating_sub(1);
-                    let inside = selected.clamp(to, last.max(to));
-                    if inside != selected {
-                        self.selection.set(inside);
+        if let Some((rect, first, len, view)) = self.bar_at.get() {
+            match self.bar.mouse(cx, mouse, rect, first, len, view) {
+                Some(Some(to)) => {
+                    // The view moves, and the selection with it, into view.
+                    self.first.set(to);
+                    if let Some(selected) = self.selection.get_untracked() {
+                        let last = (to + view).saturating_sub(1);
+                        let inside = selected.clamp(to, last.max(to));
+                        if inside != selected {
+                            self.selection.set(inside);
+                        }
                     }
+                    cx.redraw();
+                    return Used::Yes;
                 }
-                cx.redraw();
+                Some(None) => return Used::Yes,
+                None => {}
+            }
+        }
+        // A press on an item selects it, as on a table's row; the wheel
+        // moves the selection up and down the screen.
+        match mouse.kind {
+            MouseKind::Down(button) => {
+                // A reorderable list's wrapper takes left presses: it
+                // selects, and drags.
+                if button == Button::Left && self.carried.get().is_some() {
+                    return Used::No;
+                }
+                let item = self
+                    .shown
+                    .borrow()
+                    .get(mouse.row as usize)
+                    .copied()
+                    .flatten();
+                let Some(item) = item else {
+                    return Used::No;
+                };
+                // The press goes on to the node's own handler (a right
+                // click's menu is about the item it selected), as it did
+                // before a press selected.
+                self.selection.set(item);
+                Used::No
+            }
+            MouseKind::ScrollUp | MouseKind::ScrollDown => {
+                let down = if mouse.kind == MouseKind::ScrollDown {
+                    WHEEL_STEP
+                } else {
+                    -WHEEL_STEP
+                };
+                let by = match self.options.borrow().direction {
+                    ListDirection::TopToBottom => down,
+                    ListDirection::BottomToTop => -down,
+                };
+                self.selection.step((self.items)().len(), by);
                 Used::Yes
             }
-            Some(None) => Used::Yes,
-            None => Used::No,
+            _ => Used::No,
         }
     }
 
