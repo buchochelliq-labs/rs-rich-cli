@@ -564,7 +564,11 @@ mod shell {
         );
         assert!(!pwsh.contains("--command"), "{pwsh}");
         // bash names the command only when history saved it.
-        assert!(bash.contains("__rich_shell_histnum='\\!'"), "{bash}");
+        assert!(
+            bash.contains("[[ $__rich_last != \"${__rich_shell_last-}\" ]]"),
+            "{bash}"
+        );
+        assert!(!bash.contains("@P}"), "{bash}");
         assert!(bash.contains("if (( __rich_saved )) && [["), "{bash}");
         assert!(bash.contains("\"${__rich_cmd[@]}\""), "{bash}");
         assert!(!bash.contains("--command \"$__rich_cmd\""), "{bash}");

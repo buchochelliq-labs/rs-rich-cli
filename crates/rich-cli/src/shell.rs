@@ -723,13 +723,14 @@ fn bash_script(args: &InitArgs, completions: &str) -> String {
          \x20   local __rich_code=$?\n",
     );
     if args.status {
-        // `\!` is the number the next history entry gets: unchanged when the
-        // command was not saved (HISTCONTROL, HISTIGNORE), and then `history
-        // 1` would name the one before it.
+        // The last history entry, number and all, is unchanged when the
+        // command was not saved (HISTCONTROL, HISTIGNORE): `history 1` would
+        // name the one before it. (Not `${x@P}`: macOS's bash is 3.2.)
         s.push_str(
-            "    local __rich_next=${__rich_shell_histnum@P} __rich_saved=0\n\
-             \x20   [[ $__rich_next != \"${__rich_shell_next-}\" ]] && __rich_saved=1\n\
-             \x20   __rich_shell_next=$__rich_next\n",
+            "    local __rich_last __rich_saved=0\n\
+             \x20   __rich_last=$(HISTTIMEFORMAT= builtin history 1)\n\
+             \x20   [[ $__rich_last != \"${__rich_shell_last-}\" ]] && __rich_saved=1\n\
+             \x20   __rich_shell_last=$__rich_last\n",
         );
     }
     s.push_str(
@@ -743,7 +744,7 @@ fn bash_script(args: &InitArgs, completions: &str) -> String {
         s.push_str(&format!(
             "        local __rich_end __rich_cmd=()\n\
              \x20       eval \"__rich_end=$__rich_shell_clock\"\n\
-             \x20       if (( __rich_saved )) && [[ $(HISTTIMEFORMAT= builtin history 1) =~ ^[[:space:]]*[0-9]+[*]?[[:space:]]+(.*)$ ]]; then\n\
+             \x20       if (( __rich_saved )) && [[ $__rich_last =~ ^[[:space:]]*[0-9]+[*]?[[:space:]]+(.*)$ ]]; then\n\
              \x20           __rich_cmd=(--command \"${{BASH_REMATCH[1]}}\")\n\
              \x20       fi\n\
              \x20       command {PROGRAM} shell status --exit \"$__rich_code\" \\\n\
@@ -763,9 +764,6 @@ fn bash_script(args: &InitArgs, completions: &str) -> String {
          }\n\
          PROMPT_COMMAND=\"__rich_shell_precmd${PROMPT_COMMAND:+;$PROMPT_COMMAND}\"\n",
     );
-    if args.status {
-        s.push_str("__rich_shell_histnum='\\!'\n");
-    }
     if args.marks {
         s.push_str("PS1='\\[\\e]133;A\\a\\]'\"$PS1\"'\\[\\e]133;B\\a\\]'\n");
     }
