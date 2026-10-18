@@ -857,6 +857,23 @@ test.
 - **Docs:** [ratatui's examples, rebuilt](docs/guide/intuituive/ratatui-examples.md),
   a new guide page; ratatui in the porting guide's credits;
   `docs/tapes/demo.tape` and `docs/tapes/demo2.tape` (not yet recorded).
+- **`widgets`, a widget gallery** (demo batch D2). `examples/widgets.rs`
+  rebuilds ratatui's widget examples, a tab each: blocks, text with a
+  masked secret and a link, lists (one bottom to top), a table and
+  ratatui's table app, tabs, scrollbars, a calendar, a pop-up over four
+  shadows, collapsed borders and buttons drawn by hand. The mouse picks
+  tabs, items, rows, panes and buttons.
+- **`charts`, a chart gallery.** `examples/charts.rs` rebuilds ratatui's
+  gauge, sparkline, bar, grouped bar, chart and canvas examples and its
+  `gauge`, `weather` and `chart` apps on rs-rich-ext's charts. A tick
+  draws only what moves, and `--frozen` stops the clock.
+- **`layout`, a layout explorer.** `examples/layout.rs` rebuilds
+  `constraint-explorer`, `constraints` and `flex`: a row of blocks you
+  edit, drawn in every `Justify` mode with its spacers; each kind of size
+  in real nodes; and `align_items` and wrapping, which ratatui lacks.
+- **Docs:** the galleries' section of the guide page, README rows, and
+  `docs/tapes/widgets.tape`, `charts.tape` and `layout.tape` (not yet
+  recorded).
 
 ### Charts that read aloud, distributions and small multiples; wide tables by column (ext 0.0.16)
 

@@ -1,0 +1,24 @@
+ Block  Text  List  Table  Tabs  Scrollbar  Calendar  Popup  Borders  Custom
+╭─ Behind ─────────────────────────────────────────────────────────────────────╮
+│This panel sits under the pop-up. Press p to open it: a box of 60% by 20% of  │
+│the screen, centred, with a shadow over what is below.                        │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│               ╭─────────────────── Popup ────────────────────╮               │
+│               │A pop-up over the blue panel, with a shadow.  │               │
+│               │p or Esc closes it.                           │               │
+│               ╰──────────────────────────────────────────────╯               │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭───────────────╮   ╭───────────────╮   ╭───────────────╮   ╭─────────────────╮
+│     Light     │░  │    Medium     │▒  │     Dark      │▓  │       Dim       │
+│               │░  │               │▒  │               │▓  │                 │
+╰───────────────╯░  ╰───────────────╯▒  ╰───────────────╯▓  ╰─────────────────╯
+ ░░░░░░░░░░░░░░░░░   ▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒   ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓
+←/→ or 1-9, 0 tabs · ? keys · Ctrl+P commands · q quit
