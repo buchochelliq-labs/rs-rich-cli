@@ -1,22 +1,26 @@
-~/project
- 1 src │ 2 project
-project/      │Name                                              Size│event_loop.rs
-              │src/                                                  │lib.rs
-              │tests/                                                │main.rs
-              │Cargo.toml                                        181B│render.rs
-              │README.md                                         1.4K│
-              │                                                      │
-              │                                                      │
-              │                                                      │
-              │                                                      │
-              │                                                      │
-              │                                                      │
-              │                                                      │
-              │                                                      │
-              │                                                      │
-              │                                                      │
-              │                                                      │
-╭─ Filter ────────────────────────────────────────────╮              │
-│? Filter ›                                           │              │
-╰─────────────────────────────────────────────────────╯              │
-1/4 · dir · sort name  ? keys
+~/project (filter: md)
+  project   │ README.md                                   1.4K│# orbit
+          ╭─ Filter: ────────────────────────────────────────────────────────────────────╮
+          │md                                                                            │ document
+          ╰──────────────────────────────────────────────────────────────────────────────╯ search.
+            │                                                 │
+            │                                                 │## What it does
+            │                                                 │
+            │                                                 │orbit watches a queue, hands each jo
+            │                                                 │terminal. Workers are plain function
+            │                                                 │once, retries a job that fails, and
+            │                                                 │
+            │                                                 │## Configuration
+            │                                                 │
+            │                                                 │| Setting | Default | Meaning |
+            │                                                 │|---|---|---|
+            │                                                 │| `workers` | 4 | Jobs that run at o
+            │                                                 │| `retries` | 3 | Tries before a job
+            │                                                 │| `port` | 8080 | Where the status p
+            │                                                 │
+            │                                                 │## Running it
+            │                                                 │
+            │                                                 │```bash
+            │                                                 │orbit --workers 8 queue.toml
+            │                                                 │```
+ NOR  1.4K  README.md                                                        -rw-r--r--  Top   1/1

@@ -1,22 +1,26 @@
-~/project
- 1 src │ 2 project
-project/      │Name                                              Size│event_loop.rs
-              │src/                                                  │lib.rs
-              │tests/                                                │main.rs
-              │Cargo.toml                                        181B│render.rs
-              │README.md                                         1.4K│
-              │                                                      │
-              │                                                      │
-              │                                                      │
-              │                                                      │
-              │                                                      │
-              │                                                      │
-              │                                                      │
-              │                                                      │
-              │                                                      │
-              │                                                      │
-              │                                                      │
-              │                                                      │
-              │                                                      │
-              │                                                      │
-1/4 · dir · sort name  ? keys
+~/project/src
+ 1 project  2 src
+  src       │ lib.rs                                      225B│//! orbit: watch a queue, run its jo
+  tests     │ render.rs                                   271B│
+  run.sh    │ main.rs                                     289B│mod event_loop;
+  Cargo.toml│ event_loop.rs                               611B│mod render;
+  readme-li…│                                                 │
+  README.md │                                                 │fn main() {
+            │                                                 │    let workers = std::env::args()
+            │                                                 │        .skip_while(|arg| arg != "--
+            │                                                 │        .nth(1)
+            │                                                 │        .and_then(|n| n.parse().ok()
+            │                                                 │        .unwrap_or(4);
+            │                                                 │    event_loop::run(workers);
+            │                                                 │}
+            │                                                 │
+            │                                                 │
+            │                                                 │
+            │                                                 │
+            │                                                 │
+            │                                                 │
+            │                                                 │
+            │                                                 │
+            │                                                 │
+            │                                                 │
+ NOR  289B  main.rs                                                          -rw-r--r--  75%   3/4
