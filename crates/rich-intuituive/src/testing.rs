@@ -217,14 +217,12 @@ pub fn assert_snapshot(path: impl AsRef<Path>, actual: &str) {
 }
 
 /// Assert that a screen matches its snapshot: `tests/snapshots/<name>.txt`
-/// under the crate being tested, the screen's [plain](testing::plain)
+/// under the crate being tested, the screen's [plain](crate::testing::plain)
 /// rows. The screen is a [`Driver`](crate::Driver), a
 /// [`Screen`](crate::screen::Screen) or the rows
 /// [`App::render_with`](crate::App::render_with) returns. Set
 /// `UPDATE_SNAPSHOTS=1` to write the file instead. See
 /// [`testing`](crate::testing).
-///
-/// [testing::plain]: crate::testing::plain
 #[macro_export]
 macro_rules! assert_screen {
     ($screen:expr, $name:expr $(,)?) => {
@@ -238,12 +236,10 @@ macro_rules! assert_screen {
     };
 }
 
-/// [`assert_screen!`], and the screen's [styled](testing::styled) rows
+/// [`assert_screen!`], and the screen's [styled](crate::testing::styled) rows
 /// against `tests/snapshots/<name>.styled.txt`: each row as console markup,
 /// so a change of colour or text style fails too. The screen is a
 /// [`Driver`](crate::Driver) or a [`Screen`](crate::screen::Screen).
-///
-/// [testing::styled]: crate::testing::styled
 #[macro_export]
 macro_rules! assert_screen_styled {
     ($screen:expr, $name:expr $(,)?) => {{
