@@ -496,6 +496,46 @@ def test_tables():
     assert screen(build_virtual, ["end", "q"], 16, 3)[-1] == "row 999"
 
 
+def test_a_wide_table_scrolls_across_with_frozen_columns():
+    people = [
+        ["1", "Ada Lovelace", "London", "United Kingdom"],
+        ["2", "Grace Hopper", "New York", "United States"],
+    ]
+    titles = ["id", "name", "city", "country"]
+
+    def build(options):
+        def build_():
+            cols = [Column(title, Size.Auto) for title in titles]
+            return table_with(cols, people, signal(0), options()).on_key("q", lambda cx: cx.quit())
+
+        return build_
+
+    # Natural widths 2, 12, 8 and 14: `›` says more are to the right.
+    out = screen(build(lambda: TableOptions().scroll_x()), ["q"], 24, 3)
+    assert out[0].startswith("id name") and out[0].endswith("›")
+    out = screen(build(lambda: TableOptions().scroll_x()), ["right", "q"], 24, 3)
+    assert out[0].startswith("‹name"), out
+    assert out[0].index("city") == out[1].index("London")
+    # The first column stays.
+    out = screen(build(lambda: TableOptions().freeze_columns(1)), ["right", "q"], 24, 3)
+    assert out[0].startswith("id ‹city"), out
+    assert out[1].startswith("1   London"), out
+
+    def build_virtual():
+        cols = [Column(f"column{i}", Size.Auto) for i in range(8)]
+        return virtual_table(
+            cols,
+            lambda: 100,
+            lambda r: [f"r{r}c{c}-cell" for c in range(8)],
+            signal(0),
+            TableOptions().freeze_columns(1),
+        ).on_key("q", lambda cx: cx.quit())
+
+    out = screen(build_virtual, ["shift+end", "q"], 30, 3)
+    assert out[0].startswith("column0   ‹column6   column7"), out
+    assert out[0].index("column7") == out[1].index("r0c7")
+
+
 def test_a_virtual_list_asks_only_for_the_rows_in_view():
     asked = []
 

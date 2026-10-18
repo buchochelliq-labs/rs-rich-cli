@@ -392,6 +392,33 @@ def test_pager_pages_any_renderable():
     assert "│ inside a panel" in record.frames[0]
 
 
+def test_pager_keeps_a_tables_header_on_top():
+    table = Table()
+    table.add_column("Name")
+    table.add_column("Size")
+    for row in range(1, 61):
+        table.add_row(f"file {row}", f"{row}K")
+    pager = Pager(table, sticky_header="table")
+    assert pager.sticky_header == "table"
+    record = pager.headless("pagedown pagedown q", width=30, height=12)
+    lines = record.last_frame.splitlines()
+    assert lines[0].startswith("┏") and "Name" in lines[1] and lines[2].startswith("┡")
+    assert "file 17" in lines[3]
+    # Without it the header scrolls away.
+    record = Pager(table).headless("pagedown pagedown q", width=30, height=12)
+    assert "Name" not in record.last_frame
+    # A number of lines, or nothing.
+    text = Text("\n".join(f"line {i}" for i in range(1, 51)))
+    record = Pager(text, sticky_header=2).headless("j j j q", width=30, height=6)
+    assert record.last_frame.splitlines()[:3] == ["line 1", "line 2", "line 6"]
+    assert Pager(text, sticky_header=2).sticky_header == 2
+    assert Pager(text).sticky_header is None
+    with pytest.raises(ValueError):
+        Pager(text, sticky_header="header")
+    with pytest.raises(TypeError):
+        Pager(text, sticky_header=1.5)
+
+
 # ---------------------------------------------------------------------------
 # Python components
 

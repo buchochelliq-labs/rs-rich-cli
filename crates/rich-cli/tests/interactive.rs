@@ -215,6 +215,11 @@ fn confirm_input_and_pager_degrade() {
         out, "\x1b[1mbold\x1b[0m\nplain\n",
         "the content, as it came"
     );
+    // Sticky lines change nothing without a terminal (#716).
+    for sticky in ["2", "table", "0"] {
+        let (out, _, code) = piped(&["pager", "--sticky", sticky], "a\nb\nc\n");
+        assert_eq!((out.as_str(), code), ("a\nb\nc\n", 0), "{sticky}");
+    }
 }
 
 #[test]
@@ -224,6 +229,7 @@ fn usage_errors_exit_2() {
         &["input", "extra"],
         &["confirm", "--default", "maybe"],
         &["pager", "a", "b"],
+        &["pager", "--sticky", "some"],
     ] {
         let (_, err, code) = piped(args, "x\n");
         assert_eq!(code, 2, "{args:?}: {err}");
@@ -812,6 +818,48 @@ mod pty {
         let out = pty.finish();
         assert!(out.contains("code=0"), "{out}");
         assert!(!out.contains("panicked"), "{out}");
+    }
+
+    /// The screen's rows as the terminal shows them now.
+    fn rows(pty: &Pty) -> Vec<String> {
+        pty.screen().lines().map(str::to_string).collect()
+    }
+
+    /// `rich data.csv --pager`, paged by `rich pager` (as `PAGER`), keeps
+    /// the table's header on top past the first screen (#716).
+    #[test]
+    fn a_table_paged_with_pager_keeps_its_header_on_top() {
+        let file = std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join("sticky-pager.csv");
+        let mut csv = String::from("name,size\n");
+        for row in 1..=120 {
+            csv.push_str(&format!("file {row},{row}\n"));
+        }
+        std::fs::write(&file, csv).unwrap();
+        // `Pty::start` turns `rich ` into the quoted binary and
+        // `--no-config`; `echo` unquotes it for `PAGER`, which is split on
+        // spaces.
+        let mut pty = Pty::start(&format!(
+            r#"PAGER="$(echo rich ) pager" rich '{}' --pager; echo "code=$?""#,
+            file.display()
+        ));
+        pty.wait_for("file 1 ");
+        for _ in 0..2 {
+            pty.send("\x1b[6~");
+            std::thread::sleep(Duration::from_millis(60));
+        }
+        // 23 rows of content a page: three of header, twenty of rows.
+        pty.wait_for("file 41 ");
+        let screen = rows(&pty);
+        assert!(screen[0].starts_with('┏'), "{screen:#?}");
+        assert!(
+            screen[1].contains("name") && screen[1].contains("size"),
+            "{screen:#?}"
+        );
+        assert!(screen[2].starts_with('┡'), "{screen:#?}");
+        assert!(screen[3].contains("file 41 "), "{screen:#?}");
+        pty.send("q");
+        let out = pty.finish();
+        assert!(out.contains("code=0"), "{out}");
     }
 
     #[test]

@@ -1263,6 +1263,7 @@ rich pager [OPTIONS] [FILE]
 | Option | Description |
 | --- | --- |
 | `--search <QUERY>` | Start with QUERY searched. |
+| `--sticky <LINES>` | Keep the first LINES lines on top while the rest scroll; `table` (the default) keeps a table's header there when the content starts with one, 0 nothing. |
 
 #### Arguments
 
@@ -1276,6 +1277,12 @@ Page coloured output
 
 ```sh
 git log --color | rich pager
+```
+
+Page a table with its header on top
+
+```sh
+PAGER='rich pager' rich data.csv --pager
 ```
 
 ### rich write

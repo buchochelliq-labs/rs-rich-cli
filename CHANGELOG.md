@@ -144,6 +144,48 @@ per browser session](#one-process-per-browser-session-web-002).
   **Docs:** [Text areas](docs/guide/intuituive/index.md#text-areas), the
   `editor` example and its recording.
 
+### Wide and long tables (interact 0.0.7, intuituive 0.0.4, cli 0.0.19)
+
+[#717](https://github.com/buchochelliq-labs/rs-rich-cli/issues/717) and
+[#716](https://github.com/buchochelliq-labs/rs-rich-cli/issues/716).
+
+- **Tables scroll across.** `TableOptions::scroll_x()` keeps an intuiTUIve
+  table's columns at their natural widths when they do not fit, and
+  `TableSelect::scroll_x(true)` does the same for rs-rich-interact's table.
+  Left and Right scroll a column at a time (Shift+Left and Shift+Right with
+  a cell cursor, which Left and Right move), Shift+Home and Shift+End go to
+  the ends, and Shift with the wheel scrolls too. A table that fits lays
+  out as before, and a table without the option is unchanged.
+- **The header stays over its columns.** It is cut where the rows are.
+  `‹` and `›` at its ends say that columns are out of view on that side,
+  readable without colour.
+- **The cursor stays in view.** The view follows an intuiTUIve table's
+  cell cursor and a `TableSelect`'s focused column.
+- **Frozen columns:** `freeze_columns(n)` keeps the first `n` columns in
+  place while the rest scroll, on both.
+- **`virtual_table_with(columns, len, row, selected, options)`** gives a
+  virtual table a cell cursor, resizable columns or a scroll across.
+- **Sticky table headers when paging.** `Pager::sticky_table_header(true)`
+  keeps a table's header on top while its rows scroll, when the content
+  starts with a table. `table_header_rows(lines)` finds the header (title,
+  top edge, header rows and the line under them) in rendered lines, so it
+  works on output rendered elsewhere. `Pager::sticky_header(n)` keeps the
+  first `n` lines instead, and `Viewport::sticky(n)` does the same for a
+  viewport. Content that does not start with a table, and output without a
+  terminal, are unchanged.
+- **`rich pager`** keeps a table's header on top by default; `--sticky
+  LINES` keeps the first LINES lines there instead, and `--sticky 0`
+  nothing. `rich ... --pager` still runs `MANPAGER`, `PAGER` or `less`;
+  with `PAGER='rich pager'` its tables page with their header on top.
+- **Python:** `TableOptions().scroll_x()` and `.freeze_columns(n)`,
+  `virtual_table(..., options=None)`, and `Pager(...,
+  sticky_header=None)`, which takes a number of lines or `"table"`.
+- **Docs:** [Wide tables](docs/guide/interact/explorers.md#wide-tables),
+  the [intuiTUIve table options](docs/guide/intuituive/index.md#sorting-resizing-and-a-cell-cursor),
+  the pager and viewport in the
+  [interact guide](docs/guide/interact/index.md#pager), and
+  [the CLI guide](docs/cli.md#ask-in-a-script).
+
 ### One process per browser session (web 0.0.2)
 
 0.0.19 workstream 3.

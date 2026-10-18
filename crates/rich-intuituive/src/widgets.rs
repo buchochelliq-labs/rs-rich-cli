@@ -87,6 +87,8 @@ struct Table {
     /// The column whose right edge is being dragged, and where the drag
     /// started.
     resizing: Cell<Option<(usize, u16)>>,
+    /// The scroll across of a table wider than its view (#717).
+    across: crate::table_scroll::Across,
 }
 
 /// Which way a table's column is sorted.
@@ -116,6 +118,18 @@ pub struct TableOptions {
     pub column: Option<Signal<usize>>,
     /// Columns resize by dragging the gap after a header.
     pub resizable: bool,
+    /// Columns keep their natural widths (a [`Size::Fixed`] column its
+    /// cells, the others their title and the cells in view) when they do
+    /// not fit, and the table scrolls across (#717): ←/→ (or h/l) without
+    /// a cell cursor, Shift+←/→ with one, Shift+Home/End to the ends and
+    /// Shift with the wheel. The header is cut where the rows are, `‹` and
+    /// `›` in it say that columns are out of view on that side, and the
+    /// view follows the cell cursor. A table that fits shares the width by
+    /// [`Size`] as before.
+    pub scroll_x: bool,
+    /// With [`scroll_x`](Self::scroll_x), the leading columns that stay in
+    /// place while the rest scroll.
+    pub freeze: usize,
 }
 
 impl TableOptions {
@@ -141,6 +155,21 @@ impl TableOptions {
     /// Columns the mouse resizes.
     pub fn resizable(mut self) -> TableOptions {
         self.resizable = true;
+        self
+    }
+
+    /// Scroll across when the columns do not fit (#717): see
+    /// [`scroll_x`](Self::scroll_x).
+    pub fn scroll_x(mut self) -> TableOptions {
+        self.scroll_x = true;
+        self
+    }
+
+    /// Keep the first `columns` columns in place while the rest scroll
+    /// across; turns [`scroll_x`](Self::scroll_x) on.
+    pub fn freeze_columns(mut self, columns: usize) -> TableOptions {
+        self.scroll_x = true;
+        self.freeze = columns;
         self
     }
 }
@@ -193,6 +222,41 @@ pub fn virtual_table(
     table_from(columns, rows, selected)
 }
 
+/// A [`virtual_table`] with a cell cursor, resizable columns or a scroll
+/// across, as `options` asks. Its rows are never all in hand, so it does
+/// not sort them itself ([`TableOptions::sort_rows`]); `row` may read a
+/// [`sort`](TableOptions::sort) signal.
+///
+/// ```
+/// use intuituive::prelude::*;
+/// use intuituive::widgets::{virtual_table_with, Column, TableOptions};
+///
+/// let app = App::new(|| {
+///     let columns = (0..6).map(|i| Column::new(&format!("col{i}"), Size::Auto)).collect();
+///     let row = |r: usize| (0..6).map(|c| format!("r{r}c{c}")).collect();
+///     let options = TableOptions::default().freeze_columns(1);
+///     virtual_table_with(columns, || 1000, row, signal(0), options).on_key("q", |cx| cx.quit())
+/// });
+/// // A column across, the first one frozen; `‹` and `›` say more are
+/// // out of view.
+/// let screen = app.render_with(&["right", "q"], 20, 2).unwrap();
+/// assert_eq!(screen[0], "col0 ‹col2 col3 col›");
+/// assert_eq!(screen[1], "r0c0  r0c2 r0c3 r0c4");
+/// ```
+pub fn virtual_table_with(
+    columns: Vec<Column>,
+    len: impl Fn() -> usize + 'static,
+    row: impl Fn(usize) -> Vec<String> + 'static,
+    selected: Signal<usize>,
+    options: TableOptions,
+) -> Node {
+    let rows = Rows::Lazy {
+        len: Box::new(len),
+        row: Box::new(row),
+    };
+    table_options(columns, rows, selected, options)
+}
+
 /// A list of markup rows, one selected, that asks only for the rows in
 /// view: `len` is how many there are and `row` makes one, so a list of a
 /// million rows costs a screenful. The keys, clicks and the wheel move the
@@ -234,6 +298,7 @@ pub fn virtual_list(
         dragged: RefCell::new(vec![None]),
         spans: RefCell::new(Vec::new()),
         resizing: Cell::new(None),
+        across: Default::default(),
     })
 }
 
@@ -296,6 +361,7 @@ fn table_options(
         dragged: RefCell::new(vec![None; count]),
         spans: RefCell::new(Vec::new()),
         resizing: Cell::new(None),
+        across: Default::default(),
     })
 }
 
@@ -405,6 +471,26 @@ impl Table {
         }
     }
 
+    /// How a key scrolls a table across (#717), if it does: ←/→ and h/l
+    /// without a cell cursor (which they move), Shift+←/→ either way, and
+    /// Shift+Home/End to the ends.
+    fn across_by(&self, key: &Key) -> Option<isize> {
+        let modifiers = key.modifiers;
+        if !self.options.scroll_x || modifiers.ctrl || modifiers.alt {
+            return None;
+        }
+        let free = modifiers.shift || self.options.column.is_none();
+        match key.code {
+            KeyCode::Left if free => Some(-1),
+            KeyCode::Right if free => Some(1),
+            KeyCode::Char('h') if self.options.column.is_none() => Some(-1),
+            KeyCode::Char('l') if self.options.column.is_none() => Some(1),
+            KeyCode::Home if modifiers.shift => Some(isize::MIN),
+            KeyCode::End if modifiers.shift => Some(isize::MAX),
+            _ => None,
+        }
+    }
+
     /// The column drawn at `x`, if any.
     fn column_at(&self, x: u16) -> Option<usize> {
         self.spans
@@ -416,7 +502,7 @@ impl Table {
     /// The column whose right edge (the gap after it) is at `x`.
     fn edge_at(&self, x: u16) -> Option<usize> {
         let spans = self.spans.borrow();
-        (0..spans.len().saturating_sub(1)).find(|&i| spans[i].0 + spans[i].1 == x)
+        (0..spans.len().saturating_sub(1)).find(|&i| spans[i].1 > 0 && spans[i].0 + spans[i].1 == x)
     }
 }
 
@@ -523,17 +609,53 @@ impl Widget for Table {
         // selected row.
         let marked = crate::a11y::text_mode();
         let indent: u16 = if marked { 2 } else { 0 };
-        let widths = solve(width.saturating_sub(indent), 1, &tracks);
+        let cell = self.options.column.map(|column| column.get());
+        // Scrolling across (#717), columns that do not fit keep their
+        // natural widths and a window shows some of them.
+        let window = self
+            .options
+            .scroll_x
+            .then(|| {
+                let natural: Vec<u16> = tracks
+                    .iter()
+                    .enumerate()
+                    .map(|(i, track)| match track.size {
+                        Size::Fixed(width) => width,
+                        _ => rows
+                            .iter()
+                            .filter_map(|row| row.get(i))
+                            .map(|cell| markup_width(cell))
+                            .chain([markup_width(&titles[i])])
+                            .max()
+                            .unwrap_or(0)
+                            .max(1),
+                    })
+                    .collect();
+                let window =
+                    self.across
+                        .window(indent, &natural, width, self.options.freeze, cell)?;
+                Some((natural, window))
+            })
+            .flatten();
+        let widths = match &window {
+            Some((natural, _)) => natural.clone(),
+            None => solve(width.saturating_sub(indent), 1, &tracks),
+        };
         {
             let mut spans = self.spans.borrow_mut();
             spans.clear();
-            let mut x = indent;
-            for w in &widths {
-                spans.push((x, *w));
-                x += w + 1;
+            match &window {
+                Some((_, window)) => spans.extend(window.spans.iter().copied()),
+                None => {
+                    let mut x = indent;
+                    for w in &widths {
+                        spans.push((x, *w));
+                        x += w + 1;
+                    }
+                }
             }
         }
-        let cell = self.options.column.map(|column| column.get());
+        let window = window.map(|(_, window)| window);
         let console = cx.console();
         let line = |cells: &mut dyn Iterator<Item = &str>, mark: bool| -> Vec<Segment> {
             let mut out = Vec::new();
@@ -551,6 +673,11 @@ impl Widget for Table {
         if self.header {
             let header_style = cx.style("table.header", "bold");
             let header = line(&mut titles.iter().map(String::as_str), false);
+            let header = match &window {
+                // Cut where the rows are, with `‹` and `›`.
+                Some(window) => window.header(&header),
+                None => header,
+            };
             canvas.lines_at(0, 0, width, 1, &[over(header, &header_style)]);
         }
         let highlight = if cx.focused() {
@@ -561,6 +688,9 @@ impl Widget for Table {
         for (i, row) in rows.iter().enumerate() {
             let mut cells = row.iter().map(String::as_str);
             let mut segments = line(&mut cells, first + i == selected);
+            if let Some(window) = &window {
+                segments = window.cut(&segments);
+            }
             if first + i == selected {
                 let used: usize = segments.iter().map(Segment::cell_length).sum();
                 if used < width as usize {
@@ -582,6 +712,12 @@ impl Widget for Table {
     fn event(&mut self, cx: &mut EventCx, event: &WidgetEvent) -> Used {
         let page = self.body.get().max(1) as isize;
         match event {
+            // A table that fits takes these keys as it always did.
+            WidgetEvent::Key(key) if self.across.wide.get() && self.across_by(key).is_some() => {
+                let by = self.across_by(key).expect("a scroll across");
+                self.across.scroll(by, self.options.freeze);
+                cx.redraw();
+            }
             WidgetEvent::Key(key) => {
                 let len = self.rows.len();
                 match (key.code, !key.modifiers.ctrl && !key.modifiers.alt) {
@@ -677,6 +813,20 @@ impl Widget for Table {
                             return Used::No;
                         }
                     }
+                }
+                // Shift with the wheel scrolls across (#717).
+                MouseKind::ScrollUp | MouseKind::ScrollDown
+                    if self.options.scroll_x && mouse.modifiers.shift =>
+                {
+                    let by = if mouse.kind == MouseKind::ScrollUp {
+                        -1
+                    } else {
+                        1
+                    };
+                    if !self.across.scroll(by, self.options.freeze) {
+                        return Used::No;
+                    }
+                    cx.redraw();
                 }
                 MouseKind::ScrollUp => self.step(-3),
                 MouseKind::ScrollDown => self.step(3),

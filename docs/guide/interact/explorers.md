@@ -212,6 +212,27 @@ After Down and Ctrl+Right twice, the second row is focused and its
 
 ![A table of four crates with the rs-rich-ext row focused and the licence column underlined](../../media/guide/guide_explorers-table.svg)
 
+## Wide tables
+
+A table wider than its list is cut at the right edge, unless it scrolls
+across (#717). `scroll_x(true)` turns that on:
+
+- **Keys:** Left and Right scroll a column at a time. Shift+Home and
+  Shift+End go to the first and last columns, and Shift with the wheel
+  scrolls too. The keys are `scroll-left`, `scroll-right`, `scroll-start`
+  and `scroll-end` in context `table`.
+- **The headings** are cut where the rows are, so each stays over its
+  column. `‹` at the start of the headings and `›` at the end say that
+  columns are out of view on that side.
+- **The focused column** stays in view: Ctrl+Right and Ctrl+Left scroll to
+  it.
+- **Frozen columns:** `freeze_columns(n)` keeps the first `n` columns in
+  place while the rest scroll, a key column say, and turns `scroll_x` on.
+
+```rust
+let table = TableSelect::new("Host", headers, rows).freeze_columns(1);
+```
+
 ## Reloading a list
 
 A list can be refilled without losing the user's place (#485), as `fzf

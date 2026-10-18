@@ -62,6 +62,7 @@ pub mod reactive;
 pub mod screen;
 mod sheet;
 mod split;
+mod table_scroll;
 pub mod task;
 mod text_area;
 mod tree;
