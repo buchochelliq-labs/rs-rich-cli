@@ -494,6 +494,39 @@ impl Redactor {
         out
     }
 
+    /// `value`, a field's value under the name `key`, masked as it would be
+    /// in `key=value`: whole when the [`Detector::KeyValue`] detector is on
+    /// and `key` is secret ([`is_secret_key`]), else what the rules match
+    /// in it ([`redact_str`](Self::redact_str)). For structured records,
+    /// where a value is not written next to its key.
+    ///
+    /// ```
+    /// use rich_ext::redact::Redactor;
+    ///
+    /// let redactor = Redactor::secrets();
+    /// assert_eq!(redactor.redact_field("password", "hunter 2"), "********");
+    /// assert_eq!(redactor.redact_field("user", "ann"), "ann");
+    /// assert_eq!(
+    ///     redactor.redact_field("note", "token=ghp_0123456789abcdefghijklmnopqrstuvwxyzAB"),
+    ///     "token=********"
+    /// );
+    /// ```
+    pub fn redact_field(&self, key: &str, value: &str) -> String {
+        let key_value = self
+            .rules
+            .iter()
+            .any(|rule| matches!(rule, Rule::Detector(Detector::KeyValue)));
+        if key_value && !value.is_empty() && is_secret_key(key) {
+            let whole = Match {
+                start: 0,
+                end: value.len(),
+                kind: Detector::KeyValue.name().to_string(),
+            };
+            return self.replacement(&whole, value, self.preserve_width);
+        }
+        self.redact_str(value)
+    }
+
     /// `text` holding ANSI escape sequences with every match masked. Rules
     /// see the visible text, so a secret interrupted by a colour change is
     /// still found; the escape sequences themselves are kept, with secrets

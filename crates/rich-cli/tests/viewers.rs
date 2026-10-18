@@ -503,7 +503,7 @@ fn redact_options_are_checked() {
     );
     let error = usage(&run(dir.path(), &["--redact", "main.rs"], b"", &[]));
     assert!(
-        error.contains("--redact only has an effect with --inspect or `rich capture`"),
+        error.contains("--redact only has an effect with --inspect, `rich capture` or `rich log`"),
         "{error}"
     );
 }

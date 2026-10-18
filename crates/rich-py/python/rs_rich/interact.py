@@ -3,7 +3,8 @@
 Components: ``Select`` and ``MultiSelect`` (fuzzy pickers over ``Item``s whose
 values are any Python objects), ``Input`` (one line, masked with
 ``password=True``), ``TextArea`` (several lines), ``Confirm`` (with
-``Choice``s), ``Form``, ``Pager``, ``FilePicker`` (a path), ``ColorPicker`` (a
+``Choice``s), ``Form``, ``Pager``, ``LogView`` (log records, as
+``rich log -i`` shows them), ``FilePicker`` (a path), ``ColorPicker`` (a
 colour string), ``AssetPicker`` (an emoji, box style or spinner), ``Reorder``
 (the items in a new order), and ``DatePicker``, ``TimePicker`` and
 ``DateTimePicker`` (a ``datetime.date``, ``datetime.time`` or naive
@@ -62,6 +63,7 @@ from ._native import (
     InteractLabel,
     InteractLayer,
     InteractLayers,
+    InteractLogView,
     InteractMap,
     InteractMultiSelect,
     InteractOutcome,
@@ -96,6 +98,7 @@ Choice = InteractChoice
 Confirm = InteractConfirm
 Form = InteractForm
 Pager = InteractPager
+LogView = InteractLogView
 TextArea = InteractTextArea
 FilePicker = InteractFilePicker
 ColorPicker = InteractColorPicker
@@ -144,6 +147,7 @@ __all__ = [
     "Confirm",
     "Form",
     "Pager",
+    "LogView",
     "TextArea",
     "FilePicker",
     "ColorPicker",

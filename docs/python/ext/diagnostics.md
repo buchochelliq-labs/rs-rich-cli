@@ -1,8 +1,8 @@
 # Diagnostics and logs
 
 Modules: `rs_rich.ext.diagnostic`, `stacktrace`, `dashboard`, `hyperlink`,
-`highlighter`, `event`, `log_handler`. The Rust side is `rich_ext::diagnostic`
-and friends.
+`highlighter`, `event`, `log_handler`, `log_stream`. The Rust side is
+`rich_ext::diagnostic` and friends.
 
 ## Diagnostic
 
@@ -144,3 +144,40 @@ handler.emit(console, StructuredEvent("GET /index", severity="warning", fields={
 ```
 
 ![A structured event, and one rendered by the event handler](../media/ext-diagnostics-events.svg)
+
+## Log streams
+
+`rs_rich.ext.log_stream` is the library behind `rich log` (0.0.19): records
+read from JSON Lines or text logs (logfmt, `LEVEL message`, timestamped lines,
+access logs), the lines after a record that no parser reads (a stack trace)
+kept with it, filters by level and field, runs of repeats folded, and groups
+by trace id with a summary.
+
+```python
+from rs_rich.console import Console
+from rs_rich.ext.log_stream import LogAssembler, LogFilter, LogSummary
+
+lines = LogAssembler()
+records = [lines.push(line) for line in [
+    "level=info msg=started trace_id=t1",
+    "ERROR request failed trace_id=t1",
+    "Traceback (most recent call last):",
+    "WARN disk low",
+]]
+records = [record for record in records if record] + [lines.flush()]
+keep = LogFilter(level="warn+", predicates=["trace_id"])
+summary = LogSummary("trace")
+for record in records:
+    summary.read()
+    if keep.matches(record):
+        summary.shown(record)
+        print(record.message, record.continuation)
+Console(width=60).print(summary)
+```
+
+```text
+request failed ['Traceback (most recent call last):']
+Summary: 1 of 3 records shown
+  error 1
+  1 trace with errors: t1 (1 error)
+```

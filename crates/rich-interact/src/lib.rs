@@ -30,7 +30,8 @@
 //!   [`Pager`], [`FilePicker`], [`ColorPicker`], [`AssetPicker`],
 //!   [`ThemePicker`], [`Reorder`] (#720), and [`DatePicker`],
 //!   [`TimePicker`] and [`DateTimePicker`] (#719, on the [`datetime`]
-//!   types), built on the above with a [`fuzzy`] matcher, and with
+//!   types), [`LogView`] (#724, a live view of log records), built on
+//!   the above with a [`fuzzy`] matcher, and with
 //!   the `data` feature `DataExplorer`, for JSON, YAML, TOML and the other
 //!   formats `rich_ext::data` reads;
 //! - [`clipboard`]: copy to the terminal's clipboard with OSC 52, when it
@@ -111,8 +112,9 @@ pub use component::{Component, Context, Flow, View};
 pub use components::DataExplorer;
 pub use components::{
     Answers, AssetKind, AssetPicker, Choice, ColorFormat, ColorPicker, Confirm, DatePicker,
-    DateTimePicker, FileMode, FilePicker, Form, Input, MultiSelect, Pager, PreviewLayout, Reorder,
-    Select, Suggestion, TableSelect, TextArea, Theme, ThemePicker, TimePicker, TreeSelect, Value,
+    DateTimePicker, FileMode, FilePicker, Form, Input, LogEvent, LogView, MultiSelect, Pager,
+    PreviewLayout, Reorder, Select, Suggestion, TableSelect, TextArea, Theme, ThemePicker,
+    TimePicker, TreeSelect, Value,
 };
 pub use compose::{
     Axis, Column, ComponentExt, Label, Layer, LayerHandle, Layers, Rect, Row, Size, Split, Stack,

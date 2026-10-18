@@ -50,7 +50,7 @@ Choose at most one; the default auto-detects .md/.rst/.json/.csv/.tsv/.ipynb, .m
 | `--csv` | Render RESOURCE as a CSV/TSV table. |
 | `--ipynb` | Render RESOURCE as a Jupyter notebook. |
 | `--jsonl`, `--ndjson` | Stream JSON Lines / NDJSON records. |
-| `--log` | Stream common structured-log JSONL records. |
+| `--log` | Stream log records: JSON Lines, logfmt and common text formats, filtered, followed and grouped. |
 | `--gif` | Animate GIFs side by side; pipes receive the first frame. |
 | `-u`, `--rule` | Draw a horizontal rule (RESOURCE is its title) |
 | `--diff` | Compare two images perceptually, two text files as a diff (syntax-aware; ANSI captures by visible text and style), or render one patch such as `git diff` output. |
@@ -148,6 +148,21 @@ Choose at most one; the default auto-detects .md/.rst/.json/.csv/.tsv/.ipynb, .m
 | `--columns <COLUMN[,COLUMN...]>...` | With `rich profile`, profile only these columns, by header, in this order; repeatable. |
 | `--top <N>` | With `rich profile`, the most common values shown for a column that is not numeric (default 5) |
 
+### Log
+
+| Option | Description |
+| --- | --- |
+| `--level <LEVEL>...` | With `rich log`, keep only records at LEVEL (trace, debug, info, warn, error or fatal), or at it and above with a `+` (`warn+`); several with commas or by repeating it. |
+| `--where <EXPR>...` | With `rich log`, keep only records whose fields pass EXPR: FIELD=VALUE, FIELD!=VALUE, FIELD>N (and >=, <, <=), FIELD~REGEX, FIELD!~REGEX, FIELD (it is there) or !FIELD (it is not); numbers, levels and times compare as such, dots reach nested fields; repeatable, and every one must pass. |
+| `-f`, `--follow` | With `rich log`, read FILE, then what is appended to it, starting again when it is truncated or replaced (log rotation), until Ctrl+C. |
+| `--collapse`, `--no-collapse` | With `rich log`, fold a run of identical records (their times aside) into the first and a `× N` count; on by default with --follow and --interactive. |
+| `--fields` | With `rich log`, list each record's fields under it, one a line, instead of on its line. |
+| `--parser <NAME>` | With `rich log`, how lines that are not JSON are read: auto tries each format; logfmt, level (`LEVEL message`), timestamp (a line that starts with a time) and access (nginx and Apache) read one; text reads none. A line no parser reads joins the record before it, or is shown as text. Default: `auto`. Possible values: `auto`, `logfmt`, `level`, `timestamp`, `access`, `text`. |
+| `--time <MODE>` | With `rich log`, show each time as written (absolute), since the first record shown (relative), or not at all (none) Default: `absolute`. Possible values: `absolute`, `relative`, `none`. |
+| `--output <FORMAT>` | With `rich log`, write the records kept as text, or as one JSON object a line (jsonl) for another program. Default: `text`. Possible values: `text`, `jsonl`. |
+| `--summary`, `--no-summary` | With `rich log`, end with a summary: records shown, counts by level and, with --group, the groups with errors; on by default with --group (on standard error with --output jsonl) |
+| `-i`, `--interactive` | With `rich log` on a terminal, show the records in a live view that follows the end: / filters, Space pauses, Enter shows a record's fields, q quits; without a terminal the records stream as usual. |
+
 ### Image
 
 | Option | Description |
@@ -185,7 +200,7 @@ Choose at most one; the default auto-detects .md/.rst/.json/.csv/.tsv/.ipynb, .m
 | `--max-depth <N>` | Fold containers deeper than N levels. |
 | `--max-length <N>` | Show at most N items per container. |
 | `--show-paths` | Append each value's path. |
-| `--redact` | Mask secret-looking keys such as password, token and api_key. With `rich capture`, mask secrets in the output before it is shown, exported or recorded: secret-named `key=value` values, bearer tokens, GitHub/GitLab/Slack/Stripe/npm/`sk-` tokens, AWS key ids, JWTs and URL passwords. Capture redaction is experimental and best effort: check the output before sharing it. |
+| `--redact` | Mask secret-looking keys such as password, token and api_key. With `rich capture`, mask secrets in the output before it is shown, exported or recorded: secret-named `key=value` values, bearer tokens, GitHub/GitLab/Slack/Stripe/npm/`sk-` tokens, AWS key ids, JWTs and URL passwords; with `rich log`, the same in each record's fields and lines. Capture redaction is experimental and best effort: check the output before sharing it. |
 | `--compare <PATH>` | Show added, removed and changed values against another document. |
 
 ### Diff & ANSI
@@ -208,11 +223,11 @@ Choose at most one; the default auto-detects .md/.rst/.json/.csv/.tsv/.ipynb, .m
 | `--offset <N>` | With `rich hex`, start N bytes in (decimal or 0x hex) |
 | `--length <N>` | With `rich hex`, show at most N bytes. |
 | `--bytes-per-line <N>` | With `rich hex`, bytes on each line (default: fit the width, up to 16) |
-| `--group <N>` | With `rich hex`, bytes per group. Default: `8`. |
+| `--group <N\|BY>` | With `rich hex`, bytes per group (default 8); with `rich log`, group records by trace, span or correlation id (trace_id, span_id, correlation_id, request_id, ...) under a header each, with a summary at the end. |
 | `--limit <N>` | With `rich unicode`, show at most N graphemes. |
 | `--show-secrets` | With `rich env`, show values whose names look secret instead of masking them. |
 | `--cast <FILE>` | With `rich capture`, also write an asciicast v2 recording (`asciinema play FILE`) |
-| `--redact-pattern <REGEX>...` | With `rich capture`, also mask matches of REGEX (only its `secret` group when it has one); repeatable. Experimental: check the output before sharing it. |
+| `--redact-pattern <REGEX>...` | With `rich capture` and `rich log`, also mask matches of REGEX (only its `secret` group when it has one); repeatable. Experimental: check the output before sharing it. |
 
 ### Export
 
@@ -313,7 +328,7 @@ Self-contained examples; ignores config; accepts --no-color.
 | `csv`, `tsv` | Render CSV/TSV as a table (`--csv`) |
 | `ipynb`, `notebook` | Render a Jupyter notebook (`--ipynb`) |
 | `jsonl`, `ndjson` | Stream JSON Lines / NDJSON records (`--jsonl`) |
-| `log`, `logs` | Stream common structured-log JSONL records (`--log`) |
+| `log`, `logs` | Stream log records (`--log`): JSON Lines, logfmt and common text formats; filter with --level and --where, follow a file with -f, group with --group |
 | `gif` | Animate GIFs (`--gif`) |
 | `diff` | Compare two images, two text files, or render one patch (`--diff`) |
 | `image` | Render a still image as ASCII/Braille/blocks/quadrants/Sixel (`--image`) |
@@ -552,13 +567,59 @@ rich jsonl [OPTIONS] [RESOURCE]
 
 ### rich log
 
-Stream common structured-log JSONL records (`--log`)
+Stream log records (`--log`): JSON Lines, logfmt and common text formats; filter with --level and --where, follow a file with -f, group with --group
 
 #### Usage
 
 ```text
 rich log [OPTIONS] [RESOURCE]
 ```
+
+#### Mode options
+
+| Option | Description |
+| --- | --- |
+| `--log-presentation <MODE>` | With --log, select log presentation. Default: `plain`. Possible values: `plain`, `rich`. |
+
+#### Log
+
+| Option | Description |
+| --- | --- |
+| `--level <LEVEL>...` | With `rich log`, keep only records at LEVEL (trace, debug, info, warn, error or fatal), or at it and above with a `+` (`warn+`); several with commas or by repeating it. |
+| `--where <EXPR>...` | With `rich log`, keep only records whose fields pass EXPR: FIELD=VALUE, FIELD!=VALUE, FIELD>N (and >=, <, <=), FIELD~REGEX, FIELD!~REGEX, FIELD (it is there) or !FIELD (it is not); numbers, levels and times compare as such, dots reach nested fields; repeatable, and every one must pass. |
+| `-f`, `--follow` | With `rich log`, read FILE, then what is appended to it, starting again when it is truncated or replaced (log rotation), until Ctrl+C. |
+| `--collapse`, `--no-collapse` | With `rich log`, fold a run of identical records (their times aside) into the first and a `× N` count; on by default with --follow and --interactive. |
+| `--fields` | With `rich log`, list each record's fields under it, one a line, instead of on its line. |
+| `--parser <NAME>` | With `rich log`, how lines that are not JSON are read: auto tries each format; logfmt, level (`LEVEL message`), timestamp (a line that starts with a time) and access (nginx and Apache) read one; text reads none. A line no parser reads joins the record before it, or is shown as text. Default: `auto`. Possible values: `auto`, `logfmt`, `level`, `timestamp`, `access`, `text`. |
+| `--time <MODE>` | With `rich log`, show each time as written (absolute), since the first record shown (relative), or not at all (none) Default: `absolute`. Possible values: `absolute`, `relative`, `none`. |
+| `--output <FORMAT>` | With `rich log`, write the records kept as text, or as one JSON object a line (jsonl) for another program. Default: `text`. Possible values: `text`, `jsonl`. |
+| `--summary`, `--no-summary` | With `rich log`, end with a summary: records shown, counts by level and, with --group, the groups with errors; on by default with --group (on standard error with --output jsonl) |
+| `-i`, `--interactive` | With `rich log` on a terminal, show the records in a live view that follows the end: / filters, Space pauses, Enter shows a record's fields, q quits; without a terminal the records stream as usual. |
+
+#### Viewers
+
+| Option | Description |
+| --- | --- |
+| `--group <N\|BY>` | With `rich hex`, bytes per group (default 8); with `rich log`, group records by trace, span or correlation id (trace_id, span_id, correlation_id, request_id, ...) under a header each, with a summary at the end. |
+| `--redact-pattern <REGEX>...` | With `rich capture` and `rich log`, also mask matches of REGEX (only its `secret` group when it has one); repeatable. Experimental: check the output before sharing it. |
+
+#### Inspect
+
+| Option | Description |
+| --- | --- |
+| `--redact` | Mask secret-looking keys such as password, token and api_key. With `rich capture`, mask secrets in the output before it is shown, exported or recorded: secret-named `key=value` values, bearer tokens, GitHub/GitLab/Slack/Stripe/npm/`sk-` tokens, AWS key ids, JWTs and URL passwords; with `rich log`, the same in each record's fields and lines. Capture redaction is experimental and best effort: check the output before sharing it. |
+
+#### Output & reports
+
+| Option | Description |
+| --- | --- |
+| `--sanitize`, `--no-sanitize` | Replace input terminal controls, JSON/notebook strings, titles and captions with visible inert text. On by default for `rich view`, `rich schema` and text `rich diff`; --no-sanitize turns it off there. |
+
+#### Layout
+
+| Option | Description |
+| --- | --- |
+| `-w`, `--width <N>` | Render the output N columns wide (the console keeps its own width, so --left/--center/--right still use it) |
 
 #### Arguments
 
@@ -681,7 +742,7 @@ rich inspect [OPTIONS] [RESOURCE]
 | `--max-depth <N>` | Fold containers deeper than N levels. |
 | `--max-length <N>` | Show at most N items per container. |
 | `--show-paths` | Append each value's path. |
-| `--redact` | Mask secret-looking keys such as password, token and api_key. With `rich capture`, mask secrets in the output before it is shown, exported or recorded: secret-named `key=value` values, bearer tokens, GitHub/GitLab/Slack/Stripe/npm/`sk-` tokens, AWS key ids, JWTs and URL passwords. Capture redaction is experimental and best effort: check the output before sharing it. |
+| `--redact` | Mask secret-looking keys such as password, token and api_key. With `rich capture`, mask secrets in the output before it is shown, exported or recorded: secret-named `key=value` values, bearer tokens, GitHub/GitLab/Slack/Stripe/npm/`sk-` tokens, AWS key ids, JWTs and URL passwords; with `rich log`, the same in each record's fields and lines. Capture redaction is experimental and best effort: check the output before sharing it. |
 | `--compare <PATH>` | Show added, removed and changed values against another document. |
 
 #### Arguments
@@ -779,7 +840,7 @@ rich hex [OPTIONS] [RESOURCE]
 | `--offset <N>` | With `rich hex`, start N bytes in (decimal or 0x hex) |
 | `--length <N>` | With `rich hex`, show at most N bytes. |
 | `--bytes-per-line <N>` | With `rich hex`, bytes on each line (default: fit the width, up to 16) |
-| `--group <N>` | With `rich hex`, bytes per group. Default: `8`. |
+| `--group <N\|BY>` | With `rich hex`, bytes per group (default 8); with `rich log`, group records by trace, span or correlation id (trace_id, span_id, correlation_id, request_id, ...) under a header each, with a summary at the end. |
 
 #### Layout
 
@@ -864,13 +925,13 @@ rich capture [OPTIONS] [RESOURCE]
 | Option | Description |
 | --- | --- |
 | `--cast <FILE>` | With `rich capture`, also write an asciicast v2 recording (`asciinema play FILE`) |
-| `--redact-pattern <REGEX>...` | With `rich capture`, also mask matches of REGEX (only its `secret` group when it has one); repeatable. Experimental: check the output before sharing it. |
+| `--redact-pattern <REGEX>...` | With `rich capture` and `rich log`, also mask matches of REGEX (only its `secret` group when it has one); repeatable. Experimental: check the output before sharing it. |
 
 #### Inspect
 
 | Option | Description |
 | --- | --- |
-| `--redact` | Mask secret-looking keys such as password, token and api_key. With `rich capture`, mask secrets in the output before it is shown, exported or recorded: secret-named `key=value` values, bearer tokens, GitHub/GitLab/Slack/Stripe/npm/`sk-` tokens, AWS key ids, JWTs and URL passwords. Capture redaction is experimental and best effort: check the output before sharing it. |
+| `--redact` | Mask secret-looking keys such as password, token and api_key. With `rich capture`, mask secrets in the output before it is shown, exported or recorded: secret-named `key=value` values, bearer tokens, GitHub/GitLab/Slack/Stripe/npm/`sk-` tokens, AWS key ids, JWTs and URL passwords; with `rich log`, the same in each record's fields and lines. Capture redaction is experimental and best effort: check the output before sharing it. |
 
 #### Output & reports
 

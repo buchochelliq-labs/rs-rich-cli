@@ -121,7 +121,7 @@ impl ViewerOptions {
             (
                 "--redact-pattern",
                 !self.redact_patterns.is_empty(),
-                &["capture"],
+                &["capture", "log"],
             ),
         ]
         .into_iter()

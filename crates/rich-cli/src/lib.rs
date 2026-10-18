@@ -50,6 +50,7 @@ mod documents;
 mod inspect;
 #[cfg(feature = "interact")]
 mod interactive;
+mod logs;
 #[cfg(feature = "art")]
 mod micro;
 mod plugins;
@@ -702,6 +703,8 @@ struct Cli {
     data: inspect::DataOptions,
     tools: tools::ToolOptions,
     viewers: viewers::ViewerOptions,
+    /// `rich log`'s filters, follow mode, groups and live view.
+    logs: logs::LogOptions,
 }
 
 /// `--mermaid-backend`.
@@ -1110,6 +1113,11 @@ const VALUE_OPTIONS: &[&str] = &[
     "--batch-input-root",
     "--batch-name-template",
     "--log-presentation",
+    "--level",
+    "--where",
+    "--parser",
+    "--time",
+    "--output",
     "--mermaid-backend",
     "--dot-backend",
     "--metadata",
@@ -1892,6 +1900,7 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
     let mut data = inspect::DataOptions::default();
     let mut tool_options = tools::ToolOptions::default();
     let mut viewer_options = viewers::ViewerOptions::default();
+    let mut log_options = logs::LogOptions::default();
     // Whether any paging flag was given: `view` pages automatically otherwise.
     let mut paging_explicit = false;
     // `rich ansi explain FILE`: the second word belongs to the command.
@@ -1981,6 +1990,11 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
             continue;
         }
         if tool_options.parse_option(arg, &mut iter)? {
+            continue;
+        }
+        // Before the viewer options: `--group trace` is `rich log`'s, and
+        // `--group 4` is left for `rich hex`.
+        if log_options.parse_option(arg, &mut iter)? {
             continue;
         }
         if viewer_options.parse_option(arg, &mut iter)? {
@@ -2497,11 +2511,13 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
         }
     }
     if let Some(flag) = data
-        .inspect_only_option(mode == Mode::Capture)
+        .inspect_only_option(matches!(mode, Mode::Capture | Mode::Log))
         .filter(|_| mode != Mode::Inspect)
     {
         if flag == "--redact" {
-            return Err("--redact only has an effect with --inspect or `rich capture`".into());
+            return Err(
+                "--redact only has an effect with --inspect, `rich capture` or `rich log`".into(),
+            );
         }
         return Err(format!("{flag} only has an effect with --inspect"));
     }
@@ -2523,6 +2539,20 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
     {
         return Err(format!("{flag} only has an effect with --ansi-explain"));
     }
+    if mode == Mode::Log {
+        // `--group 4` went to `rich hex`'s options: say what `rich log` takes.
+        if viewer_options
+            .given()
+            .iter()
+            .any(|(flag, _)| *flag == "--group")
+        {
+            return Err("--group requires trace, span or correlation with `rich log`".into());
+        }
+        log_options.validate(resources.first().map(String::as_str))?;
+        if log_options.follows() && (watch || batch) {
+            return Err("--follow cannot be combined with --watch or --batch".into());
+        }
+    }
     for (flag, commands) in viewer_options
         .given()
         .into_iter()
@@ -2530,6 +2560,7 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
         .chain(chart.given())
         .chain(schema_options.given())
         .chain(profile_options.given())
+        .chain(log_options.given())
     {
         if !commands.contains(&mode_name(mode)) {
             return Err(format!(
@@ -3066,6 +3097,7 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
         data,
         tools: tool_options,
         viewers: viewer_options,
+        logs: log_options,
     }))
 }
 
@@ -5107,6 +5139,9 @@ fn run_json_lines(cli: &Cli, console: &Console, log_mode: bool) -> ExitCode {
             "streaming JSONL/log mode reads files or stdin, not URLs",
         );
     }
+    if log_mode {
+        return logs::run(cli, console);
+    }
 
     let mut input: Box<dyn BufRead> = match cli.resource.as_deref() {
         Some(path) if path != "-" => {
@@ -5170,18 +5205,9 @@ fn run_json_lines(cli: &Cli, console: &Console, log_mode: bool) -> ExitCode {
         if cli.sanitize {
             sanitize_json_value(&mut value);
         }
-        let wrote = if log_mode {
-            if cli.log_presentation == "rich" {
-                write_rendered_stdout(console, &structured_log::event(&value))
-            } else {
-                let text = Text::new(format_log_record(&value));
-                write_rendered_stdout(console, &text)
-            }
-        } else {
-            let source = serde_json::to_string(&value).expect("JSON value serializes");
-            let json = Json::new(&source).expect("serialized JSON parses");
-            write_rendered_stdout(console, &json)
-        };
+        let source = serde_json::to_string(&value).expect("JSON value serializes");
+        let json = Json::new(&source).expect("serialized JSON parses");
+        let wrote = write_rendered_stdout(console, &json);
         if let Err(error) = wrote {
             if error.kind() == std::io::ErrorKind::BrokenPipe {
                 return success(cli);
@@ -5194,64 +5220,6 @@ fn run_json_lines(cli: &Cli, console: &Console, log_mode: bool) -> ExitCode {
         }
     }
     success(cli)
-}
-
-fn format_log_record(value: &serde_json::Value) -> String {
-    let Some(object) = value.as_object() else {
-        return serde_json::to_string(value).expect("JSON value serializes");
-    };
-    let take_value = |keys: &[&'static str]| {
-        keys.iter().find_map(|key| {
-            object.get(*key).map(|value| {
-                let display = value.as_str().map(str::to_string).unwrap_or_else(|| {
-                    serde_json::to_string(value).expect("JSON value serializes")
-                });
-                (*key, display, value.is_string())
-            })
-        })
-    };
-    let timestamp = take_value(&["timestamp", "time", "@timestamp"]);
-    let level = take_value(&["level", "severity"]);
-    let message = take_value(&["message", "msg"]);
-    let mut rest = serde_json::Map::new();
-    for (key, value) in object {
-        let consumed = timestamp
-            .as_ref()
-            .is_some_and(|(consumed, _, _)| consumed == key)
-            || level
-                .as_ref()
-                .is_some_and(|(consumed, _, _)| consumed == key)
-            || message
-                .as_ref()
-                .is_some_and(|(consumed, _, _)| consumed == key);
-        if !consumed {
-            rest.insert(key.clone(), value.clone());
-        }
-    }
-    let mut parts = Vec::new();
-    if let Some((_, timestamp, _)) = timestamp {
-        parts.push(timestamp);
-    }
-    if let Some((_, level, is_string)) = level {
-        parts.push(if is_string {
-            level.to_ascii_uppercase()
-        } else {
-            level
-        });
-    }
-    if let Some((_, message, _)) = message {
-        parts.push(message);
-    }
-    if !rest.is_empty() {
-        parts.push(
-            serde_json::to_string(&serde_json::Value::Object(rest)).expect("JSON value serializes"),
-        );
-    }
-    if parts.is_empty() {
-        serde_json::to_string(value).expect("JSON value serializes")
-    } else {
-        parts.join(" ")
-    }
 }
 
 /// Whether `value` matches rich-cli's `is_number`, i.e. Python's

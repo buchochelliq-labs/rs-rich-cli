@@ -1,0 +1,15 @@
+booting checkout service v2.4.1
+{"time":"2026-10-18T10:00:00.000Z","level":"info","msg":"request started","service":"api","trace_id":"4bf92f3577b34da6","path":"/cart"}
+{"time":"2026-10-18T10:00:00.250Z","level":"info","msg":"request started","service":"web","trace_id":"00f067aa0ba902b7","path":"/"}
+{"time":"2026-10-18T10:00:01.100Z","level":"warn","msg":"upstream slow","service":"api","trace_id":"4bf92f3577b34da6","latency_ms":812}
+{"time":"2026-10-18T10:00:01.900Z","level":"error","msg":"upstream timed out","service":"api","trace_id":"4bf92f3577b34da6","latency_ms":3000}
+Traceback (most recent call last):
+  File "checkout/cart.py", line 42, in total
+TimeoutError: inventory did not answer in 3s
+time=2026-10-18T10:00:02Z level=info msg="health check" service=web
+time=2026-10-18T10:00:03Z level=info msg="health check" service=web
+time=2026-10-18T10:00:04Z level=info msg="health check" service=web
+2026-10-18T10:00:05.000Z ERROR web::db: connection refused host=db port=5432 trace_id=00f067aa0ba902b7
+10.0.0.7 - - [18/Oct/2026:10:00:06 +0000] "GET /cart HTTP/1.1" 200 512 "-" "curl/8.4"
+10.0.0.7 - - [18/Oct/2026:10:00:07 +0000] "GET /missing HTTP/1.1" 404 0 "-" "curl/8.4"
+WARN disk 91% full on /var

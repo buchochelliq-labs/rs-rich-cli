@@ -441,16 +441,164 @@ tail -f app.jsonl | rich jsonl -
 rich --jsonl events.ndjson
 ```
 
-Malformed records fail fast by default and report the line number. Use `log` /
-`--log` when records follow common structured-log shapes:
+Malformed records fail fast by default and report the line number.
+
+### Logs: `rich log`
+
+Use `log` / `--log` for logs: JSON Lines and the common text formats. Each
+record is written as it is read:
 
 ```bash
+rich log app.jsonl
 tail -f app.jsonl | rich log -
 ```
 
 Objects with `timestamp`, `time` or `@timestamp`, `level` or `severity`, and
 `message` or `msg` are flattened into a readable log line; remaining fields are
 printed as compact JSON. Other values fall back to compact JSON.
+`--log-presentation rich` shows typed fields and coloured levels instead (see
+[Rich log presentation](#rich-log-presentation)). With none of the options
+below, the output is what it has always been.
+
+**Text logs (0.0.19).** A line that is not JSON is read by the first parser
+that knows its format, and becomes a record with fields like a JSON one:
+
+| `--parser` | Reads | For example |
+|---|---|---|
+| `logfmt` | `key=value` pairs | `time=… level=info msg="cache warm" keys=12` |
+| `level` | a line that starts with a level | `ERROR request failed host=db`, `[warn] disk full`, `INFO:app.db:connected` |
+| `timestamp` (`rfc3339`) | a line that starts with an ISO 8601 time | `2026-10-18T10:00:01Z WARN app::db: pool low size=2` |
+| `access` (`nginx`, `apache`) | access logs, the level from the status (5xx error, 4xx warn) | `127.0.0.1 - - [18/Oct/2026:10:00:02 +0000] "GET / HTTP/1.1" 404 0` |
+
+`--parser auto`, the default, tries each in that order; `--parser logfmt`
+(or another name) reads with that one only, and `--parser text` with none.
+Words such as `host=db` at the end of a message become fields too. A line no
+parser reads is never dropped: after a record it joins it, as a stack trace
+does, and is written indented under it; before any record it is written as
+text. Blank lines are skipped, and colour codes are taken out before a line
+is read.
+
+```bash
+rich log app.log --parser logfmt
+```
+
+**Filters.** `--level LEVEL` keeps one level, `LEVEL+` that level and the
+ones above it (trace, debug, info, warn, error, fatal); give several with
+commas or by repeating it. A record keeps its continuation lines.
+
+```bash
+rich log app.jsonl --level warn+
+rich log app.jsonl --level debug,error
+```
+
+`--where EXPR` keeps the records whose fields pass a test. Repeat it: every
+test must pass.
+
+| `EXPR` | Keeps a record whose field… |
+|---|---|
+| `service=api` | equals the value (`==` works too) |
+| `service!=api` | is missing, or differs |
+| `latency_ms>500`, `>=`, `<`, `<=` | orders after (or before) the value |
+| `msg~time(d )?out` | matches the regular expression |
+| `msg!~retry` | is missing, or does not match |
+| `trace_id` | is there |
+| `!trace_id` | is missing |
+
+Dots reach into nested fields (`http.status`) and lists (`tags.0`), and
+`message`, `level` and `time` also find `msg`, `severity` and `timestamp`.
+Levels compare by severity (`level>=warn`), numbers as numbers (a logfmt
+value that is a number too), times as instants whatever their offsets
+(`time>=2026-10-18T10:00:00Z`), and anything else as text. A missing field
+fails every test but `!=`, `!~` and `!FIELD`. The value may be quoted.
+
+```bash
+rich log app.jsonl --where 'service=api' --where 'latency_ms>500'
+rich log app.jsonl --where 'msg~(?i)timeout'
+```
+
+**Follow a file.** `-f` / `--follow` reads FILE, then what is appended to
+it, until Ctrl+C (exit 130). When the file is truncated or replaced, as log
+rotation does, it says so on stderr and reads on from the start of the new
+content. Standard input needs no `--follow`: it is read until it ends.
+
+```bash
+rich log -f /var/log/app.jsonl --level warn+
+```
+
+**Fold repeats.** `--collapse` writes a run of identical records (their
+times aside) once, with `× N (last TIME)` under it. It is on by default with
+`--follow` (where, on a terminal, the count grows in place) and in the live
+view; `--no-collapse` turns it off there.
+
+```bash
+rich log app.jsonl --collapse
+```
+
+**Groups and a summary.** `--group trace`, `span` or `correlation` gathers
+the records by their trace id (`trace_id`, `traceId`, `trace.id`, …), span id
+or correlation id (`correlation_id`, `request_id`, `x-request-id`, …): a
+header for each group with its records, errors, warnings and how long it
+took, its records indented under it, and the records without an id last.
+It ends with a summary: the records shown, counts by level, and the groups
+with errors. With `--follow`, a header is written whenever the group
+changes.
+
+```bash
+rich log app.jsonl --group trace
+```
+
+```text
+▸ trace 4bf92f3577b34da6 · 3 records · 1 error · 1 warning · 1.900s
+  2026-10-18T10:00:00.000Z INFO request started {"service":"api","trace_id":"4bf92f3577b34da6"}
+  …
+Summary: 12 records
+  error 2 · warn 3 · info 6 · no level 1
+  2 traces with errors: 4bf92f3577b34da6 (1 error), 00f067aa0ba902b7 (1 error)
+```
+
+`--summary` adds the summary without groups, and `--no-summary` leaves it
+out.
+
+**Fields and times.** `--fields` lists each record's fields under it, one a
+line, instead of on its line. `--time relative` shows each time since the
+first record shown (`+1.250s`), `--time none` leaves times out, and `--time
+absolute`, the default, shows them as written.
+
+```bash
+rich log app.jsonl --fields --time relative
+```
+
+**JSON out.** `--output jsonl` writes the records kept as JSON Lines, for
+another program: JSON records with their fields unchanged, text records as
+objects of their fields, and continuation lines as a `continuation` list.
+Read back by `rich log`, a record shows as it did. With `--summary` the
+summary goes to stderr.
+
+```bash
+rich log app.log --level error --output jsonl | jq .msg
+```
+
+**Redaction.** `--redact` masks secrets as `rich capture --redact` does:
+values under secret-looking keys (`password`, `token`, …), and bearer tokens,
+API keys, JWTs and URL passwords in any text, with `********`.
+`--redact-pattern REGEX` masks what REGEX matches too; repeat it. Filters
+see the record before it is masked.
+
+```bash
+rich log app.jsonl --redact --redact-pattern 'card=\d+'
+```
+
+**Live view.** `-i` / `--interactive`, on a terminal, shows the records in a
+view that follows the end as they arrive (with `-f`, or from a pipe). `/`
+types a filter that applies as you type: words that look like `--where`
+tests (`service=api`, `latency_ms>500`) test a field, and other words must
+appear in the record. Space pauses and resumes, Enter shows the record's
+fields and continuation lines, Up and Down move, End follows again, and `q`
+quits. Without a terminal the records are written as without `-i`.
+
+```bash
+rich log -i -f app.jsonl
+```
 
 If the delimiter cannot be determined and the file is not `.csv`/`.tsv`, `rich`
 reports it and **exits non-zero** rather than inventing a one-column table:

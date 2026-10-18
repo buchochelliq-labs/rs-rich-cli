@@ -1898,6 +1898,9 @@ pub(super) fn leaf(py: Python<'_>, component: &Bound<'_, PyAny>) -> PyResult<Opt
     if let Some(node) = super::order_date::leaf(component)? {
         return Ok(Some(node));
     }
+    if let Some(node) = super::log_view::leaf(component)? {
+        return Ok(Some(node));
+    }
     if component.is_instance_of::<compose::Base>() {
         let object = PyComponent::new(component.clone().unbind(), true);
         return Ok(Some(Box::new(move || Box::new(object))));
@@ -1965,6 +1968,10 @@ pub(crate) fn drive(py: Python<'_>, component: &Bound<'_, PyAny>, mode: Mode) ->
         Err(mode) => mode,
     };
     let mode = match super::order_date::drive(py, component, mode)? {
+        Ok(record) => return Ok(record),
+        Err(mode) => mode,
+    };
+    let mode = match super::log_view::drive(py, component, mode)? {
         Ok(record) => return Ok(record),
         Err(mode) => mode,
     };
