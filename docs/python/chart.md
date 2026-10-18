@@ -24,6 +24,11 @@ markers.
 | `StatusMatrix`, `ChartState` | rows and columns of states (pass, fail, skip, flaky, your own) |
 | `KpiCard` | a label, a value, a delta, a sparkline and a status |
 | `Timeline`, `TimelineSpan` | labelled ranges on a scale, overlaps stacked, milestones |
+| `Distribution`, `DistributionSet` | the count, quantiles and mean of values, with a box-and-whisker strip; several on one scale |
+| `SmallMultiples` | a grid of titled sparklines, bar charts or line charts on one value scale |
+
+Every chart also says what it shows in words: `describe(chart)` gives its
+accessible text ([below](#accessible-text)).
 
 Settings are keyword arguments. Three are shared:
 
@@ -252,3 +257,87 @@ console.print(chart.Timeline(
 ```
 
 ![A timeline with overlapping spans and a milestone](media/chart-timeline.svg)
+
+## Distributions
+
+```text
+Distribution(values, *, label=None, range=None, strip_width=None, format=None,
+             unit=None, charset="auto", style=None, numbers=True)
+DistributionSet(distributions=None, *, range=None, strip_width=None, numbers=True,
+                charset="auto", shared_scale=True)
+quantile(values, q) -> float | None
+summary(values) -> dict
+```
+
+A `Distribution` is a box-and-whisker strip on one line (`├` and `┤` at
+the smallest and largest value, a shaded box from the first quartile to the
+third, the median `█`, the 95th percentile a `┼`), then the count, `min`,
+`p25`, `p50`, `p75`, `p95`, `max` and `mean`. `None`, NaN and infinities are
+left out and counted (`1 ignored`). Quantiles are interpolated linearly,
+numpy's default, so `quantile(values, q)` matches `numpy.quantile`.
+`summary` (and a distribution's `.summary`) is a dict of the numbers, with
+`None` for each when there are no values.
+
+A `DistributionSet` stacks distributions on one scale: `Distribution`s,
+`(label, values)` pairs, or a dict of label to values. `shared_scale=False`
+gives each row its own.
+
+```python
+latency = [12, 15, 14, 18, 25, 31, 28, 22, 35, 41, 38, 30, 26, 33, 47, 52, 140, None]
+console.print(chart.Distribution(latency, label="latency", unit="ms", format=0))
+console.print(chart.DistributionSet(
+    {"api": latency, "web": [v * 0.6 for v in latency[:-1]], "worker": [v * 1.5 for v in latency[:-1]]},
+    strip_width=24,
+    numbers=False,
+))
+print(round(chart.quantile(latency, 0.95), 2), chart.summary(latency)["ignored"])
+```
+
+![A distribution with its numbers, three on one scale, and a quantile](media/chart-distribution.svg)
+
+## Small multiples
+
+```text
+SmallMultiples(items, *, columns=None, min_cell_width=24, gap=2, shared_scale=True,
+               range=None, height=None, note=True, charset="auto")
+```
+
+`items` are `(title, chart)` pairs or a dict of title to chart, each a
+`Sparkline`, `BarChart` or `LineChart`. The grid has `columns` columns, or as
+many cells of at least `min_cell_width` as fit the width (one at 40 cells,
+three at 80, four at 120). Every chart is put on one value scale, the range
+of them all (or `range`), so a taller bar is a larger value in any chart;
+`shared_scale=False` leaves each its own. A note under the grid says the
+scale and holds the line charts' one legend. `columns_at(width)` and
+`scale` say how it is laid out.
+
+```python
+requests = [12, 15, 14, 18, 25, 31, 28, 22, 35, 41, 38, 30, 26, 33, 47, 52]
+services = {"api": 1.0, "web": 0.6, "worker": 0.3, "cron": 0.1}
+grid = chart.SmallMultiples(
+    {name: chart.Sparkline([v * share for v in requests]) for name, share in services.items()},
+    min_cell_width=18,
+)
+console.print(grid)
+print(chart.describe(grid))
+```
+
+![Four sparklines on one scale, and what the grid says](media/chart-multiples.svg)
+
+## Accessible text
+
+```text
+describe(chart, width=80) -> str
+```
+
+`describe` gives what a chart says to a screen reader: a few lines of plain
+words, no glyphs. The first line says what it is, how much it holds and the
+ranges of its axes (`Line chart, 2 series, x from 0 to 23, y from 12 to
+52`); the next lines its key values: a series' `min`, `max`, `last` and
+trend, the largest bars, a gauge's place on its scale (`Gauge cpu: 72%, 72
+percent of 0% to 100%, band high, target 80%`). A trend is the
+least-squares line through the values: `up` or `down` when it rises or
+falls by a tenth of their range or more, else `flat`.
+`rs_rich.ext.a11y.accessible_text(chart)` gives the same. The
+[Rust guide](https://buchochelliq-labs.github.io/rs-rich-cli/guide/ext/charts/#accessible-text)
+lists what each chart says.

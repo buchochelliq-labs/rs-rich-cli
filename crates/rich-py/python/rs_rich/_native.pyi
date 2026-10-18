@@ -4558,6 +4558,77 @@ class Timeline:
     @property
     def rows(self) -> List[str]: ...
 
+ChartSummary = Dict[str, Optional[float]]
+
+def chart_quantile(values: Iterable[Optional[float]], q: float) -> Optional[float]: ...
+def chart_summary(values: Iterable[Optional[float]]) -> ChartSummary: ...
+def chart_describe(chart: Any, width: int = 80) -> str: ...
+
+class Distribution:
+    def __init__(
+        self,
+        values: Iterable[Optional[float]],
+        *,
+        label: Optional[str] = None,
+        range: Optional[Tuple[float, float]] = None,
+        strip_width: Optional[int] = None,
+        format: ChartFormat = None,
+        unit: Optional[str] = None,
+        charset: ChartCharset = "auto",
+        style: Optional[str] = None,
+        numbers: bool = True,
+    ) -> None: ...
+    @property
+    def summary(self) -> ChartSummary: ...
+    @property
+    def values(self) -> List[float]: ...
+    @property
+    def label(self) -> str: ...
+    def quantile(self, q: float) -> Optional[float]: ...
+
+class DistributionSet:
+    def __init__(
+        self,
+        distributions: Union[
+            None,
+            Iterable[Union[Distribution, Tuple[str, Iterable[Optional[float]]]]],
+            Dict[str, Iterable[Optional[float]]],
+        ] = None,
+        *,
+        range: Optional[Tuple[float, float]] = None,
+        strip_width: Optional[int] = None,
+        numbers: bool = True,
+        charset: ChartCharset = "auto",
+        shared_scale: bool = True,
+    ) -> None: ...
+    @property
+    def scale(self) -> Tuple[float, float]: ...
+    @property
+    def labels(self) -> List[str]: ...
+
+class SmallMultiples:
+    def __init__(
+        self,
+        items: Union[
+            Iterable[Tuple[str, Union[Sparkline, BarChart, LineChart]]],
+            Dict[str, Union[Sparkline, BarChart, LineChart]],
+        ],
+        *,
+        columns: Optional[int] = None,
+        min_cell_width: int = 24,
+        gap: int = 2,
+        shared_scale: bool = True,
+        range: Optional[Tuple[float, float]] = None,
+        height: Optional[int] = None,
+        note: bool = True,
+        charset: ChartCharset = "auto",
+    ) -> None: ...
+    def columns_at(self, width: int) -> int: ...
+    @property
+    def scale(self) -> Optional[Tuple[float, float]]: ...
+    @property
+    def titles(self) -> List[str]: ...
+
 # --- area: diagram (rs-rich-diagram) ---
 
 # ``rs_rich.diagram``: a ``Graph`` built in code, drawn by ``Diagram`` or
@@ -4926,14 +4997,22 @@ class VirtualTable:
         max_column_width: int = 40,
         fit_window: bool = False,
         title: Optional[str] = None,
+        column_offset: int = 0,
+        visible_columns: Optional[int] = None,
+        fit_columns: bool = False,
+        frozen_columns: int = 0,
     ) -> None: ...
     offset: int
     height: int
+    column_offset: int
     @property
     def row_count(self) -> int: ...
     @property
     def max_offset(self) -> int: ...
     def scroll_by(self, rows: int) -> None: ...
+    def scroll_columns_by(self, columns: int) -> None: ...
+    def shown_columns(self, width: int = 80) -> List[int]: ...
+    def column_position(self, width: int = 80, *, ascii: bool = False) -> Optional[str]: ...
     def window(self) -> Tuple[int, int]: ...
     def position(self, *, ascii: bool = False) -> str: ...
 

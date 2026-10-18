@@ -60,6 +60,37 @@ impl Widget for Leaf {
     }
 }
 
+/// What a [`described`](crate::described) node draws, and (when the last
+/// argument asks) what it says: its accessible text at that width.
+pub(crate) type Describe =
+    Box<dyn Fn(&Console, u16, u16, bool) -> (Vec<Vec<Segment>>, Option<String>)>;
+
+/// A leaf that says what it shows: its accessible name is the text of
+/// what it last drew.
+pub(crate) struct Described {
+    pub draw: Describe,
+    pub text: Option<String>,
+}
+
+impl Widget for Described {
+    fn name(&self) -> &'static str {
+        "described"
+    }
+
+    fn measure(&mut self, cx: &MeasureCx, axis: Axis, width: u16, height: u16) -> u16 {
+        extent(
+            &(self.draw)(cx.console(), width.max(1), height, false).0,
+            axis,
+        )
+    }
+
+    fn draw(&mut self, cx: &mut DrawCx, canvas: &mut Canvas) {
+        let (lines, text) = (self.draw)(cx.console(), canvas.width(), canvas.height(), true);
+        self.text = text;
+        canvas.lines(&lines);
+    }
+}
+
 /// Children along an axis: [`column`](crate::column) and [`row`](crate::row).
 pub(crate) struct Stack {
     pub axis: Axis,

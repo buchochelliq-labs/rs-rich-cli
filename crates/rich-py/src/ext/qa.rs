@@ -29,8 +29,8 @@ use crate::text::Text;
 
 /// `accessible_text(renderable, width=80)`: linear text for a screen
 /// reader. Tables become `header: value` records, badges and diagnostics
-/// keep their words; anything else is rendered plainly with decoration
-/// dropped (`semantic_text`).
+/// keep their words, charts say what they show; anything else is rendered
+/// plainly with decoration dropped (`semantic_text`).
 #[pyfunction]
 #[pyo3(signature = (renderable, width=80))]
 fn accessible_text(
@@ -59,6 +59,9 @@ fn accessible_text(
     }
     if let Ok(value) = renderable.extract::<PyRef<'_, Diagnostic>>() {
         return Ok(value.inner.accessible_text(width));
+    }
+    if let Some(text) = crate::chart::accessible_text_of(renderable, width) {
+        return Ok(text);
     }
     common::scoped(py, width, 10_000, false, || {
         let value = renderable::to_renderable(renderable, None)?;

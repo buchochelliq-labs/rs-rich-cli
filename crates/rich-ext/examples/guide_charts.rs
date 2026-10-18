@@ -5,11 +5,12 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use rich::{Cell, ColorSystem, Columns, Console, HorizontalAlign, Layout, Panel, Table, Text};
+use rich_ext::a11y::AccessibleText;
 use rich_ext::chart::{
     Axis, Band, Bar, BarChart, BarGroup, BulletChart, Canvas, Charset, Chart, Dataset, Direction,
-    FillGauge, Gauge, GraphType, Heatmap, Histogram, KpiCard, Labels, LineChart, LineGauge,
-    LineSet, MapResolution, Marker, Orientation, Series, Sparkline, State, Status, StatusMatrix,
-    Timeline, ValueFormat,
+    Distribution, DistributionSet, FillGauge, Gauge, GraphType, Heatmap, Histogram, KpiCard,
+    Labels, LineChart, LineGauge, LineSet, MapResolution, Marker, Orientation, Series,
+    SmallMultiples, Sparkline, State, Status, StatusMatrix, Timeline, ValueFormat,
 };
 use rich_ext::palette::{okhsv, tailwind};
 
@@ -537,6 +538,91 @@ fn show_palette(console: &Console) {
 }
 // --8<-- [end:palette]
 
+// --8<-- [start:accessible]
+fn show_accessible(console: &Console) {
+    // What each chart says to a screen reader: plain words, no glyphs.
+    let gauge = Gauge::new("cpu", 72.0)
+        .range(0.0, 100.0)
+        .target(80.0)
+        .band(Band::new(60.0, "ok"))
+        .band(Band::new(85.0, "high"))
+        .unit("%");
+    let texts = [
+        Sparkline::new(REQUESTS).accessible_text(80),
+        traffic().accessible_text(80),
+        gauge.accessible_text(80),
+        Histogram::new(latencies()).bins(8).accessible_text(80),
+    ];
+    console.print(&Text::new(texts.join("\n\n")));
+}
+// --8<-- [end:accessible]
+
+// --8<-- [start:distribution]
+fn show_distribution(console: &Console) {
+    // One set of values: a box-and-whisker strip, then the numbers.
+    let latency = Distribution::new(latencies())
+        .label("latency")
+        .format(ValueFormat::Fixed(0));
+    console.print(&latency);
+    // Several on one scale, their numbers in columns.
+    let set = DistributionSet::new()
+        .push(
+            Distribution::new(latencies())
+                .label("api")
+                .format(ValueFormat::Fixed(0)),
+        )
+        .push(
+            Distribution::new(latencies().iter().map(|v| v * 0.6 + 15.0))
+                .label("web")
+                .format(ValueFormat::Fixed(0)),
+        )
+        .push(
+            Distribution::new(latencies().iter().map(|v| v * 1.3))
+                .label("worker")
+                .format(ValueFormat::Fixed(0)),
+        );
+    console.print(&set);
+}
+// --8<-- [end:distribution]
+
+// --8<-- [start:multiples]
+fn show_multiples(console: &Console) {
+    // A sparkline per service on one scale: the busiest stands out.
+    let services = [
+        ("api", 1.0),
+        ("web", 0.6),
+        ("worker", 0.3),
+        ("search", 0.8),
+        ("auth", 0.45),
+        ("cron", 0.1),
+    ];
+    let grid = SmallMultiples::new(
+        services.map(|(name, share)| (name, Sparkline::new(REQUESTS.map(|v| v * share)))),
+    );
+    console.print(&grid);
+    // Line charts in three columns, with one legend under them.
+    let region = |phase: f64| {
+        let wave = move |i: usize| ((i as f64 + phase) / 4.0).sin();
+        LineChart::new()
+            .series(Series::from_values(
+                "p50",
+                (0..24).map(|i| 40.0 + 15.0 * wave(i)),
+            ))
+            .series(Series::from_values(
+                "p99",
+                (0..24).map(|i| 70.0 + 25.0 * wave(i)),
+            ))
+            .height(5)
+    };
+    let regions = [
+        ("eu", region(0.0)),
+        ("us", region(3.0)),
+        ("ap", region(6.0)),
+    ];
+    console.print(&SmallMultiples::new(regions).columns(3));
+}
+// --8<-- [end:multiples]
+
 fn main() {
     let shots = Shots::from_args();
     shots.shot("sparkline", 60, "Sparkline", show_sparklines);
@@ -579,6 +665,9 @@ fn main() {
         "Tailwind shades and an Okhsv swatch",
         show_palette,
     );
+    shots.shot("accessible", 76, "Accessible text", show_accessible);
+    shots.shot("distribution", 92, "Distributions", show_distribution);
+    shots.shot("multiples", 76, "Small multiples", show_multiples);
 }
 
 /// `--svg DIR` writes each shot as `DIR/guide_charts-<shot>.svg`; without it,

@@ -461,6 +461,59 @@ impl Renderable for Canvas {
     }
 }
 
+/// `Canvas, x from -180 to 180, y from -90 to 90: a world map, 4 points, 3
+/// lines`, then the text printed on it (`Text: London, Paris`). A canvas
+/// holds shapes rather than data, so it says what it drew.
+impl crate::a11y::AccessibleText for Canvas {
+    fn accessible_text(&self, _width: usize) -> String {
+        use super::describe::counted;
+        let format = super::ValueFormat::Compact;
+        let axis = |[a, b]: [f64; 2]| super::describe::range(a.min(b), a.max(b), format);
+        let mut head = format!(
+            "Canvas, x {}, y {}",
+            axis(self.x_bounds),
+            axis(self.y_bounds)
+        );
+        let (mut points, mut lines, mut areas, mut circles) = (0, 0, 0, 0);
+        let mut map = false;
+        let mut text = Vec::new();
+        for op in &self.ops {
+            match op {
+                Op::Points(p, _) => points += p.len(),
+                Op::Line(..) => lines += 1,
+                Op::Area(..) => areas += 1,
+                Op::Circle(..) => circles += 1,
+                Op::Map(..) => map = true,
+                Op::Print(_, t, _) if !t.trim().is_empty() => text.push(t.trim().to_string()),
+                _ => {}
+            }
+        }
+        let mut drawn = Vec::new();
+        if map {
+            drawn.push("a world map".to_string());
+        }
+        for (n, one, many) in [
+            (points, "point", "points"),
+            (lines, "line", "lines"),
+            (areas, "area segment", "area segments"),
+            (circles, "circle", "circles"),
+        ] {
+            if n > 0 {
+                drawn.push(counted(n, one, many));
+            }
+        }
+        if drawn.is_empty() {
+            head.push_str(": empty");
+        } else {
+            head.push_str(&format!(": {}", drawn.join(", ")));
+        }
+        if !text.is_empty() {
+            head.push_str(&format!("\nText: {}", text.join(", ")));
+        }
+        head
+    }
+}
+
 /// Whether to draw in ASCII only on `console`.
 pub(crate) fn is_ascii(console: &Console, options: &ConsoleOptions) -> bool {
     Charset::Auto.resolve(console, options, Charset::Braille) == Charset::Ascii
@@ -989,6 +1042,39 @@ impl CellGrid {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn accessible_text_says_what_was_drawn() {
+        use crate::a11y::AccessibleText;
+        let canvas = Canvas::new()
+            .x_bounds(-1.0, 1.0)
+            .y_bounds(-1.0, 1.0)
+            .paint(|p| {
+                p.circle(0.0, 0.0, 0.8, "cyan");
+                p.line(-1.0, -1.0, 1.0, 1.0, "red");
+                p.points(&[(0.0, 0.0), (0.5, 0.5)], "");
+                p.layer();
+                p.print(-0.2, 0.0, "hi", "bold");
+            });
+        assert_eq!(
+            canvas.accessible_text(80),
+            "Canvas, x from -1 to 1, y from -1 to 1: 2 points, 1 line, 1 circle\nText: hi"
+        );
+        let world = Canvas::new()
+            .x_bounds(-180.0, 180.0)
+            .y_bounds(-90.0, 90.0)
+            .paint(|p| {
+                p.map(MapResolution::Low, "green");
+            });
+        assert_eq!(
+            world.accessible_text(80),
+            "Canvas, x from -180 to 180, y from -90 to 90: a world map"
+        );
+        assert_eq!(
+            Canvas::new().accessible_text(80),
+            "Canvas, x from 0 to 1, y from 0 to 1: empty"
+        );
+    }
 
     fn console(width: usize) -> Console {
         Console::builder().width(width).color_system(None).build()

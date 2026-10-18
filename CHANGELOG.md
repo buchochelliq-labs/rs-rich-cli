@@ -663,6 +663,55 @@ test.
   sections and two pictures. The intuiTUIve guide covers the new calendar
   options, and the ratatui matrix marks these rows as built.
 
+### Charts that read aloud, distributions and small multiples; wide tables by column (ext 0.0.16)
+
+0.0.19 workstream 14 (#726, #702).
+
+- **Charts read aloud.** Every chart implements `a11y::AccessibleText`:
+  sparklines, bars and their groups, histograms, line, scatter and area
+  charts, gauges, heatmaps, status matrices, KPI cards, timelines and the
+  canvas. Each says what it is, its axes' ranges and its key values, in a
+  few lines of plain words: `Sparkline, 24 values: min 12, max 52, last
+  14, trend up`, `Gauge cpu: 72%, 72 percent of 0% to 100%, band high`. A
+  trend is the least-squares line through the values: up or down when it
+  moves by a tenth of their range, flat otherwise. The text is the same at
+  any width, on any console.
+- **In an intuiTUIve app** (intuituive 0.0.4), `described(move || ..)`
+  draws a chart as `renderable(..)` does, and names it by that text. The
+  accessibility tree, linear mode and a screen reader read the
+  description, and read it again when the data changes.
+- **Distributions.** `Distribution` sums values up on one line: a
+  box-and-whisker strip, then the count, `min`, `p25`, `p50`, `p75`,
+  `p95`, `max` and `mean`. NaN and infinite values are left out and
+  counted. Quantiles are numpy's default, linear interpolation;
+  `Summary::of` and `quantile` give them without drawing.
+  `DistributionSet` stacks several on one scale, their numbers in columns.
+- **Small multiples.** `SmallMultiples` lays charts out in a grid, each
+  under its title, fitted to the width: one column at 40 cells, three at
+  80, four at 120, or `columns(n)`. Sparklines, bar charts, line charts and
+  `Chart`s (a `Facet` each) share one value scale. A note under the grid
+  says the scale and holds the one legend. The theme gains `chart.title`.
+- **Wide tables by column.** `VirtualTable` gets a window of columns as
+  well as rows: `column_offset`, `visible_columns` or `fit_columns`, and
+  `frozen_columns` kept on the left. Only the columns shown are fetched,
+  sampled and laid out, through the new `VirtualRows::rows_columns`. Its
+  default picks cells from `rows`, so existing sources keep working. The
+  position line adds `columns 42–51 of 2,000`, and `scroll_columns_by`
+  moves the window across. `FnCells` makes each cell on demand. A
+  120-column window of 2,000 columns by 100,000 rows renders in about
+  20 ms in release, its width sample included (an ignored test times it).
+- **Python:** `Distribution`, `DistributionSet`, `SmallMultiples`,
+  `quantile`, `summary` and `describe` in `rs_rich.chart`.
+  `rs_rich.ext.a11y.accessible_text` reads charts too. `data.VirtualTable`
+  takes `column_offset`, `visible_columns`, `fit_columns` and
+  `frozen_columns`, with `scroll_columns_by`, `shown_columns` and
+  `column_position`.
+- **Docs:** the [charts guide](docs/guide/ext/charts.md) gains sections on
+  distributions, small multiples and accessible text, with three new
+  screenshots. The [tables guide](docs/guide/ext/tables.md) covers the
+  column window. The Python charts page gains three sections and two
+  pictures.
+
 ### One process per browser session (web 0.0.2)
 
 0.0.19 workstream 3.
