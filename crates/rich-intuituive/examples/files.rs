@@ -959,8 +959,13 @@ impl Fm {
             return false;
         };
         let at = self.cursor.get_untracked();
+        // A filter may have left fewer entries than the range, or none.
         let paths: Vec<PathBuf> = self.files.with_untracked(|f| {
-            f[anchor.min(at)..=anchor.max(at).min(f.len().saturating_sub(1))]
+            let (from, to) = (anchor.min(at), anchor.max(at));
+            if from >= f.len() {
+                return Vec::new();
+            }
+            f[from..=to.min(f.len() - 1)]
                 .iter()
                 .map(|e| self.path_of(e))
                 .collect()
@@ -1188,8 +1193,15 @@ fn remove(path: &Path) -> std::io::Result<()> {
     }
 }
 
-/// Move `from` to `to`, copying across file systems.
+/// Move `from` to `to`, copying across file systems. Never into itself:
+/// the copy would find its own destination and nest without end.
 fn move_to(from: &Path, to: &Path) -> std::io::Result<()> {
+    if to.starts_with(from) {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "can't go inside itself",
+        ));
+    }
     std::fs::rename(from, to).or_else(|_| {
         copy_all(from, to)?;
         remove(from)
@@ -1540,7 +1552,8 @@ fn run(fm: Fm, act: Act, cx: &mut Ctx) {
                         }
                         paths
                             .iter()
-                            .filter(|p| !p.starts_with(&trash) || **p == trash)
+                            // Not the trash, nor anything already in it.
+                            .filter(|p| !p.starts_with(&trash))
                             .filter_map(|p| {
                                 let to = unique(&trash.join(p.file_name()?));
                                 move_to(p, &to)
@@ -2178,6 +2191,11 @@ fn header(fm: Fm) -> Node {
 /// The tab strip, shown once there is more than one tab: Yazi's, the
 /// active tab on blue.
 fn tab_strip(fm: Fm) -> Node {
+    // A click picks a tab through `switch_tab`, as the keys do, so visual
+    // mode, the filter and the find end the same way.
+    let clicked = signal(fm.active.get_untracked());
+    watch(move || fm.active.get(), move |at, _| clicked.set(at));
+    watch(move || clicked.get(), move |to, _| fm.switch_tab(to));
     switch(
         move || fm.tabs.with(Vec::len) > 1,
         move |many| {
@@ -2205,7 +2223,7 @@ fn tab_strip(fm: Fm) -> Node {
                         .collect()
                 })
             };
-            tabs(titles, fm.active)
+            tabs(titles, clicked)
                 .divider("")
                 .tab_padding("", "")
                 .no_focus()

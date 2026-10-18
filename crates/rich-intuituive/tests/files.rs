@@ -243,6 +243,32 @@ fn selecting_marks_rows_and_the_header_counts_them() {
 }
 
 #[test]
+fn visual_mode_ends_cleanly_when_a_filter_leaves_nothing() {
+    let root = tree("visual-empty");
+    let script = Script::new()
+        .keys("v j j f")
+        .text("nothing-like-it")
+        .keys("enter esc q");
+    let rows = screen(&run(app(&root), script, 80, 10));
+    assert!(status(&rows).starts_with(" NOR "), "{rows:?}");
+}
+
+#[test]
+fn a_tab_click_switches_as_the_keys_do() {
+    let root = tree("tab-click");
+    let rows = screen(&run(app(&root), Script::new().keys("t t q"), 80, 10));
+    let x = rows[1].find(" 1 ").expect("tab 1 in the strip") as u16 + 1;
+    // In visual mode in tab 2, a click on tab 1 ends it, as `1` would.
+    let script = Script::new()
+        .keys("t t v j")
+        .mouse(MouseKind::Down(Button::Left), x, 1)
+        .mouse(MouseKind::Up(Button::Left), x, 1)
+        .keys("q");
+    let rows = screen(&run(app(&root), script, 80, 10));
+    assert!(status(&rows).starts_with(" NOR "), "{rows:?}");
+}
+
+#[test]
 fn copying_paths_puts_them_on_the_clipboard() {
     let root = tree("copy");
     let record = run(app(&root), Script::new().keys("c c c f q"), 80, 10);
@@ -295,6 +321,11 @@ fn trash_and_delete_ask_first() {
     );
     run(app(&root), Script::new().keys("D y q"), 80, 24);
     assert!(!root.join("alpha").exists());
+    // The trash itself is never moved into itself.
+    let script = Script::new().keys(". f").text(".trash").keys("enter d y q");
+    run(app(&root), script, 80, 24);
+    assert!(root.join(".trash/z.txt").exists());
+    assert!(!root.join(".trash/.trash").exists());
 }
 
 #[test]
