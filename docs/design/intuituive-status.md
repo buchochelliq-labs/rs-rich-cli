@@ -15,7 +15,7 @@ rules are in [the demo gaps](intuituive-demo-gaps.md).
   `recent_timed`, `falling`, Miller overlay, `marks_by`, `next_from`,
   `tabs_for_indexed`, `StatusSegment::when`, `facts` value styles,
   `cx.edit_text`, the `state` module, `FrecencyStore`, `Jobs::run_process`.
-- Round 5 clones (round 1 of each; reports in [`gaps/`](gaps/)): gitui
+- Round 5 clones (round 1 of each; reports in [`gaps/`](https://github.com/buchochelliq-labs/rs-rich-cli/tree/main/docs/design/gaps)): gitui
   (`git`), bottom (`top`), slumber (`http`), rata-tetris (`blocks`), csvlens
   (`csv`), diskonaut (`disk`), termusic (`music`), taskwarrior-tui (`tasks`,
   test `taskwarrior`), and a Doom-style raycaster (`raycast`). Sprites

@@ -4,10 +4,10 @@ What does not work yet, what was never meant to, and what works differently on
 purpose. Three different things, kept apart — a deliberate trade-off listed as a
 bug makes a considered decision look like neglect.
 
-**Applies to** the 0.0.11 cohort (`rs-rich-cli` 0.0.11, `rs-rich` 0.0.7,
-`rs-rich-ext` 0.0.9, `rs-rich-art` 0.0.9, `rs-rich-macros` 0.0.1), published
-2026-09-24 and reviewed against Python `rich` 15.0.0. Each entry links to its issue so you can check the status without
-waiting for this page to be updated.
+**Applies to** the 0.0.20 release (`rs-rich-cli` 0.0.20, `rs-rich` 0.0.10),
+reviewed against Python `rich` 15.0.0. Older entries name the release they
+were found in. Each entry links to its issue or report so you can check the
+status without waiting for this page to be updated.
 
 ---
 
@@ -24,6 +24,38 @@ escapes together when folding at widths that can fit them. See
 [DIVERGENCES §22](DIVERGENCES.md#22-escape-safe-json-presentation-json-escape-safe).
 Neither mode promises machine-readable output; use the original JSON with `jq`
 when every value must survive.
+
+### The recorder keeps fewer frames on macOS
+
+`rich record` keeps every screen update the program finished, up to the
+tape's frame rate. On Linux a game recorded at `Set Framerate 35` keeps
+about 30 frames a second; on CI's macOS runners the same recording kept 7
+frames over 0.8 s, so its video plays in jumps. Whether macOS's PTY reads
+or the recorder's settling rule merge the updates is not known yet; the
+frame-rate test keeps its lower bound on Linux only until it is. Record
+games on Linux for now. Planned for [0.0.21](plans/0.0.21.md#1-round-7s-bugs-and-regressions-intuituive-record).
+
+### Four intuiTUIve bugs the demo clones found
+
+Round 7 of the [demo loop](design/intuituive-demo-gaps.md#round-7-the-nine-apps-rebuilt-on-round-6)
+found these; each has a minimal failing test in its clone's report and a
+workaround in the clone, and all four are planned for 0.0.21:
+
+- a `cx.focus(x)` made just before `cx.modal(..)` opens is not where the
+  focus returns when the modal closes: it goes back to the node focused
+  before ([tasks](design/gaps/tasks.md)); focus `x` again after the modal
+  closes;
+- a styled `layers` node does not cover the gaps its inset children leave
+  ([blocks](design/gaps/blocks.md)); put a `fill` as the first layer;
+- `layout::squarify` gives the largest item no tile when the rest's tile is
+  under the minimum width ([disk](design/gaps/disk.md));
+- a `previews_keys` container takes the letters typed into a
+  `command_line` inside it ([csv](design/gaps/csv.md)); put the command
+  line outside the container.
+
+Filtering a million rows through `view_of` is also slower than the clone's
+own loop was (15.4 s against 3.3 s in an unoptimised build): each row is
+read through `TableSource::row` and turned into a `Text` for the regex.
 
 ---
 
@@ -42,6 +74,37 @@ every supported Windows release has a VT-capable console, so this is a
 permanent divergence ([DIVERGENCES §38](DIVERGENCES.md#38-the-windows-legacy-console-is-not-supported),
 [#12](https://github.com/buchochelliq-labs/rs-rich-cli/issues/12)).
 **Workaround:** use Windows Terminal, or `--no-color`.
+
+### A tape without `Output` also writes an APNG
+
+Since 0.0.20 `rich record` writes every format a tape does not narrow, and
+the formats now include an animated PNG beside the GIF. An APNG is in full
+colour, so it can be several megabytes for a long recording, and encoding
+it adds time. Name what you want with an `Output` line (`Output gif png`)
+or `--format gif,png,svg`, or skip all video with `--no-video`. Whether the
+APNG stays a default is an open question for
+[0.0.21](plans/0.0.21.md#1-round-7s-bugs-and-regressions-intuituive-record).
+
+### The local time zone on Windows follows `TZ` when it is set
+
+`rs-rich-interact`'s `Zone::Local` (and so `DateTime::now_local`, natural
+dates and intuiTUIve's calendars) asks Windows for the system's zone,
+unless `TZ` is set: then `TZ` wins, as it does for the C runtime. Windows
+has no zoneinfo database, so `TZ` must be a POSIX rule
+(`CET-1CEST,M3.5.0,M10.5.0/3`) or `TZDIR` must name a zoneinfo directory;
+a zone name alone, such as `Europe/Berlin`, is read as UTC. See
+[Troubleshooting](troubleshooting.md#the-local-time-is-wrong-on-windows).
+
+### Chrome's DevTools port in rs-rich-embed
+
+The Chrome engine of `rs-rich-embed`'s web view talks to Chrome over
+DevTools on a random port of `127.0.0.1`, which other programs and users
+on the machine can reach while the view is open, and DevTools has no
+authentication. Use the Chrome engine on a machine you do not share. A
+pipe in place of the port is
+[planned for 0.0.21](plans/0.0.21.md#8-devtools-over-a-pipe-on-unix-embed)
+on Linux and macOS; Windows keeps the port until a maintained crate can
+pass Chrome the pipe's two handles.
 
 ### No Jupyter integration, and no Python-object inspection
 

@@ -63,7 +63,7 @@ by default, so a default build is the whole port. An application that never
 renders `Syntax` or `Markdown` can build without them:
 
 ```toml
-rs-rich = { version = "0.0.9", default-features = false }
+rs-rich = { version = "0.0.10", default-features = false }
 ```
 
 That removes `rich::syntax`, `rich::markdown` and the `Syntax` /

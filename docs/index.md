@@ -11,19 +11,17 @@
 
 </div>
 
-A Rust port of Python's [`rich`](https://github.com/Textualize/rich) — rich text,
-colour, tables, markdown and progress bars in the terminal — plus a port of the
-[`rich-cli`](https://github.com/Textualize/rich-cli) tool.
+Python's [`rich`](https://github.com/Textualize/rich), ported to Rust and
+held to it byte for byte: rich text, colour, tables, Markdown and progress
+bars in the terminal, with the [`rich-cli`](https://github.com/Textualize/rich-cli)
+tool. On top of it: charts and diagrams, pickers and forms, intuiTUIve (a
+reactive framework for terminal apps), a terminal recorder, and images in
+the terminal.
 
-![Rich-art cover cropping with nine anchors](assets/demos/v8-crop-anchors.gif)
+![rich rendering Markdown, a CSV table and Python source in a real terminal](media/tapes/hero/hero.gif)
 
-**[Watch the CLI and art videos](demos.md)** · [Browse the gallery](gallery.md) ·
+**[Play the terminal recordings](recordings.md)** · [Browse the gallery](gallery.md) ·
 [Start with the CLI](cli.md) · [Learn the library](tutorial/index.md) · [Read the full guide](guide/index.md)
-
-The preview shows `rich-art` cover cropping, recorded with CLI 0.0.8. The
-[0.0.11 demo tour](demos.md) walks through the newer tools: `inspect`, `diff`,
-`view`, the `hex`, `unicode` and `ansi explain` inspectors, a theme file, a
-redacted `capture`, and the new image modes.
 
 ```bash
 cargo install rs-rich-cli
@@ -33,32 +31,50 @@ rich --print '[bold magenta]Hello[/] [green]World[/]'
 For Rust applications: `cargo add rs-rich`. Read [Getting started](getting-started.md)
 for a complete library example.
 
-## Output in motion
+## New in 0.0.20
 
-![Progress frames exported by rs-rich](assets/demos/progress.gif)
+| A raycaster on intuiTUIve | Recorded with held keys |
+|---|---|
+| ![The raycaster example: a first-person maze in half blocks](media/tapes/raycast/start.png) | ![The raycaster's map, recorded from a tape](media/tapes/raycast/map.png) |
 
-Progress and spinner animations replay exported library frames. The
-[gallery](gallery.md) pairs output with links to the relevant guides.
+0.0.20 is the intuiTUIve demo loop's release: eleven well-known terminal
+apps rebuilt on [intuiTUIve](guide/intuituive/index.md) (Yazi, scope-tui,
+gitui, bottom, Slumber, csvlens, diskonaut, termusic, taskwarrior-tui, a
+falling-block game and a Doom-style raycaster), what each lacked added to
+the framework, and each rebuilt again on it.
+[What the demos are missing](design/intuituive-demo-gaps.md) tells the
+story round by round.
 
-## Release history and development
+- **Games and pixels:** sprites on a stage, RGBA pixel buffers, held keys
+  and key releases, key repeat at the app's own rate, timers you can pause
+  and fixed steps with catch-up. See [a game, played with held
+  keys](recordings.md#a-game-played-with-held-keys).
+- **Apps:** tables, trees and lists that follow state, input completion and
+  history, a command line, a query language over records, focus scopes,
+  treemaps.
+- **Dates and zones:** `tomorrow`, `eow` and `3d` read by
+  [`dates::parse`](guide/interact/index.md#natural-dates), and
+  [time zones](guide/interact/index.md#time-zones) with summer time.
+- **Recording games:** `rich record` follows Kitty, Sixel and iTerm2
+  images, keeps every frame at a set rate, holds keys and writes an
+  animated PNG. See [Record your own](recordings.md#record-your-own).
+- **Core:** [`Text::markup()`](guide/core/text-and-style.md#back-to-markup),
+  a port of upstream's `Text.markup`.
 
-The [0.0.9 cohort](releases/0.0.9-expanded.md) is published. The
-[0.0.10 cohort](releases/0.0.10.md) is published too. It adds
-Progress time, rate and spinner columns, upstream's theme stack, `~~~` strikethrough
-parity, multi-file watch, and quadrant, ANSI16 and grayscale image modes.
-The [0.0.11 cohort](releases/0.0.11.md) (core 0.0.7, macros 0.0.1 (new),
-ext 0.0.9, art 0.0.9, CLI 0.0.11) is published. It adds
-diagnostics, structured data, checked-markup macros, `clap` and `tracing`
-integration, workflow renderables, and the `inspect`, `diff`, `view`, `hex`,
-`unicode`, `env` and `capture` commands.
-The [0.0.12 cohort](releases/0.0.12.md) added the plugin platform and the
-first Python package; [0.0.13](releases/0.0.13.md) interactive components and
-`rich record`; [0.0.14](releases/0.0.14.md) composable interactive views,
-`rich explore` and micro assets; and [0.0.15](releases/0.0.15.md) terminal
-charts, `rs-rich-diagram` with DOT, `rich chart`, `rich dot`, `rich deps` and
-`rich schema`. All four are published.
-The [roadmap](ROADMAP.md) tracks subsequent work. Manifest versions below
-identify this checkout; the crates.io badges identify published packages.
+Earlier releases are under [Releases](releases/0.0.19.md) in the
+navigation; the [roadmap](ROADMAP.md) and the
+[0.0.21 plan](plans/0.0.21.md) say what comes next.
+
+### Which version are these docs for?
+
+The version menu in the header picks the docs of a release. A release is
+named by `rs-rich-cli`'s version, and its docs match the crates of that
+release: the other crates' versions are in that release's
+[version table](#versions-in-this-checkout). **dev (main)** documents what
+is on `main` and not released yet. The site's root and `/latest/` show the
+newest release, and every other version says so in a banner with a link to
+it. The site keeps the newest releases; older releases' docs stay in the
+repository, under `docs/` at their `rs-rich-cli-vX.Y.Z` tags.
 
 ## What it does
 
@@ -108,6 +124,18 @@ identify this checkout; the crates.io badges identify published packages.
 
     Fuzzy pickers, input, forms, pagers and explorers, composable into your
     own views. See [Interactive](guide/interact/index.md).
+
+- **Terminal apps**
+
+    intuiTUIve: signals, a retained tree, layout, focus, tables, trees,
+    a command line, sprites and pixel buffers, tested headless and served
+    to a browser. See [Terminal apps](guide/intuituive/index.md).
+
+- **Terminal recordings**
+
+    `rich record` runs a tape in a real terminal and writes screenshots,
+    a cast, a GIF, an animated PNG and an MP4, images and held keys
+    included. See [Terminal recordings](recordings.md).
 
 - **Micro assets**
 
@@ -163,7 +191,9 @@ That promise is why the honest bits matter:
 
 ## Released crates
 
-The badges below show the versions currently available on crates.io.
+The badges below show the versions currently available on crates.io. The
+packages carry an `rs-` prefix because `rich` was taken on crates.io; the
+library targets keep the short names, so you write `use rich::Console`.
 
 | crate | version | docs | what it is |
 |---|---|---|---|
@@ -186,11 +216,14 @@ The badges below show the versions currently available on crates.io.
 | [`rs-rich-embed`](https://crates.io/crates/rs-rich-embed) | [![rs-rich-embed](https://img.shields.io/crates/v/rs-rich-embed.svg)](https://crates.io/crates/rs-rich-embed) | [docs.rs](https://docs.rs/rs-rich-embed) | a terminal pane and a web view for intuiTUIve apps (new in 0.0.18) |
 
 <a id="versions-prepared-in-this-checkout"></a>
+<a id="versions-in-this-checkout"></a>
 
-### Versions in this checkout
+### Versions these docs describe
 
-These manifest versions describe the source tree, not publication status.
-Each crate versions independently; see [Branching and releases](BRANCHING.md).
+The crates' versions in the source these docs were built from: a release's
+docs list that release's crates, and dev (main)'s the versions on `main`,
+published or not. Each crate versions independently; see
+[Branching and releases](BRANCHING.md).
 
 <!-- BEGIN MANIFEST VERSIONS -->
 | Package | Manifest version |
@@ -214,37 +247,11 @@ Each crate versions independently; see [Branching and releases](BRANCHING.md).
 | [`rs-rich-embed`](https://crates.io/crates/rs-rich-embed) | `0.0.3` |
 <!-- END MANIFEST VERSIONS -->
 
-## Install
+## Where next
 
-=== "Library"
-
-    ```bash
-    cargo add rs-rich
-    ```
-
-    The package is `rs-rich` because `rich` was taken on crates.io. The library
-    target keeps the short name, so you write:
-
-    ```rust
-    use rich::{Console, Table};
-    ```
-
-=== "CLI"
-
-    ```bash
-    cargo install rs-rich-cli
-    ```
-
-    Installs a binary called `rich`.
-
-## A first look
-
-```rust
-use rich::Console;
-
-let console = Console::new();
-console.print_str("[bold magenta]Hello[/] [green]World[/] — 42");
-```
-
-Then read the [tutorial](tutorial/index.md), or skim the
-[gallery](gallery.md) to see what is available.
+- [Getting started](getting-started.md): install, check it worked, and a
+  first program.
+- The [tutorial](tutorial/index.md) builds up from a line of text to a
+  live progress display.
+- The [gallery](gallery.md) and the [recordings](recordings.md) show what
+  exists; the [guide](guide/index.md) covers every crate.

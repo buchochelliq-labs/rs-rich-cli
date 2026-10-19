@@ -11,6 +11,7 @@ site_dir: site
 # docs/python is its own site (mkdocs-python.yml), published under /python/.
 exclude_docs: |
   python/
+  assets/vendor/**/README.md
 
 theme:
   name: material
@@ -188,6 +189,7 @@ nav:
   - Known issues: known-issues.md
   - Development plans:
       - "Plan to 1.0.0": plans/1.0.0.md
+      - "Parity, the marketplace and round 7's leftovers": plans/0.0.21.md
       - "Layout, editing, isolation and docs": plans/0.0.19.md
       - "intuiTUIve grows up": plans/0.0.18.md
       - "Data and developer tooling": plans/0.0.16.md
@@ -238,4 +240,15 @@ nav:
       - "Design: intuiTUIve widgets": design/intuituive-widgets.md
       - "Design: intuiTUIve against ratatui": design/intuituive-vs-ratatui.md
       - "Design: what the intuiTUIve demos are missing": design/intuituive-demo-gaps.md
+      - "Design: the demo loop, where things stand": design/intuituive-status.md
+      - "Design: the clones' gap reports":
+          - "git (gitui)": design/gaps/git.md
+          - "top (bottom)": design/gaps/top.md
+          - "http (Slumber)": design/gaps/http.md
+          - "blocks (rata-tetris)": design/gaps/blocks.md
+          - "csv (csvlens)": design/gaps/csv.md
+          - "disk (diskonaut)": design/gaps/disk.md
+          - "music (termusic)": design/gaps/music.md
+          - "tasks (taskwarrior-tui)": design/gaps/tasks.md
+          - "raycast": design/gaps/raycast.md
       - "Design: a playground in the docs": design/docs-playground.md

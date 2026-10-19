@@ -1,5 +1,10 @@
 # CLI and art videos
 
+The guided tour of the `rich` command, then the CLI and art videos of
+earlier releases, kept as a record. Every other recording, the terminal
+apps and the raycaster among them, is on
+[Terminal recordings](recordings.md).
+
 ## Run the suite in your terminal
 
 CLI 0.0.8 introduced `rich --demo`: a single guided pass through the

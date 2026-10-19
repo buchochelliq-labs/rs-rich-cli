@@ -230,8 +230,9 @@ and `ProgressBar::indeterminate()`; `.animation_time(t)` picks the pulse frame.
 
 - `Console.status()` / `with console.status(...)`: create a `Status` and drive
   it with `Live` as shown above.
-- `Live`: `screen=True` (alternate screen), `redirect_stdout`/`redirect_stderr`,
-  `vertical_overflow`, and `get_renderable` callbacks.
+- `Live`: `screen=True` (alternate screen), `redirect_stdout`/`redirect_stderr`
+  and `get_renderable` callbacks. (`vertical_overflow` is ported:
+  `Live::vertical_overflow(VerticalOverflow::Visible)`.)
 - `Progress`: `console.print` through the display (`progress.console`), and
   `redirect_stdout`.
 

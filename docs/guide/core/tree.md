@@ -62,13 +62,26 @@ A tree measures its widest label plus its guides (see
 [measuring](console.md#measuring)), so in a table cell or under
 `Align::center` it takes only the room it needs.
 
-## Not yet ported
+## Guides and styles
 
-This port covers upstream's default tree: thin guides, with labels given as
-markup strings, `Text` or renderables. Not yet available:
+Upstream's options are all here, as builders on the root (or on a subtree
+made with `Tree::new` and added with `add_tree`):
 
-- `guide_style` and the bold, double and ASCII guide sets.
-- `style`, `hide_root` and `expanded=False`.
+```rust
+use rich::{Console, Tree};
+
+let mut tree = Tree::new("[bold]release[/]")
+    .guide_style("bold blue") // bold guides are heavy; "underline2" draws double ones
+    .hide_root(true);         // start at the children
+tree.add("core 0.0.10");
+let mut cli = Tree::new("cli 0.0.20").style("green").expanded(false);
+cli.add("not shown while collapsed");
+tree.add_tree(cli);
+Console::new().print(&tree);
+```
+
+`expanded(false)` hides a node's children, and a console that cannot
+encode Unicode draws ASCII guides.
 
 ## See also
 

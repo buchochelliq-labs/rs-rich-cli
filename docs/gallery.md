@@ -15,12 +15,14 @@ guide page has more.
 | Arrange output | [Layout tutorial](tutorial/04-layout.md) |
 | Show running work | [Progress and live output](tutorial/05-live.md) |
 | Format files from the shell | [CLI guide](cli.md) |
+| Build a full-screen terminal app | [Terminal apps](guide/intuituive/index.md) |
+| Record a terminal session | [Record your own](recordings.md#record-your-own) |
 
 ## Rich-art in motion
 
 ![Half-block, Braille and ASCII renderings of the same image](assets/demos/release-image-modes.gif)
 
-[Watch or download the videos](demos.md), including fresh image, fit/crop, watch and batch clips. Capture details are on that page.
+[Watch or download the videos](demos.md): image modes, fit and crop, watch and batch clips from earlier releases. Capture details are on that page.
 
 ## Markup
 
@@ -104,7 +106,7 @@ The same over-long word under each overflow method.
 
 ## Beyond the core
 
-These come from `rs-rich-ext`, `rs-rich-art`, `rs-rich-diagram` and the `rich` command. Each image
+These come from `rs-rich-ext`, `rs-rich-art`, `rs-rich-diagram`, `rs-rich-intuituive` and the `rich` command. Each image
 is the real output of a guide example or CLI command; follow the link for the
 code.
 
@@ -169,6 +171,16 @@ code.
 ![One image in each colour mode](media/guide/guide_images-color-modes.svg)
 
 [Images guide](guide/art/images.md)
+
+### Terminal apps
+
+![The raycaster example: a first-person maze in half blocks, with a status bar](media/tapes/raycast/start.png)
+
+![The files example, a Yazi-style file manager, previewing a Rust file](media/tapes/files/files.png)
+
+![The scope example, scope-tui rebuilt: a Lissajous figure in the vectorscope](media/tapes/scope/vectorscope.png)
+
+[Terminal apps guide](guide/intuituive/index.md) · [A game, played with held keys](recordings.md#a-game-played-with-held-keys), [a file manager](recordings.md#a-file-manager) and [an oscilloscope](recordings.md#an-oscilloscope) recordings
 
 ### CLI viewers
 

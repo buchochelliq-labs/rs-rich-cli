@@ -9,16 +9,16 @@ looks inside bytes, characters and escape sequences (`hex`, `unicode`,
 (`capture`). It draws charts and diagrams (`chart`, `mermaid`, `dot`, `deps`,
 `schema`, which also reads SQL DDL and Arrow and draws ER diagrams),
 profiles data files (`profile`), asks questions in scripts
-(`choose`, `input`, `confirm`, ...) and shows micro assets (`micro`). This
+(`choose`, `input`, `confirm`, ...), shows micro assets (`micro`) and
+records terminal sessions (`record`). This
 page is organised by what you are trying to do. For the complete list of
 options, see the
 [CLI reference](cli-reference.md).
 
 **Assumes** you can run commands in a terminal. Examples use real CLI output;
 sections marked with a version need at least that version. The latest
-published release is 0.0.15 (see the
-[0.0.15 release notes](releases/0.0.15.md)), in which `chart`, `dot`, `deps`
-and `schema` are new.
+published release is 0.0.19 (see the
+[0.0.19 release notes](releases/0.0.19.md)); this page describes 0.0.20.
 
 ---
 
@@ -2378,6 +2378,27 @@ keep the previous `PROMPT_COMMAND`, `PS0`, `PS1` and PowerShell `prompt`,
 and keep `$?` and `$LASTEXITCODE` for whatever runs after them. In bash an
 empty command line reports nothing. PowerShell gets no OSC 133 `C` mark
 (that needs a PSReadLine hook).
+
+## Record a terminal session
+
+`rich record` runs a **tape**, a script of keys, waits and screenshots, in
+`bash` (or `zsh`, `fish`, `sh`) on a real pseudo-terminal, and writes PNG,
+SVG and text screenshots, an asciinema cast, a GIF, an animated PNG, an MP4
+(with FFmpeg) and an HTML page. Every recording in these docs is one.
+
+```bash
+rich record demo.tape                     # writes recordings/demo/
+rich record --format gif,apng demo.tape   # only the video
+rich record --fps 35 game.tape            # every frame, up to 35 a second
+rich record --check demo.tape             # fail if a screenshot changed
+```
+
+A tape can hold keys for a game (`KeyDown Up`, `KeyUp Up`, `Hold f 2s`),
+report the kitty keyboard protocol so the program hears releases
+(`Set KittyKeyboard on`), and records the Kitty, Sixel and iTerm2 images a
+program draws into the video. The commands and options are in
+[Record your own](recordings.md#record-your-own); a tape is code, so record
+only tapes you trust.
 
 ## Shell completions and generated docs
 

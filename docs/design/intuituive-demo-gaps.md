@@ -883,7 +883,7 @@ use under them: `recent`, `smoothed`, `latest_with_state`, `latest_iter`,
 
 Round 5 cloned apps unlike a file manager and an audio scope, each built on
 intuiTUIve as round 4 left it (no framework change during the round), each
-with its own report in [`docs/design/gaps/`](gaps/):
+with its own report in [`docs/design/gaps/`](https://github.com/buchochelliq-labs/rs-rich-cli/tree/main/docs/design/gaps):
 
 | App | Clone | Lines | Tests | Report |
 |---|---|---|---|---|
@@ -965,7 +965,7 @@ through cpal. What it needed from rs-rich, beyond the raycaster's list:
 ## Round 7: the nine apps rebuilt on round 6
 
 Each clone was rebuilt on round 6's components, without library edits. Each
-report in [`gaps/`](gaps/) has a "Round 2" section with the details.
+report in [`gaps/`](https://github.com/buchochelliq-labs/rs-rich-cli/tree/main/docs/design/gaps) has a "Round 2" section with the details.
 
 | Clone | Example lines | Tests | What replaced hand-built code |
 |---|---|---|---|

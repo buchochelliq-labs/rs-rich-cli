@@ -7,54 +7,74 @@
 [![License](https://img.shields.io/crates/l/rs-rich.svg)](LICENSE)
 [![Docs site](https://img.shields.io/badge/docs-site-blue)](https://buchochelliq-labs.github.io/rs-rich-cli/)
 
-A **Rust port of the Python [`rich`](https://github.com/Textualize/rich)** library
-and the [`rich-cli`](https://github.com/Textualize/rich-cli) tool — for rich text,
-color, and beautiful formatting in the terminal.
+**Python's [`rich`](https://github.com/Textualize/rich), ported to Rust and held to
+it byte for byte**, with the [`rich-cli`](https://github.com/Textualize/rich-cli)
+tool and a stack built on top: charts and diagrams, pickers and forms, a
+reactive terminal UI framework (intuiTUIve), a terminal recorder, and images
+in the terminal. Tracking **`rich` 15.0.0** and **`rich-cli` 1.8.1**
+([`UPSTREAM.toml`](UPSTREAM.toml)); every parity claim is a golden test
+captured from the real Python library.
 
 **📖 [Documentation, tutorial and gallery](https://buchochelliq-labs.github.io/rs-rich-cli/)**
 
-Currently tracking **`rich` 15.0.0** and **`rich-cli` 1.8.1**
-(see [`UPSTREAM.toml`](UPSTREAM.toml)).
-
 ![rich rendering Markdown, a CSV table and Python source in a real terminal](docs/media/tapes/hero/hero.gif)
 
-**[Play the terminal recordings](https://buchochelliq-labs.github.io/rs-rich-cli/recordings/)**:
-real sessions you can pause and copy text from, re-run by CI on every change.
+| A game on intuiTUIve | A Yazi-style file manager |
+|---|---|
+| ![The raycaster example: a first-person maze drawn in half blocks, with a status bar of digits](docs/media/tapes/raycast/start.png) | ![The files example previewing a Rust file in three columns](docs/media/tapes/files/files.png) |
 
-![The guided tour of the rich CLI, recorded by rich record](docs/media/tapes/tour/tour.gif)
-
-**[Watch the CLI and art videos](https://buchochelliq-labs.github.io/rs-rich-cli/demos/)** ·
-[User guide](docs/guide/index.md) · [Output gallery](docs/gallery.md) · [CLI guide](docs/cli.md)
-
-This is the guided tour (`rich --demo`), recorded from a tape by `rich record`
-in a real terminal: inspectors, diffs, Mermaid flowcharts drawn as text, code
-themes, `--filter` and `--highlight`, rich-cli's options, reStructuredText, a
-`rich choose` picker, banners and images.
-[Tour and reproduction](docs/demos.md) ·
-[0.0.15 release notes](docs/releases/0.0.15.md).
+Every picture here is a [terminal recording](https://buchochelliq-labs.github.io/rs-rich-cli/recordings/)
+made by `rich record` from a script in [`docs/tapes/`](docs/tapes/), re-run
+by CI on every change.
 
 ## Install and try
 
 ```bash
 cargo install rs-rich-cli
 rich --print '[bold magenta]Hello[/] [green]World[/]'
-rich --help
-rich --demo  # guided suite tour; Ctrl+C stops
+rich README.md          # Markdown, JSON, CSV, source, notebooks, images…
+rich --demo             # the guided tour; Ctrl+C stops
 ```
 
-For Rust applications, use `cargo add rs-rich` and import `rich::Console`.
-See [Getting started](docs/getting-started.md) for library examples.
+In Rust, `cargo add rs-rich` and `use rich::Console`:
 
-![Progress output exported by rs-rich](docs/assets/demos/progress.gif)
+```rust
+use rich::Console;
 
-Progress and spinner GIFs replay exported library frames; the gallery includes
-[tables, panels, trees, Markdown and JSON](docs/gallery.md).
+let console = Console::new();
+console.print_str("[bold red]Hello[/] [green]World[/] — 42");
+```
+
+[Getting started](docs/getting-started.md) has a complete program; the
+[tutorial](docs/tutorial/index.md) builds up from there.
+
+## New in 0.0.20
+
+The intuiTUIve demo loop: eleven well-known terminal apps rebuilt on
+intuiTUIve (Yazi, scope-tui, gitui, bottom, Slumber, csvlens, diskonaut,
+termusic, taskwarrior-tui, a falling-block game and a Doom-style raycaster),
+each gap they found added to the framework, and each clone rebuilt on it
+([the loop](docs/design/intuituive-demo-gaps.md)). What it added:
+
+- **Games and pixels:** sprites on a stage, RGBA pixel buffers drawn in half
+  blocks, quadrants or Braille, held keys and key releases, DAS/ARR key
+  repeat, timers with a handle and fixed steps with catch-up, frame pacing.
+- **Apps:** tables, trees and lists that follow state, rows from a source
+  filtered on a worker thread, input completion and history, a command
+  line, a query language over records, focus scopes and directional focus,
+  treemaps, and natural dates (`tomorrow`, `eow`, `3d`) with time zones.
+- **`rich record`** follows Kitty, Sixel and iTerm2 images, records every
+  frame at a set rate (`Set Framerate 35`), holds keys (`KeyDown`, `KeyUp`,
+  `Hold`) with the kitty keyboard protocol, and writes an animated PNG.
+- **Core:** `Text::markup()`, a port of upstream's `Text.markup`.
+
+The [changelog](CHANGELOG.md) lists every change.
 
 > **Early releases, and the versions say so.** The crates version independently
 > by ordinary SemVer; the number is *not* tied to the upstream release. Expect
 > breaking API changes. Which upstream version is tracked lives in
-> [`UPSTREAM.toml`](UPSTREAM.toml) and the line above. See [AGENTS.md](AGENTS.md)
-> for why the version is not mirrored.
+> [`UPSTREAM.toml`](UPSTREAM.toml). See [AGENTS.md](AGENTS.md) for why the
+> version is not mirrored.
 
 ## Workspace
 
@@ -101,12 +121,12 @@ in the release notes; the crates.io links show available packages.
 | `rs-rich-diagram` | graph model, layered layout and `Diagram` renderable; DOT (Graphviz) sources and ```` ```dot ```` fences | `use rich_diagram` |
 | `rs-rich-data` | tabular data: CSV/TSV, JSONL, serde and Arrow row sources, type inference and column statistics | `use rich_data` |
 | `rs-rich-ratatui` | ratatui interop: rich renderables as ratatui widgets, buffer and style conversions, ratatui widgets in rich-interact | `use rich_ratatui` |
-| `rs-rich-intuituive` | intuiTUIve: a reactive, retained terminal UI framework (signals, retained tree, damaged diff) on rich-interact | `use intuituive` |
+| `rs-rich-intuituive` | intuiTUIve: a reactive, retained terminal UI framework (signals, a retained tree, widgets, sprites and pixel buffers) on rich-interact | `use intuituive` |
 | `rs-rich-web` | serving intuiTUIve apps, or any terminal program, to a web browser over a WebSocket, drawn by a vendored xterm.js or an accessible DOM renderer | `use rich_web` |
 | `rs-rich-embed` | a terminal pane and a web view for intuiTUIve apps, over swappable PTY and browser backends | `use rich_embed` |
 | `rs-rich-lumis` | the lumis (tree-sitter) code highlighter | `use rich_lumis` |
-| `rs-rich-record` | scripted terminal recordings (`rich record`) | `use rich_record` |
-| `rs-rich-interact` | interactive components: pickers, input, forms, pagers, explorers | `use rich_interact` |
+| `rs-rich-record` | scripted terminal recordings (`rich record`): screenshots, casts, GIF, APNG and MP4, with terminal graphics and held keys | `use rich_record` |
+| `rs-rich-interact` | interactive components: pickers, input, forms, pagers, explorers; the terminal session, keys, natural dates and time zones | `use rich_interact` |
 | `rs-rich-micro` | micro assets: emoji-sized inline images written `:micro:name:` | `use rich_micro` |
 | `rs-rich` (PyPI) | Python bindings: Rich's API over the Rust core, plus the port's crates (`rs_rich.ext`, `rs_rich.chart`, `rs_rich.diagram`, `rs_rich.interact`, `rs_rich.tui`, ...) | `import rs_rich` |
 
@@ -129,7 +149,7 @@ byte-parity tested against real Python `rich` 15.0.0, and the parts that aren't
 listed genuinely aren't there.
 
 **Ported and parity-tested:** colour (truecolor/256/standard downgrade) · styles ·
-markup · `Text` (wrapping, justification incl. full, overflow, spans) ·
+markup · `Text` (wrapping, justification incl. full, overflow, spans, `markup()`) ·
 `Console` (capture, export to HTML/SVG, paging, control codes) · `Segment` ·
 themes · highlighters · `Table` · `Panel` · `Rule` · `Align` · `Padding` ·
 `Columns` · `Constrain` · `Tree` · `Layout` · `Screen` · `Markdown` · `Syntax` ·
@@ -137,8 +157,8 @@ themes · highlighters · `Table` · `Panel` · `Rule` · `Align` · `Padding` �
 `RenderableColumn`) · `Spinner` · `Status` · `Live` · `LogRender` · `Bar` ·
 `Prompt` · emoji · filesize.
 
-**Not ported:** Windows legacy-console support (so pre-Windows-10 terminals fall
-back to plain output), Jupyter integration, and `inspect`/`repr` of Python objects
+**Not ported:** Windows legacy-console support (a console without VT
+processing shows raw escape sequences; use Windows Terminal), Jupyter integration, and `inspect`/`repr` of Python objects
 (no Rust equivalent — see [#19](https://github.com/buchochelliq-labs/rs-rich-cli/issues/19)).
 A `log`/`tracing` handler (`RichHandler`) lives in `rs-rich-ext`.
 
@@ -150,95 +170,44 @@ Per-module detail is in [docs/PORTING.md](docs/PORTING.md). What comes next, and
 why, is in [docs/ROADMAP.md](docs/ROADMAP.md); the tracking epic is
 [#16](https://github.com/buchochelliq-labs/rs-rich-cli/issues/16).
 
-## Release history and development
+## Releases
 
-The [0.0.15 release notes](docs/releases/0.0.15.md) document the newest
-published cohort, charts and diagrams; older notes are in
-[`docs/releases/`](docs/releases/), and [`CHANGELOG.md`](CHANGELOG.md) lists
-every change. Later source changes are tracked in the [roadmap](docs/ROADMAP.md)
-and development plans. The manifest table above describes this checkout;
-crates.io is the source for available published versions.
+Each release has notes in [`docs/releases/`](docs/releases/) (the newest
+published one is [0.0.19](docs/releases/0.0.19.md)), and
+[`CHANGELOG.md`](CHANGELOG.md) lists every change. What comes next is in the
+[roadmap](docs/ROADMAP.md) and the [0.0.21 plan](docs/plans/0.0.21.md). The
+manifest table above describes this checkout; crates.io is the source for
+published versions.
 
-The 0.0.9 cohort (core 0.0.5, ext 0.0.7, art 0.0.7, CLI 0.0.9) is also
-[published](docs/releases/0.0.9-expanded.md). The [0.0.10 cohort](docs/releases/0.0.10.md)
-(core 0.0.6, ext 0.0.8, art 0.0.8, CLI 0.0.10) is published: Progress time, rate and spinner columns, upstream's theme stack, `~~~`
-strikethrough parity, multi-file watch, and quadrant, ANSI16 and grayscale image
-modes with tone adjustments. The [0.0.11 cohort](docs/releases/0.0.11.md)
-(core 0.0.7, macros 0.0.1 (new), ext 0.0.9, art 0.0.9, CLI 0.0.11) is
-published: diagnostics, structured data, checked-markup macros,
-`clap` and `tracing` integration, workflow renderables, and the `inspect`, `diff`,
-`view`, `hex`, `unicode`, `env` and `capture` commands. The
-[0.0.12 cohort](docs/releases/0.0.12.md) added the plugin platform
-(`rs-rich-plugin-api`, `rs-rich-mermaid`, `rs-rich-lumis`) and the first
-`rs-rich` Python package; [0.0.13](docs/releases/0.0.13.md) interactive
-components (`rs-rich-interact`), third-party plugins and `rich record`; and
-[0.0.14](docs/releases/0.0.14.md) composable interactive views, `rich explore`
-and micro assets (`rs-rich-micro`); and [0.0.15](docs/releases/0.0.15.md)
-terminal charts and diagrams (`rs-rich-diagram`, `rich chart`, `rich dot`,
-`rich deps` and `rich schema`). See [copyable workflows](docs/recipes.md).
-
-## Install
-
-```bash
-cargo add rs-rich                      # the library — then `use rich::…`
-cargo install rs-rich-cli              # the `rich` command
-```
+## Leaner builds
 
 `Syntax` (syntect) and `Markdown` (pulldown-cmark) are default features of
 `rs-rich` and `rs-rich-ext`. If you use neither, turn them off and drop
 syntect, its bincode 1.x and a second `fancy-regex` from your build:
 
 ```toml
-rs-rich = { version = "0.0.9", default-features = false }
-rs-rich-ext = { version = "0.0.13", default-features = false }  # if you use it
+rs-rich = { version = "0.0.10", default-features = false }
+rs-rich-ext = { version = "0.0.17", default-features = false }  # if you use it
 ```
 
-## Try it
-
-```bash
-cargo run -p rs-rich-cli            # capability demo (markup, color, extensions)
-cargo run -p rs-rich-cli -- --help  # every supported flag
-cargo run -p rs-rich-cli -- FILE    # print a file (type auto-detected)
-```
+## The `rich` command
 
 The CLI covers upstream's `--markdown` · `--rst` · `--syntax` · `--json` · `--csv` ·
 `--ipynb` · `--print` · `--rule` · `--panel` · `--padding` · `--pager` ·
-`--export-html` · `--export-svg` and alignment and width flags, plus fetching an
-`http(s)` URL directly. It adds `--jsonl` · `--log` · `--image` · `--gif` ·
-`--diff` · `--sanitize` · `--report json` · `--watch` · `--batch` ·
-`--theme-file` · `--format`. Preferred subcommands such as `rich json`,
-`rich markdown`, `rich csv`, `rich jsonl` and `rich log` coexist with the legacy
-flat flags.
+`--export-html` · `--export-svg`, the alignment and width flags, and every
+other rich-cli 1.8.1 option. Beyond upstream it has subcommands to:
 
-0.0.11 adds tool commands: `inspect`
-(JSON/YAML/TOML/XML/INI/CSV with `--select`, `--compare` and experimental
-`--redact`), `diff` for text and patches, `view`, `hex` (alias `hexdump`),
-`unicode`, `env`, `capture` (with experimental `--redact`), `ansi explain`,
-`doctor`, `bench compare`, `completions`, `docs`, `config explain|reference`,
-and rich-rendered help (`rich COMMAND --help`). 0.0.13 adds the rest of
-rich-cli 1.8.1's options (`--head`/`--tail`, `-n`, `--guides`, `--lexer`,
-`--emoji`, `--soft`, `--no-wrap`, `--max-width`, the `--text-*` alignments,
-the rule options, `--force-terminal` and `--rst`), interactive commands for
-scripts (`rich choose`, `filter`, `input`, `confirm` and `pager`) and
-`rich record` for scripted terminal recordings. 0.0.14 adds `rich explore`
-and `rich micro`. 0.0.15 draws data and structure: `rich chart` (CSV, JSON or
-stdin as a sparkline, bars, lines, points or a heatmap), `rich dot` and
-```` ```dot ```` fences (DOT drawn natively), `rich deps` (Cargo dependency
-trees and graphs) and `rich schema` (a JSON Schema, SQL DDL or Arrow schema as
-a tree, what changed between two, or an ER diagram with `--er`). See the [CLI guide](docs/guide/cli/walkthrough.md),
-[Charts](docs/guide/ext/charts.md), [Diagrams](docs/guide/diagram/index.md)
+- read and compare: `inspect`, `view`, `diff` (text, patches, images and
+  merge conflicts), `hex`, `unicode`, `ansi explain`, `log`, `profile`;
+- draw data and structure: `chart`, `dot`, `mermaid`, `deps`, `schema`;
+- ask in a script: `choose`, `filter`, `input`, `confirm`, `write`, `file`,
+  `color`, `date`, `pager`, `explore`, `approve`, `jump`;
+- record and present: `record` (tapes into PNG, SVG, GIF, APNG, MP4 and
+  casts), `capture`, `banner`, `shell`, `micro`, and `serve` (a program in a
+  browser, behind the off-by-default `serve` feature).
+
+See [Using the CLI](docs/cli.md), the [CLI walkthrough](docs/guide/cli/walkthrough.md)
 and the [CLI reference](docs/cli-reference.md).
-
-Library usage:
-
-```rust
-use rich::{Console, ColorSystem};
-use rich_ext::ConsoleExt;
-
-let mut console = Console::new();
-console.install_extensions();                 // optional: our highlighters etc.
-console.print_str("[bold red]Hello[/] [green]World[/] — 42");
-```
 
 ## Develop
 
