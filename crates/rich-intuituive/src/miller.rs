@@ -67,6 +67,9 @@ pub trait MillerSource: 'static {
 ///   ([`click_parent`](Self::click_parent)), and
 ///   [`enter_at`](Self::enter_at) enters the hovered item at a name, for
 ///   a click in its preview.
+/// - Other items at a level: [`overlay`](Self::overlay) lists search
+///   results, bookmarks or a "recent" list at a level, each opening a
+///   level of its own, until the columns leave it.
 pub struct Miller<S: MillerSource> {
     source: Signal<Rc<S>>,
     /// The current level.
@@ -96,6 +99,43 @@ pub struct Miller<S: MillerSource> {
     /// The panes' shares of the width, which the rails drag.
     outer: Signal<f64>,
     inner: Signal<f64>,
+    /// Items listed at a level in place of its own ([`overlay`](Miller::overlay)).
+    overlay: Signal<Option<Overlay<S::Key>>>,
+}
+
+/// What a [`Miller::overlay`] lists at a level: each item's name, and the
+/// level it opens (`None`, a leaf).
+#[derive(Clone, PartialEq)]
+struct Overlay<K> {
+    at: K,
+    names: Vec<String>,
+    opens: Vec<Option<K>>,
+}
+
+impl<K: PartialEq + Clone> Overlay<K> {
+    /// The level item `name` opens, if the overlay is at `at` and lists it.
+    fn child(&self, at: &K, name: &str) -> Option<Option<K>> {
+        if self.at != *at {
+            return None;
+        }
+        let i = self.names.iter().position(|n| n == name)?;
+        Some(self.opens[i].clone())
+    }
+}
+
+/// The level `name` at `at` opens: the overlay's, else the source's.
+/// Subscribes to the overlay.
+fn child_of<S: MillerSource>(
+    source: &S,
+    overlay: Signal<Option<Overlay<S::Key>>>,
+    at: &S::Key,
+    name: &str,
+) -> Option<S::Key> {
+    let listed = overlay.with(|o| o.as_ref().and_then(|o| o.child(at, name)));
+    match listed {
+        Some(opens) => opens,
+        None => source.child(at, name),
+    }
 }
 
 impl<S: MillerSource> Clone for Miller<S> {
@@ -149,9 +189,17 @@ pub fn miller_of<S: MillerSource>(source: S, start: S::Key) -> Miller<S> {
 /// source can read it (a model that follows the current level).
 pub fn miller_in<S: MillerSource>(source: S, at: Signal<S::Key>) -> Miller<S> {
     let source = Rc::new(source);
+    let overlay: Signal<Option<Overlay<S::Key>>> = signal(None);
     let items = {
         let source = source.clone();
-        memo(move || at.with(|key| source.items(key)))
+        memo(move || {
+            let listed = overlay.with(|o| {
+                o.as_ref()
+                    .filter(|o| at.with(|key| *key == o.at))
+                    .map(|o| o.names.clone())
+            });
+            listed.unwrap_or_else(|| at.with(|key| source.items(key)))
+        })
     };
     let parent_items = {
         let source = source.clone();
@@ -187,12 +235,14 @@ pub fn miller_in<S: MillerSource>(source: S, at: Signal<S::Key>) -> Miller<S> {
         column: signal(None),
         outer: signal(1.0 / 8.0),
         inner: signal(4.0 / 7.0),
+        overlay,
     };
-    // Remember the item hovered at each level, for coming back.
+    // Remember the item hovered at each level, for coming back (not an
+    // overlay's: the level's own is remembered).
     watch(
-        move || (at.get(), hovered.get()),
-        move |(key, name), _| {
-            if let Some(name) = name {
+        move || (at.get(), hovered.get(), overlay.with(Option::is_some)),
+        move |(key, name, overlaid), _| {
+            if let (Some(name), false) = (name, overlaid) {
                 miller.remember.update(|r| {
                     r.insert(key, name);
                 });
@@ -376,7 +426,84 @@ impl<S: MillerSource> Miller<S> {
     /// The level the hovered item opens, if it opens one.
     pub fn hovered_child(&self) -> Option<S::Key> {
         let name = self.hovered.get_untracked()?;
-        self.source().child(&self.at.get_untracked(), &name)
+        let at = self.at.get_untracked();
+        crate::reactive::untracked(|| child_of(&*self.source(), self.overlay, &at, &name))
+    }
+
+    /// List `items` at level `at` in place of its own, and go there: each
+    /// item a name and the level it opens (`None` for a leaf), as a search's
+    /// results, bookmarks or a "recent" list. The cursor starts on the
+    /// first. It lasts until the columns leave the level: entering an item
+    /// goes to its level, and [`leave`](Self::leave) (or
+    /// [`end_overlay`](Self::end_overlay)) goes back to the level's own
+    /// items, hovering the one hovered before, as Yazi leaves a search.
+    ///
+    /// ```
+    /// # use intuituive::miller::MillerSource;
+    /// # use intuituive::miller_of;
+    /// # use intuituive::prelude::*;
+    /// # struct Menu;
+    /// # impl MillerSource for Menu {
+    /// #     type Key = String;
+    /// #     fn items(&self, at: &String) -> Vec<String> {
+    /// #         match at.as_str() {
+    /// #             "" => vec!["fruit".into(), "veg".into()],
+    /// #             "fruit" => vec!["apple".into(), "pear".into()],
+    /// #             _ => vec!["leek".into()],
+    /// #         }
+    /// #     }
+    /// #     fn child(&self, at: &String, name: &str) -> Option<String> {
+    /// #         at.is_empty().then(|| name.to_string())
+    /// #     }
+    /// #     fn parent(&self, at: &String) -> Option<(String, String)> {
+    /// #         (!at.is_empty()).then(|| (String::new(), at.clone()))
+    /// #     }
+    /// # }
+    /// let app = App::new(|| {
+    ///     let m = miller_of(Menu, String::new());
+    ///     m.navigation(m.view()).on_key("b", move |_| {
+    ///         // Bookmarks at the top: one opens a level, one is a leaf.
+    ///         m.overlay(String::new(), vec![("★ veg".into(), Some("veg".into())), ("★ note".into(), None)]);
+    ///     })
+    /// });
+    /// let mut driver = app.driver(40, 2);
+    /// driver.press("b");
+    /// assert!(driver.screen().plain()[0].contains("★ veg"));
+    /// driver.press("l");
+    /// assert!(driver.screen().plain()[0].contains("leek"));
+    /// driver.press("h b h");
+    /// // Leaving the overlay shows the level's own items again.
+    /// assert!(driver.screen().plain()[0].contains("fruit"));
+    /// ```
+    pub fn overlay(&self, at: S::Key, items: Vec<(String, Option<S::Key>)>) {
+        if self.at.get_untracked() != at {
+            self.cd(at.clone(), None);
+        }
+        let (names, opens) = items.into_iter().unzip();
+        self.overlay.set(Some(Overlay { at, names, opens }));
+        self.cursor.set(0);
+        self.first.set(0);
+    }
+
+    /// The level an [`overlay`](Self::overlay) is listed at, while one
+    /// is, subscribing: a title saying "search results", say.
+    pub fn overlay_at(&self) -> Option<S::Key> {
+        self.overlay.with(|o| o.as_ref().map(|o| o.at.clone()))
+    }
+
+    /// End the [`overlay`](Self::overlay): the level's own items again,
+    /// hovering the one hovered before it. Nothing without one.
+    pub fn end_overlay(&self) {
+        if self.overlay.with_untracked(Option::is_none) {
+            return;
+        }
+        self.overlay.set(None);
+        let at = self.at.get_untracked();
+        let to = self
+            .remembered(&at)
+            .and_then(|n| self.position(&n))
+            .unwrap_or(0);
+        self.cursor.set(to);
     }
 
     /// Move the cursor to `to`, kept in the items.
@@ -402,6 +529,10 @@ impl<S: MillerSource> Miller<S> {
     /// it was last shown, else the first. The source's
     /// [`arrive`](MillerSource::arrive) runs first.
     pub fn cd(&self, at: S::Key, hover: Option<String>) {
+        // Going anywhere ends an overlay.
+        if self.overlay.with_untracked(Option::is_some) {
+            self.overlay.set(None);
+        }
         self.at.set(at);
         let at = self.at.get_untracked();
         self.source().arrive(&at);
@@ -425,8 +556,13 @@ impl<S: MillerSource> Miller<S> {
         }
     }
 
-    /// Go up a level, hovering the level left.
+    /// Go up a level, hovering the level left; in an
+    /// [`overlay`](Self::overlay), back to the level's own items.
     pub fn leave(&self) {
+        if self.overlay.with_untracked(Option::is_some) {
+            self.end_overlay();
+            return;
+        }
         let at = self.at.get_untracked();
         if let Some((up, name)) = self.source().parent(&at) {
             self.cd(up, Some(name));
@@ -658,10 +794,10 @@ impl<S: MillerSource> Miller<S> {
         let m = self;
         let source = self.source();
         let hovered = self.hovered;
-        let at = self.at;
+        let (at, overlay) = (self.at, self.overlay);
         let shown = memo(move || {
             let name = hovered.get()?;
-            let child = at.with(|key| source.child(key, &name))?;
+            let child = at.with(|key| child_of(&*source, overlay, key, &name))?;
             let items = source.items(&child);
             Some((child, items))
         });

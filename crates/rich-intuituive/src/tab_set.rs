@@ -209,6 +209,39 @@ pub fn tabs_for<T: 'static>(set: &TabSet<T>, title: impl Fn(&T) -> String + 'sta
     crate::widgets::tabs(set.titles(title), set.active)
 }
 
+/// [`tabs_for`] with each tab's index (from 0) given to `title` too:
+/// numbered tabs, as Yazi's ` 1 src `.
+///
+/// ```
+/// use intuituive::prelude::*;
+/// use intuituive::{tab_set, tabs_for_indexed};
+///
+/// let app = App::new(|| {
+///     let set = tab_set(|| "src".to_string());
+///     set.open_with("docs".to_string());
+///     tabs_for_indexed(&set, |i, name| format!(" {} {name} ", i + 1))
+/// });
+/// let mut driver = app.driver(30, 1);
+/// driver.settle();
+/// let strip = driver.screen().plain()[0].clone();
+/// assert!(strip.contains("1 src") && strip.contains("2 docs"), "{strip}");
+/// ```
+pub fn tabs_for_indexed<T: 'static>(
+    set: &TabSet<T>,
+    title: impl Fn(usize, &T) -> String + 'static,
+) -> Node {
+    let tabs = set.tabs;
+    let titles = move || {
+        tabs.with(|tabs| {
+            tabs.iter()
+                .enumerate()
+                .map(|(i, tab)| title(i, tab))
+                .collect()
+        })
+    };
+    crate::widgets::tabs(titles, set.active)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

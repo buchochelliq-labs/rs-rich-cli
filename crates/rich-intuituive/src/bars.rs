@@ -45,6 +45,8 @@ pub struct StatusSegment {
     style: Box<dyn Fn() -> String>,
     /// For [`seg_gauge`]: the share filled, and the cells it takes.
     gauge: Option<(Box<dyn Fn() -> f64>, u16)>,
+    /// Shown only while this holds ([`when`](StatusSegment::when)).
+    when: Option<Box<dyn Fn() -> bool>>,
 }
 
 /// A [`status_bar`] segment showing console `markup`, which may read
@@ -55,6 +57,7 @@ pub fn seg(markup: impl Fn() -> String + 'static) -> StatusSegment {
         markup: Box::new(markup),
         style: Box::new(String::new),
         gauge: None,
+        when: None,
     }
 }
 
@@ -92,6 +95,7 @@ pub fn seg_gauge(
         markup: Box::new(label),
         style: Box::new(|| "status_bar.gauge".into()),
         gauge: Some((Box::new(fraction), 10)),
+        when: None,
     }
 }
 
@@ -107,6 +111,33 @@ impl StatusSegment {
     /// Yazi's mode is blue, red in visual mode.
     pub fn style_with(mut self, style: impl Fn() -> String + 'static) -> StatusSegment {
         self.style = Box::new(style);
+        self
+    }
+
+    /// Show the segment (and its caps) only while `shown` is true (it may
+    /// read signals): a gauge while tasks run, a mode only when it is not
+    /// the usual one. A segment left out takes no room, as an empty one.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    /// use intuituive::widgets::{seg, seg_gauge, status_bar};
+    ///
+    /// let app = App::new(|| {
+    ///     let running = signal(0usize);
+    ///     status_bar(
+    ///         [seg(|| "files".into())],
+    ///         [seg_gauge(|| 0.5, || "50%".into()).width(6).when(move || running.get() > 0)],
+    ///     )
+    ///     .on_key("r", move |_| running.set(1))
+    /// });
+    /// let mut driver = app.driver(16, 1);
+    /// driver.settle();
+    /// assert_eq!(driver.screen().plain()[0].trim_end(), "files");
+    /// driver.press("r");
+    /// assert_eq!(driver.screen().plain()[0], "files      50%  ");
+    /// ```
+    pub fn when(mut self, shown: impl Fn() -> bool + 'static) -> StatusSegment {
+        self.when = Some(Box::new(shown));
         self
     }
 
@@ -226,6 +257,7 @@ impl StatusBar {
     fn read(console: &Console, segments: &[StatusSegment]) -> Vec<Shown> {
         segments
             .iter()
+            .filter(|segment| segment.when.as_ref().is_none_or(|shown| shown()))
             .filter_map(|segment| {
                 let markup = (segment.markup)();
                 let name = (segment.style)();

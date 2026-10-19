@@ -376,6 +376,45 @@ impl Node {
             options.marks = Some(marks.clone())
         })
     }
+
+    /// [`selection_markers`](Self::selection_markers) for a list that is
+    /// not the one `selection` is over: its items found in the selection
+    /// by key alone, with no cursor of their own. A parent column showing
+    /// which of its items are selected, a second view of the same items,
+    /// a search's results.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    /// use intuituive::multi_select;
+    ///
+    /// let app = App::new(|| {
+    ///     let picked = multi_select::<String>();
+    ///     picked.select("b".to_string());
+    ///     // Another list, in another order, with a cursor of its own.
+    ///     let other = signal(vec!["b".to_string(), "a".to_string()]);
+    ///     list(move || other.get(), signal(1))
+    ///         .marks_by(picked, move |i| other.with(|o| o[i].clone()))
+    /// });
+    /// let mut driver = app.driver(6, 2);
+    /// driver.settle();
+    /// let styled = intuituive::testing::styled(&driver);
+    /// assert!(styled.lines().next().unwrap().contains("on yellow"), "{styled}");
+    /// ```
+    pub fn marks_by<K: Clone + Eq + Hash + 'static>(
+        self,
+        selection: MultiSelect<K>,
+        key: impl Fn(usize) -> K + 'static,
+    ) -> Node {
+        let marks: crate::list::Marks = Rc::new(move |i| match selection.mark(&key(i)) {
+            Mark::None => None,
+            Mark::Selected => Some(("marker.selected", "on yellow")),
+            Mark::Visual => Some(("marker.visual", "on cyan")),
+            Mark::Unset => Some(("marker.unset", "on red")),
+        });
+        self.list_options("marks_by", move |options| {
+            options.marks = Some(marks.clone())
+        })
+    }
 }
 
 /// Find next and previous over a list's items: [`list_search`].
@@ -481,6 +520,45 @@ impl ListSearch {
             .or_else(|| matches.first().copied())?;
         self.cursor.set(to);
         Some(to)
+    }
+
+    /// [`next`](Self::next), staying on the item the cursor is on if
+    /// that matches and `here` is true: find as you type, which keeps a
+    /// hovered match where it is (Yazi's `/`).
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    /// use intuituive::list_search;
+    ///
+    /// let app = App::new(|| {
+    ///     let items = || ["lib.rs", "main.rs", "mod.rs"].map(String::from).to_vec();
+    ///     let cursor = signal(1usize);
+    ///     let find = list_search(|| "m".to_string(), items, cursor);
+    ///     text!("{cursor}").on_key("n", move |_| {
+    ///         find.next_from(true);
+    ///     })
+    /// });
+    /// let mut driver = app.driver(5, 1);
+    /// driver.press("n");
+    /// // main.rs matches: the cursor stays on it.
+    /// assert_eq!(driver.screen().plain()[0].trim_end(), "1");
+    /// ```
+    pub fn next_from(&self, here: bool) -> Option<usize> {
+        let at = self.cursor.get_untracked();
+        if here && crate::reactive::untracked(|| self.is_match(at)) {
+            return Some(at);
+        }
+        self.next()
+    }
+
+    /// [`previous`](Self::previous), staying on the item the cursor is on
+    /// if that matches and `here` is true.
+    pub fn previous_from(&self, here: bool) -> Option<usize> {
+        let at = self.cursor.get_untracked();
+        if here && crate::reactive::untracked(|| self.is_match(at)) {
+            return Some(at);
+        }
+        self.previous()
     }
 
     /// Move the cursor to the previous match before it, wrapping to the

@@ -14,8 +14,9 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use intuituive::interact::Event;
+use intuituive::miller::MillerSource;
 use intuituive::prelude::*;
-use intuituive::{Driver, Notifier};
+use intuituive::{miller_of, Driver, Notifier};
 
 fn rows(driver: &Driver) -> Vec<String> {
     driver
@@ -446,6 +447,158 @@ fn a_falling_value_rises_at_once_and_never_falls_below_its_source() {
     assert_eq!(rows(&driver)[0], "0.50");
     driver.press("h");
     assert_eq!(rows(&driver)[0], "1.00");
+}
+
+// 5. Lists and Miller columns: a level overlay, marks by key, find from
+// the hovered item, numbered tabs, optional segments, styled facts.
+
+/// A two-level tree: `a` and `b` at the top, each with two leaves.
+struct Tree;
+
+impl MillerSource for Tree {
+    type Key = String;
+    fn items(&self, at: &String) -> Vec<String> {
+        match at.as_str() {
+            "" => names(&["a", "b"]),
+            "a" => names(&["a1", "a2"]),
+            _ => names(&["b1", "b2"]),
+        }
+    }
+    fn child(&self, at: &String, name: &str) -> Option<String> {
+        at.is_empty().then(|| name.to_string())
+    }
+    fn parent(&self, at: &String) -> Option<(String, String)> {
+        (!at.is_empty()).then(|| (String::new(), at.clone()))
+    }
+}
+
+#[test]
+fn an_overlay_lists_other_items_at_a_level_until_the_columns_leave_it() {
+    let app = App::new(|| {
+        let m = miller_of(Tree, String::new());
+        column([
+            m.navigation(m.view()).flex(1),
+            text(move || format!("{:?} {:?}", m.overlay_at(), m.hovered().get())).fixed(1),
+        ])
+        .on_key("s", move |_| {
+            m.overlay(
+                "a".into(),
+                vec![("found b2".into(), None), ("in b".into(), Some("b".into()))],
+            )
+        })
+    });
+    let mut driver = app.driver(60, 3);
+    // Into `a`, on `a2`, then the overlay at `a`.
+    driver.press("l j s");
+    assert_eq!(rows(&driver)[2], r#"Some("a") Some("found b2")"#);
+    // Its second item previews the level it opens.
+    driver.press("j");
+    assert!(rows(&driver)[0].contains("b1"), "{:?}", rows(&driver));
+    // `h` goes back to `a`'s own items, on the one hovered before.
+    driver.press("h");
+    assert_eq!(rows(&driver)[2], r#"None Some("a2")"#);
+    // Entering an item goes to its level, and the overlay is over.
+    driver.press("s j l");
+    assert_eq!(rows(&driver)[2], r#"None Some("b1")"#);
+    driver.press("h");
+    assert_eq!(rows(&driver)[2], r#"None Some("b")"#);
+}
+
+#[test]
+fn marks_by_key_show_a_selection_in_another_list_visual_range_too() {
+    use intuituive::{multi_select, Mark};
+    let app = App::new(|| {
+        let items = signal(names(&["a", "b", "c"]));
+        let cursor = signal(0usize);
+        let picked = multi_select::<String>()
+            .over(move || items.get())
+            .range_from(cursor);
+        // The same items, the other way round.
+        let reversed = memo(move || items.with(|i| i.iter().rev().cloned().collect::<Vec<_>>()));
+        row([
+            list(move || items.get(), cursor).fixed(4),
+            list(move || reversed.get(), signal(0))
+                .marks_by(picked, move |i| reversed.with(|r| r[i].clone()))
+                .no_focus()
+                .fixed(4),
+            text(move || format!("{:?}", picked.mark(&"b".to_string()))),
+        ])
+        .on_key("v", move |_| picked.visual(false))
+        .on_key("space", move |_| picked.toggle("c".into()))
+    });
+    let mut driver = app.driver(30, 3);
+    driver.press("space v down");
+    let styled = intuituive::testing::styled(&driver);
+    // c (row 0 of the reversed list) selected; b (row 1) in the range.
+    let lines: Vec<&str> = styled.lines().collect();
+    assert!(lines[0].contains("on yellow"), "{styled}");
+    assert!(lines[1].contains("on cyan"), "{styled}");
+    assert!(rows(&driver)[0].ends_with(&format!("{:?}", Mark::Visual)));
+}
+
+#[test]
+fn find_from_the_hovered_item_stays_on_a_match() {
+    use intuituive::list_search;
+    let app = App::new(|| {
+        let items = || names(&["main.rs", "lib.rs", "mod.rs"]);
+        let cursor = signal(0usize);
+        let find = list_search(|| "m".to_string(), items, cursor);
+        let (here, next) = (find.clone(), find.clone());
+        text!("{cursor}")
+            .on_key("h", move |_| {
+                here.next_from(true);
+            })
+            .on_key("n", move |_| {
+                next.next_from(false);
+            })
+            .on_key("p", move |_| {
+                find.previous_from(true);
+            })
+    });
+    let mut driver = app.driver(5, 1);
+    driver.press("h");
+    assert_eq!(rows(&driver)[0], "0");
+    driver.press("n");
+    assert_eq!(rows(&driver)[0], "2");
+    driver.press("p");
+    assert_eq!(rows(&driver)[0], "2");
+}
+
+#[test]
+fn numbered_tabs_and_a_segment_that_shows_only_while_it_should() {
+    use intuituive::widgets::{seg, status_bar, Caps};
+    use intuituive::{tab_set, tabs_for_indexed};
+    let app = App::new(|| {
+        let set = tab_set(|| "src".to_string());
+        set.open_with("docs".to_string());
+        let visual = signal(false);
+        column([
+            tabs_for_indexed(&set, |i, name| format!("{} {name}", i + 1)).fixed(1),
+            status_bar(
+                [
+                    seg(|| " NOR ".into()).style("white on blue"),
+                    seg(|| " VIS ".into())
+                        .style("white on red")
+                        .when(move || visual.get()),
+                    seg(|| " notes".into()),
+                ],
+                [],
+            )
+            .caps(Caps::Powerline)
+            .fixed(1),
+        ])
+        .on_key("v", move |_| visual.set(true))
+    });
+    let mut driver = app.driver(30, 2);
+    driver.settle();
+    let strip = rows(&driver)[0].clone();
+    assert!(
+        strip.contains("1 src") && strip.contains("2 docs"),
+        "{strip}"
+    );
+    assert_eq!(rows(&driver)[1], " NOR \u{e0b0} notes");
+    driver.press("v");
+    assert_eq!(rows(&driver)[1], " NOR \u{e0b0} VIS \u{e0b0} notes");
 }
 
 #[allow(dead_code)]

@@ -11,6 +11,10 @@ struct Facts {
     /// The keys' style (or theme style name), when not the theme's
     /// `facts.key`.
     key_style: Option<String>,
+    /// The values' style, when not the theme's `facts.value` (none).
+    value_style: Option<String>,
+    /// A style for row `i`'s value, over the values' style.
+    row_style: Option<Box<dyn Fn(usize) -> Option<String>>>,
 }
 
 /// A description list: each key (console markup) in a column as wide as
@@ -18,7 +22,10 @@ struct Facts {
 /// it, wrapped under itself when it is long: a file's details, a
 /// process's, a record's fields (Yazi's spotter, a `DataTable` of two
 /// columns in Textual). The keys are in the theme's `facts.key` style
-/// (bold), or [`key_style`](Node::key_style)'s, under their own markup.
+/// (bold), or [`key_style`](Node::key_style)'s, under their own markup;
+/// the values in the theme's `facts.value` (none), or
+/// [`value_style`](Node::value_style)'s, a row's own from
+/// [`value_style_for`](Node::value_style_for) over it.
 /// Sized [`Size::Auto`](crate::Size::Auto), it is as tall as its rows
 /// and as wide as its widest. Read aloud as `key: value` pairs.
 ///
@@ -49,6 +56,8 @@ pub fn facts_of(rows: impl Fn() -> Vec<(String, String)> + 'static) -> Node {
     crate::widget::widget(Facts {
         rows: Box::new(rows),
         key_style: None,
+        value_style: None,
+        row_style: None,
     })
     .what("facts")
 }
@@ -77,13 +86,35 @@ impl Facts {
         }
     }
 
+    /// The style of row `i`'s value: the values', then the row's own over
+    /// it; `None` for none.
+    fn value_style(&self, console: &Console, i: usize) -> Option<Style> {
+        let base = match &self.value_style {
+            Some(style) => Some(theme_style(console, style, style)),
+            None => {
+                let theme = theme_style(console, "facts.value", "");
+                (theme != Style::new()).then_some(theme)
+            }
+        };
+        let own = self
+            .row_style
+            .as_ref()
+            .and_then(|row| row(i))
+            .map(|style| theme_style(console, &style, &style));
+        match (base, own) {
+            (Some(base), Some(own)) => Some(base.combine(&own)),
+            (base, own) => own.or(base),
+        }
+    }
+
     /// Every row's lines, at `width`.
     fn lines(&self, console: &Console, key_style: &Style, width: u16) -> Vec<Vec<Segment>> {
         let rows = (self.rows)();
         let keys = Facts::key_width(&rows, width);
         let room = width.saturating_sub(keys + 1).max(1);
         let mut out = Vec::new();
-        for (key, value) in &rows {
+        for (i, (key, value)) in rows.iter().enumerate() {
+            let value_style = self.value_style(console, i);
             let mut key_line: Vec<Segment> = markup_line(console, key, keys)
                 .into_iter()
                 .map(|piece| {
@@ -108,7 +139,16 @@ impl Facts {
                 } else {
                     vec![Segment::new(" ".repeat(keys as usize + 1), None)]
                 };
-                row.extend(line);
+                match &value_style {
+                    Some(style) => row.extend(line.into_iter().map(|piece| {
+                        let style = match &piece.style {
+                            Some(own) => style.combine(own),
+                            None => style.clone(),
+                        };
+                        Segment::new(piece.text, Some(style))
+                    })),
+                    None => row.extend(line),
+                }
                 out.push(row);
             }
         }
@@ -194,6 +234,42 @@ impl Node {
     pub fn key_style(self, style: &str) -> Node {
         let style = style.to_string();
         self.widget_mut(|facts: &mut Facts| facts.key_style = Some(style));
+        self
+    }
+
+    /// For [`facts`]: the values' style (or theme style name) instead of
+    /// the theme's `facts.value` (none), under their own markup: Yazi's
+    /// spotter has yellow values. Ignored on other nodes.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    /// use intuituive::facts;
+    ///
+    /// let app = App::new(|| {
+    ///     facts([("Size", "12 KB"), ("Mode", "rw-r--r--")])
+    ///         .value_style("yellow")
+    ///         .value_style_for(|i| (i == 1).then(|| "bold".to_string()))
+    /// });
+    /// let mut driver = app.driver(20, 2);
+    /// driver.settle();
+    /// let styled = intuituive::testing::styled(&driver);
+    /// assert!(styled.contains("[yellow]12 KB"), "{styled}");
+    /// assert!(styled.contains("[bold yellow]rw-r--r--"), "{styled}");
+    /// ```
+    pub fn value_style(self, style: &str) -> Node {
+        let style = style.to_string();
+        self.widget_mut(|facts: &mut Facts| facts.value_style = Some(style));
+        self
+    }
+
+    /// For [`facts`]: a style (or theme style name) for row `i`'s value,
+    /// over the values' style; `None` for none. A size in red when it is
+    /// big, a permission in the colour of its kind. Ignored on other
+    /// nodes.
+    pub fn value_style_for(self, style: impl Fn(usize) -> Option<String> + 'static) -> Node {
+        let style: Box<dyn Fn(usize) -> Option<String>> = Box::new(style);
+        let mut style = Some(style);
+        self.widget_mut(|facts: &mut Facts| facts.row_style = style.take());
         self
     }
 }
