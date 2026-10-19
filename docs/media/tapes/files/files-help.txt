@@ -23,4 +23,4 @@
           │ V                   Enter visual mode (unset mode)                           │
           │ K                   Seek up 5 units in the preview                           │
           ╰──────────────────────────────────────────────────────────────────────────────╯
- NOR  4K  src                                                                drwxr-xr-x  Top   1/7
+ NOR  4K  src                                                                drwxr-xr-x  Top   1/8

@@ -2,11 +2,11 @@
   project   │ src                                           4 │#!/bin/sh
             │ tests                                         1 │echo hi
             │ run.sh                                      18B │
-            │ Cargo.toml                                 181B │
-            │ logo.p╭─ Commands ───────────────────────────────────────────────╮
-            │ readme│? Command ›                                               │
-            │ README│❯  Exit visual mode, clear selection, or cancel sear… esc │
-            │       │   Quit the process                                     q │
+            │ scripts.tar.gz                             122B │
+            │ Cargo.╭─ Commands ───────────────────────────────────────────────╮
+            │ logo.p│? Command ›                                               │
+            │ readme│❯  Exit visual mode, clear selection, or cancel sear… esc │
+            │ README│   Quit the process                                     q │
             │       │   Close the current tab, or quit if it's last     ctrl+c │
             │       │   Previous file                                      k/↑ │
             │       │   Next file                                          j/↓ │
@@ -16,11 +16,11 @@
             │       │   Move cursor down half page           ctrl+d/shift+pgdn │
             │       │   Move cursor up one page                    ctrl+b/pgup │
             │       │   Move cursor down one page                  ctrl+f/pgdn │
-            │       │  87/87 · ↑↓ move · enter run · esc close                 │
+            │       │  88/88 · ↑↓ move · enter run · esc close                 │
             │       ╰──────────────────────────────────────────────────────────╯
             │                                                 │
             │                                                 │
             │                                                 │
             │                                                 │
             │                                                 │
- NOR  18B  run.sh                                                            -rwxr-xr-x  42%   3/7
+ NOR  18B  run.sh                                                            -rwxr-xr-x  37%   3/8

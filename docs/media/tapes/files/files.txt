@@ -6,7 +6,7 @@
   readme-li…│                                                 │
   README.md │                                                 │fn main() {
   run.sh    │                                                 │    let workers = std::env::args()
-            │                                                 │        .skip_while(|arg| arg != "--
+  scripts.t…│                                                 │        .skip_while(|arg| arg != "--
             │                                                 │        .nth(1)
             │                                                 │        .and_then(|n| n.parse().ok()
             │                                                 │        .unwrap_or(4);

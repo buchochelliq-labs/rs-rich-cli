@@ -350,3 +350,134 @@ round.
 | A debounced signal | the find-as-you-type and preview reloads built from `after` and a generation | `debounced(signal, 150ms) -> Signal<T>` | core | medium |
 | A mode line | `status_bar` segments that follow `bind_cycle`'s mode, its colour per mode | `mode_segment(mode, &[(Mode::Normal, "NOR", "blue"), ..])` | core | low |
 | A footer that pages | `key_hints` showing more on `?` (Bubbles' short and full help) | `key_hints().expand_on("?")` | core | low |
+
+## Round 3: files (Yazi)
+
+`examples/files.rs` rebuilt on round 3's additions: the `files` plugin
+(`intuituive::files`, rs-rich-ext's `listing`, `open`, `file_ops`, `trash`,
+`git`, `archive`) and the core's bars, tabs and dialogs. No framework
+change in the round. It went from 2,756 lines to 1,450: what is left is
+Yazi's keymap, what each key does, tabs, the selection and visual mode,
+the help and the spotter. It now needs the crate's `files` feature
+(`required-features = ["files"]`, so a default build and `--all-targets`
+skip it); `archive`, `watch` and `art` add to it, and CI's tapes job
+builds it with all four.
+
+A rule from this round on: a **core** entry below names a component that
+another, unrelated component could reuse, with nothing about files, paths
+or Yazi in its name or parameters. What is about files is a **plugin**
+entry (the `files` feature); where a file component has a generic shape
+underneath, both are proposed: the generic core piece and the plugin
+built on it.
+
+### Round-2 gaps now closed, and where files.rs uses them
+
+| Round-2 gap or component | Now | Where in files.rs |
+|---|---|---|
+| Miller columns, file list, directory model, preview by type (~700 lines of round 2) | `files::miller(start).icons(..)`, `view_with(MillerOptions::new().markers(..).git(..))`; its `cwd`, `cursor`, `hovered`, `current`, `hidden`, `sort`, `linemode`, `find`, `preview_top` signals and its `arrow`/`page`/`enter`/`leave`/`cd`/`refresh` | `Fm`, `columns`, `run` |
+| MIME by content | `DirModel::sniff`, inside `miller`; `m.current.mime(&entry)` | the rows' colours, `spot` |
+| The keyed preview with a generation counter | `files::preview` inside `miller` (code, images with `art`, archives with `archive`, directories, hex) | gone from the example |
+| Openers (`Opener`, `openers_for`, `system_opener`, `editor`) | `files::opener_rules()` (`Rules::matching`, `shared`), `files::open_with` | `open`, `launch` |
+| File operations, a free name, "not into itself" | `files::tasks()` + `Op::{Copy, Move, Delete, Trash}` with `Conflict::{Rename, Overwrite}` | `Fm::job`, `paste`, `remove` |
+| No system trash (a `.trash` folder stood in) | `Op::Trash`: the FreeDesktop trash | `remove`; tested with `XDG_DATA_HOME` |
+| Archives described as binary | the `archive` preview; `Launch::Extract` through `Tasks::extract` | `launch`; `archives_are_listed_in_the_preview_and_extracted_by_enter` |
+| Git signs | `files::git_status(m.current)` into `MillerOptions::git` | `columns`; `git_signs_show_beside_the_line_mode` |
+| `jump`'s blocking 20,000-entry walk | `files::finder(walk(cwd).hidden(..))`, streaming | `jump`; `z_finds_a_file_below_here_and_goes_to_it` |
+| Task manager | `files::tasks_panel(jobs)` in a modal on `w`; `Tasks::running()` for Yazi's quit confirm | `task_manager`, `quit`, the status line's progress |
+| The `Prompt` builder (~80 lines) | `cx.prompt_with(.., PromptOptions::new().title_style("default").at(..).caret(..).on_change(..).on_cancel(..), ..)`, Yazi's 50 wide | every prompt in `run`; `prompts_are_yazis_50_wide_at_the_top_centre` |
+| "Open with:" as `popup_at` + `list` | `cx.pick_with(title, Origin::At(row), items, PickOptions::new().offset(..), ..)` | `open` |
+| `cx.confirm` 50 wide, an empty body taking rows | `cx.confirm_with(.., ConfirmOptions::new().size(..), ..)`: Yazi's 70 x 20 trash, 50 x 15 overwrite, the quit confirm | `remove`, `paste`, `quit`; `the_trash_confirm_is_yazis_70_by_20` |
+| The status line's hand-made caps | `status_bar(left, right)` of `seg(..).style_with(..)`, `.caps(Caps::Rounded)` with icons | `status` |
+| The header's left cut from `viewport()` | `breadcrumb(..).home_tilde().crumb_suffix(..)`, cyan through the theme's `breadcrumb*` styles | `header` |
+| `tab_strip`'s `switch`, `clicked` signal and two watches | `tabs(..).auto_hide().on_select(\|to, _\| fm.switch_tab(to))` | `tab_strip` |
+| Which-key columns running together, no description style | the fixed columns; theme `which_key.sep`, `which_key.desc` in Yazi's colours | `theme` |
+| `"\",\" s"` | `"comma s"` | `SEQUENCES` |
+| A rule in a padded column not joining the panel | fixed: the help pads its column, not each child | `help` |
+| `RectHandle` in a signal, `Signal<Option<RectHandle>>` | not needed: Miller keeps its column's rect (`m.row_rects()`, `column_rect()`) | `open`, `Act::Rename` |
+| The headless record kept only the program | `Record::handoff_commands` | `enter_hands_the_terminal_to_the_editor_as_yazi_does` asserts the file |
+
+Newly faithful, and tested: the system's trash; file jobs in the
+background and a task manager; quitting asks while tasks run; git signs;
+type colours sniffed from content; archive listings and extraction; the
+finder's streaming walk; 50-wide prompts; Yazi's confirm sizes; a click in
+the parent column goes into that directory (Yazi's `cd`; round 2 went to
+the parent, hovering it, and its test now says so). One assertion changed
+for the worse: a binary file previews as a hex dump, not Yazi's `file`
+classification (below).
+
+Not used, on purpose: `key_hints` (Yazi has no footer), `notify_width`
+(the default fits Yazi's errors at 80 columns), `Miller::navigation` (see
+friction).
+
+### New gaps and bugs
+
+| Gap or bug | Needed for | API sketch | Where |
+|---|---|---|---|
+| **Bug:** work that a layout starts (a watch on a `rect_handle`) is not settled before the next input event. `files::preview` loads only once its pane has a width, so an app's first frame shows no preview and an event sent right away (a click on a directory's preview) finds nothing. Repro: `run(files_app(root).wait_for_tasks(true), Script::new().keys("q"), 80, 10)` in tests/files.rs: the preview column of the hovered `alpha` is empty; `Script::new().wait(50ms).keys("q")` shows `a.txt`. The tests wait first (`first_frame()`) | a correct first frame; clicks and keys at start-up | a turn that lays out runs the watches its new rects woke, and their tasks under `wait_for_tasks`, before the next event; or `preview` loads at a provisional width | core (generic: any watch on a rect) |
+| **Bug:** list options on a node that wraps a list do nothing, silently. `file_list` returns a `switch` (for its "No items"), so `.highlight_layer(..)`, `.wheel_step(..)` or `.selected_style_for(..)` on it are ignored | Yazi's rounded ends on the hovered row (round 2's gap, still open for the clone); any wrapped list | a wrapper forwards list options to the list it holds, or warns once in debug builds that an option met no list | core (generic) |
+| The hovered row's rounded ends with a Nerd Font | Yazi's hovered row | `FileListOptions::hovered_caps(open, close)` and `MillerOptions::hovered_caps`, drawing the ends in the row's colour on `highlight_layer(Under)` | plugin (on core's `highlight_layer`) |
+| A binary file previews as a hex dump | Yazi's `file` previewer: `file -bL`'s classification ("data", "ELF 64-bit…") | a built-in `Previewer::file_type()` (the `file` command, else a description of the MIME type), chosen by `PreviewOptions::binary(BinaryPreview::FileType \| Hex)` | plugin |
+| One cwd: tabs, each with a back/forward history, are app code (`Tab`, `history`, `switch_tab`, `close_tab`, `swap_tab`, a watch on `m.cwd`: ~140 lines) | Yazi's tabs, H and L | core: `history(signal) -> History` (back/forward over any signal's past values: `back()`, `forward()`, `can_back()`), and `tab_set(make: Fn() -> T) -> TabSet<T>` (states with an active index: `open`, `close`, `swap`, `switch`, `titles`) for `tabs(..)`; plugin: `files::tabs(miller)` giving each tab its cwd and history | core + plugin |
+| Selection and visual mode are app code (`selected`, `visual`, `end_visual`, `targets`, `marker`: ~100 lines) | Space, Ctrl+A, Ctrl+R, v, V, and what y/x/d act on | core: `multi_select(keys) -> MultiSelect<K>` over a list's items by key, with `toggle`, `select_all`, `invert`, a range anchor that follows a cursor (`visual(unset)`), `targets(hovered)`; plugin: `MillerOptions::selection(sel)` for the markers and `Miller::targets()` | core + plugin |
+| Yank state and paste are app code | y, x, p, P, the copied and cut markers | `files::Yank` (paths, cut) with `markers` and `paste(into, conflict) -> Op` | plugin |
+| Find next/previous over the list is app code (`find_arrow`, ~25 lines); `Miller::find` only highlights | /, ?, n, N | core: `list_search(query, items, cursor)` with `next()`, `previous()`, `place() -> (n, of)` (smart case); plugin: `Miller::find_next(previous)` | core + plugin |
+| The hovered entry is kept by hand across a re-sort, filter or hidden toggle (`keep`) | `,s`, `f`, `.` | core: a list cursor kept by key (`cursor_by(\|item\| key)`): when the items change, the selection follows the same key; plugin: Miller's cursor by name | core + plugin |
+| A right-click menu on a row needs `cx.pointer()` and `row_rects` maths: Miller's lists are not reachable for `on_mouse` | the menu on a row | core: `list.on_context(\|index, cx\| ..)` (a right press or the menu key on an item); plugin: `MillerOptions::on_context(\|entry, cx\| ..)` | core + plugin |
+| `open_with` extracts with a plain `spawn`; to show it as a task the example matches `Launch::Extract` itself and calls `Tasks::extract` | Yazi's extract as a task | `open_with_tasks(cx, opener, paths, jobs, done)`, or `Tasks` optional in `open_with` | plugin |
+| No progress segment for the status line; the example prints the share and count | Yazi's progress gauge | core: `seg_gauge(fraction, label)`, a `status_bar` segment filled to a share; plugin: `Tasks::summary() -> (fraction, running, failed)` | core + plugin |
+| `Miller` keeps the directories visited private (`remembered(dir)` only) | Z (zoxide) over what was visited; the example keeps its own set | `Miller::visited() -> Vec<PathBuf>`, and a frecency store (`files::frecency(path)`) for Z across sessions | plugin |
+| The finder walks a tree only; Z uses rs-rich-interact's `Jump`, so two finders look different | one look for z and Z | core: a streaming fuzzy list over any item source (`fuzzy_list(source)`); plugin: `files::finder(walk)` on it (the refactor under way) | core + plugin |
+| `finder` has no Esc, title or border; the example adds them | z in a modal | `finder(..)` closes its modal on Esc (or `.on_cancel`) | plugin (on the core finder) |
+| The trash on macOS and Windows fails ("Unsupported") | `d` there | `trash::put` through the Finder (AppleScript or `NSFileManager`) and the shell's recycle bin (`SHFileOperation`) | plugin (rs-rich-ext) |
+| Tab titles are cut to the width by hand, and the unselected style is markup in each title | Yazi's strip | core: `tabs(..).fit()` (titles cut with `…` to share the width) and a theme style `tabs.unselected` | core |
+
+### Friction with the new APIs
+
+- **`Miller::navigation`'s descriptions are its own** ("Move up", "Go to
+  the top"), not Yazi's ("Previous file"), and its key set is fixed (no
+  `shift+pageup`). The help and the which-key pop-up show descriptions,
+  so the example binds the moves itself with `m.arrow`, `m.page`, …. A
+  table form (`navigation_with(&[(Move::Up, "k up", "Previous file")])`)
+  would let a clone keep its wording.
+- **Two ways to reach a column**: Miller's lists are built inside
+  `view_with`, so anything not in `MillerOptions` (an `on_mouse`, list
+  options, a name) has to go on the whole view. Every option a clone
+  needs has to be added to `MillerOptions` by hand; a
+  `MillerOptions::current(|list| list.option(..))` hook would end that.
+- **Which signals are public is uneven**: `cwd`, `cursor`, `find`,
+  `preview_top` are fields, `current.filter` is a field of a field,
+  `row_rects()` and `column_rect()` are methods, `remembered` a lookup,
+  the preview cursor private. A clone reads all of them; one style (all
+  methods returning signals) would be easier to find.
+- **Tasks report twice**: a failed job stays in `tasks_panel` and the app
+  notifies too, so the title shows twice ("Move src to src: src: can't go
+  inside itself"). An option for the panel's line without the title, or
+  `Tasks::on_fail(|job, cx| ..)` app-wide, would replace the `done`
+  closure each call repeats.
+- **`files::preview` does not use the core's `resource_for` /
+  `stale_after`** that round 3 added for it: it keeps its own generation
+  counter and a `spawn`ed sleep. The first-frame bug above would be one
+  fix in one place if it did.
+- **`required-features` for an example that a test includes by path**:
+  `tests/files.rs` needs `#![cfg(feature = "files")]` by hand; without it a
+  default `cargo test` fails to compile the test, not skips it.
+### Components that would help
+
+| Component | What it would replace or enable in files.rs | API sketch | Where | Value |
+|---|---|---|---|---|
+| History (back/forward) | `Tab::back`/`forward`, `history`, the watch that records them | `history(signal) -> History` with `back()`, `forward()`; a browser's, a pager's, a REPL's | core | high |
+| Tab set | `tabs`/`active` signals, `new_tab`, `switch_tab`, `close_tab`, `swap_tab`, `tab_strip`'s titles (Bubble Tea apps and Textual's `TabbedContent` keep a model like it) | `tab_set(\|\| state) -> TabSet<T>`; `tabs_for(&set, \|t\| title)` | core | high |
+| Multi-select with a visual range | `selected`, `visual`, `end_visual`, `targets`, `marker` (ratatui's `tui-widget-list`, Textual's `SelectionList`, vim's visual mode) | `multi_select::<K>()` with `toggle`, `range_from(cursor)`, `targets(hovered)` | core | high |
+| Files on top of those | the rest of the selection code, yank, paste, tabs per directory | `files::selection(miller)`, `files::Yank`, `files::tabs(miller)` | plugin | high |
+| List search | `find_arrow` and the find prompt's handlers (Bubbles' `list` filter, Textual's `OptionList` search) | `list_search(query, items, cursor).next()` | core | medium |
+| Cursor kept by key | `keep` around every sort, filter and hidden toggle | `list(..).cursor_by(\|item\| key)` | core | medium |
+| Context menu on list items | the columns' `on_mouse` with `cx.pointer()` and `row_rects` (Textual's `on_click` per option) | `.on_context(\|i, cx\| items)` | core | medium |
+| Help screen options | the hand-built `help` modal (~40 lines) when the core help can take a title, the key notation (`<C-u>`) and Yazi's filter-first layout (Bubbles' `help`, Textual's `HelpPanel`) | `cx.help_with(HelpOptions::new().title("mgr.help").key_format(Vim))` | core | medium |
+| Description list | the spotter's `[blue]key[/][yellow]value` lines (Textual's `DataTable` two-column use, ratatui's `Table` of facts) | `facts([("Name", value), ..]).key_style(..)` | core | low |
+| Spotter | `spot`: name, path, MIME, size, mode, owner, times, link (Yazi's `spot`) | `files::spot(path)` on `facts` | plugin | low |
+| Gauge segment | the status line's progress text | `seg_gauge(fraction, label)` | core | low |
+| Frecency store | the session-only `visited` set behind Z (zoxide) | `files::frecency().visit(dir)`, `.ranked()` | plugin | medium |
+| `file` classification previewer | the hex dump for binaries | `Previewer::file_type()` | plugin | low |
+| Bulk rename | Yazi's `r` on a selection: the names in `$EDITOR`, renamed on save | `files::bulk_rename(cx, paths)` over a handoff | plugin | medium |
+| Shell command prompt | Yazi's `;` and `:` (run a command on the selection, blocking or not) | `cx.prompt` + `open::Launch::Shell` as `files::shell(cx, paths)` | plugin | medium |
+| Content search | Yazi's `s`/`S` (fd and ripgrep into a virtual listing) | core: a streaming list of results (`fuzzy_list`'s source); plugin: `files::search(root, query, Grep)` showing a listing of matches in Miller | core + plugin | medium |

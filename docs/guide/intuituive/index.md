@@ -2563,7 +2563,7 @@ build has. The `files` and `scope` examples take `--backend NAME`, or
 backends the build has when the name is not one of them:
 
 ```bash
-cargo run -p rs-rich-intuituive --example files --features termwiz -- --backend termwiz
+cargo run -p rs-rich-intuituive --example files --features files,termwiz -- --backend termwiz
 INTUITUIVE_BACKEND=termion cargo run -p rs-rich-intuituive --example scope --features termion
 ```
 

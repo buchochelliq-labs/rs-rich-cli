@@ -6,7 +6,7 @@
             │ readme-link -> README.md                        │
             │ README.md                                       │
             │ run.sh                                          │
-            │                                                 │
+            │ scripts.tar.gz                                  │
             │                                                 │
             │                                                 │
             │                                                 │
@@ -17,10 +17,10 @@
             │                                                 │
             │                                                 │
  ╭────────────────────────────────────────────────────────────────────────────────────────────────╮
- │ m  Sort by modified time        E  Sort by extension (reverse)  s  Sort by size                │
- │ M  Sort by modified time (rever a  Sort alphabetically          S  Sort by size (reverse)      │
- │ b  Sort by birth time           A  Sort alphabetically (reverse r  Sort randomly               │
- │ B  Sort by birth time (reverse) n  Sort naturally                                              │
+ │ m  Sort by modified time        E  Sort by extension (revers…   s  Sort by size                │
+ │ M  Sort by modified time (re…   a  Sort alphabetically          S  Sort by size (reverse)      │
+ │ b  Sort by birth time           A  Sort alphabetically (reve…   r  Sort randomly               │
+ │ B  Sort by birth time (rever…   n  Sort naturally                                              │
  │ e  Sort by extension            N  Sort naturally (reverse)                                    │
  ╰────────────────────────────────────────────────────────────────────────────────────────────────╯
- NOR  4K  src                                                                drwxr-xr-x  Top   1/7
+ NOR  4K  src                                                                drwxr-xr-x  Top   1/8
