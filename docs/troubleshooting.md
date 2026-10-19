@@ -17,7 +17,9 @@ what kind of failure it was:
 `rich capture` is the exception: it exits with the captured command's own
 status (128 + the signal number when a signal ended it).
 
-**Applies to** `rich 0.0.11` (`rs-rich-cli` 0.0.11). If your version differs, check
+**Applies to** `rich` 0.0.11 and later (`rs-rich-cli` 0.0.11 to 0.0.20);
+entries for later features name the release they came in. If your version
+differs, check
 [the changelog](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/CHANGELOG.md).
 
 ---
@@ -171,6 +173,49 @@ Windows. Piped input keeps working without a hint.
 
 ---
 
+## Recordings and time
+
+### `rich record` wrote an `.apng` I did not ask for
+
+A tape without an `Output` line writes every format, and since 0.0.20 that
+includes an animated PNG beside the GIF. Name the formats you want in the
+tape (`Output gif png svg`) or on the command line
+(`--format gif,png,svg`); `--no-video` skips the GIF, the APNG, the MP4 and
+the page's player. See [Record your own](recordings.md#record-your-own).
+
+### A recording made on macOS plays in jumps
+
+On macOS the recorder keeps fewer frames than the tape's `Set Framerate`
+asks for (CI's runners kept 7 frames over 0.8 s where Linux keeps about 30
+a second), so a fast game's video is choppy. The screenshots and the cast
+are not affected. Record games on Linux until it is fixed; see
+[Known issues](known-issues.md#the-recorder-keeps-fewer-frames-on-macos).
+
+### A game in a recording does not stop when the key is let go
+
+The program hears a release only with the kitty keyboard protocol: add
+`Set KittyKeyboard on` to the tape, and the program must turn the protocol
+on (intuiTUIve apps do). Without it a `KeyUp` sends nothing, as on a legacy
+terminal, and the program sees only the repeats.
+
+### The local time is wrong on Windows
+
+`Zone::Local` (behind `DateTime::now_local`, natural dates and intuiTUIve's
+calendars) uses Windows' own zone unless `TZ` is set. When it is set, `TZ`
+wins, as it does for the C runtime, and Windows has no zoneinfo database to
+read a name from:
+
+- unset `TZ` to use the system's zone;
+- or set it to a POSIX rule: `set TZ=CET-1CEST,M3.5.0,M10.5.0/3`
+  (`$env:TZ = '...'` in PowerShell);
+- or point `TZDIR` at a zoneinfo directory to use a name such as
+  `Europe/Berlin`.
+
+A `TZ` that is neither a rule nor a name it can read is taken as UTC. The
+zone is read once per process, so restart the program after changing it.
+See [Time zones](guide/interact/index.md#time-zones).
+
+---
 
 ## Text encoding
 
