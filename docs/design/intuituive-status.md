@@ -47,22 +47,27 @@ Each on its own local branch; pushed as a backup branch named
 3. Release bumps owed on main once the 0.0.19 cohort is out: web, data and
    cli changed since 2fc9772.
 
-## Round 6 (fix round), started
+## Round 6 (fix round)
 
 Brief: `/home/user/apps/R6BRIEF.md` in the session (its rules: regression
-test first, generic core, stay in your area). Areas, each on its own branch:
+test first, generic core, stay in your area).
 
-| Agent | Branch | Area |
-|---|---|---|
-| A | `r6-render` | style table growth and per-frame clone, fast interning, `put_rgb` pixel cells, public `DrawCx::rect()` (later: Kitty/Sixel/iTerm2 from the `pixels` node) |
-| B | `r6-input` | one input event per frame, keys lost at start-up, Shift+arrows swallowed, `Driver::event` settling; key state and releases, kitty flag 8, repeat control, timers with a handle and catch-up, frame pacing and stats |
-| C | (next) | panel titles/borders from state, `shown_when`/`size_with`, focus scopes, `keyed`, `.auto()` switch sizes, layer over fill, spatial focus, treemap, `App::min_size`, longest-fit text, `key_hints_with`, whole-app help |
-| D | (next) | reactive tables and columns, marker column, keyed cursor, offset, percent widths, row heights, keyed tree with reveal, list ranges |
-| E | (next) | completion, ghost text, history, command line, query language, natural dates, calendar options |
-| F | (next) | port `Text.markup` with goldens; the template manifest noise for git dependencies |
+| Agent | Branch | Area | State |
+|---|---|---|---|
+| A | `r6-render` | style table compaction, Fx interning, `put_rgb` pixel cells, `DrawCx::rect()` | merged |
+| B | `r6-input` | input drained per frame, start-up keys, Shift+arrows, `Driver::send`; key state and releases, every key, DAS/ARR repeat, `Timer` handles, `fixed_step`, `max_fps`, stats | merged |
+| C | `r6-react` | `.auto()` switches, layers that composite, `keep_last`, titles/borders from state, `shown_when`/`size_with`, focus scopes and direction, `keyed`, treemap, `App::min_size`, fitted text, `key_hints_with`, whole-app help | merged; layers then made single-pass (05305b7: each layer draws once per change, no second pass) |
+| D | `r6-tables` | reactive tables and columns, markers, keyed cursor, offset across, widths and priorities, row heights, keyed/lazy trees, list ranges, `TableSource` and `view_of` | merged |
+| E | `r6-inputs` | completion, history, command line, query language, natural dates, calendar options | in progress (wip-r6-inputs) |
+| F | `r6-parity` | `Text.markup` port with goldens; template manifest | merged |
+| G | `r6-record` | rich-record graphics capture, every frame at a set fps, held keys, APNG; raycaster and Doom videos | merged; Doom videos on rs-rich-doom `claude/doom-frontend` (114c39a) |
+
+Found by G for the rebuild: the raycaster's Kitty mode draws its image
+under cells with the root's background, so nothing shows (give the view the
+default background, or place at z below -2^30); its held arrow keys count as
+held only after a release was seen.
 
 Then every clone is rebuilt on the fixes.
-| G | `r6-record` | rich-record: Kitty/Sixel/iTerm2 capture, every-frame video at a set fps, `KeyDown`/`KeyUp`/`Hold`, APNG; gameplay videos of the raycaster (here) and of Doom's demo playback (rs-rich-doom) |
 
 **When all of it has landed and the full gate passes: open two PRs** (the
 user asked for this): rs-rich-cli `claude/next-priority-items-3c5p8e` →
