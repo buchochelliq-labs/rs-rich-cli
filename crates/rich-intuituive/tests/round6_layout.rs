@@ -10,6 +10,7 @@ use std::cell::Cell;
 use std::rc::Rc;
 
 use intuituive::prelude::*;
+use intuituive::widget::{Canvas, DrawCx};
 use intuituive::Driver;
 
 fn rows(driver: &Driver) -> Vec<String> {
@@ -706,4 +707,54 @@ fn the_whole_app_help_lists_every_panes_keys_with_the_focused_first() {
         help.contains("Remove") && !help.contains("Add to"),
         "{help}"
     );
+}
+
+/// Counts its draws; prints what its signal holds.
+struct Counted {
+    draws: Rc<Cell<usize>>,
+    word: Signal<&'static str>,
+}
+
+impl Widget for Counted {
+    fn draw(&mut self, _cx: &mut DrawCx, canvas: &mut Canvas) {
+        self.draws.set(self.draws.get() + 1);
+        canvas.print(0, 0, self.word.get(), None);
+    }
+}
+
+// Cost: once one layer drew, the whole stack drew again, so every layer
+// drew twice for each change in any of them.
+
+#[test]
+fn a_change_in_one_layer_draws_each_layer_once() {
+    let below = Rc::new(Cell::new(0));
+    let above = Rc::new(Cell::new(0));
+    let (b, a) = (below.clone(), above.clone());
+    let app = App::new(move || {
+        let word = signal("hi");
+        layers([
+            fill("·", ""),
+            widget(Counted {
+                draws: b.clone(),
+                word: signal("lo"),
+            }),
+            column([widget(Counted {
+                draws: a.clone(),
+                word,
+            })
+            .fixed(1)])
+            .inset(1, 0, 0, 2),
+        ])
+        .on_key("x", move |_| word.set("hey"))
+    });
+    let mut driver = app.driver(6, 2);
+    driver.settle();
+    assert_eq!(rows(&driver), ["lo····", "··hi··"]);
+    let (b0, a0) = (below.get(), above.get());
+    driver.press("x");
+    assert_eq!(rows(&driver), ["lo····", "··hey·"]);
+    assert_eq!((below.get() - b0, above.get() - a0), (1, 1));
+    // Nothing changed: nothing draws.
+    driver.settle();
+    assert_eq!((below.get() - b0, above.get() - a0), (1, 1));
 }

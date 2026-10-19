@@ -3648,6 +3648,7 @@ impl App {
             runtime: &self.runtime,
             dirty: self.runtime.take_dirty(),
             damage: Vec::new(),
+            composing: 0,
             focus_path: self.focus_path,
             hover_path: self.hover_path,
             wants_hover: std::cell::Cell::new(false),

@@ -108,7 +108,8 @@ reports), all generic core:
   `.min_size(n)` and `.max_size(n)` (bottom's sort menu came out 9 wide
   for 11); `layers` composite, so a layer shows the ones below where it
   draws nothing (a backdrop is one `fill`; a panel still covers its inside,
-  a node with a background its rectangle); a `switch` can drop the pages
+  a node with a background its rectangle), drawing each layer once when
+  any of them changes; a `switch` can drop the pages
   it no longer shows (`.keep_last(n)`), where it kept every page it built.
 - **Layout from state:** `Node::size_with(|| Size)`, `Node::shown_when(||
   bool)` and `hidden_when` (today's private `shown_if`, public);

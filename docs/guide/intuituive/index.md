@@ -251,9 +251,9 @@ Layers composite: where a layer draws nothing (the room round a centred
 column, a gap between its children) the ones below it show, so a backdrop
 is one `fill` under the content. A panel covers what is inside its frame,
 and a node with a background (`.bg(..)`, `.style(..)`) its whole
-rectangle; text covers the cells it writes. Once any layer draws, they all
-draw again, bottom first, so the board's ticks never show through the
-panel. A click goes to the top layer under the pointer,
+rectangle; text covers the cells it writes. When any layer is to draw,
+they all draw once, bottom first, none clearing what is under it, so the
+board's ticks never show through the panel. A click goes to the top layer under the pointer,
 and the Tab order and the accessibility tree follow the children's order
 (a lower layer's text, read from the screen, leaves out what is over it).
 

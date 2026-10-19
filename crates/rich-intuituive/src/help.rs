@@ -1,7 +1,7 @@
 //! The help's options ([`Ctx::help_with`](crate::Ctx::help_with)): its
 //! title, how it says keys, and its layout.
 
-use rich_interact::{Key, KeyCode};
+use rich_interact::{Key, KeyCode, ModifierKey};
 
 /// How the help says a binding's keys.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -401,6 +401,10 @@ fn symbol_key(key: Key) -> String {
         KeyCode::F(n) => format!("F{n}"),
         KeyCode::Char(' ') => "␣".to_string(),
         KeyCode::Char(c) => c.to_string(),
+        KeyCode::Modifier(ModifierKey::Shift) => "⇧".to_string(),
+        KeyCode::Modifier(ModifierKey::Ctrl) => "^".to_string(),
+        KeyCode::Modifier(ModifierKey::Alt) => "⌥".to_string(),
+        KeyCode::Modifier(ModifierKey::Super) => "⌘".to_string(),
     };
     let mut held = String::new();
     if key.modifiers.ctrl {

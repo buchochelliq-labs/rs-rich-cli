@@ -2764,6 +2764,29 @@ impl Node {
         }
     }
 
+    /// Whether drawing it into `rect` this frame would draw anything: it
+    /// or something inside it is dirty, or it moved. Read without drawing,
+    /// so a layers stack composites in one pass.
+    fn will_draw(&self, frame: &FrameState, rect: Rect) -> bool {
+        if self.hidden() {
+            return self.drawn.get().is_some();
+        }
+        if self.drawn.get() != Some(rect) {
+            return true;
+        }
+        !frame.dirty.is_empty() && self.dirty_within(&frame.dirty)
+    }
+
+    /// It or a node inside it is in `dirty`.
+    fn dirty_within(&self, dirty: &HashSet<NodeId>) -> bool {
+        if dirty.contains(&self.id) {
+            return true;
+        }
+        let mut found = false;
+        self.each_child(&mut |child| found = found || child.dirty_within(dirty));
+        found
+    }
+
     /// Not shown this frame: no rectangle (so no clicks reach it or
     /// anything inside it), and it draws afresh when it comes back.
     fn hide(&self) {
@@ -2998,7 +3021,9 @@ impl Node {
                 || restyled
                 || (relaid && !viewport);
             repaint = moved || force || cleared;
-            if cleared {
+            // In a layers stack drawn afresh the area is clear already, and
+            // the layers below show where this draws nothing.
+            if cleared && frame.composing == 0 {
                 screen.clear(rect);
             }
             if let (true, Some((kind, style))) = (repaint, &decor) {
@@ -3109,14 +3134,40 @@ impl Node {
             None => {
                 let overlapping = widget.overlapping();
                 let siblings = frame.damage.len();
+                // Layers composite: where a layer draws nothing (a gap
+                // between its children, no background), the ones below it
+                // show. When any of them is to draw, they all draw once
+                // over a clear area, bottom first, none clearing what is
+                // under it.
+                let shown = areas.iter().filter(|area| !area.is_empty()).count();
+                let layered = overlapping && shown > 1;
+                let compose = layered
+                    && (repaint
+                        || !written.is_empty()
+                        || widget
+                            .children()
+                            .iter()
+                            .zip(areas.iter())
+                            .any(|(child, area)| {
+                                let area = area.intersection(inner);
+                                !area.is_empty() && child.will_draw(frame, area)
+                            }));
+                if compose {
+                    if frame.composing == 0 {
+                        screen.clear(inner);
+                    }
+                    frame.damage.push(inner);
+                    frame.composing += 1;
+                }
                 for (i, child) in widget.children().iter().enumerate() {
                     match areas.get(i).map(|area| area.intersection(inner)) {
                         Some(area) if !area.is_empty() => {
                             // A child draws again where the widget drew over
                             // it, and, over its earlier siblings, where they
                             // drew this frame, on a clear area.
-                            let over = written.iter().any(|w| w.intersects(area));
+                            let over = compose || written.iter().any(|w| w.intersects(area));
                             let under = overlapping
+                                && !compose
                                 && frame.damage[siblings..].iter().any(|d| d.intersects(area));
                             if under {
                                 screen.clear(area);
@@ -3127,14 +3178,17 @@ impl Node {
                         _ => child.hide(),
                     }
                 }
-                // Layers composite: where a layer draws nothing (a gap
-                // between its children, no background), the ones below it
-                // show. Once any of them drew, they all draw again over a
-                // clear area, bottom first, none clearing what is under it.
-                let shown = areas.iter().filter(|area| !area.is_empty()).count();
-                if overlapping && shown > 1 && frame.damage.len() > siblings {
-                    screen.clear(inner);
+                if compose {
+                    frame.composing -= 1;
+                }
+                // Something drew that was not foreseen: the stack draws
+                // again, as above, so the layers still composite.
+                if layered && !compose && frame.damage.len() > siblings {
+                    if frame.composing == 0 {
+                        screen.clear(inner);
+                    }
                     frame.damage.push(inner);
+                    frame.composing += 1;
                     for (i, child) in widget.children().iter().enumerate() {
                         if let Some(area) = areas.get(i).map(|area| area.intersection(inner)) {
                             if !area.is_empty() {
@@ -3142,6 +3196,7 @@ impl Node {
                             }
                         }
                     }
+                    frame.composing -= 1;
                 }
                 // An effect sees what is inside it whole: when a child
                 // drew and the effect did not, everything inside draws
@@ -3592,6 +3647,9 @@ pub(crate) struct FrameState<'a> {
     pub runtime: &'a Runtime,
     pub dirty: HashSet<NodeId>,
     pub damage: Vec<Rect>,
+    /// How many layers stacks being drawn afresh this node is inside: it
+    /// draws over what the layers below drew, clearing nothing.
+    pub composing: usize,
     pub focus_path: Signal<Vec<NodeId>>,
     /// The nodes under the mouse pointer, outermost first.
     pub hover_path: Signal<Vec<NodeId>>,
