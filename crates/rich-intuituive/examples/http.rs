@@ -33,8 +33,9 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant, SystemTime};
 
 use intuituive::prelude::*;
+use intuituive::reactive::NodeId;
 use intuituive::widgets::{
-    table_with, tabs, tree_with, vsplit, Column, RowRects, TableOptions, TreeItem,
+    table_with, tabs, tree_keyed, tree_reveal, vsplit, Column, RowRects, TableOptions, TreeItem,
 };
 use intuituive::{Offset, Origin, PromptOptions};
 use rich::markup::escape;
@@ -282,36 +283,27 @@ fn pretty_json(text: &str) -> Option<String> {
 }
 
 impl Collection {
-    /// The entry at a tree path.
-    fn entry(&self, path: &[usize]) -> Option<&Entry> {
-        let (first, rest) = path.split_first()?;
-        let mut at = self.recipes.get(*first)?;
-        for i in rest {
-            at = match at {
-                Entry::Folder { children, .. } => children.get(*i)?,
-                Entry::Recipe(_) => return None,
-            };
+    /// The entry (a recipe or a folder) named `id`.
+    fn entry(&self, id: &str) -> Option<&Entry> {
+        fn find<'a>(entries: &'a [Entry], id: &str) -> Option<&'a Entry> {
+            entries.iter().find_map(|entry| match entry {
+                Entry::Folder { id: i, .. } if i == id => Some(entry),
+                Entry::Folder { children, .. } => find(children, id),
+                Entry::Recipe(r) => (r.id == id).then_some(entry),
+            })
         }
-        Some(at)
+        find(&self.recipes, id)
     }
 
-    /// The path of the first recipe, depth first.
-    fn first_recipe(&self) -> Vec<usize> {
-        fn find(entries: &[Entry], path: &mut Vec<usize>) -> bool {
-            for (i, entry) in entries.iter().enumerate() {
-                path.push(i);
-                match entry {
-                    Entry::Recipe(_) => return true,
-                    Entry::Folder { children, .. } if find(children, path) => return true,
-                    Entry::Folder { .. } => {}
-                }
-                path.pop();
-            }
-            false
+    /// The id of the first recipe, depth first.
+    fn first_recipe(&self) -> Option<String> {
+        fn find(entries: &[Entry]) -> Option<String> {
+            entries.iter().find_map(|entry| match entry {
+                Entry::Recipe(r) => Some(r.id.clone()),
+                Entry::Folder { children, .. } => find(children),
+            })
         }
-        let mut path = Vec::new();
-        find(&self.recipes, &mut path);
-        path
+        find(&self.recipes)
     }
 }
 
@@ -786,34 +778,21 @@ enum Kind {
 }
 
 /// Which panes show: the sidebar's list while it is open, and the one pane
-/// in fullscreen. The view is built once for each layout (a `switch`), as
-/// intuiTUIve has no node shown or hidden by a signal.
+/// in fullscreen. Each pane is built once and shown or hidden by it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 struct Layout {
     sidebar: Option<Sidebar>,
     full: Option<Pane>,
 }
 
-/// A node a pane focuses, in one layout.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-enum Target {
-    Sidebar,
-    Recipe(Kind, usize),
-    Exchange(bool, usize),
-    Profile,
-}
-
-/// Where each focus target is: (layout, target) to node id, filled in as
-/// the switches build their pages.
-type Registry = HashMap<(Layout, Target), u64>;
-
 /// Every piece of state, as signals: `Copy`, so each handler takes it.
 #[derive(Clone, Copy)]
 struct Slumber {
     path: Signal<PathBuf>,
     collection: Signal<Collection>,
-    tree: Signal<Vec<usize>>,
-    expanded: Signal<HashSet<Vec<usize>>>,
+    /// The selected recipe or folder, by id.
+    tree: Signal<Option<String>>,
+    expanded: Signal<HashSet<String>>,
     profile: Signal<usize>,
     sidebar: Signal<Sidebar>,
     sidebar_open: Signal<bool>,
@@ -834,9 +813,8 @@ struct Slumber {
     filter: Signal<String>,
     filtered: Signal<Option<(u64, Result<String, String>)>>,
     notice: Signal<Option<String>>,
-    focus: Signal<Registry>,
-    /// A target to focus once its page is built.
-    want: Signal<Option<(Layout, Target)>>,
+    /// The panes' nodes (sidebar, top, bottom), to focus inside.
+    panes: Signal<[Option<NodeId>; 3]>,
 }
 
 impl Slumber {
@@ -844,13 +822,15 @@ impl Slumber {
         let profile = (collection.profiles.iter())
             .position(|p| p.default)
             .unwrap_or(0);
-        let first = collection.first_recipe();
-        // The folders down to the first recipe start open.
-        let open: HashSet<Vec<usize>> = (1..first.len()).map(|n| first[..n].to_vec()).collect();
+        // The first recipe selected, the folders down to it open.
+        let (tree, expanded) = (signal(None), signal(HashSet::new()));
+        if let Some(first) = collection.first_recipe() {
+            tree_reveal(&tree_items(&collection.recipes), &first, tree, expanded);
+        }
         Slumber {
             path: signal(path),
-            tree: signal(first),
-            expanded: signal(open),
+            tree,
+            expanded,
             collection: signal(collection),
             profile: signal(profile),
             sidebar: signal(Sidebar::Recipe),
@@ -872,14 +852,13 @@ impl Slumber {
             filter: signal(String::new()),
             filtered: signal(None),
             notice: signal(None),
-            focus: signal(Registry::new()),
-            want: signal(None),
+            panes: signal([None; 3]),
         }
     }
 
     fn entry(&self) -> Option<Entry> {
-        let path = self.tree.get();
-        self.collection.with(|c| c.entry(&path).cloned())
+        let id = self.tree.get()?;
+        self.collection.with(|c| c.entry(&id).cloned())
     }
 
     fn recipe(&self) -> Option<Recipe> {
@@ -972,23 +951,9 @@ impl Slumber {
         }
     }
 
-    /// The node the selected pane focuses.
-    fn target(&self) -> Target {
-        match self.pane.get() {
-            Pane::Sidebar => Target::Sidebar,
-            Pane::Top => Target::Recipe(self.kind(), self.recipe_tab.get()),
-            Pane::Bottom if self.sidebar.get() == Sidebar::Profile => Target::Profile,
-            Pane::Bottom => Target::Exchange(self.shown().is_some(), self.exchange_tab.get()),
-        }
-    }
-
-    /// Note that `node` is `target` in `layout`, and return it.
-    fn register(&self, layout: Layout, target: Target, node: Node) -> Node {
-        let id = node.id();
-        self.focus.update(|r| {
-            r.insert((layout, target), id);
-        });
-        node
+    /// The pane shown alone, in fullscreen.
+    fn full(&self) -> Option<Pane> {
+        self.layout().full
     }
 
     fn select_pane(&self, pane: Pane, cx: &mut Ctx) {
@@ -996,16 +961,12 @@ impl Slumber {
         self.refocus(cx);
     }
 
-    /// Focus the selected pane's node. A page a `switch` has not built yet
-    /// is focused once it is (see the watch in [`http_app`]).
+    /// Focus inside the selected pane: its page now, or once a `switch`
+    /// has built it.
     fn refocus(&self, cx: &mut Ctx) {
-        let slot = (self.layout(), self.target());
-        match self.focus.with(|r| r.get(&slot).copied()) {
-            Some(id) => {
-                self.want.set(None);
-                cx.focus(id);
-            }
-            None => self.want.set(Some(slot)),
+        let at = self.pane.get() as usize;
+        if let Some(id) = self.panes.with(|p| p[at]) {
+            cx.focus_within(id);
         }
     }
 
@@ -1196,11 +1157,10 @@ fn pipe(command: &str, input: &[u8]) -> Result<String, String> {
 // The view
 // ---------------------------------------------------------------------------
 
-/// Slumber's pane: its border blue while the focus is inside. (Slumber's
-/// is double then too; a panel's kind of border cannot follow the focus.)
+/// Slumber's pane: its border blue and double while the focus is inside.
 /// Titles are markup, so a key's brackets are escaped.
 fn pane(node: Node, title: &str) -> Node {
-    node.panel(&escape(title))
+    node.panel(&escape(title)).focus_border(Border::Double)
 }
 
 /// Console markup as a `Text`.
@@ -1215,50 +1175,51 @@ fn error_text(error: &str) -> rich::Text {
 fn tree_items(entries: &[Entry]) -> Vec<TreeItem> {
     (entries.iter())
         .map(|entry| match entry {
-            Entry::Folder { name, children, .. } => {
-                TreeItem::new(escape(name)).children(tree_items(children))
+            Entry::Folder { id, name, children } => {
+                TreeItem::keyed(id, escape(name)).children(tree_items(children))
             }
-            Entry::Recipe(recipe) => TreeItem::new(escape(&recipe.name)),
+            Entry::Recipe(recipe) => TreeItem::keyed(&recipe.id, escape(&recipe.name)),
         })
         .collect()
 }
 
-/// The sidebar: the recipe tree, the profiles or the history.
-fn sidebar(s: Slumber, layout: Layout, which: Sidebar) -> Node {
-    let (node, title) = match which {
-        Sidebar::Recipe => {
-            let tree = tree_with(
-                move || s.collection.with(|c| tree_items(&c.recipes)),
-                s.tree,
-                s.expanded,
-            );
-            (tree, "Recipe [r]")
-        }
-        Sidebar::Profile => {
-            let names = move || {
-                (s.collection).with(|c| c.profiles.iter().map(|p| escape(&p.name)).collect())
-            };
-            (list(names, s.profile), "Profile [p]")
-        }
-        Sidebar::History => {
-            let rows = move || s.recipe_history().iter().map(Exchange::summary).collect();
-            (list(rows, s.history_row), "Request History [ctrl h]")
-        }
-    };
-    let node = s.register(layout, Target::Sidebar, node);
-    if which != Sidebar::History {
-        return pane(node, title);
-    }
+/// The sidebar: the recipe tree, the profiles or the history, each shown
+/// while the sidebar lists it, under a title that follows.
+fn sidebar(s: Slumber) -> Node {
+    let tree = tree_keyed(
+        move || s.collection.with(|c| tree_items(&c.recipes)),
+        s.tree,
+        s.expanded,
+    );
+    let names =
+        move || (s.collection).with(|c| c.profiles.iter().map(|p| escape(&p.name)).collect());
+    let profiles = list(names, s.profile);
+    let rows = move || s.recipe_history().iter().map(Exchange::summary).collect();
     let none = text(move || match s.recipe_history().is_empty() {
         true => "No request history".into(),
         false => String::new(),
     });
-    pane(column([none.auto(), node.flex(1)]), title)
+    let history = column([none.auto(), list(rows, s.history_row).flex(1)]);
+    let lists = [
+        (Sidebar::Recipe, tree),
+        (Sidebar::Profile, profiles),
+        (Sidebar::History, history),
+    ];
+    let lists =
+        lists.map(|(which, node)| node.flex(1).shown_when(move || s.sidebar.get() == which));
+    let title = move || {
+        escape(match s.sidebar.get() {
+            Sidebar::Recipe => "Recipe [r]",
+            Sidebar::Profile => "Profile [p]",
+            Sidebar::History => "Request History [ctrl h]",
+        })
+    };
+    column(lists).panel_with(title).focus_border(Border::Double)
 }
 
 /// The boxes above the panes: the profile, and the recipe while the
 /// sidebar does not list the recipes, as Slumber's headers.
-fn headers(s: Slumber, layout: Layout) -> Node {
+fn headers(s: Slumber) -> Node {
     let profile =
         text(move || (s.profile()).map_or("[dim]No profiles[/]".into(), |p| escape(&p.name)))
             .no_wrap();
@@ -1268,14 +1229,11 @@ fn headers(s: Slumber, layout: Layout) -> Node {
         None => "[dim]None[/]".into(),
     })
     .no_wrap();
-    let mut boxes = Vec::new();
-    if layout.sidebar != Some(Sidebar::Profile) {
-        boxes.push(pane(profile, "Profile [p]"));
-    }
-    if layout.sidebar != Some(Sidebar::Recipe) {
-        boxes.push(pane(recipe, "Recipe [r]"));
-    }
-    row(boxes)
+    let listed = move |which| s.layout().sidebar == Some(which);
+    row([
+        pane(profile, "Profile [p]").hidden_when(move || listed(Sidebar::Profile)),
+        pane(recipe, "Recipe [r]").hidden_when(move || listed(Sidebar::Recipe)),
+    ])
 }
 
 type RowsOf = fn(&Recipe) -> &Vec<(String, String)>;
@@ -1396,8 +1354,8 @@ fn recipe_page(s: Slumber, tab: usize, rects: &(RowRects, RowRects)) -> Node {
 
 /// The top pane: the selected recipe's URL, query, headers, body and
 /// authentication, in tabs (Slumber's recipe pane), or a folder's
-/// recipes.
-fn recipe_pane(s: Slumber, layout: Layout, rects: &(RowRects, RowRects)) -> Node {
+/// recipes; the recipe's id on its top edge.
+fn recipe_pane(s: Slumber, rects: &(RowRects, RowRects)) -> Node {
     let edit_rects = rects.clone();
     let rects = rects.clone();
     let content = switch(
@@ -1407,56 +1365,36 @@ fn recipe_pane(s: Slumber, layout: Layout, rects: &(RowRects, RowRects)) -> Node
                 let rects = rects.clone();
                 let pages = switch(
                     move || s.recipe_tab.get(),
-                    move |tab| {
-                        let page = recipe_page(s, tab, &rects);
-                        s.register(layout, Target::Recipe(Kind::Recipe, tab), page)
-                    },
+                    move |tab| recipe_page(s, tab, &rects),
                 );
-                let id = text(move || match s.recipe() {
-                    Some(r) => format!("[bold]{}[/]", escape(&r.id)),
-                    None => String::new(),
-                })
-                .no_wrap();
                 let titles = || RECIPE_TABS.iter().map(|t| t.to_string()).collect();
-                let strip = row([tabs(titles, s.recipe_tab).no_focus().flex(1), id.auto()]);
+                let strip = tabs(titles, s.recipe_tab).no_focus();
                 column([strip.fixed(1), pages.flex(1)])
             }
-            Kind::Folder => {
-                let folder = text(move || match s.entry() {
-                    Some(Entry::Folder { name, children, .. }) => {
-                        let mut lines = vec![format!("[bold]{}[/]", escape(&name))];
-                        lines.extend(tree_lines(&children, 1));
-                        lines.join("\n")
-                    }
-                    _ => String::new(),
-                })
-                .focusable();
-                register_all(s, layout, Kind::Folder, folder)
-            }
-            Kind::None => {
-                let empty = label("No recipes defined; add one to your collection").focusable();
-                register_all(s, layout, Kind::None, empty)
-            }
+            Kind::Folder => text(move || match s.entry() {
+                Some(Entry::Folder { name, children, .. }) => {
+                    let mut lines = vec![format!("[bold]{}[/]", escape(&name))];
+                    lines.extend(tree_lines(&children, 1));
+                    lines.join("\n")
+                }
+                _ => String::new(),
+            })
+            .focusable(),
+            Kind::None => label("No recipes defined; add one to your collection").focusable(),
         },
     );
-    pane(content, "Recipe [1]").section("Recipe", |node| {
-        node.bind("left h", "Previous tab", move |cx| switch_tab(s, -1, cx))
-            .bind("right l", "Next tab", move |cx| switch_tab(s, 1, cx))
-            .bind("space", "Toggle row", move |_| toggle_row(s))
-            .bind("e", "Edit", move |cx| edit(s, cx, &edit_rects))
-            .bind("z", "Reset edit", move |_| reset(s))
-    })
-}
-
-/// A page that every tab of the recipe pane focuses.
-fn register_all(s: Slumber, layout: Layout, kind: Kind, node: Node) -> Node {
-    let id = node.id();
-    s.focus.update(|r| {
-        for tab in 0..RECIPE_TABS.len() {
-            r.insert((layout, Target::Recipe(kind, tab)), id);
-        }
-    });
-    node
+    pane(content, "Recipe [1]")
+        .add_title_with(Edge::Top, Align::End, move || match s.recipe() {
+            Some(r) => format!("[bold]{}[/]", escape(&r.id)),
+            None => String::new(),
+        })
+        .section("Recipe", |node| {
+            node.bind("left h", "Previous tab", move |cx| switch_tab(s, -1, cx))
+                .bind("right l", "Next tab", move |cx| switch_tab(s, 1, cx))
+                .bind("space", "Toggle row", move |_| toggle_row(s))
+                .bind("e", "Edit", move |cx| edit(s, cx, &edit_rects))
+                .bind("z", "Reset edit", move |_| reset(s))
+        })
 }
 
 fn tree_lines(entries: &[Entry], depth: usize) -> Vec<String> {
@@ -1650,17 +1588,17 @@ fn request_view(s: Slumber) -> Node {
     }))
 }
 
-/// One tab of the exchange pane, its focus target registered. The body's
-/// tab has the filter box under it; `/` there focuses the box.
-fn exchange_page(s: Slumber, layout: Layout, tab: usize) -> Node {
-    let target = Target::Exchange(true, tab);
+/// One tab of the exchange pane. The body's tab has the filter box under
+/// it, with a history of the queries; `/` there focuses the box.
+fn exchange_page(s: Slumber, tab: usize) -> Node {
     match tab {
-        0 => s.register(layout, target, request_view(s)),
+        0 => request_view(s),
         1 => {
-            let body = s.register(layout, target, body_view(s));
+            let body = body_view(s);
             let body_id = body.id();
             let filter_box = input(s.filter)
                 .placeholder("'/' to filter body with JSONPath or a shell command")
+                .history("query")
                 .on_submit(move |query, cx| {
                     s.run_filter(query.to_string());
                     cx.focus(body_id);
@@ -1671,23 +1609,20 @@ fn exchange_page(s: Slumber, layout: Layout, tab: usize) -> Node {
                 node.bind("slash", "Filter body", move |cx| cx.focus(filter_id))
             })
         }
-        _ => {
-            let headers = table_with(
-                vec![
-                    Column::new("Header", Size::Auto),
-                    Column::new("Value", Size::Flex(1)),
-                ],
-                move || match s.shown().map(|x| x.outcome) {
-                    Some(Outcome::Done(r, _)) => (r.headers.iter())
-                        .map(|(k, v)| vec![escape(k), escape(v)])
-                        .collect(),
-                    _ => Vec::new(),
-                },
-                signal(0usize),
-                TableOptions::default(),
-            );
-            s.register(layout, target, headers)
-        }
+        _ => table_with(
+            vec![
+                Column::new("Header", Size::Auto),
+                Column::new("Value", Size::Flex(1)),
+            ],
+            move || match s.shown().map(|x| x.outcome) {
+                Some(Outcome::Done(r, _)) => (r.headers.iter())
+                    .map(|(k, v)| vec![escape(k), escape(v)])
+                    .collect(),
+                _ => Vec::new(),
+            },
+            signal(0usize),
+            TableOptions::default(),
+        ),
     }
 }
 
@@ -1720,12 +1655,12 @@ fn meta(s: Slumber) -> Node {
 
 /// The bottom pane: the shown exchange's request, response body (with the
 /// filter box) and headers (Slumber's exchange pane).
-fn exchange_pane(s: Slumber, layout: Layout) -> Node {
+fn exchange_pane(s: Slumber) -> Node {
     let content = switch(
         move || s.shown().is_some(),
         move |shown| {
             if !shown {
-                let empty = text(move || match s.entry() {
+                return text(move || match s.entry() {
                     Some(Entry::Folder { .. }) => {
                         "Select a recipe to see its request history".into()
                     }
@@ -1733,17 +1668,10 @@ fn exchange_pane(s: Slumber, layout: Layout) -> Node {
                     None => String::new(),
                 })
                 .focusable();
-                let id = empty.id();
-                s.focus.update(|r| {
-                    for tab in 0..EXCHANGE_TABS.len() {
-                        r.insert((layout, Target::Exchange(false, tab)), id);
-                    }
-                });
-                return empty;
             }
             let pages = switch(
                 move || s.exchange_tab.get(),
-                move |tab| exchange_page(s, layout, tab),
+                move |tab| exchange_page(s, tab),
             );
             let titles = || EXCHANGE_TABS.iter().map(|t| t.to_string()).collect();
             let strip = tabs(titles, s.exchange_tab).no_focus();
@@ -1771,7 +1699,8 @@ fn export(s: Slumber, cx: &mut Ctx) {
     let Some(body) = s.shown().and_then(|x| s.visible_body(&x)) else {
         return;
     };
-    cx.prompt("Export", "", move |command, _| {
+    let options = PromptOptions::new().history("export");
+    cx.prompt_with("Export", "", options, move |command, _| {
         spawn(
             move || pipe(&command, body.as_bytes()),
             move |result, cx| {
@@ -1803,7 +1732,7 @@ fn view_body(s: Slumber, cx: &mut Ctx) {
 
 /// The bottom pane while the profile list is open: the profile's fields,
 /// rendered.
-fn profile_pane(s: Slumber, layout: Layout) -> Node {
+fn profile_pane(s: Slumber) -> Node {
     let fields = table_with(
         vec![
             Column::new("Field", Size::Auto),
@@ -1818,7 +1747,7 @@ fn profile_pane(s: Slumber, layout: Layout) -> Node {
         signal(0usize),
         TableOptions::default(),
     );
-    pane(s.register(layout, Target::Profile, fields), "Profile")
+    pane(fields, "Profile")
 }
 
 /// The actions menu (`x`), Slumber's.
@@ -1869,8 +1798,12 @@ fn reload(s: Slumber, cx: &mut Ctx) {
     let read = std::fs::read_to_string(&path).map_err(|e| e.to_string());
     match read.and_then(|text| parse_collection(&text)) {
         Ok(collection) => {
-            if collection.entry(&s.tree.get()).is_none() {
-                s.tree.set(collection.first_recipe());
+            let kept = s
+                .tree
+                .get()
+                .is_some_and(|id| collection.entry(&id).is_some());
+            if let (false, Some(first)) = (kept, collection.first_recipe()) {
+                tree_reveal(&tree_items(&collection.recipes), &first, s.tree, s.expanded);
             }
             if s.profile.get() >= collection.profiles.len() {
                 s.profile.set(0);
@@ -1898,25 +1831,37 @@ fn footer(s: Slumber) -> Node {
     ])
 }
 
-/// The panes of one layout (see [`Layout`]).
-fn arrange(s: Slumber, layout: Layout, rects: &(RowRects, RowRects)) -> Node {
-    let side = layout.sidebar.unwrap_or(Sidebar::Recipe);
-    let bottom = move || match s.sidebar.get_untracked() {
-        Sidebar::Profile => profile_pane(s, layout),
-        _ => exchange_pane(s, layout),
-    };
-    match layout.full {
-        Some(Pane::Sidebar) => return sidebar(s, layout, side),
-        Some(Pane::Top) => return recipe_pane(s, layout, rects),
-        Some(Pane::Bottom) => return bottom(),
-        None => {}
-    }
-    let split = vsplit(recipe_pane(s, layout, rects), bottom(), s.ratio);
-    let main = column([headers(s, layout).fixed(3), split.flex(1)]);
-    match layout.sidebar {
-        Some(which) => row([sidebar(s, layout, which).fixed(30), main.flex(1)]),
-        None => main,
-    }
+/// Every pane, each shown as the layout says: the sidebar (30 columns, or
+/// all of it in fullscreen), the headers, and the top and bottom panes in
+/// a split that gives one all of it when the other is hidden. Each pane
+/// sets the selected pane when the focus comes to it (a click).
+fn view(s: Slumber, rects: &(RowRects, RowRects)) -> Node {
+    let full = move || s.full();
+    let side = sidebar(s)
+        .size_with(move || match full() {
+            Some(Pane::Sidebar) => Size::Flex(1),
+            _ => Size::Fixed(30),
+        })
+        .shown_when(move || s.sidebar_open.get() && matches!(full(), None | Some(Pane::Sidebar)))
+        .on_focus(move |_| s.pane.set(Pane::Sidebar));
+    let top = recipe_pane(s, rects)
+        .hidden_when(move || full() == Some(Pane::Bottom))
+        .on_focus(move |_| s.pane.set(Pane::Top));
+    let profile = move || s.sidebar.get() == Sidebar::Profile;
+    let bottom = column([
+        profile_pane(s).flex(1).shown_when(profile),
+        exchange_pane(s).flex(1).hidden_when(profile),
+    ])
+    .hidden_when(move || full() == Some(Pane::Top))
+    .on_focus(move |_| s.pane.set(Pane::Bottom));
+    s.panes
+        .set([Some(side.id()), Some(top.id()), Some(bottom.id())]);
+    let main = column([
+        headers(s).fixed(3).shown_when(move || full().is_none()),
+        vsplit(top, bottom, s.ratio).flex(1),
+    ])
+    .hidden_when(move || full() == Some(Pane::Sidebar));
+    row([side, main.flex(1)])
 }
 
 /// Slumber's look: its default theme's blue for the focus and the
@@ -1950,12 +1895,18 @@ pub fn http_app(path: PathBuf) -> App {
             let message = format!("[red]Error loading collection: {}[/]", escape(&problem));
             s.notice.set(Some(message));
         }
-        // A tick while a request is in flight, for its elapsed time.
-        every(Duration::from_millis(100), move |_| {
-            if s.shown().is_some_and(|x| x.loading()) {
-                s.tick.update(|t| *t += 1);
-            }
+        // A tick while a request is in flight, for its elapsed time: the
+        // timer runs only then.
+        let ticks = every(Duration::from_millis(100), move |_| {
+            s.tick.update(|t| *t += 1);
         });
+        watch(
+            move || s.shown().is_some_and(|x| x.loading()),
+            move |loading, _| match loading {
+                true => ticks.resume(),
+                false => ticks.pause(),
+            },
+        );
         // A history row picked shows its exchange; another recipe or
         // profile shows its latest again.
         watch(
@@ -1979,18 +1930,6 @@ pub fn http_app(path: PathBuf) -> App {
             move || (s.layout(), s.kind(), s.shown().is_some()),
             move |_, cx| s.refocus(cx),
         );
-        // A target wanted before its page was built, focused once it is.
-        watch(
-            move || (s.want.get(), s.focus.with(Registry::len)),
-            move |(want, _), cx| {
-                if let Some(id) =
-                    want.and_then(|slot| s.focus.with_untracked(|r| r.get(&slot).copied()))
-                {
-                    s.want.set(None);
-                    cx.focus(id);
-                }
-            },
-        );
         #[cfg(feature = "watch")]
         {
             // Slumber reads the collection again when its file changes.
@@ -2000,8 +1939,7 @@ pub fn http_app(path: PathBuf) -> App {
             }
         }
         let rects = (RowRects::new(), RowRects::new());
-        let panes = switch(move || s.layout(), move |layout| arrange(s, layout, &rects));
-        column([panes.flex(1), footer(s).fixed(1)])
+        column([view(s, &rects).flex(1), footer(s).fixed(1)])
             .section("Pane Navigation", |node| {
                 node.bind("tab", "Next pane", move |cx| s.cycle_pane(1, cx))
                     .bind("shift+tab", "Previous pane", move |cx| s.cycle_pane(-1, cx))

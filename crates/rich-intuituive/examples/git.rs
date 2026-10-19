@@ -16,7 +16,7 @@
 //!     cargo run -p rs-rich-intuituive --example git [-- DIR]
 //!
 //! gitui's default keys: 1-5 (or Tab and Shift+Tab) switch tabs, h shows
-//! the help, q quits. Status: ↑/↓ move, Enter stages (or unstages) the
+//! the help, . expands the key bar, q quits. Status: ↑/↓ move, Enter stages (or unstages) the
 //! selected file or folder, a stages everything (unstages, in the staged
 //! list), D resets a file (asking first), w moves between the unstaged and
 //! staged lists, → (or l) moves to the diff and ← back, c commits, b lists
@@ -41,8 +41,10 @@ use std::time::{Duration, SystemTime};
 use intuituive::prelude::*;
 use intuituive::reactive::NodeId;
 use intuituive::rich::markup::escape;
-use intuituive::widgets::{key_hints, list_rows, tabs, tree_with, ListRow, TreeItem};
-use intuituive::{facts_of, HelpOptions, ModalOptions, Offset, Origin, PromptOptions};
+use intuituive::widgets::{
+    key_hints_with, list_rows, tabs, tree_keyed, KeyHintsOptions, ListRow, TreeItem,
+};
+use intuituive::{facts_of, keyed, HelpOptions, ModalOptions, Offset, Origin, PromptOptions};
 use rich_ext::diff::git::{parse_unified, FilePatch, LineKind, Patch};
 
 // ---------------------------------------------------------------------
@@ -683,9 +685,10 @@ pub fn hunk_patch(
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct FileTree {
     pub items: Vec<TreeItem>,
-    /// Each row's path in the tree, the file it is (if a file) and the
-    /// files under it, in the order shown with every folder open.
-    pub rows: Vec<(Vec<usize>, Option<usize>, Vec<usize>)>,
+    /// Each row's key (its path; a folded folder's `a/b/c`), the file it
+    /// is (if a file) and the files under it, in the order shown with
+    /// every folder open.
+    pub rows: Vec<(String, Option<usize>, Vec<usize>)>,
 }
 
 impl FileTree {
@@ -723,36 +726,46 @@ impl FileTree {
                 file => file,
             }
         }
-        fn emit(
+        // gitui's status letter goes first on a file's row, before the
+        // indent; a folder's row starts with as many spaces.
+        let lettered = files.iter().any(|f| f.kind != Kind::Unchanged);
+        fn walk(
             children: Vec<Child>,
             files: &[FileEntry],
-            at: &[usize],
-            rows: &mut Vec<(Vec<usize>, Option<usize>, Vec<usize>)>,
+            at: &str,
+            lettered: bool,
+            rows: &mut Vec<(String, Option<usize>, Vec<usize>)>,
         ) -> (Vec<TreeItem>, Vec<usize>) {
             let (mut items, mut all) = (Vec::new(), Vec::new());
-            for (i, child) in children.into_iter().enumerate() {
-                let mut path = at.to_vec();
-                path.push(i);
+            for child in children {
                 match child {
                     Child::File(f) => {
                         let file = &files[f];
                         let name = file.path.rsplit('/').next().unwrap_or(&file.path);
                         let style = file.kind.style();
-                        let mark = match file.kind {
-                            Kind::Unchanged => String::new(),
-                            kind => format!("{} ", kind.letter()),
-                        };
-                        items.push(TreeItem::new(format!("[{style}]{mark}{}[/]", escape(name))));
-                        rows.push((path, Some(f), vec![f]));
+                        let item = TreeItem::keyed(
+                            file.path.clone(),
+                            format!("[{style}]{}[/]", escape(name)),
+                        );
+                        items.push(match lettered {
+                            true => item.prefix(format!("[{style}]{}[/] ", file.kind.letter())),
+                            false => item,
+                        });
+                        rows.push((file.path.clone(), Some(f), vec![f]));
                         all.push(f);
                     }
                     Child::Dir(name, inner) => {
+                        let key = match at {
+                            "" => name.clone(),
+                            at => format!("{at}/{name}"),
+                        };
                         let row = rows.len();
-                        rows.push((path.clone(), None, Vec::new()));
-                        let (kids, under) = emit(inner, files, &path, rows);
+                        rows.push((key.clone(), None, Vec::new()));
+                        let (kids, under) = walk(inner, files, &key, lettered, rows);
                         rows[row].2 = under.clone();
                         all.extend(under);
-                        items.push(TreeItem::new(escape(&name)).children(kids));
+                        let item = TreeItem::keyed(key, escape(&name)).children(kids);
+                        items.push(if lettered { item.prefix("  ") } else { item });
                     }
                 }
             }
@@ -765,74 +778,69 @@ impl FileTree {
         }
         let top: Vec<Child> = top.into_iter().map(fold).collect();
         let mut rows = Vec::new();
-        let (items, _) = emit(top, files, &[], &mut rows);
+        let (items, _) = walk(top, files, "", lettered, &mut rows);
         FileTree { items, rows }
     }
 
-    /// Every folder's path, to open them all.
-    pub fn folders(&self) -> HashSet<Vec<usize>> {
+    /// Every folder's key.
+    pub fn folders(&self) -> HashSet<String> {
         (self.rows.iter())
             .filter(|(_, file, _)| file.is_none())
-            .map(|(path, ..)| path.clone())
+            .map(|(key, ..)| key.clone())
             .collect()
     }
 
-    fn row(&self, path: &[usize]) -> Option<usize> {
-        self.rows.iter().position(|(p, ..)| p == path)
+    fn row(&self, key: &str) -> Option<usize> {
+        self.rows.iter().position(|(k, ..)| k == key)
     }
 }
 
-/// A file tree over a list of files, all its folders open, its selection
-/// kept on the same row when the files change: gitui's status tree.
+/// A file tree over a list of files, its selection and open folders kept
+/// by path (`tree_keyed`) as the files change, each new folder opened:
+/// gitui's status tree.
 #[derive(Clone, Copy)]
 struct Files {
     entries: Memo<Vec<FileEntry>>,
     tree: Memo<FileTree>,
-    selected: Signal<Vec<usize>>,
-    expanded: Signal<HashSet<Vec<usize>>>,
+    selected: Signal<Option<String>>,
+    expanded: Signal<HashSet<String>>,
 }
 
 impl Files {
     fn new(entries: impl Fn() -> Vec<FileEntry> + 'static) -> Files {
         let entries = memo(entries);
         let tree = memo(move || entries.with(|e| FileTree::of(e)));
-        let selected = signal(vec![0usize]);
         let expanded = signal(HashSet::new());
-        let last = signal(0usize);
+        // Folders open when they first show; one the user closed stays so.
+        let seen = std::rc::Rc::new(std::cell::RefCell::new(HashSet::new()));
         watch(
-            move || tree.get(),
-            move |tree, _| {
-                expanded.set(tree.folders());
-                let row = tree.row(&selected.get_untracked());
-                if row.is_none() {
-                    let at = last.get_untracked().min(tree.rows.len().saturating_sub(1));
-                    let path = tree.rows.get(at).map_or(vec![0], |r| r.0.clone());
-                    selected.set(path);
+            move || tree.with(FileTree::folders),
+            move |folders, _| {
+                let mut seen = seen.borrow_mut();
+                let new: Vec<String> = folders.difference(&seen).cloned().collect();
+                if !new.is_empty() {
+                    expanded.update(|open| open.extend(new));
                 }
-            },
-        );
-        watch(
-            move || selected.get(),
-            move |path, _| {
-                if let Some(row) = tree.with(|t| t.row(&path)) {
-                    last.set(row);
-                }
+                *seen = folders;
             },
         );
         Files {
             entries,
             tree,
-            selected,
+            selected: signal(None),
             expanded,
         }
     }
 
+    /// The row the selection names.
+    fn row(&self) -> Option<usize> {
+        let key = self.selected.get()?;
+        self.tree.with(|t| t.row(&key))
+    }
+
     /// The files the selected row stands for: one file, or a folder's.
     fn targets(&self) -> Vec<FileEntry> {
-        let path = self.selected.get();
-        let under = self
-            .tree
-            .with(|t| t.row(&path).map(|r| t.rows[r].2.clone()));
+        let under = self.row().map(|r| self.tree.with(|t| t.rows[r].2.clone()));
         let under = under.unwrap_or_default();
         self.entries
             .with(|e| under.iter().filter_map(|&i| e.get(i).cloned()).collect())
@@ -840,14 +848,13 @@ impl Files {
 
     /// The selected file, if the selection is a file.
     fn file(&self) -> Option<FileEntry> {
-        let path = self.selected.get();
-        let file = self.tree.with(|t| t.row(&path).and_then(|r| t.rows[r].1));
+        let file = self.row().and_then(|r| self.tree.with(|t| t.rows[r].1));
         file.and_then(|i| self.entries.with(|e| e.get(i).cloned()))
     }
 
     fn view(&self) -> Node {
         let tree = self.tree;
-        tree_with(
+        tree_keyed(
             move || tree.with(|t| t.items.clone()),
             self.selected,
             self.expanded,
@@ -992,21 +999,6 @@ impl Diff {
             .join("\n")
     }
 
-    /// Move the cursor by `by` rows; with `extend`, keep the selection's
-    /// other end where it is.
-    fn step(&self, by: isize, extend: bool) {
-        let len = self.rows.with(Vec::len);
-        if extend && self.anchor.get_untracked().is_none() {
-            self.anchor.set(Some(self.cursor.get_untracked()));
-        }
-        if !extend {
-            self.anchor.set(None);
-        }
-        let at = self.cursor.get_untracked() as isize + by;
-        self.cursor
-            .set(at.clamp(0, len.saturating_sub(1) as isize) as usize);
-    }
-
     /// Move to the next (or the previous) hunk's header.
     fn jump(&self, forward: bool) {
         let cursor = self.cursor.get_untracked();
@@ -1030,7 +1022,8 @@ impl Diff {
         }
     }
 
-    /// The list of rows, with the hunk markers and the selection.
+    /// The list of rows, with the hunk markers; Shift with the moves
+    /// selects lines (the list's range).
     fn view(&self) -> Node {
         let me = *self;
         let rows = self.rows;
@@ -1038,7 +1031,6 @@ impl Diff {
             move || rows.with(Vec::len),
             move |i| {
                 let hunk = me.hunk();
-                let (from, to) = me.range();
                 rows.with(|rows| {
                     let row = &rows[i];
                     let marker = match (row.end, row.line) {
@@ -1052,14 +1044,14 @@ impl Diff {
                     } else {
                         "bright_black"
                     };
-                    let picked = (from..=to).contains(&i) && me.anchor.get().is_some();
                     ListRow::new(format!("[{marker_style}]{marker}[/]{}", row.markup))
-                        .style(picked.then(|| "white on blue".to_string()))
                 })
             },
             self.cursor,
         )
+        .range(self.anchor)
         .selected_style_for(|_| Some("white on blue".into()))
+        .theme_styles([("selected.range", "white on blue")])
     }
 }
 
@@ -1099,6 +1091,8 @@ struct Gu {
     stash_files: Files,
     untracked: Signal<bool>,
     keep_index: Signal<bool>,
+    /// The command bar expanded (`.`).
+    more: Signal<bool>,
 }
 
 impl Gu {
@@ -1139,6 +1133,7 @@ impl Gu {
             stash_files,
             untracked: signal(true),
             keep_index: signal(false),
+            more: signal(false),
         };
         // The diff follows the selected file of the list last focused.
         watch(
@@ -1210,6 +1205,18 @@ impl Gu {
     }
 }
 
+/// gitui's command bar: `Stage [⏎] Reset [D]`, the keys as symbols, and
+/// `more [.]` where they do not fit, `.` expanding it onto more rows.
+fn command_bar(more: Signal<bool>) -> Node {
+    key_hints_with(
+        KeyHintsOptions::new()
+            .format(|keys, desc| format!("{desc} [{keys}]"))
+            .key_symbols(true)
+            .separator(" ")
+            .more(more, "more [.]"),
+    )
+}
+
 /// gitui's error box: the message, closed by Enter or Esc.
 fn error_popup(cx: &mut Ctx, error: &str) {
     let error = escape(error);
@@ -1278,7 +1285,7 @@ fn status_tab(gu: Gu) -> (Node, [NodeId; 3]) {
     .inset(0, 1, 0, 0);
     let wd = layers([wd, branch])
         .name("Unstaged Changes")
-        .on_click(move |_| gu.focus.set(Focus::WorkDir))
+        .on_focus(move |_| gu.focus.set(Focus::WorkDir))
         .previews_keys()
         .bind("enter", "Stage", move |cx| {
             let paths: Vec<String> = gu.wd.targets().into_iter().map(|f| f.path).collect();
@@ -1319,7 +1326,7 @@ fn status_tab(gu: Gu) -> (Node, [NodeId; 3]) {
     .inset(0, 1, 0, 0);
     let stage = layers([stage, branch])
         .name("Staged Changes")
-        .on_click(move |_| gu.focus.set(Focus::Stage))
+        .on_focus(move |_| gu.focus.set(Focus::Stage))
         .previews_keys()
         .bind("enter", "Unstage", move |cx| {
             let paths: Vec<String> = gu.stage.targets().into_iter().map(|f| f.path).collect();
@@ -1346,10 +1353,16 @@ fn status_tab(gu: Gu) -> (Node, [NodeId; 3]) {
     };
     let diff = diff_bindings(gu, titled(diff_list, diff_title, focused(Focus::Diff)))
         .name("Diff")
-        .on_click(move |_| gu.focus.set(Focus::Diff));
+        .on_focus(move |_| gu.focus.set(Focus::Diff));
 
-    let left = column([wd.percent(60), stage.percent(40)]).percent(50);
-    let page = row([left, diff.percent(50)])
+    // gitui's layout follows its focus: the lists 60/40, 40/60 while the
+    // diff shows the staged list's file, and the diff alone while focused.
+    let share =
+        move |staged: bool| move || Size::Flex(if gu.staged_diff.get() == staged { 3 } else { 2 });
+    let left = column([wd.size_with(share(false)), stage.size_with(share(true))])
+        .percent(50)
+        .hidden_when(move || gu.focus.get() == Focus::Diff);
+    let page = row([left, diff.flex(1)])
         .name("Status")
         .bind_when(
             move || gu.focus.get() != Focus::Diff,
@@ -1410,14 +1423,6 @@ fn diff_bindings(gu: Gu, view: Node) -> Node {
             };
             gu.focus.set(back);
         })
-        .bind("down j", "Scroll", move |_| diff.step(1, false))
-        .bind("up k", "Scroll", move |_| diff.step(-1, false))
-        .bind("shift+down J", "Select down", move |_| diff.step(1, true))
-        .bind("shift+up K", "Select up", move |_| diff.step(-1, true))
-        .bind("pagedown", "Page down", move |_| diff.step(10, false))
-        .bind("pageup", "Page up", move |_| diff.step(-10, false))
-        .bind("home", "Top", move |_| diff.step(-(1 << 20), false))
-        .bind("end", "Bottom", move |_| diff.step(1 << 20, false))
         .bind("n", "Next hunk", move |_| diff.jump(true))
         .bind("p", "Prev hunk", move |_| diff.jump(false))
         .bind_when(
@@ -1748,34 +1753,16 @@ fn details_view(
 }
 
 fn log_tab(gu: Gu) -> (Node, NodeId) {
-    let (alone, alone_id) = commit_list(gu, gu.log, gu.log_at, "Commit");
-    let (beside, beside_id) = commit_list(gu, gu.log, gu.log_at, "Commit");
+    let (list, id) = commit_list(gu, gu.log, gu.log_at, "Commit");
     let hash = move || {
         gu.log
             .with(|l| l.get(gu.log_at.get()).map(|c| c.hash.clone()))
     };
     let (details, ..) = details_view(gu, hash);
-    let mut alone = Some(alone);
-    let mut split = Some(row([beside.percent(60), details.percent(40)]));
-    let pages = std::cell::RefCell::new((alone.take(), split.take()));
-    let view = switch(
-        move || gu.details.get(),
-        move |shown| {
-            let mut pages = pages.borrow_mut();
-            let page = if shown {
-                pages.1.take()
-            } else {
-                pages.0.take()
-            };
-            page.unwrap_or_else(|| label(""))
-        },
-    );
-    // The details toggle between two copies of the list on one selection:
-    // the focus follows the one shown.
-    watch(
-        move || gu.details.get(),
-        move |shown, cx| cx.focus(if shown { beside_id } else { alone_id }),
-    );
+    let view = row([
+        list.flex(3),
+        details.flex(2).shown_when(move || gu.details.get()),
+    ]);
     let view = view
         .name("Log")
         .bind("enter", "Details", move |_| gu.details.update(|d| *d = !*d))
@@ -1795,7 +1782,7 @@ fn log_tab(gu: Gu) -> (Node, NodeId) {
                 cx.copy(hash);
             }
         });
-    (view, alone_id)
+    (view, id)
 }
 
 /// gitui's Inspect: a commit's details and the diff of its selected file,
@@ -1827,14 +1814,12 @@ fn inspect(gu: Gu, cx: &mut Ctx, hash: String) {
         let view = diff.view();
         let list = titled(view, diff_title, || true)
             .previews_keys()
-            .bind("down j", "Scroll", move |_| diff.step(1, false))
-            .bind("up k", "Scroll", move |_| diff.step(-1, false))
             .bind("n", "Next hunk", move |_| diff.jump(true))
             .bind("p", "Prev hunk", move |_| diff.jump(false))
             .bind("y", "Copy", move |cx| cx.copy(diff.selected_text()));
         let page =
             row([details.percent(40), list.percent(60)]).bind("esc left", "Close", |cx| cx.pop());
-        column([page.flex(1), key_hints().fixed(1)])
+        column([page.flex(1), command_bar(gu.more).auto()])
     });
 }
 
@@ -1871,7 +1856,7 @@ fn files_tab(gu: Gu) -> (Node, NodeId) {
     let tree = files.view();
     let id = tree.id();
     // A text area's language is set when it is made: one per extension,
-    // on the same text.
+    // on the same text, the last one dropped.
     let extension = memo(move || {
         let path = files.file().map(|f| f.path).unwrap_or_default();
         Path::new(&path)
@@ -1879,7 +1864,7 @@ fn files_tab(gu: Gu) -> (Node, NodeId) {
             .map(|e| e.to_string_lossy().into_owned())
             .unwrap_or_default()
     });
-    let content = switch(
+    let content = keyed(
         move || extension.get(),
         move |extension| {
             let area = text_area(text).read_only().line_numbers();
@@ -2182,11 +2167,10 @@ pub fn git_app(git: Git) -> App {
 
         every(Duration::from_secs(5), move |_| gu.refresh());
 
-        column([top, body.flex(1), key_hints().fixed(1)])
+        column([top, body.flex(1), command_bar(gu.more).auto()])
             .theme_styles([
                 ("border.focused", "white"),
-                ("key_hints.key", "bold white"),
-                ("key_hints.desc", "white"),
+                ("key_hints.hint", "white"),
                 ("tabs.selected", "underline"),
             ])
             .name("Global")
@@ -2201,6 +2185,7 @@ pub fn git_app(git: Git) -> App {
                 gu.tab.update(|t| *t = (*t + 4) % 5)
             })
             .bind("b", "Branches", move |cx| branch_popup(gu, cx))
+            .bind("period", "More", move |_| gu.more.update(|on| *on = !*on))
             .bind("h", "Help", |cx| {
                 cx.help_with(HelpOptions::new().title("Help: all commands"))
             })

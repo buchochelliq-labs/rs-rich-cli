@@ -174,3 +174,119 @@ Taskwarrior plugin would hold.
 | A transaction log for undo | the store's `undo.jsonl` | core: `UndoLog<C>` (`push(change)`, `undo() -> Option<C>`, `redo`, a limit, serialisable by the app); `history(signal)` covers values in memory only | core | low |
 | A Taskwarrior plugin | the `Store`, urgency, reports and colour rules read from `task show` | as in the gaps | plugin | high |
 | A tree with columns | `task projects` as text: a tree of projects with a count column | core: `tree_table(columns, items, selected)` (tui-tree-widget plus a table) | core | low |
+
+## Round 2: taskwarrior-tui on round 6
+
+The clone is rebuilt on round 6. It is 2,412 lines (from 2,582) and does
+more: Taskwarrior's `or`, `not` and parentheses in filters, a completion
+pop-up with ghost text, a history per action, local time across a change
+of summer time, `⦿`/`⦾` while marking, months titled as taskwarrior-tui
+titles them. The tests are 807 lines, 27 tests; all pass.
+
+### What was replaced, and by what
+
+| Hand-built in round 1 | Now | Lines |
+|---|---|---|
+| `Filter` and `Term` (~150 lines): attribute terms, tags, words, ids; no `or`, `xor` or parentheses | Taskwarrior's syntax as a `query::Grammar` in the example (fields, `pro`/`proj`/`pri` aliases, `project:` by prefix, `status:`/`priority:` readers, dates through `dates`, ids as `words` matchers, `lenient`) over a `TaskRecord` implementing `Record` (its `has_tag` answers the virtual tags); `query::parse` and `Query::matches` | −70 |
+| `parse_date` (~60 lines) and `DATE_NAMES` | `dates::parse_with(.., DateOptions::new().week_start(6))`, `dates::NAMES` for completion | −70 |
+| `local_offset()` (a fixed offset from `%z`, wrong across summer time) and `offset: i64` everywhere | `rich_interact::datetime::Zone` (`Zone::Local` in the app, `Zone::Utc`/`Fixed` in the tests), `DateTime::from_unix`/`to_unix`/`format` | −20 |
+| The command bar: a `text` title in a `switch`, an `input` `disabled_when` it was not typing, `in_mode` prompts writing `Press <x> to confirm…` into the input's signal, a `watch` copying the input to the filter, the input's and the table's ids kept in `Signal<Cell<Option<NodeId>>>` to move the focus, the `Mode` enum | `command_line_with(cmd, CommandLineOptions::new().two_rows())`: a `Mode` per action (`title`, `initial`, `complete`, `history`, `on_submit`, `on_change` for the filter as you type, `on_cancel` putting it back), `confirm_keys(.., "x", ..)` and `"u"` for delete and undo; the focus goes back by itself | −110 |
+| Tab cycling through candidates by rewriting the input's signal (`Completion` state, `complete()`) | `Mode::complete` with `word_before` and `Completion::new`: the pop-up, Tab/↓, Enter, and ghost text | −20 |
+| No history | `Mode::history("add")`, one per action, as taskwarrior-tui keeps them (new test) | +1 |
+| The report table rebuilt in a `switch` keyed by the visible column set and report, its id written out of the builder | one `table_with`: `columns_with` (the report's columns), `columns_shown` (the non-empty ones), its id kept once | −15 |
+| `reload` finding the selected uuid again after each change | `Node::cursor_by(\|i\| uuid)` on the table | −10 |
+| Marks only in the ID cell, `•` always | `symbol_for(2, ..)`: `⦿` on a marked selected row, `⦾` on an unmarked one, while marking (the `✔` in the ID cell stays: taskwarrior-tui draws it there) | +8 |
+| J/K pages from a `RectHandle` of the report area, halved when the details are under it | `TableOptions::layout(&layout)`, `layout.rows_in_view()` | −8 |
+| The details' layouts in a `switch` that rebuilt the table with them | `shown_when` on two details panes (beside, under); the table is built once | −5 |
+| The calendar: a `RectHandle`, a `memo` of how many fit, a `grid` of twelve `month`s in a `switch`, two flexible blanks to centre it, the year as a `text` | `year_view_with` (`YearOptions::marks`, `heading_style` bold only for this year), `MonthTitle::Name`, `month_style_with` bolding today's month | −25 |
+
+Tests changed, each where the component's behaviour is the better one
+or the more faithful: filters with `or`, `not` and parentheses now pass
+(the old test asserted `+a or +b` was an error); `someday` is
+9999-12-30 as Taskwarrior reads it (was no date); the bad-filter test
+types `(+bills` (an unclosed parenthesis) since `or` is valid now; the
+months are `October`, not `October 2026`; the selected marked row starts
+`⦿ ✔ 1`; the completion test drives the pop-up (Tab, Tab, Enter) and
+reads the ghost text, and checks ↑ in the add history; the filter row
+shows the ghost text while typing (`status:pending project:home.bills`
+after typing `project:home`); while typing, the red title is the
+command line's error style over the whole row (`[bold red]Filter Tasks
+…[/]` where it was a bold title on a red row).
+
+### Still hand-built, and why
+
+- **The closed bar's two rows.** A closed `command_line` shows a message
+  on its line row only, and nothing on its title row, where
+  taskwarrior-tui shows `Filter Tasks` over the filter (and `Error` over
+  `Press any key to continue.`). A `column` of two `text`s is layered over
+  the command line while it is closed, and its title row also while it
+  asks (the title over the question, `Delete Task 1?`).
+- **Whether it is typing or asking.** `CommandLine::is_open` is both; the
+  app keeps a `typing` signal (set on open, cleared in each mode's
+  `on_submit`/`on_cancel` and on failure) and an `asking` title.
+- **The red title while typing a bad filter.** A mode's title is fixed
+  at open and has one style; the filter mode's `on_change` calls
+  `cmd.error("Filter Tasks")` so the error style draws the title. Keys
+  that change nothing (an arrow) clear the error until the next edit.
+- **The menus** (an `input` over a three-column `table` in a modal):
+  still no filterable table.
+- **`task info`, `task projects`, `task timesheet` as text**, the
+  modification syntax (`words`, `modify`), urgency, reports, colour rules
+  and the store: the Taskwarrior domain (round 1's plugin).
+
+### New gaps
+
+| Gap | Needed for | API sketch | Where |
+|---|---|---|---|
+| A two-row command line's closed look: a title row and a line row while idle | `Filter Tasks` over the filter, `Error` over `Press any key…`, with no layer | `CommandLine::idle(title_markup, line_markup)` or `message_with(\|\| (title, line))` | core |
+| A mode's title that follows state and a title style of its own (an error look that keeps the title) | the red `Filter Tasks` while the filter does not parse; `[3 / 7]` (the history's position) in the title, as taskwarrior-tui shows | `Mode::title_with(\|\| markup)`, `Mode::invalid_when(\|text\| bool)` styling the title with `command.error`; `InputHistory::status()` read from the title | core |
+| A question's title in a two-row bar, and a callback for no | `Delete Task 1?` over `Press <x> to confirm…`; clearing state when the answer is no | `confirm_with(cx, ConfirmOptions::new(question).title(t).keys("x").on_no(f), on_yes)` | core |
+| Which state the line is in | the app's own `typing` signal | `CommandLine::is_typing()` / `is_asking()` (reactive) | core |
+| `Zone` is not re-exported (`dates` is): the example names `rich_interact::datetime::Zone` | any app showing local times | `intuituive::datetime::Zone` (or `widgets::Zone`) | core |
+| A quote-aware word splitter: the query's tokenizer is private, so the modification syntax (`"Sweep the porch" project:home`) keeps its own `words` | Taskwarrior's `add`/`modify`, any command line with quoted arguments | `query::words(text) -> Vec<(String, Range<usize>)>` | core |
+| A filterable table (round 1): the menus are an input over a table with ↑/↓ bound on the column | the context and report menus | `table_with(..).filter_by(query: Signal<String>, \|row\| text)`, or `fuzzy_table` | core |
+
+### Bugs found
+
+- **A modal opened after `cx.focus(x)` in the same handler gives the
+  focus back to the node focused before, not `x`.** The command line
+  closes on a failed add (`cmd.close(cx)` focuses the report) and the
+  error modal opens: when it pops, the focus goes to the command line,
+  closed and no longer focusable, and the report's keys are dead. The
+  clone focuses the report itself after the pop. Minimal failing test:
+
+  ```rust
+  use intuituive::prelude::*;
+
+  #[test]
+  fn a_modal_opened_after_a_focus_change_gives_the_focus_back_to_the_new_node() {
+      let app = App::new(|| {
+          let said = signal(String::new());
+          let a = label("a").focusable().on_key("x", move |_| said.set("a".into()));
+          let a_id = a.id();
+          let b = label("b").focusable().autofocus().on_key("m", move |cx| {
+              cx.focus(a_id);
+              cx.modal(Size::Fixed(6), Size::Fixed(1), || {
+                  label("modal").on_any_key(|cx, _| {
+                      cx.pop();
+                      true
+                  })
+              });
+          });
+          column([a.fixed(1), b.fixed(1), text!("{said}").fixed(1)])
+      });
+      let mut d = app.driver(10, 3);
+      d.press("m space x");
+      // Fails: "" (the focus went back to b). Without the modal, "m x" gives "a".
+      assert_eq!(d.screen().plain()[2].trim_end(), "a");
+  }
+  ```
+
+### Components that would help
+
+| Component | What it would replace or enable | API sketch | Where | Value |
+|---|---|---|---|---|
+| The two-row command line's closed look and state reads | the layered overlay, `typing`, `asking`, the `error` hack (~50 lines) | as in the gaps | core | high |
+| A Taskwarrior plugin (round 1) | the store, urgency, reports, colour rules, the modification syntax; its grammar would be the example's `grammar()` | as in round 1 | plugin | high |
+| A filterable table | `menu` (~60 lines) | as above | core | medium |
+| A tree with columns (round 1) | `task projects` as text | `tree_table` | core | low |

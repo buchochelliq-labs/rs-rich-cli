@@ -151,3 +151,70 @@ what would make the clone shorter or more faithful.
 | A template engine | `{{ }}` with functions and filters, and the prompt form it asks through | `rich_ext::template::render(text, &ctx)` with a `Prompter`; core `cx.form(..)` for the questions | plugin (core form) | medium |
 | An input with history | The query and export boxes: ↑/↓ through earlier commands, Ctrl+R to search them, as Slumber's | `input(sig).history(signal<Vec<String>>)` | core | medium |
 | A spinner node | The in-flight request (Bubbles' `spinner`); the example ticks a signal every 100 ms to redraw the elapsed time | `spinner(Spinner::Dots)`, animating on the app's clock while shown | core | low |
+
+## Round 2: Slumber on round 6
+
+The clone is rebuilt on round 6. It is 2,026 lines (from 2,088), and is
+more faithful: the selected pane is double-bordered, the recipe's id sits
+on the recipe pane's top edge, a click selects a pane, the recipe tree
+keeps its selection by id across a reload, and the query and export boxes
+keep a history. The tests are 710 lines, 22 tests (from 20); all pass.
+
+### What was replaced, and by what
+
+| Hand-built in round 1 | Now | Lines |
+|---|---|---|
+| The whole layout in a `switch` keyed by a `Layout` value (sidebar, fullscreen pane), each layout built anew with its own node state; `arrange` | one tree built once: `shown_when`/`hidden_when` on the sidebar, the headers and each header box, the top and bottom panes and the profile/exchange pair; `size_with` for the sidebar (30 columns, or all of it in fullscreen); `vsplit` gives the shown pane all of it | −20 |
+| The focus registry: `Target`, `Registry` (`(layout, target) → id`, written as pages build), `register`, `register_all`, the `want` signal and the watch that focused a target once its page appeared (~70 lines) | `cx.focus_within(pane_id)`, which waits for a `switch`'s page to be built and laid out; three pane ids | −65 |
+| The selected pane not updated by a click | `Node::on_focus` on each pane sets it (new test: a click, then Tab from there) | +3 |
+| A blue border only (a panel's kind of border could not follow the focus) | `focus_border(Border::Double)` on every pane and the sidebar, as Slumber's | +2 |
+| The recipe id at the end of the tab strip's row (titles were fixed) | `add_title_with(Edge::Top, Align::End, \|\| id)` on the recipe pane; the sidebar's title `panel_with(\|\| ..)` from the list it shows | ±0 |
+| The recipe tree by index path (`tree_with`, `HashSet<Vec<usize>>`), a reload keeping the path, the first recipe's folders opened by path | `tree_keyed` with `TreeItem::keyed` (recipe and folder ids), `tree_reveal` to open the folders down to the first recipe; a reload keeps the selection on the same recipe where it moved (new test) | −5 |
+| A 10 Hz tick always running, bumping a signal only while a request was in flight | `every` returns a `Timer`: a watch on "loading" `resume`s and `pause`s it | ±0 |
+| No history in the query box or the export prompt | `input(..).history("query")`, `PromptOptions::history("export")` (Slumber's query history; Ctrl+R search is still out) | +2 |
+
+Tests changed where the component's behaviour is Slumber's: the focused
+pane's border is double (`╔═ Recipe [1] ═`, `╔═ Profile [p] ═`,
+`║Other`), and the recipe's id is on the top edge (` list_fish ═╗`,
+` create_fish ─╮`) rather than at the end of the tab strip.
+
+### Still hand-built, and why
+
+- **`cycle_pane` and the `pane` signal.** `focus_next_scope` skips hidden
+  panes, so in fullscreen Tab could not move to the pane to show next;
+  and the pane decides which tab signal ←/→ change. `on_focus` keeps the
+  signal in step with clicks now.
+- **The key-value tables' checkbox column** (`▣`/`□` written into a cell,
+  Space bound by hand): `marker`/`marks_by` draw a styled cell, not a
+  glyph, from a `MultiSelect`, where the rows off are per-recipe edits.
+- **Editing a value over its row** (`prompt_with` at the row's rect): no
+  in-place cell editing.
+- **The response body** in `scroll(renderable(..))`: no virtualised
+  read-only text view; it also loses its scroll offset when it grows to
+  fit (fullscreen) and comes back.
+- **Every title escaped** (`Recipe [r]`): markup titles still eat
+  bracketed keys.
+- The HTTP client, templates, `$ref`s and the history store: the plugin
+  gaps of round 1.
+
+### New gaps
+
+| Gap | Needed for | API sketch | Where |
+|---|---|---|---|
+| A table column of glyphs from state, toggled by a key and a click | Slumber's `▣`/`□` rows | `TableOptions::checks(\|i\| bool, on_toggle)` drawing `checks.on`/`checks.off` glyphs (`▣`/`□`) | core |
+| A scroll that keeps its offset across a resize that fits the content | the body after fullscreen and back | `scroll(..).offset(Signal<u16>)` read and set by the app, kept when the content fits | core |
+| `focus_next_scope` over panes some of which are hidden by a layout the move itself changes | Tab in fullscreen moving to (and showing) the next pane | `Ctx::focus_next_scope_with(\|scopes\| ..)`, or scopes in a fixed ring including hidden ones, with an `on_focus` that shows them | core |
+| Plain-text titles | every Slumber title (`Recipe [r]`, `History [ctrl h]`) | `panel_text(..)`/`title_text(..)`, or a debug warning for a tag that styles nothing (round 1) | core |
+
+### Bugs found
+
+None in this clone; see [tasks](tasks.md) for the focus-then-modal bug,
+which an error box here would meet too.
+
+### Components that would help
+
+| Component | What it would replace or enable | API sketch | Where | Value |
+|---|---|---|---|---|
+| A key-value editor (round 1), on a checks column and in-place cell editing | `key_values`, `toggle_row`, `edit`'s rows and `reset` (~130 lines) | `kv_editor(rows)` | core | high |
+| A virtualised text view (round 1) | `body_view`, `request_view` | `text_view(\|\| text).language("json")` | core | high |
+| An HTTP client plugin, templates, persisted state (round 1) | the transport, `render`, the history | as in round 1 | plugin | high |
