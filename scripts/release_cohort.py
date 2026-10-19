@@ -7,26 +7,36 @@ on it:
     check       RELEASES.toml matches every manifest, lists every publishable
                 crate once, and orders each after its workspace dependencies.
     sync        rewrite RELEASES.toml's versions from the manifests.
-    status      each package's version, tag, and whether it is on its registry.
-    unreleased  fail when what a release tag selects is already published
-                (the first step of release.yml and pypi-release.yml).
-    tag         create and push the tag of every package not yet on its
-                registry, one at a time in order, waiting for each release to
-                appear before the next. A published version is never tagged.
+    status      each package's version, tag, and whether it is on its
+                registry, and the release tag.
+    unreleased  what a tag's run publishes, failing when that is already out
+                (release.yml and pypi-release.yml, first). For a release tag,
+                every crate not yet on crates.io, each tagged on its commit;
+                none due fails. Writes the selection to GITHUB_OUTPUT.
+    published   what a verify_only run checks: what the tag released, all on
+                crates.io already (a release tag's crates tagged on its commit).
+    tag         tag the release on its commit and wait for it: an annotated
+                tag for every crate not yet on crates.io (records, which start
+                nothing), then `release-<name>`, which starts the one
+                release.yml run that publishes them all, and `python-v...` if
+                PyPI is due. A published version is never tagged.
                 It picks the commit itself: the one a release already in
                 progress was tagged from, else the local checkout (HEAD).
                 `--release 0.0.20` releases that one (from the commit its
                 tags are on, else the last commit on main naming it), and
                 `--commit` names the commit outright. Main is never fetched.
                 `--registry crates.io` (or `pypi`) tags only that registry's
-                packages, to hold the other back.
+                packages, to hold the other back. Run again after a failed
+                run, it pushes the tag again; the new run publishes only
+                what is still due.
     same-commit fail when a release tag's commit is not the one the rest of
                 its release was tagged from, and the packages differ between
                 the two (release.yml and pypi-release.yml, before building).
 
 A release is named by the version of the last crate in RELEASES.toml
-(rs-rich-cli): the 0.0.19 release is the one with rs-rich-cli 0.0.19. Each tag
-`tag` creates records it, and its commit, in the tag's message:
+(rs-rich-cli): the 0.0.20 release is the one with rs-rich-cli 0.0.20, and
+its release tag is `release-0.0.20`. Each tag `tag` creates records its
+release and its commit in the tag's message:
 
     rs-rich-ext 0.0.17
 
@@ -34,7 +44,8 @@ A release is named by the version of the last crate in RELEASES.toml
     Commit: <the commit tagged>
 
 Requires Python 3.11+ and git; `tag` uses the GitHub CLI (`gh`), when present,
-to stop as soon as a release run fails.
+to follow the runs: to stop as soon as one fails, and to push a failed run's
+tag again when re-run.
 """
 
 import sys
@@ -44,6 +55,7 @@ if sys.version_info < (3, 11):
 
 import argparse
 from dataclasses import dataclass
+import json
 import os
 from pathlib import Path
 import re
@@ -254,8 +266,24 @@ def is_published(package, status=registry_status):
     raise RuntimeError(f"Could not check {package} (HTTP {code})")
 
 
+def release_tag(name):
+    """The tag that releases every due crate of release `name` in one run."""
+    return f"release-{name}"
+
+
+def workflow_of(tag_name):
+    return REGISTRIES["pypi" if tag_name.startswith("python-v") else "crates.io"]
+
+
 def selected_by(tag, packages):
-    """The RELEASES.toml entries a release tag publishes, checked against the tag."""
+    """The RELEASES.toml entries a release tag publishes, checked against the
+    tag: a `release-X.Y.Z` tag every crate of release X.Y.Z (of which its run
+    publishes those not yet out), a crate tag its crate, `python-v` PyPI's."""
+    if match := release.RELEASE.fullmatch(tag):
+        name = release_name(packages)
+        if match[1] != name:
+            raise ValueError(f"{tag}: {CONFIG} here is release {name}, not {match[1]}")
+        return [p for p in packages if p.registry == "crates.io"]
     if tag.startswith("python-v"):
         version = tag.removeprefix("python-v")
         chosen = [p for p in packages if p.registry == "pypi"]
@@ -273,10 +301,36 @@ def selected_by(tag, packages):
     return chosen
 
 
-def unreleased(tag, packages, status=registry_status):
-    """Raise when anything the tag selects is already on its registry."""
+def unreleased(tag, packages, status=registry_status, existing=None, sha=None, lightweight=frozenset()):
+    """What the tag's run publishes; raise when that is already on its
+    registry. A crate or `python-v` tag: its package, which must not be out.
+    A release tag: every crate of the release not yet on crates.io, which
+    must not be none, each with its own annotated tag (a record, `tag` pushes
+    it; none of the `lightweight` tag names) on the release tag's commit `sha`
+    in `existing` (tag -> commit)."""
+    chosen = selected_by(tag, packages)
+    if release.RELEASE.fullmatch(tag):
+        due = []
+        for package in chosen:
+            if is_published(package, status):
+                print(f"{package} is already published; not selected", flush=True)
+            else:
+                print(f"{package} is not yet published; selected", flush=True)
+                due.append(package)
+        if not due:
+            raise RuntimeError(f"{tag}: every crate of release {release_name(packages)} is already on "
+                               "crates.io; nothing to publish")
+        untagged = [f"{p.tag} ({'missing' if p.tag not in existing else 'at ' + existing[p.tag][:12]})"
+                    for p in due if existing.get(p.tag) != sha]
+        if untagged:
+            raise RuntimeError(f"{tag}: each selected crate's tag must be on {sha[:12]}, the release "
+                               f"commit: {', '.join(untagged)}. release_cohort.py tag pushes them.")
+        if plain := [p.tag for p in due if p.tag in lightweight]:
+            raise RuntimeError(f"{tag}: a record tag must be annotated: {', '.join(plain)} "
+                               "is lightweight. release_cohort.py tag pushes annotated ones.")
+        return due
     released = []
-    for package in selected_by(tag, packages):
+    for package in chosen:
         if is_published(package, status):
             released.append(str(package))
         else:
@@ -284,6 +338,33 @@ def unreleased(tag, packages, status=registry_status):
     if released:
         raise RuntimeError(f"{tag}: already released: {', '.join(released)}. "
                            "A published version is permanent; bump the version instead.")
+    return chosen
+
+
+def published(tag, packages, status=registry_status, existing=None, sha=None):
+    """What a `verify_only` run checks: what the tag released, all of which
+    must be out. A release tag: the crates tagged on its commit `sha`."""
+    chosen = selected_by(tag, packages)
+    if release.RELEASE.fullmatch(tag):
+        chosen = [p for p in chosen if existing.get(p.tag) == sha]
+        if not chosen:
+            raise RuntimeError(f"{tag}: no crate of the release is tagged on {sha[:12]}")
+    missing = [str(p) for p in chosen if not is_published(p, status)]
+    if missing:
+        raise RuntimeError(f"{tag}: not on its registry yet: {', '.join(missing)}; verify_only "
+                           "cannot complete a partial upload")
+    return chosen
+
+
+def write_selection(chosen):
+    """Hand the crates a run publishes to the next step, as {name: version}
+    in RELEASES.toml order (GITHUB_OUTPUT `selection`)."""
+    crates = {p.name: p.version for p in chosen if p.registry == "crates.io"}
+    encoded = json.dumps(crates, separators=(",", ":"))
+    print(f"selection={encoded}", flush=True)
+    if crates and (output := os.environ.get("GITHUB_OUTPUT")):
+        with open(output, "a", encoding="utf-8") as stream:
+            stream.write(f"selection={encoded}\n")
 
 
 def git(*args, capture=True):
@@ -305,12 +386,20 @@ def remote_tags(remote):
     return tags
 
 
-def run_conclusion(package):
-    """The latest release run for the package's tag: (status, conclusion, url), or None."""
+def lightweight_tags(remote):
+    """The names of `remote`'s tags that are not annotated (no peeled `^{}` line)."""
+    names = [line.split("\t")[1].removeprefix("refs/tags/") for line in
+             git("ls-remote", "--tags", remote).splitlines()]
+    annotated = {name.removesuffix("^{}") for name in names if name.endswith("^{}")}
+    return {name for name in names if not name.endswith("^{}")} - annotated
+
+
+def run_conclusion(tag_name):
+    """The latest run for a tag: (status, conclusion, url), or None."""
     if not shutil.which("gh"):
         return None
     result = subprocess.run(
-        ["gh", "run", "list", "--workflow", package.workflow, "--branch", package.tag, "--limit", "1",
+        ["gh", "run", "list", "--workflow", workflow_of(tag_name), "--branch", tag_name, "--limit", "1",
          "--json", "status,conclusion,url", "--jq", '.[0] | "\\(.status) \\(.conclusion) \\(.url)"'],
         cwd=ROOT, text=True, encoding="utf-8", capture_output=True,
     )
@@ -318,14 +407,15 @@ def run_conclusion(package):
     return tuple(fields) if result.returncode == 0 and len(fields) == 3 else None
 
 
-def tag_run(package):
-    """The latest release run for the package's tag, as a dict: status,
-    conclusion, url, head_sha, and whether its publish job started; None
-    when there is no GitHub CLI or no run."""
+def tag_run(tag_name):
+    """The latest run for a tag, as a dict: status, conclusion, url,
+    head_sha, and whether its publish job started; None when there is no
+    GitHub CLI or no run. A run dispatched by hand is on its branch (main),
+    not the tag, and is not seen."""
     if not shutil.which("gh"):
         return None
     result = subprocess.run(
-        ["gh", "run", "list", "--workflow", package.workflow, "--branch", package.tag, "--limit", "1",
+        ["gh", "run", "list", "--workflow", workflow_of(tag_name), "--branch", tag_name, "--limit", "1",
          "--json", "status,conclusion,url,headSha,databaseId",
          "--jq", '.[0] | "\\(.status) \\(.conclusion) \\(.url) \\(.headSha) \\(.databaseId)"'],
         cwd=ROOT, text=True, encoding="utf-8", capture_output=True,
@@ -347,6 +437,19 @@ def tag_run(package):
             "publish_started": started}
 
 
+def run_tag_of(package, existing):
+    """The tag whose run publishes `package` as it is tagged in `existing`:
+    for a crate, the release tag on the same commit (its own tag is only a
+    record), else its own tag (a crate tag pushed alone, as before release
+    tags, or `python-v`)."""
+    tagged = existing.get(package.tag)
+    if package.registry == "crates.io" and tagged:
+        for name, commit in sorted(existing.items()):
+            if commit == tagged and release.RELEASE.fullmatch(name):
+                return name
+    return package.tag
+
+
 def dead_tag(run, tagged):
     """Whether a tag's release run proves nothing was published from it: it
     ran on the tagged commit, finished without success, and never started
@@ -355,27 +458,33 @@ def dead_tag(run, tagged):
                 and run["conclusion"] != "success" and not run["publish_started"])
 
 
-def wait_for(package, timeout, status=registry_status, conclusion=run_conclusion, sleep=time.sleep,
+def wait_for(tag_name, packages, timeout, status=registry_status, conclusion=run_conclusion, sleep=time.sleep,
              stale=None):
-    """Return once the release is done: its run succeeded and the version is
-    on the registry. The run uploads before it verifies the upload as a
-    consumer would, so the version can appear while the run still fails;
-    when the run cannot be seen (no `gh`), the registry alone decides. A
-    run at the URL `stale` (the one a re-pushed tag replaces) is not it."""
+    """Return once the run of `tag_name` is done: it succeeded and every one
+    of `packages` is on its registry. The run uploads before it verifies the
+    upload as a consumer would, so the versions can appear while the run
+    still fails; when the run cannot be seen (no `gh`), the registry alone
+    decides. A run at the URL `stale` (the one a re-pushed tag replaces) is
+    not it."""
     deadline = time.monotonic() + timeout
+    workflow = workflow_of(tag_name)
     while True:
-        published = is_published(package, status)
-        run = conclusion(package)
+        missing = [p for p in packages if not is_published(p, status)]
+        run = conclusion(tag_name)
         if run and run[2] == stale:
             run = ("queued", "", stale)
         if run and run[0] == "completed" and run[1] != "success":
-            raise RuntimeError(f"The {package.tag} release run ended {run[1]}: {run[2]}")
-        if published and (run is None or run[0] == "completed"):
-            print(f"{package} is published", flush=True)
+            out = len(packages) - len(missing)
+            raise RuntimeError(f"The {tag_name} run ended {run[1]}: {run[2]} ({out} of {len(packages)} "
+                               "published). Fix the cause, then run `release_cohort.py tag` again: it "
+                               "pushes the tag again, and the run publishes only what is still due "
+                               "(docs/BRANCHING.md, Re-running a release).")
+        if not missing and (run is None or run[0] == "completed"):
+            print(f"{tag_name}: {', '.join(str(p) for p in packages)} published", flush=True)
             return
         if time.monotonic() > deadline:
-            raise RuntimeError(f"{package} did not appear within {timeout // 60} minutes; "
-                               f"check the {package.workflow} run for {package.tag}")
+            raise RuntimeError(f"{', '.join(str(p) for p in missing) or tag_name} did not finish within "
+                               f"{timeout // 60} minutes; check the {workflow} run for {tag_name}")
         sleep(30)
 
 
@@ -432,7 +541,8 @@ def have_commits(existing, remote):
 
 def releases_tagged(existing):
     """Commit -> its RELEASES.toml entries, for every commit some release tag
-    was cut from: a tag on the commit names a version that commit lists."""
+    was cut from: a tag on the commit names a version that commit lists, or
+    is its release tag."""
     found = {}
     for commit in set(existing.values()):
         try:
@@ -440,7 +550,8 @@ def releases_tagged(existing):
             release_name(packages)
         except (subprocess.CalledProcessError, ValueError, IndexError, tomllib.TOMLDecodeError):
             continue
-        if any(existing.get(p.tag) == commit for p in packages):
+        if any(existing.get(p.tag) == commit for p in packages) or \
+                existing.get(release_tag(release_name(packages))) == commit:
             found[commit] = packages
     return found
 
@@ -520,8 +631,15 @@ def resolve(commit, release_wanted, remote, existing, binds, published):
 
 
 def tag_message(package, release_wanted, sha):
-    """A release tag's message: the package, then its release and commit."""
+    """A package tag's message: the package, then its release and commit."""
     return f"{package.name} {package.version}\n\nRelease: {release_wanted}\nCommit: {sha}\n"
+
+
+def release_message(name, due, sha):
+    """A release tag's message: the release, the crates due when it was
+    pushed, then its release and commit."""
+    crates = "".join(f"{p.name} {p.version}\n" for p in due)
+    return f"Release {name}\n\n{crates}\nRelease: {name}\nCommit: {sha}\n"
 
 
 def tag_trailers(tag_name):
@@ -540,6 +658,9 @@ def same_commit(tag_name, remote):
     packages = load(read)
     name = release_name(packages)
     recorded = tag_trailers(tag_name)
+    if release.RELEASE.fullmatch(tag_name) and recorded.keys() != {"Release", "Commit"}:
+        raise RuntimeError(f"{tag_name} must record its release and commit (Release: and Commit: "
+                           "lines in its message, as release_cohort.py tag writes them)")
     if recorded.get("Commit") and recorded["Commit"] != sha:
         raise RuntimeError(f"{tag_name} records commit {recorded['Commit']} but points at {sha}")
     if recorded.get("Release") and recorded["Release"] != name:
@@ -548,8 +669,8 @@ def same_commit(tag_name, remote):
     existing = remote_tags(remote)
     have_commits(existing, remote)
     selected_by(tag_name, packages)  # the tag names versions this RELEASES.toml lists
-    # Every package's own tag is compared, the tag's own included: an
-    # all-crates `vX.Y.Z` tag is checked against each `<crate>-vX.Y.Z`.
+    # Every package's own tag is compared, the tag's own included: a release
+    # tag (or an all-crates `vX.Y.Z`) is checked against each crate's tag.
     if split := split_from(packages, existing, sha, read, lambda package, tagged: True):
         raise RuntimeError(split_error(sha, split, f"would split release {name}: it changes packages tagged"))
     siblings = sorted(p.tag for p in packages if existing.get(p.tag) == sha)
@@ -557,25 +678,43 @@ def same_commit(tag_name, remote):
             f"{', '.join(siblings) or tag_name}.")
 
 
-def start_at(packages, start):
-    """The index in `packages` of `start`: a package name or its tag."""
-    for index, package in enumerate(packages):
-        if start in (package.name, package.tag, f"{package.name}@{package.version}"):
-            return index
-    raise ValueError(f"--from {start}: no {CONFIG} entry has that name or tag")
+RELEASE_WORKFLOW = ".github/workflows/release.yml"
+
+
+def starts_on_release_tags(read):
+    """Whether a commit's release.yml runs on a pushed `release-*` tag."""
+    try:
+        text = read(RELEASE_WORKFLOW)
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return False
+    return re.search(r'(?m)^\s+tags:\s*\[[^\]]*"release-\*"', text) is not None
+
+
+def local_tag(name):
+    """The commit a local tag points at, or ''."""
+    return subprocess.run(["git", "rev-parse", "--verify", "--quiet", f"refs/tags/{name}^{{commit}}"],
+                          cwd=ROOT, text=True, encoding="utf-8", capture_output=True).stdout.strip()
 
 
 def tag(commit, remote, timeout, dry_run, status=registry_status, wait=wait_for, registry=None,
-        run=tag_run, start=None, release_wanted=None):
+        run=tag_run, release_wanted=None):
+    """Tag a release on its commit and wait for it to be published.
+
+    Every crate due (not yet on crates.io) gets its own annotated tag, a
+    record that triggers nothing; the release tag `release-<name>` then
+    starts the one release.yml run that publishes all of them, and
+    `python-v<version>` the PyPI run, if PyPI is due. Record tags go up in
+    one atomic push, the tags that start runs in a second one: GitHub starts
+    no workflow for a push of more than three tags."""
     # The local checkout decides what is released: main is never fetched, so
     # a run that is resumed later tags the same commit, not whatever main has
     # moved on to since. Only the remote's tags and the registries are read.
     existing = remote_tags(remote)
 
     def binds(package, tagged):
-        # A tag elsewhere holds the release to its commit unless its run
-        # provably published nothing: then it is moved here.
-        return is_published(package, status) or not dead_tag(run(package), tagged)
+        # A tag elsewhere holds the release to its commit unless the run that
+        # publishes it provably published nothing: then it is moved here.
+        return is_published(package, status) or not dead_tag(run(run_tag_of(package, existing)), tagged)
 
     sha, why = resolve(commit, release_wanted, remote, existing, binds,
                        lambda package: is_published(package, status))
@@ -592,85 +731,130 @@ def tag(commit, remote, timeout, dry_run, status=registry_status, wait=wait_for,
     have_commits(existing, remote)
     if split := split_from(packages, existing, sha, read, binds):
         raise RuntimeError(split_error(sha, split))
-    first = start_at(packages, start) if start else 0
-    if first:
-        # Packages before --from are left as they are. One a later crate
-        # needs at a version not yet on crates.io would make that crate's
-        # publish fail, so it is refused before anything is tagged.
-        held = {p.name: p for p in packages[:first]
-                if p.registry == "crates.io" and not is_published(p, status)}
-        needs = {name: deps for name, (_, deps) in workspace_crates(read).items()}
-        blocked = [f"{p.name} needs {held[d]}" for p in packages[first:] if p.registry == "crates.io"
-                   for d in sorted(needs.get(p.name, ())) if d in held]
-        if blocked:
-            raise RuntimeError(f"--from {start} leaves unpublished versions that later crates need: "
-                               + "; ".join(blocked) + ". Start from the first of those instead.")
     print(f"Release {name} from {sha} ({why})", flush=True)
-    for index, package in enumerate(packages):
-        if index < first:
-            print(f"leave  {package.tag}: before --from {start}", flush=True)
-            continue
+
+    deletions = []        # remote tags to delete first: moved, or pushed again
+    records, starts = [], []  # (tag, message) to create here and push
+    waits = []            # (tag whose run publishes, packages, stale run URL)
+    due = []              # crates the release tag's run will publish
+    for package in packages:
         if registry and package.registry != registry:
             print(f"leave  {package.tag}: only {registry} packages were asked for", flush=True)
             continue
         if is_published(package, status):
             print(f"skip   {package.tag}: {package} is already on {package.registry}", flush=True)
             continue
-        stale = None
-        if package.tag in existing and existing[package.tag] != sha:
+        tagged = existing.get(package.tag)
+        runner = run_tag_of(package, existing)
+        latest = run(runner) if tagged else None
+        if tagged and tagged != sha:
             # A tag on another commit whose version is not on the registry.
-            # Moved here when its release run, on that commit, ended without
-            # success and never started publishing. Otherwise it stands, and
-            # the split check has shown it ships the same files as `sha`.
-            old = existing[package.tag][:12]
-            latest = run(package)
-            if not dead_tag(latest, existing[package.tag]):
-                print(f"wait   {package.tag}: tagged at {old}, which ships the same files; "
-                      "waiting for its release", flush=True)
+            # Moved here when the run that publishes it, on that commit,
+            # ended without success and never started publishing. Otherwise
+            # it stands, and the split check has shown it ships the same
+            # files as `sha`: its own run is waited on.
+            if not dead_tag(latest, tagged):
+                print(f"wait   {package.tag}: tagged at {tagged[:12]}, which ships the same files; "
+                      f"waiting for the {runner} run", flush=True)
                 if not dry_run:
-                    wait(package, timeout, status)
+                    wait(runner, [package], timeout, status)
                 continue
-            print(f"move   {package.tag}: its run at {old} ended {latest['conclusion']} before publishing; "
-                  f"tagging {sha[:12]}", flush=True)
-            stale = latest["url"]
-            if dry_run:
-                continue
-            git("push", remote, f":refs/tags/{package.tag}", capture=False)
-            if subprocess.run(["git", "rev-parse", "--verify", "--quiet", f"refs/tags/{package.tag}"],
-                              cwd=ROOT, capture_output=True).returncode == 0:
-                git("tag", "-d", package.tag)
-            del existing[package.tag]
-        if package.tag in existing and dead_tag(latest := run(package), sha):
-            # Tagged here, but its run ended before publishing: push the tag
-            # again to start a new run.
-            print(f"retag  {package.tag}: its run ended before publishing; pushing it again", flush=True)
-            stale = latest["url"]
-            if dry_run:
-                continue
-            git("push", remote, f":refs/tags/{package.tag}", capture=False)
-            del existing[package.tag]
-        if package.tag in existing:
-            print(f"wait   {package.tag}: already tagged, waiting for its release", flush=True)
-            if dry_run:
-                continue
-        elif dry_run:
-            print(f"would  tag {package.tag} at {sha[:12]} and push it", flush=True)
+            print(f"move   {package.tag}: the {runner} run at {tagged[:12]} ended {latest['conclusion']} "
+                  f"before publishing; tagging {sha[:12]}", flush=True)
+            deletions.append(package.tag)
+            tagged = None
+        message = tag_message(package, name, sha)
+        if package.registry == "pypi":
+            stale = None
+            if tagged and dead_tag(latest, sha):
+                # Tagged here, but its run ended before publishing: push the
+                # tag again to start a new run.
+                print(f"retag  {package.tag}: its run ended before publishing; pushing it again", flush=True)
+                deletions.append(package.tag)
+                stale, tagged = latest["url"], None
+            if tagged:
+                print(f"wait   {package.tag}: already tagged here, waiting for its run", flush=True)
+            else:
+                print(f"tag    {package.tag} at {sha[:12]} (starts {package.workflow})", flush=True)
+                starts.append((package.tag, message))
+            waits.append((package.tag, [package], stale))
             continue
+        if tagged:
+            print(f"keep   {package.tag}: already tagged here", flush=True)
         else:
-            local = subprocess.run(["git", "rev-parse", "--verify", "--quiet", f"refs/tags/{package.tag}^{{commit}}"],
-                                   cwd=ROOT, text=True, encoding="utf-8", capture_output=True).stdout.strip()
-            if local and local != sha:
-                # Not on the remote, so never released: a leftover of an
-                # earlier run (or of a remote tag deleted by hand). Replace it.
-                print(f"drop   local {package.tag} at {local[:12]}: it is not on {remote}", flush=True)
-                git("tag", "-d", package.tag)
-                local = ""
-            if not local:
-                git("tag", "-a", package.tag, "-m", tag_message(package, name, sha), sha)
-            git("push", remote, f"refs/tags/{package.tag}", capture=False)
-            print(f"tagged {package.tag}; waiting for {package.workflow}", flush=True)
-        wait(package, timeout, status, stale=stale)
-    print("Every package in RELEASES.toml is published." if not dry_run else "Dry run: nothing was tagged.")
+            print(f"tag    {package.tag} at {sha[:12]} (a record)", flush=True)
+            records.append((package.tag, message))
+        due.append(package)
+
+    if due and not starts_on_release_tags(read):
+        # The workflow a tag push runs is the tagged commit's: one from
+        # before release tags (release 0.0.19's) starts nothing on one.
+        raise RuntimeError(
+            f"{sha[:12]}'s {RELEASE_WORKFLOW} does not start on release-* tags: it predates one-run "
+            "releases, and a release tag pushed there would start nothing. Finish this release one "
+            "tag at a time with the release_cohort.py of main before one-run releases (git worktree "
+            "add ../release-old 5989aac && python3 ../release-old/scripts/release_cohort.py tag; "
+            "docs/BRANCHING.md), or release a later commit (bump first if its crates changed).")
+    if due:
+        name_tag = release_tag(name)
+        tagged, stale = existing.get(name_tag), None
+        latest = run(name_tag) if tagged else None
+        if tagged and tagged != sha:
+            # Its crates' tags were here or moved here, so the run there is
+            # dead or the split check stopped above; a live one stops here.
+            if not dead_tag(latest, tagged):
+                raise RuntimeError(f"{name_tag} is on {tagged[:12]}, not {sha[:12]}, and its run there has "
+                                   "not provably published nothing; release from that commit "
+                                   f"(--commit {tagged[:12]}), or wait for the run to end")
+            print(f"move   {name_tag}: its run at {tagged[:12]} ended {latest['conclusion']} before "
+                  f"publishing; tagging {sha[:12]}", flush=True)
+            deletions.append(name_tag)
+            tagged = None
+        elif tagged and latest and latest["status"] == "completed" and latest["conclusion"] != "success":
+            # Ended without success with crates still due: before publishing
+            # (dead), or partway (some crates out). Either way a new run of
+            # the same tag selects only what is still unpublished.
+            what = "before publishing" if dead_tag(latest, sha) else "after publishing started"
+            print(f"retag  {name_tag}: its run ended {latest['conclusion']} {what}; pushing it again, "
+                  "and the new run publishes only what is still due", flush=True)
+            deletions.append(name_tag)
+            stale, tagged = latest["url"], None
+        if tagged:
+            print(f"wait   {name_tag}: already tagged here, waiting for its run", flush=True)
+        else:
+            print(f"tag    {name_tag} at {sha[:12]} (starts {REGISTRIES['crates.io']}: "
+                  f"{', '.join(p.name for p in due)})", flush=True)
+            starts.insert(0, (name_tag, release_message(name, due, sha)))
+        waits.insert(0, (name_tag, due, stale))
+
+    if dry_run:
+        print("Dry run: nothing was tagged.")
+        return
+    if deletions:
+        git("push", "--atomic", remote, *(f":refs/tags/{t}" for t in deletions), capture=False)
+        for name_ in deletions:
+            if local_tag(name_):
+                git("tag", "-d", name_)
+            existing.pop(name_, None)
+    for tag_name, message in records + starts:
+        local = local_tag(tag_name)
+        if local and local != sha:
+            # Not on the remote, so never released: a leftover of an earlier
+            # run (or of a remote tag deleted by hand). Replace it.
+            print(f"drop   local {tag_name} at {local[:12]}: it is not on {remote}", flush=True)
+            git("tag", "-d", tag_name)
+        elif local:
+            git("tag", "-d", tag_name)     # made again with this run's message
+        git("tag", "-a", tag_name, "-m", message, sha)
+    if records:
+        git("push", "--atomic", remote, *(f"refs/tags/{t}" for t, _ in records), capture=False)
+    if starts:
+        git("push", "--atomic", remote, *(f"refs/tags/{t}" for t, _ in starts), capture=False)
+        print(f"pushed {', '.join(t for t, _ in starts)}; waiting for the runs", flush=True)
+    for tag_name, chosen, stale in waits:
+        wait(tag_name, chosen, timeout, status, stale=stale)
+    print("Every package in RELEASES.toml is published." if not registry
+          else f"Every {registry} package in RELEASES.toml is published.")
 
 
 def main():
@@ -681,6 +865,10 @@ def main():
     commands.add_parser("status")
     guard = commands.add_parser("unreleased")
     guard.add_argument("tag")
+    guard.add_argument("--remote", default="origin")
+    done = commands.add_parser("published")
+    done.add_argument("tag")
+    done.add_argument("--remote", default="origin")
     split = commands.add_parser("same-commit")
     split.add_argument("tag")
     split.add_argument("--remote", default="origin")
@@ -694,11 +882,8 @@ def main():
                        help="release this one (rs-rich-cli's version, such as 0.0.20 or v0.0.20): from "
                             "the commit its tags are on, else the last commit on main naming it")
     tagger.add_argument("--remote", default="origin")
-    tagger.add_argument("--timeout", type=int, default=120, help="minutes to wait for each release")
+    tagger.add_argument("--timeout", type=int, default=120, help="minutes to wait for each run")
     tagger.add_argument("--dry-run", action="store_true", help="show what would be tagged, then stop")
-    tagger.add_argument("--from", dest="start", metavar="PACKAGE",
-                        help="start at this package (its name or tag) in RELEASES.toml order, leaving "
-                             "the ones before it; refused when a later crate needs one of them unpublished")
     tagger.add_argument("--registry", choices=sorted(REGISTRIES),
                         help="tag only the packages released to this registry (default: all)")
     args = parser.parse_args()
@@ -712,12 +897,28 @@ def main():
             print("\n".join(sync()) or f"{CONFIG} already matches the manifests")
         elif args.command == "status":
             tags = remote_tags("origin")
-            for package in load(files_on_disk()):
-                published = "published" if is_published(package) else "unreleased"
+            packages = load(files_on_disk())
+            due = 0
+            for package in packages:
+                out = is_published(package)
+                due += not out and package.registry == "crates.io"
                 tagged = f"tagged at {tags[package.tag][:12]}" if package.tag in tags else "-"
-                print(f"{package.tag:<28} {package.registry:<10} {published:<11} {tagged}")
-        elif args.command == "unreleased":
-            unreleased(args.tag, load(files_on_disk()))
+                print(f"{package.tag:<28} {package.registry:<10} {'published' if out else 'unreleased':<11} {tagged}")
+            name_tag = release_tag(release_name(packages))
+            tagged = f"tagged at {tags[name_tag][:12]}" if name_tag in tags else "-"
+            print(f"{name_tag:<28} {'crates.io':<10} {f'{due} due' if due else 'done':<11} {tagged}")
+        elif args.command in ("unreleased", "published"):
+            existing = sha = None
+            if release.RELEASE.fullmatch(args.tag):
+                existing = remote_tags(args.remote)
+                sha = git("rev-parse", "--verify", f"refs/tags/{args.tag}^{{commit}}")
+            if args.command == "unreleased":
+                lightweight = lightweight_tags(args.remote) if existing is not None else frozenset()
+                chosen = unreleased(args.tag, load(files_on_disk()), existing=existing, sha=sha,
+                                    lightweight=lightweight)
+            else:
+                chosen = published(args.tag, load(files_on_disk()), existing=existing, sha=sha)
+            write_selection(chosen)
         elif args.command == "same-commit":
             summary = same_commit(args.tag, args.remote)
             print(summary)
@@ -726,7 +927,7 @@ def main():
                     out.write(summary + "\n")
         else:
             tag(args.commit, args.remote, args.timeout * 60, args.dry_run, registry=args.registry,
-                start=args.start, release_wanted=args.release_wanted)
+                release_wanted=args.release_wanted)
     except (RuntimeError, ValueError, subprocess.CalledProcessError) as error:
         print(f"error: {error}", file=sys.stderr)
         return 1

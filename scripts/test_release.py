@@ -78,6 +78,46 @@ class SelectionTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "rich-art"):
             release.select("rs-rich-art-v0.0.3", metadata, root)
 
+    def test_a_release_tag_selects_what_the_gate_handed_it_in_order(self):
+        metadata, root = workspace()
+        wanted = {"rs-rich-ext": "0.0.2", "rs-rich": "0.0.2", "rs-rich-cli": "0.0.2"}
+        selection = release.select("release-0.0.2", metadata, root, wanted)
+        self.assertEqual(list(selection), ["rs-rich-ext", "rs-rich", "rs-rich-cli"])
+
+    def test_a_release_tag_checks_every_selected_manifest_and_requirement(self):
+        metadata, root = workspace()
+        package(metadata, "rs-rich-art")["version"] = "0.0.3"
+        with self.assertRaisesRegex(ValueError, "rs-rich-art: manifest says 0.0.3, the release says 0.0.2"):
+            release.select("release-0.0.2", metadata, root, {"rs-rich-art": "0.0.2"})
+        with self.assertRaisesRegex(ValueError, "workspace dependency rich-art"):
+            release.select("release-0.0.2", metadata, root, {"rs-rich-art": "0.0.3"})
+        for wanted in ({}, {"rs-unknown": "0.0.2"}, {"rs-rich": "0.0.2;bad"}):
+            with self.subTest(wanted=wanted), self.assertRaises(ValueError):
+                release.select("release-0.0.2", *workspace(), wanted)
+
+    def test_a_release_tag_without_a_selection_plans_the_whole_release(self):
+        releases = "".join(f'[[package]]\nname = "{n}"\nregistry = "crates.io"\nversion = "0.0.2"\n'
+                           for n in NAMES)
+        releases += '[[package]]\nname = "rs-rich"\nregistry = "pypi"\nversion = "9.9.9"\n'
+        self.assertEqual(release.select("release-0.0.2", *workspace(), releases=releases),
+                         dict.fromkeys(NAMES, "0.0.2"))
+        with self.assertRaisesRegex(ValueError, "names release 0.0.2"):
+            release.select("release-0.0.3", *workspace(), releases=releases)
+        with self.assertRaisesRegex(ValueError, "needs its selection"):
+            release.select("release-0.0.2", *workspace())
+
+    def test_a_crate_tag_refuses_a_selection_it_does_not_name(self):
+        with self.assertRaisesRegex(ValueError, "not what the tag selects"):
+            release.select("rs-rich-cli-v0.0.2", *workspace(), {"rs-rich": "0.0.2"})
+        self.assertEqual(release.select("rs-rich-cli-v0.0.2", *workspace(), {"rs-rich-cli": "0.0.2"}),
+                         {"rs-rich-cli": "0.0.2"})
+
+    def test_release_tags_follow_the_version_grammar(self):
+        for tag in ("release-0.0.20", "release-1.2.3-rc.1"):
+            self.assertTrue(release.RELEASE.fullmatch(tag), tag)
+        for tag in ("release-", "release-v0.0.20", "release-0.0", "releases-0.0.20", "release-0.0.20;x"):
+            self.assertFalse(release.RELEASE.fullmatch(tag), tag)
+
     def test_changed_publishable_workspace_is_rejected(self):
         for change in ("missing", "extra", "disabled"):
             metadata, root = workspace()
@@ -119,8 +159,7 @@ class PublicationTests(unittest.TestCase):
 
     @patch("release.subprocess.run")
     def test_invalid_downstream_selection_never_publishes(self, run):
-        for selection in ({}, {"unknown": "0.0.3"}, {"rs-rich-cli": "0.0.3;bad"},
-                          {"rs-rich-cli": "0.0.3", "rs-rich-art": "0.0.3"}):
+        for selection in ({}, {"unknown": "0.0.3"}, {"rs-rich-cli": "0.0.3;bad"}, ["rs-rich-cli"]):
             with self.subTest(selection=selection), \
                     patch.dict("release.os.environ", {"RELEASE_SELECTION": json.dumps(selection)}), \
                     patch("sys.argv", ["release.py", "publish"]), self.assertRaises(ValueError):
@@ -148,14 +187,12 @@ class PublicationTests(unittest.TestCase):
             self.assertEqual(["rs-rich-record"], release.preflight({"rs-rich-record": "0.0.1"}))
 
     @patch("release.registry_status", return_value=404)
-    def test_preflight_refuses_new_and_existing_crates_together(self, status):
-        # A coordinated release would push the existing crates through the
-        # new-crate token, which trusted-publishing-only crates reject after
-        # earlier packages have uploaded.
+    def test_preflight_lets_new_and_existing_crates_share_a_release(self, status):
+        # `publish` uploads each kind with its own credential.
         exists = {"rs-rich": 200, "rs-rich-record": 404}
         with patch("release.crate_status", side_effect=lambda name: exists[name]):
-            with self.assertRaisesRegex(RuntimeError, "mixes new crates"):
-                release.preflight({"rs-rich": "0.0.9", "rs-rich-record": "0.0.1"})
+            self.assertEqual(["rs-rich-record"],
+                             release.preflight({"rs-rich": "0.0.9", "rs-rich-record": "0.0.1"}))
 
     @patch("release.registry_status", return_value=404)
     def test_preflight_fails_closed_when_crate_existence_is_unknown(self, status):
@@ -172,17 +209,87 @@ class PublicationTests(unittest.TestCase):
             env = {"RELEASE_SELECTION": '{"rs-rich-interact":"0.0.1"}', "GITHUB_OUTPUT": str(output)}
             with patch.dict(os.environ, env), patch("sys.argv", ["release.py", "preflight"]):
                 release.main()
-            self.assertEqual("new_crate=true\n", output.read_text(encoding="utf-8"))
+            self.assertEqual('new_crate=true\nexisting_crate=false\nnew_crates=["rs-rich-interact"]\n',
+                             output.read_text(encoding="utf-8"))
+
+    TOKENS = {"RELEASE_TRUSTED_TOKEN": "oidc", "RELEASE_NEW_CRATE_TOKEN": "secret"}
 
     @patch("release.subprocess.run")
     def test_publish_and_dry_run_use_same_selection(self, run):
         for selection, args in (({"rs-rich-cli": "0.0.3"}, ["-p", "rs-rich-cli"]),
                                 ({"rs-rich-art": "0.0.3"}, ["-p", "rs-rich-art"]),
-                                (dict.fromkeys(NAMES, "0.0.2"), ["--workspace"])):
-            for dry_run in (True, False):
-                release.publish(selection, dry_run=dry_run)
-                run.assert_called_with(["cargo", "publish", *args, "--locked",
-                                        *(["--dry-run"] if dry_run else [])], check=True)
+                                ({"rs-rich": "0.0.3", "rs-rich-ext": "0.0.4", "rs-rich-cli": "0.0.5"},
+                                 ["-p", "rs-rich", "-p", "rs-rich-ext", "-p", "rs-rich-cli"]),
+                                (dict.fromkeys(NAMES, "0.0.2"), [a for n in NAMES for a in ("-p", n)])):
+            release.publish(selection, dry_run=True)
+            run.assert_called_with(["cargo", "publish", *args, "--locked", "--dry-run"], check=True)
+            release.publish(selection, dependencies={}, environ={"PATH": "/bin", **self.TOKENS})
+            run.assert_called_with(["cargo", "publish", *args, "--locked"], check=True,
+                                   env={"PATH": "/bin", "CARGO_REGISTRY_TOKEN": "oidc"})
+
+    def test_publish_runs_group_crates_by_credential_in_dependency_order(self):
+        order = {"rs-rich": "1", "rs-rich-ext": "1", "rs-rich-data": "1", "rs-rich-ratatui": "1", "rs-rich-cli": "1"}
+        needs = {"rs-rich-ext": {"rs-rich"}, "rs-rich-data": {"rs-rich-ext"}, "rs-rich-ratatui": {"rs-rich"},
+                 "rs-rich-cli": {"rs-rich-ext", "rs-rich-data"}}
+        # No new crate: one upload.
+        self.assertEqual(release.publish_runs(order, [], needs), [(False, list(order))])
+        # A new crate nothing selected needs joins its own run after the existing ones.
+        self.assertEqual(release.publish_runs(order, ["rs-rich-ratatui"], needs),
+                         [(False, ["rs-rich", "rs-rich-ext", "rs-rich-data", "rs-rich-cli"]),
+                          (True, ["rs-rich-ratatui"])])
+        # A new crate between existing ones in the dependency order: three runs.
+        self.assertEqual(release.publish_runs(order, ["rs-rich-data"], needs),
+                         [(False, ["rs-rich", "rs-rich-ext", "rs-rich-ratatui"]), (True, ["rs-rich-data"]),
+                          (False, ["rs-rich-cli"])])
+        # Every crate new: one run with the token.
+        self.assertEqual(release.publish_runs(order, list(order), needs), [(True, list(order))])
+        with self.assertRaisesRegex(ValueError, "before a crate it depends on"):
+            release.publish_runs({"rs-rich-ext": "1", "rs-rich": "1"}, ["rs-rich"], needs)
+
+    @patch("release.subprocess.run")
+    def test_each_run_uploads_with_its_own_credential_only(self, run):
+        selection = {"rs-rich": "0.0.3", "rs-rich-data": "0.0.1", "rs-rich-cli": "0.0.4"}
+        needs = {"rs-rich-data": {"rs-rich"}, "rs-rich-cli": {"rs-rich-data"}}
+        release.publish(selection, new=["rs-rich-data"], dependencies=needs,
+                        environ={**self.TOKENS, "CARGO_REGISTRY_TOKEN": "ambient"})
+        self.assertEqual([(c.args[0], c.kwargs["env"]) for c in run.call_args_list], [
+            (["cargo", "publish", "-p", "rs-rich", "--locked"], {"CARGO_REGISTRY_TOKEN": "oidc"}),
+            (["cargo", "publish", "-p", "rs-rich-data", "--locked"], {"CARGO_REGISTRY_TOKEN": "secret"}),
+            (["cargo", "publish", "-p", "rs-rich-cli", "--locked"], {"CARGO_REGISTRY_TOKEN": "oidc"}),
+        ])
+
+    @patch("release.subprocess.run")
+    def test_a_missing_credential_stops_before_any_upload(self, run):
+        selection = {"rs-rich": "0.0.3", "rs-rich-data": "0.0.1"}
+        for environ, missing in (({"RELEASE_TRUSTED_TOKEN": "oidc"}, "CARGO_REGISTRY_TOKEN"),
+                                 ({"RELEASE_NEW_CRATE_TOKEN": "secret"}, "exchange")):
+            with self.subTest(missing=missing), self.assertRaisesRegex(RuntimeError, missing):
+                release.publish(selection, new=["rs-rich-data"], dependencies={}, environ=environ)
+        run.assert_not_called()
+
+    @patch("release.subprocess.run")
+    def test_publish_reads_the_new_crates_from_the_preflight(self, run):
+        env = {"RELEASE_SELECTION": '{"rs-rich":"0.0.3","rs-rich-data":"0.0.1"}',
+               "RELEASE_NEW_CRATES": '["rs-rich-data"]', **self.TOKENS}
+        with patch.dict(os.environ, env), patch("sys.argv", ["release.py", "publish"]), \
+                patch("release.internal_dependencies", return_value={"rs-rich-data": {"rs-rich"}}):
+            release.main()
+        self.assertEqual([c.args[0][-3:] for c in run.call_args_list],
+                         [["-p", "rs-rich", "--locked"], ["-p", "rs-rich-data", "--locked"]])
+        with patch.dict(os.environ, {**env, "RELEASE_NEW_CRATES": '["rs-rich-cli"]'}), \
+                patch("sys.argv", ["release.py", "publish"]), self.assertRaises(ValueError):
+            release.main()
+
+    def test_internal_dependencies_skip_dev_dependencies(self):
+        metadata = {"packages": [
+            {"name": "rs-rich", "dependencies": [{"name": "rs-rich-ext", "kind": "dev"}]},
+            {"name": "rs-rich-ext", "dependencies": [{"name": "rs-rich", "kind": None},
+                                                     {"name": "serde", "kind": None}]},
+            {"name": "rs-rich-cli", "dependencies": [{"name": "rs-rich-ext", "kind": "build"}]},
+        ]}
+        with patch("release.subprocess.check_output", return_value=json.dumps(metadata)):
+            self.assertEqual(release.internal_dependencies(),
+                             {"rs-rich": set(), "rs-rich-ext": {"rs-rich"}, "rs-rich-cli": {"rs-rich-ext"}})
 
     @patch("release.time.sleep")
     @patch("release.subprocess.run")
