@@ -878,3 +878,58 @@ oscilloscope view. The `wav` feature is the home of recording
 (`audio::record`, `wav_writer`). The core keeps only what any app could
 use under them: `recent`, `smoothed`, `latest_with_state`, `latest_iter`,
 `digits`, `rate`.
+
+## Round 5: nine new apps
+
+Round 5 cloned apps unlike a file manager and an audio scope, each built on
+intuiTUIve as round 4 left it (no framework change during the round), each
+with its own report in [`docs/design/gaps/`](gaps/):
+
+| App | Clone | Lines | Tests | Report |
+|---|---|---|---|---|
+| gitui (git client) | `examples/git.rs` | 2,219 | 21 | [git](gaps/git.md) |
+| bottom (system monitor) | `examples/top.rs` | 2,706 | 25 | [top](gaps/top.md) |
+| slumber (HTTP client) | `examples/http.rs` | 2,088 | 20 | [http](gaps/http.md) |
+| rata-tetris (game) | `examples/blocks.rs` | 919 | 15 | [blocks](gaps/blocks.md) |
+| csvlens (CSV viewer) | `examples/csv.rs` | 1,534 | 14 | [csv](gaps/csv.md) |
+| diskonaut (disk treemap) | `examples/disk.rs` | 1,395 | 21 | [disk](gaps/disk.md) |
+| termusic (music player) | `examples/music.rs` | 1,556 | 17 | [music](gaps/music.md) |
+| taskwarrior-tui (tasks) | `examples/tasks.rs` | 2,582 | 27 | [tasks](gaps/tasks.md) |
+| a raycaster (Doom-style) | `examples/raycast.rs` | — | — | [raycast](gaps/raycast.md) |
+
+None draws a widget of its own except the game's playfield and the
+raycaster's 3D view. The round-5 core and plugin work (below the round-4
+sections' backlog) landed alongside; the clones do not use it yet.
+
+### Gaps shared across apps
+
+What several clones hit independently leads round 6. Each is generic core
+unless marked.
+
+| Gap | Hit by | Shape |
+|---|---|---|
+| Panel titles and border styles that follow state | git, top, http, music | `panel_with(\|\| markup)`, a focused border kind |
+| Show or hide a node by a signal; sizes that follow state | git, top, http | `.shown_when(\|\| ..)` (today's private `shown_if`), `.size_with(\|\| ..)` |
+| Focus a page a `switch` has not built yet; read where the focus is | git, top, http, tasks | `cx.focus_within(id)`, `focus_scope`, `on_focus` / `focus_within` signal |
+| A node rebuilt from state that drops its old child (`switch` keeps every page) | disk, csv, tasks | `keyed(key, build)` |
+| Tables: reactive options and columns, marker column, keyed cursor, offset, widths in percent, row heights | csv, tasks, music, top | signal-taking `TableOptions`, `marks_by`/`selection_markers` on tables, `cursor_by`, `offset_x`, `Column::max_percent`, `row_height_for` |
+| A tree keyed by item, with reveal and a prefix | git, music | `tree_keyed`, `reveal(key)`, `TreeItem::prefix` |
+| Range selection on a list | git | `list(..).range(anchor)` |
+| Directional (spatial) focus and selection | top, disk | move to the neighbouring rectangle by direction |
+| Input completion pop-up, ghost text and history; a command line | tasks, http | `input(..).complete(..)`, `history(..)`, `command_line(..)` |
+| A query language over records | tasks, top, csv | `query::parse` over a `Record` trait; syntaxes as plugins |
+| Timers with a handle (pause, rate, cancel), catch-up; key repeat control; key releases for bindings | blocks, raycast | `every(..) -> Timer`, fixed step with catch-up, DAS/ARR, `bind_release` |
+| `key_hints` formats; whole-app help | git, music | `key_hints_with(..)`, `HelpOptions::all_panes()` |
+| Treemap layout | disk | `layout::squarify(rect, weights, ..)` |
+| Natural dates and local time | tasks | date parsing ("tomorrow", "eow"), a local offset that follows DST |
+| `App::min_size` guard | disk, blocks | a too-small screen by default |
+| A process as a job, with progress and cancel | git, http | round 5's `Jobs::run_process` (landed) |
+| App state files | blocks, tasks | round 5's `state` module (landed) |
+| Plugins: git model, HTTP client, audio player and decoders, tags, disk usage, system metrics, data sources, Taskwarrior | one each | plugin |
+
+**Bugs found:** keys typed while the terminal ignores the start-up query are
+lost for up to 3 s (blocks); tables and lists treat Shift+↑/↓ as ↑/↓ (top);
+an `.auto()` switch ignores its page's `.fixed()`/`.min_size()` (top);
+`Driver::event` does not settle as `press` does (top); a full-size layer
+paints over a `fill` beneath it (blocks); upstream's `Text.markup` is not
+ported (csv).
