@@ -45,12 +45,14 @@ rich-cli ──▶ rich-data ──▶ rich-ext ──▶ rich       (tabular da
                                                  reports and SQL result sets)
                  └──▶ rich-diagram           (optional, the `er` feature: ER diagrams of a schema)
              rich-ratatui ──▶ rich, ratatui-core   (ratatui interop: `RichWidget`, style and buffer conversions;
+                  ├──▶ rich-ext (no defaults)   its colour names re-exported from `rich_ext::palette`;
                   └ ─ ▶ rich-interact          `RatatuiComponent` behind its `interact` feature. Nothing in
                                                  the workspace depends on it, or on ratatui)
              rich-intuituive ──▶ rich-interact ──▶ rich-ext ──▶ rich   (intuiTUIve, the TUI framework:
-                  └ ─ ▶ rich-art, cpal, notify   signals, retained tree, cell screen; ratatui only as a
-                                                 dev-dependency, for its benchmark gate. Its off-by-default
-                                                 `art` (image nodes), `audio` and `watch` features)
+                  └ ─ ▶ rich-art, cpal, notify,  signals, retained tree, cell screen; ratatui only as a
+                        hound                    dev-dependency, for its benchmark gate. Its off-by-default
+                                                 `art` (image nodes, big text), `audio` (with `pulse`),
+                                                 `wav` and `watch` features)
              rich-embed ──▶ rich-intuituive, rich-record   (a terminal pane and a web view: `PtyHost`
                   └ ─ ▶ tungstenite, image       (portable-pty), `WebEngine`; Chrome over DevTools behind
                                                  its `chrome` feature, Browsh behind `browsh`)

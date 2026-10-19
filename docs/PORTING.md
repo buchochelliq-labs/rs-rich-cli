@@ -259,9 +259,11 @@ module to port: Python `rich` has no application framework (upstream's is
 Textual, a separate project this repository does not mirror). It composes
 `rs-rich-interact`'s sessions and drivers, `rich-ext` and core `rich`'s
 public APIs. Core is unchanged and no golden fixture covers it. Its
-off-by-default `art` (image nodes over `rs-rich-art`'s public `ImageArt`),
-`audio` (cpal), `watch` (notify), `files` and `archive` (a file manager's
-components) features add no core hook either. See
+off-by-default `art` (image nodes over `rs-rich-art`'s public `ImageArt`,
+and FIGlet big text over its public `figlet::render`), `audio` (cpal, with
+`pulse` for cpal's PulseAudio host), `wav` (hound), `watch` (notify),
+`files` and `archive` (a file manager's components) features add no
+core hook either. See
 [Terminal apps](guide/intuituive/index.md).
 
 rs-rich-ext's `filetype`, `fs`, `listing`, `open`, `file_ops`, `trash`,

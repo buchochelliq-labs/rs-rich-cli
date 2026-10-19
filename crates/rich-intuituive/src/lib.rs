@@ -45,12 +45,14 @@
 //!   instead of the alternate screen.
 //! - **Responsive**: [`Node::hide_below`] and a stylesheet's `@media`
 //!   rules follow the terminal's size; [`viewport`] reads it.
-//! - **The outside world** (off-by-default features): `audio::input`
-//!   captures a sound card into a signal (`audio`), `watch_path` wakes the
-//!   app when files change (`watch`), `image` draws an image file in
-//!   half blocks (`art`), and [`files`] has a file manager's components:
-//!   Miller columns, file lists, previews, background file jobs and a
-//!   streaming finder (`files`).
+//! - **The outside world**: [`audio::pcm`] reads raw PCM a buffer at a
+//!   time; behind off-by-default features, `audio::input` captures a sound
+//!   card into a signal (`audio`, with PulseAudio sources under `pulse`),
+//!   `audio::wav` reads and records WAV files (`wav`), `watch_path` wakes
+//!   the app when files change (`watch`), `image` draws an image file
+//!   in half blocks (`art`), and [`files`] has a file manager's
+//!   components: Miller columns, file lists, previews, background file
+//!   jobs and a streaming finder (`files`).
 //! - **Tests**: [`App::render_with`] and [`App::run_on`] with
 //!   `rich-interact`'s headless driver run an app without a terminal;
 //!   [`App::driver`] steps one, and [`assert_screen!`] compares its screen
@@ -61,8 +63,9 @@
 
 pub mod a11y;
 pub mod app;
-#[cfg(feature = "audio")]
 pub mod audio;
+#[cfg(feature = "art")]
+mod big_text;
 pub mod border;
 mod builtin;
 mod calendar;
@@ -79,6 +82,7 @@ pub mod layout;
 mod list;
 pub mod log;
 pub mod menu;
+mod meter;
 pub mod node;
 mod notify;
 mod place;
@@ -112,6 +116,8 @@ pub use app::{
     every, rate, Anchor, App, Ctx, Driver, Easing, FrameStats, Handoff, ModalOptions, Placement,
     Theme,
 };
+#[cfg(feature = "art")]
+pub use big_text::big_text;
 pub use border::{Border, BorderSet, Edge, Shadow, Sides};
 pub use effect::{effect, fill};
 #[cfg(feature = "art")]
@@ -120,6 +126,7 @@ pub use input::{input, number_input};
 pub use layout::{Align, AlignContent, Justify, Size, StackLayout, TextAlign};
 pub use list::list_optional;
 pub use log::Log;
+pub use meter::{meter, meter_with, sparkline, sparkline_with};
 pub use node::described;
 pub use node::{
     column, component, each, grid, label, layers, leaf, list, renderable, repeating, row, scroll,

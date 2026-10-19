@@ -827,13 +827,14 @@ pub fn scope_app(options: Options, input: Input) -> App {
                 let (channels, buffer) = (options.channels.max(1) as u16, options.buffer as usize);
                 match audio::input(device.as_deref(), options.rate, channels, buffer) {
                     Ok(samples) => {
-                        // It starts as empty rows, before the first buffer.
-                        // A watch skips a buffer equal to the last (digital
-                        // silence), so silence counts no frames.
+                        // `None` before the first buffer. Watched by number,
+                        // as the thread's frames are.
                         watch(
-                            move || samples.get(),
-                            move |data, _| {
-                                if data.iter().any(|row| !row.is_empty()) {
+                            move || samples.with(|f| f.as_ref().map(|f| f.number)),
+                            move |_, _| {
+                                if let Some(data) = samples
+                                    .with_untracked(|f| f.as_ref().map(|f| f.samples.clone()))
+                                {
                                     take(data);
                                 }
                             },

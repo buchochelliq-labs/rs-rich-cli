@@ -1709,6 +1709,8 @@ own thread and delivering on the app's thread, between frames:
 
 ```toml
 rs-rich-intuituive = { version = "0.0.4", features = ["watch", "audio", "art", "files"] }
+# PulseAudio and PipeWire sources, and WAV files:
+# features = ["pulse", "wav"]
 ```
 
 - **`watch`: files that change.** `watch_path(path, |event, cx| …)` wakes
@@ -1726,20 +1728,47 @@ watch_path(&dir, move |_event, _cx| entries.set(list_dir(&dir)))?;
 ```
 
 - **`audio`: a sound card.** `audio::input(device, rate, channels,
-  buffer)` returns a `Signal<Matrix>`, one row a channel of `buffer`
-  samples from -1 to 1, which changes with every buffer the device
-  captures (through cpal: ALSA, CoreAudio, WASAPI). The newest buffer
-  wins: one that arrives while the app is busy replaces the one still
-  waiting, so a slow frame drops buffers rather than falling behind.
-  `audio::devices()` lists the inputs (none, not a panic, on a machine
-  without sound). A device with fewer channels than asked for is spread
-  over the rows. On Linux the feature needs ALSA's headers to build
-  (`libasound2-dev`). For a spectrum, rs-rich-ext's `rich_ext::dsp` has
-  `fft` (any length), `hann` and `spectrum(samples, rate)`.
+  buffer)` returns a `Signal<Option<Frame>>`, the shape of `latest`'s:
+  `None` until the first buffer, then the newest `Frame`, numbered, with
+  `samples` one row a channel of `buffer` samples from -1 to 1 (through
+  cpal: ALSA, CoreAudio, WASAPI). Watch the number to see every buffer,
+  silence included. The newest buffer wins: one that arrives while the
+  app is busy replaces the one still waiting, so a slow frame drops
+  buffers rather than falling behind. A device with fewer channels than
+  asked for is spread over the rows. On Linux the feature needs ALSA's
+  headers to build (`libasound2-dev`).
+  - `audio::open(AudioOptions::new().device(id).rate(r).latency(frames)
+    .stall_after(d))` opens one before the app, so a missing device fails
+    before the terminal is taken; inside the app, `capture.samples()` is
+    the signal and `capture.status()` an `AudioStatus` (`Running`,
+    `Stalled(since)`, `Failed(why)`) to end the app on, scope-tui's
+    `--timeout`.
+  - `audio::devices()` lists the inputs as `Device { id, name, default,
+    host }` (none, not a panic, on a machine without sound): the id is
+    what `input` takes (ALSA's `null`, `pulse`, `hw:CARD=…`), the name
+    what to show. `device.configs()` lists what each can capture
+    (channels, rates, buffer sizes, sample format), and `audio::picker(|
+    device, cx| …)` is a list to choose one in the app.
+  - ALSA's `ALSA lib …` complaints are kept off the screen while devices
+    are listed and opened; `audio::messages()` has them, and
+    `capture.log(log)` sends them to a `Log`.
+  - **`pulse`** (on top of `audio`) adds `Host::Pulse`: PulseAudio's and
+    PipeWire's sources, a sink's monitor among them, through cpal's own
+    client (no system library), with `.latency(frames)` as the server's
+    buffer.
+  - Without any feature, `audio::pcm(reader, Format::S16Le, channels,
+    buffer)` reads raw PCM (`parec`'s, `arecord`'s) as buffers; with
+    **`wav`**, `audio::wav(path, buffer)` reads WAV files the same way,
+    `audio::wav_writer` writes one, and `audio::record(samples, path,
+    rate, channels)` records a frame signal while the app runs (hound).
+
+  For a spectrum, rs-rich-ext's `rich_ext::dsp` has `fft` (any length),
+  `hann`, `spectrum(samples, rate)` and `spectrum_full`, and a test signal
+  without a sound card: `tone`, `partials`, `noise` and `mix`.
 
 ```rust
 let samples = audio::input(None, 48_000, 2, 1024)?;
-renderable(move || oscilloscope(&samples.get()))
+renderable(move || samples.with(|f| oscilloscope(f.as_ref())))
 ```
 
 - **`art`: images.** `image(path)` is a node that draws an image file in
@@ -1755,7 +1784,10 @@ renderable(move || oscilloscope(&samples.get()))
 A file manager's other parts are in rs-rich-ext: `rich_ext::filetype`
 (Yazi's icons and type colours, MIME types, a Nerd Font check) and
 `rich_ext::fs` (local times, owner and group names); see
-[Files, spectra and warm-ups](../ext/files-and-signals.md).
+[Files, spectra and warm-ups](../ext/files-and-signals.md). rs-rich-ext's
+`palette::style_from_color_name("DarkGray")` (re-exported by
+rs-rich-ratatui) reads a ratatui colour name, as a ported app's options
+take them, as a rich style.
 
 ### A file manager's components
 
@@ -1831,9 +1863,42 @@ App::new(|| {
 Kitty and Sixel images are not drawn yet: rs-rich-ext's `Surface` has a
 graphics side channel (`Surface::graphics`, `frame::graphics::plan`) and
 rs-rich-art encodes both protocols, but intuiTUIve's paint step does not
-use it. rs-rich-ratatui's
-`style_from_color_name("DarkGray")` reads a ratatui colour name, as a
-ported app's options take them, as a rich style.
+use it.
+
+## Levels, sparklines and big text
+
+Three nodes for a dashboard or an audio app, drawn by rs-rich-ext's charts
+from closures that read signals:
+
+```rust
+use intuituive::{big_text, meter_with, sparkline};
+use rich_ext::chart::MeterScale;
+
+row([
+    meter_with(move || rms.get(), move || peak.get(), |m| {
+        m.label("L").readout(true).scale(MeterScale::Decibels { floor: -60.0 })
+    })
+    .hold(Duration::from_secs(1))
+    .flex(1),
+    sparkline(move || history.get()).fixed(20),
+])
+big_text(move || format!("[accent]{:02}[/]:{:02}", minutes.get(), seconds.get()))
+```
+
+- **`meter(level, peak)`** is a `LevelMeter`: a bar green to red with a
+  mark at the peak; `.hold(duration)` adds a mark that keeps the highest
+  peak for that long, as a DAW's meter does. `meter_with(level, peak,
+  configure)` sets up its label, readout, decibel scale or orientation.
+- **`sparkline(values)`** is a `Sparkline` of what the closure returns,
+  one cell a value (resampled when there are more): keep a history the
+  node's width long. `sparkline_with` configures it.
+- **`big_text(markup)`** (the `art` feature) draws markup in FIGlet
+  letters with rs-rich-art's bundled font, each run in its style: a
+  clock, a readout, a title.
+
+Each says what it shows to a screen reader: the meter its level, peaks and
+band, the sparkline its range and trend, big text its text. A
+`Spectrogram` (a waterfall of spectra) goes in a `renderable`.
 
 ## Themes
 
