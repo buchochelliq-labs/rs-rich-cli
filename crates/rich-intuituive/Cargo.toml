@@ -20,11 +20,11 @@ keywords = ["terminal", "tui", "reactive", "framework", "rich"]
 categories = ["command-line-interface"]
 include = ["src/**/*", "README.md", "LICENSE", "Cargo.toml"]
 
-# The image nodes, the file watcher and the file components on docs.rs
-# too; `audio` is left out,
+# The image nodes, the file watcher, the file components and raw PCM on
+# docs.rs too; `audio` is left out,
 # as its ALSA headers may not be there to build it.
 [package.metadata.docs.rs]
-features = ["art", "watch", "files", "archive"]
+features = ["art", "watch", "files", "archive", "pcm"]
 
 [lib]
 name = "intuituive"
@@ -39,18 +39,23 @@ termion = ["rich-interact/termion"]
 # `App::run_with(BackendKind::Termwiz)`: the termwiz backend of
 # rs-rich-interact.
 termwiz = ["rich-interact/termwiz"]
+# `audio::pcm`, `audio::Format`, `audio::deinterleave`, `audio::Frame`
+# and `audio::Matrix`: raw PCM read a buffer at a time, the light base of
+# the sound plugin, with no dependency. `audio` and `wav` turn it on.
+# Off by default.
+pcm = []
 # `audio::input`, `audio::open`, `audio::devices` and `audio::picker`:
 # capture from a sound card through cpal (ALSA on Linux, which needs
 # libasound2-dev to build; CoreAudio on macOS; WASAPI on Windows), with
 # alsa-sys to keep ALSA's messages off the screen. Off by default.
-audio = ["dep:cpal", "dep:alsa-sys"]
+audio = ["pcm", "dep:cpal", "dep:alsa-sys"]
 # `audio::Host::Pulse`: PulseAudio and PipeWire sources (a sink's monitor
 # among them) through cpal's own PulseAudio client, pure Rust: no system
 # library beyond `audio`'s. Off by default.
 pulse = ["audio", "cpal/pulseaudio"]
 # `audio::wav`, `audio::wav_writer` and `audio::record`: WAV files in and
 # out, through hound (pure Rust). Off by default.
-wav = ["dep:hound"]
+wav = ["pcm", "dep:hound"]
 # `watch_path`: wake the app when files change, through notify (inotify,
 # FSEvents, ReadDirectoryChangesW, kqueue). Off by default.
 watch = ["dep:notify"]
@@ -66,6 +71,11 @@ files = ["rich-ext/local-time"]
 # `files` with archive previews and extraction (tar, tar.gz, zip) through
 # rs-rich-ext's `archive` (zip, flate2). Off by default.
 archive = ["files", "rich-ext/archive"]
+
+# The scope-tui rebuild reads raw PCM (`audio::pcm`), the `pcm` plugin's.
+[[example]]
+name = "scope"
+required-features = ["pcm"]
 
 [dependencies]
 rich.workspace = true

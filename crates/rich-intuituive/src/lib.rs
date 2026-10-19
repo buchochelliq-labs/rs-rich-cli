@@ -45,14 +45,21 @@
 //!   instead of the alternate screen.
 //! - **Responsive**: [`Node::hide_below`] and a stylesheet's `@media`
 //!   rules follow the terminal's size; [`viewport`] reads it.
-//! - **The outside world**: [`audio::pcm`] reads raw PCM a buffer at a
-//!   time; behind off-by-default features, `audio::input` captures a sound
-//!   card into a signal (`audio`, with PulseAudio sources under `pulse`),
+//! - **The outside world**, behind off-by-default features (plugins: the
+//!   core stays generic): `audio::pcm` reads raw PCM a buffer at a time
+//!   (`pcm`), `audio::input` captures a sound card into a signal
+//!   (`audio`, with PulseAudio sources under `pulse`),
 //!   `audio::wav` reads and records WAV files (`wav`), `watch_path` wakes
 //!   the app when files change (`watch`), `image` draws an image file
 //!   in half blocks (`art`), and [`files`] has a file manager's
 //!   components: Miller columns, file lists, previews, background file
 //!   jobs and a streaming finder (`files`).
+//! - **Generic building blocks**: [`miller_of`] (Miller columns over any
+//!   [`MillerSource`] tree), [`jobs`](fn@jobs) and [`jobs_panel`]
+//!   (cancellable work with progress), [`finder_of`] (a fuzzy finder over
+//!   any stream of items) and [`preview_of`] (a value loaded off the app's
+//!   thread for the current key). The core is generic only; the domain
+//!   plugins above build on these.
 //! - **Tests**: [`App::render_with`] and [`App::run_on`] with
 //!   `rich-interact`'s headless driver run an app without a terminal;
 //!   [`App::driver`] steps one, and [`assert_screen!`] compares its screen
@@ -63,6 +70,7 @@
 
 pub mod a11y;
 pub mod app;
+#[cfg(feature = "pcm")]
 pub mod audio;
 mod bars;
 #[cfg(feature = "art")]
@@ -75,18 +83,23 @@ mod dialog;
 mod effect;
 #[cfg(feature = "files")]
 pub mod files;
+pub mod finder;
+mod hex;
 #[cfg(feature = "art")]
 mod image;
 mod input;
 pub mod inspect;
+pub mod jobs;
 pub mod layout;
 mod list;
 pub mod log;
 pub mod menu;
 mod meter;
+pub mod miller;
 pub mod node;
 mod notify;
 mod place;
+pub mod preview;
 pub mod reactive;
 mod reorder;
 mod rule;
@@ -122,13 +135,16 @@ pub use big_text::big_text;
 pub use border::{Border, BorderSet, Edge, Shadow, Sides};
 pub use dialog::{ConfirmOptions, PickOptions, PromptOptions};
 pub use effect::{effect, fill};
+pub use finder::finder_of;
 #[cfg(feature = "art")]
 pub use image::{image, image_of, image_with, ImageAnchor, ImageFit, ImageMode, ImageView};
 pub use input::{input, number_input};
+pub use jobs::{jobs, jobs_panel, Job, JobOutcome, JobProgress, JobState, Jobs};
 pub use layout::{Align, AlignContent, Justify, Size, StackLayout, TextAlign};
 pub use list::list_optional;
 pub use log::Log;
 pub use meter::{meter, meter_with, sparkline, sparkline_with};
+pub use miller::{miller_in, miller_of, MillerSource};
 pub use node::described;
 pub use node::{
     column, component, each, grid, label, layers, leaf, list, renderable, repeating, row, scroll,
@@ -136,6 +152,7 @@ pub use node::{
 };
 pub use notify::{Corner, Level};
 pub use place::{Offset, Origin, RectHandle};
+pub use preview::{preview_of, preview_of_with, PreviewOfOptions};
 pub use reactive::{memo, on_write, signal, viewport, watch, Memo, Proxy, Signal};
 /// What a text does with what does not fit a line: rich's.
 pub use rich::Overflow;

@@ -1,9 +1,8 @@
 //! Bars and rows an app's chrome is made of: a [`status_bar`] of
-//! powerline segments, a [`breadcrumb`] path, a footer of [`key_hints`],
+//! powerline segments, a [`breadcrumb`] trail, a footer of [`key_hints`],
 //! a row of percentage [`cells`], and a [`live`] node that draws at most so
 //! many times a second.
 
-use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use rich::{Console, Renderable, Segment, Style};
@@ -303,41 +302,44 @@ impl Widget for StatusBar {
 
 /// A [`breadcrumb`]'s widget.
 struct Breadcrumb {
-    path: Box<dyn Fn() -> PathBuf>,
-    home: Option<PathBuf>,
+    parts: Box<dyn Fn() -> Vec<String>>,
+    separator: String,
     after: Option<Box<dyn Fn() -> String>>,
 }
 
-/// A path as a one-row header: its parts joined by `/`, the last one (where
-/// you are) in the theme's `breadcrumb.last` style (bold by default), the
-/// others in `breadcrumb` and the slashes in `breadcrumb.separator`. When
-/// it does not fit, it loses its start, with `…` where it was cut, so
-/// where you are stays in view: Yazi's header. `path` may read signals.
-/// [`Node::home_tilde`] shows the home directory as `~`, and
-/// [`Node::crumb_suffix`] adds markup after the path that is never cut
-/// (Yazi's `(filter: x)`).
+/// A trail of parts as a one-row header: the parts (where you are last)
+/// joined by a separator (` › ` by default; [`Node::crumb_separator`]),
+/// the last part in the theme's `breadcrumb.last` style (bold by
+/// default), the others in `breadcrumb` and the separators in
+/// `breadcrumb.separator`. When it does not fit, it loses its start, with
+/// `…` where it was cut, so where you are stays in view. `parts` may read
+/// signals; an empty part shows nothing, so a leading empty part puts a
+/// separator first (a path's root). [`Node::crumb_suffix`] adds markup
+/// after the trail that is never cut (a filter, a count). It knows
+/// nothing of what the parts are: a file path is one with
+/// `files::path_crumb` (the `files` feature), a tree's ancestors or a
+/// wizard's steps are others.
 ///
 /// ```
 /// use intuituive::prelude::*;
 /// use intuituive::widgets::breadcrumb;
-/// use std::path::PathBuf;
 ///
 /// let shown = |width| {
 ///     let app = App::new(|| {
-///         let cwd = signal(PathBuf::from("/home/ada/projects/rich/src"));
-///         breadcrumb(move || cwd.get()).home_tilde_at("/home/ada")
+///         let at = signal(vec!["Settings".to_string(), "Display".into(), "Colours".into()]);
+///         breadcrumb(move || at.get()).crumb_suffix(|| " (3)".into())
 ///     });
 ///     let mut driver = app.driver(width, 1);
 ///     driver.settle();
 ///     driver.screen().plain()[0].trim_end().to_string()
 /// };
-/// assert_eq!(shown(30), "~/projects/rich/src");
-/// assert_eq!(shown(12), "…ts/rich/src");
+/// assert_eq!(shown(40), "Settings › Display › Colours (3)");
+/// assert_eq!(shown(16), "…y › Colours (3)");
 /// ```
-pub fn breadcrumb(path: impl Fn() -> PathBuf + 'static) -> Node {
+pub fn breadcrumb(parts: impl Fn() -> Vec<String> + 'static) -> Node {
     let mut node = crate::widget::widget(Breadcrumb {
-        path: Box::new(path),
-        home: None,
+        parts: Box::new(parts),
+        separator: " › ".into(),
         after: None,
     });
     node.size = Size::Fixed(1);
@@ -345,25 +347,16 @@ pub fn breadcrumb(path: impl Fn() -> PathBuf + 'static) -> Node {
 }
 
 impl Node {
-    /// For a [`breadcrumb`]: show the home directory (`$HOME`, else
-    /// `%USERPROFILE%`) as `~`. Ignored on other nodes.
-    pub fn home_tilde(self) -> Node {
-        let home = std::env::var_os("HOME")
-            .or_else(|| std::env::var_os("USERPROFILE"))
-            .map(PathBuf::from);
-        self.widget_mut(|crumb: &mut Breadcrumb| crumb.home = home);
+    /// For a [`breadcrumb`]: the text between its parts (` › ` by
+    /// default; `/` for a path). Ignored on other nodes.
+    pub fn crumb_separator(self, separator: &str) -> Node {
+        let separator = separator.to_string();
+        self.widget_mut(|crumb: &mut Breadcrumb| crumb.separator = separator);
         self
     }
 
-    /// For a [`breadcrumb`]: show `home` as `~`. Ignored on other nodes.
-    pub fn home_tilde_at(self, home: impl Into<PathBuf>) -> Node {
-        let home = home.into();
-        self.widget_mut(|crumb: &mut Breadcrumb| crumb.home = Some(home));
-        self
-    }
-
-    /// For a [`breadcrumb`]: console markup after the path (which may read
-    /// signals), kept whole while the path is cut. Ignored on other nodes.
+    /// For a [`breadcrumb`]: console markup after the trail (which may read
+    /// signals), kept whole while the trail is cut. Ignored on other nodes.
     pub fn crumb_suffix(self, markup: impl Fn() -> String + 'static) -> Node {
         self.widget_mut(|crumb: &mut Breadcrumb| crumb.after = Some(Box::new(markup)));
         self
@@ -371,52 +364,22 @@ impl Node {
 }
 
 impl Breadcrumb {
-    /// The path's parts as shown: `~` for home, `/` for the root.
-    fn parts(&self, path: &Path) -> Vec<String> {
-        let (shown, tilde) = match &self.home {
-            Some(home) => match path.strip_prefix(home) {
-                Ok(rest) => (rest, true),
-                Err(_) => (path, false),
-            },
-            None => (path, false),
-        };
-        let mut parts: Vec<String> = Vec::new();
-        if tilde {
-            parts.push("~".into());
-        }
-        for part in shown.components() {
-            use std::path::Component;
-            match part {
-                Component::RootDir => parts.push(String::new()),
-                Component::Prefix(prefix) => {
-                    parts.push(prefix.as_os_str().to_string_lossy().into_owned())
-                }
-                other => parts.push(other.as_os_str().to_string_lossy().into_owned()),
-            }
-        }
-        parts
-    }
-
     fn line(&self, console: &Console) -> (Vec<Segment>, Vec<Segment>) {
-        let parts = self.parts(&(self.path)());
+        let parts = (self.parts)();
         let base = theme_style(console, "breadcrumb", "");
         let last = theme_style(console, "breadcrumb.last", "bold");
         let sep = theme_style(console, "breadcrumb.separator", "");
         let mut line = Vec::new();
         let count = parts.len();
-        let mut slash = false;
         for (i, part) in parts.into_iter().enumerate() {
-            if i == 0 && part.is_empty() {
-                // The root is the slash itself.
-                line.push(Segment::new("/", Some(sep.clone())));
-                continue;
+            if i > 0 {
+                line.push(Segment::new(self.separator.clone(), Some(sep.clone())));
             }
-            if slash {
-                line.push(Segment::new("/", Some(sep.clone())));
+            if part.is_empty() {
+                continue;
             }
             let style = if i + 1 == count { &last } else { &base };
             line.push(Segment::new(part, Some(style.clone())));
-            slash = true;
         }
         let after = match &self.after {
             Some(after) => {

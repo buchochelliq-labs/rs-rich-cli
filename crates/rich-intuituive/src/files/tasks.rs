@@ -1,61 +1,60 @@
-//! File jobs in the background, with progress: Yazi's task manager.
+//! File jobs in the background, with progress: Yazi's task manager, as
+//! file operations run on the core's generic [`Jobs`](crate::Jobs).
 
-use std::time::{Duration, Instant};
-
-use rich::markup::escape;
 use rich_ext::cancel::CancelToken;
 use rich_ext::file_ops::{self, Op, Progress, Report};
 
 use crate::app::Ctx;
-use crate::layout::TextAlign;
-use crate::list::list_lazy;
-use crate::node::{switch, text, Node};
-use crate::reactive::{signal, Signal};
+use crate::jobs::{jobs, jobs_panel, JobOutcome, JobProgress, Jobs};
+use crate::node::Node;
+use crate::reactive::Signal;
 
-/// Where a [`Job`] is.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum JobState {
-    Running,
-    /// Ended with these errors (a job that ends cleanly, or is cancelled,
-    /// leaves the list).
-    Failed(Vec<String>),
-}
+pub use crate::jobs::JobState;
 
-/// A job in a [`Tasks`] list.
-#[derive(Clone, Debug)]
-pub struct Job {
-    pub id: u64,
-    /// What it does: `Copy 3 items to docs`.
-    pub title: String,
-    pub progress: Progress,
-    pub state: JobState,
-    cancel: CancelToken,
-}
+/// A file job in a [`Tasks`] list: the core's [`Job`](crate::jobs::Job)
+/// with a file operation's [`Progress`].
+pub type Job = crate::jobs::Job<Progress>;
 
-impl PartialEq for Job {
-    fn eq(&self, other: &Self) -> bool {
-        (self.id, &self.title, &self.progress, &self.state)
-            == (other.id, &other.title, &other.progress, &other.state)
+/// A file operation's progress, as a job panel shows it: by bytes, else
+/// by items, with `items/total` when there are several.
+impl JobProgress for Progress {
+    fn fraction(&self) -> f64 {
+        Progress::fraction(self)
+    }
+
+    fn detail(&self) -> String {
+        if self.total_items > 1 {
+            format!("{}/{}", self.items, self.total_items)
+        } else {
+            String::new()
+        }
+    }
+
+    fn finish(&mut self) {
+        self.current = None;
     }
 }
 
-impl Job {
-    /// Ask it to stop at its next safe point.
-    pub fn cancel(&self) {
-        self.cancel.cancel();
+impl JobOutcome for Report {
+    fn errors(&self) -> Vec<String> {
+        self.errors.clone()
+    }
+
+    fn cancelled(&self) -> bool {
+        self.cancelled
     }
 }
 
 /// Background file jobs (copies, moves, deletes, trashing, extraction),
 /// each on a thread of its own, reporting progress into a signal a few
-/// times a second and cancellable: Yazi's scheduler. A job that ends
-/// cleanly (or is cancelled) leaves the list; one with errors stays,
-/// [`Failed`](JobState::Failed), until [`clear_finished`](Self::clear_finished).
-/// `Copy`; made by [`tasks`], shown by [`tasks_panel`].
+/// times a second and cancellable: Yazi's scheduler, on the core's
+/// generic [`Jobs`]. A job that ends cleanly (or is cancelled) leaves the
+/// list; one with errors stays, [`Failed`](JobState::Failed), until
+/// [`clear_finished`](Self::clear_finished). `Copy`; made by [`tasks`],
+/// shown by [`tasks_panel`].
 #[derive(Clone, Copy)]
 pub struct Tasks {
-    jobs: Signal<Vec<Job>>,
-    next: Signal<u64>,
+    jobs: Jobs<Progress>,
 }
 
 /// A task list. Call it while the app is built.
@@ -87,25 +86,23 @@ pub struct Tasks {
 /// # std::fs::remove_dir_all(&dir).ok();
 /// ```
 pub fn tasks() -> Tasks {
-    Tasks {
-        jobs: signal(Vec::new()),
-        next: signal(1),
-    }
+    Tasks { jobs: jobs() }
 }
-
-/// How often a job's progress reaches the app.
-const EVERY: Duration = Duration::from_millis(50);
 
 impl Tasks {
     /// The jobs in the list.
     pub fn jobs(&self) -> Signal<Vec<Job>> {
+        self.jobs.list()
+    }
+
+    /// The core job list the file jobs run on.
+    pub fn as_jobs(&self) -> Jobs<Progress> {
         self.jobs
     }
 
     /// How many jobs are running (subscribing).
     pub fn running(&self) -> usize {
-        self.jobs
-            .with(|jobs| jobs.iter().filter(|j| j.state == JobState::Running).count())
+        self.jobs.running()
     }
 
     /// Run a file operation ([`file_ops::run`]); `done` gets its report
@@ -167,158 +164,47 @@ impl Tasks {
         work: impl FnOnce(&CancelToken, &mut dyn FnMut(&Progress)) -> Report + Send + 'static,
         done: impl FnOnce(Report, &mut Ctx) + Send + 'static,
     ) -> u64 {
-        let id = self.next.get_untracked();
-        self.next.set(id + 1);
-        let cancel = CancelToken::new();
-        self.jobs.update(|jobs| {
-            jobs.push(Job {
-                id,
-                title: title.to_string(),
-                progress: Progress::default(),
-                state: JobState::Running,
-                cancel: cancel.clone(),
-            })
-        });
-        let jobs = self.jobs;
-        super::background("Tasks::run()", move |proxy| {
-            let mut last: Option<Instant> = None;
-            let mut report_progress = |progress: &Progress| {
-                if last.is_some_and(|l| l.elapsed() < EVERY) {
-                    return;
-                }
-                last = Some(Instant::now());
-                let progress = progress.clone();
-                proxy.run(move || {
-                    jobs.update(|all| {
-                        if let Some(job) = all.iter_mut().find(|j| j.id == id) {
-                            job.progress = progress;
-                        }
-                    })
-                });
-            };
-            let report = work(&cancel, &mut report_progress);
-            proxy.run_with(move |cx| {
-                jobs.update(|all| {
-                    if report.errors.is_empty() || report.cancelled {
-                        all.retain(|j| j.id != id);
-                    } else if let Some(job) = all.iter_mut().find(|j| j.id == id) {
-                        job.state = JobState::Failed(report.errors.clone());
-                        job.progress.current = None;
-                    }
-                });
-                done(report, cx);
-            });
-        });
-        id
+        self.jobs.run(title, work, done)
     }
 
     /// Cancel the job `id`.
     pub fn cancel(&self, id: u64) {
-        self.jobs.with_untracked(|jobs| {
-            if let Some(job) = jobs.iter().find(|j| j.id == id) {
-                job.cancel();
-            }
-        });
+        self.jobs.cancel(id);
     }
 
     /// Cancel every running job.
     pub fn cancel_all(&self) {
-        self.jobs
-            .with_untracked(|jobs| jobs.iter().for_each(Job::cancel));
+        self.jobs.cancel_all();
     }
 
     /// Take the failed jobs off the list.
     pub fn clear_finished(&self) {
-        self.jobs
-            .update(|jobs| jobs.retain(|j| j.state == JobState::Running));
-    }
-}
-
-/// A bar of `width` cells, `fraction` of it filled.
-fn bar(fraction: f64, width: usize) -> String {
-    let filled = ((fraction.clamp(0.0, 1.0) * width as f64).round() as usize).min(width);
-    format!(
-        "[green]{}[/][bright_black]{}[/]",
-        "━".repeat(filled),
-        "━".repeat(width - filled)
-    )
-}
-
-/// A job's row: its title, a bar and the share done, or its errors.
-fn job_line(job: &Job) -> String {
-    let title = escape(&job.title);
-    match &job.state {
-        JobState::Running => {
-            let p = &job.progress;
-            let percent = (p.fraction() * 100.0).floor() as u32;
-            let count = if p.total_items > 1 {
-                format!(" {}/{}", p.items, p.total_items)
-            } else {
-                String::new()
-            };
-            format!("{} {percent:>3}%{count}  {title}", bar(p.fraction(), 16))
-        }
-        JobState::Failed(errors) => {
-            let first = errors.first().map(String::as_str).unwrap_or_default();
-            let more = match errors.len() {
-                0 | 1 => String::new(),
-                n => format!(" (and {} more)", n - 1),
-            };
-            format!("[red]failed[/]  {title}: {}{more}", escape(first))
-        }
+        self.jobs.clear_finished();
     }
 }
 
 /// The jobs of `tasks`, one row each with a progress bar (Yazi's `w`
-/// panel): `x` cancels the hovered job, `X` every job, `c` clears the
+/// panel; the core's [`jobs_panel`]): `x` cancels the hovered job, `X` every job, `c` clears the
 /// failed ones. `No tasks` when there are none.
 pub fn tasks_panel(tasks: Tasks) -> Node {
-    let cursor = signal(0usize);
-    let jobs = tasks.jobs;
-    switch(
-        move || jobs.with(Vec::is_empty),
-        move |empty| {
-            if empty {
-                return text(|| "[bright_black]No tasks".into()).text_align(TextAlign::Center);
-            }
-            list_lazy(
-                move || jobs.with(Vec::len),
-                move |i| jobs.with(|all| all.get(i).map(job_line).unwrap_or_default()),
-                cursor,
-            )
-        },
-    )
-    .bind("x", "Cancel the task", move |_| {
-        let at = cursor.get_untracked();
-        let id = jobs.with_untracked(|all| all.get(at).map(|j| j.id));
-        if let Some(id) = id {
-            tasks.cancel(id);
-        }
-    })
-    .bind("X", "Cancel every task", move |_| tasks.cancel_all())
-    .bind("c", "Clear failed tasks", move |_| tasks.clear_finished())
-    .name("tasks")
+    jobs_panel(tasks.jobs)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::jobs::job_line;
 
     #[test]
     fn rows_show_progress_and_failures() {
-        let mut job = Job {
-            id: 1,
-            title: "Copy a to b".into(),
-            progress: Progress {
-                bytes: 50,
-                total_bytes: 100,
-                items: 1,
-                total_items: 2,
-                current: None,
-            },
-            state: JobState::Running,
-            cancel: CancelToken::new(),
+        let progress = Progress {
+            bytes: 50,
+            total_bytes: 100,
+            items: 1,
+            total_items: 2,
+            current: None,
         };
+        let mut job = Job::new(1, "Copy a to b", progress, JobState::Running);
         let line = job_line(&job);
         assert!(line.contains(" 50% 1/2  Copy a to b"), "{line}");
         assert!(

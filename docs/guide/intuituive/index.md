@@ -108,7 +108,8 @@ or `fold`).
 `…` where it was cut, and does not wrap: a path keeps where you are
 (`…/rich/src`), as Yazi's header does. rich's `Overflow` is a mirror of
 upstream's and cuts only at the end, so this is the node's own option.
-For a path with its parts styled, see [`breadcrumb`](#bars-for-an-apps-chrome).
+For a trail of parts with each styled, see [`breadcrumb`](#bars-for-an-apps-chrome)
+(a path's is `files::path_crumb`).
 
 ## Layout
 
@@ -1413,14 +1414,14 @@ keeps them from the meters.
 
 ### Bars for an app's chrome
 
-Five ready-made nodes cover the rows round an app's content (in
+Ready-made nodes cover the rows round an app's content (in
 `intuituive::widgets`):
 
 ```rust
 use intuituive::widgets::{breadcrumb, cells, key_hints, live, seg, status_bar, Caps};
 
 column([
-    breadcrumb(move || cwd.get()).home_tilde().crumb_suffix(move || flags()),
+    breadcrumb(move || trail.get()).crumb_suffix(move || flags()),
     body.flex(1),
     status_bar(
         [
@@ -1444,18 +1445,23 @@ column([
   vim-airline draw them. A segment with no background gets no cap, an
   empty one is left out, and the left group is cut with `…` when the two
   do not fit.
-- **`breadcrumb(path)`** is a path header: its parts joined by `/`, the
-  last in the theme's `breadcrumb.last` style (bold by default), the rest
-  in `breadcrumb` and the slashes in `breadcrumb.separator`. Too long, it
-  loses its start, `…` where it was cut. `.home_tilde()` shows the home
-  directory as `~` (`.home_tilde_at(dir)` names it), and
-  `.crumb_suffix(|| markup)` adds markup after it that is never cut.
+- **`breadcrumb(|| parts)`** is a trail header over any parts (a tree's
+  ancestors, a wizard's steps, a path's directories): the parts joined by
+  ` › ` (`.crumb_separator("/")` changes it), the last in the theme's
+  `breadcrumb.last` style (bold by default), the rest in `breadcrumb` and
+  the separators in `breadcrumb.separator`; an empty part shows nothing,
+  so a leading one puts a separator first. Too long, it loses its start,
+  `…` where it was cut. `.crumb_suffix(|| markup)` adds markup after it
+  that is never cut. A file path, with the home directory as `~`, is the
+  `files` plugin's `path_crumb(|| path)`, built on it.
 - **`key_hints()`** is a footer of the keys that work now: the described
   bindings of the focused node and its ancestors (a pop-up's while one is
   open), innermost first, `key description` in `key_hints.key` and
   `key_hints.desc`, `·` apart; what does not fit is left out whole. Bubbles'
   `help` and Textual's `Footer`, from the same `.bind` descriptions the
   help uses.
+- **`hex_view(|| bytes, top)`** is rs-rich-ext's `HexView` as a
+  scrolling node: any bytes as `hexdump -C` lays them out.
 - **`cells([(35, a), (25, b), ..])`** is ratatui's one-row `Table`: a row
   of nodes sized by percentages with `Solver::Ratatui` and a cell between
   (`.gap(n)` changes it), text cut at each cell's edge with no `…`.
@@ -1878,15 +1884,75 @@ text(move || match user.get() {
   program is recorded, not run; a loop of your own takes it with
   `Driver::take_handoff` and gives it back with `Driver::handed_back`.
 
+## Browsing, jobs, finding and previewing
+
+Four components that apps of many kinds rebuild by hand are in the core,
+generic over what they show: none knows about files, so a file manager, a
+menu, a package browser or a database client builds on the same pieces.
+The `files` plugin (below) is each of them with a file system plugged in.
+
+- **Miller columns over any tree:** `miller_of(source, start)` takes a
+  `MillerSource` (the items of a level by key, the level an item opens,
+  the level above; `arrive` runs when the columns get to a level) and is
+  the level above, the current level and a preview of the hovered item,
+  in panes whose rails the mouse drags, as signals (`at`, `items`,
+  `cursor`, `hovered`) in a `Copy` struct. Each level remembers the item
+  last hovered in it; a click in the parent column goes there
+  (`click_parent`), one in the preview enters it (`enter_at`).
+  `columns.navigation(node)` binds `j`/`k`, `h`/`l`, `g g`/`G`, Ctrl+D/U
+  and PgDn/PgUp; `cd`, `enter`, `leave`, `arrow`, `page` and `keep` are
+  there for your own. `view()` draws names in lists; `layout(parent,
+  current, preview)` takes columns of your own (`track_current` marks the
+  current one), and `miller_in(source, at)` takes a current-level signal
+  made first, so the source can follow it.
+
+```rust
+struct Menu;
+impl MillerSource for Menu {
+    type Key = String;
+    fn items(&self, at: &String) -> Vec<String> { /* the level's names */ }
+    fn child(&self, at: &String, name: &str) -> Option<String> { /* a submenu */ }
+    fn parent(&self, at: &String) -> Option<(String, String)> { /* up, and our name there */ }
+}
+let columns = miller_of(Menu, String::new());
+columns.navigation(columns.view())
+```
+
+- **Jobs with progress:** `jobs::<P>()` runs any work as a cancellable
+  job: `list.run(title, |cancel, progress| { ..; outcome }, |outcome, cx|
+  ..)` on a thread of its own, its progress (`P: JobProgress`: a share
+  done and a detail; plain `f64` is one) reaching a signal at most every
+  50 ms. The outcome (`JobOutcome`: `()`, `Result<T, String>`, or your
+  own) says what failed: a clean or cancelled job leaves the list, a
+  failed one stays until `clear_finished`. `jobs_panel(list)` lists them
+  with progress bars (`x` cancels the hovered job, `X` all, `c` clears the
+  failed).
+- **A streaming fuzzy finder:** `finder_of(items, |item| text, |item, cx|
+  ..)` is a fuzzy finder over any iterator, read on its own thread:
+  results show while it goes on (`12/3400 (loading…)`), a new batch is
+  matched alone, Enter picks the hovered item (the item, not its text),
+  and the stream stops when the finder's screen closes.
+- **A preview pane:** `preview_of(|width| key, |key| value, |state| node)`
+  loads a value off the app's thread whenever the key changes (it may
+  read signals, and gets the pane's width), drops results for keys left
+  behind, and draws the value from a signal. `preview_of_with(..,
+  PreviewOfOptions::new().state(sig).clear_after(d).on_change(..)
+  .on_loaded(..))` shares the value, clears a slow one, resets a scroll
+  when the key changes and acts on a value as it arrives.
+
 ## Files, sound and images
 
 Off-by-default features bring the outside world in, each working on its
-own thread and delivering on the app's thread, between frames:
+own thread and delivering on the app's thread, between frames. They are
+plugins: the core stays generic, and what only one domain uses (files,
+sound, images) lives behind a feature, built on generic core pieces.
 
 ```toml
 rs-rich-intuituive = { version = "0.0.4", features = ["watch", "audio", "art", "files"] }
 # PulseAudio and PipeWire sources, and WAV files:
 # features = ["pulse", "wav"]
+# Raw PCM only, with no dependency:
+# features = ["pcm"]
 ```
 
 - **`watch`: files that change.** `watch_path(path, |event, cx| …)` wakes
@@ -1932,8 +1998,10 @@ watch_path(&dir, move |_event, _cx| entries.set(list_dir(&dir)))?;
     PipeWire's sources, a sink's monitor among them, through cpal's own
     client (no system library), with `.latency(frames)` as the server's
     buffer.
-  - Without any feature, `audio::pcm(reader, Format::S16Le, channels,
-    buffer)` reads raw PCM (`parec`'s, `arecord`'s) as buffers; with
+  - With the light **`pcm`** feature (no dependency; `audio` and `wav`
+    turn it on), `audio::pcm(reader, Format::S16Le, channels, buffer)`
+    reads raw PCM (`parec`'s, `arecord`'s) as buffers, and `Frame`,
+    `Matrix` and `deinterleave` are there; with
     **`wav`**, `audio::wav(path, buffer)` reads WAV files the same way,
     `audio::wav_writer` writes one, and `audio::record(samples, path,
     rate, channels)` records a frame signal while the app runs (hound).
@@ -1969,7 +2037,9 @@ take them, as a rich style.
 
 The off-by-default `files` feature (`archive` adds archive previews and
 extraction) has the parts of a file manager such as Yazi as components, in
-`intuituive::files`, built on rs-rich-ext's `listing`, `open`, `file_ops`,
+`intuituive::files`: the core's generic pieces (see [Browsing, jobs,
+finding and previewing](#browsing-jobs-finding-and-previewing)) with a
+file system plugged in, on rs-rich-ext's `listing`, `open`, `file_ops`,
 `trash` and `git`:
 
 ```toml
@@ -1989,8 +2059,9 @@ App::new(|| {
 })
 ```
 
-- **Miller columns:** `miller(start)` is the parent directory, the
-  current one and a preview of the hovered entry, in panes whose rails the
+- **Miller columns:** `miller(start)` is the core's `miller_of` over the
+  directory tree: the parent directory, the current one and a preview of
+  the hovered entry, in panes whose rails the
   mouse drags, as signals (`cwd`, `cursor`, `hovered`, `hidden`, `sort`,
   `linemode`, `find`) in a `Copy` struct. Each directory remembers the
   entry last hovered in it; a click in the parent column goes there, one
@@ -2013,7 +2084,8 @@ App::new(|| {
   (`Linemode::Size`, `Permissions`, `Mtime`, `Btime`, `Owner`) at the
   right. `entry_markup` and `linemode_cell` are the pieces on their own.
 - **A preview pane:** `preview(move || hovered_path(), PreviewOptions::new())`
-  loads off the app's thread whenever the path or the pane's width
+  is the core's `preview_of` keyed by the path: it loads off the app's
+  thread whenever the path or the pane's width
   changes and picks a renderer by type: a directory's entries, text
   highlighted, an image (`art`; described without it), an archive's
   entries (`archive`), a hex dump of anything else. A result for a path
@@ -2024,17 +2096,21 @@ App::new(|| {
   blocking one (the editor) gets the terminal through `cx.handoff_then`,
   the others run in the background; `Launch::Extract` extracts beside the
   archive.
-- **Background jobs:** `tasks()` runs copies, moves, deletes, trashing
+- **Background jobs:** `tasks()` is the core's `jobs` with file
+  operations as the work: it runs copies, moves, deletes, trashing
   (`jobs.run(Op::Copy { .. }, |report, cx| ..)`) and extraction
   (`jobs.extract(..)`) each on a thread, with progress a few times a
   second and a cancel token; `tasks_panel(jobs)` lists them with progress
   bars (`x` cancels, Yazi's `w`). A job with errors stays listed.
-- **A streaming finder:** `finder(walk(root), |path, cx| ..)` is a fuzzy
-  finder over a directory walk that runs on its own thread: results show
-  while it goes on (`12/3400 (walking…)`), a new batch is matched alone,
-  and the walk stops when the finder's screen closes.
-- **A hex view:** `hex_view(|| bytes, top)` is rs-rich-ext's `HexView` as a
-  scrolling node.
+- **A streaming finder:** `finder(walk(root), |path, cx| ..)` is the
+  core's `finder_of` over a directory walk that runs on its own thread:
+  results show while it goes on (`12/3400 (loading…)`), and the walk
+  stops when the finder's screen closes.
+- **A path header:** `path_crumb(|| cwd)` is the core's `breadcrumb` over
+  a path's parts (`path_parts`), `/` between them and the home directory
+  as `~` (`path_crumb_at(.., Some(home))` names it).
+- **A hex view:** `hex_view` is the core's (`widgets::hex_view`),
+  re-exported.
 
 Kitty and Sixel images are not drawn yet: rs-rich-ext's `Surface` has a
 graphics side channel (`Surface::graphics`, `frame::graphics::plan`) and
@@ -2564,7 +2640,7 @@ backends the build has when the name is not one of them:
 
 ```bash
 cargo run -p rs-rich-intuituive --example files --features termwiz -- --backend termwiz
-INTUITUIVE_BACKEND=termion cargo run -p rs-rich-intuituive --example scope --features termion
+INTUITUIVE_BACKEND=termion cargo run -p rs-rich-intuituive --example scope --features termion,pcm
 ```
 
 termwiz runs on Windows too. CI builds both crates, and every target,

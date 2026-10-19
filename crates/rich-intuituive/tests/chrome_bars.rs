@@ -5,7 +5,6 @@
 //! and a list that leaves the wheel to its ancestors.
 
 use std::cell::Cell;
-use std::path::PathBuf;
 use std::rc::Rc;
 use std::time::Duration;
 
@@ -228,23 +227,31 @@ fn a_status_bar_follows_its_signals_and_cuts_the_left_group() {
 
 #[test]
 fn a_breadcrumb_cuts_from_the_left_and_keeps_its_suffix() {
-    let app = App::new(|| {
-        let path = signal(PathBuf::from("/usr/local/share/doc"));
-        breadcrumb(move || path.get())
+    let parts = |all: &[&str]| all.iter().map(|p| p.to_string()).collect::<Vec<_>>();
+    let app = App::new(move || {
+        let trail = signal(parts(&["", "usr", "local", "share", "doc"]));
+        breadcrumb(move || trail.get())
+            .crumb_separator("/")
             .crumb_suffix(|| " (filter: md)".into())
-            .on_key("u", move |_| path.set(PathBuf::from("/")))
+            .on_key("u", move |_| trail.set(parts(&["", ""])))
             .focusable()
     });
     let mut driver = shown(app, 40, 1);
+    // A leading empty part puts the separator first.
     assert_eq!(rows(&driver)[0], "/usr/local/share/doc (filter: md)");
     // The last part is bold.
     assert!(styled(&driver)[0].contains("[bold]doc[/]"));
-    let app = App::new(|| {
-        breadcrumb(|| PathBuf::from("/usr/local/share/doc")).crumb_suffix(|| " (f)".into())
+    let app = App::new(move || {
+        breadcrumb(move || parts(&["", "usr", "local", "share", "doc"]))
+            .crumb_separator("/")
+            .crumb_suffix(|| " (f)".into())
     });
     assert_eq!(rows(&shown(app, 14, 1))[0], "…share/doc (f)");
     driver.press("u");
     assert_eq!(rows(&driver)[0], "/ (filter: md)");
+    // Any trail: the default separator is ` › `.
+    let app = App::new(move || breadcrumb(move || parts(&["Settings", "Display"])));
+    assert_eq!(rows(&shown(app, 30, 1))[0], "Settings › Display");
 }
 
 #[test]

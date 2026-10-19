@@ -10,10 +10,10 @@
 //! by alemi, MIT licence. Its design, keys, options and display layout are
 //! alemi's; the credit for them is theirs.
 //!
-//!     cargo run -p rs-rich-intuituive --example scope              # a test signal
-//!     cargo run -p rs-rich-intuituive --example scope -- file PATH # raw PCM
+//!     cargo run -p rs-rich-intuituive --example scope --features pcm              # a test signal
+//!     cargo run -p rs-rich-intuituive --example scope --features pcm -- file PATH # raw PCM
 //!     parec --format=s16le --rate=48000 --channels=2 \
-//!         | cargo run -p rs-rich-intuituive --example scope -- file -
+//!         | cargo run -p rs-rich-intuituive --example scope --features pcm -- file -
 //!     cargo run -p rs-rich-intuituive --example scope --features audio -- audio
 //!
 //! Options, as scope-tui's: `-c N` channels, `-b SIZE` buffer, `-r HZ`
@@ -30,7 +30,7 @@
 //! termwiz instead of crossterm, when built with the crate's feature of
 //! that name:
 //!
-//!     cargo run -p rs-rich-intuituive --example scope --features termwiz -- --backend termwiz
+//!     cargo run -p rs-rich-intuituive --example scope --features pcm,termwiz -- --backend termwiz
 //!
 //! q or ctrl+c quits · space pauses · tab changes mode · s scatter · h
 //! hides the interface · r reference lines · ↑ ↓ scale · ← → samples ·

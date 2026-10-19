@@ -9,6 +9,56 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### intuiTUIve: core components are generic (rs-rich-intuituive)
+
+The rule for intuiTUIve is now that its always-compiled core holds only
+generic components, reusable by other components; anything only one
+domain could use (files, sound, one app) is a plugin, built on a generic
+core piece where there is one. [The demo gaps](docs/design/intuituive-demo-gaps.md)
+and `AGENTS.md` make it a gate for new proposals. An audit of the core
+moved or split what did not pass:
+
+- **Miller columns over any tree:** `miller_of(source, start)` (and
+  `miller_in(source, at)`) over a `MillerSource` (a level's items, the
+  level an item opens, the level above, an `arrive` hook): the parent,
+  current and preview columns with remembered cursors per level, clicks,
+  the wheel, draggable rails and the movement keys (`intuituive::miller`).
+  `files::miller` is now a thin layer over it, its API unchanged.
+- **Jobs with progress:** `jobs::<P>()`, `Jobs::run(title, work, done)`
+  and `jobs_panel(list)`, generic over the progress (`JobProgress`; `f64`
+  is one) and the outcome (`JobOutcome`; `()`, `Result<T, String>`).
+  `files::tasks` runs file operations on it, its API unchanged;
+  `files::Job` is now `Job<file_ops::Progress>`.
+- **A streaming fuzzy finder over any items:** `finder_of(items, display,
+  on_pick)`, read on its own thread. `files::finder` is it over a
+  directory walk; `files::Finder` is now `Finder<String>`, its `walking`
+  field renamed `streaming`, and its status says `loading…`.
+- **A keyed preview pane:** `preview_of(key, load, render)` and
+  `preview_of_with(.., PreviewOfOptions)` load a value off the app's
+  thread for the current key and drop results for keys left behind.
+  `files::preview` is built on it, its API unchanged.
+- **Breaking: `breadcrumb` takes parts, not a path.**
+  `widgets::breadcrumb(|| Vec<String>)` joins any trail with ` › ` (or
+  `.crumb_separator(..)`); `.home_tilde()` and `.home_tilde_at(..)` are
+  gone from the core. The path form is the `files` plugin's
+  `path_crumb(|| path)` (home as `~`), `path_crumb_at(.., home)` and
+  `path_parts(path, home)`.
+- **Breaking: the `audio` module needs a feature.** `audio::pcm`,
+  `Format`, `deinterleave`, `Frame` and `Matrix` were compiled in every
+  build; they are now behind the new off-by-default `pcm` feature (no
+  dependency), which `audio` and `wav` turn on. The scope example needs
+  it (`--example scope --features pcm`; `required-features`), and CI's
+  tapes build turns it on.
+- **`hex_view` moves to the core** (`widgets::hex_view`): any bytes are
+  generic. `files::hex_view` re-exports it.
+
+Kept in the core after the audit, as generic: `meter` and `sparkline`
+(any level, any series; decibels are a scale option), `big_text` (`art`),
+`key_hints`, `status_bar`, `cells`, `live`, tabs, the prompt, pick and
+confirm pop-ups, which-key, `latest`/`latest_every`, `rate` and the
+`bind_*` family. The image nodes stay behind `art`, `watch_path` behind
+`watch`.
+
 ### intuiTUIve: widgets, pop-ups and runtime from round 2 (rs-rich-intuituive)
 
 The rest of what the round-2 rebuilds of scope-tui and Yazi found
@@ -43,8 +93,9 @@ what the plugin work on files, audio and charts asked of the core.
 - **`App::notify_width(size)`**: how wide a notification may grow, 48
   cells by default.
 - **Bars.** `status_bar(left, right)` of `seg(..)` segments with
-  `.caps(Caps::Powerline | Caps::Rounded)`; `breadcrumb(path)` with
-  `.home_tilde()` and `.crumb_suffix(..)`; `key_hints()`, a footer of the
+  `.caps(Caps::Powerline | Caps::Rounded)`; `breadcrumb(parts)` with
+  `.crumb_separator(..)` and `.crumb_suffix(..)` (a path's is
+  `files::path_crumb`, below); `key_hints()`, a footer of the
   keys that work now; `cells([(35, a), ..])`, ratatui's one-row table;
   `live(fps_cap, || renderable)`, which draws at most so many times a
   second of the app's clock.
@@ -189,7 +240,8 @@ the scope-tui rebuild still lacked from the `audio` feature.
   host's inputs.
 - **`audio::pcm(reader, Format, channels, buffer)`** reads interleaved raw
   PCM (`u8`, `s8`, `s16le/be`, `s24le`, `s32le/be`, `f32le/be`, `f64le`;
-  `Format::parse("S16_LE")`) as buffers, in every build. The new `wav`
+  `Format::parse("S16_LE")`) as buffers, behind the light `pcm` feature
+  (below). The new `wav`
   feature (hound) adds `audio::wav(path, buffer)`, `audio::wav_writer` and
   `audio::record(samples, path, rate, channels)`.
 - **`audio::picker(on_pick)`**: a list of the inputs, the default selected,

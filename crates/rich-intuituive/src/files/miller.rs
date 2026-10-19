@@ -1,29 +1,104 @@
 //! Miller columns: the parent directory, the current one and a preview,
-//! over one cursor.
+//! over one cursor: the core's generic [`Miller`](crate::miller::Miller)
+//! over a directory tree, with Yazi's rows and previews.
 
-use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
 use rich_ext::git::GitStatus;
-use rich_ext::listing::{Entry, Sort};
+use rich_ext::listing::{read_dir, Entry, Sort};
 
 use super::model::{dir_model_with, DirModel};
 use super::preview::{preview, Preview, PreviewOptions, PreviewSettings};
 use super::row::{file_list, FileListOptions, Linemode, Marker, MarkerFn};
 use crate::app::Ctx;
 use crate::list::RowRects;
+use crate::miller::{miller_in, MillerSource};
 use crate::node::{label, row, Node};
-use crate::place::RectHandle;
-use crate::reactive::{memo, signal, watch, Memo, Signal};
+use crate::reactive::{memo, signal, Memo, Signal};
 use crate::screen::Rect;
-use crate::split::hsplit;
+
+/// A directory tree as the core's Miller columns browse it: the current
+/// directory's and the parent's items come from their models (sorted,
+/// filtered, followed on disk), any other directory is read.
+#[derive(Clone, Copy)]
+struct DirTree {
+    cwd: Signal<PathBuf>,
+    current: DirModel,
+    parent: DirModel,
+    find: Signal<Option<String>>,
+    preview_top: Signal<u16>,
+}
+
+impl DirTree {
+    /// The model listing `at`, if one does (subscribing to the current
+    /// directory when `track`).
+    fn model(&self, at: &Path, track: bool) -> Option<DirModel> {
+        let is = |cwd: &PathBuf| {
+            if cwd == at {
+                Some(self.current)
+            } else if cwd.parent() == Some(at) {
+                Some(self.parent)
+            } else {
+                None
+            }
+        };
+        if track {
+            self.cwd.with(is)
+        } else {
+            self.cwd.with_untracked(is)
+        }
+    }
+}
+
+impl MillerSource for DirTree {
+    type Key = PathBuf;
+
+    fn items(&self, at: &PathBuf) -> Vec<String> {
+        let names = |entries: &Vec<Entry>| entries.iter().map(|e| e.name.clone()).collect();
+        match self.model(at, true) {
+            Some(model) => model.entries().with(names),
+            None => {
+                let (hidden, sort) = (self.current.hidden.get(), self.current.sort.get());
+                read_dir(at, hidden, sort)
+                    .map(|e| names(&e))
+                    .unwrap_or_default()
+            }
+        }
+    }
+
+    fn child(&self, at: &PathBuf, name: &str) -> Option<PathBuf> {
+        let dir = match self.model(at, false) {
+            Some(model) => model
+                .entries()
+                .with_untracked(|e| e.iter().find(|e| e.name == name).map(|e| e.dir))?,
+            None => at.join(name).is_dir(),
+        };
+        dir.then(|| at.join(name))
+    }
+
+    fn parent(&self, at: &PathBuf) -> Option<(PathBuf, String)> {
+        let up = at.parent()?;
+        let name = at.file_name()?.to_string_lossy().into_owned();
+        Some((up.to_path_buf(), name))
+    }
+
+    /// A fresh view: the find cleared, the filter too, the preview
+    /// scrolled back.
+    fn arrive(&self, _at: &PathBuf) {
+        self.find.set(None);
+        self.current.filter.set(String::new());
+        self.preview_top.set(0);
+    }
+}
 
 /// Miller columns over a directory tree, as Yazi lays them out: the
 /// parent directory (the current one hovered in it), the current
 /// directory (the cursor's column) and a preview of the hovered entry,
-/// side by side in panes whose rails the mouse drags. All of it is
-/// signals, and the struct is `Copy`, so any handler takes one. Made by
+/// side by side in panes whose rails the mouse drags: the core's generic
+/// [`Miller`](crate::miller::Miller) over the directory tree, with
+/// [`file_list`] columns and a [`preview`] by type. All of it is signals,
+/// and the struct is `Copy`, so any handler takes one. Made by
 /// [`miller`]; drawn by [`view`](Self::view).
 ///
 /// - Moving: [`arrow`](Self::arrow), [`move_to`](Self::move_to),
@@ -62,18 +137,9 @@ pub struct Miller {
     /// What the preview shows, and its first line in view (J and K).
     pub preview: Signal<Preview>,
     pub preview_top: Signal<u16>,
-    parent_cursor: Signal<usize>,
+    columns: crate::miller::Miller<DirTree>,
     preview_cursor: Signal<usize>,
-    first: Signal<usize>,
-    parent_first: Signal<usize>,
     preview_first: Signal<usize>,
-    /// The entry last hovered in each directory visited.
-    remember: Signal<HashMap<PathBuf, String>>,
-    rows: Signal<RowRects>,
-    column: Signal<Option<RectHandle>>,
-    /// The panes' shares of the width, which the rails drag.
-    outer: Signal<f64>,
-    inner: Signal<f64>,
     icons: bool,
 }
 
@@ -152,13 +218,23 @@ pub fn miller(start: impl Into<PathBuf>) -> Miller {
     );
     #[cfg(feature = "watch")]
     let (current, parent) = (current.watch(), parent.watch());
-    let cursor = signal(0usize);
+    let find = signal(None);
+    let preview_top = signal(0);
+    let tree = DirTree {
+        cwd,
+        current,
+        parent,
+        find,
+        preview_top,
+    };
+    let columns = miller_in(tree, cwd);
+    let cursor = columns.cursor;
     let entries = current.entries();
     let hovered = memo(move || {
         let at = cursor.get();
         entries.with(|f| f.get(at.min(f.len().saturating_sub(1))).cloned())
     });
-    let miller = Miller {
+    Miller {
         cwd,
         current,
         parent,
@@ -167,54 +243,14 @@ pub fn miller(start: impl Into<PathBuf>) -> Miller {
         hidden,
         sort,
         linemode: signal(Linemode::None),
-        find: signal(None),
+        find,
         preview: signal(Preview::Nothing),
-        preview_top: signal(0),
-        parent_cursor: signal(0),
+        preview_top,
+        columns,
         preview_cursor: signal(0),
-        first: signal(0),
-        parent_first: signal(0),
         preview_first: signal(0),
-        remember: signal(HashMap::new()),
-        rows: signal(RowRects::new()),
-        column: signal(None),
-        outer: signal(1.0 / 8.0),
-        inner: signal(4.0 / 7.0),
         icons: false,
-    };
-    // Remember the entry hovered in each directory, for coming back.
-    watch(
-        move || (cwd.get(), hovered.get().map(|e| e.name)),
-        move |(dir, name), _| {
-            if let Some(name) = name {
-                miller.remember.update(|r| {
-                    r.insert(dir, name);
-                });
-            }
-        },
-    );
-    // The cursor stays on the listing when it shrinks.
-    watch(
-        move || entries.with(Vec::len),
-        move |len, _| {
-            if cursor.get_untracked() >= len {
-                cursor.set(len.saturating_sub(1));
-            }
-        },
-    );
-    // The parent column hovers the current directory.
-    let parent_entries = parent.entries();
-    watch(
-        move || {
-            let name = cwd.with(|d| d.file_name().map(|n| n.to_string_lossy().into_owned()));
-            (name, parent_entries.with(Vec::len))
-        },
-        move |(name, _), _| {
-            let at = name.and_then(|n| parent.position(&n)).unwrap_or(0);
-            miller.parent_cursor.set(at);
-        },
-    );
-    miller
+    }
 }
 
 impl Miller {
@@ -227,10 +263,7 @@ impl Miller {
     /// The columns' shares of the width: Yazi's `ratio`, `[1, 4, 3]` by
     /// default. A share of 0 hides that column's pane down to its rail.
     pub fn ratios(self, parent: u16, current: u16, preview: u16) -> Miller {
-        let total = f64::from(parent + current + preview).max(1.0);
-        self.outer.set(f64::from(parent) / total);
-        let rest = f64::from(current + preview).max(1.0);
-        self.inner.set(f64::from(current) / rest);
+        self.columns.ratios(parent, current, preview);
         self
     }
 
@@ -246,102 +279,68 @@ impl Miller {
 
     /// Where the current column's rows in view are on the screen.
     pub fn row_rects(&self) -> RowRects {
-        self.rows.get_untracked()
+        self.columns.row_rects()
     }
 
     /// Where the current column is on the screen.
     pub fn column_rect(&self) -> Option<Rect> {
-        self.column.get_untracked().and_then(|c| c.get_untracked())
+        self.columns.column_rect()
     }
 
     /// The entry last hovered in `dir`, if it has been shown.
     pub fn remembered(&self, dir: &Path) -> Option<String> {
-        self.remember.with_untracked(|r| r.get(dir).cloned())
+        self.columns.remembered(&dir.to_path_buf())
     }
 
     /// Move the cursor to `to`, kept in the listing.
     pub fn move_to(&self, to: isize) {
-        let len = self.current.entries().with_untracked(Vec::len);
-        let to = to.clamp(0, len.saturating_sub(1) as isize) as usize;
-        self.cursor.set(to);
+        self.columns.move_to(to);
     }
 
     /// Move the cursor by `by` entries.
     pub fn arrow(&self, by: isize) {
-        self.move_to(self.cursor.get_untracked() as isize + by);
+        self.columns.arrow(by);
     }
 
     /// Move by a share of the column's height (Yazi's Ctrl+D is 0.5).
     pub fn page(&self, share: f64) {
-        let rows = self.column_rect().map_or(1, |r| r.height.max(1)) as f64;
-        let by = (rows * share).round() as isize;
-        self.arrow(if by == 0 { share.signum() as isize } else { by });
+        self.columns.page(share);
     }
 
     /// Show `dir`, hovering `hover` there, else the entry hovered when it
     /// was last shown. The find is cleared and the preview scrolled back.
     pub fn cd(&self, dir: PathBuf, hover: Option<String>) {
-        self.cwd.set(dir);
-        self.arrive(hover);
-    }
-
-    /// After the directory changed: a fresh view of it.
-    fn arrive(&self, hover: Option<String>) {
-        self.find.set(None);
-        self.current.filter.set(String::new());
-        self.preview_top.set(0);
-        let dir = self.cwd.get_untracked();
-        let hover = hover.or_else(|| self.remembered(&dir));
-        let at = hover.and_then(|n| self.current.position(&n)).unwrap_or(0);
-        self.cursor.set(at);
+        self.columns.cd(dir, hover);
     }
 
     /// Enter the hovered directory.
     pub fn enter(&self) {
-        if let Some(entry) = self.hovered.get_untracked().filter(|e| e.dir) {
-            self.cd(self.path_of(&entry), None);
-        }
+        self.columns.enter();
     }
 
     /// Go up to the parent, hovering the directory left.
     pub fn leave(&self) {
-        let dir = self.cwd.get_untracked();
-        if let Some(up) = dir.parent() {
-            let came_from = dir.file_name().map(|n| n.to_string_lossy().into_owned());
-            self.cd(up.to_path_buf(), came_from);
-        }
+        self.columns.leave();
     }
 
     /// Read both directories again (after changing files), keeping the
     /// hovered entry where it is if it is still there.
     pub fn refresh(&self) {
-        let name = self.hovered.get_untracked().map(|e| e.name);
-        self.current.refresh();
-        self.parent.refresh();
-        if let Some(at) = name.and_then(|n| self.current.position(&n)) {
-            self.cursor.set(at);
-        }
+        let (current, parent) = (self.current, self.parent);
+        self.columns.keep(|| {
+            current.refresh();
+            parent.refresh();
+        });
     }
 
     /// Bind Yazi's movement keys on `node` (which should hold the view):
-    /// `j`/`k` (and the arrows) move, `h`/`l` (and ←/→) leave and enter,
-    /// `g g`/`G` (and Home/End) go to the top and the bottom, Ctrl+D/U
-    /// and PgDn/PgUp move by half and whole columns, `J`/`K` scroll the
-    /// preview. The node sees the keys before the focused list.
+    /// the core's [`navigation`](crate::miller::Miller::navigation)
+    /// (`j`/`k`, `h`/`l`, `g g`/`G`, Ctrl+D/U, PgDn/PgUp), and `J`/`K`
+    /// scroll the preview. The node sees the keys before the focused list.
     pub fn navigation(self, node: Node) -> Node {
         let m = self;
-        node.previews_keys()
-            .bind("k up", "Move up", move |_| m.arrow(-1))
-            .bind("j down", "Move down", move |_| m.arrow(1))
-            .bind("h left", "Go up a directory", move |_| m.leave())
-            .bind("l right", "Enter the directory", move |_| m.enter())
-            .bind_sequence("g g", "Go to the top", move |_| m.move_to(0))
-            .bind("home", "Go to the top", move |_| m.move_to(0))
-            .bind("G end", "Go to the bottom", move |_| m.move_to(isize::MAX))
-            .bind("ctrl+d", "Half a page down", move |_| m.page(0.5))
-            .bind("ctrl+u", "Half a page up", move |_| m.page(-0.5))
-            .bind("pagedown ctrl+f", "A page down", move |_| m.page(1.0))
-            .bind("pageup ctrl+b", "A page up", move |_| m.page(-1.0))
+        self.columns
+            .navigation(node)
             .bind("J", "Scroll the preview down", move |_| {
                 m.preview_top.update(|t| *t = t.saturating_add(5))
             })
@@ -357,14 +356,10 @@ impl Miller {
 
     /// The three columns: markers and git signs as `options` says.
     pub fn view_with(self, options: MillerOptions) -> Node {
-        hsplit(
+        self.columns.layout(
             self.parent_column(&options),
-            hsplit(
-                self.current_column(&options),
-                self.preview_column(&options),
-                self.inner,
-            ),
-            self.outer,
+            self.current_column(&options),
+            self.preview_column(&options),
         )
     }
 
@@ -373,8 +368,8 @@ impl Miller {
             .icons(self.icons)
             .linemode(self.linemode)
             .find(self.find)
-            .offset(self.first)
-            .row_rects(&self.rows.get_untracked())
+            .offset(self.columns.first)
+            .row_rects(&self.columns.row_rects())
             .marker_fn(options.markers.clone());
         if let Some(git) = options.git {
             list = list.git(git);
@@ -383,10 +378,7 @@ impl Miller {
         let node = file_list(self.current, self.cursor, list)
             .name("current")
             .autofocus();
-        let handle = node.rect_handle();
-        // `update`, not `set`: a handle is not `PartialEq`.
-        self.column.update(|c| *c = Some(handle));
-        node
+        self.columns.track_current(node)
     }
 
     fn parent_column(self, options: &MillerOptions) -> Node {
@@ -397,11 +389,11 @@ impl Miller {
             .map(|f| Rc::new(move |_, path: &Path| f(None, path)) as MarkerFn);
         let list = FileListOptions::new()
             .icons(self.icons)
-            .offset(self.parent_first)
+            .offset(self.columns.parent_first)
             .lead(true)
             .marker_fn(markers)
             .no_focus();
-        file_list(self.parent, self.parent_cursor, list)
+        file_list(self.parent, self.columns.parent_cursor, list)
             .name("parent")
             .on_mouse(move |_, mouse| {
                 use rich_interact::{Button, MouseKind};
@@ -410,16 +402,7 @@ impl Miller {
                     MouseKind::ScrollUp | MouseKind::ScrollDown => return true,
                     _ => return false,
                 }
-                let i = m.parent_first.get_untracked() + mouse.row as usize;
-                let dir = m.cwd.get_untracked();
-                let Some(up) = dir.parent() else {
-                    return true;
-                };
-                match m.parent.entries().with_untracked(|e| e.get(i).cloned()) {
-                    Some(entry) if entry.dir => m.cd(up.join(&entry.name), None),
-                    Some(entry) => m.cd(up.to_path_buf(), Some(entry.name)),
-                    None => m.leave(),
-                }
+                m.columns.click_parent(mouse.row as usize);
                 true
             })
     }
@@ -444,14 +427,7 @@ impl Miller {
                 .refresh(self.current.tick_signal())
                 .icons(self.icons)
                 .remembered(move |dir| m.remembered(dir))
-                .on_dir_click(move |name, _cx: &mut Ctx| {
-                    if let Some(dir) = m
-                        .hovered_path()
-                        .filter(|_| m.hovered.get_untracked().is_some_and(|e| e.dir))
-                    {
-                        m.cd(dir, name);
-                    }
-                }),
+                .on_dir_click(move |name, _cx: &mut Ctx| m.columns.enter_at(name)),
         );
         // Yazi pads the preview column by a cell on the right.
         row([pane.flex(1), label("").fixed(1)])

@@ -1,8 +1,10 @@
 //! Sound in and out: a sound card captured into a signal, raw PCM and WAV
-//! files read a buffer at a time, and what is shown recorded to a WAV.
+//! files read a buffer at a time, and what is shown recorded to a WAV. A
+//! plugin, not core: the module is there only with the off-by-default
+//! `pcm` feature, which `audio` and `wav` turn on.
 //!
 //! Every source gives the same thing, a [`Matrix`]: one row a channel,
-//! each sample from -1 to 1. What is always here:
+//! each sample from -1 to 1. What the `pcm` feature brings:
 //!
 //! - [`pcm`] reads interleaved PCM (`s16le`, `f32le`, …, as `parec` and
 //!   `arecord` write it) from a file, a pipe or stdin, a buffer at a time.

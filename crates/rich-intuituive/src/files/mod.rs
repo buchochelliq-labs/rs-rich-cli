@@ -1,6 +1,12 @@
 //! A file manager's components, behind the off-by-default `files` feature:
 //! what rebuilding [Yazi](https://github.com/sxyazi/yazi) by hand
-//! (`examples/files.rs`) took a few hundred lines each to write.
+//! (`examples/files.rs`) took a few hundred lines each to write. A plugin:
+//! each component with a generic shape underneath is that core component
+//! with a file system plugged in ([`miller`] on
+//! [`miller_of`](crate::miller_of), [`tasks`] on [`jobs`](crate::jobs::jobs),
+//! [`finder`] on [`finder_of`](crate::finder_of), [`preview`] on
+//! [`preview_of`](crate::preview_of), [`path_crumb`] on
+//! [`breadcrumb`](crate::widgets::breadcrumb)).
 //!
 //! - [`dir_model`]: a directory's entries as signals, sorted and filtered,
 //!   read again on [`refresh`](DirModel::refresh), followed on disk with
@@ -25,8 +31,9 @@
 //!   `w`).
 //! - [`finder`]: a fuzzy finder over a directory walk whose results stream
 //!   in while the walk goes on (Yazi's `z` over fd and fzf).
+//! - [`path_crumb`]: a path as a header, the home directory as `~`.
 //! - [`git_status`]: `git status` per file, loaded in the background.
-//! - [`hex_view`]: a scrolling hex dump of bytes.
+//! - [`hex_view`]: the core's scrolling hex dump, re-exported.
 //!
 //! The parts that need no terminal are in rs-rich-ext:
 //! [`listing`](rich_ext::listing) (entries and sorting),
@@ -51,8 +58,8 @@
 //! # std::fs::remove_dir_all(&dir).ok();
 //! ```
 
+mod crumb;
 mod finder;
-mod hex;
 mod miller;
 mod model;
 mod open;
@@ -62,8 +69,10 @@ mod tasks;
 
 use std::sync::atomic::Ordering;
 
+/// The core's [`hex_view`](crate::widgets::hex_view), here too.
+pub use crate::widgets::hex_view;
+pub use crumb::{home_dir, path_crumb, path_crumb_at, path_parts};
 pub use finder::{finder, Finder};
-pub use hex::hex_view;
 pub use miller::{miller, Miller, MillerOptions};
 pub use model::{dir_model, dir_model_with, git_status, DirModel};
 pub use open::{open_with, opener_rules};

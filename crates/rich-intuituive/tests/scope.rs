@@ -1,6 +1,9 @@
 //! The scope-tui rebuild (examples/scope.rs): its signal processing, its
 //! sources, and the app driven by keys on the test signal.
 
+// The example reads raw PCM, behind the `pcm` feature.
+#![cfg(feature = "pcm")]
+
 mod common;
 
 #[path = "../examples/scope.rs"]

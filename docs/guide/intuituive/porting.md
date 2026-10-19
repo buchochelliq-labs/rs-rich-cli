@@ -35,7 +35,7 @@ covers both. Three complete ports show where it leads:
   draws audio as an oscilloscope, a vectorscope and a spectroscope, twenty
   or more times a second. It is rebuilt in
   [`examples/scope.rs`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/crates/rich-intuituive/examples/scope.rs)
-  (`cargo run -p rs-rich-intuituive --example scope`), with its keys,
+  (`cargo run -p rs-rich-intuituive --example scope --features pcm`), with its keys,
   options, trigger, averaging, Braille plots and live capture (with the
   `audio` feature). See
   [the walkthrough](#worked-example-scope-tui-an-oscilloscope) below.

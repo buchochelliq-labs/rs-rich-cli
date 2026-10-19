@@ -23,6 +23,26 @@ Where a gap belongs:
 - **plugin**: a crate or feature beside it (rs-rich-ext's charts,
   rs-rich-ratatui, or a new one).
 
+**Core components are generic.** A core component must be reusable by
+other components: no domain types, names or parameters (no paths, files,
+samples, sound cards, or one app's or one data source's shapes). Anything
+only one domain could use is a plugin: an off-by-default feature module
+(`files`, `pcm`/`audio`, `watch`, `art`) or another crate. Where a domain
+component has a generic shape underneath, the generic part goes in core
+and the plugin builds on it: `files::miller` is the core's `miller_of`
+over a directory tree, `files::tasks` the core's `jobs` running file
+operations, `files::finder` the core's `finder_of` over a walk,
+`files::preview` the core's `preview_of` keyed by a path, and
+`files::path_crumb` the core's `breadcrumb` over a path's parts.
+
+This is a gate, not a preference. A proposal for core that is not generic
+is not accepted into core: it is reshaped as a generic core piece plus a
+plugin built on it, or kept as a plugin. So every gap report and every
+**Components that would help** entry that proposes a domain component
+must also propose the generic core shape under it (or say why there is
+none, and mark it plugin). The tables below predate the rule where they
+name a domain shape as core; such an entry is read as its generic shape.
+
 ## Round 1: Yazi and scope-tui
 
 The clones are [`examples/files.rs`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/crates/rich-intuituive/examples/files.rs)
@@ -285,7 +305,7 @@ into itself, and tab clicks going through `switch_tab` (all tested).
 | Miller columns | parent, current and preview panes over one cursor, with rails, remembered positions and click-to-navigate | `parent_column`, `current_column`, the preview's dir list, the `remember` map, three `on_mouse` handlers (~300 lines) | `miller(source: impl Tree, cursor).ratios(1, 4, 3).preview(\|node\| ..)` | core (or rs-rich-ext) | high |
 | File list | a lazy list of `Entry`s with icon, type colour, marker, line mode and find highlights built in | `entity`, `row_style`, `marker_style`, `linemode_cell` | `file_list(entries, cursor).linemode(Linemode::Size).icons(true).markers(\|p\| ..)` | plugin (rs-rich-ext `filetype` + intuituive) | high |
 | Status bar with segments | left/right segments with powerline caps between them, Yazi's and lualine's | `status`, the `cap` closures | `status_bar().left(seg(" NOR ", main)).right(..).caps(Caps::Rounded)` | core | medium |
-| Breadcrumb / path header | a path that cuts from the left, with `~`, and flags after it | `header`'s cwd text | `path_header(path).home_tilde().flags(..)` | core | medium |
+| Breadcrumb / path header | a path that cuts from the left, with `~`, and flags after it | `header`'s cwd text | `path_header(path).home_tilde().flags(..)`; landed as core `breadcrumb(parts)` + `files::path_crumb(path)` | core + plugin (`files`) | medium |
 | Preview pane by type | picks a renderer from the MIME type: code, Markdown, image, directory, hex, archive listing; worker-loaded, stale-safe | `load_preview`, `Preview`, `preview_column`'s switch, the generation counter | `preview(path_signal).with(Previewer::code()).with(Previewer::image())` | plugin | high |
 | Tab strip that hides below two tabs | `tabs` that collapse with one tab, number titles, and report clicks as a change event | `tab_strip`'s `switch`, `clicked` signal and two watches | `tabs(titles, active).auto_hide().on_change(\|to, cx\| ..)` | core | medium |
 | Key-hint footer | the keys that work now, from the bindings (Bubbles' `help`, Textual's `Footer`) | the help modal for the common case | `key_hints().from_focus()` | core | medium |

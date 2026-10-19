@@ -260,10 +260,14 @@ Textual, a separate project this repository does not mirror). It composes
 `rs-rich-interact`'s sessions and drivers, `rich-ext` and core `rich`'s
 public APIs. Core is unchanged and no golden fixture covers it. Its
 off-by-default `art` (image nodes over `rs-rich-art`'s public `ImageArt`,
-and FIGlet big text over its public `figlet::render`), `audio` (cpal, with
-`pulse` for cpal's PulseAudio host), `wav` (hound), `watch` (notify),
-`files` and `archive` (a file manager's components) features add no
-core hook either. See
+and FIGlet big text over its public `figlet::render`), `pcm` (raw PCM,
+no dependency; the `audio` module's base), `audio` (cpal, with `pulse`
+for cpal's PulseAudio host), `wav` (hound), `watch` (notify), `files` and
+`archive` (a file manager's components, on the always-compiled generic
+`miller_of`, `jobs`, `finder_of`, `preview_of` and `breadcrumb`) features
+add no core hook either. Its always-compiled code is generic only: a
+domain component is one of these plugins (see
+[the demo gaps](design/intuituive-demo-gaps.md)). See
 [Terminal apps](guide/intuituive/index.md).
 
 rs-rich-ext's `filetype`, `fs`, `listing`, `open`, `file_ops`, `trash`,

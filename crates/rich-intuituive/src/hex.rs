@@ -9,11 +9,12 @@ use crate::reactive::Signal;
 /// `hexdump -C`'s layout through rs-rich-ext's [`HexView`]: offsets, the
 /// bytes in groups, an ASCII panel, as many bytes a line as the width
 /// fits, runs of equal lines collapsed. It scrolls; `top` is its first
-/// line in view (both ways).
+/// line in view (both ways). Any bytes: a file's head (the `files`
+/// plugin's preview), a packet, a register dump.
 ///
 /// ```
-/// use intuituive::files::hex_view;
 /// use intuituive::prelude::*;
+/// use intuituive::widgets::hex_view;
 ///
 /// let app = App::new(|| hex_view(|| b"PNG\x00".to_vec(), signal(0)).on_key("q", |cx| cx.quit()));
 /// let screen = app.render_with(&["q"], 80, 2).unwrap();

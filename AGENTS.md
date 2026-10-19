@@ -141,6 +141,16 @@ version.
 If you find yourself editing a faithful-port library module to add non-upstream
 behavior, stop and move it to `rich-ext`.
 
+**intuiTUIve's core components are generic.** `crates/rich-intuituive`'s
+always-compiled code holds only components other components can reuse: no
+domain types, names or parameters (files and paths, audio, one app, one
+data source). A domain component is a plugin (an off-by-default feature
+module such as `files`, `pcm`/`audio`, `watch`, `art`, or another crate),
+built on a generic core piece where one exists (`files::miller` on
+`miller_of`, `files::tasks` on `jobs`). A non-generic proposal is not
+accepted into core; reshape it as a generic core piece plus a plugin. See
+[the demo gaps' intro](docs/design/intuituive-demo-gaps.md).
+
 ---
 
 ## Porting a module (parity workflow)
