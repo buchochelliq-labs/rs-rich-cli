@@ -59,6 +59,11 @@ pub enum KeyCode {
     PageUp,
     PageDown,
     F(u8),
+    /// The menu key (the context-menu key beside the right Ctrl), parsed
+    /// as `menu`. Terminals with the kitty keyboard protocol report it;
+    /// others send nothing for it, so a binding on it usually has
+    /// Shift+F10 beside it.
+    Menu,
 }
 
 /// A key press.
@@ -172,6 +177,7 @@ impl Key {
                 "backspace" => KeyCode::Backspace,
                 "delete" | "del" => KeyCode::Delete,
                 "insert" => KeyCode::Insert,
+                "menu" => KeyCode::Menu,
                 "escape" | "esc" => KeyCode::Escape,
                 "space" => KeyCode::Char(' '),
                 // A list of key names is separated by commas too.
@@ -607,6 +613,7 @@ fn translate(event: crossterm::event::Event, exact: bool) -> Option<Event> {
                 K::PageUp => KeyCode::PageUp,
                 K::PageDown => KeyCode::PageDown,
                 K::F(n) => KeyCode::F(n),
+                K::Menu => KeyCode::Menu,
                 _ => return None,
             };
             let mut read = Key::with(code, held);
@@ -695,6 +702,13 @@ mod tests {
         );
         // Shift with punctuation is a layout's, not a key name.
         assert_eq!(Key::parse("shift+minus"), None);
+    }
+
+    #[test]
+    fn the_menu_key_has_a_name() {
+        assert_eq!(Key::parse("menu"), Some(Key::new(KeyCode::Menu)));
+        assert_eq!(Key::parse("Menu").unwrap().to_string(), "menu");
+        assert_eq!(Key::parse("shift+menu").unwrap().to_string(), "shift+menu");
     }
 
     fn key(name: &str) -> Key {

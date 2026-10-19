@@ -446,6 +446,7 @@ fn key_parts(key: Key) -> (String, u32, Option<String>) {
         KeyCode::End => named("End", 35),
         KeyCode::PageUp => named("PageUp", 33),
         KeyCode::PageDown => named("PageDown", 34),
+        KeyCode::Menu => named("ContextMenu", 93),
         KeyCode::F(n) => (format!("F{n}"), 111 + n as u32, None),
     }
 }

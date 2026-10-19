@@ -1320,21 +1320,20 @@ impl Widget for List {
         let context = self.options.borrow().context.clone();
         let mouse = match event {
             WidgetEvent::Mouse(mouse) => mouse,
-            // The menu key (Shift+F10) on the selected item.
+            // The menu key (or Shift+F10) on the selected item.
             WidgetEvent::Key(key) => {
                 let (Some(context), Some(at)) = (context, self.selection.get_untracked()) else {
                     return Used::No;
                 };
-                if *key
-                    != rich_interact::Key::with(
-                        KeyCode::F(10),
-                        Modifiers {
-                            shift: true,
-                            ..Modifiers::NONE
-                        },
-                    )
-                    || at >= self.items.len()
-                {
+                let shift_f10 = rich_interact::Key::with(
+                    KeyCode::F(10),
+                    Modifiers {
+                        shift: true,
+                        ..Modifiers::NONE
+                    },
+                );
+                let menu = rich_interact::Key::new(KeyCode::Menu);
+                if (*key != shift_f10 && *key != menu) || at >= self.items.len() {
                     return Used::No;
                 }
                 (context.borrow_mut())(at, cx.app());
@@ -1668,7 +1667,7 @@ impl Node {
 
     /// Run `handler` with an item's index when it is pressed with the
     /// right button (it is selected first) or, while the list has the
-    /// focus, when the menu key (Shift+F10) is pressed on the selected
+    /// focus, when the menu key (or Shift+F10) is pressed on the selected
     /// item: a context menu on a row, opened with `cx.pointer()` (`None`
     /// from the keyboard) or the row's [`row_rects`](Self::row_rects).
     /// The right press goes no further.
