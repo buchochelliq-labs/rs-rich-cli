@@ -192,6 +192,11 @@ impl Runtime {
         Runtime::current_for("this")
     }
 
+    /// The current runtime, if an app is built or running.
+    pub(crate) fn try_current() -> Option<Rc<Runtime>> {
+        CURRENT.with(|current| current.borrow().last().cloned())
+    }
+
     /// The current runtime, or a panic that names `what` was called
     /// outside an app.
     pub(crate) fn current_for(what: &str) -> Rc<Runtime> {
