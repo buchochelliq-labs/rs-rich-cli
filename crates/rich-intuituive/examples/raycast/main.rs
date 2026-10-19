@@ -8,16 +8,20 @@
 //!     cargo run ... -- --mode braille        (auto, blocks, quadrants, braille, kitty, iterm)
 //!     cargo run ... -- --flat --level 2      (flat fogged floor; start on level 2)
 //!
-//! The 3D view is drawn into an RGB framebuffer each tic (35 a second, on
-//! the app's clock) and put on screen by the `View` widget: half blocks by
+//! The game runs on a fixed step of a tic (35 a second, on the app's clock,
+//! catching up after a slow frame), and the 3D view is drawn into an RGB
+//! framebuffer each tic and put on screen by the `View` widget: half blocks by
 //! default, quadrants or Braille, or real pixels through Kitty's or
 //! iTerm2's image protocol. Everything round it (the status bar's digits
 //! and face, the map, the messages, the title, the pause menu, help) is
 //! ordinary intuiTUIve nodes.
 //!
 //! Keys: W/↑ S/↓ walk, A/← D/→ turn, Q/E (or Alt+←/→, `,` `.`) strafe,
-//! capitals run; F (or Ctrl+F) fires; Space opens doors and presses the
-//! exit switch; Tab shows the map; Esc pauses; `?` lists the keys.
+//! capitals (or Shift held) run; F (or Ctrl+F) fires; Space opens doors and
+//! presses the exit switch; Tab shows the map; Esc pauses; `?` lists the
+//! keys. A key whose release the terminal reports (every key with the kitty
+//! keyboard protocol, which the app asks for) is held from its press to its
+//! release; one whose release will not come is held a few tics a press.
 
 mod art;
 mod game;
@@ -25,16 +29,13 @@ mod render;
 mod view;
 
 use std::cell::{Cell, RefCell};
-use std::collections::HashSet;
 use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use intuituive::interact::Key;
+use intuituive::pixels::pixels;
 use intuituive::prelude::*;
-use intuituive::{big_text, digits, rate, RectHandle};
-use rich_art::image::{DynamicImage, RgbImage};
-use rich_art::{ImageArt, ImageMode};
+use intuituive::{big_text, digits, rate};
 
 pub use art::Textures;
 pub use game::{Action, DoorState, Game, Kind, Mode as EnemyMode, State, Tile, Wall, LEVELS, TIC};
@@ -94,13 +95,8 @@ pub struct Options {
     /// Skip the title screen.
     pub start: bool,
     /// Draw as fast as frames allow (the game still runs at 35 tics a
-    /// second of the wall clock); else one frame a tic.
+    /// second); else one frame a tic.
     pub uncapped: bool,
-    /// Keep the game to the wall clock: a frame that came late runs the
-    /// tics it owes (at most five). Off, each timer tick is one tic, which
-    /// a test's clock steps exactly (a timer handler is not told the app's
-    /// clock, so catching up needs the wall clock).
-    pub realtime: bool,
     /// Walk round by itself for this long and quit, counting frames.
     pub bench: Option<Duration>,
 }
@@ -114,7 +110,6 @@ impl Default for Options {
             floor_cast: true,
             start: false,
             uncapped: false,
-            realtime: false,
             bench: None,
         }
     }
@@ -124,7 +119,6 @@ impl Options {
     pub fn parse(args: impl IntoIterator<Item = String>) -> Result<Options, String> {
         let mut options = Options {
             mode: None,
-            realtime: true,
             ..Options::default()
         };
         let mut args = args.into_iter();
@@ -225,19 +219,17 @@ pub fn raycast_app(options: Options) -> (App, Probe) {
         .then(|| Arc::new(Mutex::new(view::Placed::default())));
     let shared = probe.clone();
     let source = placed.clone();
+    // Every key reported, releases too, where the terminal can (kitty).
     let app = App::new(move || build(shared, options, placed))
         .help_key("?")
-        .palette_key("ctrl+p");
+        .palette_key("ctrl+p")
+        .all_keys(true);
     let app = match source {
         Some(placed) => app.graphics(Arc::new(view::Pixels(placed))),
         None => app,
     };
     (app, probe)
 }
-
-/// The keys that have been seen let go: from then on they are held by
-/// press and release, not latched.
-type Releasing = Rc<RefCell<HashSet<&'static str>>>;
 
 fn build(probe: Probe, options: Options, placed: Option<Arc<Mutex<view::Placed>>>) -> Node {
     let textures = Rc::new(Textures::generate());
@@ -249,44 +241,49 @@ fn build(probe: Probe, options: Options, placed: Option<Arc<Mutex<view::Placed>>
     let show_map = signal(false);
     let map = signal(String::new());
     let size = Rc::new(Cell::new((80u16, 19u16)));
-    let releasing: Releasing = Rc::new(RefCell::new(HashSet::new()));
+    let size_of = size.clone();
     let covered = memo(move || {
         let (state, paused) = hud.with(|h| (h.state, h.paused));
         show_map.get() || paused || state != State::Playing
     });
 
-    // The loop: tics of the game, then a frame.
+    // A frame of the 3D view, from the game as it is.
     let look = Look {
         floor_cast: options.floor_cast,
         aspect: 1.0,
     };
-    let mut started: Option<Instant> = None;
-    let mut run = 0u64;
-    let interval = if options.uncapped {
-        Duration::from_millis(1)
-    } else {
-        TIC
-    };
-    let tick_game = game.clone();
-    let tick_size = size.clone();
-    let tick_probe = probe.clone();
-    let bench = options.bench.is_some();
     let mode = probe.mode;
-    every(interval, move |_| {
+    let bench = options.bench.is_some();
+    let draw_probe = probe.clone();
+    let draw = Rc::new(move |game: &Game| {
+        let (w, h) = size_of.get();
+        let (sx, sy, aspect) = mode.pixels(covered.get_untracked());
+        let mut next = render(
+            game,
+            &textures,
+            usize::from(w) * sx,
+            usize::from(h) * sy,
+            Look { aspect, ..look },
+        );
+        if bench && draw_probe.first.get().is_none() {
+            draw_probe.first.set(Some(Instant::now()));
+        }
+        let n = draw_probe.frames.get() + 1;
+        next.number = n;
+        draw_probe.frames.set(n);
+        let next = Rc::new(next);
+        *draw_probe.frame.borrow_mut() = next.clone();
+        frame.replace(next);
+        drawn.replace(n);
+    });
+
+    // The loop: the tics owed (five at most after a stall), then a frame,
+    // or, uncapped, a frame on every turn of the loop.
+    let tick_game = game.clone();
+    let tick_draw = draw.clone();
+    fixed_step(TIC, move |_, steps| {
         let mut game = tick_game.borrow_mut();
-        let due = if options.uncapped || options.realtime {
-            // The clock starts at the first tick (after the terminal is set
-            // up), and runs the tics owed since, five at most a frame.
-            let since = *started.get_or_insert_with(Instant::now);
-            let should = 1 + (since.elapsed().as_nanos() / TIC.as_nanos()) as u64;
-            // Further behind than that, the rest is dropped.
-            let due = should.saturating_sub(run).min(5);
-            run = should;
-            due
-        } else {
-            1
-        };
-        for _ in 0..due {
+        for _ in 0..steps {
             if bench {
                 // The benchmark walks round on its own.
                 game.press(Action::Forward, false);
@@ -307,60 +304,38 @@ fn build(probe: Probe, options: Options, placed: Option<Arc<Mutex<view::Placed>>
         if show_map.get_untracked() {
             map.set(minimap(&game));
         }
-        // Capped, a frame is drawn for each tic (none when none is due);
-        // uncapped, one for every turn of the loop, to measure the cost.
-        if game.paused || (due == 0 && !options.uncapped && game.state != State::Title) {
-            return;
+        if !game.paused && !options.uncapped {
+            tick_draw(&game);
         }
-        let (w, h) = tick_size.get();
-        let (sx, sy, aspect) = mode.pixels(covered.get_untracked());
-        let mut next = render(
-            &game,
-            &textures,
-            usize::from(w) * sx,
-            usize::from(h) * sy,
-            Look { aspect, ..look },
-        );
-        if bench && tick_probe.first.get().is_none() {
-            tick_probe.first.set(Some(Instant::now()));
-        }
-        let n = tick_probe.frames.get() + 1;
-        next.number = n;
-        tick_probe.frames.set(n);
-        let next = Rc::new(next);
-        *tick_probe.frame.borrow_mut() = next.clone();
-        frame.replace(next);
-        drawn.replace(n);
-    });
+    })
+    .max_catch_up(5);
+    if options.uncapped {
+        let game = game.clone();
+        every(Duration::from_millis(1), move |_| {
+            let game = game.borrow();
+            if !game.paused {
+                draw(&game);
+            }
+        });
+    }
     if let Some(after_secs) = options.bench {
         after(after_secs, |cx| cx.quit());
     }
 
     // The view, and what goes over it.
-    let rect = RectHandle::new();
-    let release_game = game.clone();
-    let release_keys = releasing.clone();
-    let view = widget(view::View {
-        frame,
-        mode,
-        covered,
-        size,
-        rect,
-        placed,
-        released: Box::new(move |key: &Key| {
-            for (name, actions, _) in KEYS {
-                let bound = Key::parse(name).expect("the key names parse");
-                if key.code == bound.code {
-                    release_keys.borrow_mut().insert(name);
-                    for action in *actions {
-                        release_game.borrow_mut().release(*action);
-                    }
-                }
-            }
-        }),
-    })
-    .autofocus()
-    .rect_into(&rect)
+    // In a pixel mode, real pixels unless an overlay covers the view, when
+    // it draws cells the overlay can cover; the picture goes with the
+    // pixel view.
+    let view = match placed {
+        Some(placed) => keyed(
+            move || covered.get(),
+            move |covered| match covered {
+                true => view::cells(frame, mode, size.clone()),
+                false => view::pixels(frame, mode, size.clone(), placed.clone()),
+            },
+        ),
+        None => view::cells(frame, mode, size),
+    }
     .name("view");
     let message = text(move || {
         hud.with(|h| match &h.message {
@@ -376,8 +351,8 @@ fn build(probe: Probe, options: Options, placed: Option<Arc<Mutex<view::Placed>>
             if on {
                 text(move || map.get())
                     .no_wrap()
-                    .style("on #101018")
                     .panel("Map")
+                    .style("on #101018")
             } else {
                 label("")
             }
@@ -406,25 +381,28 @@ fn build(probe: Probe, options: Options, placed: Option<Arc<Mutex<view::Placed>>
     )
     .place(Align::Center, Align::Center);
     let stage = layers([view, message, map_panel, screens]);
-    let root = column([stage.flex(1), status_bar(hud, fps, mode).fixed(5)]).style("on #101018");
-    keys(root, game, releasing, show_map, map)
+    // The background goes on the status bar, not the root: in a pixel mode
+    // the view's cells must keep the terminal's own background, as Kitty
+    // draws the image (placed below -2^30) under any cell that has one.
+    let root = column([
+        stage.flex(1),
+        status_bar(hud, fps, mode).fixed(5).style("on #101018"),
+    ]);
+    keys(root, game, show_map, map)
 }
 
 /// The keys: movement held down, the rest pressed.
-fn keys(
-    root: Node,
-    game: Rc<RefCell<Game>>,
-    releasing: Releasing,
-    show_map: Signal<bool>,
-    map: Signal<String>,
-) -> Node {
+fn keys(root: Node, game: Rc<RefCell<Game>>, show_map: Signal<bool>, map: Signal<String>) -> Node {
     let mut root = root;
     for (name, actions, help) in KEYS {
-        let game = game.clone();
-        let releasing = releasing.clone();
-        let press = move |_: &mut Ctx| {
-            let releases = releasing.borrow().contains(name);
-            let mut game = game.borrow_mut();
+        let press_game = game.clone();
+        // Held until its release where the terminal will report it (from
+        // the first press), else latched for a few tics.
+        let press = move |cx: &mut Ctx| {
+            let releases = cx
+                .key()
+                .is_some_and(|key| cx.releases_reported().reported(&key));
+            let mut game = press_game.borrow_mut();
             if game.state != State::Playing {
                 return;
             }
@@ -432,12 +410,22 @@ fn keys(
                 game.press(*action, releases);
             }
         };
+        let release_game = game.clone();
+        let release = move |_: &mut Ctx| {
+            for action in *actions {
+                release_game.borrow_mut().release(*action);
+            }
+        };
         root = if help.is_empty() {
             root.on_key(name, press)
         } else {
             root.bind_in("Move", name, help, press)
-        };
+        }
+        .on_key_up(name, release);
     }
+    // Shift let go before the letter: no longer running.
+    let run_game = game.clone();
+    let root = root.on_key_up("shift", move |_| run_game.borrow_mut().release(Action::Run));
     let act = |f: fn(&mut Game)| {
         let game = game.clone();
         move |_: &mut Ctx| f(&mut game.borrow_mut())
@@ -570,14 +558,12 @@ fn end_panel(
 
 /// The status bar: ammunition, health, the face, armour, and the rest.
 fn status_bar(hud: Signal<Hud>, fps: Signal<u32>, mode: Mode) -> Node {
-    let face = renderable(move || {
+    let face = pixels(10, 6, move |buf| {
         let (health, hurt, grin, look) = hud.with(|h| (h.health, h.hurt, h.grin, h.look));
-        let (w, h, px) = art::face(health, hurt, grin, look);
-        let image = RgbImage::from_raw(w as u32, h as u32, px).expect("the face's size");
-        ImageArt::new(DynamicImage::ImageRgb8(image))
-            .mode(ImageMode::Blocks)
-            .width(w)
-            .height(h / 2)
+        let (_, _, px) = art::face(health, hurt, grin, look);
+        for (to, from) in buf.pixels_mut().iter_mut().zip(px.as_chunks::<3>().0) {
+            *to = [from[0], from[1], from[2], 255];
+        }
     })
     .label("Face");
     let info = text(move || {

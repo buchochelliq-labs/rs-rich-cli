@@ -1,21 +1,18 @@
-//! Putting the framebuffer on screen. In cells, through rs-rich-art's
-//! `ImageArt` (half blocks, quadrants or Braille) rendered on the widget's
-//! canvas; in real pixels, through the app's graphics side channel
+//! Putting the framebuffer on screen. In cells, through intuiTUIve's
+//! `pixels` node (half blocks, quadrants or Braille); in real pixels, through the app's graphics side channel
 //! (`App::graphics`, a `PlacementSource`) as a Kitty or iTerm2 image
-//! placed over blank cells. The widget is also where key releases arrive:
-//! intuiTUIve gives `KeyUp` to widgets only, never to bindings.
+//! placed over blank cells, which keep the terminal's own background so
+//! the image (under cells with a background) shows.
 
 use std::cell::Cell;
 use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 
-use intuituive::interact::Key;
+use intuituive::pixels::{pixels_fit, PixelMode};
 use intuituive::prelude::*;
 use intuituive::screen::Rect;
 use intuituive::widget::{Canvas, DrawCx, EventCx, Used, WidgetEvent};
-use intuituive::RectHandle;
-use rich_art::image::{DynamicImage, RgbImage, RgbaImage};
-use rich_art::{ImageArt, ImageMode};
+use rich_art::image::RgbaImage;
 use rich_ext::frame::{Frame as CellFrame, Graphic, Placement, PlacementSource};
 
 use super::render::Frame;
@@ -87,14 +84,6 @@ impl Mode {
             Mode::Blocks | Mode::Kitty | Mode::Iterm => (1, 2, 1.0),
             Mode::Quadrants => (2, 2, 2.0),
             Mode::Braille => (2, 4, 1.0),
-        }
-    }
-
-    fn cells(self) -> ImageMode {
-        match self {
-            Mode::Quadrants => ImageMode::Quadrants,
-            Mode::Braille => ImageMode::Braille,
-            _ => ImageMode::Blocks,
         }
     }
 }
@@ -196,35 +185,61 @@ fn encode(mode: Mode, frame: &Frame, cols: u16, rows: u16) -> Option<String> {
     })
 }
 
-/// The frame in black and white, brightened and dithered (a 4x4 Bayer
-/// matrix): rs-rich-art's Braille sets a dot where a pixel is brighter
-/// than half, with no colour, which leaves a dim scene blank.
-fn dither(frame: &Frame) -> Vec<u8> {
-    const BAYER: [[u8; 4]; 4] = [[0, 8, 2, 10], [12, 4, 14, 6], [3, 11, 1, 9], [15, 7, 13, 5]];
-    let mut out = vec![0u8; frame.rgb.len()];
-    for (i, px) in frame.rgb.as_chunks::<3>().0.iter().enumerate() {
-        let (x, y) = (i % frame.width, i / frame.width);
-        let luma = (0.299 * px[0] as f64 + 0.587 * px[1] as f64 + 0.114 * px[2] as f64) / 255.0;
-        let level = luma.powf(0.6) * 16.0;
-        if level > BAYER[y % 4][x % 4] as f64 + 0.5 {
-            out[i * 3..i * 3 + 3].fill(255);
+/// The view in cells: the framebuffer copied into a `pixels` node, in half
+/// blocks, quadrants or Braille. `size` keeps the view's size in cells for
+/// the next frame.
+pub fn cells(frame: Signal<Rc<Frame>>, mode: Mode, size: Rc<Cell<(u16, u16)>>) -> Node {
+    let pixel_mode = match mode {
+        Mode::Quadrants => PixelMode::Quadrants,
+        Mode::Braille => PixelMode::Braille,
+        _ => PixelMode::HalfBlocks,
+    };
+    let (pw, ph) = pixel_mode.cell();
+    pixels_fit(move |buf| {
+        size.set((buf.width() / pw, buf.height() / ph));
+        let frame = frame.get();
+        let width = usize::from(buf.width());
+        for (y, row) in buf.pixels_mut().chunks_mut(width.max(1)).enumerate() {
+            for (x, px) in row.iter_mut().enumerate() {
+                *px = match (
+                    x < frame.width && y < frame.height,
+                    (y * frame.width + x) * 3,
+                ) {
+                    (true, i) => [frame.rgb[i], frame.rgb[i + 1], frame.rgb[i + 2], 255],
+                    (false, _) => [0, 0, 0, 255],
+                };
+            }
         }
-    }
-    out
+    })
+    .pixel_mode(pixel_mode)
 }
 
-/// The view: the framebuffer in cells or pixels, and the keys let go.
+/// The view in real pixels: blank cells for the picture; gone (covered),
+/// no picture.
+pub fn pixels(
+    frame: Signal<Rc<Frame>>,
+    mode: Mode,
+    size: Rc<Cell<(u16, u16)>>,
+    placed: Arc<Mutex<Placed>>,
+) -> Node {
+    let gone = placed.clone();
+    widget(View {
+        frame,
+        mode,
+        size,
+        placed,
+    })
+    .on_unmount(move || gone.lock().expect("the view's picture").picture = None)
+}
+
+/// The view in real pixels: blank cells, with the terminal's own
+/// background, that the picture goes over after the frame.
 pub struct View {
     pub frame: Signal<Rc<Frame>>,
     pub mode: Mode,
-    /// An overlay (a menu, the map, a message box) is over the view: a
-    /// pixel mode draws cells meanwhile, which the overlay can cover.
-    pub covered: Memo<bool>,
     /// The view's size in cells, for the next frame.
     pub size: Rc<Cell<(u16, u16)>>,
-    pub rect: RectHandle,
-    pub placed: Option<Arc<Mutex<Placed>>>,
-    pub released: Box<dyn FnMut(&Key)>,
+    pub placed: Arc<Mutex<Placed>>,
 }
 
 impl Widget for View {
@@ -233,60 +248,26 @@ impl Widget for View {
     }
 
     fn draw(&mut self, cx: &mut DrawCx, canvas: &mut Canvas) {
-        let (w, h) = (canvas.width(), canvas.height());
-        self.size.set((w, h));
+        let rect = cx.rect();
+        self.size.set((canvas.width(), canvas.height()));
         let frame = self.frame.get();
-        let covered = self.covered.get();
-        if self.mode.is_pixels() && !covered {
-            // Blank cells; the picture goes over them after the frame.
-            if let (Some(placed), Some(rect)) = (&self.placed, self.rect.get_untracked()) {
-                let escape = encode(self.mode, &frame, rect.width, rect.height);
-                let mut placed = placed.lock().expect("the view's picture");
-                placed.mode = Some(self.mode);
-                placed.rect = Some(rect);
-                placed.picture = escape.map(|escape| {
-                    Arc::new(Picture {
-                        key: frame.number,
-                        escape,
-                    })
-                });
-            }
-            return;
-        }
-        if let Some(placed) = &self.placed {
-            placed.lock().expect("the view's picture").picture = None;
-        }
-        let rgb = if self.mode == Mode::Braille {
-            dither(&frame)
-        } else {
-            frame.rgb.clone()
-        };
-        let Some(image) = RgbImage::from_raw(frame.width as u32, frame.height as u32, rgb) else {
-            return;
-        };
-        let art = ImageArt::new(DynamicImage::ImageRgb8(image))
-            .mode(self.mode.cells())
-            .width(usize::from(w))
-            .height(usize::from(h));
-        canvas.render(cx.console(), 0, 0, w, h, &art);
+        let escape = encode(self.mode, &frame, rect.width, rect.height);
+        let mut placed = self.placed.lock().expect("the view's picture");
+        placed.mode = Some(self.mode);
+        placed.rect = Some(rect);
+        placed.picture = escape.map(|escape| {
+            Arc::new(Picture {
+                key: frame.number,
+                escape,
+            })
+        });
     }
 
     fn event(&mut self, _cx: &mut EventCx, event: &WidgetEvent) -> Used {
-        match event {
-            WidgetEvent::KeyUp(key) => {
-                (self.released)(key);
-                Used::Yes
-            }
-            WidgetEvent::Resize { width, height } => {
-                self.size.set((*width, *height));
-                Used::No
-            }
-            _ => Used::No,
+        if let WidgetEvent::Resize { width, height } = event {
+            self.size.set((*width, *height));
         }
-    }
-
-    fn focusable(&self) -> bool {
-        true
+        Used::No
     }
 
     fn access_text(&self) -> Option<String> {

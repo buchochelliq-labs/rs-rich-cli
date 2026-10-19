@@ -8,7 +8,7 @@ mod raycast;
 
 use std::time::Duration;
 
-use intuituive::interact::{Event, Key};
+use intuituive::interact::{Event, Key, Releases};
 use intuituive::Driver;
 use raycast::*;
 
@@ -177,25 +177,56 @@ fn a_press_without_a_release_walks_for_a_few_tics() {
 }
 
 #[test]
-fn a_key_seen_let_go_is_held_until_it_is_released() {
+fn a_key_whose_release_is_reported_is_held_from_its_first_press() {
     let (mut driver, probe) = playing();
-    // The terminal reports releases (the kitty keyboard protocol): once
-    // one arrives for ↑, ↑ is held by press and release.
-    key_up(&mut driver, "up");
+    // The kitty keyboard protocol as pushed by default: releases for ↑,
+    // none for the text keys. ↑ is held from its first press (round 1
+    // latched it until a first release had been seen).
+    driver.set_releases(Releases::ExceptText);
     let x0 = probe.game.borrow().player.x;
     driver.press("up");
     driver.advance(tics(30));
     let walked = probe.game.borrow().player.x - x0;
-    assert!(walked > 0.085 * 29.0, "held, not latched: {walked}");
+    assert!(
+        (walked - 0.085 * 30.0).abs() < 1e-6,
+        "held, not latched: {walked}"
+    );
     key_up(&mut driver, "up");
     let x1 = probe.game.borrow().player.x;
     driver.advance(tics(10));
     assert_eq!(probe.game.borrow().player.x, x1);
-    // `w` never sent a release: it is still latched.
+    // `w` sends no release here: latched.
     driver.press("w");
     driver.advance(tics(30));
     let walked = probe.game.borrow().player.x - x1;
     assert!((walked - 0.085 * 8.0).abs() < 1e-6, "{walked}");
+}
+
+#[test]
+fn with_every_key_reported_letters_are_held_and_shift_runs() {
+    let (mut driver, probe) = playing();
+    driver.set_releases(Releases::All);
+    let x0 = probe.game.borrow().player.x;
+    driver.press("w");
+    driver.advance(tics(20));
+    let walked = probe.game.borrow().player.x - x0;
+    assert!((walked - 0.085 * 20.0).abs() < 1e-6, "{walked}");
+    // Shift down: W runs; Shift up first, then w: walking, then still.
+    driver.press("W");
+    driver.advance(tics(4));
+    let x1 = probe.game.borrow().player.x;
+    driver.advance(tics(4));
+    let ran = probe.game.borrow().player.x - x1;
+    assert!((ran - 0.15 * 4.0).abs() < 1e-6, "{ran}");
+    key_up(&mut driver, "shift");
+    let x2 = probe.game.borrow().player.x;
+    driver.advance(tics(4));
+    let walked = probe.game.borrow().player.x - x2;
+    assert!((walked - 0.085 * 4.0).abs() < 1e-6, "{walked}");
+    key_up(&mut driver, "w");
+    let x3 = probe.game.borrow().player.x;
+    driver.advance(tics(4));
+    assert_eq!(probe.game.borrow().player.x, x3);
 }
 
 #[test]
@@ -566,6 +597,30 @@ fn kitty_and_iterm_modes_send_the_frame_as_an_image() {
 }
 
 #[test]
+fn the_kitty_view_keeps_the_terminals_background() {
+    // Kitty draws an image placed below -2^30 under every cell that has a
+    // background: the view's cells must have none, or nothing shows.
+    let (app, _) = raycast_app(Options {
+        mode: Some(Mode::Kitty),
+        ..options()
+    });
+    let mut driver = app.driver(W, H);
+    driver.settle();
+    driver.advance(tics(2));
+    let styled = intuituive::testing::styled(&driver);
+    let lines: Vec<&str> = styled.lines().collect();
+    // Row 0 has the level's name in a box of its own over the image.
+    assert!(lines[0].contains("on #101018] E1 Hangar"), "{styled}");
+    for line in &lines[1..H as usize - 5] {
+        assert!(
+            !line.contains("on #"),
+            "a background over the image: {line}"
+        );
+    }
+    assert!(lines[H as usize - 3].contains("on #101018"), "{styled}");
+}
+
+#[test]
 fn a_covered_pixel_view_draws_cells_instead() {
     let (app, probe) = raycast_app(Options {
         mode: Some(Mode::Kitty),
@@ -578,6 +633,10 @@ fn a_covered_pixel_view_draws_cells_instead() {
     let frame = probe.frame.borrow().clone();
     assert_eq!((frame.width, frame.height), (80, 38));
     assert!(rows(&driver)[5].contains('▀'), "{}", dump(&driver));
+    // No picture is sent while covered.
+    driver.update(tics(3));
+    let out = driver.render().unwrap_or_default();
+    assert!(!out.contains("\x1b_Ga=T"), "a picture while covered");
 }
 
 #[test]
