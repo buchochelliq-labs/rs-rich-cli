@@ -260,11 +260,13 @@ Textual, a separate project this repository does not mirror). It composes
 `rs-rich-interact`'s sessions and drivers, `rich-ext` and core `rich`'s
 public APIs. Core is unchanged and no golden fixture covers it. Its
 off-by-default `art` (image nodes over `rs-rich-art`'s public `ImageArt`),
-`audio` (cpal) and `watch` (notify) features add no core hook either. See
+`audio` (cpal), `watch` (notify), `files` and `archive` (a file manager's
+components) features add no core hook either. See
 [Terminal apps](guide/intuituive/index.md).
 
-rs-rich-ext's `filetype`, `fs`, `dsp` and `syntax` modules, written for its
-Yazi and scope-tui rebuilds, are rs-rich additions too; `syntax::preload`
+rs-rich-ext's `filetype`, `fs`, `listing`, `open`, `file_ops`, `trash`,
+`git`, `archive`, `dsp` and `syntax` modules, written for its Yazi and
+scope-tui rebuilds, are rs-rich additions too; `syntax::preload`
 warms core's `SyntectHighlighter` through its public `CodeHighlighter`
 API, so core is unchanged. See
 [Files, spectra and warm-ups](guide/ext/files-and-signals.md).

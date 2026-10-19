@@ -1654,11 +1654,11 @@ text(move || match user.get() {
 
 ## Files, sound and images
 
-Three off-by-default features bring the outside world in, each working on
-its own thread and delivering on the app's thread, between frames:
+Off-by-default features bring the outside world in, each working on its
+own thread and delivering on the app's thread, between frames:
 
 ```toml
-rs-rich-intuituive = { version = "0.0.4", features = ["watch", "audio", "art"] }
+rs-rich-intuituive = { version = "0.0.4", features = ["watch", "audio", "art", "files"] }
 ```
 
 - **`watch`: files that change.** `watch_path(path, |event, cx| …)` wakes
@@ -1705,7 +1705,83 @@ renderable(move || oscilloscope(&samples.get()))
 A file manager's other parts are in rs-rich-ext: `rich_ext::filetype`
 (Yazi's icons and type colours, MIME types, a Nerd Font check) and
 `rich_ext::fs` (local times, owner and group names); see
-[Files, spectra and warm-ups](../ext/files-and-signals.md). rs-rich-ratatui's
+[Files, spectra and warm-ups](../ext/files-and-signals.md).
+
+### A file manager's components
+
+The off-by-default `files` feature (`archive` adds archive previews and
+extraction) has the parts of a file manager such as Yazi as components, in
+`intuituive::files`, built on rs-rich-ext's `listing`, `open`, `file_ops`,
+`trash` and `git`:
+
+```toml
+rs-rich-intuituive = { version = "0.0.4", features = ["files", "watch", "art"] }
+```
+
+```rust
+use intuituive::files::{miller, MillerOptions, Marker};
+
+App::new(|| {
+    let columns = miller(start.clone()).icons(true).ratios(1, 4, 3);
+    let selected = signal(BTreeSet::<PathBuf>::new());
+    let view = columns.view_with(MillerOptions::new().markers(move |_, path| {
+        if selected.with(|s| s.contains(path)) { Marker::Selected } else { Marker::None }
+    }));
+    columns.navigation(column([view.flex(1), status(columns)]))
+})
+```
+
+- **Miller columns:** `miller(start)` is the parent directory, the
+  current one and a preview of the hovered entry, in panes whose rails the
+  mouse drags, as signals (`cwd`, `cursor`, `hovered`, `hidden`, `sort`,
+  `linemode`, `find`) in a `Copy` struct. Each directory remembers the
+  entry last hovered in it; a click in the parent column goes there, one
+  in a directory's preview enters it. `columns.navigation(node)` binds
+  Yazi's movement keys (`j`/`k`, `h`/`l`, `g g`/`G`, Ctrl+D/U, `J`/`K` for
+  the preview); `cd`, `enter`, `leave`, `arrow` and `refresh` are there
+  for your own. With `watch` both directories follow the disk.
+- **A directory model:** `dir_model(|| Some(dir))` holds a directory's
+  entries as memos, sorted (`model.sort`), hidden files shown or not
+  (`model.hidden`), filtered (`model.filter`, smart case), read again on
+  `refresh()`. `.watch()` follows the disk (`watch` feature); `.sniff()`
+  types each file by its first bytes on a worker thread, so a PNG named
+  `.txt` still gets the image colour. `git_status(model)` loads `git
+  status` beside it.
+- **A file list:** `file_list(model, cursor, FileListOptions::new()
+  .icons(true).linemode(mode).find(query).git(status).markers(..))` is a
+  lazy list of rows as Yazi draws them: the type's colour across the row
+  (so the hovered bar takes it), a marker column, find matches picked
+  out with the hovered one's place (`[2/5]`), a git sign and the line mode
+  (`Linemode::Size`, `Permissions`, `Mtime`, `Btime`, `Owner`) at the
+  right. `entry_markup` and `linemode_cell` are the pieces on their own.
+- **A preview pane:** `preview(move || hovered_path(), PreviewOptions::new())`
+  loads off the app's thread whenever the path or the pane's width
+  changes and picks a renderer by type: a directory's entries, text
+  highlighted, an image (`art`; described without it), an archive's
+  entries (`archive`), a hex dump of anything else. A result for a path
+  no longer shown is dropped, and a slow one clears the pane after 150 ms.
+  `.previewer(|path, mime, settings| ..)` adds your own.
+- **Opening:** `open_with(cx, &opener, paths, |cx| ..)` runs one of
+  `rich_ext::open`'s openers (`opener_rules()` is Yazi's defaults): a
+  blocking one (the editor) gets the terminal through `cx.handoff_then`,
+  the others run in the background; `Launch::Extract` extracts beside the
+  archive.
+- **Background jobs:** `tasks()` runs copies, moves, deletes, trashing
+  (`jobs.run(Op::Copy { .. }, |report, cx| ..)`) and extraction
+  (`jobs.extract(..)`) each on a thread, with progress a few times a
+  second and a cancel token; `tasks_panel(jobs)` lists them with progress
+  bars (`x` cancels, Yazi's `w`). A job with errors stays listed.
+- **A streaming finder:** `finder(walk(root), |path, cx| ..)` is a fuzzy
+  finder over a directory walk that runs on its own thread: results show
+  while it goes on (`12/3400 (walking…)`), a new batch is matched alone,
+  and the walk stops when the finder's screen closes.
+- **A hex view:** `hex_view(|| bytes, top)` is rs-rich-ext's `HexView` as a
+  scrolling node.
+
+Kitty and Sixel images are not drawn yet: rs-rich-ext's `Surface` has a
+graphics side channel (`Surface::graphics`, `frame::graphics::plan`) and
+rs-rich-art encodes both protocols, but intuiTUIve's paint step does not
+use it. rs-rich-ratatui's
 `style_from_color_name("DarkGray")` reads a ratatui colour name, as a
 ported app's options take them, as a rich style.
 

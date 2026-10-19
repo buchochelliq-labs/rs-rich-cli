@@ -221,8 +221,8 @@ jobs:
             args: "--all-features"
           # intuiTUIve, the TUI framework, with both of interact's extra
           # backends (each alone, and on macOS, in `backends`) and its
-          # `art`, `audio` (ALSA headers installed below) and `watch`
-          # features. Its benchmark against ratatui runs in release in
+          # `art`, `audio` (ALSA headers installed below), `watch`, `files`
+          # and `archive` features. Its benchmark against ratatui runs in release in
           # `ratatui-gate`.
           - crate: rs-rich-intuituive
             args: "--all-features"

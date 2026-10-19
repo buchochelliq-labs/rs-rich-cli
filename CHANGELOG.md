@@ -9,6 +9,47 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### A file manager's components (rs-rich-intuituive `files`, rs-rich-ext)
+
+Round 2 of [the demo gaps](docs/design/intuituive-demo-gaps.md) asked for
+the parts of Yazi that `examples/files.rs` writes by hand. The UI parts
+are in intuiTUIve's new off-by-default `files` feature
+(`intuituive::files`); what needs no terminal is in rs-rich-ext, with no
+new dependency outside its `archive` feature.
+
+- **Miller columns:** `files::miller(start)`: the parent, current and
+  preview columns over one cursor, in draggable panes, with remembered
+  positions, clicks that navigate, Yazi's movement keys
+  (`Miller::navigation`) and markers and git signs through
+  `MillerOptions`. With `watch` both directories follow the disk.
+- **A directory model:** `files::dir_model(..)`: entries as memos,
+  sorted, hidden files shown or not, filtered (smart case), read again on
+  `refresh()`; `.watch()` (`watch` feature) and `.sniff()`, which types
+  files by their first bytes on a worker thread.
+- **File-list rows:** `files::file_list(model, cursor, options)`: icon,
+  type colour across the row, marker, find highlights with the hovered
+  match's place, a git sign and Yazi's line modes (size, permissions,
+  mtime, btime, owner).
+- **A preview pane by type:** `files::preview(path, options)`: a
+  directory's entries, highlighted text, an image (`art`), an archive's
+  listing (`archive`), a hex dump; loaded off the app's thread, stale
+  results dropped, custom previewers first.
+- **Openers, jobs, a finder:** `files::open_with` runs an opener (the
+  editor through a handoff, the system opener in the background, archive
+  extraction); `files::tasks()` and `tasks_panel` run copies, moves,
+  deletes, trashing and extraction as cancellable jobs with progress;
+  `files::finder(walk, on_pick)` fuzzy-finds over a directory walk whose
+  results stream in; `files::git_status`, `files::hex_view`.
+- **rs-rich-ext:** `listing` (entries, Yazi's sort orders, line-mode
+  cells, a lazy tree `walk`), `open` (Yazi's opener rules, MIME and name
+  globs), `file_ops` (copy, move, delete, trash with progress, conflict
+  rules, cancellation), `trash` (the FreeDesktop trash: put, list,
+  restore, purge; an `Unsupported` error on macOS and Windows), `git`
+  (`git status --porcelain=v1 -z` per file), `archive` (tar, tar.gz and
+  zip listing and extraction that never writes outside its directory;
+  the off-by-default `archive` feature brings `zip` and `flate2`, both
+  already in the tree), and `filetype::mime_batch`.
+
 ### intuiTUIve's Yazi example on the new components (rs-rich-intuituive)
 
 Round 2 of [the demo gaps](docs/design/intuituive-demo-gaps.md):

@@ -20,10 +20,11 @@ keywords = ["terminal", "tui", "reactive", "framework", "rich"]
 categories = ["command-line-interface"]
 include = ["src/**/*", "README.md", "LICENSE", "Cargo.toml"]
 
-# The image nodes and the file watcher on docs.rs too; `audio` is left out,
+# The image nodes, the file watcher and the file components on docs.rs
+# too; `audio` is left out,
 # as its ALSA headers may not be there to build it.
 [package.metadata.docs.rs]
-features = ["art", "watch"]
+features = ["art", "watch", "files", "archive"]
 
 [lib]
 name = "intuituive"
@@ -48,6 +49,15 @@ watch = ["dep:notify"]
 # `image`: an image file as a node, drawn by rs-rich-art in half blocks
 # (or quadrants, Braille, ASCII). Off by default.
 art = ["dep:rich-art", "rich-art/image"]
+# `files`: a file manager's components (Miller columns, file lists,
+# previews by type, a watched directory model, background file jobs with
+# progress, a streaming fuzzy finder), on rs-rich-ext's `listing`, `open`,
+# `file_ops`, `trash` and `git`. Local times through rs-rich-ext's
+# `local-time` (chrono). Off by default.
+files = ["rich-ext/local-time"]
+# `files` with archive previews and extraction (tar, tar.gz, zip) through
+# rs-rich-ext's `archive` (zip, flate2). Off by default.
+archive = ["files", "rich-ext/archive"]
 
 [dependencies]
 rich.workspace = true
