@@ -618,3 +618,133 @@ entries are generic: another, unrelated component could use them.
 | Big digits | a level or frequency readout (Textual's `Digits`, tui-big-text) | `big_text` exists behind `art`; a `digits(text)` in box-drawing glyphs with no FIGlet would suit every build | core (generic) | low |
 | A fake capture | `--timeout` and device failures under test (see the gaps) | `audio::Capture::simulated(..)` | plugin (`audio`) | medium |
 | Already there, not in scope-tui | `Spectrogram` (spek's, Audacity's waterfall), `meter`/`PeakHold` (every DAW), `sparkline` (ratatui's, Textual's), `audio::picker` (Bubbles' list), `audio::record` | an extended scope, not this clone | plugin | — |
+
+## Round 4: scope-tui
+
+[`examples/scope.rs`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/crates/rich-intuituive/examples/scope.rs)
+rebuilt on round 4's runtime, widgets and sound pieces, with no framework
+change in the round and no hand-made stand-in left in the example. Its
+hand-checked `in_mode` handlers, the `page` dispatcher, ten flag closures,
+the clamped debounce steps, the quoted punctuation keys, the hand-paced
+file thread, the per-channel `VecDeque` history and the equal-temperament
+`tune` are gone; it is 1,274 lines where round 3's was 1,323, and more
+faithful: each scope's keys apply, and are listed, only while it shows
+(`p` is peaks in one and the phase difference in another), `--tune` picks
+scope-tui's buffer sizes sample for sample, and the frame rate is the
+buffers' rate, as scope-tui's (`-b 2048` 23 fps, `-b 1024` 47, `-b 4096`
+12, on the app's clock and in a terminal). `tests/scope.rs` (853 lines,
+was 741) runs on the app's clock with no hand stepping and checks the new
+behaviour (29 tests; 30 with `audio`).
+
+### Round-3 gaps now closed, and where scope.rs uses them
+
+| Round-3 gap or workaround | Now | Where in scope.rs |
+|---|---|---|
+| **Bug: values from other threads picked up at most every 50 ms** (20 fps whatever the buffer; tests stepped the driver by hand every 10 ms) | the run loop is woken by a `Proxy` send, and the headless `Driver::timeout` steps to the next `latest` thread asleep on the app's clock. The tests' `step` is gone: `driver.advance(2.1 s)` reads 23, 47 and 12 fps at `-b 2048`, `1024` and `4096`. In a pty, a debug build of the example shows 24, 47, 12 and 89 (`-b 512`), where scope-tui's arithmetic gives 23.4, 46.9, 11.7 and 93.8 | `the_frame_rate_is_a_buffers_worth_of_time_as_scope_tuis`, every timed test |
+| **Bug: grid lines shared one layer** (`⣸` where scope-tui draws `⢸`) | a layer a grid line, the y axis's first | `chart`; pinned by `reference_lines_are_drawn_as_scope_tuis_datasets_are` |
+| **Bug: a grid with no datasets was drawn in dots** | `Chart::marker(marker)`: the zero line is Braille (or dots with `--no-braille`) before the first buffer as after | `chart` |
+| Bindings active only in a state (`t`, `e`, `=`, `w`, `l` bound and listed in every scope; one `p` with one description) | `.modes(mode, &[(Mode::Oscilloscope, "oscilloscope", &oscilloscope_keys), (Mode::Spectroscope, "spectroscope", &spectroscope_keys)])`: two `p`s, two `pageup`s, two `esc`s; the general `esc` is `bind_when(mode != Oscilloscope)`, so each scope's help lists one | `scope_app` |
+| Sections for every kind of binding | `in_mode`'s section (under `modes`) lists the modes' `bind_scaled` and `bind_step` bindings under the scope's name | `oscilloscope_keys`, `spectroscope_keys` |
+| Named punctuation keys | `equals`, `minus`, `plus`, `underscore`; the help shows `=`, `-`, `+`, `_` | `oscilloscope_keys` |
+| Testing a capture's status | `Capture::simulated(frames, period)` with `stall()` and `fail(why)`: `--timeout` and a failure are tested; the test signal is itself a simulated capture, so it and a sound card are one `Input::Capture` | `demo`, `a_capture_that_stalls_ends_the_app_as_scope_tuis_timeout`, `a_capture_that_fails_ends_the_app_saying_why` |
+| A thread feed with a state | `latest_with_state` under `Capture::status()`, a `FeedState`; the file source has none (see the gaps: `audio::play` gives no state, and scope-tui needs none) | `scope_app` |
+| `audio::pcm` behind `pcm` | `required-features = ["pcm"]`, unchanged; `Capture` is now `pcm`'s, so `Input` has no `cfg(feature = "audio")` arm | `Input` |
+| One `on_write` arm per kind of source (three) | two: a capture's `Frame` and a file's `Matrix` | `scope_app` |
+| `on_write` cloned each buffer | `on_write_ref` lends it; one copy is made, into the buffer shown (but see `recent` below) | `take` |
+| `dsp::note_hz` was not scope-tui's table (E2 a sample off) | `dsp::NoteTable::ScopeTui.hz(note)`, octave 0 by default: E2 at 48 kHz is 583 samples, as scope-tui's; the hand-added octave is gone | `tune`, `tune_reads_notes_as_scope_tui_does_on_rich_exts_pitches` |
+| `Axis::grid` styled with `Axis::style` | `Axis::grid_style(axis colour)` for the reference lines; `Axis::style` stays, as scope-tui styles its axes | `chart` |
+| `Chart::style("none")` for the legend | `Chart::legend_unstyled()` | `chart` |
+| `bind_scaled`'s help said `alt ×0.2` | labelled variants, `("alt", 0.2, "⅕")`: `scale up (shift ×10, ctrl ×5, alt ⅕)`, as scope-tui's docs | `MAGNITUDES` |
+| The help cut long rows ("threshold or avg up") | it wraps; with the keys per scope the descriptions say one thing each ("threshold up", "average more") | `oscilloscope_keys`, `spectroscope_keys` |
+| Ten `signal.update(\|g\| g.x = !g.x)` closures, the clamped steps of the debounce and the averaging | `bind_toggle(keys, desc, signal, \|s\| &mut s.flag)` (ten flags), `bind_step(keys, desc, signal, field, step, 1..=65535)` (the debounce's four keys, the averaging's) | `scope_app` |
+| A history of writes (`take`'s per-channel `VecDeque`s) | `recent(frame, averaged)`, `averaged` a memo of the spectroscope's `average`; `spectroscope` takes the buffers, oldest first | `scope_app`, `spectroscope` |
+| An iterator played at a pace (`play`'s thread) | `audio::play(pcm, rate)` with `-l` (`latest_iter` at `Pace::Every`, then silence); a pipe is `latest_iter(pcm, Pace::Free)` | `play` |
+
+Not used, on purpose, as in round 3: `live`, `audio::record`/`wav`,
+`audio::picker`, the `viz` plugin's `meter`, `sparkline`, `hold`,
+`spectrogram` and `bar_spectrum`, `chart::Persistence`, `digits`,
+`dsp::peak_hz`/`nearest_note`, `smoothed`, `status_bar` and `key_hints`:
+scope-tui has none of them. Not reproduced, also on purpose: scope-tui
+0.3.5's `file` source reads `buffer × channels` bytes a buffer, half a
+buffer of s16 frames a channel (its trace fills half the width), and
+paces `-l` by whole milliseconds of that; and its spectroscope keeps its
+averaging history only while it shows. The clone reads a whole buffer a
+channel at its time, and averages the last buffers shown in any scope.
+
+### New gaps and bugs
+
+| Gap or bug | Needed for | Repro or API sketch | Where |
+|---|---|---|---|
+| The help cuts a long key list instead of wrapping it | a binding with several keys: `bind_step("pageup shift+pageup ctrl+pageup alt+pageup", ..)` is listed `pgup/shift+pgup/ctrl+pgu` | the key column wraps as the description does, or is as wide as its widest entry up to a share of the box | core (generic) |
+| A binding whose modifiers do not matter | scope-tui's spectroscope steps the averaging by one on PgUp with any modifier; the clone binds `pageup` and, with an empty description (hidden), `shift+pageup ctrl+pageup alt+pageup` | `.bind_step(..).any_modifiers()`, or `shown` keys for every kind of binding, as `bind_scaled` has | core (generic) |
+| A step scaled by the modifier | ← →, ↑ ↓ and PgUp/PgDn step a clamped field by a base step times shift ×10, ctrl ×5, alt ⅕; `bind_scaled` gives the factor but not the field, so `samples` and `threshold` are hand-written clamps (and ← → truncate the step to whole samples) | `bind_step_scaled(keys, &MAGNITUDES, desc, signal, \|s\| &mut s.n, base_step, range)`; an integer field rounds (or truncates, as scope-tui) the step | core (generic) |
+| A played feed with a state | an app that shows "end of file" (scope-tui does not: it pads with silence for ever, so the clone needs none) | `latest_iter(..).with_state() -> (Signal<Option<T>>, Signal<FeedState>)`, `Ended` when the values run out (before `then`'s), and `audio::play` returning it | core (generic) + plugin (`audio`) |
+| A tail at its own pace | a pipe read as fast as it comes, then silence a buffer's time apart: `then` keeps `Pace::Free`, a flood, so the clone writes `then_with(\|tx\| while tx.send(silence.clone()) && tx.sleep(period) {})` | `.then_at(Pace::Every(period), iter)` | core (generic) |
+| `Pcm` drops read errors | scope-tui ends on a read error with "data source returned null"; `audio::pcm` treats an error as the end, so the clone pads with silence instead | `Pcm::error() -> Option<&io::Error>`, or a `Result` item; `audio::play` with a state then `Failed(why)` | plugin (`audio`) |
+| A capture that never stalls | scope-tui's `pulse` source blocks and has no timeout; the clone's ends after the default second without a buffer | `AudioOptions::stall_after(impl Into<Option<Duration>>)` and `Capture::stall_after`, as `latest_with_state` takes | plugin (`audio`) |
+| `recent` clones every write | the spectroscope's history copies each buffer a second time (a 2×2048 matrix a frame), on top of the copy into the buffer shown | `recent` on `on_write_ref`, cloning once, or a `recent_of(source, n, \|&T\| -> U)` that keeps a projection | core (generic) |
+
+### Friction with the new APIs
+
+- **A field picker kept in a variable does not compile.** `let average =
+  |s: &mut Spectroscope| &mut s.average;` passed to two `bind_step`s fails
+  with "lifetime may not live long enough": a closure's return does not
+  take its argument's lifetime. The clone writes `fn depth` and `fn
+  average`. A `field!(Spectroscope, average)` macro, or the docs saying
+  "use a `fn`", would save the detour.
+- **A name for a memo and a field picker clash quietly.** `average` the
+  memo and `average` the `fn` gave a type error naming `Memo<usize>`; not
+  the API's fault, but `recent(signal, n)` taking a closure (`|| spec.with(..)`)
+  as a `Count` would make the memo unnecessary.
+- **Empty descriptions hide bindings.** `""` is still the way to keep a
+  binding out of the help, as `"none"` was for the legend's style;
+  Textual's `Binding(show=False)` names it: `.hidden()`.
+- **`modes` wants `&dyn Fn(Node) -> Node`.** The pages are closures kept
+  in variables (`oscilloscope_keys`), which reads well; the type
+  (`ModePage`) only shows when inference fails.
+- **One key, two scopes, one handler each.** scope-tui hands a key to the
+  app and then to the scope showing (Esc resets the view and stops the
+  trigger); a binding's key runs one handler, so the oscilloscope's Esc
+  calls the shared `reset` itself and the general Esc is
+  `bind_when(mode != Oscilloscope)`. Fine, but a "fall through" binding
+  (`.and_then_parent()`, Bubble Tea's message passed on) would say it
+  directly.
+- **Headings in the help have no hook for tests.** A test finds a section
+  by `│name ` at the box's edge, since a description may hold the same
+  word ("oscilloscope, vectorscope, spectroscope").
+- **`Capture::simulated` for a demo signal.** It fits (a source with a
+  status, the same arm as a sound card), but its name says tests; a
+  `Capture::generated(iter, period)` alias, or the one source type below,
+  would read better.
+
+### Components that would help
+
+What scope-tui leans on, what the sound and chart work left open, and
+what comparable audio and visualisation TUIs and libraries offer (cava,
+ratatui and its crates, Bubble Tea and Bubbles, Textual). Core entries
+are generic: another, unrelated component could use them.
+
+| Component | What it would replace or enable | API sketch | Where | Value |
+|---|---|---|---|---|
+| One audio source type | the two `on_write_ref` arms and the `Input` enum: a capture, a file, a pipe and a generator as one value with samples and a status | core: a `Feed<T>` value (`samples()`, `status()`) that `latest_with_state` and `latest_iter(..).with_state()` return; plugin: `audio::Capture::from_pcm(pcm, rate)`, `Capture::generated(iter, period)`, `Capture::from_feed(feed)`, all a `Capture` | core (generic) + plugin (`audio`) | high |
+| A wait the test clock counts as asleep | a feed thread blocked on a condition (a device's condvar, a socket) is busy to the headless clock, so a sound card's feed polls every 100 ms and only `simulated`'s `sleep(period)` is stepped exactly; `wait_for` would let any feed be tested on the app's clock | `Latest::wait_for(\|\| cond, timeout) -> bool`, notified by `Latest::notify()`, on the app's clock under `wait_for_tasks` | core (generic) | medium |
+| Scaled steps | `samples`, `threshold` and `nudge`: a clamped field stepped by the modifier's factor (ratatui apps' and scope-tui's shift ×10) | `bind_step_scaled(keys, variants, desc, signal, field, step, range)` | core (generic) | medium |
+| Falling values | a peak or a level that falls with gravity after it rises (cava's bars, a meter's peak, a notification badge's decay); `dsp::Falloff` is a plain struct in rich-ext | `falling(signal, gravity) -> Memo<f64>`, on the app's clock, beside `smoothed` (Bubbles' harmonica springs) | core (generic) | medium |
+| Ages in `recent` | persistence that fades by time, not by count (a phosphor's decay, a toast list, a log's recent lines) | `recent_with_ages(signal, n) -> Memo<VecDeque<(Duration, T)>>`, or `recent(..).aged()` | core (generic) | low |
+| A persistence or oscilloscope view | the oscilloscope's plot builders (trigger, peaks, zero line) for any scope app, and an analogue scope's phosphor (xoscope, glscopeclient) | plugin: `viz::oscilloscope(\|\| frame).trigger(..).persistence(n)` over `chart::Persistence`; generic core under it: `recent` (with ages) | plugin (`viz`) | medium |
+| A tuner readout | the note nearest the loudest peak, with cents (guitar tuners, `tuner` TUIs) | plugin: `viz::tuner(\|\| spectrum)` on `dsp::peak_hz` and `nearest_note`, drawn with the core's `digits` | plugin (`viz`) | low |
+| A help that wraps keys | the hidden modifier bindings above, and any binding with several keys | the help's key column wrapping (Bubbles' `help` full view, Textual's key panel) | core (generic) | low |
+| Bindings that fall through | scope-tui's Esc, the app's and then the scope's | `.bind_through(keys, desc, f)`: runs, then passes the key on (Bubble Tea's `Update` returning the message to a child) | core (generic) | low |
+| Hidden bindings by name | `""` descriptions | `.bind_hidden(keys, f)`, or `.hidden()` after a binding (Textual's `show=False`) | core (generic) | low |
+| Already there, not in scope-tui | `viz::spectrogram`, `viz::bar_spectrum` (cava's bars, `dsp::bands`, `Falloff::gravity`), `meter`/`hold`, `sparkline`, `digits`, `smoothed`, `audio::record` | an extended scope, not this clone | plugin | — |
+
+### Plugins
+
+The user's decision for this round: visualisation and recording are
+plugins, not core. The `viz` feature is the home of the views of sound and
+signal data: `meter`, `sparkline`, the peak hold (`PeakHold`, `hold`), the
+spectrogram and the bar spectrum, and later persistence and an
+oscilloscope view. The `wav` feature is the home of recording
+(`audio::record`, `wav_writer`). The core keeps only what any app could
+use under them: `recent`, `smoothed`, `latest_with_state`, `latest_iter`,
+`digits`, `rate`.
