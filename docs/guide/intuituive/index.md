@@ -690,6 +690,109 @@ column([
 - Both are text boxes for assistive technology, with their text as the
   value. Validate them with `.error_when(..)`, as any node.
 
+### Completion, history and a command line
+
+```rust
+use intuituive::command_line::{command_line_with, CommandLine, CommandLineOptions, Mode};
+use intuituive::{complete_words, history_in, Completion};
+
+// An input that completes and remembers.
+input(query)
+    .complete(complete_words(["project:", "status:", "priority:"]))
+    .history(history_in("tasks", "filter-history"));
+
+// A command bar: modes, a title, an inline confirm, errors in red.
+let cmd = CommandLine::new();
+column([report, command_line_with(cmd, CommandLineOptions::new().two_rows())])
+    .on_key("/", move |cx| {
+        cmd.open(cx, Mode::new("").title("Filter Tasks")
+            .on_change(move |text, _| filter.set(text.to_string())))
+    })
+    .on_key("x", move |cx| cmd.confirm_keys(cx, "Delete Task 1? (x)", "x", delete));
+```
+
+- **`input(..).complete(|text, caret| Vec<Completion>)`** gives an
+  input candidates for its text and the caret's byte; each
+  `Completion::new(range, text)` replaces a byte range (usually the word
+  before the caret, `word_before(text, caret)`), with an optional
+  `.detail(..)` shown dimmed beside it. Tab opens a pop-up of them under
+  the input (above it where there is no room), drawn over its neighbours
+  without taking the keys; one candidate is taken at once. Tab and ↓ or
+  Shift+Tab and ↑ move through it, Enter takes one, Esc closes it, and
+  typing narrows it. The top candidate's rest shows after the caret,
+  dimmed (`input.ghost`), and → or End at the end takes it.
+  `complete_with(f, CompleteOptions::new().auto().ghost(false).rows(5))`
+  opens it as you type, drops the ghost, shows five rows.
+  `complete_words(list)` completes the word before the caret from a list.
+  The pop-up's styles are `completion`, `completion.selected` and
+  `completion.detail`.
+- **`input(..).history(h)`**: ↑ and ↓ go through the entries that start
+  with what was typed before the first ↑ (newest first; ↓ past the newest
+  puts the typing back), and Enter adds the text as the newest entry.
+  `h` is an `InputHistory`: a name (`"find"`, the session's, shared by
+  name), `history_session()`, `history_in(app, name)` in the app's
+  [state directory](#editing-text-state-files-and-process-jobs), or
+  `history_file(path)`, written on each entry under a lock and merged
+  with what another session wrote. `h.status()` is `Some((3, 7))` while
+  an input browses it, for a `[3 / 7]` in a title.
+- **`cx.prompt_with(.., PromptOptions::new().complete(f).history(h), ..)`**
+  does the same in a prompt.
+- **`command_line(state)`** is a bar of one row (or two:
+  `command_line_with(state, CommandLineOptions::new().two_rows())`, the
+  title above the line) driven by a `CommandLine`, which is `Copy`.
+  `state.open(cx, Mode::new(":"))` opens it with that prefix and takes the
+  focus; the mode sets `.title(markup)`, `.initial(text)`,
+  `.complete(f)`, `.history(h)`, `.on_submit(|text, cx| Ok(()))` (an
+  `Err(message)` keeps it open with the message in red), `.on_change(..)`
+  (a filter as you type) and `.on_cancel(..)` (Esc). `state.confirm(cx,
+  question, on_yes)` asks in place (`y`; `confirm_keys` takes other keys,
+  and `n`, `q` and Esc say no), `state.error(text)` shows an error in red,
+  `state.message(markup)` a message, and `state.close(cx)` closes it. On
+  closing, the focus goes back where it was. Its styles are
+  `command.title` (reversed) and `command.question` (bold).
+
+### Queries over records
+
+```rust
+use intuituive::query::{self, Grammar, Kind, Record, TextMatch, Value};
+
+let grammar = Grammar::new()
+    .field("project", Kind::Text).matching(TextMatch::Prefix).alias("proj", "project")
+    .field("due", Kind::Date)
+    .field("urgency", Kind::Number)
+    .dates(move |word| intuituive::dates::parse(word, now).ok());
+let query = query::parse("proj:home +next (due.before:eow or urgency > 5)", &grammar)?;
+let shown: Vec<&Task> = tasks.iter().filter(|t| query.matches(*t)).collect();
+```
+
+- **`query::parse(text, &grammar)`** reads a filter into a `Query`, and
+  `query.matches(&record)` tests anything that implements `Record`:
+  `field(name) -> Option<Value>`, `text()` for bare words, and `tags()`
+  (or `has_tag`, for virtual tags). Bare and `"quoted words"` look in the
+  text; `field:value` compares by the field's `Kind` (text by its
+  `TextMatch`, numbers equal, dates on the same day), `field:` matches a
+  record without it; modifiers `field.before:`/`.after:`/`.above:`/
+  `.below:`, `.is:`/`.not:`, `.has:`/`.hasnt:`, `.startswith:`/
+  `.endswith:`, `.none:`/`.any:`; comparisons `field > 5`, `<=`, `!=`;
+  `+tag`/`-tag`; `and`, `or` (looser), `not` or `!`, and parentheses.
+  Errors are `QueryError { message, at }`, `at` the byte range.
+- **The grammar** names the fields, their aliases and kinds, reads
+  values (`.read(|text| ..)` for one field's sizes or levels, `.dates(..)`
+  for dates), gives some bare words a test of their own (`.words(..)`,
+  Taskwarrior's ids), and says whether case counts, whether an unknown
+  `name:value` is a word (`.lenient()`), and whether `+word` is a tag. A
+  Taskwarrior or a process list's syntax is a grammar, not core code.
+- **Dates as typed:** `intuituive::dates` (rs-rich-interact's) reads
+  `now`, `today`, `tomorrow`, `eod`, `monday`, `eow`, `som`, `eoy`,
+  `2026-11-01`, `14:30`, `3d`, `2w` and the rest relative to a given now
+  (`dates::parse(word, now)`, `parse_with(.., DateOptions::new()
+  .week_start(6))` for weeks from Sunday); `dates::NAMES` lists the words
+  for completion. `DateTime::now_local()` and `Date::today_local()` read
+  the clock in the local zone, which follows summer time (`Zone::Local`;
+  `Zone::posix(rule)`, `Zone::named("Europe/London")` and `Zone::tzif`
+  read others), and `DateTime::from_unix(secs, &zone)`/`to_unix(&zone)`
+  convert.
+
 ## Logs
 
 ```rust
@@ -1128,6 +1231,23 @@ hsplit(
   });
   grid([Size::Fixed(22); 3], months)
   ```
+- **Titles and options that follow state:** `CalendarOptions::title(
+  MonthTitle::Name)` titles a month `October` (`NameYear`, the default,
+  `October 2026`; `None`, no title), and `.month_style_with(|first| ..)`
+  styles each month's title by the month (bold only for this one).
+  `month_with(shown, || options)` and `calendar_options_with(selected, ||
+  options)` read their options again whenever a signal those read
+  changes.
+- **`year_view(year, YearOptions::new())`** is the year as taskwarrior-tui
+  draws it: as many months across as fit (`.across(n)` for a set number),
+  centred, under the year, each titled by its name, with
+  `.marks(|date| Some("red"))` styling dates, `.today(date)`,
+  `.first_weekday(..)`, `.gap(columns, rows)` and `.calendar(options)`
+  for each month's options. `year_view_with(year, || options)` reads its
+  options from signals.
+- **`agenda(from, days, |date| items)`** lists the days from `from` that
+  have items, each under a bold heading (`Monday 19 October 2026`), and
+  says "Nothing scheduled" when none has.
 - **`virtual_list(len, row, selected)`** is the list form of
   `virtual_table`: it asks only for the rows in view. `.scroll_padding(n)`,
   `.row_style(|i| …)`, `.offset(signal)` and `.row_rects(&rects)` work on
