@@ -622,3 +622,88 @@ fn truncate_middle_keeps_both_ends_of_wide_text() {
     );
     assert!(shown.contains('…'));
 }
+
+// Footers and helps in other formats.
+
+#[test]
+fn a_footer_greys_what_cannot_run_now_and_lights_it_when_it_can() {
+    use intuituive::widgets::{key_hints_with, KeyHintsOptions};
+    let app = App::new(|| {
+        let staged = signal(false);
+        column([
+            label("files")
+                .bind("s", "Stage", move |_| staged.set(true))
+                .bind_when(
+                    move || staged.get(),
+                    "u",
+                    "Unstage",
+                    move |_| staged.set(false),
+                )
+                .autofocus(),
+            key_hints_with(
+                KeyHintsOptions::new()
+                    .format(|key, desc| format!("{desc} [{key}]"))
+                    .show_disabled(true)
+                    .separator("  "),
+            ),
+        ])
+    });
+    let mut driver = app.driver(30, 2);
+    driver.settle();
+    assert_eq!(rows(&driver)[1], "Stage [s]  Unstage [u]");
+    let grey = |driver: &Driver| {
+        let screen = driver.screen();
+        let cell = screen.get(11, 1).expect("a cell");
+        screen.style(cell.style).and_then(|s| s.color().cloned())
+    };
+    assert!(grey(&driver).is_some(), "Unstage is greyed");
+    driver.press("s");
+    assert_eq!(rows(&driver)[1], "Stage [s]  Unstage [u]");
+    assert!(grey(&driver).is_none(), "Unstage is lit");
+}
+
+#[test]
+fn a_footer_says_keys_in_vim_notation() {
+    use intuituive::widgets::{key_hints_with, KeyHintsOptions};
+    use intuituive::KeyFormat;
+    let app = App::new(|| {
+        column([
+            label("x").bind("ctrl+u", "up", |_| {}).autofocus(),
+            key_hints_with(KeyHintsOptions::new().key_format(KeyFormat::Vim)),
+        ])
+    });
+    let mut driver = app.driver(20, 2);
+    driver.settle();
+    assert_eq!(rows(&driver)[1], "<C-u> up");
+}
+
+#[test]
+fn the_whole_app_help_lists_every_panes_keys_with_the_focused_first() {
+    use intuituive::HelpOptions;
+    let app = App::new(|| {
+        row([
+            label("library")
+                .focusable()
+                .name("Library")
+                .bind("a", "Add to playlist", |_| {}),
+            label("playlist").focusable().name("Playlist").bind(
+                "d",
+                "Remove from playlist",
+                |_| {},
+            ),
+        ])
+        .on_key("?", |cx| cx.help_with(HelpOptions::new().all_panes(true)))
+        .on_key("h", |cx| cx.help())
+    });
+    let mut driver = app.driver(70, 16);
+    driver.press("tab ?");
+    let help = rows(&driver).join("\n");
+    let (remove, add) = (help.find("Remove").unwrap(), help.find("Add to").unwrap());
+    assert!(remove < add, "{help}");
+    driver.press("esc h");
+    let help = rows(&driver).join("\n");
+    assert!(
+        help.contains("Remove") && !help.contains("Add to"),
+        "{help}"
+    );
+}

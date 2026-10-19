@@ -7,6 +7,7 @@ use std::time::Duration;
 
 use rich::{Console, Renderable, Segment, Style};
 
+use crate::help::KeyHintsOptions;
 use crate::layout::Size;
 use crate::node::{leaf, row, Axis, Node};
 use crate::reactive::{Runtime, Signal};
@@ -563,7 +564,21 @@ impl Widget for Breadcrumb {
 
 /// A [`key_hints`]'s widget.
 struct KeyHints {
-    hints: Signal<Vec<(String, String)>>,
+    hints: Signal<crate::reactive::Hints>,
+    options: KeyHintsOptions,
+}
+
+/// The footer's hints signal: the app's, made by the first footer.
+fn hints_signal(what: &str) -> Signal<crate::reactive::Hints> {
+    let runtime = Runtime::current_for(what);
+    match runtime.hints.get() {
+        Some(hints) => hints,
+        None => {
+            let hints = crate::reactive::signal(Vec::new()).untraced();
+            runtime.hints.set(Some(hints));
+            hints
+        }
+    }
 }
 
 /// A footer of the keys that work now: each described binding
@@ -572,7 +587,8 @@ struct KeyHints {
 /// default) and `key_hints.desc` (dim) styles, `·` apart in
 /// `key_hints.separator`. It follows the focus, and a pop-up's keys while
 /// one is open. Hints that do not fit are left out, whole: Bubbles'
-/// `help`, Textual's `Footer`.
+/// `help`, Textual's `Footer`. [`key_hints_with`] shows them in other
+/// ways.
 ///
 /// ```
 /// use intuituive::prelude::*;
@@ -590,18 +606,173 @@ struct KeyHints {
 /// assert_eq!(driver.screen().plain()[1].trim_end(), "d trash · q quit");
 /// ```
 pub fn key_hints() -> Node {
-    let runtime = Runtime::current_for("key_hints()");
-    let hints = match runtime.hints.get() {
-        Some(hints) => hints,
-        None => {
-            let hints = crate::reactive::signal(Vec::new()).untraced();
-            runtime.hints.set(Some(hints));
-            hints
-        }
-    };
-    let mut node = crate::widget::widget(KeyHints { hints });
+    let hints = hints_signal("key_hints()");
+    let mut node = crate::widget::widget(KeyHints {
+        hints,
+        options: KeyHintsOptions::new(),
+    });
     node.size = Size::Fixed(1);
     node
+}
+
+/// A [`key_hints`] footer shown as `options` say: each hint's text
+/// (`Stage [⏎]`), keys said with symbols or in vim's notation, the
+/// bindings that do not apply now greyed rather than left out, another
+/// separator, and a "more" that expands it onto several rows. One row
+/// tall, or as tall as its hints while expanded.
+///
+/// ```
+/// use intuituive::prelude::*;
+/// use intuituive::widgets::{key_hints_with, KeyHintsOptions};
+///
+/// let app = App::new(|| {
+///     let more = signal(false);
+///     column([
+///         key_hints_with(KeyHintsOptions::new().more(more, "more [.]")).auto(),
+///         label("files")
+///             .bind("a", "Add", |_| {})
+///             .bind("b", "Branch", |_| {})
+///             .bind("c", "Commit", |_| {})
+///             .autofocus(),
+///     ])
+///     .bind("period", "More", move |_| more.update(|on| *on = !*on))
+/// });
+/// let mut driver = app.driver(20, 4);
+/// driver.settle();
+/// assert_eq!(driver.screen().plain()[0].trim_end(), "a Add · more [.]");
+/// driver.press("period");
+/// let rows = driver.screen().plain();
+/// assert_eq!(rows[0].trim_end(), "a Add · b Branch");
+/// assert_eq!(rows[1].trim_end(), "c Commit · . More");
+/// ```
+pub fn key_hints_with(options: KeyHintsOptions) -> Node {
+    let hints = hints_signal("key_hints_with()");
+    let expands = options.more.is_some();
+    let mut node = crate::widget::widget(KeyHints { hints, options });
+    node.size = if expands { Size::Auto } else { Size::Fixed(1) };
+    node
+}
+
+/// What a part of a hint is drawn as.
+#[derive(Clone, Copy)]
+enum HintPart {
+    Key,
+    Desc,
+    /// A hint in its own format, whole.
+    Hint,
+    Disabled,
+    Separator,
+    /// Between a key and its description, unstyled.
+    Space,
+}
+
+/// A hint's parts and its cells.
+type HintPieces = (Vec<(String, HintPart)>, usize);
+
+impl KeyHints {
+    /// Each hint's parts, in order.
+    fn pieces(&self) -> Vec<HintPieces> {
+        let options = &self.options;
+        self.hints.with(|hints| {
+            hints
+                .iter()
+                .filter(|hint| options.disabled || !hint.disabled)
+                .map(|hint| {
+                    let keys = options.say(&hint.keys);
+                    let parts = match (&options.format, hint.disabled) {
+                        (Some(format), disabled) => {
+                            let part = if disabled {
+                                HintPart::Disabled
+                            } else {
+                                HintPart::Hint
+                            };
+                            vec![(format(&keys, &hint.description), part)]
+                        }
+                        (None, true) => {
+                            vec![(format!("{keys} {}", hint.description), HintPart::Disabled)]
+                        }
+                        (None, false) => vec![
+                            (keys, HintPart::Key),
+                            (" ".to_string(), HintPart::Space),
+                            (hint.description.clone(), HintPart::Desc),
+                        ],
+                    };
+                    let cells = parts
+                        .iter()
+                        .map(|(text, _)| rich::cells::cell_len(text))
+                        .sum();
+                    (parts, cells)
+                })
+                .collect()
+        })
+    }
+
+    /// The rows the hints take in `width` cells: one, or as many as they
+    /// need while expanded.
+    fn rows(&self, width: usize) -> Vec<Vec<(String, HintPart)>> {
+        let separator = self
+            .options
+            .separator
+            .as_deref()
+            .unwrap_or(" · ")
+            .to_string();
+        let between = rich::cells::cell_len(&separator);
+        let pieces = self.pieces();
+        let expanded = self
+            .options
+            .more
+            .as_ref()
+            .map(|(on, label)| (on.get(), label.clone()));
+        let mut rows: Vec<Vec<(String, HintPart)>> = vec![Vec::new()];
+        let mut used = 0;
+        let place = |row: &mut Vec<(String, HintPart)>,
+                     used: &mut usize,
+                     parts: &[(String, HintPart)],
+                     cells: usize| {
+            if !row.is_empty() {
+                row.push((separator.clone(), HintPart::Separator));
+                *used += between;
+            }
+            row.extend(parts.iter().cloned());
+            *used += cells;
+        };
+        if let Some((true, _)) = expanded {
+            for (parts, cells) in &pieces {
+                let row = rows.last_mut().expect("a row");
+                let gap = if row.is_empty() { 0 } else { between };
+                if !row.is_empty() && used + gap + cells > width {
+                    rows.push(Vec::new());
+                    used = 0;
+                }
+                let row = rows.last_mut().expect("a row");
+                place(row, &mut used, parts, *cells);
+            }
+            return rows;
+        }
+        let total: usize = pieces.iter().map(|(_, cells)| cells).sum::<usize>()
+            + between * pieces.len().saturating_sub(1);
+        // Room kept for "more" when they do not all fit.
+        let more = match &expanded {
+            Some((false, label)) if total > width => Some(label.clone()),
+            _ => None,
+        };
+        let room = match &more {
+            Some(label) => width.saturating_sub(rich::cells::cell_len(label) + between),
+            None => width,
+        };
+        let row = &mut rows[0];
+        for (parts, cells) in &pieces {
+            let gap = if row.is_empty() { 0 } else { between };
+            if used + gap + cells > room {
+                break;
+            }
+            place(row, &mut used, parts, *cells);
+        }
+        if let Some(label) = more {
+            place(row, &mut used, &[(label.clone(), HintPart::Separator)], 0);
+        }
+        rows
+    }
 }
 
 impl Widget for KeyHints {
@@ -611,7 +782,7 @@ impl Widget for KeyHints {
 
     fn measure(&mut self, _cx: &MeasureCx, axis: Axis, width: u16, _height: u16) -> u16 {
         match axis {
-            Axis::Vertical => 1,
+            Axis::Vertical => self.rows(width.max(1) as usize).len() as u16,
             Axis::Horizontal => width,
         }
     }
@@ -619,27 +790,29 @@ impl Widget for KeyHints {
     fn draw(&mut self, cx: &mut DrawCx, canvas: &mut Canvas) {
         let key = cx.style("key_hints.key", "bold");
         let desc = cx.style("key_hints.desc", "dim");
+        let hint = cx.style("key_hints.hint", "");
+        let disabled = cx.style("key_hints.disabled", "bright_black");
         let sep = cx.style("key_hints.separator", "dim");
-        let width = canvas.width() as usize;
-        let mut line: Vec<Segment> = Vec::new();
-        let mut used = 0;
-        self.hints.with(|hints| {
-            for (keys, description) in hints {
-                let between = if line.is_empty() { 0 } else { 3 };
-                let cells = rich::cells::cell_len(keys) + 1 + rich::cells::cell_len(description);
-                if used + between + cells > width {
-                    break;
-                }
-                if between > 0 {
-                    line.push(Segment::new(" · ", Some(sep.clone())));
-                }
-                line.push(Segment::new(keys.clone(), Some(key.clone())));
-                line.push(Segment::new(" ", None));
-                line.push(Segment::new(description.clone(), Some(desc.clone())));
-                used += between + cells;
-            }
-        });
-        canvas.lines(&[line]);
+        let lines: Vec<Vec<Segment>> = self
+            .rows(canvas.width() as usize)
+            .into_iter()
+            .map(|row| {
+                row.into_iter()
+                    .map(|(text, part)| {
+                        let style = match part {
+                            HintPart::Space => return Segment::new(text, None),
+                            HintPart::Key => &key,
+                            HintPart::Desc => &desc,
+                            HintPart::Hint => &hint,
+                            HintPart::Disabled => &disabled,
+                            HintPart::Separator => &sep,
+                        };
+                        Segment::new(text, (!style.is_null()).then(|| style.clone()))
+                    })
+                    .collect()
+            })
+            .collect();
+        canvas.lines(&lines);
     }
 }
 

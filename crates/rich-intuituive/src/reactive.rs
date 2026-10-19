@@ -74,7 +74,7 @@ struct Graph {
 }
 
 /// What a key-hint footer shows: each binding's keys and description.
-pub(crate) type Hints = Vec<(String, String)>;
+pub(crate) type Hints = Vec<crate::help::Hint>;
 
 /// One app's reactive state.
 pub(crate) struct Runtime {

@@ -22,7 +22,8 @@ use crate::scrollbar::Bar;
 use crate::widget::{widget, Canvas, DrawCx, EventCx, MeasureCx, Used, Widget, WidgetEvent};
 
 pub use crate::bars::{
-    breadcrumb, cells, key_hints, live, seg, seg_gauge, status_bar, Caps, StatusSegment,
+    breadcrumb, cells, key_hints, key_hints_with, live, seg, seg_gauge, status_bar, Caps,
+    StatusSegment,
 };
 pub use crate::calendar::{
     calendar, calendar_options, calendar_with, month, CalendarOptions, Date, DateTime, Time,
@@ -31,6 +32,7 @@ pub use crate::calendar::{
 pub use crate::datetime::{
     datetime_picker, time_picker, time_picker_with, DateTimeOptions, TimeOptions,
 };
+pub use crate::help::KeyHintsOptions;
 pub use crate::hex::hex_view;
 pub use crate::list::{
     list_lazy, list_optional, list_rows, HighlightLayer, HighlightSpacing, ListDirection, ListRow,

@@ -3382,8 +3382,36 @@ impl App {
             .map(|id| self.path_to(id))
             .filter(|p| !p.is_empty())
             .unwrap_or_else(|| vec![self.top().root.id()]);
+        let ids: Vec<NodeId> = path.into_iter().rev().collect();
+        self.bindings_of(&ids, palette)
+    }
+
+    /// [`bindings`](Self::bindings) of every node shown on the top screen:
+    /// the focus path's first, innermost first, then the others in tree
+    /// order.
+    fn all_bindings(&self) -> Vec<(NodeId, usize, rich_interact::keymap::Binding)> {
+        let path = self
+            .focus()
+            .map(|id| self.path_to(id))
+            .filter(|p| !p.is_empty())
+            .unwrap_or_else(|| vec![self.top().root.id()]);
+        let mut ids: Vec<NodeId> = path.iter().rev().copied().collect();
+        self.top().root.walk(&mut |node, _| {
+            if !path.contains(&node.id) {
+                ids.push(node.id);
+            }
+        });
+        self.bindings_of(&ids, false)
+    }
+
+    /// The described bindings of the nodes `ids`, in that order.
+    fn bindings_of(
+        &self,
+        ids: &[NodeId],
+        palette: bool,
+    ) -> Vec<(NodeId, usize, rich_interact::keymap::Binding)> {
         let mut out = Vec::new();
-        for &id in path.iter().rev() {
+        for &id in ids {
             with_node(&self.top().root, id, &mut |node| {
                 let name = node.group_name();
                 // A binding that does not apply now is not listed.
@@ -3421,28 +3449,56 @@ impl App {
     /// What a [`key_hints`](crate::widgets::key_hints) footer shows: the
     /// described bindings (not sequences) of the focused node and its
     /// ancestors, innermost first, each keys once. Nothing without one.
+    /// Those whose condition does not hold come too, marked disabled, for
+    /// a footer that greys them.
     fn refresh_hints(&self) {
         let Some(hints) = self.runtime.hints.get() else {
             return;
         };
-        let mut shown: Vec<(String, String)> = Vec::new();
-        for (_, _, binding) in self.bindings(false) {
-            let keys = binding.hint();
-            if binding.sequence || shown.iter().any(|(k, _)| *k == keys) {
-                continue;
-            }
-            shown.push((keys, binding.description));
+        let path = self
+            .focus()
+            .map(|id| self.path_to(id))
+            .filter(|p| !p.is_empty())
+            .unwrap_or_else(|| vec![self.top().root.id()]);
+        let mut shown: Vec<crate::help::Hint> = Vec::new();
+        for &id in path.iter().rev() {
+            with_node(&self.top().root, id, &mut |node| {
+                for bound in node.keys.borrow().iter() {
+                    if bound.description.is_empty() || bound.hidden {
+                        continue;
+                    }
+                    let keys = bound.shown.clone().unwrap_or_else(|| bound.keys.clone());
+                    let disabled = !bound.active();
+                    // Each keys once: the innermost that applies wins.
+                    match shown.iter_mut().find(|hint| hint.keys == keys) {
+                        Some(hint) if hint.disabled && !disabled => {
+                            hint.description = bound.description.clone();
+                            hint.disabled = false;
+                        }
+                        Some(_) => {}
+                        None => shown.push(crate::help::Hint {
+                            keys,
+                            description: bound.description.clone(),
+                            disabled,
+                        }),
+                    }
+                }
+            });
         }
-        self.runtime.enter(|| hints.set(shown));
+        self.runtime.enter(|| {
+            if hints.with_untracked(|old| *old != shown) {
+                hints.set(shown);
+            }
+        });
     }
 
     /// The help over the top screen, as `options` say.
     fn open_help(&mut self, options: crate::help::HelpOptions) {
-        let all: Vec<_> = self
-            .bindings(false)
-            .into_iter()
-            .map(|(_, _, b)| b)
-            .collect();
+        let found = match options.all_panes {
+            true => self.all_bindings(),
+            false => self.bindings(false),
+        };
+        let all: Vec<_> = found.into_iter().map(|(_, _, b)| b).collect();
         self.open(
             Box::new(move || {
                 let format = options.key_format;
