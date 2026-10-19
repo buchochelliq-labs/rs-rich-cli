@@ -373,9 +373,11 @@ fn it_shows_slumbers_main_view() {
     assert!(rows[1].starts_with("│▾ Fish"), "{}", rows[1]);
     assert!(rows[2].starts_with("│    List Fish"), "{}", rows[2]);
     assert!(rows[1].contains("│Local"), "{}", rows[1]);
-    assert_has(&d, "╭─ Recipe [1] ─");
+    // The selected pane double-bordered, as Slumber's; the recipe's id on
+    // its top edge.
+    assert_has(&d, "╔═ Recipe [1] ═");
     assert_has(&d, "URL │ Query │ Headers │ Body │ Authentication");
-    assert_has(&d, "list_fish│");
+    assert_has(&d, " list_fish ═╗");
     assert_has(&d, &format!("GET http://127.0.0.1:{}/fish", server.port));
     assert_has(&d, "╭─ Request / Response [2] ─");
     assert_has(&d, "History [ctrl h]");
@@ -467,8 +469,8 @@ fn a_profile_changes_what_the_templates_fill_in() {
     let server = Server::start();
     let mut d = driver("profiles", &server);
     d.press("p");
-    assert_has(&d, "╭─ Profile [p] ─");
-    assert_has(&d, "│Other");
+    assert_has(&d, "╔═ Profile [p] ═");
+    assert_has(&d, "║Other");
     // The bottom pane shows the profile's fields, the recipe goes up top.
     assert_has(&d, "╭─ Profile ─");
     assert_has(&d, "greeting hello");
@@ -510,7 +512,7 @@ fn the_history_lists_each_request_and_shows_the_one_picked() {
     d.press("enter enter");
     assert_has(&d, "\"call\": 2,");
     d.press("ctrl+h");
-    assert_has(&d, "╭─ Request History [ctrl h] ─");
+    assert_has(&d, "╔═ Request History [ctrl h] ═");
     let ok = rows(&d).iter().filter(|r| r.contains(" 200 OK ")).count();
     assert_eq!(ok, 3, "two history rows and the status line:\n{}", text(&d));
     d.press("j");
@@ -552,7 +554,7 @@ fn a_post_sends_its_templated_json_body() {
     let server = Server::start();
     let mut d = driver("post", &server);
     d.press("r j");
-    assert_has(&d, "create_fish│");
+    assert_has(&d, " create_fish ─╮");
     d.press("1 l l l");
     // The body tab shows the JSON with its template filled in.
     assert_has(&d, "\"says\": \"hello\"");
@@ -609,7 +611,7 @@ fn layout_keys_hide_the_sidebar_and_fill_the_screen() {
     d.press("f");
     assert_lacks(&d, "Request / Response");
     assert_lacks(&d, "│Local");
-    assert_has(&d, "╭─ Recipe [1] ─");
+    assert_has(&d, "╔═ Recipe [1] ═");
     d.press("esc");
     assert_has(&d, "Request / Response");
     // Tab moves to the bottom pane, and fullscreen shows that one.
@@ -671,4 +673,38 @@ fn f5_reads_the_collection_again() {
     d.press("f5");
     assert_has(&d, "All the Fish");
     assert_has(&d, "Reloaded collection from");
+}
+
+#[test]
+fn a_click_selects_the_pane_and_tab_goes_on_from_it() {
+    use intuituive::interact::{Button, Event, Mouse, MouseKind};
+    let server = Server::start();
+    let mut d = driver("click", &server);
+    // A click in the sidebar's tree selects the sidebar pane (its border
+    // doubles); Tab then goes to the next pane, the top one.
+    for kind in [MouseKind::Down(Button::Left), MouseKind::Up(Button::Left)] {
+        d.send(Event::Mouse(Mouse::new(kind, 5, 2)));
+    }
+    assert_has(&d, "╔═ Recipe [r] ═");
+    d.press("tab");
+    assert_has(&d, "╭─ Recipe [r] ─");
+    assert_has(&d, "╔═ Recipe [1] ═");
+}
+
+#[test]
+fn a_reload_keeps_the_selected_recipe_where_it_moved() {
+    let server = Server::start();
+    let path = file("moved", server.port);
+    let mut d = http_app(path.clone()).wait_for_tasks(true).driver(100, 30);
+    d.press("r j");
+    assert_has(&d, " create_fish ─╮");
+    // A recipe added before it: the tree keeps its selection by id.
+    let changed = collection(server.port).replace(
+        "    requests:\n      list_fish:",
+        "    requests:\n      new_fish:\n        name: New Fish\n        url: \"{{ host }}/fish\"\n      list_fish:",
+    );
+    std::fs::write(&path, changed).unwrap();
+    d.press("f5");
+    assert_has(&d, "New Fish");
+    assert_has(&d, " create_fish ─╮");
 }
