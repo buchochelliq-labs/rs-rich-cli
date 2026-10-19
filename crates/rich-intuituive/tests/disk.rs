@@ -15,6 +15,18 @@ use intuituive::Driver;
 const W: u16 = 80;
 const H: u16 = 24;
 
+/// Where the test folders go: a short path, as the top line shows the
+/// folder's path and, like diskonaut's, drops the totals before it when the
+/// path is too long (macOS's temporary folder is).
+fn base() -> PathBuf {
+    let short = Path::new("/tmp");
+    if cfg!(unix) && short.is_dir() {
+        short.to_path_buf()
+    } else {
+        std::env::temp_dir()
+    }
+}
+
 /// root/
 ///   big/        a.bin 60000, b.bin 20000
 ///   docs/       notes.txt 30000
@@ -22,7 +34,7 @@ const H: u16 = 24;
 ///   song.mp3    15000
 ///   tiny0..tiny5  100 each
 fn tree(name: &str) -> PathBuf {
-    let root = std::env::temp_dir().join(format!("intuituive-disk-{name}-{}", std::process::id()));
+    let root = base().join(format!("intuituive-disk-{name}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(root.join("big")).unwrap();
     std::fs::create_dir_all(root.join("docs")).unwrap();
@@ -588,7 +600,7 @@ fn a_small_window_says_so() {
 
 #[test]
 fn an_empty_folder_says_so() {
-    let root = std::env::temp_dir().join(format!("intuituive-disk-empty-{}", std::process::id()));
+    let root = base().join(format!("intuituive-disk-empty-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(root.join("void")).unwrap();
     let mut driver = driver(&root);
