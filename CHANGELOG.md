@@ -59,6 +59,9 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   (2fc9772) and are published at their old numbers. The other crates already
   carry unpublished versions. `RELEASES.toml`, the version tables and both
   `Cargo.lock` files follow.
+- The Python package `rs-rich` moves to 0.0.8 (PyPI): it builds those crates,
+  so its `Cargo.lock` changed with them, and 0.0.7 is on PyPI. Without the
+  bump the cohort's tagging refused main as shipping a different 0.0.7.
 
 ### Repo: the app template no longer trips git dependencies
 
