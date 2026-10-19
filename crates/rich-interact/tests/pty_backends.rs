@@ -633,3 +633,38 @@ fn a_late_answer_is_no_key() {
         finish(pty, backend);
     }
 }
+
+/// blocks: with a terminal that never answers the start-up query, keys
+/// typed while the session waited for the answer were lost (a `q` at 0.1,
+/// 0.5 or 1.5 s did not quit). They arrive, in order, soon after.
+#[test]
+fn every_backend_keeps_keys_typed_while_the_terminal_does_not_answer() {
+    for backend in backends() {
+        let mut pty = Pty::start_mute_on(backend, "events");
+        // The query is out (termion asks nothing, and is ready at once).
+        let end = Instant::now() + Duration::from_secs(30);
+        while !pty.text().contains("\x1b[c") && !pty.text().contains("child ready") {
+            assert!(Instant::now() < end, "{backend}: no query:\n{}", pty.text());
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        std::thread::sleep(Duration::from_millis(100));
+        let sent = Instant::now();
+        pty.send("x\x1b[Ay");
+        let want = [key("x"), key("up"), key("y")].map(|event| format!("EV<{event:?}>EV"));
+        let end = Instant::now() + Duration::from_secs(10);
+        loop {
+            let text = pty.text();
+            let at: Vec<Option<usize>> = want.iter().map(|w| text.find(w.as_str())).collect();
+            if let [Some(x), Some(up), Some(y)] = at[..] {
+                assert!(x < up && up < y, "{backend}: out of order:\n{text}");
+                break;
+            }
+            assert!(Instant::now() < end, "{backend}: keys lost:\n{text}");
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        // Soon: the session stops waiting for an answer once keys come.
+        let took = sent.elapsed();
+        assert!(took < Duration::from_millis(900), "{backend}: {took:?}");
+        finish(pty, backend);
+    }
+}

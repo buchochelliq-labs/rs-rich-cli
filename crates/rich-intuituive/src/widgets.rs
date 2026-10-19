@@ -12,7 +12,7 @@ use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 
 use rich::{Console, Overflow, Segment, Style};
-use rich_interact::{Button, Key, KeyCode, MouseKind};
+use rich_interact::{Button, Key, KeyCode, Modifiers, MouseKind};
 
 use crate::layout::{solve, Align, Size, Track};
 use crate::list::Selection;
@@ -1526,7 +1526,10 @@ impl Widget for Table {
             }
             WidgetEvent::Key(key) => {
                 let len = self.rows.len();
-                match (key.code, !key.modifiers.ctrl && !key.modifiers.alt) {
+                // Plain keys only: a key with Shift, Ctrl or Alt is left to
+                // the nodes above (Shift+↑ between panes), as a capital
+                // letter has no Shift of its own.
+                match (key.code, key.modifiers == Modifiers::NONE) {
                     (KeyCode::Up, true) | (KeyCode::Char('k'), true) => self.step(-1),
                     (KeyCode::Down, true) | (KeyCode::Char('j'), true) => self.step(1),
                     (KeyCode::PageUp, true) => self.step(-page),

@@ -76,6 +76,10 @@ pub struct Ctx {
     handoffs: Vec<Handoff>,
     /// One-shot timers made with [`Ctx::after`].
     afters: Vec<After>,
+    /// Repeating timers made with [`Ctx::every`] and [`Ctx::fixed_step`].
+    tickers: Vec<Ticker>,
+    /// In a timer's function: the ticks it stands for.
+    ticks: u64,
     /// Screens open when the handler was called.
     layers: usize,
     /// The handler passed its key on ([`pass_key`](Ctx::pass_key)).
@@ -102,14 +106,15 @@ fn editor_command() -> std::process::Command {
 /// A one-shot timer waiting to be put on the app's clock: how long it
 /// waits, what it runs, and where it was made.
 pub(crate) struct After {
-    pub wait: Duration,
+    pub timer: Timer,
     pub run: Box<dyn FnOnce(&mut Ctx)>,
     pub at: &'static Location<'static>,
 }
 
-/// A one-shot timer on the app's clock: when it is due.
+/// A one-shot timer on the app's clock: its handle (when it is due), and
+/// what it runs.
 struct Timeout {
-    due: Duration,
+    timer: Timer,
     run: Box<dyn FnOnce(&mut Ctx)>,
     at: &'static Location<'static>,
 }
@@ -290,6 +295,8 @@ impl Ctx {
             printed: Vec::new(),
             handoffs: Vec::new(),
             afters: Vec::new(),
+            tickers: Vec::new(),
+            ticks: 0,
             layers: 1,
             passed: false,
         }
@@ -360,12 +367,65 @@ impl Ctx {
     /// Run `then` once, `wait` from now on the app's clock: [`after`] from
     /// a handler.
     #[track_caller]
-    pub fn after(&mut self, wait: Duration, then: impl FnOnce(&mut Ctx) + 'static) {
+    pub fn after(&mut self, wait: Duration, then: impl FnOnce(&mut Ctx) + 'static) -> Timer {
+        let timer = Timer::once(wait);
         self.afters.push(After {
-            wait,
+            timer,
             run: Box::new(then),
             at: Location::caller(),
         });
+        timer
+    }
+
+    /// Call `tick` every `interval` from now: [`every`] from a handler,
+    /// so a timer starts when it is wanted (a game's tick when play
+    /// starts) rather than with the app. It belongs to the screen the
+    /// handler runs on, and stops when that screen closes.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    /// use std::time::Duration;
+    ///
+    /// let app = App::new(|| {
+    ///     let ticks = signal(0);
+    ///     text!("{ticks}").on_key("space", move |cx| {
+    ///         cx.every(Duration::from_millis(100), move |_| ticks.update(|t| *t += 1));
+    ///     })
+    /// });
+    /// let mut driver = app.driver(5, 1);
+    /// driver.advance(Duration::from_secs(1));
+    /// assert_eq!(driver.screen().plain()[0].trim_end(), "0");
+    /// driver.press("space");
+    /// driver.advance(Duration::from_millis(300));
+    /// assert_eq!(driver.screen().plain()[0].trim_end(), "3");
+    /// ```
+    #[track_caller]
+    pub fn every(&mut self, interval: Duration, tick: impl FnMut(&mut Ctx) + 'static) -> Timer {
+        let ticker = Ticker::every(interval, tick, Location::caller());
+        let timer = ticker.timer;
+        self.tickers.push(ticker);
+        timer
+    }
+
+    /// [`fixed_step`] from a handler, as [`every`](Self::every) is
+    /// [`every`](crate::every).
+    #[track_caller]
+    pub fn fixed_step(
+        &mut self,
+        period: Duration,
+        step: impl FnMut(&mut Ctx, u64) + 'static,
+    ) -> Timer {
+        let ticker = Ticker::steps(period, step, Location::caller());
+        let timer = ticker.timer;
+        self.tickers.push(ticker);
+        timer
+    }
+
+    /// In a timer's function: how many of its ticks went by unrun since it
+    /// last ran, because the loop fell behind (an [`every`] runs once
+    /// however many are due). 0 when it is on time, and outside a timer.
+    pub fn missed_ticks(&self) -> u64 {
+        self.ticks.saturating_sub(1)
     }
 
     /// Give the terminal to `command` (an editor, a pager, a shell) once
@@ -957,27 +1017,306 @@ impl Theme {
     }
 }
 
-struct Timer {
-    every: Duration,
+/// A timer on the app's clock, made by [`every`], [`after`],
+/// [`fixed_step`] or their [`Ctx`] forms: a handle to pause it, resume it,
+/// change its period and cancel it, from a handler or anywhere else on
+/// the app's thread. Clones are the same timer. Dropping the handle leaves
+/// the timer running.
+///
+/// ```
+/// use intuituive::prelude::*;
+/// use std::time::Duration;
+///
+/// let app = App::new(|| {
+///     let ticks = signal(0);
+///     let timer = every(Duration::from_millis(100), move |_| ticks.update(|t| *t += 1));
+///     text!("{ticks}")
+///         .on_key("p", move |_| match timer.is_paused() {
+///             true => timer.resume(),
+///             false => timer.pause(),
+///         })
+///         .on_key("f", move |_| timer.set_period(Duration::from_millis(50)))
+/// });
+/// let mut driver = app.driver(5, 1);
+/// driver.advance(Duration::from_millis(300));
+/// assert_eq!(driver.screen().plain()[0].trim_end(), "3");
+/// driver.press("p");
+/// driver.advance(Duration::from_secs(1));
+/// assert_eq!(driver.screen().plain()[0].trim_end(), "3");
+/// driver.press("p f");
+/// driver.advance(Duration::from_millis(200));
+/// assert_eq!(driver.screen().plain()[0].trim_end(), "7");
+/// ```
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub struct Timer {
+    runtime: u32,
+    index: u32,
+    /// Which timer of those the entry has held: a handle to one that has
+    /// ended finds a newer one there, or none, and does nothing.
+    generation: u32,
+}
+
+/// The state behind every [`Timer`] of an app, in its runtime: entries
+/// are reused once their timer ends, so an app making a timer a key
+/// press keeps a few.
+#[derive(Default)]
+pub(crate) struct TimerTable {
+    entries: Vec<(u32, Option<TimerData>)>,
+    free: Vec<u32>,
+}
+
+#[derive(Clone, Copy)]
+struct TimerData {
+    period: Duration,
+    /// When it is due next, on the app's clock.
     next: Duration,
-    tick: Box<dyn FnMut(&mut Ctx)>,
-    /// Where it was made, for the inspector's trace.
+    /// Paused: how long it had left.
+    paused: Option<Duration>,
+    /// A [`fixed_step`]'s most ticks for one call; `None`, all that are due.
+    max_catch_up: Option<u64>,
+}
+
+/// The shortest period: a zero one would never move the timer on (and
+/// spin the loop).
+const SHORTEST_PERIOD: Duration = Duration::from_millis(1);
+
+impl Timer {
+    /// A timer in the current app, due `wait` from now on its clock and
+    /// every `period` after.
+    fn make(wait: Duration, period: Duration) -> Timer {
+        let runtime = Runtime::current_for("a timer");
+        let now = runtime.now.get();
+        let data = TimerData {
+            period,
+            next: now + wait,
+            paused: None,
+            max_catch_up: None,
+        };
+        let mut table = runtime.timers.borrow_mut();
+        let index = match table.free.pop() {
+            Some(index) => index,
+            None => {
+                table.entries.push((0, None));
+                (table.entries.len() - 1) as u32
+            }
+        };
+        let entry = &mut table.entries[index as usize];
+        entry.0 = entry.0.wrapping_add(1);
+        entry.1 = Some(data);
+        Timer {
+            runtime: runtime.id,
+            index,
+            generation: entry.0,
+        }
+    }
+
+    /// A repeating timer, due a period from now.
+    fn new(period: Duration) -> Timer {
+        let period = period.max(SHORTEST_PERIOD);
+        Timer::make(period, period)
+    }
+
+    /// A one-shot timer: [`after`]'s wait may be zero.
+    fn once(wait: Duration) -> Timer {
+        Timer::make(wait, wait)
+    }
+
+    /// Run `f` on its state and the app's clock; `None` once it has ended
+    /// (or its app has).
+    fn with<R>(&self, f: impl FnOnce(&mut TimerData, Duration) -> R) -> Option<R> {
+        let runtime = Runtime::try_get(self.runtime)?;
+        let now = runtime.now.get();
+        let mut table = runtime.timers.borrow_mut();
+        match table.entries.get_mut(self.index as usize) {
+            Some((generation, Some(data))) if *generation == self.generation => Some(f(data, now)),
+            _ => None,
+        }
+    }
+
+    /// Let its state go: the handle reads as cancelled from now on.
+    fn release(&self) {
+        let Some(runtime) = Runtime::try_get(self.runtime) else {
+            return;
+        };
+        let mut table = runtime.timers.borrow_mut();
+        let ended = match table.entries.get_mut(self.index as usize) {
+            Some((generation, data)) if *generation == self.generation && data.is_some() => {
+                *data = None;
+                true
+            }
+            _ => false,
+        };
+        if ended {
+            table.free.push(self.index);
+        }
+    }
+
+    /// Stop it: it does not fire until [`resume`](Self::resume)d, and
+    /// keeps the time it had left.
+    pub fn pause(&self) {
+        self.with(|timer, now| {
+            if timer.paused.is_none() {
+                timer.paused = Some(timer.next.saturating_sub(now));
+            }
+        });
+    }
+
+    /// Start it again after [`pause`](Self::pause): it is due when the
+    /// time it had left has passed. Time spent paused is not caught up.
+    pub fn resume(&self) {
+        self.with(|timer, now| {
+            if let Some(left) = timer.paused.take() {
+                timer.next = now + left;
+            }
+        });
+    }
+
+    /// Whether it is paused.
+    pub fn is_paused(&self) -> bool {
+        self.with(|timer, _| timer.paused.is_some())
+            .unwrap_or(false)
+    }
+
+    /// Fire every `period` from now on (one millisecond at least): the
+    /// next tick falls `period` after the last one (or after the timer
+    /// started), at once if that is already past. Paused, it waits
+    /// `period` once resumed. For a one-shot timer ([`after`]), the wait
+    /// from when it started.
+    pub fn set_period(&self, period: Duration) {
+        self.with(|timer, _| {
+            let last = timer.next.saturating_sub(timer.period);
+            // A one-shot timer's wait may be zero.
+            timer.period = match timer.period.is_zero() {
+                true => period,
+                false => period.max(SHORTEST_PERIOD),
+            };
+            timer.next = last + timer.period;
+            if timer.paused.is_some() {
+                timer.paused = Some(timer.period);
+            }
+        });
+    }
+
+    /// Its period (a one-shot timer's wait); zero once it has ended.
+    pub fn period(&self) -> Duration {
+        self.with(|timer, _| timer.period).unwrap_or_default()
+    }
+
+    /// Start its period again from now: the next tick is `period` away.
+    pub fn reset(&self) {
+        self.with(|timer, now| match timer.paused {
+            Some(_) => timer.paused = Some(timer.period),
+            None => timer.next = now + timer.period,
+        });
+    }
+
+    /// Stop it for good: it never fires again, and the app lets it go.
+    pub fn cancel(&self) {
+        self.release();
+    }
+
+    /// Whether it has ended: [`cancel`](Self::cancel)led, made by
+    /// [`after`] and fired, or on a screen that closed.
+    pub fn is_cancelled(&self) -> bool {
+        self.with(|_, _| ()).is_none()
+    }
+
+    /// For a [`fixed_step`]: hand its function at most `ticks` ticks a
+    /// call, dropping the rest, so after a long stall (a suspended
+    /// process, a machine asleep) the app does not run hours of steps at
+    /// once. By default every tick due is handed over.
+    pub fn max_catch_up(self, ticks: u64) -> Timer {
+        self.with(|timer, _| timer.max_catch_up = Some(ticks.max(1)));
+        self
+    }
+
+    /// How long until it is due, if it is waiting to fire.
+    fn left(&self, now: Duration) -> Option<Duration> {
+        self.with(|timer, _| {
+            timer
+                .paused
+                .is_none()
+                .then(|| timer.next.saturating_sub(now))
+        })
+        .flatten()
+    }
+
+    /// When it is due next.
+    fn next(&self) -> Option<Duration> {
+        self.with(|timer, _| timer.next)
+    }
+
+    /// Due `period` from `now`, as a screen's timers are when it opens.
+    fn start_at(&self, now: Duration) {
+        self.with(|timer, _| timer.next = now + timer.period);
+    }
+
+    /// How many ticks are due at `now` (all of them, and the most a fixed
+    /// step takes), the timer moved on past them in step: 0 when it is not
+    /// due (or paused, or has ended).
+    fn take_due(&self, now: Duration) -> (u64, u64) {
+        self.with(|timer, _| {
+            if timer.paused.is_some() || now < timer.next {
+                return (0, 0);
+            }
+            let period = timer.period.as_nanos().max(1);
+            let due = 1 + (now - timer.next).as_nanos() / period;
+            let due = u64::try_from(due).unwrap_or(u64::MAX);
+            let by = timer.period.as_nanos().saturating_mul(u128::from(due));
+            timer.next += Duration::from_nanos(u64::try_from(by).unwrap_or(u64::MAX));
+            (due, timer.max_catch_up.unwrap_or(u64::MAX))
+        })
+        .unwrap_or((0, 0))
+    }
+}
+
+impl std::fmt::Debug for Timer {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Timer")
+            .field("period", &self.period())
+            .field("paused", &self.is_paused())
+            .field("cancelled", &self.is_cancelled())
+            .finish()
+    }
+}
+
+/// What a repeating timer runs.
+enum Tick {
+    /// [`every`]: once however many ticks are due.
+    Every(Box<dyn FnMut(&mut Ctx)>),
+    /// [`fixed_step`]: told how many.
+    Steps(Box<dyn FnMut(&mut Ctx, u64)>),
+}
+
+/// A repeating timer of a screen: its handle, what it runs, and where it
+/// was made, for the inspector's trace.
+struct Ticker {
+    timer: Timer,
+    tick: Tick,
     at: &'static Location<'static>,
 }
 
-impl Timer {
-    /// A zero interval would never move the timer on (and spin the loop),
-    /// so the shortest interval is one millisecond.
-    fn new(
+impl Ticker {
+    fn every(
         interval: Duration,
         tick: impl FnMut(&mut Ctx) + 'static,
         at: &'static Location<'static>,
-    ) -> Timer {
-        let every = interval.max(Duration::from_millis(1));
-        Timer {
-            every,
-            next: every,
-            tick: Box::new(tick),
+    ) -> Ticker {
+        Ticker {
+            timer: Timer::new(interval),
+            tick: Tick::Every(Box::new(tick)),
+            at,
+        }
+    }
+
+    fn steps(
+        period: Duration,
+        step: impl FnMut(&mut Ctx, u64) + 'static,
+        at: &'static Location<'static>,
+    ) -> Ticker {
+        Ticker {
+            timer: Timer::new(period),
+            tick: Tick::Steps(Box::new(step)),
             at,
         }
     }
@@ -1007,7 +1346,7 @@ struct Layer {
     anchor: Option<(Anchor, Placement)>,
     /// For a pop-up placed from a point of the screen: where.
     origin: Option<(Origin, Offset)>,
-    timers: Vec<Timer>,
+    timers: Vec<Ticker>,
     /// Its [watches](crate::watch), stopped when it closes.
     watches: Vec<usize>,
     /// Its focusable nodes, in Tab order, at the last frame: where the
@@ -1020,7 +1359,7 @@ struct Layer {
 
 thread_local! {
     /// Timers [`every`] made while an app is being built.
-    static BUILDING: std::cell::RefCell<Option<Vec<Timer>>> = const { std::cell::RefCell::new(None) };
+    static BUILDING: std::cell::RefCell<Option<Vec<Ticker>>> = const { std::cell::RefCell::new(None) };
     /// Watches [`watch`](crate::watch) made while a screen is being built.
     static WATCHES: std::cell::RefCell<Option<Vec<usize>>> = const { std::cell::RefCell::new(None) };
 }
@@ -1049,18 +1388,72 @@ pub(crate) fn building_watch(id: usize) {
 /// });
 /// ```
 ///
+/// It returns the [`Timer`], to pause, resume, speed up or cancel it
+/// later. Fallen behind (a slow frame, a suspended process), it runs once
+/// and goes on in step; [`Ctx::missed_ticks`] tells `tick` how many it
+/// skipped, and [`fixed_step`] runs every one. From a handler, use
+/// [`Ctx::every`].
+///
 /// # Panics
 /// Outside `App::new`'s closure or a screen's.
 #[track_caller]
-pub fn every(interval: Duration, tick: impl FnMut(&mut Ctx) + 'static) {
-    let at = Location::caller();
+pub fn every(interval: Duration, tick: impl FnMut(&mut Ctx) + 'static) -> Timer {
+    building_ticker("every()", Ticker::every(interval, tick, Location::caller()))
+}
+
+/// Run `step` on a fixed timestep of `period` while the app runs, told how
+/// many steps are due: one each period in time, more after the loop fell
+/// behind (a slow frame, a stall), so a game or a simulation keeps to the
+/// clock instead of slowing down with the frame rate. Exact under a
+/// [`Driver`]: [`advance`](Driver::advance) steps to each tick, so `step`
+/// is called once a period with 1; one [`update`](Driver::update) far ahead
+/// calls it once with all the steps owed. [`Timer::max_catch_up`] caps
+/// them. Call it where [`every`] is called; [`Ctx::fixed_step`] from a
+/// handler.
+///
+/// ```
+/// use intuituive::prelude::*;
+/// use intuituive::fixed_step;
+/// use std::time::Duration;
+///
+/// let app = App::new(|| {
+///     let (frames, calls) = (signal(0u64), signal(0u64));
+///     fixed_step(Duration::from_millis(10), move |_, steps| {
+///         frames.update(|f| *f += steps);
+///         calls.update(|c| *c += 1);
+///     });
+///     text!("{frames} in {calls}")
+/// });
+/// let mut driver = app.driver(12, 1);
+/// driver.advance(Duration::from_millis(50));
+/// assert_eq!(driver.screen().plain()[0].trim_end(), "5 in 5");
+/// // A stall: one turn of the loop a quarter of a second later.
+/// driver.update(Duration::from_millis(300));
+/// driver.settle();
+/// assert_eq!(driver.screen().plain()[0].trim_end(), "30 in 6");
+/// ```
+///
+/// # Panics
+/// Outside `App::new`'s closure or a screen's.
+#[track_caller]
+pub fn fixed_step(period: Duration, step: impl FnMut(&mut Ctx, u64) + 'static) -> Timer {
+    building_ticker(
+        "fixed_step()",
+        Ticker::steps(period, step, Location::caller()),
+    )
+}
+
+/// Put `ticker` on the screen being built; its handle.
+fn building_ticker(what: &str, ticker: Ticker) -> Timer {
+    let timer = ticker.timer;
     BUILDING.with(|building| {
         building
             .borrow_mut()
             .as_mut()
-            .expect("every() is called inside App::new's closure or a screen's")
-            .push(Timer::new(interval, tick, at))
+            .unwrap_or_else(|| panic!("{what} is called inside App::new's closure or a screen's"))
+            .push(ticker)
     });
+    timer
 }
 
 /// Call `then` once, `wait` from now on the app's clock (the time a
@@ -1086,19 +1479,22 @@ pub fn every(interval: Duration, tick: impl FnMut(&mut Ctx) + 'static) {
 /// assert_eq!(driver.screen().plain()[0].trim_end(), "");
 /// ```
 ///
+/// It returns the [`Timer`]: [`cancel`](Timer::cancel) it to call
+/// nothing, [`pause`](Timer::pause) it to hold the wait.
+///
 /// # Panics
 /// Outside a running or building app.
 #[track_caller]
-pub fn after(wait: Duration, then: impl FnOnce(&mut Ctx) + 'static) {
+pub fn after(wait: Duration, then: impl FnOnce(&mut Ctx) + 'static) -> Timer {
     let at = Location::caller();
-    Runtime::current_for("after()")
-        .afters
-        .borrow_mut()
-        .push(After {
-            wait,
-            run: Box::new(then),
-            at,
-        });
+    let runtime = Runtime::current_for("after()");
+    let timer = Timer::once(wait);
+    runtime.afters.borrow_mut().push(After {
+        timer,
+        run: Box::new(then),
+        at,
+    });
+    timer
 }
 
 /// How many times a second `source` is written, counted over each second
@@ -1146,6 +1542,44 @@ pub struct FrameStats {
     /// Frames drawn since the app started, this one included: ratatui's
     /// `Frame::count`.
     pub frames: u64,
+    /// Frames not drawn to keep to [`App::max_fps`]: each turn of the
+    /// loop that had something to draw and left it for the next frame,
+    /// which then drew what all of them changed.
+    pub skipped: u64,
+}
+
+/// [`FrameStats`] that stay readable after the app has run (and while a
+/// [`Driver`] runs it): [`App::stats_handle`]. Clones read the same
+/// counters.
+///
+/// ```
+/// use intuituive::interact::headless::{Headless, Script};
+/// use intuituive::prelude::*;
+///
+/// let app = App::new(|| {
+///     let n = signal(0);
+///     text!("{n}")
+///         .on_key("+", move |_| n.update(|n| *n += 1))
+///         .on_key("q", |cx| cx.quit())
+/// });
+/// let stats = app.stats_handle();
+/// app.run_on(&mut Headless::new(Script::new().keys("+ + q"), 5, 1)).unwrap();
+/// assert_eq!(stats.get().frames, 3);
+/// ```
+#[derive(Clone, Debug, Default)]
+pub struct StatsHandle(Rc<std::cell::Cell<FrameStats>>);
+
+impl StatsHandle {
+    /// The counters as the last frame left them.
+    pub fn get(&self) -> FrameStats {
+        self.0.get()
+    }
+
+    fn update(&self, f: impl FnOnce(&mut FrameStats)) {
+        let mut stats = self.0.get();
+        f(&mut stats);
+        self.0.set(stats);
+    }
 }
 
 /// An intuiTUIve app.
@@ -1238,7 +1672,10 @@ pub struct App {
     console: Option<Console>,
     /// The console the last frame used, for components handling events.
     last_console: Option<Console>,
-    stats: FrameStats,
+    stats: StatsHandle,
+    /// The shortest time between two frames [`run_on`](Self::run_on)
+    /// draws ([`max_fps`](Self::max_fps)).
+    frame_time: Option<Duration>,
     /// Hand each frame's plain text to the backend (the headless driver
     /// records it); off in a real terminal, where nobody reads it.
     text_frames: bool,
@@ -1424,7 +1861,8 @@ impl App {
             theme: Theme::default(),
             console: None,
             last_console: None,
-            stats: FrameStats::default(),
+            stats: StatsHandle::default(),
+            frame_time: None,
             text_frames: true,
             caret_shown: false,
             restyled: false,
@@ -1734,7 +2172,8 @@ impl App {
     #[track_caller]
     pub fn every(mut self, interval: Duration, tick: impl FnMut(&mut Ctx) + 'static) -> App {
         let at = Location::caller();
-        self.layers[0].timers.push(Timer::new(interval, tick, at));
+        let ticker = self.runtime.enter(|| Ticker::every(interval, tick, at));
+        self.layers[0].timers.push(ticker);
         self
     }
 
@@ -1834,7 +2273,45 @@ impl App {
 
     /// Counters from the last frame.
     pub fn stats(&self) -> FrameStats {
-        self.stats
+        self.stats.get()
+    }
+
+    /// The app's [`FrameStats`], readable after it has run: [`run`](Self::run)
+    /// and [`run_on`](Self::run_on) take the app, so take this first.
+    pub fn stats_handle(&self) -> StatsHandle {
+        self.stats.clone()
+    }
+
+    /// Draw at most `fps` frames a second when the app runs its own loop
+    /// ([`run`](Self::run), [`run_on`](Self::run_on)): what changes in
+    /// between waits, and the next frame draws it all, so an app fed
+    /// faster than it can draw (a game at 60 Hz, a thread sending frames)
+    /// shows the newest state at a steady rate instead of falling behind.
+    /// Input and timers are still handled as they come. Frames held back
+    /// are counted in [`FrameStats::skipped`]. 0 draws as often as there
+    /// is something to draw, the default. A [`Driver`] draws whenever it
+    /// is asked to.
+    ///
+    /// ```
+    /// use intuituive::interact::headless::{Headless, Script};
+    /// use intuituive::prelude::*;
+    /// use std::time::Duration;
+    ///
+    /// let app = App::new(|| {
+    ///     let n = signal(0);
+    ///     every(Duration::from_millis(10), move |_| n.update(|n| *n += 1));
+    ///     text!("{n}").on_key("q", |cx| cx.quit())
+    /// })
+    /// .max_fps(20);
+    /// let stats = app.stats_handle();
+    /// let script = Script::new().wait(Duration::from_secs(1)).keys("q");
+    /// app.run_on(&mut Headless::new(script, 5, 1)).unwrap();
+    /// // A hundred ticks, twenty-odd frames.
+    /// assert!(stats.get().frames <= 22, "{:?}", stats.get());
+    /// ```
+    pub fn max_fps(mut self, fps: u32) -> App {
+        self.frame_time = (fps > 0).then(|| Duration::from_secs(1) / fps);
+        self
     }
 
     /// Stack toasts and [notifications](Ctx::notify) in `corner`, newest
@@ -2074,6 +2551,8 @@ impl App {
         let inline = self.inline.is_some();
         let text_frames = self.text_frames;
         let linear = self.linear;
+        let frame_time = self.frame_time;
+        let mut last_frame: Option<Duration> = None;
         let mut driver = self.driver(width, height);
         driver.set_clipboard(backend.clipboard().is_ok());
         // A value from another thread ends the wait on the terminal.
@@ -2126,6 +2605,60 @@ impl App {
             }
             Ok(())
         }
+        // One event read from the backend, handled (without drawing):
+        // Ctrl+Z suspends unless the app binds it, a resume after SIGTSTP
+        // draws everything, and what handlers asked for (copies, programs
+        // to run) is done.
+        fn deliver(
+            driver: &mut Driver,
+            backend: &mut impl Backend,
+            event: Event,
+            linear: bool,
+            inline: bool,
+        ) -> io::Result<()> {
+            match &event {
+                // Raw mode turns off the terminal's own Ctrl+Z, so it
+                // arrives as a key: suspend as the terminal would have,
+                // unless the app binds it. On `fg` everything draws
+                // again (inline, in a new region below the shell's
+                // lines).
+                Event::Key(key)
+                    if *key == Key::ctrl('z')
+                        && backend.can_suspend()
+                        && !driver.app.binds(*key) =>
+                {
+                    put(backend, linear, &driver.suspend())?;
+                    backend.suspend()?;
+                    if linear {
+                        // The session hides the cursor on the way back;
+                        // linear mode reads from where it is.
+                        backend.write("\x1b[?25h")?;
+                    }
+                    let (columns, rows) = backend.size();
+                    if inline {
+                        driver.set_origin(backend.origin());
+                    }
+                    driver.resize(columns, rows);
+                    return Ok(());
+                }
+                // Back from a suspend started outside (SIGTSTP): what
+                // is on the screen is the shell's, so the resize this
+                // is draws everything, in a new region when inline.
+                Event::Resize { .. } if backend.take_resumed() => {
+                    let _ = driver.suspend();
+                    if linear {
+                        backend.write("\x1b[?25h")?;
+                    }
+                }
+                _ => {}
+            }
+            if inline {
+                driver.set_origin(backend.origin());
+            }
+            driver.event(event);
+            copy_all(driver, backend);
+            hand_off(driver, backend, linear, inline)
+        }
         let result = (|| -> io::Result<()> {
             loop {
                 driver.update(backend.elapsed());
@@ -2134,59 +2667,49 @@ impl App {
                 if driver.is_done() {
                     return Ok(());
                 }
-                if let Some(out) = driver.render() {
+                // Keeping to `max_fps`: a frame too soon after the last
+                // waits, and the wait ends when it may be drawn.
+                let now = backend.elapsed();
+                let hold = match (frame_time, last_frame) {
+                    (Some(frame), Some(last)) if driver.needs_render() => {
+                        Some(last + frame).filter(|&due| due > now)
+                    }
+                    _ => None,
+                };
+                if hold.is_some() {
+                    driver.app.stats.update(|stats| stats.skipped += 1);
+                } else if let Some(out) = driver.render() {
+                    last_frame = Some(now);
                     put(backend, linear, &out)?;
                     if text_frames {
                         backend.painted(&driver.screen().plain().join("\n"));
                     }
                 }
                 copy_all(&mut driver, backend);
-                let wait = driver.timeout(backend.elapsed());
+                let wait = match hold {
+                    // Until the frame may draw, or something is due first.
+                    Some(due) => {
+                        let now = backend.elapsed();
+                        driver.next_due(now).min(due.saturating_sub(now))
+                    }
+                    None => driver.timeout(backend.elapsed()),
+                };
                 let Some(event) = backend.read(Some(wait))? else {
                     continue;
                 };
-                match &event {
-                    // Raw mode turns off the terminal's own Ctrl+Z, so it
-                    // arrives as a key: suspend as the terminal would have,
-                    // unless the app binds it. On `fg` everything draws
-                    // again (inline, in a new region below the shell's
-                    // lines).
-                    Event::Key(key)
-                        if *key == Key::ctrl('z')
-                            && backend.can_suspend()
-                            && !driver.app.binds(*key) =>
-                    {
-                        put(backend, linear, &driver.suspend())?;
-                        backend.suspend()?;
-                        if linear {
-                            // The session hides the cursor on the way back;
-                            // linear mode reads from where it is.
-                            backend.write("\x1b[?25h")?;
-                        }
-                        let (columns, rows) = backend.size();
-                        if inline {
-                            driver.set_origin(backend.origin());
-                        }
-                        driver.resize(columns, rows);
-                        continue;
+                deliver(&mut driver, backend, event, linear, inline)?;
+                // Everything else already waiting goes in before the next
+                // frame: keys typed while a frame was slow are handled
+                // together, as they came, not one a frame.
+                for _ in 1..DRAIN_EVENTS {
+                    if driver.is_done() {
+                        break;
                     }
-                    // Back from a suspend started outside (SIGTSTP): what
-                    // is on the screen is the shell's, so the resize this
-                    // is draws everything, in a new region when inline.
-                    Event::Resize { .. } if backend.take_resumed() => {
-                        let _ = driver.suspend();
-                        if linear {
-                            backend.write("\x1b[?25h")?;
-                        }
-                    }
-                    _ => {}
+                    let Some(event) = backend.read(Some(Duration::ZERO))? else {
+                        break;
+                    };
+                    deliver(&mut driver, backend, event, linear, inline)?;
                 }
-                if inline {
-                    driver.set_origin(backend.origin());
-                }
-                driver.event(event);
-                copy_all(&mut driver, backend);
-                hand_off(&mut driver, backend, linear, inline)?;
                 if driver.is_done() {
                     return Ok(());
                 }
@@ -2887,7 +3410,7 @@ impl App {
             }
         });
         let took = started.map(|start| start.elapsed()).unwrap_or_default();
-        self.stats.drawn = frame.drawn;
+        self.stats.update(|stats| stats.drawn = frame.drawn);
         // A drag: its source dimmed, the drop target under the pointer lit.
         if let Some(drag) = self.drag.as_ref().filter(|drag| drag.active) {
             let root = &self.top().root;
@@ -3018,7 +3541,7 @@ impl App {
                 focus: all.last().and_then(|layer| layer.focus),
                 focus_path: &focus_path,
                 hover: &hover,
-                stats: self.stats,
+                stats: self.stats.get(),
                 frame: inspector.frames,
                 theme,
                 viewport,
@@ -3064,7 +3587,7 @@ impl App {
         let made = std::mem::take(&mut *self.runtime.afters.borrow_mut());
         for after in made {
             self.timeouts.push(Timeout {
-                due: self.now + after.wait,
+                timer: after.timer,
                 run: after.run,
                 at: after.at,
             });
@@ -3083,10 +3606,15 @@ impl App {
         let mut quit = cx.quit;
         for after in cx.afters {
             self.timeouts.push(Timeout {
-                due: self.now + after.wait,
+                timer: after.timer,
                 run: after.run,
                 at: after.at,
             });
+        }
+        // Timers a handler started: on the screen it ran on.
+        if !cx.tickers.is_empty() {
+            let layer = cx.layers.clamp(1, self.layers.len()) - 1;
+            self.layers[layer].timers.extend(cx.tickers);
         }
         self.take_afters();
         if let Some(exit) = cx.exit {
@@ -3370,15 +3898,15 @@ impl App {
                     .get_or_insert_with(|| POPUP_TITLE.to_string());
             });
         }
-        let mut timers = BUILDING
+        let timers = BUILDING
             .with(|building| building.borrow_mut().take())
             .unwrap_or_default();
         let watches = WATCHES
             .with(|watches| watches.borrow_mut().take())
             .unwrap_or_default();
         // A screen's timers start counting when it opens.
-        for timer in &mut timers {
-            timer.next = self.now + timer.every;
+        for ticker in &timers {
+            ticker.timer.start_at(self.now);
         }
         self.pending = None;
         self.layers.push(Layer {
@@ -3406,6 +3934,9 @@ impl App {
     fn close(&mut self) {
         self.pending = None;
         let layer = self.layers.pop().expect("an app always has a screen");
+        for ticker in &layer.timers {
+            ticker.timer.release();
+        }
         self.runtime.tracer.farewell(&layer.root);
         layer.root.forget(&self.runtime);
         for watch in layer.watches {
@@ -4537,6 +5068,11 @@ const LINEAR_ROWS: u16 = 4096;
 /// what they changed, before it is sent.
 const LAYOUT_ROUNDS: usize = 4;
 
+/// The most events [`App::run_on`]'s loop handles between two frames: all
+/// that are waiting, up to this many, so a flood (a paste without
+/// bracketed paste, a stuck key) still draws now and then.
+const DRAIN_EVENTS: usize = 64;
+
 impl Driver {
     /// Bring the app up to `now` (the time since it started): run the
     /// timers that are due, move animations, deliver results from other
@@ -4555,43 +5091,53 @@ impl Driver {
         app.take_afters();
         let mut cx = app.ctx();
         let runtime = app.runtime.clone();
-        // One-shot timers that are due, in the order they fall due.
+        // One-shot timers that are due, in the order they fall due; and
+        // those cancelled let go.
+        app.timeouts.retain(|timeout| !timeout.timer.is_cancelled());
         let mut due = Vec::new();
         let mut i = 0;
         while i < app.timeouts.len() {
-            if app.timeouts[i].due <= now {
-                due.push(app.timeouts.remove(i));
+            let at = app.timeouts[i].timer.next().unwrap_or_default();
+            if app.timeouts[i].timer.take_due(now).0 > 0 {
+                due.push((at, app.timeouts.remove(i)));
             } else {
                 i += 1;
             }
         }
-        due.sort_by_key(|timeout| timeout.due);
+        due.sort_by_key(|(at, _)| *at);
         runtime.enter(|| {
-            for timeout in due {
+            for (_, timeout) in due {
                 if runtime.tracer.on() {
                     runtime.tracer.push(Traced::Timer {
                         every: Duration::ZERO,
                         at: timeout.at,
                     });
                 }
+                timeout.timer.cancel();
                 (timeout.run)(&mut cx);
             }
             for layer in &mut app.layers {
-                for timer in &mut layer.timers {
-                    if now >= timer.next {
-                        if runtime.tracer.on() {
-                            runtime.tracer.push(Traced::Timer {
-                                every: timer.every,
-                                at: timer.at,
-                            });
-                        }
-                        (timer.tick)(&mut cx);
-                        // Once, however far behind (the clock jumped, the
-                        // laptop slept), and on to the next tick in step.
-                        let every = timer.every.as_nanos().max(1);
-                        let behind = (now - timer.next).as_nanos() % every;
-                        timer.next = now + Duration::from_nanos((every - behind) as u64);
+                layer.timers.retain(|ticker| !ticker.timer.is_cancelled());
+                for ticker in &mut layer.timers {
+                    // Once, however far behind (the clock jumped, the
+                    // laptop slept), and on to the next tick in step; a
+                    // fixed step is told how many are due.
+                    let (ticks, most) = ticker.timer.take_due(now);
+                    if ticks == 0 {
+                        continue;
                     }
+                    if runtime.tracer.on() {
+                        runtime.tracer.push(Traced::Timer {
+                            every: ticker.timer.period(),
+                            at: ticker.at,
+                        });
+                    }
+                    cx.ticks = ticks;
+                    match &mut ticker.tick {
+                        Tick::Every(tick) => tick(&mut cx),
+                        Tick::Steps(step) => step(&mut cx, ticks.min(most)),
+                    }
+                    cx.ticks = 0;
                 }
             }
             // Animations: each one's value for now; finished ones go.
@@ -4716,7 +5262,7 @@ impl Driver {
                     out.push_str("\x1b[?25l");
                 }
             }
-            self.app.stats.frames += 1;
+            self.app.stats.update(|stats| stats.frames += 1);
             // Inline, lines printed above go into the scrollback before the
             // region draws again below them.
             if self.app.inline.is_some() && !self.app.printed.is_empty() {
@@ -4756,22 +5302,28 @@ impl Driver {
     /// [waker](Self::set_waker), as [`App::run`]'s has; without one, it
     /// waits for the timeout.
     pub fn timeout(&self, now: Duration) -> Duration {
-        let app = &self.app;
-        if self.needs_render() || !app.lifecycle.is_empty() {
+        if self.needs_render() || !self.app.lifecycle.is_empty() {
             // Something is waiting to be drawn or told: no waiting.
             return Duration::ZERO;
         }
+        self.next_due(now)
+    }
+
+    /// How long until the next thing due ([`timeout`](Self::timeout)
+    /// without what waits to be drawn).
+    fn next_due(&self, now: Duration) -> Duration {
+        let app = &self.app;
         app.layers
             .iter()
             .flat_map(|layer| &layer.timers)
-            .map(|t| t.next.saturating_sub(now))
+            .filter_map(|ticker| ticker.timer.left(now))
             .min()
             .unwrap_or(Duration::from_millis(50))
             .min(Duration::from_millis(50))
             .min(
                 app.timeouts
                     .iter()
-                    .map(|t| t.due.saturating_sub(now))
+                    .filter_map(|timeout| timeout.timer.left(now))
                     .min()
                     .unwrap_or(Duration::MAX),
             )
@@ -4849,7 +5401,10 @@ impl Driver {
     /// Handle an event: a key pressed or let go, the mouse, pasted text, or
     /// the terminal's new size. Ctrl+C quits, unless a node on the focused
     /// path binds it ([`on_key`](crate::Node::on_key)); then the binding
-    /// runs.
+    /// runs. It does not draw: a loop of your own takes every event
+    /// waiting, then [`render`](Self::render)s once ([`App::run_on`]'s
+    /// does). A test that wants the screen to show what an event did uses
+    /// [`send`](Self::send).
     pub fn event(&mut self, event: Event) {
         if self.done {
             return;
@@ -5037,6 +5592,32 @@ impl Driver {
             self.update(next);
             self.settle();
         }
+    }
+
+    /// [`event`](Self::event), then [`settle`](Self::settle), as
+    /// [`press`](Self::press) does for keys: a test's step for a mouse
+    /// event, a paste, a release or a resize, after which the screen shows
+    /// what it did.
+    ///
+    /// ```
+    /// use intuituive::interact::{Event, Mouse, MouseKind};
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| {
+    ///     let n = signal(0);
+    ///     text!("{n}").on_mouse(move |_, mouse| {
+    ///         n.update(|n| *n += 1);
+    ///         mouse.kind == MouseKind::ScrollDown
+    ///     })
+    /// });
+    /// let mut driver = app.driver(5, 1);
+    /// driver.send(Event::Mouse(Mouse::new(MouseKind::ScrollDown, 0, 0)));
+    /// assert_eq!(driver.screen().plain()[0].trim_end(), "1");
+    /// ```
+    pub fn send(&mut self, event: Event) {
+        self.settle();
+        self.event(event);
+        self.settle();
     }
 
     /// Press keys by name, separated by spaces (`"down down enter"`,
@@ -5240,7 +5821,7 @@ impl Driver {
 
     /// The last frame's numbers.
     pub fn stats(&self) -> FrameStats {
-        self.app.stats
+        self.app.stats.get()
     }
 
     /// The node selected in the [inspector](crate::inspect), if any.
@@ -5563,7 +6144,7 @@ impl Driver {
         let mut damage = app.frame(&self.console, screen, full);
         if app.linear {
             let out = self.lines();
-            self.app.stats.bytes = out.len();
+            self.app.stats.update(|stats| stats.bytes = out.len());
             return out;
         }
         if let Some((start, end)) = app.selection {
@@ -5598,7 +6179,7 @@ impl Driver {
             app.motion.1 = true;
         }
         out.push_str(&app.caret(&mut self.painter));
-        app.stats.bytes = out.len();
+        app.stats.update(|stats| stats.bytes = out.len());
         out
     }
 

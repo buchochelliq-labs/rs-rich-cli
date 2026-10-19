@@ -78,7 +78,7 @@ pub(crate) type Hints = Vec<(String, String)>;
 
 /// One app's reactive state.
 pub(crate) struct Runtime {
-    id: u32,
+    pub(crate) id: u32,
     values: RefCell<Vec<Box<dyn Any>>>,
     graph: RefCell<Graph>,
     /// Closures sent from other threads, run on the app's thread.
@@ -119,6 +119,8 @@ pub(crate) struct Runtime {
     pub(crate) afters: RefCell<Vec<crate::app::After>>,
     /// The app's clock at the top of its last turn.
     pub(crate) now: Cell<std::time::Duration>,
+    /// The state behind each [`Timer`](crate::Timer) handle.
+    pub(crate) timers: RefCell<crate::app::TimerTable>,
     /// What a [`key_hints`](crate::widgets::key_hints) footer shows, once
     /// one is made: each binding's keys and description.
     pub(crate) hints: Cell<Option<Signal<Hints>>>,
@@ -164,6 +166,7 @@ impl Runtime {
                 tracer: Default::default(),
                 afters: RefCell::new(Vec::new()),
                 now: Cell::new(std::time::Duration::ZERO),
+                timers: Default::default(),
                 hints: Cell::new(None),
                 layers: Cell::new(1),
                 locals: RefCell::new(HashMap::new()),
@@ -184,7 +187,7 @@ impl Runtime {
     }
 
     /// Runtime `id`, if its app is still there.
-    fn try_get(id: u32) -> Option<Rc<Runtime>> {
+    pub(crate) fn try_get(id: u32) -> Option<Rc<Runtime>> {
         RUNTIMES.with(|all| all.borrow().get(id as usize).and_then(Clone::clone))
     }
 
