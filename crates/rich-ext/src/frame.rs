@@ -31,7 +31,7 @@ pub use graphics::{plan as plan_graphics, Graphic, GraphicsPlan, Placement, Plac
 pub use regions::{render_frame, role_name, Rect, Region, RegionRecorder, Span};
 
 use std::collections::HashMap;
-use std::hash::{Hash, Hasher};
+use std::hash::{BuildHasherDefault, Hasher};
 use std::ops::Range;
 
 use rich::cells::{cell_len, split_graphemes};
@@ -46,29 +46,65 @@ impl StyleId {
     /// "No style": a segment whose `style` is `None`.
     pub const NONE: StyleId = StyleId(0);
 
+    /// No style's id: what a [`StyleRemap`] gives a dropped style, so a
+    /// copy of cells that still holds it differs from every cell.
+    pub const GONE: StyleId = StyleId(u32::MAX);
+
     pub fn index(self) -> usize {
         self.0 as usize
     }
+
+    pub(crate) fn from_index(index: usize) -> StyleId {
+        StyleId(index as u32)
+    }
 }
+
+/// A colour as three bytes: red, green and blue.
+pub type Rgb = [u8; 3];
 
 /// Styles, stored once each. Runs refer to them by [`StyleId`].
 ///
-/// Interning hashes a style's public parts (colours, attributes and link) and
-/// confirms a match with `==`, so metadata still tells styles apart.
+/// Interning hashes a style's public parts (colours, attributes and link)
+/// with a fast non-cryptographic hash and confirms a match with `==`, so
+/// metadata still tells styles apart. A style made of two plain colours can
+/// be interned by the colours alone ([`intern_rgb`](Self::intern_rgb)),
+/// without building a [`Style`] unless it is new.
+///
+/// The table only grows while it is used; a table kept between frames (a
+/// [`Screen`](crate::surface::Screen)'s) drops what its cells no longer
+/// use with [`retain`](Self::retain).
 #[derive(Clone, Debug)]
 pub struct StyleTable {
     styles: Vec<Option<Style>>,
-    index: HashMap<u64, Vec<StyleId>>,
+    /// Each style's key (see [`style_key`]), to rebuild the index.
+    keys: Vec<u64>,
+    /// Each style's colour pair when it was interned as one (see
+    /// [`pair_key`]), else 0.
+    pairs: Vec<u64>,
+    /// Per id, the next id whose key is the same (0 ends the chain:
+    /// [`StyleId::NONE`] is never in one).
+    chain: Vec<u32>,
+    /// The first id with each key.
+    index: HashMap<u64, u32, FxBuild>,
+    /// Colour pairs interned with [`intern_rgb`](Self::intern_rgb).
+    rgb: HashMap<u64, StyleId, FxBuild>,
     /// The last style interned: consecutive segments usually share one.
     last: StyleId,
+    /// How many styles the last [`retain`](Self::retain) kept.
+    kept: usize,
 }
 
 impl Default for StyleTable {
     fn default() -> Self {
         StyleTable {
             styles: vec![None],
-            index: HashMap::new(),
+            keys: vec![0],
+            pairs: vec![0],
+            chain: vec![0],
+            index: HashMap::default(),
+            rgb: HashMap::default(),
             last: StyleId::NONE,
+            kept: 1,
         }
     }
 }
@@ -87,21 +123,88 @@ impl StyleTable {
             return self.last;
         }
         let key = style_key(style);
-        let bucket = self.index.entry(key).or_default();
-        let id = match bucket
-            .iter()
-            .find(|id| self.styles[id.index()].as_ref() == Some(style))
-        {
-            Some(id) => *id,
+        let id = match self.find(key, style) {
+            Some(id) => id,
+            None => self.push(key, style.clone()),
+        };
+        self.last = id;
+        id
+    }
+
+    /// The id of a style of foreground `fg` and background `bg` in true
+    /// colour (either missing), as [`Style::from_color`] with
+    /// [`Color::from_rgb`](rich::Color::from_rgb) would make it; neither is
+    /// [`StyleId::NONE`]. A pixel's cell: the style is built only the first
+    /// time the pair is seen.
+    ///
+    /// ```
+    /// use rich::{Color, Style};
+    /// use rich_ext::frame::StyleTable;
+    ///
+    /// let mut table = StyleTable::new();
+    /// let id = table.intern_rgb(Some([255, 0, 0]), None);
+    /// let red = Style::from_color(Some(Color::from_rgb(255, 0, 0)), None);
+    /// assert_eq!(table.intern(Some(&red)), id);
+    /// assert_eq!(table.rgb(id), Some((Some([255, 0, 0]), None)));
+    /// ```
+    pub fn intern_rgb(&mut self, fg: Option<Rgb>, bg: Option<Rgb>) -> StyleId {
+        let pair = pair_key(fg, bg);
+        if pair == 0 {
+            return StyleId::NONE;
+        }
+        if self.pairs[self.last.index()] == pair {
+            return self.last;
+        }
+        let id = match self.rgb.get(&pair) {
+            Some(&id) => id,
             None => {
-                let id = StyleId(self.styles.len() as u32);
-                self.styles.push(Some(style.clone()));
-                bucket.push(id);
+                let style = Style::from_color(
+                    fg.map(|[r, g, b]| rich::Color::from_rgb(r, g, b)),
+                    bg.map(|[r, g, b]| rich::Color::from_rgb(r, g, b)),
+                );
+                let key = style_key(&style);
+                let id = match self.find(key, &style) {
+                    Some(id) => id,
+                    None => self.push(key, style),
+                };
+                self.pairs[id.index()] = pair;
+                self.rgb.insert(pair, id);
                 id
             }
         };
         self.last = id;
         id
+    }
+
+    /// The colours of a style interned with [`intern_rgb`](Self::intern_rgb)
+    /// (or found by it): what a painter can write without asking the style.
+    pub fn rgb(&self, id: StyleId) -> Option<(Option<Rgb>, Option<Rgb>)> {
+        match self.pairs.get(id.index()).copied().unwrap_or(0) {
+            0 => None,
+            pair => Some((unpack(pair >> 32), unpack(pair))),
+        }
+    }
+
+    fn find(&self, key: u64, style: &Style) -> Option<StyleId> {
+        let mut at = self.index.get(&key).copied().unwrap_or(0);
+        while at != 0 {
+            if self.styles[at as usize].as_ref() == Some(style) {
+                return Some(StyleId(at));
+            }
+            at = self.chain[at as usize];
+        }
+        None
+    }
+
+    fn push(&mut self, key: u64, style: Style) -> StyleId {
+        let id = self.styles.len() as u32;
+        self.styles.push(Some(style));
+        self.keys.push(key);
+        self.pairs.push(0);
+        // At the head of its key's chain.
+        let next = self.index.insert(key, id).unwrap_or(0);
+        self.chain.push(next);
+        StyleId(id)
     }
 
     /// The style behind `id`; `None` for [`StyleId::NONE`].
@@ -118,18 +221,216 @@ impl StyleTable {
     pub fn is_empty(&self) -> bool {
         false
     }
+
+    /// Whether the table has at least doubled since the last
+    /// [`retain`](Self::retain) and holds more than a few hundred styles:
+    /// when dropping the unused ones is worth a pass over the cells.
+    pub fn piled_up(&self) -> bool {
+        self.styles.len() > PILE.max(2 * self.kept)
+    }
+
+    /// Keep only the styles `keep` marks (by index; [`StyleId::NONE`] is
+    /// always kept, and ids past `keep`'s end are dropped), renumbered in
+    /// their order. The result maps the old ids to the new: everything
+    /// holding an old id must be moved over with it.
+    ///
+    /// ```
+    /// use rich::Style;
+    /// use rich_ext::frame::{StyleId, StyleTable};
+    ///
+    /// let mut table = StyleTable::new();
+    /// let bold = table.intern(Some(&Style::parse("bold").unwrap()));
+    /// let red = table.intern(Some(&Style::parse("red").unwrap()));
+    /// let mut keep = vec![false; table.len()];
+    /// keep[red.index()] = true;
+    /// let remap = table.retain(&keep);
+    /// assert_eq!(table.len(), 2);
+    /// assert_eq!(remap.get(bold), None);
+    /// let red = remap.get(red).unwrap();
+    /// assert_eq!(table.get(red), Some(&Style::parse("red").unwrap()));
+    /// assert_eq!(remap.get(StyleId::NONE), Some(StyleId::NONE));
+    /// ```
+    pub fn retain(&mut self, keep: &[bool]) -> StyleRemap {
+        let mut map = vec![StyleRemap::GONE; self.styles.len()];
+        map[0] = 0;
+        let mut next = 1usize;
+        for old in 1..self.styles.len() {
+            if !keep.get(old).copied().unwrap_or(false) {
+                continue;
+            }
+            map[old] = next as u32;
+            if old != next {
+                self.styles.swap(old, next);
+                self.keys[next] = self.keys[old];
+                self.pairs[next] = self.pairs[old];
+            }
+            next += 1;
+        }
+        self.styles.truncate(next);
+        self.keys.truncate(next);
+        self.pairs.truncate(next);
+        self.chain.clear();
+        self.chain.resize(next, 0);
+        self.index.clear();
+        self.rgb.clear();
+        for id in 1..next as u32 {
+            let key = self.keys[id as usize];
+            self.chain[id as usize] = self.index.insert(key, id).unwrap_or(0);
+            if self.pairs[id as usize] != 0 {
+                self.rgb.insert(self.pairs[id as usize], StyleId(id));
+            }
+        }
+        self.last = StyleId::NONE;
+        self.kept = next;
+        StyleRemap { map }
+    }
 }
 
-fn style_key(style: &Style) -> u64 {
-    let mut hasher = std::collections::hash_map::DefaultHasher::new();
-    style.color().hash(&mut hasher);
-    style.bgcolor().hash(&mut hasher);
-    for index in 0..13 {
-        style.attr(index).hash(&mut hasher);
+/// Below this many styles a table is not worth compacting.
+const PILE: usize = 1024;
+
+/// From the ids a [`StyleTable`] had to the ids it has after
+/// [`retain`](StyleTable::retain).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct StyleRemap {
+    map: Vec<u32>,
+}
+
+impl StyleRemap {
+    const GONE: u32 = u32::MAX;
+
+    /// The new id of `old`; `None` when its style was dropped (or `old` was
+    /// never in the table).
+    pub fn get(&self, old: StyleId) -> Option<StyleId> {
+        match self.map.get(old.index()).copied() {
+            None | Some(StyleRemap::GONE) => None,
+            Some(new) => Some(StyleId(new)),
+        }
     }
-    style.link().hash(&mut hasher);
+
+    /// The new id of `old`, or an id no style has (that equals no id the
+    /// table gives) when its style was dropped: for a copy of cells that
+    /// must read as changed wherever the style went away.
+    pub fn get_or_gone(&self, old: StyleId) -> StyleId {
+        self.get(old).unwrap_or(StyleId::GONE)
+    }
+}
+
+/// The key a style is interned by: its colours (without the names they
+/// were spelled with), attributes and link.
+fn style_key(style: &Style) -> u64 {
+    let mut hasher = FxHasher::default();
+    hash_color(style.color(), &mut hasher);
+    hash_color(style.bgcolor(), &mut hasher);
+    let mut attrs = 0u32;
+    for index in 0..13 {
+        attrs |= match style.attr(index) {
+            None => 0,
+            Some(false) => 1,
+            Some(true) => 2,
+        } << (2 * index);
+    }
+    hasher.write_u32(attrs);
+    if let Some(link) = style.link() {
+        hasher.write(link.as_bytes());
+    }
     hasher.finish()
 }
+
+fn hash_color(color: Option<&rich::Color>, hasher: &mut FxHasher) {
+    match color {
+        None => hasher.write_u32(0),
+        Some(color) => {
+            let triplet = color
+                .triplet
+                .map_or(0, |t| u32::from_be_bytes([0, t.red, t.green, t.blue]));
+            hasher.write_u64(
+                (color.kind as u64 + 1) << 40
+                    | u64::from(color.number.map_or(0, |n| n as u32 + 1)) << 24
+                    | u64::from(triplet),
+            );
+        }
+    }
+}
+
+/// A colour pair as a key: each colour in 25 bits, a bit for "present"
+/// above its 24 bits of RGB, the foreground in the high half. 0 is "no
+/// colour at all".
+fn pair_key(fg: Option<Rgb>, bg: Option<Rgb>) -> u64 {
+    let pack = |c: Option<Rgb>| {
+        c.map_or(0, |[r, g, b]| {
+            1 << 24 | u64::from(u32::from_be_bytes([0, r, g, b]))
+        })
+    };
+    pack(fg) << 32 | pack(bg)
+}
+
+fn unpack(half: u64) -> Option<Rgb> {
+    let half = half as u32;
+    (half & 1 << 24 != 0).then(|| {
+        let [_, r, g, b] = half.to_be_bytes();
+        [r, g, b]
+    })
+}
+
+/// The Firefox / rustc hash: a multiply and a rotate a word, much faster
+/// than the standard library's SipHash for short keys an attacker does not
+/// choose (style keys, colour pairs).
+#[derive(Clone, Copy, Default)]
+pub(crate) struct FxHasher {
+    hash: u64,
+}
+
+impl FxHasher {
+    const SEED: u64 = 0x51_7c_c1_b7_27_22_0a_95;
+
+    #[inline]
+    fn add(&mut self, word: u64) {
+        self.hash = (self.hash.rotate_left(5) ^ word).wrapping_mul(FxHasher::SEED);
+    }
+}
+
+impl Hasher for FxHasher {
+    #[inline]
+    fn write(&mut self, bytes: &[u8]) {
+        let mut chunks = bytes.chunks_exact(8);
+        for chunk in &mut chunks {
+            self.add(u64::from_le_bytes(chunk.try_into().expect("eight bytes")));
+        }
+        let mut rest = [0u8; 8];
+        let tail = chunks.remainder();
+        rest[..tail.len()].copy_from_slice(tail);
+        self.add(u64::from_le_bytes(rest) ^ (tail.len() as u64) << 56);
+    }
+
+    #[inline]
+    fn write_u8(&mut self, n: u8) {
+        self.add(n.into());
+    }
+
+    #[inline]
+    fn write_u32(&mut self, n: u32) {
+        self.add(n.into());
+    }
+
+    #[inline]
+    fn write_u64(&mut self, n: u64) {
+        self.add(n);
+    }
+
+    #[inline]
+    fn write_usize(&mut self, n: usize) {
+        self.add(n as u64);
+    }
+
+    #[inline]
+    fn finish(&self) -> u64 {
+        self.hash
+    }
+}
+
+/// Builds [`FxHasher`]s, for `HashMap`s keyed by trusted values.
+pub(crate) type FxBuild = BuildHasherDefault<FxHasher>;
 
 /// The run is followed by a line break that belonged to its segment.
 const NEWLINE: u8 = 1;
@@ -778,5 +1079,45 @@ mod tests {
         assert_eq!(span, "b\x1b[1mc\x1b[0m");
         let wide = Frame::from_segments(&[seg("漢x", None)]);
         assert_eq!(wide.encode_span(0, 1..3, None, false), " x");
+    }
+
+    #[test]
+    fn styles_that_hash_alike_stay_apart() {
+        // Metadata is not in the key: these two share one, and a chain.
+        let plain = Style::parse("bold").unwrap();
+        let meta: rich::style::Meta = [("k", rich::style::MetaValue::Int(1))]
+            .into_iter()
+            .collect();
+        let tagged = plain.clone().with_meta(meta);
+        let mut table = StyleTable::new();
+        let a = table.intern(Some(&plain));
+        let b = table.intern(Some(&tagged));
+        assert_ne!(a, b);
+        assert_eq!(table.intern(Some(&plain)), a);
+        assert_eq!(table.intern(Some(&tagged)), b);
+        let remap = table.retain(&[true, false, true]);
+        let b = remap.get(b).unwrap();
+        assert_eq!(table.get(b), Some(&tagged));
+        assert_eq!(table.intern(Some(&tagged)), b);
+        assert_eq!(table.intern(Some(&plain)), StyleId::from_index(2));
+    }
+
+    #[test]
+    fn colour_pairs_and_styles_share_ids() {
+        let mut table = StyleTable::new();
+        let style = Style::from_color(None, Some(rich::Color::from_rgb(1, 2, 3)));
+        let id = table.intern(Some(&style));
+        assert_eq!(table.rgb(id), None, "not interned as a pair yet");
+        assert_eq!(table.intern_rgb(None, Some([1, 2, 3])), id);
+        assert_eq!(table.rgb(id), Some((None, Some([1, 2, 3]))));
+        assert_eq!(table.intern_rgb(None, None), StyleId::NONE);
+        let other = table.intern_rgb(Some([0, 0, 0]), Some([1, 2, 3]));
+        assert_ne!(other, id);
+        // Kept through a compaction, found again by its colours.
+        let remap = table.retain(&[true, false, true]);
+        assert_eq!(remap.get(id), None);
+        let other = remap.get(other).unwrap();
+        assert_eq!(table.intern_rgb(Some([0, 0, 0]), Some([1, 2, 3])), other);
+        assert!(!table.piled_up());
     }
 }

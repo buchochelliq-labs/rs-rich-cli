@@ -8,9 +8,11 @@
 //! what it sent last time and writes the difference, keeping colour and
 //! link state across the frame rather than resetting it for every run.
 
+use std::collections::HashMap;
+
 use rich::{ColorSystem, Segment, Style};
 
-use crate::frame::{Frame, StyleId, StyleTable};
+use crate::frame::{Frame, FxBuild, Rgb, StyleId, StyleRemap, StyleTable};
 
 /// A rectangle of cells.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
@@ -222,12 +224,23 @@ impl Cell {
 }
 
 /// The grid of cells, and the styles they use.
+///
+/// The style table only grows as cells are written; a screen kept between
+/// frames drops the styles no cell uses any more with
+/// [`compact_styles`](Self::compact_styles) (a [`Painter`] does it for the
+/// screen it paints with [`Painter::compact`]), so a picture whose colours
+/// change every frame does not pile them up.
 #[derive(Clone, Debug)]
 pub struct Screen {
     width: u16,
     height: u16,
     cells: Vec<Cell>,
     styles: StyleTable,
+    /// The style last laid under or over cells, and its id.
+    layer: Option<(Style, StyleId)>,
+    /// What laying a style under or over a cell's made: by (layer, own,
+    /// over), the combined style's id.
+    layered: HashMap<(u32, u32, bool), StyleId, FxBuild>,
 }
 
 impl Screen {
@@ -237,6 +250,8 @@ impl Screen {
             height,
             cells: vec![Cell::blank(); width as usize * height as usize],
             styles: StyleTable::new(),
+            layer: None,
+            layered: HashMap::default(),
         }
     }
 
@@ -275,9 +290,141 @@ impl Screen {
         self.styles.get(id)
     }
 
+    /// How many styles the screen's table holds, counting "no style":
+    /// what its cells use, and what they used before the last
+    /// [`compact_styles`](Self::compact_styles).
+    pub fn style_count(&self) -> usize {
+        self.styles.len()
+    }
+
     /// Intern `style` for use in this screen's cells.
     pub fn intern(&mut self, style: Option<&Style>) -> StyleId {
         self.styles.intern(style)
+    }
+
+    /// Whether the style table has grown well past what the cells used
+    /// when it was last compacted: time for
+    /// [`compact_styles`](Self::compact_styles).
+    pub fn styles_piled_up(&self) -> bool {
+        self.styles.piled_up()
+    }
+
+    /// Drop the styles no cell uses, and renumber the rest. The result maps
+    /// the old ids to the new, for whatever kept an id of this screen's
+    /// between frames: a [`Painter`] that painted it is moved over with
+    /// [`Painter::remap_styles`] (or compacts it itself with
+    /// [`Painter::compact`]). The cells keep their styles; only the ids
+    /// change.
+    ///
+    /// ```
+    /// use rich::{Color, Style};
+    /// use rich_ext::surface::Screen;
+    ///
+    /// let mut screen = Screen::new(2, 1);
+    /// for n in 0..=255u8 {
+    ///     screen.put_rgb(0, 0, '▀', Some([n, 0, 0]), Some([0, 0, n]));
+    /// }
+    /// assert_eq!(screen.style_count(), 257);
+    /// screen.compact_styles();
+    /// // "No style" (the blank cell) and the last colour pair.
+    /// assert_eq!(screen.style_count(), 2);
+    /// let cell = screen.cell(0, 0);
+    /// let last = Style::from_color(Some(Color::from_rgb(255, 0, 0)), Some(Color::from_rgb(0, 0, 255)));
+    /// assert_eq!(screen.style(cell.style), Some(&last));
+    /// ```
+    pub fn compact_styles(&mut self) -> StyleRemap {
+        let mut keep = vec![false; self.styles.len()];
+        for cell in &self.cells {
+            if let Some(used) = keep.get_mut(cell.style.index()) {
+                *used = true;
+            }
+        }
+        let remap = self.styles.retain(&keep);
+        for cell in &mut self.cells {
+            cell.style = remap.get_or_gone(cell.style);
+        }
+        self.layer = None;
+        self.layered.clear();
+        remap
+    }
+
+    /// Set the cell at `x`, `y` to `ch` with foreground `fg` and background
+    /// `bg` in true colour (either missing), without building a
+    /// [`Segment`] or, unless the pair is new, a [`Style`]: the fast way to
+    /// draw a picture a cell at a time (half blocks, quadrants, Braille).
+    /// The cell takes the style [`Style::from_color`] of the two
+    /// [`Color::from_rgb`](rich::Color::from_rgb)s would give. Off the
+    /// screen, nothing is written.
+    ///
+    /// `ch` takes one cell: a wide or zero-width character becomes a space,
+    /// and a terminal control its visible stand-in (see
+    /// [`control_picture`](super::control_picture)). A wide grapheme the
+    /// cell was half of becomes a space.
+    ///
+    /// ```
+    /// use rich::{Color, Style};
+    /// use rich_ext::surface::Screen;
+    ///
+    /// let mut screen = Screen::new(2, 1);
+    /// screen.put_rgb(1, 0, '▀', Some([255, 0, 0]), Some([0, 0, 255]));
+    /// let cell = screen.cell(1, 0);
+    /// let style = Style::from_color(
+    ///     Some(Color::from_rgb(255, 0, 0)),
+    ///     Some(Color::from_rgb(0, 0, 255)),
+    /// );
+    /// assert_eq!((cell.text.as_str(), screen.style(cell.style)), ("▀", Some(&style)));
+    /// ```
+    pub fn put_rgb(&mut self, x: u16, y: u16, ch: char, fg: Option<Rgb>, bg: Option<Rgb>) {
+        if x >= self.width || y >= self.height {
+            return;
+        }
+        let id = self.styles.intern_rgb(fg, bg);
+        self.put_cell(x, y, ch, id);
+    }
+
+    /// Set the cell at `x`, `y` to `ch` in the style `style` (an id from
+    /// [`intern`](Self::intern) on this screen), as
+    /// [`put_rgb`](Self::put_rgb) does: for many cells in one style,
+    /// interned once.
+    ///
+    /// ```
+    /// use rich::Style;
+    /// use rich_ext::surface::Screen;
+    ///
+    /// let mut screen = Screen::new(3, 1);
+    /// let bold = screen.intern(Some(&Style::parse("bold").unwrap()));
+    /// for x in 0..3 {
+    ///     screen.put(x, 0, '#', bold);
+    /// }
+    /// assert_eq!(screen.plain(), ["###"]);
+    /// ```
+    pub fn put(&mut self, x: u16, y: u16, ch: char, style: StyleId) {
+        if x >= self.width
+            || y >= self.height
+            || self.styles.get(style).is_none() && style != StyleId::NONE
+        {
+            return;
+        }
+        self.put_cell(x, y, ch, style);
+    }
+
+    #[inline]
+    fn put_cell(&mut self, x: u16, y: u16, ch: char, style: StyleId) {
+        let ch = narrow(ch);
+        let at = y as usize * self.width as usize + x as usize;
+        let width = self.cells[at].width;
+        if width == 0 && x > 0 {
+            // The second column of a wide grapheme: its first is erased too.
+            let lead = &mut self.cells[at - 1];
+            let lead_style = lead.style;
+            lead.set(" ", 1, lead_style);
+        } else if width >= 2 && x + 1 < self.width {
+            let next = &mut self.cells[at + 1];
+            let next_style = next.style;
+            next.set(" ", 1, next_style);
+        }
+        let mut buffer = [0u8; 4];
+        self.cells[at].set(ch.encode_utf8(&mut buffer), 1, style);
     }
 
     /// A wide grapheme that `rect` cuts in half, on either side, becomes a
@@ -373,29 +520,44 @@ impl Screen {
     /// Lay `style` under the cell at `x`, `y`: it takes what the cell's own
     /// style leaves unset (a stylesheet's colours, as CSS inherits them).
     pub fn underlay(&mut self, x: u16, y: u16, style: &Style) {
-        if x >= self.width || y >= self.height {
-            return;
-        }
-        let own = self.styles.get(self.cell(x, y).style).cloned();
-        let combined = match own {
-            Some(own) => style.combine(&own),
-            None => style.clone(),
-        };
-        let id = self.styles.intern(Some(&combined));
-        self.cell_mut(x, y).style = id;
+        self.lay(x, y, style, false);
     }
 
     /// Lay `style` over the cell at `x`, `y` (a selection's highlight).
     pub fn restyle(&mut self, x: u16, y: u16, style: &Style) {
+        self.lay(x, y, style, true);
+    }
+
+    /// Combine `style` with the cell's own, under it or over it. A style is
+    /// usually laid over many cells of a few styles, so each combination is
+    /// made and interned once.
+    fn lay(&mut self, x: u16, y: u16, style: &Style, over: bool) {
         if x >= self.width || y >= self.height {
             return;
         }
-        let own = self.styles.get(self.cell(x, y).style).cloned();
-        let combined = match own {
-            Some(own) => own.combine(style),
-            None => style.clone(),
+        let layer = match &self.layer {
+            Some((last, id)) if last == style => *id,
+            _ => {
+                let id = self.styles.intern(Some(style));
+                self.layer = Some((style.clone(), id));
+                id
+            }
         };
-        let id = self.styles.intern(Some(&combined));
+        let own = self.cell(x, y).style;
+        let key = (layer.index() as u32, own.index() as u32, over);
+        let id = match self.layered.get(&key) {
+            Some(&id) => id,
+            None => {
+                let combined = match self.styles.get(own) {
+                    Some(own) if over => own.combine(style),
+                    Some(own) => style.combine(own),
+                    None => style.clone(),
+                };
+                let id = self.styles.intern(Some(&combined));
+                self.layered.insert(key, id);
+                id
+            }
+        };
         self.cell_mut(x, y).style = id;
     }
 
@@ -405,6 +567,8 @@ impl Screen {
     pub fn blit(&mut self, source: &Screen, from: Rect, x: u16, y: u16) {
         let from = from.intersection(source.area());
         self.split_edges(Rect::new(x, y, from.width, from.height));
+        // The source's style ids, translated into this screen's table once.
+        let mut ids: Vec<Option<StyleId>> = vec![None; source.styles.len()];
         for row in 0..from.height {
             let ty = y.saturating_add(row);
             if ty >= self.height {
@@ -418,7 +582,13 @@ impl Screen {
                 let cell = source.cell(from.x + column, from.y + row);
                 let cut = cell.is_continuation() && column == 0
                     || cell.width >= 2 && (column + 1 >= from.width || tx + 1 >= self.width);
-                let id = self.styles.intern(source.style(cell.style));
+                let styles = &mut self.styles;
+                let id = match ids.get_mut(cell.style.index()) {
+                    Some(slot) => {
+                        *slot.get_or_insert_with(|| styles.intern(source.style(cell.style)))
+                    }
+                    None => styles.intern(source.style(cell.style)),
+                };
                 if cut {
                     self.cell_mut(tx, ty).set(" ", 1, id);
                 } else {
@@ -495,13 +665,55 @@ impl Screen {
     }
 }
 
+/// One cell wide: `ch`, or a space for a wide or zero-width character, or
+/// a control's visible stand-in.
+#[inline]
+fn narrow(ch: char) -> char {
+    // ASCII, box drawing and block elements, Braille: the pictures' cells.
+    if (' '..='~').contains(&ch)
+        || ('\u{2500}'..='\u{259f}').contains(&ch)
+        || ('\u{2800}'..='\u{28ff}').contains(&ch)
+    {
+        return ch;
+    }
+    if let Some(picture) = super::control_picture(ch) {
+        return picture;
+    }
+    let mut buffer = [0u8; 4];
+    if rich::cells::cell_len(ch.encode_utf8(&mut buffer)) == 1 {
+        ch
+    } else {
+        ' '
+    }
+}
+
+/// What a [`Painter`] last sent: the cells, by the style ids of the screen
+/// it painted (whose table it does not copy).
+struct Sent {
+    width: u16,
+    height: u16,
+    cells: Vec<Cell>,
+}
+
+impl Sent {
+    fn cell(&self, x: u16, y: u16) -> &Cell {
+        &self.cells[y as usize * self.width as usize + x as usize]
+    }
+}
+
 /// Turns screens into terminal output: the cells that changed since the
 /// last paint, inside the damaged rectangles.
+///
+/// It keeps a copy of the cells it sent, not of the style table: cells
+/// compare by style id, so a screen's ids must not change under it, except
+/// through [`compact`](Self::compact) or [`remap_styles`](Self::remap_styles).
 pub struct Painter {
-    previous: Option<Screen>,
+    previous: Option<Sent>,
     system: Option<ColorSystem>,
     /// SGR parameters per style id of the screen being painted.
     codes: Vec<Option<String>>,
+    /// The SGR parameters of the style being set, when they are not cached.
+    scratch: String,
     /// Painting an inline region below the cursor, with relative moves,
     /// rather than the whole screen with absolute ones.
     inline: bool,
@@ -532,6 +744,7 @@ impl Painter {
             previous: None,
             system,
             codes: Vec::new(),
+            scratch: String::new(),
             inline: false,
             cursor: None,
             height: 0,
@@ -622,6 +835,64 @@ impl Painter {
         self.previous = None;
     }
 
+    /// The screen this painter paints had its styles renumbered
+    /// ([`Screen::compact_styles`]): follow the new ids, so what was sent
+    /// still compares with it. A cell sent in a style that was dropped
+    /// reads as changed.
+    pub fn remap_styles(&mut self, remap: &StyleRemap) {
+        if let Some(previous) = &mut self.previous {
+            for cell in &mut previous.cells {
+                cell.style = remap.get_or_gone(cell.style);
+            }
+        }
+        let mut codes = Vec::with_capacity(self.codes.len());
+        for (old, code) in self.codes.drain(..).enumerate() {
+            let Some(code) = code else { continue };
+            if let Some(new) = remap.get(StyleId::from_index(old)) {
+                if codes.len() <= new.index() {
+                    codes.resize(new.index() + 1, None);
+                }
+                codes[new.index()] = Some(code);
+            }
+        }
+        self.codes = codes;
+    }
+
+    /// Drop the styles `screen`'s cells no longer use, when its table has
+    /// piled up ([`Screen::styles_piled_up`]), keeping this painter in
+    /// step: call it after each [`paint`](Self::paint), and a screen whose
+    /// cells change colour every frame keeps only the styles of a frame or
+    /// two. Whether it compacted. What is painted next is the same either
+    /// way.
+    ///
+    /// ```
+    /// use rich::ColorSystem;
+    /// use rich_ext::surface::{Painter, Screen};
+    ///
+    /// let mut screen = Screen::new(16, 4);
+    /// let mut painter = Painter::new(Some(ColorSystem::Truecolor));
+    /// for frame in 0..100u8 {
+    ///     for y in 0..4 {
+    ///         for x in 0..16 {
+    ///             let c = [frame, x as u8 * 16, y as u8 * 64];
+    ///             screen.put_rgb(x, y, '▀', Some(c), Some([0, 0, frame]));
+    ///         }
+    ///     }
+    ///     painter.paint(&screen, &[screen.area()]);
+    ///     painter.compact(&mut screen);
+    /// }
+    /// // A frame uses 64 styles; a hundred frames made 6,400.
+    /// assert!(screen.style_count() < 2_000);
+    /// ```
+    pub fn compact(&mut self, screen: &mut Screen) -> bool {
+        if !screen.styles_piled_up() {
+            return false;
+        }
+        let remap = screen.compact_styles();
+        self.remap_styles(&remap);
+        true
+    }
+
     /// What to write so the terminal shows `screen`, given that only the
     /// `damage` rectangles can have changed since the last paint (ignored
     /// on the first paint, or after a resize or [`invalidate`](Self::invalidate)).
@@ -670,15 +941,27 @@ impl Painter {
         if self.inline {
             self.cursor = pen.at.or(self.cursor);
         }
-        // Bring the copy of what was sent up to date.
+        // Bring the copy of what was sent up to date, reusing its cells'
+        // text buffers.
         match &mut self.previous {
-            None => self.previous = Some(screen.clone()),
+            None => {
+                self.previous = Some(Sent {
+                    width: screen.width,
+                    height: screen.height,
+                    cells: screen.cells.clone(),
+                })
+            }
             Some(previous) => {
-                previous.styles = screen.styles.clone();
+                let width = screen.width as usize;
                 for rect in &rects {
                     for y in rect.y..rect.bottom() {
-                        for x in rect.x..rect.right() {
-                            *previous.cell_mut(x, y) = screen.cell(x, y).clone();
+                        let row = y as usize * width;
+                        let span = row + rect.x as usize..row + rect.right() as usize;
+                        for (sent, cell) in previous.cells[span.clone()]
+                            .iter_mut()
+                            .zip(&screen.cells[span])
+                        {
+                            sent.clone_from(cell);
                         }
                     }
                 }
@@ -711,8 +994,8 @@ impl Painter {
         match &self.previous {
             None => true,
             Some(previous) => {
-                // The previous copy shares the screen's (append-only) style
-                // table, so style ids compare directly.
+                // The copy holds the screen's style ids (moved over when the
+                // screen compacts), so they compare directly.
                 previous.cell(x, y) != screen.cell(x, y)
             }
         }
@@ -776,28 +1059,72 @@ impl Painter {
             }
             pen.link = link;
         }
-        if self.codes.len() <= style.index() {
-            self.codes.resize(style.index() + 1, None);
-        }
         let system = self.system;
-        let codes = self.codes[style.index()]
-            .get_or_insert_with(|| match (resolved, system) {
-                (Some(s), Some(system)) => s.ansi_codes(system),
-                _ => String::new(),
-            })
-            .clone();
+        let codes: &str = match (screen.styles.rgb(style), system) {
+            // A colour pair in true colour: written straight from the
+            // colours, as `Style::ansi_codes` would, with nothing cached.
+            (Some((fg, bg)), Some(ColorSystem::Truecolor)) => {
+                self.scratch.clear();
+                rgb_codes(&mut self.scratch, fg, bg);
+                &self.scratch
+            }
+            _ => {
+                if self.codes.len() <= style.index() {
+                    self.codes.resize(style.index() + 1, None);
+                }
+                self.codes[style.index()].get_or_insert_with(|| match (resolved, system) {
+                    (Some(s), Some(system)) => s.ansi_codes(system),
+                    _ => String::new(),
+                })
+            }
+        };
         // Styles that differ only in their link share colours: no SGR.
-        if pen.codes.as_deref() != Some(codes.as_str()) {
+        if pen.codes.as_deref() != Some(codes) {
             out.push_str("\x1b[0");
             if !codes.is_empty() {
                 out.push(';');
-                out.push_str(&codes);
+                out.push_str(codes);
             }
             out.push('m');
-            pen.codes = Some(codes);
+            match &mut pen.codes {
+                Some(current) => {
+                    current.clear();
+                    current.push_str(codes);
+                }
+                None => pen.codes = Some(codes.to_string()),
+            }
         }
         pen.style = Some(style);
     }
+}
+
+/// The SGR parameters of a true-colour pair, as `Style::ansi_codes` writes
+/// them: `38;2;r;g;b`, then `48;2;r;g;b`.
+fn rgb_codes(out: &mut String, fg: Option<Rgb>, bg: Option<Rgb>) {
+    for (lead, colour) in [("38;2;", fg), ("48;2;", bg)] {
+        let Some(rgb) = colour else { continue };
+        if !out.is_empty() {
+            out.push(';');
+        }
+        out.push_str(lead);
+        for (i, part) in rgb.into_iter().enumerate() {
+            if i > 0 {
+                out.push(';');
+            }
+            push_u8(out, part);
+        }
+    }
+}
+
+/// `n` in decimal.
+fn push_u8(out: &mut String, n: u8) {
+    if n >= 100 {
+        out.push(char::from(b'0' + n / 100));
+    }
+    if n >= 10 {
+        out.push(char::from(b'0' + n / 10 % 10));
+    }
+    out.push(char::from(b'0' + n % 10));
 }
 
 /// For each row, the merged column spans the rectangles cover.
@@ -936,5 +1263,223 @@ mod tests {
         screen.write_lines(screen.area(), &[line("abx")]);
         let out = painter.paint(&screen, &[screen.area()]);
         assert_eq!(out, "\x1b[1;1H\x1b[0mab");
+    }
+
+    /// A small, fast generator: the same noise on every run.
+    struct Noise(u64);
+
+    impl Noise {
+        fn rgb(&mut self) -> [u8; 3] {
+            self.0 = self
+                .0
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
+            let [r, g, b, _] = ((self.0 >> 33) as u32).to_le_bytes();
+            [r, g, b]
+        }
+    }
+
+    /// A frame of `screen` in random colour pairs, as `put_rgb` cells, or
+    /// as rendered segments when `segments`.
+    fn noise_frame(screen: &mut Screen, noise: &mut Noise, segments: bool) {
+        let area = screen.area();
+        if segments {
+            let lines: Vec<Vec<Segment>> = (0..area.height)
+                .map(|_| {
+                    (0..area.width)
+                        .map(|_| {
+                            let [r, g, b] = noise.rgb();
+                            let [r2, g2, b2] = noise.rgb();
+                            let style = Style::from_color(
+                                Some(rich::Color::from_rgb(r, g, b)),
+                                Some(rich::Color::from_rgb(r2, g2, b2)),
+                            );
+                            Segment::new("▀", Some(style))
+                        })
+                        .collect()
+                })
+                .collect();
+            screen.write_lines(area, &lines);
+        } else {
+            for y in 0..area.height {
+                for x in 0..area.width {
+                    let (fg, bg) = (noise.rgb(), noise.rgb());
+                    screen.put_rgb(x, y, '▀', Some(fg), Some(bg));
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn the_style_table_stays_bounded_over_a_thousand_random_frames() {
+        for segments in [false, true] {
+            let mut screen = Screen::new(40, 12);
+            let mut painter = Painter::new(Some(ColorSystem::Truecolor));
+            let mut noise = Noise(1);
+            let mut most = 0;
+            for _ in 0..1000 {
+                noise_frame(&mut screen, &mut noise, segments);
+                painter.paint(&screen, &[screen.area()]);
+                painter.compact(&mut screen);
+                most = most.max(screen.style_count());
+            }
+            // 480 cells, each a new pair a frame: about a frame's worth is
+            // kept, never a thousand frames'.
+            assert!(most <= 2 * 1024 + 1, "{most} styles ({segments})");
+            assert!(painter.codes.len() <= most, "{}", painter.codes.len());
+        }
+    }
+
+    #[test]
+    fn compacting_changes_no_byte_painted() {
+        // Two screens drawn alike, one compacted after every paint and one
+        // never: the painters write the same bytes, frame after frame.
+        let mut kept = (
+            Screen::new(30, 6),
+            Painter::new(Some(ColorSystem::Truecolor)),
+        );
+        let mut compacted = (
+            Screen::new(30, 6),
+            Painter::new(Some(ColorSystem::Truecolor)),
+        );
+        let mut noise = Noise(9);
+        for frame in 0..60 {
+            let mut lines = vec![
+                line("[bold]title[/] [link=https://x.y]docs[/link]"),
+                line(&format!("[red]{frame}[/] [on blue]  [/]")),
+            ];
+            if frame % 3 == 0 {
+                lines.push(line("[italic green]every third[/]"));
+            }
+            let mut cells = Vec::new();
+            for x in 0..30 {
+                cells.push((x, noise.rgb(), noise.rgb()));
+            }
+            let underlay = Style::parse("on #202020").unwrap();
+            let mut bytes = Vec::new();
+            for (screen, painter) in [&mut kept, &mut compacted] {
+                screen.write_lines(Rect::new(0, 0, 30, 3), &lines);
+                // Only some cells change colour, so most are not repainted.
+                for &(x, fg, bg) in &cells[..(frame % 30)] {
+                    screen.put_rgb(x, 4, '▀', Some(fg), Some(bg));
+                }
+                for x in 0..30 {
+                    screen.underlay(x, 1, &underlay);
+                }
+                bytes.push(painter.paint(screen, &[Rect::new(0, 0, 30, 5)]));
+            }
+            let remap = compacted.0.compact_styles();
+            compacted.1.remap_styles(&remap);
+            assert_eq!(bytes[0], bytes[1], "frame {frame}");
+            assert_eq!(kept.0.plain(), compacted.0.plain());
+        }
+        assert!(compacted.0.style_count() < kept.0.style_count());
+    }
+
+    #[test]
+    fn a_cell_sent_in_a_dropped_style_reads_as_changed() {
+        let mut screen = Screen::new(2, 1);
+        let mut painter = Painter::new(Some(ColorSystem::Truecolor));
+        screen.put_rgb(0, 0, 'a', Some([1, 2, 3]), None);
+        painter.paint(&screen, &[]);
+        // Drawn over without a paint, then compacted: the style sent went.
+        screen.put_rgb(0, 0, 'a', Some([4, 5, 6]), None);
+        let remap = screen.compact_styles();
+        painter.remap_styles(&remap);
+        let out = painter.paint(&screen, &[screen.area()]);
+        assert_eq!(out, "\x1b[1;1H\x1b[0;38;2;4;5;6ma\x1b[0m");
+    }
+
+    #[test]
+    fn pixel_cells_write_what_their_style_would() {
+        let mut noise = Noise(3);
+        for system in [
+            ColorSystem::Truecolor,
+            ColorSystem::EightBit,
+            ColorSystem::Standard,
+        ] {
+            for case in 0..200 {
+                let fg = (case % 3 != 0).then(|| noise.rgb());
+                let bg = (case % 5 != 0).then(|| noise.rgb());
+                let mut fast = Screen::new(1, 1);
+                fast.put_rgb(0, 0, '▄', fg, bg);
+                let mut slow = Screen::new(1, 1);
+                let style = Style::from_color(
+                    fg.map(|[r, g, b]| rich::Color::from_rgb(r, g, b)),
+                    bg.map(|[r, g, b]| rich::Color::from_rgb(r, g, b)),
+                );
+                slow.write_lines(slow.area(), &[vec![Segment::new("▄", Some(style))]]);
+                let paint = |screen: &Screen| Painter::new(Some(system)).paint(screen, &[]);
+                assert_eq!(paint(&fast), paint(&slow), "{fg:?} {bg:?} {system:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn a_pixel_cell_over_half_a_wide_grapheme_clears_the_other_half() {
+        let mut screen = Screen::new(5, 1);
+        screen.write_lines(screen.area(), &[line("日本x")]);
+        screen.put_rgb(1, 0, '▀', Some([255, 0, 0]), None);
+        screen.put_rgb(2, 0, '▀', None, Some([0, 0, 255]));
+        assert_eq!(screen.plain(), [" ▀▀ x"]);
+        assert!((0..5).all(|x| screen.cell(x, 0).width == 1));
+        // Wide, zero-width and control characters take one cell.
+        screen.put_rgb(0, 0, '日', None, None);
+        screen.put_rgb(1, 0, '\u{301}', None, None);
+        screen.put_rgb(2, 0, '\x1b', None, None);
+        assert_eq!(screen.plain(), ["  ␛ x"]);
+        // Off the screen, nothing.
+        screen.put_rgb(5, 0, 'z', None, None);
+        screen.put(0, 1, 'z', StyleId::NONE);
+        assert_eq!(screen.plain(), ["  ␛ x"]);
+    }
+
+    #[test]
+    fn the_pixel_glyphs_are_one_cell_wide() {
+        let ranges = [
+            (' ', '~'),
+            ('\u{2500}', '\u{259f}'),
+            ('\u{2800}', '\u{28ff}'),
+        ];
+        for (first, last) in ranges {
+            for c in first..=last {
+                assert_eq!(rich::cells::cell_len(&c.to_string()), 1, "{c:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn layering_a_style_over_many_cells_combines_each_pair_once() {
+        let mut screen = Screen::new(8, 1);
+        screen.write_lines(screen.area(), &[line("[red]abcd[/][blue]efgh[/]")]);
+        let before = screen.style_count();
+        let under = Style::parse("on black").unwrap();
+        for x in 0..8 {
+            screen.underlay(x, 0, &under);
+        }
+        // The layer, and red and blue on black.
+        assert_eq!(screen.style_count(), before + 3);
+        let style_of = |screen: &Screen, x| screen.style(screen.cell(x, 0).style).cloned();
+        let parse = |s| Style::parse(s).ok();
+        assert_eq!(
+            (style_of(&screen, 0), style_of(&screen, 7)),
+            (parse("red on black"), parse("blue on black"))
+        );
+        let over = Style::parse("bold").unwrap();
+        screen.restyle(0, 0, &over);
+        assert_eq!(style_of(&screen, 0), parse("bold red on black"));
+        screen.compact_styles();
+        screen.underlay(1, 0, &under);
+        assert_eq!(style_of(&screen, 1), parse("red on black"));
+    }
+
+    #[test]
+    fn a_blit_translates_each_style_once() {
+        let mut source = Screen::new(6, 1);
+        source.write_lines(source.area(), &[line("[bold]ab[/][red]cd[/]ef")]);
+        let mut target = Screen::new(6, 1);
+        target.blit(&source, source.area(), 0, 0);
+        assert_eq!(target.lines(), source.lines());
+        assert_eq!(target.style_count(), source.style_count());
     }
 }
