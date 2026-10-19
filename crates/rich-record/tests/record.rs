@@ -374,10 +374,14 @@ fn every_settled_update_is_a_frame_at_the_tapes_rate() {
         .collect();
     let span = counting.last().unwrap() - counting.first().unwrap();
     let rate = (counting.len() - 1) as f64 / span;
-    // At most the tape's rate, and well above the old 12 unless the
-    // machine is too busy to draw (loose, for loaded CI machines).
+    // At most the tape's rate; and most of the frames there were to keep:
+    // the 75 updates, or 35 a second over the time they took, whichever is
+    // fewer (the loop runs slower on a busy machine, so the bound follows
+    // the span measured rather than a fixed rate). On a machine that keeps
+    // up (about 1.5s), a recorder at the old 12 a second keeps under 40%.
+    let possible = (35.0 * span).min(75.0);
     assert!(
-        (8.0..=36.0).contains(&rate),
+        rate <= 36.0 && counting.len() as f64 >= 0.4 * possible,
         "{} frames over {span:.2}s",
         counting.len()
     );
