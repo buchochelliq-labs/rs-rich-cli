@@ -74,11 +74,17 @@ each clone's gap report gets a "Round 2" section). From e4bc67c:
 
 | Agent | Branch | Clones | State |
 |---|---|---|---|
-| A | `r7-a` | git, tasks (taskwarrior), http | in progress |
-| B | `r7-b` | disk, top, csv | in progress |
-| C | `r7-c` | blocks, raycast (with its Kitty-mode and held-key fixes), music | in progress |
+| A | `r7-a` | git, tasks (taskwarrior), http | merged |
+| B | `r7-b` | disk, top, csv | merged |
+| C | `r7-c` | blocks, raycast (with its Kitty-mode and held-key fixes), music | merged |
 
-Then: merge, fold the round-2 reports into the gap note, full gate, PRs. rs-rich-doom is pinned to
+Merged, and folded into the gap note's "Round 7" section (bugs, csv's filter
+regression, shared gaps). The PR is rs-rich-cli #757; rs-rich-doom #1 is
+merged. Core went to 0.0.10 with its published dependents (d35d906), since
+the `Text.markup` port changed a published file.
+
+Next: the round 7 gaps (round 8 of the loop): the four bugs first, then the
+shared gaps, then rebuild again. rs-rich-doom is pinned to
 866b897 (before round 6); moving it onto pixel cells, held keys, `fixed_step` and stats is open.
 
 **When all of it has landed and the full gate passes: open two PRs** (the
