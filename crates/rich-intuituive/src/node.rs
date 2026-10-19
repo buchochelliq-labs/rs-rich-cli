@@ -194,6 +194,9 @@ pub struct Node {
     /// A [`list`]'s selection and scroll, for
     /// [`reorderable`](Node::reorderable).
     pub(crate) list_model: Option<Rc<crate::reorder::ListModel>>,
+    /// The list options given a [`switch`] to pass on to the lists it
+    /// builds, now and later.
+    pub(crate) list_forward: Option<crate::list::Forward>,
     /// Its own colours and text style ([`style`](Node::style),
     /// [`bg`](Node::bg), [`fg`](Node::fg)), under what it draws.
     own_style: Option<OwnStyle>,
@@ -423,6 +426,7 @@ impl Node {
             checked_when: None,
             busy_when: None,
             list_model: None,
+            list_forward: None,
             own_style: None,
             theme_styles: Vec::new(),
             scope: RefCell::new(None),
@@ -3565,7 +3569,10 @@ where
 /// detail pane per item. `key` may read signals; when it changes, the
 /// switch shows the other child, which keeps its state (and its focus
 /// order) from when it was last shown. Only the shown child is in the Tab
-/// order and takes clicks.
+/// order and takes clicks. A [list](crate::list)'s options given the
+/// switch ([`highlight_layer`](Node::highlight_layer),
+/// [`wheel_step`](Node::wheel_step), …) reach each list it shows: a list
+/// with a "No items" text in its place keeps them.
 ///
 /// ```
 /// use intuituive::prelude::*;
@@ -3591,7 +3598,16 @@ where
     K: Clone + Eq + Hash + 'static,
     F: Fn(K) -> Node + 'static,
 {
-    Node::from_widget(
+    // List options given the switch reach each child it builds: the list
+    // shown, or the one shown later.
+    let forward = crate::list::Forward::default();
+    let options = forward.clone();
+    let build = move |key: K| {
+        let node = build(key);
+        options.apply(&node);
+        node
+    };
+    let mut node = Node::from_widget(
         Box::new(Switch {
             key: Box::new(key),
             build,
@@ -3599,7 +3615,9 @@ where
             current: None,
         }),
         "switch",
-    )
+    );
+    node.list_forward = Some(forward);
+    node
 }
 
 /// The nodes under `column`, `row`, outermost first (the path to the
