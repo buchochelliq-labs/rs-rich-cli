@@ -16,7 +16,7 @@
 //! the current directory).
 //!
 //! There is no sound: intuiTUIve's `audio` plugin captures but has no
-//! output, so playback runs on the app's clock. A WAV file is opened with
+//! output, so playback is a `transport` play head on the app's clock. A WAV file is opened with
 //! `audio::wav` for its length and checked to decode; other formats are
 //! listed and queued, but there is no decoder for them. Tags are read from
 //! a WAV's `LIST`/`INFO` chunk, else from the file name (`Artist - Title`).
@@ -44,12 +44,12 @@ use std::time::Duration;
 use intuituive::audio;
 use intuituive::prelude::*;
 use intuituive::rich::Style;
-use intuituive::widgets::{table_with, tree_with, Column, TableOptions, TreeItem};
-use intuituive::{image_of, ImageFit, ImageView, Level};
+use intuituive::widgets::{
+    table_with, tree_keyed, tree_reveal, Column, TableOptions, TreeItem, TreeKeys,
+};
+use intuituive::{image_of, transport, HelpOptions, ImageFit, ImageView, Level, Transport};
 use rich_ext::chart::FillGauge;
 
-/// How often the playback clock ticks.
-pub const TICK: Duration = Duration::from_millis(100);
 /// termusic's seek step for short tracks.
 pub const SEEK: Duration = Duration::from_secs(5);
 /// How far F and B move the lyrics, in milliseconds.
@@ -151,22 +151,18 @@ pub fn scan(path: &Path) -> Entry {
     }
 }
 
-impl Entry {
-    /// The entry at `path`, a list of child indices from this one.
-    pub fn at(&self, path: &[usize]) -> Option<&Entry> {
-        path.iter().try_fold(self, |e, &i| e.children.get(i))
-    }
+/// A library entry's key in the tree: its path.
+fn key(path: &Path) -> String {
+    path.display().to_string()
+}
 
-    /// The child indices to the entry for `file`, from this one.
-    pub fn locate(&self, file: &Path) -> Option<Vec<usize>> {
+impl Entry {
+    /// The entry for `file`, this one or one under it.
+    pub fn find(&self, file: &Path) -> Option<&Entry> {
         if self.path == file {
-            return Some(Vec::new());
+            return Some(self);
         }
-        self.children.iter().enumerate().find_map(|(i, child)| {
-            let mut rest = child.locate(file)?;
-            rest.insert(0, i);
-            Some(rest)
-        })
+        self.children.iter().find_map(|child| child.find(file))
     }
 
     /// Every track under this entry, in order.
@@ -189,10 +185,10 @@ impl Entry {
         out
     }
 
-    /// The tree's items: this entry, folders in the library colour.
+    /// The tree's items: this entry, keyed by its path.
     fn item(&self) -> TreeItem {
         let name = rich::markup::escape(&self.name);
-        TreeItem::new(name).children(self.children.iter().map(Entry::item))
+        TreeItem::keyed(key(&self.path), name).children(self.children.iter().map(Entry::item))
     }
 }
 
@@ -472,7 +468,8 @@ impl LoopMode {
     }
 }
 
-/// Whether a track is playing.
+/// Whether a track is playing: none (stopped), or the play head moving or
+/// not.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Status {
     Stopped,
@@ -530,17 +527,18 @@ pub struct Player {
     /// The library's roots (`o`, `a`, `A`) and the one shown.
     pub roots: Signal<Vec<PathBuf>>,
     pub root: Signal<usize>,
-    /// The folder the tree shows, and what is in it.
+    /// The folder the tree shows, and what is in it; the tree's selection
+    /// and open folders, by path.
     pub top: Signal<PathBuf>,
     pub library: Signal<Entry>,
-    pub tree_at: Signal<Vec<usize>>,
-    pub expanded: Signal<HashSet<Vec<usize>>>,
+    pub selected: Signal<Option<String>>,
+    pub expanded: Signal<HashSet<String>>,
     pub yanked: Signal<Option<PathBuf>>,
     pub playlist: Signal<Vec<Track>>,
     pub cursor: Signal<usize>,
     pub current: Signal<Option<usize>>,
-    pub status: Signal<Status>,
-    pub pos: Signal<Duration>,
+    /// The play head through the current track.
+    pub head: Transport,
     pub volume: Signal<u16>,
     /// Tenths: 10 is 1.0.
     pub speed: Signal<i32>,
@@ -558,16 +556,15 @@ impl Player {
         Player {
             roots: signal(vec![root.clone()]),
             root: signal(0),
+            selected: signal(Some(key(&root))),
+            expanded: signal(HashSet::from([key(&root)])),
             top: signal(root),
             library: signal(library),
-            tree_at: signal(vec![0]),
-            expanded: signal(HashSet::from([vec![0]])),
             yanked: signal(None),
             playlist: signal(Vec::new()),
             cursor: signal(0),
             current: signal(None),
-            status: signal(Status::Stopped),
-            pos: signal(Duration::ZERO),
+            head: transport(None),
             volume: signal(30),
             speed: signal(10),
             gapless: signal(true),
@@ -591,6 +588,26 @@ impl Player {
         (n % below.max(1) as u64) as usize
     }
 
+    /// Stopped, running or paused.
+    pub fn status(self) -> Status {
+        match (self.current.get(), self.head.is_playing()) {
+            (None, _) => Status::Stopped,
+            (Some(_), true) => Status::Running,
+            (Some(_), false) => Status::Paused,
+        }
+    }
+
+    fn status_untracked(self) -> Status {
+        match (
+            self.current.get_untracked(),
+            self.head.is_playing_untracked(),
+        ) {
+            (None, _) => Status::Stopped,
+            (Some(_), true) => Status::Running,
+            (Some(_), false) => Status::Paused,
+        }
+    }
+
     /// The track playing (or paused).
     pub fn playing(self) -> Option<Track> {
         let at = self.current.get()?;
@@ -601,52 +618,36 @@ impl Player {
 
     /// Show `dir` in the tree, read again, with `focus` selected if given.
     pub fn show_dir(self, dir: PathBuf, focus: Option<&Path>) {
-        let library = scan(&dir);
-        let at = focus.and_then(|f| library.locate(f));
+        self.library.set(scan(&dir));
+        self.expanded.set(HashSet::from([key(&dir)]));
+        self.selected.set(Some(key(&dir)));
         self.top.set(dir);
-        self.library.set(library);
-        self.expanded.set(HashSet::from([vec![0]]));
-        match at {
-            Some(rest) => self.locate_path(rest),
-            None => self.tree_at.set(vec![0]),
+        if let Some(focus) = focus {
+            self.locate(focus);
         }
     }
 
-    /// Select the entry at `rest` below the root, opening its folders.
-    fn locate_path(self, rest: Vec<usize>) {
-        let mut path = vec![0];
-        self.expanded.update(|open| {
-            for &i in &rest {
-                open.insert(path.clone());
-                path.push(i);
-            }
-        });
-        let mut full = vec![0];
-        full.extend(rest);
-        self.tree_at.set(full);
-    }
-
-    /// Select `file` in the tree.
+    /// Select `file` in the tree, its folders opened.
     pub fn locate(self, file: &Path) {
-        if let Some(rest) = self.library.with(|l| l.locate(file)) {
-            self.locate_path(rest);
-        }
+        let items = [self.library.with_untracked(Entry::item)];
+        tree_reveal(&items, &key(file), self.selected, self.expanded);
     }
 
-    /// Read the library again, keeping the selection on `focus`.
-    pub fn rescan(self, focus: Option<&Path>) {
-        self.show_dir(self.top.get_untracked(), focus);
+    /// Read the library again: the selection stays on its entry, or, gone,
+    /// on the row now in its place.
+    pub fn rescan(self) {
+        self.library.set(scan(&self.top.get_untracked()));
     }
 
     /// The selected entry of the tree.
     pub fn selected(self) -> Option<Entry> {
-        let at = self.tree_at.get_untracked();
-        let library = self.library.get_untracked();
-        let rest = at.get(1..)?;
-        if at.first() != Some(&0) {
-            return None;
-        }
-        library.at(rest).cloned()
+        let at = PathBuf::from(self.selected.get_untracked()?);
+        self.library.with_untracked(|l| l.find(&at).cloned())
+    }
+
+    /// Whether the tree's top folder is selected.
+    fn top_selected(self) -> bool {
+        self.selected.get_untracked() == Some(key(&self.top.get_untracked()))
     }
 
     // -- the playlist -----------------------------------------------------
@@ -715,9 +716,9 @@ impl Player {
     // -- playback ---------------------------------------------------------
 
     pub fn stop(self) {
-        self.status.set(Status::Stopped);
+        self.head.pause();
+        self.head.seek(Duration::ZERO);
         self.current.set(None);
-        self.pos.set(Duration::ZERO);
         self.lyrics.set(None);
     }
 
@@ -754,16 +755,16 @@ impl Player {
             .map(|text| parse_lrc(&text))
             .filter(|l| !l.captions.is_empty());
         self.current.set(Some(at));
-        self.pos.set(Duration::ZERO);
         self.lyrics.set(lyrics);
-        self.status.set(Status::Running);
+        self.head.set_length(track.duration);
+        self.head.seek(Duration::ZERO);
+        self.head.play();
     }
 
     /// Space: pause, resume, or start the playlist.
     pub fn toggle(self, cx: &mut Ctx) {
-        match self.status.get_untracked() {
-            Status::Running => self.status.set(Status::Paused),
-            Status::Paused => self.status.set(Status::Running),
+        match self.status_untracked() {
+            Status::Running | Status::Paused => self.head.toggle(),
             Status::Stopped => {
                 if self.playlist.with(|p| !p.is_empty()) {
                     self.play(self.cursor.get_untracked(), cx);
@@ -798,41 +799,25 @@ impl Player {
     }
 
     pub fn seek(self, forward: bool) {
-        if self.status.get_untracked() == Status::Stopped {
-            return;
+        if self.status_untracked() != Status::Stopped {
+            let by = SEEK.as_secs_f64();
+            self.head.seek_by(if forward { by } else { -by });
         }
-        let total = self.playing().and_then(|t| t.duration).unwrap_or_default();
-        self.pos.update(|p| {
-            *p = if forward {
-                (*p + SEEK).min(total)
-            } else {
-                p.saturating_sub(SEEK)
-            }
-        });
     }
 
-    /// One tick of the clock: on at the speed, and on to the next track at
-    /// the end of one.
-    pub fn tick(self, cx: &mut Ctx) {
-        if self.status.get_untracked() != Status::Running {
-            return;
-        }
-        let step = TICK.mul_f64(f64::from(self.speed.get_untracked()) / 10.0);
-        let total = self.playing().and_then(|t| t.duration).unwrap_or_default();
-        let pos = self.pos.get_untracked() + step;
-        if pos >= total {
-            self.next(cx, true);
-        } else {
-            self.pos.set(pos);
-        }
+    /// The playback speed, in tenths (Ctrl+F, Ctrl+B).
+    pub fn set_speed(self, tenths: i32) {
+        let tenths = tenths.clamp(1, 30);
+        self.speed.set(tenths);
+        self.head.set_rate(f64::from(tenths) / 10.0);
     }
 
     /// The text the progress gauge shows over its bar.
     pub fn progress_label(self) -> String {
-        if self.status.get() == Status::Stopped {
+        if self.status() == Status::Stopped {
             return "--:--".into();
         }
-        let pos = fmt_short(self.pos.get());
+        let pos = fmt_short(self.head.position());
         match self.playing().and_then(|t| t.duration) {
             Some(total) if !total.is_zero() => format!("{pos}    -    {}", fmt_short(total)),
             _ => pos,
@@ -840,19 +825,17 @@ impl Player {
     }
 
     pub fn progress_ratio(self) -> f64 {
-        match self.playing().and_then(|t| t.duration) {
-            Some(total) if self.status.get() != Status::Stopped && !total.is_zero() => {
-                self.pos.get().as_secs_f64() / total.as_secs_f64()
-            }
-            _ => 0.0,
+        match self.status() {
+            Status::Stopped => 0.0,
+            _ => self.head.progress(),
         }
     }
 
     /// The gauge's title, termusic's.
     pub fn progress_title(self) -> String {
         format!(
-            " Status: {} | Volume: {} | Speed: {:^.1} | Gapless: {} ",
-            self.status.get(),
+            "Status: {} | Volume: {} | Speed: {:^.1} | Gapless: {}",
+            self.status(),
             self.volume.get(),
             self.speed.get() as f32 / 10.0,
             if self.gapless.get() { "True" } else { "False" },
@@ -866,7 +849,7 @@ impl Player {
             (p.len(), total)
         });
         format!(
-            "─ Playlist ──┤ Total {n} tracks | {} | Mode: {} ├─",
+            "Playlist ──┤ Total {n} tracks | {} | Mode: {} ├─",
             fmt_short(total),
             self.mode.get().symbol()
         )
@@ -874,20 +857,16 @@ impl Player {
 
     pub fn lyric_title(self) -> String {
         match self.playing() {
-            Some(track) if self.status.get() != Status::Stopped => {
-                format!(
-                    " Lyrics of {:^.20} - {:^.20} ",
-                    track.artist(),
-                    track.title()
-                )
+            Some(track) if self.status() != Status::Stopped => {
+                format!("Lyrics of {:^.20} - {:^.20}", track.artist(), track.title())
             }
-            _ => " No track is playing ".into(),
+            _ => "No track is playing".into(),
         }
     }
 
     /// The lines of the lyrics pane: the captions, or what stands in.
     pub fn lyric_lines(self) -> Vec<String> {
-        if self.status.get() == Status::Stopped {
+        if self.status() == Status::Stopped {
             return vec!["Stopped.".into()];
         }
         self.lyrics.with(|l| match l {
@@ -901,22 +880,10 @@ impl Player {
     }
 
     pub fn playlist_rows(self) -> Vec<Vec<String>> {
-        let (cursor, current) = (self.cursor.get(), self.current.get());
         self.playlist.with(|p| {
             p.iter()
-                .enumerate()
-                .map(|(i, t)| {
-                    // termusic's first column: the highlight symbol on the
-                    // cursor, over the playing track's ►.
-                    let mark = if i == cursor {
-                        "🚀"
-                    } else if Some(i) == current {
-                        "►"
-                    } else {
-                        ""
-                    };
+                .map(|t| {
                     vec![
-                        mark.into(),
                         t.duration_cell(),
                         format!("[b]{}[/]", rich::markup::escape(t.title())),
                         rich::markup::escape(t.artist()),
@@ -945,25 +912,16 @@ impl Player {
 // The view.
 // ---------------------------------------------------------------------------
 
-/// A pane with a rounded border and a title that follows state: the
-/// panel's title is fixed when built, so the title is a text laid over
-/// the border's top row.
-fn titled(body: Node, align: Align, title: impl Fn() -> String + 'static) -> Node {
-    layers([
-        body.panel(""),
-        text(move || rich::markup::escape(&title()))
-            .no_wrap()
-            .place(align, Align::Start)
-            .inset(0, 1, 0, 1),
-    ])
-}
-
 fn library_view(m: Player) -> Node {
-    let tree = tree_with(
+    // Enter and Space go to the bindings: open a folder as the root, and
+    // pause.
+    let tree = tree_keyed(
         move || vec![m.library.with(Entry::item)],
-        m.tree_at,
+        m.selected,
         m.expanded,
     )
+    .tree_keys(TreeKeys::default().no_toggle())
+    .symbol("🦄")
     .theme_styles([
         ("selected", "bold bright_yellow"),
         ("tree.selected", "bright_yellow"),
@@ -1033,34 +991,28 @@ fn library_view(m: Player) -> Node {
                 "The tag editor needs a tag writer",
             );
         })
-    });
-    // Enter and Backspace before the tree's own Enter (which toggles).
-    titled(tree, Align::Start, || " Library ".into())
-        .previews_keys()
-        .section("Library", |node| {
-            node.bind("enter", "Open sub directory as root", move |_| {
-                match m.selected() {
-                    Some(e) if e.is_dir && m.tree_at.get_untracked().len() > 1 => {
-                        m.show_dir(e.path, None)
-                    }
-                    Some(e) if !e.is_dir => {
-                        m.queue(vec![e.path]);
-                    }
-                    _ => {}
+        .bind("enter", "Open sub directory as root", move |_| {
+            match m.selected() {
+                Some(e) if e.is_dir && !m.top_selected() => m.show_dir(e.path, None),
+                Some(e) if !e.is_dir => {
+                    m.queue(vec![e.path]);
                 }
-            })
-            .bind("backspace", "Go back to parent directory", move |_| {
-                let top = m.top.get_untracked();
-                if let Some(parent) = top.parent() {
-                    m.show_dir(parent.to_path_buf(), Some(&top));
-                }
-            })
+                _ => {}
+            }
         })
+        .bind("backspace", "Go back to parent directory", move |_| {
+            let top = m.top.get_untracked();
+            if let Some(parent) = top.parent() {
+                m.show_dir(parent.to_path_buf(), Some(&top));
+            }
+        })
+    });
+    tree.panel("Library")
 }
 
 fn delete(m: Player, cx: &mut Ctx) {
     let Some(entry) = m.selected() else { return };
-    if m.tree_at.get_untracked().len() < 2 {
+    if m.top_selected() {
         return;
     }
     let what = entry.path.clone();
@@ -1085,7 +1037,7 @@ fn delete(m: Player, cx: &mut Ctx) {
                     for i in gone {
                         m.remove(i);
                     }
-                    m.rescan(what.parent());
+                    m.rescan();
                 }
                 Err(e) => cx.notify(Level::Error, "Error", format!("Delete failed: {e}")),
             }
@@ -1112,7 +1064,8 @@ fn paste(m: Player, cx: &mut Ctx) {
                     t.path = to.clone();
                 }
             });
-            m.rescan(Some(&to));
+            m.rescan();
+            m.locate(&to);
         }
         Err(e) => cx.notify(Level::Error, "Error", format!("Paste failed: {e}")),
     }
@@ -1120,80 +1073,77 @@ fn paste(m: Player, cx: &mut Ctx) {
 
 fn playlist_view(m: Player) -> Node {
     let columns = vec![
-        Column::new("", Size::Fixed(2)),
         Column::new("Duration", Size::Fixed(9)),
         Column::new("Title", Size::Flex(1)).min(10),
         Column::new("Artist", Size::Flex(1)).min(10),
         Column::new("Album", Size::Flex(1)).min(10),
     ];
-    let table = table_with(
-        columns,
-        move || m.playlist_rows(),
-        m.cursor,
-        TableOptions::default(),
-    )
-    .theme_styles([("selected", "bold bright_yellow"), ("table.header", "bold")])
-    .name("Playlist")
-    .section("Playlist", |node| {
-        node.bind("l", "Play selected", move |cx| {
-            m.play(m.cursor.get_untracked(), cx)
-        })
-        .bind("d", "Delete one track from playlist", move |_| {
-            m.remove(m.cursor.get_untracked())
-        })
-        .bind("D", "Delete all tracks from playlist", move |_| m.clear())
-        .bind("r", "Randomize playlist", move |_| m.shuffle())
-        .bind("m", "Loop mode cycle", move |cx| {
-            m.mode.update(|mode| *mode = mode.cycle());
-            cx.toast(format!("Loop mode: {}", m.mode.get_untracked().text()));
-        })
-        .bind("/", "Search in playlist", move |cx| {
-            search(m, cx, Source::Playlist)
-        })
-        .bind("K", "Swap track up in playlist", move |_| m.swap(-1))
-        .bind("J", "Swap track down in playlist", move |_| m.swap(1))
-        .bind("s", "Select random tracks to playlist", move |cx| {
-            let mut all = m.library.with(Entry::tracks);
-            let mut picked = Vec::new();
-            while !all.is_empty() && picked.len() < RANDOM_TRACKS {
-                picked.push(all.remove(m.random(all.len())));
-            }
-            let n = m.queue(picked);
-            cx.toast(format!("{n} random tracks added"));
-        })
-        .bind("S", "Select random album to playlist", move |cx| {
-            let albums: Vec<Vec<PathBuf>> = m
-                .library
-                .with(|l| l.albums().iter().map(|a| a.tracks()).collect());
-            if !albums.is_empty() {
-                let n = m.queue(albums[m.random(albums.len())].clone());
-                cx.toast(format!("{n} tracks of an album added"));
-            }
-        })
-        .bind("comma", "Open sort popup menu", |cx| {
-            cx.notify(
-                Level::Warn,
-                "Not in this clone",
-                "The sort menu sorts by tags",
-            );
-        })
+    // termusic's first column: the highlight symbol on the cursor, over
+    // the playing track's ►.
+    let symbols = TableOptions::default().symbol_for(3, move |i, selected| match selected {
+        true => Some("🚀".into()),
+        false => (m.current.get() == Some(i)).then(|| "►".into()),
     });
-    titled(table, Align::Start, move || m.playlist_title())
+    let table = table_with(columns, move || m.playlist_rows(), m.cursor, symbols)
+        .theme_styles([("selected", "bold bright_yellow"), ("table.header", "bold")])
+        .name("Playlist")
+        .section("Playlist", |node| {
+            node.bind("l", "Play selected", move |cx| {
+                m.play(m.cursor.get_untracked(), cx)
+            })
+            .bind("d", "Delete one track from playlist", move |_| {
+                m.remove(m.cursor.get_untracked())
+            })
+            .bind("D", "Delete all tracks from playlist", move |_| m.clear())
+            .bind("r", "Randomize playlist", move |_| m.shuffle())
+            .bind("m", "Loop mode cycle", move |cx| {
+                m.mode.update(|mode| *mode = mode.cycle());
+                cx.toast(format!("Loop mode: {}", m.mode.get_untracked().text()));
+            })
+            .bind("/", "Search in playlist", move |cx| {
+                search(m, cx, Source::Playlist)
+            })
+            .bind("K", "Swap track up in playlist", move |_| m.swap(-1))
+            .bind("J", "Swap track down in playlist", move |_| m.swap(1))
+            .bind("s", "Select random tracks to playlist", move |cx| {
+                let mut all = m.library.with(Entry::tracks);
+                let mut picked = Vec::new();
+                while !all.is_empty() && picked.len() < RANDOM_TRACKS {
+                    picked.push(all.remove(m.random(all.len())));
+                }
+                let n = m.queue(picked);
+                cx.toast(format!("{n} random tracks added"));
+            })
+            .bind("S", "Select random album to playlist", move |cx| {
+                let albums: Vec<Vec<PathBuf>> = m
+                    .library
+                    .with(|l| l.albums().iter().map(|a| a.tracks()).collect());
+                if !albums.is_empty() {
+                    let n = m.queue(albums[m.random(albums.len())].clone());
+                    cx.toast(format!("{n} tracks of an album added"));
+                }
+            })
+            .bind("comma", "Open sort popup menu", |cx| {
+                cx.notify(
+                    Level::Warn,
+                    "Not in this clone",
+                    "The sort menu sorts by tags",
+                );
+            })
+        });
+    table.panel_with(move || rich::markup::escape(&m.playlist_title()))
 }
 
 /// The cover, over the playlist's bottom right corner as termusic draws it
 /// (its default place: the right edge, three quarters down).
 fn art_view(m: Player) -> Node {
-    switch(
+    keyed(
         move || m.art.get(),
         move |art| {
-            if !art.shown {
-                return label("");
-            }
             let view = ImageView::new().fit(ImageFit::Contain);
             let cover = image_of(
                 move || {
-                    if m.status.get() == Status::Stopped {
+                    if m.status() == Status::Stopped {
                         return None;
                     }
                     m.playing().and_then(|t| cover_for(&t.path))
@@ -1208,6 +1158,7 @@ fn art_view(m: Player) -> Node {
             ])
         },
     )
+    .shown_when(move || m.art.with(|a| a.shown))
     // Inside the playlist's border, at its bottom right.
     .place(Align::End, Align::End)
     .inset(1, 1, 1, 1)
@@ -1220,14 +1171,18 @@ fn progress_view(m: Player) -> Node {
             .style("white")
             .height(1)
     });
-    titled(gauge, Align::Center, move || m.progress_title())
+    gauge
+        .panel_with(move || rich::markup::escape(&m.progress_title()))
+        .title_align(Align::Center)
 }
 
 fn lyric_view(m: Player) -> Node {
     let lines = list(move || m.lyric_lines(), m.lyric_at)
         .theme_styles([("selected", "bold bright_yellow")])
         .name("Lyrics");
-    titled(lines, Align::Center, move || m.lyric_title())
+    lines
+        .panel_with(move || rich::markup::escape(&m.lyric_title()))
+        .title_align(Align::Center)
 }
 
 fn footer() -> Node {
@@ -1424,7 +1379,9 @@ fn global_keys(m: Player, node: Node) -> Node {
         node.bind("q esc", "Exit", |cx| {
             cx.confirm("Are sure you want to quit?", "", Vec::new(), |cx| cx.quit())
         })
-        .bind("ctrl+h", "Help", |cx| cx.help())
+        .bind("ctrl+h", "Help", |cx| {
+            cx.help_with(HelpOptions::new().all_panes(true))
+        })
         .bind("space", "Pause current track", move |cx| m.toggle(cx))
         .bind("n", "Next track", move |cx| m.next(cx, false))
         .bind("N", "Previous track", move |cx| m.previous(cx))
@@ -1435,17 +1392,15 @@ fn global_keys(m: Player, node: Node) -> Node {
             m.volume.update(|v| *v = v.saturating_sub(5))
         })
         .bind("0", "Restart current track", move |_| {
-            if m.status.get_untracked() != Status::Stopped {
-                m.pos.set(Duration::ZERO)
-            }
+            m.head.seek(Duration::ZERO)
         })
         .bind("f", "Seek forward 5 seconds", move |_| m.seek(true))
         .bind("b", "Seek backward 5 seconds", move |_| m.seek(false))
         .bind("ctrl+f", "Playback speed up 10 percent", move |_| {
-            m.speed.update(|s| *s = (*s + 1).min(30))
+            m.set_speed(m.speed.get_untracked() + 1)
         })
         .bind("ctrl+b", "Playback speed down 10 percent", move |_| {
-            m.speed.update(|s| *s = (*s - 1).max(1))
+            m.set_speed(m.speed.get_untracked() - 1)
         })
         .bind("ctrl+g", "Toggle gapless playback", move |_| {
             m.gapless.update(|g| *g = !*g)
@@ -1514,10 +1469,11 @@ fn lyric_offset(m: Player, cx: &mut Ctx, by: i64) {
 pub fn music_app_seeded(root: PathBuf, seed: u64) -> App {
     App::new(move || {
         let m = Player::new(root, seed);
-        every(TICK, move |cx| m.tick(cx));
+        // The end of a track goes on by the loop mode.
+        m.head.on_end(move |cx| m.next(cx, true));
         // The lyric line follows playback.
         let line = memo(move || {
-            let pos = m.pos.get();
+            let pos = m.head.position();
             m.lyrics.with(|l| l.as_ref().and_then(|l| l.index_at(pos)))
         });
         watch(

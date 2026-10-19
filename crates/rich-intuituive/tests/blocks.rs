@@ -388,3 +388,48 @@ fn level_colours_change_and_the_board_is_drawn_in_them() {
     };
     assert_ne!(styled(0), styled(1));
 }
+
+#[test]
+fn held_arrows_repeat_at_the_nes_rates_where_releases_come() {
+    use intuituive::interact::{Event, Key, Releases};
+    let mut driver = driver(Game::new(seed_for(Kind::O), None));
+    driver.set_releases(Releases::ExceptText);
+    driver.press("space");
+    let col = |d: &Driver| field(d)[1].chars().position(|c| c == '█').unwrap();
+    let start = col(&driver);
+    // At once, then after 16 frames, then every 6 (DAS and ARR).
+    driver.press("right");
+    assert_eq!(col(&driver), start + 2);
+    driver.advance(Duration::from_millis(17 * 16 - 1));
+    assert_eq!(col(&driver), start + 2, "not before the delay");
+    driver.advance(Duration::from_millis(1));
+    assert_eq!(col(&driver), start + 4);
+    driver.advance(Duration::from_millis(17 * 6));
+    assert_eq!(col(&driver), start + 6);
+    // Let go, it stops.
+    driver.send(Event::KeyUp(Key::parse("right").unwrap()));
+    driver.advance(Duration::from_millis(500));
+    assert_eq!(col(&driver), start + 6);
+}
+
+#[test]
+fn a_stalled_loop_catches_up_on_gravity() {
+    // At level 29 a row falls every frame: ten frames late, ten rows.
+    let mut game = Game::new(seed_for(Kind::O), None);
+    game.level = 29;
+    let mut driver = driver(game);
+    driver.press("space");
+    assert_eq!(rows_with(&field(&driver), "██"), vec![0, 1]);
+    driver.update(frames(10));
+    driver.settle();
+    assert_eq!(rows_with(&field(&driver), "██"), vec![10, 11]);
+}
+
+#[test]
+fn the_backdrop_shows_round_the_screen() {
+    let mut driver = game_app(Game::new(1, None)).driver(W + 10, H + 4);
+    driver.settle();
+    let rows = rows(&driver);
+    assert!(rows[0].chars().all(|c| c == '▓'), "{}", dump(&driver));
+    assert!(rows[10].starts_with("▓▓▓▓▓ "), "{}", dump(&driver));
+}

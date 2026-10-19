@@ -176,3 +176,78 @@ client plugin with OAuth (the Web API), panes of results that fill as
 requests return (the core `resource_for` per pane, with a loading state),
 `image_from(bytes)` for covers fetched over the network, and an output
 device picker (`audio::picker` lists inputs only).
+
+## Round 2: rebuilt on rounds 5 and 6
+
+`examples/music.rs` went from 1,556 lines to 1,512, `tests/music.rs` from
+508 to 549 (17 tests to 20). All 17 earlier tests pass; one assertion
+changed (below).
+
+### Replaced by components
+
+| Before (hand-built) | Now | Component |
+|---|---|---|
+| A 100 ms `every` adding the speed's step to a `pos` signal, the end checked each tick, `seek` clamping by hand, a `status` signal kept in step | A play head: `play`, `toggle`, `seek`, `seek_by`, `set_rate` (the speed), `set_length` (each track's), `on_end` (the loop mode's next), `position()` and `progress()` for the gauge and the lyrics; `Status` is derived from the current track and `is_playing` | `transport` (round 5) |
+| `titled`: each pane a `layers` of an untitled panel and a `text` placed on its top row | The panel's own title, read again as state changes: the accessible name, lit with the focus | `panel_with`, `title_align` |
+| The tree selected and opened by index paths (`tree_at`, `expanded: HashSet<Vec<usize>>`), `Entry::at`/`locate`/`locate_path` walking for indices, selection reset after each rescan | The tree keyed by path: the selection stays on its entry across rescans (on the row in its place when the entry goes), `tree_reveal` locates a search result and the folder Backspace came from | `tree_keyed`, `TreeItem::keyed`, `tree_reveal` |
+| The library pane's `previews_keys` so Enter opens a folder as the root instead of toggling it | The tree leaves Enter and Space to the bindings | `Node::tree_keys(TreeKeys::default().no_toggle())` |
+| The playlist's first column a cell (`🚀`/`►`), so every cursor move rebuilt every row | A symbol column: 🚀 on the cursor, ► on the playing track; the rows no longer read the cursor | `TableOptions::symbol_for` |
+| The cover's `switch` on its place and size, keeping a page for every place it was ever moved to, and a blank `label` when hidden | One child rebuilt when the place changes, the old one dropped; hidden by state | `keyed`, `shown_when` |
+| The help of the focused pane's path only | Every pane's keys, by section, wherever the focus is | `HelpOptions::all_panes` |
+| (none: termusic's tree highlight symbol was missing) | 🦄 on the library's selected row, termusic's default | `Node::symbol` on trees |
+
+New tests: the help from the playlist lists the library's keys; at speed
+2.0 a four-second track ends after two; a deleted library entry leaves the
+cursor on the row in its place.
+
+**Changed look (test changed):** a panel's title sits a glyph in from the
+corner with a space each side (`╭─ Library ─`), where termusic's (ratatui's
+`Block::title`) sits at the corner (`╭ Library ─`). The playlist's title
+string starts `Playlist ──┤`, so its row reads as termusic's up to `├─`,
+then a space before the border goes on. `the_tree_view_layout` now
+expects `╭─ Library ─`; the other title assertions pass unchanged.
+
+### Still hand-built, and why
+
+- **The tag reader** (`riff_info`, WAV `INFO` with std), the `.lrc`
+  parser, the wildcard matcher, the library scan and natural order, the
+  m3u writer: domain code a plugin would hold (round 1's gaps).
+- **The playlist model** (current index kept through removes, swaps and
+  shuffles, next by loop mode): no queue component yet.
+- **The lyric line**: a `memo` on the play head and a `watch` writing the
+  list's cursor.
+- **The search pop-up**: a modal of an `input` over a `table_with`, with
+  the results as a memo.
+- **The footer**: termusic's five fixed hints; `key_hints_with` shows the
+  focused path's bindings, all of them (52 here), with no way to pick five
+  and name them.
+- **The cover's place**: a column of a row with blank `label`s for the
+  offsets, inside `.place(End, End).inset(1, 1, 1, 1)`.
+- **The progress gauge**: `renderable(FillGauge)`; there is no seekable
+  gauge node.
+
+### New gaps
+
+| Gap | Needed for | API sketch | Where |
+|---|---|---|---|
+| A panel title as ratatui draws it | termusic's titles at the corner, unpadded (`╭ Library ─`); every ratatui port's `Block::title(" X ")` | `.title_at_corner()` / `TitleLook::Ratatui` on a panel (no inset, no added spaces) | core (generic) |
+| A transport's status | `Status` (stopped, running, paused) is worked out from the current track and `is_playing`; a transport with no length set and at 0 cannot say "stopped" | `Transport::stop()` (pause and seek to 0, `is_stopped()`), or a `state()` of `Stopped`/`Playing`/`Paused` | core (generic) |
+| Key hints chosen by key | termusic's footer (`Help: <control+h> Config: <shift+C> …`), a fixed few of the app's bindings with their own short names | `key_hints_with(KeyHintsOptions::new().only(&[("ctrl+h", "Help"), ("C", "Config")]).format(..))` | core (generic) |
+| A tree reveal that also scrolls into view and is a method | `locate` builds the items again to pass `tree_reveal` a slice | `tree_keyed(..)` returning a handle with `.reveal(key)`, reading its own items | core (generic) |
+| Following a time | the lyric line's `memo` + `watch` from the play head to the list's cursor (round 1's) | `follow_time(\|\| cues, \|\| head.position()) -> Memo<Option<usize>>`, or `Transport::cue_index(&cues)` | core (generic) |
+
+### Bugs found
+
+None. (`transport`'s end on the app's clock, `tree_keyed` after a delete
+and `symbol_for` all behaved as documented under the driver.)
+
+### Components that would help
+
+| Component | What it would replace or enable | API sketch | Where | Value |
+|---|---|---|---|---|
+| Audio output and decoders (round 1's) | Sound; the play head would follow the sink | `audio::output`, `audio::decode(path)`, a player driving a `Transport` | plugin (`audio`) | high |
+| A tag reader (round 1's) | `riff_info`, tags from file names, embedded covers (`image_bytes_of` is ready for them) | `tags::read(path)` | plugin | high |
+| A playback queue (round 1's) | The playlist half of `Player` | `queue::<T>()` with `current`, `next(Repeat)`, `remove`, `swap`, `shuffle` | core (generic) | medium |
+| A seekable gauge | `renderable(FillGauge)` and its label; seeking by a click | `gauge(\|\| ratio).label(..).on_seek(..)` | core (generic) | medium |
+| Ratatui-style titles | The one look difference left | see the gap | core (generic) | medium |
+| Chosen key hints | The footer's hand-written markup | see the gap | core (generic) | low |

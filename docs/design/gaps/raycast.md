@@ -169,3 +169,94 @@ that crate is the pixel surface above. Textual's `textual-image` does the
 same for Textual; Bubble Tea has no pixel widget. None of them reports key
 releases without the kitty protocol; terminal games everywhere latch
 presses as this one does.
+
+## Round 2: rebuilt on round 6
+
+The example went from 2,924 lines to 2,891 (`main.rs` 676 → 662, `view.rs`
+295 → 276; `game.rs`, `art.rs` and `render.rs` unchanged), and
+`tests/raycast.rs` from 593 lines to 652 (26 tests to 28). Two bugs found
+while recording it are fixed in the example, each with a test that fails
+on round 1's code.
+
+### Bugs fixed (example bugs, not library ones)
+
+- **Kitty mode showed nothing.** The image is placed at a z below -2^30,
+  which Kitty draws under every cell that has a background colour, and
+  the root's `.style("on #101018")` gave every cell of the view one. The
+  z is right (the level's name over the view, in a box with a background,
+  still covers the image); the background moved from the root to the
+  status bar, so the view's cells keep the terminal's own. The map's
+  panel takes `on #101018` itself. Test:
+  `the_kitty_view_keeps_the_terminals_background` (no background in the
+  view's rows but the level-name box; the status bar keeps it).
+- **An arrow counted as held only after the app had seen a release for
+  it**, so until then each press was latched for 8 tics. A movement key
+  is now held from its first press wherever its release will be reported
+  (`cx.key()` and `cx.releases_reported().reported(&key)`), until its
+  `on_key_up`; where none will come (a legacy terminal, or a letter
+  without every key reported) it is latched as before, the terminal's
+  repeats extending it. The app asks for every key (`App::all_keys`), so
+  under the kitty protocol W/A/S/D are held too, and Shift let go stops
+  running (`on_key_up("shift")`). Tests:
+  `a_key_whose_release_is_reported_is_held_from_its_first_press` (replaces
+  `a_key_seen_let_go_is_held_until_it_is_released`, whose behaviour was
+  the bug) and `with_every_key_reported_letters_are_held_and_shift_runs`.
+
+### Replaced by components
+
+| Before (hand-built) | Now | Component |
+|---|---|---|
+| `every(TIC)` plus `Instant` bookkeeping to run the tics owed (five at most), off under tests because a timer handler had no clock | A fixed step of a tic, five at most after a stall, exact under `Driver::advance`; the `realtime` option is gone | `fixed_step`, `Timer::max_catch_up` |
+| Releases heard by the view widget's `event` (`WidgetEvent::KeyUp`), a `Releasing` set of keys seen let go | `on_key_up` per key on the root; which releases come from the terminal | `Node::on_key_up`, `Ctx::key`, `Ctx::releases_reported`, `App::all_keys` |
+| The view drawing rs-rich-art `ImageArt` on its canvas (a copy into an `RgbImage`, half blocks, quadrants or Braille), with a dithering pass for Braille | A `pixels_fit` node, its `PixelMode` by the view's mode, filled from the frame | `pixels::pixels_fit`, `Node::pixel_mode` (cells written with `put_rgb`) |
+| A `RectHandle` made before the view for its own rectangle | `cx.rect()` in the pixel view's `draw` | `DrawCx::rect` |
+| One view widget switching between cells and an image by `covered`, clearing the picture by hand | `keyed` on `covered`: the cells node or the pixel view, whose `on_unmount` takes the picture down | `keyed`, `Node::on_unmount` |
+| The face as a `renderable` of `ImageArt` | `pixels(10, 6, ..)` | `pixels::pixels` |
+
+The test suite runs in about half the time (2 s instead of 4.5 s in a
+debug build), the cells now going through the pixel path.
+
+**Changed look:** Braille is now drawn in two colours a cell (the
+`pixels` node's) instead of a dithered black and white; shapes read as
+before and the scene keeps its colours.
+
+### Still hand-built, and why
+
+- **The pixel view and its `PlacementSource`** (`view::Pixels`, the PNG
+  encoding and the Kitty and iTerm2 escapes): the `pixels` node draws cells
+  only; the `art` plugin's `image_bytes_of` draws Kitty (by placeholders),
+  Sixel and iTerm2 but takes encoded image bytes and is not built for 35
+  new pictures a second.
+- **The latch** in `game.rs` (`Held`, `FIRST_LATCH`, `REPEAT_LATCH`) for
+  keys whose release will not come. `held_keys()` holds only keys whose
+  release is known (or made up by `synthesize_releases`, whose `hold` must
+  outlast the terminal's repeat delay, about 500 ms, far too long for a tap
+  in a game), so the model keeps both kinds in one place.
+- **Pausing** is still the model's flag: the modal's screen keeps the
+  game's timer, so `Timer::pause` would only save the stepping it does
+  not do.
+- **The bench**'s frame count and first-frame `Instant` (it counts frames
+  rendered from the first one, which `StatsHandle` does not).
+
+### New gaps
+
+| Gap | Needed for | API sketch | Where |
+|---|---|---|---|
+| Held keys that fall back on a latch | A key held where its release is known, and held for a few ticks a press (extended by each repeat) where it is not: the model's `Held` and the press/release bindings | `held_keys_with(Unreported::Latch { first: ms(230), repeat: ms(140) })`, so `cx.is_held("w")` is right on every terminal | core (generic) |
+| A pixel buffer that shows real pixels | The view's PNG encoding, `PlacementSource`, Kitty z-order and iTerm2 escapes, and the switch to cells under an overlay | `pixels_fit(..).graphics(Graphics::Auto)`: Kitty, Sixel or iTerm2 where the terminal has them, cells where something covers it | plugin (`art`), on the core's graphics placement |
+| Copying a frame into a `PixelBuf` | The loop from RGB bytes into RGBA, twice (the view and the face) | `PixelBuf::copy_rgb(width, height, &bytes)` (scaled or clipped) | core (generic) |
+| Kitty's z-order and backgrounds | The bug above is easy to make: any style on an ancestor puts a background under the image and hides it, with no warning | the graphics placement told which cells under it have a background (debug-build warning), or an `App::graphics` option that places at a z above backgrounds and clips at the layers over it | core (`App::graphics`) |
+
+### Bugs found in the library
+
+None this round. (`App::all_keys` and the release bindings worked as the
+guide says; the driver's `set_releases` made both fixes testable.)
+
+### Components that would help
+
+| Component | What it would replace or enable | API sketch | Where | Value |
+|---|---|---|---|---|
+| Real pixels on the `pixels` node | `view.rs`'s encoder and placement source (most of what is left of it) | see the gap | plugin (`art`) | high |
+| Latching held keys | `Held` in `game.rs` and the bindings round it | see the gap | core | high |
+| Sound effects (round 1's) | Shots, doors, pickups | `audio::sfx(bytes).play()` | plugin (`audio`) | medium |
+| Mouse-look (round 1's) | Turning with the mouse | relative motion (SGR pixels), pointer capture | core | low |
