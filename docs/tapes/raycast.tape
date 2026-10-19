@@ -3,12 +3,22 @@
 # cell. The title over the first level turning slowly; the start, the map
 # (Tab), the keys (?) and the pause menu (Esc), each taken before the
 # player moves, so their text is the same on every run (the time and the
-# frame rate are masked). Then a walk east to the door, Space to open it,
-# and shots at the sentry behind it as it comes (in the cast and the GIF
-# only: the fight runs on the wall clock, so it varies from run to run).
+# frame rate are masked). Then a walk-through played with held keys: east
+# to the door, Space to open it, the sentry behind it shot as it comes,
+# on through the hall to the second door, the guard behind that one shot,
+# and the ammo beyond it picked up. The fight runs on the game's clock, so
+# the video varies a little from run to run; the stills do not.
+#
+# Recorded at 35 frames a second, every frame the game draws, with the
+# kitty keyboard protocol reported, so the arrows' releases reach the game
+# and a held arrow walks as long as it is held.
 Set Title "rs-rich raycaster · a ray caster on intuiTUIve"
 Set Size 100x30
 Set TypingDelay 60ms
+Set Framerate 35
+Set FontSize 10
+Set KittyKeyboard on
+Output gif apng png svg
 Mask /\s+\d+ fps/ " NN fps"
 Mask /\d+:\d\d/ "N:NN"
 Hide
@@ -24,7 +34,7 @@ Sleep 2s
 Screenshot title
 Enter
 Wait /Kills 0\/4/
-Sleep 4s
+Sleep 3s
 Screenshot start
 Tab
 Wait /Map/
@@ -43,17 +53,28 @@ Sleep 300ms
 Screenshot paused
 Escape
 Sleep 500ms
-Type "wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww"
-Sleep 400ms
+# The walk-through, facing east all the way: both doors and both guards
+# are on the row the player starts on, so each guard comes through its
+# doorway into the line of fire, and a closed door stops the walk in front
+# of it. The trigger is held until the first guard is down, and for five
+# and a half seconds at the second (a Wait there would fail the run when
+# the guard hangs back), by when the door has begun to close again, so
+# Space opens it once more.
+Hold Up 2s
+Space
+KeyDown f
+Wait /Kills 1\/4/ 20s
+KeyUp f
+Hold Up 3s
+Space
+KeyDown f
+Sleep 5500ms
+KeyUp f
 Space
 Sleep 1500ms
-Type "f"
-Sleep 600ms
-Type "f"
-Sleep 600ms
-Type "f"
-Sleep 600ms
-Type "f"
+Hold Up 1500ms
+Hold Alt+Left 340ms
+Hold Up 1500ms
 Sleep 1500ms
 Escape
 Wait /Paused/

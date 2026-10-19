@@ -1939,15 +1939,28 @@ pub(crate) fn spec() -> CommandSpec {
     spec.subcommand(
         CommandSpec::new("record")
             .about(
-                "Run tapes (scripted terminal sessions: type, press keys, wait for screen text, \
-                 take screenshots) in a real terminal and write PNG, SVG and text screenshots, an \
-                 asciinema cast, a GIF, an MP4 (with FFmpeg) and an HTML page with a player; \
-                 --check compares screenshots with committed ones instead",
+                "Run tapes (scripted terminal sessions: type, press and hold keys, wait for \
+                 screen text, take screenshots) in a real terminal and write PNG, SVG and text \
+                 screenshots, an asciinema cast, a GIF, an animated PNG, an MP4 (with FFmpeg) and \
+                 an HTML page with a player; video has every screen update at the tape's frame \
+                 rate, and Kitty, Sixel and iTerm2 images; --check compares screenshots with \
+                 committed ones instead",
             )
             .usage(
                 "record [--check] [--output DIR] [--bin-dir DIR] \
-                 [--format png,svg,cast,gif,mp4,html] [--no-video] [--font FILE] \
+                 [--format png,svg,cast,gif,apng,mp4,html] [--no-video] [--fps N] [--font FILE] \
                  [--window-frame on|off] [--caption TEXT] [--key-overlay on|off] TAPE...",
+            )
+            .section(
+                "Tapes",
+                "- Set Framerate N: video frames a second, 1 to 60 (12); --fps overrides it\n\
+                 - Set FontSize N: the text size of video frames, in pixels (16)\n\
+                 - KeyDown KEY, KeyUp KEY: hold a key (Up, Ctrl+F, or one character) down, let \
+                 it go; it autorepeats meanwhile (Set KeyRepeat DELAY INTERVAL, 200ms 33ms)\n\
+                 - Hold KEY DURATION: KeyDown, wait, KeyUp\n\
+                 - Set KittyKeyboard on: report the kitty keyboard protocol, so a program can \
+                 turn it on and hear releases\n\
+                 - Output apng: an animated PNG beside (or instead of) the GIF",
             ),
     )
     .subcommand(
