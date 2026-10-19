@@ -46,3 +46,19 @@ Each on its own local branch; pushed as a backup branch named
    found; then rebuild all eleven clones on them.
 3. Release bumps owed on main once the 0.0.19 cohort is out: web, data and
    cli changed since 2fc9772.
+
+## Round 6 (fix round), started
+
+Brief: `/home/user/apps/R6BRIEF.md` in the session (its rules: regression
+test first, generic core, stay in your area). Areas, each on its own branch:
+
+| Agent | Branch | Area |
+|---|---|---|
+| A | `r6-render` | style table growth and per-frame clone, fast interning, `put_rgb` pixel cells, public `DrawCx::rect()` (later: Kitty/Sixel/iTerm2 from the `pixels` node) |
+| B | `r6-input` | one input event per frame, keys lost at start-up, Shift+arrows swallowed, `Driver::event` settling; key state and releases, kitty flag 8, repeat control, timers with a handle and catch-up, frame pacing and stats |
+| C | (next) | panel titles/borders from state, `shown_when`/`size_with`, focus scopes, `keyed`, `.auto()` switch sizes, layer over fill, spatial focus, treemap, `App::min_size`, longest-fit text, `key_hints_with`, whole-app help |
+| D | (next) | reactive tables and columns, marker column, keyed cursor, offset, percent widths, row heights, keyed tree with reveal, list ranges |
+| E | (next) | completion, ghost text, history, command line, query language, natural dates, calendar options |
+| F | (next) | port `Text.markup` with goldens; the template manifest noise for git dependencies |
+
+Then every clone is rebuilt on the fixes.
