@@ -22,6 +22,12 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   another commit that the remote does not have (a remote tag deleted by
   hand leaves one) was never released, so it is replaced too, where it
   stopped with "delete it first".
+- **`release_cohort.py tag --from <package or tag>`** starts later in
+  `RELEASES.toml`'s order and leaves the packages before it alone. It
+  refuses, before tagging anything, when a later crate depends on one of
+  them at a version not yet on crates.io, naming each, since that crate's
+  publish would fail. Without it, `tag` already begins at the first
+  unpublished package.
 
 ### Releases: tag from the local checkout; versions after a split cohort
 
