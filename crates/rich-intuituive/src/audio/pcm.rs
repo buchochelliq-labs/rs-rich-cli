@@ -1,6 +1,7 @@
 //! Raw PCM: interleaved samples in a byte stream, read a buffer at a time.
 
 use std::io::Read;
+use std::time::Duration;
 
 use super::Matrix;
 
@@ -152,6 +153,58 @@ pub struct Pcm<R> {
     format: Format,
     channels: usize,
     bytes: Vec<u8>,
+}
+
+impl<R> Pcm<R> {
+    /// The rows each buffer has.
+    pub fn channels(&self) -> usize {
+        self.channels
+    }
+
+    /// The samples each row of a buffer has.
+    pub fn buffer(&self) -> usize {
+        self.bytes.len() / self.channels / self.format.bytes()
+    }
+}
+
+/// Play `pcm`'s buffers onto a signal at `rate` samples a second, a
+/// buffer's worth of time apart (the first at once), and then silence on
+/// the same beat, as a file played to a scope (scope-tui's `file` source
+/// pads with silence): the core's [`latest_iter`](crate::latest_iter)
+/// with [`Pace::Every`](crate::Pace::Every). In an app that
+/// [waits for its tasks](crate::App::wait_for_tasks) it keeps to the
+/// app's clock. The reader is read on the signal's thread.
+///
+/// ```
+/// use intuituive::audio::{pcm, play, Format};
+/// use intuituive::prelude::*;
+/// use std::time::Duration;
+///
+/// // Two mono u8 buffers of two samples at 100 Hz: 20 ms each.
+/// let bytes = std::io::Cursor::new(vec![255u8, 255, 0, 0]);
+/// let app = App::new(move || {
+///     let samples = play(pcm(bytes, Format::U8, 1, 2), 100);
+///     text(move || format!("{:?}", samples.with(|m| m.as_ref().map(|m| m[0][0]))))
+/// })
+/// .wait_for_tasks(true);
+/// let mut driver = app.driver(20, 1);
+/// driver.advance(Duration::from_millis(10));
+/// assert_eq!(driver.screen().plain()[0].trim_end(), "Some(0.9921875)");
+/// driver.advance(Duration::from_millis(20));
+/// assert_eq!(driver.screen().plain()[0].trim_end(), "Some(-1.0)");
+/// driver.advance(Duration::from_millis(20));
+/// // Then silence, buffers of the same shape.
+/// assert_eq!(driver.screen().plain()[0].trim_end(), "Some(0.0)");
+/// ```
+///
+/// # Panics
+/// Outside a running or building app.
+#[track_caller]
+pub fn play<R: Read + Send + 'static>(pcm: Pcm<R>, rate: u32) -> crate::Signal<Option<Matrix>> {
+    let frames = pcm.buffer() as f64;
+    let period = Duration::from_secs_f64(frames / f64::from(rate.max(1)));
+    let silence = vec![vec![0.0; pcm.buffer()]; pcm.channels()];
+    crate::latest_iter(pcm, crate::Pace::Every(period)).then(std::iter::repeat(silence))
 }
 
 impl<R: Read> Iterator for Pcm<R> {

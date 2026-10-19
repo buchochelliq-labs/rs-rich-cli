@@ -743,9 +743,9 @@ pub fn scope_app(options: Options, input: Input) -> App {
                 watch(
                     move || status.get(),
                     |status, cx| match status {
-                        audio::AudioStatus::Stalled(_) => cx.fail(STALLED),
-                        audio::AudioStatus::Failed(why) => cx.fail(why),
-                        audio::AudioStatus::Running => {}
+                        intuituive::FeedState::Stalled(_) => cx.fail(STALLED),
+                        intuituive::FeedState::Failed(why) => cx.fail(why),
+                        intuituive::FeedState::Running | intuituive::FeedState::Ended => {}
                     },
                 );
                 rate(samples)

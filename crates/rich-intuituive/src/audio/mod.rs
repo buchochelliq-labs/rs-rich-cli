@@ -7,9 +7,15 @@
 //! each sample from -1 to 1. What the `pcm` feature brings:
 //!
 //! - [`pcm`] reads interleaved PCM (`s16le`, `f32le`, …, as `parec` and
-//!   `arecord` write it) from a file, a pipe or stdin, a buffer at a time.
+//!   `arecord` write it) from a file, a pipe or stdin, a buffer at a time,
+//!   and [`play`] plays its buffers onto a signal at the sample rate, then
+//!   silence (on the core's [`latest_iter`](crate::latest_iter)).
 //! - [`Frame`] is a buffer with its number, the shape a capture's signal
 //!   holds.
+//! - [`Capture::simulated`] is a capture with no sound card: buffers a
+//!   period apart, which a test can [`stall`](Capture::stall) and
+//!   [`fail`](Capture::fail), so what an app does on a stall or a failure
+//!   is tested in any build.
 //!
 //! Behind the off-by-default `audio` feature, on
 //! [cpal](https://docs.rs/cpal) (ALSA on Linux, CoreAudio on macOS, WASAPI
@@ -25,8 +31,9 @@
 //!   replaces it, so a slow frame drops buffers instead of falling behind.
 //! - [`open`] does the same before an app exists, so a missing device
 //!   fails before the terminal is taken, and gives a [`Capture`] with a
-//!   [`status`](Capture::status) signal ([`AudioStatus`]: running,
-//!   stalled since an instant, or failed) to end the app on.
+//!   [`status`](Capture::status) signal (the core's
+//!   [`FeedState`](crate::FeedState): running, stalled since a time on the
+//!   app's clock, failed, or ended once stopped) to end the app on.
 //! - [`devices`] lists the inputs by [`Device`] (an id to open, a name to
 //!   show), [`Device::configs`] what each can do, and [`picker`] is a list
 //!   to choose one in the app.
@@ -71,6 +78,7 @@ use std::fmt;
 mod alsa;
 #[cfg(feature = "audio")]
 mod capture;
+mod live;
 mod pcm;
 #[cfg(feature = "audio")]
 mod picker;
@@ -79,10 +87,10 @@ mod wav;
 
 #[cfg(feature = "audio")]
 pub use capture::{
-    devices, devices_on, input, messages, open, AudioOptions, AudioStatus, Capture, Device,
-    DeviceConfig, Host,
+    devices, devices_on, input, messages, open, AudioOptions, Device, DeviceConfig, Host,
 };
-pub use pcm::{deinterleave, pcm, Format, Pcm};
+pub use live::Capture;
+pub use pcm::{deinterleave, pcm, play, Format, Pcm};
 #[cfg(feature = "audio")]
 pub use picker::picker;
 #[cfg(feature = "wav")]

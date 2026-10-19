@@ -1,16 +1,16 @@
 //! Capturing from a sound card into signals, through cpal: the devices,
-//! their configurations, and a capture with its status.
+//! their configurations, and opening a [`Capture`] on one.
 
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::{mpsc, Arc, Mutex};
-use std::time::{Duration, Instant};
+use std::sync::atomic::Ordering;
+use std::sync::{mpsc, Arc};
+use std::time::Duration;
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{FromSample, SampleFormat, SizedSample};
 
-use super::{error, AudioError, Frame, Matrix};
-use crate::log::Log;
-use crate::reactive::{signal, Proxy, Runtime, Signal};
+use super::live::Shared;
+use super::{error, AudioError, Capture, Frame, Matrix};
+use crate::reactive::{Runtime, Signal};
 
 /// The sound system a device is reached through.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
@@ -256,259 +256,11 @@ impl AudioOptions {
     }
 
     /// How long without a buffer before the [`status`](Capture::status)
-    /// says [`AudioStatus::Stalled`] (default a second): the `--timeout`
-    /// of a scope.
+    /// says [`FeedState::Stalled`](crate::FeedState::Stalled) (default a
+    /// second, on the app's clock): the `--timeout` of a scope.
     pub fn stall_after(mut self, quiet: Duration) -> Self {
         self.stall = quiet.max(Duration::from_millis(1));
         self
-    }
-}
-
-/// How a capture is going.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum AudioStatus {
-    /// Buffers are arriving (or the stream has just started).
-    Running,
-    /// No buffer has come since this instant (the last buffer, or the
-    /// start), for longer than [`AudioOptions::stall_after`]. Buffers
-    /// coming again make it [`Running`](Self::Running).
-    Stalled(Instant),
-    /// The stream broke (the device was unplugged, the server went away),
-    /// with why. No more buffers come.
-    Failed(String),
-}
-
-/// A running capture, from [`open`]. Clones are the same capture. It
-/// captures until [`stop`](Self::stop) is called or, once its signals are
-/// in an app, until the app ends; a capture never put in an app stops when
-/// its last clone is dropped.
-#[derive(Clone)]
-pub struct Capture {
-    shared: Arc<Shared>,
-    _handle: Arc<Handle>,
-}
-
-impl std::fmt::Debug for Capture {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Capture")
-            .field("device", &self.shared.device)
-            .field("status", &self.shared.status())
-            .finish()
-    }
-}
-
-/// Dropped with the last clone of a [`Capture`].
-struct Handle(Arc<Shared>);
-
-impl Drop for Handle {
-    fn drop(&mut self) {
-        self.0.dropped.store(true, Ordering::SeqCst);
-    }
-}
-
-/// What the capture's threads and the app share.
-struct Shared {
-    /// The device opened, by name.
-    device: String,
-    /// The newest frame not yet taken by the app.
-    latest: Mutex<Option<Frame>>,
-    /// A job to take it is on its way.
-    posted: AtomicBool,
-    /// Buffers delivered.
-    count: AtomicU64,
-    /// The status, and when the last buffer came.
-    state: Mutex<(AudioStatus, Instant)>,
-    /// Where frames and status go, once in an app.
-    sink: Mutex<Option<Sink>>,
-    /// Where ALSA's messages go, once given.
-    log: Mutex<Option<Log>>,
-    stop: AtomicBool,
-    dropped: AtomicBool,
-}
-
-/// The app side of a capture.
-#[derive(Clone)]
-struct Sink {
-    proxy: Proxy,
-    samples: Signal<Option<Frame>>,
-    status: Signal<AudioStatus>,
-}
-
-impl Shared {
-    fn new(device: String) -> Shared {
-        Shared {
-            device,
-            latest: Mutex::new(None),
-            posted: AtomicBool::new(false),
-            count: AtomicU64::new(0),
-            state: Mutex::new((AudioStatus::Running, Instant::now())),
-            sink: Mutex::new(None),
-            log: Mutex::new(None),
-            stop: AtomicBool::new(false),
-            dropped: AtomicBool::new(false),
-        }
-    }
-
-    fn status(&self) -> AudioStatus {
-        self.state
-            .lock()
-            .map(|s| s.0.clone())
-            .unwrap_or(AudioStatus::Running)
-    }
-
-    fn sink(&self) -> Option<Sink> {
-        self.sink.lock().ok().and_then(|s| s.clone())
-    }
-
-    /// A full buffer from the device.
-    fn deliver(self: &Arc<Self>, samples: Matrix) {
-        let number = self.count.fetch_add(1, Ordering::SeqCst) + 1;
-        if let Ok(mut latest) = self.latest.lock() {
-            *latest = Some(Frame { number, samples });
-        }
-        let was = self.state.lock().ok().map(|mut state| {
-            state.1 = Instant::now();
-            match state.0 {
-                AudioStatus::Stalled(_) => std::mem::replace(&mut state.0, AudioStatus::Running),
-                ref other => other.clone(),
-            }
-        });
-        if matches!(was, Some(AudioStatus::Stalled(_))) {
-            self.post_status(AudioStatus::Running);
-        }
-        self.post_frame();
-    }
-
-    /// Send a job to take the newest frame, unless one is on its way.
-    fn post_frame(self: &Arc<Self>) {
-        let Some(sink) = self.sink() else {
-            return;
-        };
-        if self.posted.swap(true, Ordering::SeqCst) {
-            return;
-        }
-        let shared = self.clone();
-        sink.proxy.run(move || {
-            shared.posted.store(false, Ordering::SeqCst);
-            let frame = shared.latest.lock().ok().and_then(|mut l| l.take());
-            if let Some(frame) = frame {
-                sink.samples.update(|s| *s = Some(frame));
-            }
-        });
-    }
-
-    fn post_status(&self, status: AudioStatus) {
-        if let Some(sink) = self.sink() {
-            sink.proxy.run(move || sink.status.set(status));
-        }
-    }
-
-    /// The stream broke.
-    fn fail(&self, why: String) {
-        let status = AudioStatus::Failed(why);
-        if let Ok(mut state) = self.state.lock() {
-            if matches!(state.0, AudioStatus::Failed(_)) {
-                return;
-            }
-            state.0 = status.clone();
-        }
-        self.post_status(status);
-    }
-
-    /// Mark the capture stalled when the last buffer is older than
-    /// `after`.
-    fn check_stall(&self, after: Duration) {
-        let stalled = self.state.lock().ok().and_then(|mut state| {
-            let since = state.1;
-            (state.0 == AudioStatus::Running && since.elapsed() > after).then(|| {
-                state.0 = AudioStatus::Stalled(since);
-                state.0.clone()
-            })
-        });
-        if let Some(status) = stalled {
-            self.post_status(status);
-        }
-    }
-}
-
-impl Capture {
-    /// The newest buffer, as a signal of this app: `None` until the first,
-    /// then each [`Frame`] as it comes (see the [module docs](super)). The
-    /// first call puts the capture in the app (it then runs until the app
-    /// ends); later calls return the same signal.
-    ///
-    /// # Panics
-    /// Outside a running or building app.
-    pub fn samples(&self) -> Signal<Option<Frame>> {
-        self.attach("Capture::samples()").samples
-    }
-
-    /// How the capture is going, as a signal of this app: watch it to end
-    /// the app on a stall (`--timeout`) or a failure.
-    ///
-    /// ```no_run
-    /// use std::time::Duration;
-    /// use intuituive::audio::{self, AudioOptions, AudioStatus};
-    /// use intuituive::prelude::*;
-    ///
-    /// let capture = audio::open(AudioOptions::new().stall_after(Duration::from_secs(5)))?;
-    /// App::new(move || {
-    ///     let samples = capture.samples();
-    ///     let status = capture.status();
-    ///     watch(move || status.get(), |status, cx| match status {
-    ///         AudioStatus::Stalled(_) => cx.fail("no audio for 5 s"),
-    ///         AudioStatus::Failed(why) => cx.fail(why),
-    ///         AudioStatus::Running => {}
-    ///     });
-    ///     text(move || format!("{:?}", samples.with(|f| f.as_ref().map(|f| f.number))))
-    /// })
-    /// .run()?;
-    /// # Ok::<(), Box<dyn std::error::Error>>(())
-    /// ```
-    ///
-    /// # Panics
-    /// Outside a running or building app.
-    pub fn status(&self) -> Signal<AudioStatus> {
-        self.attach("Capture::status()").status
-    }
-
-    /// Send ALSA's messages to `log` from now on, the ones already kept
-    /// first (see [`messages`]).
-    pub fn log(&self, log: Log) {
-        if let Ok(mut slot) = self.shared.log.lock() {
-            *slot = Some(log);
-        }
-    }
-
-    /// Stop capturing. The signals keep their last values.
-    pub fn stop(&self) {
-        self.shared.stop.store(true, Ordering::SeqCst);
-    }
-
-    /// The device opened, by name.
-    pub fn device(&self) -> &str {
-        &self.shared.device
-    }
-
-    fn attach(&self, what: &str) -> Sink {
-        if let Some(sink) = self.shared.sink() {
-            return sink;
-        }
-        let runtime = Runtime::current_for(what);
-        let sink = Sink {
-            proxy: runtime.proxy(),
-            samples: signal(None),
-            status: signal(self.shared.status()),
-        };
-        if let Ok(mut slot) = self.shared.sink.lock() {
-            *slot = Some(sink.clone());
-        }
-        // A buffer that came before: the app takes it on its first turn.
-        let waiting = self.shared.latest.lock().is_ok_and(|l| l.is_some());
-        if waiting {
-            self.shared.post_frame();
-        }
-        sink
     }
 }
 
@@ -530,7 +282,7 @@ pub fn open(options: AudioOptions) -> Result<Capture, AudioError> {
         .spawn(move || {
             // ALSA's complaints while opening are kept, not printed.
             let _quiet = quiet();
-            let (stream, shared) = match start(&options) {
+            let (stream, shared) = match start(&options, stall) {
                 Ok(started) => started,
                 Err(e) => {
                     let _ = opened.send(Err(e));
@@ -538,16 +290,13 @@ pub fn open(options: AudioOptions) -> Result<Capture, AudioError> {
                 }
             };
             let _ = opened.send(Ok(shared.clone()));
-            keep(stream, &shared, stall);
+            keep(stream, &shared);
         })
         .map_err(error)?;
     let shared = result
         .recv()
         .unwrap_or_else(|_| Err(error("the audio thread stopped")))?;
-    Ok(Capture {
-        _handle: Arc::new(Handle(shared.clone())),
-        shared,
-    })
+    Ok(Capture::from_shared(shared))
 }
 
 /// Capture from `device` (an id or a name from [`devices`]; `None` for the
@@ -597,10 +346,10 @@ fn quiet() -> super::alsa::Quiet {
 #[cfg(not(target_os = "linux"))]
 fn quiet() {}
 
-/// Keep `stream` until the capture stops, checking for a stall and
-/// passing ALSA's messages on, a few times a second.
-fn keep(stream: cpal::Stream, shared: &Arc<Shared>, stall: Duration) {
-    let tick = (stall / 4).clamp(Duration::from_millis(10), Duration::from_millis(250));
+/// Keep `stream` until the capture stops (or its app ends), passing
+/// ALSA's messages on a few times a second.
+fn keep(stream: cpal::Stream, shared: &Arc<Shared>) {
+    let tick = Duration::from_millis(100);
     #[cfg(target_os = "linux")]
     let mut seen = 0;
     loop {
@@ -615,7 +364,6 @@ fn keep(stream: cpal::Stream, shared: &Arc<Shared>, stall: Duration) {
             None if shared.dropped.load(Ordering::SeqCst) => break,
             None => {}
         }
-        shared.check_stall(stall);
         #[cfg(target_os = "linux")]
         if let (Some(sink), Some(log)) = (shared.sink(), shared.log.lock().ok().and_then(|l| *l)) {
             let (lines, next) = super::alsa::messages_since(seen);
@@ -627,11 +375,16 @@ fn keep(stream: cpal::Stream, shared: &Arc<Shared>, stall: Duration) {
         }
         std::thread::sleep(tick);
     }
+    // The feed thread ends too.
+    shared.halt();
     drop(stream);
 }
 
 /// Open and start the stream that feeds a new capture.
-fn start(options: &AudioOptions) -> Result<(cpal::Stream, Arc<Shared>), AudioError> {
+fn start(
+    options: &AudioOptions,
+    stall: Duration,
+) -> Result<(cpal::Stream, Arc<Shared>), AudioError> {
     let host = options.host.open()?;
     let device = match &options.device {
         None => host
@@ -649,7 +402,7 @@ fn start(options: &AudioOptions) -> Result<(cpal::Stream, Arc<Shared>), AudioErr
             config.buffer_size = cpal::BufferSize::Fixed(frames);
         }
     }
-    let shared = Arc::new(Shared::new(name));
+    let shared = Arc::new(Shared::new(name, stall));
     let framer = Framer::new(
         usize::from(config.channels),
         usize::from(options.channels),
@@ -667,9 +420,6 @@ fn start(options: &AudioOptions) -> Result<(cpal::Stream, Arc<Shared>), AudioErr
         other => return Err(error(format!("unsupported sample format {other}"))),
     }?;
     stream.play().map_err(error)?;
-    if let Ok(mut state) = shared.state.lock() {
-        state.1 = Instant::now();
-    }
     Ok((stream, shared))
 }
 
@@ -901,53 +651,6 @@ mod tests {
             quad.push(&[0.1, 0.2, 0.3, 0.4]),
             Some(vec![vec![0.1], vec![0.2]])
         );
-    }
-
-    #[test]
-    fn frames_are_numbered_and_the_newest_waits_for_the_app() {
-        let shared = Arc::new(Shared::new("test".into()));
-        shared.deliver(vec![vec![0.0]]);
-        shared.deliver(vec![vec![0.0]]);
-        // Not in an app yet: the newest waits, numbered.
-        let latest = shared.latest.lock().unwrap().clone();
-        assert_eq!(latest.map(|f| f.number), Some(2));
-        let capture = Capture {
-            _handle: Arc::new(Handle(shared.clone())),
-            shared,
-        };
-        let app = crate::App::new(move || {
-            let samples = capture.samples();
-            let status = capture.status();
-            // Two equal buffers are two frames.
-            capture.shared.deliver(vec![vec![0.0]]);
-            crate::text(move || {
-                let number = samples.with(|f| f.as_ref().map_or(0, |f| f.number));
-                format!("{number} {:?}", status.get())
-            })
-        });
-        let mut driver = app.driver(20, 1);
-        driver.settle();
-        assert_eq!(driver.screen().plain()[0].trim_end(), "3 Running");
-    }
-
-    #[test]
-    fn a_quiet_stream_stalls_then_runs_again() {
-        let shared = Arc::new(Shared::new("test".into()));
-        shared.check_stall(Duration::from_secs(60));
-        assert_eq!(shared.status(), AudioStatus::Running);
-        std::thread::sleep(Duration::from_millis(5));
-        shared.check_stall(Duration::from_millis(1));
-        assert!(matches!(shared.status(), AudioStatus::Stalled(_)));
-        shared.deliver(vec![vec![0.5]]);
-        assert_eq!(shared.status(), AudioStatus::Running);
-        shared.fail("unplugged".into());
-        shared.fail("again".into());
-        assert_eq!(shared.status(), AudioStatus::Failed("unplugged".into()));
-        // A failed stream neither stalls nor runs again.
-        std::thread::sleep(Duration::from_millis(2));
-        shared.check_stall(Duration::from_millis(1));
-        shared.deliver(vec![vec![0.5]]);
-        assert_eq!(shared.status(), AudioStatus::Failed("unplugged".into()));
     }
 
     #[test]
