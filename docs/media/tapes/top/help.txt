@@ -1,0 +1,30 @@
+
+
+
+┌─ Help ──────────────────────────────────────────────────────── Esc to close ─┐
+│1 - General                                                                  ┃│
+│q, Q, Ctrl-c            Quit                                                 ┃│
+│Esc                     Close dialog windows, search, widgets, or exit       ┃│
+│expanded mode                                                                ┃│
+│Ctrl-r                  Reset display and any collected data                 ┃│
+│f                       Freeze/unfreeze updating with new data               ┃│
+│Shift/Ctrl-Left, H, A   Move widget selection left                           ││
+│Shift/Ctrl-Right, L, D  Move widget selection right                          ││
+│Shift/Ctrl-Up, K, W     Move widget selection up                             ││
+│Shift/Ctrl-Down, J, S   Move widget selection down                           ││
+│Left, h                 Move left within widget                              ││
+│Down, j                 Move down within widget                              ││
+│Up, k                   Move up within widget                                ││
+│Right, l                Move right within widget                             ││
+│?                       Open help menu                                       ││
+│gg                      Jump to the first entry                              ││
+│G                       Jump to the last entry                               ││
+│e                       Toggle expanding the currently selected widget       ││
+│+                       Zoom in on chart (decrease time range)               ││
+│-                       Zoom out on chart (increase time range)              ││
+│=                       Reset zoom                                           ││
+│PgUp, PgDown            Scroll up/down a table by a page                     ││
+└──────────────────────────────────────────────────────────────────────────────┘
+
+
+

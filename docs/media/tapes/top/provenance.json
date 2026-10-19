@@ -1,0 +1,12 @@
+{
+  "tape": "docs/tapes/top.tape",
+  "tape_fnv1a64": "655fa4430389a3b5",
+  "recorder": "rs-rich-record 0.0.8",
+  "rich": null,
+  "commit": "384b53e0ecc535c8d40bae6729fde95527f61fda",
+  "screenshots": [
+    "help",
+    "help-processes"
+  ],
+  "note": "Every frame is real output of the program under test on a PTY."
+}
