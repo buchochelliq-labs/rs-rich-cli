@@ -149,3 +149,12 @@ name = "csv"
 # no feature.
 [[example]]
 name = "disk"
+
+# The termusic clone reads WAV files (`wav`) and draws the cover (`art`).
+[[example]]
+name = "music"
+required-features = ["wav", "art"]
+
+[[test]]
+name = "music"
+required-features = ["wav", "art"]
