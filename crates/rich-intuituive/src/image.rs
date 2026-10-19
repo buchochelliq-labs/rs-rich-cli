@@ -361,6 +361,38 @@ mod tests {
     }
 
     #[test]
+    fn a_decode_is_a_task_the_driver_waits_for() {
+        // An image node built only once a key is pressed (a preview pane
+        // that switches to an image): one press draws it, with no polling.
+        let path = temp("later.png");
+        RgbImage::from_pixel(4, 4, Rgb([255, 0, 0]))
+            .save(&path)
+            .unwrap();
+        let shown = path.clone();
+        let app = App::new(move || {
+            let open = signal(false);
+            let shown = shown.clone();
+            crate::switch(
+                move || open.get(),
+                move |open| match open {
+                    true => image(&shown).fixed(2),
+                    false => crate::label("none"),
+                },
+            )
+            .on_key("o", move |_| open.set(true))
+        })
+        .wait_for_tasks(true);
+        let mut driver = app.driver(4, 2);
+        driver.press("o");
+        assert!(
+            driver.screen().plain()[0].starts_with("▀▀"),
+            "{:?}",
+            driver.screen().plain()
+        );
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
     fn follows_a_changing_path() {
         let red = temp("red.png");
         let blue = temp("blue.png");

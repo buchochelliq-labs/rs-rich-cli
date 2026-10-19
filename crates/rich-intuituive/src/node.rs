@@ -60,6 +60,35 @@ pub enum Axis {
 }
 
 pub(crate) type Handler = Box<dyn FnMut(&mut Ctx)>;
+/// What a key binding runs, told the key that fired it (the first of its
+/// keys when the command palette runs it).
+pub(crate) type KeyHandler = Box<dyn FnMut(&mut Ctx, Key)>;
+
+/// A node's key binding, or key sequence: its keys, what the help says of
+/// it and under which section, and its handler.
+pub(crate) struct KeyBinding {
+    pub keys: Vec<Key>,
+    pub description: String,
+    /// The help's section ([`bind_in`](Node::bind_in)); `None` is the
+    /// node's name.
+    pub section: Option<String>,
+    /// The keys the help and the palette show, when not all of `keys`
+    /// ([`bind_scaled`](Node::bind_scaled) shows the plain ones).
+    pub shown: Option<Vec<Key>>,
+    pub handler: KeyHandler,
+}
+
+impl KeyBinding {
+    pub(crate) fn new(keys: Vec<Key>, description: &str, handler: KeyHandler) -> KeyBinding {
+        KeyBinding {
+            keys,
+            description: description.to_string(),
+            section: None,
+            shown: None,
+            handler,
+        }
+    }
+}
 /// A mouse handler: the event in the node's coordinates; whether it used
 /// it.
 pub(crate) type MouseHandler = Box<dyn FnMut(&mut Ctx, Mouse) -> bool>;
@@ -96,10 +125,10 @@ pub struct Node {
     /// Takes the focus when its screen opens, before the first focusable
     /// node does.
     pub(crate) autofocus: bool,
-    pub(crate) keys: RefCell<Vec<(Vec<Key>, String, Handler)>>,
-    /// Key sequences ([`bind_sequence`](Node::bind_sequence)): the keys in
-    /// order, a description and the handler.
-    pub(crate) sequences: RefCell<Vec<(Vec<Key>, String, Handler)>>,
+    pub(crate) keys: RefCell<Vec<KeyBinding>>,
+    /// Key sequences ([`bind_sequence`](Node::bind_sequence)), their keys
+    /// in order.
+    pub(crate) sequences: RefCell<Vec<KeyBinding>>,
     /// What [`on_any_key`](Node::on_any_key) runs.
     pub(crate) any_key: RefCell<Option<crate::sequence::AnyKey>>,
     /// Its bindings see keys before the focused node inside it
@@ -703,13 +732,13 @@ impl Node {
             .keys
             .borrow()
             .iter()
-            .map(|(keys, _, _)| joined(keys, "/"))
+            .map(|bound| joined(&bound.keys, "/"))
             .collect();
         keys.extend(
             self.sequences
                 .borrow()
                 .iter()
-                .map(|(keys, _, _)| joined(keys, " ")),
+                .map(|bound| joined(&bound.keys, " ")),
         );
         let mut handlers = Vec::new();
         if self.any_key.borrow().is_some() {
@@ -1240,13 +1269,172 @@ impl Node {
         self,
         keys: &str,
         description: &str,
-        handler: impl FnMut(&mut Ctx) + 'static,
+        mut handler: impl FnMut(&mut Ctx) + 'static,
     ) -> Node {
         let parsed = parse_keys(keys);
+        let handler: KeyHandler = Box::new(move |cx, _| handler(cx));
         self.keys
             .borrow_mut()
-            .push((parsed, description.to_string(), Box::new(handler)));
+            .push(KeyBinding::new(parsed, description, handler));
         self
+    }
+
+    /// [`bind`](Self::bind), listed in the help (and the command palette)
+    /// under `section` rather than under the node's
+    /// [name](Self::name): one node's keys in groups, as an app with modes
+    /// lists them.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| {
+    ///     label("scope")
+    ///         .bind_in("oscilloscope", "t", "Toggle the trigger", |_| {})
+    ///         .bind_in("spectroscope", "l", "Logarithmic scale", |_| {})
+    ///         .on_key("?", |cx| cx.help())
+    /// });
+    /// let mut driver = app.driver(60, 16);
+    /// driver.press("?");
+    /// let rows = driver.screen().plain().join("\n");
+    /// assert!(rows.find("oscilloscope") < rows.find("Toggle the trigger"));
+    /// assert!(rows.find("spectroscope") < rows.find("Logarithmic scale"));
+    /// ```
+    ///
+    /// # Panics
+    /// On a name that is not a key, or on no names at all.
+    pub fn bind_in(
+        self,
+        section: &str,
+        keys: &str,
+        description: &str,
+        handler: impl FnMut(&mut Ctx) + 'static,
+    ) -> Node {
+        let node = self.bind(keys, description, handler);
+        if let Some(binding) = node.keys.borrow_mut().last_mut() {
+            binding.section = Some(section.to_string());
+        }
+        node
+    }
+
+    /// Bind `keys` and the same keys with modifiers, each variant with its
+    /// own value, shown in the help as one row: `variants` pairs the
+    /// modifiers (`""` for none, `"shift"`, `"ctrl"`, `"alt"`,
+    /// `"ctrl+alt"`) with a value, and `handler` gets the value of the
+    /// variant pressed. scope-tui's ↑, ten times with Shift and five with
+    /// Ctrl. The help lists the keys of the first variant, its description
+    /// followed by the others' (`(shift ×10, ctrl ×5)`); the palette runs
+    /// the first.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| {
+    ///     let scale = signal(1.0);
+    ///     text!("{scale}").bind_scaled(
+    ///         "up",
+    ///         &[("", 1.0), ("shift", 10.0), ("ctrl", 5.0)],
+    ///         "Scale up",
+    ///         move |_, by| scale.update(|s| *s += by),
+    ///     )
+    /// });
+    /// let mut driver = app.driver(10, 1);
+    /// driver.press("up shift+up ctrl+up");
+    /// assert_eq!(driver.screen().plain()[0].trim_end(), "17");
+    /// ```
+    ///
+    /// # Panics
+    /// On a name that is not a key, on no names or no variants, or on a
+    /// modifier that makes no key with one of them (`"shift"` with `","`).
+    pub fn bind_scaled(
+        self,
+        keys: &str,
+        variants: &[(&str, f64)],
+        description: &str,
+        mut handler: impl FnMut(&mut Ctx, f64) + 'static,
+    ) -> Node {
+        assert!(
+            !variants.is_empty(),
+            "bind_scaled({keys:?}) has no variants"
+        );
+        let plain = parse_keys(keys);
+        // What the help says of the others: `shift ×10`.
+        let others: Vec<String> = variants[1..]
+            .iter()
+            .map(|(modifiers, value)| format!("{} ×{value}", modifiers.trim_end_matches('+')))
+            .collect();
+        let variants: Vec<(Vec<Key>, f64)> = variants
+            .iter()
+            .map(|&(modifiers, value)| {
+                let modifiers = modifiers.trim_end_matches('+');
+                let keys = match modifiers {
+                    "" => plain.clone(),
+                    modifiers => plain
+                        .iter()
+                        .map(|key| {
+                            let name = format!("{modifiers}+{key}");
+                            Key::parse(&name).unwrap_or_else(|| {
+                                panic!("bind_scaled({keys:?}): {name:?} is not a key")
+                            })
+                        })
+                        .collect(),
+                };
+                (keys, value)
+            })
+            .collect();
+        let description = if others.is_empty() {
+            description.to_string()
+        } else {
+            format!("{description} ({})", others.join(", "))
+        };
+        let all: Vec<Key> = variants.iter().flat_map(|(keys, _)| keys.clone()).collect();
+        let shown = variants[0].0.clone();
+        let handler: KeyHandler = Box::new(move |cx, key| {
+            // The variant that names the key, before one it could be (as
+            // a binding picks among its keys).
+            let index = key
+                .pick(variants.iter().map(|(keys, _)| keys.as_slice()))
+                .unwrap_or(0);
+            handler(cx, variants[index].1)
+        });
+        let mut binding = KeyBinding::new(all, &description, handler);
+        binding.shown = Some(shown);
+        self.keys.borrow_mut().push(binding);
+        self
+    }
+
+    /// Bind `keys` to move `mode` on to the next of `modes`, round to the
+    /// first after the last: a mode switcher (scope-tui's Tab through the
+    /// oscilloscope, the vectorscope and the spectroscope). A value that is
+    /// not among `modes` moves to the first.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| {
+    ///     let mode = signal("scope");
+    ///     text!("{mode}").bind_cycle("tab", "Next mode", mode, &["scope", "vector", "spectrum"])
+    /// });
+    /// let mut driver = app.driver(10, 1);
+    /// driver.press("tab tab tab tab");
+    /// assert_eq!(driver.screen().plain()[0].trim_end(), "vector");
+    /// ```
+    ///
+    /// # Panics
+    /// On a name that is not a key, or on no names or no modes.
+    pub fn bind_cycle<T: PartialEq + Clone + 'static>(
+        self,
+        keys: &str,
+        description: &str,
+        mode: Signal<T>,
+        modes: &[T],
+    ) -> Node {
+        assert!(!modes.is_empty(), "bind_cycle({keys:?}) has no modes");
+        let modes = modes.to_vec();
+        self.bind(keys, description, move |_| {
+            let at = mode.with_untracked(|now| modes.iter().position(|m| m == now));
+            let next = at.map_or(0, |i| (i + 1) % modes.len());
+            mode.set(modes[next].clone());
+        })
     }
 
     /// Run `handler` when this node is clicked. A clickable node is also

@@ -9,6 +9,50 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### intuiTUIve: runtime, keys and signals from round 2 (rs-rich-intuituive, interact)
+
+What the round-2 rebuilds of scope-tui and Yazi found missing from the
+core (see [the demo gaps](docs/design/intuituive-demo-gaps.md)).
+
+- **`on_write(signal, |value, cx| ..)`** runs after every write to a
+  signal, an equal value too, where a `watch` sees two equal buffers as
+  one. **`rate(signal)`** is a `Signal<u32>` of writes a second, updated
+  each second of the app's clock: a frame-rate meter.
+- **`latest` threads on the app's clock.** `Latest::sleep(period)` keeps
+  a thread to a beat, as `every` does, and **`latest_every(period, ||
+  value)`** is a thread making a value every period. In an app that
+  `wait_for_tasks(true)`, both keep to the app's clock, and each turn
+  waits until the threads due have sent their values and sleep again, so
+  a thread-fed app can be tested frame by frame. `latest` threads now
+  start when the app starts running.
+- **`App::try_new(|| -> Result<Node, E>)`**: a builder that can fail
+  returns its error from `try_new`, before the terminal is taken.
+- **Help sections and modifier variants.** `.bind_in(section, keys,
+  description, handler)` lists a binding under a section of its own in
+  the help and the palette. `.bind_scaled(keys, &[("", 1.0), ("shift",
+  10.0), ..], description, |cx, value| ..)` binds keys with modifiers,
+  each with its value, shown as one help row. `.bind_cycle(keys,
+  description, signal, &modes)` steps a signal through modes.
+- **`resource_for(key, fetch)`** fetches again whenever the key changes
+  and drops results for keys left behind; **`Resource::stale_after(d)`**
+  keeps the last value while the next loads, for `d` at most.
+- **`Signal::replace(value)`** sets a value with no `PartialEq` and
+  returns the old one. `RectHandle` and `PathWatch` are `PartialEq` (the
+  same handle), so they can be kept in a signal with `set`.
+- **`RectHandle::new()`** and **`Node::rect_into(&handle)`**: a handle
+  made before its node.
+- **Keys.** `comma` names the comma key wherever keys are parsed
+  (`"comma s"`, `"ctrl+comma"`; rs-rich-interact's `Key::parse`). A
+  `bind_sequence` of one key panics, saying to use `bind`, where it
+  silently became a `bind`.
+- **The headless record keeps arguments:** rs-rich-interact's
+  `Record::handoff_commands` holds each handed-off program with its
+  arguments.
+- **Fixed: which-key columns ran into each other.** A description too
+  long for its column is cut with `…` two cells short of the next
+  column's keys. The theme's `which_key.desc` and `which_key.sep` style
+  the descriptions and the separator.
+
 ### intuiTUIve's Yazi example on the new components (rs-rich-intuituive)
 
 Round 2 of [the demo gaps](docs/design/intuituive-demo-gaps.md):

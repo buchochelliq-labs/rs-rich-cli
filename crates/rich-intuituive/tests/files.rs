@@ -598,18 +598,10 @@ fn images_are_drawn_in_the_preview() {
         .save(root.join("a.png"))
         .unwrap();
     // a.png is after the directories: alpha, beta, a.png. It is decoded
-    // on a worker, so look until it is drawn.
+    // on a worker, a task the app waits for like the preview's own.
     let mut driver = app(&root).driver(80, 10);
     driver.press("j j");
-    let mut rows = Vec::new();
-    for _ in 0..200 {
-        std::thread::sleep(std::time::Duration::from_millis(20));
-        driver.settle();
-        rows = driver.screen().plain();
-        if rows[1].contains('▀') {
-            break;
-        }
-    }
+    let rows = driver.screen().plain();
     assert!(status(&rows).contains("a.png"), "{rows:?}");
     assert!(rows[1].contains('▀'), "{rows:?}");
 }

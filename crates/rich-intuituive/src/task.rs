@@ -6,23 +6,29 @@
 //!   that does not need a particular runtime (a tokio app keeps its own
 //!   runtime and sends results back with a [`Proxy`](crate::Proxy));
 //! - [`resource`] is a value that loads in the background, with
-//!   [`Load::Loading`] until it arrives, and reloads on demand.
+//!   [`Load::Loading`] until it arrives, and reloads on demand;
+//!   [`resource_for`] loads again whenever a key changes;
+//! - [`latest`] and [`latest_every`] are the newest value a thread of
+//!   their own makes.
 //!
 //! The `done` closure runs back on the app's thread, between frames, with a
 //! [`Ctx`]: it can write signals, open a screen, or quit. A cancelled
 //! [`Task`] still finishes its work (a thread cannot be stopped from
 //! outside), but its result is dropped.
 
+use std::cell::Cell;
+use std::collections::HashMap;
 use std::fmt::Display;
 use std::future::Future;
 use std::panic::Location;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Condvar, Mutex, MutexGuard};
 use std::task::{Context, Poll, Wake, Waker};
+use std::time::{Duration, Instant};
 
 use crate::app::Ctx;
-use crate::reactive::{signal, Runtime, Signal};
+use crate::reactive::{signal, watch, Runtime, Signal};
 
 /// A running piece of background work.
 #[derive(Clone, Debug)]
@@ -171,6 +177,9 @@ impl<T> Load<T> {
 pub struct Resource<T: 'static> {
     state: Signal<Load<T>>,
     start: Signal<Rc<dyn Fn()>>,
+    /// How long the last value stays while the next loads
+    /// ([`stale_after`](Resource::stale_after)).
+    stale: Signal<Option<Duration>>,
 }
 
 impl<T> Clone for Resource<T> {
@@ -192,6 +201,16 @@ impl<T: 'static> Resource<T> {
     pub fn reload(&self) {
         let start = self.start.with_untracked(Rc::clone);
         start();
+    }
+
+    /// When it fetches again (a [`reload`](Self::reload), or a new key of
+    /// [`resource_for`]), keep the last value (or error) for up to `wait`
+    /// rather than going back to [`Load::Loading`] at once: a preview pane
+    /// that does not blink between two quick loads, and clears once a slow
+    /// one has kept the old value on show for `wait`.
+    pub fn stale_after(self, wait: Duration) -> Resource<T> {
+        self.stale.set(Some(wait));
+        self
     }
 }
 
@@ -228,35 +247,128 @@ where
     E: Display,
 {
     let site = Location::caller();
-    let state = signal(Load::<T>::Loading);
-    let generation = signal(0u64);
+    let (state, generation, stale) = (signal(Load::<T>::Loading), signal(0u64), signal(None));
     let fetch = Arc::new(fetch);
     let start: Rc<dyn Fn()> = Rc::new(move || {
-        generation.update(|g| *g += 1);
-        let mine = generation.get_untracked();
-        state.update(|s| *s = Load::Loading);
         let fetch = fetch.clone();
-        spawn_at(
-            site,
-            move || fetch().map_err(|error| error.to_string()),
-            move |result, _| {
-                // A later fetch started: this result is stale.
-                if generation.get_untracked() == mine {
-                    state.update(|s| {
-                        *s = match result {
-                            Ok(value) => Load::Ready(value),
-                            Err(error) => Load::Failed(error),
-                        }
-                    });
-                }
-            },
-        );
+        load(site, state, generation, stale, move || {
+            fetch().map_err(|error| error.to_string())
+        });
     });
     start();
     Resource {
         state,
         start: signal(start),
+        stale,
     }
+}
+
+/// A [`resource`] that fetches for a key: `key` reads signals (the
+/// hovered file, the pane's width), and whenever what it returns changes,
+/// `fetch` runs for the new key on its own thread. A result for a key
+/// already left behind is dropped. With
+/// [`stale_after`](Resource::stale_after), the last key's value stays on
+/// show while the next one loads, for a while at most. The first fetch
+/// starts on the app's first turn; [`reload`](Resource::reload) fetches
+/// the current key again.
+///
+/// ```
+/// use intuituive::prelude::*;
+/// use intuituive::resource_for;
+///
+/// let app = App::new(|| {
+///     let id = signal(1);
+///     let user = resource_for(move || id.get(), |id| Ok::<_, String>(format!("user {id}")));
+///     text(move || match user.get() {
+///         Load::Ready(name) => name,
+///         _ => "…".into(),
+///     })
+///     .on_key("n", move |_| id.update(|i| *i += 1))
+/// })
+/// .wait_for_tasks(true);
+/// let mut driver = app.driver(10, 1);
+/// driver.press("n");
+/// assert_eq!(driver.screen().plain()[0].trim_end(), "user 2");
+/// ```
+///
+/// # Panics
+/// Outside a running or building app.
+#[track_caller]
+pub fn resource_for<K, T, E>(
+    key: impl Fn() -> K + 'static,
+    fetch: impl Fn(K) -> Result<T, E> + Send + Sync + 'static,
+) -> Resource<T>
+where
+    K: PartialEq + Clone + Send + 'static,
+    T: Send + 'static,
+    E: Display,
+{
+    let site = Location::caller();
+    let (state, generation, stale) = (signal(Load::<T>::Loading), signal(0u64), signal(None));
+    let current: Signal<Option<K>> = signal(None);
+    let fetch = Arc::new(fetch);
+    let start: Rc<dyn Fn()> = Rc::new(move || {
+        let Some(key) = current.get_untracked() else {
+            return;
+        };
+        let fetch = fetch.clone();
+        load(site, state, generation, stale, move || {
+            fetch(key).map_err(|error| error.to_string())
+        });
+    });
+    let start = signal(start);
+    watch(key, move |key, _| {
+        current.replace(Some(key));
+        start.with_untracked(Rc::clone)();
+    });
+    Resource {
+        state,
+        start,
+        stale,
+    }
+}
+
+/// Start a fetch of `state` with `work`: a result for an earlier one is
+/// dropped from now on. The state goes back to loading at once, or after
+/// `stale`'s wait if the fetch is still under way then.
+fn load<T: Send + 'static>(
+    site: &'static Location<'static>,
+    state: Signal<Load<T>>,
+    generation: Signal<u64>,
+    stale: Signal<Option<Duration>>,
+    work: impl FnOnce() -> Result<T, String> + Send + 'static,
+) {
+    generation.update(|g| *g += 1);
+    let mine = generation.get_untracked();
+    let arrived = Arc::new(AtomicBool::new(false));
+    match stale.get_untracked() {
+        Some(wait) if !state.with_untracked(Load::is_loading) => {
+            let arrived = arrived.clone();
+            spawn_at(
+                site,
+                move || std::thread::sleep(wait),
+                move |(), _| {
+                    // Still waiting for this fetch: the old value goes.
+                    if generation.get_untracked() == mine && !arrived.load(Ordering::SeqCst) {
+                        state.update(|s| *s = Load::Loading);
+                    }
+                },
+            );
+        }
+        _ => state.update(|s| *s = Load::Loading),
+    }
+    spawn_at(site, work, move |result, _| {
+        // A later fetch started: this result is stale.
+        if generation.get_untracked() == mine {
+            arrived.store(true, Ordering::SeqCst);
+            state.update(|s| {
+                *s = match result {
+                    Ok(value) => Load::Ready(value),
+                    Err(error) => Load::Failed(error),
+                }
+            });
+        }
+    });
 }
 
 /// The sending end of a [`latest`] signal, for its thread.
@@ -269,6 +381,10 @@ pub struct Latest<T> {
     closed: Arc<AtomicBool>,
     proxy: crate::reactive::Proxy,
     signal: Signal<Option<T>>,
+    /// The clock [`sleep`](Latest::sleep) keeps to, and the time of the
+    /// last beat it slept to.
+    clock: Arc<ThreadClock>,
+    due: Cell<Option<Duration>>,
 }
 
 /// Marks the app gone if the delivery it rides with is dropped unrun.
@@ -322,7 +438,197 @@ impl<T: Send + 'static> Latest<T> {
         }
         sent
     }
+
+    /// Wait until `period` after the last beat (after now, the first
+    /// time): a thread that makes a value every `period` keeps to its beat
+    /// however long each takes to make. One that fell behind does not
+    /// hurry through the beats it missed: as a timer made with
+    /// [`every`](crate::every), it goes on at once and then keeps to its
+    /// step. It waits on the wall clock; in an app
+    /// that [waits for its tasks](crate::App::wait_for_tasks), as a test
+    /// does, on the app's clock instead, so a headless script's
+    /// `wait(..)` moves the thread on as far as it moves the app. Returns
+    /// `false` once the app has finished, as [`send`](Self::send) does.
+    ///
+    /// ```
+    /// use intuituive::interact::headless::{Headless, Script};
+    /// use intuituive::prelude::*;
+    /// use std::time::Duration;
+    ///
+    /// let app = App::new(|| {
+    ///     let tick = latest(|tx| {
+    ///         let mut n = 0;
+    ///         while tx.send(n) && tx.sleep(Duration::from_millis(100)) {
+    ///             n += 1;
+    ///         }
+    ///     });
+    ///     text!("{}", tick.get().unwrap_or(0))
+    /// })
+    /// .wait_for_tasks(true);
+    /// let script = Script::new().wait(Duration::from_millis(350)).keys("ctrl+c");
+    /// let mut backend = Headless::new(script, 10, 1);
+    /// let record = backend.record();
+    /// app.run_on(&mut backend).unwrap();
+    /// // Exactly: the thread kept to the app's clock.
+    /// assert_eq!(record.borrow().last_frame().trim_end(), "3");
+    /// ```
+    pub fn sleep(&self, period: Duration) -> bool {
+        if self.closed.load(Ordering::SeqCst) {
+            return false;
+        }
+        let now = self.clock.now();
+        // The shortest beat is a millisecond, as a timer's.
+        let period = period.max(Duration::from_millis(1));
+        let next = self.due.get().unwrap_or(now) + period;
+        let due = if next >= now {
+            next
+        } else {
+            let behind = (now - next).as_nanos() % period.as_nanos();
+            now + Duration::from_nanos((period.as_nanos() - behind) as u64)
+        };
+        self.due.set(Some(due));
+        self.clock.sleep_until(due) && !self.closed.load(Ordering::SeqCst)
+    }
 }
+
+/// The clock [`latest`] threads keep to with [`Latest::sleep`]: the wall
+/// clock, or, in an app that waits for its tasks, the app's own, which its
+/// driver moves on. Then the driver also waits, each turn, until every
+/// such thread is asleep for a later time or finished, so what they send
+/// is the same on every run.
+pub(crate) struct ThreadClock {
+    state: Mutex<ClockState>,
+    changed: Condvar,
+    /// Where the wall clock's time starts.
+    start: Instant,
+}
+
+#[derive(Default)]
+struct ClockState {
+    /// Threads keep to the app's clock, not the wall's.
+    manual: bool,
+    /// The app's time, as its driver last set it.
+    now: Duration,
+    /// Threads started and neither asleep on the app's clock nor finished.
+    running: usize,
+    /// Threads asleep on the app's clock, by ticket, with when each wakes.
+    asleep: HashMap<u64, Duration>,
+    next: u64,
+    /// The app has finished: sleepers wake, and stop.
+    closed: bool,
+}
+
+impl ThreadClock {
+    pub(crate) fn new() -> Arc<ThreadClock> {
+        Arc::new(ThreadClock {
+            state: Mutex::new(ClockState::default()),
+            changed: Condvar::new(),
+            start: Instant::now(),
+        })
+    }
+
+    fn lock(&self) -> MutexGuard<'_, ClockState> {
+        self.state.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
+    /// Keep threads to the app's clock from now on (`manual`), or to the
+    /// wall's.
+    pub(crate) fn set_manual(&self, manual: bool) {
+        self.lock().manual = manual;
+    }
+
+    fn now(&self) -> Duration {
+        let state = self.lock();
+        if state.manual {
+            state.now
+        } else {
+            self.start.elapsed()
+        }
+    }
+
+    /// A thread starts (or ends, if not `started`).
+    fn running(&self, started: bool) {
+        let mut state = self.lock();
+        if started {
+            state.running += 1;
+        } else {
+            state.running = state.running.saturating_sub(1);
+            self.changed.notify_all();
+        }
+    }
+
+    /// Sleep until `due`; `false` once the app has finished.
+    fn sleep_until(&self, due: Duration) -> bool {
+        let mut state = self.lock();
+        if !state.manual {
+            drop(state);
+            let wait = due.saturating_sub(self.start.elapsed());
+            if !wait.is_zero() {
+                std::thread::sleep(wait);
+            }
+            return !self.lock().closed;
+        }
+        if due <= state.now || state.closed {
+            return !state.closed;
+        }
+        let ticket = state.next;
+        state.next += 1;
+        state.asleep.insert(ticket, due);
+        state.running = state.running.saturating_sub(1);
+        self.changed.notify_all();
+        // Woken by `advance`, which counts it running again, or the end.
+        while state.asleep.contains_key(&ticket) && !state.closed {
+            state = self.changed.wait(state).unwrap_or_else(|e| e.into_inner());
+        }
+        !state.closed
+    }
+
+    /// The app's clock is at `now`: wake the threads that are due.
+    pub(crate) fn advance(&self, now: Duration) {
+        let mut state = self.lock();
+        state.now = now;
+        let due: Vec<u64> = state
+            .asleep
+            .iter()
+            .filter(|(_, at)| **at <= now)
+            .map(|(ticket, _)| *ticket)
+            .collect();
+        for ticket in &due {
+            state.asleep.remove(ticket);
+        }
+        state.running += due.len();
+        self.changed.notify_all();
+    }
+
+    /// Wait (a while at most) until every thread is asleep on the app's
+    /// clock or finished. Only on the app's clock.
+    pub(crate) fn settle(&self) {
+        let deadline = Instant::now() + THREAD_SETTLE;
+        let mut state = self.lock();
+        while state.manual && state.running > 0 && !state.closed {
+            let left = deadline.saturating_duration_since(Instant::now());
+            if left.is_zero() {
+                return;
+            }
+            state = self
+                .changed
+                .wait_timeout(state, left)
+                .unwrap_or_else(|e| e.into_inner())
+                .0;
+        }
+    }
+
+    /// The app has finished.
+    pub(crate) fn close(&self) {
+        self.lock().closed = true;
+        self.changed.notify_all();
+    }
+}
+
+/// How long a turn of an app on its own clock waits, at most, for its
+/// `latest` threads to go to sleep: one that waits on something else (a
+/// pipe, a device) holds each turn up this long.
+const THREAD_SETTLE: Duration = Duration::from_secs(5);
 
 /// A signal holding the newest value a thread of its own produces: `run`
 /// gets the [`Latest`] to send them with, and runs until it returns.
@@ -332,7 +638,9 @@ impl<T: Send + 'static> Latest<T> {
 /// delivery wakes the app's loop, which picks it up on its next turn.
 /// `send` returns `false` once the app has finished; stop then. The thread
 /// is not a [task](spawn): [`App::wait_for_tasks`](crate::App::wait_for_tasks)
-/// does not wait for it.
+/// does not wait for it; a thread that keeps to a beat with
+/// [`Latest::sleep`] keeps to the app's clock under it. The thread starts
+/// when the app starts running (or at once, when the app already is).
 ///
 /// ```
 /// use intuituive::prelude::*;
@@ -365,13 +673,69 @@ pub fn latest<T: Send + 'static>(
 ) -> Signal<Option<T>> {
     let runtime = Runtime::current_for("latest()");
     let value = signal(None);
+    let clock = runtime.clock.clone();
     let sender = Latest {
         slot: Arc::new(std::sync::Mutex::new(None)),
         queued: Arc::new(AtomicBool::new(false)),
         closed: Arc::new(AtomicBool::new(false)),
         proxy: runtime.proxy(),
         signal: value,
+        clock: clock.clone(),
+        due: Cell::new(None),
     };
-    std::thread::spawn(move || run(sender));
+    runtime.start_thread(Box::new(move || {
+        clock.running(true);
+        std::thread::spawn(move || {
+            // Counted finished however `run` ends, a panic included.
+            struct Finished(Arc<ThreadClock>);
+            impl Drop for Finished {
+                fn drop(&mut self) {
+                    self.0.running(false);
+                }
+            }
+            let _finished = Finished(clock);
+            run(sender)
+        });
+    }));
     value
+}
+
+/// A [`latest`] signal fed by `next`, called on a thread of its own once at
+/// the start and then every `period`, keeping to the beat as
+/// [`Latest::sleep`] does: on the app's clock in an app that
+/// [waits for its tasks](crate::App::wait_for_tasks), so a test sees the
+/// same values at the same times on every run; on the wall clock
+/// otherwise. A generator, a sensor polled, a demo's signal.
+///
+/// ```
+/// use intuituive::prelude::*;
+/// use intuituive::latest_every;
+/// use std::time::Duration;
+///
+/// let app = App::new(|| {
+///     let mut n = 0;
+///     let count = latest_every(Duration::from_millis(10), move || {
+///         n += 1;
+///         n
+///     });
+///     text!("{}", count.get().unwrap_or(0))
+/// })
+/// .wait_for_tasks(true);
+/// let mut driver = app.driver(10, 1);
+/// for ms in [0, 10, 20, 30, 40, 45] {
+///     driver.update(Duration::from_millis(ms));
+/// }
+/// driver.render();
+/// // Made at 0, 10, 20, 30 and 40 ms.
+/// assert_eq!(driver.screen().plain()[0].trim_end(), "5");
+/// ```
+///
+/// # Panics
+/// Outside a running or building app.
+#[track_caller]
+pub fn latest_every<T: Send + 'static>(
+    period: Duration,
+    mut next: impl FnMut() -> T + Send + 'static,
+) -> Signal<Option<T>> {
+    latest(move |tx| while tx.send(next()) && tx.sleep(period) {})
 }

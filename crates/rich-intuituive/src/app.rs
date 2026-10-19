@@ -867,6 +867,41 @@ pub fn every(interval: Duration, tick: impl FnMut(&mut Ctx) + 'static) {
     });
 }
 
+/// How many times a second `source` is written, counted over each second
+/// of the app's clock (and 0 for the first): a frame-rate meter. Each
+/// write counts, an equal value too, as [`on_write`](crate::on_write)
+/// sees them. Call it inside [`App::new`]'s closure (or a screen's), as
+/// [`every`].
+///
+/// ```
+/// use intuituive::prelude::*;
+/// use std::time::Duration;
+///
+/// let app = App::new(|| {
+///     let frame = signal(());
+///     every(Duration::from_millis(100), move |_| frame.update(|_| {}));
+///     let fps = rate(frame);
+///     text!("{fps} fps")
+/// });
+/// let mut driver = app.driver(10, 1);
+/// for tenth in 1..=10 {
+///     driver.update(Duration::from_millis(100 * tenth));
+/// }
+/// driver.render();
+/// assert_eq!(driver.screen().plain()[0].trim_end(), "10 fps");
+/// ```
+///
+/// # Panics
+/// Outside `App::new`'s closure or a screen's, or for a signal of another
+/// app.
+#[track_caller]
+pub fn rate<T: 'static>(source: Signal<T>) -> Signal<u32> {
+    let shown = signal(0u32);
+    let count = crate::reactive::count_writes(source);
+    every(Duration::from_secs(1), move |_| shown.set(count.replace(0)));
+    shown
+}
+
 /// Counters from the last frame, for tests and benchmarks.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct FrameStats {
@@ -1161,6 +1196,42 @@ impl App {
             which_key: None,
             which_key_at: None,
             used: None,
+        }
+    }
+
+    /// [`new`](Self::new), with a `build` that can fail: a sound card that
+    /// is not there, a file that does not open. The error is returned here,
+    /// before anything runs, so the terminal is never taken: `main` reports
+    /// it as any other, with `?`. Signals, watches and tasks `build` made
+    /// before it failed are dropped with the app; `latest` threads, which
+    /// start when the app runs, never start.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    ///
+    /// let opened = App::try_new(|| {
+    ///     let text = std::fs::read_to_string("/no/such/file")?;
+    ///     Ok::<_, std::io::Error>(label(text))
+    /// });
+    /// assert!(opened.is_err());
+    /// let app = App::try_new(|| Ok::<_, std::io::Error>(label("fine"))).unwrap();
+    /// assert_eq!(app.render_with(&["ctrl+c"], 4, 1).unwrap()[0], "fine");
+    /// ```
+    pub fn try_new<E>(build: impl FnOnce() -> Result<Node, E>) -> Result<App, E> {
+        let mut failed = None;
+        let app = App::new(|| match build() {
+            Ok(root) => root,
+            Err(error) => {
+                failed = Some(error);
+                crate::node::label("")
+            }
+        });
+        match failed {
+            Some(error) => {
+                app.runtime.close();
+                Err(error)
+            }
+            None => Ok(app),
         }
     }
 
@@ -1466,7 +1537,14 @@ impl App {
 
     /// Before each event, wait for the [tasks](crate::spawn) in flight to
     /// deliver their results. For tests, which then see a task's result on
-    /// the next frame however fast the machine is; off by default.
+    /// the next frame however fast the machine is; off by default. It also
+    /// puts [`latest`](crate::latest) threads that keep a beat with
+    /// [`Latest::sleep`](crate::Latest::sleep) (and
+    /// [`latest_every`](crate::latest_every)) on the app's clock, and
+    /// waits each turn until those due have sent their values and sleep
+    /// again: a thread-fed app is the same frame by frame on every run.
+    /// A `latest` thread that waits on something else (a pipe) holds each
+    /// turn up to 5 seconds.
     pub fn wait_for_tasks(mut self, on: bool) -> App {
         self.wait_for_tasks = on;
         self
@@ -1517,8 +1595,10 @@ impl App {
     /// the keys pressed so far, with their descriptions, in up to three
     /// columns in a box at the bottom of the screen (Yazi's). It shows at
     /// once; [`which_key_delay`](Self::which_key_delay) waits first. Off by
-    /// default. Its keys are in the theme's `which_key.key` style, else
-    /// `accent`.
+    /// default. Its keys are in the theme's `which_key.key` style (else
+    /// `accent`), the two cells after them in `which_key.sep`, and the
+    /// descriptions in `which_key.desc`; a description too long for its
+    /// column ends in `…`, two cells short of the next column's keys.
     ///
     /// ```
     /// use intuituive::prelude::*;
@@ -1529,7 +1609,7 @@ impl App {
     ///         .bind_sequence("g h", "Go home", |_| {})
     /// })
     /// .which_key(true);
-    /// let mut driver = app.driver(40, 6);
+    /// let mut driver = app.driver(44, 6);
     /// driver.press("g");
     /// let rows = driver.screen().plain();
     /// assert!(rows[3].contains("g  Go to the top") && rows[3].contains("h  Go home"));
@@ -1891,6 +1971,8 @@ impl App {
         // Focus what can be focused before the first frame (keyed children
         // appear only once drawn; `keep_focus` catches them after it).
         self.focus_first();
+        // `latest` threads start with the app, on its clock in a test.
+        self.runtime.start_threads(self.wait_for_tasks);
         Driver {
             app: self,
             painter,
@@ -2798,28 +2880,28 @@ impl App {
         let mut out = Vec::new();
         for &id in path.iter().rev() {
             with_node(&self.top().root, id, &mut |node| {
-                let context = node.group_name();
-                for (index, (keys, description, _)) in node.keys.borrow().iter().enumerate() {
-                    if description.is_empty() {
+                let name = node.group_name();
+                for (index, bound) in node.keys.borrow().iter().enumerate() {
+                    if bound.description.is_empty() {
                         continue;
                     }
                     let binding = rich_interact::keymap::Binding::new(
-                        context.clone(),
+                        bound.section.clone().unwrap_or_else(|| name.clone()),
                         format!("{id}:{index}"),
-                        keys.clone(),
-                        description.clone(),
+                        bound.shown.clone().unwrap_or_else(|| bound.keys.clone()),
+                        bound.description.clone(),
                     );
                     out.push((id, index, binding));
                 }
-                for (index, (keys, description, _)) in node.sequences.borrow().iter().enumerate() {
-                    if description.is_empty() {
+                for (index, bound) in node.sequences.borrow().iter().enumerate() {
+                    if bound.description.is_empty() {
                         continue;
                     }
                     let binding = rich_interact::keymap::Binding::sequence(
-                        context.clone(),
+                        bound.section.clone().unwrap_or_else(|| name.clone()),
                         format!("{id}:s{index}"),
-                        keys.clone(),
-                        description.clone(),
+                        bound.keys.clone(),
+                        bound.description.clone(),
                     );
                     out.push((id, index, binding));
                 }
@@ -2881,8 +2963,10 @@ impl App {
                     true => node.sequences.borrow_mut(),
                     false => node.keys.borrow_mut(),
                 };
-                if let Some((_, _, handler)) = list.get_mut(index) {
-                    handler(&mut cx);
+                if let Some(bound) = list.get_mut(index) {
+                    // As its first key would.
+                    let key = bound.keys[0];
+                    (bound.handler)(&mut cx, key);
                 }
             });
         });
@@ -3186,12 +3270,12 @@ impl App {
                     .keys
                     .borrow()
                     .iter()
-                    .any(|(keys, _, _)| key.matches_any(keys))
+                    .any(|bound| key.matches_any(&bound.keys))
                     || node
                         .sequences
                         .borrow()
                         .iter()
-                        .any(|(keys, _, _)| crate::sequence::starts(keys, &[key]))
+                        .any(|bound| crate::sequence::starts(&bound.keys, &[key]))
                     || node.body.borrow().widget.claims_key(key);
             });
         }
@@ -3364,9 +3448,9 @@ impl App {
                     let mut keys = node.keys.borrow_mut();
                     // A binding that names the key before one it could be
                     // (a Tab from a legacy terminal: `tab`, then `ctrl+i`).
-                    let picked = key.pick(keys.iter().map(|(keys, _, _)| keys.as_slice()));
-                    if let Some((_, _, handler)) = picked.and_then(|index| keys.get_mut(index)) {
-                        handler(&mut cx);
+                    let picked = key.pick(keys.iter().map(|bound| bound.keys.as_slice()));
+                    if let Some(bound) = picked.and_then(|index| keys.get_mut(index)) {
+                        (bound.handler)(&mut cx, key);
                         used = Some("on_key");
                         return;
                     }
@@ -3374,7 +3458,7 @@ impl App {
                 let sequences = node.sequences.borrow();
                 if sequences
                     .iter()
-                    .any(|(keys, _, _)| crate::sequence::starts(keys, &[key]))
+                    .any(|bound| crate::sequence::starts(&bound.keys, &[key]))
                 {
                     starts = true;
                     return;
@@ -3420,9 +3504,9 @@ impl App {
         typed.push(key);
         let (mut exact, mut longer) = (None, false);
         with_node(&self.top().root, pending.node, &mut |node| {
-            for (index, (keys, _, _)) in node.sequences.borrow().iter().enumerate() {
-                if crate::sequence::starts(keys, &typed) {
-                    if keys.len() == typed.len() {
+            for (index, bound) in node.sequences.borrow().iter().enumerate() {
+                if crate::sequence::starts(&bound.keys, &typed) {
+                    if bound.keys.len() == typed.len() {
                         exact.get_or_insert(index);
                     } else {
                         longer = true;
@@ -4023,6 +4107,12 @@ impl Driver {
                 a.value.set(a.from + (a.to - a.from) * a.easing.at(t));
                 t < 1.0
             });
+            // Waiting for tasks, `latest` threads keep to the app's clock:
+            // those due run until they sleep again (or end).
+            if app.wait_for_tasks {
+                runtime.clock.advance(now);
+                runtime.clock.settle();
+            }
             // Results from other threads, then the watches they (or the
             // last event) set off. Waiting for tasks, this repeats until
             // none is in flight: a watch may start one, and its result may

@@ -178,3 +178,24 @@ fn reading_a_rect_handle_redraws_when_the_node_moves() {
     driver.settle();
     assert_eq!(driver.screen().plain()[1].trim_end(), "Some(0)");
 }
+
+#[test]
+fn a_handle_made_before_its_node_is_set_once_it_is_given_one() {
+    let app = App::new(|| {
+        // App state holds the handle before the view is built, in a signal.
+        let status: Signal<Option<RectHandle>> = signal(None);
+        let handle = RectHandle::new();
+        status.set(Some(handle));
+        assert_eq!(handle.get_untracked(), None);
+        column([
+            text(move || {
+                let rect = status.get().and_then(|h| h.get());
+                format!("{:?}", rect.map(|r| (r.y, r.width)))
+            }),
+            label("status").fixed(1).rect_into(&handle),
+        ])
+    });
+    let mut driver = app.driver(30, 4);
+    driver.settle();
+    assert_eq!(driver.screen().plain()[0].trim_end(), "Some((3, 30))");
+}

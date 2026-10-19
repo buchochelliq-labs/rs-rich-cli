@@ -437,11 +437,21 @@ let is_first = memo(move || selected.get() == 0);
 
 - `get()` reads a value, and `set(v)` or `update(|v| …)` writes it. A node
   that reads a signal while drawing subscribes to it, and a write redraws
-  exactly those nodes. `set` with an equal value does nothing.
+  exactly those nodes. `set` with an equal value does nothing. `set` needs
+  `PartialEq`; `replace(v)` does not (it returns the old value, and every
+  reader updates), for a value that cannot be compared: a closure, a
+  handle. `RectHandle` and `PathWatch` compare as handles: equal when they
+  are the same one.
 - `watch(move || source, move |value, cx| …)` runs a callback when a value
   changes (and once at the start), between frames, with a `Ctx`: load a
   preview when the selection moves, save when a document changes. A watch
   made while a screen is built stops when the screen closes.
+- `on_write(signal, move |value, cx| …)` runs a callback after every write
+  to a signal, in turn, an equal value too: a watch sees two equal buffers
+  as one, this sees two frames. Not called at the start. `rate(signal)` is
+  a `Signal<u32>` of how many times a second it was written, counted over
+  each second of the app's clock: a frame-rate meter. Call `rate` where
+  you call `every`.
 - A `memo` derives a value and notifies its readers only when the result
   changes. In a list where each row reads `memo(move || selected.get() == i)`,
   a move redraws two rows, not all of them.
@@ -486,7 +496,7 @@ column([
   store rectangles yourself.
 - **Key names** are the ones `rs-rich-interact` uses: `"q"`, `"ctrl+s"`,
   `"up k"` (either key). Spaces separate names, so the space key is
-  `"space"`; a binding with no keys, or a name that is not a key (`"f99"`,
+  `"space"`, and the comma `"comma"` (`"ctrl+comma"`); a binding with no keys, or a name that is not a key (`"f99"`,
   `"ctrl-s"`), panics when the binding is made. A name means the key:
   `"shift+a"` is `"A"`, and `"ctrl+i"` is Ctrl+I, not Tab. A terminal
   without the kitty keyboard protocol sends some keys alike (Tab and
@@ -532,10 +542,15 @@ column([list(files, selected), status])
   the first key wins over the sequence). Esc cancels a sequence under way;
   any other key that goes on with none of the node's sequences cancels it
   and is then handled as usual, so `g` then `j` still moves down. The comma
-  key is written in quotes, as in any binding: `"\",\" s"`.
+  key is `comma`, as in any binding: `"comma s"` (or quoted, `"\",\" s"`).
+  Spaces mean "then" here and "or" in `bind("k up", ..)`; a sequence is two
+  keys or more, and one of one key panics: bind it with `bind`.
 - **`App::which_key(true)`** shows what can follow while a sequence waits,
   Yazi's way: in up to three columns, in a box at the bottom of the screen,
-  the keys left in the theme's `which_key.key` style (else `accent`).
+  the keys left in the theme's `which_key.key` style (else `accent`), the
+  two cells after them in `which_key.sep`, the descriptions in
+  `which_key.desc`. A description too long for its column ends in `…`, two
+  cells short of the next column's keys.
   `App::which_key_delay(d)` waits `d` first, so a sequence typed quickly
   shows nothing. The help and the command palette list sequences as `g g`.
 - **`.on_any_key(|cx, key| -> bool)`** gets every key that reaches the node
@@ -1457,6 +1472,11 @@ let picked: Option<usize> = App::new(|| {
   `run_on`) returns once the terminal is given back. An `io::Error` keeps
   its kind; anything else (a `String`, your own error) is `Other`.
   `Driver::take_error()` gives it to a loop of your own.
+- **`App::try_new(|| -> Result<Node, E>)`** builds an app that can fail
+  before it starts (a sound card that is not there): the error comes back
+  from `try_new` itself, before the terminal is taken, so `main` reports it
+  with `?` like any other. What the builder made is dropped, and its
+  `latest` threads never start.
 
 ### Pop-ups
 
@@ -1499,7 +1519,9 @@ cx.popup_at(Origin::TopCenter, Offset::new(0, 2, 50, 3), move || {
 on the screen after each frame (`None` while hidden or scrolled out of
 view); reading it with `get()` subscribes, so what reads it redraws when
 the node moves. `Origin::At(handle.get_untracked()?)` puts a pop-up under
-it.
+it. App state that wants the handle before the view is built makes one
+with `RectHandle::new()` and gives it to the node later with
+`.rect_into(&handle)`.
 
 ### Menus
 
@@ -1545,7 +1567,26 @@ App::new(build).palette_key("ctrl+p").help_key("?")
 ```
 
 Bindings made with `.on_key` have no description and stay out of both.
-Name a node (`.name("Editor")`) to group its commands under that name.
+Name a node (`.name("Editor")`) to group its commands under that name, or
+put one binding in a section of its own with `.bind_in(section, keys,
+description, handler)`: an app with modes lists each mode's keys under the
+mode, as scope-tui's help does.
+
+```rust
+label("scope")
+    .bind_in("oscilloscope", "t", "Toggle the trigger", toggle_trigger)
+    .bind_in("spectroscope", "l", "Logarithmic scale", toggle_log)
+    .bind_scaled("up", &[("", 1.0), ("shift", 10.0), ("ctrl", 5.0)], "Scale up",
+        move |_, by| scale.update(|s| *s *= 1.0 + 0.01 * by))
+    .bind_cycle("tab", "Next mode", mode, &[Mode::Scope, Mode::Vector, Mode::Spectrum])
+```
+
+`.bind_scaled(keys, variants, description, |cx, value| …)` binds the keys
+and the same keys with modifiers, each variant with its value (Shift ten
+times, Ctrl five, Alt a fifth), and the help shows them as one row: the
+plain keys, and `Scale up (shift ×10, ctrl ×5)`. `.bind_cycle(keys,
+description, signal, &modes)` moves a signal on to the next of its modes,
+round to the first after the last.
 
 Sequence bindings are listed too, with their keys as `g g`; a long
 description is cut so its keys still show.
@@ -1622,7 +1663,12 @@ App::new(|| {
 - **Resources:** `resource(fetch)` loads a value in the background and
   holds `Load::Loading`, `Load::Ready(value)` or `Load::Failed(error)`. A
   node that reads it redraws when it arrives; `reload()` fetches again and
-  drops any older result still on its way.
+  drops any older result still on its way. `resource_for(move || key(),
+  |key| fetch(key))` fetches again whenever the key changes (the hovered
+  file, the pane's width), dropping results for keys left behind, and
+  `.stale_after(Duration::from_millis(150))` keeps the last value on show
+  while the next loads, for that long at most: a preview pane that neither
+  blinks nor shows the last file for long.
 
 ```rust
 let user = resource(|| api::user(42));
@@ -1643,7 +1689,11 @@ text(move || match user.get() {
   `Signal<Option<T>>`: `None` until the first value, then the newest.
   Nothing queues: values the app had no time for are skipped (an audio
   buffer, a sensor, scope-tui's reader). `send` returns `false` once the
-  app has finished.
+  app has finished. A thread that keeps a beat sleeps with
+  `tx.sleep(period)`, which keeps to its step as a timer does, and
+  `latest_every(period, || value)` is a thread that makes a value every
+  `period`. Both keep to the app's clock in a test (see
+  [Testing](#testing)). The thread starts when the app starts running.
 - **Another program:** `cx.handoff(command)` gives the terminal to a
   program once the handler returns (an editor, a pager, a shell): the app
   leaves the alternate screen and raw mode, runs it and waits, then takes
@@ -1727,7 +1777,8 @@ everything is drawn again in the new theme.
 The framework's own parts look for names of their own and fall back to
 these: a modal's or pop-up's panel title (the palette's, the help's, a
 confirm's) is drawn in `popup.title`, else `title`; the which-key keys in
-`which_key.key`, else `accent`; notifications in `notify.info`,
+`which_key.key`, else `accent`, its separators in `which_key.sep` and its
+descriptions in `which_key.desc`; notifications in `notify.info`,
 `notify.warn` and `notify.error`, else `accent`, `warn` and `bad`.
 
 ### Theme files, reloaded live
@@ -2373,9 +2424,17 @@ to-do list:
 ```
 
 For the exact bytes sent, or a script of clicks and waits, use
-`App::run_on` with `rs-rich-interact`'s `Headless` backend.
-`App::wait_for_tasks(true)` waits for background tasks before each step,
-so a test sees a task's result however fast the machine is.
+`App::run_on` with `rs-rich-interact`'s `Headless` backend; its `Record`
+keeps the programs handed the terminal (`handoffs`) and each with its
+arguments (`handoff_commands`), so a test sees that `$EDITOR` got the
+right file. `App::wait_for_tasks(true)` waits for background tasks before
+each step, so a test sees a task's result however fast the machine is.
+It also puts `latest` threads that keep a beat (`tx.sleep(period)`,
+`latest_every`) on the app's clock: each step lets the threads that are
+due run until they sleep again, so a thread-fed app shows the same thing
+frame by frame on every run, and a script's `wait(..)` moves the threads
+on as far as the app. (A `latest` thread that waits on something else, a
+pipe, holds each step up to 5 seconds.)
 
 ## Inspector
 
