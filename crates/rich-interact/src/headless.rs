@@ -130,6 +130,9 @@ pub struct Record {
     pub frames: Vec<String>,
     /// Commands handed the terminal, by program name.
     pub handoffs: Vec<String>,
+    /// The same commands, each its program and its arguments: what a test
+    /// asserts to know `$EDITOR` got the right file.
+    pub handoff_commands: Vec<(String, Vec<String>)>,
     /// How many times Ctrl+Z suspended the run
     /// ([`Headless::suspendable`]).
     pub suspends: usize,
@@ -269,7 +272,13 @@ impl Backend for Headless {
 
     fn handoff(&mut self, command: &mut Command) -> io::Result<Option<i32>> {
         let program = command.get_program().to_string_lossy().into_owned();
-        self.record.borrow_mut().handoffs.push(program);
+        let args = command
+            .get_args()
+            .map(|arg| arg.to_string_lossy().into_owned())
+            .collect();
+        let mut record = self.record.borrow_mut();
+        record.handoffs.push(program.clone());
+        record.handoff_commands.push((program, args));
         Ok(self.handoff_code)
     }
 

@@ -114,7 +114,9 @@ impl Key {
     }
 
     /// Parse a key name such as `enter`, `ctrl+c`, `shift+tab`, `pagedown`,
-    /// `f5` or a single character. Case does not matter for names.
+    /// `f5` or a single character. Case does not matter for names. The
+    /// comma key is `,` or `comma` (`ctrl+comma`), the name a list of key
+    /// names can hold without quotes.
     ///
     /// A name means the key: `ctrl+i` is Ctrl+I, not Tab, although a legacy
     /// terminal sends the two alike; [`matches`](Key::matches) is what lets
@@ -169,6 +171,8 @@ impl Key {
                 "insert" => KeyCode::Insert,
                 "escape" | "esc" => KeyCode::Escape,
                 "space" => KeyCode::Char(' '),
+                // A list of key names is separated by commas too.
+                "comma" => KeyCode::Char(','),
                 "up" => KeyCode::Up,
                 "down" => KeyCode::Down,
                 "left" => KeyCode::Left,
@@ -582,6 +586,8 @@ mod tests {
         assert_eq!(Key::parse("shift+tab"), Some(Key::new(KeyCode::BackTab)));
         assert_eq!(Key::parse("f12"), Some(Key::new(KeyCode::F(12))));
         assert_eq!(Key::parse("space"), Some(Key::char(' ')));
+        assert_eq!(Key::parse("comma"), Some(Key::char(',')));
+        assert_eq!(Key::parse("ctrl+comma"), Some(Key::ctrl(',')));
         assert_eq!(Key::parse("x"), Some(Key::char('x')));
         assert_eq!(Key::parse("ctrl++").unwrap().code, KeyCode::Char('+'));
         assert_eq!(Key::parse("+"), Some(Key::char('+')));
