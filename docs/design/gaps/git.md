@@ -133,3 +133,78 @@ allows (`std::process::Command`), parsed with rs-rich-ext's
 | A lane graph for a DAG | a commit graph in the log (lazygit, tig, gitu draw one; gitui's is an open request) | core: `dag_lanes(rows: &[(id, parents)]) -> Vec<String>` (the glyphs per row, `│ ├─╮ ╰─╯`), any DAG (a build graph, a task tree); plugin: the git log's | core + plugin | medium |
 | A progress popup for a running process | push/pull/fetch with stages (`adding objects (1/3)`) and a credential prompt | `jobs.run_process` above, `jobs_panel` in a modal; `cx.prompt_with(.., mask('•'))` for the password exists | core + plugin | medium |
 | Reactive layout: `shown_when`, `size_with` | the log's two lists, gitui's 0/100 and 40/60 layouts | as in the gaps | core | medium |
+
+## Round 2: gitui on round 6
+
+The clone is rebuilt on what round 6 added. It is 2,204 lines (from
+2,219), and does more than before: gitui's focus-driven layout and its
+command bar are in, the closed folders stay closed. The tests are 585
+lines, 23 tests (from 21); all pass.
+
+### What was replaced, and by what
+
+| Hand-built in round 1 | Now | Lines |
+|---|---|---|
+| `Files`: index-path selection and open folders, every folder reopened on each refresh, the selection found again from a remembered row (two `watch`es and a `last` signal) | `tree_keyed` on `Signal<Option<String>>` / `Signal<HashSet<String>>`, keyed by path; one `watch` opens only the folders it has not seen, so a folder the user closed stays closed (new test) | −20 |
+| The status letter inside the label, after the indent (`    M lib.rs`) | `TreeItem::prefix`: the letter first, as gitui draws it (`M     lib.rs`) | ±0 |
+| The diff's selection: an `anchor`, `Diff::step` and ten bindings (↑/↓, J/K, Shift+↑/↓, PgUp/PgDn, Home/End) over the list's own, the selected rows' style by hand | `list_rows(..).range(anchor)`, the theme's `selected.range` set to gitui's `white on blue` | −45 |
+| The log's details: a `switch` between two copies of the commit list on one selection, a `watch` moving the focus to the copy shown, each copy with its own scroll | one list and the details `.shown_when(\|\| details)` | −25 |
+| The panes' `on_click`, to keep the app's focus signal in step with a click | `Node::on_focus` on each pane | ±0 |
+| Fixed 60/40 and 50/50 (gitui's layout not kept) | `size_with` (the lists 60/40, 40/60 while the staged list leads) and `hidden_when` (the diff alone while focused), as gitui | +8 |
+| `key_hints()` in its own look (`enter Stage · a Stage All`) | `key_hints_with(..format(\|k, d\| "{d} [{k}]").key_symbols(true).separator(" ").more(more, "more [.]"))`: `Stage [⏎] Stage All [a] Reset [D] … more [.]`, `.` expands it (new test) | +12 |
+| The Files tab's `switch` per extension, keeping every text area it built | `keyed(\|\| extension, ..)`, the last one dropped | ±0 |
+
+Tests changed, each where the component's behaviour is the better one:
+the key bar's strings (gitui's look); the tree rows (`+   notes.md`,
+`M     lib.rs`: the letter first, as gitui); and two key sequences in the
+staged list (`w up` for `w down`), because the selection now stays on
+the file it was on (`staged.txt`) when `src/lib.rs` is staged above it,
+where the index path stayed on row 0. `FileTree.rows` are keyed by path.
+Dropped: J/K as a second selection key (gitui's are Shift+↑/↓).
+
+### Still hand-built, and why
+
+- **`titled`** (a `text` layer over a panel's top edge). `panel_with` and
+  `title_with` follow state, but a panel's title is always ` Title `
+  one glyph in from the corner (`┌─ Staged Changes ─`); gitui's, as any
+  ratatui `Block`'s, is flush with the corner (`┌Staged Changes──`). The
+  branch on the lists' edge and the commit popup's `{main}` and
+  `[subject length: N]` stay layers too, flush right (`{main}┘`), for the
+  same reason (`add_title_with` pads them).
+- **The title's focus look** still reads the app's `Focus` signal: the
+  panel combines its title with the edge's style, so a focused title is
+  `white` and an unfocused one `bright_black`, but gitui's focused title
+  is bold; there is no `title.focused` style.
+- **`Diff`'s hunk model** (`diff_rows`, the markers lit for the cursor's
+  hunk, `jump` for n/p, the hunk lines a range covers): the sectioned list
+  of round 1's "Components that would help".
+- **The app's `Focus` signal and the watch that moves the real focus**:
+  gitui's focus decides the diff's file and the layout, and `w`, `→` and
+  `←` set it. `on_focus` keeps it in step with clicks; `focus_within` is
+  a read in a handler, not a signal.
+- **The git layer** (~630 lines) and `hunk_patch`: the plugin gaps of
+  round 1, unchanged.
+
+### New gaps
+
+| Gap | Needed for | API sketch | Where |
+|---|---|---|---|
+| A panel title flush with the corner, as a ratatui `Block` draws it, and titles flush with the right corner | every pane's title and the `{branch}` on the lists' edge, with no layer | `.title_padding(0)` / `.title_inset(0)` on a panel, or the theme's `title.padding`; or `Title::flush()` | core |
+| A focused panel's own title style | gitui's bold title on the focused pane | the theme's `title.focused` (combined with `border.focused`) | core |
+| A tree's leaves are indented past the arrow column: `+   notes.md` at the top level and `M     lib.rs` under a folder, where gitui draws `+ notes.md` and `M   lib.rs` (and `▾src`, the arrow on the name) | gitui's tree look exactly | `TreeKeys`' sibling: `TreeLook::leaf_indent(0)`, `.indent(2)`, `.arrow_gap(0)` | core |
+| A binding whose description follows state. The diff's Enter is "Add hunk" or "Remove hunk", `s` "Stage lines" or "Unstage lines": two `bind_when`s each. With `show_disabled(true)` the bar would grey the other one beside it, so the clone leaves it off, and Commit is hidden rather than greyed as gitui does | gitui's bar with greyed commands | `bind_with(keys, \|\| desc, f)`, or `show_disabled` leaving out a disabled hint whose keys an enabled one has | core |
+| `Size::Percent` children of a column can leave a row unused (60% + 40% of 21 rows is 12 + 8); ratatui gives the rest to the last. The clone uses `Flex(3)`/`Flex(2)` | percentages that fill | the last percentage child takes the rounding's remainder | core |
+| A modal's size clamp (round 1) is still missing | the branch popup | `ModalOptions::min(w, h)` | core |
+
+### Bugs found
+
+None blocking. The rounding above is the only surprise.
+
+### Components that would help
+
+| Component | What it would replace or enable | API sketch | Where | Value |
+|---|---|---|---|---|
+| Panel titles in ratatui's placement | `titled`, the branch and warning layers (~40 lines) | as above | core | high |
+| A sectioned list (round 1) | `Diff`'s markers and jumps, now on `range` (~150 lines) | `list(..).sections(\|i\| section)`, a gutter marker per section lit for the cursor's, `next_section`/`previous_section`, a range kept within one | core (sectioned list) + plugin (diff) | high |
+| The git plugin (round 1) | `Git` (~630 lines), `hunk_patch` | as in round 1 | plugin | high |
+| A reactive focus read for containers | the app's `Focus` signal and its watch | `focus::within(id) -> bool` as a tracked read (as `focus::has_focus` is for one node) | core | medium |

@@ -144,21 +144,22 @@ fn the_status_tab_shows_both_trees_and_the_diff() {
     let top = row_with(&d, "Status [1]");
     assert!(top.contains("Status [1]  |  Log [2]  |  Files [3]  |  Stashing [4]  |  Stashes [5]"));
     assert!(row_with(&d, "Unstaged Changes").contains("Diff: notes.md"));
-    assert!(screen_has(&d, "+ notes.md"));
-    assert!(screen_has(&d, "▾ src"));
-    assert!(screen_has(&d, "    M lib.rs"), "{}", dump(&d));
+    // gitui's status letter first, before the indent (`TreeItem::prefix`).
+    assert!(screen_has(&d, "+   notes.md"), "{}", dump(&d));
+    assert!(screen_has(&d, "  ▾ src"));
+    assert!(screen_has(&d, "M     lib.rs"), "{}", dump(&d));
     assert!(row_with(&d, "Staged Changes").starts_with("┌Staged Changes"));
-    assert!(screen_has(&d, "+ staged.txt"));
+    assert!(screen_has(&d, "+   staged.txt"));
     // The branch on the unstaged list's bottom edge, while it is focused.
     assert!(row_with(&d, "{main}").starts_with("└"), "{}", dump(&d));
     // An untracked file's diff, and gitui's hunk markers.
     assert!(screen_has(&d, "┌@@ -0,0 +1 @@"));
     assert!(screen_has(&d, "└+a note"));
-    // The key bar: the focused list's keys first.
+    // The key bar, in gitui's look: the focused list's keys first.
     assert!(rows(&d)
         .last()
         .unwrap()
-        .starts_with("enter Stage · a Stage All · D Reset"));
+        .starts_with("Stage [⏎] Stage All [a] Reset [D]"));
 }
 
 #[test]
@@ -175,14 +176,15 @@ fn enter_stages_a_file_and_unstages_it() {
         .unwrap();
     let lib_row = rows(&d)
         .iter()
-        .rposition(|r| r.contains("M lib.rs"))
+        .rposition(|r| r.contains("M     lib.rs"))
         .unwrap();
     assert!(lib_row > staged_row, "{}", dump(&d));
-    // w to the staged list; its first row is the src folder, then lib.rs.
+    // w to the staged list: its selection stays on staged.txt (kept by
+    // key), under the src folder and lib.rs.
     d.press("w");
     assert!(row_with(&d, "Staged Changes").contains("{main}"));
-    assert!(rows(&d).last().unwrap().starts_with("enter Unstage"));
-    d.press("down enter");
+    assert!(rows(&d).last().unwrap().starts_with("Unstage [⏎]"));
+    d.press("up enter");
     assert!(cached(&root).is_empty(), "unstaged again");
     assert!(worktree(&root).contains("+TWO"));
 }
@@ -250,8 +252,9 @@ fn shift_selects_lines_and_s_stages_only_them() {
     );
     let index = sh(&root, &["show", ":src/lib.rs"]);
     assert!(index.starts_with("one\nthree\n"), "{index}");
-    // Unstage it from the staged diff: w goes to the staged list.
-    d.press("left w down right");
+    // Unstage it from the staged diff: w goes to the staged list, whose
+    // selection stayed on staged.txt (kept by key), under lib.rs.
+    d.press("left w up right");
     assert!(screen_has(&d, "Diff: src/lib.rs"), "{}", dump(&d));
     d.press("down down s");
     assert!(cached(&root).is_empty(), "{}", cached(&root));
@@ -303,7 +306,7 @@ fn the_commit_popup_commits_the_index() {
     let title = row_with(&d, "Commit");
     assert!(title.contains("{main}"), "{title}");
     assert!(screen_has(&d, "type commit message.."));
-    assert!(rows(&d).last().unwrap().starts_with("ctrl+d Do Commit"));
+    assert!(rows(&d).last().unwrap().starts_with("Do Commit [^d]"));
     d.type_text("Add the staged file");
     d.press("ctrl+d");
     assert!(!screen_has(&d, "type commit message"), "closed");
@@ -529,7 +532,54 @@ fn a_file_tree_folds_folders_with_one_folder_in_them() {
     assert_eq!(tree.items.len(), 2);
     assert_eq!(tree.items[0].label, "a/b/c");
     assert_eq!(tree.items[0].children.len(), 2);
-    assert_eq!(tree.rows[0], (vec![0], None, vec![0, 1]));
-    assert_eq!(tree.rows[2], (vec![0, 1], Some(1), vec![1]));
-    assert_eq!(tree.rows[3], (vec![1], Some(2), vec![2]));
+    // Rows by key: a folded folder's is its whole path.
+    assert_eq!(tree.rows[0], ("a/b/c".into(), None, vec![0, 1]));
+    assert_eq!(tree.rows[2], ("a/b/c/y.rs".into(), Some(1), vec![1]));
+    assert_eq!(tree.rows[3], ("z.rs".into(), Some(2), vec![2]));
+}
+
+#[test]
+fn the_layout_follows_the_focus_and_period_expands_the_key_bar() {
+    let root = repo("layout");
+    let mut d = driver(&root);
+    // The unstaged list 60%, the staged one 40%, of the left half.
+    let at = |d: &Driver, title: &str| rows(d).iter().position(|r| r.contains(title)).unwrap();
+    assert_eq!(at(&d, "Staged Changes"), 14, "{}", dump(&d));
+    // 40/60 while the staged list is focused.
+    d.press("w");
+    assert_eq!(at(&d, "Staged Changes"), 10, "{}", dump(&d));
+    // The diff alone while it has the focus.
+    d.press("right");
+    assert!(
+        row_with(&d, "Diff: staged.txt").starts_with("┌Diff"),
+        "{}",
+        dump(&d)
+    );
+    assert!(!screen_has(&d, "Staged Changes"));
+    d.press("left");
+    assert!(screen_has(&d, "Staged Changes"));
+    // `more [.]` where the bar is cut; `.` shows the rest on more rows.
+    assert!(
+        rows(&d).last().unwrap().ends_with("more [.]"),
+        "{}",
+        dump(&d)
+    );
+    d.press("period");
+    assert!(screen_has(&d, "Quit [q]"), "{}", dump(&d));
+}
+
+#[test]
+fn a_folder_closed_stays_closed_when_the_files_change() {
+    let root = repo("closed");
+    let mut d = driver(&root);
+    // Close src (row 2), then a new file appears beside it: the tree
+    // keeps its open folders by key, and src stays closed.
+    d.press("down left");
+    assert!(screen_has(&d, "▸ src"), "{}", dump(&d));
+    write(&root, "other.txt", "x\n");
+    d.advance(std::time::Duration::from_secs(6));
+    d.settle();
+    assert!(screen_has(&d, "other.txt"), "{}", dump(&d));
+    assert!(screen_has(&d, "▸ src"), "{}", dump(&d));
+    assert!(!screen_has(&d, "lib.rs"), "{}", dump(&d));
 }
