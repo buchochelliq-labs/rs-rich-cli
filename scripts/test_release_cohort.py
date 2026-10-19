@@ -42,6 +42,8 @@ manifest = "crates/rich-py/pyproject.toml"
 version = "0.3.0"
 """
 
+WORKFLOW = 'on:\n  push:\n    tags: ["release-*"]\n'
+
 
 def write_tree(root, config=CONFIG, art=ART):
     files = {
@@ -51,6 +53,7 @@ def write_tree(root, config=CONFIG, art=ART):
         "crates/rich-py/pyproject.toml": PYPROJECT,
         "crates/rich-py/Cargo.toml": PYCARGO,
         "RELEASES.toml": config,
+        ".github/workflows/release.yml": WORKFLOW,
     }
     for path, text in files.items():
         (root / path).parent.mkdir(parents=True, exist_ok=True)
@@ -179,6 +182,127 @@ class Unreleased(unittest.TestCase):
         self.assertLessEqual(test_deps("python.yml"), test_deps("pypi-release.yml"))
 
 
+class ReleaseTags(unittest.TestCase):
+    """A `release-X.Y.Z` tag selects the release's crates not yet out."""
+
+    packages = [cohort.Package("rs-rich", "crates.io", "m", "0.0.10"),
+                cohort.Package("rs-rich-ext", "crates.io", "m", "0.0.18"),
+                cohort.Package("rs-rich-cli", "crates.io", "m", "0.0.20"),
+                cohort.Package("rs-rich", "pypi", "m", "0.0.8")]
+    tags = {"rs-rich-v0.0.10": "c", "rs-rich-ext-v0.0.18": "c", "rs-rich-cli-v0.0.20": "c"}
+
+    def status(self, *out):
+        return lambda package: 200 if (package.registry, package.name) in out else 404
+
+    def test_a_release_tag_selects_every_crate_of_its_release(self):
+        self.assertEqual([p.name for p in cohort.selected_by("release-0.0.20", self.packages)],
+                         ["rs-rich", "rs-rich-ext", "rs-rich-cli"])
+        with self.assertRaisesRegex(ValueError, "release 0.0.20, not 0.0.19"):
+            cohort.selected_by("release-0.0.19", self.packages)
+
+    def test_the_selection_is_the_release_minus_what_is_published_in_order(self):
+        due = cohort.unreleased("release-0.0.20", self.packages, self.status(("crates.io", "rs-rich")),
+                                self.tags, "c")
+        self.assertEqual([p.name for p in due], ["rs-rich-ext", "rs-rich-cli"])
+
+    def test_pypi_is_never_in_a_release_tags_selection(self):
+        due = cohort.unreleased("release-0.0.20", self.packages, self.status(), self.tags, "c")
+        self.assertEqual({p.registry for p in due}, {"crates.io"})
+
+    def test_an_empty_selection_is_refused(self):
+        out = self.status(("crates.io", "rs-rich"), ("crates.io", "rs-rich-ext"), ("crates.io", "rs-rich-cli"))
+        with self.assertRaisesRegex(RuntimeError, "nothing to publish"):
+            cohort.unreleased("release-0.0.20", self.packages, out, self.tags, "c")
+
+    def test_every_selected_crate_must_be_tagged_on_the_release_commit(self):
+        tags = {**self.tags, "rs-rich-ext-v0.0.18": "elsewhere000000"}
+        del tags["rs-rich-cli-v0.0.20"]
+        with self.assertRaisesRegex(RuntimeError, r"rs-rich-ext-v0\.0\.18 \(at elsewhere000\), "
+                                                  r"rs-rich-cli-v0\.0\.20 \(missing\)"):
+            cohort.unreleased("release-0.0.20", self.packages, self.status(), tags, "c")
+        # A published crate's tag may be anywhere: it is not selected.
+        cohort.unreleased("release-0.0.20", self.packages[:2] + self.packages[2:],
+                          self.status(("crates.io", "rs-rich-ext"), ("crates.io", "rs-rich-cli")), tags, "c")
+
+    def test_a_selected_crates_record_tag_must_be_annotated(self):
+        with self.assertRaisesRegex(RuntimeError, r"must be annotated: rs-rich-cli-v0\.0\.20 is lightweight"):
+            cohort.unreleased("release-0.0.20", self.packages, self.status(), self.tags, "c",
+                              lightweight={"rs-rich-cli-v0.0.20"})
+        # A published crate is not selected, so its tag's kind does not matter.
+        cohort.unreleased("release-0.0.20", self.packages, self.status(("crates.io", "rs-rich-cli")),
+                          self.tags, "c", lightweight={"rs-rich-cli-v0.0.20"})
+
+    def test_verify_only_checks_what_the_release_tagged_on_its_commit(self):
+        tags = {**self.tags, "rs-rich-v0.0.10": "older"}
+        everything = self.status(("crates.io", "rs-rich"), ("crates.io", "rs-rich-ext"), ("crates.io", "rs-rich-cli"))
+        chosen = cohort.published("release-0.0.20", self.packages, everything, tags, "c")
+        self.assertEqual([p.name for p in chosen], ["rs-rich-ext", "rs-rich-cli"])
+        with self.assertRaisesRegex(RuntimeError, "cannot complete a partial upload"):
+            cohort.published("release-0.0.20", self.packages, self.status(("crates.io", "rs-rich-ext")), tags, "c")
+
+    def test_the_selection_is_handed_on_as_json_in_order(self):
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "out"
+            with mock.patch.dict(os.environ, {"GITHUB_OUTPUT": str(output)}):
+                cohort.write_selection(self.packages[::-1])
+            self.assertEqual(output.read_text(),
+                             'selection={"rs-rich-cli":"0.0.20","rs-rich-ext":"0.0.18","rs-rich":"0.0.10"}\n')
+
+
+class Workflow(unittest.TestCase):
+    """release.yml: one release tag, one gate, one CI, one publish."""
+
+    text = (ROOT / ".github/workflows/release.yml").read_text()
+
+    def test_only_a_release_tag_push_or_a_dispatch_starts_it(self):
+        on = self.text[self.text.index("\non:"):self.text.index("\npermissions:")]
+        self.assertIn('  push:\n    tags: ["release-*"]\n  workflow_dispatch:', on)
+        self.assertEqual(on.count("tags:"), 1)
+        self.assertNotIn('"v*"', on)
+        self.assertNotIn("-v*", on)
+        self.assertIn("      tag:", on)
+        self.assertIn("      verify_only:", on)
+
+    def test_ci_runs_once_on_the_validated_commit(self):
+        self.assertEqual(self.text.count("uses: ./.github/workflows/ci.yml"), 1)
+        self.assertIn("checkout_ref: ${{ needs.gate.outputs.sha }}", self.text)
+        self.assertEqual(self.text.count("runs-on:"), 2)         # the gate and the publish job
+
+    def test_the_gate_checks_the_release_before_ci(self):
+        ci = self.text.index("uses: ./.github/workflows/ci.yml")
+        steps = ["release.py validate-tag", "release_cohort.py check", "release_cohort.py same-commit",
+                 "release_cohort.py unreleased", "release.py plan"]
+        positions = [self.text.index(step) for step in steps]
+        self.assertEqual(positions, sorted(positions))
+        self.assertLess(positions[-1], ci)
+        self.assertIn("RELEASE_SELECTION: ${{ steps.due.outputs.selection || steps.done.outputs.selection }}",
+                      self.text)
+
+    def test_one_publish_job_uploads_the_whole_selection(self):
+        publish = self.text[self.text.index("  publish:"):]
+        self.assertEqual(publish.count("run: python3 scripts/release.py publish\n"), 1)
+        self.assertEqual(publish.count("run: python3 scripts/release.py publish --dry-run\n"), 1)
+        self.assertEqual(publish.count("run: python3 scripts/release.py verify\n"), 1)
+        self.assertIn("needs: [gate, ci]", publish)
+        self.assertIn("RELEASE_SELECTION: ${{ needs.gate.outputs.selection }}", publish)
+        # ...with one multi-package `cargo publish -p a -p b`, dry run and upload.
+        with mock.patch.object(cohort.release.subprocess, "run") as run:
+            cohort.release.publish({"rs-rich": "1.0.0", "rs-rich-ext": "1.0.0"}, dry_run=True)
+            cohort.release.publish({"rs-rich": "1.0.0", "rs-rich-ext": "1.0.0"}, dependencies={},
+                                   environ={"RELEASE_TRUSTED_TOKEN": "t"})
+        self.assertEqual([c.args[0] for c in run.call_args_list], [
+            ["cargo", "publish", "-p", "rs-rich", "-p", "rs-rich-ext", "--locked", "--dry-run"],
+            ["cargo", "publish", "-p", "rs-rich", "-p", "rs-rich-ext", "--locked"]])
+
+    def test_releases_never_cancel_each_other(self):
+        self.assertIn("group: crates-io-release\n  cancel-in-progress: false", self.text)
+
+    def test_pypi_does_not_start_on_a_release_tag(self):
+        pypi = (ROOT / ".github/workflows/pypi-release.yml").read_text()
+        self.assertIn('tags: ["python-v*"]', pypi)
+        self.assertNotIn("release-*\"", pypi)
+
+
 class Tag(unittest.TestCase):
     """`tag` against a throwaway repository and its bare `origin`."""
 
@@ -211,10 +335,10 @@ class Tag(unittest.TestCase):
         published = {(package.registry, package.name), (package.registry, package.name, package.version)}
         return 200 if published & self.published else 404
 
-    def wait(self, package, timeout, status, stale=None):
-        self.waited.append(package.tag)
+    def wait(self, tag_name, packages, timeout, status, stale=None):
+        self.waited.append(tag_name)
         self.stale.append(stale)
-        self.published.add((package.registry, package.name))
+        self.published |= {(p.registry, p.name) for p in packages}
 
     def remote_tags(self):
         return sorted(cohort.remote_tags("origin"))
@@ -222,20 +346,98 @@ class Tag(unittest.TestCase):
     def run_tag(self, **options):
         cohort.tag(options.get("commit", "HEAD"), "origin", 60, options.get("dry_run", False),
                    status=self.status, wait=self.wait, registry=options.get("registry"),
-                   run=options.get("run", lambda package: None), start=options.get("start"),
-                   release_wanted=options.get("release"))
+                   run=options.get("run", lambda tag_name: None), release_wanted=options.get("release"))
 
-    def test_tags_only_what_is_unpublished_in_order_and_waits_for_each(self):
+    def test_lightweight_tags_are_the_remotes_tags_with_no_tag_object(self):
+        git(self.work, "tag", "rs-rich-art-v0.2.0")
+        git(self.work, "tag", "-a", "-m", "release", "release-0.2.0")
+        git(self.work, "push", "--quiet", "origin", "rs-rich-art-v0.2.0", "release-0.2.0")
+        self.assertEqual(cohort.lightweight_tags("origin"), {"rs-rich-art-v0.2.0"})
+
+    def test_tags_what_is_unpublished_and_the_release_and_waits_for_each_run(self):
         self.run_tag()
-        self.assertEqual(self.waited, ["rs-rich-art-v0.2.0", "python-v0.3.0"])
-        self.assertEqual(self.remote_tags(), ["python-v0.3.0", "rs-rich-art-v0.2.0"])
-        self.assertEqual(git(self.work, "cat-file", "-t", "rs-rich-art-v0.2.0"), "tag")
-        self.assertEqual(git(self.work, "rev-parse", "rs-rich-art-v0.2.0^{commit}"), self.sha)
+        self.assertEqual(self.waited, ["release-0.2.0", "python-v0.3.0"])
+        self.assertEqual(self.remote_tags(), ["python-v0.3.0", "release-0.2.0", "rs-rich-art-v0.2.0"])
+        for name in ("rs-rich-art-v0.2.0", "release-0.2.0", "python-v0.3.0"):
+            self.assertEqual(git(self.work, "cat-file", "-t", name), "tag")
+            self.assertEqual(git(self.work, "rev-parse", f"{name}^{{commit}}"), self.sha)
+
+    def test_the_release_tag_is_named_by_the_release_and_records_it(self):
+        self.run_tag(registry="crates.io")
+        self.assertEqual(cohort.tag_trailers("release-0.2.0"), {"Release": "0.2.0", "Commit": self.sha})
+        message = git(self.work, "for-each-ref", "refs/tags/release-0.2.0", "--format=%(contents)")
+        self.assertTrue(message.startswith("Release 0.2.0\n\nrs-rich-art 0.2.0\n"), message)
+        self.assertNotIn("rs-rich 0.1.0", message)       # already published: not in this run
+        self.assertEqual(cohort.release_tag("0.0.20"), "release-0.0.20")
+
+    def pushes(self, **options):
+        """Run `tag`, returning the refs of every `git push` it made."""
+        made, real = [], cohort.git
+
+        def recording(*args, capture=True):
+            if args[0] == "push":
+                made.append([a for a in args[1:] if a != "origin"])
+            return real(*args, capture=capture)
+        with mock.patch.object(cohort, "git", recording):
+            self.run_tag(**options)
+        return made
+
+    def test_record_tags_go_up_in_one_atomic_push_then_the_tags_that_start_runs(self):
+        # GitHub starts no workflow for a push of more than three tags: the
+        # records (which start nothing) go first, together, then the release
+        # and python tags.
+        self.published.clear()
+        self.assertEqual(self.pushes(), [
+            ["--atomic", "refs/tags/rs-rich-v0.1.0", "refs/tags/rs-rich-art-v0.2.0"],
+            ["--atomic", "refs/tags/release-0.2.0", "refs/tags/python-v0.3.0"],
+        ])
+        self.assertEqual(self.waited, ["release-0.2.0", "python-v0.3.0"])
+
+    def test_an_atomic_push_that_fails_pushes_nothing(self):
+        # Someone else's rs-rich-art tag lands on the remote first: the record
+        # push is refused whole, and no run is started.
+        self.published.clear()
+        other = Path(self.dir.name) / "other"
+        git(Path(self.dir.name), "clone", "--quiet", "-b", "main", str(self.remote), str(other))
+        git(other, "-c", "user.name=T", "-c", "user.email=t@e", "tag", "-a", "rs-rich-art-v0.2.0", "-m", "x")
+        git(other, "push", "--quiet", "origin", "rs-rich-art-v0.2.0")
+        real = cohort.remote_tags
+        with mock.patch.object(cohort, "remote_tags", lambda remote: {}), \
+                self.assertRaises(subprocess.CalledProcessError):
+            self.run_tag()     # it saw the remote before the other tag landed
+        self.assertEqual(sorted(real("origin")), ["rs-rich-art-v0.2.0"])
+        self.assertEqual(self.waited, [])
 
     def test_a_registry_tags_only_its_packages(self):
         self.run_tag(registry="crates.io")
-        self.assertEqual(self.waited, ["rs-rich-art-v0.2.0"])
-        self.assertEqual(self.remote_tags(), ["rs-rich-art-v0.2.0"])
+        self.assertEqual(self.waited, ["release-0.2.0"])
+        self.assertEqual(self.remote_tags(), ["release-0.2.0", "rs-rich-art-v0.2.0"])
+
+    def test_pypi_alone_leaves_the_crates_and_the_release_tag(self):
+        self.run_tag(registry="pypi")
+        self.assertEqual(self.waited, ["python-v0.3.0"])
+        self.assertEqual(self.remote_tags(), ["python-v0.3.0"])
+
+    def test_a_commit_whose_workflow_predates_release_tags_is_refused(self):
+        # Release 0.0.19's commit has the per-crate release.yml: a release
+        # tag there would start nothing.
+        (self.work / ".github/workflows/release.yml").write_text(
+            'on:\n  push:\n    tags: ["v*", "rs-rich-v*", "rs-rich-art-v*"]\n')
+        git(self.work, "commit", "--quiet", "-am", "the old workflow")
+        git(self.work, "push", "--quiet", "origin", "main")
+        with self.assertRaisesRegex(RuntimeError, "predates one-run releases"):
+            self.run_tag()
+        self.assertEqual(self.remote_tags(), [])
+        self.run_tag(registry="pypi")          # PyPI's workflow is unchanged
+        self.assertEqual(self.remote_tags(), ["python-v0.3.0"])
+
+    def test_the_repositorys_release_workflow_starts_on_release_tags(self):
+        self.assertTrue(cohort.starts_on_release_tags(cohort.files_on_disk(ROOT)))
+
+    def test_nothing_due_on_crates_io_pushes_no_release_tag(self):
+        self.published.add(("crates.io", "rs-rich-art"))
+        self.run_tag()
+        self.assertEqual(self.remote_tags(), ["python-v0.3.0"])
 
     def test_a_second_run_tags_nothing(self):
         self.run_tag()
@@ -243,37 +445,26 @@ class Tag(unittest.TestCase):
         self.run_tag()
         self.assertEqual(self.waited, [])
 
-    def test_from_leaves_the_packages_before_it(self):
-        self.run_tag(start="python-v0.3.0")
-        self.assertEqual(self.waited, ["python-v0.3.0"])
-        self.assertEqual(self.remote_tags(), ["python-v0.3.0"])
-
-    def test_from_takes_a_crate_name(self):
-        self.run_tag(start="rs-rich-art")
-        self.assertEqual(self.waited, ["rs-rich-art-v0.2.0", "python-v0.3.0"])
-
-    def test_from_refuses_to_leave_an_unpublished_crate_a_later_one_needs(self):
-        # rs-rich-art depends on rs-rich: starting after an unpublished
-        # rs-rich would make rs-rich-art's publish fail.
-        self.published.clear()
-        with self.assertRaisesRegex(RuntimeError, r"rs-rich-art needs rs-rich@0\.1\.0"):
-            self.run_tag(start="rs-rich-art")
-        self.assertEqual(self.remote_tags(), [])
-
-    def test_from_an_unknown_package_is_refused(self):
-        with self.assertRaisesRegex(ValueError, "no RELEASES.toml entry"):
-            self.run_tag(start="rs-rich-nope")
-
     def test_a_dry_run_tags_nothing(self):
         self.run_tag(dry_run=True)
         self.assertEqual(self.remote_tags(), [])
         self.assertEqual(self.waited, [])
 
-    def test_an_existing_unpublished_tag_is_waited_on_not_recreated(self):
-        git(self.work, "tag", "-a", "rs-rich-art-v0.2.0", "-m", "x")
+    def test_an_existing_record_tag_is_kept_not_recreated(self):
+        git(self.work, "tag", "-a", "rs-rich-art-v0.2.0", "-m", "by hand")
         git(self.work, "push", "--quiet", "origin", "rs-rich-art-v0.2.0")
-        self.run_tag()
-        self.assertEqual(self.waited, ["rs-rich-art-v0.2.0", "python-v0.3.0"])
+        self.assertEqual(self.pushes(), [["--atomic", "refs/tags/release-0.2.0", "refs/tags/python-v0.3.0"]])
+        self.assertEqual(self.waited, ["release-0.2.0", "python-v0.3.0"])
+        self.assertEqual(git(self.work, "for-each-ref", "refs/tags/rs-rich-art-v0.2.0", "--format=%(contents)"),
+                         "by hand")
+
+    def test_a_release_whose_run_is_going_is_waited_on(self):
+        self.run_tag(registry="crates.io")
+        self.published.discard(("crates.io", "rs-rich-art"))
+        self.waited.clear()
+        going = self.run_on(self.sha, status="in_progress", conclusion="")
+        self.assertEqual(self.pushes(registry="crates.io", run=going), [])
+        self.assertEqual(self.waited, ["release-0.2.0"])
 
     def tag_a_later_commit(self, change=True):
         """rs-rich-art's tag on a later commit of main, its version unpublished;
@@ -289,7 +480,7 @@ class Tag(unittest.TestCase):
         return git(self.work, "rev-parse", "HEAD")
 
     def run_on(self, commit, status="completed", conclusion="cancelled", publish_started=False):
-        return lambda package: {"status": status, "conclusion": conclusion, "url": "https://example/run",
+        return lambda tag_name: {"status": status, "conclusion": conclusion, "url": "https://example/run",
                                 "head_sha": commit, "publish_started": publish_started}
 
     def test_a_tag_with_a_run_going_on_another_commit_that_ships_other_files_stops(self):
@@ -316,7 +507,7 @@ class Tag(unittest.TestCase):
         self.run_tag(commit=self.sha, run=self.run_on(later))
         self.assertEqual(cohort.remote_tags("origin")["rs-rich-art-v0.2.0"], self.sha)
         self.assertEqual(git(self.work, "rev-parse", "rs-rich-art-v0.2.0^{commit}"), self.sha)
-        self.assertEqual(self.waited, ["rs-rich-art-v0.2.0", "python-v0.3.0"])
+        self.assertEqual(self.waited, ["release-0.2.0", "python-v0.3.0"])
 
     def test_a_cancelled_run_that_started_publishing_holds_the_release_to_its_commit(self):
         # The upload may have landed before the cancel; the registry can
@@ -365,7 +556,7 @@ class Tag(unittest.TestCase):
         with mock.patch.object(sys, "argv", ["release_cohort.py", "tag", "--registry", "crates.io"]), \
                 mock.patch.object(cohort, "tag", lambda *a, **k: tag(*a, status=self.status, wait=self.wait, **k)):
             self.assertEqual(cohort.main(), 0)
-        self.assertEqual(self.waited, ["rs-rich-art-v0.2.0"])
+        self.assertEqual(self.waited, ["release-0.2.0"])
         self.assertEqual(git(self.work, "rev-parse", "rs-rich-art-v0.2.0^{commit}"), self.sha)
         # Nothing was fetched: the checkout's view of main is where it was.
         self.assertEqual(git(self.work, "rev-parse", "origin/main"), self.sha)
@@ -378,7 +569,7 @@ class Tag(unittest.TestCase):
         git(self.work, "commit", "--quiet", "-am", "later")
         git(self.work, "push", "--quiet", "origin", "main")
         self.run_tag(commit=self.sha, registry="crates.io")
-        self.assertEqual(self.waited, ["rs-rich-art-v0.2.0"])
+        self.assertEqual(self.waited, ["release-0.2.0"])
         self.assertEqual(git(self.work, "rev-parse", "rs-rich-art-v0.2.0^{commit}"), self.sha)
 
     def publish_rs_rich_here(self):
@@ -407,7 +598,7 @@ class Tag(unittest.TestCase):
         git(self.work, "commit", "--quiet", "-m", "outside the crate")
         git(self.work, "push", "--quiet", "origin", "main")
         self.run_tag(registry="crates.io")
-        self.assertEqual(self.waited, ["rs-rich-art-v0.2.0"])
+        self.assertEqual(self.waited, ["release-0.2.0"])
 
     def change_rs_rich(self, message="change rs-rich without a bump"):
         (self.work / "crates/rich/src").mkdir(parents=True, exist_ok=True)
@@ -432,7 +623,7 @@ class Tag(unittest.TestCase):
         self.publish_rs_rich_here()
         self.change_rs_rich()
         self.run_tag(commit=None)
-        self.assertEqual(self.waited, ["rs-rich-art-v0.2.0", "python-v0.3.0"])
+        self.assertEqual(self.waited, ["release-0.2.0", "python-v0.3.0"])
         self.assertEqual(git(self.work, "rev-parse", "rs-rich-art-v0.2.0^{commit}"), self.sha)
         self.assertEqual(git(self.work, "rev-parse", "python-v0.3.0^{commit}"), self.sha)
 
@@ -455,7 +646,7 @@ class Tag(unittest.TestCase):
     def test_release_finds_the_last_commit_on_main_naming_it(self):
         self.bump_art()
         self.run_tag(commit=None, release="v0.2.0", registry="crates.io")
-        self.assertEqual(self.waited, ["rs-rich-art-v0.2.0"])
+        self.assertEqual(self.waited, ["release-0.2.0"])
         self.assertEqual(git(self.work, "rev-parse", "rs-rich-art-v0.2.0^{commit}"), self.sha)
 
     def test_release_takes_the_commit_its_tags_are_on(self):
@@ -488,6 +679,33 @@ class Tag(unittest.TestCase):
         git(self.work, "tag", "-a", "rs-rich-art-v0.2.0", "-m", "x", later)
         with self.assertRaisesRegex(RuntimeError, r"would split release 0\.2\.0(.|\n)*rs-rich@0\.1\.0"):
             cohort.same_commit("rs-rich-art-v0.2.0", "origin")
+
+    def test_same_commit_passes_a_release_tag_on_its_commit(self):
+        self.run_tag(registry="crates.io")
+        summary = cohort.same_commit("release-0.2.0", "origin")
+        self.assertIn(f"release-0.2.0 -> {self.sha} (release 0.2.0)", summary)
+        self.assertIn("rs-rich-art-v0.2.0", summary)
+
+    def test_same_commit_refuses_a_release_tag_without_its_record(self):
+        git(self.work, "tag", "-a", "release-0.2.0", "-m", "by hand")
+        with self.assertRaisesRegex(RuntimeError, "must record its release and commit"):
+            cohort.same_commit("release-0.2.0", "origin")
+        git(self.work, "tag", "-f", "-a", "release-0.2.0", "-m", f"x\n\nRelease: 0.2.0\nCommit: {self.sha}")
+        cohort.same_commit("release-0.2.0", "origin")
+
+    def test_same_commit_refuses_a_release_tag_of_another_release(self):
+        git(self.work, "tag", "-a", "release-0.1.0", "-m", f"x\n\nRelease: 0.1.0\nCommit: {self.sha}")
+        with self.assertRaisesRegex(RuntimeError, "records release 0.1.0"):
+            cohort.same_commit("release-0.1.0", "origin")
+
+    def test_the_gate_selects_what_tag_left_due(self):
+        # What release.yml's gate computes from what `tag` pushed: the
+        # unpublished crates, each tagged on the release commit.
+        self.run_tag(registry="crates.io")
+        self.published = {("crates.io", "rs-rich")}
+        due = cohort.unreleased("release-0.2.0", cohort.load(cohort.files_at(self.sha)), self.status,
+                                cohort.remote_tags("origin"), self.sha)
+        self.assertEqual([p.tag for p in due], ["rs-rich-art-v0.2.0"])
 
     def test_same_commit_refuses_a_tag_moved_from_its_recorded_commit(self):
         later = self.change_rs_rich("elsewhere")
@@ -534,23 +752,120 @@ class Tag(unittest.TestCase):
         head = git(self.work, "rev-parse", "HEAD")
         self.run_tag(commit=None, registry="crates.io", run=self.run_on(self.sha, conclusion="failure"))
         self.assertEqual(cohort.remote_tags("origin")["rs-rich-art-v0.2.0"], head)
-        self.assertEqual(self.stale[self.waited.index("rs-rich-art-v0.2.0")], "https://example/run")
+        self.assertEqual(cohort.remote_tags("origin")["release-0.2.0"], head)
 
-    def test_a_dead_tag_on_the_release_commit_is_pushed_again(self):
-        # Re-running after a run that failed before publishing starts a new
-        # run, and the wait ignores the failed one.
-        git(self.work, "tag", "-a", "rs-rich-art-v0.2.0", "-m", "x")
-        git(self.work, "push", "--quiet", "origin", "rs-rich-art-v0.2.0")
-        self.run_tag(registry="crates.io", run=self.run_on(self.sha, conclusion="failure"))
-        self.assertEqual(self.waited, ["rs-rich-art-v0.2.0"])
+    def released_here(self, published=()):
+        """`tag` pushed release 0.2.0 here; its run ended. `published` names
+        the crates it got out before failing."""
+        self.published.clear()
+        self.run_tag(registry="crates.io")
+        self.published = {("crates.io", name) for name in published}
+        self.waited.clear()
+        self.stale.clear()
+
+    def test_a_dead_release_on_the_release_commit_is_pushed_again(self):
+        # Re-running after a run that failed before publishing deletes and
+        # pushes the release tag again; the records stay; the wait ignores
+        # the failed run.
+        self.released_here()
+        pushes = self.pushes(registry="crates.io", run=self.run_on(self.sha, conclusion="failure"))
+        self.assertEqual(pushes, [["--atomic", ":refs/tags/release-0.2.0"], ["--atomic", "refs/tags/release-0.2.0"]])
+        self.assertEqual(self.waited, ["release-0.2.0"])
         self.assertEqual(self.stale, ["https://example/run"])
-        self.assertEqual(cohort.remote_tags("origin")["rs-rich-art-v0.2.0"], self.sha)
+        self.assertEqual(cohort.remote_tags("origin")["release-0.2.0"], self.sha)
+
+    def test_a_partial_release_is_resumed_by_pushing_its_tag_again(self):
+        # rs-rich went out, then the run failed: `tag` (no --commit) resumes
+        # on the release commit even after main has moved on, and pushes the
+        # same release tag again; the gate will select only rs-rich-art.
+        self.released_here(published=["rs-rich"])
+        self.change_rs_rich("main moves on")
+        failed = self.run_on(self.sha, conclusion="failure", publish_started=True)
+        pushes = self.pushes(commit=None, registry="crates.io", run=failed)
+        self.assertEqual(pushes, [["--atomic", ":refs/tags/release-0.2.0"], ["--atomic", "refs/tags/release-0.2.0"]])
+        self.assertEqual(cohort.remote_tags("origin")["release-0.2.0"], self.sha)
+        self.assertEqual(self.waited, ["release-0.2.0"])
+        self.assertEqual(self.stale, ["https://example/run"])
+        message = git(self.work, "for-each-ref", "refs/tags/release-0.2.0", "--format=%(contents)")
+        self.assertIn("rs-rich-art 0.2.0", message)
+        self.assertNotIn("rs-rich 0.1.0", message)
+
+    def test_a_partial_release_holds_the_rest_to_its_commit(self):
+        # The run that failed had started publishing: the unpublished
+        # crates' records bind too, so a commit that changes them is refused.
+        self.released_here(published=["rs-rich"])
+        (self.work / "crates/rich-art/src").mkdir(parents=True)
+        (self.work / "crates/rich-art/src/lib.rs").write_text("// fix\n")
+        git(self.work, "add", ".")
+        git(self.work, "commit", "--quiet", "-m", "fix art")
+        git(self.work, "push", "--quiet", "origin", "main")
+        failed = self.run_on(self.sha, conclusion="failure", publish_started=True)
+        with self.assertRaisesRegex(RuntimeError, r"rs-rich-art@0\.2\.0.*src/lib\.rs"):
+            self.run_tag(commit="HEAD", registry="crates.io", run=failed)
+
+    def test_a_dead_release_moves_to_a_fix_on_main(self):
+        # Nothing went out; main has a fix. `tag` releases HEAD and moves the
+        # records and the release tag there in its two pushes.
+        self.released_here()
+        (self.work / "crates/rich-art/src").mkdir(parents=True)
+        (self.work / "crates/rich-art/src/lib.rs").write_text("// fix\n")
+        git(self.work, "add", ".")
+        git(self.work, "commit", "--quiet", "-m", "fix art")
+        git(self.work, "push", "--quiet", "origin", "main")
+        head = git(self.work, "rev-parse", "HEAD")
+        dead = self.run_on(self.sha, conclusion="failure")
+        pushes = self.pushes(commit=None, registry="crates.io", run=dead)
+        self.assertEqual(pushes[0][0], "--atomic")
+        self.assertEqual(sorted(pushes[0][1:]), [":refs/tags/release-0.2.0", ":refs/tags/rs-rich-art-v0.2.0",
+                                                 ":refs/tags/rs-rich-v0.1.0"])
+        self.assertEqual(pushes[1:], [["--atomic", "refs/tags/rs-rich-v0.1.0", "refs/tags/rs-rich-art-v0.2.0"],
+                                      ["--atomic", "refs/tags/release-0.2.0"]])
+        tags = cohort.remote_tags("origin")
+        self.assertEqual({tags["release-0.2.0"], tags["rs-rich-art-v0.2.0"], tags["rs-rich-v0.1.0"]}, {head})
+        self.assertEqual(self.stale, [None])
+
+    def test_a_live_release_tag_elsewhere_stops(self):
+        self.released_here()
+        later = self.change_rs_rich("later")
+        going = self.run_on(self.sha, status="in_progress", conclusion="")
+        with self.assertRaisesRegex(RuntimeError, f"tagged at {self.sha[:12]}"):
+            self.run_tag(commit=later, registry="crates.io", run=going)
 
     def test_the_wait_ignores_the_run_a_pushed_again_tag_replaces(self):
         package = cohort.Package("rs-rich-art", "crates.io", "x", "0.2.0")
         runs = iter([("completed", "failure", "old"), ("completed", "success", "new")])
-        cohort.wait_for(package, 60, status=lambda p: 200, conclusion=lambda p: next(runs),
+        cohort.wait_for("release-0.2.0", [package], 60, status=lambda p: 200, conclusion=lambda t: next(runs),
                         sleep=lambda s: None, stale="old")
+
+    def test_the_wait_asks_for_the_release_tags_run_and_every_crate(self):
+        rich, art = (cohort.Package(n, "crates.io", "x", "0.2.0") for n in ("rs-rich", "rs-rich-art"))
+        out, asked, sleeps = {"rs-rich"}, [], []
+
+        def conclusion(tag_name):
+            asked.append(tag_name)
+            if len(asked) == 1:
+                out.add("rs-rich-art")
+            return ("completed", "success", "u")
+        cohort.wait_for("release-0.2.0", [rich, art], 60, status=lambda p: 200 if p.name in out else 404,
+                        conclusion=conclusion, sleep=sleeps.append)
+        self.assertEqual(set(asked), {"release-0.2.0"})
+        self.assertEqual(len(sleeps), 1)
+
+    def test_a_failed_release_run_says_how_far_it_got_and_how_to_resume(self):
+        rich, art = (cohort.Package(n, "crates.io", "x", "0.2.0") for n in ("rs-rich", "rs-rich-art"))
+        with self.assertRaisesRegex(RuntimeError, r"ended failure: u \(1 of 2 published\).*tag again"):
+            cohort.wait_for("release-0.2.0", [rich, art], 60, status=lambda p: 200 if p.name == "rs-rich" else 404,
+                            conclusion=lambda t: ("completed", "failure", "u"), sleep=lambda s: None)
+
+    def test_the_run_of_a_crate_is_its_release_tags_on_the_same_commit(self):
+        art = cohort.Package("rs-rich-art", "crates.io", "x", "0.2.0")
+        python = cohort.Package("rs-rich", "pypi", "x", "0.3.0")
+        self.assertEqual(cohort.run_tag_of(art, {"rs-rich-art-v0.2.0": "a", "release-0.2.0": "a"}), "release-0.2.0")
+        self.assertEqual(cohort.run_tag_of(art, {"rs-rich-art-v0.2.0": "a", "release-0.2.0": "b"}),
+                         "rs-rich-art-v0.2.0")       # a crate tag pushed alone, as before release tags
+        self.assertEqual(cohort.run_tag_of(python, {"python-v0.3.0": "a", "release-0.2.0": "a"}), "python-v0.3.0")
+        self.assertEqual(cohort.workflow_of("release-0.2.0"), "release.yml")
+        self.assertEqual(cohort.workflow_of("python-v0.3.0"), "pypi-release.yml")
 
     def test_cargo_globs(self):
         cases = [("src/style.rs", "src/**/*", True), ("src/a/b.rs", "src/**/*", True),
@@ -577,26 +892,27 @@ class Tag(unittest.TestCase):
         package = cohort.Package("rs-rich-art", "crates.io", "x", "0.2.0")
         runs = iter([("in_progress", "", "u"), ("in_progress", "", "u"), ("completed", "success", "u")])
         sleeps = []
-        cohort.wait_for(package, 60, status=lambda p: 200, conclusion=lambda p: next(runs),
+        cohort.wait_for("release-0.2.0", [package], 60, status=lambda p: 200, conclusion=lambda t: next(runs),
                         sleep=sleeps.append)
         self.assertEqual(len(sleeps), 2)
 
     def test_a_run_that_fails_after_uploading_stops_the_wait(self):
         package = cohort.Package("rs-rich-art", "crates.io", "x", "0.2.0")
         with self.assertRaisesRegex(RuntimeError, "ended failure"):
-            cohort.wait_for(package, 60, status=lambda p: 200,
-                            conclusion=lambda p: ("completed", "failure", "https://example/run"),
+            cohort.wait_for("release-0.2.0", [package], 60, status=lambda p: 200,
+                            conclusion=lambda t: ("completed", "failure", "https://example/run"),
                             sleep=lambda s: None)
 
     def test_without_gh_the_registry_decides(self):
         package = cohort.Package("rs-rich-art", "crates.io", "x", "0.2.0")
-        cohort.wait_for(package, 60, status=lambda p: 200, conclusion=lambda p: None, sleep=lambda s: None)
+        cohort.wait_for("release-0.2.0", [package], 60, status=lambda p: 200, conclusion=lambda t: None,
+                        sleep=lambda s: None)
 
     def test_a_failed_release_run_stops_the_wait(self):
         package = cohort.Package("rs-rich-art", "crates.io", "x", "0.2.0")
         with self.assertRaisesRegex(RuntimeError, "ended failure"):
-            cohort.wait_for(package, 60, status=lambda p: 404,
-                            conclusion=lambda p: ("completed", "failure", "https://example/run"),
+            cohort.wait_for("release-0.2.0", [package], 60, status=lambda p: 404,
+                            conclusion=lambda t: ("completed", "failure", "https://example/run"),
                             sleep=lambda s: None)
 
 
