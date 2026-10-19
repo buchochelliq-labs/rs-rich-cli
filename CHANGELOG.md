@@ -9,6 +9,46 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Releases: one run for every crate (scripts, release.yml)
+
+- **A release tag publishes the whole release.** `release-<name>` (the
+  release's name, rs-rich-cli's version: `release-0.0.20`), annotated, on
+  the release commit, with `Release:` and `Commit:` lines, starts one
+  `release.yml` run. It checks the release once, runs CI once and publishes
+  every crate of its `RELEASES.toml` not yet on crates.io in one job, where
+  each crate tag used to run all of it again. `release.yml` starts only on
+  `release-*` pushes now; the crates' `<crate>-vX.Y.Z` tags are records, and
+  dispatching one by hand still publishes that crate alone. PyPI is
+  unchanged (`python-v*`).
+- **The gate computes the selection.** `release_cohort.py unreleased` of a
+  release tag selects, in `RELEASES.toml` order, every crate not yet on
+  crates.io, and refuses when none is due or a selected crate's tag is
+  missing or on another commit; `same-commit` checks the release tag (and
+  requires its `Release:`/`Commit:` lines); `release.py plan` checks every
+  selected manifest and internal requirement. `release_cohort.py published`
+  selects what a `verify_only` run checks.
+- **One multi-package publish.** `release.py publish` runs one
+  `cargo publish -p a -p b … --dry-run` for the selection, then uploads with
+  `-p … -p …`. New crates may share a release with existing ones: they
+  upload with the environment's `CARGO_REGISTRY_TOKEN` and the rest with
+  Trusted Publishing, in separate runs in dependency order
+  (`publish_runs`); a release used to refuse the mix. Verification runs
+  once for the whole selection.
+- **`release_cohort.py tag` pushes once and waits once.** It makes the
+  record tag of every crate due and pushes them in one atomic push, then the
+  release tag and `python-v…` (when PyPI is due, unless `--registry
+  crates.io`) in a second (GitHub starts no workflow for a push of more than
+  three tags), then waits for the release run and the PyPI run, where it
+  pushed and waited tag by tag. `--from` is gone: a release run publishes
+  everything due.
+- **Re-running resumes.** Run `tag` again after a failed run: a release
+  tag whose run ended without success is deleted and pushed again (on the
+  release commit when some crates are out; moved, with its records, to
+  `HEAD` when nothing was), and the new run publishes only what is still
+  due. `status` shows the release tag. `tag` refuses to push a release tag
+  on a commit whose `release.yml` predates them (release 0.0.19's), which
+  would start nothing.
+
 ### Releases: one release, one commit, found for you
 
 - **`release_cohort.py tag` finds the release and its commit.** A release

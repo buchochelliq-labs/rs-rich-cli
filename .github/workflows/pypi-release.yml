@@ -4,7 +4,8 @@
 # `rs-rich` expects exactly this repository, this file name
 # (`pypi-release.yml`) and the `pypi` environment, so none of them may change.
 # Like crates.io, an upload is permanent: the gate re-checks the tag first.
-# `python-v…` never matches `release.yml`'s crate tags, and vice versa.
+# `python-v…` never matches `release.yml`'s `release-*` tags, and vice versa;
+# `release_cohort.py tag` pushes both, each starting its own run.
 name: pypi-release
 
 on:

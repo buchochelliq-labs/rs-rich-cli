@@ -2,25 +2,30 @@
 # at, and the order to publish in.
 #
 # Each entry's tag is derived, never written: a crates.io package is tagged
-# `<name>-v<version>` (release.yml), the PyPI package `python-v<version>`
-# (pypi-release.yml). Entries are listed in publication order, each after
-# every workspace crate it depends on.
+# `<name>-v<version>` (a record of it in its release, which starts nothing),
+# the PyPI package `python-v<version>` (pypi-release.yml). Entries are listed
+# in publication order, each after every workspace crate it depends on.
+#
+# A release is named by rs-rich-cli's version (the last crate below) and is
+# cut from one commit. Its tag, `release-<name>`, starts the one release.yml
+# run that checks it once, runs CI once and publishes every crate below not
+# yet on crates.io; both release workflows refuse a tag that splits it.
 #
 #   python3 scripts/release_cohort.py check    CI: this file matches every
 #                                             manifest, and the order is valid
 #   python3 scripts/release_cohort.py sync     rewrite the versions from the
 #                                             manifests after a bump
 #   python3 scripts/release_cohort.py status   what is published, tagged, or due
-#   python3 scripts/release_cohort.py tag      tag everything not yet released,
-#                                             one at a time: a release in
-#                                             progress on its commit, else HEAD
-#                                             (--release X.Y.Z, --commit SHA)
+#   python3 scripts/release_cohort.py tag      tag what is due, push the records
+#                                             (one atomic push), then the release
+#                                             and python tags, and wait for the
+#                                             runs; run it again to resume a
+#                                             failed release (--release X.Y.Z,
+#                                             --commit SHA, --registry)
 #
-# A release is named by rs-rich-cli's version (the last crate below), and is
-# tagged from one commit; both release workflows refuse a tag that splits it.
-#
-# A version already on its registry is never tagged again: `tag` skips it, and
-# both release workflows fail a tag whose version is already published.
+# A version already on its registry is never tagged again: `tag` skips it, a
+# release run does not select it, and both release workflows refuse a tag
+# whose version is already published.
 
 [[package]]
 name = "rs-rich"

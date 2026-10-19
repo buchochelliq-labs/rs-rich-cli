@@ -137,50 +137,33 @@ There are two separate decisions here:
    contents; it is never copied from either Python upstream. A change in one
    crate does not, by policy alone, require an unrelated crate's version to
    change.
-2. **The tag explicitly selects what ships.** A `vX.Y.Z` tag retains the
-   coordinated workspace meaning: all sixteen manifests and their internal
-   requirements must agree at `X.Y.Z`. A `<crate>-vX.Y.Z` tag selects only that
-   crate, whose manifest must match the tag. Unselected crates keep their own
-   versions and are neither published nor verified as if they had changed.
+2. **One release, one run.** A release is every package of a `RELEASES.toml`
+   on one commit of `main`, named by the version of its last crate
+   (`rs-rich-cli`). Its release tag, `release-X.Y.Z`, starts one
+   `release.yml` run that checks it once, runs CI once and publishes **every
+   crate of it not yet on crates.io** in one job. Each published crate also
+   has its own annotated `<crate>-vX.Y.Z` tag on the same commit: a record,
+   which starts nothing. Unchanged crates keep their versions, are already on
+   crates.io, and are neither published nor verified again.
 
-| Tag | Packages published and verified |
+| Tag | What it does |
 |---|---|
-| `v0.0.3` | Every crate at `0.0.3` (all four at the time; `rs-rich-macros` joined at 0.0.11) |
-| `rs-rich-v0.0.3` | Only `rs-rich` at `0.0.3` |
-| `rs-rich-plugin-api-v0.0.1` | Only `rs-rich-plugin-api` at `0.0.1` |
-| `rs-rich-macros-v0.0.1` | Only `rs-rich-macros` at `0.0.1` |
-| `rs-rich-ext-v0.0.3` | Only `rs-rich-ext` at `0.0.3` |
-| `rs-rich-cli-v0.0.3` | Only `rs-rich-cli` at `0.0.3` |
-| `rs-rich-art-v0.0.3` | Only `rs-rich-art` at `0.0.3` |
-| `rs-rich-mermaid-v0.0.1` | Only `rs-rich-mermaid` at `0.0.1` |
-| `rs-rich-lumis-v0.0.1` | Only `rs-rich-lumis` at `0.0.1` |
-| `rs-rich-record-v0.0.1` | Only `rs-rich-record` at `0.0.1` |
-| `rs-rich-interact-v0.0.1` | Only `rs-rich-interact` at `0.0.1` |
-| `rs-rich-micro-v0.0.1` | Only `rs-rich-micro` at `0.0.1` |
-| `rs-rich-diagram-v0.0.1` | Only `rs-rich-diagram` at `0.0.1` |
-| `rs-rich-data-v0.0.1` | Only `rs-rich-data` at `0.0.1` |
-| `rs-rich-ratatui-v0.0.1` | Only `rs-rich-ratatui` at `0.0.1` |
-| `rs-rich-intuituive-v0.0.1` | Only `rs-rich-intuituive` at `0.0.1` |
-| `rs-rich-web-v0.0.1` | Only `rs-rich-web` at `0.0.1` |
-| `rs-rich-embed-v0.0.1` | Only `rs-rich-embed` at `0.0.1` |
+| `release-0.0.20` | Pushed: publishes every crate of release 0.0.20 (rs-rich-cli 0.0.20's `RELEASES.toml`) not yet on crates.io |
+| `rs-rich-ext-v0.0.18` | A record of that crate in its release; pushing it starts nothing. Dispatched by hand: publishes that crate alone |
+| `python-v0.0.8` | Pushed: publishes the Python bindings to PyPI (`pypi-release.yml`) |
+| `vX.Y.Z` | Historical (every crate at one version, until 0.0.3); dispatch only |
 
-The same forms accept SemVer prereleases, for example
-`rs-rich-cli-v0.0.3-rc.1`. Manual dispatch accepts an **existing tag** in one of
-these forms, never a branch name. Every job checks out the validated tag's
-commit SHA, including the reusable CI gate. Tags still belong on `main` after
+Versions accept SemVer prereleases, for example `release-0.0.20-rc.1` or
+`rs-rich-cli-v0.0.20-rc.1`. Manual dispatch takes an **existing tag** in
+one of these forms, never a branch name. Every job checks out the validated
+tag's commit SHA, including the reusable CI gate. Tags belong on `main` after
 merging the release changes; this does not relax the ancestry rule.
 
-For a CLI-only `0.0.3` release with core still at `0.0.2`, use
-`rs-rich-cli-v0.0.3`, not `v0.0.3`. For an art-only release, use
-`rs-rich-art-v0.0.3` and update the root `rich-art` dependency requirement to
-match. All three workspace requirements are checked against their respective
-crate versions, not against the selected crate's tag version. Refresh
-`Cargo.lock` whenever manifests or dependency requirements change.
-
-Dependencies outside the selected set must already be available on crates.io;
-`cargo publish -p <crate> --locked --dry-run` verifies the packaged crate against
-those registry dependencies before any upload. If both art and CLI advance and
-CLI requires the new art version, publish and verify art first, then CLI.
+All workspace requirements are checked against their respective crate
+versions, for every crate selected. Refresh `Cargo.lock` whenever manifests
+or dependency requirements change. A dependency outside the selection must
+already be on crates.io: it is, since the selection is everything of the
+release that is not.
 
 ### What Cargo means by `0.0.x`
 
@@ -307,12 +290,14 @@ open long enough for a concurrent Cargo invocation to fail with
 `Access is denied`. For release prep, prefer the serialized wrapper:
 
 ```bash
-python scripts/validate_release.py --tag rs-rich-cli-v0.0.6
+python scripts/validate_release.py --tag release-0.0.20
 ```
 
 `--tag` is required. The wrapper always ends by running
 `scripts/release.py plan <tag>`, so the local validation list proves the selected
-release tag as well as build/test health. Its Python release checks are listed
+release tag as well as build/test health. Run locally, `plan` of a release
+tag checks every crate of the release's `RELEASES.toml` (the run checks the
+unpublished ones); a crate tag checks that crate. Its Python release checks are listed
 explicitly (`test_release.py` and `test_release_readiness.py`) instead of through
 a glob, so adding another release test module requires updating the wrapper on
 purpose.
@@ -331,80 +316,157 @@ is a specific reason to do otherwise.
 
 ### Publish order
 
-`cargo publish --workspace --locked` retains the coordinated path's topological
-order and sibling-tarball verification. Independent tags use
-`cargo publish -p <crate> --locked`. Both paths run a dry run with the identical
-selection first. The workflow resolves that selection once, checks the
-manifests and internal requirements, and queries crates.io for each selected
-package/version. A hit or an unexpected registry response aborts the job;
-unchanged, unselected versions are not queried. Uploads are serialized across
-all release tags and manual dispatches.
+One job publishes the whole selection. It re-checks each selected
+crate/version against crates.io (a hit, or any answer but 404, aborts), then
+runs `cargo publish -p a -p b … --locked --dry-run` for all of it: Cargo
+(1.90 and later) packages every crate and verifies each against the earlier
+ones' tarballs before anything uploads. The upload is then `cargo publish -p
+… -p … --locked`, with Cargo ordering the crates by dependency and waiting
+for each to reach the index before uploading what needs it. Uploads are
+serialized across releases and manual dispatches by the `crates-io-release`
+concurrency group, which never cancels a run in progress.
+
+One `cargo publish` uses one credential, so the upload is split into runs of
+crates that share one (`release.py publish_runs`): existing crates with the
+Trusted Publishing exchange, brand-new crates with the environment's token.
+In `RELEASES.toml` order, each run takes every crate of its kind whose
+selected dependencies are already up or in the same run; a new crate that
+needs an existing one goes after it, and an existing crate that needs a new
+one goes after that. With no new crate, it is one upload.
 
 The gate requires an annotated tag pointing at the checked-out commit on `main`;
 lightweight tags are rejected before CI or publication.
 
 ### Release numbers and tagging (`RELEASES.toml`)
 
-`RELEASES.toml` lists every package this repository publishes, its version and
-its place in the publication order; each tag is derived from it
-(`<crate>-v<version>`, or `python-v<version>` for PyPI). CI runs
-`scripts/release_cohort.py check`, which fails when an entry's version differs
-from its manifest, a publishable crate is missing, or a crate is listed before a
-workspace crate it depends on. After a version bump, `release_cohort.py sync`
-rewrites the versions from the manifests.
+`RELEASES.toml` lists every package this repository publishes, its version
+and its place in the publication order; each tag is derived from it
+(`<crate>-v<version>`, `python-v<version>` for PyPI, and `release-<name>`
+for the release). CI runs `scripts/release_cohort.py check`, which fails when
+an entry's version differs from its manifest, a publishable crate is missing,
+or a crate is listed before a workspace crate it depends on. After a version
+bump, `release_cohort.py sync` rewrites the versions from the manifests.
 
 A release is named by the version of the last crate in `RELEASES.toml`,
-`rs-rich-cli`: release 0.0.19 is the commit whose `RELEASES.toml` has
-rs-rich-cli 0.0.19. Every tag `release_cohort.py tag` makes records its
-release and the commit it was cut from in its message (`Release: 0.0.19`,
-`Commit: <sha>`).
+`rs-rich-cli`: release 0.0.20 is the commit whose `RELEASES.toml` has
+rs-rich-cli 0.0.20, and its release tag is `release-0.0.20`. Every tag
+`release_cohort.py tag` makes records its release and the commit it was cut
+from in its message (`Release: 0.0.20`, `Commit: <sha>`); the release tag's
+also lists the crates due when it was pushed.
 
-`release_cohort.py tag` picks the commit itself. The newest release that has
-tags is resumed on the commit those tags are on while any of it is still
-unpublished, so a run that stopped partway, or one resumed after `main` has
-moved on, finishes the release where it started. With nothing in progress it
-tags the local checkout (`HEAD`). `--release 0.0.20` (or `v0.0.20`) releases
-that one: from the commit its tags are on, else the last commit on `main` (as
-last fetched) whose `RELEASES.toml` names it. `--commit <sha>` names the
-commit outright: any commit on `main`, such as an earlier one known to be
-good. `RELEASES.toml` and the manifests then come from that commit. `main` is
-never fetched (only the remote's tags and the registries are read live), so
-pull `main` before starting a new release.
+#### How to release
 
-Before tagging it refuses a commit that changes the shipped files (by each
-manifest's `include`) of a package tagged under the same version on another
-commit, naming each package, the files and the commit it was tagged on:
-that release would put the rest of it beside a package built from other
-code. Release from that commit (`--commit <sha>`) or bump the package. For each entry in
-order it skips a version already on crates.io
-or PyPI, never tagging it; otherwise it pushes the annotated tag and waits for
-the version to appear before the next, stopping when the release run fails
-(with the GitHub CLI) or after `--timeout` minutes. One tag at a time keeps
-dependencies published first and stays inside the release workflow's
-concurrency group, which keeps only one pending run. It is safe to re-run: a
-tag that exists but is not yet published is waited on, not recreated, and so
-is one on another commit that ships the same files. A tag on another commit
-is moved to the commit being released when its latest release run ran on
-that tag's commit, ended without success (cancelled, failed) and never
-started its publish job, so nothing can have been uploaded; anything less
-certain holds the release to that tag's commit. `--dry-run` shows the plan; `status` shows
-every package's state. By default it starts at the top of `RELEASES.toml`
-and skips everything already on its registry, so it begins at the first
-unpublished package; `--from <package or tag>` starts later in the order and
-leaves the packages before it alone, but refuses when a later crate depends
-on one of them at a version not yet on crates.io (that crate's publish would
-fail). `--registry crates.io` tags only the crates, leaving
-the Python package for later (and `--registry pypi` only it).
+From an up-to-date `main` (`git switch main && git pull --ff-only`), with
+authorization to publish:
 
-Both release workflows also refuse a published version from the tag itself:
-the first job runs `release_cohort.py unreleased <tag>`, which fails when the
-tag selects a version already on its registry, or one `RELEASES.toml` does not
-name, before the full gate or any build. They then run
-`release_cohort.py same-commit <tag>`, which fails when another package of
-the tag's `RELEASES.toml` is tagged on another commit and ships other files
-under its number, or when the tag's recorded `Commit:` is not the commit it
-points at; it writes the tag, its commit and its release to the job summary.
-A tag pushed by hand therefore cannot split a release either.
+```bash
+python3 scripts/release_cohort.py tag --dry-run   # the plan: what is tagged, kept, skipped
+python3 scripts/release_cohort.py tag             # tag, push, and wait for the runs
+```
+
+`tag` does, in order:
+
+1. **Picks the commit.** The newest release that has tags is resumed on the
+   commit those tags are on while any of it is still unpublished; with
+   nothing in progress, the local checkout (`HEAD`). `--release 0.0.20` (or
+   `v0.0.20`) releases that one: from the commit its tags are on, else the
+   last commit on `main` (as last fetched) naming it. `--commit <sha>` names
+   any commit on `main` outright. `RELEASES.toml` and the manifests come from
+   that commit; `main` is never fetched.
+2. **Refuses a split release**: a commit that changes the shipped files (by
+   each manifest's `include`) of a package tagged under the same version on
+   another commit, naming each package, the files and the commit. Release
+   from that commit (`--commit <sha>`) or bump the package.
+3. **Tags every crate not yet on crates.io** with an annotated record tag
+   (skipping published versions, never tagging them), and pushes all the
+   records in **one `git push --atomic`**: all or none.
+4. **Pushes the release tag** `release-<name>`, and `python-v<version>` when
+   PyPI is due, in a second atomic push. They are separate because GitHub
+   starts no workflow for a push of more than three tags; the records start
+   nothing anyway, and must exist before the release tag's gate looks for
+   them.
+5. **Waits** for the release run to succeed with every selected crate on
+   crates.io, then for the PyPI run, stopping as soon as a run fails (with
+   the GitHub CLI, `gh`) or after `--timeout` minutes per run.
+
+`--registry crates.io` tags only the crates and the release tag, leaving
+the Python package for later; `--registry pypi` only the Python package.
+`status` shows every package's state and the release tag.
+
+The release run (`release.yml`), from the release tag:
+
+1. **Gate, once:** the tag is annotated, on `main` and on the checked-out
+   commit (`release.py validate-tag`); `RELEASES.toml` there matches the
+   manifests (`release_cohort.py check`); no package of the release is
+   tagged on another commit shipping other files, and the tag's recorded
+   `Release:`/`Commit:` are its own (`same-commit`); the **selection** is
+   every crate of the release not yet on crates.io, in `RELEASES.toml`
+   order, refused when empty or when any selected crate's record tag is
+   missing or elsewhere (`unreleased`); every selected manifest and internal
+   requirement agrees (`release.py plan`).
+2. **CI, once:** `ci.yml` on the validated commit.
+3. **Publish, once:** preflight, the multi-package dry run, the Trusted
+   Publishing exchange (when any selected crate exists), the upload runs,
+   then one verification of the whole selection (below).
+
+#### Re-running a release
+
+Re-run `python3 scripts/release_cohort.py tag`: it finds the release, and
+the gate of a new run selects only what is still unpublished, so nothing is
+uploaded twice (crates.io would refuse it anyway).
+
+- **The run ended before publishing anything** (the gate or CI failed, or
+  it was cancelled before the publish job started): merge the fix to `main`,
+  pull, and run `tag`. A release held only by such dead tags is not resumed
+  where it was: `HEAD` is released, and the records and the release tag are
+  deleted on the remote and pushed again there. With no fix needed (a
+  flake), `tag` pushes the release tag again on the same commit.
+- **The run failed after publishing some crates** (an index timeout, a
+  verification flake, an expired token): run `tag` again. The published
+  crates hold the release to its commit; `tag` deletes the release tag and
+  pushes it again there (its records stay), and the new run publishes the
+  rest. A fix to an unpublished crate cannot go on another commit under the
+  same version (the records bind it): bump that crate, which gives it a new
+  tag, then `tag --commit <the fix>`.
+- **A fix is needed in `release.yml` itself:** a tag push runs the workflow
+  from the tagged commit, so dispatch the fixed one from `main` instead:
+  `gh workflow run release.yml --ref main -f tag=release-0.0.20`. The gate
+  still checks out and publishes the tag's commit, with that commit's
+  scripts. `tag` does not see a dispatched run (it is on `main`, not the
+  tag): watch it with `gh run watch`.
+
+`tag` decides from the release tag's latest run: one still going, or one
+that succeeded, is waited on; one that ended without success is pushed
+again. The wait ignores the replaced run. A record tag on another commit is
+moved to the commit being released only when the run that publishes it
+(the release tag's on that commit, or for a crate tag pushed alone before
+release tags, its own) ran on that commit, ended without success and never
+started its publish job; anything less certain holds the release to that
+commit.
+
+#### Publishing one crate by hand
+
+Dispatch `release.yml` with that crate's existing tag:
+`gh workflow run release.yml --ref main -f tag=rs-rich-ext-v0.0.18`. The run
+publishes that crate alone, refusing it when it is already out, after the
+same gate and CI. Create the tag first (annotated, on `main`, with the
+release's `Release:`/`Commit:` lines as `tag` writes them) if it does not
+exist. Every dependency it names must already be on crates.io.
+
+#### Release 0.0.19
+
+Release 0.0.19 was cut (2fc9772) before release tags: that commit's
+`release.yml` does not start on `release-*`, and `tag` refuses to push a
+release tag there. Finish it one tag at a time with the scripts of `main`
+before this change:
+
+```bash
+git worktree add ../release-old 5989aac
+python3 ../release-old/scripts/release_cohort.py tag
+```
+
+The first release from a commit with this workflow is the first one-run
+release.
 
 ### Registry authentication (Trusted Publishing)
 
@@ -413,6 +475,8 @@ crates.io secret. After the preflight and dry run pass, `rust-lang/crates-io-aut
 GitHub OIDC token (`id-token: write` on the `publish` job only) for a short-lived
 crates.io token, which only the upload step receives. A failed exchange stops
 the job before any crate is uploaded; `verify_only` runs never request a token.
+The exchanged token is short-lived (about half an hour): a release whose
+uploads outlast it fails partway, and is resumed as above.
 
 Each crate needs a Trusted Publishing entry on crates.io
 (crate → Settings → Trusted Publishing) with repository
@@ -425,60 +489,29 @@ repository secret.
 **A brand-new crate cannot start with Trusted Publishing.** crates.io only
 offers the setting on a crate that already exists, so a new crate's first
 version must be uploaded with a maintainer's API token. The workflow does this
-itself: its preflight reports a selected crate that does not exist yet, and
-then the token exchange is skipped and the upload uses the `crates-io`
-environment's `CARGO_REGISTRY_TOKEN` secret (the step fails if the secret is
-missing). Every existing crate still uses Trusted Publishing only; nothing else
-can read the secret. A selection that mixes new and existing crates (a
-coordinated `vX.Y.Z` tag) is refused before anything uploads: give each new
-crate its own tag first. Uploading by hand, as below, also works. After the first
-version is up, add the crate's Trusted Publishing entry, and publish later
-versions from the workflow as usual.
-`rs-rich-macros` was in this position for 0.0.11: a `rs-rich-macros-v0.0.1`
-tag run would have failed the token exchange, so 0.0.1 was published by hand on
-2026-09-24, after `rs-rich` 0.0.7 was on crates.io (it depends on the core) and
-before tagging `rs-rich-ext` 0.0.9, whose optional `macros` dependency must
-resolve on crates.io for its own upload. 0.0.12 did the same for its three new
-crates on 2026-09-26: `rs-rich-plugin-api` 0.0.1 by hand after `rs-rich` 0.0.8
-and before tagging `rs-rich-ext` 0.0.10 (which depends on it unconditionally);
-`rs-rich-lumis` 0.0.1 after the plugin API; and `rs-rich-mermaid` 0.0.1 after
-`rs-rich-art` 0.0.10 (its optional `mmdc` dependency). All three went up before
-the `rs-rich-cli` 0.0.12 tag, which depends on each of them. The rule for any
-new crate: upload it only once every dependency it names, optional ones
-included, is on crates.io, and before anything that depends on it. 0.0.13
-adds `rs-rich-record` 0.0.1 after `rs-rich-ext` 0.0.11 and before the
-`rs-rich-cli` 0.0.13 tag, whose default `record` feature depends on it; and
-`rs-rich-interact` 0.0.1 after `rs-rich-ext` 0.0.11, also before the
-`rs-rich-cli` 0.0.13 tag, whose default `interact` feature depends on it. Both
-go through the workflow with their own tags (`rs-rich-interact-v0.0.1`,
-`rs-rich-record-v0.0.1`) and the environment's token. 0.0.15 adds
-`rs-rich-diagram` 0.0.1, which depends on `rs-rich` only: its own
-`rs-rich-diagram-v0.0.1` tag goes after `rs-rich` is on crates.io and before
-the `rs-rich-mermaid` 0.0.4 tag, which depends on it unconditionally. 0.0.16
-adds `rs-rich-data` 0.0.1, which depends on `rs-rich` and `rs-rich-ext`: its
-own `rs-rich-data-v0.0.1` tag goes after the `rs-rich-ext` release it requires
-is on crates.io and before the `rs-rich-cli` tag, which depends on it
-unconditionally (its CSV reader backs `--csv`). `rs-rich-ratatui` 0.0.1
-depends on `rs-rich` and, behind its optional `interact` feature, on
-`rs-rich-interact`: its own `rs-rich-ratatui-v0.0.1` tag goes after both are
-on crates.io. Nothing in the workspace depends on it, so it holds up no other
-tag. `rs-rich-intuituive` 0.0.1 depends on `rs-rich`, `rs-rich-ext` and
-`rs-rich-interact`: its own `rs-rich-intuituive-v0.0.1` tag goes after the
-releases of those it requires are on crates.io. `rs-rich-embed` 0.0.1 depends
-on `rs-rich`, `rs-rich-intuituive` and `rs-rich-record`: its own
-`rs-rich-embed-v0.0.1` tag goes after the releases of those it requires are on
-crates.io, and before `rs-rich-web`'s. `rs-rich-web` 0.0.1 depends on
-`rs-rich-intuituive` and `rs-rich-embed` (for its PTY mode): its own
-`rs-rich-web-v0.0.1` tag goes after both are on crates.io, and before the
-`rs-rich-cli` tag, which depends on it behind its off-by-default `serve`
-feature. By hand, from the tagged commit on `main`:
+itself, in the same run as the rest of the release: its preflight reports
+the selected crates that do not exist yet, the upload step receives the
+`crates-io` environment's `CARGO_REGISTRY_TOKEN` secret only then, and
+`release.py publish` uploads the new crates with it and every existing crate
+with the exchanged token, in separate `cargo publish` runs in dependency
+order (see Publish order). It fails before uploading anything if a run's
+credential is missing. After the first version is up, add the crate's
+Trusted Publishing entry. Uploading by hand also works, from the release
+commit on `main`, once every dependency it names (optional ones included) is
+on crates.io:
 
 ```bash
 cargo publish -p rs-rich-macros --locked   # with a maintainer's API token
 ```
 
-Then add its Trusted Publishing entry, and continue with the ext, art and CLI
-tags in order.
+Before one-run releases, a new crate went up with its own tag, and a
+release could not mix new and existing crates: `rs-rich-macros` 0.0.1 was
+published by hand on 2026-09-24, `rs-rich-plugin-api`, `rs-rich-lumis` and
+`rs-rich-mermaid` 0.0.1 on 2026-09-26, and each later new crate
+(`rs-rich-record`, `rs-rich-interact`, `rs-rich-diagram`, `rs-rich-data`,
+`rs-rich-ratatui`, `rs-rich-intuituive`, `rs-rich-embed`, `rs-rich-web`)
+with its own `<crate>-v0.0.1` tag, after its dependencies and before its
+dependents.
 
 A tag push runs the workflow file from the tagged commit. To publish an existing
 tag with a newer workflow on `main`, dispatch the workflow manually from `main`
@@ -487,30 +520,35 @@ with that tag; the gate still checks out and publishes the tag's exact commit.
 After publishing, verification reuses the protected `crates-io` job's validated
 checkout: fresh registry consumers can execute build scripts too. The short-lived
 registry token is scoped only to the upload step.
-Verification waits for **each selected version** on crates.io
-and fails if it does not appear. In fresh temporary directories outside the
-checkout, it installs the CLI with an exact version and `--locked`, or compiles
-a consumer with an exact registry dependency for each selected library. An
-art-only release never installs the CLI or waits for a new core version.
+Verification runs once, for the whole selection: it waits for **each
+selected version** on crates.io and fails if one does not appear. In fresh
+temporary directories outside the checkout, it installs the CLI with an
+exact version and `--locked`, or compiles a consumer with an exact registry
+dependency for each selected library. A crate not selected is not installed
+or verified again.
 
-To retry verification after all selected packages have been uploaded, manually
-dispatch the release workflow with the same existing tag and `verify_only: true`.
-This keeps the annotated-tag, ancestry and full-CI gates, skips preflight and both
-upload commands, and runs exact-version verification. Normal tag pushes and
-manual dispatches default to publication and still reject any existing version.
-Verification-only mode cannot complete a partial upload.
+To retry verification after every selected package has been uploaded,
+manually dispatch the release workflow with the same existing tag and
+`verify_only: true`. For a release tag it verifies the crates whose record
+tags are on the release commit, all of which must be on crates.io. This keeps
+the annotated-tag, ancestry and full-CI gates, skips preflight and the
+uploads, and runs exact-version verification. Normal tag pushes and manual
+dispatches default to publication and still reject any existing version.
+Verification-only mode cannot complete a partial upload; re-running the
+release does (above).
 
-Publishing is **irreversible** — versions are immutable and can only be yanked.
-A partial upload still requires manual recovery, not a blind rerun. Planning and documentation updates
-do not create tags or publish packages. Create the annotated tag on `main`;
-the protected release workflow publishes the selected packages.
+Publishing is **irreversible**: versions are immutable and can only be
+yanked. Planning and documentation updates do not create tags or publish
+packages; `release_cohort.py tag` does, from `main`, and the protected
+release workflow publishes.
 
 ### Python package (PyPI)
 
 The Python bindings (`crates/rich-py`, `rs-rich` on PyPI, `import rs_rich`)
-release separately from the crates, from their own `python-vX.Y.Z` tags. A
-Python tag never matches `release.yml`'s crate tags, and a crate tag never
-matches the Python workflow's.
+release separately from the crates, from their own `python-vX.Y.Z` tags,
+which `release_cohort.py tag` pushes beside the release tag when PyPI is due.
+A Python tag never matches `release.yml`'s `release-*` tags, and a release
+tag never matches the Python workflow's.
 
 1. Bump `version` in `crates/rich-py/pyproject.toml` and `Cargo.toml`. The
    package has its own SemVer, independent of the crates.

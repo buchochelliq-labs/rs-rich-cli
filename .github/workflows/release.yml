@@ -1,18 +1,22 @@
-# Publish a tagged version to crates.io.
+# Publish a release to crates.io: every crate of it not yet published, in one
+# run, from the `release-X.Y.Z` tag `scripts/release_cohort.py tag` pushes.
 #
 # Publishing is IRREVERSIBLE — a version can be yanked but never deleted or
-# edited — so this workflow is deliberately paranoid. It re-runs the full gate on
-# the tagged commit, refuses to publish anything that is not on `main`, and
-# aborts before upload if any selected crate/version already exists.
+# edited — so this workflow is deliberately paranoid. It checks the tag and its
+# release once, re-runs the full gate on the tagged commit once, refuses to
+# publish anything that is not on `main`, and aborts before upload if any
+# selected crate/version already exists. The crates' own `<crate>-vX.Y.Z`
+# tags are records and start nothing; dispatching one by hand publishes that
+# crate alone. PyPI is pypi-release.yml's, from `python-v…` tags.
 name: release
 
 on:
   push:
-    tags: ["v*", "rs-rich-v*", "rs-rich-plugin-api-v*", "rs-rich-macros-v*", "rs-rich-ext-v*", "rs-rich-cli-v*", "rs-rich-art-v*", "rs-rich-mermaid-v*", "rs-rich-lumis-v*", "rs-rich-record-v*", "rs-rich-interact-v*", "rs-rich-micro-v*", "rs-rich-diagram-v*", "rs-rich-data-v*", "rs-rich-ratatui-v*", "rs-rich-intuituive-v*", "rs-rich-web-v*", "rs-rich-embed-v*"]
+    tags: ["release-*"]
   workflow_dispatch:
     inputs:
       tag:
-        description: Existing tag (vX.Y.Z for all crates or rs-rich[-macros/-ext/-cli/-art]-vX.Y.Z for one)
+        description: Existing tag, release-X.Y.Z for a release (what of it is unpublished), or <crate>-vX.Y.Z for that crate alone
         required: true
       verify_only:
         description: Verify already-published exact versions without uploading
@@ -23,7 +27,7 @@ permissions:
   contents: read
 
 concurrency:
-  # Serialize coordinated and per-crate uploads, including manual dispatches.
+  # Serialize releases and single-crate uploads, including manual dispatches.
   # Never cancel a partially published release.
   group: crates-io-release
   cancel-in-progress: false
@@ -35,6 +39,8 @@ jobs:
     outputs:
       selection: ${{ steps.plan.outputs.selection }}
       sha: ${{ steps.commit.outputs.sha }}
+    env:
+      RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -60,37 +66,42 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Tag, selected manifests, and internal requirements must agree
-        id: plan
-        env:
-          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
-        run: python3 scripts/release.py plan "$RELEASE_TAG"
+      - name: Require an annotated tag and pin its validated commit
+        id: commit
+        run: python3 scripts/release.py validate-tag "$RELEASE_TAG"
 
-      # Fail in seconds, not after the full gate: a version on crates.io is
-      # permanent, so a tag selecting one is refused here (RELEASES.toml must
-      # also name the tag's version). `verify_only` checks a published release.
-      - name: Refuse a tag whose version is already released
-        if: ${{ inputs.verify_only != true }}
-        env:
-          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
-        run: python3 scripts/release_cohort.py unreleased "$RELEASE_TAG"
+      - name: RELEASES.toml at the tagged commit matches its manifests
+        run: python3 scripts/release_cohort.py check
 
       # One release, one commit. Every package of a release is tagged on the
       # commit the release was cut from (release_cohort.py records it in each
-      # tag's message); a tag on another commit whose packages would ship
+      # tag's message); a package tagged on another commit that would ship
       # other code beside the rest of its release under the same numbers is
       # refused here, before the gate. The job summary names the commit.
       - name: Refuse a tag that splits its release across commits
-        if: ${{ inputs.verify_only != true }}
-        env:
-          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
         run: python3 scripts/release_cohort.py same-commit "$RELEASE_TAG"
 
-      - name: Require an annotated tag and pin its validated commit
-        id: commit
+      # Fail in seconds, not after the full gate: a version on crates.io is
+      # permanent. For a release tag this computes the selection: every crate
+      # of the release not yet on crates.io, in RELEASES.toml order, each of
+      # which must have its own tag on this commit; none due is refused. A
+      # crate tag selects its crate, refused when it is out. `verify_only`
+      # selects what the tag already released instead.
+      - name: Select what is due, refusing what is already released
+        id: due
+        if: ${{ inputs.verify_only != true }}
+        run: python3 scripts/release_cohort.py unreleased "$RELEASE_TAG"
+
+      - name: Select what the tag released (verify only)
+        id: done
+        if: ${{ inputs.verify_only == true }}
+        run: python3 scripts/release_cohort.py published "$RELEASE_TAG"
+
+      - name: Selected manifests and internal requirements must agree
+        id: plan
         env:
-          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
-        run: python3 scripts/release.py validate-tag "$RELEASE_TAG"
+          RELEASE_SELECTION: ${{ steps.due.outputs.selection || steps.done.outputs.selection }}
+        run: python3 scripts/release.py plan "$RELEASE_TAG"
 
   # The same gate every PR passes, re-run on the exact tagged tree. `cargo
   # publish`'s own verification does NOT compile test targets for these crates
@@ -132,37 +143,35 @@ jobs:
         if: ${{ inputs.verify_only != true }}
         run: python3 scripts/release.py preflight
 
+      # One `cargo publish --dry-run -p a -p b …` for the whole selection:
+      # each crate is packaged and verified against the earlier ones'
+      # tarballs before anything uploads.
       - name: Dry run selected packages
         if: ${{ inputs.verify_only != true }}
         run: python3 scripts/release.py publish --dry-run
 
       # Exchange only after the preflight and dry run pass; a failed exchange
-      # stops the job before anything is uploaded.
+      # stops the job before anything is uploaded. Skipped when every
+      # selected crate is new.
       - name: Authenticate with crates.io Trusted Publishing
         id: crates-io-auth
-        if: ${{ inputs.verify_only != true && steps.preflight.outputs.new_crate != 'true' }}
+        if: ${{ inputs.verify_only != true && steps.preflight.outputs.existing_crate == 'true' }}
         uses: rust-lang/crates-io-auth-action@v1
 
+      # `cargo publish -p … -p …`, once per run of crates sharing a
+      # credential, in RELEASES.toml's dependency order (release.py
+      # publish_runs): existing crates with the exchanged token, a brand-new
+      # crate's first version with the environment's CARGO_REGISTRY_TOKEN,
+      # since Trusted Publishing needs the crate to exist. The secret reaches
+      # this step only when the preflight found a new crate. Add each new
+      # crate's Trusted Publishing entry once it is up.
       - name: Publish selected packages
-        if: ${{ inputs.verify_only != true && steps.preflight.outputs.new_crate != 'true' }}
+        if: ${{ inputs.verify_only != true }}
         env:
-          CARGO_REGISTRY_TOKEN: ${{ steps.crates-io-auth.outputs.token }}
+          RELEASE_NEW_CRATES: ${{ steps.preflight.outputs.new_crates }}
+          RELEASE_TRUSTED_TOKEN: ${{ steps.crates-io-auth.outputs.token }}
+          RELEASE_NEW_CRATE_TOKEN: ${{ steps.preflight.outputs.new_crate == 'true' && secrets.CARGO_REGISTRY_TOKEN || '' }}
         run: python3 scripts/release.py publish
-
-      # A brand-new crate's first version: the environment's token, since
-      # Trusted Publishing needs the crate to exist. The preflight refuses a
-      # selection mixing new and existing crates, so this never uploads an
-      # existing one. Add the crate's Trusted Publishing entry once it succeeds.
-      - name: Publish a new crate's first version
-        if: ${{ inputs.verify_only != true && steps.preflight.outputs.new_crate == 'true' }}
-        env:
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-        run: |
-          if [ -z "$CARGO_REGISTRY_TOKEN" ]; then
-            echo "::error::A new crate needs CARGO_REGISTRY_TOKEN in the crates-io environment for its first upload"
-            exit 1
-          fi
-          python3 scripts/release.py publish
 
       # Reuse the protected, validated checkout. Registry consumers still build
       # in fresh temporary directories, without the upload step's credential.
