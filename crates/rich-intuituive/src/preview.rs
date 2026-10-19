@@ -45,9 +45,9 @@ impl<K, T> PreviewOfOptions<K, T> {
     /// Show the empty value (`T::default()`) when a load takes longer
     /// than `delay` (on the app's clock), so a slow one does not leave the
     /// last key's value on show. Off by default: the last value stays
-    /// until the next is ready.
-    pub fn clear_after(mut self, delay: Duration) -> PreviewOfOptions<K, T> {
-        self.clear_after = Some(delay);
+    /// until the next is ready (or with `None`).
+    pub fn clear_after(mut self, delay: impl Into<Option<Duration>>) -> PreviewOfOptions<K, T> {
+        self.clear_after = delay.into();
         self
     }
 

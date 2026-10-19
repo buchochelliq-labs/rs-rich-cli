@@ -182,12 +182,12 @@ pub use rich::Overflow;
 pub use rule::rule;
 pub use select::{list_search, multi_select, ListSearch, Mark, MultiSelect};
 pub use sheet::{SheetError, Stylesheet};
-pub use signals::{history, recent, smoothed, Count, History};
+pub use signals::{falling, history, recent, recent_of, recent_timed, smoothed, Count, History};
 pub use solver::Solver;
 pub use tab_set::{tab_set, tabs_for, TabSet};
 pub use task::{
     latest, latest_every, resource, resource_for, spawn, spawn_future, spawn_stream, spawn_then,
-    Latest, Load, Resource, Stream, Task,
+    Latest, Load, Notifier, Resource, Stream, Task,
 };
 pub use text_area::Caret;
 #[cfg(feature = "viz")]

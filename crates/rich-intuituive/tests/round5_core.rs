@@ -8,9 +8,14 @@
 //! `$EDITOR`, state files, a frecency store and jobs running a process.
 //! Nothing about files, sound or one app is in them.
 
+use std::rc::Rc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
+
 use intuituive::interact::Event;
 use intuituive::prelude::*;
-use intuituive::Driver;
+use intuituive::{Driver, Notifier};
 
 fn rows(driver: &Driver) -> Vec<String> {
     driver
@@ -304,6 +309,143 @@ fn a_hidden_binding_works_is_left_out_of_the_help_and_runs_by_name() {
         help.contains("Add one") && !help.contains("any way"),
         "{help}"
     );
+}
+
+// 4. Feeds: a played feed's state, a tail at its own pace, waits the
+// test clock counts as asleep, recent writes with their times.
+
+#[test]
+fn a_played_feed_ends_when_its_values_run_out_while_its_tail_plays_on() {
+    use intuituive::{latest_iter, Pace};
+    let app = App::new(|| {
+        let (frame, state) = latest_iter(vec![1, 2, 3], Pace::Free)
+            .then_at(Pace::Every(Duration::from_millis(100)), 10..)
+            .with_state();
+        let (last, done) = latest_iter(vec![7], Pace::Free).with_state();
+        text(move || {
+            format!(
+                "{:?} {:?} {:?} {:?}",
+                frame.get(),
+                state.get(),
+                last.get(),
+                done.get()
+            )
+        })
+    })
+    .wait_for_tasks(true);
+    let mut driver = app.driver(50, 1);
+    driver.settle();
+    // All three at once; the tail a beat after the last.
+    assert_eq!(rows(&driver)[0], "Some(3) Ended Some(7) Ended");
+    driver.advance(Duration::from_millis(350));
+    assert_eq!(rows(&driver)[0], "Some(12) Ended Some(7) Ended");
+}
+
+#[test]
+fn a_played_feed_stalls_between_slow_values_and_runs_again() {
+    use intuituive::{latest_iter, Pace};
+    let app = App::new(|| {
+        let (frame, state) = latest_iter(1..=3, Pace::Every(Duration::from_millis(500)))
+            .stall_after(Duration::from_millis(300))
+            .with_state();
+        text(move || format!("{:?} {:?}", frame.get(), state.get()))
+    })
+    .wait_for_tasks(true);
+    let mut driver = app.driver(40, 1);
+    driver.advance(Duration::from_millis(400));
+    assert_eq!(rows(&driver)[0], "Some(1) Stalled(0ns)");
+    driver.advance(Duration::from_millis(200));
+    assert_eq!(rows(&driver)[0], "Some(2) Running");
+    driver.advance(Duration::from_millis(500));
+    assert_eq!(rows(&driver)[0], "Some(3) Ended");
+}
+
+/// What a test sees of a thread waiting on a condition another thread
+/// makes true.
+struct Device {
+    filled: Arc<AtomicBool>,
+    notifier: Arc<Mutex<Option<Notifier>>>,
+}
+
+#[test]
+fn a_thread_waiting_for_a_condition_does_not_hold_the_test_clocks_turns() {
+    let device = Rc::new(Device {
+        filled: Arc::new(AtomicBool::new(false)),
+        notifier: Arc::new(Mutex::new(None)),
+    });
+    let shared = device.clone();
+    let app = App::new(move || {
+        let (filled, slot) = (shared.filled.clone(), shared.notifier.clone());
+        let said = latest(move |tx| {
+            *slot.lock().unwrap() = Some(tx.notifier());
+            let ready = tx.wait_for(|| filled.load(Ordering::SeqCst), None);
+            tx.send(format!("ready {ready}"));
+            // Then one with a timeout, on the app's clock.
+            let ready = tx.wait_for(|| false, Duration::from_millis(300));
+            tx.send(format!("timed out {}", !ready));
+        });
+        text(move || said.get().unwrap_or_else(|| "waiting".into()))
+    })
+    .wait_for_tasks(true);
+    let mut driver = app.driver(20, 1);
+    let start = Instant::now();
+    driver.advance(Duration::from_secs(1));
+    // Asleep to the clock: the second went by without a five-second hold.
+    assert!(start.elapsed() < Duration::from_secs(3));
+    assert_eq!(rows(&driver)[0], "waiting");
+    device.filled.store(true, Ordering::SeqCst);
+    let notifier = device.notifier.lock().unwrap().clone().unwrap();
+    notifier.notify();
+    driver.settle();
+    assert_eq!(rows(&driver)[0], "ready true");
+    driver.advance(Duration::from_millis(250));
+    assert_eq!(rows(&driver)[0], "ready true");
+    driver.advance(Duration::from_millis(100));
+    assert_eq!(rows(&driver)[0], "timed out true");
+}
+
+#[test]
+fn recent_keeps_a_part_of_each_write_and_its_time() {
+    use intuituive::{recent_of, recent_timed};
+    let app = App::new(|| {
+        let frame = signal(vec![0u32; 1024]);
+        let sums = recent_of(frame, 2, |f: &Vec<u32>| f.iter().sum::<u32>());
+        let times = recent_timed(frame, 2);
+        text(move || {
+            let at: Vec<u128> = times.with(|t| t.iter().map(|(at, _)| at.as_millis()).collect());
+            format!("{:?} {at:?}", sums.get())
+        })
+        .on_key("w", move |_| frame.update(|f| f[1] += 1))
+    });
+    let mut driver = app.driver(30, 1);
+    driver.press("w");
+    driver.advance(Duration::from_millis(40));
+    driver.press("w");
+    driver.advance(Duration::from_millis(40));
+    driver.press("w");
+    assert_eq!(rows(&driver)[0], "[2, 3] [40, 80]");
+}
+
+#[test]
+fn a_falling_value_rises_at_once_and_never_falls_below_its_source() {
+    use intuituive::falling;
+    let app = App::new(|| {
+        let level = signal(0.0);
+        let bar = falling(level, 4.0);
+        text(move || format!("{:.2}", bar.get()))
+            .on_key("h", move |_| level.set(1.0))
+            .on_key("m", move |_| level.set(0.5))
+    });
+    let mut driver = app.driver(10, 1);
+    driver.press("h m");
+    driver.advance(Duration::from_millis(200));
+    // 1 - ½·4·0.2² = 0.92.
+    let shown: f64 = rows(&driver)[0].parse().unwrap();
+    assert!((0.90..0.94).contains(&shown), "{shown}");
+    driver.advance(Duration::from_secs(2));
+    assert_eq!(rows(&driver)[0], "0.50");
+    driver.press("h");
+    assert_eq!(rows(&driver)[0], "1.00");
 }
 
 #[allow(dead_code)]

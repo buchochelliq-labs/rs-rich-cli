@@ -337,9 +337,10 @@ impl<T: 'static> Resource<T> {
     /// that does not blink between two quick loads, and clears once a slow
     /// one has kept the old value on show for `wait`. The wait is on the
     /// app's clock ([`after`](crate::after)), so a test steps through it
-    /// with [`Driver::advance`](crate::Driver::advance).
-    pub fn stale_after(self, wait: Duration) -> Resource<T> {
-        self.stale.set(Some(wait));
+    /// with [`Driver::advance`](crate::Driver::advance). `None` goes
+    /// back to loading at once, as without it.
+    pub fn stale_after(self, wait: impl Into<Option<Duration>>) -> Resource<T> {
+        self.stale.set(wait.into());
         self
     }
 }
@@ -616,6 +617,107 @@ impl<T: Send + 'static> Latest<T> {
         self.due.set(Some(due));
         self.clock.sleep_until(due) && !self.closed.load(Ordering::SeqCst)
     }
+
+    /// Wait until `ready` is true, or `timeout` has passed (`None`: no
+    /// limit), looking again each time a [`Notifier`] from
+    /// [`notifier`](Self::notifier) is notified: a device's buffer filled,
+    /// a message in a channel. Whether `ready` was true; `false` on the
+    /// timeout, or once the app has finished.
+    ///
+    /// Waiting this way, the thread counts as asleep for an app that
+    /// [waits for its tasks](crate::App::wait_for_tasks), as a test does:
+    /// its driver does not hold each turn for it (as it would for a
+    /// thread blocked on its own), and the timeout is on the app's clock.
+    /// Once notified it counts as running until it sleeps or waits again,
+    /// so what it sends then is in the same turn on every run.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    /// use std::sync::atomic::{AtomicU32, Ordering};
+    /// use std::sync::Arc;
+    /// use std::time::Duration;
+    ///
+    /// let filled = Arc::new(AtomicU32::new(0));
+    /// let device = filled.clone();
+    /// let app = App::new(move || {
+    ///     let filled = filled.clone();
+    ///     let level = latest(move |tx| {
+    ///         let notifier = tx.notifier();
+    ///         // A device's own thread fills a buffer every 50 ms.
+    ///         std::thread::spawn(move || {
+    ///             for _ in 0..3 {
+    ///                 std::thread::sleep(Duration::from_millis(50));
+    ///                 device.fetch_add(1, Ordering::SeqCst);
+    ///                 notifier.notify();
+    ///             }
+    ///         });
+    ///         let mut seen = 0;
+    ///         while seen < 3 {
+    ///             if !tx.wait_for(|| filled.load(Ordering::SeqCst) > seen, None) {
+    ///                 return;
+    ///             }
+    ///             seen = filled.load(Ordering::SeqCst);
+    ///             tx.send(seen);
+    ///         }
+    ///     });
+    ///     text!("{}", level.get().unwrap_or(0))
+    /// })
+    /// .wait_for_tasks(true);
+    /// let mut driver = app.driver(5, 1);
+    /// let start = std::time::Instant::now();
+    /// while driver.screen().plain()[0].trim_end() != "3" {
+    ///     driver.advance(Duration::from_millis(10));
+    /// }
+    /// // No turn waited the five seconds a busy thread would hold it.
+    /// assert!(start.elapsed() < Duration::from_secs(4));
+    /// ```
+    pub fn wait_for(
+        &self,
+        mut ready: impl FnMut() -> bool,
+        timeout: impl Into<Option<Duration>>,
+    ) -> bool {
+        let timeout = timeout.into();
+        let due = timeout.map(|t| self.clock.now() + t);
+        self.clock.wait_for(&mut ready, due) && !self.closed.load(Ordering::SeqCst)
+    }
+
+    /// A handle any thread can [`notify`](Notifier::notify) a
+    /// [`wait_for`](Self::wait_for) with: `Clone` and `Send`, for the
+    /// device callback or the channel's sender.
+    pub fn notifier(&self) -> Notifier {
+        Notifier {
+            clock: self.clock.clone(),
+        }
+    }
+
+    /// Run `work`, which blocks on something else (a channel's `recv`, a
+    /// read from a pipe), with the thread counted as asleep for an app on
+    /// its own clock, as [`wait_for`](Self::wait_for) is: the driver's
+    /// turns do not wait for it. What it sends after is picked up when it
+    /// comes, not in a set turn; to keep a test exact, wait with
+    /// [`wait_for`](Self::wait_for) and a [`Notifier`] instead.
+    pub fn blocking<R>(&self, work: impl FnOnce() -> R) -> R {
+        self.clock.running(false);
+        let out = work();
+        self.clock.running(true);
+        out
+    }
+}
+
+/// Wakes a [`Latest::wait_for`] to look again: made by
+/// [`Latest::notifier`], sent to whatever thread makes the condition
+/// true.
+#[derive(Clone)]
+pub struct Notifier {
+    clock: Arc<ThreadClock>,
+}
+
+impl Notifier {
+    /// Wake every thread of the app waiting in
+    /// [`wait_for`](Latest::wait_for), to look at its condition again.
+    pub fn notify(&self) {
+        self.clock.notify();
+    }
 }
 
 /// The clock [`latest`] threads keep to with [`Latest::sleep`]: the wall
@@ -640,6 +742,11 @@ struct ClockState {
     running: usize,
     /// Threads asleep on the app's clock, by ticket, with when each wakes.
     asleep: HashMap<u64, Duration>,
+    /// Threads in [`Latest::wait_for`], by ticket (with a timeout, also
+    /// in `asleep`), until notified or due.
+    waiting: std::collections::HashSet<u64>,
+    /// Bumped by each notify: a waiter that saw it change looks again.
+    notified: u64,
     next: u64,
     /// The app has finished: sleepers wake, and stop.
     closed: bool,
@@ -710,6 +817,67 @@ impl ThreadClock {
         !state.closed
     }
 
+    /// Wait until `ready`, or the app's time `due`, waking to look
+    /// again on each [`notify`](Self::notify); whether `ready` was true.
+    /// The thread counts as asleep meanwhile.
+    fn wait_for(&self, ready: &mut dyn FnMut() -> bool, due: Option<Duration>) -> bool {
+        loop {
+            let seen = self.lock().notified;
+            if ready() {
+                return true;
+            }
+            let mut state = self.lock();
+            if state.closed {
+                return false;
+            }
+            if state.notified != seen {
+                // Notified while looking: look again.
+                continue;
+            }
+            if !state.manual {
+                // The wall clock: a wait on the notifications, cut at `due`.
+                let left = due.map(|due| due.saturating_sub(self.start.elapsed()));
+                if left.is_some_and(|left| left.is_zero()) {
+                    return false;
+                }
+                let wait = left.unwrap_or(Duration::from_secs(3600));
+                drop(
+                    self.changed
+                        .wait_timeout_while(state, wait, |s| s.notified == seen && !s.closed),
+                );
+                continue;
+            }
+            if due.is_some_and(|due| due <= state.now) {
+                return false;
+            }
+            let ticket = state.next;
+            state.next += 1;
+            state.waiting.insert(ticket);
+            if let Some(due) = due {
+                state.asleep.insert(ticket, due);
+            }
+            state.running = state.running.saturating_sub(1);
+            self.changed.notify_all();
+            // Woken by a notify or `advance`, which count it running again,
+            // or the end.
+            while state.waiting.contains(&ticket) && !state.closed {
+                state = self.changed.wait(state).unwrap_or_else(|e| e.into_inner());
+            }
+        }
+    }
+
+    /// Wake every [`wait_for`](Self::wait_for) to look again.
+    fn notify(&self) {
+        let mut state = self.lock();
+        state.notified += 1;
+        let woken: Vec<u64> = state.waiting.drain().collect();
+        for ticket in &woken {
+            state.asleep.remove(ticket);
+        }
+        state.running += woken.len();
+        self.changed.notify_all();
+    }
+
     /// The app's clock is at `now`: wake the threads that are due.
     pub(crate) fn advance(&self, now: Duration) {
         let mut state = self.lock();
@@ -722,6 +890,7 @@ impl ThreadClock {
             .collect();
         for ticket in &due {
             state.asleep.remove(ticket);
+            state.waiting.remove(ticket);
         }
         state.running += due.len();
         self.changed.notify_all();

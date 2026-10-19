@@ -943,7 +943,18 @@ pub fn watch<T: PartialEq + Clone + 'static>(
 #[track_caller]
 pub fn on_write<T: Clone + 'static>(
     signal: Signal<T>,
-    mut on_write: impl FnMut(T, &mut Ctx) + 'static,
+    on_write: impl FnMut(T, &mut Ctx) + 'static,
+) {
+    on_write_map(signal, T::clone, on_write);
+}
+
+/// [`on_write`], keeping `project` of each value written (a part of it, a
+/// shared handle to it) rather than a clone: what `on_write` gets.
+#[track_caller]
+pub(crate) fn on_write_map<T: 'static, U: 'static>(
+    signal: Signal<T>,
+    project: impl Fn(&T) -> U + 'static,
+    mut on_write: impl FnMut(U, &mut Ctx) + 'static,
 ) {
     let runtime = Runtime::current_for("on_write()");
     assert_eq!(
@@ -956,11 +967,11 @@ pub fn on_write<T: Clone + 'static>(
         .watch_sites
         .borrow_mut()
         .insert(id, Location::caller());
-    let written: Rc<RefCell<VecDeque<T>>> = Rc::default();
+    let written: Rc<RefCell<VecDeque<U>>> = Rc::default();
     let kept = written.clone();
     let keep: Keep = Rc::new(move |value: &dyn Any| {
         let value = value.downcast_ref::<T>().expect("signal type");
-        kept.borrow_mut().push_back(value.clone());
+        kept.borrow_mut().push_back(project(value));
     });
     runtime
         .writes

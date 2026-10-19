@@ -1,13 +1,15 @@
 //! Signals that follow other signals over time: [`history`] (back and
-//! forward through a signal's past values), [`recent`] (its last writes)
-//! and [`smoothed`] (a number easing after another on the app's clock).
+//! forward through a signal's past values), [`recent`] (its last writes;
+//! [`recent_of`] a part of each, [`recent_timed`] each with its time),
+//! [`smoothed`] (a number easing after another on the app's clock) and
+//! [`falling`] (a level that jumps up and falls with gravity).
 
 use std::collections::VecDeque;
 use std::rc::Rc;
 use std::time::Duration;
 
 use crate::app::Ctx;
-use crate::reactive::{on_write, signal, watch, Memo, Runtime, Signal};
+use crate::reactive::{on_write_map, signal, watch, Memo, Runtime, Signal};
 
 /// Back and forward through the values a signal has had, as a browser's
 /// history, a pager's or a file manager's: [`history`] makes one. A `Copy`
@@ -173,9 +175,15 @@ impl Count for Memo<usize> {
 }
 
 /// The last `n` values written to `source`, oldest first: each write, an
-/// equal value too, as [`on_write`] sees them. An average over the last
-/// frames, a meter's peak, an oscilloscope's persistence. `n` may be a
-/// signal (or memo): when it shrinks, the oldest go.
+/// equal value too, as [`on_write`](crate::on_write) sees them. An
+/// average over the last frames, a meter's peak, an oscilloscope's
+/// persistence. `n` may be a signal (or memo): when it shrinks, the
+/// oldest go.
+///
+/// Each value is cloned once, into the history. For a big value (a
+/// buffer, a frame) shown as well as kept, hold it in the signal as an
+/// `Arc` (or `Rc`), so the history shares it, or keep a part of each with
+/// [`recent_of`].
 ///
 /// ```
 /// use intuituive::prelude::*;
@@ -196,12 +204,89 @@ impl Count for Memo<usize> {
 /// Outside a running or building app, or for a signal of another app.
 #[track_caller]
 pub fn recent<T: Clone + 'static>(source: Signal<T>, n: impl Count) -> Memo<VecDeque<T>> {
+    keep_last(source, n, T::clone, |value, _| value)
+}
+
+/// [`recent`], keeping `keep` of each value written rather than a clone of
+/// it: a part (a channel of a frame, its peak), a summary, or a shared
+/// handle. Nothing else of the value is copied.
+///
+/// ```
+/// use intuituive::prelude::*;
+/// use intuituive::recent_of;
+///
+/// let app = App::new(|| {
+///     let frame = signal(vec![0u8; 4096]);
+///     // The last three frames' peaks, not the frames.
+///     let peaks = recent_of(frame, 3, |f: &Vec<u8>| f.iter().copied().max().unwrap_or(0));
+///     text(move || peaks.with(|p| format!("{p:?}")))
+///         .on_key("w", move |_| frame.update(|f| f[0] += 1))
+/// });
+/// let mut driver = app.driver(12, 1);
+/// driver.press("w w w w");
+/// assert_eq!(driver.screen().plain()[0].trim_end(), "[2, 3, 4]");
+/// ```
+///
+/// # Panics
+/// Outside a running or building app, or for a signal of another app.
+#[track_caller]
+pub fn recent_of<T: 'static, U: 'static>(
+    source: Signal<T>,
+    n: impl Count,
+    keep: impl Fn(&T) -> U + 'static,
+) -> Memo<VecDeque<U>> {
+    keep_last(source, n, keep, |value, _| value)
+}
+
+/// [`recent`], each value with the time it was written on the app's clock
+/// ([`Ctx::now`](crate::Ctx::now) gives the time to measure its age
+/// against): a trace whose old frames fade by age, toasts or log lines
+/// that go after a while.
+///
+/// ```
+/// use intuituive::prelude::*;
+/// use intuituive::recent_timed;
+/// use std::time::Duration;
+///
+/// let app = App::new(|| {
+///     let level = signal(0);
+///     let last = recent_timed(level, 2);
+///     text(move || last.with(|l| format!("{l:?}")))
+///         .on_key("+", move |_| level.update(|n| *n += 1))
+/// });
+/// let mut driver = app.driver(40, 1);
+/// driver.press("+");
+/// driver.advance(Duration::from_millis(500));
+/// driver.press("+");
+/// assert_eq!(driver.screen().plain()[0].trim_end(), "[(0ns, 1), (500ms, 2)]");
+/// ```
+///
+/// # Panics
+/// Outside a running or building app, or for a signal of another app.
+#[track_caller]
+pub fn recent_timed<T: Clone + 'static>(
+    source: Signal<T>,
+    n: impl Count,
+) -> Memo<VecDeque<(Duration, T)>> {
+    keep_last(source, n, T::clone, |value, cx| (cx.now(), value))
+}
+
+/// The last `n` writes to `source`, each kept as `keep` takes it and
+/// `stamp` finishes it on the app's thread.
+#[track_caller]
+fn keep_last<T: 'static, U: 'static, V: 'static>(
+    source: Signal<T>,
+    n: impl Count,
+    keep: impl Fn(&T) -> U + 'static,
+    stamp: impl Fn(U, &Ctx) -> V + 'static,
+) -> Memo<VecDeque<V>> {
     let n = Rc::new(n);
     let kept = signal(VecDeque::new());
     let room = n.clone();
-    on_write(source, move |value, _| {
+    on_write_map(source, keep, move |value, cx| {
         let n = room.count();
-        kept.update(|kept: &mut VecDeque<T>| {
+        let value = stamp(value, cx);
+        kept.update(|kept: &mut VecDeque<V>| {
             kept.push_back(value);
             while kept.len() > n {
                 kept.pop_front();
@@ -273,6 +358,88 @@ pub fn smoothed<T: Copy + Into<f64> + 'static>(
         },
     );
     Memo::of(out)
+}
+
+/// A number that follows `source` up at once and falls back with
+/// `gravity` (in units a second, a second): it falls slowly at first and
+/// faster and faster, as a level meter's bar or peak, cava's bars, or a
+/// badge's glow fading. It never falls below `source`, and stops once it
+/// is there. Steps a frame at a time on the app's clock while it falls.
+///
+/// ```
+/// use intuituive::prelude::*;
+/// use intuituive::falling;
+/// use std::time::Duration;
+///
+/// let app = App::new(|| {
+///     let level = signal(0.0);
+///     let bar = falling(level, 8.0);
+///     text(move || format!("{:.2}", bar.get()))
+///         .on_key("x", move |_| {
+///             level.set(1.0);
+///         })
+///         .on_key("z", move |_| level.set(0.0))
+/// });
+/// let mut driver = app.driver(10, 1);
+/// driver.press("x z");
+/// // Up at once; after a quarter of a second, ½·8·0.25² = 0.25 down.
+/// driver.advance(Duration::from_millis(250));
+/// let shown: f64 = driver.screen().plain()[0].trim().parse().unwrap();
+/// assert!((0.70..0.80).contains(&shown), "{shown}");
+/// driver.advance(Duration::from_secs(1));
+/// assert_eq!(driver.screen().plain()[0].trim_end(), "0.00");
+/// ```
+///
+/// # Panics
+/// Outside a running or building app.
+#[track_caller]
+pub fn falling<T: Copy + Into<f64> + 'static>(source: Signal<T>, gravity: f64) -> Memo<f64> {
+    let out = signal(source.get_untracked().into());
+    // Falling: since when, from what height, on the app's clock.
+    let fall: Rc<std::cell::Cell<Option<(Duration, f64)>>> = Rc::default();
+    watch(
+        move || source.with(|value| (*value).into()),
+        move |target: f64, cx| {
+            if target >= out.get_untracked() {
+                // Up at once; a fall under way stops.
+                fall.set(None);
+                out.set(target);
+            } else if fall.get().is_none() {
+                let since = now();
+                fall.set(Some((since, out.get_untracked())));
+                fall_step(cx, source, out, fall.clone(), since, gravity);
+            }
+        },
+    );
+    Memo::of(out)
+}
+
+/// One step of a [`falling`] value's fall, and the next after a frame
+/// while it is above its source.
+fn fall_step<T: Copy + Into<f64> + 'static>(
+    cx: &mut Ctx,
+    source: Signal<T>,
+    out: Signal<f64>,
+    fall: Rc<std::cell::Cell<Option<(Duration, f64)>>>,
+    since: Duration,
+    gravity: f64,
+) {
+    // Stopped, or a later fall took over.
+    let Some((_, from)) = fall.get().filter(|(at, _)| *at == since) else {
+        return;
+    };
+    let target: f64 = source.get_untracked().into();
+    let t = now().saturating_sub(since).as_secs_f64();
+    let next = (from - 0.5 * gravity.max(0.0) * t * t).max(target);
+    out.set(next);
+    if next <= target || (gravity <= 0.0 && t > 0.0) {
+        fall.set(None);
+        out.set(target);
+        return;
+    }
+    cx.after(SMOOTH_STEP, move |cx| {
+        fall_step(cx, source, out, fall, since, gravity)
+    });
 }
 
 /// The app's clock at the top of this turn.
