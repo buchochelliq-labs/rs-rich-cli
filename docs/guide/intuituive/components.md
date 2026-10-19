@@ -349,5 +349,6 @@ let shown: Vec<&Task> = tasks.iter().filter(|t| query.matches(*t)).collect();
   for completion. `DateTime::now_local()` and `Date::today_local()` read
   the clock in the local zone, which follows summer time (`Zone::Local`;
   `Zone::posix(rule)`, `Zone::named("Europe/London")` and `Zone::tzif`
-  read others), and `DateTime::from_unix(secs, &zone)`/`to_unix(&zone)`
-  convert.
+  read others; `DateTime::now_in(&zone)` and `Date::today_in(&zone)` read
+  the clock there), `DateTime::from_unix(secs, &zone)`/`to_unix(&zone)`
+  convert, and `add_seconds(n)` moves a moment on.

@@ -200,7 +200,8 @@ App::new(|| {
   **`App::all_keys(true)`** asks a kitty terminal to report every key
   (flag 8, with alternate keys so Shift+1 is still `!`): text keys then
   report releases, and a modifier on its own is a key (`"shift"`,
-  `"ctrl"`, `"alt"`, `"super"`), as a game wants it.
+  `"ctrl"`, `"alt"`, `"super"`: `KeyCode::Modifier(ModifierKey::Shift)`
+  and the rest), as a game wants it.
   **`App::synthesize_releases(Some(hold))`** makes up the releases that do
   not come, `hold` after a key's last press or repeat: pick it longer than
   the terminal's repeat delay. A test sets what its terminal reports with
@@ -218,6 +219,8 @@ App::new(|| {
   frame was slow are not spread over the frames after. Keys typed while
   the terminal is asked about itself at the start are kept: the session
   waits a second at most for the answer, a quarter of one once keys come.
+  A test scripts keys that arrive together with the `Headless` backend's
+  `queued` field set (`headless.queued = true`).
 
 ## The mouse
 

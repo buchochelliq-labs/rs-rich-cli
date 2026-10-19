@@ -68,7 +68,7 @@ times itself) are on [State, keys and the mouse](input.md#held-keys-releases-and
 
 ```rust
 let app = App::new(build).max_fps(60);
-let stats = app.stats_handle();           // `run` takes the app: take this first
+let stats = app.stats_handle();           // a `StatsHandle`: `run` takes the app, so take this first
 app.run()?;
 let s = stats.get();
 eprintln!("{} frames, {} held back", s.frames, s.skipped);
@@ -150,11 +150,28 @@ detail. `PixelSprite::from_art(&rows, &palette)` draws pixel art in
 characters, `.with_frame(..)` adds frames and `frame_at(elapsed)` picks
 one by the clock.
 
+```rust
+use intuituive::pixels::{pixels_fit, PixelMode, PixelSprite};
+
+let ball = PixelSprite::from_art(&[".rr.", "rrrr", ".rr."], &[('r', [220, 40, 40, 255])]);
+let x = signal(0i32);
+every(Duration::from_millis(16), move |_| x.update(|x| *x = (*x + 1) % 160));
+pixels_fit(move |buf| {
+    buf.clear([10, 16, 48, 255]);
+    let h = buf.height() as i32;
+    buf.line(0, h - 1, buf.width() as i32 - 1, h - 1, [255, 255, 255, 255]);
+    buf.blit(&ball, x.get(), h - 4, 1.0, false);
+})
+.pixel_mode(PixelMode::HalfBlocks)
+```
+
 Behind features, two plugins: `sprite_sheet(path, tile_width,
 tile_height)` (and `sprite_sheet_bytes`) cuts an image into `PixelSprite`
 tiles, `.animation(&[0, 1, 2])` and `.sprite(i)` (`art`); and
 `micro_sprite(&asset)` makes an rs-rich-micro micro asset a sprite, its
-images fitted in half blocks, its fallback where it has none (`micro`).
+images fitted in half blocks, its fallback where it has none (`micro`;
+`micro_pixels(&asset, &limits)` gives its images as a `PixelSprite` for a
+pixel buffer).
 
 A stage of 300 moving sprites with a full-screen backdrop draws a 200x60
 frame in about 6 ms in a release build, painting included; a 200x120
