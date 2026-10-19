@@ -280,6 +280,48 @@ Sixel output is terminal graphics, not text, so it cannot be exported to HTML
 or SVG; exports use blocks instead. Run the example with `-- --sixel` in a Sixel
 terminal to see it.
 
+
+## Kitty and iTerm2
+
+Two more protocols draw real pixels, each behind a feature of its own:
+
+- **`iterm`**: `iterm::inline_image(bytes, cols, rows)` is the one escape
+  that draws a PNG (or a GIF, which the terminal animates) at the cursor in
+  exactly `cols × rows` cells. iTerm2 and WezTerm speak it.
+- **`kitty`**: `kitty::transmit(id, png, cols, rows)` sends the image once,
+  under an id, and gives it a *virtual* placement. It then shows wherever
+  the program prints placeholder cells for it (`kitty::placeholder_row`), in
+  the foreground colour `kitty::id_color(id, truecolor)` gives, so the image
+  lives in the cell grid: it scrolls with the text and costs nothing to show
+  again. `kitty::delete(id)` frees it.
+
+```rust
+use rich::{Console, Style, Text};
+use rich_art::{iterm, kitty};
+
+let png = std::fs::read("cat.png")?;
+let (cols, rows) = (20, 10);
+
+// iTerm2 or WezTerm: one escape at the cursor.
+print!("{}", iterm::inline_image(&png, cols, rows));
+
+// Kitty: send it once, then print its placeholder cells in its colour.
+print!("{}", kitty::transmit(1, &png, cols, rows));
+let style = Style::from_color(kitty::id_color(1, true), None);
+let console = Console::new();
+for row in 0..rows {
+    let cells = kitty::placeholder_row(row, cols).expect("fits the diacritics");
+    console.print(&Text::styled(cells, style.clone()));
+}
+# Ok::<(), std::io::Error>(())
+```
+
+These are the encoders; choosing a protocol for the terminal in front of
+you is left to the caller. intuiTUIve's `art` plugin
+([Terminal apps](../intuituive/index.md)) and micro assets
+([Terminal compatibility](../micro/terminals.md)) pick one and draw with
+them, and `rich record` draws all three into its video.
+
 ## The individual backends
 
 `ImageArt` is a front end. The backends are public too, for when you want one

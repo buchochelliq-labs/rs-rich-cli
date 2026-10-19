@@ -21,8 +21,8 @@ command is built on it.
 
 ```toml
 [dependencies]
-rs-rich = "0.0.7"
-rs-rich-ext = { version = "0.0.9", features = ["data", "yaml"] }
+rs-rich = "0.0.10"
+rs-rich-ext = { version = "0.0.17", features = ["data", "yaml"] }
 ```
 
 `yaml`, `toml`, `xml` and `jsonpath` each turn on `data`. The examples on

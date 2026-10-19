@@ -20,7 +20,7 @@ it never reaches your release build:
 
 ```toml
 [dev-dependencies]
-rs-rich-ext = { version = "0.0.9", features = ["testing"] }
+rs-rich-ext = { version = "0.0.17", features = ["testing"] }
 ```
 
 The examples come from

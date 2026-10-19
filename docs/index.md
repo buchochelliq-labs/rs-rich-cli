@@ -216,11 +216,14 @@ library targets keep the short names, so you write `use rich::Console`.
 | [`rs-rich-embed`](https://crates.io/crates/rs-rich-embed) | [![rs-rich-embed](https://img.shields.io/crates/v/rs-rich-embed.svg)](https://crates.io/crates/rs-rich-embed) | [docs.rs](https://docs.rs/rs-rich-embed) | a terminal pane and a web view for intuiTUIve apps (new in 0.0.18) |
 
 <a id="versions-prepared-in-this-checkout"></a>
+<a id="versions-in-this-checkout"></a>
 
-### Versions in this checkout
+### Versions these docs describe
 
-These manifest versions describe the source tree, not publication status.
-Each crate versions independently; see [Branching and releases](BRANCHING.md).
+The crates' versions in the source these docs were built from: a release's
+docs list that release's crates, and dev (main)'s the versions on `main`,
+published or not. Each crate versions independently; see
+[Branching and releases](BRANCHING.md).
 
 <!-- BEGIN MANIFEST VERSIONS -->
 | Package | Manifest version |

@@ -22,8 +22,8 @@ so any format `rich_ext::data` parses works. Enable the formats you need on
 
 ```toml
 [dependencies]
-rs-rich-interact = { version = "0.0.2", features = ["data"] }
-rs-rich-ext = { version = "0.0.12", features = ["yaml"] }
+rs-rich-interact = { version = "0.0.8", features = ["data"] }
+rs-rich-ext = { version = "0.0.17", features = ["yaml"] }
 ```
 
 ```rust

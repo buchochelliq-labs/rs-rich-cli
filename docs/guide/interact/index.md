@@ -728,7 +728,7 @@ termion or termwiz, each behind an off-by-default feature of the same name.
 the build has:
 
 ```toml
-rs-rich-interact = { version = "0.0.6", features = ["termwiz"] }
+rs-rich-interact = { version = "0.0.8", features = ["termwiz"] }
 ```
 
 ```rust
