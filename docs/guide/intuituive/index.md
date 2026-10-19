@@ -1615,6 +1615,83 @@ Three frames in (`tests/effects.rs`):
 --8<-- "crates/rich-intuituive/tests/snapshots/effect_drip.txt"
 ```
 
+### Sprites, stages and pixel buffers
+
+A game, a map or an animation draws things that move over a background.
+`intuituive::sprite` has the pieces, all generic:
+
+- A **`Sprite`** is cell art: one or more frames of styled cells, some of
+  them transparent. `Sprite::from_markup(&lines, '.')` reads console markup
+  lines, every `.` a hole; `Sprite::from_cells(rows)` takes `SpriteCell`s;
+  `Sprite::from_pixels(&pixel_sprite)` draws pixel art in half blocks.
+  `Sprite::from_frames([..]).period(ms(120))` animates on the app's clock
+  (`.once()` stops on the last frame); `.anchor(x, y)` or `.centered()`
+  says which cell goes at the sprite's position.
+- A **`stage`** draws `Placed` sprites from a closure that may read
+  signals: `Placed::new(id, sprite).at(x, y).z(1).flip(true)`. Sprites are
+  clipped to the stage and drawn in z order over its backdrop
+  (`StageOptions::backdrop(node)`, any node) or its background
+  (`.bg(..)`); a cell that sets no background takes the colour beneath it,
+  so a red `@` on a blue backdrop is red on blue. The stage draws again
+  when the signals change, and on the app's clock while a sprite animates
+  or moves.
+- **Clicks and hovers** find the topmost sprite with an opaque cell under
+  the pointer: `StageOptions::on_sprite_click(|id, cx| ..)` and
+  `on_sprite_hover(|id, cx| ..)` (`None` off every sprite). A click on no
+  sprite goes on to the stage's own `on_click`.
+- **Movement:** `Placed::tween(tween(from, to, duration, easing))` moves a
+  sprite on the app's clock, a frame every 16 ms until it arrives; a
+  position in a signal moved by `cx.animate` works too.
+  `StageOptions::half_cells(true)` moves pixel-art sprites a pixel (half a
+  cell) at a time up and down.
+- **Collisions:** `overlaps(a, b)` is true when two placed sprites share an
+  opaque cell (`overlaps_at(a, b, now)` at a time), `bounds_overlap(a, b)`
+  when their rectangles meet.
+
+```rust
+use intuituive::sprite::{stage_with, Placed, Sprite, StageOptions};
+
+let ship = Sprite::from_frames([
+    Sprite::from_markup(&[".[cyan]/\\.[/]", "[cyan]<[b red]##[/]>", ".[yellow]''[/]."], '.'),
+    Sprite::from_markup(&[".[cyan]/\\.[/]", "[cyan]<[b red]##[/]>", ".[red]\"\"[/]."], '.'),
+])
+.period(Duration::from_millis(120));
+let (x, selected) = (signal(4.0), signal(None::<usize>));
+stage_with(
+    move || vec![Placed::new(0, ship.clone()).at(x.get(), 3.0)],
+    StageOptions::new()
+        .backdrop(fill("·", "grey30 on #0b1020"))
+        .on_sprite_click(move |id, _| selected.set(Some(id))),
+)
+.on_key("right", move |_| x.update(|x| *x += 1.0))
+```
+
+`intuituive::pixels` is a framebuffer for what is drawn a pixel at a time
+(a raycaster's view, a plot, pixel art): `pixels(width, height, |buf| ..)`
+hands its closure a `PixelBuf` (RGBA, kept between draws) and shows it in
+half blocks, two pixels a cell in true colour; `pixels_fit(|buf| ..)`
+sizes the buffer to the node. `PixelBuf` has `set`, `plot` (blended),
+`fill_rect`, `line` and `blit(&sprite, x, y, scale, flip)`, which draws a
+`PixelSprite` scaled (nearest neighbour) and mirrored, by each pixel's
+alpha; `pixels_mut()` writes the pixels directly. `.pixel_mode(PixelMode::
+Quadrants)` (2x2 a cell) and `PixelMode::Braille` (2x4) trade colour for
+detail. `PixelSprite::from_art(&rows, &palette)` draws pixel art in
+characters, `.with_frame(..)` adds frames and `frame_at(elapsed)` picks
+one by the clock.
+
+Behind features, two plugins: `sprite_sheet(path, tile_width,
+tile_height)` (and `sprite_sheet_bytes`) cuts an image into `PixelSprite`
+tiles, `.animation(&[0, 1, 2])` and `.sprite(i)` (`art`); and
+`micro_sprite(&asset)` makes an rs-rich-micro micro asset a sprite, its
+images fitted in half blocks, its fallback where it has none (`micro`).
+
+A stage of 300 moving sprites with a full-screen backdrop draws a 200x60
+frame in about 6 ms in a release build, painting included; a 200x120
+pixel buffer whose every pixel changes, about 12 to 17 ms
+(`tests/sprites.rs` measures both). `examples/sprites.rs` puts it
+together: animated sprites drifting over a backdrop, a click to select
+one, the arrows to steer it, and a pixel buffer beside them.
+
 ## Screens and modals
 
 ![A modal asking whether to quit, over the screens example](../../media/tapes/intuituive/modal.png)

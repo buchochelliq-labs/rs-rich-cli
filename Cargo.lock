@@ -3032,6 +3032,7 @@ dependencies = [
  "rs-rich-art",
  "rs-rich-ext",
  "rs-rich-interact",
+ "rs-rich-micro",
  "rs-rich-ratatui",
  "vt100",
 ]
