@@ -353,8 +353,12 @@ from its manifest, a publishable crate is missing, or a crate is listed before a
 workspace crate it depends on. After a version bump, `release_cohort.py sync`
 rewrites the versions from the manifests.
 
-`release_cohort.py tag` tags the merged commit on `main` (by default
-`origin/main`). For each entry in order it skips a version already on crates.io
+`release_cohort.py tag` tags the local checkout (`HEAD`, or `--commit`),
+which must be on `main` as last fetched. It fetches nothing and reads
+`RELEASES.toml` and the manifests from that commit, so pull `main` first, and
+a run resumed later releases the same commit even if `main` has moved on
+(only the remote's tags and the registries are read live). For each entry in
+order it skips a version already on crates.io
 or PyPI, never tagging it; otherwise it pushes the annotated tag and waits for
 the version to appear before the next, stopping when the release run fails
 (with the GitHub CLI) or after `--timeout` minutes. One tag at a time keeps

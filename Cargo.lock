@@ -2847,7 +2847,7 @@ dependencies = [
 
 [[package]]
 name = "rs-rich-embed"
-version = "0.0.2"
+version = "0.0.3"
 dependencies = [
  "image",
  "libc",
@@ -2891,7 +2891,7 @@ dependencies = [
 
 [[package]]
 name = "rs-rich-interact"
-version = "0.0.7"
+version = "0.0.8"
 dependencies = [
  "crossterm",
  "filedescriptor",
@@ -2910,7 +2910,7 @@ dependencies = [
 
 [[package]]
 name = "rs-rich-intuituive"
-version = "0.0.4"
+version = "0.0.5"
 dependencies = [
  "cpal",
  "kasuari",
@@ -2984,7 +2984,7 @@ dependencies = [
 
 [[package]]
 name = "rs-rich-ratatui"
-version = "0.0.4"
+version = "0.0.5"
 dependencies = [
  "ratatui-core",
  "ratatui-widgets",

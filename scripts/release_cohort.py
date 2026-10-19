@@ -13,6 +13,8 @@ on it:
     tag         create and push the tag of every package not yet on its
                 registry, one at a time in order, waiting for each release to
                 appear before the next. A published version is never tagged.
+                It tags the local checkout (HEAD, or `--commit`) and fetches
+                nothing, so a resumed run releases the same commit.
                 `--registry crates.io` (or `pypi`) tags only that registry's
                 packages, to hold the other back.
 
@@ -311,10 +313,13 @@ def wait_for(package, timeout, status=registry_status, conclusion=run_conclusion
 
 
 def tag(commit, remote, timeout, dry_run, status=registry_status, wait=wait_for, registry=None):
-    git("fetch", "--quiet", remote, "main", "--tags")
+    # The local checkout decides what is released: nothing is fetched, so a
+    # run that is resumed later tags the same commit, not whatever main has
+    # moved on to since. Only the remote's tags and the registries are read.
     sha = git("rev-parse", "--verify", f"{commit}^{{commit}}")
     if subprocess.run(["git", "merge-base", "--is-ancestor", sha, f"{remote}/main"], cwd=ROOT).returncode:
-        raise RuntimeError(f"{sha} is not on {remote}/main; release tags go on main (docs/BRANCHING.md)")
+        raise RuntimeError(f"{sha} is not on {remote}/main as last fetched; release tags go on main "
+                           "(docs/BRANCHING.md)")
     read = files_at(sha)
     if subprocess.run(["git", "cat-file", "-e", f"{sha}:{CONFIG}"], cwd=ROOT, capture_output=True).returncode:
         raise RuntimeError(f"{CONFIG} is not in {sha[:12]}; tag a commit that has it")
@@ -361,7 +366,8 @@ def main():
     guard = commands.add_parser("unreleased")
     guard.add_argument("tag")
     tagger = commands.add_parser("tag")
-    tagger.add_argument("--commit", default="origin/main", help="commit to tag (default: origin/main)")
+    tagger.add_argument("--commit", default="HEAD",
+                        help="commit to tag (default: HEAD, the local checkout; it must be on main)")
     tagger.add_argument("--remote", default="origin")
     tagger.add_argument("--timeout", type=int, default=120, help="minutes to wait for each release")
     tagger.add_argument("--dry-run", action="store_true", help="show what would be tagged, then stop")

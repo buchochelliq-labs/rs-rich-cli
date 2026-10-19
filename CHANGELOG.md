@@ -9,6 +9,21 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Releases: tag from the local checkout; versions after a split cohort
+
+- **`release_cohort.py tag` releases the local checkout.** It tags `HEAD`
+  (or `--commit`), which must be on `main` as last fetched, and fetches
+  nothing: `RELEASES.toml` and the manifests come from that commit. A run
+  resumed after `main` has moved on releases the same commit, where it used
+  to fetch and tag the newer `origin/main`, splitting a cohort across two
+  commits.
+- **Versions.** rs-rich-intuituive 0.0.4, rs-rich-ratatui 0.0.4,
+  rs-rich-interact 0.0.7 and rs-rich-embed 0.0.2 were published from commits
+  before #752, which changed them under the same numbers. They move to
+  rs-rich-intuituive 0.0.5, rs-rich-ratatui 0.0.5, rs-rich-interact 0.0.8 and
+  rs-rich-embed 0.0.3, so every published version matches its registry
+  package again.
+
 ### intuiTUIve: list and table rows (rs-rich-intuituive)
 
 What rebuilding Yazi and scope-tui found the lists and tables lack

@@ -81,25 +81,25 @@ version = "0.0.8"
 name = "rs-rich-interact"
 registry = "crates.io"
 manifest = "crates/rich-interact/Cargo.toml"
-version = "0.0.7"
+version = "0.0.8"
 
 [[package]]
 name = "rs-rich-ratatui"
 registry = "crates.io"
 manifest = "crates/rich-ratatui/Cargo.toml"
-version = "0.0.4"
+version = "0.0.5"
 
 [[package]]
 name = "rs-rich-intuituive"
 registry = "crates.io"
 manifest = "crates/rich-intuituive/Cargo.toml"
-version = "0.0.4"
+version = "0.0.5"
 
 [[package]]
 name = "rs-rich-embed"
 registry = "crates.io"
 manifest = "crates/rich-embed/Cargo.toml"
-version = "0.0.2"
+version = "0.0.3"
 
 [[package]]
 name = "rs-rich-web"
