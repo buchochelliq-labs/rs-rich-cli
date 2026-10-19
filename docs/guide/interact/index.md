@@ -313,9 +313,9 @@ A day, a time of day, or both (#719), as the `rich_interact::datetime`
 types: `Date`, `Time` and `DateTime`. They are hand-rolled (the proleptic
 Gregorian calendar, with no time zone and no dependency), parse and print
 ISO 8601 (`2026-10-17`, `14:30`, `2026-10-17 14:30`), and are what
-intuiTUIve's calendar uses. `Date::today_utc()` and `DateTime::now_utc()`
-are in UTC: pass the local day with `.value(...)` and `.today(...)` when
-the difference matters.
+intuiTUIve's calendar uses. The pickers start from today in UTC: pass the
+local day (`Date::today_local()`, see [Time zones](#time-zones)) with
+`.value(...)` and `.today(...)` when the difference matters.
 
 - **The date** is picked on a month grid: ←/→ a day, ↑/↓ a week, PgUp/PgDn
   (or `[` `]`) a month, Shift+PgUp/PgDn (or `{` `}`) a year, Home/End the
@@ -367,6 +367,92 @@ let at = run(picker, &RunOptions::default())?;
 
 `rich date` runs these from the shell: see
 [Ask in a script](../../cli.md#ask-in-a-script).
+
+### Natural dates
+
+`dates::parse(text, now)` reads a date as people type it, relative to
+`now`: `tomorrow`, `friday`, `eom`, `3d`, `2026-11-01 14:30`. It is
+generic, for a to-do list's due dates, a log viewer's `since` or a
+calendar's jump, and its words are Taskwarrior's, which most such tools
+share. intuiTUIve re-exports the module as `intuituive::dates`.
+
+```rust
+use rich_interact::dates::{self, DateOptions};
+use rich_interact::datetime::{Date, DateTime, Time};
+
+// Monday 19 October 2026, noon.
+let now = DateTime::new(Date::new(2026, 10, 19), Time::new(12, 0, 0));
+assert_eq!(dates::parse("tomorrow", now)?, Date::new(2026, 10, 20).into());
+assert_eq!(dates::parse("eom", now)?, Date::new(2026, 10, 31).at(Time::LAST));
+assert_eq!(dates::parse("3d", now)?.date, Date::new(2026, 10, 22));
+
+// Weeks that start on Sunday (0 is Monday, 6 Sunday).
+let sunday = DateOptions::new().week_start(6);
+assert_eq!(dates::parse_with("eow", now, sunday)?.date, Date::new(2026, 10, 24));
+# Ok::<(), dates::DateError>(())
+```
+
+| Word | Is |
+|---|---|
+| `now` | now |
+| `today`, `sod`, `yesterday`, `tomorrow` | that day at 00:00 |
+| `eod` | today at 23:59:59 |
+| `monday` … `sunday`, `mon` … `sun` | the next such day (never today) |
+| `january` … `december`, `jan` … `dec` | the 1st of the next such month (never this one) |
+| `sow`, `som`, `soq`, `soy` | the start of the next week, month, quarter or year |
+| `socw`, `socm`, `socq`, `socy` | the start of the current one |
+| `eow`, `eom`, `eoq`, `eoy` (and `eocw` …) | the end of the current one, at 23:59:59 |
+| `later`, `someday` | 9999-12-30 |
+| `2026-11-01`, `2026-11-01 14:30`, `2026-11-01T14:30` | that day, and time |
+| `14:30`, `2pm` | today at that time |
+| `3d`, `2w`, `1mo`, `1y`, `4h`, `30min`, `10s`, `-2d`, `+1w` | now plus or minus that long |
+
+Case does not matter. `dates::parse_date(text, today)` gives the day
+alone, a `DateError` says which text was not a date, and `dates::NAMES`
+lists every word by name, for completion.
+
+### Time zones
+
+`datetime::Zone` says how far a zone's clocks are from UTC at a moment,
+summer time included, with no dependency:
+
+| Zone | Is |
+|---|---|
+| `Zone::Utc` | UTC |
+| `Zone::Local` | the platform's local zone, as it is configured now: `localtime_r` on Unix (which reads `TZ` and the zoneinfo database); `SystemTimeToTzSpecificLocalTime` on Windows, unless `TZ` is set |
+| `Zone::Fixed(seconds)` | always that far ahead of UTC (behind if negative) |
+| `Zone::posix(rule)` | a POSIX `TZ` rule: `"CET-1CEST,M3.5.0,M10.5.0/3"`, `"EST5EDT,M3.2.0,M11.1.0"`, `"UTC0"` |
+| `Zone::tzif(bytes)` | the rules in a TZif file, the zoneinfo database's format |
+| `Zone::named(name)` | `"Europe/London"`, read from `$TZDIR` or `/usr/share/zoneinfo`; an error where there is no such file, as on Windows |
+
+```rust
+use rich_interact::datetime::{Date, DateTime, Time, Zone};
+
+// Central Europe: an hour ahead of UTC in winter, two in summer.
+let cet = Zone::posix("CET-1CEST,M3.5.0,M10.5.0/3")?;
+let summer = DateTime::new(Date::new(2026, 7, 15), Time::new(12, 0, 0));
+let unix = summer.to_unix(&cet);
+assert_eq!(DateTime::from_unix(unix, &Zone::Utc).time, Time::new(10, 0, 0));
+
+// Now on the local clocks: what `dates::parse` wants as `now`.
+let now = DateTime::now_local();
+assert!(now.is_valid());
+# Ok::<(), String>(())
+```
+
+`DateTime::from_unix(unix, &zone)` and `to_unix(&zone)` convert between
+seconds since 1970 UTC and a zone's clocks; a time the clocks pass twice
+when summer time ends is the first of the two, and one they skip when it
+starts is read on the clock of before the change (02:30 in a gap from
+02:00 to 03:00 is 03:30). `DateTime::now_in(&zone)`, `Date::today_in` and
+`Time::now_local` read the clock; `add_seconds` adds on a clock that does
+not change.
+
+On Windows a `TZ` that is set wins over the system's zone, as it does for
+the C runtime's `localtime`. Without a zoneinfo database there, `TZ` must be
+a POSIX rule (`TZ=CET-1CEST,M3.5.0,M10.5.0/3`), or `TZDIR` must name a
+zoneinfo directory for a name such as `Europe/Berlin`; a `TZ` that is
+neither is read as UTC. See [Troubleshooting](../../troubleshooting.md#the-local-time-is-wrong-on-windows).
 
 ### ApprovalQueue and Jump
 
@@ -498,8 +584,42 @@ the protocol's flags.
 The question is asked once per process, and the session waits for the
 answer. Real terminals answer at once; a terminal emulator that answers
 neither the protocol's query nor the device attributes query sent after it
-keeps the session waiting two seconds before it goes on without the
-protocol.
+keeps the session waiting a second at most before it goes on without the
+protocol, and a quarter of a second once keys come instead of an answer.
+On Unix the keys typed meanwhile are kept and delivered, not lost.
+
+### Releases, and every key
+
+Which releases arrive depends on the terminal and the backend, and
+`Session::releases_reported()` says which, as a `Releases`:
+
+| `Releases` | When | Reported |
+|---|---|---|
+| `None` | no kitty protocol, the termion or termwiz backend | no releases |
+| `ExceptText` | crossterm with the kitty protocol, as a session pushes it by default | every key's but text keys': characters typed without Ctrl or Alt (Space too), Enter, Tab and Backspace |
+| `All` | crossterm with the kitty protocol and `all_keys`; the Windows console | every key's |
+
+`Releases::reported(&key)` asks it of one key. A game that moves while a
+key is held wants every release: `SessionOptions { all_keys: true, .. }`
+asks the terminal to report every key as an escape code (kitty's flags 1,
+2, 4 and 8), so letters report their releases too, and a modifier pressed
+on its own arrives as `KeyCode::Modifier(ModifierKey::Shift)` (`Ctrl`,
+`Alt`, `Super`; named `shift`, `ctrl`, `alt` and `super`). It is off by
+default because typed text then arrives as a base key and modifiers,
+which loses what an input method composes.
+
+```rust
+use rich_interact::{Key, Releases};
+
+let up = Key::parse("up").unwrap();
+let w = Key::parse("w").unwrap();
+assert!(Releases::ExceptText.reported(&up));
+assert!(!Releases::ExceptText.reported(&w));
+assert!(Releases::All.reported(&w));
+```
+
+intuiTUIve builds held keys, release bindings and key repeat on these: see
+[Terminal apps](../intuituive/index.md).
 
 ## Synchronized output
 
