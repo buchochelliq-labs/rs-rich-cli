@@ -500,7 +500,10 @@ column([
   handler can move it too, with `cx.focus_next()` or `cx.focus(id)`.
 - **Which node has the focus first:** the first focusable one, unless a
   node asks with `.autofocus()` (a search box, the list a screen is
-  about).
+  about). On a wrapper that is not focusable of its own (a `switch`, a
+  panel or padding round a list) the focus passes to the first focusable
+  node inside it, now or once it is built: a list in a `switch` gets its
+  own keys, and the menu key reaches its `on_context`.
 - **Clicks:** `.on_click(|cx| …)` gets the clicks inside the node and
   focuses it. The app remembers where each node was drawn, so you never
   store rectangles yourself.
@@ -1914,7 +1917,50 @@ cx.help_with(
 `<PageUp>`, a sequence as `gg`), and the search finds them as said;
 `filter_first(true)` lists every binding in one list under the search
 line and a rule, with no section headings. `KeyFormat::keys(&keys,
-sequence)` says keys the same way anywhere else.
+sequence)` says keys the same way anywhere else. `.filter_key("/")` makes
+it Yazi's: `j` and `k` move a row and `g`/`G` go to the ends until `/`
+starts the search, which Esc ends (clearing it) before Esc closes the
+help. A row too long for the help wraps, its keys as well as its
+description: a binding of several keys lists them over several lines,
+broken between keys, the key column taking at most half the width.
+
+### Scaled steps, any modifiers, falling through, unlisted bindings
+
+```rust
+const MAGNITUDES: [(&str, f64, &str); 4] =
+    [("", 1.0, "×1"), ("shift", 10.0, "×10"), ("ctrl", 5.0, "×5"), ("alt", 0.2, "⅕")];
+
+fn samples(s: &mut Scope) -> &mut u32 { &mut s.samples }
+
+label("scope")
+    .bind_step_scaled("right", &MAGNITUDES, "More samples", cfg, samples, 16.0, 16..=8192)
+    .bind_step("pageup", "Average more", cfg, |s| &mut s.average, 1.0, 1..=64)
+    .any_modifiers()
+    .bind("esc", "Reset the view", reset)
+    .fall_through()
+    .bind_hidden("ctrl+l", "Clear the trace", move |_| trace.set(Vec::new()))
+```
+
+- **`.bind_step_scaled(keys, variants, description, signal, field, step,
+  range)`** is `bind_step` with the step scaled by the modifiers held, as
+  `bind_scaled` scales a value: one row in the help (`More samples
+  (shift ×10, ctrl ×5, alt ⅕)`), the field still kept within `range`. An
+  integer moves by the scaled step rounded. A field picker kept in a
+  variable does not compile as a closure (its return does not take its
+  argument's lifetime): write it as a `fn`, as `samples` above.
+- **`.any_modifiers()`** lets the binding added last fire with any
+  modifiers held: `pageup`, Shift+PgUp, Ctrl+PgUp. A binding that names
+  the key with its modifiers, on the node or deeper, still wins.
+- **`.fall_through()`** lets the key go on after the binding added last
+  runs: to the next binding of the key on the node, then up to the nodes
+  above, as Bubble Tea passes a message on. A handler decides as it runs
+  with **`cx.pass_key()`**.
+- **`.unlisted()`** keeps the binding added last out of the help, the
+  which-key pop-up and `key_hints`; it still works, and its description
+  is its name: the palette lists it, and **`driver.run_named(name)`** runs
+  it in a test. **`bind_hidden(keys, name, handler)`** is both at once
+  (Textual's `show=False`). An empty description still hides a binding
+  with no name.
 
 ### Confirming
 
@@ -2068,12 +2114,30 @@ text(move || match user.get() {
   fast as it comes), then `.then(fallback)` plays another at the same
   beat (`std::iter::repeat(silence)`), `.then_with(|tx| …)` runs a
   closure with the thread's `Latest`, and `.signal()` plays nothing after.
+  `.then_at(pace, tail)` adds a tail at a pace of its own (a pipe read as
+  fast as it comes, then silence a buffer's time apart) and starts
+  nothing; `.with_state()` starts it with a `FeedState` too: `Ended` once
+  the values run out, while a tail plays on (the end of a file, padded
+  with silence), `Stalled` as `.stall_after(d)` says.
+- **Waiting the test clock sees:** a feed thread that waits on something
+  else (a device's buffer, a channel) waits with `tx.wait_for(|| ready,
+  timeout)`, woken to look again by a `Notifier` (`tx.notifier()`,
+  `Clone + Send`, for the device's callback or the channel's sender):
+  under `wait_for_tasks` it counts as asleep, so the driver's turns do
+  not wait for it, and the timeout is on the app's clock. `tx.blocking(||
+  rx.recv())` counts any blocking call as asleep, without the exactness.
 - **Signals over time:** `history(signal)` goes `back()` and `forward()`
   through the values a signal has had (`can_back()`, `can_forward()`,
   `.limit(n)`), not recording its own moves: a browser's, a pager's, a
   file manager's tabs. `recent(signal, n)` is a `Memo<VecDeque<T>>` of its
   last `n` writes (`n` may be a signal): an average over the last frames,
-  a peak, persistence. `smoothed(signal, attack, release)` is a number
+  a peak, persistence; it clones each value once, so hold a big one as an
+  `Arc` to share it, or keep a part with `recent_of(signal, n, |v| part)`.
+  `recent_timed(signal, n)` has each value's time on the app's clock
+  (`cx.now()` is the clock), for fading by age. `falling(signal,
+  gravity)` follows a level up at once and falls back with gravity (in
+  units a second, a second), as cava's bars and a meter's peak.
+  `smoothed(signal, attack, release)` is a number
   that eases after another on the app's clock, rising with the `attack`
   time constant and falling with `release`: a meter's needle, a progress
   bar that glides, bars falling back slowly.
@@ -2122,6 +2186,13 @@ The `files` plugin (below) is each of them with a file system plugged in.
   each default column's list to a hook (`current`, `parent`, `preview`),
   so any list option or handler reaches it; a view of your own passes
   its lists through `wrap_current` and the like.
+- **Other items at a level:** `m.overlay(at, vec![(name, Some(level)),
+  (name, None)])` goes to level `at` and lists those items in place of
+  its own, each opening a level of its own (or a leaf): a search's
+  results, bookmarks, a "recent" list. It lasts until the columns leave
+  the level: entering an item goes to its level, and `leave` (or
+  `end_overlay`) goes back to the level's own items, on the one hovered
+  before, as Yazi leaves a search. `overlay_at()` says where one is.
 
 ```rust
 struct Menu;
@@ -2168,6 +2239,70 @@ columns.navigation(columns.view())
   `resource_for` keyed by the width and the key (`clear_after` its
   `stale_after`, on the app's clock), so the first frame lays it out and
   already shows the first value.
+
+### Lists, tabs, status bars and facts
+
+- **Marks by key:** `list.marks_by(selection, |i| key)` draws a
+  `multi_select`'s marks on a list that is not the one it is over (a
+  parent column, a second view, a search's results), finding each item
+  by key, a visual range too.
+- **Find from here:** `search.next_from(true)` (and `previous_from`)
+  stays on the hovered item when it matches, as find as you type does;
+  `false` is `next`.
+- **Numbered tabs:** `tabs_for_indexed(&set, |i, state| title)` gives the
+  title closure each tab's index, for Yazi's ` 1 src `.
+- **Optional status segments:** `seg(..).when(|| cond)` (any segment, a
+  `seg_gauge` too) leaves the segment and its caps out while `cond` is
+  false: a progress gauge while tasks run.
+- **Facts' values:** `facts(..).value_style("yellow")` styles the values
+  (the theme's `facts.value`, none by default), and
+  `.value_style_for(|i| Some(style))` styles a row's value over it.
+
+### Editing text, state files and process jobs
+
+```rust
+// $VISUAL, else $EDITOR, on a temporary file; read back when it ends.
+cx.edit_text_as(&message, "md", move |edited, cx| match edited {
+    Ok(text) => commit(text, cx),
+    Err(why) => cx.notify(Level::Error, "Editor", why.to_string()),
+});
+
+// State between sessions, by app name.
+let recent = frecency_in("launcher", "recent.tsv").keep(200);
+recent.visit("build");
+let best: Vec<String> = recent.ranked();
+update_state("launcher", "history", |old| append(old, "build"))?;
+
+// A process as a job: progress from its lines, killed on cancel.
+jobs.run_process_with("Fetch", command, |line| parse_percent(line), |outcome, cx| ..);
+```
+
+- **`cx.edit_text(text, |edited, cx| ..)`** puts `text` in a temporary
+  file, hands the terminal to the user's editor on it (`$VISUAL`, else
+  `$EDITOR`, else `vi`; Notepad on Windows) and gives back the file's
+  text once it ends, or why it could not run; `edit_text_as(text, "md",
+  ..)` names the file's extension. Under the headless driver the editor
+  is a recorded `Handoff`, as any `handoff`.
+- **State files:** `state_dir(app)` is where an app keeps state
+  (`$XDG_STATE_HOME/app`, else `~/.local/state/app`; Application Support
+  on macOS; `%LOCALAPPDATA%` on Windows), `state_file(app, name)` a file
+  in it; `write_state(app, name, bytes)` writes it whole (a temporary
+  file synced and renamed over it: `write_atomic(path, bytes)` for any
+  path), `read_state` reads it, and `update_state(app, name, |old|
+  new)` (`update_file` for any path) reads, changes and writes it under
+  a lock another session waits for, so two windows' changes add up.
+- **A frecency store:** `frecency_in(app, name)` (or
+  `frecency_store(file)`, or `frecency_session()` for the session only)
+  ranks string keys by how often and how lately each was used, as zoxide
+  does: `visit`, `remove`, `ranked`, `visits`, `reload`; `keep(n)` caps
+  it, `max_age(total)` sets when the ranks age. Each visit is merged into
+  the file's latest under its lock.
+- **Process jobs:** `jobs.run_process(title, command, |outcome, cx| ..)`
+  runs a command as a job, its output read line by line; cancelling the
+  job kills it. A process that exits otherwise than with 0 fails the job
+  with the last line of its standard error (`ProcessOutcome::Failed(why,
+  output)`); `run_process_with` reads progress from each line.
+  `job.errors()` is a failed job's errors.
 
 ## Files, sound and images
 

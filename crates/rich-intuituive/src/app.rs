@@ -5125,16 +5125,18 @@ impl Driver {
         self.app.focus()
     }
 
-    /// The focused node's [name](crate::Node::name), else its accessible
-    /// name (its [label](crate::Node::label), the text it shows, a panel's
-    /// title), if any.
+    /// The focused node's [name](crate::Node::name), else the name of the
+    /// wrapper that handed it the focus ([`autofocus`](crate::Node::autofocus)
+    /// on a `switch` round it), else its accessible name (its
+    /// [label](crate::Node::label), the text it shows, a panel's title), if
+    /// any.
     pub fn focused_name(&self) -> Option<String> {
         let id = self.focused()?;
         let mut name = None;
         with_node(&self.app.top().root, id, &mut |node| {
             name = node.given_name().map(str::to_string);
         });
-        name.or_else(|| {
+        name.or_else(|| self.passed_from(id)).or_else(|| {
             self.accessibility()
                 .into_iter()
                 .find(|node| node.id == id)
@@ -5143,8 +5145,27 @@ impl Driver {
         })
     }
 
+    /// The name of the wrapper (innermost first) whose
+    /// [`autofocus`](crate::Node::autofocus) handed node `id` the focus.
+    fn passed_from(&self, id: NodeId) -> Option<String> {
+        let path = self.app.path_to(id);
+        let mut name = None;
+        for &at in path.iter().rev().skip(1) {
+            with_node(&self.app.top().root, at, &mut |node| {
+                if name.is_none() && node.focus_passes && node.focus_target() == Some(id) {
+                    name = node.given_name().map(str::to_string);
+                }
+            });
+            if name.is_some() {
+                break;
+            }
+        }
+        name
+    }
+
     /// Assert that the focus is on the node called `name`: its
-    /// [name](crate::Node::name), or its accessible name (see
+    /// [name](crate::Node::name), the name of the wrapper that handed it
+    /// the focus, or its accessible name (see
     /// [`focused_name`](Self::focused_name)).
     ///
     /// # Panics
@@ -5186,7 +5207,10 @@ impl Driver {
         });
         let tree = self.accessibility();
         let access = tree.iter().find(|node| node.id == id);
-        if given.as_deref() == Some(name) || access.is_some_and(|node| node.name == name) {
+        if given.as_deref() == Some(name)
+            || access.is_some_and(|node| node.name == name)
+            || self.passed_from(id).as_deref() == Some(name)
+        {
             return Ok(());
         }
         let what = match (given, access) {

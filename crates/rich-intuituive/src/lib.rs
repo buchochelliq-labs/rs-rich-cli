@@ -64,9 +64,10 @@
 //!   loaded off the app's thread for the current key), [`multi_select`]
 //!   (a selection by key with a visual range), [`list_search`] (find next
 //!   and previous over a list), [`tab_set`](fn@tab_set) (tabs' states with one
-//!   active), [`facts`] (a description list) and [`digits`] (big digits
-//!   in any build). The core is generic only; the domain plugins above
-//!   build on these.
+//!   active), [`facts`] (a description list), [`digits`] (big digits
+//!   in any build), and [`state`]'s files and [`FrecencyStore`] (an
+//!   app's state between sessions). The core is generic only; the domain
+//!   plugins above build on these.
 //! - **Tests**: [`App::render_with`] and [`App::run_on`] with
 //!   `rich-interact`'s headless driver run an app without a terminal;
 //!   [`App::driver`] steps one, and [`assert_screen!`] compares its screen

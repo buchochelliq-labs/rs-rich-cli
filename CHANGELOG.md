@@ -9,6 +9,63 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### intuiTUIve: round 5 core (rs-rich-intuituive, rs-rich-interact)
+
+The generic core pieces of the round-4 gaps of the Yazi and scope-tui
+clones ([the demo gaps](docs/design/intuituive-demo-gaps.md), "Round 4:
+files (Yazi)" and "Round 4: scope-tui"), none of them about files, sound
+or one app:
+
+- **Fixed: `.autofocus()` on a wrapper focused the wrapper.** On a node
+  that is not focusable of its own (a `switch`, a panel, padding), the
+  focus now passes to the first focusable node inside it, now or once it
+  is built, and the wrapper leaves the Tab order: a list in a `switch`
+  gets its own keys, and the menu key reaches its `on_context`.
+- **Fixed: the help cut a long key list.** Wrapping rows wrap their keys
+  too, between keys (within one only where it must), the key column
+  taking at most half the width. `HelpOptions::filter_key("/")`: letters
+  move (`j`, `k`, `g`, `G`) until the key starts the search, as Yazi's
+  help (rs-rich-interact: `overlay::Help::filter_key`).
+- **Bindings:** `bind_step_scaled(keys, variants, desc, signal, field,
+  step, range)`, a clamped step scaled by the modifiers held; after a
+  binding, `.any_modifiers()` (its keys with any modifiers; an exact
+  binding still wins), `.fall_through()` (the key goes on to the next
+  handler) and `.unlisted()` (left out of the help, the which-key pop-up
+  and `key_hints`, still in the palette by its name);
+  `bind_hidden(keys, name, f)`; `Ctx::pass_key()` passes a key on from
+  inside a handler; `Driver::run_named(name)` runs a binding by its name.
+- **Feeds:** `latest_iter(..).then_at(pace, iter)`, a tail at its own
+  pace, and `.with_state()` (`Ended` once the values run out, while a
+  tail plays on; `.stall_after(..)`); `Latest::wait_for(ready, timeout)`
+  woken by a `Notifier` (`Latest::notifier`), and `Latest::blocking(..)`,
+  which count a waiting feed thread as asleep for the headless clock
+  under `wait_for_tasks`; `recent_of(signal, n, |v| part)` (a part of
+  each write, nothing else copied) and `recent_timed(signal, n)` (each
+  with its time on the app's clock, `Ctx::now()`); `falling(signal,
+  gravity)`, a level that rises at once and falls with gravity.
+  `Resource::stale_after` and `PreviewOfOptions::clear_after` take an
+  `impl Into<Option<Duration>>`, as `latest_with_state` does.
+- **Lists and Miller columns:** `Miller::overlay(at, items)` lists other
+  items at a level (each opening a level of its own) until the columns
+  leave it, `leave`/`end_overlay` going back to the level's own items
+  (`overlay_at()`); `Node::marks_by(selection, |i| key)` marks a list's
+  items in a `multi_select` it is not over; `ListSearch::next_from(here)`
+  and `previous_from(here)` stay on a hovered match; `tabs_for_indexed`;
+  `StatusSegment::when(|| cond)` hides a segment and its caps;
+  `facts(..).value_style(..)` (theme `facts.value`) and
+  `.value_style_for(|i| style)`.
+- **App plumbing:** `Ctx::edit_text(text, |edited, cx| ..)` and
+  `edit_text_as(text, ext, ..)` (a temporary file handed to `$VISUAL` or
+  `$EDITOR`); the `state` module: `state_dir(app)`, `state_file`,
+  `read_state`, `write_state` (written whole and renamed), `update_state`
+  and `update_file` (read, change and write under a lock), `write_atomic`;
+  `FrecencyStore` (`frecency_store(file)`, `frecency_in(app, name)`,
+  `frecency_session()`) ranking string keys as zoxide does, merged on
+  write so two sessions add up, with `keep` and `max_age`;
+  `Jobs::run_process(title, command, done)` and `run_process_with(..,
+  |line| progress, ..)` (`ProcessOutcome`, `ProcessOutput`: the last line
+  of stderr as the error, killed on cancel); `Job::errors()`.
+
 ### intuiTUIve: round 4 sound, charts and the viz plugin (rs-rich-intuituive, rs-rich-ext)
 
 The round-3 scope-tui gaps' sound and chart pieces, built on round 4's
