@@ -17,10 +17,18 @@
 //! assert_eq!(at.to_string(), "2026-10-17 14:30");
 //! assert_eq!("2:30 pm".parse::<Time>().unwrap(), Time::new(14, 30, 0));
 //! ```
+//!
+//! A [`Zone`] turns a moment (seconds since 1970 UTC) into a local
+//! [`DateTime`] and back, following summer time: [`Zone::Local`] is the
+//! platform's zone, and [`DateTime::now_local`] and [`Date::today_local`]
+//! read the clock in it. Named dates (`tomorrow`, `eow`, `3d`) are
+//! [`dates`](crate::dates)'.
 
 use std::fmt;
 use std::str::FromStr;
 use std::time::{SystemTime, UNIX_EPOCH};
+
+pub use crate::zone::{Rules, Zone};
 
 /// A day of the proleptic Gregorian calendar. Months and days count from 1.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -85,6 +93,16 @@ impl Date {
     /// picker when the difference matters.
     pub fn today_utc() -> Date {
         Date::from_days(unix_now().div_euclid(86_400))
+    }
+
+    /// Today in the local zone, summer time included.
+    pub fn today_local() -> Date {
+        DateTime::now_local().date
+    }
+
+    /// Today in `zone`.
+    pub fn today_in(zone: &Zone) -> Date {
+        DateTime::now_in(zone).date
     }
 
     /// Days since 1970-01-01 (negative before it).
@@ -246,6 +264,11 @@ impl Time {
         Time::from_seconds(unix_now())
     }
 
+    /// Now, in the local zone.
+    pub fn now_local() -> Time {
+        DateTime::now_local().time
+    }
+
     /// The hour on a 12-hour clock (12, then 1 to 11), and whether it is
     /// after noon.
     pub const fn twelve_hour(self) -> (u32, bool) {
@@ -347,6 +370,67 @@ impl DateTime {
             Date::from_days(now.div_euclid(86_400)),
             Time::from_seconds(now),
         )
+    }
+
+    /// Now, in the local zone, summer time included.
+    ///
+    /// ```
+    /// use rich_interact::datetime::DateTime;
+    ///
+    /// assert!(DateTime::now_local().is_valid());
+    /// ```
+    pub fn now_local() -> DateTime {
+        DateTime::now_in(&Zone::Local)
+    }
+
+    /// Now, on `zone`'s clocks.
+    pub fn now_in(zone: &Zone) -> DateTime {
+        DateTime::from_unix(unix_now(), zone)
+    }
+
+    /// The moment `unix` (seconds since 1970-01-01 00:00 UTC) on `zone`'s
+    /// clocks.
+    ///
+    /// ```
+    /// use rich_interact::datetime::{Date, DateTime, Time, Zone};
+    ///
+    /// let at = DateTime::from_unix(1_792_404_000, &Zone::Fixed(7200));
+    /// assert_eq!(at, DateTime::new(Date::new(2026, 10, 19), Time::new(12, 0, 0)));
+    /// assert_eq!(at.to_unix(&Zone::Fixed(7200)), 1_792_404_000);
+    /// ```
+    pub fn from_unix(unix: i64, zone: &Zone) -> DateTime {
+        let local = unix + zone.offset_at(unix) as i64;
+        DateTime::new(
+            Date::from_days(local.div_euclid(86_400)),
+            Time::from_seconds(local),
+        )
+    }
+
+    /// The moment this is on `zone`'s clocks, in seconds since 1970 UTC.
+    /// A time the clocks pass twice (when summer time ends) is the first
+    /// of the two; one they skip (when it starts) is read on the clock of
+    /// before the change, so 02:30 in a gap from 02:00 to 03:00 is 03:30.
+    pub fn to_unix(self, zone: &Zone) -> i64 {
+        let wall = self.date.days() * 86_400 + self.time.seconds() as i64;
+        // The offsets around: transitions are days apart.
+        let around = [
+            zone.offset_at(wall - 172_800),
+            zone.offset_at(wall),
+            zone.offset_at(wall + 172_800),
+        ];
+        around
+            .iter()
+            .map(|&offset| wall - offset as i64)
+            .filter(|&unix| (unix + zone.offset_at(unix) as i64) == wall)
+            .min()
+            .unwrap_or(wall - around[0] as i64)
+    }
+
+    /// The moment `seconds` later (earlier if negative), on a clock that
+    /// does not change (as UTC's): add to [`to_unix`](Self::to_unix) for
+    /// a zone's.
+    pub fn add_seconds(self, seconds: i64) -> DateTime {
+        DateTime::from_unix(self.to_unix(&Zone::Utc) + seconds, &Zone::Utc)
     }
 
     /// Whether both halves are valid.
@@ -520,5 +604,60 @@ mod tests {
         assert!(at > DateTime::new(Date::new(2026, 10, 16), Time::LAST));
         assert_eq!(at.to_string(), "2026-10-17 14:30");
         assert!(DateTime::now_utc().is_valid());
+    }
+
+    #[test]
+    fn moments_round_trip_across_a_change_of_summer_time() {
+        let cet = Zone::posix("CET-1CEST,M3.5.0,M10.5.0/3").unwrap();
+        let utc = |y, m, d, h, min| DateTime::new(Date::new(y, m, d), Time::new(h, min, 0));
+        // Summer time starts at 01:00 UTC on 29 March 2026: 02:00 is 03:00.
+        let before = utc(2026, 3, 29, 0, 30).to_unix(&Zone::Utc);
+        let after = utc(2026, 3, 29, 1, 30).to_unix(&Zone::Utc);
+        assert_eq!(DateTime::from_unix(before, &cet), utc(2026, 3, 29, 1, 30));
+        assert_eq!(DateTime::from_unix(after, &cet), utc(2026, 3, 29, 3, 30));
+        assert_eq!(utc(2026, 3, 29, 3, 30).to_unix(&cet), after);
+        // In the gap: on the clock of before, an hour on.
+        assert_eq!(utc(2026, 3, 29, 2, 30).to_unix(&cet), after);
+        // It ends at 01:00 UTC on 25 October: 02:30 comes twice, the
+        // first (summer) one is taken.
+        let first = utc(2026, 10, 25, 0, 30).to_unix(&Zone::Utc);
+        let second = utc(2026, 10, 25, 1, 30).to_unix(&Zone::Utc);
+        assert_eq!(DateTime::from_unix(first, &cet), utc(2026, 10, 25, 2, 30));
+        assert_eq!(DateTime::from_unix(second, &cet), utc(2026, 10, 25, 2, 30));
+        assert_eq!(utc(2026, 10, 25, 2, 30).to_unix(&cet), first);
+        // A day across it is 25 hours.
+        let day = utc(2026, 10, 26, 0, 0).to_unix(&cet) - utc(2026, 10, 25, 0, 0).to_unix(&cet);
+        assert_eq!(day, 25 * 3600);
+    }
+
+    /// The local zone follows summer time: run in a child with `TZ` set,
+    /// as the C library reads it once.
+    #[test]
+    fn the_local_zone_follows_summer_time() {
+        if std::env::var_os("RICH_INTERACT_TZ_CHILD").is_none() {
+            let child = std::process::Command::new(std::env::current_exe().unwrap())
+                .args([
+                    "--exact",
+                    "datetime::tests::the_local_zone_follows_summer_time",
+                    "--quiet",
+                ])
+                .env("RICH_INTERACT_TZ_CHILD", "1")
+                .env("TZ", "CET-1CEST,M3.5.0,M10.5.0/3")
+                .output()
+                .unwrap();
+            let said = String::from_utf8_lossy(&child.stdout);
+            assert!(child.status.success(), "{said}");
+            return;
+        }
+        let utc = |m, d, h| DateTime::new(Date::new(2026, m, d), Time::new(h, 0, 0));
+        let winter = utc(1, 15, 12).to_unix(&Zone::Utc);
+        let summer = utc(7, 15, 12).to_unix(&Zone::Utc);
+        assert_eq!(Zone::Local.offset_at(winter), 3600);
+        assert_eq!(Zone::Local.offset_at(summer), 7200);
+        assert_eq!(DateTime::from_unix(summer, &Zone::Local), utc(7, 15, 14));
+        assert_eq!(
+            utc(10, 25, 2).to_unix(&Zone::Local),
+            utc(10, 25, 0).to_unix(&Zone::Utc)
+        );
     }
 }
