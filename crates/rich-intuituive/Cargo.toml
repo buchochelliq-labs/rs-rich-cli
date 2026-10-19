@@ -125,3 +125,7 @@ required-features = ["files"]
 # (a dev-dependency feature) shows the commits' times.
 [[example]]
 name = "git"
+
+# The bottom (btm) clone reads /proc and /sys through std; no feature.
+[[example]]
+name = "top"
