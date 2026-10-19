@@ -3983,6 +3983,20 @@ impl App {
                     );
                     out.push((id, index, binding));
                 }
+                // Release bindings, for the help to read; the palette
+                // cannot let a key go.
+                for (index, bound) in node.releases.borrow().iter().enumerate() {
+                    if palette || bound.description.is_empty() || !bound.active() {
+                        continue;
+                    }
+                    let binding = rich_interact::keymap::Binding::new(
+                        bound.section.clone().unwrap_or_else(|| name.clone()),
+                        format!("{id}:r{index}"),
+                        bound.keys.clone(),
+                        format!("{} (on release)", bound.description),
+                    );
+                    out.push((id, index, binding));
+                }
                 for (index, bound) in node.sequences.borrow().iter().enumerate() {
                     if bound.description.is_empty() || !bound.active() || (bound.hidden && !palette)
                     {

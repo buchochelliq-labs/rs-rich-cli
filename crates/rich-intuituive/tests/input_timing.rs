@@ -427,3 +427,17 @@ fn a_modifier_alone_is_a_key() {
     driver.press("w");
     assert_eq!(first(&driver), "run false");
 }
+
+/// A described release binding is in the help.
+#[test]
+fn the_help_lists_a_release_binding() {
+    let app = App::new(|| {
+        label("game")
+            .bind_release("down", "Stop the soft drop", |_| {})
+            .on_key("?", |cx| cx.help())
+    });
+    let mut driver = app.driver(80, 10);
+    driver.press("?");
+    let rows = driver.screen().plain().join("\n");
+    assert!(rows.contains("Stop the soft drop (on release)"), "{rows}");
+}
