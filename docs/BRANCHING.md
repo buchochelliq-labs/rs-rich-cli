@@ -364,8 +364,11 @@ the version to appear before the next, stopping when the release run fails
 (with the GitHub CLI) or after `--timeout` minutes. One tag at a time keeps
 dependencies published first and stays inside the release workflow's
 concurrency group, which keeps only one pending run. It is safe to re-run: a
-tag that exists but is not yet published is waited on, not recreated, and a
-tag on another commit stops it. `--dry-run` shows the plan; `status` shows
+tag that exists but is not yet published is waited on, not recreated. A tag
+on another commit whose release run ended without success (cancelled,
+failed) published nothing, so it is moved to the commit being released; one
+whose run is still going, or with no run to see (no GitHub CLI), stops it
+with the commands to clear it by hand. `--dry-run` shows the plan; `status` shows
 every package's state. `--registry crates.io` tags only the crates, leaving
 the Python package for later (and `--registry pypi` only it).
 

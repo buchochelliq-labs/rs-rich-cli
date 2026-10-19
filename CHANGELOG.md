@@ -9,6 +9,15 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Releases: a dead tag is moved, not a dead end
+
+- **`release_cohort.py tag` moves a tag whose release never happened.** A
+  tag on another commit, for a version that is not on its registry and whose
+  last release run ended without success (cancelled or failed), is deleted
+  and made again on the commit being released; it used to stop with
+  "resolve it by hand". A tag whose run is still going, or with no run to
+  see, still stops, now with the commands to clear it.
+
 ### Releases: tag from the local checkout; versions after a split cohort
 
 - **`release_cohort.py tag` releases the local checkout.** It tags `HEAD`

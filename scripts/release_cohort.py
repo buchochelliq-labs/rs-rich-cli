@@ -312,7 +312,8 @@ def wait_for(package, timeout, status=registry_status, conclusion=run_conclusion
         sleep(30)
 
 
-def tag(commit, remote, timeout, dry_run, status=registry_status, wait=wait_for, registry=None):
+def tag(commit, remote, timeout, dry_run, status=registry_status, wait=wait_for, registry=None,
+        conclusion=run_conclusion):
     # The local checkout decides what is released: nothing is fetched, so a
     # run that is resumed later tags the same commit, not whatever main has
     # moved on to since. Only the remote's tags and the registries are read.
@@ -334,10 +335,28 @@ def tag(commit, remote, timeout, dry_run, status=registry_status, wait=wait_for,
         if is_published(package, status):
             print(f"skip   {package.tag}: {package} is already on {package.registry}", flush=True)
             continue
+        if package.tag in existing and existing[package.tag] != sha:
+            # A tag on another commit whose version never reached the
+            # registry: when its release run ended without success
+            # (cancelled, failed), nothing was published from it, so it is
+            # moved here. One still running, or with no run to see, stops.
+            old = existing[package.tag][:12]
+            run = conclusion(package)
+            if not (run and run[0] == "completed" and run[1] != "success"):
+                state = f"its release run is {run[0]}: {run[2]}" if run else "no release run can be seen"
+                raise RuntimeError(
+                    f"{package.tag} exists on {remote} at {old}, not {sha[:12]}, and {package} is not "
+                    f"published; {state}. If nothing will come of it, delete it and run again:\n"
+                    f"  git push {remote} :refs/tags/{package.tag} && git tag -d {package.tag}")
+            print(f"move   {package.tag}: its run at {old} ended {run[1]}; tagging {sha[:12]}", flush=True)
+            if dry_run:
+                continue
+            git("push", remote, f":refs/tags/{package.tag}", capture=False)
+            if subprocess.run(["git", "rev-parse", "--verify", "--quiet", f"refs/tags/{package.tag}"],
+                              cwd=ROOT, capture_output=True).returncode == 0:
+                git("tag", "-d", package.tag)
+            del existing[package.tag]
         if package.tag in existing:
-            if existing[package.tag] != sha:
-                raise RuntimeError(f"{package.tag} exists on {remote} at {existing[package.tag][:12]}, "
-                                   f"not {sha[:12]}, but {package} is not published; resolve it by hand")
             print(f"wait   {package.tag}: already tagged, waiting for its release", flush=True)
             if dry_run:
                 continue
