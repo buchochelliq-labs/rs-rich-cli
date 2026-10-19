@@ -745,6 +745,16 @@ impl ThreadClock {
         }
     }
 
+    /// When the next thread asleep on the app's clock wakes; `None` on the
+    /// wall clock, or with none asleep.
+    pub(crate) fn next_due(&self) -> Option<Duration> {
+        let state = self.lock();
+        if !state.manual {
+            return None;
+        }
+        state.asleep.values().min().copied()
+    }
+
     /// The app has finished.
     pub(crate) fn close(&self) {
         self.lock().closed = true;
@@ -849,13 +859,15 @@ pub fn latest<T: Send + 'static>(
 /// })
 /// .wait_for_tasks(true);
 /// let mut driver = app.driver(10, 1);
-/// for ms in [0, 10, 20, 30, 40, 45] {
-///     driver.update(Duration::from_millis(ms));
-/// }
-/// driver.render();
-/// // Made at 0, 10, 20, 30 and 40 ms.
+/// driver.advance(Duration::from_millis(45));
+/// // Made at 0, 10, 20, 30 and 40 ms: each beat is a step of the driver.
 /// assert_eq!(driver.screen().plain()[0].trim_end(), "5");
 /// ```
+///
+/// Each value is delivered: [`Driver::advance`](crate::Driver::advance)
+/// and a headless script's `wait` step to each beat, and in a terminal a
+/// value wakes the loop at once, so a [`rate`](crate::rate) counts every
+/// one (100 a second at 10 ms), however fast the beat.
 ///
 /// # Panics
 /// Outside a running or building app.

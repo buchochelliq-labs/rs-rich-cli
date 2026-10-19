@@ -84,6 +84,8 @@ pub(crate) struct Runtime {
     /// Closures sent from other threads, run on the app's thread.
     inbox: mpsc::Receiver<Job>,
     outbox: mpsc::Sender<Job>,
+    /// What wakes the loop's wait when another thread sends a closure.
+    pub(crate) wake: Arc<WakeSlot>,
     /// Tasks started and not yet delivered.
     pub(crate) tasks: Arc<AtomicUsize>,
     /// The clock [`latest`](crate::latest) threads keep to, and the
@@ -143,6 +145,7 @@ impl Runtime {
                 graph: RefCell::new(Graph::default()),
                 inbox,
                 outbox,
+                wake: Arc::default(),
                 tasks: Arc::new(AtomicUsize::new(0)),
                 clock: crate::task::ThreadClock::new(),
                 threads: RefCell::new(Some(Vec::new())),
@@ -521,6 +524,12 @@ impl Runtime {
         }
     }
 
+    /// Whether watches wait to run: their sources changed since they last
+    /// ran (a frame's layout moved a rect they read).
+    pub(crate) fn has_pending_watches(&self) -> bool {
+        !self.graph.borrow().pending.is_empty()
+    }
+
     /// Stop the watch `id`.
     pub(crate) fn drop_watch(&self, id: usize) {
         self.watches.borrow_mut().remove(&id);
@@ -580,7 +589,10 @@ impl Runtime {
     }
 
     pub(crate) fn proxy(&self) -> Proxy {
-        Proxy(self.outbox.clone())
+        Proxy {
+            outbox: self.outbox.clone(),
+            wake: self.wake.clone(),
+        }
     }
 }
 
@@ -1008,7 +1020,32 @@ impl<T: Clone + 'static> Memo<T> {
 /// });
 /// ```
 #[derive(Clone)]
-pub struct Proxy(mpsc::Sender<Job>);
+pub struct Proxy {
+    outbox: mpsc::Sender<Job>,
+    wake: Arc<WakeSlot>,
+}
+
+/// What wakes the app's loop from a wait on the terminal (the backend's
+/// waker, set by [`Driver::set_waker`](crate::Driver::set_waker)), shared
+/// by every [`Proxy`].
+#[derive(Default)]
+pub(crate) struct WakeSlot(std::sync::Mutex<Option<Waking>>);
+
+/// Wakes the app's loop.
+pub(crate) type Waking = Arc<dyn Fn() + Send + Sync>;
+
+impl WakeSlot {
+    pub(crate) fn set(&self, wake: Option<Waking>) {
+        *self.0.lock().unwrap_or_else(|e| e.into_inner()) = wake;
+    }
+
+    fn wake(&self) {
+        let wake = self.0.lock().unwrap_or_else(|e| e.into_inner()).clone();
+        if let Some(wake) = wake {
+            wake();
+        }
+    }
+}
 
 /// One run of a watch: read its source, call back if it changed.
 type WatchStep = Box<dyn FnMut(&mut Ctx)>;
@@ -1045,9 +1082,14 @@ impl Proxy {
         }))
     }
 
-    /// Send `job` as it is: a task's delivery, which traces itself.
+    /// Send `job` as it is: a task's delivery, which traces itself. The
+    /// loop's wait on the terminal ends, so it runs at once.
     pub(crate) fn send(&self, job: Job) -> bool {
-        self.0.send(job).is_ok()
+        let sent = self.outbox.send(job).is_ok();
+        if sent {
+            self.wake.wake();
+        }
+        sent
     }
 }
 

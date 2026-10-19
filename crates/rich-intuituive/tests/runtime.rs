@@ -272,3 +272,89 @@ fn replace_sets_a_value_without_partial_eq() {
     driver.press("r");
     assert_eq!(first(&driver), "2");
 }
+
+#[test]
+fn advance_steps_to_each_beat_of_a_thread_on_the_apps_clock() {
+    let app = App::new(|| {
+        let feed = latest_every(Duration::from_millis(10), || 0u8);
+        let fps = rate(feed);
+        text!("{fps}")
+    })
+    .wait_for_tasks(true);
+    let mut driver = app.driver(10, 1);
+    driver.advance(Duration::from_millis(2100));
+    // Every buffer of the second before 2 s, not one per 50 ms step.
+    assert_eq!(first(&driver), "100");
+}
+
+#[test]
+fn a_scripts_wait_steps_to_each_beat_too() {
+    let app = App::new(|| {
+        let feed = latest_every(Duration::from_millis(10), || 0u8);
+        let fps = rate(feed);
+        text!("{fps}")
+    })
+    .wait_for_tasks(true);
+    let script = Script::new()
+        .wait(Duration::from_millis(2100))
+        .keys("ctrl+c");
+    let mut backend = Headless::new(script, 10, 1);
+    let record = backend.record();
+    app.run_on(&mut backend).unwrap();
+    assert_eq!(record.borrow().last_frame().trim_end(), "100");
+}
+
+#[test]
+fn a_send_from_another_thread_wakes_the_loops_wait() {
+    let app = App::new(|| {
+        let feed = latest(|tx| {
+            // Long after the loop started waiting.
+            std::thread::sleep(Duration::from_millis(30));
+            tx.send(1);
+        });
+        text!("{}", feed.get().unwrap_or(0))
+    });
+    let mut driver = app.driver(10, 1);
+    let waker = intuituive::interact::Waker::new();
+    let wakes = waker.clone();
+    driver.set_waker(move || wakes.wake());
+    driver.settle();
+    // Woken by the send, not by a timeout: well before 10 s.
+    let start = Instant::now();
+    assert!(waker.wait(Duration::from_secs(10)));
+    assert!(start.elapsed() < Duration::from_secs(5));
+    driver.settle();
+    assert_eq!(first(&driver), "1");
+}
+
+#[test]
+fn work_a_layout_sets_off_is_settled_before_the_next_event() {
+    // A pane that loads only once it has a width (a preview), from a
+    // watch on its rect, through a task.
+    let app = App::new(|| {
+        let content = signal(String::new());
+        let pane = text(move || content.get());
+        let rect = pane.rect_handle();
+        watch(
+            move || rect.get().map(|r| r.width),
+            move |width, _| {
+                if let Some(width) = width {
+                    spawn(
+                        move || format!("{width} wide"),
+                        move |made, _| content.set(made),
+                    );
+                }
+            },
+        );
+        pane.on_key("x", move |cx| cx.quit_with(content.get_untracked()))
+    })
+    .wait_for_tasks(true);
+    // The key comes at once, before any wait.
+    let mut backend = Headless::new(Script::new().keys("x"), 12, 1);
+    let record = backend.record();
+    let seen = app.run_on_for::<String>(&mut backend).unwrap();
+    assert_eq!(seen.as_deref(), Some("12 wide"));
+    // And the first frame sent shows it.
+    let frames = record.borrow().frames.clone();
+    assert_eq!(frames[0].trim_end(), "12 wide");
+}

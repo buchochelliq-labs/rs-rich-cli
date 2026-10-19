@@ -132,7 +132,9 @@ pub use keymap::{Binding, Keymap};
 pub use overlay::{Command, Help, Menu, Overlays, Palette, Shortcuts};
 pub use plugin::PluginView;
 pub use policy::{Fallback, LineIo, NotInteractive, Policy, Reason};
-pub use session::{synchronized_update, Backend, BackendKind, Output, Session, SessionOptions};
+pub use session::{
+    synchronized_update, Backend, BackendKind, Output, Session, SessionOptions, Waker,
+};
 pub use viewport::Viewport;
 
 /// Forward every [`Component`] method to `(**self)`.

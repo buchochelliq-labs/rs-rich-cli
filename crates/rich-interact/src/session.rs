@@ -848,6 +848,164 @@ pub struct SessionOptions {
     pub synchronized_output: Option<bool>,
 }
 
+/// Ends a [`Backend::read`] under way early, from any thread: a value made
+/// on another thread is then picked up at once, rather than when the read's
+/// timeout runs out. Clones wake the same reads. A wake that comes while
+/// no read is under way ends the next one at once, so none is lost; a
+/// read woken returns `None`, as if its timeout had passed.
+///
+/// [`Session`] waits on it with the terminal (a self-pipe beside the
+/// terminal in one `poll`, on Unix; elsewhere it looks between short
+/// waits). Any other backend, or a loop of one's own, can wait on it with
+/// [`wait`](Waker::wait).
+///
+/// ```
+/// use rich_interact::Waker;
+/// use std::time::Duration;
+///
+/// let waker = Waker::new();
+/// let other = waker.clone();
+/// std::thread::spawn(move || other.wake());
+/// assert!(waker.wait(Duration::from_secs(5)));
+/// // Taken: the next wait waits.
+/// assert!(!waker.wait(Duration::from_millis(1)));
+/// ```
+#[derive(Clone)]
+pub struct Waker(std::sync::Arc<WakeState>);
+
+struct WakeState {
+    woken: std::sync::Mutex<bool>,
+    changed: std::sync::Condvar,
+    /// A byte is written to the second end on a wake, so a `poll` on the
+    /// first sees it.
+    #[cfg(unix)]
+    pipe: Option<(
+        std::os::unix::net::UnixStream,
+        std::os::unix::net::UnixStream,
+    )>,
+}
+
+impl Default for Waker {
+    fn default() -> Waker {
+        Waker::new()
+    }
+}
+
+impl fmt::Debug for Waker {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Waker")
+            .field("woken", &*self.lock())
+            .finish()
+    }
+}
+
+impl Waker {
+    pub fn new() -> Waker {
+        #[cfg(unix)]
+        let pipe = std::os::unix::net::UnixStream::pair()
+            .ok()
+            .filter(|(a, b)| a.set_nonblocking(true).is_ok() && b.set_nonblocking(true).is_ok());
+        Waker(std::sync::Arc::new(WakeState {
+            woken: std::sync::Mutex::new(false),
+            changed: std::sync::Condvar::new(),
+            #[cfg(unix)]
+            pipe,
+        }))
+    }
+
+    fn lock(&self) -> std::sync::MutexGuard<'_, bool> {
+        self.0.woken.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
+    /// End the read under way, or the next one.
+    pub fn wake(&self) {
+        let mut woken = self.lock();
+        if std::mem::replace(&mut *woken, true) {
+            // Woken already: the byte is there.
+            return;
+        }
+        #[cfg(unix)]
+        if let Some((_, writer)) = &self.0.pipe {
+            use std::io::Write as _;
+            let _ = (&*writer).write(&[1]);
+        }
+        self.0.changed.notify_all();
+    }
+
+    /// Whether it was woken since the last call (or [`wait`](Self::wait));
+    /// it is not woken after.
+    pub fn take(&self) -> bool {
+        let mut woken = self.lock();
+        #[cfg(unix)]
+        if let Some((reader, _)) = &self.0.pipe {
+            use std::io::Read as _;
+            let mut drained = [0u8; 16];
+            while matches!((&*reader).read(&mut drained), Ok(n) if n > 0) {}
+        }
+        std::mem::replace(&mut *woken, false)
+    }
+
+    /// Wait until woken, `timeout` at most; whether it was (and it is not
+    /// woken after).
+    pub fn wait(&self, timeout: Duration) -> bool {
+        {
+            let woken = self.lock();
+            let _ = self
+                .0
+                .changed
+                .wait_timeout_while(woken, timeout, |woken| !*woken)
+                .unwrap_or_else(|e| e.into_inner());
+        }
+        self.take()
+    }
+
+    /// What a `poll` waits on to see a wake: readable once woken, until
+    /// [`take`](Self::take).
+    #[cfg(unix)]
+    pub(crate) fn fd(&self) -> Option<std::os::unix::io::RawFd> {
+        use std::os::unix::io::AsRawFd;
+        self.0.pipe.as_ref().map(|(reader, _)| reader.as_raw_fd())
+    }
+}
+
+/// How long a read waits between looks at its [`Waker`] where it cannot
+/// wait on it with the terminal.
+const WAKE_SLICE: Duration = Duration::from_millis(4);
+
+/// What a read waits on to see a [`Waker`]'s wake: its pipe on Unix.
+#[cfg(unix)]
+pub(crate) type WakeFd = std::os::unix::io::RawFd;
+#[cfg(not(unix))]
+pub(crate) type WakeFd = ();
+
+/// Wait up to `wait` for input on `tty` or a wake on `wake`; whether input
+/// came, and no wake. A signal ends the wait early, as nothing.
+#[cfg(unix)]
+fn input_before_wake(
+    tty: std::os::unix::io::RawFd,
+    wake: std::os::unix::io::RawFd,
+    wait: Duration,
+) -> io::Result<bool> {
+    use filedescriptor::{poll, pollfd, POLLIN};
+    let mut ready = [
+        pollfd {
+            fd: tty,
+            events: POLLIN,
+            revents: 0,
+        },
+        pollfd {
+            fd: wake,
+            events: POLLIN,
+            revents: 0,
+        },
+    ];
+    match poll(&mut ready, Some(wait)) {
+        Ok(_) => Ok(ready[0].revents != 0 && ready[1].revents == 0),
+        Err(filedescriptor::Error::Poll(e)) if e.kind() == io::ErrorKind::Interrupted => Ok(false),
+        Err(e) => Err(io::Error::other(e.to_string())),
+    }
+}
+
 /// Where the event loop reads events and writes paints: the terminal, or
 /// the [headless](crate::headless) driver.
 pub trait Backend {
@@ -919,6 +1077,13 @@ pub trait Backend {
         let _ = text;
         Ok(())
     }
+    /// A [`Waker`] that ends a [`read`](Backend::read) under way early,
+    /// for another thread to call when it has something for the loop; the
+    /// same one each time. The default: none, so what another thread sends
+    /// waits for the read's timeout.
+    fn waker(&mut self) -> Option<Waker> {
+        None
+    }
 }
 
 /// How a session reads the terminal: the library's reader, opened on the
@@ -968,6 +1133,12 @@ pub struct Session {
     sync: bool,
     /// `None` until the first `enter`.
     input: Option<Input>,
+    /// The [`Waker`] handed out, once one was.
+    waker: Option<Waker>,
+    /// The terminal crossterm reads, when it is not standard input, opened
+    /// to wait on it beside the waker.
+    #[cfg(unix)]
+    tty: Option<std::fs::File>,
 }
 
 /// What the terminal answered the start-up query, asked once a process
@@ -1029,6 +1200,9 @@ impl Session {
             kitty: false,
             sync: false,
             input: None,
+            waker: None,
+            #[cfg(unix)]
+            tty: None,
         };
         session.enter()?;
         Ok(session)
@@ -1181,11 +1355,15 @@ impl Session {
     /// sequence it does not know).
     fn next_event(&mut self, wait: Duration) -> io::Result<Option<Event>> {
         let kitty = self.kitty;
+        #[cfg(unix)]
+        let wake: Option<WakeFd> = self.waker.as_ref().and_then(Waker::fd);
+        #[cfg(not(unix))]
+        let wake: Option<WakeFd> = None;
         match &mut self.input {
             #[cfg(all(unix, feature = "termion"))]
-            Some(Input::Termion(reader)) => reader.next(wait),
+            Some(Input::Termion(reader)) => reader.next(wait, wake),
             #[cfg(feature = "termwiz")]
-            Some(Input::Termwiz { held, probed }) => Ok(with_termwiz::poll(probed, wait)?
+            Some(Input::Termwiz { held, probed }) => Ok(with_termwiz::poll(probed, wait, wake)?
                 .and_then(|event| {
                     if kitty {
                         crate::event::from_termwiz_kitty(event, held)
@@ -1194,8 +1372,33 @@ impl Session {
                     }
                 })),
             _ => {
-                if !crossterm::event::poll(wait)? {
+                // With a waker: wait on the terminal and the waker together,
+                // then let crossterm read what came. It may hold events
+                // already read, so it is asked first; a millisecond, as with
+                // no time at all it does not look at what it holds.
+                #[cfg(unix)]
+                if let Some(wake) = wake {
+                    if !crossterm::event::poll(Duration::from_millis(1))? {
+                        let tty = self.crossterm_tty()?;
+                        // Nothing, or woken: back to the loop.
+                        if !input_before_wake(tty, wake, wait)? {
+                            return Ok(None);
+                        }
+                        // Input: a sequence's rest may come after its
+                        // start, as crossterm would wait for it.
+                        if !crossterm::event::poll(wait.min(Duration::from_millis(10)))? {
+                            return Ok(None);
+                        }
+                    }
+                } else if !crossterm::event::poll(wait)? {
                     return Ok(None);
+                }
+                #[cfg(not(unix))]
+                {
+                    let _ = wake;
+                    if !crossterm::event::poll(wait)? {
+                        return Ok(None);
+                    }
                 }
                 let event = crossterm::event::read()?;
                 Ok(if kitty {
@@ -1205,6 +1408,21 @@ impl Session {
                 })
             }
         }
+    }
+
+    /// The terminal crossterm reads, as it finds it: standard input when
+    /// that is a terminal, else `/dev/tty`.
+    #[cfg(unix)]
+    fn crossterm_tty(&mut self) -> io::Result<std::os::unix::io::RawFd> {
+        use std::io::IsTerminal;
+        use std::os::unix::io::AsRawFd;
+        if io::stdin().is_terminal() {
+            return Ok(io::stdin().as_raw_fd());
+        }
+        if self.tty.is_none() {
+            self.tty = Some(std::fs::File::open("/dev/tty")?);
+        }
+        Ok(self.tty.as_ref().map_or(0, |tty| tty.as_raw_fd()))
     }
 
     /// Restore the terminal. Also done on drop and on panic.
@@ -1285,12 +1503,20 @@ impl Backend for Session {
             if RESUMED.load(Ordering::SeqCst) {
                 return Ok(Some(self.repaint()));
             }
-            // Short waits, so a resume is noticed without a key.
-            let wait = match end {
+            // Woken: back to the loop, which has something to pick up.
+            if self.waker.as_ref().is_some_and(Waker::take) {
+                return Ok(None);
+            }
+            // Short waits, so a resume is noticed without a key; shorter
+            // where the waker cannot be waited on with the terminal.
+            let mut wait = match end {
                 Some(end) => end.saturating_duration_since(Instant::now()),
                 None => Duration::from_secs(3600),
             }
             .min(Duration::from_millis(250));
+            if self.waker.is_some() && !cfg!(unix) {
+                wait = wait.min(WAKE_SLICE);
+            }
             // Events the library reports that components do not see (focus)
             // are skipped, not returned as a timeout.
             if let Some(event) = self.next_event(wait)? {
@@ -1304,6 +1530,13 @@ impl Backend for Session {
 
     fn write(&mut self, text: &str) -> io::Result<()> {
         self.options.output.write(text)
+    }
+
+    /// The session's [`Waker`]: on Unix the terminal and it are waited on
+    /// in one `poll`, on every backend; elsewhere a read looks at it every
+    /// few milliseconds.
+    fn waker(&mut self) -> Option<Waker> {
+        Some(self.waker.get_or_insert_with(Waker::new).clone())
     }
 
     fn synchronized_output(&self) -> bool {

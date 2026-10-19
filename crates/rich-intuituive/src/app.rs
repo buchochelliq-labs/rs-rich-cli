@@ -1909,6 +1909,10 @@ impl App {
         let linear = self.linear;
         let mut driver = self.driver(width, height);
         driver.set_clipboard(backend.clipboard().is_ok());
+        // A value from another thread ends the wait on the terminal.
+        if let Some(waker) = backend.waker() {
+            driver.set_waker(move || waker.wake());
+        }
         // A frame as one synchronized update, where the backend writes
         // them; linear lines as they are, since they are appended and
         // there is no frame to hold. Nothing for output that is empty.
@@ -4314,6 +4318,10 @@ const RESTLESS_FRAMES: u32 = 4;
 /// The most rows linear mode lays out in.
 const LINEAR_ROWS: u16 = 4096;
 
+/// How many times a frame runs the watches its layout set off, and draws
+/// what they changed, before it is sent.
+const LAYOUT_ROUNDS: usize = 4;
+
 impl Driver {
     /// Bring the app up to `now` (the time since it started): run the
     /// timers that are due, move animations, deliver results from other
@@ -4455,8 +4463,31 @@ impl Driver {
 
     /// Draw what changed and return the bytes that show it (they may be
     /// empty); `None` when nothing changed. Then tell widgets of focus,
-    /// hover and size changes, now that they are laid out.
+    /// hover and size changes, now that they are laid out. Watches the
+    /// layout set off (one reading a [`RectHandle`](crate::RectHandle):
+    /// what loads once its pane has a width) run before it returns, and,
+    /// in an app that [waits for its tasks](App::wait_for_tasks), the
+    /// tasks they start finish, and what they change is drawn too: the
+    /// frame returned is settled, and the next event finds it so.
     pub fn render(&mut self) -> Option<String> {
+        let mut out = self.render_once();
+        // A few rounds: a watch's result may lay out anew, and set off
+        // another.
+        for _ in 0..LAYOUT_ROUNDS {
+            if self.done || !self.app.runtime.has_pending_watches() {
+                break;
+            }
+            self.update(self.app.now);
+            if let Some(more) = self.render_once() {
+                out.get_or_insert_with(String::new).push_str(&more);
+            }
+        }
+        out
+    }
+
+    /// [`render`](Self::render), once: what changed drawn, and the
+    /// lifecycle events told.
+    fn render_once(&mut self) -> Option<String> {
         if self.done {
             return None;
         }
@@ -4502,8 +4533,13 @@ impl Driver {
     /// [`update`](Self::update) again: not at all while a frame or a
     /// widget's event waits; else until the next timer, a frame's time
     /// while something animates, until the next toast goes or a tooltip
-    /// shows, and at most 50 ms (results from other threads and theme
-    /// files are picked up by `update`).
+    /// shows, until the next [`latest`](crate::latest) thread asleep on
+    /// the app's clock wakes (in an app that
+    /// [waits for its tasks](App::wait_for_tasks)), and at most 50 ms
+    /// (theme files are looked at by `update`). A value another thread
+    /// sends ends the wait early when the loop has a
+    /// [waker](Self::set_waker), as [`App::run`]'s has; without one, it
+    /// waits for the timeout.
     pub fn timeout(&self, now: Duration) -> Duration {
         let app = &self.app;
         if self.needs_render() || !app.lifecycle.is_empty() {
@@ -4556,6 +4592,43 @@ impl Driver {
                     .map(|ends| ends.saturating_sub(now))
                     .unwrap_or(Duration::MAX),
             )
+            .min(
+                app.runtime
+                    .clock
+                    .next_due()
+                    .map(|due| due.saturating_sub(now))
+                    .unwrap_or(Duration::MAX),
+            )
+    }
+
+    /// Have every [`Proxy`] send (a [`latest`](crate::latest) value, a
+    /// task's result, [`Proxy::run`]) call `wake`, on the thread that
+    /// sends: a loop of your own that waits on something (a socket, a
+    /// channel, the terminal) ends that wait, so the value shows at once
+    /// rather than at the next [`timeout`](Self::timeout).
+    /// [`App::run_on`] sets the backend's
+    /// [`Waker`](rich_interact::Waker) here, when it has one.
+    ///
+    /// ```
+    /// use intuituive::interact::Waker;
+    /// use intuituive::prelude::*;
+    /// use std::time::Duration;
+    ///
+    /// let app = App::new(|| {
+    ///     let status = signal("waiting");
+    ///     text!("{status}")
+    /// });
+    /// let proxy = app.proxy();
+    /// let mut driver = app.driver(10, 1);
+    /// let waker = Waker::new();
+    /// let wakes = waker.clone();
+    /// driver.set_waker(move || wakes.wake());
+    /// std::thread::spawn(move || proxy.run(|| {}));
+    /// // The send ended the wait at once, not at its timeout.
+    /// assert!(waker.wait(Duration::from_secs(10)));
+    /// ```
+    pub fn set_waker(&mut self, wake: impl Fn() + Send + Sync + 'static) {
+        self.app.runtime.wake.set(Some(std::sync::Arc::new(wake)));
     }
 
     /// Handle an event: a key pressed or let go, the mouse, pasted text, or
@@ -4720,7 +4793,12 @@ impl Driver {
     /// Move the app's clock on by `by`, a step at a time, and draw after
     /// each step: every timer, [`after`], animation and toast in between
     /// runs at its own time, as it would with a real clock. A step goes
-    /// to the next thing due, 50 ms at most. A test of something timed.
+    /// to the next thing due, 50 ms at most; in an app that
+    /// [waits for its tasks](App::wait_for_tasks), a
+    /// [`latest`](crate::latest) thread asleep on the app's clock
+    /// ([`Latest::sleep`](crate::Latest::sleep),
+    /// [`latest_every`](crate::latest_every)) is a thing due, so each of
+    /// its values is seen. A test of something timed.
     ///
     /// ```
     /// use intuituive::prelude::*;
