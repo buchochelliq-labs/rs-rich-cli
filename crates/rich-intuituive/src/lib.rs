@@ -60,7 +60,7 @@
 //!   (a fuzzy list over any stream of items), [`preview_of`] (a value
 //!   loaded off the app's thread for the current key), [`multi_select`]
 //!   (a selection by key with a visual range), [`list_search`] (find next
-//!   and previous over a list), [`tab_set`] (tabs' states with one
+//!   and previous over a list), [`tab_set`](fn@tab_set) (tabs' states with one
 //!   active), [`facts`] (a description list) and [`digits`] (big digits
 //!   in any build). The core is generic only; the domain plugins above
 //!   build on these.

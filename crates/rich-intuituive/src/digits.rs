@@ -143,7 +143,7 @@ impl rich_ext::a11y::AccessibleText for Digits {
 /// it is, on the middle row. Each run of the markup keeps its style
 /// (`"[green]12[/]:[red]34"`); each line of the markup is three rows. It
 /// needs no font, so it works in every build, where
-/// [`big_text`](crate::big_text) needs the `art` feature. A glyph that
+/// `big_text` needs the `art` feature. A glyph that
 /// does not fit the width is left out. Its accessible name is the text.
 ///
 /// ```
