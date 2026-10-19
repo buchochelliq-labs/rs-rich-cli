@@ -61,6 +61,9 @@ rich-art = { workspace = true, optional = true }
 kasuari = "0.4"
 
 [dev-dependencies]
+# The Yazi example (examples/files.rs) shows times in the local time zone
+# with rs-rich-ext's `fs::local_time`, behind its `local-time` feature.
+rich-ext = { workspace = true, features = ["local-time"] }
 # PTY tests: an app run on every backend gives the terminal back
 # (tests/backends.rs).
 portable-pty = "0.9"

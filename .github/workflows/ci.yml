@@ -584,11 +584,14 @@ jobs:
           sudo apt-get install -y less zsh fish w3m
 
       # The CLI with its `serve` feature (the serve tape), the interact
-      # examples (the viewport tape), and the intuiTUIve and embed examples.
+      # examples (the viewport tape), and the intuiTUIve and embed examples;
+      # intuiTUIve's with `watch` and `art`, so the files tape follows the
+      # disk and draws its image preview.
       - name: Build the CLI and the examples the tapes run
         run: >-
           cargo build -p rs-rich-cli -p rs-rich-interact -p rs-rich-intuituive
-          -p rs-rich-embed --features rs-rich-cli/serve --bins --examples --locked
+          -p rs-rich-embed --features rs-rich-cli/serve,rs-rich-intuituive/watch,rs-rich-intuituive/art
+          --bins --examples --locked
 
       # rs-rich-ext's examples are guide programs; the surface tape runs one.
       - name: Build the example the surface tape runs

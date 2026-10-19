@@ -111,7 +111,8 @@ fn a_chord_shows_what_can_follow_it() {
         ["data.bin", "notes.md", "z.txt"],
         "{rows:?}"
     );
-    assert!(rows[5].contains("1.2K│"), "{rows:?}");
+    // The line mode ends with Yazi's padding cell.
+    assert!(rows[5].contains("1.2K │"), "{rows:?}");
 }
 
 #[test]
@@ -354,11 +355,11 @@ fn create_and_rename_stay_inside_the_directory() {
         .keys("enter q");
     let rows = screen(&run(app(&root), script, 80, 10));
     assert!(!root.parent().unwrap().join("escaped.txt").exists());
-    assert!(row_of(&rows, "inside this directory").is_some(), "{rows:?}");
-    // r renames the hovered entry, starting from its name (the prompt's
-    // caret starts at its start).
+    assert!(row_of(&rows, "must stay inside this").is_some(), "{rows:?}");
+    // r renames the hovered entry, starting from its name, the caret at
+    // its end (a directory's name has no extension).
     let script = Script::new()
-        .keys("r end backspace backspace backspace backspace backspace")
+        .keys("r backspace backspace backspace backspace backspace")
         .text("gamma")
         .keys("enter q");
     let rows = screen(&run(app(&root), script, 80, 10));
@@ -435,4 +436,180 @@ fn it_fits_small_and_large_screens() {
         assert!(status(&rows).starts_with(" NOR "), "{w}x{h}: {rows:?}");
         assert!(rows.iter().all(|r| r.chars().count() <= w as usize));
     }
+}
+
+#[test]
+fn rename_puts_the_caret_before_the_extension() {
+    let root = tree("rename-ext");
+    // notes.md: typing goes before ".md", as Yazi's `--cursor=before_ext`.
+    let script = Script::new().keys("j j j r").text("-v2").keys("enter q");
+    run(app(&root), script, 80, 10);
+    assert!(root.join("notes-v2.md").is_file());
+    assert!(!root.join("notes.md").exists());
+}
+
+#[test]
+fn the_rename_prompt_opens_below_the_hovered_row() {
+    let root = tree("rename-at");
+    // beta is on row 2: the prompt's box starts on row 3.
+    let rows = screen(&run_open(app(&root), Script::new().keys("j r"), 100, 14));
+    assert_eq!(row_of(&rows, "Rename:"), Some(3), "{rows:?}");
+}
+
+/// The program `$EDITOR` names, as the example reads it.
+fn editor() -> String {
+    files::editor().get_program().to_string_lossy().into_owned()
+}
+
+#[test]
+fn enter_hands_the_terminal_to_the_editor_as_yazi_does() {
+    let root = tree("open");
+    // notes.md is text: Enter (and o) open it in $EDITOR.
+    let record = run(app(&root), Script::new().keys("j j j enter o q"), 80, 10);
+    assert_eq!(record.handoffs, [editor(), editor()]);
+    // Yazi's rules give a directory to the editor too.
+    let record = run(app(&root), Script::new().keys("enter q"), 80, 10);
+    assert_eq!(record.handoffs, [editor()]);
+}
+
+#[test]
+fn open_interactively_offers_the_openers_of_the_files_type() {
+    let root = tree("open-with");
+    let rows = screen(&run_open(app(&root), Script::new().keys("j j j O"), 80, 14));
+    let at = row_of(&rows, "Open with:").expect("the pick");
+    // Below notes.md (row 4).
+    assert_eq!(at, 5, "{rows:?}");
+    assert!(rows[at + 1].contains("$EDITOR"), "{rows:?}");
+    assert!(rows[at + 2].contains("Reveal"), "{rows:?}");
+    let record = run(app(&root), Script::new().keys("j j j O enter q"), 80, 14);
+    assert_eq!(record.handoffs, [editor()]);
+    assert_eq!(files::openers_for("image/png")[0], files::Opener::Open);
+    assert_eq!(files::openers_for("video/mp4")[0], files::Opener::Play);
+}
+
+#[test]
+fn line_modes_show_local_times_and_owner_names() {
+    let root = tree("linemode");
+    let mtime = std::fs::metadata(root.join("alpha"))
+        .unwrap()
+        .modified()
+        .unwrap();
+    let rows = screen(&run(app(&root), Script::new().keys("m m q"), 80, 10));
+    let shown = rich_ext::fs::short_local_time(mtime);
+    assert!(rows[1].contains(&format!("{shown} │")), "{shown}: {rows:?}");
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        let meta = std::fs::metadata(root.join("alpha")).unwrap();
+        let user = rich_ext::fs::user_name(meta.uid()).unwrap_or(meta.uid().to_string());
+        let rows = screen(&run(app(&root), Script::new().keys("m o q"), 80, 10));
+        assert!(rows[1].contains(&format!("{user}:")), "{user}: {rows:?}");
+    }
+}
+
+#[test]
+fn errors_are_notifications_at_the_top_right() {
+    let root = tree("notify");
+    let script = Script::new().keys("a").text("../out").keys("enter");
+    let rows = screen(&run_open(app(&root), script, 100, 14));
+    let at = row_of(&rows, "must stay").expect("the notification");
+    assert!(at <= 2, "{rows:?}");
+    let title = row_of(&rows, "Create").expect("its title");
+    assert!(rows[title].find("Create").unwrap() > 50, "{rows:?}");
+}
+
+#[test]
+fn a_sequence_shows_what_can_follow_and_esc_cancels_it() {
+    let root = tree("sequence");
+    let rows = screen(&run_open(app(&root), Script::new().keys("g"), 100, 14));
+    assert!(row_of(&rows, "Go home").is_some(), "{rows:?}");
+    // Esc cancels: j then moves as usual.
+    let rows = screen(&run(app(&root), Script::new().keys("g esc j q"), 80, 10));
+    assert!(status(&rows).contains("2/5"), "{rows:?}");
+    assert!(row_of(&rows, "Go home").is_none(), "{rows:?}");
+}
+
+#[test]
+fn overwriting_asks_first() {
+    let root = tree("overwrite");
+    std::fs::write(root.join("alpha/notes.md"), "old").unwrap();
+    // notes.md yanked, P in alpha, where one has the name.
+    let rows = screen(&run_open(
+        app(&root),
+        Script::new().keys("j j j y k k k l P"),
+        80,
+        24,
+    ));
+    assert!(row_of(&rows, "Overwrite file?").is_some(), "{rows:?}");
+    assert!(
+        row_of(&rows, "Will overwrite the following file:").is_some(),
+        "{rows:?}"
+    );
+    run(
+        app(&root),
+        Script::new().keys("j j j y k k k l P n q"),
+        80,
+        24,
+    );
+    assert_eq!(
+        std::fs::read_to_string(root.join("alpha/notes.md")).unwrap(),
+        "old"
+    );
+    run(
+        app(&root),
+        Script::new().keys("j j j y k k k l P y q"),
+        80,
+        24,
+    );
+    assert!(std::fs::read_to_string(root.join("alpha/notes.md"))
+        .unwrap()
+        .contains("hello notes"));
+}
+
+#[cfg(feature = "watch")]
+#[test]
+fn it_follows_the_disk() {
+    let root = tree("watch");
+    let mut driver = app(&root).driver(80, 10);
+    driver.settle();
+    std::fs::write(root.join("added.txt"), "new").unwrap();
+    let mut seen = false;
+    for _ in 0..200 {
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        driver.settle();
+        if driver
+            .screen()
+            .plain()
+            .iter()
+            .any(|r| r.contains("added.txt"))
+        {
+            seen = true;
+            break;
+        }
+    }
+    assert!(seen, "{:?}", driver.screen().plain());
+}
+
+#[cfg(feature = "art")]
+#[test]
+fn images_are_drawn_in_the_preview() {
+    let root = tree("image");
+    rich_art::image::RgbImage::from_pixel(8, 8, rich_art::image::Rgb([255, 0, 0]))
+        .save(root.join("a.png"))
+        .unwrap();
+    // a.png is after the directories: alpha, beta, a.png. It is decoded
+    // on a worker, so look until it is drawn.
+    let mut driver = app(&root).driver(80, 10);
+    driver.press("j j");
+    let mut rows = Vec::new();
+    for _ in 0..200 {
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        driver.settle();
+        rows = driver.screen().plain();
+        if rows[1].contains('▀') {
+            break;
+        }
+    }
+    assert!(status(&rows).contains("a.png"), "{rows:?}");
+    assert!(rows[1].contains('▀'), "{rows:?}");
 }

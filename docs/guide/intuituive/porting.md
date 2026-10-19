@@ -294,35 +294,45 @@ way in for an app too big to port at once: move one pane at a time.
 
 [`examples/files.rs`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/crates/rich-intuituive/examples/files.rs)
 reproduces Yazi as it looks and behaves out of the box: its 1:4:3 columns,
-its default dark theme, header, tab strip and status line, and its default
-keymap. It is built only from the framework's ready-made components, with
-no widget of its own. Its tests are in `tests/files.rs`. It does not reuse
-any of Yazi's code: it is a rebuild of the behaviour, showing how a large
-ratatui app's ideas map.
+its default dark theme, icons and type colours, header, tab strip and
+status line, and its default keymap. It is built only from the
+framework's ready-made components and its plugins, with no widget of its
+own. Its tests are in `tests/files.rs`. It does not reuse any of Yazi's
+code: it is a rebuild of the behaviour, showing how a large ratatui app's
+ideas map.
+
+    cargo run -p rs-rich-intuituive --example files
+    cargo run -p rs-rich-intuituive --features watch,art --example files
 
 !!! note "Credit"
     Ported from [Yazi](https://github.com/sxyazi/yazi), by sxyazi and its
     contributors (MIT licence). Its layout, keys, theme and behaviour are
-    theirs. The optional icons (`--icons`, for a Nerd Font) are the glyphs
-    Yazi's theme picks, from nvim-web-devicons (MIT).
+    theirs. The icons and type colours (`--icons`, for a Nerd Font) are
+    Yazi's defaults, through rs-rich-ext's `filetype`, whose glyphs come
+    from nvim-web-devicons (MIT).
 
 ![The file manager: parent, current directory and a highlighted preview](../../media/tapes/files/files.png)
 
 | Yazi does | The rebuild uses |
 |---|---|
 | Three columns, parent, current and preview, in a 1:4:3 ratio, with rails the mouse drags | `hsplit(parent, hsplit(current, preview, inner), outer)`; the theme's `split.divider` is Yazi's gray |
-| The hovered row reversed across the column, in the entry's colour (a blue bar on a directory) | a `list` per column: its `row_style` gives each row its type's colour and the theme's `selected` reverses it |
-| Line modes (size, permissions, times, owner) at the right of the rows | a second `list` on the same cursor, as wide as its widest cell |
-| Markers for selected, visual-range and yanked rows, and their count in the header | markup at the start of each row; a `text` in the header |
+| One row per entry, built only for the rows in view | `list_lazy(len, item, cursor)` for each column |
+| The hovered row reversed across the column, in the entry's colour (a blue bar on a directory) | the list's `row_style` gives each row its type's colour (`rich_ext::filetype::style_for`) and the theme's `selected` reverses it; the preview's hovered entry is underlined with `.selected_style_for` |
+| Line modes (size, permissions, local times, `user:group`) at the right of the rows | `.trailing(\|i\| ..)` on the same list; `rich_ext::fs::short_local_time`, `user_name`, `group_name` |
+| Markers for selected, visual-range and yanked rows, and their count in the header | `.marker(\|i\| style)`, a one-cell column outside the highlight; a `text` in the header |
+| Icons and type colours, with a Nerd Font | `rich_ext::filetype::icon_with` (the hovered row's icon takes the bar's colour, as Yazi's); on with `--icons` or `RICH_NERD_FONT=1` |
 | A status line: mode, size and name; permissions, `Top`/`Bot`/percent and position | two `text`s in a `row`, coloured as Yazi's theme |
-| Keys: one keymap, chords (`gg`, `,s`, `cc`, `tt`) with a which-key pop-up | the root takes the focus and holds every binding; the first key of a chord opens a `cx.popup` at the bottom whose bindings run the second |
-| Previews loaded and highlighted off the UI thread | a `watch` on the hovered entry starts a `spawn`; a generation counter drops stale results, and a slow one clears the pane |
-| Prompts for find, filter, create, rename and `cd`, applied as typed | `input(signal)` in a `cx.popup` at Yazi's place, a `watch` on the signal |
-| Confirmations before trashing, deleting and overwriting | `cx.modal` with the files and the two buttons |
-| The help, searchable | `cx.modal` holding an `input` and a `list` |
+| One keymap that wins over the focused column, with sequences (`gg`, `,s`, `cc`, `tt`) and a which-key pop-up | the root column `.previews_keys()` and holds every `bind` and `bind_sequence`; `App::which_key(true)` draws the pop-up, and the help and the palette list the sequences |
+| Previews loaded and highlighted off the UI thread, warmed at start | a `watch` on the hovered entry and the pane's `rect_handle()` width starts a `spawn`; a generation counter drops stale results; `rich_ext::syntax::preload` at start-up |
+| Image previews | `image_of(path, ImageView)` with the `art` feature (half blocks); described without it |
+| Prompts for find, filter, create and `cd` at the top centre, rename below the hovered row with the caret before the extension | `cx.popup_at(Origin::TopCenter, Offset::new(0, 2, 80, 3), ..)`; `Origin::At(rect)` from the list's `RowRects`, `input(..).caret(Caret::At(n))` |
+| Confirmations before trashing, deleting and overwriting | `cx.confirm(title, body, files, on_yes)` |
+| Errors as notifications at the top right, titled by what failed | `cx.notify(Level::Error, "Paste", ..)` and `App::toasts_at(Corner::TopRight)` |
+| Enter and `o` open with the first opener for the file's type (`$EDITOR` for text); `O` picks one | `cx.handoff_then(editor, ..)` gives the terminal to `$EDITOR`; the system opener (`$OPENER`, `xdg-open`, `open`) runs in a `spawn`; `O` is a `list` in `popup_at` below the row |
+| The help, searchable | `cx.modal` holding an `input`, a `rule()` joined to the panel and a `list` |
 | fzf and zoxide jumps (`z`, `Z`) | rs-rich-interact's `Jump` component in a modal: files below here, directories visited |
 | Tabs (`tt`, 1–9, `[ ]`, Ctrl+C) | a signal of tabs, `tabs(titles, active)` shown once there are two |
-| Watches the disk | `every(2s)` looks at the directories' modification times; a listing is read again only when one moved |
+| Watches the disk | with the `watch` feature, `watch_path` on the current directory and its parent, moved when the directory changes; without it the view changes only with what the app does |
 | (not in Yazi) a command palette and a right-click menu | `.palette_key("ctrl+p")`, from the bindings' descriptions; `context_menu(cx, items)` in the list's `on_mouse` |
 
 ![The which-key pop-up after `,`](../../media/tapes/files/files-which.png)
@@ -333,31 +343,42 @@ ratatui app's ideas map.
 
 ![The filter, applied as it is typed](../../media/tapes/files/files-filter.png)
 
+![An image preview, with the `art` feature](../../media/tapes/files/files-image.png)
+
+![The rename prompt below the hovered row, the caret before the extension](../../media/tapes/files/files-rename.png)
+
+![A notification at the top right](../../media/tapes/files/files-notify.png)
+
 Where it differs from Yazi, and why:
 
 - **Trash** goes to a `.trash` folder in the directory the app started in,
   not the system's trash, so nothing outside it changes.
-- **Opening a file** (Enter, `o`) is left to the shell: the demo opens
-  directories only. Images are described, not drawn; there is no task
-  manager, shell (`;`), `fd`/`rg` search or bulk rename.
-- **Icons** are off unless `--icons` is given, since they need a Nerd Font;
-  without it the rows and the status line are plain text, as Yazi with its
-  icons turned off.
-- **Times** are in UTC and owners are numbers: the standard library has no
-  time zones or user names.
+- **Opening**: `$EDITOR` (split on spaces, not run through a shell) and the
+  system opener cover Yazi's `edit`, `open`, `play` and `reveal`; there is
+  no `extract` for archives, no task manager, shell (`;`), `fd`/`rg`
+  search or bulk rename.
+- **MIME types** in the listing come from the name; Yazi reads each file's
+  first bytes in the background. The opener reads them.
+- **Images** are drawn in half blocks: the screen cannot pass Kitty or
+  Sixel through yet.
+- **The hovered row** has no rounded ends with a Nerd Font: a list's
+  highlight is drawn over the row's markup, so a cell of it cannot stay
+  unreversed (see [the demo gaps](../../design/intuituive-demo-gaps.md)).
+- **Icons** are off unless `--icons` is given or `RICH_NERD_FONT=1` says a
+  Nerd Font is in use: an installed Nerd Font may not be the terminal's.
 
 Two things the port shows:
 
 1. **Slow work belongs on a worker, including rendering.** Highlighting a
    language for the first time compiles its grammar, which takes seconds
-   in a debug build for Markdown and its embedded languages. The preview
-   worker therefore highlights the text too, at the pane's size, and the
-   app's thread only copies the finished lines onto the screen. Yazi does
-   this for the same reason.
+   in a debug build for Markdown and its embedded languages. The app warms
+   the likely grammars at start-up, and the preview worker highlights the
+   text at the pane's size, so the app's thread only copies the finished
+   lines onto the screen. Yazi does this for the same reason.
 2. **The listing is data, the lists are views.** One memo holds the
    filtered, sorted entries. The columns, the header, the status line and
    the preview `watch` all read it, and each updates only when the part it
-   read changes.
+   read changes; a lazy list asks only for the rows it draws.
 
 ## Worked example: scope-tui, an oscilloscope
 

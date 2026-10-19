@@ -9,6 +9,21 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### intuiTUIve's Yazi example on the new components (rs-rich-intuituive)
+
+Round 2 of [the demo gaps](docs/design/intuituive-demo-gaps.md):
+`examples/files.rs` rebuilt on round 1's additions, with every workaround
+gone. One lazy list per column with the line mode trailing and a marker
+column; Yazi's key sequences and which-key; prompts placed with
+`popup_at` (rename below the hovered row, the caret before the
+extension); `cx.confirm`, `cx.notify` at the top right; rs-rich-ext's
+`filetype` icons and type colours, local times and owner names; Enter and
+`o` open with `$EDITOR` through `cx.handoff` or the system opener, `O`
+picks one. With the crate's `watch` feature it follows the disk, with
+`art` it draws image previews; CI's tapes job builds the examples with
+both. The example's tests cover the new behaviour.
+
+
 ### intuiTUIve: list and table rows (rs-rich-intuituive)
 
 What rebuilding Yazi and scope-tui found the lists and tables lack

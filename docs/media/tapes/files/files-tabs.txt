@@ -1,12 +1,12 @@
 ~/project/src
  1 project  2 src
-  src       │ lib.rs                                      225B│//! orbit: watch a queue, run its jo
-  tests     │ render.rs                                   271B│
-  run.sh    │ main.rs                                     289B│mod event_loop;
-  Cargo.toml│ event_loop.rs                               611B│mod render;
-  readme-li…│                                                 │
-  README.md │                                                 │fn main() {
-            │                                                 │    let workers = std::env::args()
+  src       │ lib.rs                                     225B │//! orbit: watch a queue, run its jo
+  tests     │ render.rs                                  271B │
+  run.sh    │ main.rs                                    289B │mod event_loop;
+  Cargo.toml│ event_loop.rs                              611B │mod render;
+  logo.png  │                                                 │
+  readme-li…│                                                 │fn main() {
+  README.md │                                                 │    let workers = std::env::args()
             │                                                 │        .skip_while(|arg| arg != "--
             │                                                 │        .nth(1)
             │                                                 │        .and_then(|n| n.parse().ok()
