@@ -528,15 +528,13 @@ fn reference_lines_are_drawn_as_scope_tuis_datasets_are() {
         let datasets = draw(&as_reference_datasets(&plot, &g));
         assert_eq!(grid, datasets, "{name}:\n{grid}\n{datasets}");
     }
-    // Where the cross meets with nothing over it, the grid's two lines
-    // share a layer and merge (`⣸`); scope-tui's second dataset is drawn
-    // over its first (`⢸`). One cell, listed in the demo gaps.
+    // Where the cross meets with nothing over it, each grid line is a
+    // layer of its own, the y axis's first: scope-tui's second dataset
+    // drawn over its first (`⢸`), not the two merged (`⣸`).
     let cross = vectorscope(&g, &vec![vec![], vec![]]);
     let (grid, datasets) = (draw(&cross), draw(&as_reference_datasets(&cross, &g)));
-    let differ: Vec<(char, char)> = (grid.chars().zip(datasets.chars()))
-        .filter(|(a, b)| a != b)
-        .collect();
-    assert_eq!(differ, [('⣸', '⢸')]);
+    assert_eq!(grid, datasets, "the cross:\n{grid}\n{datasets}");
+    assert!(grid.contains('⢸') && !grid.contains('⣸'), "{grid}");
 }
 
 /// Step the app's clock by `step` to `until` from `from`, drawing after

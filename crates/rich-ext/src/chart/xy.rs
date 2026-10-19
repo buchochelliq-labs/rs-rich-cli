@@ -76,9 +76,13 @@ pub struct Axis {
     grid: Option<Box<GridLines>>,
 }
 
-/// An [`Axis`]'s grid values.
-#[derive(Clone, Debug, PartialEq)]
-struct GridLines(Vec<f64>);
+/// An [`Axis`]'s grid lines: their values, style and marker.
+#[derive(Clone, Debug, Default, PartialEq)]
+struct GridLines {
+    values: Vec<f64>,
+    style: Option<String>,
+    marker: Option<Marker>,
+}
 
 impl Axis {
     /// The values at either end, in either order. Without bounds, the axis
@@ -145,12 +149,17 @@ impl Axis {
     }
 
     /// Grid lines across the plot at these values, in the axis's
-    /// [`style`](Self::style), drawn under the datasets with the first
-    /// dataset's marker: the x axis's run up the plot, the y axis's along
-    /// it. Values the axis cannot show (outside its bounds, or not positive
-    /// on a log axis) are left out. With [`Layering::PerDataset`] the
-    /// datasets are drawn over the grid, so a trace breaks the lines it
-    /// crosses, as datasets drawn for the purpose do in ratatui.
+    /// [`grid_style`](Self::grid_style) (else its [`style`](Self::style)),
+    /// drawn under the datasets with the axis's
+    /// [`grid_marker`](Self::grid_marker) (else the chart's
+    /// [`marker`](Chart::marker), else the first dataset's, else Braille):
+    /// the x axis's run up the plot, the y axis's along it. Values the axis
+    /// cannot show (outside its bounds, or not positive on a log axis) are
+    /// left out. With [`Layering::PerDataset`] each line is a layer of its
+    /// own, the y axis's first, and the datasets are drawn over them, so a
+    /// line crossing another and a trace crossing a line break what they
+    /// cross, as datasets drawn for the purpose do in ratatui (scope-tui's
+    /// reference lines).
     ///
     /// ```
     /// use rich::Console;
@@ -166,9 +175,54 @@ impl Axis {
     /// assert_eq!(console.render_export(&chart), "    o    \n  o o    \nooooooooo\n");
     /// ```
     pub fn grid(mut self, values: impl IntoIterator<Item = f64>) -> Self {
-        let values: Vec<f64> = values.into_iter().collect();
-        self.grid = (!values.is_empty()).then(|| Box::new(GridLines(values)));
+        self.grid_lines().values = values.into_iter().collect();
         self
+    }
+
+    /// The style of the [`grid`](Self::grid) lines: a theme key or a
+    /// definition (default: the axis's [`style`](Self::style), else
+    /// `chart.axis`), so the lines can be fainter than the axis line and
+    /// labels.
+    ///
+    /// ```
+    /// use rich::Console;
+    /// use rich_ext::chart::{Axis, Chart, Dataset, Labels, Marker};
+    ///
+    /// let console = Console::builder().width(5).force_terminal(true).build();
+    /// let chart = Chart::new(Vec::<Dataset>::new())
+    ///     .marker(Marker::Ascii('.'))
+    ///     .x_axis(Axis::default().bounds(0.0, 4.0))
+    ///     .y_axis(
+    ///         Axis::default()
+    ///             .bounds(0.0, 1.0)
+    ///             .labels(Labels::Text(vec!["0".into(), "1".into()]))
+    ///             .style("bold")
+    ///             .grid([0.0])
+    ///             .grid_style("dim"),
+    ///     )
+    ///     .width(5)
+    ///     .height(2);
+    /// // The labels and the axis line bold, the grid line dim.
+    /// assert_eq!(
+    ///     console.render_export(&chart),
+    ///     "\u{1b}[1m1│\u{1b}[0m   \n\u{1b}[1m0│\u{1b}[0m\u{1b}[2m...\u{1b}[0m\n"
+    /// );
+    /// ```
+    pub fn grid_style(mut self, style: impl Into<String>) -> Self {
+        self.grid_lines().style = Some(style.into());
+        self
+    }
+
+    /// The marker the [`grid`](Self::grid) lines are drawn with (default:
+    /// the chart's [`marker`](Chart::marker), else the first dataset's,
+    /// else [`Marker::Braille`]).
+    pub fn grid_marker(mut self, marker: Marker) -> Self {
+        self.grid_lines().marker = Some(marker);
+        self
+    }
+
+    fn grid_lines(&mut self) -> &mut GridLines {
+        self.grid.get_or_insert_with(Default::default)
     }
 
     /// The values labelled with [`Labels::Auto`] or [`Labels::Values`],
@@ -357,7 +411,7 @@ impl Resolved {
         let slack = (hi - lo).abs() * 1e-9;
         axis.grid
             .iter()
-            .flat_map(|lines| lines.0.iter())
+            .flat_map(|lines| lines.values.iter())
             .filter_map(|v| axis.map(*v))
             .filter(|m| lo.min(hi) - slack <= *m && *m <= lo.max(hi) + slack)
             .collect()
@@ -626,6 +680,7 @@ pub struct Chart {
     legend_clear: bool,
     out_of_bounds: OutOfBounds,
     layering: Layering,
+    marker: Option<Marker>,
     width: Option<usize>,
     height: Option<usize>,
 }
@@ -650,6 +705,7 @@ impl Chart {
             legend_clear: true,
             out_of_bounds: OutOfBounds::Clip,
             layering: Layering::Merge,
+            marker: None,
             width: None,
             height: None,
         }
@@ -696,10 +752,11 @@ impl Chart {
     /// The chart's own style, as ratatui's `Chart::style`: a theme key or a
     /// definition put under every cell of the chart (a background fills
     /// it), and the style of the legend's box unless
-    /// [`legend_style`](Self::legend_style) gives one. `"none"` is the
-    /// terminal's own colours, as a ratatui chart with no style: the legend
-    /// then leaves the axis style. Without it the chart has no style of
-    /// its own and the legend's box takes the x axis's.
+    /// [`legend_style`](Self::legend_style) gives one. Without it the chart
+    /// has no style of its own and the legend's box takes the x axis's.
+    /// `"none"` is the terminal's own colours, so the legend's box is
+    /// unstyled too: [`legend_unstyled`](Self::legend_unstyled) says the
+    /// same by name.
     ///
     /// ```
     /// use rich::Console;
@@ -735,6 +792,31 @@ impl Chart {
     pub fn legend_style(mut self, style: impl Into<String>) -> Self {
         self.legend_style = Some(style.into().into_boxed_str());
         self
+    }
+
+    /// The legend's box in the terminal's own colours, not the x axis's
+    /// style: a ratatui chart whose legend style is the default (scope-tui
+    /// sets `legend_style(Style::default())`). The same as
+    /// [`legend_style`](Self::legend_style)`("none")`, by name; the names
+    /// keep their datasets' styles.
+    ///
+    /// ```
+    /// use rich::Console;
+    /// use rich_ext::chart::{Axis, Chart, Dataset};
+    ///
+    /// let console = Console::builder().width(6).force_terminal(true).build();
+    /// let chart = Chart::new(vec![Dataset::new([]).name("a").style("none")])
+    ///     .x_axis(Axis::default().bounds(0.0, 1.0).style("red"))
+    ///     .y_axis(Axis::default().bounds(0.0, 1.0))
+    ///     .hidden_legend_fraction(1.0, 1.0)
+    ///     .width(6)
+    ///     .height(3);
+    /// // The box in the x axis's red, then in no colour at all.
+    /// assert!(console.render_export(&chart).contains("\u{1b}[31m┌"));
+    /// assert!(!console.render_export(&chart.legend_unstyled()).contains('\u{1b}'));
+    /// ```
+    pub fn legend_unstyled(self) -> Self {
+        self.legend_style("none")
     }
 
     /// Whether the legend clears the plot under it (default true). When
@@ -779,6 +861,31 @@ impl Chart {
     /// [`Layering::Merge`]).
     pub fn layering(mut self, layering: Layering) -> Self {
         self.layering = layering;
+        self
+    }
+
+    /// The marker the axes' [grid lines](Axis::grid) are drawn with when
+    /// an axis gives none ([`Axis::grid_marker`]). Without it, the first
+    /// dataset's marker, or [`Marker::Braille`] when there is no dataset,
+    /// so a chart's grid looks the same before its first data as after.
+    ///
+    /// ```
+    /// use rich::Console;
+    /// use rich_ext::chart::{Axis, Chart, Dataset, Marker};
+    ///
+    /// let console = Console::builder().width(4).color_system(None).build();
+    /// let empty = Chart::new(Vec::<Dataset>::new())
+    ///     .x_axis(Axis::default().bounds(0.0, 1.0))
+    ///     .y_axis(Axis::default().bounds(-1.0, 1.0).grid([0.0]))
+    ///     .width(4)
+    ///     .height(1);
+    /// // Braille with no datasets, not dots.
+    /// assert_eq!(console.render_export(&empty), "⠒⠒⠒⠒\n");
+    /// let ascii = empty.marker(Marker::Ascii('-'));
+    /// assert_eq!(console.render_export(&ascii), "----\n");
+    /// ```
+    pub fn marker(mut self, marker: Marker) -> Self {
+        self.marker = Some(marker);
         self
     }
 
@@ -1060,20 +1167,41 @@ impl Chart {
             self.out_of_bounds == OutOfBounds::Clip || (inside(a) && inside(b))
         };
         let mut ops = Vec::new();
-        // The grid lines first, under the datasets, with their marker.
-        let marker = self.datasets.first().map_or(Marker::Dot, |d| d.marker);
-        let spec = |axis: &Axis| axis.style.clone().unwrap_or_else(|| "chart.axis".into());
-        let (x_lines, y_lines) = (x.grid(&self.x_axis), y.grid(&self.y_axis));
-        if !x_lines.is_empty() || !y_lines.is_empty() {
-            ops.push(Op::Marker(marker));
-            let (bottom, top) = (y.scale.min(), y.scale.max());
-            for at in x_lines {
-                ops.push(Op::Line((at, bottom), (at, top), spec(&self.x_axis)));
+        // The grid lines first, under the datasets: the y axis's, then the
+        // x axis's, each its own layer when the datasets are (scope-tui
+        // lists its reference lines in that order).
+        let fallback = self
+            .marker
+            .or(self.datasets.first().map(|d| d.marker))
+            .unwrap_or(Marker::Braille);
+        let lines = |axis: &Axis| {
+            let grid = axis.grid.as_deref();
+            let spec = grid
+                .and_then(|g| g.style.clone())
+                .or_else(|| axis.style.clone())
+                .unwrap_or_else(|| "chart.axis".into());
+            let marker = grid.and_then(|g| g.marker).unwrap_or(fallback);
+            (spec, marker)
+        };
+        let (left, right) = (x.scale.min(), x.scale.max());
+        let (bottom, top) = (y.scale.min(), y.scale.max());
+        let (y_spec, y_marker) = lines(&self.y_axis);
+        let (x_spec, x_marker) = lines(&self.x_axis);
+        let across = y.grid(&self.y_axis).into_iter().map(|at| {
+            let line = Op::Line((left, at), (right, at), y_spec.clone());
+            (line, y_marker)
+        });
+        let up = x.grid(&self.x_axis).into_iter().map(|at| {
+            let line = Op::Line((at, bottom), (at, top), x_spec.clone());
+            (line, x_marker)
+        });
+        let mut marker = None;
+        for (line, line_marker) in across.chain(up) {
+            if marker != Some(line_marker) {
+                ops.push(Op::Marker(line_marker));
+                marker = Some(line_marker);
             }
-            let (left, right) = (x.scale.min(), x.scale.max());
-            for at in y_lines {
-                ops.push(Op::Line((left, at), (right, at), spec(&self.y_axis)));
-            }
+            ops.push(line);
             if self.layering == Layering::PerDataset {
                 ops.push(Op::Layer);
             }
@@ -2162,5 +2290,105 @@ mod tests {
             .legend_style("green")
             .grid(&console, &console.options());
         assert_eq!(grid.style_at(0, 5), Style::parse("on blue green").ok());
+    }
+    #[test]
+    fn crossing_grid_lines_are_layers_of_their_own_the_y_axis_first() {
+        // A cross at the centre of a 3 × 1 Braille plot: the x line (drawn
+        // last) over the y line in the cell they share, as two datasets.
+        let cross = |layering| {
+            Chart::new(Vec::<Dataset>::new())
+                .x_axis(Axis::default().bounds(-1.0, 1.0).grid([0.0]))
+                .y_axis(Axis::default().bounds(-1.0, 1.0).grid([0.0]))
+                .layering(layering)
+                .width(3)
+                .height(1)
+        };
+        let line = |points: [(f64, f64); 2]| {
+            Dataset::new(points)
+                .graph_type(GraphType::Line)
+                .marker(Marker::Braille)
+        };
+        let datasets = Chart::new(vec![
+            line([(-1.0, 0.0), (1.0, 0.0)]),
+            line([(0.0, -1.0), (0.0, 1.0)]),
+        ])
+        .x_axis(Axis::default().bounds(-1.0, 1.0))
+        .y_axis(Axis::default().bounds(-1.0, 1.0))
+        .layering(Layering::PerDataset)
+        .width(3)
+        .height(1);
+        let layered = rows(&cross(Layering::PerDataset), 3);
+        assert_eq!(layered, rows(&datasets, 3));
+        assert_eq!(layered, ["⠒⡇⠒"]);
+        // Merged, the two lines share the cell's dots.
+        assert_eq!(rows(&cross(Layering::Merge), 3), ["⠒⡗⠒"]);
+    }
+
+    #[test]
+    fn a_grid_with_no_datasets_is_braille_unless_told() {
+        let empty = Chart::new(Vec::<Dataset>::new())
+            .x_axis(Axis::default().bounds(0.0, 1.0))
+            .y_axis(Axis::default().bounds(-1.0, 1.0).grid([0.0]))
+            .width(3)
+            .height(1);
+        assert_eq!(rows(&empty, 3), ["⠒⠒⠒"]);
+        // The axis's marker wins over the chart's, the chart's over the
+        // first dataset's.
+        let dotted = Chart::new(vec![Dataset::new([]).marker(Marker::Dot)])
+            .y_axis(Axis::default().bounds(-1.0, 1.0).grid([0.0]))
+            .x_axis(Axis::default().bounds(0.0, 1.0))
+            .width(3)
+            .height(1);
+        assert_eq!(rows(&dotted, 3), ["•••"]);
+        assert_eq!(rows(&dotted.clone().marker(Marker::Ascii('=')), 3), ["==="]);
+        let own = dotted.marker(Marker::Ascii('=')).y_axis(
+            Axis::default()
+                .bounds(-1.0, 1.0)
+                .grid([0.0])
+                .grid_marker(Marker::Ascii('~')),
+        );
+        assert_eq!(rows(&own, 3), ["~~~"]);
+    }
+
+    #[test]
+    fn grid_lines_take_their_own_style_over_the_axis_style() {
+        let console = Console::builder().width(3).build();
+        let chart = Chart::new(vec![Dataset::new([]).marker(Marker::Ascii('.'))])
+            .x_axis(
+                Axis::default()
+                    .bounds(0.0, 2.0)
+                    .grid([1.0])
+                    .style("red")
+                    .grid_style("blue"),
+            )
+            .y_axis(Axis::default().bounds(0.0, 1.0))
+            .width(3)
+            .height(1);
+        let grid = chart.grid(&console, &console.options());
+        assert_eq!(grid.row_string(0), " . ");
+        assert_eq!(grid.style_at(0, 1), Style::parse("blue").ok());
+        // A style or a marker alone draws no line.
+        let none = Chart::new(Vec::<Dataset>::new())
+            .x_axis(Axis::default().bounds(0.0, 2.0).grid_style("blue"))
+            .y_axis(Axis::default().bounds(0.0, 1.0))
+            .width(3)
+            .height(1);
+        assert_eq!(rows(&none, 3), ["   "]);
+    }
+
+    #[test]
+    fn an_unstyled_legend_is_the_none_style_by_name() {
+        let console = Console::builder().width(9).build();
+        let options = console.options();
+        let chart = legend_chart(LegendPosition::TopRight).x_axis(Axis::default().style("magenta"));
+        let plain = chart.clone().legend_unstyled().grid(&console, &options);
+        let none = chart.style("none").grid(&console, &options);
+        for (row, col) in [(0, 4), (1, 4), (3, 6)] {
+            assert_eq!(
+                plain.style_at(row, col).unwrap_or_default(),
+                Style::default()
+            );
+            assert_eq!(plain.style_at(row, col), none.style_at(row, col));
+        }
     }
 }
