@@ -25,8 +25,9 @@ pub use crate::bars::{
     breadcrumb, cells, key_hints, live, seg, seg_gauge, status_bar, Caps, StatusSegment,
 };
 pub use crate::calendar::{
-    calendar, calendar_options, calendar_with, month, CalendarOptions, Date, DateTime, Time,
-    Weekday,
+    agenda, calendar, calendar_options, calendar_options_with, calendar_with, month, month_with,
+    year_view, year_view_with, CalendarOptions, Date, DateTime, MonthTitle, Time, Weekday,
+    YearOptions,
 };
 pub use crate::datetime::{
     datetime_picker, time_picker, time_picker_with, DateTimeOptions, TimeOptions,
