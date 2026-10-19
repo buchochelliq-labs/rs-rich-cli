@@ -1,7 +1,13 @@
-"""Select, publish, and verify coordinated or independently versioned releases.
+"""Select, publish, and verify a release of the crates.
 
-The workflow carries one validated selection between jobs. No phase infers a
-different crate or version from the tag. Requires Python 3.11+ and Cargo.
+A release tag (`release-X.Y.Z`, X.Y.Z being the release's name, rs-rich-cli's
+version) publishes every crate of its RELEASES.toml not yet on crates.io, in
+one run: release_cohort.py computes that selection, `plan` checks it against
+the manifests, and `preflight`, `publish` and `verify` act on all of it at
+once. A crate tag (`<crate>-vX.Y.Z`, by manual dispatch) still publishes that
+crate alone. The workflow carries one validated selection between jobs; no
+phase infers a different crate or version from the tag. Requires Python 3.11+
+and Cargo.
 """
 
 import argparse
@@ -24,10 +30,12 @@ NUMBER = r"(?:0|[1-9][0-9]*)"
 PRERELEASE = rf"(?:{NUMBER}|[0-9]*[A-Za-z-][0-9A-Za-z-]*)"
 VERSION = rf"{NUMBER}\.{NUMBER}\.{NUMBER}(?:-{PRERELEASE}(?:\.{PRERELEASE})*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?"
 TAG = re.compile(rf"(?:({'|'.join(CRATES)})-)?v({VERSION})")
+# A release tag: one run publishes every crate of the release not yet out.
+RELEASE = re.compile(rf"release-({VERSION})")
 
 
 def validate_tag(tag):
-    if not TAG.fullmatch(tag):
+    if not (TAG.fullmatch(tag) or RELEASE.fullmatch(tag)):
         raise ValueError(f"Invalid release tag: {tag!r}")
     ref = f"refs/tags/{tag}"
     kind = subprocess.check_output(["git", "cat-file", "-t", ref], text=True, encoding="utf-8").strip()
@@ -42,11 +50,39 @@ def validate_tag(tag):
     return sha
 
 
-def select(tag, metadata, root):
-    match = TAG.fullmatch(tag)
-    if not match:
-        raise ValueError(f"Invalid release tag: {tag!r}; use vX.Y.Z or <crate>-vX.Y.Z")
-    crate, version = match.groups()
+def release_entries(text):
+    """A RELEASES.toml's crates in order, {name: version}, and its release name."""
+    crates = {entry["name"]: entry["version"] for entry in tomllib.loads(text).get("package", [])
+              if entry.get("registry") == "crates.io"}
+    if not crates:
+        raise ValueError("RELEASES.toml lists no crates.io package")
+    return crates, list(crates.values())[-1]
+
+
+def select(tag, metadata, root, wanted=None, releases=None):
+    """The {crate: version} a tag publishes, checked against the manifests and
+    the internal requirements. A release tag publishes `wanted` (the gate's
+    selection, in RELEASES.toml order), or, without it, every crate of the
+    release in `releases` (RELEASES.toml's text); a crate tag its one crate,
+    which `wanted` must then agree with."""
+    if release_match := RELEASE.fullmatch(tag):
+        if wanted is None:
+            if releases is None:
+                raise ValueError(f"{tag}: a release tag needs its selection (or RELEASES.toml)")
+            wanted, name = release_entries(releases)
+            if name != release_match[1]:
+                raise ValueError(f"{tag}: RELEASES.toml names release {name}")
+        if not isinstance(wanted, dict) or not wanted:
+            raise ValueError(f"{tag}: the selection is empty")
+        planned = dict(wanted)
+    else:
+        match = TAG.fullmatch(tag)
+        if not match:
+            raise ValueError(f"Invalid release tag: {tag!r}; use release-X.Y.Z or <crate>-vX.Y.Z")
+        crate, version = match.groups()
+        planned = {crate: version} if crate else dict.fromkeys(CRATES, version)
+        if wanted is not None and wanted != planned:
+            raise ValueError(f"{tag}: the selection {wanted} is not what the tag selects")
     members = set(metadata["workspace_members"])
     packages = {
         p["name"]: p for p in metadata["packages"]
@@ -54,12 +90,17 @@ def select(tag, metadata, root):
     }
     if packages.keys() != set(CRATES):
         raise ValueError(f"Publishable workspace must contain exactly {CRATES}; got {sorted(packages)}")
-    selected = (crate,) if crate else CRATES
     errors = []
-    for name in selected:
+    for name, version in planned.items():
+        if name not in packages:
+            errors.append(f"{name}: not a publishable workspace crate")
+            continue
+        if not isinstance(version, str) or not re.fullmatch(VERSION, version):
+            errors.append(f"{name}: {version!r} is not a version")
+            continue
         package = packages[name]
         if package["version"] != version:
-            errors.append(f'{name}: manifest says {package["version"]}, tag says {version}')
+            errors.append(f'{name}: manifest says {package["version"]}, the release says {version}')
         if package.get("publish") is not None and "crates-io" not in package["publish"]:
             errors.append(f"{name}: publishing to crates.io is disabled")
     # Keep the repository's exact internal-requirement policy, but compare each
@@ -75,7 +116,7 @@ def select(tag, metadata, root):
             errors.append(f"workspace dependency {key}: expected package {name}, version {expected}")
     if errors:
         raise ValueError("\n".join(errors))
-    return {name: packages[name]["version"] for name in selected}
+    return planned
 
 
 def registry_status(name, version):
@@ -104,6 +145,8 @@ def preflight(selection):
     Trusted Publishing works only for a crate that already exists, so the
     workflow uploads a brand-new crate's first version with the `crates-io`
     environment's token instead (docs/BRANCHING.md, Registry authentication).
+    New and existing crates may share a release: `publish` uploads each kind
+    with its own credential (`publish_runs`).
     """
     new = []
     for name, version in selection.items():
@@ -118,23 +161,73 @@ def preflight(selection):
         elif crate != 200:
             raise RuntimeError(f"Could not check whether {name} exists (HTTP {crate})")
         print(f"{name}@{version} is available{' (new crate)' if crate == 404 else ''}", flush=True)
-    # One upload uses one credential: the token for new crates, the exchange
-    # for existing ones, which may be set to Trusted Publishing only and then
-    # reject the token after `--workspace` has uploaded earlier packages.
-    if new and len(new) != len(selection):
-        raise RuntimeError(
-            f"Refusing a release that mixes new crates ({', '.join(new)}) with existing "
-            "ones; publish each new crate with its own tag first"
-        )
     return new
 
 
-def publish(selection, dry_run=False):
-    # Preserve Cargo's topological ordering and sibling-tarball verification for
-    # the legacy workspace path; a crate tag never uploads unchanged siblings.
-    args = ["--workspace"] if set(selection) == set(CRATES) else ["-p", next(iter(selection))]
-    subprocess.run(["cargo", "publish", *args, "--locked",
-                    *(["--dry-run"] if dry_run else [])], check=True)
+def internal_dependencies():
+    """Workspace crate -> the workspace crates it needs on crates.io first
+    (normal and build dependencies; dev-dependencies are not published)."""
+    metadata = json.loads(subprocess.check_output(
+        ["cargo", "metadata", "--no-deps", "--format-version", "1", "--locked"], text=True, encoding="utf-8",
+    ))
+    names = {p["name"] for p in metadata["packages"]}
+    return {p["name"]: {d["name"] for d in p["dependencies"]
+                        if d["name"] in names and d.get("kind") in (None, "build")}
+            for p in metadata["packages"]}
+
+
+def publish_runs(selection, new, dependencies):
+    """The uploads, as [(new?, [crate, ...])]: one `cargo publish` per run of
+    crates that share a credential (the token for new crates, the Trusted
+    Publishing exchange for existing ones). Each run takes, in the selection's
+    (RELEASES.toml's) order, every crate of its kind whose selected
+    dependencies are already in an earlier run or in this one, so a new crate
+    that needs an existing one in the release goes after it, and the reverse."""
+    new, wanted, done, runs = set(new), set(selection), set(), []
+    remaining = list(selection)
+    while remaining:
+        kind, batch = remaining[0] in new, []
+        for name in remaining:
+            if (name in new) == kind and dependencies.get(name, set()) & wanted <= done | set(batch):
+                batch.append(name)
+        if remaining[0] not in batch:
+            raise ValueError(f"{remaining[0]} is selected before a crate it depends on")
+        runs.append((kind, batch))
+        done |= set(batch)
+        remaining = [name for name in remaining if name not in done]
+    return runs
+
+
+def publish(selection, dry_run=False, new=(), dependencies=None, environ=None):
+    """`cargo publish -p a -p b ...` for the selection. A dry run packages and
+    verifies all of it in one command, each crate against the earlier ones'
+    tarballs (multi-package publish, Cargo 1.90+). The upload runs once per
+    `publish_runs` run, with that run's credential: RELEASE_TRUSTED_TOKEN
+    (the exchange) for existing crates, RELEASE_NEW_CRATE_TOKEN for new ones.
+    Cargo orders each run's crates by dependency and waits for each on the
+    index before uploading what needs it."""
+    if dry_run:
+        subprocess.run(["cargo", "publish", *package_args(selection), "--locked", "--dry-run"], check=True)
+        return
+    environ = dict(os.environ if environ is None else environ)
+    tokens = {False: environ.pop("RELEASE_TRUSTED_TOKEN", ""), True: environ.pop("RELEASE_NEW_CRATE_TOKEN", "")}
+    environ.pop("CARGO_REGISTRY_TOKEN", None)
+    runs = publish_runs(selection, new, internal_dependencies() if dependencies is None else dependencies)
+    for kind, names in runs:
+        if not tokens[kind]:
+            raise RuntimeError(
+                "No credential for " + ", ".join(names) + ": " +
+                ("a new crate's first version needs CARGO_REGISTRY_TOKEN in the crates-io environment"
+                 if kind else "the Trusted Publishing exchange gave no token"))
+    for kind, names in runs:
+        print(f"Publishing {', '.join(names)} ({'new crates, token' if kind else 'Trusted Publishing'})",
+              flush=True)
+        subprocess.run(["cargo", "publish", *package_args(names), "--locked"], check=True,
+                       env={**environ, "CARGO_REGISTRY_TOKEN": tokens[kind]})
+
+
+def package_args(names):
+    return [arg for name in names for arg in ("-p", name)]
 
 
 def verify(selection):
@@ -174,7 +267,9 @@ def main():
     commands = parser.add_subparsers(dest="command", required=True)
     tag_check = commands.add_parser("validate-tag")
     tag_check.add_argument("tag")
-    plan = commands.add_parser("plan")
+    plan = commands.add_parser("plan",
+                               help="check a tag's selection (RELEASE_SELECTION, for a release tag) "
+                                    "against the manifests and export it")
     plan.add_argument("tag")
     commands.add_parser("preflight")
     upload = commands.add_parser("publish")
@@ -192,7 +287,10 @@ def main():
             ["cargo", "metadata", "--no-deps", "--format-version", "1", "--locked"], text=True, encoding="utf-8",
         ))
         root = tomllib.loads(Path("Cargo.toml").read_text(encoding="utf-8"))
-        selection = select(args.tag, metadata, root)
+        wanted = os.environ.get("RELEASE_SELECTION") or None
+        releases = Path("RELEASES.toml")
+        selection = select(args.tag, metadata, root, json.loads(wanted) if wanted else None,
+                           releases.read_text(encoding="utf-8") if releases.exists() else None)
         encoded = json.dumps(selection, separators=(",", ":"))
         print(encoded)
         if output := os.environ.get("GITHUB_OUTPUT"):
@@ -202,8 +300,6 @@ def main():
         selection = json.loads(os.environ["RELEASE_SELECTION"])
         if not isinstance(selection, dict) or not selection or not set(selection) <= set(CRATES):
             raise ValueError("Invalid release selection")
-        if len(selection) != 1 and set(selection) != set(CRATES):
-            raise ValueError("Select one crate or the entire workspace")
         for version in selection.values():
             if not isinstance(version, str) or not re.fullmatch(VERSION, version):
                 raise ValueError("Invalid release version")
@@ -211,9 +307,14 @@ def main():
             new = preflight(selection)
             if output := os.environ.get("GITHUB_OUTPUT"):
                 with open(output, "a", encoding="utf-8") as stream:
-                    stream.write(f"new_crate={'true' if new else 'false'}\n")
+                    stream.write(f"new_crate={'true' if new else 'false'}\n"
+                                 f"existing_crate={'true' if len(new) < len(selection) else 'false'}\n"
+                                 f"new_crates={json.dumps(new, separators=(',', ':'))}\n")
         elif args.command == "publish":
-            publish(selection, args.dry_run)
+            new = [] if args.dry_run else json.loads(os.environ.get("RELEASE_NEW_CRATES") or "[]")
+            if not isinstance(new, list) or not set(new) <= set(selection):
+                raise ValueError("Invalid new-crate list")
+            publish(selection, args.dry_run, new)
         else:
             verify(selection)
 
