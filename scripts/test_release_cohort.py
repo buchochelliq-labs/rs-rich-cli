@@ -219,7 +219,7 @@ class Tag(unittest.TestCase):
     def run_tag(self, **options):
         cohort.tag(options.get("commit", "HEAD"), "origin", 60, options.get("dry_run", False),
                    status=self.status, wait=self.wait, registry=options.get("registry"),
-                   run=options.get("run", lambda package: None))
+                   run=options.get("run", lambda package: None), start=options.get("start"))
 
     def test_tags_only_what_is_unpublished_in_order_and_waits_for_each(self):
         self.run_tag()
@@ -238,6 +238,27 @@ class Tag(unittest.TestCase):
         self.waited.clear()
         self.run_tag()
         self.assertEqual(self.waited, [])
+
+    def test_from_leaves_the_packages_before_it(self):
+        self.run_tag(start="python-v0.3.0")
+        self.assertEqual(self.waited, ["python-v0.3.0"])
+        self.assertEqual(self.remote_tags(), ["python-v0.3.0"])
+
+    def test_from_takes_a_crate_name(self):
+        self.run_tag(start="rs-rich-art")
+        self.assertEqual(self.waited, ["rs-rich-art-v0.2.0", "python-v0.3.0"])
+
+    def test_from_refuses_to_leave_an_unpublished_crate_a_later_one_needs(self):
+        # rs-rich-art depends on rs-rich: starting after an unpublished
+        # rs-rich would make rs-rich-art's publish fail.
+        self.published.clear()
+        with self.assertRaisesRegex(RuntimeError, r"rs-rich-art needs rs-rich@0\.1\.0"):
+            self.run_tag(start="rs-rich-art")
+        self.assertEqual(self.remote_tags(), [])
+
+    def test_from_an_unknown_package_is_refused(self):
+        with self.assertRaisesRegex(ValueError, "no RELEASES.toml entry"):
+            self.run_tag(start="rs-rich-nope")
 
     def test_a_dry_run_tags_nothing(self):
         self.run_tag(dry_run=True)

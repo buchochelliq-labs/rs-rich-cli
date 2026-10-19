@@ -349,8 +349,16 @@ def wait_for(package, timeout, status=registry_status, conclusion=run_conclusion
         sleep(30)
 
 
+def start_at(packages, start):
+    """The index in `packages` of `start`: a package name or its tag."""
+    for index, package in enumerate(packages):
+        if start in (package.name, package.tag, f"{package.name}@{package.version}"):
+            return index
+    raise ValueError(f"--from {start}: no {CONFIG} entry has that name or tag")
+
+
 def tag(commit, remote, timeout, dry_run, status=registry_status, wait=wait_for, registry=None,
-        run=tag_run):
+        run=tag_run, start=None):
     # The local checkout decides what is released: nothing is fetched, so a
     # run that is resumed later tags the same commit, not whatever main has
     # moved on to since. Only the remote's tags and the registries are read.
@@ -364,8 +372,25 @@ def tag(commit, remote, timeout, dry_run, status=registry_status, wait=wait_for,
     if errors := check(read):
         raise RuntimeError(f"{CONFIG} at {sha[:12]} disagrees with the repository:\n  " + "\n  ".join(errors))
     existing = remote_tags(remote)
+    packages = load(read)
+    first = start_at(packages, start) if start else 0
+    if first:
+        # Packages before --from are left as they are. One a later crate
+        # needs at a version not yet on crates.io would make that crate's
+        # publish fail, so it is refused before anything is tagged.
+        held = {p.name: p for p in packages[:first]
+                if p.registry == "crates.io" and not is_published(p, status)}
+        needs = {name: deps for name, (_, deps) in workspace_crates(read).items()}
+        blocked = [f"{p.name} needs {held[d]}" for p in packages[first:] if p.registry == "crates.io"
+                   for d in sorted(needs.get(p.name, ())) if d in held]
+        if blocked:
+            raise RuntimeError(f"--from {start} leaves unpublished versions that later crates need: "
+                               + "; ".join(blocked) + ". Start from the first of those instead.")
     print(f"Releasing from {sha}", flush=True)
-    for package in load(read):
+    for index, package in enumerate(packages):
+        if index < first:
+            print(f"leave  {package.tag}: before --from {start}", flush=True)
+            continue
         if registry and package.registry != registry:
             print(f"leave  {package.tag}: only {registry} packages were asked for", flush=True)
             continue
@@ -441,6 +466,9 @@ def main():
     tagger.add_argument("--remote", default="origin")
     tagger.add_argument("--timeout", type=int, default=120, help="minutes to wait for each release")
     tagger.add_argument("--dry-run", action="store_true", help="show what would be tagged, then stop")
+    tagger.add_argument("--from", dest="start", metavar="PACKAGE",
+                        help="start at this package (its name or tag) in RELEASES.toml order, leaving "
+                             "the ones before it; refused when a later crate needs one of them unpublished")
     tagger.add_argument("--registry", choices=sorted(REGISTRIES),
                         help="tag only the packages released to this registry (default: all)")
     args = parser.parse_args()
@@ -461,7 +489,8 @@ def main():
         elif args.command == "unreleased":
             unreleased(args.tag, load(files_on_disk()))
         else:
-            tag(args.commit, args.remote, args.timeout * 60, args.dry_run, registry=args.registry)
+            tag(args.commit, args.remote, args.timeout * 60, args.dry_run, registry=args.registry,
+                start=args.start)
     except (RuntimeError, ValueError, subprocess.CalledProcessError) as error:
         print(f"error: {error}", file=sys.stderr)
         return 1

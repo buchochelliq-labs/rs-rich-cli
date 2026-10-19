@@ -371,7 +371,12 @@ latest release run ran on that tag's commit, ended without success
 been uploaded; anything less certain (a run still going, one that started
 publishing, a run of another commit, or no run to see without the GitHub
 CLI) stops it with the commands to clear it by hand. `--dry-run` shows the plan; `status` shows
-every package's state. `--registry crates.io` tags only the crates, leaving
+every package's state. By default it starts at the top of `RELEASES.toml`
+and skips everything already on its registry, so it begins at the first
+unpublished package; `--from <package or tag>` starts later in the order and
+leaves the packages before it alone, but refuses when a later crate depends
+on one of them at a version not yet on crates.io (that crate's publish would
+fail). `--registry crates.io` tags only the crates, leaving
 the Python package for later (and `--registry pypi` only it).
 
 Both release workflows also refuse a published version from the tag itself:
