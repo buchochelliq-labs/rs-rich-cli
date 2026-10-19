@@ -575,7 +575,7 @@ let scope = Chart::new(fading.datasets()).layering(Layering::PerDataset);
 
 intuiTUIve draws these as nodes with its `viz` feature: `meter(level,
 peak).hold(d)`, `spectrogram(|| rows)` and `bar_spectrum(|| bands)`; see
-[intuiTUIve's levels](../intuituive/index.md#levels-sparklines-and-big-text).
+[intuiTUIve's levels](../intuituive/plugins.md#levels-sparklines-and-big-text).
 
 ## In tables and panels
 
@@ -860,7 +860,7 @@ its axes. The lines after it give the key values:
 - **In an intuiTUIve app**, draw a chart with `described(move || ..)`
   instead of `renderable(..)`. It looks the same, and its accessible name
   is the chart's text, its lines joined with `. `. The accessibility tree,
-  [linear mode](../intuituive/index.md#linear-mode) and a screen reader
+  [linear mode](../intuituive/accessibility.md#linear-mode) and a screen reader
   read the description, and read it again when the data changes.
   `.label("CPU")` goes first: `CPU: Line chart, …`.
 - From Python: `rs_rich.chart.describe(chart)`, or

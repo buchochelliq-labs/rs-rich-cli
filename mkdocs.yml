@@ -139,6 +139,21 @@ nav:
       - Terminal apps (rs-rich-intuituive):
           - guide/intuituive/index.md
           - "Tutorial: a to-do app": guide/intuituive/tutorial.md
+          - Nodes and layout: guide/intuituive/layout.md
+          - Panels, themes and stylesheets: guide/intuituive/panels.md
+          - State, keys and the mouse: guide/intuituive/input.md
+          - Inputs, text and dates: guide/intuituive/components.md
+          - Lists, trees and tabs: guide/intuituive/lists.md
+          - Tables and scrolling: guide/intuituive/tables.md
+          - Chrome, your own widgets and effects: guide/intuituive/widgets.md
+          - Screens, pop-ups and toasts: guide/intuituive/screens.md
+          - Tasks, feeds and other threads: guide/intuituive/background.md
+          - Browsing, jobs and app state: guide/intuituive/browsing.md
+          - Timers, frames and games: guide/intuituive/timers.md
+          - Files, sound, images and charts: guide/intuituive/plugins.md
+          - Accessibility: guide/intuituive/accessibility.md
+          - Inline apps, backends and your own loop: guide/intuituive/running.md
+          - Testing and the inspector: guide/intuituive/testing.md
           - Porting a ratatui app: guide/intuituive/porting.md
           - "ratatui's examples, rebuilt": guide/intuituive/ratatui-examples.md
           - Serving an app to a browser: guide/intuituive/web.md

@@ -20,7 +20,7 @@ Every port follows the same conventions, so it can be tested and recorded:
   `--frozen` stops the clock where an example has one.
 - **Refined.** Tabs, lists and tables take the mouse; `?` lists the keys
   and Ctrl+P finds a command, from the bindings' descriptions; the nodes
-  have labels, so [linear mode](index.md#linear-mode) reads well; and only
+  have labels, so [linear mode](accessibility.md#linear-mode) reads well; and only
   what moves draws again, which a test checks.
 
 ## The showcases
@@ -68,7 +68,7 @@ What intuiTUIve adds:
   bars and the chart each read a signal of their own, so a tick draws them
   and nothing else: not the tasks, the footer or the tab strip.
   `tests/demo.rs` checks it with the frame's numbers and the
-  [inspector](index.md#inspector)'s timings, and the inspector shows it
+  [inspector](testing.md#inspector)'s timings, and the inspector shows it
   as it runs (run it with `INTUITUIVE_INSPECT=1`).
 - **The widgets are rs-rich-ext's charts** as nodes: `FillGauge`,
   `Sparkline`, `LineGauge`, `BarChart`, `Chart` and the `Canvas` with its

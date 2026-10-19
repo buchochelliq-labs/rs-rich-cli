@@ -93,7 +93,7 @@ Server::bind("127.0.0.1:0", counter)? // port 0: any free port
 
 ## How a session runs
 
-The server runs one intuiTUIve [`Driver`](index.md#owning-the-loop) per
+The server runs one intuiTUIve [`Driver`](running.md#owning-the-loop) per
 connection. Each turn of the loop updates the app, sends what changed, and
 then waits for the page's next message, but no longer than the app can
 wait: until its next timer, animation frame or toast. Timers and background
@@ -289,7 +289,7 @@ tape is [`docs/tapes/serve.tape`](../../tapes/serve.tape).
 
 `Renderer::Dom` draws an app with the page's own DOM instead of xterm.js:
 the screen as a grid of styled spans, and over it the app's
-[accessibility tree](index.md#accessibility) as elements carrying ARIA roles,
+[accessibility tree](accessibility.md#accessibility) as elements carrying ARIA roles,
 names and states, so a browser's screen reader reads the app as it reads a
 web page.
 
