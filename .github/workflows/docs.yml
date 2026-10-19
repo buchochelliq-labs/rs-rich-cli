@@ -1,4 +1,8 @@
-# Build the documentation site and publish it to GitHub Pages.
+# Build the documentation site and publish it to GitHub Pages, one copy of the
+# docs per release with a version selector (scripts/build_versioned_docs.py):
+# main's docs at /dev/, each release's from its rs-rich-cli tag at /X.Y.Z/.
+# A release tag's push re-runs this workflow on main, which publishes it: the
+# site is only ever deployed from main.
 #
 # The screenshots are NOT regenerated here — they are committed, and CI checks
 # their referenced paths exist. Regenerating during deploy would let the published images
@@ -8,12 +12,19 @@ name: docs
 on:
   push:
     branches: [main]
+    # Path filters do not apply to tag pushes: every release publishes its docs.
+    # A cohort run's release-X.Y.Z tag starts it (its rs-rich-cli-v record tag
+    # goes up first, in a push too big to start workflows); a crate tag pushed
+    # on its own starts it too.
+    tags: ["release-*", "rs-rich-cli-v*"]
     paths:
       - docs/**
       - mkdocs.yml
       - .github/workflows/docs.yml
       - mkdocs-python.yml
       - scripts/gen_python_api.py
+      - scripts/build_versioned_docs.py
+      - scripts/docs_overrides/**
       # The Python site's API reference is read from the stubs and modules.
       - crates/rich-py/python/**
   pull_request:
@@ -23,6 +34,8 @@ on:
       - .github/workflows/docs.yml
       - mkdocs-python.yml
       - scripts/gen_python_api.py
+      - scripts/build_versioned_docs.py
+      - scripts/docs_overrides/**
       # The Python site's API reference is read from the stubs and modules.
       - crates/rich-py/python/**
   workflow_dispatch:
@@ -35,18 +48,35 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # A new release's docs: rebuild and publish the site from main.
+  release:
+    name: publish a release's docs
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - run: gh workflow run docs.yml --repo "$GITHUB_REPOSITORY" --ref main
+        env:
+          GH_TOKEN: ${{ github.token }}
+
   build:
     name: build site
+    if: ${{ !startsWith(github.ref, 'refs/tags/') }}
     runs-on: ubuntu-latest
     steps:
+      # The release tags' docs are built from history.
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
 
       - name: Install MkDocs
-        run: pip install mkdocs-material "mkdocstrings[python]>=1,<2"
+        # MkDocs 2 drops the plugins and theme overrides the site uses.
+        run: pip install "mkdocs<2" mkdocs-material "mkdocstrings[python]>=1,<2"
 
       # --strict turns broken internal links into failures. A docs site whose
       # links rot is worse than no docs site.
@@ -78,6 +108,12 @@ jobs:
               sys.exit(1)
           print("all image references resolve")
           PY
+
+      # Every version into site/: main's (strict again) and the newest
+      # releases' that fit under Pages' 1 GB. A pull request builds one release
+      # to prove the versioned build still works.
+      - name: Build every version
+        run: python scripts/build_versioned_docs.py ${{ github.event_name == 'pull_request' && '--releases 1' || '' }}
 
       - uses: actions/upload-pages-artifact@v5
         if: github.ref == 'refs/heads/main'

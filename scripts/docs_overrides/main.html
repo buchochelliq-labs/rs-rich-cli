@@ -1,0 +1,10 @@
+{#- Used by scripts/build_versioned_docs.py: the banner every version but the
+    newest release shows, with a link to the same site's newest release. -#}
+{% extends "base.html" %}
+
+{% block outdated %}
+  These are not the newest release's docs.
+  <a href="{{ '../' ~ base_url }}">
+    <strong>Read the newest release's docs.</strong>
+  </a>
+{% endblock %}
