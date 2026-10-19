@@ -85,11 +85,13 @@ column([
   a `"ctrl+i"` binding (on one node, `"tab"` wins). With the protocol,
   which the app turns on when the terminal has it (`.legacy_keys(true)`
   keeps it off), Tab fires only `"tab"` and Ctrl+I only `"ctrl+i"`.
-- **Key releases** reach widgets as `WidgetEvent::KeyUp`, from a terminal
-  with the kitty protocol; bindings fire on presses (and repeats) only.
-  Typed text stays text, so a plain letter or digit (or Enter, Tab and
-  Backspace) has no release: Escape, arrows, function keys and keys with
-  Ctrl or Alt do.
+- **Key releases** come from a terminal with the kitty protocol. They
+  reach widgets as `WidgetEvent::KeyUp`, and release bindings
+  (`.on_key_up`, `.bind_release`); `.on_key` and `.bind` fire on presses
+  and repeats. Typed text stays text, so a plain letter or digit (or
+  Enter, Tab and Backspace) has no release unless the app asks for every
+  key with `App::all_keys(true)`. See
+  [Held keys, releases and key repeat](#held-keys-releases-and-key-repeat).
 - **Ctrl+C** quits, unless a node on the focused path binds it: then the
   binding runs, and quitting is up to you.
 - **Ctrl+Z** suspends the app on Unix, as the shell expects, and `fg`

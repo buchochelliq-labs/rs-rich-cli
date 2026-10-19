@@ -141,7 +141,8 @@ What a widget can do:
   - keys while the focus is on it or inside it (with nothing focused,
     while the pointer is over it), and `KeyUp` when one is let go (from a
     terminal with the kitty keyboard protocol, for keys other than plain
-    text, Enter, Tab and Backspace);
+    text, Enter, Tab and Backspace unless the app asks for
+    [every key](input.md#held-keys-releases-and-key-repeat));
   - mouse events over it, and pasted text;
   - `Focus`, `Hover` and `Resize` when the focus or the pointer comes or
     goes, or its size: after the frame it is first laid out in, and
@@ -189,8 +190,10 @@ What a widget can do:
   and copied out where the widget looks. Clicks and the caret are
   translated through it.
 - **`overlapping`** lets its children overlap, later ones on top, as
-  [`layers`](layout.md#layers) does: a child draws again wherever an earlier one
-  drew in the same frame, and a click goes to the later one.
+  [`layers`](layout.md#layers) does: when any of them is to draw, they all
+  draw once, bottom first, none clearing what is under it, so the ones
+  below show where a later one draws nothing; a click goes to the later
+  one.
 - **`caret`** places the text caret while it has the focus.
 - **`access_text`** says what it shows to assistive technology (`Level
   42%` for a meter of block glyphs): the widget is read as text with that

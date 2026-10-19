@@ -71,7 +71,9 @@ covers both. Three complete ports show where it leads:
 | `crossterm::event::read()` + `match` | `.on_key("q", …)` on the node that owns the key; keys bubble. Or keep your loop and feed an `App::driver` (path 4) |
 | A focus enum and Tab handling | `.focusable()` / `.focus_style(..)`; Tab and Shift+Tab are built in |
 | Mouse hit-testing against stored `Rect`s | `.on_click(…)`, `.on_mouse(…)`; events arrive in the node's own coordinates and bubble |
-| A tick rate in the loop | `every(interval, …)` |
+| A tick rate in the loop | `every(interval, …)`, which returns a `Timer` to pause or re-time; `fixed_step(period, \|cx, steps\| …)` for a game's timestep |
+| `KeyEventKind::Release`, keys held down | `.on_key_up(..)`, `.bind_release(..)`, `held_keys()`; `App::all_keys(true)` for every key's release |
+| A "terminal too small" check before drawing | `App::min_size(w, h, message)` |
 | Threads and channels into the loop | `spawn(work, done)`, `resource(fetch)`, `Proxy::run` |
 | "When X changes, do Y" in the loop | `watch(\|\| x.get(), \|x, cx\| …)` |
 | `ratatui::init()` / `restore()` | `App::run()` (restores on every exit, panics included) |
@@ -200,9 +202,13 @@ worth a closer look:
   keeps the selection in view, highlights it in the theme's `selected` style
   and binds ↑/↓, j/k, Home/End and PageUp/PageDown while it has the focus.
   Bind Enter yourself.
-- **Tables.** Build a rich `Table` in `renderable(move || …)`. Columns size
-  themselves, and cells take markup. For a table whose rows change one at a
-  time, `each(keys, row)` keeps each row's node, so only changed rows draw.
+- **Tables.** `table(columns, rows, selected)` is `Table` and `TableState`
+  together: sized columns, a header that stays, the keys and clicks.
+  `TableOptions` sorts, scrolls across and adds a cell cursor, and its
+  options can follow signals; `.cursor_by(|i| key)` keeps the selection on
+  its row through a re-sort. A file too big to hold is a `TableSource`
+  behind `view_of`, filtered and sorted on a worker thread. See
+  [Tables and scrolling](tables.md).
 - **Popups.** Replace `Clear` plus a centred `Rect` with
   `cx.modal(Size::Auto, Size::Auto, build)`. Keys go to the modal until
   `cx.pop()`.
@@ -245,6 +251,7 @@ between them, panels highlight while the focus is inside, and
 |---|---|
 | `if last_tick.elapsed() >= tick_rate { app.on_tick() }` | `every(tick_rate, move \|_\| …)` |
 | A thread sending results down a channel | `spawn(work, move \|result, cx\| …)` |
+| A thread sending a stream of values (a sensor, audio) | `latest(\|tx\| …)`: a signal of the newest; `latest_with_state` also says when it stalls or ends |
 | A value that loads in the background | `resource(fetch)`: `Loading`, `Ready`, `Failed`, `reload()` |
 | A tokio task updating state | `proxy.run(move \|\| signal.set(v))` from the task |
 | "If the selection changed, reload the preview" | `watch(\|\| selected.get(), \|i, cx\| …)` |
@@ -512,9 +519,11 @@ included, drive the app with `App::driver` (path 4). `App::run_with` drives
 it with termion or termwiz instead, behind this crate's features of those
 names (see [Backends](running.md#backends)).
 
-**Do I lose performance?** No: [the benchmark](index.md#against-ratatui) has
-intuiTUIve ahead on every scenario it measures, because it redraws and sends
-only what changed.
+**Do I lose performance?** Not where most frames change little:
+[the benchmark](index.md#against-ratatui) has intuiTUIve ahead on a status
+tick, a selection move and a log append, because it redraws and sends only
+what changed. Where every cell changes each frame (a full-screen swatch, a
+chart redrawn whole), ratatui is ahead, as the same page shows.
 
 **What about async runtimes?** Keep yours. Send results to the app with a
 `Proxy`, or use `spawn_future` for futures that do not need a particular

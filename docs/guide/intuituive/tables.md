@@ -277,8 +277,8 @@ row([my_view, scrollbar(top, move || lines.get().len(), || 0, Scrollbar::new())]
   `virtual_list`, a `tree`, a `text_area` or a log's view a bar. It keeps a
   column of the widget while it shows: by default (`Show::Auto`) only while
   the content does not fit; `Show::Always` keeps it with a full thumb, and
-  `Show::Never` keeps no column. A `scroll` without one still draws today's
-  bar.
+  `Show::Never` keeps no column. A `scroll` given no bar still shows a
+  thin one while its child does not fit.
 - **`.side(..)`** puts it on the right (the default) or the left; on a
   `scroll_x` or `scroll_both`, a bar on the top or the bottom is the one
   across.

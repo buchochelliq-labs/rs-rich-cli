@@ -301,9 +301,13 @@ signal it wrote, with the nodes that write made dirty. The
 
 ## Where next
 
-- [Terminal apps](index.md): every node, layout option and feature.
-- Screens: `cx.push(build)` opens a full screen over the app, and
-  `cx.pop()` goes back.
-- Background work: `spawn`, `spawn_future` and `resource` load data
-  without freezing the app.
-- Inline apps: `App::inline(rows)` runs in a few rows under the prompt.
+- [Terminal apps](index.md): the overview, with a map of the guide's
+  pages.
+- [Screens, pop-ups and toasts](screens.md): `cx.push(build)` opens a full
+  screen over the app, and `cx.pop()` goes back.
+- [Tasks, feeds and other threads](background.md): `spawn`,
+  `spawn_future` and `resource` load data without freezing the app.
+- [Inline apps](running.md#inline-apps): `App::inline(rows)` runs in a few
+  rows under the prompt.
+- [Testing and the inspector](testing.md): snapshots of the screen, and
+  every inspector key.
