@@ -4,8 +4,10 @@
 //! each component with a generic shape underneath is that core component
 //! with a file system plugged in ([`miller`] on
 //! [`miller_of`](crate::miller_of), [`tasks`] on [`jobs`](crate::jobs::jobs),
-//! [`finder`] on [`finder_of`](crate::finder_of), [`preview`] on
-//! [`preview_of`](crate::preview_of), [`path_crumb`] on
+//! [`finder`] on [`fuzzy_list`](crate::finder::fuzzy_list), [`preview`]
+//! on [`preview_of`](crate::preview_of), [`tabs`] on
+//! [`tab_set`](crate::tab_set()), [`selection`] on
+//! [`multi_select`](crate::multi_select), [`path_crumb`] on
 //! [`breadcrumb`](crate::widgets::breadcrumb)).
 //!
 //! - [`dir_model`]: a directory's entries as signals, sorted and filtered,
@@ -30,7 +32,20 @@
 //!   extraction as background jobs with progress, cancellable (Yazi's
 //!   `w`).
 //! - [`finder`]: a fuzzy finder over a directory walk whose results stream
-//!   in while the walk goes on (Yazi's `z` over fd and fzf).
+//!   in while the walk goes on (Yazi's `z` over fd and fzf), titled and
+//!   bordered with [`finder_with`].
+//! - [`tabs`]: tabs over Miller's columns, each with its directory and a
+//!   back/forward history (on the core's [`tab_set`](crate::tab_set()) and
+//!   [`history`](crate::history)).
+//! - [`selection`] and [`Yank`]: what actions act on
+//!   ([`Miller::targets`]), on the core's
+//!   [`multi_select`](crate::multi_select), and files yanked to paste.
+//! - [`frecency`]: directories ranked by visits, kept across sessions
+//!   (Yazi's `Z` over zoxide).
+//! - [`search`]: a search by name or content (`fd`, `rg`, else a walk)
+//!   whose results Miller lists ([`Miller::show_search`]).
+//! - [`spot`], [`bulk_rename`] and [`shell`]: a file's details, renaming
+//!   in `$EDITOR`, a command on the selection.
 //! - [`path_crumb`]: a path as a header, the home directory as `~`.
 //! - [`git_status`]: `git status` per file, loaded in the background.
 //! - [`hex_view`]: the core's scrolling hex dump, re-exported.

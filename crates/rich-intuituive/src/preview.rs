@@ -108,7 +108,7 @@ where
 /// [`wait_for_tasks`](crate::App::wait_for_tasks), shows the first value
 /// already); a result for a key already left behind is dropped, so a slow
 /// load never replaces a newer one. With no key the value is
-/// `T::default()`. It is a [`resource_for`](crate::resource_for) keyed by
+/// `T::default()`. It is a [`resource_for`] keyed by
 /// the width and the key, [`stale_after`](crate::Resource::stale_after)
 /// the [`clear_after`](PreviewOfOptions::clear_after) wait. The `files`
 /// plugin's preview is one: a path to a file's preview, picked by its

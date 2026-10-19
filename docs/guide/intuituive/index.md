@@ -1148,7 +1148,8 @@ items change: re-sorted, filtered, read again. The key of the item under
 the cursor is remembered; when the key now at its index differs, the
 selection goes to wherever it went. Moving the cursor is unchanged.
 **`.on_context(|i, cx| ..)`** runs on a right press on an item (which
-selects it first, and goes no further) or the menu key (Shift+F10) on the
+selects it first, and goes no further) or the menu key (`menu`, which
+terminals with the kitty keyboard protocol report, or Shift+F10) on the
 selected item: place the menu at `cx.pointer()`, or at the row's
 `row_rects` from the keyboard.
 
@@ -2142,7 +2143,8 @@ columns.navigation(columns.view())
   own) says what failed: a clean or cancelled job leaves the list, a
   failed one stays until `clear_finished`. `jobs_panel(list)` lists them
   with progress bars (`x` cancels the hovered job, `X` all, `c` clears the
-  failed).
+  failed); `jobs_panel_with(list, JobsPanelOptions::new()
+  .failed_title(false))` shows a failed job's error without its title.
 - **A streaming fuzzy list:** `fuzzy_list(source, |item| text, |item,
   cx| ..)` is a fuzzy list over any source of items, read on its own
   thread: `FuzzySource::iter(items)` for an iterator, or
@@ -2150,8 +2152,9 @@ columns.navigation(columns.view())
   arrive (a search's results), stopping once `feed.push` says false.
   Results show while it goes on (`12/3400 (loading…)`), a new batch is
   matched alone, Enter picks the hovered item (the item, not its text),
-  Esc closes the screen or modal it is on, and the source stops when the
-  screen closes. `fuzzy_list_with(.., FuzzyOptions::new().title("Jump")
+  Esc closes the screen or modal it is on (on the first screen it leaves
+  Esc to the app: `cx.is_modal()` says which a handler runs on), and the
+  source stops when the screen closes. `fuzzy_list_with(.., FuzzyOptions::new().title("Jump")
   .border(Border::Rounded).prompt(":").on_cancel(..))` adds a panel, a
   prompt, or an Esc of your own. **`finder_of(items, ..)`** is one over an
   iterator, with the same look and keys.
@@ -2161,7 +2164,10 @@ columns.navigation(columns.view())
   behind, and draws the value from a signal. `preview_of_with(..,
   PreviewOfOptions::new().state(sig).clear_after(d).on_change(..)
   .on_loaded(..))` shares the value, clears a slow one, resets a scroll
-  when the key changes and acts on a value as it arrives.
+  when the key changes and acts on a value as it arrives. It is a
+  `resource_for` keyed by the width and the key (`clear_after` its
+  `stale_after`, on the app's clock), so the first frame lays it out and
+  already shows the first value.
 
 ## Files, sound and images
 
@@ -2270,15 +2276,22 @@ rs-rich-intuituive = { version = "0.0.5", features = ["files", "watch", "art"] }
 ```
 
 ```rust
-use intuituive::files::{miller, MillerOptions, Marker};
+use intuituive::files::{miller, selection, tabs, MillerOptions, Yank};
 
 App::new(|| {
     let columns = miller(start.clone()).icons(true).ratios(1, 4, 3);
-    let selected = signal(BTreeSet::<PathBuf>::new());
-    let view = columns.view_with(MillerOptions::new().markers(move |_, path| {
-        if selected.with(|s| s.contains(path)) { Marker::Selected } else { Marker::None }
-    }));
-    columns.navigation(column([view.flex(1), status(columns)]))
+    let picked = selection(columns);
+    let strip = tabs(columns);
+    let yanked = signal(None::<Yank>);
+    let view = columns.view_with(
+        MillerOptions::new()
+            .markers(Yank::markers(yanked))
+            .hovered_caps("\u{e0b6}", "\u{e0b4}"),
+    );
+    columns
+        .navigation(column([strip.strip().fit().fixed(1), view.flex(1), status(columns)]))
+        .on_key("space", move |_| picked.toggle(columns.hovered_path().unwrap()))
+        .on_key("y", move |_| yanked.set(Some(Yank::copy(columns.targets()))))
 })
 ```
 
@@ -2291,7 +2304,31 @@ App::new(|| {
   in a directory's preview enters it. `columns.navigation(node)` binds
   Yazi's movement keys (`j`/`k`, `h`/`l`, `g g`/`G`, Ctrl+D/U, `J`/`K` for
   the preview); `cd`, `enter`, `leave`, `arrow` and `refresh` are there
-  for your own. With `watch` both directories follow the disk.
+  for your own. With `watch` both directories follow the disk. The cursor
+  stays on its entry, by path, through a re-sort, a filter, hidden files
+  shown and a refresh. `find_next(previous)` is Yazi's `n` and `N` over
+  the find query (the core's `list_search`), and `visited()` the
+  directories shown so far.
+- **Column options:** `view_with(MillerOptions::new() …)` takes markers,
+  git signs (`.git(status)`), the hovered row's rounded ends in its type
+  colour (`.hovered_caps(open, close)`, on the list's
+  `highlight_layer(Under)`), a context handler
+  (`.on_context(|entry, cx| ..)`: a right press, the menu key or
+  Shift+F10 on an entry), how a binary file previews (`.binary(..)`),
+  previewers, and any list option through the core's hooks
+  (`.current(|list| list.wheel_step(1))`, `.parent(..)`, `.preview(..)`).
+- **Tabs:** `tabs(columns)` keeps a directory and a back/forward history
+  per tab (the core's `tab_set` and `history`): `open`, `close_active`,
+  `switch`, `cycle`, `swap`, `back` and `forward` (Yazi's `H` and `L`),
+  `rename`, and `strip()`, a tab strip of their titles. Wherever the
+  columns go, the active tab follows.
+- **The selection and yanking:** `selection(columns)` is the core's
+  `multi_select` over the current column by path, marked in the columns,
+  with a visual range that follows the cursor (`visual(unset)`,
+  `end_visual`); `columns.targets()` is what an action acts on, the
+  selection or else the hovered file. `Yank::copy(paths)` and
+  `Yank::cut(paths)` hold what `y` and `x` took: `Yank::markers(signal)`
+  marks them, `yank.paste(into, Conflict::Rename)` is the `Op` to run.
 - **A directory model:** `dir_model(|| Some(dir))` holds a directory's
   entries as memos, sorted (`model.sort`), hidden files shown or not
   (`model.hidden`), filtered (`model.filter`, smart case), read again on
@@ -2312,28 +2349,62 @@ App::new(|| {
   changes and picks a renderer by type: a directory's entries, text
   highlighted, an image (`art`; described without it), an archive's
   entries (`archive`), a hex dump of anything else. A result for a path
-  no longer shown is dropped, and a slow one clears the pane after 150 ms.
-  `.previewer(|path, mime, settings| ..)` adds your own.
+  no longer shown is dropped, and a slow one clears the pane after 150 ms
+  (on the app's clock); the first frame already shows the hovered
+  entry's. `.previewer(|path, mime, settings| ..)` adds your own;
+  `.binary(BinaryPreview::FileType)` shows a binary file as `file -bL`
+  classifies it (`Previewer::file_type()`, a MIME description without
+  `file`) instead of a hex dump.
 - **Opening:** `open_with(cx, &opener, paths, |cx| ..)` runs one of
   `rich_ext::open`'s openers (`opener_rules()` is Yazi's defaults): a
   blocking one (the editor) gets the terminal through `cx.handoff_then`,
   the others run in the background; `Launch::Extract` extracts beside the
-  archive.
+  archive. `open_with_tasks(cx, &opener, paths, jobs, |cx| ..)` runs
+  extraction as jobs of a task list instead.
 - **Background jobs:** `tasks()` is the core's `jobs` with file
   operations as the work: it runs copies, moves, deletes, trashing
   (`jobs.run(Op::Copy { .. }, |report, cx| ..)`) and extraction
   (`jobs.extract(..)`) each on a thread, with progress a few times a
   second and a cancel token; `tasks_panel(jobs)` lists them with progress
   bars (`x` cancels, Yazi's `w`). A job with errors stays listed.
+  `tasks().on_fail(|job, cx| ..)` hears every failure in one place, and
+  `tasks_panel_with(jobs, JobsPanelOptions::new().failed_title(false))`
+  then leaves the title out of a failed row, so nothing is told twice;
+  `jobs.summary()` is `(share done, running, failed)` for a
+  `seg_gauge` in the status line.
 - **A streaming finder:** `finder(walk(root), |path, cx| ..)` is the
-  core's `finder_of` over a directory walk that runs on its own thread:
+  core's `fuzzy_list` over a directory walk that runs on its own thread:
   results show while it goes on (`12/3400 (loading…)`), and the walk
-  stops when the finder's screen closes.
+  stops when the finder's screen closes. `finder_with(.., FuzzyOptions
+  ::new().title("Find").border(Border::Rounded))` looks as any fuzzy list
+  does; Esc closes its modal (or runs `.on_cancel(..)`).
+- **Frecency:** `frecency().follow(columns)` counts a visit to each
+  directory shown and ranks them as zoxide does (`ranked()`, best
+  first), in a small file in the user's state directory (`state_dir()`;
+  `frecency_at(file)` names one), written whole and renamed into place:
+  Yazi's `Z` across sessions.
+- **Searching:** `search(root, query, SearchKind::Name | Grep)` runs
+  `fd` or `rg` (else a walk of its own), its results streaming in;
+  `columns.show_search(found)` lists them in the current column, each
+  named by its path from the root and previewed as any entry, until the
+  columns go elsewhere or `end_search()` (Yazi's `s` and `S`).
+- **The spotter, bulk rename, a shell:** `spot(path)` is the core's
+  `facts` with a file's name, path, MIME type, size, mode, owner, times
+  and link target. `bulk_rename(cx, paths, |renamed, cx| ..)` puts the
+  names in a file for `$EDITOR` and renames what changed when it ends
+  (files may swap names; a name in use is reported). `shell(cx, paths,
+  ShellOptions::new())` prompts for a command and runs it on them as
+  Yazi's `;` (in the background, or as a job with `.tasks(jobs)`) or `:`
+  (`.block(true)`: the terminal handed over), `"$@"` the paths and `$0`
+  the hovered file (`.hovered(..)`).
 - **A path header:** `path_crumb(|| cwd)` is the core's `breadcrumb` over
   a path's parts (`path_parts`), `/` between them and the home directory
   as `~` (`path_crumb_at(.., Some(home))` names it).
 - **A hex view:** `hex_view` is the core's (`widgets::hex_view`),
   re-exported.
+- **The trash everywhere:** `Op::Trash` uses rs-rich-ext's `trash::send`:
+  the FreeDesktop trash on Linux and the BSDs, the Finder's on macOS, the
+  Recycle Bin on Windows.
 
 Kitty and Sixel images are not drawn yet: rs-rich-ext's `Surface` has a
 graphics side channel (`Surface::graphics`, `frame::graphics::plan`) and
