@@ -961,3 +961,63 @@ through cpal. What it needed from rs-rich, beyond the raycaster's list:
 | Encoders: indexed-palette Sixel is crate-private; Kitty has PNG only and no direct placement id | public palette Sixel, Kitty raw RGB (`f=24/32`, zlib), placement ids | rs-rich-art |
 | A git dependency on rs-rich-cli prints an "invalid character" error from `templates/intuituive-app/Cargo.toml` (`{{project-name}}`) | exclude the template from cargo's package discovery (rename the manifest, or a workspace `exclude`) | repo |
 | Music | MUS→MIDI and an OPL/MIDI synth | plugin |
+
+## Round 7: the nine apps rebuilt on round 6
+
+Each clone was rebuilt on round 6's components, without library edits. Each
+report in [`gaps/`](gaps/) has a "Round 2" section with the details.
+
+| Clone | Example lines | Tests | What replaced hand-built code |
+|---|---|---|---|
+| git (gitui) | 2,219 → 2,204 | 21 → 23 | `tree_keyed` with status prefixes, `list_rows(..).range`, `shown_when`/`size_with` layout, `on_focus`, `key_hints_with`, `keyed` |
+| tasks (taskwarrior-tui) | 2,582 → 2,412 | 27 | `query::Grammar` filters (adds `or`, `not`, brackets), `dates::parse_with`, `Zone`, `command_line_with(two_rows)` with completion and history, one reactive report table, `year_view_with` |
+| http (Slumber) | 2,088 → 2,026 | 20 → 22 | one tree with `shown_when`/`size_with`, `focus_within`, `focus_border`, panel titles from state, `tree_keyed`/`tree_reveal`, `Timer` pause/resume, input history |
+| disk (diskonaut) | 1,395 → 1,192 | 21 | `layout::squarify`, `focus::neighbour`, `fit_text`/`truncate_middle`, `keyed`, `App::min_size` |
+| top (bottom) | 2,706 → 2,415 | 25 | focus scopes with directional focus, `shown_when` instead of a second copy of each widget, `columns_with` with `priority`, `query::Grammar` search, `title_with` |
+| csv (csvlens) | 1,534 → 1,375 | 14 | `TableSource` with `view_of` (keep, find, sort), a reactive table with frozen columns and `multiline_when`, `command_line` with shared history, `Text::markup()` |
+| blocks (rata-tetris) | 919 → 959 | 15 → 18 | `fixed_step` with catch-up, DAS/ARR `.repeat`, `App::min_size`, one backdrop `fill` layer, `state_file`, sprites on a stage |
+| raycast | 2,924 → 2,891 | 26 → 28 | `fixed_step`, `on_key_up` and the release report, `all_keys`, `pixels_fit`, `DrawCx::rect()`, `keyed` with `on_unmount`; the Kitty-mode and held-key bugs are fixed |
+| music (termusic) | 1,556 → 1,512 | 17 → 20 | a `transport` play head, `panel_with`, `tree_keyed`/`tree_reveal`, `symbol_for`, `keyed`/`shown_when`, `HelpOptions::all_panes` |
+
+blocks grew by 40 lines. Its model is unchanged; the extra lines are the
+repeat rates and the sprite builder.
+
+### Bugs found
+
+| Bug | Found by | Workaround in the clone |
+|---|---|---|
+| Closing a modal gives the focus back to the node focused before a `cx.focus(x)` made just before it opened | tasks | focuses the report after the modal closes |
+| A styled `layers` node does not cover the gaps its inset children leave | blocks | a `fill` as the first layer |
+| `layout::squarify` gives the largest item no tile when the rest's tile is under the minimum width | disk | 12 lines |
+| A `previews_keys` container takes the letters typed into a `command_line` inside it | csv | the line sits outside the container |
+
+Each has a minimal failing test in its report.
+
+### Performance
+
+`view_of` made csv's million-row filter slower: 3.3 s → 15.4 s in the
+unoptimised test build. About 8 s goes on reading each row through
+`TableSource::row(i)`, and about 7 s on building a `Text` per row for the
+regex. Needed:
+
+- a bulk read for passes;
+- a compiled matcher on `&str` in rs-rich-ext.
+
+### Gaps shared across apps
+
+| Gap | Apps | Kind |
+|---|---|---|
+| Panel titles flush with the corner (ratatui's look), and plain-text titles | git, music, http | core: a title option |
+| A tree table (a table whose rows nest) | top, tasks | core |
+| A treemap that joins its tiles' borders and keeps a selection | disk | core |
+| Held keys that fall back on a latch where releases are not reported | raycast | core: `held_keys_with` |
+| `App::min_size` with a node of its own, and shorter forms of the message | blocks, disk | core |
+| A timer that runs while a condition holds (`running_when`) | blocks | core |
+| A stopped state on `Transport`; `follow_time` for a time-keyed line | music | core |
+| Command-line reads (`is_typing`, `is_asking`), a closed-bar look, mode titles from state | tasks, csv | core |
+| Keys that submit a command line (`<n>G`) | csv | core |
+| Directional-focus binding descriptions, tie-breaking in `neighbour`, scope cycling past hidden panes | top, disk, http | core |
+| A glyph checks column on tables, `column_highlight` from state | http, csv | core |
+| A scroll offset kept across a resize | http | core |
+| Real pixels on the `pixels` node; `PixelBuf::copy_rgb` | raycast | plugin (`art`) |
+| Unit words in a grammar (`1 gib`), `TextMatch` on comparisons, `Zone` re-exported | top, tasks | core (query, dates) |
