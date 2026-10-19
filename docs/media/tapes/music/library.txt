@@ -1,0 +1,30 @@
+╭─ Library ────────────────────────╮╭─ Playlist ──┤ Total 0 tracks | 00:00 | Mode: 🔁 ├─ ────────────────────╮
+│  ▾ library                       ││   Duration  Title               Artist              Album              │
+│    ▸ Harbour Songs               ││                                                                        │
+│🦄  ▾ Orbit Lights                ││                                                                        │
+│        Nova Hale - Low Earth.wav ││                                                                        │
+│        Nova Hale - Morning Signa…││                                                                        │
+│        Nova Hale - Perigee.wav   ││                                                                        │
+│                                  ││                                                                        │
+│                                  ││                                                                        │
+│                                  ││                                                                        │
+│                                  ││                                                                        │
+│                                  ││                                                                        │
+│                                  ││                                                                        │
+│                                  ││                                                                        │
+│                                  ││                                                                        │
+│                                  ││                                                                        │
+│                                  ││                                                                        │
+│                                  ││                                                                        │
+│                                  ││                                                                        │
+│                                  ││                                                                        │
+│                                  ││                                                                        │
+│                                  │╰────────────────────────────────────────────────────────────────────────╯
+│                                  │╭────── Status: Stopped | Volume: 30 | Speed: 1.0 | Gapless: True ───────╮
+│                                  ││                                 --:--                                  │
+│                                  │╰────────────────────────────────────────────────────────────────────────╯
+│                                  │╭───────────────────────── No track is playing ──────────────────────────╮
+│                                  ││Stopped.                                                                │
+│                                  ││                                                                        │
+╰──────────────────────────────────╯╰────────────────────────────────────────────────────────────────────────╯
+ Help: <control+h> Config: <shift+C> Library: <1> Database: <2> Podcasts: <3> Version: rs-rich

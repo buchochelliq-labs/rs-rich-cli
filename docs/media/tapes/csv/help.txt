@@ -1,0 +1,22 @@
+──────────────────────────────────────────────────────────────────────────────────────────
+       order_id    region    amount    status       placed        express
+1   │  1001        eu        42.50     shipped      2026-09-01    true
+2   │  1002  ╭─ csvlens ───────────────────────────────────────────────────╮
+3   │  1003  │? Search keys ›                                              │
+4   │  1004  │Moving                                                       │
+5   │  1005  │  j/↓          Scroll one row down                           │
+6   │  1006  │  k/↑          Scroll one row up                             │
+7   │  1007  │  ctrl+f/pgdn  Scroll one window down                        │
+8   │  1008  │  ctrl+b/pgup  Scroll one window up                          │
+9   │  1009  │  ctrl+d/d     Scroll half a window down                     │
+10  │  1010  │  ctrl+u/u     Scroll half a window up                       │
+11  │  1011  │  ctrl+h       Scroll one window left                        │
+12  │  1012  │  ctrl+l       Scroll one window right                       │
+13  │  1013  │  ctrl+←       Scroll left to first column                   │
+14  │  1014  │  ctrl+→       Scroll right to last column                   │
+15  │  1015  │  36 keys · more below · type to search · ↑↓ scroll · esc clo│
+16  │  1016  ╰─────────────────────────────────────────────────────────────╯
+17  │  1017        us        72.15     shipped      2026-09-09    false
+18  │  1018        eu        120.00    shipped      2026-09-09    true
+──────────────────────────────────────────────────────────────────────────────────────────
+orders.csv [Row 1/24, Col 4/6]

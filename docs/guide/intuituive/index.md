@@ -86,6 +86,7 @@ thing it introduces:
 | [Accessibility](accessibility.md) | The cursor on the focus, text mode, roles and states, announcements, linear mode |
 | [Inline apps, backends and your own loop](running.md) | Inline apps, termion and termwiz, synchronized output, a loop of your own, inside ratatui |
 | [Testing and the inspector](testing.md) | Headless tests, snapshots, a clock you move, the inspector |
+| [Eleven apps, rebuilt](clones.md) | Real terminal apps cloned from components only: what each one is built from, with recordings |
 
 Then: [porting a ratatui app](porting.md), [ratatui's examples,
 rebuilt](ratatui-examples.md), [serving an app to a browser](web.md),

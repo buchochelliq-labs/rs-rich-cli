@@ -1,0 +1,42 @@
+# A Slumber collection for the http tape (docs/tapes/http.tape). The tape
+# serves api/ with Python's http.server on a free port, written over 8765.
+profiles:
+  local:
+    name: Local
+    default: true
+    data:
+      host: http://127.0.0.1:8765
+      greeting: hello
+  staging:
+    name: Staging
+    data:
+      host: http://127.0.0.1:8765/staging
+      greeting: howdy
+
+.base:
+  headers:
+    Accept: application/json
+
+requests:
+  fish:
+    name: Fish
+    requests:
+      list_fish:
+        $ref: "#/.base"
+        name: List Fish
+        method: GET
+        url: "{{ host }}/fish.json"
+        query:
+          big: "true"
+          say: "{{ greeting }}"
+      create_fish:
+        $ref: "#/.base"
+        name: Create Fish
+        method: POST
+        url: "{{ host }}/fish.json"
+        body:
+          type: json
+          data: { "name": "Barry", "says": "{{ greeting }}" }
+  health:
+    name: Health
+    url: "{{ host }}/health.json"

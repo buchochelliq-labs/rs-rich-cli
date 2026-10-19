@@ -18,6 +18,11 @@ Ctrl+C stops cleanly. See [the tour instructions](cli.md#take-the-guided-tour).
 [Cast](media/tapes/tour/tour.cast) · [GIF](media/tapes/tour/tour.gif) ·
 [Tape](tapes/tour.tape)
 
+For terminal apps built on intuiTUIve, see
+[Eleven apps, rebuilt](guide/intuituive/clones.md): recordings of the file
+manager, git client, system monitor, HTTP client, game, CSV viewer, disk
+treemap, music player and task list, rebuilt from real terminal apps.
+
 This recording runs `rich --demo --demo-delay 1.5` in a real terminal, faster
 than the default three-second pace. It is a [tape](recordings.md#how-it-works)
 recorded by `rich record`, so it is replayed from the build in this repository

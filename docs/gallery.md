@@ -180,7 +180,9 @@ code.
 
 ![The scope example, scope-tui rebuilt: a Lissajous figure in the vectorscope](media/tapes/scope/vectorscope.png)
 
-[Terminal apps guide](guide/intuituive/index.md) · [A game, played with held keys](recordings.md#a-game-played-with-held-keys), [a file manager](recordings.md#a-file-manager) and [an oscilloscope](recordings.md#an-oscilloscope) recordings
+![A gitui-style git client on intuiTUIve: the log with a branch and a tag](media/tapes/git/log.png)
+
+[Terminal apps guide](guide/intuituive/index.md) · [A game, played with held keys](recordings.md#a-game-played-with-held-keys), [a file manager](recordings.md#a-file-manager) and [an oscilloscope](recordings.md#an-oscilloscope) recordings · [Eleven apps, rebuilt](guide/intuituive/clones.md): real terminal apps cloned on intuiTUIve
 
 ### CLI viewers
 

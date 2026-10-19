@@ -1,0 +1,28 @@
+ Tasks   Projects   Timesheet   Calendar                                                           next [none]
+  ID Active Age P Project Tag    Due Description                                                         Urg
+• 2  2h     10d   work    next   5d  Write the quarterly report                                          27.14
+  3         5d    work    review -1d Review pull requests [1]                                            12.11
+  6         2h  M         phone      Call the plumber                                                    4.70
+
+
+
+
+
+
+
+
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────
+Name          Value                                                                                          ┃
+ID            2                                                                                              ┃
+Description   Write the quarterly report                                                                     ┃
+Status        Pending                                                                                        ┃
+Project       work                                                                                           ┃
+Entered       YYYY-MM-DD hh:mm:ss (10d)                                                                      ┃
+Start         YYYY-MM-DD hh:mm:ss                                                                            ┃
+Due           YYYY-MM-DD hh:mm:ss                                                                            │
+Last modified YYYY-MM-DD hh:mm:ss (10d)                                                                      │
+Tags          next                                                                                           │
+Virtual tags  ACTIVE DUE PENDING PROJECT READY TAGGED UNBLOCKED                                              │
+UUID          5e1f0c2a-0000-4000-8000-000000000002                                                           │
+Filter Tasks
+status:pending  project:work or +phone
