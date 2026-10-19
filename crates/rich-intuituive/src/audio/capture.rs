@@ -29,7 +29,7 @@ pub enum Host {
 }
 
 impl Host {
-    fn open(self) -> Result<cpal::Host, AudioError> {
+    pub(super) fn open(self) -> Result<cpal::Host, AudioError> {
         match self {
             Host::Default => Ok(cpal::default_host()),
             #[cfg(target_os = "linux")]
@@ -172,7 +172,7 @@ pub fn devices_on(host: Host) -> Result<Vec<Device>, AudioError> {
 }
 
 /// A device's id without its host's prefix.
-fn id_of(device: &cpal::Device) -> Option<String> {
+pub(super) fn id_of(device: &cpal::Device) -> Option<String> {
     device.id().ok().map(|id| id.id().to_string())
 }
 
@@ -340,12 +340,12 @@ pub fn messages() -> Vec<String> {
 
 /// While it lives, ALSA's messages on this thread are kept off stderr.
 #[cfg(target_os = "linux")]
-fn quiet() -> super::alsa::Quiet {
+pub(super) fn quiet() -> super::alsa::Quiet {
     super::alsa::Quiet::new()
 }
 
 #[cfg(not(target_os = "linux"))]
-fn quiet() {}
+pub(super) fn quiet() {}
 
 /// Keep `stream` until the capture stops (or its app ends), passing
 /// ALSA's messages on a few times a second.

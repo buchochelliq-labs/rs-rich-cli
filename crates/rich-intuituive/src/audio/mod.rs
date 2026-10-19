@@ -79,9 +79,13 @@ mod alsa;
 #[cfg(feature = "audio")]
 mod capture;
 mod live;
+#[cfg(feature = "audio")]
+mod output;
 mod pcm;
 #[cfg(feature = "audio")]
 mod picker;
+mod player;
+mod source;
 #[cfg(feature = "wav")]
 mod wav;
 
@@ -90,9 +94,13 @@ pub use capture::{
     devices, devices_on, input, messages, open, AudioOptions, Device, DeviceConfig, Host,
 };
 pub use live::Capture;
+#[cfg(feature = "audio")]
+pub use output::{output, output_devices, Output, OutputOptions};
 pub use pcm::{deinterleave, pcm, play, Format, Pcm};
 #[cfg(feature = "audio")]
 pub use picker::picker;
+pub use player::{player, Player, PlayerOptions};
+pub use source::{clip, open_source, Clip, Source};
 #[cfg(feature = "wav")]
 pub use wav::{record, wav, wav_writer, Recording, Wav, WavWriter};
 

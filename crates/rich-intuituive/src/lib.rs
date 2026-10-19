@@ -129,6 +129,7 @@ mod table_scroll;
 pub mod task;
 pub mod testing;
 mod text_area;
+pub mod transport;
 mod tree;
 #[cfg(feature = "viz")]
 mod viz;
@@ -198,6 +199,7 @@ pub use task::{
     Latest, Load, Notifier, Resource, Stream, Task,
 };
 pub use text_area::Caret;
+pub use transport::{transport, Transport};
 #[cfg(feature = "viz")]
 pub use viz::{
     bar_spectrum, bar_spectrum_with, meter, meter_with, persistence, persistence_with, sparkline,
