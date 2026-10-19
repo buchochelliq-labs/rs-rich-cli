@@ -279,7 +279,10 @@ fn the_search_reads_bottoms_queries() {
         text: "cpu > lots".into(),
         ..Query::default()
     };
-    assert_eq!(bad.error().as_deref(), Some("Invalid number: lots"));
+    assert_eq!(
+        bad.error().as_deref(),
+        Some("`lots` is not a number for `cpu`")
+    );
     assert!(
         all.iter().all(|p| bad.matches(p, false)),
         "a bad query hides nothing"
@@ -520,7 +523,7 @@ fn the_search_filters_as_it_is_typed_and_keeps_its_filter() {
     assert_eq!(names(&d).len(), 2);
     d.press("ctrl+u");
     d.type_text("cpu > lots");
-    assert!(has(&d, "Invalid number: lots"));
+    assert!(has(&d, "`lots` is not a number for `cpu`"));
     d.press("ctrl+u");
     d.type_text("cpu > 20");
     assert_eq!(names(&d), ["cargo", "rustc"]);

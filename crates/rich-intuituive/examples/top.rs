@@ -21,12 +21,17 @@
 //! sizes, `kill` to send a signal), behind the [`Source`] trait, so the
 //! tests feed it samples of their own.
 //!
+//! On intuiTUIve's components: widgets are focus scopes moved between by
+//! `bind_directional_focus`; expanding hides the others (`shown_when`);
+//! the process table's titles follow the view (`columns_with`), its
+//! columns drop by `priority`; the search is a `query` grammar; the sort
+//! menu and the search box take the focus with `focus_within`.
+//!
 //! q quits · ? help · e expands the selected widget · ctrl or shift+arrows
 //! (or H J K L, A S W D) move between widgets · + - = zoom the graphs ·
 //! f freezes · ctrl+r resets · in the processes: c m p n sort, s the sort
 //! menu, / or ctrl+f searches, t the tree, tab groups, dd or F9 kills.
 
-use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet, HashMap, VecDeque};
 use std::rc::Rc;
 use std::sync::{Arc, Mutex};
@@ -34,10 +39,14 @@ use std::time::{Duration, Instant};
 
 use intuituive::interact::MouseKind;
 use intuituive::prelude::*;
+use intuituive::query::{
+    self, Grammar, Kind as FieldKind, Matcher, QueryError, Record, TextMatch, Value,
+};
+use intuituive::reactive::NodeId;
 use intuituive::rich::markup::escape;
 use intuituive::rich::Style;
-use intuituive::widgets::{table_with, Column, Order, TableOptions};
-use intuituive::{Level, RectHandle};
+use intuituive::widgets::{table_with, Column, Order, TableLayout, TableOptions};
+use intuituive::Level;
 use rich_ext::chart::{Axis, Chart, Dataset, GraphType, Labels, LegendPosition, Marker};
 
 // ---------------------------------------------------------------------------
@@ -704,29 +713,32 @@ pub struct Query {
     pub regex: bool,
 }
 
-#[derive(Clone, Debug, PartialEq)]
-enum Cond {
-    Name(String),
-    Num(&'static str, &'static str, f64),
-    Text(&'static str, String),
-    Not(Box<Cond>),
-}
+/// A process as the search reads it: its fields by bottom's keywords,
+/// and its name (or with `P`, its command) as its text.
+struct Searched<'a>(&'a Proc, bool);
 
-const OPS: [&str; 6] = [">=", "<=", "!=", "=", ">", "<"];
+impl Record for Searched<'_> {
+    fn field(&self, name: &str) -> Option<Value> {
+        let p = self.0;
+        Some(match name {
+            "pid" => Value::Number(p.pid as f64),
+            "cpu" => Value::Number(p.cpu),
+            "mem" => Value::Number(p.mem_percent),
+            "memb" => Value::Number(p.mem as f64),
+            "read" => Value::Number(p.read as f64),
+            "write" => Value::Number(p.write as f64),
+            "user" => Value::from(p.user.as_str()),
+            "state" => Value::from(p.state.as_str()),
+            _ => return None,
+        })
+    }
 
-/// A keyword bottom's search knows, by its canonical name.
-fn keyword(word: &str) -> Option<&'static str> {
-    Some(match word.to_lowercase().as_str() {
-        "pid" => "pid",
-        "cpu" | "cpu%" => "cpu",
-        "mem" | "mem%" => "mem",
-        "memb" => "memb",
-        "read" | "r/s" | "rps" => "read",
-        "write" | "w/s" | "wps" => "write",
-        "user" => "user",
-        "state" => "state",
-        _ => return None,
-    })
+    fn text(&self) -> String {
+        match self.1 {
+            true => self.0.command.clone(),
+            false => self.0.name.clone(),
+        }
+    }
 }
 
 fn unit_bytes(value: f64, unit: &str) -> f64 {
@@ -744,129 +756,95 @@ fn unit_bytes(value: f64, unit: &str) -> f64 {
     value * scale
 }
 
+/// A number of bytes, with a unit or without: `1gib`, `500kb`, `4096`.
+fn bytes(text: &str) -> Option<Value> {
+    let at = text.find(|c: char| c.is_alphabetic()).unwrap_or(text.len());
+    let (number, unit) = text.split_at(at);
+    let number: f64 = number.parse().ok()?;
+    (unit.is_empty() || unit_bytes(1.0, unit) != 1.0)
+        .then(|| Value::Number(unit_bytes(number, unit)))
+}
+
+/// Whether `word` is a whole word of `text`.
+fn whole_word(text: &str, word: &str, case: bool) -> bool {
+    let fold = |t: &str| {
+        if case {
+            t.to_string()
+        } else {
+            t.to_lowercase()
+        }
+    };
+    let (text, word) = (fold(text), fold(word));
+    text.split(|c: char| !c.is_alphanumeric() && c != '_' && c != '-')
+        .any(|w| w == word)
+}
+
 impl Query {
-    /// The query as alternatives (`or`) of conditions (`and`, or a space).
-    fn parse(&self) -> Result<Vec<Vec<Cond>>, String> {
-        let spaced = OPS.iter().fold(self.text.clone(), |t, op| {
-            t.replace(op, &format!(" {} ", op.replace('=', "\u{1}")))
-        });
-        let words: Vec<String> = spaced
-            .replace('\u{1}', "=")
-            .split_whitespace()
-            .map(String::from)
-            .collect();
-        let mut alternatives = vec![Vec::new()];
-        let mut i = 0;
-        while i < words.len() {
-            let word = &words[i];
-            match word.to_lowercase().as_str() {
-                "or" | "||" => alternatives.push(Vec::new()),
-                "and" | "&&" => {}
-                _ => {
-                    let (negate, word) = match word.strip_prefix('!') {
-                        Some(rest) => (true, rest.to_string()),
-                        None => (false, word.clone()),
-                    };
-                    let cond = match keyword(&word) {
-                        Some(key)
-                            if words.get(i + 1).is_some_and(|w| OPS.contains(&w.as_str())) =>
-                        {
-                            let op = OPS.iter().find(|o| **o == words[i + 1]).copied().unwrap();
-                            let value = words
-                                .get(i + 2)
-                                .ok_or(format!("Missing value after {key}"))?;
-                            i += 2;
-                            if matches!(key, "user" | "state") {
-                                Cond::Text(key, value.clone())
-                            } else {
-                                let number: f64 = value
-                                    .parse()
-                                    .map_err(|_| format!("Invalid number: {value}"))?;
-                                let unit = words.get(i + 1).filter(|u| unit_bytes(1.0, u) != 1.0);
-                                let number = match unit {
-                                    Some(unit) => {
-                                        i += 1;
-                                        unit_bytes(number, unit)
-                                    }
-                                    None => number,
-                                };
-                                Cond::Num(key, op, number)
-                            }
-                        }
-                        _ => Cond::Name(word.trim_matches('"').to_string()),
-                    };
-                    let last = alternatives.last_mut().expect("an alternative");
-                    last.push(if negate {
-                        Cond::Not(Box::new(cond))
-                    } else {
-                        cond
-                    });
+    /// bottom's search as a grammar: its keywords as fields, sizes with
+    /// units, and bare words matching the name (whole words with Alt+W).
+    fn grammar(&self) -> Grammar {
+        let grammar = Grammar::new()
+            .field("pid", FieldKind::Number)
+            .field("cpu", FieldKind::Number)
+            .alias("cpu%", "cpu")
+            .field("mem", FieldKind::Number)
+            .alias("mem%", "mem")
+            .field("memb", FieldKind::Number)
+            .read(bytes)
+            .field("read", FieldKind::Number)
+            .read(bytes)
+            .alias("r/s", "read")
+            .alias("rps", "read")
+            .field("write", FieldKind::Number)
+            .read(bytes)
+            .alias("w/s", "write")
+            .alias("wps", "write")
+            .field("user", FieldKind::Text)
+            .matching(TextMatch::Contains)
+            .field("state", FieldKind::Text)
+            .matching(TextMatch::Contains)
+            .case_sensitive(self.case)
+            .without_tags();
+        if !self.whole {
+            return grammar;
+        }
+        let case = self.case;
+        grammar.words(move |word| {
+            let word = word.to_string();
+            let matcher: Matcher =
+                Rc::new(move |p: &dyn Record| whole_word(&p.text(), &word, case));
+            Some(matcher)
+        })
+    }
+
+    /// The query read, a unit after a number joined to it (`1 gib`) and
+    /// `&&` and `||` read as `and` and `or`.
+    fn parsed(&self) -> Result<query::Query, QueryError> {
+        let mut words: Vec<String> = Vec::new();
+        for word in self.text.split_whitespace() {
+            match words.last_mut() {
+                Some(last) if unit_bytes(1.0, word) != 1.0 && last.parse::<f64>().is_ok() => {
+                    last.push_str(word)
                 }
-            }
-            i += 1;
-        }
-        Ok(alternatives)
-    }
-
-    fn text_matches(&self, haystack: &str, needle: &str) -> bool {
-        let (h, n) = if self.case {
-            (haystack.to_string(), needle.to_string())
-        } else {
-            (haystack.to_lowercase(), needle.to_lowercase())
-        };
-        if self.whole {
-            h.split(|c: char| !c.is_alphanumeric() && c != '_' && c != '-')
-                .any(|w| w == n)
-        } else {
-            h.contains(&n)
-        }
-    }
-
-    fn holds(&self, cond: &Cond, p: &Proc, command: bool) -> bool {
-        match cond {
-            Cond::Not(c) => !self.holds(c, p, command),
-            Cond::Name(n) => self.text_matches(if command { &p.command } else { &p.name }, n),
-            Cond::Text(key, value) => {
-                let field = if *key == "user" { &p.user } else { &p.state };
-                self.text_matches(field, value)
-            }
-            Cond::Num(key, op, value) => {
-                let have = match *key {
-                    "pid" => p.pid as f64,
-                    "cpu" => p.cpu,
-                    "mem" => p.mem_percent,
-                    "memb" => p.mem as f64,
-                    "read" => p.read as f64,
-                    _ => p.write as f64,
-                };
-                match *op {
-                    ">=" => have >= *value,
-                    "<=" => have <= *value,
-                    "!=" => have != *value,
-                    "=" => have == *value,
-                    ">" => have > *value,
-                    _ => have < *value,
-                }
+                _ => words.push(match word {
+                    "&&" => "and".into(),
+                    "||" => "or".into(),
+                    word => word.into(),
+                }),
             }
         }
+        query::parse(&words.join(" "), &self.grammar())
     }
 
-    /// Whether `p` is shown, and the parse error when the query has one
-    /// (every process is shown then, as bottom does).
+    /// Whether `p` is shown: every process when the query has an error,
+    /// as bottom does.
     pub fn matches(&self, p: &Proc, command: bool) -> bool {
-        match self.parse() {
-            Ok(alternatives) => alternatives
-                .iter()
-                .filter(|a| !a.is_empty())
-                .map(|a| a.iter().all(|c| self.holds(c, p, command)))
-                .reduce(|a, b| a || b)
-                .unwrap_or(true),
-            Err(_) => true,
-        }
+        self.parsed()
+            .map_or(true, |q| q.matches(&Searched(p, command)))
     }
 
     pub fn error(&self) -> Option<String> {
-        self.parse().err()
+        self.parsed().err().map(|e| e.message)
     }
 }
 
@@ -951,8 +929,14 @@ pub fn proc_rows(
     collapsed: &BTreeSet<u32>,
 ) -> Vec<ProcRow> {
     let kept = |p: &Proc| !(view.hide_kernel && p.kernel);
+    let query = query.parsed().ok();
+    let found = |p: &Proc| {
+        query
+            .as_ref()
+            .is_none_or(|q| q.matches(&Searched(p, view.command)))
+    };
     let shown: Vec<Proc> = (procs.iter())
-        .filter(|p| kept(p) && query.matches(p, view.command))
+        .filter(|p| kept(p) && found(p))
         .cloned()
         .collect();
     if view.tree {
@@ -1251,8 +1235,7 @@ const TX_COLOUR: &str = "bright_yellow";
 const TEXT: &str = "white";
 const HIGHLIGHT: &str = "bright_blue";
 
-/// The state the widgets share: every widget is a view of these signals,
-/// so the expanded view and the dashboard show the same thing.
+/// The state the widgets share: every widget is a view of these signals.
 #[derive(Clone, Copy)]
 struct State {
     options: Signal<Options>,
@@ -1264,7 +1247,9 @@ struct State {
     mem_window: Signal<u64>,
     net_window: Signal<u64>,
     cpu_selected: Signal<usize>,
+    /// How the processes show; their sort is `proc_sort`, the table's.
     proc_view: Signal<ProcView>,
+    proc_sort: Signal<Option<(usize, Order)>>,
     proc_selected: Signal<usize>,
     collapsed: Signal<BTreeSet<u32>>,
     query: Signal<String>,
@@ -1290,211 +1275,34 @@ impl State {
             regex,
         }
     }
-}
 
-/// Where each widget's focusable node is, and its id, by a name: the
-/// directional moves read the rectangles, and a node a `switch` is about
-/// to build is focused once it is drawn.
-#[derive(Clone)]
-struct Places {
-    nodes: Slots,
-    /// The node to focus as soon as it is drawn.
-    pending: Signal<Option<String>>,
-}
-
-type NodeIdOf = u64;
-/// Each name's node id (once built) and rectangle.
-type Slots = Rc<RefCell<HashMap<String, (Option<NodeIdOf>, RectHandle)>>>;
-/// A rectangle as `(x, y, width, height)`.
-type Area = (u16, u16, u16, u16);
-
-impl Places {
-    /// Call while the app is built: the watch that focuses a pending node
-    /// once its rectangle is known.
-    fn new() -> Places {
-        let places = Places {
-            nodes: Rc::default(),
-            pending: signal(None),
-        };
-        let at = places.clone();
-        let to = places.clone();
-        watch(
-            move || {
-                let key = at.pending.get()?;
-                at.handle(&key).get().map(|_| key)
-            },
-            move |key, cx| {
-                if let Some(id) = key.and_then(|key| to.id(&key)) {
-                    cx.focus(id);
-                    to.pending.set(None);
-                }
-            },
-        );
-        places
-    }
-
-    fn handle(&self, key: &str) -> RectHandle {
-        let mut nodes = self.nodes.borrow_mut();
-        let entry = nodes
-            .entry(key.to_string())
-            .or_insert_with(|| (None, RectHandle::new()));
-        entry.1
-    }
-
-    fn put(&self, key: String, node: Node) -> Node {
-        let handle = self.handle(&key);
-        if let Some(entry) = self.nodes.borrow_mut().get_mut(&key) {
-            entry.0 = Some(node.id());
-        }
-        node.rect_into(&handle)
-    }
-
-    fn id(&self, key: &str) -> Option<NodeIdOf> {
-        self.nodes.borrow().get(key).and_then(|(id, _)| *id)
-    }
-
-    fn rect(&self, key: &str) -> Option<Area> {
-        let nodes = self.nodes.borrow();
-        let r = nodes.get(key)?.1.get_untracked()?;
-        Some((r.x, r.y, r.width, r.height))
-    }
-
-    /// Focus `key`'s node once it is drawn: a `switch` builds it after the
-    /// handler that shows it returns.
-    fn focus_soon(&self, key: String) {
-        self.pending.set(Some(key));
+    /// Whether a widget of `kinds` shows: all do, unless another is
+    /// expanded.
+    fn shows(self, kinds: &'static [Kind]) -> impl Fn() -> bool {
+        move || self.expanded.get().is_none_or(|k| kinds.contains(&k))
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
-enum Dir {
-    Left,
-    Right,
-    Up,
-    Down,
-}
-
-/// The widget nearest `from` in `dir`: one that overlaps it across the
-/// move if any does, the closest first. bottom works this out from its
-/// layout tree; here it is from where each widget was drawn.
-fn neighbour(from: (u16, u16, u16, u16), dir: Dir, others: &[(Kind, Area)]) -> Option<Kind> {
-    let (x, y, w, h) = from;
-    let (x, y, w, h) = (x as i32, y as i32, w as i32, h as i32);
-    others
-        .iter()
-        .filter_map(|&(kind, (ox, oy, ow, oh))| {
-            let (ox, oy, ow, oh) = (ox as i32, oy as i32, ow as i32, oh as i32);
-            let (gap, overlap) = match dir {
-                Dir::Left => (x - (ox + ow), (y + h).min(oy + oh) - y.max(oy)),
-                Dir::Right => (ox - (x + w), (y + h).min(oy + oh) - y.max(oy)),
-                Dir::Up => (y - (oy + oh), (x + w).min(ox + ow) - x.max(ox)),
-                Dir::Down => (oy - (y + h), (x + w).min(ox + ow) - x.max(ox)),
-            };
-            (gap >= -1).then_some((overlap <= 0, gap, -overlap, kind))
-        })
-        .min()
-        .map(|(_, _, _, kind)| kind)
-}
-
-/// The name a widget's focusable node is kept under: the process table's
-/// with its titles, as each set of titles is a table of its own.
-fn place_key(state: State, prefix: &str, kind: Kind) -> String {
-    match kind {
-        Kind::Proc => {
-            let titles = state.proc_view.with_untracked(|v| v.titles().join(","));
-            format!("{prefix}/Proc/{titles}")
-        }
-        kind => format!("{prefix}/{kind:?}"),
-    }
-}
-
-/// Move the focus from `kind` to its neighbour in `dir`, as bottom's
-/// ctrl+arrows do. Nothing moves while a widget is expanded.
-fn move_focus(cx: &mut Ctx, places: &Places, state: State, kind: Kind, dir: Dir) {
-    if state.expanded.get_untracked().is_some() {
-        return;
-    }
-    let rects: Vec<(Kind, Area)> = [
-        Kind::Cpu,
-        Kind::CpuLegend,
-        Kind::Mem,
-        Kind::Temp,
-        Kind::Disk,
-        Kind::Net,
-        Kind::Proc,
-    ]
-    .into_iter()
-    .filter(|k| *k != kind)
-    .filter_map(|k| Some((k, places.rect(&place_key(state, "dash", k))?)))
-    .collect();
-    let Some(from) = places.rect(&place_key(state, "dash", kind)) else {
-        return;
-    };
-    if let Some(to) = neighbour(from, dir, &rects) {
-        if let Some(id) = places.id(&place_key(state, "dash", to)) {
-            cx.focus(id);
-        }
-    }
-}
-
-/// The keys every widget of the dashboard takes: moving to a neighbour,
-/// expanding, and, on a graph, zooming its window.
-fn widget_keys(
-    node: Node,
-    places: &Places,
-    state: State,
-    kind: Kind,
-    window: Option<Signal<u64>>,
-) -> Node {
+/// The keys every widget of the dashboard takes: expanding, and, on a
+/// graph, zooming its window. Each widget is a focus scope, so the
+/// dashboard's directional keys move between widgets.
+fn widget_keys(node: Node, state: State, kind: Kind, window: Option<Signal<u64>>) -> Node {
     // Basic mode has no expanding, and its arrows move between tables.
     if state.options.get_untracked().basic {
         return node;
     }
-    let mv = |dir: Dir| {
-        let places = places.clone();
-        move |cx: &mut Ctx| move_focus(cx, &places, state, kind, dir)
-    };
-    let expand = {
-        let places = places.clone();
-        move |_: &mut Ctx| {
-            if state.expanded.get_untracked().is_some() {
-                state.expanded.set(None);
-                places.focus_soon(place_key(state, "dash", kind));
-            } else {
-                state.expanded.set(Some(kind));
-                places.focus_soon(place_key(state, "expanded", kind));
-            }
-        }
-    };
-    // The widget's container sees these first: a table takes Shift+↑ as
-    // ↑ otherwise.
-    let node = node
-        .previews_keys()
-        .bind(
-            "ctrl+left shift+left H A",
-            "Move widget selection left",
-            mv(Dir::Left),
-        )
-        .bind(
-            "ctrl+right shift+right L D",
-            "Move widget selection right",
-            mv(Dir::Right),
-        )
-        .bind(
-            "ctrl+up shift+up K W",
-            "Move widget selection up",
-            mv(Dir::Up),
-        )
-        .bind(
-            "ctrl+down shift+down J S",
-            "Move widget selection down",
-            mv(Dir::Down),
-        )
-        .bind(
-            "e",
-            "Toggle expanding the currently selected widget",
-            expand,
-        );
+    let node = node.focus_scope().bind(
+        "e",
+        "Toggle expanding the currently selected widget",
+        move |_| {
+            state.expanded.update(|e| {
+                *e = match e {
+                    Some(_) => None,
+                    None => Some(kind),
+                }
+            })
+        },
+    );
     match window {
         Some(window) => {
             let zoom_in =
@@ -1674,45 +1482,35 @@ fn proc_default_order(column: usize) -> Order {
 }
 
 fn proc_sort(state: State, column: usize) {
-    state.proc_view.update(|v| {
-        v.sort = match v.sort {
-            Some((c, order)) if c == column => Some((
-                column,
-                if order == Order::Ascending {
-                    Order::Descending
-                } else {
-                    Order::Ascending
-                },
-            )),
-            _ => Some((column, proc_default_order(column))),
-        }
-    })
+    sort_by(state.proc_sort, column, proc_default_order(column))
 }
 
 /// The panel every widget sits in: bottom's plain border, its title at
 /// the left and, expanded, `Esc to go back` at the right.
-fn boxed(node: Node, title: &str, expanded: bool) -> Node {
-    let node = node.panel(title).border(Border::Plain);
-    if expanded {
-        node.title_right("Esc to go back")
-    } else {
-        node
-    }
+fn boxed(node: Node, title: &str, kind: Kind, state: State) -> Node {
+    node.panel(title)
+        .border(Border::Plain)
+        .add_title_with(Edge::Top, Align::End, move || {
+            match state.expanded.get() == Some(kind) {
+                true => "Esc to go back".into(),
+                false => String::new(),
+            }
+        })
 }
 
-/// The CPU graph.
-fn cpu_graph(state: State, places: &Places, prefix: &str) -> Node {
+/// The CPU graph, its title with the load averages.
+fn cpu_graph(state: State) -> Node {
     let graph = renderable(move || cpu_chart(state)).focusable().name("cpu");
     let graph = wheel_zoom(graph, state.cpu_window);
-    let graph = places.put(format!("{prefix}/{:?}", Kind::Cpu), graph);
-    // bottom's title carries the load average (`CPU ─ 0.52 0.48 0.40`), but
-    // a panel's titles are fixed when it is built.
-    let node = boxed(graph, "CPU", prefix == "expanded");
-    widget_keys(node, places, state, Kind::Cpu, Some(state.cpu_window))
+    let node = boxed(graph, "CPU", Kind::Cpu, state).title_with(move || {
+        let [one, five, fifteen] = state.shown.with(|s| s.load);
+        format!("CPU ─ {one:.2} {five:.2} {fifteen:.2}")
+    });
+    widget_keys(node, state, Kind::Cpu, Some(state.cpu_window))
 }
 
 /// The CPU legend: `All`, `AVG`, then each core, with its use.
-fn cpu_legend(state: State, places: &Places, prefix: &str) -> Node {
+fn cpu_legend(state: State) -> Node {
     let columns = vec![
         Column::new("CPU", Size::Auto),
         Column::new("Use", Size::Auto).align(Align::End),
@@ -1735,32 +1533,29 @@ fn cpu_legend(state: State, places: &Places, prefix: &str) -> Node {
         })
     });
     let table = table_with(columns, rows, state.cpu_selected, options).name("cpu legend");
-    let table = places.put(format!("{prefix}/{:?}", Kind::CpuLegend), table);
-    let node = boxed(table, "", prefix == "expanded");
-    widget_keys(node, places, state, Kind::CpuLegend, None)
+    let node = boxed(table, "", Kind::CpuLegend, state);
+    widget_keys(node, state, Kind::CpuLegend, None)
 }
 
-fn mem_graph(state: State, places: &Places, prefix: &str) -> Node {
+fn mem_graph(state: State) -> Node {
     let graph = renderable(move || mem_chart(state))
         .focusable()
         .name("memory");
     let graph = wheel_zoom(graph, state.mem_window);
-    let graph = places.put(format!("{prefix}/{:?}", Kind::Mem), graph);
-    let node = boxed(graph, "Memory", prefix == "expanded");
-    widget_keys(node, places, state, Kind::Mem, Some(state.mem_window))
+    let node = boxed(graph, "Memory", Kind::Mem, state);
+    widget_keys(node, state, Kind::Mem, Some(state.mem_window))
 }
 
-fn net_graph(state: State, places: &Places, prefix: &str) -> Node {
+fn net_graph(state: State) -> Node {
     let graph = renderable(move || net_chart(state))
         .focusable()
         .name("network");
     let graph = wheel_zoom(graph, state.net_window);
-    let graph = places.put(format!("{prefix}/{:?}", Kind::Net), graph);
-    let node = boxed(graph, "Network", prefix == "expanded");
-    widget_keys(node, places, state, Kind::Net, Some(state.net_window))
+    let node = boxed(graph, "Network", Kind::Net, state);
+    widget_keys(node, state, Kind::Net, Some(state.net_window))
 }
 
-fn temp_table(state: State, places: &Places, prefix: &str) -> Node {
+fn temp_table(state: State) -> Node {
     let columns = vec![
         Column::new("Sensor", Size::Flex(1)),
         Column::new("Temp", Size::Auto).align(Align::End),
@@ -1776,7 +1571,6 @@ fn temp_table(state: State, places: &Places, prefix: &str) -> Node {
         TableOptions::default().sort(state.temp_sort),
     )
     .name("temperatures");
-    let table = places.put(format!("{prefix}/{:?}", Kind::Temp), table);
     let keys = column([table])
         .previews_keys()
         .bind(
@@ -1789,20 +1583,21 @@ fn temp_table(state: State, places: &Places, prefix: &str) -> Node {
             "Sort by temperature, press again to reverse",
             move |_| sort_by(state.temp_sort, 1, Order::Descending),
         );
-    let node = boxed(keys, "Temperatures", prefix == "expanded");
-    widget_keys(node, places, state, Kind::Temp, None)
+    let node = boxed(keys, "Temperatures", Kind::Temp, state);
+    widget_keys(node, state, Kind::Temp, None)
 }
 
-fn disk_table(state: State, places: &Places, prefix: &str) -> Node {
+fn disk_table(state: State) -> Node {
     let columns = DISK_COLUMNS
         .iter()
         .enumerate()
         .map(|(i, t)| {
+            // The rightmost go first when they do not fit, as bottom's.
             let c = Column::new(t, Size::Auto);
             if i >= 2 {
-                c.align(Align::End)
+                c.align(Align::End).priority((DISK_COLUMNS.len() - i) as u8)
             } else {
-                c
+                c.priority(u8::MAX)
             }
         })
         .collect();
@@ -1817,7 +1612,6 @@ fn disk_table(state: State, places: &Places, prefix: &str) -> Node {
         TableOptions::default().sort(state.disk_sort),
     )
     .name("disks");
-    let table = places.put(format!("{prefix}/{:?}", Kind::Disk), table);
     let mut keys = column([table]).previews_keys();
     let what = [
         ("d", "disk name", Order::Ascending),
@@ -1835,8 +1629,8 @@ fn disk_table(state: State, places: &Places, prefix: &str) -> Node {
             sort_by(state.disk_sort, column, order)
         });
     }
-    let node = boxed(keys, "Disks", prefix == "expanded");
-    widget_keys(node, places, state, Kind::Disk, None)
+    let node = boxed(keys, "Disks", Kind::Disk, state);
+    widget_keys(node, state, Kind::Disk, None)
 }
 
 /// bottom's signals on Linux, for the kill dialog.
@@ -2030,19 +1824,18 @@ fn help(cx: &mut Ctx) {
     });
 }
 
-/// The process table, as the view's titles name its columns. The titles
-/// change with grouping, `P` and `%`, and a table's columns are fixed, so
-/// each set of titles is a table of its own under a `switch`.
-fn proc_table(state: State, places: &Places, prefix: String) -> Node {
-    let key = move || state.proc_view.with(|v| v.titles());
-    let places = places.clone();
-    switch(key, move |titles: Vec<String>| {
-        let columns = (titles.iter().enumerate())
+/// The process table: its columns' titles follow the view (PID becomes
+/// Count when grouped, Name Command, Mem% Mem), and the rightmost go
+/// first when they do not fit, as bottom's do.
+fn proc_table(state: State, layout: &TableLayout) -> Node {
+    let columns = move || {
+        let titles = state.proc_view.with(|v| v.titles());
+        (titles.iter().enumerate())
             .map(|(i, t)| {
-                let c = if i == 1 {
-                    Column::new(t, Size::Flex(1)).min(16)
-                } else {
-                    Column::new(t, Size::Auto)
+                let c = match i {
+                    0 => Column::new(t, Size::Auto).priority(u8::MAX),
+                    1 => Column::new(t, Size::Flex(1)).min(16).priority(u8::MAX),
+                    i => Column::new(t, Size::Auto).priority((PROC_COLUMNS.len() - i) as u8),
                 };
                 if (2..8).contains(&i) {
                     c.align(Align::End)
@@ -2050,170 +1843,122 @@ fn proc_table(state: State, places: &Places, prefix: String) -> Node {
                     c
                 }
             })
-            .collect();
-        // The table's own sort signal mirrors the view's, so a click on a
-        // header sorts, and the header shows the arrow.
-        let sort = signal(state.proc_view.get_untracked().sort);
-        watch(
-            move || state.proc_view.with(|v| v.sort),
-            move |s, _| sort.set(s),
-        );
-        watch(
-            move || sort.get(),
-            move |s, _| state.proc_view.update(|v| v.sort = s),
-        );
-        let table = table_with(
-            columns,
-            move || {
-                state
-                    .rows
-                    .with(|rows| rows.iter().map(|r| r.cells.clone()).collect())
-            },
-            state.proc_selected,
-            TableOptions::default().sort(sort),
-        )
-        .name("processes");
-        // bottom starts on the processes.
-        let table = if prefix == "dash" {
-            table.autofocus()
-        } else {
-            table
+            .collect()
+    };
+    let rows = move || {
+        state
+            .rows
+            .with(|rows| rows.iter().map(|r| r.cells.clone()).collect())
+    };
+    let options = TableOptions::default()
+        .columns_with(columns)
+        .sort(state.proc_sort)
+        .layout(layout);
+    let table = table_with(Vec::new(), rows, state.proc_selected, options).name("processes");
+    // bottom starts on the processes.
+    if state.options.get_untracked().basic {
+        table
+    } else {
+        table.autofocus()
+    }
+}
+
+/// The sort menu at the left of the processes: `s` or F6. Closing it
+/// gives the focus back to `table`.
+fn sort_menu(state: State, table: NodeId) -> Node {
+    let names = move || state.proc_view.with(|v| v.titles());
+    let close = move |cx: &mut Ctx| {
+        state.sort_open.set(false);
+        cx.focus(table);
+    };
+    list(names, state.sort_selected)
+        .panel("Sort By")
+        .border(Border::Plain)
+        .on_key("esc", close)
+        .on_key("enter", move |cx| {
+            let column = state.sort_selected.get_untracked();
+            state
+                .proc_sort
+                .set(Some((column, proc_default_order(column))));
+            close(cx);
+        })
+        // bottom's is 11 wide, its title against the corner; a panel's
+        // title sits a glyph in, so two more.
+        .fixed(13)
+        .shown_when(move || state.sort_open.get())
+}
+
+/// The search box under the processes: `/` or ctrl+f. Closing it gives
+/// the focus back to `table`.
+fn search_box(state: State, table: NodeId) -> Node {
+    let field = input(state.query).name("search");
+    let options = text(move || {
+        let (case, whole, regex) = state.query_options.get();
+        let on = |b: bool, t: &str| {
+            if b {
+                format!("[black on {HIGHLIGHT}]{t}[/]")
+            } else {
+                t.to_string()
+            }
         };
-        let key = format!("{prefix}/Proc/{}", titles.join(","));
-        places.put(key, table)
-    })
-}
-
-/// The sort menu at the left of the processes: `s` or F6.
-fn sort_menu(state: State, places: &Places, prefix: String) -> Node {
-    let places = places.clone();
-    switch(
-        move || state.sort_open.get(),
-        move |open| {
-            if !open {
-                return column([]).fixed(0);
-            }
-            // Padded: an `.auto()` switch is as wide as its page's content,
-            // whatever size the page asks for.
-            let names = move || {
-                let titles = state.proc_view.with(|v| v.titles());
-                titles.iter().map(|t| format!("{t:<11}")).collect()
-            };
-            let menu = list(names, state.sort_selected);
-            let menu = places.put(format!("{prefix}/sort"), menu);
-            let close = {
-                let places = places.clone();
-                let prefix = prefix.clone();
-                move |_: &mut Ctx| {
-                    state.sort_open.set(false);
-                    places.focus_soon(place_key(state, &prefix, Kind::Proc));
-                }
-            };
-            let close_esc = close.clone();
-            let close_enter = close;
-            boxed(menu, "Sort By", false)
-                .on_key("esc", move |cx| close_esc(cx))
-                .on_key("enter", move |cx| {
-                    let column = state.sort_selected.get_untracked();
-                    state
-                        .proc_view
-                        .update(|v| v.sort = Some((column, proc_default_order(column))));
-                    close_enter(cx);
-                })
-                // bottom's is 11 wide, its title against the corner;
-                // a panel's title sits a glyph in, so two more.
-                .fixed(13)
-        },
-    )
-}
-
-/// The search box under the processes: `/` or ctrl+f.
-fn search_box(state: State, places: &Places, prefix: String) -> Node {
-    let places = places.clone();
-    switch(
-        move || state.search_open.get(),
-        move |open| {
-            if !open {
-                return column([]).fixed(0);
-            }
-            let field = input(state.query).name("search");
-            let field = places.put(format!("{prefix}/search"), field);
-            let options = text(move || {
-                let (case, whole, regex) = state.query_options.get();
-                let on = |b: bool, t: &str| {
-                    if b {
-                        format!("[black on {HIGHLIGHT}]{t}[/]")
-                    } else {
-                        t.to_string()
-                    }
-                };
-                format!(
-                    "{}  {}  {}",
-                    on(case, "Case(Alt+C)"),
-                    on(whole, "Whole(Alt+W)"),
-                    on(regex, "Regex(Alt+R)")
-                )
-            });
-            let error = text(move || match state.query().error() {
-                Some(e) => format!("[red]{}[/]", escape(&e)),
-                None => String::new(),
-            });
-            let toggle = |which: usize| {
-                move |_: &mut Ctx| {
-                    state.query_options.update(|o| match which {
-                        0 => o.0 = !o.0,
-                        1 => o.1 = !o.1,
-                        _ => o.2 = !o.2,
-                    })
-                }
-            };
-            let places = places.clone();
-            let prefix = prefix.clone();
-            column([
-                row([label(format!("[bold {HIGHLIGHT}]> [/]")).fixed(2), field]).fixed(1),
-                error.fixed(1),
-                options.fixed(1),
-            ])
-            .panel("")
-            .border(Border::Plain)
-            .title_right("Esc to close")
-            .on_key("alt+c f1", toggle(0))
-            .on_key("alt+w f2", toggle(1))
-            .on_key("alt+r f3", toggle(2))
-            .on_key("ctrl+u", move |_| state.query.set(String::new()))
-            .on_key("esc", move |_| {
-                state.search_open.set(false);
-                places.focus_soon(place_key(state, &prefix, Kind::Proc));
+        format!(
+            "{}  {}  {}",
+            on(case, "Case(Alt+C)"),
+            on(whole, "Whole(Alt+W)"),
+            on(regex, "Regex(Alt+R)")
+        )
+    });
+    let error = text(move || match state.query().error() {
+        Some(e) => format!("[red]{}[/]", escape(&e)),
+        None => String::new(),
+    });
+    let toggle = |which: usize| {
+        move |_: &mut Ctx| {
+            state.query_options.update(|o| match which {
+                0 => o.0 = !o.0,
+                1 => o.1 = !o.1,
+                _ => o.2 = !o.2,
             })
-            .fixed(5)
-        },
-    )
+        }
+    };
+    column([
+        row([label(format!("[bold {HIGHLIGHT}]> [/]")).fixed(2), field]).fixed(1),
+        error.fixed(1),
+        options.fixed(1),
+    ])
+    .panel("")
+    .border(Border::Plain)
+    .title_right("Esc to close")
+    .on_key("alt+c f1", toggle(0))
+    .on_key("alt+w f2", toggle(1))
+    .on_key("alt+r f3", toggle(2))
+    .on_key("ctrl+u", move |_| state.query.set(String::new()))
+    .on_key("esc", move |cx| {
+        state.search_open.set(false);
+        cx.focus(table);
+    })
+    .fixed(5)
+    .shown_when(move || state.search_open.get())
 }
 
 /// The process widget: the table, the sort menu at its left and the
 /// search under it, with the table's keys.
-fn proc_widget(
-    state: State,
-    places: &Places,
-    prefix: &str,
-    source: Arc<Mutex<Box<dyn Source>>>,
-) -> Node {
-    let table = proc_table(state, places, prefix.to_string());
-    let half_page = {
-        let places = places.clone();
-        let prefix = prefix.to_string();
-        move |sign: i64| {
-            let places = places.clone();
-            let prefix = prefix.clone();
-            move |_: &mut Ctx| {
-                let rows = places
-                    .rect(&place_key(state, &prefix, Kind::Proc))
-                    .map_or(10, |r| r.3.saturating_sub(1) / 2) as i64;
-                let len = state.rows.with_untracked(Vec::len) as i64;
-                state
-                    .proc_selected
-                    .update(|s| *s = (*s as i64 + sign * rows).clamp(0, (len - 1).max(0)) as usize);
-            }
+fn proc_widget(state: State, source: Arc<Mutex<Box<dyn Source>>>) -> Node {
+    let layout = TableLayout::new();
+    let table = proc_table(state, &layout);
+    let table_id = table.id();
+    let menu = sort_menu(state, table_id);
+    let menu_id = menu.id();
+    let search = search_box(state, table_id);
+    let search_id = search.id();
+    let half_page = move |sign: i64| {
+        let layout = layout.clone();
+        move |_: &mut Ctx| {
+            let rows = (layout.rows_in_view() / 2).max(1) as i64;
+            let len = state.rows.with_untracked(Vec::len) as i64;
+            state
+                .proc_selected
+                .update(|s| *s = (*s as i64 + sign * rows).clamp(0, (len - 1).max(0)) as usize);
         }
     };
     let tree = move || state.proc_view.with(|v| v.tree);
@@ -2239,25 +1984,15 @@ fn proc_widget(
             });
         }
     };
-    let open_search = {
-        let places = places.clone();
-        let prefix = prefix.to_string();
-        move |_: &mut Ctx| {
-            state.search_open.set(true);
-            places.focus_soon(format!("{prefix}/search"));
-        }
+    let open_search = move |cx: &mut Ctx| {
+        state.search_open.set(true);
+        cx.focus_within(search_id);
     };
-    let open_sort = {
-        let places = places.clone();
-        let prefix = prefix.to_string();
-        move |_: &mut Ctx| {
-            let at = state
-                .proc_view
-                .with_untracked(|v| v.sort.map_or(0, |s| s.0));
-            state.sort_selected.set(at);
-            state.sort_open.set(true);
-            places.focus_soon(format!("{prefix}/sort"));
-        }
+    let open_sort = move |cx: &mut Ctx| {
+        let at = state.proc_sort.with_untracked(|s| s.map_or(0, |s| s.0));
+        state.sort_selected.set(at);
+        state.sort_open.set(true);
+        cx.focus_within(menu_id);
     };
     let kill = {
         let source = source.clone();
@@ -2265,15 +2000,6 @@ fn proc_widget(
     };
     let kill_seq = kill.clone();
     let view = state.proc_view;
-    // A change of titles shows another table: the focus goes with it.
-    let retitle = |change: fn(&mut ProcView)| {
-        let places = places.clone();
-        let prefix = prefix.to_string();
-        move |_: &mut Ctx| {
-            view.update(change);
-            places.focus_soon(place_key(state, &prefix, Kind::Proc));
-        }
-    };
     let keyed = column([table])
         .previews_keys()
         .bind(
@@ -2295,37 +2021,35 @@ fn proc_widget(
             move |_| proc_sort(state, 1),
         )
         .bind("I", "Invert current sort", move |_| {
-            view.update(|v| {
-                if let Some((c, o)) = v.sort {
-                    v.sort = Some((
-                        c,
-                        if o == Order::Ascending {
-                            Order::Descending
-                        } else {
-                            Order::Ascending
-                        },
-                    ));
+            state.proc_sort.update(|s| {
+                if let Some((_, order)) = s {
+                    *order = match order {
+                        Order::Ascending => Order::Descending,
+                        Order::Descending => Order::Ascending,
+                    };
                 }
             })
         })
         .bind(
             "tab",
             "Group/un-group processes with the same name",
-            retitle(|v| {
-                if !v.tree {
-                    v.grouped = !v.grouped
-                }
-            }),
+            move |_| {
+                view.update(|v| {
+                    if !v.tree {
+                        v.grouped = !v.grouped
+                    }
+                })
+            },
         )
         .bind(
             "P",
             "Toggle between showing the full command or just the process name",
-            retitle(|v| v.command = !v.command),
+            move |_| view.update(|v| v.command = !v.command),
         )
         .bind(
             "percent",
             "Toggle between values and percentages for memory usage",
-            retitle(|v| v.mem_bytes = !v.mem_bytes),
+            move |_| view.update(|v| v.mem_bytes = !v.mem_bytes),
         )
         .bind("t f5", "Toggle tree mode", move |_| {
             view.update(|v| {
@@ -2359,52 +2083,54 @@ fn proc_widget(
                 toggle_branch(None),
             )
         });
-    let body = row([
-        sort_menu(state, places, prefix.to_string()).auto(),
-        keyed.flex(1),
-    ]);
-    let node = boxed(body, "Processes", prefix == "expanded");
-    let node = widget_keys(node, places, state, Kind::Proc, None);
-    column([
-        node.flex(1),
-        search_box(state, places, prefix.to_string()).auto(),
-    ])
+    let body = row([menu, keyed.flex(1)]);
+    let node = boxed(body, "Processes", Kind::Proc, state);
+    let node = column([node.flex(1), search]);
+    widget_keys(node, state, Kind::Proc, None)
 }
 
-/// One widget by its kind, in the dashboard or expanded.
-fn widget_of(
-    kind: Kind,
-    state: State,
-    places: &Places,
-    prefix: &str,
-    source: &Arc<Mutex<Box<dyn Source>>>,
-) -> Node {
+/// One widget by its kind.
+fn widget_of(kind: Kind, state: State, source: &Arc<Mutex<Box<dyn Source>>>) -> Node {
     match kind {
-        Kind::Cpu | Kind::CpuLegend => row([
-            cpu_graph(state, places, prefix).flex(1),
-            cpu_legend(state, places, prefix).percent(15),
-        ]),
-        Kind::Mem => mem_graph(state, places, prefix),
-        Kind::Temp => temp_table(state, places, prefix),
-        Kind::Disk => disk_table(state, places, prefix),
-        Kind::Net => net_graph(state, places, prefix),
-        Kind::Proc => proc_widget(state, places, prefix, source.clone()),
+        Kind::Cpu | Kind::CpuLegend => {
+            row([cpu_graph(state).flex(1), cpu_legend(state).percent(15)])
+        }
+        Kind::Mem => mem_graph(state),
+        Kind::Temp => temp_table(state),
+        Kind::Disk => disk_table(state),
+        Kind::Net => net_graph(state),
+        Kind::Proc => proc_widget(state, source.clone()),
     }
 }
 
 /// bottom's default layout: CPU on top, memory beside temperatures over
-/// disks, then network beside processes, in rows of 30, 40 and 30.
-fn dashboard(state: State, places: &Places, source: &Arc<Mutex<Box<dyn Source>>>) -> Node {
-    let w = |kind| widget_of(kind, state, places, "dash", source);
+/// disks, then network beside processes, in rows of 30, 40 and 30. An
+/// expanded widget hides the others, and so takes the screen.
+fn dashboard(state: State, source: &Arc<Mutex<Box<dyn Source>>>) -> Node {
+    let w = |kind: Kind, kinds: &'static [Kind]| {
+        widget_of(kind, state, source).shown_when(state.shows(kinds))
+    };
+    use Kind::*;
     column([
-        w(Kind::Cpu).flex(30),
+        w(Cpu, &[Cpu, CpuLegend]).flex(30),
         row([
-            w(Kind::Mem).flex(4),
-            column([w(Kind::Temp), w(Kind::Disk)]).flex(3),
+            w(Mem, &[Mem]).flex(4),
+            column([w(Temp, &[Temp]), w(Disk, &[Disk])])
+                .flex(3)
+                .shown_when(state.shows(&[Temp, Disk])),
         ])
-        .flex(40),
-        row([w(Kind::Net).flex(1), w(Kind::Proc).flex(1)]).flex(30),
+        .flex(40)
+        .shown_when(state.shows(&[Mem, Temp, Disk])),
+        row([w(Net, &[Net]).flex(1), w(Proc, &[Proc]).flex(1)])
+            .flex(30)
+            .shown_when(state.shows(&[Net, Proc])),
     ])
+    .bind_directional_focus(
+        "ctrl+left shift+left H A",
+        "ctrl+right shift+right L D",
+        "ctrl+up shift+up K W",
+        "ctrl+down shift+down J S",
+    )
 }
 
 /// An htop-style pipe gauge, as bottom's basic mode draws them:
@@ -2424,7 +2150,7 @@ pub fn pipe_gauge(label: &str, ratio: f64, inner: &str, width: usize, style: &st
 }
 
 /// bottom's basic mode: gauges instead of graphs, and one table at a time.
-fn basic(state: State, places: &Places, source: &Arc<Mutex<Box<dyn Source>>>) -> Node {
+fn basic(state: State, source: &Arc<Mutex<Box<dyn Source>>>) -> Node {
     let cpus = text(move || {
         let width = viewport().get().0 as usize;
         let per_row = if width >= 120 {
@@ -2521,31 +2247,34 @@ fn basic(state: State, places: &Places, source: &Arc<Mutex<Box<dyn Source>>>) ->
         Kind::Disk => "Disks",
         _ => "Processes",
     };
-    let arrows = text(move || {
-        let at = order
+    let at = move || {
+        order
             .iter()
             .position(|k| *k == state.basic_table.get())
-            .unwrap_or(0);
-        let left = at
-            .checked_sub(1)
-            .map(|i| format!("◄ {}", name(order[i])))
-            .unwrap_or_default();
-        let right = order
-            .get(at + 1)
-            .map(|k| format!("{} ►", name(*k)))
-            .unwrap_or_default();
-        let width = viewport().get().0 as usize;
-        let pad = width.saturating_sub(left.chars().count() + right.chars().count() + 2);
-        format!(" {left}{}{right}", " ".repeat(pad))
-    });
-    let places = places.clone();
+            .unwrap_or(0)
+    };
+    let arrows = row([
+        text(move || {
+            at().checked_sub(1)
+                .map(|i| format!("◄ {}", name(order[i])))
+                .unwrap_or_default()
+        }),
+        text(move || {
+            order
+                .get(at() + 1)
+                .map(|k| format!("{} ►", name(*k)))
+                .unwrap_or_default()
+        })
+        .auto(),
+    ])
+    .padding(0, 1);
     let source = source.clone();
     let tables = switch(
         move || state.basic_table.get(),
         move |kind| match kind {
-            Kind::Temp => temp_table(state, &places, "basic"),
-            Kind::Disk => disk_table(state, &places, "basic"),
-            _ => proc_widget(state, &places, "basic", source.clone()),
+            Kind::Temp => temp_table(state),
+            Kind::Disk => disk_table(state),
+            _ => proc_widget(state, source.clone()),
         },
     );
     column([
@@ -2570,6 +2299,7 @@ pub fn top_app(options: Options, source: Box<dyn Source>) -> App {
         let collapsed = signal(BTreeSet::new());
         let query = signal(String::new());
         let query_options = signal((false, false, false));
+        let proc_sort = signal(ProcView::default().sort);
         let rows = memo(move || {
             let (case, whole, regex) = query_options.get();
             let q = Query {
@@ -2578,7 +2308,10 @@ pub fn top_app(options: Options, source: Box<dyn Source>) -> App {
                 whole,
                 regex,
             };
-            let view = proc_view.get();
+            let view = ProcView {
+                sort: proc_sort.get(),
+                ..proc_view.get()
+            };
             collapsed.with(|c| shown.with(|s| proc_rows(&s.procs, &view, &q, c)))
         });
         let state = State {
@@ -2592,6 +2325,7 @@ pub fn top_app(options: Options, source: Box<dyn Source>) -> App {
             net_window: signal(options.default_time),
             cpu_selected: signal(0),
             proc_view,
+            proc_sort,
             proc_selected: signal(0),
             collapsed,
             query,
@@ -2622,44 +2356,19 @@ pub fn top_app(options: Options, source: Box<dyn Source>) -> App {
             }
         });
 
-        let places = Places::new();
         let body = if options.basic {
-            basic(state, &places, &source)
+            basic(state, &source)
         } else {
-            let places = places.clone();
-            let source = source.clone();
-            switch(
-                move || state.expanded.get(),
-                move |expanded| match expanded {
-                    None => dashboard(state, &places, &source),
-                    Some(kind) => widget_of(kind, state, &places, "expanded", &source),
-                },
-            )
+            dashboard(state, &source)
         };
-        let frozen = switch(
-            move || state.frozen.get(),
-            |frozen| {
-                if frozen {
-                    label(format!(
-                        "[black on {HIGHLIGHT}]Frozen, press 'f' to unfreeze[/]"
-                    ))
-                    .padding(0, 1)
-                    .fixed(1)
-                } else {
-                    column([]).fixed(0)
-                }
-            },
-        );
-        let back = {
-            let places = places.clone();
-            move |_: &mut Ctx| {
-                if let Some(kind) = state.expanded.get_untracked() {
-                    state.expanded.set(None);
-                    places.focus_soon(place_key(state, "dash", kind));
-                }
-            }
-        };
-        column([body.flex(1), frozen.auto()])
+        let frozen = label(format!(
+            "[black on {HIGHLIGHT}]Frozen, press 'f' to unfreeze[/]"
+        ))
+        .padding(0, 1)
+        .fixed(1)
+        .shown_when(move || state.frozen.get());
+        let back = move |_: &mut Ctx| state.expanded.set(None);
+        column([body.flex(1), frozen])
             .bind("q Q", "Quit", |cx| cx.quit())
             .bind("question", "Open help menu", help)
             .bind("f", "Freeze/unfreeze updating with new data", move |_| {

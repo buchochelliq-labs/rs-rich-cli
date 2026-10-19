@@ -156,3 +156,95 @@ place; ratatui's `Table` is immediate (csvlens draws its own `CsvTable`
 widget on a buffer, including the gutter and the joins). None of them reads a
 file lazily; csvlens's own `csv.rs` (a position table built on a thread, rows
 read by seeking) is the model the `data` plugin's source would follow.
+
+## Round 2: rebuilt on round 6
+
+`examples/csv.rs` went from 1,534 lines to 1,375 (tests 526, 14 tests and
+the hand-run measure, all passing; three expectations changed, below).
+
+### Replaced
+
+| Hand-built (round 1) | Now | Lines gone |
+|---|---|---|
+| The whole-file pass (`answer`, `rows_matching`, `Answer`, `run_query`, the task slot, the `view`/`found`/`busy` signals, picking a record by position) | the file as a `TableSource` (`Indexed`: the count from the indexer's signal, `N+` while it runs, `RowCount`) and `view_of(source, \|\| ViewQuery)` with `keep`, `find`, `sort` and, for Ctrl+J, `compare(natural_cmp)`; `View::source_row`, `place`, `is_busy`, `next_found`/`previous_found` | ~150 |
+| The `switch` on a hash of every layout input (`layout_key`), which rebuilt the table on each change and kept every table built | one table per selection mode (`keyed(mode)`, the old one dropped), everything else read as it draws: `columns_with` (titles, the sort arrow, widths set by `<`/`>`, the column filter), `freeze_columns_with`, `multiline_when` | ~25 |
+| The 30% cap from the table's `RectHandle` (`cap`) | `Column::max_percent(30)` | ~10 |
+| Measuring a column's width again for `<`/`>` (`width_of`), and the page from the `RectHandle` | `TableLayout::width_of` and `rows_in_view` | ~20 |
+| `-S`'s guess at one height for every row (`toggle_wrap`) | `multiline_when(\|\| wrap)`: each row as tall as its own cells, as csvlens | ~15 |
+| Writing a highlighted cell's spans out as markup | `Text::markup()` | ~15 |
+| The prompts as a one-row `popup_at` over the status line | a `command_line` in place of the status line (`Mode::new("Find: ").initial(..).history("finder")`), `<n>G`'s G bound with `bind_when` while it is the goto's; find and filter now share an input history (↑/↓), csvlens's, which round 1 left out | ~10 |
+
+The rows' sorting, the record index and the parser stay the example's:
+rs-rich-data is not a dependency of the crate, so the CSV layer stays std
+as the brief says.
+
+### Behaviour changes
+
+- **The 30% cap counts the clone's two cells of padding**: `max_percent`
+  caps the column's whole width, where the clone capped the text (30%
+  less 2). A long cell shows two more characters before its `…`
+  (`quoted, with comm…` for `quoted, with co…` at 60 columns), and `-S`
+  wraps it a little later. Two tests moved with it (the look test's two
+  cut cells; `-S` now checked on "biggest little / city"). The padding is
+  the round-1 workaround for one `column_spacing`; `Column::padding` would
+  end it, and the cap would then be csvlens's exactly.
+- **`n` and `N` wrap round** (`View::next_found`): past the last match `n`
+  goes to the first. csvlens does too; the clone stopped.
+- **Sorting text ignores case**, and a column of numbers and text puts the
+  numbers first (`view_of`'s default keys); csvlens compares text by bytes
+  and sorts a column as numbers only when every value is one.
+- **A pass is much slower on a million rows**: the filter that took 3.3 s
+  takes 15.4 s (unoptimised test build). About 8 s is reading every row
+  through `TableSource::row` (a lock, a seek, a read, a parse, a cache
+  insert and a copy a row; a buffered reader that skips the seek on a
+  sequential read saved nothing measurable) and about 7 s is the regex:
+  round 1 ran one regex over the whole file's cells, one a line, where a
+  `RowTest` gets one row, and the only compiled regex rs-rich-ext offers
+  (`KeepLines`) takes a `Text`, built per row. First frame, keys and `G`
+  are unchanged (150 ms, 28 ms a key, 31 ms).
+
+### Still hand-built, and why
+
+- **The CSV layer**: the record index on a `spawn_stream`, the parser, the
+  sniffer (std; rs-rich-data is not a dependency).
+- **The gutter**: a frozen first column whose cells end in `│`, sized to
+  the numbers in view, the selected one bold; no row-number option.
+- **The selection modes' styles**: `column_highlight` and `theme_styles`
+  are fixed when the table is built, so Tab rebuilds the table (`keyed`
+  on the mode). `cells_when` alone would not do: the row highlight must go
+  and the cell's come in their place.
+- **The keys and the help sections** (`KEYS`, `run`, `keymap`): csvlens's,
+  through the core's bindings.
+
+### New gaps
+
+| Gap | Needed for | API sketch | Where |
+|---|---|---|---|
+| **Reactive highlight styles.** `column_highlight` and the `selected`/`selected.cell` theme styles are fixed at build; Tab between row, column and cell modes has to rebuild the table | csvlens's modes; any table with a cursor kind | `TableOptions::column_highlight_when(\|\| bool)`, `theme_styles_with(\|\| ..)` on a node, or a `CursorKind` signal (row, column, cell) that sets the styles | core, generic |
+| **A bulk read for passes.** `view_of` reads `row(i)` once a row; a file source would rather hand out rows in order from one buffered read | fast whole-file passes over large sources | `TableSource::rows(range, \|i, cells\| ..)` with a default that calls `row`, which `view_of` uses | core, generic |
+| **A compiled matcher on plain text.** A `RowTest` with a regex builds a `Text` per row for `KeepLines`; rs-rich-ext has no `is_match(&str)` | regex filters in `view_of`, the finder, the query module's `Grammar::words` | `rich_ext::text::Pattern::new(re)?.is_match(&str)` (fancy-regex underneath), and a `ViewQuery::keep_matching(pattern)` that tests cells one by one | plugin (rs-rich-ext) + core |
+| **A prompt that ends on a key.** `<n>G`: the command line has no "these keys submit"; the clone wraps it and binds `G g` while a signal says the goto is open | vim-like counts, `less`'s prompts | `Mode::submit_keys("G g")` | core, generic (small) |
+| **Root keys reach a command line's text.** A `previews_keys` container round the command line takes its letters before the input does (typing `42` reopened the goto with `2`); the line has to sit outside the container with the app's keys | every app with letter keys and a command line | the command line (and any focused text input) seeing printable keys before ancestors' previews, or a note in `previews_keys`'s docs | core, generic |
+| **Column padding** (round 1's friction, still open) | the cap above, the `OH…` cut | `Column::padding(left, right)` | core |
+
+Round 1's still open: a row-number gutter, header rules and border joins,
+help rows for keys a child handles, and the `data` plugin (a seekable,
+indexed CSV source on rs-rich-data).
+
+### Bugs found
+
+None that block. The previews-keys interaction above reads as a trap
+rather than a bug. `view_of`'s query closure is run again whenever the
+source's count changes (the watch reads both), so a `ViewQuery` built in
+it gets new `Arc`s each time and the pass restarts on every indexing step
+while a query is set; the clone puts the query in a `memo`. Worth a note
+in `view_of`'s docs, or a dependency on the count's exactness only.
+
+### Components that would help
+
+| Component | What it would replace | API sketch | Where | Value |
+|---|---|---|---|---|
+| A `data` plugin CSV source | `Source`, `scan`, `parse_record`, `sniff`, `index_in_background`, `Indexed` (~330 lines) | `data::csv_source(path, Dialect)` as a `TableSource` with `parsed()` | plugin (rs-rich-data) | high |
+| A row-number gutter | the gutter column and its width sums (~20 lines) | `TableOptions::row_numbers(\|i\| n)` | core | medium |
+| Reactive cursor kind | the `keyed` rebuild per mode | `TableOptions::cursor_kind(Signal<CursorKind>)` | core | medium |
+| A compiled matcher | `row_test`, the `Text` per row | `Pattern::is_match` | plugin (rs-rich-ext) | medium |
