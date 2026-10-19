@@ -289,10 +289,11 @@ theme shared with Python rich users works here too:
 
 ## Not yet ported
 
-- `Text` methods for which Rust has other idioms (`Text.assemble`,
-  `Text.from_ansi`) — use `append`/`append_text`, and
+- `Text.assemble`, for which Rust has another idiom: use
+  `append`/`append_text`. (`Text.from_ansi` is ported as
+  `Text::from_ansi(text, style)`; for a stream,
   [`AnsiDecoder`](https://docs.rs/rs-rich/latest/rich/ansi/struct.AnsiDecoder.html)
-  to turn ANSI output back into `Text`.
+  turns ANSI output back into `Text`.)
 - Upstream's `Style(bold=True, color="red")` keyword constructor: use
   `Style::parse("bold red")` or `Style::from_color`.
 

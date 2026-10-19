@@ -129,12 +129,32 @@ for ex in console text tables layout tree progress code logging prompts export; 
 done
 ```
 
-## Not yet ported
+## Templates and the font's aspect ratio
 
-- `save_text`, `save_html`, `save_svg` — write the returned string with
-  `std::fs::write`.
-- `export_html(code_format=…)` and `export_svg(code_format=…)` custom
-  templates, and the SVG `font_aspect_ratio` option.
+`export_html_with` and `export_svg_with` take upstream's remaining options:
+a `code_format` template of your own (`None` for upstream's), whether HTML
+styles are inline, and the SVG's `font_aspect_ratio` (upstream's default is
+0.61). A template Python's `str.format` would reject is an
+`ExportFormatError`.
+
+```rust
+use rich::terminal_theme::MONOKAI;
+use rich::Console;
+
+let console = Console::builder().width(40).build();
+let html = console.export_html_with(&MONOKAI, None, true, |c| {
+    c.print_str("[bold green]built[/] in 2.1s");
+})?;
+let svg = console.export_svg_with(&MONOKAI, "build", "build", None, 0.6, |c| {
+    c.print_str("[bold green]built[/] in 2.1s");
+})?;
+std::fs::write("build.html", html)?;
+std::fs::write("build.svg", svg)?;
+# Ok::<(), Box<dyn std::error::Error>>(())
+```
+
+Upstream's `save_text`, `save_html` and `save_svg` are not ported: write
+the returned string with `std::fs::write`, as above.
 
 ## See also
 

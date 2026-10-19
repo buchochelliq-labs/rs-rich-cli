@@ -159,7 +159,8 @@ Format: what differs · why · how to remove it (if temporary).
   size and highlighted repr), byte-parity in `upstream_features.tsv`, along with
   `name`/`visible`, `split`/`add_split`/`unsplit`, lookup by name, `tree` and
   `map`. `map` keys leaves by name and child-index path (Rust has no object
-  identity to key by). `refresh_screen` is not ported.
+  identity to key by). `refresh_screen` is ported, with
+  `Console::update_screen` and `update_screen_lines`.
 - **Resolved:** height-aware leaves — `Panel` now consumes `options.height` and
   expands to fill its region (byte-parity), via `Console::render_lines`'s height
   handling. Other containers can adopt the same pattern as needed.

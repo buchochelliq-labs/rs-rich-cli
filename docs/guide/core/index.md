@@ -90,7 +90,8 @@ protocol, so everything nests: a table in a panel in a layout.
 - **Documented differences.** Where Rust cannot follow Python — there is no
   `repr()` to pretty-print, no Python traceback, no Pygments — the port says so
   in [Divergences](../../DIVERGENCES.md). Some upstream options are not ported
-  yet; each page lists what is missing under "Not yet ported".
+  yet; a page with any missing lists them under "Not yet ported", and
+  [Module status](../../PORTING.md) has every module.
 - **No extras in the core.** Features that upstream does not have belong in
   `rs-rich-ext`, so the core stays a faithful mirror.
 

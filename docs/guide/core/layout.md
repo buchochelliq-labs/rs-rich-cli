@@ -149,16 +149,37 @@ small tables so the header separator shows:
 A panel uses only the outer edges; the head and row separators matter for
 tables.
 
-## Not yet ported
+## More of upstream's options
 
-- `Panel`: `height`, `style`, `highlight`.
-- `Align`: vertical alignment, `width`, `style`.
-- `Columns`: `column_first`, `right_to_left`, `align`, `title`, custom
-  padding.
-- `Layout`: named regions (`layout["body"]`), `visible`, `update`, and the
-  placeholder drawn for an empty region (it renders blank —
-  [divergence #11](../../DIVERGENCES.md)).
-- `Rule`: `end`.
+The options above are the common ones; upstream's others are ported too:
+
+```rust
+use rich::{Align, Columns, Console, Layout, Panel, Text, VerticalAlign};
+
+// A panel of a fixed height, its body centred both ways.
+let body = Align::center(Box::new(Text::new("ready"))).vertical(VerticalAlign::Middle);
+let panel = Panel::new(Box::new(body)).height(5).style("on grey11");
+
+// Columns filled top to bottom first, under a title.
+let names = ["core", "ext", "art", "cli", "record"].map(String::from).to_vec();
+let columns = Columns::new(names).column_first(true).title("crates");
+
+// A layout's regions by name: find one and give it new content.
+let mut layout = Layout::new();
+layout.split_column(vec![Layout::new().name("header").size(3), Layout::new().name("body")]);
+if let Some(header) = layout.get_mut("header") {
+    header.update(Box::new(Text::new("rs-rich")));
+}
+
+let console = Console::new();
+console.print(&panel);
+console.print(&columns);
+```
+
+`Panel::highlight`, `Align`'s `width` and `style`, `Columns`'
+`right_to_left`, `align` and `padding`, `Layout::visible` and the
+placeholder an empty region draws, and `Rule::end` follow upstream; see the
+API pages below.
 
 ## See also
 
