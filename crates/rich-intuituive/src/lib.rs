@@ -122,6 +122,7 @@ mod sheet;
 mod signals;
 mod solver;
 mod split;
+pub mod state;
 pub mod tab_set;
 mod table_scroll;
 pub mod task;
@@ -162,7 +163,7 @@ pub use image::{image, image_of, image_with, ImageAnchor, ImageFit, ImageMode, I
 pub use input::{input, number_input};
 pub use jobs::{
     jobs, jobs_panel, jobs_panel_with, Job, JobOutcome, JobProgress, JobState, Jobs,
-    JobsPanelOptions,
+    JobsPanelOptions, ProcessOutcome, ProcessOutput,
 };
 pub use layout::{Align, AlignContent, Justify, Size, StackLayout, TextAlign};
 pub use list::list_optional;
@@ -184,6 +185,10 @@ pub use select::{list_search, multi_select, ListSearch, Mark, MultiSelect};
 pub use sheet::{SheetError, Stylesheet};
 pub use signals::{falling, history, recent, recent_of, recent_timed, smoothed, Count, History};
 pub use solver::Solver;
+pub use state::{
+    frecency_in, frecency_session, frecency_store, read_state, state_dir, state_file, update_file,
+    update_state, write_atomic, write_state, FrecencyStore,
+};
 pub use tab_set::{tab_set, tabs_for, tabs_for_indexed, TabSet};
 pub use task::{
     latest, latest_every, resource, resource_for, spawn, spawn_future, spawn_stream, spawn_then,

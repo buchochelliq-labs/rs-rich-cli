@@ -601,5 +601,170 @@ fn numbered_tabs_and_a_segment_that_shows_only_while_it_should() {
     assert_eq!(rows(&driver)[1], " NOR \u{e0b0} VIS \u{e0b0} notes");
 }
 
+// 6. App plumbing: text edited in `$EDITOR`, state files, a frecency
+// store two sessions share, a job running a process.
+
+#[test]
+fn edit_text_hands_a_temporary_file_to_the_editor_and_reads_it_back() {
+    let app = App::new(|| {
+        let said = signal(String::from("one"));
+        text!("{said}").on_key("e", move |cx| {
+            cx.edit_text_as(&said.get_untracked(), "md", move |edited, _| match edited {
+                Ok(text) => said.set(text.trim_end().replace('\n', "+")),
+                Err(error) => said.set(error.to_string()),
+            })
+        })
+    });
+    let mut driver = app.driver(20, 1);
+    driver.press("e");
+    let handoff = driver
+        .take_handoff()
+        .expect("the editor takes the terminal");
+    let file = std::path::PathBuf::from(handoff.command.get_args().last().unwrap());
+    assert_eq!(file.extension().unwrap(), "md");
+    std::fs::write(&file, "one\ntwo\n").unwrap();
+    driver.handed_back(handoff, Ok(Some(0)));
+    driver.settle();
+    assert_eq!(rows(&driver)[0], "one+two");
+    assert!(!file.exists());
+    // An editor that could not run: its error, and the file still goes.
+    driver.press("e");
+    let handoff = driver.take_handoff().unwrap();
+    let file = std::path::PathBuf::from(handoff.command.get_args().last().unwrap());
+    driver.handed_back(handoff, Err(std::io::Error::other("no editor")));
+    driver.settle();
+    assert_eq!(rows(&driver)[0], "no editor");
+    assert!(!file.exists());
+}
+
+fn temp(name: &str) -> std::path::PathBuf {
+    let dir = std::env::temp_dir().join(format!("intuituive-round5-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join(name);
+    let _ = std::fs::remove_file(&file);
+    file
+}
+
+#[test]
+fn two_frecency_stores_on_one_file_add_up_rather_than_clobber() {
+    use intuituive::frecency_store;
+    let file = temp("frecency.tsv");
+    let path = file.clone();
+    let app = App::new(move || {
+        // Two sessions' stores, as two windows of one app.
+        let (one, two) = (frecency_store(path.clone()), frecency_store(path.clone()));
+        one.visit("build");
+        two.visit("test");
+        two.visit("test");
+        one.visit("build");
+        one.visit("build");
+        two.remove("gone");
+        label(format!("{:?} {:?}", one.ranked(), two.ranked()))
+    });
+    let screen = app.render_with(&[], 60, 1).unwrap();
+    assert_eq!(
+        screen[0].trim_end(),
+        r#"["build", "test"] ["build", "test"]"#
+    );
+    let text = std::fs::read_to_string(&file).unwrap();
+    assert_eq!(text.lines().count(), 2, "{text}");
+}
+
+#[test]
+fn a_frecency_store_keeps_at_most_its_cap() {
+    use intuituive::frecency_session;
+    let app = App::new(|| {
+        let store = frecency_session().keep(2);
+        for key in ["a", "b", "b", "c", "c", "c"] {
+            store.visit(key);
+        }
+        label(format!("{:?}", store.ranked()))
+    });
+    assert_eq!(
+        app.render_with(&[], 30, 1).unwrap()[0].trim_end(),
+        r#"["c", "b"]"#
+    );
+}
+
+#[test]
+fn update_state_reads_changes_and_writes_a_state_file() {
+    use intuituive::{update_file, write_atomic};
+    let file = temp("history");
+    write_atomic(&file, b"ls\n").unwrap();
+    let written = update_file(&file, |old| {
+        let mut lines = String::from_utf8(old.unwrap()).unwrap();
+        lines.push_str("cd\n");
+        lines.into_bytes()
+    })
+    .unwrap();
+    assert_eq!(written, b"ls\ncd\n");
+    assert_eq!(std::fs::read(&file).unwrap(), b"ls\ncd\n");
+}
+
+#[cfg(unix)]
+#[test]
+fn a_job_runs_a_process_reads_its_progress_and_cancelling_kills_it() {
+    use intuituive::{jobs, ProcessOutcome};
+    let app = App::new(|| {
+        let list = jobs::<f64>();
+        let said = signal(String::new());
+        let shown = list;
+        column([
+            text!("{said}"),
+            text(move || {
+                shown.list().with(|jobs| {
+                    jobs.iter()
+                        .map(|j| format!("{:.1}", j.progress))
+                        .collect::<Vec<_>>()
+                        .join(",")
+                })
+            }),
+        ])
+        .on_key("r", move |_| {
+            let mut command = std::process::Command::new("sh");
+            command.args(["-c", "echo 50%; sleep 30"]);
+            let id = list.run_process_with(
+                "Count",
+                command,
+                |line| {
+                    line.strip_suffix('%')?
+                        .parse::<f64>()
+                        .ok()
+                        .map(|p| p / 100.0)
+                },
+                move |outcome, _| {
+                    said.set(match outcome {
+                        ProcessOutcome::Cancelled(out) => format!("killed after {:?}", out.stdout),
+                        other => format!("{other:?}"),
+                    })
+                },
+            );
+            assert_eq!(id, 1);
+        })
+        .on_key("c", move |_| list.cancel_all())
+    });
+    let mut driver = app.driver(40, 2);
+    driver.press("r");
+    let start = Instant::now();
+    while rows(&driver)[1] != "0.5" {
+        assert!(
+            start.elapsed() < Duration::from_secs(10),
+            "{:?}",
+            rows(&driver)
+        );
+        std::thread::sleep(Duration::from_millis(10));
+        driver.settle();
+    }
+    driver.press("c");
+    while rows(&driver)[0].is_empty() {
+        assert!(start.elapsed() < Duration::from_secs(10), "not killed");
+        std::thread::sleep(Duration::from_millis(10));
+        driver.settle();
+    }
+    assert_eq!(rows(&driver)[0], r#"killed after ["50%"]"#);
+    // A cancelled job leaves the list.
+    assert_eq!(rows(&driver)[1], "");
+}
+
 #[allow(dead_code)]
 fn unused(_: Event) {}

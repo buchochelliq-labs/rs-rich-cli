@@ -82,6 +82,23 @@ pub struct Ctx {
     pub(crate) passed: bool,
 }
 
+/// The user's editor: `$VISUAL` (a program and its arguments), else
+/// `$EDITOR`, else `vi` (Notepad on Windows).
+fn editor_command() -> std::process::Command {
+    let visual = std::env::var("VISUAL")
+        .ok()
+        .filter(|v| !v.trim().is_empty());
+    match visual {
+        Some(line) => {
+            let mut words = line.split_whitespace();
+            let mut command = std::process::Command::new(words.next().unwrap_or("vi"));
+            command.args(words);
+            command
+        }
+        None => rich_ext::open::editor(),
+    }
+}
+
 /// A one-shot timer waiting to be put on the app's clock: how long it
 /// waits, what it runs, and where it was made.
 pub(crate) struct After {
@@ -390,6 +407,74 @@ impl Ctx {
         self.handoffs.push(Handoff {
             command,
             then: Some(Box::new(then)),
+        });
+    }
+
+    /// Edit `text` in the user's editor (`$VISUAL`, else `$EDITOR`, else
+    /// `vi`; Notepad on Windows): it goes in a temporary file, the editor
+    /// gets the terminal on it as with [`handoff_then`](Self::handoff_then),
+    /// and `done` gets the file's text once the editor ends (or why it
+    /// could not run), back on the app's thread. The file is removed. A
+    /// commit message, a note, a list of names to rename, a command to
+    /// change before it runs (Bubble Tea's `tea.ExecProcess`).
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| {
+    ///     let note = signal(String::from("draft"));
+    ///     text!("{note}").on_key("e", move |cx| {
+    ///         cx.edit_text(&note.get_untracked(), move |edited, _| {
+    ///             if let Ok(edited) = edited {
+    ///                 note.set(edited.trim_end().to_string());
+    ///             }
+    ///         })
+    ///     })
+    /// });
+    /// let mut driver = app.driver(10, 1);
+    /// driver.press("e");
+    /// let handoff = driver.take_handoff().expect("the editor takes the terminal");
+    /// // The editor's last argument is the file: edit it as a user would.
+    /// let file = handoff.command.get_args().last().unwrap().to_owned();
+    /// assert_eq!(std::fs::read_to_string(&file).unwrap(), "draft");
+    /// std::fs::write(&file, "final\n").unwrap();
+    /// driver.handed_back(handoff, Ok(Some(0)));
+    /// driver.settle();
+    /// assert_eq!(driver.screen().plain()[0].trim_end(), "final");
+    /// ```
+    pub fn edit_text(
+        &mut self,
+        text: &str,
+        done: impl FnOnce(io::Result<String>, &mut Ctx) + 'static,
+    ) {
+        self.edit_text_as(text, "txt", done);
+    }
+
+    /// [`edit_text`](Self::edit_text) in a file ending `.extension`, so the
+    /// editor knows what it is editing (`"md"`, `"toml"`, `"sh"`).
+    pub fn edit_text_as(
+        &mut self,
+        text: &str,
+        extension: &str,
+        done: impl FnOnce(io::Result<String>, &mut Ctx) + 'static,
+    ) {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        static NEXT: AtomicUsize = AtomicUsize::new(0);
+        let n = NEXT.fetch_add(1, Ordering::SeqCst);
+        let extension = extension.trim_start_matches('.');
+        let file = std::env::temp_dir().join(format!(
+            "intuituive-edit-{}-{n}.{extension}",
+            std::process::id()
+        ));
+        if let Err(error) = std::fs::write(&file, text) {
+            return done(Err(error), self);
+        }
+        let mut editor = editor_command();
+        editor.arg(&file);
+        self.handoff_then(editor, move |ended, cx| {
+            let edited = ended.and_then(|_| std::fs::read_to_string(&file));
+            let _ = std::fs::remove_file(&file);
+            done(edited, cx);
         });
     }
 
