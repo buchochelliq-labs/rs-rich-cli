@@ -5,7 +5,7 @@
   run.sh    │ main.rs                                    289B │mod event_loop;
   scripts.t…│ event_loop.rs                              611B │mod render;
   Cargo.to╭─────────────────────────────────── Tasks ────────────────────────────────────╮
-  logo.png│ failed  Move src to src: src: can't go inside itself                         │
+  logo.png│ failed  src: can't go inside itself                                          │
   readme-l│                                                                              │:args()
   README.m│                                                                              │rg != "--
           │                                                                              │

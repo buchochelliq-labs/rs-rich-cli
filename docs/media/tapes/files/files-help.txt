@@ -1,26 +1,26 @@
-~/project ╭────────────────────────────────── mgr.help ──────────────────────────────────╮
-  project │ Type / to filter                                                             │
-          ├──────────────────────────────────────────────────────────────────────────────┤
-          │ <Esc>               Exit visual mode, clear selection, or cancel search      │
-          │ q                   Quit the process                                         │
-          │ <C-c>               Close the current tab, or quit if it's last              │
-          │ k                   Previous file                                            │
-          │ j                   Next file                                                │
-          │ G                   Go to bottom                                             │
-          │ <Home>              Go to top                                                │
-          │ <C-u>               Move cursor up half page                                 │
-          │ <C-d>               Move cursor down half page                               │
-          │ <C-b>               Move cursor up one page                                  │
-          │ <C-f>               Move cursor down one page                                │
-          │ h                   Back to the parent directory                             │
-          │ l                   Enter the child directory                                │
-          │ H                   Back to previous directory                               │
-          │ L                   Forward to next directory                                │
-          │ <Space>             Toggle the current selection state                       │
-          │ <C-a>               Select all files                                         │
-          │ <C-r>               Invert selection of all files                            │
-          │ v                   Enter visual mode (selection mode)                       │
-          │ V                   Enter visual mode (unset mode)                           │
-          │ K                   Seek up 5 units in the preview                           │
-          ╰──────────────────────────────────────────────────────────────────────────────╯
+~/project
+  project   │ src                                           4 │lib.rs
+            │ tests                                         1 │render.rs
+            │ run.sh                                      18B │main.rs
+            │ s╭─ mgr.help ─────────────────────────────────────────────────────────╮
+            │ C│? Search keys ›                                                     │
+            │ l│────────────────────────────────────────────────────────────────────│
+            │ r│  <Esc>                Exit visual mode, clear selection, or cancel │
+            │ R│                       search                                       │
+            │  │  q                    Quit the process                             │
+            │  │  <C-c>                Close the current tab, or quit if it's last  │
+            │  │  k, <Up>              Previous file                                │
+            │  │  j, <Down>            Next file                                    │
+            │  │  G, <End>             Go to bottom                                 │
+            │  │  <Home>               Go to top                                    │
+            │  │  <C-u>, <S-PageUp>    Move cursor up half page                     │
+            │  │  <C-d>, <S-PageDown>  Move cursor down half page                   │
+            │  │  <C-b>, <PageUp>      Move cursor up one page                      │
+            │  │  <C-f>, <PageDown>    Move cursor down one page                    │
+            │  │  h, <Left>            Back to the parent directory                 │
+            │  │  93 keys · more below · type to search · ↑↓ scroll · esc close     │
+            │  ╰────────────────────────────────────────────────────────────────────╯
+            │                                                 │
+            │                                                 │
+            │                                                 │
  NOR  4K  src                                                                drwxr-xr-x  Top   1/8

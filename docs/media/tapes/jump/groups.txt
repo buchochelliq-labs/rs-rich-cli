@@ -6,7 +6,7 @@ Files  +105 more · tab                            │     1 # The rs-rich guide
   docs/guide/art/banners.md                       │     4 styled text, tables, trees, progress bars, syntax hi
   docs/guide/art/gifs.md                          │     5 in the terminal, plus exports to HTML and SVG. On to
   docs/guide/art/image-diff.md                    │     6 adds Rust-first extensions (diagnostics, structured
-Headings #  +760 more · tab                       │     7 diffs, test tooling, capability detection, accessibi
+Headings #  +778 more · tab                       │     7 diffs, test tooling, capability detection, accessibi
   The rs-rich guide  # docs/guide/index.md:1      │     8 workflow renderables and charts), graph diagrams, in
   The pieces  ## docs/guide/index.md:42           │     9 micro assets, image and GIF art, and the `rich` comm
   How it fits together  ## docs/guide/index.md:67 │    10
