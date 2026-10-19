@@ -353,30 +353,41 @@ from its manifest, a publishable crate is missing, or a crate is listed before a
 workspace crate it depends on. After a version bump, `release_cohort.py sync`
 rewrites the versions from the manifests.
 
-`release_cohort.py tag` tags the local checkout (`HEAD`), or `--commit
-<sha>`: any commit on `main` as last fetched, such as an earlier one known to
-be good, whose `RELEASES.toml` and manifests then decide what is released.
+A release is named by the version of the last crate in `RELEASES.toml`,
+`rs-rich-cli`: release 0.0.19 is the commit whose `RELEASES.toml` has
+rs-rich-cli 0.0.19. Every tag `release_cohort.py tag` makes records its
+release and the commit it was cut from in its message (`Release: 0.0.19`,
+`Commit: <sha>`).
+
+`release_cohort.py tag` picks the commit itself. The newest release that has
+tags is resumed on the commit those tags are on while any of it is still
+unpublished, so a run that stopped partway, or one resumed after `main` has
+moved on, finishes the release where it started. With nothing in progress it
+tags the local checkout (`HEAD`). `--release 0.0.20` (or `v0.0.20`) releases
+that one: from the commit its tags are on, else the last commit on `main` (as
+last fetched) whose `RELEASES.toml` names it. `--commit <sha>` names the
+commit outright: any commit on `main`, such as an earlier one known to be
+good. `RELEASES.toml` and the manifests then come from that commit. `main` is
+never fetched (only the remote's tags and the registries are read live), so
+pull `main` before starting a new release.
+
 Before tagging it refuses a commit that changes the shipped files (by each
-manifest's `include`) of a package already published under the same version
-from another commit, naming each package and the commit it came from: that
-release would put the rest of the cohort beside a package built from other
-code. Release from that commit (`--commit <sha>`) or bump the package. It fetches nothing and reads
-`RELEASES.toml` and the manifests from that commit, so pull `main` first, and
-a run resumed later releases the same commit even if `main` has moved on
-(only the remote's tags and the registries are read live). For each entry in
+manifest's `include`) of a package tagged under the same version on another
+commit, naming each package, the files and the commit it was tagged on:
+that release would put the rest of it beside a package built from other
+code. Release from that commit (`--commit <sha>`) or bump the package. For each entry in
 order it skips a version already on crates.io
 or PyPI, never tagging it; otherwise it pushes the annotated tag and waits for
 the version to appear before the next, stopping when the release run fails
 (with the GitHub CLI) or after `--timeout` minutes. One tag at a time keeps
 dependencies published first and stays inside the release workflow's
 concurrency group, which keeps only one pending run. It is safe to re-run: a
-tag that exists but is not yet published is waited on, not recreated. A tag
-on another commit is moved to the commit being released only when its
-latest release run ran on that tag's commit, ended without success
-(cancelled, failed) and never started its publish job, so nothing can have
-been uploaded; anything less certain (a run still going, one that started
-publishing, a run of another commit, or no run to see without the GitHub
-CLI) stops it with the commands to clear it by hand. `--dry-run` shows the plan; `status` shows
+tag that exists but is not yet published is waited on, not recreated, and so
+is one on another commit that ships the same files. A tag on another commit
+is moved to the commit being released when its latest release run ran on
+that tag's commit, ended without success (cancelled, failed) and never
+started its publish job, so nothing can have been uploaded; anything less
+certain holds the release to that tag's commit. `--dry-run` shows the plan; `status` shows
 every package's state. By default it starts at the top of `RELEASES.toml`
 and skips everything already on its registry, so it begins at the first
 unpublished package; `--from <package or tag>` starts later in the order and
@@ -388,7 +399,12 @@ the Python package for later (and `--registry pypi` only it).
 Both release workflows also refuse a published version from the tag itself:
 the first job runs `release_cohort.py unreleased <tag>`, which fails when the
 tag selects a version already on its registry, or one `RELEASES.toml` does not
-name, before the full gate or any build.
+name, before the full gate or any build. They then run
+`release_cohort.py same-commit <tag>`, which fails when another package of
+the tag's `RELEASES.toml` is tagged on another commit and ships other files
+under its number, or when the tag's recorded `Commit:` is not the commit it
+points at; it writes the tag, its commit and its release to the job summary.
+A tag pushed by hand therefore cannot split a release either.
 
 ### Registry authentication (Trusted Publishing)
 

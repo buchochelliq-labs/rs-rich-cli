@@ -207,7 +207,8 @@ class Tag(unittest.TestCase):
         self.dir.cleanup()
 
     def status(self, package):
-        return 200 if (package.registry, package.name) in self.published else 404
+        published = {(package.registry, package.name), (package.registry, package.name, package.version)}
+        return 200 if published & self.published else 404
 
     def wait(self, package, timeout, status):
         self.waited.append(package.tag)
@@ -219,7 +220,8 @@ class Tag(unittest.TestCase):
     def run_tag(self, **options):
         cohort.tag(options.get("commit", "HEAD"), "origin", 60, options.get("dry_run", False),
                    status=self.status, wait=self.wait, registry=options.get("registry"),
-                   run=options.get("run", lambda package: None), start=options.get("start"))
+                   run=options.get("run", lambda package: None), start=options.get("start"),
+                   release_wanted=options.get("release"))
 
     def test_tags_only_what_is_unpublished_in_order_and_waits_for_each(self):
         self.run_tag()
@@ -271,8 +273,13 @@ class Tag(unittest.TestCase):
         self.run_tag()
         self.assertEqual(self.waited, ["rs-rich-art-v0.2.0", "python-v0.3.0"])
 
-    def tag_a_later_commit(self):
-        """rs-rich-art's tag on a later commit of main, its version unpublished."""
+    def tag_a_later_commit(self, change=True):
+        """rs-rich-art's tag on a later commit of main, its version unpublished;
+        with `change`, that commit also changes what rs-rich-art ships."""
+        if change:
+            (self.work / "crates/rich-art/src").mkdir(parents=True, exist_ok=True)
+            (self.work / "crates/rich-art/src/lib.rs").write_text("// later\n")
+            git(self.work, "add", ".")
         git(self.work, "commit", "--quiet", "--allow-empty", "-m", "later")
         git(self.work, "push", "--quiet", "origin", "main")
         git(self.work, "tag", "-a", "rs-rich-art-v0.2.0", "-m", "x")
@@ -283,15 +290,21 @@ class Tag(unittest.TestCase):
         return lambda package: {"status": status, "conclusion": conclusion, "url": "https://example/run",
                                 "head_sha": commit, "publish_started": publish_started}
 
-    def test_an_existing_tag_on_another_commit_with_a_run_going_stops(self):
+    def test_a_tag_with_a_run_going_on_another_commit_that_ships_other_files_stops(self):
         later = self.tag_a_later_commit()
-        with self.assertRaisesRegex(RuntimeError, "release run is in_progress"):
+        with self.assertRaisesRegex(RuntimeError, rf"tagged at {later[:12]}: rs-rich-art@0\.2\.0.*src/lib\.rs"):
             self.run_tag(commit=self.sha, run=self.run_on(later, status="in_progress", conclusion=""))
         self.assertEqual(cohort.remote_tags("origin")["rs-rich-art-v0.2.0"], later)
 
-    def test_an_existing_tag_on_another_commit_with_no_run_says_how_to_clear_it(self):
+    def test_a_tag_with_a_run_going_on_another_commit_that_ships_the_same_files_is_waited_on(self):
+        later = self.tag_a_later_commit(change=False)
+        self.run_tag(commit=self.sha, run=self.run_on(later, status="in_progress", conclusion=""))
+        self.assertEqual(cohort.remote_tags("origin")["rs-rich-art-v0.2.0"], later)
+        self.assertEqual(self.waited, ["rs-rich-art-v0.2.0", "python-v0.3.0"])
+
+    def test_a_tag_on_another_commit_with_no_run_says_how_to_clear_it(self):
         self.tag_a_later_commit()
-        with self.assertRaisesRegex(RuntimeError, r"git push origin :refs/tags/rs-rich-art-v0\.2\.0"):
+        with self.assertRaisesRegex(RuntimeError, r"git push origin :refs/tags/"):
             self.run_tag(commit=self.sha)
 
     def test_a_tag_whose_run_was_cancelled_is_moved_to_this_commit(self):
@@ -303,11 +316,11 @@ class Tag(unittest.TestCase):
         self.assertEqual(git(self.work, "rev-parse", "rs-rich-art-v0.2.0^{commit}"), self.sha)
         self.assertEqual(self.waited, ["rs-rich-art-v0.2.0", "python-v0.3.0"])
 
-    def test_a_cancelled_run_that_started_publishing_stops(self):
+    def test_a_cancelled_run_that_started_publishing_holds_the_release_to_its_commit(self):
         # The upload may have landed before the cancel; the registry can
         # take a while to show it, so the tag stays.
         later = self.tag_a_later_commit()
-        with self.assertRaisesRegex(RuntimeError, "started publishing"):
+        with self.assertRaisesRegex(RuntimeError, f"tagged at {later[:12]}"):
             self.run_tag(commit=self.sha, run=self.run_on(later, publish_started=True))
         self.assertEqual(cohort.remote_tags("origin")["rs-rich-art-v0.2.0"], later)
 
@@ -315,7 +328,7 @@ class Tag(unittest.TestCase):
         # The latest run seen is an older one, of the tag before it moved:
         # it says nothing about the tag as it is now.
         later = self.tag_a_later_commit()
-        with self.assertRaisesRegex(RuntimeError, "not the tag"):
+        with self.assertRaisesRegex(RuntimeError, f"tagged at {later[:12]}"):
             self.run_tag(commit=self.sha, run=self.run_on(self.sha, conclusion="failure"))
         self.assertEqual(cohort.remote_tags("origin")["rs-rich-art-v0.2.0"], later)
 
@@ -393,6 +406,98 @@ class Tag(unittest.TestCase):
         git(self.work, "push", "--quiet", "origin", "main")
         self.run_tag(registry="crates.io")
         self.assertEqual(self.waited, ["rs-rich-art-v0.2.0"])
+
+    def change_rs_rich(self, message="change rs-rich without a bump"):
+        (self.work / "crates/rich/src").mkdir(parents=True, exist_ok=True)
+        (self.work / "crates/rich/src/lib.rs").write_text(message + "\n")
+        git(self.work, "add", ".")
+        git(self.work, "commit", "--quiet", "-m", message)
+        git(self.work, "push", "--quiet", "origin", "main")
+        return git(self.work, "rev-parse", "HEAD")
+
+    def bump_art(self):
+        """main moves on to the next release: rs-rich-art (the last crate) 0.2.1."""
+        write_tree(self.work, config=CONFIG.replace('version = "0.2.0"', 'version = "0.2.1"'),
+                   art=ART.replace("0.2.0", "0.2.1"))
+        git(self.work, "commit", "--quiet", "-am", "next release")
+        git(self.work, "push", "--quiet", "origin", "main")
+        return git(self.work, "rev-parse", "HEAD")
+
+    def test_a_release_in_progress_is_resumed_on_the_commit_it_started_from(self):
+        # The split release, prevented: rs-rich went out from the first
+        # commit; main has moved on and changed it. With no --commit, the
+        # rest of the release is tagged where it started, not at HEAD.
+        self.publish_rs_rich_here()
+        self.change_rs_rich()
+        self.run_tag(commit=None)
+        self.assertEqual(self.waited, ["rs-rich-art-v0.2.0", "python-v0.3.0"])
+        self.assertEqual(git(self.work, "rev-parse", "rs-rich-art-v0.2.0^{commit}"), self.sha)
+        self.assertEqual(git(self.work, "rev-parse", "python-v0.3.0^{commit}"), self.sha)
+
+    def test_with_nothing_in_progress_the_checkout_is_released(self):
+        head = self.change_rs_rich("unreleased work")
+        self.published.clear()
+        self.run_tag(commit=None, registry="crates.io")
+        self.assertEqual(git(self.work, "rev-parse", "rs-rich-art-v0.2.0^{commit}"), head)
+
+    def test_a_finished_release_is_not_resumed(self):
+        # Everything of release 0.2.0 is out; HEAD names 0.2.1, and is released.
+        self.publish_rs_rich_here()
+        self.published |= {("crates.io", "rs-rich-art", "0.2.0"), ("pypi", "rs-rich")}
+        git(self.work, "tag", "-a", "rs-rich-art-v0.2.0", "-m", "x", self.sha)
+        git(self.work, "push", "--quiet", "origin", "rs-rich-art-v0.2.0")
+        head = self.bump_art()
+        self.run_tag(commit=None, registry="crates.io")
+        self.assertEqual(git(self.work, "rev-parse", "rs-rich-art-v0.2.1^{commit}"), head)
+
+    def test_release_finds_the_last_commit_on_main_naming_it(self):
+        self.bump_art()
+        self.run_tag(commit=None, release="v0.2.0", registry="crates.io")
+        self.assertEqual(self.waited, ["rs-rich-art-v0.2.0"])
+        self.assertEqual(git(self.work, "rev-parse", "rs-rich-art-v0.2.0^{commit}"), self.sha)
+
+    def test_release_takes_the_commit_its_tags_are_on(self):
+        self.publish_rs_rich_here()
+        self.change_rs_rich("not a bump")
+        self.run_tag(commit=None, release="0.2.0", registry="crates.io")
+        self.assertEqual(git(self.work, "rev-parse", "rs-rich-art-v0.2.0^{commit}"), self.sha)
+
+    def test_an_unknown_release_is_refused(self):
+        with self.assertRaisesRegex(RuntimeError, "names release 9.9.9"):
+            self.run_tag(commit=None, release="9.9.9")
+        self.assertEqual(self.remote_tags(), [])
+
+    def test_a_tag_records_its_release_and_commit(self):
+        self.run_tag(registry="crates.io")
+        self.assertEqual(cohort.tag_trailers("rs-rich-art-v0.2.0"), {"Release": "0.2.0", "Commit": self.sha})
+
+    def test_same_commit_passes_a_tag_on_its_release_commit(self):
+        self.publish_rs_rich_here()
+        self.run_tag(registry="crates.io")
+        summary = cohort.same_commit("rs-rich-art-v0.2.0", "origin")
+        self.assertIn(f"-> {self.sha} (release 0.2.0)", summary)
+        self.assertIn("rs-rich-v0.1.0", summary)
+
+    def test_same_commit_refuses_a_tag_that_splits_its_release(self):
+        # What release.yml runs: rs-rich-art tagged on a commit that ships an
+        # rs-rich other than the one released under rs-rich 0.1.0.
+        self.publish_rs_rich_here()
+        later = self.change_rs_rich()
+        git(self.work, "tag", "-a", "rs-rich-art-v0.2.0", "-m", "x", later)
+        with self.assertRaisesRegex(RuntimeError, r"would split release 0\.2\.0(.|\n)*rs-rich@0\.1\.0"):
+            cohort.same_commit("rs-rich-art-v0.2.0", "origin")
+
+    def test_same_commit_refuses_a_tag_moved_from_its_recorded_commit(self):
+        later = self.change_rs_rich("elsewhere")
+        git(self.work, "tag", "-a", "rs-rich-art-v0.2.0", "-m", f"rs-rich-art 0.2.0\n\nCommit: {self.sha}", later)
+        with self.assertRaisesRegex(RuntimeError, "records commit"):
+            cohort.same_commit("rs-rich-art-v0.2.0", "origin")
+
+    def test_both_release_workflows_refuse_a_split_release_before_building(self):
+        crates = (ROOT / ".github/workflows/release.yml").read_text()
+        self.assertLess(crates.index("release_cohort.py same-commit"), crates.index("uses: ./.github/workflows/ci.yml"))
+        pypi = (ROOT / ".github/workflows/pypi-release.yml").read_text()
+        self.assertLess(pypi.index("release_cohort.py same-commit"), pypi.index("  wheels:"))
 
     def test_cargo_globs(self):
         cases = [("src/style.rs", "src/**/*", True), ("src/a/b.rs", "src/**/*", True),

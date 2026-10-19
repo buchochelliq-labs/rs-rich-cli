@@ -12,7 +12,12 @@
 #                                             manifests after a bump
 #   python3 scripts/release_cohort.py status   what is published, tagged, or due
 #   python3 scripts/release_cohort.py tag      tag everything not yet released,
-#                                             one at a time, on main
+#                                             one at a time: a release in
+#                                             progress on its commit, else HEAD
+#                                             (--release X.Y.Z, --commit SHA)
+#
+# A release is named by rs-rich-cli's version (the last crate below), and is
+# tagged from one commit; both release workflows refuse a tag that splits it.
 #
 # A version already on its registry is never tagged again: `tag` skips it, and
 # both release workflows fail a tag whose version is already published.

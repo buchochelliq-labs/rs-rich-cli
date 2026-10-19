@@ -13,10 +13,25 @@ on it:
     tag         create and push the tag of every package not yet on its
                 registry, one at a time in order, waiting for each release to
                 appear before the next. A published version is never tagged.
-                It tags the local checkout (HEAD, or `--commit`) and fetches
-                nothing, so a resumed run releases the same commit.
+                It picks the commit itself: the one a release already in
+                progress was tagged from, else the local checkout (HEAD).
+                `--release 0.0.20` releases that one (from the commit its
+                tags are on, else the last commit on main naming it), and
+                `--commit` names the commit outright. Main is never fetched.
                 `--registry crates.io` (or `pypi`) tags only that registry's
                 packages, to hold the other back.
+    same-commit fail when a release tag's commit is not the one the rest of
+                its release was tagged from, and the packages differ between
+                the two (release.yml and pypi-release.yml, before building).
+
+A release is named by the version of the last crate in RELEASES.toml
+(rs-rich-cli): the 0.0.19 release is the one with rs-rich-cli 0.0.19. Each tag
+`tag` creates records it, and its commit, in the tag's message:
+
+    rs-rich-ext 0.0.17
+
+    Release: 0.0.20
+    Commit: <the commit tagged>
 
 Requires Python 3.11+ and git; `tag` uses the GitHub CLI (`gh`), when present,
 to stop as soon as a release run fails.
@@ -29,6 +44,7 @@ if sys.version_info < (3, 11):
 
 import argparse
 from dataclasses import dataclass
+import os
 from pathlib import Path
 import re
 import shutil
@@ -75,7 +91,8 @@ def files_on_disk(root=ROOT):
 def files_at(commit):
     """Read files as they are at `commit`, whatever is checked out."""
     return lambda path: subprocess.check_output(
-        ["git", "show", f"{commit}:{path}"], cwd=ROOT, text=True, encoding="utf-8"
+        ["git", "show", f"{commit}:{path}"], cwd=ROOT, text=True, encoding="utf-8",
+        stderr=subprocess.DEVNULL,
     )
 
 
@@ -88,6 +105,15 @@ def load(read):
             raise ValueError(f"{CONFIG}: an entry lacks {', '.join(sorted(missing))}: {entry}")
         packages.append(Package(entry["name"], entry["registry"], entry["manifest"], entry["version"]))
     return packages
+
+
+def release_name(packages):
+    """The release a RELEASES.toml describes: its last crate's version (rs-rich-cli's)."""
+    return [p for p in packages if p.registry == "crates.io"][-1].version
+
+
+def version_key(version):
+    return tuple(int(part) for part in re.findall(r"\d+", version))
 
 
 def manifest_version(read, package):
@@ -390,24 +416,136 @@ def packaged_changes(package, old, new, read):
     return shipped
 
 
-def published_elsewhere(packages, existing, sha, remote, read, status):
-    """Published packages whose tag is on another commit and whose shipped
-    files differ at `sha`: releasing `sha` would put the rest of the cohort
-    beside packages built from other code under the same numbers (the split
-    cohort of rs-rich-intuituive 0.0.4). Returns {tag commit: [package
-    (files)]}."""
+def have_commits(existing, remote):
+    """Fetch the objects of any tagged commit this clone lacks (only those
+    tags; main is never fetched)."""
+    missing = sorted(name for name, sha in existing.items()
+                     if subprocess.run(["git", "cat-file", "-e", f"{sha}^{{commit}}"], cwd=ROOT,
+                                       capture_output=True).returncode)
+    if missing:
+        git("fetch", "--quiet", "--no-tags", remote, *(f"refs/tags/{name}" for name in missing))
+
+
+def releases_tagged(existing):
+    """Commit -> its RELEASES.toml entries, for every commit some release tag
+    was cut from: a tag on the commit names a version that commit lists."""
+    found = {}
+    for commit in set(existing.values()):
+        try:
+            packages = load(files_at(commit))
+            release_name(packages)
+        except (subprocess.CalledProcessError, ValueError, IndexError, tomllib.TOMLDecodeError):
+            continue
+        if any(existing.get(p.tag) == commit for p in packages):
+            found[commit] = packages
+    return found
+
+
+def newest_first(commits):
+    return sorted(commits, key=lambda c: int(git("rev-list", "--count", c)), reverse=True)
+
+
+def split_from(packages, existing, sha, read, binds):
+    """Packages whose tag is on another commit, and whose shipped files differ
+    at `sha`: releasing `sha` would put the rest of the release beside
+    packages built from other code under the same numbers (the split
+    release of rs-rich-intuituive 0.0.4). `binds(package, tagged)` says
+    whether such a tag holds this release to its commit. Returns {tag
+    commit: [package (files)]}."""
     found = {}
     for package in packages:
         tagged = existing.get(package.tag)
-        if not tagged or tagged == sha or not is_published(package, status):
+        if not tagged or tagged == sha or not binds(package, tagged):
             continue
-        if subprocess.run(["git", "cat-file", "-e", f"{tagged}^{{commit}}"], cwd=ROOT,
-                          capture_output=True).returncode:
-            git("fetch", "--quiet", "--no-tags", remote, f"refs/tags/{package.tag}")
         if changed := packaged_changes(package, tagged, sha, read):
             shown = ", ".join(changed[:3]) + (", ..." if len(changed) > 3 else "")
             found.setdefault(tagged, []).append(f"{package} ({shown})")
     return found
+
+
+def split_error(sha, split, what="changes packages already released under the same version"):
+    lines = [f"  tagged at {commit[:12]}: " + "; ".join(names) for commit, names in split.items()]
+    hint = " or ".join(f"--commit {commit[:12]}" for commit in split)
+    return (f"{sha[:12]} {what} from other commits:\n" + "\n".join(lines)
+            + f"\nRelease from the commit they came from ({hint}), or bump them first. A tag "
+              "whose run will never publish can be deleted: git push origin :refs/tags/<tag> "
+              "&& git tag -d <tag>")
+
+
+def resolve(commit, release_wanted, remote, existing, binds, published):
+    """The commit to release and why: `--commit`; else the commit the release
+    (`--release`, or the newest one tagged) was started from, while any of
+    it is still due; else, for `--release`, the last commit on main naming
+    it; else HEAD."""
+    if commit:
+        return git("rev-parse", "--verify", f"{commit}^{{commit}}"), "--commit"
+    have_commits(existing, remote)
+    tagged = releases_tagged(existing)
+    names = {c: release_name(p) for c, p in tagged.items()}
+    wanted = release_wanted.removeprefix("v") if release_wanted else None
+    target = wanted or max(names.values(), key=version_key, default=None)
+    started = newest_first([c for c in tagged if names[c] == target])
+    for candidate in started:
+        packages = tagged[candidate]
+        if split_from(packages, existing, candidate, files_at(candidate), binds):
+            continue
+        due = [p for p in packages if not published(p)]
+        if due or wanted:
+            shown = ", ".join(sorted(t for t, c in existing.items() if c == candidate))
+            return candidate, f"release {target}, already tagged there: {shown}"
+    if started and wanted:
+        raise RuntimeError(f"release {wanted}'s tags are on {', '.join(c[:12] for c in started)}, "
+                           "and none of them can take the rest without splitting it; use --commit")
+    if wanted:
+        for candidate in git("rev-list", "--first-parent", f"{remote}/main").splitlines():
+            try:
+                name = release_name(load(files_at(candidate)))
+            except (subprocess.CalledProcessError, ValueError, IndexError, tomllib.TOMLDecodeError):
+                break
+            if name == wanted:
+                return candidate, f"release {wanted}: the last commit on {remote}/main naming it"
+            if version_key(name) < version_key(wanted):
+                break
+        raise RuntimeError(f"no commit on {remote}/main (as last fetched) names release {wanted} "
+                           f"(the version of the last crate in {CONFIG})")
+    return git("rev-parse", "--verify", "HEAD^{commit}"), "the local checkout (HEAD)"
+
+
+def tag_message(package, release_wanted, sha):
+    """A release tag's message: the package, then its release and commit."""
+    return f"{package.name} {package.version}\n\nRelease: {release_wanted}\nCommit: {sha}\n"
+
+
+def tag_trailers(tag_name):
+    """The `Key: value` lines of a local tag's message."""
+    text = git("for-each-ref", f"refs/tags/{tag_name}", "--format=%(contents)")
+    return dict(re.findall(r"(?m)^(Release|Commit): (\S+)$", text))
+
+
+def same_commit(tag_name, remote):
+    """Fail when a release tag (checked out) would split its release: another
+    package of the same RELEASES.toml is tagged on another commit and ships
+    other files under its number, or the tag's recorded commit is not the
+    one it points at. Returns a summary of the tag, its release and commit."""
+    sha = git("rev-parse", "--verify", f"refs/tags/{tag_name}^{{commit}}")
+    read = files_at(sha)
+    packages = load(read)
+    name = release_name(packages)
+    recorded = tag_trailers(tag_name)
+    if recorded.get("Commit") and recorded["Commit"] != sha:
+        raise RuntimeError(f"{tag_name} records commit {recorded['Commit']} but points at {sha}")
+    if recorded.get("Release") and recorded["Release"] != name:
+        raise RuntimeError(f"{tag_name} records release {recorded['Release']}, but {CONFIG} at "
+                           f"{sha[:12]} is release {name}")
+    existing = remote_tags(remote)
+    have_commits(existing, remote)
+    own = {p.tag for p in selected_by(tag_name, packages)}
+    others = [p for p in packages if p.tag not in own]
+    if split := split_from(others, existing, sha, read, lambda package, tagged: True):
+        raise RuntimeError(split_error(sha, split, f"would split release {name}: it changes packages tagged"))
+    siblings = sorted(p.tag for p in packages if existing.get(p.tag) == sha)
+    return (f"{tag_name} -> {sha} (release {name}). Tagged on this commit: "
+            f"{', '.join(siblings) or tag_name}.")
 
 
 def start_at(packages, start):
@@ -419,11 +557,19 @@ def start_at(packages, start):
 
 
 def tag(commit, remote, timeout, dry_run, status=registry_status, wait=wait_for, registry=None,
-        run=tag_run, start=None):
-    # The local checkout decides what is released: nothing is fetched, so a
-    # run that is resumed later tags the same commit, not whatever main has
+        run=tag_run, start=None, release_wanted=None):
+    # The local checkout decides what is released: main is never fetched, so
+    # a run that is resumed later tags the same commit, not whatever main has
     # moved on to since. Only the remote's tags and the registries are read.
-    sha = git("rev-parse", "--verify", f"{commit}^{{commit}}")
+    existing = remote_tags(remote)
+
+    def binds(package, tagged):
+        # A tag elsewhere holds the release to its commit unless its run
+        # provably published nothing: then it is moved here.
+        return is_published(package, status) or not dead_tag(run(package), tagged)
+
+    sha, why = resolve(commit, release_wanted, remote, existing, binds,
+                       lambda package: is_published(package, status))
     if subprocess.run(["git", "merge-base", "--is-ancestor", sha, f"{remote}/main"], cwd=ROOT).returncode:
         raise RuntimeError(f"{sha} is not on {remote}/main as last fetched; release tags go on main "
                            "(docs/BRANCHING.md)")
@@ -432,15 +578,11 @@ def tag(commit, remote, timeout, dry_run, status=registry_status, wait=wait_for,
         raise RuntimeError(f"{CONFIG} is not in {sha[:12]}; tag a commit that has it")
     if errors := check(read):
         raise RuntimeError(f"{CONFIG} at {sha[:12]} disagrees with the repository:\n  " + "\n  ".join(errors))
-    existing = remote_tags(remote)
     packages = load(read)
-    if split := published_elsewhere(packages, existing, sha, remote, read, status):
-        lines = [f"  released from {commit[:12]}: " + "; ".join(names) for commit, names in split.items()]
-        hint = " or ".join(f"--commit {commit[:12]}" for commit in split)
-        raise RuntimeError(
-            f"{sha[:12]} changes packages already published under the same version from other commits:\n"
-            + "\n".join(lines)
-            + f"\nRelease from the commit they came from ({hint}), or bump them first.")
+    name = release_name(packages)
+    have_commits(existing, remote)
+    if split := split_from(packages, existing, sha, read, binds):
+        raise RuntimeError(split_error(sha, split))
     first = start_at(packages, start) if start else 0
     if first:
         # Packages before --from are left as they are. One a later crate
@@ -454,7 +596,7 @@ def tag(commit, remote, timeout, dry_run, status=registry_status, wait=wait_for,
         if blocked:
             raise RuntimeError(f"--from {start} leaves unpublished versions that later crates need: "
                                + "; ".join(blocked) + ". Start from the first of those instead.")
-    print(f"Releasing from {sha}", flush=True)
+    print(f"Release {name} from {sha} ({why})", flush=True)
     for index, package in enumerate(packages):
         if index < first:
             print(f"leave  {package.tag}: before --from {start}", flush=True)
@@ -467,26 +609,17 @@ def tag(commit, remote, timeout, dry_run, status=registry_status, wait=wait_for,
             continue
         if package.tag in existing and existing[package.tag] != sha:
             # A tag on another commit whose version is not on the registry.
-            # Moved here only when its release run, on that commit, ended
-            # without success and never started publishing; anything less
-            # certain stops.
+            # Moved here when its release run, on that commit, ended without
+            # success and never started publishing. Otherwise it stands, and
+            # the split check has shown it ships the same files as `sha`.
             old = existing[package.tag][:12]
             latest = run(package)
             if not dead_tag(latest, existing[package.tag]):
-                if not latest:
-                    state = "no release run can be seen"
-                elif latest["head_sha"] != existing[package.tag]:
-                    state = f"its latest release run is on {latest['head_sha'][:12]}, not the tag"
-                elif latest["status"] != "completed":
-                    state = f"its release run is {latest['status']}: {latest['url']}"
-                elif latest["publish_started"]:
-                    state = f"its release run started publishing: {latest['url']}"
-                else:
-                    state = f"its release run succeeded: {latest['url']}"
-                raise RuntimeError(
-                    f"{package.tag} exists on {remote} at {old}, not {sha[:12]}, and {package} is not "
-                    f"published; {state}. If nothing will come of it, delete it and run again:\n"
-                    f"  git push {remote} :refs/tags/{package.tag} && git tag -d {package.tag}")
+                print(f"wait   {package.tag}: tagged at {old}, which ships the same files; "
+                      "waiting for its release", flush=True)
+                if not dry_run:
+                    wait(package, timeout, status)
+                continue
             print(f"move   {package.tag}: its run at {old} ended {latest['conclusion']} before publishing; "
                   f"tagging {sha[:12]}", flush=True)
             if dry_run:
@@ -513,7 +646,7 @@ def tag(commit, remote, timeout, dry_run, status=registry_status, wait=wait_for,
                 git("tag", "-d", package.tag)
                 local = ""
             if not local:
-                git("tag", "-a", package.tag, "-m", f"{package.name} {package.version}", sha)
+                git("tag", "-a", package.tag, "-m", tag_message(package, name, sha), sha)
             git("push", remote, f"refs/tags/{package.tag}", capture=False)
             print(f"tagged {package.tag}; waiting for {package.workflow}", flush=True)
         wait(package, timeout, status)
@@ -528,10 +661,18 @@ def main():
     commands.add_parser("status")
     guard = commands.add_parser("unreleased")
     guard.add_argument("tag")
+    split = commands.add_parser("same-commit")
+    split.add_argument("tag")
+    split.add_argument("--remote", default="origin")
     tagger = commands.add_parser("tag")
-    tagger.add_argument("--commit", default="HEAD",
-                        help="commit to tag (default: HEAD, the local checkout): any commit on main, "
-                             "such as an earlier one known to be good; its RELEASES.toml decides")
+    which = tagger.add_mutually_exclusive_group()
+    which.add_argument("--commit",
+                       help="commit to tag: any commit on main, such as an earlier one known to be "
+                            "good; its RELEASES.toml decides (default: the commit a release in "
+                            "progress was tagged from, else HEAD)")
+    which.add_argument("--release", dest="release_wanted", metavar="VERSION",
+                       help="release this one (rs-rich-cli's version, such as 0.0.20 or v0.0.20): from "
+                            "the commit its tags are on, else the last commit on main naming it")
     tagger.add_argument("--remote", default="origin")
     tagger.add_argument("--timeout", type=int, default=120, help="minutes to wait for each release")
     tagger.add_argument("--dry-run", action="store_true", help="show what would be tagged, then stop")
@@ -553,13 +694,19 @@ def main():
             tags = remote_tags("origin")
             for package in load(files_on_disk()):
                 published = "published" if is_published(package) else "unreleased"
-                tagged = "tagged" if package.tag in tags else "-"
+                tagged = f"tagged at {tags[package.tag][:12]}" if package.tag in tags else "-"
                 print(f"{package.tag:<28} {package.registry:<10} {published:<11} {tagged}")
         elif args.command == "unreleased":
             unreleased(args.tag, load(files_on_disk()))
+        elif args.command == "same-commit":
+            summary = same_commit(args.tag, args.remote)
+            print(summary)
+            if path := os.environ.get("GITHUB_STEP_SUMMARY"):
+                with open(path, "a", encoding="utf-8") as out:
+                    out.write(summary + "\n")
         else:
             tag(args.commit, args.remote, args.timeout * 60, args.dry_run, registry=args.registry,
-                start=args.start)
+                start=args.start, release_wanted=args.release_wanted)
     except (RuntimeError, ValueError, subprocess.CalledProcessError) as error:
         print(f"error: {error}", file=sys.stderr)
         return 1

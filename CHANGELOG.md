@@ -9,6 +9,30 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Releases: one release, one commit, found for you
+
+- **`release_cohort.py tag` finds the release and its commit.** A release
+  is named by rs-rich-cli's version. With no `--commit`, the newest release
+  that has tags is resumed on the commit those tags are on while any of it
+  is unpublished; with nothing in progress, `HEAD` is released. On today's
+  repository it picks release 0.0.19 at 2fc9772 by itself and tags only web
+  0.0.2, data 0.0.3, cli 0.0.19 and python 0.0.7.
+- **`--release 0.0.20`** (or `v0.0.20`) releases that one: from the commit
+  its tags are on, else the last commit on main naming it.
+- **Tags record their release and commit.** Each tag's message carries
+  `Release:` and `Commit:` lines.
+- **The release workflows refuse a split release.** `release.yml` and
+  `pypi-release.yml` run `release_cohort.py same-commit <tag>` before
+  building: a tag whose commit ships other code than a package of its
+  release tagged elsewhere under the same number is refused, and the job
+  summary names the tag's commit and release.
+- **The split check counts tagged packages, not only published ones.** A
+  tag on another commit still running, or one that started publishing,
+  holds the release to that commit unless it ships the same files (then it
+  is waited on).
+- **Template.** `templates/intuituive-app` depends on rs-rich-intuituive
+  0.0.5, which #753 missed (main's interact and intuiTUIve test jobs).
+
 ### Releases: a dead tag is moved, not a dead end
 
 - **`release_cohort.py tag` moves a tag whose release never happened.** A
