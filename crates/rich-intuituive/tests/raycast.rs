@@ -150,11 +150,7 @@ fn the_status_bar_has_digits_a_face_and_the_frame_rate() {
     }
     // `digits` draws 50 in box glyphs, and reads 100% aloud.
     assert!(text.contains("┌─╴┌─┐"), "{text}");
-    let names: Vec<String> = driver
-        .accessibility()
-        .into_iter()
-        .map(|n| n.name)
-        .collect();
+    let names: Vec<String> = driver.accessibility().into_iter().map(|n| n.name).collect();
     assert!(names.iter().any(|n| n.contains("100%")), "{names:?}");
     // One frame a tic: 35 a second on the app's clock.
     assert!(text.contains("35 fps · half blocks"), "{text}");
@@ -532,7 +528,12 @@ fn help_lists_the_keys() {
     let (mut driver, _) = start(options(), 100, 50);
     driver.press("?");
     let text = dump(&driver);
-    for line in ["Walk forward", "Strafe left", "Fire", "Show or hide the map"] {
+    for line in [
+        "Walk forward",
+        "Strafe left",
+        "Fire",
+        "Show or hide the map",
+    ] {
         assert!(text.contains(line), "{text}");
     }
 }
@@ -590,4 +591,3 @@ fn options_parse() {
     assert!(Options::parse(["--level", "3"].map(String::from)).is_err());
     assert!(Options::parse(["--mode", "sixel"].map(String::from)).is_err());
 }
-

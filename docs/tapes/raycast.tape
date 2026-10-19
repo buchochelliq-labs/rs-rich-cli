@@ -9,7 +9,7 @@
 Set Title "rs-rich raycaster · a ray caster on intuiTUIve"
 Set Size 100x30
 Set TypingDelay 60ms
-Mask /\d+ fps/ "NN fps"
+Mask /\s+\d+ fps/ " NN fps"
 Mask /\d+:\d\d/ "N:NN"
 Hide
 Exec "mkdir -p bin && ln -sf \"$(dirname \"$(command -v rich)\")/examples/raycast\" bin/raycast"

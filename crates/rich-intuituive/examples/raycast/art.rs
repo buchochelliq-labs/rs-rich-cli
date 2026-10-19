@@ -102,14 +102,20 @@ fn brick() -> Texture {
         let row = y / 8;
         let x_off = (x + if row % 2 == 1 { 8 } else { 0 }) % TEX;
         let brick = x_off / 16;
-        if y % 8 == 7 || x_off % 16 == 0 {
+        if y % 8 == 7 || x_off.is_multiple_of(16) {
             return shade([86, 80, 74], noise(x as i64, y as i64, 1) * 0.12);
         }
         let base = shade(
             [150, 62, 44],
             noise(brick as i64, row as i64, 2) * 0.18 + smooth(x as f64, y as f64, 6.0, 3) * 0.08,
         );
-        let edge = if y % 8 == 6 { -0.25 } else if y % 8 == 0 { 0.12 } else { 0.0 };
+        let edge = if y % 8 == 6 {
+            -0.25
+        } else if y % 8 == 0 {
+            0.12
+        } else {
+            0.0
+        };
         shade(base, edge + noise(x as i64, y as i64, 4) * 0.08)
     })
 }
@@ -119,7 +125,7 @@ fn stone() -> Texture {
         let row = y / 16;
         let x_off = (x + row * 11) % TEX;
         let block = x_off / 21;
-        let seam = y % 16 == 15 || x_off % 21 == 0 || (x_off == 63 && block == 3);
+        let seam = y % 16 == 15 || x_off.is_multiple_of(21) || (x_off == 63 && block == 3);
         let base = shade(
             [118, 116, 108],
             noise(block as i64, row as i64, 5) * 0.12 + smooth(x as f64, y as f64, 9.0, 6) * 0.15,
@@ -182,7 +188,11 @@ fn tech_at(x: usize, y: usize) -> [u8; 3] {
     }
     let panel = (x / 32 + y / 32) % 2;
     if panel == 0 && (12..15).contains(&py) && (5..27).contains(&px) {
-        return if py == 13 { [140, 240, 255] } else { [60, 170, 200] };
+        return if py == 13 {
+            [140, 240, 255]
+        } else {
+            [60, 170, 200]
+        };
     }
     if panel == 1 && (8..24).contains(&py) && (8..24).contains(&px) && py % 3 == 0 {
         return shade(base, -0.5);
@@ -238,7 +248,7 @@ fn door() -> Texture {
             7 => -0.35,
             _ => 0.0,
         };
-        let edge = if x < 2 || x > 61 { -0.4 } else { 0.0 };
+        let edge = if !(2..=61).contains(&x) { -0.4 } else { 0.0 };
         shade(base, rib + edge + noise(x as i64, y as i64, 14) * 0.05)
     })
 }
@@ -247,7 +257,10 @@ fn frame() -> Texture {
     Texture::from_fn(TEX, TEX, |x, y| {
         let stripe = (24..40).contains(&x);
         let base = if stripe { [180, 150, 40] } else { [60, 60, 66] };
-        shade(base, noise(x as i64, y as i64, 15) * 0.06 - if x % 16 == 0 { 0.3 } else { 0.0 })
+        shade(
+            base,
+            noise(x as i64, y as i64, 15) * 0.06 - if x % 16 == 0 { 0.3 } else { 0.0 },
+        )
     })
 }
 
@@ -363,7 +376,9 @@ fn barrel() -> Texture {
             light * 0.5 - 0.45 + noise(i64::from(x), i64::from(y), 20) * 0.08,
         )
     });
-    t.ellipse(32.0, 24.5, 14.0, 3.0, |nx, _| shade([120, 82, 40], -nx * 0.2));
+    t.ellipse(32.0, 24.5, 14.0, 3.0, |nx, _| {
+        shade([120, 82, 40], -nx * 0.2)
+    });
     t.ellipse(32.0, 24.5, 9.0, 1.8, |_, _| [70, 200, 60]);
     t
 }
@@ -396,7 +411,9 @@ fn lamp() -> Texture {
             shade([40, 90, 60], -(x as f64 - 32.0).abs() / 30.0)
         });
     }
-    t.ellipse(32.0, 23.0, 7.0, 2.5, |_, ny| shade([255, 244, 190], -ny * 0.1));
+    t.ellipse(32.0, 23.0, 7.0, 2.5, |_, ny| {
+        shade([255, 244, 190], -ny * 0.1)
+    });
     t
 }
 
@@ -404,7 +421,10 @@ fn ammo() -> Texture {
     let mut t = Texture::new(TEX, TEX);
     t.rect(22, 54, 42, 64, |x, y| {
         let edge = if y == 54 || x == 22 { 0.25 } else { 0.0 };
-        shade([92, 100, 52], edge + noise(i64::from(x), i64::from(y), 22) * 0.06)
+        shade(
+            [92, 100, 52],
+            edge + noise(i64::from(x), i64::from(y), 22) * 0.06,
+        )
     });
     for i in 0..4 {
         let x = 24 + i * 5;
@@ -423,7 +443,10 @@ fn medikit() -> Texture {
     let mut t = Texture::new(TEX, TEX);
     t.rect(20, 48, 44, 64, |x, y| {
         let edge = if y == 48 || x == 20 { 0.0 } else { -0.08 };
-        shade([232, 232, 228], edge + noise(i64::from(x), i64::from(y), 23) * 0.04)
+        shade(
+            [232, 232, 228],
+            edge + noise(i64::from(x), i64::from(y), 23) * 0.04,
+        )
     });
     t.rect(30, 50, 34, 62, |_, _| [210, 30, 30]);
     t.rect(26, 54, 38, 58, |_, _| [210, 30, 30]);
@@ -468,7 +491,9 @@ fn enemy(n: usize) -> Texture {
     if n >= 5 {
         // Falling: lower and wider, then a heap in a puddle.
         let drop = (n - 5) as i32;
-        t.ellipse(32.0, 61.0, 10.0 + 4.0 * drop as f64, 2.5, |_, _| [120, 10, 10]);
+        t.ellipse(32.0, 61.0, 10.0 + 4.0 * drop as f64, 2.5, |_, _| {
+            [120, 10, 10]
+        });
         let top = 30 + drop * 11;
         t.rect(22 - drop * 3, top, 42 + drop * 3, 61, robe);
         if drop < 2 {
@@ -489,7 +514,7 @@ fn enemy(n: usize) -> Texture {
     // The robe and its belt.
     for y in 20..46 {
         let half = 8 + (y - 20) / 4;
-        t.rect(32 - half, y, 32 + half, y + 1, |x, y| robe(x, y));
+        t.rect(32 - half, y, 32 + half, y + 1, robe);
     }
     t.rect(22, 36, 42, 38, |_, _| [150, 120, 50]);
     // Arms; firing, the right one points a weapon out with a flash.
@@ -509,7 +534,9 @@ fn enemy(n: usize) -> Texture {
         t.rect(39, 40, 44, 43, |_, _| [150, 160, 130]);
     }
     // The hood, the face in its shadow, the eyes.
-    t.ellipse(32.0, 13.0, 8.0, 8.5, |nx, ny| shade([80, 42, 104], -nx * 0.15 - ny * 0.1));
+    t.ellipse(32.0, 13.0, 8.0, 8.5, |nx, ny| {
+        shade([80, 42, 104], -nx * 0.15 - ny * 0.1)
+    });
     t.ellipse(32.0, 14.5, 5.0, 5.0, |_, _| [26, 20, 30]);
     t.rect(29, 13, 31, 15, |_, _| [255, 70, 40]);
     t.rect(33, 13, 35, 15, |_, _| [255, 70, 40]);
@@ -537,8 +564,17 @@ fn pistol() -> Texture {
     t.rect(12, 34, 36, 40, |_, _| [60, 64, 70]);
     // The slide and barrel.
     t.rect(18, 4, 30, 26, |x, y| {
-        let light = if x < 21 { 0.25 } else if x > 27 { -0.3 } else { 0.0 };
-        shade([82, 84, 92], light + noise(i64::from(x), i64::from(y), 27) * 0.04)
+        let light = if x < 21 {
+            0.25
+        } else if x > 27 {
+            -0.3
+        } else {
+            0.0
+        };
+        shade(
+            [82, 84, 92],
+            light + noise(i64::from(x), i64::from(y), 27) * 0.04,
+        )
     });
     t.rect(22, 1, 26, 5, |_, _| [40, 40, 44]);
     t.rect(23, 2, 25, 4, |_, _| [10, 10, 10]);
@@ -587,9 +623,7 @@ pub fn face(health: i32, hurt: bool, grin: bool, look: i32) -> (usize, usize, Ve
     for y in 0..H {
         for x in 0..W {
             let edge = x == 0 || x == W - 1;
-            let rgb = if y == 0 {
-                [90, 60, 30]
-            } else if edge && y < 3 {
+            let rgb = if y == 0 || (edge && y < 3) {
                 [90, 60, 30]
             } else if edge {
                 [20, 20, 24]

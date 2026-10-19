@@ -158,7 +158,12 @@ impl PlacementSource for Pixels {
 fn encode(mode: Mode, frame: &Frame, cols: u16, rows: u16) -> Option<String> {
     let mut rgba = RgbaImage::new(frame.width as u32, frame.height as u32);
     for (i, px) in rgba.pixels_mut().enumerate() {
-        px.0 = [frame.rgb[i * 3], frame.rgb[i * 3 + 1], frame.rgb[i * 3 + 2], 255];
+        px.0 = [
+            frame.rgb[i * 3],
+            frame.rgb[i * 3 + 1],
+            frame.rgb[i * 3 + 2],
+            255,
+        ];
     }
     let png = rich_art::graphics::encode_png(&rgba)?;
     let data = rich_art::graphics::base64(&png);
@@ -197,7 +202,7 @@ fn encode(mode: Mode, frame: &Frame, cols: u16, rows: u16) -> Option<String> {
 fn dither(frame: &Frame) -> Vec<u8> {
     const BAYER: [[u8; 4]; 4] = [[0, 8, 2, 10], [12, 4, 14, 6], [3, 11, 1, 9], [15, 7, 13, 5]];
     let mut out = vec![0u8; frame.rgb.len()];
-    for (i, px) in frame.rgb.chunks_exact(3).enumerate() {
+    for (i, px) in frame.rgb.as_chunks::<3>().0.iter().enumerate() {
         let (x, y) = (i % frame.width, i / frame.width);
         let luma = (0.299 * px[0] as f64 + 0.587 * px[1] as f64 + 0.114 * px[2] as f64) / 255.0;
         let level = luma.powf(0.6) * 16.0;

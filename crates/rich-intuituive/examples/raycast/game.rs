@@ -316,7 +316,10 @@ impl Player {
 
     /// The camera plane, to the right of the direction.
     pub fn plane(&self, half_width: f64) -> (f64, f64) {
-        (-self.angle.sin() * half_width, self.angle.cos() * half_width)
+        (
+            -self.angle.sin() * half_width,
+            self.angle.cos() * half_width,
+        )
     }
 }
 
@@ -485,7 +488,12 @@ impl Game {
     /// dying, back to the title after the last level.
     pub fn enter(&mut self) {
         match self.state {
-            State::Title => self.state = State::Playing,
+            State::Title => {
+                // The title turned the camera round: start where the level
+                // says.
+                self.load(self.level);
+                self.state = State::Playing;
+            }
             State::LevelDone => {
                 self.load(self.level + 1);
                 self.state = State::Playing;
@@ -734,17 +742,17 @@ impl Game {
         if player_check && (self.player.x - x).hypot(self.player.y - y) < RADIUS * 2.5 {
             return true;
         }
-        self.things.iter().enumerate().any(|(i, t)| {
-            Some(i) != me && t.solid() && (t.x - x).hypot(t.y - y) < RADIUS + 0.3
-        })
+        self.things
+            .iter()
+            .enumerate()
+            .any(|(i, t)| Some(i) != me && t.solid() && (t.x - x).hypot(t.y - y) < RADIUS + 0.3)
     }
 
     fn pick_up(&mut self) {
         let (px, py) = (self.player.x, self.player.y);
         let mut said = None;
         for thing in &mut self.things {
-            if thing.gone || !thing.kind.is_pickup() || (thing.x - px).hypot(thing.y - py) > 0.55
-            {
+            if thing.gone || !thing.kind.is_pickup() || (thing.x - px).hypot(thing.y - py) > 0.55 {
                 continue;
             }
             let p = &mut self.player;
@@ -896,8 +904,16 @@ impl Game {
     /// x`), so the walls do not bulge.
     pub fn cast(&self, ox: f64, oy: f64, rx: f64, ry: f64) -> Option<Hit> {
         let (mut mx, mut my) = (ox.floor() as i64, oy.floor() as i64);
-        let ddx = if rx == 0.0 { f64::MAX } else { (1.0 / rx).abs() };
-        let ddy = if ry == 0.0 { f64::MAX } else { (1.0 / ry).abs() };
+        let ddx = if rx == 0.0 {
+            f64::MAX
+        } else {
+            (1.0 / rx).abs()
+        };
+        let ddy = if ry == 0.0 {
+            f64::MAX
+        } else {
+            (1.0 / ry).abs()
+        };
         let (sx, mut side_x) = if rx < 0.0 {
             (-1, (ox - mx as f64) * ddx)
         } else {

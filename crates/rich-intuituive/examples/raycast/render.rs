@@ -110,9 +110,17 @@ pub fn render(game: &Game, tex: &Textures, width: usize, height: usize, look: Lo
         for y in 0..h {
             let t = (y as f64 + 0.5 - horizon).abs() / horizon;
             let rgb = if (y as f64) < horizon {
-                [(14.0 + 46.0 * t) as u8, (14.0 + 46.0 * t) as u8, (16.0 + 50.0 * t) as u8]
+                [
+                    (14.0 + 46.0 * t) as u8,
+                    (14.0 + 46.0 * t) as u8,
+                    (16.0 + 50.0 * t) as u8,
+                ]
             } else {
-                [(12.0 + 78.0 * t) as u8, (10.0 + 70.0 * t) as u8, (8.0 + 58.0 * t) as u8]
+                [
+                    (12.0 + 78.0 * t) as u8,
+                    (10.0 + 70.0 * t) as u8,
+                    (8.0 + 58.0 * t) as u8,
+                ]
             };
             for x in 0..w {
                 frame.put(x, y, rgb);
@@ -180,10 +188,13 @@ pub fn render(game: &Game, tex: &Textures, width: usize, height: usize, look: Lo
         } else {
             fog(ty)
         };
-        let (x0, x1) = (left.max(0.0) as usize, (left + size_x).min(w as f64) as usize);
+        let (x0, x1) = (
+            left.max(0.0) as usize,
+            (left + size_x).min(w as f64) as usize,
+        );
         let (y0, y1) = (top.max(0.0) as usize, (top + size_y).min(h as f64) as usize);
-        for x in x0..x1 {
-            if ty >= zbuf[x] {
+        for (x, depth) in zbuf.iter().enumerate().take(x1).skip(x0) {
+            if ty >= *depth {
                 continue;
             }
             let u = (((x as f64 + 0.5 - left) / size_x) * texture.w as f64) as usize;
@@ -206,7 +217,14 @@ pub fn render(game: &Game, tex: &Textures, width: usize, height: usize, look: Lo
     if game.flash > 0 {
         let fh = gh * 0.6;
         let fw = fh * look.aspect * tex.flash.w as f64 / tex.flash.h as f64;
-        blit(&mut frame, &tex.flash, gx + gw / 2.0 - fw / 2.0, gy - fh * 0.8, fw, fh);
+        blit(
+            &mut frame,
+            &tex.flash,
+            gx + gw / 2.0 - fw / 2.0,
+            gy - fh * 0.8,
+            fw,
+            fh,
+        );
     }
     blit(&mut frame, &tex.pistol, gx, gy, gw, gh);
 
@@ -221,7 +239,7 @@ pub fn render(game: &Game, tex: &Textures, width: usize, height: usize, look: Lo
         None
     };
     if let Some((rgb, amount)) = tint {
-        for px in frame.rgb.chunks_exact_mut(3) {
+        for px in frame.rgb.as_chunks_mut::<3>().0 {
             for c in 0..3 {
                 px[c] = (px[c] as f64 * (1.0 - amount) + rgb[c] * amount) as u8;
             }
@@ -232,8 +250,14 @@ pub fn render(game: &Game, tex: &Textures, width: usize, height: usize, look: Lo
 
 /// Draw `texture` scaled into the rectangle at `(x, y)`, `w` × `h`.
 fn blit(frame: &mut Frame, texture: &super::art::Texture, x: f64, y: f64, w: f64, h: f64) {
-    let (x0, x1) = (x.max(0.0) as usize, (x + w).min(frame.width as f64) as usize);
-    let (y0, y1) = (y.max(0.0) as usize, (y + h).min(frame.height as f64) as usize);
+    let (x0, x1) = (
+        x.max(0.0) as usize,
+        (x + w).min(frame.width as f64) as usize,
+    );
+    let (y0, y1) = (
+        y.max(0.0) as usize,
+        (y + h).min(frame.height as f64) as usize,
+    );
     for py in y0..y1 {
         let v = (((py as f64 + 0.5 - y) / h) * texture.h as f64) as usize;
         for px in x0..x1 {

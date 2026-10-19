@@ -190,10 +190,18 @@ const KEYS: &[(&str, &[Action], &str)] = &[
     ("d", &[Action::TurnRight], "Turn right (also →)"),
     ("right", &[Action::TurnRight], ""),
     ("D", &[Action::TurnRight, Action::Run], ""),
-    ("q", &[Action::StrafeLeft], "Strafe left (also Alt+←, comma)"),
+    (
+        "q",
+        &[Action::StrafeLeft],
+        "Strafe left (also Alt+←, comma)",
+    ),
     ("alt+left", &[Action::StrafeLeft], ""),
     ("comma", &[Action::StrafeLeft], ""),
-    ("e", &[Action::StrafeRight], "Strafe right (also Alt+→, period)"),
+    (
+        "e",
+        &[Action::StrafeRight],
+        "Strafe right (also Alt+→, period)",
+    ),
     ("alt+right", &[Action::StrafeRight], ""),
     ("period", &[Action::StrafeRight], ""),
 ];
@@ -285,7 +293,7 @@ fn build(probe: Probe, options: Options, placed: Option<Arc<Mutex<view::Placed>>
                 if game.tic % 140 < 40 {
                     game.press(Action::TurnRight, false);
                 }
-                if game.tic % 35 == 0 {
+                if game.tic.is_multiple_of(35) {
                     game.use_key();
                 }
             }
@@ -381,9 +389,19 @@ fn build(probe: Probe, options: Options, placed: Option<Arc<Mutex<view::Placed>>
         move |state| match state {
             State::Playing => label(""),
             State::Title => title_panel(),
-            State::LevelDone => end_panel(hud, "Level complete", "[bold #ffd75f]Level complete[/]", "Enter: next level"),
+            State::LevelDone => end_panel(
+                hud,
+                "Level complete",
+                "[bold #ffd75f]Level complete[/]",
+                "Enter: next level",
+            ),
             State::Dead => end_panel(hud, "Dead", "[bold red]You died[/]", "Enter: try again"),
-            State::Won => end_panel(hud, "Cleared", "[bold green]All levels cleared[/]", "Enter: back to the title"),
+            State::Won => end_panel(
+                hud,
+                "Cleared",
+                "[bold green]All levels cleared[/]",
+                "Enter: back to the title",
+            ),
         },
     )
     .place(Align::Center, Align::Center);
@@ -430,8 +448,18 @@ fn keys(
     let level_game = game.clone();
     root.bind_in("Act", "f", "Fire (also Ctrl+F)", act(Game::fire))
         .on_key("ctrl+f", fire)
-        .bind_in("Act", "space", "Open a door, press the exit switch", act(Game::use_key))
-        .bind_in("Act", "enter", "Start, next level, try again", act(Game::enter))
+        .bind_in(
+            "Act",
+            "space",
+            "Open a door, press the exit switch",
+            act(Game::use_key),
+        )
+        .bind_in(
+            "Act",
+            "enter",
+            "Start, next level, try again",
+            act(Game::enter),
+        )
         .bind_in("Game", "tab", "Show or hide the map", move |_| {
             show_map.update(|on| *on = !*on);
             if show_map.get_untracked() {
@@ -488,17 +516,15 @@ fn pause_menu(game: Rc<RefCell<Game>>) -> Node {
             cx.pop();
         }
     };
-    label(
-        "[b]Esc[/]  resume\n[b]r[/]    restart the level\n[b]?[/]    keys\n[b]q[/]    quit",
-    )
-    .padding(1, 2)
-    .style("on #181828")
-    .panel("Paused")
-    .bind("esc enter", "Resume", resume)
-    .bind("r", "Restart the level", restart)
-    .bind("q", "Quit", |cx| cx.quit())
-    .focusable()
-    .autofocus()
+    label("[b]Esc[/]  resume\n[b]r[/]    restart the level\n[b]?[/]    keys\n[b]q[/]    quit")
+        .padding(1, 2)
+        .style("on #181828")
+        .panel("Paused")
+        .bind("esc enter", "Resume", resume)
+        .bind("r", "Restart the level", restart)
+        .bind("q", "Quit", |cx| cx.quit())
+        .focusable()
+        .autofocus()
 }
 
 /// The title, over the first level turning slowly behind it.
@@ -506,8 +532,10 @@ fn title_panel() -> Node {
     column([
         big_text(|| "[bold #e0603c]RAYCASTER[/]".to_string()).fixed(6),
         label("[dim]rs-rich raycaster · a first-person maze on intuiTUIve[/]").fixed(2),
-        label("[b]Enter[/] start   [b]1[/] [b]2[/] pick a level   [b]?[/] keys   [b]Ctrl+Q[/] quit")
-            .fixed(1),
+        label(
+            "[b]Enter[/] start   [b]1[/] [b]2[/] pick a level   [b]?[/] keys   [b]Ctrl+Q[/] quit",
+        )
+        .fixed(1),
     ])
     .padding(0, 2)
     .style("on #101018")
@@ -515,7 +543,12 @@ fn title_panel() -> Node {
 }
 
 /// The box at the end of a level, or of the player.
-fn end_panel(hud: Signal<Hud>, title: &'static str, heading: &'static str, next: &'static str) -> Node {
+fn end_panel(
+    hud: Signal<Hud>,
+    title: &'static str,
+    heading: &'static str,
+    next: &'static str,
+) -> Node {
     text(move || {
         hud.with(|h| {
             format!(
@@ -550,7 +583,7 @@ fn status_bar(hud: Signal<Hud>, fps: Signal<u32>, mode: Mode) -> Node {
     let info = text(move || {
         hud.with(|h| {
             format!(
-                "[b]{}[/]  {}:{:02}\nKills {}/{}  Items {}/{}\n[dim]{} fps · {}[/]",
+                "[b]{}[/]  {}:{:02}\nKills {}/{}  Items {}/{}\n[dim]{:>3} fps · {}[/]",
                 h.level,
                 h.seconds / 60,
                 h.seconds % 60,
@@ -570,10 +603,16 @@ fn status_bar(hud: Signal<Hud>, fps: Signal<u32>, mode: Mode) -> Node {
         digits(move || format!("[{colour}]{}[/]", hud.with(f)))
     };
     row([
-        number(|h| h.ammo.to_string(), "#ffd75f").panel("Ammo").fixed(11),
-        number(|h| format!("{}%", h.health.max(0)), "#ff5f5f").panel("Health").fixed(14),
+        number(|h| h.ammo.to_string(), "#ffd75f")
+            .panel("Ammo")
+            .fixed(11),
+        number(|h| format!("{}%", h.health.max(0)), "#ff5f5f")
+            .panel("Health")
+            .fixed(14),
         face.padding(0, 0).panel("").fixed(12),
-        number(|h| format!("{}%", h.armour), "#5fd75f").panel("Armour").fixed(14),
+        number(|h| format!("{}%", h.armour), "#5fd75f")
+            .panel("Armour")
+            .fixed(14),
         info.flex(1),
     ])
 }
