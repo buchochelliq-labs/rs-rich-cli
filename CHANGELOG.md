@@ -9,6 +9,39 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### intuiTUIve: state-driven layout, focus scopes and keyed nodes (rs-rich-intuituive)
+
+Round 6's layout, focus and help pieces, from the shared gaps and bugs of
+the round-5 clones ([the demo gaps](docs/design/intuituive-demo-gaps.md),
+"Round 5"; the git, top, http, music, disk, csv, tasks and blocks
+reports), all generic core:
+
+- **Fixed:** an `.auto()` `switch` takes its page's own `.fixed(n)`,
+  `.min_size(n)` and `.max_size(n)` (bottom's sort menu came out 9 wide
+  for 11); `layers` composite, so a layer shows the ones below where it
+  draws nothing (a backdrop is one `fill`; a panel still covers its inside,
+  a node with a background its rectangle); a `switch` can drop the pages
+  it no longer shows (`.keep_last(n)`), where it kept every page it built.
+- **Layout from state:** `Node::size_with(|| Size)`, `Node::shown_when(||
+  bool)` and `hidden_when` (today's private `shown_if`, public);
+  `keyed(|| key, |key| node)`, one child rebuilt when its key changes, the
+  old one dropped and the focus passed on.
+- **Panels:** `panel_with(|| markup)`, `title_with`, `add_title_with`;
+  `border_with(|| Border)`, and `focus_border` now works on a panel.
+- **Focus:** `Ctx::focus_within(id)` (once the container is laid out);
+  `Node::focus_scope` with `Ctx::focus_next_scope`/`focus_previous_scope`;
+  `Ctx::focus_direction(Direction)` and `Node::bind_directional_focus`, on
+  the pure `focus::neighbour`; `focus::focused()` and `focus::has_focus(id)`
+  as reactive reads; `Node::on_focus` and `on_blur`.
+- **Treemaps:** `layout::squarify(rect, weights, min, aspect)`
+  (`Squarified`), and `treemap`/`treemap_with(.., TreemapOptions)`.
+- **Text:** `fit_text(|| forms)`, the longest that fits;
+  `Node::truncate_middle`.
+- **Screens and help:** `App::min_size(w, h, message)`;
+  `widgets::key_hints_with(KeyHintsOptions)` (a format per hint, key
+  symbols or vim notation, disabled bindings greyed, a separator, a "more"
+  expander); `HelpOptions::all_panes`.
+
 ### intuiTUIve: sprites, stages and pixel buffers (rs-rich-intuituive)
 
 Cell art that moves over a backdrop, and a framebuffer drawn in cells: the

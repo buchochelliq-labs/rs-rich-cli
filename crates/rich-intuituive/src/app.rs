@@ -2060,8 +2060,8 @@ impl App {
 
     /// Below `width` x `height` cells, show `message` (console markup)
     /// centred instead of the app, as a fixed-layout app or a game does on
-    /// a terminal too small for it. Meanwhile keys go nowhere but `q` and
-    /// Ctrl+C, which quit; the app keeps its state, its timers run, and it
+    /// a terminal too small for it. Meanwhile keys go nowhere but `q`,
+    /// which quits (as Ctrl+C does anyway); the app keeps its state, its timers run, and it
     /// comes back as it was once the terminal is big enough. Pop-ups and
     /// modals open over it as ever.
     ///
@@ -2100,8 +2100,7 @@ impl App {
                     .justify(crate::Justify::Center)
                     .auto()])
                     .justify(crate::Justify::Center)
-                    .on_key("q", |cx| cx.quit())
-                    .on_key("ctrl+c", |cx| cx.quit()),
+                    .on_key("q", |cx| cx.quit()),
                     false => app.borrow_mut().take().unwrap_or_else(|| label("")),
                 })
             });
