@@ -393,7 +393,7 @@ Two things the port shows:
 
 [`examples/scope.rs`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/crates/rich-intuituive/examples/scope.rs)
 rebuilds [scope-tui](https://github.com/alemidev/scope-tui) in about 1,300
-lines. Its tests are in `tests/scope.rs`. Like the file manager, it reuses
+lines, built only from intuiTUIve's components and rs-rich-ext's. Its tests are in `tests/scope.rs`. Like the file manager, it reuses
 none of the original's code. Where the file manager redraws when you press
 a key, this app redraws whenever a new buffer of audio arrives.
 
@@ -406,15 +406,24 @@ a key, this app redraws whenever a new buffer of audio arrives.
 
 | scope-tui does | The rebuild uses |
 |---|---|
-| A loop that blocks on the audio source, then draws | each source becomes a signal of the newest buffer, and a `watch` takes each one in: the test signal is made on the app's clock with `every(buffer period)`, a file or a pipe is read on a thread of its own with `latest(…)`, and a sound card is `audio::input(…)` |
-| Audio from cpal (`audio`) and PulseAudio (`pulse`) | intuiTUIve's `audio` feature, on cpal: `audio [DEVICE] [--list]`, and `pulse` as ALSA's `pulse` device; raw PCM from a file or stdin; a built-in test signal |
+| A loop that blocks on the audio source, then draws | each source is a signal of the newest buffer: the test signal is made every buffer period by `latest_every(…)`, a file or a pipe is read on a `latest(…)` thread kept to its beat by `Latest::sleep`, and a sound card is `audio::open(…)` before the app with `capture.samples()` inside it. `on_write` takes every buffer, two equal ones (silence) included |
+| `fps`, counted as it reads | `rate(samples)`, the writes a second |
+| Audio from cpal (`audio`) and PulseAudio (`pulse`) | intuiTUIve's `audio` feature, on cpal: `audio [DEVICE] [--list] [--timeout S]`, with `--list` printing each device's configurations (`Device::configs`) as scope-tui does and `--timeout` ending the app when `capture.status()` says `Stalled`; `pulse [DEVICE] [--server-buffer N]` on the `pulse` feature's PulseAudio host, every source and sink monitor by name, `--server-buffer` as `AudioOptions::latency` |
+| Raw s16le PCM from a file or a pipe | `audio::pcm(reader, Format::S16Le, …)` |
 | Three `DisplayMode` trait objects, mutated by key handlers | one signal per mode's settings, and one per shared setting (`Graph`) |
-| The header, a one-row `Table` with percentage columns | a `row` of `widgets::cell`s with `.percent(…)`, `.gap(1)` and `.solver(Solver::Ratatui)`, styled as the table is with `.style(…)` |
-| `Chart` with Braille `Dataset`s, axis titles and a legend, and axes without labels (so without lines) | rs-rich-ext's `Chart`, laid out as ratatui's, with the same `Dataset`s and `Labels::None`, and drawn as ratatui 0.29 draws: `out_of_bounds(OutOfBounds::Drop)`, `layering(Layering::PerDataset)`, `legend_style("")` and `legend_clear(false)`; the spectroscope's frequencies on a log `Axis` |
-| `rustfft` for the spectrum | `rich_ext::dsp::fft`, `hann` and `magnitude` |
-| Colours parsed by ratatui (`--axis-color DarkGray`) | `rich_ratatui::style_from_color_name` |
-| Shift ×10, Ctrl ×5, Alt ×⅕ on every step | the same bindings, made in a loop over the modifiers |
+| The header, a one-row `Table` with percentage columns | `cells([(35, …), (25, …), …])`, ratatui's one-row table, styled as the table is with `.style(…)` |
+| `Chart` with Braille `Dataset`s, axis titles and a legend, and axes without labels (so without lines) | rs-rich-ext's `Chart`, laid out as ratatui's, with the same `Dataset`s and `Labels::None`, and drawn as ratatui 0.29 draws: `out_of_bounds(OutOfBounds::Drop)`, `layering(Layering::PerDataset)`, `style("none")` (the legend takes it) and `legend_clear(false)`; the spectroscope's frequencies on a log `Axis` |
+| Reference lines as datasets (29 in the spectroscope) | `Axis::grid([…])` in the axis colour, under the traces |
+| `rustfft` for the spectrum; a trigger search | `rich_ext::dsp::spectrum_full`, `fft`, `hann`; `dsp::trigger(…, Edge::Rising)` |
+| `--tune NOTE`, from a table of pitches | `dsp::note_hz` |
+| Colours parsed by ratatui (`--axis-color DarkGray`) | `rich_ext::palette::style_from_color_name` |
+| Tab through the modes | `.bind_cycle("tab", …, mode, &Mode::ALL)` |
+| Shift ×10, Ctrl ×5, Alt ×⅕ on every step | `.bind_scaled(key, &[("", 1.0), ("shift", 10.0), ("ctrl", 5.0), ("alt", 0.2)], …)`, one help row each |
 | `h` hides the interface | `switch` on the `show_ui` setting |
+
+The test signal is made of `dsp::partials`, `tone`, `noise(..).low_pass(..)`
+and `mix`, and `?` opens the framework's help, each scope's keys in a
+section of its own (`.bind_in("oscilloscope", …)`).
 
 ![The vectorscope: left against right, a Lissajous figure](../../media/tapes/scope/vectorscope.png)
 
@@ -426,30 +435,42 @@ What the port shows:
    them. While the scope is paused nothing draws at all, and identical
    buffers (the `--still` test signal) draw nothing either.
 2. **Take the newest frame from a stream rather than queueing them.**
-   `latest` and `audio::input` both keep only the newest buffer. When the
-   terminal falls behind, the app skips old buffers rather than drawing a
-   backlog. A thread's buffers are numbered, because a `watch` runs only
-   when what it reads changes, and two buffers of silence are equal.
-3. **Ported layouts can keep ratatui's arithmetic.** `Solver::Ratatui`
-   places the header's cells in the same columns as scope-tui's table at
-   every width, and `cell` cuts them as a table cell is cut.
+   `latest`, `latest_every` and a capture's `samples()` keep only the
+   newest buffer, so when the terminal falls behind the app skips old
+   buffers rather than drawing a backlog. `on_write` sees every write, so
+   two buffers of silence count as two frames, as in scope-tui.
+3. **Threads can keep to the app's clock.** Under `wait_for_tasks(true)`
+   the test signal and a file's beat run on the app's clock, so the tests
+   count frames exactly.
+4. **Ported layouts can keep ratatui's arithmetic.** `cells` places the
+   header's cells in the same columns as scope-tui's table at every width,
+   and cuts them as a table cell is cut.
 
 It differs from scope-tui in a few deliberate ways:
 
 - `audio` and `pulse` need the crate's `audio` feature (and ALSA's headers
-  on Linux); without it they say so and point at `file -`. `pulse` opens
-  ALSA's `pulse` device, so it reads PulseAudio's default source: a named
-  PulseAudio source, a sink's monitor among them, cannot be chosen, and
-  `--server-buffer` is read but has no effect. `audio --timeout` is read
-  but not enforced, and `audio --list` lists names without their
-  configurations.
+  on Linux); without it they say so and point at `file -`. With `audio`
+  alone, `pulse` opens ALSA's `pulse` device (PulseAudio's default
+  source); the `pulse` feature reaches every PulseAudio and PipeWire
+  source.
 - Its `file` source reads a whole buffer per channel. scope-tui 0.3.5's
   reads half of one, so its waveform fills half the width and its
   spectroscope stops at the first frame; this one draws what scope-tui's
-  audio sources do.
+  audio sources do. Past the end of a file it draws silence a buffer
+  period apart, where scope-tui reads silence as fast as it can.
+- `--tune` takes equal-temperament pitches (`dsp::note_hz`), where
+  scope-tui doubles a table of octave-0 pitches rounded to the hundredth:
+  about one note in ten gives a buffer a sample longer or shorter (E2 is
+  582 samples at 48 kHz here, 583 in scope-tui).
 - The trigger threshold keeps scope-tui's 16-bit units, and compares them
   with the samples scaled back up, so it triggers on every source.
+- Where the vectorscope's reference lines cross with nothing drawn over
+  them, the two grid lines merge in one cell; scope-tui draws its second
+  reference over the first.
 - `?` lists the keys, and options may follow the source.
+- For now it shows at most 20 frames a second (23 is scope-tui's at its
+  default buffer): the framework picks up values from other threads every
+  50 ms, a bug listed in [the demo gaps](../../design/intuituive-demo-gaps.md).
 
 ![The spectroscope: each channel's spectrum on a log frequency axis](../../media/tapes/scope/spectroscope.png)
 

@@ -15,6 +15,7 @@ use std::io::Cursor;
 use std::time::Duration;
 
 use common::{row_of, run, screen};
+use intuituive::audio::{self, Format};
 use intuituive::interact::BackendKind;
 use intuituive::App;
 use ratatui::layout::{Constraint, Flex, Layout, Rect};
@@ -32,11 +33,17 @@ fn silence(channels: usize, buffer: usize) -> Matrix {
     vec![vec![0.0; buffer]; channels]
 }
 
+/// The app on `input`, its threads on the app's clock: what a test sees
+/// is the same on every run.
+fn app_on(options: Options, input: Input) -> App {
+    scope_app(options, input).wait_for_tasks(true)
+}
+
 /// The app on the test signal, standing still, one buffer every 40 ms.
 fn app() -> App {
     let options = Options::default();
-    let demo = Demo::new(2, options.buffer as usize, true);
-    scope_app(options, Input::Clock(Box::new(demo), PERIOD))
+    let demo = Demo::new(2, options.buffer as usize, options.rate, true);
+    app_on(options, Input::Every(Box::new(demo), PERIOD))
 }
 
 /// Run `keys` after the first buffers have arrived, then quit.
@@ -60,22 +67,21 @@ fn braille(rows: &[String]) -> usize {
 }
 
 #[test]
-fn samples_are_split_into_channels_and_scaled() {
+fn files_are_read_as_scope_tuis_s16le() {
+    // scope-tui divides each 16-bit sample by 32768, as `audio::pcm` does.
     let bytes: Vec<u8> = [16384i16, -32768, 0, 32767]
         .iter()
         .flat_map(|s| s.to_le_bytes())
         .collect();
-    let m = deinterleave(&bytes, 2);
+    let m = audio::deinterleave(&bytes, Format::S16Le, 2);
     assert_eq!(m, vec![vec![0.5, 0.0], vec![-1.0, 32767.0 / 32768.0]]);
-}
-
-#[test]
-fn a_short_last_buffer_is_padded_and_then_the_input_ends() {
+    // A short last buffer is padded with silence, as scope-tui's, then it
+    // ends.
     let bytes: Vec<u8> = [1000i16, 2000, 3000]
         .iter()
         .flat_map(|s| s.to_le_bytes())
         .collect();
-    let mut pcm = Pcm::new(Cursor::new(bytes), 1, 4);
+    let mut pcm = audio::pcm(Cursor::new(bytes), Format::S16Le, 1, 4);
     let m = pcm.next().expect("a frame");
     assert_eq!(m[0].len(), 4, "padded to the buffer: {m:?}");
     assert_eq!(m[0][3], 0.0);
@@ -85,12 +91,26 @@ fn a_short_last_buffer_is_padded_and_then_the_input_ends() {
 #[test]
 fn the_trigger_finds_a_debounced_crossing() {
     let data = [-0.5, 0.2, -0.1, -0.2, 0.3, 0.4, 0.5];
+    let at = |depth, falling_edge, threshold| {
+        Oscilloscope {
+            triggering: true,
+            falling_edge,
+            threshold,
+            depth,
+            peaks: true,
+        }
+        .trigger_at(&data)
+    };
     // Rising through 0 at 1 bounces back; at 3 it stays up for 3 samples.
-    assert!(triggered(&data, 0, 0.0, 1, false));
-    assert!(!triggered(&data, 0, 0.0, 2, false));
-    assert!(triggered(&data, 3, 0.0, 3, false));
-    assert!(triggered(&data, 1, 0.0, 1, true), "falling at 1");
-    assert!(!triggered(&data, 5, 0.0, 3, false), "too near the end");
+    assert_eq!(at(1, false, 0.0), Some(0));
+    assert_eq!(at(2, false, 0.0), Some(3));
+    assert_eq!(at(3, false, 0.0), Some(3));
+    assert_eq!(at(1, true, 0.0), Some(1), "falling at 1");
+    assert_eq!(at(4, false, 0.0), None, "too near the end");
+    // The threshold in 16-bit units: 0.25 of full scale.
+    assert_eq!(at(1, false, 8192.0), Some(3));
+    let idle = Oscilloscope::default();
+    assert_eq!(idle.trigger_at(&data), Some(0), "not triggering");
 }
 
 #[test]
@@ -120,7 +140,7 @@ fn the_spectroscope_peaks_at_the_test_tones() {
         references: false,
         ..graph()
     };
-    let frame = Demo::new(2, 2048, true)
+    let frame = Demo::new(2, 2048, 48000, true)
         .next()
         .expect("the demo never ends");
     let history: Vec<VecDeque<Vec<f64>>> = frame.into_iter().map(|c| VecDeque::from([c])).collect();
@@ -140,6 +160,19 @@ fn the_spectroscope_peaks_at_the_test_tones() {
     // 3 and 2 cycles a buffer of 2048 at 48 kHz.
     assert_eq!(peak(&plot.sets[0]), (3.0 * 48000.0 / 2048.0f64).round());
     assert_eq!(peak(&plot.sets[1]), (2.0 * 48000.0 / 2048.0f64).round());
+}
+
+#[test]
+fn the_test_signal_turns_unless_held_still() {
+    let mut moving = Demo::new(2, 512, 48000, false);
+    let (a, b) = (moving.next().unwrap(), moving.next().unwrap());
+    assert_ne!(a, b, "the right channel drifts");
+    let mut still = Demo::new(2, 512, 48000, true);
+    let first = still.next().unwrap();
+    assert_eq!(still.next().unwrap(), first, "noise included");
+    // The same first buffer either way, but for the right channel's drift.
+    assert_eq!(first[0], a[0]);
+    assert!(first.iter().flatten().all(|s| s.abs() <= 1.0));
 }
 
 fn graph() -> Graph {
@@ -202,8 +235,8 @@ fn the_command_line_reads_as_scope_tuis() {
     // A4 is 440 Hz: 48000 / 440 samples a period.
     assert_eq!(parse(&args("-t A4")).unwrap().options.buffer, 109);
     assert_eq!(tune("A5", 48000, 2), Some(55));
-    // From scope-tui's table (C0 is 16.35 Hz, C4 261.6), then nudged off a
-    // multiple of channels × 2: A3 is 218 samples, and 219 on one channel.
+    // C4 is 261.6 Hz, then nudged off a multiple of channels × 2: A3 is
+    // 218 samples, and 219 on one channel.
     assert_eq!(tune("C4", 48000, 2), Some(183));
     assert_eq!(tune("A3", 48000, 2), Some(218));
     assert_eq!(tune("A3", 48000, 1), Some(219));
@@ -255,6 +288,20 @@ fn the_command_line_reads_as_scope_tuis() {
         "{error}"
     );
     assert!(parse(&args("--backend")).is_err());
+}
+
+#[test]
+fn tune_reads_notes_as_scope_tui_does_on_rich_exts_pitches() {
+    // A note without an octave is in octave 0, as scope-tui reads it:
+    // A0 is 27.5 Hz, 1745 samples at 48 kHz.
+    assert_eq!(tune("A", 48000, 2), Some(1745));
+    assert_eq!(tune("Eb", 48000, 2), tune("Eb0", 48000, 2));
+    assert_eq!(tune("C#3", 48000, 2), tune("Db3", 48000, 2));
+    // `dsp::note_hz` is equal temperament; scope-tui's table is rounded to
+    // the hundredth of a hertz in octave 0 and doubled, so about one note
+    // in ten lands a sample away: E2 is 82.41 Hz (582 samples), where
+    // scope-tui's 20.60 × 4 = 82.4 Hz gives 583.
+    assert_eq!(tune("E2", 48000, 2), Some(582));
 }
 
 #[test]
@@ -329,6 +376,10 @@ fn settings_show_in_the_header() {
     // Only the scope showing gets it: in the vectorscope, the trigger stays.
     let rows = after("t tab esc tab tab");
     assert!(rows[0].contains("^ 0 trigger"), "{:?}", rows[0]);
+    // Ctrl ×5 and alt ×⅕, as scope-tui steps them: 25 × 5 and 25 / 5.
+    let rows = after("ctrl+right alt+left ctrl+up alt+down");
+    assert!(rows[0].contains("2168/2048 spf"), "{:?}", rows[0]);
+    assert!(rows[0].contains("-1.05x+"), "{:?}", rows[0]);
 }
 
 #[test]
@@ -410,6 +461,8 @@ fn lines_leaving_the_bounds_are_left_out_as_ratatuis_are() {
         x_title: "",
         y_title: "",
         x_log: false,
+        x_grid: Vec::new(),
+        y_grid: Vec::new(),
     };
     let console = Console::builder().width(20).color_system(None).build();
     let draw = |points| {
@@ -422,41 +475,134 @@ fn lines_leaving_the_bounds_are_left_out_as_ratatuis_are() {
     assert_eq!(dots(draw(vec![(0.0, 0.0), (1.0, 5.0), (2.0, 0.5)])), 2);
 }
 
+/// `plot` with its reference lines as datasets of their own, before the
+/// traces, as scope-tui makes them (and as round 2 of the rebuild drew
+/// them, checked against ratatui 0.29 by eye at three sizes).
+fn as_reference_datasets(plot: &Plot, g: &Graph) -> Plot {
+    let line = |points| DataSet {
+        name: None,
+        points,
+        scatter: false,
+        style: g.axis.clone(),
+    };
+    let x = plot
+        .x_grid
+        .iter()
+        .map(|x| line(vec![(*x, plot.y.0), (*x, plot.y.1)]));
+    let y = plot
+        .y_grid
+        .iter()
+        .map(|y| line(vec![(plot.x.0, *y), (plot.x.1, *y)]));
+    Plot {
+        sets: y.chain(x).chain(plot.sets.iter().cloned()).collect(),
+        x_grid: Vec::new(),
+        y_grid: Vec::new(),
+        ..plot.clone()
+    }
+}
+
+#[test]
+fn reference_lines_are_drawn_as_scope_tuis_datasets_are() {
+    // The axis grid stands for scope-tui's reference datasets: the
+    // oscilloscope's zero line and the vectorscope's cross, with a trace
+    // over them, cell for cell as datasets of their own draw them.
+    let g = graph();
+    let (width, height) = (40usize, 12usize);
+    let trace: Vec<f64> = (0..=2048).map(|i| (i as f64 / 300.0).sin() * 0.8).collect();
+    let lissajous: Matrix = vec![
+        (0..400).map(|i| (i as f64 / 40.0).sin() * 0.7).collect(),
+        (0..400).map(|i| (i as f64 / 27.0).cos() * 0.7).collect(),
+    ];
+    let still = Oscilloscope {
+        peaks: false,
+        ..Oscilloscope::default()
+    };
+    let cases = [
+        ("oscilloscope", oscilloscope(&g, &still, &vec![trace])),
+        ("vectorscope", vectorscope(&g, &lissajous)),
+    ];
+    let console = Console::builder().width(width).color_system(None).build();
+    let draw = |plot: &Plot| console.render_export(&chart(plot, &g).width(width).height(height));
+    for (name, plot) in cases {
+        let grid = draw(&plot);
+        let datasets = draw(&as_reference_datasets(&plot, &g));
+        assert_eq!(grid, datasets, "{name}:\n{grid}\n{datasets}");
+    }
+    // Where the cross meets with nothing over it, the grid's two lines
+    // share a layer and merge (`⣸`); scope-tui's second dataset is drawn
+    // over its first (`⢸`). One cell, listed in the demo gaps.
+    let cross = vectorscope(&g, &vec![vec![], vec![]]);
+    let (grid, datasets) = (draw(&cross), draw(&as_reference_datasets(&cross, &g)));
+    let differ: Vec<(char, char)> = (grid.chars().zip(datasets.chars()))
+        .filter(|(a, b)| a != b)
+        .collect();
+    assert_eq!(differ, [('⣸', '⢸')]);
+}
+
+/// Step the app's clock by `step` to `until` from `from`, drawing after
+/// each: `Driver::advance` steps by 50 ms at most and does not wake a
+/// `latest` thread due sooner (see the demo gaps), so a source faster
+/// than 20 buffers a second is stepped by hand.
+fn step(driver: &mut intuituive::Driver, from: Duration, until: Duration, step: Duration) {
+    let mut now = from;
+    while now < until {
+        now += step;
+        driver.update(now);
+        driver.render();
+    }
+}
+
 #[test]
 fn the_fps_counter_counts_frames_paused_or_not() {
-    let script = Script::new().wait(Duration::from_millis(2100)).keys("q");
-    let rows = screen(&run(app(), script, 100, 24));
-    // A buffer every 40 ms: 25 a second.
-    assert!(rows[0].contains("25fps"), "{:?}", rows[0]);
+    // On the app's clock, frame for frame: a buffer every 40 ms is 25 a
+    // second, counted by `rate` from `on_write`.
+    let mut driver = app().driver(100, 24);
+    let ms = Duration::from_millis;
+    step(&mut driver, ms(0), ms(2100), ms(10));
+    let rows = driver.screen().plain();
+    assert!(rows[0].contains(" 25fps"), "{:?}", rows[0]);
     // Paused, scope-tui still reads its source a frame at a time.
-    let script = Script::new()
-        .wait(Duration::from_millis(500))
-        .keys("space")
-        .wait(Duration::from_millis(2100))
-        .keys("q");
-    let rows = screen(&run(app(), script, 100, 24));
+    driver.press("space");
+    step(&mut driver, ms(2100), ms(4100), ms(10));
+    let rows = driver.screen().plain();
     assert!(
-        rows[0].contains("25fps") && rows[0].contains("||"),
+        rows[0].contains(" 25fps") && rows[0].contains("||"),
         "{:?}",
         rows[0]
     );
 }
 
 #[test]
+fn equal_buffers_are_frames_too() {
+    // Digital silence: every buffer the same. A watch would see one; the
+    // scope counts each, as scope-tui does.
+    let silent = std::iter::repeat(silence(2, 64));
+    let input = Input::Every(Box::new(silent), Duration::from_millis(10));
+    let mut driver = app_on(Options::default(), input).driver(100, 24);
+    let ms = Duration::from_millis;
+    step(&mut driver, ms(0), ms(1050), ms(5));
+    let rows = driver.screen().plain();
+    assert!(rows[0].contains(" 100fps"), "{:?}", rows[0]);
+}
+
+#[test]
 fn past_the_end_of_the_input_the_scope_draws_silence() {
     let bytes: Vec<u8> = (0..64i16).flat_map(|s| (s * 300).to_le_bytes()).collect();
-    let pcm = Pcm::new(Cursor::new(bytes), 2, 16);
+    let pcm = audio::pcm(Cursor::new(bytes), Format::S16Le, 2, 16);
     let options = Options {
         references: false,
         ..Options::default()
     };
-    // Read as fast as it comes, then silence every 40 ms.
-    let app = scope_app(options, play(pcm, silence(2, 16), None, PERIOD));
-    let script = Script::new().wait(Duration::from_millis(1100)).keys("q");
-    let rows = screen(&run(app, script, 100, 24));
-    // Every channel flat on the zero line. (The reader thread keeps the
-    // wall clock and the headless script a clock of its own, so how many
-    // frames it has counted by then is not fixed.)
+    // Two buffers, one every 40 ms (`-l`), then silence every 40 ms, all
+    // on the app's clock.
+    let input = play(pcm, silence(2, 16), Some(PERIOD), PERIOD);
+    let mut driver = app_on(options, input).driver(100, 24);
+    let ms = Duration::from_millis;
+    step(&mut driver, ms(0), ms(1010), ms(10));
+    let rows = driver.screen().plain();
+    // 25 frames a second, the file's two and silence's; every channel flat
+    // on the zero line.
+    assert!(rows[0].contains(" 25fps"), "{:?}", rows[0]);
     let drawn: Vec<_> = rows[1..]
         .iter()
         .filter(|r| braille(&[r.to_string()]) > 0)
@@ -465,16 +611,44 @@ fn past_the_end_of_the_input_the_scope_draws_silence() {
 }
 
 #[test]
-fn question_mark_lists_the_keys() {
+fn a_file_plays_at_its_sample_rate_with_l() {
+    // Four buffers at 40 ms each with `-l`: after 100 ms the third shows.
+    let buffers: Vec<Matrix> = (1..=4).map(|n| vec![vec![n as f64 / 8.0; 16]]).collect();
+    let options = Options {
+        channels: 1,
+        buffer: 16,
+        references: false,
+        ..Options::default()
+    };
+    let input = play(buffers.into_iter(), silence(1, 16), Some(PERIOD), PERIOD);
+    let mut driver = app_on(options, input).driver(60, 18);
+    let ms = Duration::from_millis;
+    step(&mut driver, ms(0), ms(100), ms(10));
+    let level = |rows: &[String]| {
+        rows.iter()
+            .position(|r| braille(std::slice::from_ref(r)) > 2)
+    };
+    let third = level(&driver.screen().plain());
+    step(&mut driver, ms(100), ms(140), ms(10));
+    let fourth = level(&driver.screen().plain());
+    assert!(third.is_some() && fourth < third, "{third:?} {fourth:?}");
+}
+
+#[test]
+fn question_mark_lists_the_keys_by_scope() {
     let script = Script::new()
         .wait(Duration::from_millis(100))
         .keys("?")
         .wait(Duration::from_millis(100));
-    let rows = screen(&common::run_open(app(), script, 120, 44));
-    // The framework's help, from the bindings' descriptions.
+    let rows = screen(&common::run_open(app(), script, 120, 50));
+    // The framework's help, from the bindings' descriptions, each scope's
+    // keys under its name.
     assert!(row_of(&rows, "Help").is_some(), "{rows:#?}");
-    assert!(row_of(&rows, "phase difference").is_some(), "{rows:#?}");
-    assert!(row_of(&rows, "scale up").is_some(), "{rows:#?}");
+    let at = |text| row_of(&rows, text).unwrap_or_else(|| panic!("{text:?} in {rows:#?}"));
+    assert!(at("oscilloscope") < at("rising or falling edge"));
+    assert!(at("spectroscope") < at("Hann window"));
+    // A key with its modifiers is one row.
+    assert!(at("scale up (shift ×10, ctrl ×5, alt ×0.2)") > 0);
 }
 
 #[test]
@@ -522,19 +696,38 @@ fn the_header_is_cut_as_a_table_cell_is() {
 
 #[cfg(feature = "audio")]
 #[test]
-fn an_audio_input_that_cannot_open_ends_the_app_with_why() {
-    let input = Input::Audio(Some("no such sound card, surely".into()));
-    let mut backend = rich_interact::headless::Headless::new(
-        Script::new().wait(Duration::from_millis(500)),
-        80,
-        24,
-    );
-    let error = scope_app(Options::default(), input)
-        .run_on(&mut backend)
-        .expect_err("no such device");
+fn an_audio_input_that_cannot_open_fails_before_the_app() {
+    let command = parse(&args("audio no-such-sound-card-surely")).unwrap();
+    let error = input(&command.source, &command.options)
+        .err()
+        .expect("no such device");
     assert!(
         error.to_string().contains("no audio input named"),
         "{error}"
+    );
+}
+
+#[cfg(feature = "audio")]
+#[test]
+fn audio_list_prints_as_scope_tuis() {
+    let device = audio::Device {
+        id: "hw:CARD=PCH,DEV=0".into(),
+        name: "HDA Intel PCH, ALC892 Analog".into(),
+        default: false,
+        host: audio::Host::Default,
+    };
+    let config = |channels, buffer| audio::DeviceConfig {
+        channels,
+        min_rate: 8000,
+        max_rate: 192000,
+        buffer,
+        format: "i16".into(),
+    };
+    let listed = list_devices(&[(device, vec![config(2, Some((32, 65536))), config(1, None)])]);
+    assert_eq!(
+        listed,
+        "> hw:CARD=PCH,DEV=0\n  + 2ch 8000-192000hz 32-65536buf (i16)\n  \
+         + 1ch 8000-192000hz 0-0buf (i16)\n"
     );
 }
 

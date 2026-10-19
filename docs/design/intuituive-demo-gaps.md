@@ -501,3 +501,120 @@ friction).
 | Bulk rename | Yazi's `r` on a selection: the names in `$EDITOR`, renamed on save | `files::bulk_rename(cx, paths)` over a handoff | plugin | medium |
 | Shell command prompt | Yazi's `;` and `:` (run a command on the selection, blocking or not) | `cx.prompt` + `open::Launch::Shell` as `files::shell(cx, paths)` | plugin | medium |
 | Content search | Yazi's `s`/`S` (fd and ripgrep into a virtual listing) | core: a streaming list of results (`fuzzy_list`'s source); plugin: `files::search(root, query, Grep)` showing a listing of matches in Miller | core + plugin | medium |
+
+## Round 3: scope-tui
+
+[`examples/scope.rs`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/crates/rich-intuituive/examples/scope.rs)
+rebuilt on what round 2's gaps added (the audio plugin rounded out,
+rs-rich-ext's `dsp` generators and chart options, and the core's clock,
+key and bar components), with no framework change in the round and no
+hand-made stand-in left in the example. Its hand-rolled test signal, PCM
+reader, `Frame` numbering, trigger search, note table, 29 reference
+datasets, polled fps counter and the 24 modifier bindings are gone; it is
+1,323 lines where round 2's was 1,340, while doing more of what scope-tui
+does (`audio --timeout`, `audio --list`'s configurations, PulseAudio's
+sources and `--server-buffer`). `tests/scope.rs` counts frames exactly on
+the app's clock and checks the new behaviour (24 tests; 25 with `audio`).
+
+### Round-2 gaps now closed, and where scope.rs uses them
+
+| Round-2 gap or workaround | Now | Where in scope.rs |
+|---|---|---|
+| A watch that runs on every write (`Frame { number, data }` numbered by hand) | `on_write(samples, ..)` takes every buffer, silence included; the example's `Frame` is gone | `scope_app`, the `fps` match |
+| Frames per second from a counter and a one-second `every` | `rate(samples)` | `scope_app` |
+| `latest` threads and the headless clock | `latest_every(period, ..)` makes the test signal; `Latest::sleep` keeps a file's `-l` beat and the silence after it; tests run with `wait_for_tasks(true)` and count frames exactly (but see the first bug below) | `Input::Every`, `play`, `tests/scope.rs` |
+| An app builder cannot fail (a `watch` that fails on the first turn) | `audio::open(AudioOptions)` before the app: a missing device fails before the terminal is taken, so `App::try_new` is not even needed | `input`, `capture_options` |
+| Two shapes for "the newest value" | `audio::input`/`samples()` are `Signal<Option<Frame>>`, as `latest`'s; one `on_write` arm per source kind remains (see friction) | `scope_app` |
+| Device names are descriptions | `Device { id, .. }`: `--list` prints ids, as scope-tui (cpal 0.15's names are ALSA ids), and `audio DEVICE` opens by id | `list_devices`, `input` |
+| Device configurations | `Device::configs()`, printed in scope-tui's `  + 2ch 8000-192000hz 32-65536buf (i16)` form | `list_devices`, `main` |
+| A stalled stream (`--timeout` read, not enforced) | `AudioOptions::stall_after` + `capture.status()`: `Stalled` ends the app with scope-tui's "data source returned null", printed after the terminal is back as `[!] Error executing app: …` | `scope_app`, `STALLED`, `main` |
+| PulseAudio and PipeWire sources | the `pulse` feature's `Host::Pulse` (every source, sink monitors among them); `--server-buffer N` as `latency(N × buffer)`, scope-tui's `maxlength` | `pulse_options`, `input` |
+| ALSA writes to stderr | kept off the screen inside the plugin; nothing in the example | — |
+| Help sections | `.bind_in("oscilloscope" \| "spectroscope", ..)` | `scope_app` |
+| Modifier variants of a binding (24 bindings) | `.bind_scaled(key, &MAGNITUDES, ..)`, six bindings, one help row each | `scope_app` |
+| A mode switcher | `.bind_cycle("tab", .., mode, &Mode::ALL)`; `Mode::next` gone | `scope_app` |
+| A row of percentage cells | `cells([(35, ..), ..])` | `header` |
+| A PCM reader (`Pcm`, `deinterleave`) | `audio::pcm(reader, Format::S16Le, channels, buffer)` | `input` |
+| A signal generator (`Demo`'s sines and xorshift) | `dsp::partials`, `tone(..).phase(..)`, `noise(..).low_pass(..)`, `mix` | `Demo::new` |
+| Trigger detection (`triggered` and its search) | `dsp::trigger(.., Edge)` | `Oscilloscope::trigger_at` |
+| Musical notes (`tune`'s table) | `dsp::note_hz` (see friction: one note in ten is a sample off scope-tui) | `tune` |
+| Axis grid lines (29 two-point datasets) | `Axis::grid([..])` with `Axis::style(axis colour)` | `chart`, `Plot::x_grid`/`y_grid` |
+| `legend_style("")` | `Chart::style("none")`, which the legend takes | `chart` |
+| `dsp::spectrum_full` | used for the points; `fft` stays for the phase difference | `spectroscope` |
+| `style_from_color_name` in rs-rich-ratatui | `rich_ext::palette::style_from_color_name`; the example no longer touches rs-rich-ratatui | `parse` |
+
+Not used, on purpose: `live` (scope-tui draws every buffer it reads, with
+no cap), `audio::wav`/`record`, `audio::picker`, `meter`, `sparkline`,
+`big_text`, `Spectrogram`, `status_bar` and `key_hints`: scope-tui has
+none of them, and extras are added only where scope-tui has them.
+
+### New gaps and bugs
+
+| Gap or bug | Needed for | Repro or API sketch | Where |
+|---|---|---|---|
+| **Bug: values from other threads are picked up at most every 50 ms.** The run loop waits on the terminal for `Driver::timeout` (50 ms at most) and a `latest` send or a capture's buffer does not wake that wait, so a source faster than 20 a second is capped at 20 in a real terminal; the headless clock does the same (`Driver::advance` and `Script::wait` step to the next timer or 50 ms, never to a `Latest::sleep` due) | scope-tui's frame rate: its default 2048-sample buffer at 48 kHz is 23 fps, `-b 1024` 47 fps; the clone shows 20 for both (paused, so drawing is not the cost; `-b 4096` shows its true 12). Tests step the driver by hand every 10 ms (`step` in `tests/scope.rs`) | `scope --still -b 1024`, Space, wait 3 s: `20fps`. Headless: `latest_every(10 ms, ..)` counted by `rate` under `wait_for_tasks(true)`, `driver.advance(2.1 s)`: 20, not 100. Fix: a proxy send wakes the backend's read (a self-pipe or the backend's waker), and `timeout` takes the earliest due of the threads asleep on the app's clock | core (generic) |
+| **Bug: grid lines share one layer.** Under `Layering::PerDataset` an x and a y grid line that cross merge their dots (`⣸`); scope-tui's two reference datasets draw the second over the first (`⢸`). Pinned by `reference_lines_are_drawn_as_scope_tuis_datasets_are` | The vectorscope's cross, faithful cell for cell | `Chart` with `x_axis(..grid([0]))`, `y_axis(..grid([0]))`, `Layering::PerDataset`, no trace at the centre. Fix: a layer per grid line (y lines first, as scope-tui orders them) | plugin (rs-rich-ext chart) |
+| **Bug: a grid with no datasets draws in `Marker::Dot`.** The grid takes the first dataset's marker, so before the first buffer the zero line is dots, then Braille | The first frame's zero line | `Chart::new(Vec::new()).y_axis(Axis::default().bounds(-1., 1.).grid([0.]))`: `•` cells. Fix: `Axis::grid_marker(..)` or `Chart::marker(..)` as the default | plugin (rs-rich-ext chart) |
+| Bindings active only in a state | scope-tui's per-mode keys: `t`, `e`, `=`, `w`, `l` do nothing outside their scope but are bound (and listed) always; `p` means peaks in one scope and phase difference in another, so it is one binding with one description | `.bind_when(\|\| mode.get() == Osc, keys, desc, f)` (listed in the help only while active; two bindings may share a key under different conditions); or a `switch` whose shown page's bindings apply and are listed in its section | core (generic) |
+| Sections for every kind of binding | PgUp/PgDn are the oscilloscope's and the spectroscope's, but `bind_scaled` (and `bind_cycle`) take no section | a `.section("oscilloscope", \|node\| node.bind_scaled(..))` scope, or `_in` variants of each | core (generic) |
+| Named punctuation keys | `=`, `-`, `+`, `_` are written `"\"=\""` (round 2 added `comma` only) | `equals`, `minus`, `plus`, `underscore`, `slash`, … wherever keys are parsed | core (generic) |
+| Testing a capture's status | `--timeout` (a `Stalled` capture) cannot be tested without a sound card that stops; the test covers only the open error | `audio::Capture::simulated(frames, period)` with `stall()` / `fail(why)`, built on `latest` | plugin (`audio`) |
+| A thread feed with a state | a file's end, a pipe closed, a stall: the example's file source cannot say it ended (it pads with silence, as scope-tui), and only a capture has a status | core: `latest_with_state(..) -> (Signal<Option<T>>, Signal<FeedState>)` with `Running`, `Stalled(since)` after `stall_after`, `Ended`, `Failed(why)`, for any thread (a sensor, a log tail, a socket); plugin: `audio::Capture::status` built on it | core (generic) + plugin (`audio`) |
+| `audio::pcm` moving behind a feature | Another round-3 change gates `audio::pcm`/`Format`/`deinterleave` behind a light `pcm` feature; the example and `tests/scope.rs` read files with it in a default build | the example then needs `required-features = ["pcm"]` (or `audio` implying `pcm` and the file source behind `cfg`), and CI's tapes job the feature | plugin (`audio`) |
+
+### Friction with the new APIs
+
+- **One `on_write` arm per kind of source.** `latest_every` and `latest`
+  give `Signal<Option<Matrix>>`, a capture `Signal<Option<Frame>>`, so the
+  example writes the same `on_write` + `rate` three times. With `on_write`
+  seeing every write, `Frame::number` is no longer needed to count; a
+  generic `latest_iter(iter, pace)` (below) and an audio source enum would
+  make a source one value again.
+- **`on_write` clones each value** (here a 2×2048 matrix per buffer, which
+  `take` then clones again into the history). A borrowing
+  `on_write_ref(signal, |&T, cx| ..)` would save both.
+- **`dsp::note_hz` is not scope-tui's table.** It is equal temperament
+  with octave 4 by default; scope-tui doubles octave-0 pitches rounded to
+  the hundredth and defaults to octave 0. The example adds the `0`; about
+  one note in ten (E2, F1, B1, … at 48 kHz) gives a buffer one sample
+  off. More correct, less faithful; a test pins E2.
+- **`Axis::grid` styles with `Axis::style`**, the axis line's style too.
+  scope-tui's axes have no lines, so it fits here; an app with a styled
+  axis and fainter grid lines would want `Axis::grid_style`.
+- **`Chart::style("none")`** reads well once known; `"none"` as a magic
+  string is easy to miss next to `""`.
+- **`bind_scaled`'s help prints `alt ×0.2`**, where scope-tui's docs say
+  ⅕; fine, but a label per variant (`("alt", 0.2, "⅕")`) would let an app
+  say it its way.
+- **`audio::open` made `App::try_new` unnecessary.** Opening before the
+  app is the cleaner shape; `try_new` stays for builders that only fail
+  inside.
+- **`Driver::advance`'s 50 ms step** is documented, but nothing says a
+  `latest` thread is not a "thing due" (see the first bug); the
+  `latest_every` doc example steps `driver.update` by hand, which hides it.
+  Round 2's "19–20 fps where scope-tui shows 21–22" was put down to a debug
+  build; it is this cap.
+- **The help cuts long rows.** `bind_scaled` appends `(shift ×10, ctrl ×5,
+  alt ×0.2)`, 30 cells, and the help box (75 wide at 110 columns) cuts a
+  row rather than wrapping it, so PgUp's description had to shrink to
+  "threshold or avg up".
+
+### Components that would help
+
+Patterns written by hand from several built-ins, what scope-tui leans on,
+and what comparable audio and visualisation TUIs and libraries offer
+(cava, ratatui and its crates, Bubble Tea and Bubbles, Textual). Core
+entries are generic: another, unrelated component could use them.
+
+| Component | What it would replace or enable | API sketch | Where | Value |
+|---|---|---|---|---|
+| Mode-scoped views | the `in_mode` checks in eight handlers, the shared `p`, and per-mode help: a page per mode whose bindings apply, and are listed under its name, only while it shows (Textual's screens' `BINDINGS`, Bubble Tea's per-model `Update`) | `modes(mode, &[(Mode::Osc, "oscilloscope", \|\| node.bind(..)), ..])` | core (generic) | high |
+| A feed with a state | the file source's end, the capture's status, `--timeout` for any source | `latest_with_state` (see the gaps), and `audio::Capture` built on it | core (generic) + plugin (`audio`) | high |
+| An iterator played at a pace | `play`: frames sent as they come or a period apart, then something after (silence) | core: `latest_iter(iter, Pace::Every(d) \| Pace::Free).then(after)`; plugin: `audio::play(pcm, rate)` on it | core (generic) + plugin (`audio`) | medium |
+| A history of writes | `take`'s per-channel `VecDeque`s for the spectroscope's averaging; also an oscilloscope's persistence | core: `history(signal, n) -> Memo<VecDeque<T>>`, `n` a signal; plugin: `chart::Persistence` (older frames fading, as an analogue scope's phosphor, xoscope, glscopeclient) on it | core (generic) + plugin (rs-rich-ext chart) | medium |
+| Bindings that toggle or step a field | ten closures of `signal.update(\|g\| g.x = !g.x)` and the clamped steps of `nudge`/`samples`/`page` | `.bind_toggle(keys, desc, signal, \|s\| &mut s.flag)`, `.bind_step(keys, desc, signal, \|s\| &mut s.n, step, range)` | core (generic) | medium |
+| A bar spectrum, cava's | a fourth view, the one most audio TUIs show: log-spaced bands, gravity fall-off, smoothing, mirrored stereo | plugin: `dsp::bands(spectrum, n, lo_hz, hi_hz)`, `dsp::Falloff::gravity(g)`; `chart::BarSpectrum::new(bands).mirror(true)`; core underneath: a `smoothed(signal, attack, release)` numeric signal (Bubbles' harmonica springs), usable for any meter or progress | core (generic) + plugin (rs-rich-ext dsp/chart) | high |
+| A tuner readout | the note nearest the loudest peak, with cents, beside the header (guitar tuners, `tuner` TUIs) | plugin: `dsp::peak_hz(spectrum)` + `nearest_note`; shown with `big_text` | plugin (rs-rich-ext dsp) | low |
+| Big digits | a level or frequency readout (Textual's `Digits`, tui-big-text) | `big_text` exists behind `art`; a `digits(text)` in box-drawing glyphs with no FIGlet would suit every build | core (generic) | low |
+| A fake capture | `--timeout` and device failures under test (see the gaps) | `audio::Capture::simulated(..)` | plugin (`audio`) | medium |
+| Already there, not in scope-tui | `Spectrogram` (spek's, Audacity's waterfall), `meter`/`PeakHold` (every DAW), `sparkline` (ratatui's, Textual's), `audio::picker` (Bubbles' list), `audio::record` | an extended scope, not this clone | plugin | — |

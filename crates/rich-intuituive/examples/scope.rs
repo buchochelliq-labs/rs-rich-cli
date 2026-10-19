@@ -3,8 +3,8 @@
 //! app, rebuilt on intuiTUIve. It reuses none of scope-tui's code: it is a
 //! rebuild of the behaviour, showing how an app that redraws twenty or more
 //! times a second maps. The plot is rich-ext's `Chart`, which lays out and
-//! draws as ratatui's does; the header is a row of `cell`s laid out by
-//! ratatui's solver, as scope-tui's one-row `Table` is.
+//! draws as ratatui's does; the header is `cells`, ratatui's one-row
+//! `Table`; every source is a signal of the newest buffer.
 //!
 //! Ported from scope-tui 0.3.5 (<https://github.com/alemidev/scope-tui>),
 //! by alemi, MIT licence. Its design, keys, options and display layout are
@@ -15,6 +15,7 @@
 //!     parec --format=s16le --rate=48000 --channels=2 \
 //!         | cargo run -p rs-rich-intuituive --example scope --features pcm -- file -
 //!     cargo run -p rs-rich-intuituive --example scope --features audio -- audio
+//!     cargo run -p rs-rich-intuituive --example scope --features pulse -- pulse
 //!
 //! Options, as scope-tui's: `-c N` channels, `-b SIZE` buffer, `-r HZ`
 //! sample rate, `-t NOTE` tune the buffer to a note, `-s X` scale,
@@ -22,9 +23,11 @@
 //! `--palette-color a,b,…`, `--labels-color c`, `--axis-color c` (colours
 //! as ratatui reads them: `red`, `LightRed`, `DarkGray`, `#ff8800`, `208`).
 //! Sources, as scope-tui's subcommands: `file PATH [-l]` plays a file or a
-//! pipe (at its sample rate with `-l`); with the crate's `audio` feature,
-//! `audio [DEVICE] [--list] [--timeout S]` captures a sound card and `pulse
-//! [DEVICE]` PulseAudio's default source, through ALSA. Without a source it
+//! pipe of s16le PCM (at its sample rate with `-l`); with the crate's
+//! `audio` feature, `audio [DEVICE] [--list] [--timeout S]` captures a
+//! sound card, and `pulse [DEVICE] [--server-buffer N]` a PulseAudio or
+//! PipeWire source, a sink's monitor among them, with the `pulse` feature
+//! (through ALSA's `pulse` device with `audio` alone). Without a source it
 //! draws a test signal; `--still` makes it stand still. `--backend NAME`
 //! (or `INTUITUIVE_BACKEND=NAME`) drives the terminal with termion or
 //! termwiz instead of crossterm, when built with the crate's feature of
@@ -37,47 +40,73 @@
 //! esc resets · shift ×10, ctrl ×5, alt ×⅕ · ? lists every key.
 
 use std::collections::VecDeque;
-use std::f64::consts::PI;
 use std::io::Read;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
-#[cfg(feature = "audio")]
-use intuituive::audio;
+pub use intuituive::audio::Matrix;
+use intuituive::audio::{self, Format};
 use intuituive::interact::BackendKind;
 use intuituive::prelude::*;
-use intuituive::widgets::cell;
-use intuituive::{Latest, Solver};
+use intuituive::widgets::cells;
+use intuituive::Latest;
 use rich_ext::chart::{
     Axis, AxisScale, Chart, Dataset, GraphType, Labels, Layering, LegendPosition, Marker,
     OutOfBounds,
 };
 use rich_ext::dsp;
-use rich_ratatui::style_from_color_name;
-
-/// One buffer of samples, one row per channel, each in -1 to 1.
-pub type Matrix = Vec<Vec<f64>>;
+use rich_ext::palette::style_from_color_name;
 
 /// A test signal: two tones a fifth apart (2 and 3 cycles a buffer), one
-/// per channel, each with overtones, faint high partials and a little
+/// per channel, each with an overtone, faint high partials and a little
 /// noise, so the vectorscope draws a Lissajous figure and the spectroscope
-/// peaks along a noise floor. Every tone is a whole number of cycles a
-/// buffer; unless `still`, the right channel's phase drifts from one buffer
-/// to the next and the figure turns. Still, every buffer is the same, noise
-/// included. It never ends.
+/// peaks along a noise floor. Made of rich-ext's `dsp` generators, each
+/// carrying its phase from one buffer to the next. Unless `still`, the
+/// right channel is a little sharp, so the figure turns; still, the first
+/// buffer comes again and again, noise included. It never ends.
 pub struct Demo {
-    pub channels: usize,
-    pub buffer: usize,
-    pub still: bool,
-    frame: u64,
+    buffer: usize,
+    channels: Vec<dsp::Mix>,
+    hold: bool,
+    /// The buffer repeated, once made, when holding still.
+    held: Option<Matrix>,
 }
 
 impl Demo {
-    pub fn new(channels: usize, buffer: usize, still: bool) -> Demo {
+    pub fn new(channels: usize, buffer: usize, rate: u32, still: bool) -> Demo {
+        let (n, rate) = (buffer.max(1) as f64, f64::from(rate.max(1)));
+        // The frequency that is `cycles` periods a buffer.
+        let hz = |cycles: f64| cycles * rate / n;
+        // How far the right channel drifts a buffer, in cycles.
+        let drift = if still {
+            0.0
+        } else {
+            0.05 / std::f64::consts::TAU
+        };
+        let channel = |c: usize| {
+            let note = match c {
+                0 => dsp::partials(hz(2.0), rate, &[0.6, 0.0, 0.2]),
+                1 => dsp::partials(hz(3.0 + drift), rate, &[0.6, 0.0, 0.15]),
+                c => dsp::partials(hz(c as f64 + 2.0), rate, &[0.5]),
+            };
+            // A fading series of high partials, for the spectroscope.
+            let high = (1..=24).fold(dsp::mix(), |mix, k| {
+                let tone = dsp::tone(hz((17 * k + 5 * c) as f64), rate).phase(k as f64);
+                mix.add(0.012 / k as f64, tone)
+            });
+            let seed = 2 * c as u64;
+            dsp::mix()
+                .add(1.0, note)
+                .add(1.0, high)
+                // A smooth wander that falls away with frequency, as
+                // music's spectrum does, and a little white noise.
+                .add(0.26, dsp::noise(seed).low_pass(300.0, rate))
+                .add(0.01, dsp::noise(seed + 1))
+        };
         Demo {
-            channels: channels.max(1),
             buffer: buffer.max(1),
-            still,
-            frame: 0,
+            channels: (0..channels.max(1)).map(channel).collect(),
+            hold: still,
+            held: None,
         }
     }
 }
@@ -86,144 +115,55 @@ impl Iterator for Demo {
     type Item = Matrix;
 
     fn next(&mut self) -> Option<Matrix> {
-        let n = self.buffer as f64;
-        let frame = if self.still { 0 } else { self.frame };
-        self.frame += 1;
-        let drift = frame as f64 * 0.05;
-        // A tone `cycles` times per buffer, at sample `i`.
-        let tone =
-            |cycles: f64, i: usize, phase: f64| (2.0 * PI * cycles * i as f64 / n + phase).sin();
-        // White noise in -1 to 1 from xorshift, seeded by the frame.
-        let mut seed = frame.wrapping_mul(0x9e37_79b9_7f4a_7c15) | 1;
-        let mut noise = move || {
-            seed ^= seed << 13;
-            seed ^= seed >> 7;
-            seed ^= seed << 17;
-            (seed >> 11) as f64 / (1u64 << 52) as f64 - 1.0
-        };
-        let mut channel = |c: usize| -> Vec<f64> {
-            // Noise through a one-pole low-pass (about 300 Hz at 48 kHz):
-            // a smooth wander that falls away with frequency, as music's
-            // spectrum does.
-            let mut low = 0.0;
-            (0..self.buffer)
-                .map(|i| {
-                    let signal = match c {
-                        0 => 0.6 * tone(2.0, i, 0.0) + 0.2 * tone(6.0, i, 0.0),
-                        1 => 0.6 * tone(3.0, i, drift) + 0.15 * tone(9.0, i, 3.0 * drift),
-                        c => 0.5 * tone(c as f64 + 2.0, i, 0.0),
-                    };
-                    // A fading series of high partials, for the spectroscope.
-                    let partials: f64 = (1..=24)
-                        .map(|k| 0.012 / k as f64 * tone((17 * k + 5 * c) as f64, i, k as f64))
-                        .sum();
-                    low += 0.04 * (0.26 * noise() - low);
-                    signal + partials + low + 0.01 * noise()
-                })
-                .collect()
-        };
-        Some((0..self.channels).map(&mut channel).collect())
-    }
-}
-
-/// Signed 16-bit little-endian PCM, channels interleaved (`L R L R …`), as
-/// `parec --format=s16le` writes it: a file, a pipe or stdin, a buffer at
-/// a time. A short last buffer is padded with silence; then it ends.
-pub struct Pcm<R> {
-    reader: R,
-    channels: usize,
-    bytes: Vec<u8>,
-}
-
-impl<R: Read> Pcm<R> {
-    pub fn new(reader: R, channels: usize, buffer: usize) -> Pcm<R> {
-        let channels = channels.max(1);
-        Pcm {
-            reader,
-            channels,
-            bytes: vec![0; buffer.max(1) * channels * 2],
+        if let Some(held) = &self.held {
+            return Some(held.clone());
         }
-    }
-}
-
-/// Split interleaved samples into channels, each scaled to -1 to 1.
-pub fn deinterleave(bytes: &[u8], channels: usize) -> Matrix {
-    let mut out = vec![Vec::with_capacity(bytes.len() / 2 / channels.max(1)); channels.max(1)];
-    for (index, pair) in bytes.as_chunks::<2>().0.iter().enumerate() {
-        let sample = i16::from_le_bytes(*pair) as f64 / 32768.0;
-        out[index % channels.max(1)].push(sample);
-    }
-    out
-}
-
-impl<R: Read> Iterator for Pcm<R> {
-    type Item = Matrix;
-
-    fn next(&mut self) -> Option<Matrix> {
-        let mut filled = 0;
-        while filled < self.bytes.len() {
-            match self.reader.read(&mut self.bytes[filled..]) {
-                Ok(0) => break,
-                Ok(n) => filled += n,
-                Err(error) if error.kind() == std::io::ErrorKind::Interrupted => {}
-                Err(_) => break,
-            }
+        let buffer = self.buffer;
+        let made: Matrix = (self.channels.iter_mut())
+            .map(|mix| mix.by_ref().take(buffer).collect())
+            .collect();
+        if self.hold {
+            self.held = Some(made.clone());
         }
-        if filled == 0 {
-            return None;
-        }
-        self.bytes[filled..].fill(0);
-        Some(deinterleave(&self.bytes, self.channels))
+        Some(made)
     }
 }
 
-/// A buffer as the app gets it from a thread: numbered, so two that hold
-/// the same samples (the still test signal, or silence) are still two
-/// frames.
-#[derive(Clone, Debug, PartialEq)]
-pub struct Frame {
-    pub number: u64,
-    pub data: Matrix,
-}
-
-/// Where the app's buffers come from, started when the app is.
+/// Where the app's buffers come from, started when the app is: each
+/// becomes a signal of the newest buffer.
 pub enum Input {
-    /// Buffers made on the app's own clock, one every period: the test
-    /// signal. A timer, not a thread, so a headless test sees the same
-    /// frames on every run.
-    Clock(Box<dyn Iterator<Item = Matrix>>, Duration),
+    /// Buffers made every period on a thread of their own
+    /// (`latest_every`), on the app's clock under a test: the test signal.
+    Every(Box<dyn Iterator<Item = Matrix> + Send>, Duration),
     /// Buffers read on a thread of their own (see [`play`]).
-    Thread(Box<dyn FnOnce(Latest<Frame>) + Send>),
-    /// A sound card, through intuiTUIve's `audio` feature (`None` for the
-    /// default input).
+    Thread(Box<dyn FnOnce(Latest<Matrix>) + Send>),
+    /// A sound card, opened before the app (see [`input`]).
     #[cfg(feature = "audio")]
-    Audio(Option<String>),
+    Audio(audio::Capture),
 }
 
 /// Send `frames` to the app on a thread, one every `pace` if it is set (a
-/// file played at its sample rate), else as fast as they come (a pipe). When they end, the scope goes on with
-/// `silence`, a buffer every `period`, as scope-tui's file source does.
-/// The newest buffer wins: one the app had no time for is dropped.
+/// file played at its sample rate), else as fast as they come (a pipe).
+/// When they end, the scope goes on with `silence`, a buffer every
+/// `period`, as scope-tui's file source does. The newest buffer wins: one
+/// the app had no time for is dropped.
 pub fn play(
     frames: impl Iterator<Item = Matrix> + Send + 'static,
     silence: Matrix,
     pace: Option<Duration>,
     period: Duration,
 ) -> Input {
-    Input::Thread(Box::new(move |tx: Latest<Frame>| {
-        let mut due = Instant::now();
-        let silent = std::iter::repeat(silence).map(|data| (data, Some(period)));
-        let frames = frames.map(|data| (data, pace)).chain(silent);
-        for (number, (data, pace)) in (0..).zip(frames) {
-            if !tx.send(Frame { number, data }) {
+    Input::Thread(Box::new(move |tx: Latest<Matrix>| {
+        for data in frames {
+            if !tx.send(data) {
                 return;
             }
-            if let Some(pace) = pace {
-                // Keep to the beat, however long a buffer took to make.
-                due = (due + pace).max(Instant::now());
-                std::thread::sleep(due.saturating_duration_since(Instant::now()));
+            // `sleep` keeps to the beat, however long a buffer took.
+            if pace.is_some_and(|pace| !tx.sleep(pace)) {
+                return;
             }
         }
+        while tx.send(silence.clone()) && tx.sleep(period) {}
     }))
 }
 
@@ -268,19 +208,14 @@ pub enum Mode {
 }
 
 impl Mode {
+    /// Tab's order.
+    pub const ALL: [Mode; 3] = [Mode::Oscilloscope, Mode::Vectorscope, Mode::Spectroscope];
+
     fn name(self) -> &'static str {
         match self {
             Mode::Oscilloscope => "oscillo",
             Mode::Vectorscope => "vector",
             Mode::Spectroscope => "spectro",
-        }
-    }
-
-    fn next(self) -> Mode {
-        match self {
-            Mode::Oscilloscope => Mode::Vectorscope,
-            Mode::Vectorscope => Mode::Spectroscope,
-            Mode::Spectroscope => Mode::Oscilloscope,
         }
     }
 }
@@ -311,6 +246,24 @@ impl Default for Oscilloscope {
             depth: 1,
             peaks: true,
         }
+    }
+}
+
+impl Oscilloscope {
+    /// Where the trace starts in `channel`: rich-ext's `dsp::trigger` at
+    /// the threshold (scaled to -1 to 1) on the edge chosen, or 0 when not
+    /// triggering. `None` when it never crosses.
+    pub fn trigger_at(&self, channel: &[f64]) -> Option<usize> {
+        if !self.triggering {
+            return Some(0);
+        }
+        let edge = if self.falling_edge {
+            dsp::Edge::Falling
+        } else {
+            dsp::Edge::Rising
+        };
+        let level = self.threshold / FULL_SCALE;
+        dsp::trigger(channel, level, self.depth as usize, edge)
     }
 }
 
@@ -355,14 +308,10 @@ impl DataSet {
             style: style.to_string(),
         }
     }
-
-    /// A reference line, in the axis colour.
-    fn reference(g: &Graph, a: (f64, f64), b: (f64, f64)) -> DataSet {
-        DataSet::new(None, vec![a, b], false, &g.axis)
-    }
 }
 
-/// What a mode draws: data sets over an x and a y range, with axis titles.
+/// What a mode draws: data sets over an x and a y range, with axis titles,
+/// and the reference lines as each axis's grid.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Plot {
     pub sets: Vec<DataSet>,
@@ -372,6 +321,10 @@ pub struct Plot {
     pub y_title: &'static str,
     /// A logarithmic x axis (the spectroscope's frequencies).
     pub x_log: bool,
+    /// Reference lines up the plot at these x values, and across it at
+    /// these y values.
+    pub x_grid: Vec<f64>,
+    pub y_grid: Vec<f64>,
 }
 
 /// The oscilloscope's and the spectroscope's names for channels.
@@ -383,37 +336,16 @@ fn channel_name(index: usize) -> String {
     }
 }
 
-/// Whether the signal crosses `threshold` at `index` and stays past it for
-/// `depth` samples, rising (or falling).
-pub fn triggered(data: &[f64], index: usize, threshold: f64, depth: u32, falling: bool) -> bool {
-    let depth = depth.max(1) as usize;
-    if data.len() < index + 1 + depth {
-        return false;
-    }
-    let after = &data[index + 1..=index + depth];
-    if falling {
-        data[index] >= threshold && after.iter().all(|s| *s < threshold)
-    } else {
-        data[index] <= threshold && after.iter().all(|s| *s > threshold)
-    }
-}
-
 /// The oscilloscope: each channel against time, from the trigger point if
 /// triggering, with each channel's peaks marked at the left edge.
 pub fn oscilloscope(g: &Graph, o: &Oscilloscope, data: &Matrix) -> Plot {
     let mut sets = Vec::new();
-    if g.references {
-        sets.push(DataSet::reference(g, (0.0, 0.0), (g.samples as f64, 0.0)));
-    }
-    let level = o.threshold / FULL_SCALE;
     // A buffer that never crosses leaves nothing to draw, as in scope-tui.
-    let offset = match data.first() {
-        Some(first) if o.triggering => (0..first.len())
-            .find(|&i| triggered(first, i, level, o.depth, o.falling_edge))
-            .unwrap_or(first.len()),
-        _ => 0,
-    };
+    let offset = data
+        .first()
+        .map_or(0, |first| o.trigger_at(first).unwrap_or(first.len()));
     if o.triggering {
+        let level = o.threshold / FULL_SCALE;
         sets.push(DataSet::new(Some("T"), vec![(0.0, level)], true, &g.labels));
     }
     for (n, channel) in data.iter().enumerate().rev() {
@@ -447,6 +379,9 @@ pub fn oscilloscope(g: &Graph, o: &Oscilloscope, data: &Matrix) -> Plot {
         x_title: "time -",
         y_title: "| amplitude",
         x_log: false,
+        x_grid: Vec::new(),
+        // The zero line.
+        y_grid: if g.references { vec![0.0] } else { Vec::new() },
     }
 }
 
@@ -469,10 +404,6 @@ pub fn oscilloscope_header(o: &Oscilloscope) -> String {
 /// the channels, as scope-tui's does.
 pub fn vectorscope(g: &Graph, data: &Matrix) -> Plot {
     let mut sets = Vec::new();
-    if g.references {
-        sets.push(DataSet::reference(g, (-g.scale, 0.0), (g.scale, 0.0)));
-        sets.push(DataSet::reference(g, (0.0, -g.scale), (0.0, g.scale)));
-    }
     for (n, pair) in data.chunks(2).enumerate() {
         let points: Vec<(f64, f64)> = match pair {
             [x, y] => x.iter().zip(y).map(|(a, b)| (*a, *b)).collect(),
@@ -495,6 +426,8 @@ pub fn vectorscope(g: &Graph, data: &Matrix) -> Plot {
             g.palette(left),
         ));
     }
+    // The cross through the middle.
+    let cross = if g.references { vec![0.0] } else { Vec::new() };
     Plot {
         sets,
         x: (-g.scale, g.scale),
@@ -502,6 +435,8 @@ pub fn vectorscope(g: &Graph, data: &Matrix) -> Plot {
         x_title: "left -",
         y_title: "| right",
         x_log: false,
+        x_grid: cross.clone(),
+        y_grid: cross,
     }
 }
 
@@ -518,21 +453,11 @@ fn reference_frequencies() -> impl Iterator<Item = f64> {
 /// The spectroscope: each channel's spectrum, averaged over the last
 /// buffers, against a logarithmic frequency axis. Every bin is a point,
 /// the mirrored half above the Nyquist frequency too, as in scope-tui
-/// (it shows once → widens the axis past it).
+/// (it shows once → widens the axis past it): `dsp::spectrum_full`.
 pub fn spectroscope(g: &Graph, s: &Spectroscope, history: &[VecDeque<Vec<f64>>]) -> Plot {
     let upper = g.scale * 7.5;
+    let rate = f64::from(g.rate);
     let mut sets = Vec::new();
-    if g.references {
-        // scope-tui's zero line runs from 1 Hz to `samples` Hz.
-        sets.push(DataSet::reference(
-            g,
-            (1.0, 0.0),
-            (g.samples.max(1) as f64, 0.0),
-        ));
-        for hz in reference_frequencies() {
-            sets.push(DataSet::reference(g, (hz, 0.0), (hz, upper)));
-        }
-    }
     // scope-tui's phase: atan2 with its arguments as it passes them.
     let phase = |(re, im): &dsp::Complex| {
         let p = re.atan2(*im);
@@ -553,21 +478,17 @@ pub fn spectroscope(g: &Graph, s: &Spectroscope, history: &[VecDeque<Vec<f64>>])
         }
         let peak = chunk.iter().copied().fold(1.0, f64::max);
         chunk.iter_mut().for_each(|x| *x /= peak);
-        // The whole transform, not `dsp::spectrum`'s half up to the Nyquist
-        // frequency: scope-tui plots every bin, the mirrored half too.
-        let bins = dsp::fft(&chunk);
-        let resolution = g.rate as f64 / bins.len() as f64;
-        let points = bins
-            .iter()
-            .enumerate()
-            .map(|(i, bin)| {
-                let magnitude = dsp::magnitude(*bin);
-                let level = if s.log_y { magnitude.ln() } else { magnitude };
-                (i as f64 * resolution, level)
-            })
+        let level = |magnitude: f64| if s.log_y { magnitude.ln() } else { magnitude };
+        let points = dsp::spectrum_full(&chunk, rate)
+            .into_iter()
+            .map(|(hz, magnitude)| (hz, level(magnitude)))
             .collect();
         if s.phase_diff {
-            phases.push((resolution, bins.iter().map(phase).collect::<Vec<_>>()));
+            let bins = dsp::fft(&chunk);
+            phases.push((
+                rate / chunk.len() as f64,
+                bins.iter().map(phase).collect::<Vec<_>>(),
+            ));
         }
         sets.push(DataSet::new(
             Some(&channel_name(n)),
@@ -599,6 +520,14 @@ pub fn spectroscope(g: &Graph, s: &Spectroscope, history: &[VecDeque<Vec<f64>>])
         x_title: "frequency -",
         y_title: if s.log_y { "| level" } else { "| amplitude" },
         x_log: true,
+        x_grid: if g.references {
+            reference_frequencies().collect()
+        } else {
+            Vec::new()
+        },
+        // scope-tui's zero line starts at 1 Hz, left of the axis's 20 Hz,
+        // so ratatui leaves it out.
+        y_grid: Vec::new(),
     }
 }
 
@@ -621,8 +550,9 @@ pub fn spectroscope_header(g: &Graph, s: &Spectroscope) -> String {
 /// `plot` as rich-ext's chart, laid out as ratatui's `Chart`, which is
 /// what scope-tui draws with: no axis lines (scope-tui's axes have no
 /// labels), the y axis's title at the top left, the x axis's at the bottom
-/// right, and the legend boxed at the top right. Braille dots, 2x4 a cell,
-/// or one dot a cell without Braille.
+/// right, the legend boxed at the top right, and the reference lines as
+/// each axis's grid in the axis colour. Braille dots, 2x4 a cell, or one
+/// dot a cell without Braille.
 pub fn chart(plot: &Plot, g: &Graph) -> Chart {
     let marker = if g.braille {
         Marker::Braille
@@ -646,11 +576,13 @@ pub fn chart(plot: &Plot, g: &Graph) -> Chart {
     });
     // No labels, so no axis lines. Titles only with the interface shown;
     // the legend always.
-    let axis = |(min, max): (f64, f64), title: &str, scale: AxisScale| {
+    let axis = |(min, max): (f64, f64), title: &str, scale: AxisScale, grid: &[f64]| {
         let axis = Axis::default()
             .bounds(min, max)
             .scale(scale)
-            .labels(Labels::None);
+            .labels(Labels::None)
+            .style(g.axis.clone())
+            .grid(grid.iter().copied());
         if g.show_ui {
             axis.title(title).title_style(g.labels.clone())
         } else {
@@ -663,17 +595,17 @@ pub fn chart(plot: &Plot, g: &Graph) -> Chart {
         AxisScale::Linear
     };
     Chart::new(datasets)
-        .x_axis(axis(plot.x, plot.x_title, x_scale))
-        .y_axis(axis(plot.y, plot.y_title, AxisScale::Linear))
+        .x_axis(axis(plot.x, plot.x_title, x_scale, &plot.x_grid))
+        .y_axis(axis(plot.y, plot.y_title, AxisScale::Linear, &plot.y_grid))
         .legend(LegendPosition::TopRight)
         // As ratatui 0.29 draws: its canvas leaves out a line with an end
         // outside the bounds, draws each dataset over the ones before (so
         // the trace breaks the reference lines it crosses), and draws the
-        // legend's box in the chart's own style, the terminal's colours,
-        // over what the datasets drew.
+        // legend's box in the chart's own style (none: the terminal's
+        // colours) over what the datasets drew.
         .out_of_bounds(OutOfBounds::Drop)
         .layering(Layering::PerDataset)
-        .legend_style("")
+        .style("none")
         .legend_clear(false)
 }
 
@@ -715,32 +647,17 @@ impl Default for Options {
 }
 
 /// The buffer size scope-tui's `--tune` picks for `note` (`A4`, `C#3`,
-/// `Eb`): one period of the note at `rate`, from its table of octave-0
-/// pitches doubled per octave, then nudged up while it is a multiple of
-/// `channels × 2`.
+/// `Eb`): one period of the note at `rate` (rich-ext's `dsp::note_hz`, in
+/// octave 0 when it names none, as scope-tui reads it), then nudged up
+/// while it is a multiple of `channels × 2`.
 pub fn tune(note: &str, rate: u32, channels: usize) -> Option<u32> {
     let note = note.trim();
-    let split = note
-        .find(|c: char| c.is_ascii_digit())
-        .unwrap_or(note.len());
-    let hz: f32 = match &note[..split] {
-        "C" => 16.35,
-        "C#" | "Db" => 17.32,
-        "D" => 18.35,
-        "D#" | "Eb" => 19.45,
-        "E" => 20.60,
-        "F" => 21.83,
-        "F#" | "Gb" => 23.12,
-        "G" => 24.50,
-        "G#" | "Ab" => 25.96,
-        "A" => 27.50,
-        "A#" | "Bb" => 29.14,
-        "B" => 30.87,
-        _ => return None,
+    let hz = if note.contains(|c: char| c.is_ascii_digit()) {
+        dsp::note_hz(note)?
+    } else {
+        dsp::note_hz(&format!("{note}0"))?
     };
-    let octave: u32 = note[split..].parse().unwrap_or(0);
-    let hz = (0..octave).fold(hz, |hz, _| hz * 2.0);
-    let mut buffer = ((rate as f32 / hz).round() as u32).max(1);
+    let mut buffer = ((f64::from(rate) / hz).round() as u32).max(1);
     let align = channels as u32 * 2;
     while align > 0 && buffer.is_multiple_of(align) {
         buffer += 1;
@@ -754,7 +671,10 @@ fn nudge(value: f64, step: f64, magnitude: f64, range: (f64, f64)) -> f64 {
 }
 
 /// The modifiers scope-tui scales a step by: shift ×10, ctrl ×5, alt ×⅕.
-const MAGNITUDES: [(&str, f64); 4] = [("", 1.0), ("shift+", 10.0), ("ctrl+", 5.0), ("alt+", 0.2)];
+const MAGNITUDES: [(&str, f64); 4] = [("", 1.0), ("shift", 10.0), ("ctrl", 5.0), ("alt", 0.2)];
+
+/// What scope-tui's app ends with when its source gives nothing in time.
+pub const STALLED: &str = "data source returned null";
 
 /// The app, drawing the buffers `input` delivers.
 pub fn scope_app(options: Options, input: Input) -> App {
@@ -778,14 +698,11 @@ pub fn scope_app(options: Options, input: Input) -> App {
         let spec = signal(Spectroscope::default());
         let frame = signal(Matrix::new());
         let history = signal(Vec::<VecDeque<Vec<f64>>>::new());
-        let frames = signal(0u32);
-        let fps = signal(0u32);
 
         // Each buffer the source delivers. Paused, the scope still takes
         // them and counts the frames, as scope-tui does, but shows nothing
         // new; an identical buffer (the still test signal) draws nothing.
         let take = move |data: Matrix| {
-            frames.update(|n| *n += 1);
             if graph.with_untracked(|g| g.pause) {
                 return;
             }
@@ -801,54 +718,39 @@ pub fn scope_app(options: Options, input: Input) -> App {
             });
             frame.set(data);
         };
-        match input {
-            Input::Clock(mut frames, period) => every(period, move |_| {
-                if let Some(data) = frames.next() {
-                    take(data);
-                }
-            }),
+        // Every source is a signal of the newest buffer: `on_write` takes
+        // each one, two equal ones (silence) included, and `rate` counts
+        // them a second, scope-tui's fps.
+        let fps = match input {
+            Input::Every(mut made, period) => {
+                let samples = latest_every(period, move || made.next().unwrap_or_default());
+                on_write(samples, move |data, _| data.into_iter().for_each(take));
+                rate(samples)
+            }
             Input::Thread(run) => {
-                let feed = latest(run);
-                // Watched by number: a watch runs only when what it reads
-                // changes, and two silent buffers are equal.
-                watch(
-                    move || feed.with(|f| f.as_ref().map(|f| f.number)),
-                    move |_, _| {
-                        if let Some(data) =
-                            feed.with_untracked(|f| f.as_ref().map(|f| f.data.clone()))
-                        {
-                            take(data);
-                        }
-                    },
-                );
+                let samples = latest(run);
+                on_write(samples, move |data, _| data.into_iter().for_each(take));
+                rate(samples)
             }
             #[cfg(feature = "audio")]
-            Input::Audio(device) => {
-                let (channels, buffer) = (options.channels.max(1) as u16, options.buffer as usize);
-                match audio::input(device.as_deref(), options.rate, channels, buffer) {
-                    Ok(samples) => {
-                        // `None` before the first buffer. Watched by number,
-                        // as the thread's frames are.
-                        watch(
-                            move || samples.with(|f| f.as_ref().map(|f| f.number)),
-                            move |_, _| {
-                                if let Some(data) = samples
-                                    .with_untracked(|f| f.as_ref().map(|f| f.samples.clone()))
-                                {
-                                    take(data);
-                                }
-                            },
-                        );
-                    }
-                    // The builder cannot fail: end the app on its first turn.
-                    Err(error) => watch(|| (), move |_, cx| cx.fail(error.to_string())),
-                }
+            Input::Audio(capture) => {
+                let samples = capture.samples();
+                on_write(samples, move |frame, _| {
+                    frame.into_iter().for_each(|f| take(f.samples))
+                });
+                // `--timeout`: scope-tui ends when no buffer comes in time.
+                let status = capture.status();
+                watch(
+                    move || status.get(),
+                    |status, cx| match status {
+                        audio::AudioStatus::Stalled(_) => cx.fail(STALLED),
+                        audio::AudioStatus::Failed(why) => cx.fail(why),
+                        audio::AudioStatus::Running => {}
+                    },
+                );
+                rate(samples)
             }
-        }
-        every(Duration::from_secs(1), move |_| {
-            fps.set(frames.get_untracked());
-            frames.set(0);
-        });
+        };
 
         let plot = renderable(move || {
             let g = graph.get();
@@ -872,7 +774,35 @@ pub fn scope_app(options: Options, input: Input) -> App {
             },
         );
 
-        let mut root = column([shown_header.auto(), plot])
+        // The keys every scope takes are the node's; each scope's own are
+        // in a help section of its own, and do nothing in the others.
+        let in_mode = move |m: Mode| mode.get_untracked() == m;
+        let osc_key = move |change: fn(&mut Oscilloscope)| {
+            move |_: &mut Ctx| {
+                if in_mode(Mode::Oscilloscope) {
+                    osc.update(change)
+                }
+            }
+        };
+        let spec_key = move |change: fn(&mut Spectroscope)| {
+            move |_: &mut Ctx| {
+                if in_mode(Mode::Spectroscope) {
+                    spec.update(change)
+                }
+            }
+        };
+        let debounce = move |step: i64| {
+            move |_: &mut Ctx| {
+                if in_mode(Mode::Oscilloscope) {
+                    osc.update(|o| o.depth = (o.depth as i64 + step).clamp(1, 65535) as u32);
+                }
+            }
+        };
+        let (peaks, phase) = (
+            osc_key(|o| o.peaks = !o.peaks),
+            spec_key(|s| s.phase_diff = !s.phase_diff),
+        );
+        column([shown_header.auto(), plot])
             .bind("q ctrl+q ctrl+w", "quit", |cx| cx.quit())
             .bind("space", "pause", move |_| {
                 graph.update(|g| g.pause = !g.pause)
@@ -886,10 +816,11 @@ pub fn scope_app(options: Options, input: Input) -> App {
             .bind("r", "reference lines", move |_| {
                 graph.update(|g| g.references = !g.references)
             })
-            .bind(
+            .bind_cycle(
                 "tab",
                 "oscilloscope, vectorscope, spectroscope",
-                move |_| mode.update(|m| *m = m.next()),
+                mode,
+                &Mode::ALL,
             )
             .bind("esc", "reset the view (and stop triggering)", move |_| {
                 graph.update(|g| {
@@ -898,103 +829,94 @@ pub fn scope_app(options: Options, input: Input) -> App {
                 });
                 // The scope showing gets the key too: the oscilloscope
                 // stops triggering.
-                if mode.get_untracked() == Mode::Oscilloscope {
+                if in_mode(Mode::Oscilloscope) {
                     osc.update(|o| o.triggering = false);
                 }
             })
-            .bind("t", "oscilloscope: trigger", move |_| {
-                if mode.get_untracked() == Mode::Oscilloscope {
-                    osc.update(|o| o.triggering = !o.triggering);
-                }
+            .bind_scaled("up", &MAGNITUDES, "scale up", move |_, by| {
+                graph.update(|g| g.scale = nudge(g.scale, 0.01, by, (0.0, 10.0)))
             })
-            .bind("e", "oscilloscope: rising or falling edge", move |_| {
-                if mode.get_untracked() == Mode::Oscilloscope {
-                    osc.update(|o| o.falling_edge = !o.falling_edge);
-                }
+            .bind_scaled("down", &MAGNITUDES, "scale down", move |_, by| {
+                graph.update(|g| g.scale = nudge(g.scale, -0.01, by, (0.0, 10.0)))
             })
-            .bind(
+            .bind_scaled("right", &MAGNITUDES, "more samples", move |_, by| {
+                samples(graph, 1.0, by)
+            })
+            .bind_scaled("left", &MAGNITUDES, "fewer samples", move |_, by| {
+                samples(graph, -1.0, by)
+            })
+            .bind_scaled(
+                "pageup",
+                &MAGNITUDES,
+                "threshold or avg up",
+                move |_, by| page(mode, osc, spec, 1.0, by),
+            )
+            .bind_scaled(
+                "pagedown",
+                &MAGNITUDES,
+                "threshold or avg down",
+                move |_, by| page(mode, osc, spec, -1.0, by),
+            )
+            .bind_in(
+                "oscilloscope",
+                "t",
+                "trigger",
+                osc_key(|o| o.triggering = !o.triggering),
+            )
+            .bind_in(
+                "oscilloscope",
+                "e",
+                "rising or falling edge",
+                osc_key(|o| o.falling_edge = !o.falling_edge),
+            )
+            .bind_in(
+                "oscilloscope",
                 "p",
-                "oscilloscope: peaks · spectroscope: phase difference",
-                move |_| match mode.get_untracked() {
-                    Mode::Oscilloscope => osc.update(|o| o.peaks = !o.peaks),
-                    Mode::Spectroscope => spec.update(|s| s.phase_diff = !s.phase_diff),
-                    Mode::Vectorscope => {}
+                "peaks · spectroscope: phase difference",
+                move |cx| {
+                    peaks(cx);
+                    phase(cx);
                 },
             )
-            .bind("w", "spectroscope: Hann window", move |_| {
-                if mode.get_untracked() == Mode::Spectroscope {
-                    spec.update(|s| s.window = !s.window);
-                }
-            })
-            .bind("l", "spectroscope: linear or log level", move |_| {
-                if mode.get_untracked() == Mode::Spectroscope {
-                    spec.update(|s| s.log_y = !s.log_y);
-                }
-            })
-            // The framework's help lists the described bindings; scope-tui has
-            // none.
-            .bind("?", "these keys", |cx| cx.help());
-        let debounce = [
-            ("=", 1, "oscilloscope: debounce up (+ by 10)"),
-            ("-", -1, "oscilloscope: debounce down (_ by 10)"),
-            ("+", 10, ""),
-            ("_", -10, ""),
-        ];
-        for (key, step, description) in debounce {
-            root = root.bind(&format!("{key:?}"), description, move |_| {
-                if mode.get_untracked() == Mode::Oscilloscope {
-                    osc.update(|o| o.depth = (o.depth as i64 + step).clamp(1, 65535) as u32);
-                }
-            });
-        }
-        for (modifier, magnitude) in MAGNITUDES {
-            // Described once, without a modifier: the help would list each.
-            let describe = |what: &'static str| if modifier.is_empty() { what } else { "" };
-            // scope-tui steps the samples by whole cells: alt's fifth of 25 is 5.
-            let samples = move |sign: f64| {
-                graph.update(|g| {
-                    let step = sign * (25.0 * magnitude).trunc();
-                    let top = g.width as f64 * 2.0;
-                    g.samples = nudge(g.samples as f64, step, 1.0, (0.0, top)) as u32;
-                })
-            };
-            root = root
-                .bind(
-                    &format!("{modifier}up"),
-                    describe("scale up (shift ×10, ctrl ×5, alt ×⅕)"),
-                    move |_| {
-                        graph.update(|g| g.scale = nudge(g.scale, 0.01, magnitude, (0.0, 10.0)))
-                    },
-                )
-                .bind(
-                    &format!("{modifier}down"),
-                    describe("scale down"),
-                    move |_| {
-                        graph.update(|g| g.scale = nudge(g.scale, -0.01, magnitude, (0.0, 10.0)))
-                    },
-                )
-                .bind(
-                    &format!("{modifier}right"),
-                    describe("more samples"),
-                    move |_| samples(1.0),
-                )
-                .bind(
-                    &format!("{modifier}left"),
-                    describe("fewer samples"),
-                    move |_| samples(-1.0),
-                )
-                .bind(
-                    &format!("{modifier}pageup"),
-                    describe("oscilloscope: threshold up · spectroscope: average more"),
-                    move |_| page(mode, osc, spec, 1.0, magnitude),
-                )
-                .bind(
-                    &format!("{modifier}pagedown"),
-                    describe("oscilloscope: threshold down · spectroscope: average less"),
-                    move |_| page(mode, osc, spec, -1.0, magnitude),
-                );
-        }
-        root
+            .bind_in(
+                "oscilloscope",
+                "\"=\"",
+                "debounce up (+ by 10)",
+                debounce(1),
+            )
+            .bind_in(
+                "oscilloscope",
+                "\"-\"",
+                "debounce down (_ by 10)",
+                debounce(-1),
+            )
+            .bind("\"+\"", "", debounce(10))
+            .bind("\"_\"", "", debounce(-10))
+            .bind_in(
+                "spectroscope",
+                "w",
+                "Hann window",
+                spec_key(|s| s.window = !s.window),
+            )
+            .bind_in(
+                "spectroscope",
+                "l",
+                "linear or log level",
+                spec_key(|s| s.log_y = !s.log_y),
+            )
+            // The framework's help lists the described bindings; scope-tui
+            // has none.
+            .bind("?", "these keys", |cx| cx.help())
+    })
+}
+
+/// ← (`sign` -1) or → (1): the samples shown, by whole steps of 25 times
+/// the modifier's magnitude (alt's fifth of 25 is 5), as scope-tui.
+fn samples(graph: Signal<Graph>, sign: f64, magnitude: f64) {
+    graph.update(|g| {
+        let step = sign * (25.0 * magnitude).trunc();
+        let top = g.width as f64 * 2.0;
+        g.samples = nudge(g.samples as f64, step, 1.0, (0.0, top)) as u32;
     })
 }
 
@@ -1019,10 +941,10 @@ fn page(
     }
 }
 
-/// The header: scope-tui's one-row `Table`, as a row of cells laid out by
-/// ratatui's solver (percentages of the whole width, a column between
-/// cells), each cut at its edge and drawn again only when what it shows
-/// changes. The row's style is the table's: the labels' colour.
+/// The header: scope-tui's one-row `Table`, as `cells` (percentages of the
+/// whole width laid out by ratatui's solver, a column between cells, each
+/// cut at its edge), each drawn again only when what it shows changes. The
+/// row's style is the table's: the labels' colour.
 fn header(
     graph: Signal<Graph>,
     mode: Signal<Mode>,
@@ -1031,32 +953,38 @@ fn header(
     fps: Signal<u32>,
 ) -> Node {
     let flag = move |on: fn(&Graph) -> bool, yes: &'static str, no: &'static str| {
-        cell(move || (if graph.with(on) { yes } else { no }).into())
+        text(move || (if graph.with(on) { yes } else { no }).into())
     };
     let labels = graph.with_untracked(|g| g.labels.clone());
-    row([
-        cell(move || {
-            let colour = graph.with(|g| g.palette(0).to_string());
-            format!("[bold {colour}]{}::scope-tui", mode.get().name())
-        })
-        .percent(35),
-        cell(move || match mode.get() {
-            Mode::Oscilloscope => osc.with(oscilloscope_header),
-            Mode::Vectorscope => "live".into(),
-            Mode::Spectroscope => graph.with(|g| spec.with(|s| spectroscope_header(g, s))),
-        })
-        .percent(25),
-        cell(move || format!("-{:.2}x+", graph.with(|g| g.scale))).percent(7),
-        cell(move || graph.with(|g| format!("{}/{} spf", g.samples, g.width))).percent(13),
-        cell(move || format!("{}fps", fps.get())).percent(6),
-        flag(|g| g.scatter, "***", "---").percent(6),
-        flag(|g| g.pause, "||", "|>").percent(6),
+    cells([
+        (
+            35,
+            text(move || {
+                let colour = graph.with(|g| g.palette(0).to_string());
+                format!("[bold {colour}]{}::scope-tui", mode.get().name())
+            }),
+        ),
+        (
+            25,
+            text(move || match mode.get() {
+                Mode::Oscilloscope => osc.with(oscilloscope_header),
+                Mode::Vectorscope => "live".into(),
+                Mode::Spectroscope => graph.with(|g| spec.with(|s| spectroscope_header(g, s))),
+            }),
+        ),
+        (
+            7,
+            text(move || format!("-{:.2}x+", graph.with(|g| g.scale))),
+        ),
+        (
+            13,
+            text(move || graph.with(|g| format!("{}/{} spf", g.samples, g.width))),
+        ),
+        (6, text!("{fps}fps")),
+        (6, flag(|g| g.scatter, "***", "---")),
+        (6, flag(|g| g.pause, "||", "|>")),
     ])
-    .solver(Solver::Ratatui)
-    // ratatui's tables leave a column between cells.
-    .gap(1)
     .style(&labels)
-    .fixed(1)
 }
 
 /// Where the samples come from: scope-tui's subcommands, and the test
@@ -1075,8 +1003,8 @@ pub enum Source {
         timeout: u64,
         list: bool,
     },
-    /// `pulse [DEVICE] [--server-buffer N]`: PulseAudio, reached through
-    /// ALSA's `pulse` device.
+    /// `pulse [DEVICE] [--server-buffer N]`: a PulseAudio (or PipeWire)
+    /// source, the default one without a name.
     Pulse {
         device: Option<String>,
         server_buffer: u32,
@@ -1116,7 +1044,7 @@ a simple oscilloscope/vectorscope/spectroscope for your terminal
 Usage: scope [OPTIONS] [COMMAND]
 
 Commands:
-  pulse  use PulseAudio's default source, through ALSA (the audio feature)
+  pulse  use a PulseAudio or PipeWire source (the pulse feature)
   file   use a file from filesystem and read its content
   audio  capture from a sound card (the audio feature)
   demo   draw a test signal (the default)
@@ -1141,9 +1069,11 @@ Options:
 
 file <PATH> [-l]: PATH is a file or pipe of signed 16-bit little-endian PCM,
 or - for stdin; -l, --limit-rate limits data flow to match the sample rate.
-audio [DEVICE] [--list] [--timeout S]: DEVICE is a name --list prints, or a
-part of one; the default input without it.
-pulse [DEVICE] [--server-buffer N]: DEVICE is an ALSA device, `pulse` by default.
+audio [DEVICE] [--list] [--timeout S]: DEVICE is an id --list prints (or a
+part of a device's name), the default input without it; it ends after S
+seconds (5) without audio.
+pulse [DEVICE] [--server-buffer N]: DEVICE is a PulseAudio source, a sink's
+monitor among them; N is the server's buffer, in buffers [default: 32].
 ";
 
 /// Parse scope-tui's command line (without the program's name). Options
@@ -1260,31 +1190,52 @@ pub fn parse(args: &[String]) -> Result<Command, String> {
     })
 }
 
-/// The input for `source`: the test signal and files on a thread of their
-/// own, a sound card through intuiTUIve's `audio` feature. A buffer's worth
-/// of time is scope-tui's frame.
+/// The input for `source`, opened before the app, so a file or a device
+/// that is not there fails before the terminal is taken: the test signal,
+/// a file read by intuiTUIve's `audio::pcm` (s16le, as scope-tui's), a
+/// sound card opened by its `audio` feature. A buffer's worth of time is
+/// scope-tui's frame.
 pub fn input(source: &Source, options: &Options) -> std::io::Result<Input> {
     let (channels, buffer) = (options.channels.max(1), options.buffer as usize);
     let period = Duration::from_secs_f64(buffer as f64 / options.rate.max(1) as f64);
     let silence = vec![vec![0.0; buffer]; channels];
     Ok(match source {
-        Source::Demo { still } => {
-            Input::Clock(Box::new(Demo::new(channels, buffer, *still)), period)
-        }
+        Source::Demo { still } => Input::Every(
+            Box::new(Demo::new(channels, buffer, options.rate, *still)),
+            period,
+        ),
         Source::File { path, limit_rate } => {
             let reader: Box<dyn Read + Send> = if path == "-" {
                 Box::new(std::io::stdin())
             } else {
                 Box::new(std::fs::File::open(path)?)
             };
-            let pcm = Pcm::new(reader, channels, buffer);
+            let pcm = audio::pcm(reader, Format::S16Le, channels, buffer);
             play(pcm, silence, limit_rate.then_some(period), period)
         }
         #[cfg(feature = "audio")]
-        Source::Audio { device, .. } => Input::Audio(device.clone()),
+        Source::Audio {
+            device, timeout, ..
+        } => {
+            let quiet = Duration::from_secs(*timeout);
+            let mut opening = capture_options(options).stall_after(quiet);
+            if let Some(device) = device {
+                opening = opening.device(device);
+            }
+            Input::Audio(audio::open(opening).map_err(std::io::Error::other)?)
+        }
         #[cfg(feature = "audio")]
-        Source::Pulse { device, .. } => {
-            Input::Audio(Some(device.clone().unwrap_or_else(|| "pulse".into())))
+        Source::Pulse {
+            device,
+            server_buffer,
+        } => {
+            // scope-tui's server buffer is `N` buffers long.
+            let mut opening = pulse_options(capture_options(options))
+                .latency(server_buffer.saturating_mul(options.buffer));
+            if let Some(device) = device {
+                opening = opening.device(device);
+            }
+            Input::Audio(audio::open(opening).map_err(std::io::Error::other)?)
         }
         #[cfg(not(feature = "audio"))]
         Source::Audio { .. } | Source::Pulse { .. } => {
@@ -1298,20 +1249,41 @@ pub fn input(source: &Source, options: &Options) -> std::io::Result<Input> {
     })
 }
 
-/// `audio --list`: the inputs, the default marked, as scope-tui lists them.
+/// What every capture asks for: the rate, the channels and the buffer.
 #[cfg(feature = "audio")]
-pub fn list_devices() -> String {
-    let devices = audio::devices();
-    if devices.is_empty() {
-        return "no audio inputs\n".into();
+fn capture_options(options: &Options) -> audio::AudioOptions {
+    audio::AudioOptions::new()
+        .rate(options.rate)
+        .channels(options.channels.max(1) as u16)
+        .buffer(options.buffer as usize)
+}
+
+/// `pulse` on PulseAudio's own host with the `pulse` feature, else on
+/// ALSA's `pulse` device (the server's default source, by name).
+#[cfg(feature = "audio")]
+fn pulse_options(opening: audio::AudioOptions) -> audio::AudioOptions {
+    #[cfg(feature = "pulse")]
+    return opening.host(audio::Host::Pulse);
+    #[cfg(not(feature = "pulse"))]
+    opening.device("pulse")
+}
+
+/// `audio --list` as scope-tui prints it: each input's id after `>`, then
+/// each configuration it offers.
+#[cfg(feature = "audio")]
+pub fn list_devices(devices: &[(audio::Device, Vec<audio::DeviceConfig>)]) -> String {
+    let mut out = String::new();
+    for (device, configs) in devices {
+        out += &format!("> {}\n", device.id);
+        for c in configs {
+            let (min, max) = c.buffer.unwrap_or((0, 0));
+            out += &format!(
+                "  + {}ch {}-{}hz {min}-{max}buf ({})\n",
+                c.channels, c.min_rate, c.max_rate, c.format
+            );
+        }
     }
-    devices
-        .iter()
-        .map(|d| {
-            let default = if d.default { " (default)" } else { "" };
-            format!("> {}{default}\n", d.name)
-        })
-        .collect()
+    out
 }
 
 #[allow(dead_code)]
@@ -1325,7 +1297,13 @@ fn main() -> std::io::Result<()> {
     }
     #[cfg(feature = "audio")]
     if let Source::Audio { list: true, .. } = command.source {
-        print!("{}", list_devices());
+        let devices: Vec<_> = (audio::devices().into_iter())
+            .map(|device| {
+                let configs = device.configs();
+                (device, configs)
+            })
+            .collect();
+        print!("{}", list_devices(&devices));
         return Ok(());
     }
     let backend = match command.backend {
@@ -1336,5 +1314,10 @@ fn main() -> std::io::Result<()> {
         },
     };
     let input = input(&command.source, &command.options)?;
-    scope_app(command.options, input).run_with(backend)
+    // As scope-tui: a source that stops ends the app, and why goes to
+    // stderr once the terminal is back.
+    if let Err(error) = scope_app(command.options, input).run_with(backend) {
+        eprintln!("[!] Error executing app: {error}");
+    }
+    Ok(())
 }
