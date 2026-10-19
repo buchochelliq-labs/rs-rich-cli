@@ -3,24 +3,24 @@ spectro::scope-tui                      live  ---  23.438Hz bins    -1.00x+  204
 ⡇     ⡇   ⢸   ⢸  ⡇ ⢸ ⢸ ⢸ ⢸          ⢸     ⢸    ⡇   ⡇ ⢸  ⡇ ⡇ ⡇ ⡇          ⡇     ⡇   ⢸   ⢸  ⡇ ⢸ ⢸ ⢸ ⢸        │R│
 ⡇     ⡇   ⢸   ⢸  ⡇ ⢸ ⢸ ⢸ ⢸          ⢸     ⢸    ⡇   ⡇ ⢸  ⡇ ⡇ ⡇ ⡇          ⡇     ⡇   ⢸   ⢸  ⡇ ⢸ ⢸ ⢸ ⢸        │L│
 ⡇     ⡇   ⢸  ⢠⢸ ╭─ Help ────────────────────────────────────────────────────────────────────╮ ⢸ ⢸ ⢸        └─┘
-⡇     ⡇   ⢸ ⢀⠏⡆ │? Search keys ›                                                            │ ⢸ ⢸ ⢸          ⢸
-⡇     ⡇   ⢸ ⡎ ⢇ │                                                                           │ ⢸ ⢸ ⢸          ⢸
-⡇     ⡇   ⢸⡸  ⢸ │  q/ctrl+q/ctrl+w  quit                                                    │ ⢸ ⢸ ⢸          ⢸
-⡇     ⡇   ⢠⠃  ⢸⡇│  space            pause                                                   │ ⢸ ⢸ ⢸          ⢸
-⡇     ⡇  ⢀⠎   ⢸⢣│  s                scatter or lines                                        │ ⢸ ⢸ ⢸          ⢸
-⡇     ⡇  ⡜⢸   ⢸⢸│  h                hide the interface                                      │ ⢸ ⢸ ⢸          ⢸
-⡇     ⡇ ⢰⠁⢸   ⢸ │  r                reference lines                                         │ ⢸ ⢸ ⢸          ⢸
-⡇     ⡇⢠⠃ ⢸   ⢸ │  tab              oscilloscope, vectorscope, spectroscope                 │ ⢸ ⢸ ⢸          ⢸
-⡇     ⡇⡎  ⢸   ⢸ │  esc              reset the view (and stop triggering)                    │ ⢸ ⢸ ⢸          ⢸
-⡇     ⡸   ⢸   ⢸⢸│  t                oscilloscope: trigger                                   │ ⢸ ⢸ ⢸          ⢸
-⡇    ⢰⠁   ⢸   ⢸⡎│  e                oscilloscope: rising or falling edge                    │ ⢸ ⢸ ⢸          ⢸
-⡇   ⢀⠇⡇   ⢸   ⢠⠃│  p                oscilloscope: peaks · spectroscope: phase difference    │ ⢸ ⢸ ⢸          ⢸
-⡇   ⡜ ⡇   ⢸   ⡸ │  w                spectroscope: Hann window                               │ ⢸ ⢸ ⢸          ⢸
-⡇  ⡰⠁ ⡇   ⢸   ⡇ │  l                spectroscope: linear or log level                       │ ⢸ ⢸ ⢸          ⢸
-⡇ ⢠⠃⠒⠒⠒⠒⠤⠤⠤⠤⠤⠼⢸ │  ?                these keys                                              │ ⢸ ⢸ ⢸          ⢸
-⡇     ⡇   ⢸   ⢸ │  21 keys · more below · type to search · ↑↓ scroll · esc close            │ ⢸ ⢸ ⢸          ⢸
-⡇     ⡇   ⢸   ⢸ ╰───────────────────────────────────────────────────────────────────────────╯ ⢸ ⢸ ⢸          ⢸
-⡇     ⡇   ⢸   ⢸  ⡇ ⢸ ⢸ ⢸ ⢸   ⠱⡀⡎    ⢸ ⠘⠎⢣⡇⠘⡸⢸⢸⡜⢸  ⢸⡇⢸⢸⠸⠃⢱ ⡇ ⢸⡀⢀ ⡀⣧⣇⢸  ⢸ ⠈⡇     ⡇⡀  ⢸   ⢸  ⡇ ⢸ ⢸ ⢸ ⢸          ⢸
-⡇     ⡇   ⢸   ⢸  ⡇ ⢸ ⢸ ⢸ ⢸    ⠱⠁    ⢸    ⢸⠔⠁⠸⠘⡇⡞   ⡇⠈⢸⢸ ⠸⣀⠇⡀⢸⠇⠐⡔⠁⡿⡀⢸⡆⢄⡜⢠⢸⣤⠁⢸⢰ ⠁⡀⠠  ⢸  ⢀⢸⠄ ⡇ ⢸ ⢸ ⢸ ⢸          ⢸
-⡇     ⡇   ⢸   ⢸  ⡇ ⢸ ⢸ ⢸ ⢸          ⢸     ⢸  ⡇⠁⠃   ⡇⡇⢸⠘ ⡇⢻⢸⣀⡎ ⡀⠘⠊ ⡗⠊⠇⠈⡇⢼⡆⡟⢠⣸⡜⢲⠔⡇  ⠂⢸⣀⠁ ⢸  ⡇ ⢸ ⢸ ⢀ ⢸          ⢸
-⡇     ⡇   ⢸   ⢸  ⡇ ⢸ ⢸ ⢸ ⢸          ⢸     ⢸    ⡇   ⡇ ⢸  ⡇⠈⡇⠈⠇ ⠘   ⠇⠈⠠⠈⠁⠘⠃⠃⠂⠘⠸⠸⠈⠄⠁  ⠐⠠⠠ ⠁ ⠠⡇ ⢸ ⠄ ⢸ ⢸frequency -
+⡇     ⡇   ⢸  ⡏⡆ │? Search keys ›                                                            │ ⢸ ⢸ ⢸          ⢸
+⡇     ⡇   ⢸ ⡸ ⢇ │                                                                           │ ⢸ ⢸ ⢸          ⢸
+⡇     ⡇   ⢸⢀⠇ ⢸ │  q/ctrl+q/ctrl+w  quit                                                    │ ⢸ ⢸ ⢸          ⢸
+⡇     ⡇   ⢸⡜  ⢸⡇│  space            pause                                                   │ ⢸ ⢸ ⢸          ⢸
+⡇     ⡇   ⢠⠃  ⢸⢣│  s                scatter or lines                                        │ ⢸ ⢸ ⢸          ⢸
+⡇     ⡇   ⡎   ⢸⠸│  h                hide the interface                                      │ ⢸ ⢸ ⢸          ⢸
+⡇     ⡇  ⢰⠁   ⢸ │  r                reference lines                                         │ ⢸ ⢸ ⢸          ⢸
+⡇     ⡇  ⡇⢸   ⢸ │  tab              oscilloscope, vectorscope, spectroscope                 │ ⢸ ⢸ ⢸          ⢸
+⡇     ⡇ ⡸ ⢸   ⢸⢀│  esc              reset the view (and stop triggering)                    │ ⢸ ⢸ ⢸          ⢸
+⡇     ⡇⢀⠇ ⢸   ⢸⢸│  ↑                scale up (shift ×10, ctrl ×5, alt ×0.2)                 │ ⢸ ⢸ ⢸          ⢸
+⡇     ⡇⡜  ⢸   ⢸⡇│  ↓                scale down (shift ×10, ctrl ×5, alt ×0.2)               │ ⢸ ⢸ ⢸          ⢸
+⡇     ⢠⠃  ⢸   ⢸ │  →                more samples (shift ×10, ctrl ×5, alt ×0.2)             │ ⢸ ⢸ ⢸          ⢸
+⡇     ⡎   ⢸   ⡎ │  ←                fewer samples (shift ×10, ctrl ×5, alt ×0.2)            │ ⢸ ⢸ ⢸          ⢸
+⡇    ⢰⠁   ⢸  ⢠⠃ │  pgup             threshold or avg up (shift ×10, ctrl ×5, alt ×0.2)      │ ⢸ ⢸ ⢸          ⢸
+⡇    ⡇⡇   ⣀⠤⠒⠉⢸ │  pgdn             threshold or avg down (shift ×10, ctrl ×5, alt ×0.2)    │ ⢸ ⢸ ⢸          ⢸
+⡇   ⡸⢀⡠⠔⠒⠉⢸   ⢸ │  21 keys · more below · type to search · ↑↓ scroll · esc close            │ ⢸ ⢸ ⢸          ⢸
+⡇ ⠠⢀⠇⠁⡇   ⢸   ⢸ ╰───────────────────────────────────────────────────────────────────────────╯ ⢸ ⢸ ⢸          ⢸
+⡇  ⡜  ⡇   ⢸   ⢸  ⡇ ⢸ ⢸ ⠘⡄⡜        ⠈⠊⢸ ⠈⠊  ⢸⠘⣼⠸⡇⠊⣇⠇⠸⠁⡇⢸⡏⢱⡎⣷⠹⡀⣧⡇⡇ ⠂  ⡇ ⣰⢠ ⢰⠐    ⢀⡇   ⢸   ⢸  ⡇ ⢸ ⢸ ⢸ ⢸          ⢸
+⡇ ⢠⠃  ⡇   ⢸   ⢸  ⡇ ⢸ ⢸ ⢸⠟⢸          ⢸     ⢸ ⠃ ⠁⡇⠋  ⡇⠁⢸⠁⠈⡇⠹⢸⠃⢻⢱⡏⡀⢠⠐ ⣴ ⣿⢾⢀⢸⠁ ⢠⢀ ⢸⡇⠐  ⢸   ⢸  ⡇ ⢸ ⢸ ⢸ ⢸          ⢸
+⡇     ⡇   ⢸   ⢸  ⡇ ⢸ ⢸ ⢸ ⢸          ⢸     ⢸    ⡇   ⡇⠘⢸  ⡇⡇⠸⡇⢸⢸⠁⠁⠸⡆⠙⠘⣼⢸⢸ ⠸⡀⡄⢸⢼ ⠁⢀⠂ ⠁⠠ ⠑ ⢸ ⠐⡇ ⢸ ⢸ ⢸ ⢸          ⢸
+⡇     ⡇   ⢸   ⢸  ⡇ ⢸ ⢸ ⢸ ⢸          ⢸     ⢸    ⡇   ⡇ ⢸  ⡇ ⡇⠇⠘⠘⠆  ⠇ ⠸⠇⠘⠘⠄⠁⠈⠠⠊⠁⠈⠂⠘⠠⠂⠈⠄⠄⠠⠂⠂⠐ ⠂ ⢸ ⢸⠄⢸ ⢸frequency -
