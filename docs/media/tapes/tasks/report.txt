@@ -1,0 +1,28 @@
+ Tasks   Projects   Timesheet   Calendar                                                           next [none]
+  ID Active Age P Project     Tag    Due Description                                                     Urg
+• 2  2h     10d   work        next   5d  Write the quarterly report                                      27.14
+  1         3d  H home.bills  bills  1d  Pay the rent                                                    15.93
+  3         5d    work        review -1d Review pull requests [1]                                        12.11
+  6         2h  M             phone      Call the plumber                                                4.70
+  7         3mo   travel             8w  Renew the passport                                              3.95
+  4         1d    travel             2w  Book flights to Lisbon                                          3.41
+  5         5w  L home.garden            Fix the garden fence                                            3.02
+
+
+
+
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────
+Name          Value                                                                                          ┃
+ID            2                                                                                              ┃
+Description   Write the quarterly report                                                                     ┃
+Status        Pending                                                                                        ┃
+Project       work                                                                                           ┃
+Entered       YYYY-MM-DD hh:mm:ss (10d)                                                                      ┃
+Start         YYYY-MM-DD hh:mm:ss                                                                            ┃
+Due           YYYY-MM-DD hh:mm:ss                                                                            │
+Last modified YYYY-MM-DD hh:mm:ss (10d)                                                                      │
+Tags          next                                                                                           │
+Virtual tags  ACTIVE DUE PENDING PROJECT READY TAGGED UNBLOCKED                                              │
+UUID          5e1f0c2a-0000-4000-8000-000000000002                                                           │
+Filter Tasks
+status:pending

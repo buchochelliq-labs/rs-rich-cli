@@ -185,13 +185,33 @@ choices; `MARKDOWN` produces a Markdown table.
 On a legacy Windows console the fancy boxes fall back to `SQUARE`, and with
 `Console::builder().ascii_only(true)` every box is drawn in ASCII.
 
-## Not yet ported
+## Footers, row styles and sections
 
-- Footers (`show_footer`, `Column.footer`).
-- Alternating row styles (`row_styles`), per-row `style`/`end_section`, and
-  `add_section`.
-- `title_style`, `caption_style`, `title_justify`, `caption_justify`,
-  `header_style` on the table, `min_width`/`width` on the table.
+The rest of upstream's table options are builders on the table and on the
+column just added:
+
+```rust
+use rich::{Console, Table};
+
+let mut table = Table::new()
+    .title("Crates")
+    .title_style("bold")
+    .show_footer(true)
+    .row_styles(vec!["".into(), "dim".into()]) // alternate rows
+    .min_width(Some(30));
+table.add_column("crate").column_footer("total");
+table.add_column("tests").column_footer("1,204");
+table.add_row(&["rich", "812"]);
+table.add_section(); // a line under the row above
+table.add_row(&["rich-ext", "392"]);
+Console::new().print(&table);
+```
+
+`add_row_with(cells, style, end_section)` styles one row, and
+`header_style`, `footer_style`, `caption_style`, `title_justify`,
+`caption_justify` and `width` follow upstream's names; the
+[API](https://docs.rs/rs-rich/latest/rich/table/struct.Table.html) lists
+them all.
 
 ## See also
 

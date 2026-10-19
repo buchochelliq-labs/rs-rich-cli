@@ -7,7 +7,7 @@ Use them through [`rs-rich-ext`](https://crates.io/crates/rs-rich-ext) with its
 `macros` feature, which re-exports them and provides the runtime they expand to:
 
 ```toml
-rs-rich-ext = { version = "0.0.9", features = ["macros"] }
+rs-rich-ext = { version = "0.0.17", features = ["macros"] }
 ```
 
 - `richf!("[bold]{name}[/] has {count:>3} items")` builds a `Text`. Unbalanced or

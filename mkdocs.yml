@@ -11,6 +11,7 @@ site_dir: site
 # docs/python is its own site (mkdocs-python.yml), published under /python/.
 exclude_docs: |
   python/
+  assets/vendor/**/README.md
 
 theme:
   name: material
@@ -139,8 +140,24 @@ nav:
       - Terminal apps (rs-rich-intuituive):
           - guide/intuituive/index.md
           - "Tutorial: a to-do app": guide/intuituive/tutorial.md
+          - Nodes and layout: guide/intuituive/layout.md
+          - Panels, themes and stylesheets: guide/intuituive/panels.md
+          - State, keys and the mouse: guide/intuituive/input.md
+          - Inputs, text and dates: guide/intuituive/components.md
+          - Lists, trees and tabs: guide/intuituive/lists.md
+          - Tables and scrolling: guide/intuituive/tables.md
+          - Chrome, your own widgets and effects: guide/intuituive/widgets.md
+          - Screens, pop-ups and toasts: guide/intuituive/screens.md
+          - Tasks, feeds and other threads: guide/intuituive/background.md
+          - Browsing, jobs and app state: guide/intuituive/browsing.md
+          - Timers, frames and games: guide/intuituive/timers.md
+          - Files, sound, images and charts: guide/intuituive/plugins.md
+          - Accessibility: guide/intuituive/accessibility.md
+          - Inline apps, backends and your own loop: guide/intuituive/running.md
+          - Testing and the inspector: guide/intuituive/testing.md
           - Porting a ratatui app: guide/intuituive/porting.md
           - "ratatui's examples, rebuilt": guide/intuituive/ratatui-examples.md
+          - "Eleven apps, rebuilt": guide/intuituive/clones.md
           - Serving an app to a browser: guide/intuituive/web.md
           - "Embedding programs and pages (rs-rich-embed)": guide/intuituive/embed.md
           - Testing with screen readers: guide/intuituive/screen-readers.md
@@ -173,6 +190,7 @@ nav:
   - Known issues: known-issues.md
   - Development plans:
       - "Plan to 1.0.0": plans/1.0.0.md
+      - "Parity, the marketplace and round 7's leftovers": plans/0.0.21.md
       - "Layout, editing, isolation and docs": plans/0.0.19.md
       - "intuiTUIve grows up": plans/0.0.18.md
       - "Data and developer tooling": plans/0.0.16.md
@@ -223,4 +241,15 @@ nav:
       - "Design: intuiTUIve widgets": design/intuituive-widgets.md
       - "Design: intuiTUIve against ratatui": design/intuituive-vs-ratatui.md
       - "Design: what the intuiTUIve demos are missing": design/intuituive-demo-gaps.md
+      - "Design: the demo loop, where things stand": design/intuituive-status.md
+      - "Design: the clones' gap reports":
+          - "git (gitui)": design/gaps/git.md
+          - "top (bottom)": design/gaps/top.md
+          - "http (Slumber)": design/gaps/http.md
+          - "blocks (rata-tetris)": design/gaps/blocks.md
+          - "csv (csvlens)": design/gaps/csv.md
+          - "disk (diskonaut)": design/gaps/disk.md
+          - "music (termusic)": design/gaps/music.md
+          - "tasks (taskwarrior-tui)": design/gaps/tasks.md
+          - "raycast": design/gaps/raycast.md
       - "Design: a playground in the docs": design/docs-playground.md

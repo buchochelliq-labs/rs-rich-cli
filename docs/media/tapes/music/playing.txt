@@ -1,0 +1,30 @@
+╭─ Library ────────────────────────╮╭─ Playlist ──┤ Total 5 tracks | 00:35 | Mode: 🔁 ├─ ────────────────────╮
+│  ▾ library                       ││   Duration  Title               Artist              Album              │
+│🦄  ▸ Harbour Songs               ││   [ 00:05 ] Low Earth           Nova Hale           Unknown Album      │
+│    ▾ Orbit Lights                ││🚀 [ 00:07 ] Morning Signal      Nova Hale           Unknown Album      │
+│        Nova Hale - Low Earth.wav ││   [ 00:09 ] Perigee             Nova Hale           Unknown Album      │
+│        Nova Hale - Morning Signa…││   [ 00:08 ] Fog Bell            The Tidewaters      Unknown Album      │
+│        Nova Hale - Perigee.wav   ││   [ 00:06 ] Rope and Lantern    The Tidewaters      Unknown Album      │
+│                                  ││                                                                        │
+│                                  ││                                                                        │
+│                                  ││                                                                        │
+│                                  ││                                                                        │
+│                                  ││                                                         ▄▄  ▄          │
+│                                  ││                                                          ▀▀ ▀  ▀▄      │
+│                                  ││                                                         ▄▀▀ ▀ ▄▀▀      │
+│                                  ││                                                        ▄▄▄▄▄▄▄▄▄       │
+│                                  ││                                                      ▄▀▀▀▀▀▀▀▀▀▀▀▄▄▄▄  │
+│                                  ││                                                      ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀ │
+│                                  ││                                                      ▀▀▀▀▀▀▀▀▀▀▀▀▀  ▀▀ │
+│                                  ││                                                      ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀ │
+│                                  ││                                                      ▀▀▀▀▀▀▀▀▀▀▀▀▀     │
+│                                  ││                                                        ▀▀▀▀▀▀▀▀▀▀▀     │
+│                                  │╰────────────────────────────────────────────────────────────────────────╯
+│                                  │╭─────── Status: Paused | Volume: 30 | Speed: 1.0 | Gapless: True ───────╮
+│                                  ││██████████████████████████00:05    -    00:07██████                     │
+│                                  │╰────────────────────────────────────────────────────────────────────────╯
+│                                  │╭───────────────── Lyrics of Nova Hale - Morning Signal ─────────────────╮
+│                                  ││Light on the dish and the dew on the wire                               │
+│                                  ││Count down the stars as they fade one by one                            │
+╰──────────────────────────────────╯╰────────────────────────────────────────────────────────────────────────╯
+ Help: <control+h> Config: <shift+C> Library: <1> Database: <2> Podcasts: <3> Version: rs-rich

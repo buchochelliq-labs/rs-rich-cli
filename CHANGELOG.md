@@ -75,6 +75,18 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   templates. Checked with cargo-generate 0.25.0: the generated app builds and
   passes its test against a `git` dependency, with no error.
 
+### Docs: one site per release, with a version selector
+
+- The documentation site keeps a copy of the docs for each release, picked
+  from a drop-down in the header: `/X.Y.Z/` is built from that release's
+  `rs-rich-cli-vX.Y.Z` tag, `/dev/` from main, and the site's root and
+  `/latest/` go to the newest release. Every other version shows a banner
+  linking to the newest release's docs, and an old unversioned link is sent
+  to the same page under the newest release.
+  `scripts/build_versioned_docs.py` builds it in the `docs` workflow, keeping
+  the newest releases that fit under GitHub Pages' 1 GB; a release tag's push
+  re-runs the workflow on main, so a release's docs go up when it is tagged.
+
 ### Core: `Text.markup` (rs-rich)
 
 - **`Text::markup()`**, a port of upstream's `Text.markup` property: the console

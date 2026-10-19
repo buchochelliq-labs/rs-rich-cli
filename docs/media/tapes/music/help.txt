@@ -1,0 +1,30 @@
+╭─ Library ────────────────────────╮╭─ Playlist ──┤ Total 5 tracks | 00:35 | Mode: 🔁 ├─ ────────────────────╮
+│  ▾ library                       ││   Duration  Title               Artist              Album              │
+│🦄  ▸ Harbour Songs               ││   [ 00:05 ] Low Earth           Nova Hale           Unknown Album      │
+│    ▾ Orbit Lights                ││🚀 [ 00:07 ] Morning Signal      Nova Hale           Unknown Album      │
+│        Nova Ha╭─ Help ────────────────────────────────────────────────────────────────────╮nown Album      │
+│        Nova Ha│? Search keys ›                                                            │nown Album      │
+│        Nova Ha│Playlist                                                                   │nown Album      │
+│               │  l                Play selected                                           │                │
+│               │  d                Delete one track from playlist                          │                │
+│               │  D                Delete all tracks from playlist                         │                │
+│               │  r                Randomize playlist                                      │                │
+│               │  m                Loop mode cycle                                         │ ▄▄  ▄          │
+│               │  /                Search in playlist                                      │  ▀▀ ▀  ▀▄      │
+│               │  K                Swap track up in playlist                               │ ▄▀▀ ▀ ▄▀▀      │
+│               │  J                Swap track down in playlist                             │▄▄▄▄▄▄▄▄▄       │
+│               │  s                Select random tracks to playlist                        │▀▀▀▀▀▀▀▀▀▀▄▄▄▄  │
+│               │  S                Select random album to playlist                         │▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀ │
+│               │  ,                Open sort popup menu                                    │▀▀▀▀▀▀▀▀▀▀▀  ▀▀ │
+│               │Global                                                                     │▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀ │
+│               │  q/esc            Exit                                                    │▀▀▀▀▀▀▀▀▀▀▀     │
+│               │  ctrl+h           Help                                                    │▀▀▀▀▀▀▀▀▀▀▀     │
+│               │  space            Pause current track                                     │────────────────╯
+│               │  n                Next track                                              │ss: True ───────╮
+│               │  52 keys · more below · type to search · ↑↓ scroll · esc close            │                │
+│               ╰───────────────────────────────────────────────────────────────────────────╯────────────────╯
+│                                  │╭───────────────── Lyrics of Nova Hale - Morning Signal ─────────────────╮
+│                                  ││Light on the dish and the dew on the wire                               │
+│                                  ││Count down the stars as they fade one by one                            │
+╰──────────────────────────────────╯╰────────────────────────────────────────────────────────────────────────╯
+ Help: <control+h> Config: <shift+C> Library: <1> Database: <2> Podcasts: <3> Version: rs-rich

@@ -35,3 +35,5 @@ crates/rich-art/examples/assets/waving_cat.gif
 
 # Terminal screenshot harness (scripts/terminal_shots)
 node_modules/
+# The versioned build writes this beside mkdocs.yml while it runs
+.mkdocs-versioned.yml

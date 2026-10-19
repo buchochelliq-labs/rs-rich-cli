@@ -55,13 +55,25 @@ block — for embedding in your own layout:
     ([divergence #18](../../DIVERGENCES.md)). Pygments style names such as
     `monokai` are not recognised.
 
-### Not yet ported
+### Line numbers, ranges and guides
 
-`line_numbers`, `line_range`, `highlight_lines`, `start_line`,
-`indent_guides`, `code_width`, `background_color`, `dedent` and
-`Syntax.from_path`. To show part of a file, slice the lines before passing
-them in; to number lines, a two-column `Table::grid()` of line numbers and
-`highlight()` output works.
+```rust
+use rich::{Console, Syntax};
+
+let code = "fn main() {\n    let x = 1;\n    println!(\"{x}\");\n}\n";
+let syntax = Syntax::new(code, "rust")
+    .line_numbers(true)
+    .line_range(Some(2), Some(3)) // show lines 2 and 3 only (1-based)
+    .highlight_lines([2])         // a pointer in the gutter at line 2
+    .indent_guides(true);
+Console::new().print(&syntax);
+```
+
+`start_line(n)` numbers the first line `n`, and `code_width`,
+`background_color` and `padding_sides` follow upstream's
+`code_width`, `background_color` and four-sided `padding`. Upstream's
+`dedent` and `Syntax.from_path` are not ported: strip the indent and read
+the file yourself.
 
 ## Markdown
 

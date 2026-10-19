@@ -13,7 +13,7 @@ behind them can be swapped, including for one your app writes itself.
 
 ```toml
 [dependencies]
-rs-rich-intuituive = "0.0.2"
+rs-rich-intuituive = "0.0.5"
 rs-rich-embed = "0.0.1"
 # The Chrome and Browsh engines are off by default:
 # rs-rich-embed = { version = "0.0.1", features = ["chrome", "browsh"] }
@@ -247,7 +247,8 @@ usual install location. It speaks the protocol directly over
   port, and DevTools has no authentication of its own: whoever finds it
   can drive the browser as you (open local files, run script in pages).
   Use the Chrome engine on a machine you do not share. A pipe in place of
-  the port is planned for 0.0.20, on every platform at once.
+  the port is planned for 0.0.21 on Linux and macOS; Windows keeps the
+  port until a maintained crate can pass the pipe's two handles.
 - **Downloads are denied** (`Browser.setDownloadBehavior`).
 - Frames are `Page.startScreencast` JPEGs, with the page laid out at the
   pane's size times `cell_pixels` (10 x 20 CSS pixels a cell by default).

@@ -35,7 +35,8 @@ the screen with a VT emulator, and writes:
 
 `Set WindowFrame off`, `Set Caption "…"` and `Set KeyOverlay off` change how
 stills and video are presented, and `Output gif png` (or `Output demo.html`)
-chooses what a tape writes.
+chooses what a tape writes; a tape without an `Output` line writes every
+format, the APNG included.
 
 ## Games and graphics
 
@@ -88,7 +89,7 @@ the files its `Output` lines ask for:
 
 ```toml
 [dependencies]
-rs-rich-record = "0.0.4"
+rs-rich-record = "0.0.8"
 ```
 
 ```rust,no_run

@@ -18,7 +18,7 @@ cargo install rs-rich-cli     # installs a binary called `rich`
 rich --version
 ```
 
-The package is `rs-rich-cli`; the binary is `rich`. Five default Cargo
+The package is `rs-rich-cli`; the binary is `rich`. Six default Cargo
 features can be turned off for a smaller, network-free binary:
 
 | Feature | Adds |
@@ -26,11 +26,13 @@ features can be turned off for a smaller, network-free binary:
 | `fetch` | `http(s)://` URLs as input |
 | `art` | images, GIFs and image diffs (`rich image`, `rich gif`, `rich diff a.png b.png`), and micro assets (`rich micro`) |
 | `mermaid` | `rich mermaid` and ```` ```mermaid ```` fences, drawn as text |
-| `record` | `rich record`: scripted terminal recordings |
+| `record` | `rich record`: scripted terminal recordings (implies `png`) |
+| `png` | `--export-png`, through the recorder's rasteriser |
 | `interact` | the interactive commands (`rich choose`, `filter`, `input`, `confirm`, `pager`, `write`, `file`, `color`, `asset`, `explore`, `date`) |
 
 `rich chart`, `rich dot`, `rich deps` and `rich schema` are in every build.
-`lumis`, `mmdc`, `arrow`, `dylib-plugins`, `wasm-plugins` and `serve` (`rich
+`lumis`, `mmdc`, `arrow`, `dylib-plugins`, `wasm-plugins`, `syntax-cache`,
+`onig`, `json-escape-safe` and `serve` (`rich
 serve`, a program in a web browser) are off by default; the
 [crate README](https://github.com/buchochelliq-labs/rs-rich-cli/tree/main/crates/rich-cli#features)
 lists what each adds.

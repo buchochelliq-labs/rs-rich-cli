@@ -111,6 +111,7 @@ pass it to anything that takes a renderable.
 | `highlight_regex(pattern, style, prefix)` | style every match; named groups get the style `prefix + name` |
 | `justify(..)`, `overflow(..)`, `no_wrap(..)` | layout, see below |
 | `plain()`, `spans()`, `cell_len()` | inspect |
+| `markup()` | the markup that renders it, see [below](#back-to-markup) |
 
 Anywhere a style is accepted you can pass a `Style` or a `&str`. A string is a
 *style name* (or definition) resolved when the text is rendered, against the
@@ -143,6 +144,34 @@ prefix.append(message, None);
 
 Either way the message stays literal: `Text` never parses markup, so a file
 name like `[red].txt` prints as written.
+
+### Back to markup
+
+`text.markup()` is the console markup that renders a `Text`: the plain
+string with every tag-opening `[` escaped, and a tag around the base style
+and each span. It is a port of upstream's `Text.markup`, byte-checked
+against rich 15.0.0, so a styled `Text` can be stored, logged or edited as
+markup and parsed back.
+
+```rust
+use rich::Text;
+
+let mut text = Text::styled("a[b]", "bold");
+text.stylize("red", 0, 1);
+assert_eq!(text.markup(), "[bold][red]a[/red]\\[b][/bold]");
+
+// Text parsed from markup gives back the same plain text and spans.
+let parsed = Text::from_markup("[bold]a[i]b\\[c][/i][/bold]").unwrap();
+let again = Text::from_markup(&parsed.markup()).unwrap();
+assert_eq!(again.plain(), "ab[c]");
+assert_eq!(again.spans(), parsed.spans());
+```
+
+At a shared offset the opening tags come before the closing ones, as
+upstream writes them; a null style or an empty name adds no tag, and a
+resolved `Style` is written as its definition (`red on blue`). An
+`[@handler]` tag carries no metadata in this port
+([divergence #3a](../../DIVERGENCES.md#3a-stylemeta-is-a-typed-map-not-marshal-bytes)), so it gives no tag back.
 
 ### Justify, overflow and wrapping
 
@@ -260,10 +289,11 @@ theme shared with Python rich users works here too:
 
 ## Not yet ported
 
-- `Text` methods for which Rust has other idioms (`Text.assemble`,
-  `Text.from_ansi`) — use `append`/`append_text`, and
+- `Text.assemble`, for which Rust has another idiom: use
+  `append`/`append_text`. (`Text.from_ansi` is ported as
+  `Text::from_ansi(text, style)`; for a stream,
   [`AnsiDecoder`](https://docs.rs/rs-rich/latest/rich/ansi/struct.AnsiDecoder.html)
-  to turn ANSI output back into `Text`.
+  turns ANSI output back into `Text`.)
 - Upstream's `Style(bold=True, color="red")` keyword constructor: use
   `Style::parse("bold red")` or `Style::from_color`.
 

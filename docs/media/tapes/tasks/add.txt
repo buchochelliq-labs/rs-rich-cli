@@ -1,0 +1,28 @@
+ Tasks   Projects   Timesheet   Calendar                                                           next [none]
+  ID Active Age P Project     Tag    Due Description                                                     Urg
+  2  2h     10d   work        next   5d  Write the quarterly report                                      27.14
+  1         3d  H home.bills  bills  1d  Pay the rent                                                    15.93
+• 3         5d    work        review -1d Review pull requests [1]                                        12.11
+  6         2h  M             phone      Call the plumber                                                4.70
+  7         3mo   travel             8w  Renew the passport                                              3.95
+  4         1d    travel             2w  Book flights to Lisbon                                          3.41
+  5         5w  L home.garden            Fix the garden fence                                            3.02
+
+
+
+
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────
+Name          Value                                                                                          ┃
+ID            3                                                                                              ┃
+Description   Review pull requests                                                                           ┃
+                YYYY-MM-DD hh:mm:ss Two are from Ada                                                         ┃
+Status        Pending                                                                                        ┃
+Project       work                                                                                           ┃
+Entered       YYYY-MM-DD hh:mm:ss (5d)                                                                       ┃
+Due           YYYY-MM-DD hh:mm:ss                                                                            │
+Last modified YYYY-MM-DD hh:mm:ss (5d)                                                                       │
+Tags          review                                                                                         │
+Virtual tags  ANNOTATED DUE OVERDUE PENDING PROJECT READY TAGGED UNBLOCKED                                   │
+UUID          5e project:home.bills  -000000000003                                                           │
+Add Task         project:home.garden
+Water the plants project:home.bills

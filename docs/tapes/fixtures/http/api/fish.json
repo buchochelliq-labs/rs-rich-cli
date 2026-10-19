@@ -1,0 +1,7 @@
+{
+  "fish": [
+    { "id": 1, "name": "Barry", "species": "Barracuda", "big": true },
+    { "id": 2, "name": "Fishy", "species": "Sunfish", "big": false },
+    { "id": 3, "name": "Wanda", "species": "Clownfish", "big": false }
+  ]
+}

@@ -1,0 +1,30 @@
+
+
+
+┌─ Help ──────────────────────────────────────────────────────── Esc to close ─┐
+│PgUp, PgDown            Scroll up/down a table by a page                     ││
+│Ctrl-u, Ctrl-d          Scroll up/down a table by half a page                ││
+│Mouse click             Selects the clicked widget, table entry, dialog      ││
+│option, or tab                                                               ││
+│                                                                             ││
+│2 - CPU widget                                                               ┃│
+│Up, Down                Select a CPU thread/average to show in the graph     ┃│
+│                                                                             ┃│
+│3 - Process widget                                                           ┃│
+│dd, F9, Delete          Kill the selected process                            ┃│
+│c                       Sort by CPU usage, press again to reverse            ┃│
+│m                       Sort by memory usage, press again to reverse         ││
+│p                       Sort by PID name, press again to reverse             ││
+│n                       Sort by process name, press again to reverse         ││
+│Tab                     Group/un-group processes with the same name          ││
+│Ctrl-f, /               Open process search widget                           ││
+│P                       Toggle between showing the full command or just the  ││
+│process name                                                                 ││
+│s, F6                   Open process sort widget                             ││
+│I                       Invert current sort                                  ││
+│%                       Toggle between values and percentages for memory     ││
+│usage                                                                        ││
+└──────────────────────────────────────────────────────────────────────────────┘
+
+
+
