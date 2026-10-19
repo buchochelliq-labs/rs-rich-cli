@@ -3111,6 +3111,7 @@ version = "0.0.8"
 dependencies = [
  "color_quant 2.0.0",
  "fancy-regex 0.19.2",
+ "flate2",
  "fontdue",
  "gif",
  "png",

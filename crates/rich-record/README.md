@@ -27,13 +27,45 @@ the screen with a VT emulator, and writes:
   by rs-rich-ext's frame exporter, like rich's other SVG output), and a text
   grid;
 - an asciinema v2 cast, with input events and the palette in its header;
-- a GIF with a key overlay, and an MP4 when FFmpeg is installed;
+- a GIF and an animated PNG (APNG) with a key overlay, and an MP4 when FFmpeg
+  is installed: every settled screen update, dropped to the tape's frame rate
+  (`Set Framerate 35`, `--fps`) and with identical frames merged;
 - a self-contained HTML page: a small player (no CDN, no terminal emulator)
   and the screenshots as selectable text.
 
 `Set WindowFrame off`, `Set Caption "…"` and `Set KeyOverlay off` change how
 stills and video are presented, and `Output gif png` (or `Output demo.html`)
 chooses what a tape writes.
+
+## Games and graphics
+
+The emulator follows the images a program draws, on the cell grid: the Kitty
+graphics protocol (PNG or raw RGB/RGBA, zlib or not, chunked; placements at
+the cursor and Unicode placeholder cells, deletes), Sixel and iTerm2 inline
+images (PNG, GIF). PNG, GIF, APNG and video frames draw them over their cells;
+text grids and SVGs show the cells under them. A recording keeps every frame
+packed (about 12 bytes a cell, unchanged rows shared, images kept compressed):
+30 s at 35 frames a second at 100x30 is a few tens of megabytes.
+
+A tape can hold keys, for games:
+
+```text
+Set Framerate 35           # video frames a second (12)
+Set FontSize 10            # text size of video frames (16)
+Set KittyKeyboard on       # tell the program the kitty keyboard protocol is there
+Set KeyRepeat 200ms 33ms   # a held key's autorepeat
+KeyDown Up                 # hold a key (or one character: KeyDown w) ...
+Sleep 1s
+KeyUp Up                   # ... and let it go
+Hold f 2s                  # both, with a wait between
+Output gif apng
+```
+
+A held key autorepeats, as a keyboard does. With `Set KittyKeyboard on` the
+emulator answers the protocol's query and follows the flags the program
+pushes: presses, repeats and releases are then sent as the protocol's escapes
+(`CSI 1;1:3A` for a released Up), so a game hears exactly how long a key is
+held; without it, a release sends nothing, as on a legacy terminal.
 
 `check` compares a new run's text grids with committed ones, so documentation
 media cannot drift from the program it shows.

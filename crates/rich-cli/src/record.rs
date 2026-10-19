@@ -26,6 +26,8 @@ struct Args {
     window_frame: Option<bool>,
     caption: Option<String>,
     key_overlay: Option<bool>,
+    /// `--fps`: video frames a second, over the tape's `Set Framerate`.
+    fps: Option<f64>,
 }
 
 fn parse_formats(value: &str) -> Result<Formats, String> {
@@ -37,8 +39,8 @@ fn parse_formats(value: &str) -> Result<Formats, String> {
                 Some(format) => formats.set(format, true),
                 None => {
                     return Err(format!(
-                        "unknown --format {other:?} (choose from png, svg, cast, gif, mp4, \
-                         html, all)"
+                        "unknown --format {other:?} (choose from png, svg, cast, gif, apng, \
+                         mp4, html, all)"
                     ))
                 }
             },
@@ -68,6 +70,7 @@ fn parse_args(args: &[String]) -> Result<Args, String> {
         window_frame: None,
         caption: None,
         key_overlay: None,
+        fps: None,
     };
     let mut seen_command = false;
     let mut iter = args.iter();
@@ -99,8 +102,18 @@ fn parse_args(args: &[String]) -> Result<Args, String> {
             "--check" => parsed.check = true,
             "--no-video" => {
                 parsed.formats.gif = false;
+                parsed.formats.apng = false;
                 parsed.formats.mp4 = false;
                 parsed.formats.html = false;
+            }
+            "--fps" => {
+                let text = value()?;
+                let fps = text
+                    .parse::<f64>()
+                    .ok()
+                    .filter(|fps| tape::FRAME_RATES.contains(fps))
+                    .ok_or_else(|| format!("--fps takes frames a second, 1 to 60, not {text:?}"))?;
+                parsed.fps = Some(fps);
             }
             "--output" | "-o" => parsed.output = fs_path(&value()?),
             "--bin-dir" => parsed.bin_dir = Some(fs_path(&value()?)),
@@ -167,6 +180,7 @@ pub(super) fn dispatch(args: &[String]) -> ExitCode {
     let options = Options {
         bin_dir: args.bin_dir.clone(),
         repo: std::env::current_dir().ok(),
+        frame_rate: args.fps,
         ..Options::default()
     };
     // A tape's name picks its output directory (`--output/<stem>`), which
@@ -365,6 +379,24 @@ mod tests {
         assert_eq!(args.window_frame, Some(false));
         assert_eq!(args.key_overlay, Some(false));
         assert_eq!(args.caption.as_deref(), Some("Saved"));
+        let args = parse_args(&strings(&[
+            "record",
+            "--fps",
+            "35",
+            "--format=apng",
+            "a.tape",
+        ]))
+        .unwrap_or_else(|e| panic!("{e}"));
+        assert_eq!(args.fps, Some(35.0));
+        assert!(args.formats.apng && !args.formats.gif);
+        for bad in ["0", "61", "fast"] {
+            let Err(error) = parse_args(&strings(&["record", "--fps", bad, "a"])) else {
+                panic!("--fps {bad} was accepted");
+            };
+            assert!(error.contains("--fps"), "{error}");
+        }
+        let args = parse_args(&strings(&["record", "--no-video", "a"])).unwrap();
+        assert!(!args.formats.apng && !args.formats.gif && args.formats.png);
         let Err(error) = parse_args(&strings(&["record", "--window-frame=maybe", "a"])) else {
             panic!("--window-frame=maybe was accepted");
         };

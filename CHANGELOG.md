@@ -185,6 +185,31 @@ reports), all generic core:
   symbols or vim notation, disabled bindings greyed, a separator, a "more"
   expander); `HelpOptions::all_panes`.
 
+### Recording: pixels, every frame and held keys (rs-rich-record, rs-rich-cli)
+
+`rich record` can now record a game as it plays:
+
+- **Terminal graphics:** the emulator follows Kitty graphics (direct
+  placements and Unicode placeholders, PNG and raw pixels, zlib, chunks,
+  deletes), Sixel and iTerm2 inline images on the cell grid
+  (`rich_record::graphics`, `Snapshot::images`, `Tile`); PNG, GIF, APNG and
+  video frames draw them over their cells.
+- **Every frame:** each settled screen update (a read that drained the PTY,
+  no synchronized update open) is a frame; `Set Framerate N` / `--fps N`
+  (1–60, default 12) sets the video's rate, merging identical frames and
+  keeping only the last update within a frame. Frames are kept packed
+  (`screen::Packed`: 12 bytes a cell, rows shared between frames; a breaking
+  change to `Timeline::frames`), and images compressed.
+- **Held keys:** `KeyDown KEY`, `KeyUp KEY`, `Hold KEY DURATION`, with
+  autorepeat (`Set KeyRepeat`); `Set KittyKeyboard on` reports the kitty
+  keyboard protocol, whose flags the emulator follows per screen (`CSI > u`,
+  `CSI < u`, `CSI = u`), and presses, repeats and releases are then sent as
+  its escapes (`rich_record::keyboard`).
+- **APNG:** `Output apng` (and `--format apng`) writes an animated PNG in full
+  colour beside the GIF; `Set FontSize N` sizes video text.
+- The raycaster's tape is now a 35 fps walk-through (`docs/tapes/raycast.tape`,
+  GIF 7.8 MB, APNG 4.7 MB) and `raycast-iterm.tape` records it in real pixels.
+
 ### intuiTUIve: sprites, stages and pixel buffers (rs-rich-intuituive)
 
 Cell art that moves over a backdrop, and a framebuffer drawn in cells: the

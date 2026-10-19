@@ -1,9 +1,9 @@
 {
   "tape": "docs/tapes/raycast.tape",
-  "tape_fnv1a64": "3f05439d25b43358",
+  "tape_fnv1a64": "5589649012bc58f7",
   "recorder": "rs-rich-record 0.0.8",
   "rich": null,
-  "commit": "6939c74c6df849afdba0ceb3f43185f71e8231ed",
+  "commit": "568b96d68c7f133cabca9a32117ce63ae868a435",
   "screenshots": [
     "title",
     "start",
