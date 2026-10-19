@@ -1754,6 +1754,8 @@ pub struct App {
     layers: Vec<Layer>,
     /// The stack changed: everything draws again.
     restack: bool,
+    /// Where floats were painted last frame.
+    floats_drawn: Vec<Rect>,
     /// Nodes left dirty by their own drawing, and for how many frames in a
     /// row: one that keeps at it is quietened (see `Driver::render`).
     restless: HashMap<NodeId, u32>,
@@ -2076,6 +2078,7 @@ impl App {
                 fallback: false,
             }],
             restack: false,
+            floats_drawn: Vec::new(),
             restless: HashMap::new(),
             now: Duration::ZERO,
             focus_path,
@@ -3678,6 +3681,7 @@ impl App {
             screen.clear(whole);
             frame.damage.push(whole);
         }
+        let mut floats_now: Vec<(NodeId, Rect)> = Vec::new();
         runtime.enter(|| {
             for (layer, rect) in self.layers[base..].iter_mut().zip(&rects) {
                 // A modal's backdrop and shadow restyle what is below it,
@@ -3733,6 +3737,20 @@ impl App {
                 }
                 layer.root.draw(&mut frame, *rect, screen, force);
                 layer.drawn = Some(*rect);
+                // What the screen's widgets draw over their neighbours.
+                for (id, at) in crate::float::paint(&runtime, &layer.root, screen, area) {
+                    frame.damage.push(at);
+                    floats_now.push((id, at));
+                }
+            }
+            // A float whose node is not shown goes.
+            if !runtime.floats.borrow().is_empty() {
+                let painted: std::collections::HashSet<NodeId> =
+                    floats_now.iter().map(|(id, _)| *id).collect();
+                runtime
+                    .floats
+                    .borrow_mut()
+                    .retain(|id, _| painted.contains(id));
             }
             // Where nodes with a rect handle are on the screen now.
             if crate::place::any_handles() {
@@ -3930,6 +3948,17 @@ impl App {
                 None => text,
             };
             self.announce(crate::a11y::Announcement { text, urgent: true }, false);
+        }
+        // A float that shrank or went uncovered cells only their owners
+        // can draw: everything draws again.
+        let now: Vec<Rect> = floats_now.into_iter().map(|(_, at)| at).collect();
+        let old = std::mem::replace(&mut self.floats_drawn, now);
+        if !full
+            && old
+                .iter()
+                .any(|r| !crate::float::covered(*r, &self.floats_drawn))
+        {
+            damage.extend(self.frame(console, screen, true));
         }
         damage
     }

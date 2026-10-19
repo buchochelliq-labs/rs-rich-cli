@@ -94,6 +94,8 @@ mod bindings;
 pub mod border;
 mod builtin;
 mod calendar;
+pub mod command_line;
+pub mod complete;
 mod datetime;
 mod dialog;
 mod digits;
@@ -103,6 +105,7 @@ mod feed;
 #[cfg(feature = "files")]
 pub mod files;
 pub mod finder;
+mod float;
 pub mod focus;
 mod help;
 mod hex;
@@ -123,6 +126,7 @@ mod notify;
 pub mod pixels;
 mod place;
 pub mod preview;
+pub mod query;
 pub mod reactive;
 mod reorder;
 mod rule;
@@ -160,6 +164,8 @@ pub use rich;
 /// rs-rich-interact, for its components (`interact::Input`,
 /// `interact::Select`, …) and the headless test driver.
 pub use rich_interact as interact;
+/// Dates as people type them (`tomorrow`, `eow`, `3d`): rs-rich-interact's.
+pub use rich_interact::dates;
 
 pub use app::{
     after, every, fixed_step, held_keys, plain_key, rate, Anchor, App, Ctx, Driver, Easing,
@@ -169,6 +175,11 @@ pub use app::{
 pub use big_text::big_text;
 pub use bindings::{ModePage, Scaled, Stepped};
 pub use border::{Border, BorderSet, Edge, Shadow, Sides};
+pub use command_line::{command_line, command_line_with, CommandLine, CommandLineOptions};
+pub use complete::{
+    complete_words, history_file, history_in, history_session, CompleteOptions, Completion,
+    InputHistory,
+};
 pub use dialog::{ConfirmOptions, PickOptions, PromptOptions};
 pub use digits::digits;
 pub use effect::{effect, fill};

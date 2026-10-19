@@ -86,6 +86,59 @@ gaps; [csv](docs/design/gaps/csv.md), [tasks](docs/design/gaps/tasks.md),
   in the theme's `selected.range`; a list without one leaves Shift to its
   ancestors.
 
+### intuiTUIve: completion, a command line, queries and dates (rs-rich-intuituive, rs-rich-interact)
+
+What the taskwarrior-tui and slumber clones built by hand for their
+command bars, filters and due dates ([the demo gaps](docs/design/intuituive-demo-gaps.md),
+"Round 5", shared gaps; [tasks](docs/design/gaps/tasks.md),
+[http](docs/design/gaps/http.md)). All generic: the syntaxes and
+candidates are the app's.
+
+- **Input completion:** `input(..).complete(|text, caret| Vec<Completion>)`
+  and `complete_with(.., CompleteOptions)` (as you type, ghost text,
+  rows): a pop-up under the input (Tab, Shift+Tab, the arrows, Enter
+  takes, Esc closes) drawn over its neighbours without taking the keys,
+  and the top candidate's rest as ghost text (→ or End takes it).
+  `Completion::new(range, text).detail(..)`, `complete_words(list)`,
+  `complete::word_before`. Floats: a widget's drawing over its
+  neighbours, painted after its screen, everything drawn again when one
+  shrinks or goes (crate-internal for now).
+- **Input history:** `input(..).history(h)` (↑/↓ through the entries that
+  start with what was typed; Enter adds one) with `InputHistory`: a name
+  for the session's, `history_session()`, `history_in(app, name)` in the
+  app's state, `history_file(path)`; `status()` for `[3 / 7]`.
+  `PromptOptions::complete` and `::history` do the same for `cx.prompt`.
+- **A command line:** `command_line(CommandLine)` and
+  `command_line_with(.., CommandLineOptions::new().two_rows())`;
+  `open(cx, Mode::new(":"))` with `title`, `initial`, `complete`,
+  `history`, `on_submit` (`Err` keeps it open, in red), `on_change`,
+  `on_cancel`; `confirm`/`confirm_keys` asked in place; `error`,
+  `message`, `close`; the focus goes back where it was.
+- **Queries:** `query::parse(text, &Grammar) -> Query` and
+  `query.matches(&record)` over a `Record` trait (`field`, `text`,
+  `tags`/`has_tag`): words, quoted words, `field:value`,
+  `field.before:/after:/above:/below:/is:/not:/has:/hasnt:/startswith:/
+  endswith:/none:/any:`, `field > value` and the other comparisons,
+  `+tag`/`-tag`, `and`/`or`/`not`/`!` and parentheses; a `Grammar` of
+  fields, aliases, `Kind`s, `TextMatch`, value readers, date reading and
+  word matchers; `QueryError` with a byte range.
+- **Calendars:** `CalendarOptions::title(MonthTitle::Name)` and
+  `month_style_with(|first_of_month| ..)`; `month_with` and
+  `calendar_options_with` read their options from signals; `year_view`
+  and `year_view_with` (`YearOptions`: months across as fit, `marks`,
+  `today`, `across`, `gap`, `heading`); `agenda(from, days, items)`;
+  `Weekday::name`.
+- **rs-rich-interact dates and zones:** `dates::parse` and `parse_with`
+  (`now`, `today`, `tomorrow`, `eod`, weekday and month names,
+  `sow`/`eow`/`som`/`eom`/`soq`/`eoq`/`soy`/`eoy` and the current ones,
+  ISO dates and times, `3d`, `2w`, `1mo`, `-2d`), `DateOptions`,
+  `dates::NAMES`; `datetime::Zone` (UTC, `Local` through `localtime_r` on
+  Unix and `SystemTimeToTzSpecificLocalTime` on Windows, `Fixed`,
+  `posix(rule)`, `tzif(bytes)`, `named(name)`), `DateTime::from_unix`,
+  `to_unix`, `now_local`, `now_in`, `add_seconds`, `Date::today_local`,
+  `today_in`, `Time::now_local`. Tested across a change of summer time.
+  intuiTUIve re-exports `dates`.
+
 ### Rendering: styles that don't pile up, fast pixel cells (rs-rich-ext, rs-rich-intuituive)
 
 A full screen of truecolour pixels added thousands of styles a frame that

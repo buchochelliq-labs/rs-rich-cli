@@ -91,6 +91,7 @@ pub mod clipboard;
 pub mod component;
 pub mod components;
 pub mod compose;
+pub mod dates;
 pub mod datetime;
 pub mod edit;
 pub mod event;
@@ -107,6 +108,7 @@ pub mod plugin;
 pub mod policy;
 pub mod session;
 pub mod viewport;
+mod zone;
 
 pub use chrome::{Breadcrumbs, StatusBar, StatusItem};
 pub use component::{Component, Context, Flow, View};

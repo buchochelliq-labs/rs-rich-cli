@@ -823,6 +823,32 @@ impl DrawCx<'_> {
     pub fn style(&self, name: &str, fallback: &str) -> Style {
         theme_style(self.console, name, fallback)
     }
+
+    /// From the widget's own cells to the screen's: where its column `x`
+    /// and row `y` are.
+    pub(crate) fn to_screen(&self, x: u16, y: u16) -> (u16, u16) {
+        let sx = self.rect.x as i32 + x as i32 - self.shift.0;
+        let sy = self.rect.y as i32 + y as i32 - self.shift.1;
+        (
+            sx.clamp(0, u16::MAX as i32) as u16,
+            sy.clamp(0, u16::MAX as i32) as u16,
+        )
+    }
+
+    /// Draw `float` over the neighbours (or, `None`, stop): it stays until
+    /// the widget sets another, and goes with the node.
+    pub(crate) fn float(&self, float: Option<crate::float::Float>) {
+        let runtime = crate::reactive::Runtime::current();
+        let mut floats = runtime.floats.borrow_mut();
+        match float {
+            Some(float) => {
+                floats.insert(self.id, float);
+            }
+            None => {
+                floats.remove(&self.id);
+            }
+        }
+    }
 }
 
 /// A theme style by name, if the console's theme has it.

@@ -140,6 +140,8 @@ pub(crate) struct Runtime {
     /// A container whose first focusable node takes the focus once it is
     /// laid out ([`Ctx::focus_within`](crate::Ctx::focus_within)).
     pub(crate) focus_later: Cell<Option<NodeId>>,
+    /// What widgets draw over their neighbours ([`crate::float`]), by node.
+    pub(crate) floats: RefCell<HashMap<NodeId, crate::float::Float>>,
 }
 
 thread_local! {
@@ -192,6 +194,7 @@ impl Runtime {
                 layers: Cell::new(1),
                 focus: Cell::new(None),
                 focus_later: Cell::new(None),
+                floats: RefCell::new(HashMap::new()),
                 locals: RefCell::new(HashMap::new()),
                 next_local: Cell::new(0),
             });
