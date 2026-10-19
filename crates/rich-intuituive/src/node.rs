@@ -1430,16 +1430,16 @@ impl Node {
     /// let app = App::new(|| {
     ///     let said = signal(String::new());
     ///     column([
-    ///         label("menu").focusable(),
+    ///         text!("{said}").fixed(1),
+    ///         label("menu").focusable().fixed(1),
     ///         column([label("a").focusable(), label("b").focusable()])
     ///             .on_focus(move |_| said.update(|s| s.push_str("in ")))
     ///             .on_blur(move |_| said.update(|s| s.push_str("out "))),
-    ///         text!("{said}"),
     ///     ])
     /// });
     /// let mut driver = app.driver(16, 4);
     /// driver.press("tab tab tab");
-    /// assert_eq!(driver.screen().plain()[3].trim_end(), "in out");
+    /// assert_eq!(driver.screen().plain()[0].trim_end(), "in out");
     /// ```
     pub fn on_focus(self, handler: impl FnMut(&mut Ctx) + 'static) -> Node {
         self.focus_handlers
@@ -1456,6 +1456,44 @@ impl Node {
             .borrow_mut()
             .push((false, Box::new(handler)));
         self
+    }
+
+    /// Bind `left`, `right`, `up` and `down` (each one or more keys, as
+    /// [`bind`](Self::bind) takes them: `"ctrl+left H"`) to moving the
+    /// focus to the neighbour on that side
+    /// ([`Ctx::focus_direction`](crate::Ctx::focus_direction)), listed in
+    /// the help as "Focus left" and so on. An empty string binds nothing.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| {
+    ///     row([
+    ///         label("a").focusable().name("a").panel("A").focus_scope(),
+    ///         label("b").focusable().name("b").panel("B").focus_scope(),
+    ///     ])
+    ///     .bind_directional_focus("h", "l", "k", "j")
+    /// });
+    /// let mut driver = app.driver(12, 3);
+    /// driver.press("l");
+    /// driver.assert_focused("b");
+    /// driver.press("h");
+    /// driver.assert_focused("a");
+    /// ```
+    pub fn bind_directional_focus(self, left: &str, right: &str, up: &str, down: &str) -> Node {
+        use crate::focus::Direction;
+        let mut node = self;
+        for (keys, direction, description) in [
+            (left, Direction::Left, "Focus left"),
+            (right, Direction::Right, "Focus right"),
+            (up, Direction::Up, "Focus up"),
+            (down, Direction::Down, "Focus down"),
+        ] {
+            if !keys.trim().is_empty() {
+                node = node.bind(keys, description, move |cx| cx.focus_direction(direction));
+            }
+        }
+        node
     }
 
     /// Take this node out of the Tab order: a [`list`] that only shows, or
@@ -1962,8 +2000,98 @@ impl Node {
     /// assert!(rows[2].starts_with("╰───") && rows[2].ends_with("─ 1/20 ─╯"));
     /// ```
     pub fn add_title(self, edge: Edge, align: Align, markup: impl Into<String>) -> Node {
-        let title = Title::new(edge, align, markup);
+        let title = crate::builtin::CodeTitle::Fixed(Title::new(edge, align, markup));
         self.widget_mut(|panel: &mut Panel| panel.code.titles.push(title));
+        self
+    }
+
+    /// For a [panel](Self::panel): a title on `edge`, placed by `align`, as
+    /// [`add_title`](Self::add_title) adds, read from `markup` whenever the
+    /// panel lays out and draws: it may read signals, and the panel draws
+    /// again when they change (a count, a position, a load average).
+    /// Ignored on other nodes.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| {
+    ///     let at = signal(1);
+    ///     label("…")
+    ///         .panel("Commits")
+    ///         .add_title_with(Edge::Top, Align::End, move || format!("{at}/10"))
+    ///         .on_key("j", move |_| at.update(|n| *n += 1))
+    /// });
+    /// let mut driver = app.driver(20, 3);
+    /// driver.press("j");
+    /// assert_eq!(driver.screen().plain()[0], "╭─ Commits ─ 2/10 ─╮");
+    /// ```
+    pub fn add_title_with(
+        self,
+        edge: Edge,
+        align: Align,
+        markup: impl Fn() -> String + 'static,
+    ) -> Node {
+        let markup = crate::builtin::Dynamic(Rc::new(markup) as Rc<dyn Fn() -> String>);
+        let title = crate::builtin::CodeTitle::With(edge, align, markup);
+        self.widget_mut(|panel: &mut Panel| panel.code.titles.push(title));
+        self
+    }
+
+    /// For a [panel](Self::panel): its own title, read from `markup`
+    /// whenever the panel lays out and draws, in place of the one it was
+    /// made with: it may read signals (`Diff: src/lib.rs`, `Processes (3 of
+    /// 210)`). It is also the panel's accessible name. Ignored on other
+    /// nodes; [`panel_with`](Self::panel_with) makes the panel.
+    pub fn title_with(self, markup: impl Fn() -> String + 'static) -> Node {
+        let markup: Rc<dyn Fn() -> String> = Rc::new(markup);
+        self.widget_mut(|panel: &mut Panel| panel.title_with = Some(markup));
+        self
+    }
+
+    /// Wrap this node in a [panel](Self::panel) whose title is read from
+    /// `markup` whenever the panel lays out and draws: it may read signals,
+    /// and the panel draws again when they change.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| {
+    ///     let file = signal("lib.rs");
+    ///     label("+ one line")
+    ///         .panel_with(move || format!("Diff: {file}"))
+    ///         .on_key("n", move |_| file.set("main.rs"))
+    /// });
+    /// let mut driver = app.driver(20, 3);
+    /// driver.press("n");
+    /// assert_eq!(driver.screen().plain()[0], "╭─ Diff: main.rs ──╮");
+    /// ```
+    pub fn panel_with(self, markup: impl Fn() -> String + 'static) -> Node {
+        self.panel("").title_with(markup)
+    }
+
+    /// For a [panel](Self::panel): the kind of box it draws, read from
+    /// `border` whenever it lays out and draws (it may read signals), over
+    /// [`border`](Self::border)'s. Ignored on other nodes.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| {
+    ///     let alert = signal(false);
+    ///     label("ok")
+    ///         .panel("")
+    ///         .border_with(move || if alert.get() { Border::Double } else { Border::Plain })
+    ///         .on_key("a", move |_| alert.set(true))
+    /// });
+    /// let mut driver = app.driver(6, 3);
+    /// driver.settle();
+    /// assert_eq!(driver.screen().plain()[0], "┌────┐");
+    /// driver.press("a");
+    /// assert_eq!(driver.screen().plain()[0], "╔════╗");
+    /// ```
+    pub fn border_with(self, border: impl Fn() -> Border + 'static) -> Node {
+        let border = crate::builtin::Dynamic(Rc::new(border) as Rc<dyn Fn() -> Border>);
+        self.widget_mut(|panel: &mut Panel| panel.code.border_with = Some(border));
         self
     }
 
@@ -2082,10 +2210,29 @@ impl Node {
     /// For a container with [collapsed borders](Self::collapse_borders):
     /// the kind of the lines round the child with the focus
     /// ([`Border::Thick`] makes it stand out, as ratatui's
-    /// `collapsed-borders` example does). Ignored on other nodes.
+    /// `collapsed-borders` example does). For a [panel](Self::panel): the
+    /// kind of its box while the focus is on it or inside it (Slumber's
+    /// double-bordered pane); it keeps the cells its other kind takes.
+    /// Ignored on other nodes.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| {
+    ///     column([
+    ///         label("a").focusable().panel("").border(Border::Plain).focus_border(Border::Double),
+    ///         label("b").focusable().panel("").border(Border::Plain).focus_border(Border::Double),
+    ///     ])
+    /// });
+    /// let mut driver = app.driver(5, 6);
+    /// driver.settle();
+    /// assert_eq!(driver.screen().plain()[0], "╔═══╗");
+    /// assert_eq!(driver.screen().plain()[3], "┌───┐");
+    /// ```
     pub fn focus_border(self, border: Border) -> Node {
         self.widget_mut(|stack: &mut Stack| stack.collapse.focus_border = Some(border));
         self.widget_mut(|grid: &mut Grid| grid.collapse.focus_border = Some(border));
+        self.widget_mut(|panel: &mut Panel| panel.code.focus_border = Some(border));
         self
     }
 

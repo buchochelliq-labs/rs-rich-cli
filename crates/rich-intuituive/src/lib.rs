@@ -175,6 +175,7 @@ pub use feed::{
     latest_feed, latest_iter, latest_with_state, Feed, FeedEnd, FeedState, FeedTeller, Pace, Play,
 };
 pub use finder::{finder_of, fuzzy_list, fuzzy_list_with, FuzzyOptions, FuzzySource};
+pub use focus::Direction;
 pub use help::{HelpOptions, KeyFormat};
 #[cfg(feature = "art")]
 pub use image::{

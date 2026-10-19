@@ -796,9 +796,14 @@ fn shown_areas(
 /// A border with titles round one child: [`Node::panel`].
 pub(crate) struct Panel {
     pub title: String,
+    /// Its title read from state ([`Node::panel_with`](crate::Node::panel_with)),
+    /// over `title`.
+    pub title_with: Option<Rc<dyn Fn() -> String>>,
     pub child: Node,
-    /// Whether the border was last drawn as focused.
+    /// Whether the border was last drawn as focused, and its kind and
+    /// titles then.
     shown_focus: Option<bool>,
+    shown_look: Option<(Border, Vec<Title>)>,
     /// What a stylesheet says about it.
     pub look: PanelLook,
     /// What code says about it, which wins.
@@ -832,8 +837,14 @@ pub(crate) struct PanelLook {
 pub(crate) struct PanelCode {
     pub title_align: Option<Align>,
     /// More titles, after the panel's own.
-    pub titles: Vec<Title>,
+    pub titles: Vec<CodeTitle>,
     pub border: Option<Border>,
+    /// The kind of box read from state ([`Node::border_with`](crate::Node::border_with)),
+    /// over `border`.
+    pub border_with: Option<Dynamic<Border>>,
+    /// The kind of box while the focus is inside
+    /// ([`Node::focus_border`](crate::Node::focus_border)).
+    pub focus_border: Option<Border>,
     pub sides: Option<Sides>,
     /// A style or a theme style's name, for the border while the focus is
     /// elsewhere, and for the titles.
@@ -842,12 +853,50 @@ pub(crate) struct PanelCode {
     pub shadow: Option<Shadow>,
 }
 
+/// A value read from state when it is used: a panel's title or kind of
+/// box that follows signals.
+#[derive(Clone)]
+pub(crate) struct Dynamic<T>(pub Rc<dyn Fn() -> T>);
+
+impl<T> std::fmt::Debug for Dynamic<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("Dynamic(..)")
+    }
+}
+
+/// A title code gave a panel: fixed markup, or markup read from state
+/// ([`Node::add_title_with`](crate::Node::add_title_with)).
+#[derive(Clone, Debug)]
+pub(crate) enum CodeTitle {
+    Fixed(Title),
+    With(Edge, Align, Dynamic<String>),
+}
+
+impl CodeTitle {
+    fn edge(&self) -> Edge {
+        match self {
+            CodeTitle::Fixed(title) => title.edge,
+            CodeTitle::With(edge, ..) => *edge,
+        }
+    }
+
+    /// The title now, reading what it reads.
+    fn title(&self) -> Title {
+        match self {
+            CodeTitle::Fixed(title) => title.clone(),
+            CodeTitle::With(edge, align, markup) => Title::new(*edge, *align, (markup.0)()),
+        }
+    }
+}
+
 impl Panel {
     pub fn new(title: String, child: Node) -> Panel {
         Panel {
             title,
+            title_with: None,
             child,
             shown_focus: None,
+            shown_look: None,
             look: PanelLook::default(),
             code: PanelCode::default(),
             invalid: false,
@@ -865,11 +914,16 @@ impl Panel {
             .unwrap_or_default()
     }
 
-    /// The title: the one code gave, else the stylesheet's.
-    fn title(&self) -> &str {
-        match (&self.title[..], &self.look.title) {
-            ("", Some(title)) => title,
-            (title, _) => title,
+    /// The title: the one code gave (read now, if it follows state), else
+    /// the stylesheet's.
+    fn title(&self) -> String {
+        let own = match &self.title_with {
+            Some(title) => title(),
+            None => self.title.clone(),
+        };
+        match (&own[..], &self.look.title) {
+            ("", Some(title)) => title.clone(),
+            _ => own,
         }
     }
 
@@ -877,7 +931,11 @@ impl Panel {
     /// `None` when a stylesheet took the frame away (`border: none`) and
     /// code set none.
     fn kind(&self) -> Option<Border> {
-        match self.code.border {
+        let code = match &self.code.border_with {
+            Some(border) => Some((border.0)()),
+            None => self.code.border,
+        };
+        match code {
             Some(kind) => Some(kind),
             None if self.look.no_border => None,
             None => Some(
@@ -911,13 +969,19 @@ impl Panel {
             let align = self.code.title_align.or(self.look.title_align);
             titles.push(Title::new(Edge::Top, align.unwrap_or(Align::Start), own));
         }
-        let code = |edge| self.code.titles.iter().filter(move |t| t.edge == edge);
-        titles.extend(code(Edge::Top).cloned());
+        let code = |edge| {
+            self.code
+                .titles
+                .iter()
+                .filter(move |t| t.edge() == edge)
+                .map(CodeTitle::title)
+        };
+        titles.extend(code(Edge::Top));
         if let Some(subtitle) = self.look.subtitle.as_ref().filter(|s| !s.is_empty()) {
             let align = self.look.subtitle_align.unwrap_or(Align::Start);
             titles.push(Title::new(Edge::Bottom, align, subtitle.clone()));
         }
-        titles.extend(code(Edge::Bottom).cloned());
+        titles.extend(code(Edge::Bottom));
         titles
     }
 
@@ -947,6 +1011,15 @@ impl Panel {
             style = style.combine(&cx.theme().error_style("border.error"));
         }
         style
+    }
+
+    /// Its kind of box `kind`, or [`focus_border`](crate::Node::focus_border)'s
+    /// while the focus is inside.
+    fn kind_now(&self, kind: Border, focused: bool) -> Border {
+        match (focused, self.code.focus_border) {
+            (true, Some(focus)) => focus,
+            _ => kind,
+        }
     }
 
     /// The cells its shadow takes, right and below.
@@ -1032,7 +1105,16 @@ impl Widget for Panel {
         // app, the panel stays as it is, and only its edges change colour
         // when it comes or goes.
         let focused = cx.focus_within();
-        if cx.repaint() || self.shown_focus != Some(focused) {
+        let kind = self.kind_now(kind, focused);
+        // Titles and a kind that follow state draw it again as they change.
+        let titles = self.titles();
+        let look = (kind, titles);
+        if cx.repaint()
+            || self.shown_focus != Some(focused)
+            || self.shown_look.as_ref() != Some(&look)
+        {
+            let (kind, titles) = &look;
+            let kind = *kind;
             let style = self.edge_style(cx, focused);
             let title = match self.code.title_style.as_deref() {
                 // A pop-up's title: the theme's `popup.title`, else its
@@ -1045,13 +1127,12 @@ impl Widget for Panel {
                 None => cx.theme().title.clone(),
             };
             let title_style = style.combine(&title);
-            let titles = self.titles();
             let frame = crate::border::Frame {
                 border: kind,
                 sides: self.sides(),
                 style: &style,
                 title_style: &title_style,
-                titles: &titles,
+                titles,
             };
             let shadow = match self.code.shadow {
                 Some(shadow) if cx.repaint() => {
@@ -1069,6 +1150,7 @@ impl Widget for Panel {
             canvas.frame(cx.console(), &frame, self.shadow() == 1, shadow);
         }
         self.shown_focus = Some(focused);
+        self.shown_look = Some(look);
     }
 
     /// [Rules](crate::rule) that reach both sides join them: `├──┤`, in
@@ -1091,7 +1173,9 @@ impl Widget for Panel {
         let (joins_left, joins_right) = (sides.contains(Sides::LEFT), sides.contains(Sides::RIGHT));
         let area = cx.rect;
         let box_right = area.right().saturating_sub(self.shadow());
-        let style = self.edge_style(cx, cx.focus_within());
+        let focused = cx.focus_within();
+        let kind = self.kind_now(kind, focused);
+        let style = self.edge_style(cx, focused);
         for rule in rules {
             let inside = rule.y > area.y && rule.y < area.bottom() && rule.height > 0;
             let from_left = rule.x == area.x + left;

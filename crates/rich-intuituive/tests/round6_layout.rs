@@ -213,3 +213,273 @@ fn keyed_moves_the_focus_into_the_new_child_when_the_old_one_had_it() {
     driver.press("k");
     driver.assert_focused("item1");
 }
+
+// Titles and borders that follow state.
+
+#[test]
+fn a_panels_titles_follow_signals_and_name_it() {
+    let app = App::new(|| {
+        let (file, at) = (signal("lib.rs"), signal(1));
+        label("+ one line")
+            .panel_with(move || format!("Diff: {file}"))
+            .add_title_with(Edge::Bottom, Align::End, move || format!("{at}/3"))
+            .on_key("n", move |_| {
+                file.set("main.rs");
+                at.set(2);
+            })
+    });
+    let mut driver = app.driver(22, 3);
+    driver.settle();
+    assert!(rows(&driver)[0].contains("Diff: lib.rs"));
+    assert!(rows(&driver)[2].contains("1/3"));
+    driver.press("n");
+    assert!(rows(&driver)[0].contains("Diff: main.rs"));
+    assert!(rows(&driver)[2].contains("2/3"));
+}
+
+#[test]
+fn a_panels_box_follows_the_focus_and_state() {
+    let app = App::new(|| {
+        let alert = signal(false);
+        column([
+            label("a")
+                .focusable()
+                .panel("A")
+                .border(Border::Plain)
+                .focus_border(Border::Double),
+            label("b")
+                .focusable()
+                .panel("B")
+                .border_with(move || match alert.get() {
+                    true => Border::Thick,
+                    false => Border::Plain,
+                }),
+        ])
+        .on_key("x", move |_| alert.set(true))
+    });
+    let mut driver = app.driver(8, 6);
+    driver.settle();
+    assert!(rows(&driver)[0].starts_with('╔'), "{:?}", rows(&driver));
+    assert!(rows(&driver)[3].starts_with('┌'));
+    driver.press("tab");
+    assert!(rows(&driver)[0].starts_with('┌'));
+    driver.press("x");
+    assert!(rows(&driver)[3].starts_with('┏'), "{:?}", rows(&driver));
+}
+
+// Nodes shown and sized by state.
+
+#[test]
+fn shown_when_hides_a_node_and_lets_its_focus_go() {
+    let app = App::new(|| {
+        let details = signal(true);
+        row([
+            label("list").focusable().name("list").fixed(5),
+            label("details")
+                .focusable()
+                .name("details")
+                .shown_when(move || details.get()),
+        ])
+        .on_key("d", move |_| details.update(|on| *on = !*on))
+    });
+    let mut driver = app.driver(14, 1);
+    driver.press("tab");
+    driver.assert_focused("details");
+    driver.press("d");
+    assert_eq!(rows(&driver)[0], "list");
+    driver.assert_focused("list");
+    driver.press("d");
+    assert_eq!(rows(&driver)[0], "list details");
+}
+
+#[test]
+fn sizes_follow_the_focus() {
+    let app = App::new(|| {
+        let right = label("right").focusable().name("right");
+        let id = right.id();
+        let grows = move || match intuituive::focus::has_focus(id) {
+            true => Size::Percent(70),
+            false => Size::Percent(30),
+        };
+        row([
+            label("left").focusable().name("left").flex(1),
+            right.size_with(grows),
+        ])
+    });
+    let mut driver = app.driver(20, 1);
+    driver.settle();
+    assert_eq!(rows(&driver)[0].find("right"), Some(14));
+    driver.press("tab");
+    assert_eq!(rows(&driver)[0].find("right"), Some(6));
+}
+
+// Focus moved into containers, by scope and by direction, and heard.
+
+#[test]
+fn focus_within_waits_for_a_node_shown_later() {
+    let app = App::new(|| {
+        let searching = signal(false);
+        let search = column([label("Search:"), label("box").focusable().name("box")])
+            .shown_when(move || searching.get());
+        let id = search.id();
+        column([label("table").focusable().name("table"), search]).on_key("/", move |cx| {
+            searching.set(true);
+            cx.focus_within(id);
+        })
+    });
+    let mut driver = app.driver(10, 3);
+    driver.settle();
+    driver.assert_focused("table");
+    driver.press("/");
+    driver.assert_focused("box");
+}
+
+#[test]
+fn a_focus_move_drops_a_wait_for_a_container() {
+    let app = App::new(|| {
+        let shown = signal(false);
+        let later = label("later")
+            .focusable()
+            .name("later")
+            .shown_when(move || shown.get());
+        let id = later.id();
+        column([
+            label("a").focusable().name("a"),
+            label("b").focusable().name("b"),
+            later,
+        ])
+        .on_key("w", move |cx| cx.focus_within(id))
+        .on_key("s", move |_| shown.set(true))
+    });
+    let mut driver = app.driver(10, 3);
+    driver.press("w tab s");
+    driver.assert_focused("b");
+}
+
+#[test]
+fn scopes_take_the_focus_back_where_it_was() {
+    let app = App::new(|| {
+        row([
+            column([
+                label("a1").focusable().name("a1"),
+                label("a2").focusable().name("a2"),
+            ])
+            .focus_scope(),
+            column([
+                label("b1").focusable().name("b1"),
+                label("b2").focusable().name("b2"),
+            ])
+            .focus_scope(),
+        ])
+        .on_key("w", |cx| cx.focus_next_scope())
+        .on_key("W", |cx| cx.focus_previous_scope())
+    });
+    let mut driver = app.driver(10, 2);
+    driver.press("tab");
+    driver.assert_focused("a2");
+    driver.press("w");
+    driver.assert_focused("b1");
+    driver.press("tab");
+    driver.assert_focused("b2");
+    driver.press("W");
+    driver.assert_focused("a2");
+    driver.press("W");
+    driver.assert_focused("b2");
+}
+
+#[test]
+fn on_focus_and_on_blur_hear_the_focus_come_and_go_including_for_a_modal() {
+    let app = App::new(|| {
+        let said = signal(String::new());
+        column([
+            column([label("a").focusable(), label("b").focusable()])
+                .on_focus(move |_| said.update(|s| s.push('+')))
+                .on_blur(move |_| said.update(|s| s.push('-'))),
+            label("c").focusable().fixed(1),
+            text!("{said}").fixed(1),
+        ])
+        .on_key("m", |cx| {
+            cx.modal(Size::Fixed(6), Size::Fixed(3), || {
+                label("hi")
+                    .focusable()
+                    .panel("")
+                    .on_key("esc", |cx| cx.pop())
+            })
+        })
+    });
+    let mut driver = app.driver(12, 4);
+    driver.settle();
+    // Focused at the start, then within, then out and back.
+    assert_eq!(rows(&driver)[3], "+");
+    driver.press("tab tab tab");
+    assert_eq!(rows(&driver)[3], "+-+");
+    driver.press("m");
+    driver.press("esc");
+    assert_eq!(rows(&driver)[3], "+-+-+");
+}
+
+#[test]
+fn focused_follows_the_focus() {
+    let app = App::new(|| {
+        let b = label("b").focusable();
+        let id = b.id();
+        column([
+            label("a").focusable(),
+            b,
+            text(move || format!("{}", intuituive::focus::focused() == Some(id))),
+        ])
+    });
+    let mut driver = app.driver(8, 3);
+    driver.settle();
+    assert_eq!(rows(&driver)[2], "false");
+    driver.press("tab");
+    assert_eq!(rows(&driver)[2], "true");
+}
+
+#[test]
+fn focus_moves_to_the_neighbour_on_a_side() {
+    let app = App::new(|| {
+        let cell = |name: &str| label(name).focusable().name(name);
+        column([
+            row([cell("nw"), cell("ne")]),
+            row([cell("sw"), cell("se")]),
+            cell("bottom"),
+        ])
+        .bind_directional_focus("left", "right", "up", "down")
+    });
+    let mut driver = app.driver(10, 3);
+    driver.settle();
+    driver.assert_focused("nw");
+    driver.press("right");
+    driver.assert_focused("ne");
+    driver.press("down");
+    driver.assert_focused("se");
+    driver.press("left");
+    driver.assert_focused("sw");
+    driver.press("down");
+    driver.assert_focused("bottom");
+    // Nothing further down: it stays.
+    driver.press("down");
+    driver.assert_focused("bottom");
+    driver.press("up");
+    driver.assert_focused("sw");
+}
+
+#[test]
+fn focus_moves_between_scopes_by_direction_keeping_their_place() {
+    let app = App::new(|| {
+        let pane = |a: &str, b: &str| {
+            column([label(a).focusable().name(a), label(b).focusable().name(b)])
+                .panel("")
+                .focus_scope()
+        };
+        row([pane("l1", "l2"), pane("r1", "r2")]).bind_directional_focus("h", "l", "k", "j")
+    });
+    let mut driver = app.driver(12, 4);
+    driver.press("tab");
+    driver.assert_focused("l2");
+    driver.press("l");
+    driver.assert_focused("r1");
+    driver.press("h");
+    driver.assert_focused("l2");
+}

@@ -229,6 +229,10 @@ enum FocusMove {
     To(NodeId),
     /// The first focusable node inside a container, now or once built.
     Within(NodeId),
+    /// The neighbouring node (or focus scope) on a side.
+    Toward(crate::focus::Direction),
+    /// The next focus scope (`true`) or the previous one.
+    Scope(bool),
 }
 
 type Build = Box<dyn FnOnce() -> Node>;
@@ -809,6 +813,54 @@ impl Ctx {
     /// ```
     pub fn focus_within(&mut self, id: NodeId) {
         self.focus = Some(FocusMove::Within(id));
+    }
+
+    /// Move the focus to the neighbour on the `direction` side of the
+    /// focused node, by where they were drawn last: the nearest focusable
+    /// node wholly on that side, the one sharing more of its edge first
+    /// (see [`neighbour`](crate::focus::neighbour)). With the focus inside a
+    /// [focus scope](crate::Node::focus_scope), it moves between scopes
+    /// instead, each giving the focus back to the node inside it that had
+    /// it last: panes on a dashboard, tiles of a map, a grid of cards.
+    /// Nothing on that side: the focus stays.
+    /// [`Node::bind_directional_focus`](crate::Node::bind_directional_focus)
+    /// binds keys to it.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    /// use intuituive::focus::Direction;
+    ///
+    /// let app = App::new(|| {
+    ///     column([
+    ///         row([label("a").focusable().name("a"), label("b").focusable().name("b")]),
+    ///         label("c").focusable().name("c"),
+    ///     ])
+    ///     .on_key("ctrl+right", |cx| cx.focus_direction(Direction::Right))
+    ///     .on_key("ctrl+down", |cx| cx.focus_direction(Direction::Down))
+    /// });
+    /// let mut driver = app.driver(10, 2);
+    /// driver.press("ctrl+right");
+    /// driver.assert_focused("b");
+    /// driver.press("ctrl+down");
+    /// driver.assert_focused("c");
+    /// ```
+    pub fn focus_direction(&mut self, direction: crate::focus::Direction) {
+        self.focus = Some(FocusMove::Toward(direction));
+    }
+
+    /// Move the focus to the next [focus scope](crate::Node::focus_scope)
+    /// in the tree, after the one that has it (the first, from outside
+    /// any): to the node inside it that had the focus last, else its first
+    /// focusable node. After the last scope, the first. Slumber's and
+    /// lazygit's Tab between panes, where Tab inside a pane moves between
+    /// its fields.
+    pub fn focus_next_scope(&mut self) {
+        self.focus = Some(FocusMove::Scope(true));
+    }
+
+    /// [`focus_next_scope`](Self::focus_next_scope) the other way round.
+    pub fn focus_previous_scope(&mut self) {
+        self.focus = Some(FocusMove::Scope(false));
     }
 
     /// A handle for other threads (see [`Proxy`]).
@@ -3188,7 +3240,15 @@ impl App {
             Some(FocusMove::Next) => self.move_focus(true),
             Some(FocusMove::Previous) => self.move_focus(false),
             Some(FocusMove::To(id)) => self.set_focus(Some(id)),
-            Some(FocusMove::Within(id)) => self.focus_inside(id),
+            Some(FocusMove::Within(id)) => {
+                // After the next frame, once what the handler changed (a
+                // switch's page, a node shown) is laid out.
+                self.runtime.focus_later.set(Some(id));
+                let root = self.top().root.id;
+                self.runtime.mark_dirty(root);
+            }
+            Some(FocusMove::Toward(direction)) => self.focus_toward(direction),
+            Some(FocusMove::Scope(forward)) => self.focus_scope_step(forward),
             None => {}
         }
         quit
@@ -3664,6 +3724,78 @@ impl App {
         chosen
     }
 
+    /// The focus scopes of the top screen that hold a node taking the
+    /// focus, in tree order.
+    fn focus_scopes(&self) -> Vec<NodeId> {
+        let mut scopes = Vec::new();
+        self.top().root.walk_accessible(&mut |node, _| {
+            if node.is_focus_scope() {
+                scopes.push(node.id);
+            }
+        });
+        scopes.retain(|&scope| self.first_inside(scope).is_some());
+        scopes
+    }
+
+    /// The innermost focus scope on the focus path.
+    fn focused_scope(&self, scopes: &[NodeId]) -> Option<NodeId> {
+        let path = self.focus().map(|id| self.path_to(id)).unwrap_or_default();
+        path.iter().rev().find(|id| scopes.contains(id)).copied()
+    }
+
+    /// Focus the next focus scope (or the previous one).
+    fn focus_scope_step(&mut self, forward: bool) {
+        let scopes = self.focus_scopes();
+        if scopes.is_empty() {
+            return;
+        }
+        let at = self
+            .focused_scope(&scopes)
+            .and_then(|scope| scopes.iter().position(|s| *s == scope));
+        let n = scopes.len();
+        let next = match (at, forward) {
+            (None, true) => 0,
+            (None, false) => n - 1,
+            (Some(i), true) => (i + 1) % n,
+            (Some(i), false) => (i + n - 1) % n,
+        };
+        self.focus_inside(scopes[next]);
+    }
+
+    /// Focus the neighbour on `direction`'s side: among the focus scopes
+    /// when the focus is in one, else among the focusable nodes.
+    fn focus_toward(&mut self, direction: crate::focus::Direction) {
+        let scopes = self.focus_scopes();
+        let (from, candidates, scoped) = match self.focused_scope(&scopes) {
+            Some(scope) => (scope, scopes, true),
+            None => match self.focus() {
+                Some(id) => (id, self.focusable(), false),
+                None => return,
+            },
+        };
+        let mut rects = vec![Rect::default(); candidates.len()];
+        let mut from_rect = None;
+        crate::node::walk_screen(&self.top().root, &mut |node, _, shift, clip| {
+            let rect = crate::node::translate(node.rect(), shift).intersection(clip);
+            if node.id() == from {
+                from_rect = Some(rect);
+            }
+            if let Some(i) = candidates.iter().position(|c| *c == node.id()) {
+                rects[i] = rect;
+            }
+        });
+        let Some(from_rect) = from_rect.filter(|r| !r.is_empty()) else {
+            return;
+        };
+        let Some(i) = crate::focus::neighbour(&rects, from_rect, direction) else {
+            return;
+        };
+        match scoped {
+            true => self.focus_inside(candidates[i]),
+            false => self.set_focus(Some(candidates[i])),
+        }
+    }
+
     /// Focus the first node inside `container` that takes the focus (a
     /// focus scope's last one first), or wait for it to be built: the
     /// wait is tried again after each frame.
@@ -3947,8 +4079,10 @@ impl App {
             return self.navigate(Nav::Help(crate::help::HelpOptions::new()));
         }
         match key.code {
-            KeyCode::Tab => self.move_focus(true),
-            KeyCode::BackTab => self.move_focus(false),
+            KeyCode::Tab | KeyCode::BackTab => {
+                self.runtime.focus_later.set(None);
+                self.move_focus(key.code == KeyCode::Tab);
+            }
             KeyCode::Escape if self.top().is_popup() => return self.navigate(Nav::Pop),
             _ => {}
         }
@@ -4275,6 +4409,7 @@ impl App {
                 yes
             });
             if let Some(id) = focusable {
+                self.runtime.focus_later.set(None);
                 self.set_focus(Some(id));
             }
         }
