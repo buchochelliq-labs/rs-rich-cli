@@ -202,6 +202,7 @@ class Tag(unittest.TestCase):
         self.addCleanup(patcher.stop)
         self.published = {("crates.io", "rs-rich")}
         self.waited = []
+        self.stale = []
 
     def tearDown(self):
         self.dir.cleanup()
@@ -210,8 +211,9 @@ class Tag(unittest.TestCase):
         published = {(package.registry, package.name), (package.registry, package.name, package.version)}
         return 200 if published & self.published else 404
 
-    def wait(self, package, timeout, status):
+    def wait(self, package, timeout, status, stale=None):
         self.waited.append(package.tag)
+        self.stale.append(stale)
         self.published.add((package.registry, package.name))
 
     def remote_tags(self):
@@ -498,6 +500,57 @@ class Tag(unittest.TestCase):
         self.assertLess(crates.index("release_cohort.py same-commit"), crates.index("uses: ./.github/workflows/ci.yml"))
         pypi = (ROOT / ".github/workflows/pypi-release.yml").read_text()
         self.assertLess(pypi.index("release_cohort.py same-commit"), pypi.index("  wheels:"))
+
+    def test_same_commit_checks_each_crate_tag_against_an_all_crates_tag(self):
+        # `v0.1.0` selects every crate; a `rs-rich-art-v0.1.0` on a commit that
+        # ships another rs-rich-art must still be caught.
+        write_tree(self.work, config=CONFIG.replace('version = "0.2.0"', 'version = "0.1.0"'),
+                   art=ART.replace("0.2.0", "0.1.0"))
+        git(self.work, "commit", "--quiet", "-am", "one version for every crate")
+        first = git(self.work, "rev-parse", "HEAD")
+        (self.work / "crates/rich-art/src").mkdir(parents=True)
+        (self.work / "crates/rich-art/src/lib.rs").write_text("// other\n")
+        git(self.work, "add", ".")
+        git(self.work, "commit", "--quiet", "-m", "change art")
+        git(self.work, "push", "--quiet", "origin", "main")
+        git(self.work, "tag", "-a", "rs-rich-art-v0.1.0", "-m", "x")
+        git(self.work, "push", "--quiet", "origin", "rs-rich-art-v0.1.0")
+        git(self.work, "tag", "-a", "v0.1.0", "-m", "x", first)
+        with self.assertRaisesRegex(RuntimeError, r"rs-rich-art@0\.1\.0.*src/lib\.rs"):
+            cohort.same_commit("v0.1.0", "origin")
+
+    def test_a_release_held_only_by_a_dead_tag_is_not_resumed(self):
+        # rs-rich-art was tagged here and its run failed before publishing;
+        # main moved on and changed it. Nothing of the release went out, so
+        # HEAD is released and the dead tag moves there.
+        self.published.clear()
+        git(self.work, "tag", "-a", "rs-rich-art-v0.2.0", "-m", "x", self.sha)
+        git(self.work, "push", "--quiet", "origin", "rs-rich-art-v0.2.0")
+        (self.work / "crates/rich-art/src").mkdir(parents=True)
+        (self.work / "crates/rich-art/src/lib.rs").write_text("// fixed\n")
+        git(self.work, "add", ".")
+        git(self.work, "commit", "--quiet", "-m", "fix the failure")
+        git(self.work, "push", "--quiet", "origin", "main")
+        head = git(self.work, "rev-parse", "HEAD")
+        self.run_tag(commit=None, registry="crates.io", run=self.run_on(self.sha, conclusion="failure"))
+        self.assertEqual(cohort.remote_tags("origin")["rs-rich-art-v0.2.0"], head)
+        self.assertEqual(self.stale[self.waited.index("rs-rich-art-v0.2.0")], "https://example/run")
+
+    def test_a_dead_tag_on_the_release_commit_is_pushed_again(self):
+        # Re-running after a run that failed before publishing starts a new
+        # run, and the wait ignores the failed one.
+        git(self.work, "tag", "-a", "rs-rich-art-v0.2.0", "-m", "x")
+        git(self.work, "push", "--quiet", "origin", "rs-rich-art-v0.2.0")
+        self.run_tag(registry="crates.io", run=self.run_on(self.sha, conclusion="failure"))
+        self.assertEqual(self.waited, ["rs-rich-art-v0.2.0"])
+        self.assertEqual(self.stale, ["https://example/run"])
+        self.assertEqual(cohort.remote_tags("origin")["rs-rich-art-v0.2.0"], self.sha)
+
+    def test_the_wait_ignores_the_run_a_pushed_again_tag_replaces(self):
+        package = cohort.Package("rs-rich-art", "crates.io", "x", "0.2.0")
+        runs = iter([("completed", "failure", "old"), ("completed", "success", "new")])
+        cohort.wait_for(package, 60, status=lambda p: 200, conclusion=lambda p: next(runs),
+                        sleep=lambda s: None, stale="old")
 
     def test_cargo_globs(self):
         cases = [("src/style.rs", "src/**/*", True), ("src/a/b.rs", "src/**/*", True),

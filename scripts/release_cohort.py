@@ -355,15 +355,19 @@ def dead_tag(run, tagged):
                 and run["conclusion"] != "success" and not run["publish_started"])
 
 
-def wait_for(package, timeout, status=registry_status, conclusion=run_conclusion, sleep=time.sleep):
+def wait_for(package, timeout, status=registry_status, conclusion=run_conclusion, sleep=time.sleep,
+             stale=None):
     """Return once the release is done: its run succeeded and the version is
     on the registry. The run uploads before it verifies the upload as a
     consumer would, so the version can appear while the run still fails;
-    when the run cannot be seen (no `gh`), the registry alone decides."""
+    when the run cannot be seen (no `gh`), the registry alone decides. A
+    run at the URL `stale` (the one a re-pushed tag replaces) is not it."""
     deadline = time.monotonic() + timeout
     while True:
         published = is_published(package, status)
         run = conclusion(package)
+        if run and run[2] == stale:
+            run = ("queued", "", stale)
         if run and run[0] == "completed" and run[1] != "success":
             raise RuntimeError(f"The {package.tag} release run ended {run[1]}: {run[2]}")
         if published and (run is None or run[0] == "completed"):
@@ -487,6 +491,10 @@ def resolve(commit, release_wanted, remote, existing, binds, published):
     started = newest_first([c for c in tagged if names[c] == target])
     for candidate in started:
         packages = tagged[candidate]
+        # Held only by tags whose runs provably published nothing, the
+        # release never really started there: those tags are moved.
+        if not any(binds(p, candidate) for p in packages if existing.get(p.tag) == candidate):
+            continue
         if split_from(packages, existing, candidate, files_at(candidate), binds):
             continue
         due = [p for p in packages if not published(p)]
@@ -539,9 +547,10 @@ def same_commit(tag_name, remote):
                            f"{sha[:12]} is release {name}")
     existing = remote_tags(remote)
     have_commits(existing, remote)
-    own = {p.tag for p in selected_by(tag_name, packages)}
-    others = [p for p in packages if p.tag not in own]
-    if split := split_from(others, existing, sha, read, lambda package, tagged: True):
+    selected_by(tag_name, packages)  # the tag names versions this RELEASES.toml lists
+    # Every package's own tag is compared, the tag's own included: an
+    # all-crates `vX.Y.Z` tag is checked against each `<crate>-vX.Y.Z`.
+    if split := split_from(packages, existing, sha, read, lambda package, tagged: True):
         raise RuntimeError(split_error(sha, split, f"would split release {name}: it changes packages tagged"))
     siblings = sorted(p.tag for p in packages if existing.get(p.tag) == sha)
     return (f"{tag_name} -> {sha} (release {name}). Tagged on this commit: "
@@ -607,6 +616,7 @@ def tag(commit, remote, timeout, dry_run, status=registry_status, wait=wait_for,
         if is_published(package, status):
             print(f"skip   {package.tag}: {package} is already on {package.registry}", flush=True)
             continue
+        stale = None
         if package.tag in existing and existing[package.tag] != sha:
             # A tag on another commit whose version is not on the registry.
             # Moved here when its release run, on that commit, ended without
@@ -622,12 +632,22 @@ def tag(commit, remote, timeout, dry_run, status=registry_status, wait=wait_for,
                 continue
             print(f"move   {package.tag}: its run at {old} ended {latest['conclusion']} before publishing; "
                   f"tagging {sha[:12]}", flush=True)
+            stale = latest["url"]
             if dry_run:
                 continue
             git("push", remote, f":refs/tags/{package.tag}", capture=False)
             if subprocess.run(["git", "rev-parse", "--verify", "--quiet", f"refs/tags/{package.tag}"],
                               cwd=ROOT, capture_output=True).returncode == 0:
                 git("tag", "-d", package.tag)
+            del existing[package.tag]
+        if package.tag in existing and dead_tag(latest := run(package), sha):
+            # Tagged here, but its run ended before publishing: push the tag
+            # again to start a new run.
+            print(f"retag  {package.tag}: its run ended before publishing; pushing it again", flush=True)
+            stale = latest["url"]
+            if dry_run:
+                continue
+            git("push", remote, f":refs/tags/{package.tag}", capture=False)
             del existing[package.tag]
         if package.tag in existing:
             print(f"wait   {package.tag}: already tagged, waiting for its release", flush=True)
@@ -649,7 +669,7 @@ def tag(commit, remote, timeout, dry_run, status=registry_status, wait=wait_for,
                 git("tag", "-a", package.tag, "-m", tag_message(package, name, sha), sha)
             git("push", remote, f"refs/tags/{package.tag}", capture=False)
             print(f"tagged {package.tag}; waiting for {package.workflow}", flush=True)
-        wait(package, timeout, status)
+        wait(package, timeout, status, stale=stale)
     print("Every package in RELEASES.toml is published." if not dry_run else "Dry run: nothing was tagged.")
 
 

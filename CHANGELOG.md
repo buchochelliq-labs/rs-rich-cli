@@ -30,6 +30,11 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   tag on another commit still running, or one that started publishing,
   holds the release to that commit unless it ships the same files (then it
   is waited on).
+- **A tag pushed again starts a fresh run.** A dead tag on the release
+  commit itself is pushed again, so re-running `tag` retries a release run
+  that failed before publishing; a release held only by dead tags is not
+  resumed. After moving or re-pushing a tag, the wait ignores the old run,
+  where it used to stop at once on its failure.
 - **Template.** `templates/intuituive-app` depends on rs-rich-intuituive
   0.0.5, which #753 missed (main's interact and intuiTUIve test jobs).
 
