@@ -1402,9 +1402,10 @@ impl Session {
             #[cfg(all(not(unix), feature = "termwiz"))]
             BackendKind::Termwiz => (Answers::default(), Vec::new()),
         };
+        #[cfg(unix)]
         if !typed.is_empty() {
             match &mut self.input {
-                #[cfg(all(unix, feature = "termwiz"))]
+                #[cfg(feature = "termwiz")]
                 Some(Input::Termwiz { probed, .. }) => with_termwiz::unread(probed, &typed),
                 // crossterm reads only the terminal: what was typed is read
                 // here, as the legacy terminal it still is before the
@@ -1412,6 +1413,9 @@ impl Session {
                 _ => self.typed.extend(crate::event::from_legacy_bytes(&typed)),
             }
         }
+        // Elsewhere nothing is read before the library's reader opens.
+        #[cfg(not(unix))]
+        debug_assert!(typed.is_empty());
         answers
     }
 
