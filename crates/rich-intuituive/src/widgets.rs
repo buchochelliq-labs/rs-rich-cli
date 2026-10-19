@@ -10,6 +10,7 @@
 
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
+use std::rc::Rc;
 
 use rich::{Console, Overflow, Segment, Style};
 use rich_interact::{Button, Key, KeyCode, MouseKind};
@@ -62,6 +63,14 @@ pub struct Column {
     /// (the default, with `…`) or [`Overflow::Crop`] (cut at the edge, as
     /// ratatui's cells are). Others are the ellipsis.
     pub overflow: Overflow,
+    /// The fewest and the most it takes as a percentage of the table's
+    /// width, as well as [`min`](Self::min) and [`max`](Self::max) cells.
+    pub min_percent: Option<u8>,
+    pub max_percent: Option<u8>,
+    /// How long it stays when the columns do not fit: `None` (the
+    /// default) is never dropped; of the others, the lowest goes first,
+    /// whole ([`priority`](Self::priority)).
+    pub priority: Option<u8>,
 }
 
 impl Column {
@@ -73,6 +82,9 @@ impl Column {
             max: u16::MAX,
             align: Align::Start,
             overflow: Overflow::Ellipsis,
+            min_percent: None,
+            max_percent: None,
+            priority: None,
         }
     }
 
@@ -103,27 +115,92 @@ impl Column {
         self
     }
 
-    fn track(&self, size: Size) -> Track {
+    /// At least `percent`% of the table's width (where there is room).
+    pub fn min_percent(mut self, percent: u8) -> Column {
+        self.min_percent = Some(percent.min(100));
+        self
+    }
+
+    /// At most `percent`% of the table's width: csvlens caps a fitted
+    /// column at 30%, `Column::new("Text", Size::Auto).max_percent(30)`.
+    /// Scrolled across ([`TableOptions::scroll_x`]), the cap holds too.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    /// use intuituive::widgets::{table, Column};
+    ///
+    /// let app = App::new(|| {
+    ///     let long = Column::new("Text", Size::Auto).max_percent(50);
+    ///     let columns = vec![long, Column::new("N", Size::Auto)];
+    ///     table(columns, || vec![vec!["a long cell of text".into(), "1".into()]], signal(0))
+    /// });
+    /// let mut driver = app.driver(20, 2);
+    /// driver.settle();
+    /// // Ten cells (half the width), cut with `…`.
+    /// assert_eq!(driver.screen().plain()[1].trim_end(), "a long ce… 1");
+    /// ```
+    pub fn max_percent(mut self, percent: u8) -> Column {
+        self.max_percent = Some(percent.min(100));
+        self
+    }
+
+    /// Drop the column, whole, when the columns do not fit, the lowest
+    /// `priority` first (the rightmost of equals first); a column with no
+    /// priority is never dropped. What is dropped leaves its room to the
+    /// rest, so a [`Size::Flex`] column keeps at least its
+    /// [`min`](Self::min), or its title, rather than shrinking to nothing
+    /// (bottom's Name column, its R/s and W/s gone at 50 cells). Not with
+    /// [`TableOptions::scroll_x`], which scrolls instead.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    /// use intuituive::widgets::{table, Column};
+    ///
+    /// let app = App::new(|| {
+    ///     let columns = vec![
+    ///         Column::new("PID", Size::Fixed(5)),
+    ///         Column::new("Name", Size::Flex(1)).min(6).priority(9),
+    ///         Column::new("CPU%", Size::Fixed(5)).priority(5),
+    ///         Column::new("R/s", Size::Fixed(5)).priority(1),
+    ///     ];
+    ///     let rows = || vec![vec!["1".into(), "systemd".into(), "0.3".into(), "12K".into()]];
+    ///     table(columns, rows, signal(0))
+    /// });
+    /// let mut driver = app.driver(18, 2);
+    /// driver.settle();
+    /// // R/s is dropped; Name keeps its six cells.
+    /// assert_eq!(driver.screen().plain()[0].trim_end(), "PID   Name   CPU%");
+    /// ```
+    pub fn priority(mut self, priority: u8) -> Column {
+        self.priority = Some(priority);
+        self
+    }
+
+    /// Its track in a table `room` cells wide.
+    fn track(&self, size: Size, room: u16) -> Track {
+        let percent = |p: u8| (room as u32 * p as u32 / 100) as u16;
         let mut track = Track::new(size);
-        track.min = self.min;
-        track.max = self.max.max(self.min);
+        track.min = self.min.max(self.min_percent.map_or(0, percent));
+        track.max = self.max.min(self.max_percent.map_or(u16::MAX, percent));
+        track.max = track.max.max(track.min);
         track
     }
 }
 
 /// Where a table's rows come from.
-enum Rows {
+#[derive(Clone)]
+pub(crate) enum Rows {
     /// Every row, from a closure that may read signals.
-    All(Box<dyn Fn() -> Vec<Vec<String>>>),
+    All(Rc<dyn Fn() -> Vec<Vec<String>>>),
     /// A count and one row at a time: only the rows in view are asked for.
     Lazy {
-        len: Box<dyn Fn() -> usize>,
-        row: Box<dyn Fn(usize) -> Vec<String>>,
+        len: Rc<dyn Fn() -> usize>,
+        row: Rc<dyn Fn(usize) -> Vec<String>>,
     },
 }
 
 impl Rows {
-    fn len(&self) -> usize {
+    pub(crate) fn len(&self) -> usize {
         match self {
             Rows::All(rows) => rows().len(),
             Rows::Lazy { len, .. } => len(),
@@ -133,16 +210,24 @@ impl Rows {
     fn window(&self, from: usize, count: usize) -> Vec<Vec<String>> {
         match self {
             Rows::All(rows) => rows().into_iter().skip(from).take(count).collect(),
-            Rows::Lazy { len, row } => (from..(from + count).min(len())).map(row).collect(),
+            Rows::Lazy { len, row } => (from..(from + count).min(len())).map(|i| row(i)).collect(),
         }
     }
 }
 
 pub(crate) struct Table {
     name: &'static str,
+    /// The columns the table was made with.
+    source: Vec<Column>,
+    /// The columns shown, left to right ([`TableOptions::columns_with`],
+    /// [`TableOptions::columns_shown`], [`Column::priority`]), and each
+    /// one's index among all the columns; whether that is all of them in
+    /// order.
     columns: Vec<Column>,
-    rows: Rows,
-    selection: Selection,
+    order: Vec<usize>,
+    identity: bool,
+    pub(crate) rows: Rows,
+    pub(crate) selection: Selection,
     /// Whether the header row is drawn (a list has none).
     header: bool,
     /// The theme style of the selection while it does not have the focus.
@@ -169,11 +254,16 @@ pub(crate) struct Table {
     /// rows and the rows in view.
     bar_at: Cell<Option<(crate::screen::Rect, usize, usize, usize)>>,
     /// The [`offset`](TableOptions::offset) signal's value as last read or
-    /// set.
+    /// set, and [`offset_x`](TableOptions::offset_x)'s.
     seen: Cell<Option<usize>>,
+    seen_x: Cell<Option<usize>>,
     /// Where the rows in view were drawn, on the screen
     /// ([`Node::row_rects`]).
     pub(crate) rects: Option<crate::list::RowRects>,
+    /// Marker cells by theme style, before
+    /// [`marker`](TableOptions::marker)'s: [`Node::selection_markers`] and
+    /// [`Node::marks_by`].
+    pub(crate) marks: Option<crate::list::Marks>,
 }
 
 /// Which way a table's column is sorted.
@@ -241,8 +331,9 @@ pub struct TableOptions {
     /// under the cells' own markup and the selection.
     pub row_style: Option<RowStyle>,
     /// Rows as tall as their tallest cell, cells wrapping to their column.
-    /// Not for a [`virtual_table`], which takes
-    /// [`row_height`](Self::row_height).
+    /// A [`virtual_table`] lays out only the rows near the view (sized
+    /// [`Size::Auto`] down, it counts a line a row, or
+    /// [`row_height_for`](Self::row_height_for)'s).
     pub multiline: bool,
     /// Every row this many lines tall (cells wrap with
     /// [`multiline`](Self::multiline), and are cut at it).
@@ -258,6 +349,120 @@ pub struct TableOptions {
     /// The first row in view: read it, or set it to scroll. The selected
     /// row is still kept in view.
     pub offset: Option<Signal<usize>>,
+    /// The columns, from a closure that may read signals, in place of the
+    /// ones the table was made with: titles, sizes and the set change with
+    /// no new table, so the scroll across and the cursor stay.
+    pub columns_with: Option<Box<dyn Fn() -> Vec<Column>>>,
+    /// Which columns show, and in what order, by their index among the
+    /// columns: the others are hidden. May read signals.
+    pub shown: Option<Box<dyn Fn() -> Vec<usize>>>,
+    /// The frozen columns' count, from a closure that may read signals, in
+    /// place of [`freeze`](Self::freeze).
+    pub freeze_with: Option<Box<dyn Fn() -> usize>>,
+    /// Each column's width, by index: `None` keeps its [`Size`]. The
+    /// mouse's drags ([`resizable`](Self::resizable)) write here too, so a
+    /// key can widen a column the mouse narrowed.
+    pub widths: Option<Signal<Vec<Option<u16>>>>,
+    /// Whether rows wrap ([`multiline`](Self::multiline)), from a closure
+    /// that may read signals.
+    pub multiline_when: Option<Box<dyn Fn() -> bool>>,
+    /// Whether the cell cursor ([`column`](Self::column)) is on, from a
+    /// closure that may read signals: off, the table selects rows.
+    pub cells_when: Option<Box<dyn Fn() -> bool>>,
+    /// A sorted column's title, from its title and the order: `"Name ▲"`
+    /// by default.
+    pub sort_indicator: Option<Box<dyn Fn(&str, Order) -> String>>,
+    /// The style (or theme style name) of row `i`'s cell in a one-cell
+    /// marker column at the left, outside the highlight; `None` is blank.
+    pub marker: Option<RowStyle>,
+    /// The symbol column's markup for each row, and the column's width:
+    /// see [`symbol_for`](Self::symbol_for).
+    pub symbols: Option<(u16, Symbols)>,
+    /// Where the selection's highlight goes: over the cells' own styles
+    /// (the default) or under them.
+    pub highlight_layer: HighlightLayer,
+    /// The first scrolled column in view, with [`scroll_x`](Self::scroll_x):
+    /// read it, or set it to scroll across.
+    pub offset_x: Option<Signal<usize>>,
+    /// Row `i`'s height in lines, in place of
+    /// [`row_height`](Self::row_height).
+    pub row_height_for: Option<Box<dyn Fn(usize) -> u16>>,
+    /// Where the last draw put the columns and the rows.
+    pub layout: Option<TableLayout>,
+}
+
+/// A table's symbol for row `i`, given whether it is selected: markup, or
+/// `None` for the plain [`symbol`](TableOptions::symbol) on the selected
+/// row and a blank on the others.
+pub type Symbols = Box<dyn Fn(usize, bool) -> Option<String>>;
+
+/// What a table's last draw laid out: each column's width, the columns
+/// and rows in view. Give one to [`TableOptions::layout`] and read it in a
+/// handler: a key that widens the selected column by four cells starts from
+/// [`width_of`](Self::width_of), a page across from
+/// [`columns_in_view`](Self::columns_in_view).
+///
+/// ```
+/// use intuituive::prelude::*;
+/// use intuituive::widgets::{table_with, Column, TableLayout, TableOptions};
+///
+/// let layout = TableLayout::new();
+/// let shown = layout.clone();
+/// let app = App::new(move || {
+///     let columns = vec![Column::new("Name", Size::Auto), Column::new("Size", Size::Flex(1))];
+///     let rows = || vec![vec!["notes.txt".into(), "12K".into()]];
+///     table_with(columns, rows, signal(0), TableOptions::default().layout(&shown))
+/// });
+/// let mut driver = app.driver(20, 3);
+/// driver.settle();
+/// assert_eq!(layout.width_of(0), Some(9));
+/// assert_eq!(layout.width_of(1), Some(10));
+/// assert_eq!(layout.columns_in_view(), [0, 1]);
+/// assert_eq!(layout.rows_in_view(), 2);
+/// ```
+#[derive(Clone, Default)]
+pub struct TableLayout(Rc<RefCell<LaidOut>>);
+
+#[derive(Default)]
+struct LaidOut {
+    /// Each column drawn, by index among the columns, with its width.
+    widths: Vec<(usize, u16)>,
+    /// The first row in view, and how many rows the body holds.
+    first: usize,
+    rows: usize,
+}
+
+impl TableLayout {
+    /// A handle with nothing laid out yet.
+    pub fn new() -> TableLayout {
+        TableLayout::default()
+    }
+
+    /// The width column `column` (its index among the columns) was drawn
+    /// at; `None` when it was hidden, dropped or scrolled out of view.
+    pub fn width_of(&self, column: usize) -> Option<u16> {
+        let laid = self.0.borrow();
+        laid.widths
+            .iter()
+            .find(|(c, _)| *c == column)
+            .map(|(_, w)| *w)
+    }
+
+    /// The columns in view, left to right, by index among the columns.
+    pub fn columns_in_view(&self) -> Vec<usize> {
+        let laid = self.0.borrow();
+        laid.widths.iter().map(|(c, _)| *c).collect()
+    }
+
+    /// The first row in view.
+    pub fn first_row(&self) -> usize {
+        self.0.borrow().first
+    }
+
+    /// How many rows the body showed: a page.
+    pub fn rows_in_view(&self) -> usize {
+        self.0.borrow().rows
+    }
 }
 
 impl TableOptions {
@@ -397,6 +602,312 @@ impl TableOptions {
         self
     }
 
+    /// The columns from `columns` (which may read signals), in place of
+    /// the ones the table was made with: a filter of the columns, titles
+    /// that follow state (`PID` → `Count`), a new set for another report,
+    /// in the same table. The horizontal scroll, the cursor and the widths
+    /// stay; a column's widths and sort are by its index.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    /// use intuituive::widgets::{table_with, Column, TableOptions};
+    ///
+    /// let app = App::new(|| {
+    ///     let grouped = signal(false);
+    ///     let columns = move || {
+    ///         let first = if grouped.get() { "Count" } else { "PID" };
+    ///         vec![Column::new(first, Size::Auto), Column::new("Name", Size::Auto)]
+    ///     };
+    ///     let rows = || vec![vec!["1".into(), "init".into()]];
+    ///     let options = TableOptions::default().columns_with(columns);
+    ///     table_with(vec![], rows, signal(0), options).on_key("tab", move |_| grouped.set(true))
+    /// });
+    /// let mut driver = app.driver(16, 2);
+    /// driver.settle();
+    /// assert_eq!(driver.screen().plain()[0].trim_end(), "PID Name");
+    /// driver.press("tab");
+    /// assert_eq!(driver.screen().plain()[0].trim_end(), "Count Name");
+    /// ```
+    pub fn columns_with(mut self, columns: impl Fn() -> Vec<Column> + 'static) -> TableOptions {
+        self.columns_with = Some(Box::new(columns));
+        self
+    }
+
+    /// Show only the columns `shown` names (by index, which may read
+    /// signals), in its order: csvlens's column filter, a hidden empty
+    /// column, columns moved. The cell cursor and the sort keep their
+    /// columns' indices.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    /// use intuituive::widgets::{table_with, Column, TableOptions};
+    ///
+    /// let app = App::new(|| {
+    ///     let shown = signal(vec![0, 1, 2]);
+    ///     let columns = ["a", "b", "c"].map(|t| Column::new(t, Size::Auto)).to_vec();
+    ///     let rows = || vec![vec!["1".into(), "2".into(), "3".into()]];
+    ///     let options = TableOptions::default().columns_shown(move || shown.get());
+    ///     table_with(columns, rows, signal(0), options).on_key("x", move |_| shown.set(vec![2, 0]))
+    /// });
+    /// let mut driver = app.driver(10, 2);
+    /// driver.press("x");
+    /// assert_eq!(driver.screen().plain()[0].trim_end(), "c a");
+    /// assert_eq!(driver.screen().plain()[1].trim_end(), "3 1");
+    /// ```
+    pub fn columns_shown(mut self, shown: impl Fn() -> Vec<usize> + 'static) -> TableOptions {
+        self.shown = Some(Box::new(shown));
+        self
+    }
+
+    /// Keep the first `columns()` columns (which may read signals) in place
+    /// while the rest scroll across: csvlens's `f<n>`. Turns
+    /// [`scroll_x`](Self::scroll_x) on.
+    pub fn freeze_columns_with(mut self, columns: impl Fn() -> usize + 'static) -> TableOptions {
+        self.scroll_x = true;
+        self.freeze_with = Some(Box::new(columns));
+        self
+    }
+
+    /// Each column's width in `widths`, by index (`None` keeps its size),
+    /// shared with the mouse's drags: set it from a key to resize a column.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    /// use intuituive::widgets::{table_with, Column, TableOptions};
+    ///
+    /// let app = App::new(|| {
+    ///     let widths = signal(vec![None, None]);
+    ///     let columns = vec![Column::new("Name", Size::Auto), Column::new("Size", Size::Auto)];
+    ///     let rows = || vec![vec!["notes.txt".into(), "12K".into()]];
+    ///     let options = TableOptions::default().widths(widths);
+    ///     table_with(columns, rows, signal(0), options)
+    ///         .on_key(">", move |_| widths.update(|w| w[0] = Some(12)))
+    /// });
+    /// let mut driver = app.driver(20, 2);
+    /// driver.press(">");
+    /// assert_eq!(driver.screen().plain()[1].trim_end(), "notes.txt    12K");
+    /// ```
+    pub fn widths(mut self, widths: Signal<Vec<Option<u16>>>) -> TableOptions {
+        self.widths = Some(widths);
+        self
+    }
+
+    /// Rows wrap, each as tall as its tallest cell, while `on()` (which may
+    /// read signals) is true: csvlens's `-S`.
+    pub fn multiline_when(mut self, on: impl Fn() -> bool + 'static) -> TableOptions {
+        self.multiline_when = Some(Box::new(on));
+        self
+    }
+
+    /// A cell cursor in `column` while `on()` (which may read signals) is
+    /// true, rows selected otherwise: csvlens's Tab between its row, column
+    /// and cell modes. Off, ←/→ go to the table's ancestors (or scroll
+    /// across, with [`scroll_x`](Self::scroll_x)).
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    /// use intuituive::widgets::{table_with, Column, TableOptions};
+    ///
+    /// let app = App::new(|| {
+    ///     let (cells, at) = (signal(false), signal(0));
+    ///     let columns = vec![Column::new("a", Size::Auto), Column::new("b", Size::Auto)];
+    ///     let rows = || vec![vec!["1".into(), "2".into()]];
+    ///     let options = TableOptions::default().cells_when(move || cells.get(), at);
+    ///     column([table_with(columns, rows, signal(0), options).fixed(2), text!("{at}")])
+    ///         .on_key("tab", move |_| cells.update(|c| *c = !*c))
+    /// });
+    /// let mut driver = app.driver(10, 3);
+    /// driver.press("right");
+    /// assert_eq!(driver.screen().plain()[2].trim_end(), "0");
+    /// driver.press("tab right");
+    /// assert_eq!(driver.screen().plain()[2].trim_end(), "1");
+    /// ```
+    pub fn cells_when(
+        mut self,
+        on: impl Fn() -> bool + 'static,
+        column: Signal<usize>,
+    ) -> TableOptions {
+        self.column = Some(column);
+        self.cells_when = Some(Box::new(on));
+        self
+    }
+
+    /// A sorted column's title: `indicator(title, order)`, which may read
+    /// signals, in place of `"Name ▲"`. csvlens's `Name [▴]`, and `[▴N]`
+    /// for its natural order.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    /// use intuituive::widgets::{table_with, Column, Order, TableOptions};
+    ///
+    /// let app = App::new(|| {
+    ///     let columns = vec![Column::new("Name", Size::Auto)];
+    ///     let rows = || vec![vec!["a".into()]];
+    ///     let options = TableOptions::default()
+    ///         .sort(signal(Some((0, Order::Descending))))
+    ///         .sort_indicator(|title, order| match order {
+    ///             Order::Ascending => format!("{title} [▴]"),
+    ///             Order::Descending => format!("{title} [▾]"),
+    ///         });
+    ///     table_with(columns, rows, signal(0), options)
+    /// });
+    /// let mut driver = app.driver(12, 2);
+    /// driver.settle();
+    /// assert_eq!(driver.screen().plain()[0].trim_end(), "Name [▾]");
+    /// ```
+    pub fn sort_indicator(
+        mut self,
+        indicator: impl Fn(&str, Order) -> String + 'static,
+    ) -> TableOptions {
+        self.sort_indicator = Some(Box::new(indicator));
+        self
+    }
+
+    /// A one-cell marker column at the left of the rows, outside their
+    /// style and the highlight: a blank cell in the style (or theme style
+    /// name) `style(i)` gives row `i`, or an unstyled one for `None`, as a
+    /// list's [`Node::marker`]. The column is kept with no row marked.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    /// use intuituive::widgets::{table_with, Column, TableOptions};
+    ///
+    /// let app = App::new(|| {
+    ///     let columns = vec![Column::new("Name", Size::Auto)];
+    ///     let rows = || vec![vec!["a".into()], vec!["b".into()]];
+    ///     let options = TableOptions::default().marker(|i| (i == 1).then(|| "on yellow".into()));
+    ///     table_with(columns, rows, signal(0), options)
+    /// });
+    /// let mut driver = app.driver(6, 3);
+    /// driver.settle();
+    /// assert_eq!(driver.screen().plain()[0].trim_end(), " Name");
+    /// let styled = intuituive::testing::styled(&driver);
+    /// assert!(styled.lines().nth(2).unwrap().starts_with("[on yellow] [/]b"), "{styled}");
+    /// ```
+    pub fn marker(mut self, style: impl Fn(usize) -> Option<String> + 'static) -> TableOptions {
+        self.marker = Some(Box::new(style));
+        self
+    }
+
+    /// A symbol column `width` cells wide whose markup for row `i` is
+    /// `symbol(i, selected)`: termusic's `►` on the playing track and `🚀`
+    /// on the cursor, taskwarrior-tui's `⦿`/`⦾` on a marked or unmarked
+    /// selected row. `None` shows the plain [`symbol`](Self::symbol) on the
+    /// selected row and a blank on the others. The column is always kept.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    /// use intuituive::widgets::{table_with, Column, TableOptions};
+    ///
+    /// let app = App::new(|| {
+    ///     let columns = vec![Column::new("Track", Size::Auto)];
+    ///     let rows = || vec![vec!["one".into()], vec!["two".into()]];
+    ///     let playing = 1;
+    ///     let options = TableOptions::default()
+    ///         .symbol("> ")
+    ///         .symbol_for(2, move |i, _| (i == playing).then(|| "► ".into()));
+    ///     table_with(columns, rows, signal(0), options)
+    /// });
+    /// let mut driver = app.driver(10, 3);
+    /// driver.settle();
+    /// assert_eq!(driver.screen().plain()[1].trim_end(), "> one");
+    /// assert_eq!(driver.screen().plain()[2].trim_end(), "► two");
+    /// ```
+    pub fn symbol_for(
+        mut self,
+        width: u16,
+        symbol: impl Fn(usize, bool) -> Option<String> + 'static,
+    ) -> TableOptions {
+        self.symbols = Some((width, Box::new(symbol)));
+        self
+    }
+
+    /// Where the selection's highlight goes: [`HighlightLayer::Under`]
+    /// keeps what a cell's markup styles (a match in red on yellow) in its
+    /// own style on the selected row.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    /// use intuituive::widgets::{table_with, Column, HighlightLayer, TableOptions};
+    ///
+    /// let app = App::new(|| {
+    ///     let columns = vec![Column::new("City", Size::Auto)];
+    ///     let rows = || vec![vec!["[red on yellow]Re[/]ading".into()]];
+    ///     let options = TableOptions::default().highlight_layer(HighlightLayer::Under);
+    ///     table_with(columns, rows, signal(0), options).theme_styles([("selected", "on grey30")])
+    /// });
+    /// let mut driver = app.driver(10, 2);
+    /// driver.settle();
+    /// let styled = intuituive::testing::styled(&driver);
+    /// assert!(styled.contains("[red on yellow]Re[/][on grey30]ading"), "{styled}");
+    /// ```
+    pub fn highlight_layer(mut self, layer: HighlightLayer) -> TableOptions {
+        self.highlight_layer = layer;
+        self
+    }
+
+    /// The first scrolled column in view, in `first`, with
+    /// [`scroll_x`](Self::scroll_x): its place among the columns shown
+    /// (the frozen ones count). Read it (csvlens's `Col n`), or set it to
+    /// scroll across (a window across, the ends); the cell cursor is still
+    /// kept in view.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    /// use intuituive::widgets::{virtual_table_with, Column, TableOptions};
+    ///
+    /// let app = App::new(|| {
+    ///     let first = signal(0usize);
+    ///     let columns = (0..6).map(|i| Column::new(&format!("col{i}"), Size::Auto)).collect();
+    ///     let row = |r: usize| (0..6).map(|c| format!("r{r}c{c}")).collect();
+    ///     let options = TableOptions::default().scroll_x().offset_x(first);
+    ///     let table = virtual_table_with(columns, || 10, row, signal(0), options);
+    ///     column([table.fixed(2), text!("{first}")]).on_key("e", move |_| first.set(5))
+    /// });
+    /// let mut driver = app.driver(20, 3);
+    /// driver.press("right");
+    /// assert_eq!(driver.screen().plain()[2].trim_end(), "1");
+    /// driver.press("e");
+    /// // Set past the end: scrolled as far as it goes, and read back.
+    /// assert_eq!(driver.screen().plain()[0], "‹col2 col3 col4 col5");
+    /// assert_eq!(driver.screen().plain()[2].trim_end(), "2");
+    /// ```
+    pub fn offset_x(mut self, first: Signal<usize>) -> TableOptions {
+        self.offset_x = Some(first);
+        self
+    }
+
+    /// Row `i` is `height(i)` lines tall (gaps aside), in place of one
+    /// [`row_height`](Self::row_height) for all: a virtual table asks only
+    /// for the rows in view. Cells wrap to it with
+    /// [`multiline`](Self::multiline), else show their first line.
+    pub fn row_height_for(mut self, height: impl Fn(usize) -> u16 + 'static) -> TableOptions {
+        self.row_height_for = Some(Box::new(height));
+        self
+    }
+
+    /// Record where each draw puts the columns and rows in `layout`.
+    pub fn layout(mut self, layout: &TableLayout) -> TableOptions {
+        self.layout = Some(layout.clone());
+        self
+    }
+
+    /// Whether rows wrap now.
+    fn wraps(&self) -> bool {
+        self.multiline || self.multiline_when.as_ref().is_some_and(|on| on())
+    }
+
+    /// The cell cursor's signal, while the cursor is on.
+    fn cell_cursor(&self) -> Option<Signal<usize>> {
+        self.column
+            .filter(|_| self.cells_when.as_ref().is_none_or(|on| on()))
+    }
+
+    /// The frozen columns' count now.
+    fn frozen(&self) -> usize {
+        self.freeze_with.as_ref().map_or(self.freeze, |f| f())
+    }
+
     /// Cells between columns.
     fn spacing(&self) -> u16 {
         self.column_spacing.unwrap_or(1)
@@ -405,7 +916,10 @@ impl TableOptions {
     /// Whether every row is one line: the old arithmetic, with no heights
     /// to find.
     fn single_line(&self) -> bool {
-        !self.multiline && self.row_height.unwrap_or(1) == 1 && self.row_gap == 0
+        !self.wraps()
+            && self.row_height.unwrap_or(1) == 1
+            && self.row_height_for.is_none()
+            && self.row_gap == 0
     }
 }
 
@@ -466,7 +980,7 @@ pub fn table(
     rows: impl Fn() -> Vec<Vec<String>> + 'static,
     selected: Signal<usize>,
 ) -> Node {
-    table_from(columns, Rows::All(Box::new(rows)), selected)
+    table_from(columns, Rows::All(Rc::new(rows)), selected)
 }
 
 /// A [`table`] that asks only for the rows in view: `len` is how many
@@ -479,8 +993,8 @@ pub fn virtual_table(
     selected: Signal<usize>,
 ) -> Node {
     let rows = Rows::Lazy {
-        len: Box::new(len),
-        row: Box::new(row),
+        len: Rc::new(len),
+        row: Rc::new(row),
     };
     table_from(columns, rows, selected)
 }
@@ -489,7 +1003,9 @@ pub fn virtual_table(
 /// across, as `options` asks. Its rows are never all in hand, so it does
 /// not sort them itself ([`TableOptions::sort_rows`]); `row` may read a
 /// [`sort`](TableOptions::sort) signal. Its rows are as tall as
-/// [`TableOptions::row_height`] says.
+/// [`TableOptions::row_height`] or [`TableOptions::row_height_for`] says,
+/// or (with [`TableOptions::multiline`]) as their cells, of the rows near
+/// the view only.
 ///
 /// ```
 /// use intuituive::prelude::*;
@@ -515,8 +1031,8 @@ pub fn virtual_table_with(
     options: TableOptions,
 ) -> Node {
     let rows = Rows::Lazy {
-        len: Box::new(len),
-        row: Box::new(row),
+        len: Rc::new(len),
+        row: Rc::new(row),
     };
     table_options(columns, rows, Selection::One(selected), options)
 }
@@ -546,12 +1062,15 @@ pub fn virtual_list(
     selected: Signal<usize>,
 ) -> Node {
     let rows = Rows::Lazy {
-        len: Box::new(len),
-        row: Box::new(move |i| vec![row(i)]),
+        len: Rc::new(len),
+        row: Rc::new(move |i| vec![row(i)]),
     };
     widget(Table {
         name: "virtual_list",
+        source: vec![Column::new("", Size::Flex(1))],
         columns: vec![Column::new("", Size::Flex(1))],
+        order: vec![0],
+        identity: true,
         rows,
         selection: Selection::One(selected),
         header: false,
@@ -567,7 +1086,9 @@ pub fn virtual_list(
         bar: Bar::default(),
         bar_at: Cell::new(None),
         seen: Cell::new(None),
+        seen_x: Cell::new(None),
         rects: None,
+        marks: None,
     })
 }
 
@@ -614,7 +1135,7 @@ pub fn table_with(
 ) -> Node {
     table_options(
         columns,
-        Rows::All(Box::new(rows)),
+        Rows::All(Rc::new(rows)),
         Selection::One(selected),
         options,
     )
@@ -645,7 +1166,7 @@ pub fn table_optional(
 ) -> Node {
     table_options(
         columns,
-        Rows::All(Box::new(rows)),
+        Rows::All(Rc::new(rows)),
         Selection::Maybe(selected),
         options,
     )
@@ -660,6 +1181,9 @@ fn table_options(
     let count = columns.len();
     widget(Table {
         name: "table",
+        source: columns.clone(),
+        order: (0..count).collect(),
+        identity: true,
         columns,
         rows,
         selection,
@@ -676,7 +1200,9 @@ fn table_options(
         bar: Bar::default(),
         bar_at: Cell::new(None),
         seen: Cell::new(None),
+        seen_x: Cell::new(None),
         rects: None,
+        marks: None,
     })
 }
 
@@ -833,27 +1359,90 @@ fn under(line: Vec<Segment>, style: &Style, width: u16) -> Vec<Segment> {
     out
 }
 
-/// The rows a draw looks at: all of them once, or one at a time.
+/// The rows a draw looks at: all of them once, or one at a time, each
+/// with its cells in the order the columns are shown.
 enum Fetch<'a> {
     All(Vec<Vec<String>>),
-    Lazy(
-        &'a dyn Fn(usize) -> Vec<String>,
-        HashMap<usize, Vec<String>>,
-    ),
+    Lazy {
+        row: &'a dyn Fn(usize) -> Vec<String>,
+        order: &'a [usize],
+        identity: bool,
+        cache: HashMap<usize, Vec<String>>,
+    },
 }
 
 impl Fetch<'_> {
     fn row(&mut self, i: usize) -> Vec<String> {
         match self {
             Fetch::All(rows) => rows.get(i).cloned().unwrap_or_default(),
-            Fetch::Lazy(row, cache) => cache.entry(i).or_insert_with(|| row(i)).clone(),
+            Fetch::Lazy {
+                row,
+                order,
+                identity,
+                cache,
+            } => cache
+                .entry(i)
+                .or_insert_with(|| pick(order, *identity, row(i)))
+                .clone(),
         }
     }
+}
+
+/// A row's cells for the columns shown: `order` gives each one's index
+/// among all the columns (`identity` when that is all of them in order).
+fn pick(order: &[usize], identity: bool, row: Vec<String>) -> Vec<String> {
+    if identity {
+        return row;
+    }
+    order
+        .iter()
+        .map(|&c| row.get(c).cloned().unwrap_or_default())
+        .collect()
+}
+
+/// A track's length clamped to its least and most.
+fn clamped(track: &Track, cells: u32) -> u32 {
+    cells.clamp(track.min as u32, track.max.max(track.min) as u32)
 }
 
 impl Table {
     pub(crate) fn options_mut(&mut self) -> &mut TableOptions {
         &mut self.options
+    }
+
+    /// The columns to show now: [`TableOptions::columns_with`]'s or the
+    /// table's own, as [`TableOptions::columns_shown`] picks them.
+    fn refresh_columns(&mut self) {
+        if self.options.columns_with.is_none() && self.options.shown.is_none() {
+            if self.columns.len() != self.source.len() || !self.identity {
+                self.columns = self.source.clone();
+                self.order = (0..self.source.len()).collect();
+                self.identity = true;
+            }
+            return;
+        }
+        let all = match &self.options.columns_with {
+            Some(columns) => columns(),
+            None => self.source.clone(),
+        };
+        let order: Vec<usize> = match &self.options.shown {
+            Some(shown) => shown().into_iter().filter(|&c| c < all.len()).collect(),
+            None => (0..all.len()).collect(),
+        };
+        self.identity = order.len() == all.len() && order.iter().enumerate().all(|(i, &c)| i == c);
+        self.columns = order.iter().map(|&c| all[c].clone()).collect();
+        self.order = order;
+    }
+
+    /// Where column `column` (its index among all the columns) is shown,
+    /// if it is.
+    fn place_of(&self, column: usize) -> Option<usize> {
+        self.order.iter().position(|&c| c == column)
+    }
+
+    /// The index among all the columns of the column shown at `at`.
+    fn original(&self, at: usize) -> usize {
+        self.order.get(at).copied().unwrap_or(at)
     }
 
     /// Where column `i`'s cells sit, and how they are cut.
@@ -873,7 +1462,7 @@ impl Table {
     /// table sorts its own rows.
     fn shown(&self, from: usize, count: usize) -> Vec<Vec<String>> {
         let order = self.options.sort.filter(|_| self.options.sort_rows);
-        match (&self.rows, order.and_then(|sort| sort.get())) {
+        let rows = match (&self.rows, order.and_then(|sort| sort.get())) {
             (Rows::All(rows), Some((column, order))) => {
                 let mut all = rows();
                 all.sort_by(|a, b| {
@@ -887,11 +1476,14 @@ impl Table {
                 all.into_iter().skip(from).take(count).collect()
             }
             _ => self.rows.window(from, count),
-        }
+        };
+        rows.into_iter()
+            .map(|row| pick(&self.order, self.identity, row))
+            .collect()
     }
 
-    /// Sort by `column`: ascending first, then the other way on the same
-    /// column.
+    /// Sort by `column` (its index among all the columns): ascending
+    /// first, then the other way on the same column.
     fn sort_by(&self, column: usize) {
         if let Some(sort) = self.options.sort {
             sort.update(|sort| {
@@ -903,10 +1495,13 @@ impl Table {
         }
     }
 
+    /// Move the cell cursor `by` columns shown.
     fn move_column(&self, by: isize) {
-        if let Some(column) = self.options.column {
+        if let Some(column) = self.options.cell_cursor() {
             let last = self.columns.len().saturating_sub(1) as isize;
-            column.update(|c| *c = (*c as isize + by).clamp(0, last.max(0)) as usize);
+            let at = self.place_of(column.get_untracked()).unwrap_or(0) as isize;
+            let to = (at + by).clamp(0, last.max(0)) as usize;
+            column.set(self.original(to));
         }
     }
 
@@ -918,19 +1513,20 @@ impl Table {
         if !self.options.scroll_x || modifiers.ctrl || modifiers.alt {
             return None;
         }
-        let free = modifiers.shift || self.options.column.is_none();
+        let cells = self.options.cell_cursor().is_some();
+        let free = modifiers.shift || !cells;
         match key.code {
             KeyCode::Left if free => Some(-1),
             KeyCode::Right if free => Some(1),
-            KeyCode::Char('h') if self.options.column.is_none() => Some(-1),
-            KeyCode::Char('l') if self.options.column.is_none() => Some(1),
+            KeyCode::Char('h') if !cells => Some(-1),
+            KeyCode::Char('l') if !cells => Some(1),
             KeyCode::Home if modifiers.shift => Some(isize::MIN),
             KeyCode::End if modifiers.shift => Some(isize::MAX),
             _ => None,
         }
     }
 
-    /// The column drawn at `x`, if any.
+    /// The column drawn at `x`, if any: its place among the columns shown.
     fn column_at(&self, x: u16) -> Option<usize> {
         self.spans
             .borrow()
@@ -968,31 +1564,42 @@ impl Table {
         (top, u16::from(self.options.footer.is_some()))
     }
 
-    /// The cells before a row's first column: the text mode's marker and the
-    /// highlight symbol's column.
-    fn indents(&self, selected: bool) -> (u16, u16) {
+    /// The cells before a row's first column: the marker column, the text
+    /// mode's marker and the highlight symbol's column.
+    fn indents(&self, selected: bool) -> (u16, u16, u16) {
+        let options = &self.options;
+        let gutter = u16::from(options.marker.is_some() || self.marks.is_some());
         let marker = if crate::a11y::text_mode() { 2 } else { 0 };
-        let symbol = match &self.options.symbol {
-            Some(symbol) if self.options.highlight_spacing.keeps(selected) => markup_width(symbol),
+        let symbol = match (&options.symbols, &options.symbol) {
+            (Some((width, _)), _) => *width,
+            (None, Some(symbol)) if options.highlight_spacing.keeps(selected) => {
+                markup_width(symbol)
+            }
             _ => 0,
         };
-        (marker, symbol)
+        (gutter, marker, symbol)
     }
 
-    /// Each column's track: its size (or the width it was dragged to), its
-    /// least and most, and for [`Size::Auto`] the widest of its title and
-    /// `rows`.
-    fn tracks(&self, rows: &[Vec<String>], titles: &[String]) -> Vec<Track> {
+    /// Each column's track in a table `room` cells wide: its size (or the
+    /// width it was set or dragged to), its least and most, and for
+    /// [`Size::Auto`] the widest of its title and `rows`.
+    fn tracks(&self, rows: &[Vec<String>], titles: &[String], room: u16) -> Vec<Track> {
+        let set = self.options.widths.map(|widths| widths.get());
         let dragged = self.dragged.borrow();
         self.columns
             .iter()
             .enumerate()
             .map(|(i, column)| {
-                let size = match dragged.get(i).copied().flatten() {
+                let index = self.original(i);
+                let width = match &set {
+                    Some(set) => set.get(index).copied().flatten(),
+                    None => dragged.get(index).copied().flatten(),
+                };
+                let size = match width {
                     Some(width) => Size::Fixed(width),
                     None => column.size,
                 };
-                let mut track = column.track(size);
+                let mut track = column.track(size, room);
                 if size == Size::Auto {
                     track.content = rows
                         .iter()
@@ -1007,25 +1614,74 @@ impl Table {
             .collect()
     }
 
-    /// The titles, a sorted column's with an arrow.
+    /// Which of the columns shown [`Column::priority`] drops so the rest
+    /// fit in `room` cells at their least: the lowest priority first, the
+    /// rightmost of equals first.
+    fn dropped(&self, tracks: &[Track], titles: &[String], room: u16, spacing: u16) -> Vec<bool> {
+        let n = tracks.len();
+        let mut gone = vec![false; n];
+        if self.columns.iter().all(|c| c.priority.is_none()) {
+            return gone;
+        }
+        let room = room as u32;
+        let least = |i: usize| -> u32 {
+            let track = &tracks[i];
+            match track.size {
+                Size::Fixed(cells) => clamped(track, cells as u32),
+                Size::Percent(p) => clamped(track, room * p.min(100) as u32 / 100),
+                Size::Ratio(a, b) => clamped(track, room * a / b.max(1)),
+                Size::Auto => clamped(track, track.content as u32),
+                // A flexible column with a priority keeps its title.
+                Size::Flex(_) if self.columns[i].priority.is_some() => {
+                    clamped(track, markup_width(&titles[i]) as u32).max(track.min as u32)
+                }
+                Size::Flex(_) => track.min as u32,
+            }
+        };
+        loop {
+            let shown: Vec<usize> = (0..n).filter(|&i| !gone[i]).collect();
+            let gaps = spacing as u32 * shown.len().saturating_sub(1) as u32;
+            let need: u32 = shown.iter().map(|&i| least(i)).sum::<u32>() + gaps;
+            if need <= room {
+                break;
+            }
+            let victim = shown
+                .iter()
+                .copied()
+                .filter(|&i| self.columns[i].priority.is_some())
+                .min_by_key(|&i| (self.columns[i].priority, std::cmp::Reverse(i)));
+            match victim {
+                Some(i) => gone[i] = true,
+                None => break,
+            }
+        }
+        gone
+    }
+
+    /// The titles, a sorted column's with an arrow (or its
+    /// [`sort_indicator`](TableOptions::sort_indicator)).
     fn titles(&self, sort: Option<(usize, Order)>) -> Vec<String> {
         self.columns
             .iter()
             .enumerate()
             .map(|(i, column)| match sort {
-                Some((c, Order::Ascending)) if c == i => format!("{} ▲", column.title),
-                Some((c, Order::Descending)) if c == i => format!("{} ▼", column.title),
+                Some((c, order)) if c == self.original(i) => match &self.options.sort_indicator {
+                    Some(indicator) => indicator(&column.title, order),
+                    None if order == Order::Ascending => format!("{} ▲", column.title),
+                    None => format!("{} ▼", column.title),
+                },
                 _ => column.title.clone(),
             })
             .collect()
     }
 
-    /// How many lines row `cells` takes at `widths`, gap included.
-    fn height_of(&self, console: &Console, cells: &[String], widths: &[u16]) -> usize {
+    /// How many lines row `i`, of `cells`, takes at `widths`, gap included.
+    fn height_of(&self, console: &Console, i: usize, cells: &[String], widths: &[u16]) -> usize {
         let options = &self.options;
-        let lines = match options.row_height {
-            Some(height) => height as usize,
-            None if options.multiline => widths
+        let lines = match (&options.row_height_for, options.row_height) {
+            (Some(height), _) => height(i).max(1) as usize,
+            (None, Some(height)) => height as usize,
+            (None, None) if options.wraps() => widths
                 .iter()
                 .enumerate()
                 .map(|(i, w)| {
@@ -1036,7 +1692,7 @@ impl Table {
                 .max()
                 .unwrap_or(1)
                 .max(1),
-            None => 1,
+            (None, None) => 1,
         };
         lines + options.row_gap as usize
     }
@@ -1052,7 +1708,7 @@ impl Table {
         height: usize,
         spacing: u16,
     ) -> Vec<Vec<Segment>> {
-        let wrap = self.options.multiline;
+        let wrap = self.options.wraps();
         let columns: Vec<Vec<Vec<Segment>>> = widths
             .iter()
             .enumerate()
@@ -1079,6 +1735,23 @@ impl Table {
             })
             .collect()
     }
+
+    /// The marker column's style for row `i`, if it is marked.
+    fn mark_of(&self, console: &Console, i: usize) -> Option<Style> {
+        let options = &self.options;
+        let marked = self
+            .marks
+            .as_ref()
+            .and_then(|marks| marks(i))
+            .map(|(name, fallback)| crate::widget::theme_style(console, name, fallback));
+        marked.or_else(|| {
+            options
+                .marker
+                .as_ref()
+                .and_then(|marker| marker(i))
+                .map(|name| crate::widget::theme_style(console, &name, &name))
+        })
+    }
 }
 
 impl Widget for Table {
@@ -1103,16 +1776,17 @@ impl Widget for Table {
             .copied()
             .find(|(i, _, _)| *i == selected)?;
         // With a cell cursor, the cell; else the row.
-        let cell = self.options.column.and_then(|column| {
+        let cell = self.options.cell_cursor().and_then(|column| {
             let spans = self.spans.borrow();
-            spans.get(column.get_untracked()).copied()
+            let at = self.place_of(column.get_untracked())?;
+            spans.get(at).copied()
         });
         let height = height.saturating_sub(self.options.row_gap).max(1);
         Some(match cell {
             Some((x, w)) => crate::screen::Rect::new(x, top, w, height),
             None => {
-                let (marker, symbol) = self.indents(true);
-                let x = if symbol > 0 { marker + symbol } else { 0 };
+                let (gutter, marker, symbol) = self.indents(true);
+                let x = gutter + if symbol > 0 { marker + symbol } else { 0 };
                 crate::screen::Rect::new(x, top, u16::MAX, height)
             }
         })
@@ -1128,25 +1802,42 @@ impl Widget for Table {
     fn measure(&mut self, cx: &MeasureCx, axis: Axis, width: u16, _height: u16) -> u16 {
         match axis {
             Axis::Vertical => {
+                self.refresh_columns();
                 let (top, footer) = self.chrome();
                 let chrome = (top + footer) as usize;
                 let len = self.rows.len();
-                let lines = if self.options.single_line() {
+                let options = &self.options;
+                let gap = options.row_gap as usize;
+                let lazy = matches!(self.rows, Rows::Lazy { .. });
+                let lines = if options.single_line() {
                     len
-                } else if let (Some(height), false) =
-                    (self.options.row_height, self.options.multiline)
+                } else if let (Some(height), false, None) =
+                    (options.row_height, options.wraps(), &options.row_height_for)
                 {
-                    len * (height as usize + self.options.row_gap as usize)
+                    len * (height as usize + gap)
+                } else if lazy {
+                    // A virtual table reads only the rows in view: its
+                    // rows' own heights where it is told them, else a
+                    // line each.
+                    match &options.row_height_for {
+                        Some(height) if len <= 4096 => {
+                            (0..len).map(|i| height(i).max(1) as usize + gap).sum()
+                        }
+                        _ => len * (options.row_height.unwrap_or(1) as usize + gap),
+                    }
                 } else {
                     // Every row, laid out at this width.
                     let rows = self.shown(0, len);
                     let titles = self.titles(None);
-                    let (marker, symbol) = self.indents(self.selection.get_untracked().is_some());
+                    let (gutter, marker, symbol) =
+                        self.indents(self.selection.get_untracked().is_some());
+                    let room = width.saturating_sub(gutter + marker + symbol);
                     let spacing = self.options.spacing();
-                    let tracks = self.tracks(&rows, &titles);
-                    let widths = solve(width.saturating_sub(marker + symbol), spacing, &tracks);
+                    let tracks = self.tracks(&rows, &titles, room);
+                    let widths = solve(room, spacing, &tracks);
                     rows.iter()
-                        .map(|row| self.height_of(cx.console(), row, &widths))
+                        .enumerate()
+                        .map(|(i, row)| self.height_of(cx.console(), i, row, &widths))
                         .sum()
                 };
                 (lines + chrome).min(u16::MAX as usize) as u16
@@ -1156,6 +1847,7 @@ impl Widget for Table {
     }
 
     fn draw(&mut self, cx: &mut DrawCx, canvas: &mut Canvas) {
+        self.refresh_columns();
         let (width, height) = (canvas.width(), canvas.height());
         let (top, footer_lines) = self.chrome();
         let body = height.saturating_sub(top + footer_lines) as usize;
@@ -1165,7 +1857,7 @@ impl Widget for Table {
             .get()
             .filter(|_| len > 0)
             .map(|s| s.min(len - 1));
-        // The offset signal, set from outside, moves the view.
+        // The offset signals, set from outside, move the view.
         if let Some(offset) = self.options.offset {
             let value = offset.get();
             if self.seen.get() != Some(value) {
@@ -1173,12 +1865,19 @@ impl Widget for Table {
                 self.seen.set(Some(value));
             }
         }
+        if let Some(offset) = self.options.offset_x {
+            let value = offset.get();
+            if self.seen_x.get() != Some(value) {
+                self.across.left.set(value);
+                self.seen_x.set(Some(value));
+            }
+        }
         let sort = self.options.sort.and_then(|sort| sort.get());
         // A sorted column's title ends with an arrow.
         let titles = self.titles(sort);
         let console = cx.console();
         let spacing = self.options.spacing();
-        let (marker, symbol) = self.indents(selected.is_some());
+        let (gutter, marker, symbol) = self.indents(selected.is_some());
         let indent = marker + symbol;
         let single = self.options.single_line();
         // The rows in hand: every row once (multi-line rows need their
@@ -1188,7 +1887,12 @@ impl Widget for Table {
             _ => None,
         };
         let mut fetch = match (single, lazy_row) {
-            (false, Some(row)) => Fetch::Lazy(row, HashMap::new()),
+            (false, Some(row)) => Fetch::Lazy {
+                row,
+                order: &self.order,
+                identity: self.identity,
+                cache: HashMap::new(),
+            },
             (false, None) => Fetch::All(self.shown(0, len)),
             // One line a row: fetched once the first row is known.
             (true, _) => Fetch::All(Vec::new()),
@@ -1202,11 +1906,12 @@ impl Widget for Table {
             let near: Vec<Vec<String>> = (guess..(guess + body.max(1)).min(len))
                 .map(|i| fetch.row(i))
                 .collect();
-            let tracks = self.tracks(&near, &titles);
-            solve(room.saturating_sub(indent), spacing, &tracks)
+            let room = room.saturating_sub(indent);
+            let tracks = self.tracks(&near, &titles, room);
+            solve(room, spacing, &tracks)
         };
         let first_at = |fetch: &mut Fetch, widths: &[u16]| -> usize {
-            let mut height = |i: usize| self.height_of(console, &fetch.row(i), widths);
+            let mut height = |i: usize| self.height_of(console, i, &fetch.row(i), widths);
             crate::list::first_in_view(len, body, self.first.get(), selected, padding, &mut height)
         };
         // The rows from `first` that fit in the body.
@@ -1216,7 +1921,7 @@ impl Widget for Table {
             }
             let (mut used, mut count) = (0, 0);
             for i in first..len {
-                let h = self.height_of(console, &fetch.row(i), widths);
+                let h = self.height_of(console, i, &fetch.row(i), widths);
                 if count > 0 && used + h > body {
                     break;
                 }
@@ -1225,7 +1930,9 @@ impl Widget for Table {
             }
             count
         };
-        let mut content_width = width;
+        // The marker column keeps the first cell; the rows are drawn after
+        // it.
+        let mut content_width = width.saturating_sub(gutter);
         let mut widths = Vec::new();
         let mut first = if single {
             crate::list::first_in_view(len, body, self.first.get(), selected, padding, &mut |_| 1)
@@ -1238,7 +1945,7 @@ impl Widget for Table {
         if let Some(look) = self.bar.look.clone() {
             if look.wanted(len, in_view(&mut fetch, first, &widths)) {
                 let (rest, at) = look.split(width, height);
-                content_width = rest.width;
+                content_width = rest.width.saturating_sub(gutter);
                 let at = crate::screen::Rect::new(at.x, top, at.width, body as u16);
                 bar_rect = Some((rest.x, at));
                 if !single {
@@ -1247,7 +1954,8 @@ impl Widget for Table {
                 }
             }
         }
-        let left = bar_rect.map_or(0, |(x, _)| x);
+        let gutter_x = bar_rect.map_or(0, |(x, _)| x);
+        let left = gutter_x + gutter;
         self.first.set(first);
         if let Some(offset) = self.options.offset {
             if self.seen.get() != Some(first) {
@@ -1257,7 +1965,7 @@ impl Widget for Table {
         }
         // The rows in view, and their heights.
         let mut placed: Vec<(usize, u16, u16)> = Vec::new();
-        let rows: Vec<Vec<String>> = if single {
+        let mut rows: Vec<Vec<String>> = if single {
             let rows = match &fetch {
                 Fetch::All(all) if !all.is_empty() => {
                     all.iter().skip(first).take(body).cloned().collect()
@@ -1273,7 +1981,7 @@ impl Widget for Table {
             let mut used = 0usize;
             for i in first..len {
                 let row = fetch.row(i);
-                let h = self.height_of(console, &row, &widths);
+                let h = self.height_of(console, i, &row, &widths);
                 if !rows.is_empty() && used + h > body {
                     break;
                 }
@@ -1286,6 +1994,7 @@ impl Widget for Table {
             }
             rows
         };
+        drop(fetch);
         self.body.set(if single {
             body.max(1)
         } else {
@@ -1293,8 +2002,46 @@ impl Widget for Table {
         });
         // Column widths: content columns fit their title and the rows in
         // view; a column the user dragged keeps that width.
-        let tracks = self.tracks(&rows, &titles);
-        let cell = self.options.column.map(|column| column.get());
+        let room = content_width.saturating_sub(indent);
+        let mut titles = titles;
+        let mut tracks = self.tracks(&rows, &titles, room);
+        // Columns with a priority that do not fit are dropped, whole.
+        if !self.options.scroll_x {
+            let gone = self.dropped(&tracks, &titles, room, spacing);
+            if gone.contains(&true) {
+                let kept = |i: &usize| !gone[*i];
+                let keep = |cells: Vec<String>| -> Vec<String> {
+                    cells
+                        .into_iter()
+                        .enumerate()
+                        .filter(|(i, _)| kept(i))
+                        .map(|(_, cell)| cell)
+                        .collect()
+                };
+                titles = keep(titles);
+                rows = rows.into_iter().map(keep).collect();
+                let columns = std::mem::take(&mut self.columns);
+                self.columns = columns
+                    .into_iter()
+                    .enumerate()
+                    .filter(|(i, _)| kept(i))
+                    .map(|(_, column)| column)
+                    .collect();
+                let order = std::mem::take(&mut self.order);
+                self.order = order
+                    .into_iter()
+                    .enumerate()
+                    .filter(|(i, _)| kept(i))
+                    .map(|(_, c)| c)
+                    .collect();
+                self.identity = false;
+                tracks = self.tracks(&rows, &titles, room);
+            }
+        }
+        let cell = self
+            .options
+            .cell_cursor()
+            .and_then(|column| self.place_of(column.get()));
         // Scrolling across (#717), columns that do not fit keep their
         // natural widths and a window shows some of them.
         let window = self
@@ -1321,16 +2068,23 @@ impl Widget for Table {
                     indent,
                     &natural,
                     content_width,
-                    self.options.freeze,
+                    self.options.frozen(),
                     cell,
                     spacing,
                 )?;
                 Some((natural, window))
             })
             .flatten();
+        if let Some(offset) = self.options.offset_x {
+            let at = self.across.left.get();
+            if self.seen_x.get() != Some(at) {
+                self.seen_x.set(Some(at));
+                crate::reactive::Runtime::current().untracked(|| offset.set(at));
+            }
+        }
         let widths = match &window {
             Some((natural, _)) => natural.clone(),
-            None => solve(content_width.saturating_sub(indent), spacing, &tracks),
+            None => solve(room, spacing, &tracks),
         };
         {
             let mut spans = self.spans.borrow_mut();
@@ -1350,6 +2104,18 @@ impl Widget for Table {
                     }
                 }
             }
+        }
+        if let Some(layout) = &self.options.layout {
+            let spans = self.spans.borrow();
+            let mut laid = layout.0.borrow_mut();
+            laid.widths = spans
+                .iter()
+                .enumerate()
+                .filter(|(_, (_, w))| *w > 0 || window.is_none())
+                .map(|(i, (_, w))| (self.original(i), *w))
+                .collect();
+            laid.first = first;
+            laid.rows = self.body.get();
         }
         let window = window.map(|(_, window)| window);
         let blank_indent = (indent > 0).then(|| Segment::new(" ".repeat(indent as usize), None));
@@ -1372,7 +2138,7 @@ impl Widget for Table {
         }
         if let Some(footer) = &self.options.footer {
             let style = cx.style("table.footer", "bold");
-            let cells = footer();
+            let cells = pick(&self.order, self.identity, footer());
             let mut line = plain_line(&cells);
             if let Some(window) = &window {
                 // The footer has no `‹` and `›`: those are the header's.
@@ -1393,16 +2159,18 @@ impl Widget for Table {
         } else {
             cx.style(self.blur, "underline")
         };
+        let symbol_markup = |markup: &str| {
+            let line = crate::widget::markup_line(console, markup, symbol);
+            aligned(line, symbol, Align::Start)
+        };
         let symbol_line = self
             .options
             .symbol
             .as_ref()
             .filter(|_| symbol > 0)
-            .map(|markup| {
-                let line = crate::widget::markup_line(console, markup, symbol);
-                aligned(line, symbol, Align::Start)
-            });
+            .map(|markup| symbol_markup(markup));
         let row_gap = self.options.row_gap as usize;
+        let layer = self.options.highlight_layer;
         for ((i, y, h), cells) in placed.iter().zip(&rows) {
             let is_selected = selected == Some(*i);
             let lines_tall = (*h as usize).saturating_sub(row_gap).max(1);
@@ -1412,6 +2180,14 @@ impl Widget for Table {
                 .as_ref()
                 .and_then(|style| style(*i))
                 .map(|name| crate::widget::theme_style(console, &name, &name));
+            // This row's own symbol, before the plain one.
+            let own_symbol = self
+                .options
+                .symbols
+                .as_ref()
+                .filter(|_| symbol > 0)
+                .and_then(|(_, symbols)| symbols(*i, is_selected))
+                .map(|markup| symbol_markup(&markup));
             let lines = self.row_lines(console, cells, &widths, lines_tall, spacing);
             let mut out_lines = Vec::with_capacity(lines.len());
             for (n, line) in lines.into_iter().enumerate() {
@@ -1421,8 +2197,11 @@ impl Widget for Table {
                     segments.push(Segment::new(mark, None));
                 }
                 if symbol > 0 {
-                    match &symbol_line {
-                        Some(sym) if is_selected && n == 0 => segments.extend(sym.iter().cloned()),
+                    match (&own_symbol, &symbol_line) {
+                        (Some(own), _) if n == 0 => segments.extend(own.iter().cloned()),
+                        (None, Some(sym)) if is_selected && n == 0 => {
+                            segments.extend(sym.iter().cloned())
+                        }
                         _ => segments.push(Segment::new(" ".repeat(symbol as usize), None)),
                     }
                 }
@@ -1430,11 +2209,24 @@ impl Widget for Table {
                 if let Some(window) = &window {
                     segments = window.cut(&segments);
                 }
-                if let Some(style) = &row_style {
-                    segments = under(segments, style, content_width);
-                }
-                if is_selected {
-                    segments = crate::list::over(segments, &highlight, content_width);
+                match (&row_style, is_selected, layer) {
+                    // Under the cells' markup: the row style, then the
+                    // highlight over it, as one style under the cells' own.
+                    (row_style, true, HighlightLayer::Under) => {
+                        let style = match row_style {
+                            Some(row) => row.combine(&highlight),
+                            None => highlight.clone(),
+                        };
+                        segments = under(segments, &style, content_width);
+                    }
+                    (row_style, is_selected, _) => {
+                        if let Some(style) = row_style {
+                            segments = under(segments, style, content_width);
+                        }
+                        if is_selected {
+                            segments = crate::list::over(segments, &highlight, content_width);
+                        }
+                    }
                 }
                 out_lines.push(segments);
             }
@@ -1442,6 +2234,13 @@ impl Widget for Table {
             let room = height.saturating_sub(*y + footer_lines);
             let shown = (out_lines.len() as u16).min(room);
             canvas.lines_at(left, *y, content_width, shown, &out_lines);
+            // The marker column, outside the row's style and highlight.
+            if gutter > 0 {
+                let mark = vec![Segment::new(" ", self.mark_of(console, *i))];
+                for line in 0..shown {
+                    canvas.lines_at(gutter_x, *y + line, 1, 1, std::slice::from_ref(&mark));
+                }
+            }
             // The cell cursor, over the selected row's cell.
             if let (true, Some(column)) = (is_selected, cell) {
                 if let Some(&(x, w)) = self.spans.borrow().get(column) {
@@ -1517,11 +2316,12 @@ impl Widget for Table {
                 None => {}
             }
         }
+        let cells = self.options.cell_cursor();
         match event {
             // A table that fits takes these keys as it always did.
             WidgetEvent::Key(key) if self.across.wide.get() && self.across_by(key).is_some() => {
                 let by = self.across_by(key).expect("a scroll across");
-                self.across.scroll(by, self.options.freeze);
+                self.across.scroll(by, self.options.frozen());
                 cx.redraw();
             }
             WidgetEvent::Key(key) => {
@@ -1534,24 +2334,23 @@ impl Widget for Table {
                     (KeyCode::Home, true) | (KeyCode::Char('g'), true) => self.selection.first(len),
                     (KeyCode::End, true) => self.selection.last(len),
                     _ if *key == Key::char('G') => self.selection.last(len),
-                    (KeyCode::Left, true) | (KeyCode::Char('h'), true)
-                        if self.options.column.is_some() =>
-                    {
+                    (KeyCode::Left, true) | (KeyCode::Char('h'), true) if cells.is_some() => {
                         self.move_column(-1)
                     }
-                    (KeyCode::Right, true) | (KeyCode::Char('l'), true)
-                        if self.options.column.is_some() =>
-                    {
+                    (KeyCode::Right, true) | (KeyCode::Char('l'), true) if cells.is_some() => {
                         self.move_column(1)
                     }
                     // `s` sorts by the cursor's column, or the next one.
                     (KeyCode::Char('s'), true) if self.options.sort.is_some() => {
-                        let column = match (self.options.column, self.options.sort) {
+                        let shown = self.columns.len().max(1);
+                        let column = match (cells, self.options.sort) {
                             (Some(column), _) => column.get_untracked(),
                             (None, Some(sort)) => match sort.get_untracked() {
-                                Some((c, Order::Descending)) => (c + 1) % self.columns.len().max(1),
+                                Some((c, Order::Descending)) => {
+                                    self.original((self.place_of(c).unwrap_or(0) + 1) % shown)
+                                }
                                 Some((c, Order::Ascending)) => c,
-                                None => 0,
+                                None => self.original(0),
                             },
                             (None, None) => 0,
                         };
@@ -1565,8 +2364,16 @@ impl Widget for Table {
                     let (column, _) = self.resizing.get().expect("resizing");
                     let start = self.spans.borrow().get(column).map_or(0, |s| s.0);
                     let width = mouse.column.saturating_sub(start).max(1);
-                    if let Some(slot) = self.dragged.borrow_mut().get_mut(column) {
-                        *slot = Some(width);
+                    let index = self.original(column);
+                    let set = |widths: &mut Vec<Option<u16>>| {
+                        if widths.len() <= index {
+                            widths.resize(index + 1, None);
+                        }
+                        widths[index] = Some(width);
+                    };
+                    match self.options.widths {
+                        Some(widths) => widths.update(set),
+                        None => set(&mut self.dragged.borrow_mut()),
                     }
                     cx.redraw();
                 }
@@ -1592,8 +2399,9 @@ impl Widget for Table {
                             self.resizing.set(Some((edge, mouse.column)));
                             cx.capture_mouse();
                         } else if let Some(column) = self.column_at(mouse.column) {
+                            let column = self.original(column);
                             self.sort_by(column);
-                            if let Some(cursor) = self.options.column {
+                            if let Some(cursor) = cells {
                                 cursor.set(column);
                             }
                         }
@@ -1603,10 +2411,8 @@ impl Widget for Table {
             }
             WidgetEvent::Mouse(mouse) => match mouse.kind {
                 MouseKind::Down(button) if mouse.row >= self.header as u16 => {
-                    if let (Some(cursor), Some(column)) =
-                        (self.options.column, self.column_at(mouse.column))
-                    {
-                        cursor.set(column);
+                    if let (Some(cursor), Some(column)) = (cells, self.column_at(mouse.column)) {
+                        cursor.set(self.original(column));
                     }
                     // Another button on a row selects it and leaves the
                     // press to the node's own handler: a right click's menu
@@ -1628,7 +2434,7 @@ impl Widget for Table {
                     } else {
                         1
                     };
-                    if !self.across.scroll(by, self.options.freeze) {
+                    if !self.across.scroll(by, self.options.frozen()) {
                         return Used::No;
                     }
                     cx.redraw();

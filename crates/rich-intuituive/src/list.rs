@@ -1589,8 +1589,9 @@ impl Node {
 
     /// Where the highlight goes: [`HighlightLayer::Over`] the item's markup
     /// (the default) or [`HighlightLayer::Under`] it, so a selected row's
-    /// markup keeps the colours it sets. Yazi's hovered row has rounded
-    /// ends in the entry's colour, outside the reversed bar:
+    /// markup keeps the colours it sets. On a table too. Yazi's hovered
+    /// row has rounded ends in the entry's colour, outside the reversed
+    /// bar:
     ///
     /// ```
     /// use intuituive::prelude::*;
@@ -1609,7 +1610,10 @@ impl Node {
     /// assert!(styled.starts_with("[not reverse blue]<[/][reverse blue]docs[/][not reverse blue]>"));
     /// ```
     pub fn highlight_layer(self, layer: HighlightLayer) -> Node {
-        self.list_options("highlight_layer", move |options| options.layer = layer)
+        self.list_option("highlight_layer", move |node| {
+            let table = table_options(node, |options| options.highlight_layer = layer);
+            set_list(node, |options| options.layer = layer) || table
+        })
     }
 
     /// Move the selection `items` items a turn of the mouse wheel, instead
@@ -1705,7 +1709,9 @@ impl Node {
     /// [`trailing`](Self::trailing) is. When the item the cursor was on
     /// moves, the selection moves with it; when it is gone, the cursor
     /// stays at its index and keeps the item now there (while the list is
-    /// empty it waits for the old one). Moving the cursor is unchanged.
+    /// empty it waits for the old one). Moving the cursor is unchanged. On
+    /// a table too, `key(i)` naming row `i` (taskwarrior-tui's selection
+    /// following a task by its uuid when the report sorts again).
     ///
     /// ```
     /// use intuituive::prelude::*;
@@ -1730,8 +1736,20 @@ impl Node {
     ) -> Node {
         let key: Rc<dyn Fn(usize) -> K> = Rc::new(key);
         self.list_option("cursor_by", move |node| {
-            with_list(node, |list| (list.selection, list.items.clone()))
-                .map(|(selection, items)| keep_by_key(selection, items, key.clone()))
+            let list = with_list(node, |list| {
+                let items = list.items.clone();
+                let len: Rc<dyn Fn() -> usize> = Rc::new(move || items.len());
+                (list.selection, len)
+            });
+            let table = || {
+                node.widget_mut(|table: &mut crate::widgets::Table| {
+                    let rows = table.rows.clone();
+                    let len: Rc<dyn Fn() -> usize> = Rc::new(move || rows.len());
+                    (table.selection, len)
+                })
+            };
+            list.or_else(table)
+                .map(|(selection, len)| keep_by_key(selection, len, key.clone()))
                 .is_some()
         })
     }
@@ -1748,6 +1766,17 @@ impl Node {
             unused(name);
         }
         self
+    }
+
+    /// Give `marks` to the list or table this node is or wraps: its
+    /// marker column's cells by theme style.
+    pub(crate) fn list_marks(self, name: &'static str, marks: Marks) -> Node {
+        self.list_option(name, move |node| {
+            let table = node
+                .widget_mut(|table: &mut crate::widgets::Table| table.marks = Some(marks.clone()))
+                .is_some();
+            set_list(node, |options| options.marks = Some(marks.clone())) || table
+        })
     }
 
     /// Set the options of the list this node is or wraps with `f`.
@@ -1779,14 +1808,14 @@ fn set_list(node: &Node, f: impl FnOnce(&mut ListOptions)) -> bool {
 /// under it, and the selection goes to wherever its key is now.
 fn keep_by_key<K: PartialEq + Clone + 'static>(
     selection: Selection,
-    items: Items,
+    items: Rc<dyn Fn() -> usize>,
     key: Rc<dyn Fn(usize) -> K>,
 ) {
     let last: Rc<RefCell<Option<(usize, K)>>> = Rc::new(RefCell::new(None));
     let (seen, read, len) = (last.clone(), key.clone(), items.clone());
     crate::reactive::watch(
         move || {
-            let len = items.len();
+            let len = items();
             let at = selection.get().filter(|at| *at < len);
             let was = seen.borrow().as_ref().map(|(i, _)| *i);
             (
@@ -1799,7 +1828,7 @@ fn keep_by_key<K: PartialEq + Clone + 'static>(
             let was = last.borrow().clone();
             if let Some((_, was)) = was.filter(|(_, was)| there.as_ref() != Some(was)) {
                 // The items changed under the remembered item: find it.
-                if let Some(to) = (0..len.len()).find(|i| key(*i) == was) {
+                if let Some(to) = (0..len()).find(|i| key(*i) == was) {
                     *last.borrow_mut() = Some((to, was));
                     if at != Some(to) {
                         selection.set(to);
