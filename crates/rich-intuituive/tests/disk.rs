@@ -372,8 +372,9 @@ fn enter_goes_into_a_folder_and_esc_comes_back() {
     // Nothing selected: Enter takes the largest folder.
     driver.press("enter");
     let top = rows(&driver)[0].clone();
+    let big = format!("{}big", std::path::MAIN_SEPARATOR);
     assert!(
-        top.contains("/big (78.1K, 2 files)") || top.contains("/big (78.1K)"),
+        top.contains(&format!("{big} (78.1K, 2 files)")) || top.contains(&format!("{big} (78.1K)")),
         "{}",
         dump(&driver)
     );
@@ -536,8 +537,13 @@ fn a_failed_delete_says_why() {
     driver.press("backspace");
     std::fs::remove_file(root.join("song.mp3")).unwrap();
     driver.press("y");
+    // The system's own words for it, as far as the box shows them.
+    let gone = std::fs::metadata(root.join("song.mp3"))
+        .unwrap_err()
+        .to_string();
+    let words: String = gone.chars().take(20).collect();
     assert!(
-        has(&driver, "Error: No such file or directory"),
+        has(&driver, &format!("Error: {words}")),
         "{}",
         dump(&driver)
     );
