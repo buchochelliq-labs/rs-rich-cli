@@ -1,7 +1,11 @@
 //! Signal processing for live views of audio and other sampled data: a
 //! fast Fourier transform, a Hann window and magnitude spectra; test
 //! signals (tones, harmonic partials, noise and a mix of them); trigger
-//! detection, as an oscilloscope's; and the frequencies of musical notes.
+//! detection, as an oscilloscope's; a spectrum's peak and log-spaced
+//! bands, with levels that fall under gravity ([`Falloff`]), as a bar
+//! spectrum's (cava's); and the frequencies of musical notes, in equal
+//! temperament or scope-tui's table ([`NoteTable`]), with the note nearest
+//! a frequency (a tuner's).
 //!
 //! Not a port of anything upstream: an rs-rich addition, written for
 //! intuiTUIve's spectroscope (the `scope` example, after scope-tui), with
@@ -462,7 +466,7 @@ const NAMES: [&str; 12] = [
 /// temperament with A4 at 440 Hz: a letter (either case), any number of
 /// sharps (`#`, `♯`) or flats (`b`, `♭`), and an octave (`-1` to `9`;
 /// 4, the octave of middle C, when left out). `None` when it is not a
-/// note.
+/// note. [`NoteTable::ScopeTui`] reads notes as scope-tui does instead.
 ///
 /// ```
 /// use rich_ext::dsp::note_hz;
@@ -476,6 +480,75 @@ const NAMES: [&str; 12] = [
 /// assert_eq!(note_hz("H2"), None);
 /// ```
 pub fn note_hz(note: &str) -> Option<f64> {
+    NoteTable::Equal.hz(note)
+}
+
+/// Which pitches [`NoteTable::hz`] gives a note.
+///
+/// ```
+/// use rich_ext::dsp::NoteTable;
+///
+/// // E2: 82.41 Hz in equal temperament; scope-tui's octave-0 E, 20.60 Hz,
+/// // doubled twice: 82.4 Hz (as an f32).
+/// assert!((NoteTable::Equal.hz("E2").unwrap() - 82.407).abs() < 0.001);
+/// assert_eq!(NoteTable::ScopeTui.hz("E2"), Some(f64::from(82.4f32)));
+/// // Without an octave: 4 in equal temperament, 0 in scope-tui's table.
+/// assert_eq!(NoteTable::Equal.hz("A"), Some(440.0));
+/// assert_eq!(NoteTable::ScopeTui.hz("A"), Some(27.5));
+/// ```
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum NoteTable {
+    /// Equal temperament, A4 at 440 Hz, octave 4 by default: exact
+    /// ([`note_hz`]).
+    #[default]
+    Equal,
+    /// scope-tui's table (`music.rs`, 0.3.5): the twelve pitches of octave
+    /// 0 rounded to the hundredth of a hertz (C0 16.35, …, B0 30.87),
+    /// doubled once an octave in `f32`, octave 0 by default and no octave
+    /// below it. A clone that divides a sample rate by these pitches picks
+    /// the buffer sizes scope-tui's `--tune` does, sample for sample
+    /// (about one note in ten is a sample off equal temperament's).
+    ScopeTui,
+}
+
+/// scope-tui's octave-0 pitches, from C, as it keeps them.
+const SCOPE_TUI_OCTAVE_0: [f32; 12] = [
+    16.35, 17.32, 18.35, 19.45, 20.60, 21.83, 23.12, 24.50, 25.96, 27.50, 29.14, 30.87,
+];
+
+impl NoteTable {
+    /// The octave a note without one is in: 4 ([`Equal`](Self::Equal)) or
+    /// 0 ([`ScopeTui`](Self::ScopeTui)).
+    pub fn default_octave(self) -> i32 {
+        match self {
+            NoteTable::Equal => 4,
+            NoteTable::ScopeTui => 0,
+        }
+    }
+
+    /// The frequency in Hz of `note`, written as [`note_hz`] reads it, in
+    /// this table. `None` when it is not a note (or, in
+    /// [`ScopeTui`](Self::ScopeTui), is below octave 0).
+    pub fn hz(self, note: &str) -> Option<f64> {
+        // Semitones from C0.
+        let from_c0 = parse_note(note, self.default_octave())?;
+        match self {
+            NoteTable::Equal => Some(440.0 * 2f64.powf(f64::from(from_c0 - 57) / 12.0)),
+            NoteTable::ScopeTui => {
+                let octave = u32::try_from(from_c0.div_euclid(12)).ok()?;
+                let mut hz = SCOPE_TUI_OCTAVE_0[from_c0.rem_euclid(12) as usize];
+                for _ in 0..octave {
+                    hz *= 2.0;
+                }
+                Some(f64::from(hz))
+            }
+        }
+    }
+}
+
+/// `note`'s semitones from C0, its octave `default_octave` when it names
+/// none.
+fn parse_note(note: &str, default_octave: i32) -> Option<i32> {
     let note = note.trim();
     let mut chars = note.chars();
     let letter = chars.next()?.to_ascii_uppercase();
@@ -492,28 +565,28 @@ pub fn note_hz(note: &str) -> Option<f64> {
         };
     }
     let octave: i32 = match &rest[octave_at..] {
-        "" => 4,
+        "" => default_octave,
         digits => digits.parse().ok().filter(|o| (-1..=9).contains(o))?,
     };
-    // Semitones from A4.
-    let from_a4 = (octave - 4) * 12 + semitone - 9;
-    Some(440.0 * 2f64.powf(f64::from(from_a4) / 12.0))
+    Some(octave * 12 + semitone)
 }
 
-/// The note nearest `hz`, with sharps (`A4`, `C#3`), and how far `hz` is
-/// from it in cents (hundredths of a semitone, from -50 to 50): a tuner's
-/// reading. `None` for a frequency that is not positive and finite, or
-/// that falls outside octaves -1 to 9.
+/// The note nearest `hz` in equal temperament (A4 at 440 Hz): its name,
+/// with sharps (`"A"`, `"C#"`), its octave, and how far `hz` is from it in
+/// cents (hundredths of a semitone, from -50 to 50): a tuner's reading.
+/// `None` for a frequency that is not positive and finite, or that falls
+/// outside octaves -1 to 9.
 ///
 /// ```
 /// use rich_ext::dsp::nearest_note;
 ///
-/// assert_eq!(nearest_note(440.0), Some(("A4".to_string(), 0.0)));
-/// let (name, cents) = nearest_note(445.0).unwrap();
-/// assert_eq!(name, "A4");
+/// assert_eq!(nearest_note(440.0), Some(("A", 4, 0.0)));
+/// let (name, octave, cents) = nearest_note(445.0).unwrap();
+/// assert_eq!((name, octave), ("A", 4));
 /// assert!((cents - 19.56).abs() < 0.01);
+/// assert_eq!(nearest_note(130.0).map(|(n, o, _)| (n, o)), Some(("C", 3)));
 /// ```
-pub fn nearest_note(hz: f64) -> Option<(String, f64)> {
+pub fn nearest_note(hz: f64) -> Option<(&'static str, i32, f64)> {
     if !(hz.is_finite() && hz > 0.0) {
         return None;
     }
@@ -526,7 +599,192 @@ pub fn nearest_note(hz: f64) -> Option<(String, f64)> {
         return None;
     }
     let name = NAMES[(from_c % 12) as usize];
-    Some((format!("{name}{}", from_c / 12 - 1), cents))
+    Some((name, (from_c / 12 - 1) as i32, cents))
+}
+
+/// The frequency of the loudest bin of `spectrum` (`(Hz, magnitude)`
+/// pairs, lowest first, as [`spectrum`] gives them) above 0 Hz, refined
+/// between bins by the parabola through its and its two neighbours'
+/// logarithms (a [`hann`]-windowed peak's shape), so a
+/// tuner reads finer than the bins are apart. `None` when there is no
+/// bin above 0 Hz louder than zero (silence).
+///
+/// ```
+/// use rich_ext::dsp::{hann, nearest_note, peak_hz, spectrum, tone};
+///
+/// // A4, 2048 samples at 48 kHz: bins 23.4 Hz apart.
+/// let samples: Vec<f64> = tone(440.0, 48_000.0).take(2048).collect();
+/// let hz = peak_hz(&spectrum(&hann(&samples), 48_000.0)).unwrap();
+/// assert!((hz - 440.0).abs() < 1.0, "{hz}");
+/// let (name, octave, cents) = nearest_note(hz).unwrap();
+/// assert_eq!((name, octave), ("A", 4));
+/// assert!(cents.abs() < 5.0);
+/// assert_eq!(peak_hz(&spectrum(&[0.0; 64], 48_000.0)), None);
+/// ```
+pub fn peak_hz(spectrum: &[(f64, f64)]) -> Option<f64> {
+    let (at, &(hz, level)) = spectrum
+        .iter()
+        .enumerate()
+        .filter(|(_, (hz, level))| *hz > 0.0 && level.is_finite())
+        .max_by(|a, b| a.1 .1.total_cmp(&b.1 .1))?;
+    if level <= 0.0 {
+        return None;
+    }
+    let (Some(&(before_hz, a)), Some(&(after_hz, c))) = (
+        at.checked_sub(1).and_then(|i| spectrum.get(i)),
+        spectrum.get(at + 1),
+    ) else {
+        return Some(hz);
+    };
+    if before_hz <= 0.0 || a <= 0.0 || c <= 0.0 {
+        return Some(hz);
+    }
+    // On the logarithms of the levels, which a windowed peak's top fits
+    // closely.
+    let (a, b, c) = (a.ln(), level.ln(), c.ln());
+    let curve = a - 2.0 * b + c;
+    if !curve.is_finite() || curve >= 0.0 {
+        return Some(hz);
+    }
+    // The vertex, from -½ to ½ a bin from `hz`.
+    let shift = (0.5 * (a - c) / curve).clamp(-0.5, 0.5);
+    let step = if shift < 0.0 {
+        hz - before_hz
+    } else {
+        after_hz - hz
+    };
+    Some(hz + shift * step)
+}
+
+/// `spectrum` (`(Hz, magnitude)` pairs, lowest first) gathered into `n`
+/// bands spaced by the logarithm of frequency from `lo_hz` to `hi_hz`, so
+/// each octave gets as many bands as any other, as cava's bars and a
+/// graphic equaliser's sliders: each band the loudest bin in it, or, for a
+/// band narrower than the bins are apart (the low end), the level between
+/// the bins either side of its middle. Empty for no bands; zeros when the
+/// range is not positive and increasing, or the spectrum is empty.
+///
+/// ```
+/// use rich_ext::dsp::bands;
+///
+/// // Bins 10 Hz apart; one loud at 100 Hz, one at 1 kHz.
+/// let spectrum: Vec<(f64, f64)> = (0..=200)
+///     .map(|i| (i as f64 * 10.0, if i == 10 || i == 100 { 1.0 } else { 0.0 }))
+///     .collect();
+/// // Three bands a decade each: 10-100 Hz, 100-1000, 1000-10000.
+/// assert_eq!(bands(&spectrum, 3, 10.0, 10_000.0), [0.0, 1.0, 1.0]);
+/// ```
+pub fn bands(spectrum: &[(f64, f64)], n: usize, lo_hz: f64, hi_hz: f64) -> Vec<f64> {
+    let mut out = vec![0.0; n];
+    let valid = lo_hz.is_finite() && hi_hz.is_finite() && 0.0 < lo_hz && lo_hz < hi_hz;
+    if n == 0 || spectrum.is_empty() || !valid {
+        return out;
+    }
+    let edge = |k: usize| lo_hz * (hi_hz / lo_hz).powf(k as f64 / n as f64);
+    for (k, band) in out.iter_mut().enumerate() {
+        let (from, to) = (edge(k), edge(k + 1));
+        let last = k + 1 == n;
+        let inside = spectrum
+            .iter()
+            .filter(|(hz, _)| from <= *hz && (*hz < to || (last && *hz <= to)))
+            .map(|(_, level)| *level)
+            .filter(|level| !level.is_nan())
+            .fold(None, |a: Option<f64>, v| Some(a.map_or(v, |a| a.max(v))));
+        *band = inside.unwrap_or_else(|| level_at(spectrum, (from * to).sqrt()));
+    }
+    out
+}
+
+/// `spectrum`'s level at `hz`, a straight line between the bins either
+/// side; the end bin's beyond the ends.
+fn level_at(spectrum: &[(f64, f64)], hz: f64) -> f64 {
+    let after = spectrum.partition_point(|(f, _)| *f < hz);
+    match (
+        after.checked_sub(1).map(|i| spectrum[i]),
+        spectrum.get(after),
+    ) {
+        (Some((f0, a)), Some(&(f1, b))) if f1 > f0 => a + (b - a) * (hz - f0) / (f1 - f0),
+        (_, Some(&(_, b))) => b,
+        (Some((_, a)), None) => a,
+        (None, None) => 0.0,
+    }
+}
+
+/// Levels that rise at once and fall under gravity, as cava's bars do:
+/// a level that drops is not followed down at once, but falls faster and
+/// faster, by `g` more each [`update`](Self::update), until it meets the
+/// new level. Rises are followed at once. Keep one per view, and update it
+/// once a frame with the new levels ([`bands`]).
+///
+/// ```
+/// use rich_ext::dsp::Falloff;
+///
+/// let mut bars = Falloff::gravity(0.1);
+/// assert_eq!(bars.update(&[1.0]), [1.0]);
+/// // Silence: down by 0.1, then 0.2, then 0.3 more, then at the floor.
+/// assert_eq!(bars.update(&[0.0]), [0.9]);
+/// assert!((bars.update(&[0.0])[0] - 0.7).abs() < 1e-12);
+/// assert!((bars.update(&[0.0])[0] - 0.4).abs() < 1e-12);
+/// assert_eq!(bars.update(&[0.0]), [0.0]);
+/// // A rise is shown at once.
+/// assert_eq!(bars.update(&[0.8]), [0.8]);
+/// ```
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Falloff {
+    gravity: f64,
+    levels: Vec<f64>,
+    speeds: Vec<f64>,
+}
+
+impl Falloff {
+    /// Levels falling `g` faster each update (in the levels' units per
+    /// update, per update); 0 or less follows every drop at once.
+    pub fn gravity(g: f64) -> Self {
+        Falloff {
+            gravity: if g.is_finite() { g.max(0.0) } else { 0.0 },
+            levels: Vec::new(),
+            speeds: Vec::new(),
+        }
+    }
+
+    /// Take the newest levels and return those to show. A level the last
+    /// update did not have starts where it is; a NaN level is taken as
+    /// silence, so the shown level falls.
+    pub fn update(&mut self, levels: &[f64]) -> &[f64] {
+        self.levels.truncate(levels.len());
+        self.speeds.truncate(levels.len());
+        for (i, &level) in levels.iter().enumerate() {
+            let level = if level.is_nan() {
+                f64::NEG_INFINITY
+            } else {
+                level
+            };
+            if i == self.levels.len() {
+                self.levels.push(level);
+                self.speeds.push(0.0);
+                continue;
+            }
+            if level >= self.levels[i] || self.gravity == 0.0 {
+                self.levels[i] = level;
+                self.speeds[i] = 0.0;
+            } else {
+                self.speeds[i] += self.gravity;
+                self.levels[i] = (self.levels[i] - self.speeds[i]).max(level);
+            }
+        }
+        &self.levels
+    }
+
+    /// The levels the last update returned.
+    pub fn levels(&self) -> &[f64] {
+        &self.levels
+    }
+
+    /// Forget the levels: the next update starts afresh.
+    pub fn reset(&mut self) {
+        self.levels.clear();
+        self.speeds.clear();
+    }
 }
 
 #[cfg(test)]
@@ -679,7 +937,9 @@ mod tests {
     fn notes_round_trip() {
         for name in ["C-1", "A0", "C4", "F#5", "B9", "G#2"] {
             let hz = note_hz(name).unwrap();
-            assert_eq!(nearest_note(hz), Some((name.to_string(), 0.0)), "{name}");
+            let (letter, octave, cents) = nearest_note(hz).unwrap();
+            assert_eq!(format!("{letter}{octave}"), name);
+            assert_eq!(cents, 0.0, "{name}");
         }
         assert_eq!(note_hz("Bb3"), note_hz("A#3"));
         assert_eq!(note_hz("B#3"), note_hz("C4"));
@@ -690,5 +950,85 @@ mod tests {
         assert_eq!(nearest_note(0.0), None);
         assert_eq!(nearest_note(f64::NAN), None);
         assert_eq!(nearest_note(1.0), None);
+    }
+
+    #[test]
+    fn scope_tuis_table_is_its_octave_0_doubled() {
+        let t = NoteTable::ScopeTui;
+        assert_eq!(t.hz("C"), Some(f64::from(16.35f32)));
+        assert_eq!(t.hz("B0"), Some(f64::from(30.87f32)));
+        assert_eq!(t.hz("Eb3"), t.hz("D#3"));
+        assert_eq!(t.hz("A4"), Some(440.0));
+        // B# is the next octave's C, as in equal temperament.
+        assert_eq!(t.hz("B#3"), t.hz("C4"));
+        // No octave below 0; Cb0 would be B-1.
+        assert_eq!(t.hz("C-1"), None);
+        assert_eq!(t.hz("Cb0"), None);
+        assert_eq!(t.hz("H"), None);
+    }
+
+    #[test]
+    fn scope_tuis_buffer_sizes_come_out_sample_for_sample() {
+        // scope-tui's `--tune`: `(rate as f32 * (1.0 / freq)).round()`.
+        // Dividing in f64 by the table's pitch gives the same size for
+        // every note it can read at the usual rates.
+        for rate in [44_100u32, 48_000, 96_000] {
+            for octave in 0..=8 {
+                for name in NAMES {
+                    let note = format!("{name}{octave}");
+                    let hz = NoteTable::ScopeTui.hz(&note).unwrap();
+                    let ours = (f64::from(rate) / hz).round() as u32;
+                    let theirs = (rate as f32 * (1.0 / hz as f32)).round() as u32;
+                    assert_eq!(ours, theirs, "{note} at {rate}");
+                }
+            }
+        }
+        // E2 at 48 kHz: 583 samples in scope-tui's table, 582 in equal
+        // temperament.
+        let size = |table: NoteTable| (48_000.0 / table.hz("E2").unwrap()).round();
+        assert_eq!(size(NoteTable::ScopeTui), 583.0);
+        assert_eq!(size(NoteTable::Equal), 582.0);
+    }
+
+    #[test]
+    fn peaks_are_refined_between_bins() {
+        // 1003 Hz with 10 Hz bins: between the 1000 and 1010 Hz bins.
+        let rate = 10_240.0;
+        let samples: Vec<f64> = tone(1003.0, rate).take(1024).collect();
+        let bins = spectrum(&hann(&samples), rate);
+        let hz = peak_hz(&bins).unwrap();
+        assert!((hz - 1003.0).abs() < 1.0, "{hz}");
+        // The 0 Hz bin never wins, however loud.
+        assert_eq!(peak_hz(&[(0.0, 9.0), (10.0, 1.0)]), Some(10.0));
+        assert_eq!(peak_hz(&[]), None);
+        assert_eq!(peak_hz(&[(0.0, 9.0)]), None);
+    }
+
+    #[test]
+    fn narrow_bands_take_the_level_between_bins() {
+        // Bins 100 Hz apart rising 1 a bin: a band around 150 Hz holds no
+        // bin, so it reads between 100 and 200 Hz.
+        let spectrum: Vec<(f64, f64)> = (0..10).map(|i| (i as f64 * 100.0, i as f64)).collect();
+        let b = bands(&spectrum, 1, 140.0, 160.0);
+        assert!((b[0] - 1.497).abs() < 0.01, "{b:?}");
+        assert!(bands(&spectrum, 0, 1.0, 2.0).is_empty());
+        assert_eq!(bands(&spectrum, 2, 0.0, 100.0), [0.0, 0.0]);
+        assert_eq!(bands(&[], 2, 1.0, 100.0), [0.0, 0.0]);
+        // The top edge is in the last band.
+        assert_eq!(bands(&spectrum, 2, 100.0, 900.0)[1], 9.0);
+    }
+
+    #[test]
+    fn a_falloff_follows_more_bands_and_nan() {
+        let mut f = Falloff::gravity(0.5);
+        assert_eq!(f.update(&[1.0]), [1.0]);
+        // A new band starts where it is; NaN falls.
+        assert_eq!(f.update(&[f64::NAN, 2.0]), [0.5, 2.0]);
+        assert_eq!(f.update(&[0.0]), [0.0]);
+        f.reset();
+        assert!(f.levels().is_empty());
+        let mut instant = Falloff::gravity(0.0);
+        instant.update(&[1.0]);
+        assert_eq!(instant.update(&[0.25]), [0.25]);
     }
 }
