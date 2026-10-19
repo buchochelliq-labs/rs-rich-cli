@@ -237,10 +237,10 @@ pub fn shell_command(run: &str, hovered: Option<&Path>, paths: &[PathBuf]) -> Co
     }
 }
 
-/// Rename `paths` in `$EDITOR`, as Yazi's bulk rename: their names go in
-/// a temporary file, a line each (just the names when they share a
-/// directory, else whole paths), the editor gets the terminal on it, and
-/// once it ends each changed line renames its file. Nothing is renamed if
+/// Rename `paths` in `$EDITOR`, as Yazi's bulk rename: their names are
+/// edited as text ([`Ctx::edit_text`]), a line each (just the names when
+/// they share a directory, else whole paths), and once the editor ends
+/// each changed line renames its file. Nothing is renamed if
 /// the file no longer has a line for each path; a new name taken by a
 /// file not being renamed, or given twice, is left out; the files can
 /// swap names. What could not be done is a notification titled `Bulk
@@ -292,23 +292,14 @@ pub fn bulk_rename(
             None => p.display().to_string(),
         })
         .collect();
-    let file = names_file();
     let body: String = lines.iter().map(|l| format!("{l}\n")).collect();
-    if let Err(error) = std::fs::write(&file, body) {
-        cx.notify(Level::Error, "Bulk rename", escape(&error.to_string()));
-        return;
-    }
-    let mut editor = rich_ext::open::editor();
-    editor.arg(&file);
-    cx.handoff_then(editor, move |ended, cx| {
-        let edited = std::fs::read_to_string(&file);
-        let _ = std::fs::remove_file(&file);
-        let edited = match (ended, edited) {
-            (Err(error), _) | (_, Err(error)) => {
+    cx.edit_text(&body, move |edited, cx| {
+        let edited = match edited {
+            Ok(edited) => edited,
+            Err(error) => {
                 cx.notify(Level::Error, "Bulk rename", escape(&error.to_string()));
                 return done(Vec::new(), cx);
             }
-            (Ok(_), Ok(edited)) => edited,
         };
         let (renames, mut problems) = match plan_renames(&paths, &lines, &edited, base.as_deref()) {
             Ok(plan) => plan,
@@ -330,17 +321,6 @@ fn shared_dir(paths: &[PathBuf]) -> Option<PathBuf> {
         .iter()
         .all(|p| p.parent() == Some(first))
         .then(|| first.to_path_buf())
-}
-
-/// A fresh file for the names, in the temporary directory.
-fn names_file() -> PathBuf {
-    use std::sync::atomic::{AtomicUsize, Ordering};
-    static NEXT: AtomicUsize = AtomicUsize::new(0);
-    let n = NEXT.fetch_add(1, Ordering::SeqCst);
-    std::env::temp_dir().join(format!(
-        "intuituive-bulk-rename-{}-{n}.txt",
-        std::process::id()
-    ))
 }
 
 /// Renames to make: each path, and its new one.

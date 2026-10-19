@@ -6,6 +6,7 @@ use std::path::PathBuf;
 use super::miller::Miller;
 use crate::node::Node;
 use crate::reactive::{signal, watch, Signal};
+use crate::select::MultiSelect;
 use crate::signals::{history, History};
 use crate::tab_set::{tab_set, tabs_for, TabSet};
 
@@ -45,8 +46,9 @@ impl FileTab {
 }
 
 /// Tabs over one set of [`Miller`] columns, as Yazi's: each tab keeps its
-/// directory and a back/forward history, and the columns show the active
-/// tab's. Wherever the columns go (keys, clicks, a finder), the active tab
+/// directory, a back/forward history and, with a
+/// [`selection`](crate::files::selection) over the columns, its own
+/// selection and visual mode; the columns show the active tab's. Wherever the columns go (keys, clicks, a finder), the active tab
 /// follows; switching tabs, closing one or going back moves the columns.
 /// `Copy`; made by [`tabs`].
 #[derive(Clone, Copy)]
@@ -88,6 +90,11 @@ pub struct FileTabs {
 pub fn tabs(miller: Miller) -> FileTabs {
     let cwd = miller.cwd;
     let set = tab_set(move || FileTab::at(cwd.get_untracked()));
+    // A selection made for the columns is kept per tab.
+    miller.tabs.replace(Some(set));
+    if let Some(selection) = miller.selection.get_untracked() {
+        selection.scoped(&set);
+    }
     // The active tab follows the columns.
     watch(
         move || cwd.get(),
@@ -168,6 +175,13 @@ impl FileTabs {
     /// Forward again (`L`); whether there was a directory to go to.
     pub fn forward(&self) -> bool {
         self.current().history.forward()
+    }
+
+    /// The selection the columns act on (the active tab's, through one
+    /// handle: see [`selection`](crate::files::selection)), if one was
+    /// made.
+    pub fn selection(&self) -> Option<MultiSelect<PathBuf>> {
+        self.miller.selection.get_untracked()
     }
 
     /// Name the active tab (`None`: its directory's name again).

@@ -73,6 +73,39 @@ impl Wav {
         let rate = f64::from(self.spec.sample_rate.max(1));
         Duration::from_secs_f64(f64::from(self.reader.duration()) / rate)
     }
+
+    /// Read on from `to` (kept within the file): the next buffer starts
+    /// there, as a player's seek.
+    ///
+    /// # Errors
+    /// The file could not be read there.
+    pub fn seek(&mut self, to: Duration) -> Result<(), AudioError> {
+        let frame = (to.as_secs_f64() * f64::from(self.spec.sample_rate)).round() as u64;
+        let frame = frame.min(u64::from(self.reader.duration())) as u32;
+        self.reader.seek(frame).map_err(error)
+    }
+}
+
+impl super::Source for Wav {
+    fn rate(&self) -> u32 {
+        Wav::rate(self)
+    }
+
+    fn channels(&self) -> u16 {
+        Wav::channels(self)
+    }
+
+    fn duration(&self) -> Option<Duration> {
+        Some(Wav::duration(self))
+    }
+
+    fn seek(&mut self, to: Duration) -> Result<(), AudioError> {
+        Wav::seek(self, to)
+    }
+
+    fn next_buffer(&mut self) -> Option<Result<Matrix, AudioError>> {
+        self.next().map(Ok)
+    }
 }
 
 impl Iterator for Wav {
@@ -294,6 +327,24 @@ mod tests {
             ]
         );
         std::fs::remove_file(path).ok();
+    }
+
+    #[test]
+    fn a_seek_reads_on_from_there() {
+        let path = scratch("seek");
+        let mut out = wav_writer(&path, 10, 1).unwrap();
+        let ramp: Vec<f64> = (0..20).map(|i| f64::from(i) / 32.0).collect();
+        out.write(&vec![ramp]).unwrap();
+        out.finish().unwrap();
+        let mut song = wav(&path, 2).unwrap();
+        assert_eq!(song.duration(), Duration::from_secs(2));
+        song.seek(Duration::from_millis(1500)).unwrap();
+        let next = song.next().unwrap();
+        assert!((next[0][0] - 15.0 / 32.0).abs() < 1e-3, "{next:?}");
+        // Past the end: nothing more.
+        song.seek(Duration::from_secs(9)).unwrap();
+        assert_eq!(song.next(), None);
+        std::fs::remove_file(&path).ok();
     }
 
     #[test]

@@ -2269,7 +2269,10 @@ The `files` plugin (below) is each of them with a file system plugged in.
   results, bookmarks, a "recent" list. It lasts until the columns leave
   the level: entering an item goes to its level, and `leave` (or
   `end_overlay`) goes back to the level's own items, on the one hovered
-  before, as Yazi leaves a search. `overlay_at()` says where one is.
+  before, as Yazi leaves a search (the source's `arrive` runs then too).
+  `overlay_at()` says where one is, and `update_overlay(items)` replaces
+  its items in place, the cursor kept: results arriving while a search
+  runs.
 
 ```rust
 struct Menu;
@@ -2334,6 +2337,15 @@ columns.navigation(columns.view())
 - **Facts' values:** `facts(..).value_style("yellow")` styles the values
   (the theme's `facts.value`, none by default), and
   `.value_style_for(|i| Some(style))` styles a row's value over it.
+- **A value per tab:** `set.scoped(|| signal(String::new()))` keeps a
+  value for each tab of a `tab_set`, made the first time a tab asks:
+  `scoped.get()` is the active tab's (a draft, a scroll position, a
+  handle), switching with the tab; a closed tab's goes. Tabs have
+  identities that stay through opens, closes and swaps (`active_id()`,
+  `ids()`). To keep one handle and switch what it holds,
+  `multi_select().scoped(&set)` gives each tab its own chosen keys and
+  visual range behind the same `MultiSelect`, so a list's markers and an
+  action's targets follow the active tab, as Yazi's per-tab selection.
 
 ### Editing text, state files and process jobs
 
@@ -2381,6 +2393,38 @@ jobs.run_process_with("Fetch", command, |line| parse_percent(line), |outcome, cx
   output)`); `run_process_with` reads progress from each line.
   `job.errors()` is a failed job's errors.
 
+### A play head, and a feed as one value
+
+```rust
+// Three minutes long, ending in the next track.
+let head = transport(Duration::from_secs(180)).on_end(move |_| next_track());
+row([
+    text(move || clock(head.position())),
+    progress(move || head.progress()),
+])
+.on_key("space", move |_| head.toggle())
+.on_key("right", move |_| head.seek_by(5.0))
+.on_key("plus", move |_| head.set_rate(head.rate() * 1.25))
+```
+
+- **`transport(length)`** is a play head on the app's clock: `play`,
+  `pause`, `toggle`, `seek(to)`, `seek_by(seconds)`, `set_rate(r)`, and
+  `position()`, `progress()` (0 to 1), `length()`, `is_playing()` to read,
+  subscribing. Readers are drawn again every `tick` (a tenth of a second
+  by default) while it plays, and the end is met on the app's clock
+  exactly, so a test stepping the clock sees it at the same time on
+  every run; `on_end(|cx| ..)` runs there (load the next track, loop,
+  close). `None` for a length is a stream with no end. Any timeline: a
+  track, a slideshow, a replay, an animation.
+- **`Feed<T>`:** a feed's newest value and its `FeedState` as one `Copy`
+  value (`feed.value()`, `feed.state()`, `feed.is_live()`, `parts()`),
+  so an app holds one type whatever its source is.
+  `latest_feed(stall_after, |tx, state| ..)` is `latest_with_state` with a
+  `FeedTeller` to say how it goes before the thread ends
+  (`state.tell(FeedState::Ended)` when a file runs out but silence plays
+  on); `latest_iter(..).feed()` is `with_state()` as one;
+  `Feed::from((value, state))` wraps a pair.
+
 ## Files, sound and images
 
 Off-by-default features bring the outside world in, each working on its
@@ -2427,8 +2471,9 @@ watch_path(&dir, move |_event, _cx| entries.set(list_dir(&dir)))?;
     before the terminal is taken; inside the app, `capture.samples()` is
     the signal and `capture.status()` the core's `FeedState` (`Running`,
     `Stalled(since)` on the app's clock, `Failed(why)`, `Ended` once
-    `capture.stop()`ped) to end the app on, scope-tui's `--timeout`: a
-    capture is a `latest_with_state` feed.
+    `capture.stop()`ped) to end the app on, scope-tui's `--timeout`
+    (`.stall_after(None)`: never, as scope-tui's `pulse` source);
+    `capture.feed()` is both as the core's `Feed`.
   - `audio::devices()` lists the inputs as `Device { id, name, default,
     host }` (none, not a panic, on a machine without sound): the id is
     what `input` takes (ALSA's `null`, `pulse`, `hw:CARD=…`), the name
@@ -2447,20 +2492,48 @@ watch_path(&dir, move |_event, _cx| entries.set(list_dir(&dir)))?;
     reads raw PCM (`parec`'s, `arecord`'s) as buffers, `audio::play(pcm,
     rate)` plays them onto a signal at the sample rate and then silence
     (`latest_iter` at a buffer's time apart), and `Frame`, `Matrix` and
-    `deinterleave` are there. `audio::Capture::simulated(frames, period)`
-    is a capture with no sound card, its buffers a period apart: a test
-    calls `stall()` (and `resume()`) or `fail(why)` on a clone, and sees
-    the status turn `Stalled` after `.stall_after(d)` or `Failed`, on the
-    app's clock under `wait_for_tasks(true)`. With
-    **`wav`**, `audio::wav(path, buffer)` reads WAV files the same way,
-    `audio::wav_writer` writes one, and `audio::record(samples, path,
-    rate, channels)` records a frame signal while the app runs (hound).
+    `deinterleave` are there. A read error ends the buffers and stays in
+    `pcm.error()` (`try_next()` gives it as a `Result`).
+    `audio::Capture::simulated(frames, period)` is a capture with no sound
+    card, its buffers a period apart: a test calls `stall()` (and
+    `resume()`) or `fail(why)` on a clone, and sees the status turn
+    `Stalled` after `.stall_after(d)` or `Failed`, on the app's clock
+    under `wait_for_tasks(true)`. Every source is a `Capture`, the shape
+    of a sound card's: `Capture::generated(frames, period)` (a tone, a
+    demo signal: `Ended` once the frames run out) and
+    `Capture::from_pcm(pcm, rate)` (a file or a pipe played at its rate,
+    `Ended` and then silence, as scope-tui pads a file, or `Failed` with
+    the read error, scope-tui's "data source returned null"). With
+    **`wav`**, `audio::wav(path, buffer)` reads WAV files the same way
+    (`seek(to)` reads on from a time), `audio::wav_writer` writes one,
+    and `audio::record(samples, path, rate, channels)` records a frame
+    signal while the app runs (hound).
+  - **Playing sound:** `audio::output(OutputOptions::new())` opens a
+    sound card output (`audio`; `output_devices(host)` lists them): an
+    `Output` to `write` interleaved samples or `write_matrix` buffers to,
+    a quarter second queued ahead, with `set_paused`, `set_volume` and
+    `clear` (a seek) at once. **`audio::player(PlayerOptions::new()
+    .output(out))`** is a music player's model on the core's `transport`:
+    `queue(tracks)`, `play_track(i)`, `toggle`, `next`, `previous` (the
+    track's start, or the one before in its first three seconds), `seek`,
+    `seek_by`, `set_volume`, `set_speed` (the pitch moves with it), with
+    gapless playback by default; `player.transport()` is the play head
+    for a progress bar, `track()` the one playing, `error()` why one was
+    skipped. Tracks are `Source`s (`rate`, `channels`, `duration`,
+    `seek`, `next_buffer`): `open_source(path)` opens WAV with `wav`,
+    `audio::clip(rate, samples)` is one in memory, and
+    `PlayerOptions::opener(..)` takes a decoder of your own. Without an
+    output (a test, a machine with no sound card) the transport runs
+    alone. Other codecs (MP3, FLAC, Ogg) are later work.
 
   For a spectrum, rs-rich-ext's `rich_ext::dsp` has `fft` (any length),
   `hann`, `spectrum(samples, rate)` and `spectrum_full`; `bands(spectrum,
   n, lo_hz, hi_hz)` (log-spaced, cava's) with `Falloff::gravity(g)` for
   bars that fall; `peak_hz(spectrum)` and `nearest_note(hz)` (`("A", 4,
-  cents)`) for a tuner; `note_hz` and `NoteTable::ScopeTui` (scope-tui's
+  cents)`), and `Tuner` (`tuner.listen(samples, rate)` or
+  `update(spectrum)`: a `Reading` of the note, octave, cents and Hz,
+  smoothed within a note, taken at once on a new one, held through a
+  few quiet spectra) for a tuner; `note_hz` and `NoteTable::ScopeTui` (scope-tui's
   rounded table, octave 0 by default); and a test signal without a sound
   card: `tone`, `partials`, `noise` and `mix`.
 
@@ -2476,8 +2549,18 @@ renderable(move || samples.with(|f| oscilloscope(f.as_ref())))
   (`Contain` centres, `Stretch` ignores the aspect), `.mode(ImageMode::
   Quadrants)` (or `Braille`, `Ascii`) draws with other cells, and
   `image_of(move || selected.get(), view)` follows a path that changes, as
-  a preview pane does. Kitty and Sixel pixels are not drawn yet: they need
-  escapes outside the cells, which the screen does not pass through.
+  a preview pane does. `image_bytes(bytes, view)` and
+  `image_bytes_of(|| cover.get(), view)` draw an image in memory (a cover
+  embedded in a song).
+  - **Real pixels:** `ImageView::new().pixels(Pixels::detect())` (or
+    `Pixels::Kitty`, `Sixel`, `Iterm`) with
+    `App::graphics(image_graphics())`: the node keeps its half blocks in
+    the cells, tagged, and after each frame the app draws the picture
+    over them (Sixel, iTerm2) only when it is new, moved or written
+    under; for Kitty the cells are its Unicode placeholders and the
+    picture is uploaded once, and freed when the app ends. Without the
+    app's source a Sixel or iTerm2 view is plain half blocks, so the
+    frame stays exact in any terminal.
 
 A file manager's other parts are in rs-rich-ext: `rich_ext::filetype`
 (Yazi's icons and type colours, MIME types, a Nerd Font check) and
@@ -2533,7 +2616,9 @@ App::new(|| {
   stays on its entry, by path, through a re-sort, a filter, hidden files
   shown and a refresh. `find_next(previous)` is Yazi's `n` and `N` over
   the find query (the core's `list_search`), and `visited()` the
-  directories shown so far.
+  directories shown so far. `columns.navigation_with(node, &[(Move::Up,
+  "k up", "Previous file"), ..])` and `columns.go(Move::Top)` bind the
+  moves in Yazi's own words (the core's, forwarded; `files::Move`).
 - **Column options:** `view_with(MillerOptions::new() …)` takes markers,
   git signs (`.git(status)`), the hovered row's rounded ends in its type
   colour (`.hovered_caps(open, close)`, on the list's
@@ -2546,14 +2631,22 @@ App::new(|| {
   per tab (the core's `tab_set` and `history`): `open`, `close_active`,
   `switch`, `cycle`, `swap`, `back` and `forward` (Yazi's `H` and `L`),
   `rename`, and `strip()`, a tab strip of their titles. Wherever the
-  columns go, the active tab follows.
+  columns go, the active tab follows. With a `selection` over the same
+  columns, each tab has its own selection and visual mode behind the one
+  handle (`MultiSelect::scoped`): `v` in one tab leaves the others as
+  they were.
 - **The selection and yanking:** `selection(columns)` is the core's
   `multi_select` over the current column by path, marked in the columns,
   with a visual range that follows the cursor (`visual(unset)`,
   `end_visual`); `columns.targets()` is what an action acts on, the
   selection or else the hovered file. `Yank::copy(paths)` and
   `Yank::cut(paths)` hold what `y` and `x` took: `Yank::markers(signal)`
-  marks them, `yank.paste(into, Conflict::Rename)` is the `Op` to run.
+  marks them, `yank.paste(into, Conflict::Rename)` is the `Op` to run,
+  and `yank.link(into, kind)` the one that links them instead (Yazi's
+  `-`, `LinkKind::Symbolic { relative: false }`; `_`, relative; Ctrl+-,
+  `LinkKind::Hard`), as rs-rich-ext's `Op::Link`. The parent column marks
+  the selection too, by path, in the theme's `marker.selected`
+  (`marks_by`).
 - **A directory model:** `dir_model(|| Some(dir))` holds a directory's
   entries as memos, sorted (`model.sort`), hidden files shown or not
   (`model.hidden`), filtered (`model.filter`, smart case), read again on
@@ -2579,7 +2672,12 @@ App::new(|| {
   entry's. `.previewer(|path, mime, settings| ..)` adds your own;
   `.binary(BinaryPreview::FileType)` shows a binary file as `file -bL`
   classifies it (`Previewer::file_type()`, a MIME description without
-  `file`) instead of a hex dump.
+  `file`) instead of a hex dump. `Previewer::command("application/pdf",
+  &["pdftoppm", "-png", "-singlefile", "-f", "1", "-l", "1", "%s"])` runs
+  an external previewer, as Yazi's `pdftoppm` and `ffmpegthumbnailer`
+  (`video/*` with `-o %o`): output that is an image is shown as one
+  (with `art`), anything else as text; `%s` is the path, `%o` a file to
+  write to, `%w` the pane's width.
 - **Opening:** `open_with(cx, &opener, paths, |cx| ..)` runs one of
   `rich_ext::open`'s openers (`opener_rules()` is Yazi's defaults): a
   blocking one (the editor) gets the terminal through `cx.handoff_then`,
@@ -2605,18 +2703,27 @@ App::new(|| {
   does; Esc closes its modal (or runs `.on_cancel(..)`).
 - **Frecency:** `frecency().follow(columns)` counts a visit to each
   directory shown and ranks them as zoxide does (`ranked()`, best
-  first), in a small file in the user's state directory (`state_dir()`;
-  `frecency_at(file)` names one), written whole and renamed into place:
-  Yazi's `Z` across sessions.
+  first), in a small file in the user's state directory (`state_dir()`,
+  the core's `state_dir("intuituive")`; `frecency_at(file)` names one):
+  the core's `FrecencyStore` keyed by paths, so two windows' visits add
+  up. Yazi's `Z` across sessions.
 - **Searching:** `search(root, query, SearchKind::Name | Grep)` runs
   `fd` or `rg` (else a walk of its own), its results streaming in;
-  `columns.show_search(found)` lists them in the current column, each
-  named by its path from the root and previewed as any entry, until the
-  columns go elsewhere or `end_search()` (Yazi's `s` and `S`).
+  `columns.show_search(found)` lists them as a level of their own at the
+  root (the core's `overlay`, Yazi's `search://` folder), each named by
+  its path from the root and previewed as any entry: `l` on a directory
+  found goes there, `h` goes back to the directory searched, on the
+  entry hovered before, and `end_search()` does too (Yazi's `s` and
+  `S`).
+- **A file picker:** `pick_file(cx, start, |path| filter, |path, cx|
+  ..)` asks for a file in a modal of Miller's columns: Enter enters a
+  directory or picks a file the filter takes (one it refuses stays, with
+  a warning), Esc cancels. Bubbles' `filepicker`, Textual's
+  `DirectoryTree` in a dialog.
 - **The spotter, bulk rename, a shell:** `spot(path)` is the core's
   `facts` with a file's name, path, MIME type, size, mode, owner, times
-  and link target. `bulk_rename(cx, paths, |renamed, cx| ..)` puts the
-  names in a file for `$EDITOR` and renames what changed when it ends
+  and link target. `bulk_rename(cx, paths, |renamed, cx| ..)` edits the
+  names in `$EDITOR` (the core's `cx.edit_text`) and renames what changed when it ends
   (files may swap names; a name in use is reported). `shell(cx, paths,
   ShellOptions::new())` prompts for a command and runs it on them as
   Yazi's `;` (in the background, or as a job with `.tasks(jobs)`) or `:`
@@ -2631,10 +2738,8 @@ App::new(|| {
   the FreeDesktop trash on Linux and the BSDs, the Finder's on macOS, the
   Recycle Bin on Windows.
 
-Kitty and Sixel images are not drawn yet: rs-rich-ext's `Surface` has a
-graphics side channel (`Surface::graphics`, `frame::graphics::plan`) and
-rs-rich-art encodes both protocols, but intuiTUIve's paint step does not
-use it.
+Image previews draw in pixels with the `art` feature's `Pixels` and
+`image_graphics` (see above).
 
 ## Levels, sparklines and big text
 
@@ -2685,25 +2790,29 @@ big_text(move || format!("[accent]{:02}[/]:{:02}", minutes.get(), seconds.get())
   clock, a readout, a title.
 - **`digits(markup)`** draws markup three rows tall in box-drawing
   glyphs, as Textual's `Digits`, in every build (no font): `0`-`9`,
-  `A`-`F`, `+ - = / % ( ) : . ,` and the space, any other character as it
-  is. A clock or a counter where the `art` feature is off.
+  `A`-`G`, `+ - = / % ( ) : . , #` and the space, any other character as
+  it is. A clock, a counter or a note name where the `art` feature is
+  off.
+- **`tuner(|| reading)`** (`viz`) is a tuner's readout of an rs-rich-ext
+  `dsp::Tuner` reading: the note in `digits`, a needle from flat to sharp
+  with the note in the middle, and the frequency and cents, green within
+  5 cents, yellow within 15, red beyond; `no signal` without one.
 
 Each says what it shows to a screen reader: the meter its level, peaks and
 band, the sparkline its range and trend, the spectrogram its range and
 where the newest spectrum peaks, the bar spectrum its loudest band, big
 text and digits their text.
 
-For a scope's persistence (older traces fading, as a phosphor's),
-rs-rich-ext's `chart::Persistence::new(frames)` turns the last frames
-(`recent(trace, 8)`) into a `Chart`'s datasets, each older one fainter;
-draw them with `Layering::PerDataset`.
+For a scope's persistence (older traces fading, as a phosphor's), the
+`viz` plugin's **`persistence(|| frames)`** draws rs-rich-ext's
+`chart::Persistence` of the last frames (`recent(trace, 8)`) on a
+`Chart`, each older one fainter, the newest on top, the axes spanning the
+points; `persistence_with(frames, |p| p.style("#33ff66").fade(0.2),
+|chart| chart.x_axis(..))` sets up the trace and the chart.
 
 ```rust
 let traces = recent(trace, 8);
-renderable(move || {
-    let fading = Persistence::new(traces.get()).style("#33ff66").fade(0.2);
-    Chart::new(fading.datasets()).layering(Layering::PerDataset)
-})
+persistence_with(move || traces.get(), |p| p.style("#33ff66").fade(0.2), |chart| chart)
 ```
 
 ## Themes

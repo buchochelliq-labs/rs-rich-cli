@@ -142,6 +142,7 @@ mod table_scroll;
 pub mod task;
 pub mod testing;
 mod text_area;
+pub mod transport;
 mod tree;
 #[cfg(feature = "viz")]
 mod viz;
@@ -169,11 +170,16 @@ pub use dialog::{ConfirmOptions, PickOptions, PromptOptions};
 pub use digits::digits;
 pub use effect::{effect, fill};
 pub use facts::{facts, facts_of};
-pub use feed::{latest_iter, latest_with_state, FeedEnd, FeedState, Pace, Play};
+pub use feed::{
+    latest_feed, latest_iter, latest_with_state, Feed, FeedEnd, FeedState, FeedTeller, Pace, Play,
+};
 pub use finder::{finder_of, fuzzy_list, fuzzy_list_with, FuzzyOptions, FuzzySource};
 pub use help::{HelpOptions, KeyFormat};
 #[cfg(feature = "art")]
-pub use image::{image, image_of, image_with, ImageAnchor, ImageFit, ImageMode, ImageView};
+pub use image::{
+    image, image_bytes, image_bytes_of, image_graphics, image_of, image_with, ImageAnchor,
+    ImageFit, ImageMode, ImageView, Pixels,
+};
 pub use input::{input, number_input};
 pub use jobs::{
     jobs, jobs_panel, jobs_panel_with, Job, JobOutcome, JobProgress, JobState, Jobs,
@@ -203,16 +209,17 @@ pub use state::{
     frecency_in, frecency_session, frecency_store, read_state, state_dir, state_file, update_file,
     update_state, write_atomic, write_state, FrecencyStore,
 };
-pub use tab_set::{tab_set, tabs_for, tabs_for_indexed, TabSet};
+pub use tab_set::{tab_set, tabs_for, tabs_for_indexed, Scoped, TabSet};
 pub use task::{
     latest, latest_every, resource, resource_for, spawn, spawn_future, spawn_stream, spawn_then,
     Latest, Load, Notifier, Resource, Stream, Task,
 };
 pub use text_area::Caret;
+pub use transport::{transport, Transport};
 #[cfg(feature = "viz")]
 pub use viz::{
-    bar_spectrum, bar_spectrum_with, meter, meter_with, sparkline, sparkline_with, spectrogram,
-    spectrogram_with,
+    bar_spectrum, bar_spectrum_with, meter, meter_with, persistence, persistence_with, sparkline,
+    sparkline_with, spectrogram, spectrogram_with, tuner,
 };
 #[cfg(feature = "watch")]
 pub use watch::{

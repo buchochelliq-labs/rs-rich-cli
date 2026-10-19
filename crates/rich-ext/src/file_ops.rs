@@ -1,5 +1,5 @@
-//! File operations as a file manager runs them: copy, move, delete and
-//! trash, reporting progress as they go and stopping when cancelled, with
+//! File operations as a file manager runs them: copy, move, link, delete
+//! and trash, reporting progress as they go and stopping when cancelled, with
 //! Yazi's rules for names that are taken (a copy gets `_1`, `_2`… before
 //! its extension) and for directories pasted into themselves (refused).
 //!
@@ -45,6 +45,20 @@ pub enum Conflict {
     Skip,
 }
 
+/// What kind of link [`Op::Link`] makes.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum LinkKind {
+    /// A symbolic link to the file: to its absolute path (Yazi's `-`), or
+    /// with `relative`, to its path from the link's directory (`_`), so the
+    /// two can move together.
+    Symbolic { relative: bool },
+    /// A hard link (Yazi's Ctrl+-): another name for the same file. A
+    /// directory is made again with hard links to the files in it, as
+    /// directories cannot be hard linked; a symbolic link is copied as a
+    /// link.
+    Hard,
+}
+
 /// A file operation over some paths.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Op {
@@ -68,6 +82,15 @@ pub enum Op {
     /// Move to the platform's trash ([`crate::trash::send`]): the
     /// FreeDesktop trash, the Finder's, the Recycle Bin.
     Trash(Vec<PathBuf>),
+    /// Link each of `from` into the directory `into`, under its own name,
+    /// as `kind` says (Yazi's `-`, `_` and Ctrl+- on the files yanked). A
+    /// name that is taken is treated as `conflict` says.
+    Link {
+        from: Vec<PathBuf>,
+        into: PathBuf,
+        kind: LinkKind,
+        conflict: Conflict,
+    },
 }
 
 impl Op {
@@ -91,13 +114,22 @@ impl Op {
             Op::Move { from, into, .. } => format!("Move {} to {}", count(from), name(into)),
             Op::Delete(paths) => format!("Delete {}", count(paths)),
             Op::Trash(paths) => format!("Trash {}", count(paths)),
+            Op::Link {
+                from, into, kind, ..
+            } => {
+                let what = match kind {
+                    LinkKind::Symbolic { .. } => "Link",
+                    LinkKind::Hard => "Hard link",
+                };
+                format!("{what} {} in {}", count(from), name(into))
+            }
         }
     }
 
     /// The paths it works on.
     pub fn paths(&self) -> &[PathBuf] {
         match self {
-            Op::Copy { from, .. } | Op::Move { from, .. } => from,
+            Op::Copy { from, .. } | Op::Move { from, .. } | Op::Link { from, .. } => from,
             Op::Delete(paths) | Op::Trash(paths) => paths,
         }
     }
@@ -156,8 +188,12 @@ pub fn run(op: &Op, cancel: &CancelToken, progress: &mut dyn FnMut(&Progress)) -
     };
     for path in op.paths() {
         let (items, bytes) = match op {
-            Op::Trash(_) => (1, 0),
-            Op::Delete(_) => (count(path).0, 0),
+            Op::Trash(_)
+            | Op::Link {
+                kind: LinkKind::Symbolic { .. },
+                ..
+            } => (1, 0),
+            Op::Delete(_) | Op::Link { .. } => (count(path).0, 0),
             _ => count(path),
         };
         runner.progress.total_items += items;
@@ -180,6 +216,12 @@ pub fn run(op: &Op, cancel: &CancelToken, progress: &mut dyn FnMut(&Progress)) -
                 runner.progress.items += 1;
                 runner.tell();
             }),
+            Op::Link {
+                into,
+                kind,
+                conflict,
+                ..
+            } => runner.link(path, into, *kind, *conflict),
         };
         if let Err(error) = done {
             if error.kind() != io::ErrorKind::Interrupted {
@@ -355,6 +397,101 @@ impl Runner<'_> {
         Ok(())
     }
 
+    /// Link `from` into the directory `into`.
+    fn link(
+        &mut self,
+        from: &Path,
+        into: &Path,
+        kind: LinkKind,
+        conflict: Conflict,
+    ) -> io::Result<()> {
+        let Some(name) = from.file_name() else {
+            return Ok(());
+        };
+        let meta = std::fs::symlink_metadata(from)?;
+        let mut target = into.join(name);
+        if std::fs::symlink_metadata(&target).is_ok() {
+            match conflict {
+                Conflict::Rename => target = unique(&target),
+                Conflict::Skip => {
+                    self.progress.items += match kind {
+                        LinkKind::Symbolic { .. } => 1,
+                        LinkKind::Hard => count(from).0,
+                    };
+                    self.tell();
+                    return Ok(());
+                }
+                Conflict::Overwrite => {
+                    if target == from {
+                        return Err(io::Error::new(
+                            io::ErrorKind::InvalidInput,
+                            "can't link a file over itself",
+                        ));
+                    }
+                    remove_all(&target)?;
+                }
+            }
+        }
+        match kind {
+            LinkKind::Symbolic { relative } => {
+                let from = absolute(from)?;
+                let to = if relative {
+                    relative_to(&from, &absolute(into)?)
+                } else {
+                    from.clone()
+                };
+                symlink(&to, &target, meta.is_dir())?;
+                self.progress.items += 1;
+                self.tell();
+            }
+            LinkKind::Hard => {
+                if meta.is_dir() && into.starts_with(from) {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "can't go inside itself",
+                    ));
+                }
+                self.hard_link(from, &target)?;
+            }
+        }
+        self.report.made.push(target);
+        Ok(())
+    }
+
+    /// Hard link `from` at `to`: a directory made again, its files hard
+    /// linked; a symbolic link copied as a link.
+    fn hard_link(&mut self, from: &Path, to: &Path) -> io::Result<()> {
+        if self.stopped() {
+            return Err(interrupted());
+        }
+        self.progress.current = Some(from.to_path_buf());
+        let meta = std::fs::symlink_metadata(from)?;
+        if meta.file_type().is_symlink() {
+            let points = std::fs::read_link(from)?;
+            let dir = std::fs::metadata(from).is_ok_and(|m| m.is_dir());
+            symlink(&points, to, dir)?;
+        } else if meta.is_dir() {
+            std::fs::create_dir(to)?;
+            let mut names: Vec<_> = std::fs::read_dir(from)?
+                .filter_map(Result::ok)
+                .map(|e| e.file_name())
+                .collect();
+            names.sort();
+            self.progress.items += 1;
+            self.tell();
+            for name in names {
+                self.hard_link(&from.join(&name), &to.join(&name))?;
+            }
+            std::fs::set_permissions(to, meta.permissions())?;
+            return Ok(());
+        } else {
+            std::fs::hard_link(from, to)?;
+        }
+        self.progress.items += 1;
+        self.tell();
+        Ok(())
+    }
+
     fn delete(&mut self, path: &Path) -> io::Result<()> {
         if self.stopped() {
             return Err(interrupted());
@@ -373,6 +510,89 @@ impl Runner<'_> {
         self.tell();
         Ok(())
     }
+}
+
+/// A symbolic link at `link` to `to` (a directory's link on Windows).
+fn symlink(to: &Path, link: &Path, dir: bool) -> io::Result<()> {
+    #[cfg(unix)]
+    {
+        let _ = dir;
+        std::os::unix::fs::symlink(to, link)
+    }
+    #[cfg(windows)]
+    {
+        if dir {
+            std::os::windows::fs::symlink_dir(to, link)
+        } else {
+            std::os::windows::fs::symlink_file(to, link)
+        }
+    }
+    #[cfg(not(any(unix, windows)))]
+    {
+        let _ = (to, link, dir);
+        Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "symbolic links are not supported here",
+        ))
+    }
+}
+
+/// `path` made absolute against the working directory, `.` and `..`
+/// resolved by name (links are not followed: a link's path is linked to,
+/// as Yazi does).
+fn absolute(path: &Path) -> io::Result<PathBuf> {
+    let joined = if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        std::env::current_dir()?.join(path)
+    };
+    let mut out = PathBuf::new();
+    for part in joined.components() {
+        match part {
+            Component::ParentDir => {
+                out.pop();
+            }
+            Component::CurDir => {}
+            other => out.push(other),
+        }
+    }
+    Ok(out)
+}
+
+/// The path from the directory `base` to `path`, both absolute:
+/// `../docs/a.txt`. Where they share no root (two drives), `path` itself.
+///
+/// ```
+/// use std::path::Path;
+/// use rich_ext::file_ops::relative_to;
+///
+/// assert_eq!(relative_to(Path::new("/home/a/docs/x.md"), Path::new("/home/a/links")), Path::new("../docs/x.md"));
+/// assert_eq!(relative_to(Path::new("/home/a/x.md"), Path::new("/home/a")), Path::new("x.md"));
+/// ```
+pub fn relative_to(path: &Path, base: &Path) -> PathBuf {
+    let (path_parts, base_parts): (Vec<_>, Vec<_>) =
+        (path.components().collect(), base.components().collect());
+    let shared = path_parts
+        .iter()
+        .zip(&base_parts)
+        .take_while(|(a, b)| a == b)
+        .count();
+    let rooted = |parts: &[Component]| {
+        parts
+            .first()
+            .is_some_and(|c| matches!(c, Component::Prefix(_) | Component::RootDir))
+    };
+    if shared == 0 && (rooted(&path_parts) || rooted(&base_parts)) {
+        return path.to_path_buf();
+    }
+    let mut out = PathBuf::new();
+    for _ in shared..base_parts.len() {
+        out.push("..");
+    }
+    for part in &path_parts[shared..] {
+        out.push(part);
+    }
+    out
 }
 
 /// Remove `path`: a link itself (never what it points to), a file, or a
@@ -558,6 +778,75 @@ mod tests {
         std::fs::remove_dir_all(&dir).ok();
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn links_absolute_relative_and_hard() {
+        let dir = base("link");
+        let link = |kind| {
+            quiet(&Op::Link {
+                from: vec![dir.join("src/a.txt"), dir.join("src/inner")],
+                into: dir.join("dst"),
+                kind,
+                conflict: Conflict::Rename,
+            })
+        };
+        let report = link(LinkKind::Symbolic { relative: false });
+        assert!(report.errors.is_empty(), "{report:?}");
+        assert_eq!(report.made, [dir.join("dst/a.txt"), dir.join("dst/inner")]);
+        assert_eq!(
+            std::fs::read_link(dir.join("dst/a.txt")).unwrap(),
+            dir.join("src/a.txt")
+        );
+        assert_eq!(
+            std::fs::read_to_string(dir.join("dst/inner/b.txt")).unwrap(),
+            "bb"
+        );
+        // Again, relative: the names are taken, so a_1.txt and inner_1.
+        let report = link(LinkKind::Symbolic { relative: true });
+        assert!(report.errors.is_empty(), "{report:?}");
+        assert_eq!(
+            std::fs::read_link(dir.join("dst/a_1.txt")).unwrap(),
+            Path::new("../src/a.txt")
+        );
+        assert_eq!(
+            std::fs::read_link(dir.join("dst/inner_1")).unwrap(),
+            Path::new("../src/inner")
+        );
+        // Hard links: the same file, a directory made again.
+        std::fs::remove_dir_all(dir.join("dst")).unwrap();
+        std::fs::create_dir(dir.join("dst")).unwrap();
+        let mut last = Progress::default();
+        let report = run(
+            &Op::Link {
+                from: vec![dir.join("src")],
+                into: dir.join("dst"),
+                kind: LinkKind::Hard,
+                conflict: Conflict::Rename,
+            },
+            &CancelToken::new(),
+            &mut |p| last = p.clone(),
+        );
+        assert!(report.errors.is_empty(), "{report:?}");
+        assert_eq!((last.items, last.total_items), (4, 4));
+        let meta = std::fs::symlink_metadata(dir.join("dst/src/inner/b.txt")).unwrap();
+        assert!(meta.is_file());
+        std::fs::write(dir.join("src/inner/b.txt"), "changed").unwrap();
+        assert_eq!(
+            std::fs::read_to_string(dir.join("dst/src/inner/b.txt")).unwrap(),
+            "changed"
+        );
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn relative_paths_climb_to_what_they_share() {
+        assert_eq!(
+            relative_to(Path::new("/a/b/c.txt"), Path::new("/a/d/e")),
+            Path::new("../../b/c.txt")
+        );
+        assert_eq!(relative_to(Path::new("/a"), Path::new("/a")), Path::new(""));
+    }
+
     #[test]
     fn titles() {
         let op = Op::Copy {
@@ -569,6 +858,17 @@ mod tests {
         assert_eq!(
             Op::Delete(vec![PathBuf::from("a"), PathBuf::from("b")]).title(),
             "Delete 2 items"
+        );
+        let link = |kind| Op::Link {
+            from: vec![PathBuf::from("/a/x.txt")],
+            into: PathBuf::from("/b/docs"),
+            kind,
+            conflict: Conflict::Rename,
+        };
+        assert_eq!(link(LinkKind::Hard).title(), "Hard link x.txt in docs");
+        assert_eq!(
+            link(LinkKind::Symbolic { relative: true }).title(),
+            "Link x.txt in docs"
         );
     }
 }

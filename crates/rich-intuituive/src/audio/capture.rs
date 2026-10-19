@@ -29,7 +29,7 @@ pub enum Host {
 }
 
 impl Host {
-    fn open(self) -> Result<cpal::Host, AudioError> {
+    pub(super) fn open(self) -> Result<cpal::Host, AudioError> {
         match self {
             Host::Default => Ok(cpal::default_host()),
             #[cfg(target_os = "linux")]
@@ -172,7 +172,7 @@ pub fn devices_on(host: Host) -> Result<Vec<Device>, AudioError> {
 }
 
 /// A device's id without its host's prefix.
-fn id_of(device: &cpal::Device) -> Option<String> {
+pub(super) fn id_of(device: &cpal::Device) -> Option<String> {
     device.id().ok().map(|id| id.id().to_string())
 }
 
@@ -185,7 +185,7 @@ pub struct AudioOptions {
     channels: u16,
     buffer: usize,
     latency: Option<u32>,
-    stall: Duration,
+    stall: Option<Duration>,
 }
 
 impl Default for AudioOptions {
@@ -205,7 +205,7 @@ impl AudioOptions {
             channels: 2,
             buffer: 1024,
             latency: None,
-            stall: Duration::from_secs(1),
+            stall: Some(Duration::from_secs(1)),
         }
     }
 
@@ -257,9 +257,10 @@ impl AudioOptions {
 
     /// How long without a buffer before the [`status`](Capture::status)
     /// says [`FeedState::Stalled`](crate::FeedState::Stalled) (default a
-    /// second, on the app's clock): the `--timeout` of a scope.
-    pub fn stall_after(mut self, quiet: Duration) -> Self {
-        self.stall = quiet.max(Duration::from_millis(1));
+    /// second, on the app's clock): the `--timeout` of a scope. `None`:
+    /// never, as scope-tui's `pulse` source, which blocks with no timeout.
+    pub fn stall_after(mut self, quiet: impl Into<Option<Duration>>) -> Self {
+        self.stall = quiet.into().map(|q| q.max(Duration::from_millis(1)));
         self
     }
 }
@@ -339,12 +340,12 @@ pub fn messages() -> Vec<String> {
 
 /// While it lives, ALSA's messages on this thread are kept off stderr.
 #[cfg(target_os = "linux")]
-fn quiet() -> super::alsa::Quiet {
+pub(super) fn quiet() -> super::alsa::Quiet {
     super::alsa::Quiet::new()
 }
 
 #[cfg(not(target_os = "linux"))]
-fn quiet() {}
+pub(super) fn quiet() {}
 
 /// Keep `stream` until the capture stops (or its app ends), passing
 /// ALSA's messages on a few times a second.
@@ -383,7 +384,7 @@ fn keep(stream: cpal::Stream, shared: &Arc<Shared>) {
 /// Open and start the stream that feeds a new capture.
 fn start(
     options: &AudioOptions,
-    stall: Duration,
+    stall: Option<Duration>,
 ) -> Result<(cpal::Stream, Arc<Shared>), AudioError> {
     let host = options.host.open()?;
     let device = match &options.device {

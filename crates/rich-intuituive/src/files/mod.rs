@@ -24,7 +24,9 @@
 //!   dropped.
 //! - [`miller`]: Miller columns, the parent, the current directory and the
 //!   preview over one cursor, with remembered positions, clicks that
-//!   navigate and Yazi's movement keys ([`Miller::navigation`]).
+//!   navigate and Yazi's movement keys ([`Miller::navigation`], or your
+//!   own wording with [`Miller::navigation_with`]); a search's results
+//!   listed as a level of their own ([`Miller::show_search`]).
 //! - [`open_with`]: runs one of rs-rich-ext's [openers](rich_ext::open)
 //!   (Yazi's `[open]` rules): an editor gets the terminal through a
 //!   handoff, the system's opener runs in the background.
@@ -39,13 +41,16 @@
 //!   [`history`](crate::history)).
 //! - [`selection`] and [`Yank`]: what actions act on
 //!   ([`Miller::targets`]), on the core's
-//!   [`multi_select`](crate::multi_select), and files yanked to paste.
+//!   [`multi_select`](crate::multi_select), one per tab with [`tabs`];
+//!   files yanked to paste, or to link ([`Yank::link`]).
 //! - [`frecency`]: directories ranked by visits, kept across sessions
-//!   (Yazi's `Z` over zoxide).
+//!   (Yazi's `Z` over zoxide), on the core's
+//!   [`FrecencyStore`](crate::FrecencyStore).
 //! - [`search`]: a search by name or content (`fd`, `rg`, else a walk)
 //!   whose results Miller lists ([`Miller::show_search`]).
 //! - [`spot`], [`bulk_rename`] and [`shell`]: a file's details, renaming
 //!   in `$EDITOR`, a command on the selection.
+//! - [`pick_file`]: a file picker, Miller's columns in a modal.
 //! - [`path_crumb`]: a path as a header, the home directory as `~`.
 //! - [`git_status`]: `git status` per file, loaded in the background.
 //! - [`hex_view`]: the core's scrolling hex dump, re-exported.
@@ -79,6 +84,7 @@ mod frecency;
 mod miller;
 mod model;
 mod open;
+mod pick;
 mod preview;
 mod row;
 mod search;
@@ -90,6 +96,9 @@ mod tasks;
 
 use std::sync::atomic::Ordering;
 
+/// The moves of Miller's columns, for [`Miller::go`] and
+/// [`Miller::navigation_with`]: the core's.
+pub use crate::miller::Move;
 /// The core's [`hex_view`](crate::widgets::hex_view), here too.
 pub use crate::widgets::hex_view;
 pub use crumb::{home_dir, path_crumb, path_crumb_at, path_parts};
@@ -98,6 +107,7 @@ pub use frecency::{frecency, frecency_at, state_dir, Frecency, Visit};
 pub use miller::{miller, Miller, MillerOptions};
 pub use model::{dir_model, dir_model_with, git_status, DirModel};
 pub use open::{open_with, open_with_tasks, opener_rules};
+pub use pick::pick_file;
 pub use preview::{
     load_preview, preview, BinaryPreview, Preview, PreviewOptions, PreviewSettings, Previewer,
 };
@@ -112,6 +122,8 @@ pub use spot::{spot, spot_facts};
 pub use tabs::{tabs, FileTab, FileTabs};
 pub use tasks::{tasks, tasks_panel, tasks_panel_with, Job, JobState, JobsPanelOptions, Tasks};
 
+/// What kind of link [`Yank::link`] makes, from rs-rich-ext.
+pub use rich_ext::file_ops::LinkKind;
 /// The listing types the components take, from rs-rich-ext.
 pub use rich_ext::git::{Change, GitStatus};
 pub use rich_ext::listing::{Entry, Sort, SortBy};
