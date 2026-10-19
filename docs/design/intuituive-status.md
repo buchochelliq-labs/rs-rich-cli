@@ -58,7 +58,7 @@ test first, generic core, stay in your area).
 | B | `r6-input` | input drained per frame, start-up keys, Shift+arrows, `Driver::send`; key state and releases, every key, DAS/ARR repeat, `Timer` handles, `fixed_step`, `max_fps`, stats | merged |
 | C | `r6-react` | `.auto()` switches, layers that composite, `keep_last`, titles/borders from state, `shown_when`/`size_with`, focus scopes and direction, `keyed`, treemap, `App::min_size`, fitted text, `key_hints_with`, whole-app help | merged; layers then made single-pass (05305b7: each layer draws once per change, no second pass) |
 | D | `r6-tables` | reactive tables and columns, markers, keyed cursor, offset across, widths and priorities, row heights, keyed/lazy trees, list ranges, `TableSource` and `view_of` | merged |
-| E | `r6-inputs` | completion, history, command line, query language, natural dates, calendar options | in progress (wip-r6-inputs) |
+| E | `r6-inputs` | completion, history, command line, query language, natural dates, calendar options | merged (e4bc67c; full gate green) |
 | F | `r6-parity` | `Text.markup` port with goldens; template manifest | merged |
 | G | `r6-record` | rich-record graphics capture, every frame at a set fps, held keys, APNG; raycaster and Doom videos | merged; Doom videos on rs-rich-doom `claude/doom-frontend` (114c39a) |
 
@@ -67,7 +67,19 @@ under cells with the root's background, so nothing shows (give the view the
 default background, or place at z below -2^30); its held arrow keys count as
 held only after a release was seen.
 
-Then every clone is rebuilt on the fixes.
+## Round 7: the clones rebuilt on round 6
+
+Brief: `/home/user/apps/R7BRIEF.md` in the session (clones use components only; no library edits;
+each clone's gap report gets a "Round 2" section). From e4bc67c:
+
+| Agent | Branch | Clones | State |
+|---|---|---|---|
+| A | `r7-a` | git, tasks (taskwarrior), http | in progress |
+| B | `r7-b` | disk, top, csv | in progress |
+| C | `r7-c` | blocks, raycast (with its Kitty-mode and held-key fixes), music | in progress |
+
+Then: merge, fold the round-2 reports into the gap note, full gate, PRs. rs-rich-doom is pinned to
+866b897 (before round 6); moving it onto pixel cells, held keys, `fixed_step` and stats is open.
 
 **When all of it has landed and the full gate passes: open two PRs** (the
 user asked for this): rs-rich-cli `claude/next-priority-items-3c5p8e` →
