@@ -104,7 +104,7 @@ The same over-long word under each overflow method.
 
 ## Beyond the core
 
-These come from `rs-rich-ext`, `rs-rich-art`, `rs-rich-diagram` and the `rich` command. Each image
+These come from `rs-rich-ext`, `rs-rich-art`, `rs-rich-diagram`, `rs-rich-intuituive` and the `rich` command. Each image
 is the real output of a guide example or CLI command; follow the link for the
 code.
 
@@ -169,6 +169,12 @@ code.
 ![One image in each colour mode](media/guide/guide_images-color-modes.svg)
 
 [Images guide](guide/art/images.md)
+
+### Terminal apps
+
+![A gitui-style git client on intuiTUIve: the log with a branch and a tag](media/tapes/git/log.png)
+
+[Eleven apps, rebuilt](guide/intuituive/clones.md): real terminal apps cloned on intuiTUIve
 
 ### CLI viewers
 
