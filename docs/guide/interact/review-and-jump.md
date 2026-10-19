@@ -162,4 +162,4 @@ assert!(record.frames[0].contains("0/3 decided"));
 ```
 
 The Python bindings are `rs_rich.interact.ApprovalQueue` and `Jump`: see
-[the Python guide](../../python/interact.md#approvalqueue-and-jump).
+[the Python guide](https://buchochelliq-labs.github.io/rs-rich-cli/python/interact/#approvalqueue-and-jump).
