@@ -178,6 +178,14 @@ pub trait Widget: Any {
         Vec::new()
     }
 
+    /// The child whose own size, minimum and maximum the widget's node
+    /// takes while it is sized [`Size::Auto`](crate::Size::Auto): a
+    /// [`switch`](crate::switch)'s shown page, chosen now. Default: none.
+    #[doc(hidden)]
+    fn sized_by(&mut self) -> Option<&Node> {
+        None
+    }
+
     /// Where each of its children goes, in the order of
     /// [`children`](Self::children), given the widget's own `rect` (in
     /// screen coordinates; for a [`viewport`](Self::viewport), in the

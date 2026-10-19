@@ -3,6 +3,7 @@
 //! components and scrolls. They use only what the trait gives any widget,
 //! which is the test that it is enough.
 
+use std::cell::Cell;
 use std::collections::HashMap;
 use std::hash::Hash;
 use std::rc::Rc;
@@ -795,9 +796,14 @@ fn shown_areas(
 /// A border with titles round one child: [`Node::panel`].
 pub(crate) struct Panel {
     pub title: String,
+    /// Its title read from state ([`Node::panel_with`](crate::Node::panel_with)),
+    /// over `title`.
+    pub title_with: Option<Rc<dyn Fn() -> String>>,
     pub child: Node,
-    /// Whether the border was last drawn as focused.
+    /// Whether the border was last drawn as focused, and its kind and
+    /// titles then.
     shown_focus: Option<bool>,
+    shown_look: Option<(Border, Vec<Title>)>,
     /// What a stylesheet says about it.
     pub look: PanelLook,
     /// What code says about it, which wins.
@@ -831,8 +837,14 @@ pub(crate) struct PanelLook {
 pub(crate) struct PanelCode {
     pub title_align: Option<Align>,
     /// More titles, after the panel's own.
-    pub titles: Vec<Title>,
+    pub titles: Vec<CodeTitle>,
     pub border: Option<Border>,
+    /// The kind of box read from state ([`Node::border_with`](crate::Node::border_with)),
+    /// over `border`.
+    pub border_with: Option<Dynamic<Border>>,
+    /// The kind of box while the focus is inside
+    /// ([`Node::focus_border`](crate::Node::focus_border)).
+    pub focus_border: Option<Border>,
     pub sides: Option<Sides>,
     /// A style or a theme style's name, for the border while the focus is
     /// elsewhere, and for the titles.
@@ -841,12 +853,50 @@ pub(crate) struct PanelCode {
     pub shadow: Option<Shadow>,
 }
 
+/// A value read from state when it is used: a panel's title or kind of
+/// box that follows signals.
+#[derive(Clone)]
+pub(crate) struct Dynamic<T>(pub Rc<dyn Fn() -> T>);
+
+impl<T> std::fmt::Debug for Dynamic<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("Dynamic(..)")
+    }
+}
+
+/// A title code gave a panel: fixed markup, or markup read from state
+/// ([`Node::add_title_with`](crate::Node::add_title_with)).
+#[derive(Clone, Debug)]
+pub(crate) enum CodeTitle {
+    Fixed(Title),
+    With(Edge, Align, Dynamic<String>),
+}
+
+impl CodeTitle {
+    fn edge(&self) -> Edge {
+        match self {
+            CodeTitle::Fixed(title) => title.edge,
+            CodeTitle::With(edge, ..) => *edge,
+        }
+    }
+
+    /// The title now, reading what it reads.
+    fn title(&self) -> Title {
+        match self {
+            CodeTitle::Fixed(title) => title.clone(),
+            CodeTitle::With(edge, align, markup) => Title::new(*edge, *align, (markup.0)()),
+        }
+    }
+}
+
 impl Panel {
     pub fn new(title: String, child: Node) -> Panel {
         Panel {
             title,
+            title_with: None,
             child,
             shown_focus: None,
+            shown_look: None,
             look: PanelLook::default(),
             code: PanelCode::default(),
             invalid: false,
@@ -864,11 +914,16 @@ impl Panel {
             .unwrap_or_default()
     }
 
-    /// The title: the one code gave, else the stylesheet's.
-    fn title(&self) -> &str {
-        match (&self.title[..], &self.look.title) {
-            ("", Some(title)) => title,
-            (title, _) => title,
+    /// The title: the one code gave (read now, if it follows state), else
+    /// the stylesheet's.
+    fn title(&self) -> String {
+        let own = match &self.title_with {
+            Some(title) => title(),
+            None => self.title.clone(),
+        };
+        match (&own[..], &self.look.title) {
+            ("", Some(title)) => title.clone(),
+            _ => own,
         }
     }
 
@@ -876,7 +931,11 @@ impl Panel {
     /// `None` when a stylesheet took the frame away (`border: none`) and
     /// code set none.
     fn kind(&self) -> Option<Border> {
-        match self.code.border {
+        let code = match &self.code.border_with {
+            Some(border) => Some((border.0)()),
+            None => self.code.border,
+        };
+        match code {
             Some(kind) => Some(kind),
             None if self.look.no_border => None,
             None => Some(
@@ -910,13 +969,19 @@ impl Panel {
             let align = self.code.title_align.or(self.look.title_align);
             titles.push(Title::new(Edge::Top, align.unwrap_or(Align::Start), own));
         }
-        let code = |edge| self.code.titles.iter().filter(move |t| t.edge == edge);
-        titles.extend(code(Edge::Top).cloned());
+        let code = |edge| {
+            self.code
+                .titles
+                .iter()
+                .filter(move |t| t.edge() == edge)
+                .map(CodeTitle::title)
+        };
+        titles.extend(code(Edge::Top));
         if let Some(subtitle) = self.look.subtitle.as_ref().filter(|s| !s.is_empty()) {
             let align = self.look.subtitle_align.unwrap_or(Align::Start);
             titles.push(Title::new(Edge::Bottom, align, subtitle.clone()));
         }
-        titles.extend(code(Edge::Bottom).cloned());
+        titles.extend(code(Edge::Bottom));
         titles
     }
 
@@ -946,6 +1011,15 @@ impl Panel {
             style = style.combine(&cx.theme().error_style("border.error"));
         }
         style
+    }
+
+    /// Its kind of box `kind`, or [`focus_border`](crate::Node::focus_border)'s
+    /// while the focus is inside.
+    fn kind_now(&self, kind: Border, focused: bool) -> Border {
+        match (focused, self.code.focus_border) {
+            (true, Some(focus)) => focus,
+            _ => kind,
+        }
     }
 
     /// The cells its shadow takes, right and below.
@@ -1031,7 +1105,16 @@ impl Widget for Panel {
         // app, the panel stays as it is, and only its edges change colour
         // when it comes or goes.
         let focused = cx.focus_within();
-        if cx.repaint() || self.shown_focus != Some(focused) {
+        let kind = self.kind_now(kind, focused);
+        // Titles and a kind that follow state draw it again as they change.
+        let titles = self.titles();
+        let look = (kind, titles);
+        if cx.repaint()
+            || self.shown_focus != Some(focused)
+            || self.shown_look.as_ref() != Some(&look)
+        {
+            let (kind, titles) = &look;
+            let kind = *kind;
             let style = self.edge_style(cx, focused);
             let title = match self.code.title_style.as_deref() {
                 // A pop-up's title: the theme's `popup.title`, else its
@@ -1044,13 +1127,12 @@ impl Widget for Panel {
                 None => cx.theme().title.clone(),
             };
             let title_style = style.combine(&title);
-            let titles = self.titles();
             let frame = crate::border::Frame {
                 border: kind,
                 sides: self.sides(),
                 style: &style,
                 title_style: &title_style,
-                titles: &titles,
+                titles,
             };
             let shadow = match self.code.shadow {
                 Some(shadow) if cx.repaint() => {
@@ -1058,9 +1140,17 @@ impl Widget for Panel {
                 }
                 _ => None,
             };
+            // Drawn in full, it covers what is under it inside its frame
+            // too: in `layers`, the layer below shows only round it.
+            if cx.repaint() {
+                let shadow = self.shadow();
+                let (width, height) = (canvas.width(), canvas.height());
+                canvas.fill(0, 0, width - shadow, height - shadow, None);
+            }
             canvas.frame(cx.console(), &frame, self.shadow() == 1, shadow);
         }
         self.shown_focus = Some(focused);
+        self.shown_look = Some(look);
     }
 
     /// [Rules](crate::rule) that reach both sides join them: `├──┤`, in
@@ -1083,7 +1173,9 @@ impl Widget for Panel {
         let (joins_left, joins_right) = (sides.contains(Sides::LEFT), sides.contains(Sides::RIGHT));
         let area = cx.rect;
         let box_right = area.right().saturating_sub(self.shadow());
-        let style = self.edge_style(cx, cx.focus_within());
+        let focused = cx.focus_within();
+        let kind = self.kind_now(kind, focused);
+        let style = self.edge_style(cx, focused);
         for rule in rules {
             let inside = rule.y > area.y && rule.y < area.bottom() && rule.height > 0;
             let from_left = rule.x == area.x + left;
@@ -1122,6 +1214,12 @@ pub(crate) struct TextNode {
     /// Lines too long lose their start, not their end
     /// ([`Node::truncate_start`](crate::Node::truncate_start)).
     pub cut_start: bool,
+    /// Lines too long lose their middle
+    /// ([`Node::truncate_middle`](crate::Node::truncate_middle)).
+    pub cut_middle: bool,
+    /// Forms of the text, longest first, of which it shows the first that
+    /// fits ([`fit_text`](crate::fit_text)).
+    pub forms: Option<Box<dyn Fn() -> Vec<String>>>,
     /// Which of the three code set, which a stylesheet leaves alone.
     pub code: [bool; 3],
 }
@@ -1134,6 +1232,8 @@ impl TextNode {
             no_wrap: None,
             overflow: None,
             cut_start: false,
+            cut_middle: false,
+            forms: None,
             code: [false; 3],
         }
     }
@@ -1141,7 +1241,10 @@ impl TextNode {
     /// Its lines at `width`, aligned or not: alignment pads lines out to
     /// the width, and a text's natural width is its lines' own.
     fn lines(&self, console: &Console, width: u16, aligned: bool) -> Vec<Vec<Segment>> {
-        let markup = (self.markup)();
+        let markup = match &self.forms {
+            Some(forms) => fitting(forms(), width.max(1) as usize),
+            None => (self.markup)(),
+        };
         let mut text = rich::Text::from_markup(&markup).unwrap_or_else(|_| rich::Text::new(markup));
         let justify = match self.align {
             Some(TextAlign::Center) => Some(rich::Justify::Center),
@@ -1156,10 +1259,84 @@ impl TextNode {
         text.set_overflow(self.overflow);
         if self.cut_start {
             text = cut_start(&text, width.max(1) as usize);
+        } else if self.cut_middle {
+            text = cut_middle(&text, width.max(1) as usize);
         }
         let options = console.options().update_width(width.max(1) as usize);
         console.render_lines(&text, &options, false)
     }
+}
+
+/// The first of `forms` (markup, longest first) whose lines all fit in
+/// `width` cells, else the last.
+fn fitting(forms: Vec<String>, width: usize) -> String {
+    let fits = |markup: &str| {
+        let text = rich::Text::from_markup(markup).unwrap_or_else(|_| rich::Text::new(markup));
+        text.split("\n", false, true)
+            .iter()
+            .all(|line| line.cell_len() <= width)
+    };
+    let last = forms.len().saturating_sub(1);
+    forms
+        .into_iter()
+        .enumerate()
+        .find(|(i, form)| *i == last || fits(form))
+        .map(|(_, form)| form)
+        .unwrap_or_default()
+}
+
+/// `text` with each line longer than `width` cells cut in its middle, a
+/// `…` in place of what went: the start and end of a name both kept
+/// (`long_na…me.txt`).
+fn cut_middle(text: &rich::Text, width: usize) -> rich::Text {
+    let lines = text.split("\n", false, true);
+    if lines.iter().all(|line| line.cell_len() <= width) {
+        return text.clone();
+    }
+    let lines: Vec<rich::Text> = lines
+        .into_iter()
+        .map(|line| {
+            if line.cell_len() <= width {
+                return line;
+            }
+            // The head takes the extra cell of an odd room.
+            let room = width.saturating_sub(1);
+            let (head_room, tail_room) = (room - room / 2, room / 2);
+            let plain = line.plain().to_string();
+            let cells = |c: char| rich::cells::cell_len(c.encode_utf8(&mut [0; 4]));
+            let (mut used, mut head) = (0, 0);
+            for (i, c) in plain.char_indices() {
+                if used + cells(c) > head_room {
+                    break;
+                }
+                used += cells(c);
+                head = i + c.len_utf8();
+            }
+            let (mut used, mut tail) = (0, plain.len());
+            for (i, c) in plain.char_indices().rev() {
+                if used + cells(c) > tail_room || i < head {
+                    break;
+                }
+                used += cells(c);
+                tail = i;
+            }
+            let parts = line.divide(&[head, tail]);
+            let mut cut = line.blank_copy();
+            if let Some(first) = parts.first() {
+                cut = cut.append_text(first);
+            }
+            cut.append("…", None);
+            match parts.get(2) {
+                Some(last) => cut.append_text(last),
+                None => cut,
+            }
+        })
+        .collect();
+    let mut joined = rich::Text::new("\n").join(&lines);
+    joined.set_justify_option(text.get_justify_option());
+    joined.set_no_wrap(text.get_no_wrap());
+    joined.set_overflow(text.get_overflow());
+    joined
 }
 
 /// `text` with each line longer than `width` cells cut from its start, a
@@ -1222,6 +1399,12 @@ impl Widget for TextNode {
         }
         if self.cut_start {
             parts.push("truncate-start");
+        }
+        if self.cut_middle {
+            parts.push("truncate-middle");
+        }
+        if self.forms.is_some() {
+            parts.push("fit");
         }
         (!parts.is_empty()).then(|| parts.join(" "))
     }
@@ -1384,7 +1567,7 @@ fn row_height(cx: &MeasureCx, child: &Node, width: u16) -> u16 {
     if child.hidden() {
         return 0;
     }
-    let height = match child.size {
+    let height = match child.own_size() {
         Size::Fixed(n) => n,
         Size::Auto => cx.measure(child, Axis::Vertical, width, 0),
         _ => 1,
@@ -1479,24 +1662,68 @@ impl<K: Clone + Eq + Hash + 'static, F: Fn(K) -> Node + 'static> Widget for Each
 }
 
 /// One child at a time, chosen by a key, the others kept:
-/// [`switch`](crate::switch).
+/// [`switch`](crate::switch), and [`keyed`](crate::keyed).
 pub(crate) struct Switch<K, F> {
     pub key: Box<dyn Fn() -> K>,
     pub build: F,
     pub built: HashMap<K, Node>,
     pub current: Option<K>,
+    /// How many pages it keeps, the shown one included
+    /// ([`keep_last`](crate::Node::keep_last)), shared with its node;
+    /// `0`, all of them.
+    pub keep: Rc<Cell<usize>>,
+    /// The keys built, the most recently shown last.
+    pub recent: Vec<K>,
+    /// For [`keyed`](crate::keyed): its own node, whose first focusable
+    /// node takes the focus when the page that had it is dropped.
+    pub refocus: Option<Rc<Cell<Option<NodeId>>>>,
 }
 
 impl<K: Clone + Eq + Hash + 'static, F: Fn(K) -> Node> Switch<K, F> {
+    pub fn new(key: Box<dyn Fn() -> K>, build: F) -> Switch<K, F> {
+        Switch {
+            key,
+            build,
+            built: HashMap::new(),
+            current: None,
+            keep: Rc::new(Cell::new(0)),
+            recent: Vec::new(),
+            refocus: None,
+        }
+    }
+
     /// Read the key (subscribing to what it reads), and build its child,
-    /// untracked, if it is new.
+    /// untracked, if it is new; drop the pages past what it keeps.
     fn settle(&mut self) {
         let key = (self.key)();
+        if self.current.as_ref() == Some(&key) && self.built.contains_key(&key) {
+            return;
+        }
         if !self.built.contains_key(&key) {
             let node = Runtime::current().untracked(|| (self.build)(key.clone()));
             self.built.insert(key.clone(), node);
         }
+        self.recent.retain(|k| *k != key);
+        self.recent.push(key.clone());
         self.current = Some(key);
+        let keep = self.keep.get();
+        if keep == 0 || self.recent.len() <= keep {
+            return;
+        }
+        let runtime = Runtime::current();
+        let focus = runtime.focus_path();
+        let drop = self.recent.len() - keep;
+        for old in self.recent.drain(..drop) {
+            if let Some(gone) = self.built.remove(&old) {
+                // The focus was inside: the new page's first focusable
+                // node takes it, once it is laid out.
+                let focused = focus.as_ref().is_some_and(|path| path.contains(&gone.id()));
+                if let (true, Some(own)) = (focused, self.refocus.as_ref().and_then(|o| o.get())) {
+                    runtime.focus_within_later(own);
+                }
+                gone.forget(&runtime);
+            }
+        }
     }
 
     fn shown(&self) -> Option<&Node> {
@@ -1525,6 +1752,11 @@ impl<K: Clone + Eq + Hash + 'static, F: Fn(K) -> Node + 'static> Widget for Swit
             .values()
             .filter(|node| Some(node.id()) != shown)
             .collect()
+    }
+
+    fn sized_by(&mut self) -> Option<&Node> {
+        self.settle();
+        self.shown()
     }
 
     fn layout(&mut self, _cx: &MeasureCx, rect: Rect) -> Vec<Rect> {

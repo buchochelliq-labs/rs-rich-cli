@@ -114,7 +114,20 @@ or `fold`).
 (`…/rich/src`), as Yazi's header does. rich's `Overflow` is a mirror of
 upstream's and cuts only at the end, so this is the node's own option.
 For a trail of parts with each styled, see [`breadcrumb`](#bars-for-an-apps-chrome)
-(a path's is `files::path_crumb`).
+(a path's is `files::path_crumb`). **`.truncate_middle()`** keeps both
+ends instead (`long_na…me.txt`): names in tiles, a delete prompt.
+
+**`fit_text(|| vec![long, medium, short])`** shows the longest of several
+forms that fits its width, read again as signals change, the last cut
+with `…` when none fits; an `.auto()` one is as wide as the form it shows:
+
+```rust
+fit_text(move || vec![
+    format!("SELECTED: {name} ({size}, {files} files)"),
+    format!("SELECTED: {name} ({size})"),
+    format!("{name}"),
+])
+```
 
 ## Layout
 
@@ -234,10 +247,67 @@ layers([
 --8<-- "crates/rich-intuituive/tests/snapshots/layers_badge.txt"
 ```
 
-A layer draws again wherever one under it drew, so the board's ticks never
-show through the panel. A click goes to the top layer under the pointer,
+Layers composite: where a layer draws nothing (the room round a centred
+column, a gap between its children) the ones below it show, so a backdrop
+is one `fill` under the content. A panel covers what is inside its frame,
+and a node with a background (`.bg(..)`, `.style(..)`) its whole
+rectangle; text covers the cells it writes. Once any layer draws, they all
+draw again, bottom first, so the board's ticks never show through the
+panel. A click goes to the top layer under the pointer,
 and the Tab order and the accessibility tree follow the children's order
 (a lower layer's text, read from the screen, leaves out what is over it).
+
+### Layout that follows state
+
+Sizes and visibility can read signals; the parent lays out again when they
+change:
+
+```rust
+row([
+    // gitui's 40/60 swap while the staged list has the focus.
+    unstaged.size_with(move || if has_focus(staged_id) { Size::Percent(40) } else { Size::Percent(60) }),
+    staged.flex(1),
+    // A details pane toggled by a key keeps its state while hidden.
+    details.shown_when(move || show_details.get()),
+])
+```
+
+- **`.size_with(|| Size)`** sizes a node by state, as `.size(..)` does once.
+- **`.shown_when(|| bool)`** (and `.hidden_when`) shows a node only while
+  the condition holds: hidden, it takes no room, no clicks and no focus
+  (a focused node inside lets it go), and keeps its state.
+- **`keyed(|| key, |key| node)`** is one child built again whenever the
+  key changes, the old one dropped (its `on_unmount`s run, its
+  subscriptions end): a pane whose shape follows state, a table rebuilt
+  when its column set changes. While the key stays, the child stays. When
+  the old child had the focus, the new one's first focusable node takes
+  it.
+- **`switch(..).keep_last(n)`** keeps at most `n` pages, dropping the one
+  shown longest ago; a plain `switch` keeps every page it built, as tabs
+  want.
+- An **`.auto()` `switch`** (or `keyed`) is as big as its page asks to be:
+  the page's own `.fixed(n)`, `.min_size(n)` and `.max_size(n)` count, as
+  a row would lay the page out.
+
+### Treemaps
+
+`layout::squarify(rect, &weights, (min_columns, min_rows), aspect)` lays
+weights out as tiles in proportion, as near square as they let them be (a
+cell `aspect` times taller than wide), covering the rectangle edge to edge;
+the smallest that would make a tile below the minimum share one tile for
+the rest (`Squarified { tiles, rest }`). `treemap(items, |key, rect| node)`
+is the node: a tile per `(key, weight)`, its node kept while its key and
+size stay, and `treemap_with(.., TreemapOptions::new().min_tile(8, 3)
+.aspect(2.0).rest(|n| node))` for the rest's tile:
+
+```rust
+treemap_with(
+    move || folders.get(),                        // Vec<(String, f64)>
+    |name, rect| fit_text(move || vec![name.clone(), "…".into()]).panel(""),
+    TreemapOptions::new().min_tile(8, 3).rest(|n| label(format!("+{n}"))),
+)
+.bind_directional_focus("left h", "right l", "up k", "down j")
+```
 
 ### Laying out by hand
 
@@ -392,6 +462,23 @@ A stylesheet sets the same: `border: thick` (and every kind by name),
 title), `border-subtitle-align` and `border-sides: top bottom`. Code wins
 over the sheet.
 
+### Titles and borders that follow state
+
+`.panel_with(|| markup)` makes a panel whose title is read again as the
+signals it reads change (`Diff: src/lib.rs`, `Processes (3 of 210)`);
+`.title_with(|| ..)` does the same on a panel already made, and
+`.add_title_with(edge, align, || ..)` adds one beside `add_title`'s. The
+kind of box can follow state too: `.focus_border(Border::Double)` while
+the focus is inside (Slumber's selected pane), `.border_with(|| ..)` from
+anything else.
+
+```rust
+list(rows, cursor)
+    .panel_with(move || format!("Commit {}/{}", cursor.get() + 1, count.get()))
+    .border(Border::Plain)
+    .focus_border(Border::Double)
+```
+
 ### Rules, and a border on any node
 
 `rule()` is a line across, one row tall, in the theme's border style.
@@ -542,6 +629,29 @@ column([
   style or theme name) restyles it, filled to its full width and over its
   children, while it has the focus, which is how a list shows its selected
   row.
+
+### Focus within, scopes, by direction, and as state
+
+- **`cx.focus_within(id)`** focuses the first focusable node inside a
+  container, once it is laid out: a `switch`'s page shown from the next
+  frame, a `keyed` child about to be rebuilt, a search box shown by a
+  signal. No `cx.after(Duration::ZERO, ..)`, no id kept from a builder.
+  Moving the focus again before then drops the wait.
+- **`.focus_scope()`** marks a pane that remembers the node inside it that
+  had the focus last; focusing the pane as a whole gives it back.
+  `cx.focus_next_scope()` and `cx.focus_previous_scope()` move between
+  panes (Slumber's and lazygit's Tab), Tab still moving between nodes.
+- **`cx.focus_direction(Direction::Left)`** moves to the neighbour on a
+  side by where things were drawn (between scopes when the focus is in
+  one), and `.bind_directional_focus("ctrl+left H", "ctrl+right L",
+  "ctrl+up K", "ctrl+down J")` binds the four; `focus::neighbour(rects,
+  from, direction)` is the geometry, for a widget placing parts of its own.
+- **Where the focus is:** `focus::focused()` (the focused node) and
+  `focus::has_focus(id)` (on it or inside it) read it so a text, a memo,
+  a watch or a size follows it.
+- **`.on_focus(|cx| ..)` and `.on_blur(|cx| ..)`** run when the focus comes
+  into a node (or a node inside it) from outside, and when it leaves; a
+  modal opening over it is leaving.
 
 ### Key sequences, any key, and keys a container sees first
 
@@ -1634,7 +1744,14 @@ column([
   open), innermost first, `key description` in `key_hints.key` and
   `key_hints.desc`, `·` apart; what does not fit is left out whole. Bubbles'
   `help` and Textual's `Footer`, from the same `.bind` descriptions the
-  help uses.
+  help uses. **`key_hints_with(KeyHintsOptions)`** shows them other ways:
+  `.format(|key, desc| format!("{desc} [{key}]"))` (drawn whole in
+  `key_hints.hint`), `.key_symbols(true)` (`⏎ ⇥ ↑ ^u`) or
+  `.key_format(KeyFormat::Vim)`, `.show_disabled(true)` greying the
+  `bind_when` bindings that cannot run now (`key_hints.disabled`) instead
+  of leaving them out, `.separator("  ")`, and `.more(expanded, "more
+  [.]")`: the label in place of what does not fit, and every hint on as
+  many rows as it takes while `expanded` holds (gitui's command bar).
 - **`hex_view(|| bytes, top)`** is rs-rich-ext's `HexView` as a
   scrolling node: any bytes as `hexdump -C` lays them out.
 - **`cells([(35, a), (25, b), ..])`** is ratatui's one-row `Table`: a row
@@ -1782,6 +1899,9 @@ label("home").on_key("enter", |cx| cx.push(|| detail(7)))
 - A screen's closure can create signals and call `every`; its timers stop
   when it closes.
 - `cx.replace(build)` swaps the top screen, as a wizard's steps do.
+- `App::min_size(64, 28, "Terminal must be at least 64 x 28!")` shows the
+  message centred instead of the app on a smaller terminal, keys held but
+  `q` (and Ctrl+C); the app comes back as it was once there is room.
 
 A modal is a screen in a box over the one below, which keeps drawing:
 
@@ -1989,6 +2109,9 @@ description is cut so its keys still show. `.bind_sequence_in(section,
 keys, description, handler)` lists one under a section of its own, as
 `bind_in` does a binding. The same descriptions make a footer of the keys
 that work now: [`key_hints()`](#bars-for-an-apps-chrome).
+`HelpOptions::new().all_panes(true)` lists every node's bindings on the
+screen, wherever the focus is, a section per pane and the focused path's
+first: one help for the whole app, as termusic's and bottom's are.
 
 A variant of `bind_scaled` may say itself its own way: with a label as a
 third item, `("alt", 0.2, "⅕")` is listed `alt ⅕` rather than `alt ×0.2`.

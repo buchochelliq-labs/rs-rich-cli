@@ -678,6 +678,190 @@ pub fn split_with_spacers(
     (areas, spacers)
 }
 
+/// What [`squarify`] lays out: a tile for each weight, in the order
+/// given (empty for a weight of nothing, or one grouped into the rest),
+/// and the tile the rest share, with how many weights it holds.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Squarified {
+    pub tiles: Vec<Rect>,
+    pub rest: Option<(Rect, usize)>,
+}
+
+/// A treemap of `rect`: a tile for each of `weights`, its area in
+/// proportion to its weight, laid out by the squarified algorithm (Bruls,
+/// Huizing and van Wijk) so tiles are as near square as the weights let
+/// them be. `aspect` is a cell's height over its width (about 2 on most
+/// terminals), so a tile looks square rather than counts square. A tile
+/// is never smaller than `min` (columns, rows): the smallest weights that
+/// would make one are grouped into one tile for the rest, as large as
+/// they are together (and twice the smallest tile at least), when there
+/// is a rest at all. Tiles cover `rect`
+/// exactly, edge to edge.
+///
+/// ```
+/// use intuituive::layout::squarify;
+/// use intuituive::screen::Rect;
+///
+/// let area = Rect::new(0, 0, 20, 10);
+/// let map = squarify(area, &[6.0, 3.0, 1.0], (1, 1), 1.0);
+/// assert_eq!(map.tiles[0], Rect::new(0, 0, 12, 10));
+/// assert_eq!(map.tiles[1], Rect::new(12, 0, 8, 8));
+/// assert_eq!(map.tiles[2], Rect::new(12, 8, 8, 2));
+/// assert_eq!(map.rest, None);
+///
+/// // With tiles of 8 x 3 at least, the two smallest share the rest.
+/// let map = squarify(area, &[6.0, 3.0, 0.4, 0.4], (8, 3), 2.0);
+/// assert_eq!(map.tiles[0], Rect::new(0, 0, 11, 10));
+/// assert_eq!(map.tiles[1], Rect::new(11, 0, 9, 6));
+/// assert!(map.tiles[2].is_empty() && map.tiles[3].is_empty());
+/// assert_eq!(map.rest, Some((Rect::new(11, 6, 9, 4), 2)));
+/// ```
+pub fn squarify(rect: Rect, weights: &[f64], min: (u16, u16), aspect: f64) -> Squarified {
+    let mut out = Squarified {
+        tiles: vec![Rect::default(); weights.len()],
+        rest: None,
+    };
+    let mut order: Vec<usize> = (0..weights.len())
+        .filter(|&i| weights[i].is_finite() && weights[i] > 0.0)
+        .collect();
+    order.sort_by(|&a, &b| weights[b].total_cmp(&weights[a]));
+    let total: f64 = order.iter().map(|&i| weights[i]).sum();
+    if rect.is_empty() || order.is_empty() || total <= 0.0 {
+        return out;
+    }
+    let aspect = if aspect.is_finite() && aspect > 0.0 {
+        aspect
+    } else {
+        1.0
+    };
+    let fits = |r: Rect| r.width >= min.0.max(1) && r.height >= min.1.max(1);
+    // Those whose own share of the area could make a tile, at most.
+    let cells = rect.width as f64 * rect.height as f64;
+    let least = min.0.max(1) as f64 * min.1.max(1) as f64;
+    let mut k = order
+        .iter()
+        .take_while(|&&i| weights[i] / total * cells >= least)
+        .count();
+    if k == order.len() {
+        let tiles = squarify_tiles(rect, &order, weights, None, aspect);
+        if tiles.iter().all(|(_, r)| fits(*r)) {
+            for (i, r) in tiles {
+                out.tiles[i] = r;
+            }
+            return out;
+        }
+        k -= 1;
+    }
+    // The first `k`, and the rest grouped, smaller until all fit.
+    loop {
+        // The rest takes room for a tile at least: twice the smallest.
+        let rest: f64 = order[k..].iter().map(|&i| weights[i]).sum();
+        let rest = rest.max(total * 2.0 * least / cells);
+        let tiles = squarify_tiles(rect, &order[..k], weights, Some(rest), aspect);
+        if k == 0 || tiles.iter().all(|(_, r)| fits(*r)) {
+            for (i, r) in tiles {
+                match i {
+                    usize::MAX => out.rest = Some((r, order.len() - k)),
+                    i => out.tiles[i] = r,
+                }
+            }
+            return out;
+        }
+        k -= 1;
+    }
+}
+
+/// [`squarify`]'s tiles for `order`'s weights, with a last tile of
+/// `rest`'s weight (numbered `usize::MAX`), in cells.
+fn squarify_tiles(
+    rect: Rect,
+    order: &[usize],
+    weights: &[f64],
+    rest: Option<f64>,
+    aspect: f64,
+) -> Vec<(usize, Rect)> {
+    let mut items: Vec<(usize, f64)> = order.iter().map(|&i| (i, weights[i])).collect();
+    if let Some(rest) = rest.filter(|r| *r > 0.0) {
+        items.push((usize::MAX, rest));
+    }
+    // Laid out where a cell is `aspect` units tall, so tiles look square.
+    let (width, height) = (rect.width as f64, rect.height as f64 * aspect);
+    let total: f64 = items.iter().map(|(_, w)| w).sum();
+    let scale = width * height / total;
+    let areas: Vec<(usize, f64)> = items.iter().map(|&(i, w)| (i, w * scale)).collect();
+    let mut free = (0.0, 0.0, width, height);
+    let mut placed: Vec<(usize, (f64, f64, f64, f64))> = Vec::new();
+    // The worst ratio of a strip of `areas` along a side `side` long.
+    let worst = |row: &[(usize, f64)], side: f64| -> f64 {
+        let sum: f64 = row.iter().map(|(_, a)| a).sum();
+        row.iter()
+            .map(|(_, a)| {
+                let along = side * side * a / (sum * sum);
+                along.max(1.0 / along)
+            })
+            .fold(0.0, f64::max)
+    };
+    let mut lay = |row: &[(usize, f64)], free: &mut (f64, f64, f64, f64)| {
+        let (x, y, w, h) = *free;
+        let sum: f64 = row.iter().map(|(_, a)| a).sum();
+        if w >= h {
+            // A column down the left.
+            let across = if h > 0.0 { sum / h } else { 0.0 };
+            let mut at = y;
+            for &(i, a) in row {
+                let down = if across > 0.0 { a / across } else { 0.0 };
+                placed.push((i, (x, at, across, down)));
+                at += down;
+            }
+            *free = (x + across, y, (w - across).max(0.0), h);
+        } else {
+            // A row along the top.
+            let down = if w > 0.0 { sum / w } else { 0.0 };
+            let mut at = x;
+            for &(i, a) in row {
+                let across = if down > 0.0 { a / down } else { 0.0 };
+                placed.push((i, (at, y, across, down)));
+                at += across;
+            }
+            *free = (x, y + down, w, (h - down).max(0.0));
+        }
+    };
+    let mut row: Vec<(usize, f64)> = Vec::new();
+    for &item in &areas {
+        let side = free.2.min(free.3);
+        let mut longer = row.clone();
+        longer.push(item);
+        if row.is_empty() || worst(&longer, side) <= worst(&row, side) {
+            row = longer;
+        } else {
+            lay(&row, &mut free);
+            row = vec![item];
+        }
+    }
+    if !row.is_empty() {
+        lay(&row, &mut free);
+    }
+    // To cells: each edge rounded, so neighbours meet exactly.
+    let x_of = |x: f64| {
+        (rect.x as f64 + x)
+            .round()
+            .clamp(rect.x as f64, rect.right() as f64) as u16
+    };
+    let y_of = |y: f64| {
+        (rect.y as f64 + y / aspect)
+            .round()
+            .clamp(rect.y as f64, rect.bottom() as f64) as u16
+    };
+    placed
+        .into_iter()
+        .map(|(i, (x, y, w, h))| {
+            let (left, top) = (x_of(x), y_of(y));
+            let (right, bottom) = (x_of(x + w), y_of(y + h));
+            (i, Rect::new(left, top, right - left, bottom - top))
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

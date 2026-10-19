@@ -103,6 +103,7 @@ mod feed;
 #[cfg(feature = "files")]
 pub mod files;
 pub mod finder;
+pub mod focus;
 mod help;
 mod hex;
 #[cfg(feature = "art")]
@@ -144,6 +145,7 @@ pub mod testing;
 mod text_area;
 pub mod transport;
 mod tree;
+mod treemap;
 #[cfg(feature = "viz")]
 mod viz;
 #[cfg(feature = "watch")]
@@ -174,7 +176,8 @@ pub use feed::{
     latest_feed, latest_iter, latest_with_state, Feed, FeedEnd, FeedState, FeedTeller, Pace, Play,
 };
 pub use finder::{finder_of, fuzzy_list, fuzzy_list_with, FuzzyOptions, FuzzySource};
-pub use help::{HelpOptions, KeyFormat};
+pub use focus::Direction;
+pub use help::{HelpOptions, KeyFormat, KeyHintsOptions};
 #[cfg(feature = "art")]
 pub use image::{
     image, image_bytes, image_bytes_of, image_graphics, image_of, image_with, ImageAnchor,
@@ -191,8 +194,9 @@ pub use log::Log;
 pub use miller::{miller_in, miller_of, MillerSource};
 pub use node::described;
 pub use node::{
-    column, component, each, grid, label, layers, leaf, list, renderable, repeating, row, scroll,
-    scroll_both, scroll_both_with, scroll_with, scroll_x, switch, text, Node,
+    column, component, each, fit_text, grid, keyed, label, layers, leaf, list, renderable,
+    repeating, row, scroll, scroll_both, scroll_both_with, scroll_with, scroll_x, switch, text,
+    Node,
 };
 pub use notify::{Corner, Level};
 pub use place::{Offset, Origin, RectHandle};
@@ -216,6 +220,7 @@ pub use task::{
 };
 pub use text_area::Caret;
 pub use transport::{transport, Transport};
+pub use treemap::{treemap, treemap_with, TreemapOptions};
 #[cfg(feature = "viz")]
 pub use viz::{
     bar_spectrum, bar_spectrum_with, meter, meter_with, persistence, persistence_with, sparkline,
@@ -233,7 +238,7 @@ pub mod prelude {
     // `text` is both the function and the `text!` macro.
     pub use crate::described;
     pub use crate::{
-        after, column, component, each, effect, every, fill, fixed_step, grid, input, label,
+        after, column, component, each, effect, every, fill, fixed_step, grid, input, keyed, label,
         latest, latest_every, layers, leaf, list, list_optional, memo, number_input, on_write,
         on_write_ref, rate, renderable, repeating, resource, resource_for, row, scroll,
         scroll_both, scroll_with, scroll_x, signal, spawn, switch, text, text_area, viewport,

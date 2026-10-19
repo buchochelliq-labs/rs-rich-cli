@@ -74,7 +74,7 @@ struct Graph {
 }
 
 /// What a key-hint footer shows: each binding's keys and description.
-pub(crate) type Hints = Vec<(String, String)>;
+pub(crate) type Hints = Vec<crate::help::Hint>;
 
 /// One app's reactive state.
 pub(crate) struct Runtime {
@@ -133,6 +133,13 @@ pub(crate) struct Runtime {
     /// How many screens are open (the first, and those over it), for
     /// [`Ctx::is_modal`](crate::Ctx::is_modal) and the bindings that ask.
     pub(crate) layers: Cell<usize>,
+    /// The path from the root to the focused node, once the app made it:
+    /// what [`focused`](crate::focus::focused) and
+    /// [`has_focus`](crate::focus::has_focus) read.
+    pub(crate) focus: Cell<Option<Signal<Vec<NodeId>>>>,
+    /// A container whose first focusable node takes the focus once it is
+    /// laid out ([`Ctx::focus_within`](crate::Ctx::focus_within)).
+    pub(crate) focus_later: Cell<Option<NodeId>>,
 }
 
 thread_local! {
@@ -142,6 +149,17 @@ thread_local! {
 }
 
 impl Runtime {
+    /// The focus path now, untracked; `None` before the app made it.
+    pub(crate) fn focus_path(&self) -> Option<Vec<NodeId>> {
+        self.focus.get().map(|path| path.get_untracked())
+    }
+
+    /// Focus the first focusable node inside `container` once it is laid
+    /// out (now, if it is).
+    pub(crate) fn focus_within_later(&self, container: NodeId) {
+        self.focus_later.set(Some(container));
+    }
+
     pub(crate) fn new() -> Rc<Runtime> {
         let (outbox, inbox) = mpsc::channel();
         RUNTIMES.with(|all| {
@@ -172,6 +190,8 @@ impl Runtime {
                 hints: Cell::new(None),
                 held_keys: Cell::new(None),
                 layers: Cell::new(1),
+                focus: Cell::new(None),
+                focus_later: Cell::new(None),
                 locals: RefCell::new(HashMap::new()),
                 next_local: Cell::new(0),
             });

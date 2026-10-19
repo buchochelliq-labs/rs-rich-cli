@@ -124,6 +124,7 @@ pub struct HelpOptions {
     pub(crate) key_format: KeyFormat,
     pub(crate) filter_first: bool,
     pub(crate) filter_key: Option<Key>,
+    pub(crate) all_panes: bool,
 }
 
 impl Default for HelpOptions {
@@ -141,6 +142,7 @@ impl HelpOptions {
             key_format: KeyFormat::Default,
             filter_first: false,
             filter_key: None,
+            all_panes: false,
         }
     }
 
@@ -161,6 +163,33 @@ impl HelpOptions {
     /// for each section.
     pub fn filter_first(mut self, on: bool) -> HelpOptions {
         self.filter_first = on;
+        self
+    }
+
+    /// List the described bindings of every node on the screen, wherever
+    /// the focus is, rather than only those of the focused node and its
+    /// ancestors: one help for the whole app, a section per pane (each
+    /// node's [`bind_in`](crate::Node::bind_in) section, else its name),
+    /// those on the focus path first. termusic's and bottom's helps.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    /// use intuituive::HelpOptions;
+    ///
+    /// let app = App::new(|| {
+    ///     row([
+    ///         label("library").focusable().bind("a", "Add to playlist", |_| {}),
+    ///         label("playlist").focusable().bind("d", "Remove", |_| {}),
+    ///     ])
+    ///     .on_key("?", |cx| cx.help_with(HelpOptions::new().all_panes(true)))
+    /// });
+    /// let mut driver = app.driver(60, 12);
+    /// driver.press("?");
+    /// let help = driver.screen().plain().join("\n");
+    /// assert!(help.contains("Add to playlist") && help.contains("Remove"));
+    /// ```
+    pub fn all_panes(mut self, on: bool) -> HelpOptions {
+        self.all_panes = on;
         self
     }
 
@@ -198,12 +227,213 @@ impl HelpOptions {
     }
 }
 
+/// A binding as a [`key_hints`](crate::widgets::key_hints) footer shows it:
+/// its keys, what it does, and whether it applies now.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct Hint {
+    pub keys: Vec<Key>,
+    pub description: String,
+    /// Its [`bind_when`](crate::Node::bind_when) condition does not hold.
+    pub disabled: bool,
+}
+
+/// The text of a hint: what a hint's keys and description become, given
+/// as (keys, description); console markup is not read in it.
+type HintFormat = std::rc::Rc<dyn Fn(&str, &str) -> String>;
+
+/// How [`key_hints_with`](crate::widgets::key_hints_with) shows the keys
+/// that work now: each hint's text, how keys are said, whether bindings
+/// that do not apply now are shown greyed, the separator, and a "more"
+/// that expands the footer onto as many rows as it needs.
+///
+/// ```
+/// use intuituive::prelude::*;
+/// use intuituive::widgets::{key_hints_with, KeyHintsOptions};
+///
+/// let app = App::new(|| {
+///     let staged = signal(false);
+///     column([
+///         label("files")
+///             .bind("enter", "Stage", move |_| staged.set(true))
+///             .bind_when(move || staged.get(), "D", "Reset", |_| {})
+///             .autofocus(),
+///         key_hints_with(
+///             KeyHintsOptions::new()
+///                 .format(|key, desc| format!("{desc} [{key}]"))
+///                 .key_symbols(true)
+///                 .show_disabled(true)
+///                 .separator(" "),
+///         ),
+///     ])
+/// });
+/// let mut driver = app.driver(30, 2);
+/// driver.settle();
+/// assert_eq!(driver.screen().plain()[1].trim_end(), "Stage [⏎] Reset [D]");
+/// ```
+#[derive(Clone)]
+pub struct KeyHintsOptions {
+    pub(crate) format: Option<HintFormat>,
+    pub(crate) key_format: KeyFormat,
+    pub(crate) symbols: bool,
+    pub(crate) disabled: bool,
+    pub(crate) separator: Option<String>,
+    pub(crate) more: Option<(crate::reactive::Signal<bool>, String)>,
+}
+
+impl std::fmt::Debug for KeyHintsOptions {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("KeyHintsOptions")
+            .field("format", &self.format.is_some())
+            .field("key_format", &self.key_format)
+            .field("symbols", &self.symbols)
+            .field("disabled", &self.disabled)
+            .field("separator", &self.separator)
+            .field("more", &self.more.as_ref().map(|(_, label)| label))
+            .finish()
+    }
+}
+
+impl Default for KeyHintsOptions {
+    fn default() -> KeyHintsOptions {
+        KeyHintsOptions::new()
+    }
+}
+
+impl KeyHintsOptions {
+    /// As [`key_hints`](crate::widgets::key_hints) shows them: `key
+    /// description`, `·` apart, only what applies now, on one row.
+    pub fn new() -> KeyHintsOptions {
+        KeyHintsOptions {
+            format: None,
+            key_format: KeyFormat::Default,
+            symbols: false,
+            disabled: false,
+            separator: None,
+            more: None,
+        }
+    }
+
+    /// Each hint's text from its keys and its description (`Stage [⏎]`,
+    /// `<q> quit`), drawn whole in the theme's `key_hints.hint` style (the
+    /// default look draws the key in `key_hints.key` and the description in
+    /// `key_hints.desc`). Plain text: brackets show as they are.
+    pub fn format(mut self, format: impl Fn(&str, &str) -> String + 'static) -> KeyHintsOptions {
+        self.format = Some(std::rc::Rc::new(format));
+        self
+    }
+
+    /// How keys are said, as in the help ([`KeyFormat::Vim`]: `<C-u>`).
+    pub fn key_format(mut self, format: KeyFormat) -> KeyHintsOptions {
+        self.key_format = format;
+        self
+    }
+
+    /// Say keys with symbols, as gitui's and many footers do: `⏎` for
+    /// Enter, `⇥` Tab, `⌫` Backspace, `⌦` Delete, `↑ ↓ ← →`, `⇞ ⇟` for
+    /// the pages, `␣` Space, `^x` for Ctrl, `⌥x` for Alt and `⇧x` for
+    /// Shift with a key that is not a letter.
+    pub fn key_symbols(mut self, on: bool) -> KeyHintsOptions {
+        self.symbols = on;
+        self
+    }
+
+    /// Show the bindings whose [`bind_when`](crate::Node::bind_when)
+    /// condition does not hold now too, in the theme's `key_hints.disabled`
+    /// style (`bright_black` by default), rather than leaving them out:
+    /// the commands are always where they are, lit when they can run.
+    pub fn show_disabled(mut self, on: bool) -> KeyHintsOptions {
+        self.disabled = on;
+        self
+    }
+
+    /// What goes between hints (`" · "` by default), in the theme's
+    /// `key_hints.separator` style.
+    pub fn separator(mut self, separator: impl Into<String>) -> KeyHintsOptions {
+        self.separator = Some(separator.into());
+        self
+    }
+
+    /// While `expanded` is false and the hints do not fit, end the row with
+    /// `label` (`more [.]`) in place of those that do not; while it is
+    /// true, wrap the hints onto as many rows as they need, the footer
+    /// growing to hold them. The app toggles `expanded` with a key of its
+    /// own (gitui's `.`).
+    pub fn more(
+        mut self,
+        expanded: crate::reactive::Signal<bool>,
+        label: impl Into<String>,
+    ) -> KeyHintsOptions {
+        self.more = Some((expanded, label.into()));
+        self
+    }
+
+    /// `keys` said as the options say.
+    pub(crate) fn say(&self, keys: &[Key]) -> String {
+        if !self.symbols {
+            return self.key_format.keys(keys, false);
+        }
+        keys.iter()
+            .map(|key| symbol_key(*key))
+            .collect::<Vec<_>>()
+            .join("/")
+    }
+}
+
+/// One key with symbols ([`KeyHintsOptions::key_symbols`]).
+fn symbol_key(key: Key) -> String {
+    let base = match key.code {
+        KeyCode::Enter => "⏎".to_string(),
+        KeyCode::Tab => "⇥".to_string(),
+        KeyCode::BackTab => "⇤".to_string(),
+        KeyCode::Backspace => "⌫".to_string(),
+        KeyCode::Delete => "⌦".to_string(),
+        KeyCode::Escape => "Esc".to_string(),
+        KeyCode::Up => "↑".to_string(),
+        KeyCode::Down => "↓".to_string(),
+        KeyCode::Left => "←".to_string(),
+        KeyCode::Right => "→".to_string(),
+        KeyCode::PageUp => "⇞".to_string(),
+        KeyCode::PageDown => "⇟".to_string(),
+        KeyCode::Home => "Home".to_string(),
+        KeyCode::End => "End".to_string(),
+        KeyCode::Insert => "Ins".to_string(),
+        KeyCode::Menu => "Menu".to_string(),
+        KeyCode::F(n) => format!("F{n}"),
+        KeyCode::Char(' ') => "␣".to_string(),
+        KeyCode::Char(c) => c.to_string(),
+    };
+    let mut held = String::new();
+    if key.modifiers.ctrl {
+        held.push('^');
+    }
+    if key.modifiers.alt {
+        held.push('⌥');
+    }
+    // A capital letter says its Shift itself.
+    let letter = matches!(key.code, KeyCode::Char(c) if c.is_alphabetic());
+    if key.modifiers.shift && !letter && key.code != KeyCode::BackTab {
+        held.push('⇧');
+    }
+    held + &base
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     fn vim(name: &str) -> String {
         vim_key(Key::parse(name).unwrap())
+    }
+
+    #[test]
+    fn symbols_say_keys_short() {
+        let say = |name: &str| symbol_key(Key::parse(name).unwrap());
+        assert_eq!(say("enter"), "⏎");
+        assert_eq!(say("ctrl+u"), "^u");
+        assert_eq!(say("shift+up"), "⇧↑");
+        assert_eq!(say("D"), "D");
+        assert_eq!(say("space"), "␣");
+        assert_eq!(say("alt+x"), "⌥x");
     }
 
     #[test]
