@@ -1,0 +1,11 @@
+{
+  "tape": "docs/tapes/raycast-iterm.tape",
+  "tape_fnv1a64": "1cc70b9b03845bd9",
+  "recorder": "rs-rich-record 0.0.8",
+  "rich": null,
+  "commit": "47e03a61152279f39fcecc7bdd51648a2608d3fb",
+  "screenshots": [
+    "start"
+  ],
+  "note": "Every frame is real output of the program under test on a PTY."
+}
