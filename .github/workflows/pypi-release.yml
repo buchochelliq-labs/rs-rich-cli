@@ -37,6 +37,9 @@ jobs:
       # A version on PyPI is permanent: refuse the tag before building wheels.
       - name: Refuse a version already on PyPI
         run: python3 scripts/release_cohort.py unreleased "${GITHUB_REF_NAME}"
+      # One release, one commit: the same check as release.yml's.
+      - name: Refuse a tag that splits its release across commits
+        run: python3 scripts/release_cohort.py same-commit "${GITHUB_REF_NAME}"
 
   wheels:
     name: wheel (${{ matrix.name }})
