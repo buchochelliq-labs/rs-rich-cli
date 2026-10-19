@@ -229,6 +229,20 @@ Each reads aloud as its chart does.
   checks it against ratatui's parser); rs-rich-ratatui now depends on
   rs-rich-ext without its default features.
 
+### intuiTUIve's scope-tui example on round 3's components (rs-rich-intuituive)
+
+Round 3 of [the demo gaps](docs/design/intuituive-demo-gaps.md):
+`examples/scope.rs` rebuilt on the audio, DSP, chart and key components
+round 2 asked for, with no hand-rolled stand-in left. Sources are
+`latest_every`, `latest` with `Latest::sleep` and `audio::open`'s capture,
+taken with `on_write` and counted with `rate`; files are read with
+`audio::pcm`; the test signal, trigger and `--tune` are `dsp`'s; reference
+lines are `Axis::grid`, the header `cells`, the keys `bind_cycle`,
+`bind_scaled` and `bind_in`. New and more faithful: `audio --timeout`
+ends the app as scope-tui does, `audio --list` prints each device's
+configurations in scope-tui's format, and `pulse` reaches every
+PulseAudio source with the `pulse` feature, `--server-buffer` included.
+
 ### intuiTUIve's Yazi example on the new components (rs-rich-intuituive)
 
 Round 2 of [the demo gaps](docs/design/intuituive-demo-gaps.md):
