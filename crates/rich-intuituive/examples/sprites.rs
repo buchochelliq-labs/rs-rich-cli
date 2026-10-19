@@ -42,11 +42,11 @@ fn ms(n: u64) -> Duration {
 fn cast() -> Vec<Sprite> {
     let ship = Sprite::from_frames([
         Sprite::from_markup(
-            &[".[cyan]/\\[/].", "[cyan]<[b red]##[/]>", ".[yellow]''[/]."],
+            &[".[cyan]/\\.[/]", "[cyan]<[b red]##[/]>", ".[yellow]''[/]."],
             '.',
         ),
         Sprite::from_markup(
-            &[".[cyan]/\\[/].", "[cyan]<[b red]##[/]>", ".[red]\"\"[/]."],
+            &[".[cyan]/\\.[/]", "[cyan]<[b red]##[/]>", ".[red]\"\"[/]."],
             '.',
         ),
     ])

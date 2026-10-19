@@ -486,7 +486,10 @@ impl Sprite {
     /// One frame from console markup lines, a row each. Every `transparent`
     /// character (unstyled or styled) is a transparent cell: `'.'`, or `' '`
     /// for art whose spaces are holes. Styles resolve without the app's
-    /// theme: use colours and attributes, not theme names.
+    /// theme: use colours and attributes, not theme names. As in any
+    /// markup, a backslash just before `[` escapes it: the Rust string
+    /// `"[cyan]/\\.[/]"` is a slash, a backslash and a hole, where
+    /// `"[cyan]/\\[/]"` would show `/[/]`.
     pub fn from_markup(lines: &[&str], transparent: char) -> Sprite {
         let console = Console::builder()
             .width(4096)

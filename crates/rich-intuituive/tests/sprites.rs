@@ -591,7 +591,7 @@ fn three_hundred_moving_sprites_on_a_200_by_60_stage() {
     let tick = frame.clone();
     let app = App::new(move || {
         let t = signal(0u32);
-        let ship = Sprite::from_markup(&[".[cyan]/\\[/].", "[cyan]<[bold red]##[/]>[/]"], '.');
+        let ship = Sprite::from_markup(&[".[cyan]/\\.[/]", "[cyan]<[bold red]##[/]>[/]"], '.');
         let blob = Sprite::from_pixels(&PixelSprite::from_art(
             &[".gg.", "gggg", "gggg", ".gg."],
             &[('g', GREEN)],

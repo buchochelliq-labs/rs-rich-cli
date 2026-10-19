@@ -9,6 +9,42 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### intuiTUIve: sprites, stages and pixel buffers (rs-rich-intuituive)
+
+Cell art that moves over a backdrop, and a framebuffer drawn in cells: the
+round-5 gaps of the falling-block and raycaster clones ([the demo
+gaps](docs/design/intuituive-demo-gaps.md), "Round 5"), generic in core,
+with two plugins:
+
+- **`sprite`:** `Sprite`, frames of cell art with transparent cells, from
+  markup lines with a transparent character, from `SpriteCell`s or from
+  pixel art in half blocks; frame times on the app's clock, looping or
+  `once`; an anchor; flips that mirror brackets, slashes and half blocks.
+  `stage(|| Vec<Placed>)` and `stage_with(.., StageOptions)` draw placed
+  sprites (id, position in cells, z order, flip, fixed frame, start time,
+  `Tween`) clipped and in z order over a backdrop node or the stage's
+  background, a cell with no background taking the one beneath;
+  `on_sprite_click` and `on_sprite_hover` find sprites by their opaque
+  cells; `half_cells` moves pixel art by half cells. `overlaps`,
+  `overlaps_at` and `bounds_overlap` test collisions; `tween(..)`,
+  `Sprite::frame_at` and `sprite::now()` work on the app's clock.
+- **`pixels`:** `pixels(w, h, |buf| ..)` and `pixels_fit(|buf| ..)` show an
+  RGBA `PixelBuf` in half blocks, or quadrants or Braille
+  (`Node::pixel_mode`); `PixelBuf::blit` (alpha, scale, flip),
+  `fill_rect`, `line`, `plot`; `PixelSprite` frames from RGBA or
+  character art.
+- **Plugins:** `sprite_sheet` cuts an image into `PixelSprite` tiles and
+  half-block sprites (`art`); a new off-by-default `micro` feature makes an
+  rs-rich-micro `MicroAsset` a `Sprite` (`micro_sprite`, `micro_pixels`).
+- `examples/sprites.rs`: animated sprites over a backdrop, selected by a
+  click, steered with the arrows, beside a bouncing ball in a pixel
+  buffer.
+
+Measured in a release build (`tests/sprites.rs`): 300 moving sprites over
+a full backdrop at 200x60 take about 6 ms a frame, painting included; a
+200x120 pixel buffer whose every pixel changes, 12 to 17 ms, most of it
+writing 12,000 differently coloured cells into the screen.
+
 ### intuiTUIve: round 5 core (rs-rich-intuituive, rs-rich-interact)
 
 The generic core pieces of the round-4 gaps of the Yazi and scope-tui

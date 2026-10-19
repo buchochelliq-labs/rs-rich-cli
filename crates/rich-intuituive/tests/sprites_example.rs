@@ -19,7 +19,9 @@ fn click_a_sprite_to_select_it_and_steer_it_with_the_arrows() {
         rows(driver)[y].chars().skip(x).take(n).collect()
     };
     assert!(rows(&driver)[23].contains("nothing selected"));
-    // The ghost's top left, at 30, 8.
+    // The ship at 4, 3, its flame below it; the ghost's top left at 30, 8.
+    assert_eq!(at(&driver, 4, 3, 4), "·/\\·");
+    assert_eq!(at(&driver, 4, 4, 4), "<##>");
     assert_eq!(at(&driver, 30, 8, 4), ".--.");
     driver.event(Event::Mouse(Mouse::new(
         MouseKind::Down(Button::Left),
