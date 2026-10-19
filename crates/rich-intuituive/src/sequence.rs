@@ -53,7 +53,8 @@ pub(crate) fn continuations(node: &Node, typed: &[Key]) -> Vec<(String, String)>
     node.sequences
         .borrow()
         .iter()
-        .filter(|bound| bound.keys.len() > typed.len() && starts(bound.live_keys(), typed))
+        .filter(|bound| !bound.hidden && bound.keys.len() > typed.len())
+        .filter(|bound| starts(bound.live_keys(), typed))
         .map(|bound| {
             let rest = bound.keys[typed.len()..]
                 .iter()

@@ -1,8 +1,11 @@
 //! Bindings beyond a key and a handler: ones that apply only in a state
 //! ([`Node::bind_when`], [`Node::when`], [`Node::in_mode`],
 //! [`Node::modes`]), a help section for any kind of binding
-//! ([`Node::section`]), and ones that toggle or step a field of a signal
-//! ([`Node::bind_toggle`], [`Node::bind_step`]).
+//! ([`Node::section`]), ones that toggle or step a field of a signal
+//! ([`Node::bind_toggle`], [`Node::bind_step`],
+//! [`Node::bind_step_scaled`]), and what a binding added last does with
+//! its key ([`Node::any_modifiers`], [`Node::fall_through`],
+//! [`Node::unlisted`], [`Node::bind_hidden`]).
 //!
 //! A binding that does not apply now is as if it were not there: a key
 //! passes it by (to another binding of the key, on the same node or
@@ -270,18 +273,165 @@ impl Node {
         range: RangeInclusive<T>,
     ) -> Node {
         self.bind(keys, description, move |_| {
-            signal.update(|value| {
-                let number = field(value);
-                let moved = number.stepped(step);
-                *number = if moved < *range.start() {
-                    *range.start()
-                } else if moved > *range.end() {
-                    *range.end()
-                } else {
-                    moved
-                };
-            })
+            signal.update(|value| step_within(field(value), step, &range))
         })
+    }
+
+    /// [`bind_step`](Self::bind_step) with a step scaled by the modifiers
+    /// held, as [`bind_scaled`](Self::bind_scaled) scales a value: each of
+    /// `variants` pairs modifiers with a factor of `step` (`("shift",
+    /// 10.0)`, `("alt", 0.2, "⅕")`), all in one row of the help. A
+    /// threshold or a window's size stepped ten times as far with Shift,
+    /// still kept within `range`. An integer moves by the scaled step
+    /// rounded.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    ///
+    /// #[derive(Default)]
+    /// struct View { samples: u32 }
+    ///
+    /// let app = App::new(|| {
+    ///     let view = signal(View { samples: 100 });
+    ///     text(move || view.with(|v| v.samples.to_string())).bind_step_scaled(
+    ///         "right",
+    ///         &[("", 1.0), ("shift", 10.0), ("ctrl", 5.0)],
+    ///         "More samples",
+    ///         view,
+    ///         |v| &mut v.samples,
+    ///         2.0,
+    ///         1..=150,
+    ///     )
+    /// });
+    /// let mut driver = app.driver(5, 1);
+    /// driver.press("right shift+right ctrl+right");
+    /// assert_eq!(driver.screen().plain()[0].trim_end(), "132");
+    /// driver.press("shift+right shift+right");
+    /// assert_eq!(driver.screen().plain()[0].trim_end(), "150");
+    /// ```
+    ///
+    /// # Panics
+    /// As [`bind_scaled`](Self::bind_scaled): on a name that is not a key,
+    /// on no names or no variants, or on a modifier that makes no key.
+    #[allow(clippy::too_many_arguments)]
+    pub fn bind_step_scaled<S: 'static, T: Stepped, V: Scaled>(
+        self,
+        keys: &str,
+        variants: &[V],
+        description: &str,
+        signal: Signal<S>,
+        field: impl Fn(&mut S) -> &mut T + 'static,
+        step: f64,
+        range: RangeInclusive<T>,
+    ) -> Node {
+        self.bind_scaled(keys, variants, description, move |_, factor| {
+            signal.update(|value| step_within(field(value), step * factor, &range))
+        })
+    }
+
+    /// Let the binding added last fire with any modifiers held: its keys
+    /// with Shift, Ctrl or Alt (or none) are all it. A binding that names
+    /// the key with its modifiers, here or on a node deeper, still wins.
+    /// scope-tui's PgUp steps by one whatever is held.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| {
+    ///     let n = signal(0);
+    ///     text!("{n}")
+    ///         .bind("pageup", "Up one", move |_| n.update(|n| *n += 1))
+    ///         .any_modifiers()
+    ///         .bind("ctrl+pageup", "Up ten", move |_| n.update(|n| *n += 10))
+    /// });
+    /// let mut driver = app.driver(5, 1);
+    /// driver.press("pageup shift+pageup alt+pageup ctrl+pageup");
+    /// assert_eq!(driver.screen().plain()[0].trim_end(), "13");
+    /// ```
+    pub fn any_modifiers(self) -> Node {
+        self.last_binding("any_modifiers", |binding| binding.any_modifiers = true)
+    }
+
+    /// Let the key go on after the binding added last runs, as if it had
+    /// not taken it: to the next binding of the key on this node, then up
+    /// to the nodes above. One key, two handlers: a view's Esc that resets
+    /// it, then the app's. A handler can also decide as it runs, with
+    /// [`Ctx::pass_key`](crate::Ctx::pass_key).
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| {
+    ///     let said = signal(String::new());
+    ///     column([text!("{said}")
+    ///         .bind("esc", "Reset the view", move |_| said.update(|s| s.push_str("view ")))
+    ///         .fall_through()
+    ///         .focusable()])
+    ///     .bind("esc", "Stop", move |_| said.update(|s| s.push_str("app")))
+    /// });
+    /// let mut driver = app.driver(10, 1);
+    /// driver.press("esc");
+    /// assert_eq!(driver.screen().plain()[0].trim_end(), "view app");
+    /// ```
+    pub fn fall_through(self) -> Node {
+        self.last_binding("fall_through", |binding| binding.fall_through = true)
+    }
+
+    /// Keep the binding added last out of the help, the which-key pop-up
+    /// and a [`key_hints`](crate::widgets::key_hints) footer while it
+    /// still works; its description is its name, which the command palette
+    /// lists and a test can run ([`Driver::run_named`](crate::Driver::run_named)),
+    /// as Textual's `Binding(show=False)`. An empty description hides a
+    /// binding with no name.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| {
+    ///     let n = signal(0);
+    ///     text!("{n}")
+    ///         .bind("+", "Add one", move |_| n.update(|n| *n += 1))
+    ///         .bind("shift+up", "Add one (shifted)", move |_| n.update(|n| *n += 1))
+    ///         .unlisted()
+    ///         .on_key("?", |cx| cx.help())
+    /// });
+    /// let mut driver = app.driver(40, 10);
+    /// driver.press("shift+up");
+    /// assert_eq!(driver.screen().plain()[0].trim_end(), "1");
+    /// driver.press("?");
+    /// let help = driver.screen().plain().join("\n");
+    /// assert!(help.contains("Add one") && !help.contains("shifted"));
+    /// ```
+    pub fn unlisted(self) -> Node {
+        self.last_binding("unlisted", |binding| binding.hidden = true)
+    }
+
+    /// [`bind`](Self::bind), [`unlisted`](Self::unlisted): bound under
+    /// `name` (for the palette and tests), not listed.
+    ///
+    /// # Panics
+    /// On a name that is not a key, or on no names at all.
+    pub fn bind_hidden(
+        self,
+        keys: &str,
+        name: &str,
+        handler: impl FnMut(&mut Ctx) + 'static,
+    ) -> Node {
+        self.bind(keys, name, handler).unlisted()
+    }
+
+    /// Change the key binding added last (not a sequence); a debug build
+    /// says so on stderr when there is none.
+    fn last_binding(self, what: &str, change: impl FnOnce(&mut KeyBinding)) -> Node {
+        match self.keys.borrow_mut().last_mut() {
+            Some(binding) => change(binding),
+            None => {
+                if cfg!(debug_assertions) {
+                    eprintln!("intuituive: {what}() on a node with no key binding does nothing");
+                }
+            }
+        }
+        self
     }
 
     /// Run `scope` on this node, then `patch` each binding and sequence it
@@ -297,6 +447,18 @@ impl Node {
         }
         node
     }
+}
+
+/// Move `number` on by `step`, kept within `range`.
+fn step_within<T: Stepped>(number: &mut T, step: f64, range: &RangeInclusive<T>) {
+    let moved = number.stepped(step);
+    *number = if moved < *range.start() {
+        *range.start()
+    } else if moved > *range.end() {
+        *range.end()
+    } else {
+        moved
+    };
 }
 
 /// One mode of [`Node::modes`]: its value, its help section, and what

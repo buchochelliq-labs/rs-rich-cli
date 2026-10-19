@@ -77,6 +77,15 @@ pub(crate) struct KeyBinding {
     pub shown: Option<Vec<Key>>,
     /// When it applies ([`bind_when`](Node::bind_when)); `None`, always.
     pub when: Option<BindingCondition>,
+    /// Its keys fire with any modifiers held
+    /// ([`any_modifiers`](Node::any_modifiers)).
+    pub any_modifiers: bool,
+    /// The key goes on to the next handler after it
+    /// ([`fall_through`](Node::fall_through)).
+    pub fall_through: bool,
+    /// Bound, but not listed in the help, the which-key pop-up or a
+    /// footer ([`unlisted`](Node::unlisted)); the palette still runs it.
+    pub hidden: bool,
     pub handler: KeyHandler,
 }
 
@@ -92,8 +101,21 @@ impl KeyBinding {
             section: None,
             shown: None,
             when: None,
+            any_modifiers: false,
+            fall_through: false,
+            hidden: false,
             handler,
         }
+    }
+
+    /// Whether it takes `key` only as a modifier-blind binding: one of
+    /// its keys with other modifiers (Shift+Tab for `tab`).
+    fn takes_bare(&self, key: Key) -> bool {
+        let code = |key: &Key| match key.code {
+            rich_interact::KeyCode::BackTab => rich_interact::KeyCode::Tab,
+            code => code,
+        };
+        self.any_modifiers && self.live_keys().iter().any(|own| code(own) == code(&key))
     }
 
     /// Whether it applies now: no condition, or its condition holds.
@@ -113,6 +135,21 @@ impl KeyBinding {
         }
     }
 }
+/// Which of `bindings` takes `key`, those in `skip` left out: one that
+/// names the key (as [`Key::pick`] chooses), else a modifier-blind one
+/// with its key.
+pub(crate) fn pick_binding(key: Key, bindings: &[KeyBinding], skip: &[usize]) -> Option<usize> {
+    let live = bindings.iter().enumerate().map(|(i, bound)| {
+        if skip.contains(&i) {
+            &[][..]
+        } else {
+            bound.live_keys()
+        }
+    });
+    key.pick(live)
+        .or_else(|| (0..bindings.len()).find(|i| !skip.contains(i) && bindings[*i].takes_bare(key)))
+}
+
 /// A mouse handler: the event in the node's coordinates; whether it used
 /// it.
 pub(crate) type MouseHandler = Box<dyn FnMut(&mut Ctx, Mouse) -> bool>;

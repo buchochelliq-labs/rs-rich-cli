@@ -78,6 +78,8 @@ pub struct Ctx {
     afters: Vec<After>,
     /// Screens open when the handler was called.
     layers: usize,
+    /// The handler passed its key on ([`pass_key`](Ctx::pass_key)).
+    pub(crate) passed: bool,
 }
 
 /// A one-shot timer waiting to be put on the app's clock: how long it
@@ -272,7 +274,42 @@ impl Ctx {
             handoffs: Vec::new(),
             afters: Vec::new(),
             layers: 1,
+            passed: false,
         }
+    }
+
+    /// Pass the key this binding was run for on, as if it had not taken
+    /// it: to the next binding of the key on the same node, then up to the
+    /// nodes above, as Bubble Tea passes a message on to a child. What the
+    /// handler did stands. Nothing outside a key binding.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| {
+    ///     let (said, editing) = (signal(String::new()), signal(false));
+    ///     column([text!("{said}")
+    ///         .bind("esc", "Stop editing", move |cx| {
+    ///             if !editing.get_untracked() {
+    ///                 cx.pass_key();
+    ///             }
+    ///             editing.set(false);
+    ///         })
+    ///         .focusable()])
+    ///     .bind("esc", "Reset", move |_| said.set("reset".into()))
+    /// });
+    /// let mut driver = app.driver(10, 1);
+    /// driver.press("esc");
+    /// assert_eq!(driver.screen().plain()[0].trim_end(), "reset");
+    /// ```
+    pub fn pass_key(&mut self) {
+        self.passed = true;
+    }
+
+    /// The app's clock: the time since it started, as this turn began
+    /// (stepped by the headless driver in a test).
+    pub fn now(&self) -> Duration {
+        Runtime::current().now.get()
     }
 
     /// Whether the handler runs on a screen, modal or pop-up opened over
@@ -3096,8 +3133,9 @@ impl App {
     }
 
     /// The described bindings of the focused node and its ancestors,
-    /// innermost first, each with its node and index.
-    fn bindings(&self) -> Vec<(NodeId, usize, rich_interact::keymap::Binding)> {
+    /// innermost first, each with its node and index; the
+    /// [unlisted](crate::Node::unlisted) ones too for the `palette`.
+    fn bindings(&self, palette: bool) -> Vec<(NodeId, usize, rich_interact::keymap::Binding)> {
         let path = self
             .focus()
             .map(|id| self.path_to(id))
@@ -3109,7 +3147,8 @@ impl App {
                 let name = node.group_name();
                 // A binding that does not apply now is not listed.
                 for (index, bound) in node.keys.borrow().iter().enumerate() {
-                    if bound.description.is_empty() || !bound.active() {
+                    if bound.description.is_empty() || !bound.active() || (bound.hidden && !palette)
+                    {
                         continue;
                     }
                     let binding = rich_interact::keymap::Binding::new(
@@ -3121,7 +3160,8 @@ impl App {
                     out.push((id, index, binding));
                 }
                 for (index, bound) in node.sequences.borrow().iter().enumerate() {
-                    if bound.description.is_empty() || !bound.active() {
+                    if bound.description.is_empty() || !bound.active() || (bound.hidden && !palette)
+                    {
                         continue;
                     }
                     let binding = rich_interact::keymap::Binding::sequence(
@@ -3145,7 +3185,7 @@ impl App {
             return;
         };
         let mut shown: Vec<(String, String)> = Vec::new();
-        for (_, _, binding) in self.bindings() {
+        for (_, _, binding) in self.bindings(false) {
             let keys = binding.hint();
             if binding.sequence || shown.iter().any(|(k, _)| *k == keys) {
                 continue;
@@ -3157,7 +3197,11 @@ impl App {
 
     /// The help over the top screen, as `options` say.
     fn open_help(&mut self, options: crate::help::HelpOptions) {
-        let all: Vec<_> = self.bindings().into_iter().map(|(_, _, b)| b).collect();
+        let all: Vec<_> = self
+            .bindings(false)
+            .into_iter()
+            .map(|(_, _, b)| b)
+            .collect();
         self.open(
             Box::new(move || {
                 let format = options.key_format;
@@ -3176,7 +3220,7 @@ impl App {
 
     /// The command palette over the top screen.
     fn open_palette(&mut self) {
-        let bindings = self.bindings();
+        let bindings = self.bindings(true);
         let commands: Vec<rich_interact::overlay::Command> = bindings
             .iter()
             .map(|(_, _, binding)| rich_interact::overlay::Command::from_binding(binding))
@@ -3533,11 +3577,7 @@ impl App {
         let mut bound = false;
         for id in self.key_path() {
             with_node(&self.top().root, id, &mut |node| {
-                bound |= node
-                    .keys
-                    .borrow()
-                    .iter()
-                    .any(|bound| key.matches_any(bound.live_keys()))
+                bound |= crate::node::pick_binding(key, &node.keys.borrow(), &[]).is_some()
                     || node
                         .sequences
                         .borrow()
@@ -3705,6 +3745,8 @@ impl App {
         let mut cx = self.ctx();
         let mut used = None;
         let mut starts = false;
+        // A binding ran and passed the key on: it goes on up.
+        let mut passed = false;
         let runtime = self.runtime.clone();
         runtime.enter(|| {
             with_node(&self.top().root, id, &mut |node| {
@@ -3714,13 +3756,25 @@ impl App {
                 {
                     let mut keys = node.keys.borrow_mut();
                     // A binding that names the key before one it could be
-                    // (a Tab from a legacy terminal: `tab`, then `ctrl+i`).
-                    // One that does not apply now has no keys (another of
-                    // the key may: two under different conditions).
-                    let picked = key.pick(keys.iter().map(|bound| bound.live_keys()));
-                    if let Some(bound) = picked.and_then(|index| keys.get_mut(index)) {
+                    // (a Tab from a legacy terminal: `tab`, then `ctrl+i`),
+                    // then a modifier-blind one. One that does not apply
+                    // now has no keys (another of the key may: two under
+                    // different conditions). One that falls through (or
+                    // passes the key on) hands it to the next that takes
+                    // it, here or above.
+                    let mut ran = Vec::new();
+                    while let Some(index) = crate::node::pick_binding(key, &keys, &ran) {
+                        let bound = &mut keys[index];
                         (bound.handler)(&mut cx, key);
                         used = Some("on_key");
+                        if !(bound.fall_through || std::mem::take(&mut cx.passed)) {
+                            passed = false;
+                            return;
+                        }
+                        passed = true;
+                        ran.push(index);
+                    }
+                    if passed {
                         return;
                     }
                 }
@@ -3754,7 +3808,12 @@ impl App {
         }
         let how = used?;
         self.note_used(id, how);
-        Some(self.apply(cx))
+        let quit = self.apply(cx);
+        if passed && !quit {
+            // Done here; the key goes on to the nodes above.
+            return None;
+        }
+        Some(quit)
     }
 
     /// Go on with the key sequence `pending` with `key`: run the sequence
@@ -4910,6 +4969,40 @@ impl Driver {
             self.event(Event::Key(key));
             self.settle();
         }
+    }
+
+    /// Run the binding called `name` (its description) that the focused
+    /// node or one above it has, as the command palette does, a
+    /// [unlisted](crate::Node::unlisted) one too, then [`settle`](Self::settle).
+    /// Whether there was one.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| {
+    ///     let n = signal(0);
+    ///     text!("{n}").bind_hidden("shift+up", "Add one", move |_| n.update(|n| *n += 1))
+    /// });
+    /// let mut driver = app.driver(5, 1);
+    /// assert!(driver.run_named("Add one"));
+    /// assert!(!driver.run_named("Add two"));
+    /// assert_eq!(driver.screen().plain()[0].trim_end(), "1");
+    /// ```
+    pub fn run_named(&mut self, name: &str) -> bool {
+        self.settle();
+        let found = self
+            .app
+            .bindings(true)
+            .into_iter()
+            .find(|(_, _, binding)| binding.description == name);
+        let Some((id, index, binding)) = found else {
+            return false;
+        };
+        if self.app.run_binding(id, index, binding.sequence) {
+            self.done = true;
+        }
+        self.settle();
+        true
     }
 
     /// Type `text`, one key a character, then [`settle`](Self::settle):
