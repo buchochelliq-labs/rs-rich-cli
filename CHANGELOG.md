@@ -78,8 +78,11 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 ### Docs: one site per release, with a version selector
 
 - The documentation site keeps a copy of the docs for each release, picked
-  from a drop-down in the header: `/X.Y.Z/` is built from that release's
-  `rs-rich-cli-vX.Y.Z` tag, `/dev/` from main, and the site's root and
+  from a drop-down in the header: `/X.Y.Z/` is built from the last commit on
+  main that still ships that release (its `rs-rich-cli-vX.Y.Z` tag, or a later
+  one up to the commit before `RELEASES.toml` first moves a crate past it, so
+  docs fixed after a release show under it), `/dev/` from main, and the
+  site's root and
   `/latest/` go to the newest release. Every other version shows a banner
   linking to the newest release's docs, and an old unversioned link is sent
   to the same page under the newest release.

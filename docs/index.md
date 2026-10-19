@@ -70,7 +70,9 @@ navigation; the [roadmap](ROADMAP.md) and the
 The version menu in the header picks the docs of a release. A release is
 named by `rs-rich-cli`'s version, and its docs match the crates of that
 release: the other crates' versions are in that release's
-[version table](#versions-in-this-checkout). **dev (main)** documents what
+[version table](#versions-in-this-checkout). A release's docs keep the fixes
+made to them after it shipped, until main moves on to the next release's
+crates. **dev (main)** documents what
 is on `main` and not released yet. The site's root and `/latest/` show the
 newest release, and every other version says so in a banner with a link to
 it. The site keeps the newest releases that fit GitHub Pages' 1 GB, up to

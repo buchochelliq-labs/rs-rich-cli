@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 """Build the documentation site with one copy of the docs per release.
 
-Each release's docs are built from its `rs-rich-cli-vX.Y.Z` tag (a release is
-named by rs-rich-cli's version; see release_cohort.py) into `<out>/X.Y.Z/`, and
-main's into `<out>/dev/`. The theme's version selector reads `versions.json`
+Each release's docs (a release is named by rs-rich-cli's version; see
+release_cohort.py) are built into `<out>/X.Y.Z/` from the last commit on main
+that still ships that release: its `rs-rich-cli-vX.Y.Z` tag, or a later commit
+up to the one before `RELEASES.toml` first moves a crate past it. Docs fixed
+after a release so show under it, and the docs of the next release's work do
+not. Main's docs are built into `<out>/dev/`. The theme's version selector reads `versions.json`
 at the site's root, the format `mike` writes, so no `gh-pages` branch is needed:
 the whole site is rebuilt and deployed as one Pages artifact.
 
@@ -30,6 +33,7 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+import tomllib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -57,6 +61,34 @@ def releases():
     return [(".".join(map(str, key)), tag) for key, tag in found]
 
 
+def versions_at(commit):
+    """RELEASES.toml's (name, registry) -> version at `commit`, or None where it
+    has none."""
+    shown = subprocess.run(["git", "show", f"{commit}:RELEASES.toml"], cwd=ROOT,
+                           capture_output=True, text=True, encoding="utf-8")
+    if shown.returncode:
+        return None
+    packages = tomllib.loads(shown.stdout).get("package", [])
+    return {(p["name"], p.get("registry")): p["version"] for p in packages}
+
+
+def docs_commit(tag):
+    """The commit whose docs stand for the release `tag` tags: the last one on
+    HEAD's first-parent line before RELEASES.toml moves a version past the
+    tag's, else HEAD. The tag itself when it is not behind HEAD or has no
+    RELEASES.toml to compare."""
+    shipped = versions_at(tag)
+    ancestor = subprocess.run(["git", "merge-base", "--is-ancestor", tag, "HEAD"], cwd=ROOT)
+    if shipped is None or ancestor.returncode:
+        return tag
+    changes = git("log", "--first-parent", "--reverse", "--format=%H", f"{tag}..HEAD",
+                  "--", "RELEASES.toml").split()
+    for commit in changes:
+        if versions_at(commit) != shipped:
+            return git("rev-parse", f"{commit}^1").strip()
+    return git("rev-parse", "HEAD").strip()
+
+
 def site_root():
     """The published site's URL, from mkdocs.yml, ending in a slash."""
     text = (ROOT / "mkdocs.yml").read_text(encoding="utf-8")
@@ -64,9 +96,9 @@ def site_root():
     return url if url.endswith("/") else url + "/"
 
 
-def extract(tag, into):
-    """The tree at `tag`, written to `into` (snippets read crates/ too)."""
-    archive = subprocess.run(["git", "archive", "--format=tar", tag], cwd=ROOT, check=True,
+def extract(commit, into):
+    """The tree at `commit`, written to `into` (snippets read crates/ too)."""
+    archive = subprocess.run(["git", "archive", "--format=tar", commit], cwd=ROOT, check=True,
                              capture_output=True).stdout
     with tarfile.open(fileobj=io.BytesIO(archive)) as tar:
         tar.extractall(into, filter="data")
@@ -166,10 +198,11 @@ def main():
     kept = []
     with tempfile.TemporaryDirectory() as scratch:
         for version, tag in releases()[: args.releases]:
-            print(f"building {version} from {tag}", flush=True)
+            commit = docs_commit(tag)
+            print(f"building {version} from {commit[:12]} ({tag})", flush=True)
             source = Path(scratch) / version
-            extract(tag, source)
-            # An old tag's docs are as they were released: warnings do not fail them.
+            extract(commit, source)
+            # An old release's docs are as they were then: warnings do not fail them.
             build(source, out / version, version, url, strict=False)
             shutil.rmtree(source)
             if size_mb(out) > args.budget_mb:
