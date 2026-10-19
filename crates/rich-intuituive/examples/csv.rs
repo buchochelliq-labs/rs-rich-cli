@@ -18,7 +18,11 @@
 //! indexed before the first frame, a background task indexes the rest
 //! (the row count shows `N+` until it is done), and only the rows in view
 //! are read and parsed, a seek and a read each. Finding, filtering and
-//! sorting read the whole file, on a background task.
+//! sorting read the whole file, on a background task: the file is a
+//! `TableSource` and what the query asks of it a `view_of` it. The table
+//! follows state as it draws (`columns_with`, `freeze_columns_with`,
+//! `multiline_when`, `TableLayout`); the prompts are a `command_line`,
+//! find and filter sharing a history.
 //!
 //! csvlens's keys: hjkl or the arrows, Ctrl+F/B (PgDn/PgUp) a window,
 //! Ctrl+D/U (d/u) half one, G (End) and g (Home), `<n>G` (or `:<n>`) a
@@ -31,21 +35,23 @@
 //! marked rows and exits, `r` resets, H or ? shows the help, q quits.
 
 use std::cell::RefCell;
-use std::collections::hash_map::DefaultHasher;
 use std::collections::{BTreeSet, HashMap};
 use std::fs::File;
-use std::hash::{Hash, Hasher};
 use std::io::{self, Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::atomic::{AtomicUsize, Ordering as Atomic};
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, Mutex, RwLock};
 
+use intuituive::command_line::{command_line, CommandLine, Mode as Line};
 use intuituive::prelude::*;
 use intuituive::rich::markup::escape;
 use intuituive::rich::{Style, Text};
-use intuituive::widgets::{virtual_table_with, Column, Scrollbar, Show, TableOptions};
-use intuituive::{rule, spawn_stream, HelpOptions, Offset, Origin, RectHandle};
+use intuituive::widgets::{
+    view_of, virtual_table_with, Column, Order, RowCount, Scrollbar, Show, TableLayout,
+    TableOptions, TableSource, View, ViewQuery,
+};
+use intuituive::{rule, spawn_stream, HelpOptions};
 use rich_ext::transform::{HighlightMatches, KeepLines, TextTransform};
 
 // ---------------------------------------------------------------------
@@ -177,8 +183,8 @@ pub struct Source {
     /// Where the background index goes on from, and whether it is needed.
     resume: u64,
     complete: bool,
-    file: RefCell<File>,
-    cache: RefCell<HashMap<usize, Rc<Vec<String>>>>,
+    file: Mutex<File>,
+    cache: Mutex<HashMap<usize, Arc<Vec<String>>>>,
     /// How many records were read and parsed for the view: the test's
     /// measure of "only the window is read".
     pub parsed: Arc<AtomicUsize>,
@@ -220,8 +226,8 @@ impl Source {
             bounds: Arc::new(RwLock::new(bounds)),
             resume,
             complete,
-            file: RefCell::new(file),
-            cache: RefCell::new(HashMap::new()),
+            file: Mutex::new(file),
+            cache: Mutex::new(HashMap::new()),
             parsed: Arc::new(AtomicUsize::new(0)),
         })
     }
@@ -234,8 +240,8 @@ impl Source {
 
     /// Data row `row` (0-based, after the header), read from disk unless
     /// it was read lately.
-    pub fn row(&self, row: usize) -> Rc<Vec<String>> {
-        if let Some(cached) = self.cache.borrow().get(&row) {
+    pub fn row(&self, row: usize) -> Arc<Vec<String>> {
+        if let Some(cached) = self.cache.lock().unwrap().get(&row) {
             return cached.clone();
         }
         let record = row + self.headers as usize;
@@ -249,7 +255,7 @@ impl Source {
         let fields = match span {
             Some((from, to)) => {
                 let mut bytes = vec![0; (to - from) as usize];
-                let mut file = self.file.borrow_mut();
+                let mut file = self.file.lock().unwrap();
                 let read = file
                     .seek(SeekFrom::Start(from))
                     .and_then(|_| file.read_exact(&mut bytes));
@@ -261,8 +267,8 @@ impl Source {
             }
             None => Vec::new(),
         };
-        let fields = Rc::new(fields);
-        let mut cache = self.cache.borrow_mut();
+        let fields = Arc::new(fields);
+        let mut cache = self.cache.lock().unwrap();
         if cache.len() > 2048 {
             cache.clear();
         }
@@ -324,8 +330,28 @@ impl Source {
     }
 }
 
+/// The rows indexed so far, as a table and a view read them: `N+` until
+/// the background index is done.
+pub struct Indexed {
+    src: Arc<Source>,
+    indexed: Signal<(usize, bool)>,
+}
+
+impl TableSource for Indexed {
+    fn len(&self) -> RowCount {
+        match self.indexed.get() {
+            (n, true) => RowCount::Exact(n),
+            (n, false) => RowCount::AtLeast(n),
+        }
+    }
+
+    fn row(&self, i: usize) -> Vec<String> {
+        self.src.row(i).to_vec()
+    }
+}
+
 // ---------------------------------------------------------------------
-// Finding, filtering and sorting: one pass over the whole file.
+// Finding, filtering and sorting: a view of the file, on a worker.
 // ---------------------------------------------------------------------
 
 /// How the rows are sorted: by a data column, which way, and whether
@@ -347,20 +373,6 @@ pub struct Query {
     pub sort: Option<Sort>,
 }
 
-impl Query {
-    fn is_plain(&self) -> bool {
-        self.filter.is_none() && self.find.is_none() && self.sort.is_none()
-    }
-}
-
-/// The pass's answer: the rows in view (record numbers, `None` for all in
-/// file order), and the positions in that view of the rows found.
-struct Answer {
-    view: Option<Vec<u32>>,
-    found: Vec<u32>,
-    error: Option<String>,
-}
-
 /// The pattern as csvlens matches it: case ignored with `-i` unless the
 /// pattern has a capital letter.
 fn pattern(re: &str, ignore_case: bool) -> String {
@@ -371,28 +383,45 @@ fn pattern(re: &str, ignore_case: bool) -> String {
     }
 }
 
-/// The rows (of those `starts` begin, in `text`) with a match of
-/// `pattern` in a cell. The cells are one to a line, so a match never runs
-/// from one cell into the next, and the whole file is one scan of the
-/// regex rather than one a row.
-fn rows_matching(text: &str, starts: &[usize], pattern: &str) -> Result<Vec<bool>, String> {
-    let style = Style::parse("bold").expect("a style");
-    // Multi-line, so `^` and `$` hold at each cell's ends, as csvlens's
-    // per-cell match has them.
-    let multi_line = format!("(?m){pattern}");
-    let highlight =
-        HighlightMatches::new(&multi_line, style).map_err(|e| e.message().to_string())?;
-    let found = highlight
-        .transform(Text::new(text))
-        .map_err(|e| e.to_string())?;
-    let mut rows = vec![false; starts.len()];
-    for span in found.spans() {
-        let row = starts
-            .partition_point(|&s| s <= span.start)
-            .saturating_sub(1);
-        rows[row] = true;
+/// A row test for the view: a match of `re` in a cell.
+fn row_test(re: &str, ignore_case: bool) -> Option<impl Fn(&[String]) -> bool + Send + Sync> {
+    let keep = KeepLines::new(&pattern(re, ignore_case)).ok()?;
+    Some(move |cells: &[String]| {
+        // A cell a line, so a match never runs from one into the next.
+        let lines: Vec<String> = cells.iter().map(|c| c.replace(['\n', '\r'], " ")).collect();
+        keep.transform(Text::new(lines.join("\n")))
+            .is_ok_and(|t| !t.plain().is_empty())
+    })
+}
+
+/// The view's query for the app's.
+fn view_query(query: &Query, ignore_case: bool) -> ViewQuery {
+    let mut view = ViewQuery::default();
+    if let Some(test) = query
+        .filter
+        .as_deref()
+        .and_then(|re| row_test(re, ignore_case))
+    {
+        view = view.keep(test);
     }
-    Ok(rows)
+    if let Some(test) = query
+        .find
+        .as_deref()
+        .and_then(|re| row_test(re, ignore_case))
+    {
+        view = view.find(test);
+    }
+    if let Some(sort) = query.sort {
+        let order = match sort.descending {
+            true => Order::Descending,
+            false => Order::Ascending,
+        };
+        view = view.sort(sort.column, order);
+        if sort.natural {
+            view = view.compare(natural_cmp);
+        }
+    }
+    view
 }
 
 /// "file10" after "file2": digit runs compare as numbers.
@@ -428,94 +457,6 @@ fn natural_cmp(a: &str, b: &str) -> std::cmp::Ordering {
                 b = &b[1..];
             }
         }
-    }
-}
-
-fn answer(path: &Path, delimiter: u8, headers: bool, query: &Query, ignore_case: bool) -> Answer {
-    let failed = |error: String| Answer {
-        view: None,
-        found: Vec::new(),
-        error: Some(error),
-    };
-    let bytes = match std::fs::read(path) {
-        Ok(bytes) => bytes,
-        Err(e) => return failed(e.to_string()),
-    };
-    let mut bounds = vec![0];
-    scan(&bytes, 0, &mut false, &mut bounds);
-    if *bounds.last().unwrap() < bytes.len() as u64 {
-        bounds.push(bytes.len() as u64);
-    }
-    // Every row's cells, one to a line, for the regex; and the sort's keys.
-    let (mut text, mut starts, mut keys) = (String::new(), Vec::new(), Vec::new());
-    let searching = query.filter.is_some() || query.find.is_some();
-    for w in bounds.windows(2).skip(headers as usize) {
-        let fields = parse_record(&bytes[w[0] as usize..w[1] as usize], delimiter);
-        if searching {
-            starts.push(text.len());
-            for field in &fields {
-                text.extend(
-                    field
-                        .chars()
-                        .map(|c| if c == '\n' || c == '\r' { ' ' } else { c }),
-                );
-                text.push('\n');
-            }
-        }
-        if let Some(sort) = query.sort {
-            keys.push(fields.get(sort.column).cloned().unwrap_or_default());
-        }
-    }
-    let rows = bounds.len().saturating_sub(1 + headers as usize);
-    let matching = |re: &Option<String>| -> Result<Option<Vec<bool>>, String> {
-        match re {
-            Some(re) => rows_matching(&text, &starts, &pattern(re, ignore_case))
-                .map(Some)
-                .map_err(|_| format!("Invalid regex: {re}")),
-            None => Ok(None),
-        }
-    };
-    let (filter, hits) = match (matching(&query.filter), matching(&query.find)) {
-        (Ok(filter), Ok(hits)) => (filter, hits),
-        (Err(e), _) | (_, Err(e)) => return failed(e),
-    };
-    let kept: Vec<u32> = (0..rows)
-        .filter(|&r| filter.as_ref().is_none_or(|f| f[r]))
-        .map(|r| r as u32)
-        .collect();
-    let mut order: Vec<usize> = (0..kept.len()).collect();
-    if let Some(sort) = query.sort {
-        // The key of the row at `kept[i]`.
-        let k = |i: usize| kept[i] as usize;
-        // csvlens's "auto": numbers when every value is one, else text.
-        let numbers: Option<Vec<f64>> = (!sort.natural)
-            .then(|| keys.iter().map(|k| k.trim().parse::<f64>().ok()).collect())
-            .flatten();
-        match numbers {
-            Some(n) => order.sort_by(|&a, &b| n[k(a)].total_cmp(&n[k(b)])),
-            None if sort.natural => order.sort_by(|&a, &b| natural_cmp(&keys[k(a)], &keys[k(b)])),
-            None => order.sort_by(|&a, &b| keys[k(a)].cmp(&keys[k(b)])),
-        }
-        if sort.descending {
-            order.reverse();
-        }
-    }
-    let found = if let Some(hits) = &hits {
-        order
-            .iter()
-            .enumerate()
-            .filter(|(_, &i)| hits[kept[i] as usize])
-            .map(|(at, _)| at as u32)
-            .collect()
-    } else {
-        Vec::new()
-    };
-    let view = (query.filter.is_some() || query.sort.is_some())
-        .then(|| order.iter().map(|&i| kept[i]).collect());
-    Answer {
-        view,
-        found,
-        error: None,
     }
 }
 
@@ -561,65 +502,74 @@ type Highlighter = (String, Option<HighlightMatches>);
 /// The app's state, every piece a signal but the file itself.
 #[derive(Clone)]
 struct Lens {
-    src: Rc<Source>,
+    src: Arc<Source>,
     name: Rc<str>,
     ignore_case: bool,
     /// Data rows indexed so far, and whether that is all of them.
     indexed: Signal<(usize, bool)>,
     query: Signal<Query>,
-    /// The rows in view, by record (filtered or sorted), or `None` for all.
-    view: Signal<Option<Rc<Vec<u32>>>>,
-    /// The positions in view of the rows found.
-    found: Signal<Rc<Vec<u32>>>,
-    /// Whether a pass over the file is under way.
-    busy: Signal<bool>,
+    /// The file through the query: the rows kept, in their order, and
+    /// those found.
+    view: View<Indexed>,
     /// The column filter (`*`): its pattern and the data columns shown.
     columns: Signal<Option<(String, Rc<Vec<usize>>)>>,
     freeze: Signal<usize>,
     mode: Signal<Mode>,
     /// Widths set with `>` and `<`, by data column.
     widths: Signal<Rc<HashMap<usize, u16>>>,
-    /// Lines a row takes: 1 unless `-S`/`-W` wrap them.
-    wrap: Signal<u16>,
+    /// `-S`/`-W`: rows as tall as their cells.
+    wrap: Signal<bool>,
     marks: Signal<Rc<BTreeSet<usize>>>,
     message: Signal<Option<String>>,
     selected: Signal<usize>,
     offset: Signal<usize>,
     /// The cell cursor's table column (the gutter is column 0).
     cursor: Signal<usize>,
-    area: RectHandle,
-    task: Rc<RefCell<Option<Task>>>,
+    /// What the table drew: its columns' widths and rows in view.
+    layout: TableLayout,
+    /// The prompts, in place of the status line.
+    cmd: CommandLine,
+    /// Whether the prompt is `<n>G`'s, which G ends.
+    goto: Signal<bool>,
     highlighter: Rc<RefCell<Option<Highlighter>>>,
 }
 
 impl Lens {
     fn new(src: Source, options: &Options) -> Lens {
         let names = src.names.len();
+        let src = Arc::new(src);
+        let indexed = signal((0, false));
+        let query = signal(Query {
+            filter: options.filter.clone(),
+            find: options.find.clone().filter(|_| options.filter.is_none()),
+            sort: None,
+        });
+        let ignore_case = options.ignore_case;
+        let asked = memo(move || view_query(&query.get(), ignore_case));
+        let source = Indexed {
+            src: src.clone(),
+            indexed,
+        };
         let lens = Lens {
-            src: Rc::new(src),
+            src,
             name: options.name.clone().into(),
-            ignore_case: options.ignore_case,
-            indexed: signal((0, false)),
-            query: signal(Query {
-                filter: options.filter.clone(),
-                find: options.find.clone().filter(|_| options.filter.is_none()),
-                sort: None,
-            }),
-            view: signal(None),
-            found: signal(Rc::new(Vec::new())),
-            busy: signal(false),
+            ignore_case,
+            indexed,
+            query,
+            view: view_of(source, move || asked.get()),
             columns: signal(None),
             freeze: signal(0),
             mode: signal(Mode::Row),
             widths: signal(Rc::new(HashMap::new())),
-            wrap: signal(1),
+            wrap: signal(false),
             marks: signal(Rc::new(BTreeSet::new())),
             message: signal(None),
             selected: signal(0),
             offset: signal(0),
             cursor: signal(1.min(names)),
-            area: RectHandle::new(),
-            task: Rc::new(RefCell::new(None)),
+            layout: TableLayout::new(),
+            cmd: CommandLine::new(),
+            goto: signal(false),
             highlighter: Rc::new(RefCell::new(None)),
         };
         if let Some(re) = &options.columns {
@@ -630,17 +580,12 @@ impl Lens {
 
     /// Rows in view.
     fn len(&self) -> usize {
-        match self.view.get() {
-            Some(view) => view.len(),
-            None => self.indexed.get().0,
-        }
+        self.view.len().count()
     }
 
     /// The record (data row in the file) at position `at` in view.
     fn record(&self, at: usize) -> usize {
-        self.view
-            .with(|v| v.as_ref().and_then(|v| v.get(at).map(|&r| r as usize)))
-            .unwrap_or(at)
+        self.view.source_row(at).unwrap_or(at)
     }
 
     fn shown(&self) -> Rc<Vec<usize>> {
@@ -662,10 +607,9 @@ impl Lens {
         self.shown().get(at).copied()
     }
 
-    /// The table's rows in view: its height less the header.
+    /// The table's rows in view.
     fn page(&self) -> usize {
-        let height = self.area.get_untracked().map_or(20, |r| r.height as usize);
-        (height.saturating_sub(1) / self.wrap.get_untracked().max(1) as usize).max(1)
+        self.layout.rows_in_view().max(1)
     }
 
     fn select(&self, at: usize) {
@@ -685,9 +629,7 @@ impl Lens {
             .map(|re| pattern(&re, self.ignore_case))
     }
 
-    /// `cell` as markup, the finder's matches in red. (csvlens puts the
-    /// match in the selected row on yellow; the table's highlight covers
-    /// the cells' own styles, so it would not show.)
+    /// `cell` as markup, the finder's matches in red.
     fn cell_markup(&self, cell: &str) -> String {
         let cell = cell.replace(['\n', '\r'], " ");
         let Some(re) = self.highlight_pattern() else {
@@ -698,27 +640,12 @@ impl Lens {
             let style = Style::parse(FOUND).expect("a style");
             *slot = Some((re.clone(), HighlightMatches::new(&re, style).ok()));
         }
-        let Some((_, Some(highlight))) = slot.as_ref() else {
-            return escape(&cell);
-        };
-        let Ok(text) = highlight.transform(Text::new(&cell)) else {
-            return escape(&cell);
-        };
-        let style = FOUND;
-        let mut spans: Vec<(usize, usize)> =
-            text.spans().iter().map(|s| (s.start, s.end)).collect();
-        spans.sort();
-        let (mut out, mut at) = (String::new(), 0);
-        for (start, end) in spans {
-            if start < at {
-                continue;
-            }
-            out.push_str(&escape(&cell[at..start]));
-            out.push_str(&format!("[{style}]{}[/]", escape(&cell[start..end])));
-            at = end;
+        match slot.as_ref() {
+            Some((_, Some(highlight))) => highlight
+                .transform(Text::new(&cell))
+                .map_or_else(|_| escape(&cell), |text| text.markup()),
+            _ => escape(&cell),
         }
-        out.push_str(&escape(&cell[at..]));
-        out
     }
 
     /// The table row at `at` in view: the row number, then the cells shown.
@@ -741,73 +668,27 @@ impl Lens {
         cells
     }
 
-    /// A column's width now: the one set with `>`/`<`, or its title's and
-    /// the cells' in view, capped as csvlens caps it.
-    fn width_of(&self, column: usize) -> u16 {
-        if let Some(&w) = self.widths.get_untracked().get(&column) {
-            return w;
+    /// The table's columns: the gutter, then the columns shown, fitted to
+    /// their titles and the cells in view up to csvlens's cap of 30%, or
+    /// as wide as `>`/`<` set them; the sorted one's title with its arrow.
+    fn columns(&self) -> Vec<Column> {
+        let sort = self.query.with(|q| q.sort);
+        let widths = self.widths.get();
+        let mut columns = vec![Column::new("", Size::Auto)];
+        for &c in self.shown().iter() {
+            let mut title = self.src.names[c].clone();
+            if let Some(sort) = sort.filter(|s| s.column == c) {
+                let arrow = if sort.descending { "▾" } else { "▴" };
+                let natural = if sort.natural { "N" } else { "" };
+                title = format!("{title} [{arrow}{natural}]");
+            }
+            let title = format!("{}  ", escape(&title));
+            columns.push(match widths.get(&c) {
+                Some(&w) => Column::new(&title, Size::Fixed(w)),
+                None => Column::new(&title, Size::Auto).max_percent(30),
+            });
         }
-        let first = self.offset.get_untracked();
-        let mut widest = self.src.names.get(column).map_or(0, |n| n.chars().count());
-        for at in first..(first + self.page()).min(self.len()) {
-            let fields = self.src.row(self.record(at));
-            let w = fields.get(column).map_or(0, |f| f.chars().count());
-            widest = widest.max(w);
-        }
-        (widest as u16 + 2).min(self.cap())
-    }
-
-    /// The widest a column fits to: 30% of the table, csvlens's cap.
-    fn cap(&self) -> u16 {
-        let width = self.area.get().map_or(80, |r| r.width);
-        ((width as f32 * 0.3) as u16).saturating_sub(2).max(6)
-    }
-
-    /// Start the pass over the file the query asks for, dropping any
-    /// still under way.
-    fn run_query(&self) {
-        if let Some(task) = self.task.borrow_mut().take() {
-            task.cancel();
-        }
-        let query = self.query.get_untracked();
-        if query.is_plain() {
-            self.view.set(None);
-            self.found.set(Rc::new(Vec::new()));
-            self.busy.set(false);
-            return;
-        }
-        self.busy.set(true);
-        let (path, delimiter, headers) =
-            (self.src.path.clone(), self.src.delimiter, self.src.headers);
-        let ignore_case = self.ignore_case;
-        let (view, found, busy, message) = (self.view, self.found, self.busy, self.message);
-        let (selected, filtering) = (
-            self.selected,
-            query.filter.is_some() || query.sort.is_some(),
-        );
-        let task = spawn(
-            move || answer(&path, delimiter, headers, &query, ignore_case),
-            move |answer, _| {
-                busy.set(false);
-                if let Some(error) = answer.error {
-                    message.set(Some(error));
-                    return;
-                }
-                view.set(answer.view.map(Rc::new));
-                if filtering {
-                    selected.set(0);
-                }
-                // csvlens goes to the first match from where it is.
-                let now = selected.get_untracked() as u32;
-                if let Some(&first) = answer.found.iter().find(|&&at| at >= now) {
-                    selected.set(first as usize);
-                } else if let Some(&first) = answer.found.first() {
-                    selected.set(first as usize);
-                }
-                found.set(Rc::new(answer.found));
-            },
-        );
-        *self.task.borrow_mut() = Some(task);
+        columns
     }
 
     fn filter_columns(&self, re: &str) {
@@ -862,17 +743,13 @@ impl Lens {
             shown.len()
         );
         let query = self.query.get();
-        let busy = self.busy.get();
+        let busy = self.view.is_busy();
         if let Some(re) = &query.find {
-            let found = self.found.get();
-            let state = if busy {
-                "Finding...".to_string()
-            } else if found.is_empty() {
-                "Not found".to_string()
-            } else {
-                let i = found.iter().position(|&f| f as usize == at);
-                let i = i.map_or("-".to_string(), |i| (i + 1).to_string());
-                format!("{i}/{}", found.len())
+            let state = match self.view.place(at) {
+                _ if busy => "Finding...".to_string(),
+                (_, 0) => "Not found".to_string(),
+                (0, n) => format!("-/{n}"),
+                (i, n) => format!("{i}/{n}"),
             };
             line += &format!(" [Find \"{re}\": {state}]");
         }
@@ -908,49 +785,21 @@ impl Lens {
 // The view.
 // ---------------------------------------------------------------------
 
-/// Everything the table is built from that its options fix: when any of
-/// it changes, the table is built again.
-fn layout_key(l: &Lens) -> u64 {
-    let mut h = DefaultHasher::new();
-    l.shown().hash(&mut h);
-    l.freeze.get().hash(&mut h);
-    l.mode.get().hash(&mut h);
-    let mut widths: Vec<(usize, u16)> = l.widths.get().iter().map(|(&c, &w)| (c, w)).collect();
-    widths.sort();
-    widths.hash(&mut h);
-    l.wrap.get().hash(&mut h);
-    l.query.with(|q| q.sort).hash(&mut h);
-    l.cap().hash(&mut h);
-    h.finish()
-}
-
-/// The table: the row numbers as a frozen first column, then the columns
-/// shown, fitted to their titles and the cells in view up to the cap.
-fn table(l: &Lens) -> Node {
-    let shown = l.shown();
-    let sort = l.query.with_untracked(|q| q.sort);
-    let cap = l.cap();
-    let widths = l.widths.get_untracked();
-    let mut columns = vec![Column::new("", Size::Auto)];
-    for &c in shown.iter() {
-        let mut title = l.src.names[c].clone();
-        if let Some(sort) = sort.filter(|s| s.column == c) {
-            let arrow = if sort.descending { "▾" } else { "▴" };
-            let natural = if sort.natural { "N" } else { "" };
-            title = format!("{title} [{arrow}{natural}]");
-        }
-        let title = format!("{}  ", escape(&title));
-        let column = match widths.get(&c) {
-            Some(&w) => Column::new(&title, Size::Fixed(w)),
-            None => Column::new(&title, Size::Auto).max(cap),
-        };
-        columns.push(column);
-    }
-    let mode = l.mode.get_untracked();
+/// The table in `mode`: the row numbers as a frozen first column, then the
+/// columns shown. Everything else it reads from state as it draws.
+fn table(l: &Lens, mode: Mode) -> Node {
+    let columns = {
+        let l = l.clone();
+        move || l.columns()
+    };
+    let (freeze, wrap) = (l.freeze, l.wrap);
     let mut options = TableOptions::default()
-        .freeze_columns(1 + l.freeze.get_untracked())
+        .columns_with(columns)
+        .freeze_columns_with(move || 1 + freeze.get())
+        .multiline_when(move || wrap.get())
         .column_spacing(2)
         .offset(l.offset)
+        .layout(&l.layout)
         .row_style({
             let l = l.clone();
             move |at| {
@@ -965,10 +814,6 @@ fn table(l: &Lens) -> Node {
     }
     if mode == Mode::Column {
         options = options.column_highlight();
-    }
-    let lines = l.wrap.get_untracked();
-    if lines > 1 {
-        options = options.multiline().row_height(lines);
     }
     let rows = {
         let l = l.clone();
@@ -988,7 +833,7 @@ fn table(l: &Lens) -> Node {
         Mode::Row => (SELECTED, "none"),
         _ => ("none", SELECTED),
     };
-    virtual_table_with(columns, len, rows, l.selected, options)
+    virtual_table_with(Vec::new(), len, rows, l.selected, options)
         .scrollbar(Scrollbar::new().show(Show::Never))
         .theme_styles([
             ("table.header", "bold"),
@@ -998,7 +843,6 @@ fn table(l: &Lens) -> Node {
             ("selected.column", cell_selected),
         ])
         .name("table")
-        .flex(1)
 }
 
 /// Where a prompt in the status line leads.
@@ -1010,7 +854,8 @@ enum Prompt {
     Goto,
 }
 
-/// csvlens's input, in the status line: a prefix and the text typed.
+/// csvlens's input, in the status line: a prefix and the text typed. Find
+/// and filter share a history, as csvlens's do.
 fn prompt(l: &Lens, cx: &mut Ctx, kind: Prompt, initial: &str) {
     let prefix = match kind {
         Prompt::Find => "Find: ",
@@ -1018,33 +863,20 @@ fn prompt(l: &Lens, cx: &mut Ctx, kind: Prompt, initial: &str) {
         Prompt::Columns => "Columns regex: ",
         Prompt::Goto => "Go to line: ",
     };
-    let (l, initial) = (l.clone(), initial.to_string());
-    let at = Offset {
-        x: 0,
-        y: 0,
-        w: Size::Percent(100),
-        h: Size::Fixed(1),
-    };
-    cx.popup_at(Origin::BottomLeft, at, move || {
-        let text = signal(initial);
-        let submit = {
-            let l = l.clone();
-            move |value: &str, cx: &mut Ctx| {
-                cx.pop();
-                submitted(&l, kind, value.trim());
-            }
-        };
-        let field = input(text).on_submit(submit.clone()).flex(1);
-        let mut line = row([label(prefix).auto(), field]).style(GUTTER);
-        if kind == Prompt::Goto {
-            // `<n>G`: G (or g) ends the number as Enter does.
-            line = line.previews_keys().on_key("G g", move |cx| {
-                let value = text.get_untracked();
-                submit.clone()(&value, cx)
-            });
-        }
-        line
-    })
+    let (submit, goto) = (l.clone(), l.goto);
+    let mut line = Line::new(prefix)
+        .initial(initial)
+        .on_submit(move |value, _| {
+            submit.goto.set(false);
+            submitted(&submit, kind, value.trim());
+            Ok(())
+        })
+        .on_cancel(move |_| goto.set(false));
+    if matches!(kind, Prompt::Find | Prompt::Filter) {
+        line = line.history("finder");
+    }
+    l.goto.set(kind == Prompt::Goto);
+    l.cmd.open(cx, line);
 }
 
 fn submitted(l: &Lens, kind: Prompt, value: &str) {
@@ -1052,10 +884,7 @@ fn submitted(l: &Lens, kind: Prompt, value: &str) {
         Prompt::Goto => {
             if let Ok(n) = value.parse::<usize>() {
                 let record = n.saturating_sub(1);
-                let at = match l.view.get_untracked() {
-                    Some(view) => view.iter().position(|&r| r as usize == record),
-                    None => Some(record),
-                };
+                let at = (0..l.len()).find(|&at| l.record(at) == record);
                 match at {
                     Some(at) => l.select(at),
                     None => l.message.set(Some(format!("Line {n} is not in view"))),
@@ -1065,6 +894,10 @@ fn submitted(l: &Lens, kind: Prompt, value: &str) {
         Prompt::Columns => l.filter_columns(value),
         Prompt::Find | Prompt::Filter => {
             if value.is_empty() {
+                return;
+            }
+            if KeepLines::new(&pattern(value, l.ignore_case)).is_err() {
+                l.message.set(Some(format!("Invalid regex: {value}")));
                 return;
             }
             l.query.update(|q| {
@@ -1081,15 +914,13 @@ fn submitted(l: &Lens, kind: Prompt, value: &str) {
 
 /// n and N: the next or the previous row found.
 fn next_found(l: &Lens, forward: bool) {
-    let found = l.found.get_untracked();
-    let now = l.selected.get_untracked() as u32;
-    let to = if forward {
-        found.iter().find(|&&f| f > now)
-    } else {
-        found.iter().rev().find(|&&f| f < now)
+    let now = l.selected.get_untracked();
+    let to = match forward {
+        true => l.view.next_found(now),
+        false => l.view.previous_found(now),
     };
-    if let Some(&to) = to {
-        l.select(to as usize);
+    if let Some(to) = to {
+        l.select(to);
     }
 }
 
@@ -1150,7 +981,6 @@ fn marked_rows(l: &Lens) -> String {
     }
     out.join("\n")
 }
-
 /// What a key does.
 #[derive(Clone, Copy)]
 enum Act {
@@ -1286,7 +1116,7 @@ fn run(l: &Lens, act: Act, cx: &mut Ctx) {
                 cx.quit_with(cell);
             }
         }
-        Act::Wrap => toggle_wrap(l),
+        Act::Wrap => l.wrap.update(|w| *w = !*w),
         Act::Reset => {
             l.widths.set(Rc::new(HashMap::new()));
             l.columns.set(None);
@@ -1359,8 +1189,11 @@ fn resize(l: &Lens, by: i32) {
     let Some(column) = l.selected_column() else {
         return;
     };
-    let now = l.width_of(column) as i32;
-    let to = now + by;
+    let at = l.cursor.get_untracked();
+    let Some(now) = l.layout.width_of(at) else {
+        return;
+    };
+    let to = now as i32 + by;
     if to > 0 {
         l.widths.update(|w| {
             Rc::make_mut(w).insert(column, to as u16);
@@ -1385,46 +1218,43 @@ fn like_cell(l: &Lens, filter: bool) {
     });
 }
 
-/// `-S`: rows as tall as the widest cell in view needs, up to six lines;
-/// again to go back to one.
-fn toggle_wrap(l: &Lens) {
-    if l.wrap.get_untracked() > 1 {
-        l.wrap.set(1);
-        return;
-    }
-    let cap = l.cap().saturating_sub(2).max(1) as usize;
-    let first = l.offset.get_untracked();
-    let mut lines = 1;
-    for at in first..(first + l.page()).min(l.len()) {
-        for cell in l.src.row(l.record(at)).iter() {
-            lines = lines.max(cell.chars().count().div_ceil(cap));
-        }
-    }
-    l.wrap.set(lines.clamp(2, 6) as u16);
-}
-
-/// csvlens's screen: a rule, the table, a rule and the status line.
+/// csvlens's screen: a rule, the table, a rule and the status line (or
+/// the prompt in its place).
 fn view(l: &Lens) -> Node {
-    let key = {
-        let l = l.clone();
-        move || layout_key(&l)
+    let tables = {
+        let (l, mode) = (l.clone(), l.mode);
+        keyed(move || mode.get(), move |mode| table(&l, mode))
     };
-    let build = {
-        let l = l.clone();
-        move |_| table(&l)
-    };
+    let cmd = l.cmd;
     let status = {
         let l = l.clone();
-        text(move || l.status()).no_wrap().style(GUTTER).fixed(1)
+        text(move || l.status())
+            .no_wrap()
+            .style(GUTTER)
+            .fixed(1)
+            .hidden_when(move || cmd.is_open())
     };
-    let body = column([
-        rule(),
-        switch(key, build).flex(1).rect_into(&l.area),
-        rule(),
-        status,
-    ])
-    .previews_keys();
-    keymap(l, body)
+    // `<n>G`: G (or g) ends the number as Enter does.
+    let goto = l.goto;
+    let ends = {
+        let l = l.clone();
+        move |cx: &mut Ctx| {
+            let value = l.cmd.text();
+            l.goto.set(false);
+            l.cmd.close(cx);
+            submitted(&l, Prompt::Goto, value.trim());
+        }
+    };
+    let line = column([command_line(cmd)])
+        .previews_keys()
+        .bind_when(move || goto.get_untracked(), "G g", "Go to the line", ends)
+        .style(GUTTER)
+        .fixed(1)
+        .shown_when(move || cmd.is_open());
+    // The prompt sits outside the keys' container, so what is typed in
+    // it reaches none of csvlens's keys.
+    let body = column([rule(), tables.flex(1), rule(), status]).previews_keys();
+    column([keymap(l, body).flex(1), line])
 }
 
 fn theme() -> Theme {
@@ -1443,13 +1273,27 @@ pub fn csv_app(options: Options) -> io::Result<App> {
         }
         let l = Lens::new(src, &options);
         l.src.index_in_background(l.indexed);
-        // Each change of the query starts a pass over the file.
+        // After each pass over the file: a filter or a sort starts at the
+        // top, and csvlens goes to the first row found from where it is.
         {
             let l2 = l.clone();
-            watch(move || l2.query.get(), {
-                let l = l.clone();
-                move |_, _| l.run_query()
-            });
+            watch(
+                move || l2.view.is_busy(),
+                move |busy, _| {
+                    if busy {
+                        return;
+                    }
+                    let query = l.query.get_untracked();
+                    if query.filter.is_some() || query.sort.is_some() {
+                        l.selected.set(0);
+                    }
+                    let now = l.selected.get_untracked();
+                    let found = l.view.found();
+                    if let Some(&first) = found.iter().find(|&&at| at >= now).or(found.first()) {
+                        l.selected.set(first);
+                    }
+                },
+            );
         }
         // Keep the cell cursor among the columns shown.
         {
@@ -1458,9 +1302,6 @@ pub fn csv_app(options: Options) -> io::Result<App> {
                 move || l2.shown().len(),
                 move |n, _| cursor.update(|c| *c = (*c).clamp(1, n.max(1))),
             );
-        }
-        if !l.query.get_untracked().is_plain() {
-            l.run_query();
         }
         Ok(view(&l))
     })?;

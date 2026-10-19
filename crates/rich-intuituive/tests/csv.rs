@@ -92,10 +92,10 @@ fn it_shows_the_table_as_csvlens_does() {
             "─".repeat(60).as_str(),
             "      City         State    Population    Note",
             "1  │  Ravenna      OH       11000         small",
-            "2  │  Reading      PA       95000         quoted, with co…",
+            "2  │  Reading      PA       95000         quoted, with comm…",
             "3  │  Red Bluff    CA       14000         has \"quotes\"",
             "4  │  Regina       SA       226000        capital",
-            "5  │  Reno         NV       264000        biggest little …",
+            "5  │  Reno         NV       264000        biggest little ci…",
             "",
             "─".repeat(60).as_str(),
             "cities.csv [Row 1/5, Col 1/4]",
@@ -327,11 +327,11 @@ fn it_resizes_wraps_and_marks() {
     let screen = rows(&d);
     let at = screen
         .iter()
-        .position(|r| r.contains("quoted, with"))
+        .position(|r| r.contains("biggest little"))
         .unwrap();
-    assert!(screen[at + 1].trim().starts_with("comma"), "{screen:#?}");
+    assert!(screen[at + 1].trim().starts_with("city"), "{screen:#?}");
     d.press("minus S");
-    assert!(rows(&d).iter().any(|r| r.ends_with("quoted, with co…")));
+    assert!(rows(&d).iter().any(|r| r.ends_with("biggest little ci…")));
     // m marks rows; Ctrl+E prints them, with the header, and exits.
     d.press("tab tab j m j j m");
     let marked = Style::parse("rgb(220,230,255) on rgb(40,50,80)").unwrap();
