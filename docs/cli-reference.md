@@ -383,7 +383,7 @@ Self-contained examples; ignores config; accepts --no-color.
 | `micro` | Micro assets: emoji-sized images and animations written :micro:name: (with --emoji). List, show, preview, add, remove and create them; install packs |
 | `banner` | Draw TEXT as a FIGlet banner: a font, a style or colour gradient, alignment and width fitting. Built with the `art` feature |
 | `shell` | Shell integration: `init` prints a script with completions, OSC 133 prompt marks, OSC 7 and a status line after each command; `status` and `link` are its helpers |
-| `record` | Run tapes (scripted terminal sessions: type, press keys, wait for screen text, take screenshots) in a real terminal and write PNG, SVG and text screenshots, an asciinema cast, a GIF, an MP4 (with FFmpeg) and an HTML page with a player; --check compares screenshots with committed ones instead |
+| `record` | Run tapes (scripted terminal sessions: type, press and hold keys, wait for screen text, take screenshots) in a real terminal and write PNG, SVG and text screenshots, an asciinema cast, a GIF, an animated PNG, an MP4 (with FFmpeg) and an HTML page with a player; video has every screen update at the tape's frame rate, and Kitty, Sixel and iTerm2 images; --check compares screenshots with committed ones instead |
 | `plugins` | List the plugins this build has — built in, linked, and any --plugin PATH loads — with their source, version, ABI and capabilities |
 | `doctor` | Read-only build, terminal, config and pager diagnostics; --report json writes diagnostic data to stdout |
 
@@ -2354,13 +2354,22 @@ PS1='$(rich shell link --tilde --links always --prompt bash) \$ '
 
 ### rich record
 
-Run tapes (scripted terminal sessions: type, press keys, wait for screen text, take screenshots) in a real terminal and write PNG, SVG and text screenshots, an asciinema cast, a GIF, an MP4 (with FFmpeg) and an HTML page with a player; --check compares screenshots with committed ones instead
+Run tapes (scripted terminal sessions: type, press and hold keys, wait for screen text, take screenshots) in a real terminal and write PNG, SVG and text screenshots, an asciinema cast, a GIF, an animated PNG, an MP4 (with FFmpeg) and an HTML page with a player; video has every screen update at the tape's frame rate, and Kitty, Sixel and iTerm2 images; --check compares screenshots with committed ones instead
 
 #### Usage
 
 ```text
-rich record [--check] [--output DIR] [--bin-dir DIR] [--format png,svg,cast,gif,mp4,html] [--no-video] [--font FILE] [--window-frame on|off] [--caption TEXT] [--key-overlay on|off] TAPE...
+rich record [--check] [--output DIR] [--bin-dir DIR] [--format png,svg,cast,gif,apng,mp4,html] [--no-video] [--fps N] [--font FILE] [--window-frame on|off] [--caption TEXT] [--key-overlay on|off] TAPE...
 ```
+
+#### Tapes
+
+- Set Framerate N: video frames a second, 1 to 60 (12); --fps overrides it
+- Set FontSize N: the text size of video frames, in pixels (16)
+- KeyDown KEY, KeyUp KEY: hold a key (Up, Ctrl+F, or one character) down, let it go; it autorepeats meanwhile (Set KeyRepeat DELAY INTERVAL, 200ms 33ms)
+- Hold KEY DURATION: KeyDown, wait, KeyUp
+- Set KittyKeyboard on: report the kitty keyboard protocol, so a program can turn it on and hear releases
+- Output apng: an animated PNG beside (or instead of) the GIF
 
 ### rich plugins
 

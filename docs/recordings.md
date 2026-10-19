@@ -268,6 +268,25 @@ then the command palette. See [Terminal apps](guide/intuituive/index.md).
 
 [Tape](tapes/intuituive.tape) · [Cast](media/tapes/intuituive/intuituive.cast) · [GIF](media/tapes/intuituive/intuituive.gif) · [Page](media/tapes/intuituive/intuituive.html)
 
+## A game, played with held keys
+
+`rs-rich-intuituive`'s ray caster, recorded at 35 frames a second, every
+frame it draws: the title, the map, the keys and the pause menu as stills,
+then a walk-through played with `Hold`, `KeyDown` and `KeyUp`, with the
+kitty keyboard protocol reported (`Set KittyKeyboard on`) so the arrows'
+releases reach the game. A second tape records the same walk-through with
+the example drawing iTerm2 images, which the recorder decodes and draws
+into the GIF. See [the recorder's README](../crates/rich-record/README.md)
+for the tape commands, `Set Framerate` and the graphics it follows.
+
+![The raycaster's walk-through](media/tapes/raycast/raycast.gif)
+
+| Title | Map |
+|---|---|
+| ![The title over the first level](media/tapes/raycast/title.png) | ![The map](media/tapes/raycast/map.png) |
+
+[Tape](tapes/raycast.tape) · [GIF](media/tapes/raycast/raycast.gif) · [APNG](media/tapes/raycast/raycast.apng) · [In iTerm2 images](media/tapes/raycast-iterm/raycast-iterm.gif) ([tape](tapes/raycast-iterm.tape))
+
 ## A file manager
 
 `rs-rich-intuituive`'s `files` example, a rebuild of the behaviour of
