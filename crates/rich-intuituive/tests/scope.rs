@@ -15,7 +15,7 @@ use std::io::Cursor;
 use std::time::Duration;
 
 use common::{row_of, run, screen};
-use intuituive::audio::{self, Format};
+use intuituive::audio::{self, Capture, Format};
 use intuituive::interact::BackendKind;
 use intuituive::App;
 use ratatui::layout::{Constraint, Flex, Layout, Rect};
@@ -43,7 +43,17 @@ fn app_on(options: Options, input: Input) -> App {
 fn app() -> App {
     let options = Options::default();
     let demo = Demo::new(2, options.buffer as usize, options.rate, true);
-    app_on(options, Input::Every(Box::new(demo), PERIOD))
+    app_on(options, Input::Capture(Capture::simulated(demo, PERIOD)))
+}
+
+/// `buffers` as s16le PCM, interleaved, read back by `audio::pcm`.
+fn pcm_of(buffers: &[Matrix]) -> audio::Pcm<Cursor<Vec<u8>>> {
+    let (channels, buffer) = (buffers[0].len(), buffers[0][0].len());
+    let bytes = (buffers.iter())
+        .flat_map(|m| (0..buffer).flat_map(move |i| (0..channels).map(move |c| m[c][i])))
+        .flat_map(|s| ((s * 32768.0).round() as i16).to_le_bytes())
+        .collect();
+    audio::pcm(Cursor::new(bytes), Format::S16Le, channels, buffer)
 }
 
 /// Run `keys` after the first buffers have arrived, then quit.
@@ -126,7 +136,7 @@ fn the_spectroscope_plots_every_bin_of_rich_exts_fft() {
         log_y: false,
         ..Spectroscope::default()
     };
-    let plot = spectroscope(&g, &s, &[VecDeque::from([tone.clone()])]);
+    let plot = spectroscope(&g, &s, &VecDeque::from([vec![tone.clone()]]));
     let bins = rich_ext::dsp::fft(&tone);
     assert_eq!(plot.sets[0].points.len(), bins.len());
     for (point, bin) in plot.sets[0].points.iter().zip(&bins) {
@@ -143,8 +153,7 @@ fn the_spectroscope_peaks_at_the_test_tones() {
     let frame = Demo::new(2, 2048, 48000, true)
         .next()
         .expect("the demo never ends");
-    let history: Vec<VecDeque<Vec<f64>>> = frame.into_iter().map(|c| VecDeque::from([c])).collect();
-    let plot = spectroscope(&g, &Spectroscope::default(), &history);
+    let plot = spectroscope(&g, &Spectroscope::default(), &VecDeque::from([frame]));
     // R is drawn first (channels in reverse, as scope-tui).
     let names: Vec<_> = plot.sets.iter().map(|s| s.name.clone().unwrap()).collect();
     assert_eq!(names, ["R", "L"]);
@@ -297,11 +306,10 @@ fn tune_reads_notes_as_scope_tui_does_on_rich_exts_pitches() {
     assert_eq!(tune("A", 48000, 2), Some(1745));
     assert_eq!(tune("Eb", 48000, 2), tune("Eb0", 48000, 2));
     assert_eq!(tune("C#3", 48000, 2), tune("Db3", 48000, 2));
-    // `dsp::note_hz` is equal temperament; scope-tui's table is rounded to
-    // the hundredth of a hertz in octave 0 and doubled, so about one note
-    // in ten lands a sample away: E2 is 82.41 Hz (582 samples), where
-    // scope-tui's 20.60 × 4 = 82.4 Hz gives 583.
-    assert_eq!(tune("E2", 48000, 2), Some(582));
+    // scope-tui's own table (`dsp::NoteTable::ScopeTui`), rounded to the
+    // hundredth of a hertz in octave 0 and doubled: E2 is 20.60 × 4 =
+    // 82.4 Hz, 583 samples, where equal temperament's 82.41 Hz gives 582.
+    assert_eq!(tune("E2", 48000, 2), Some(583));
 }
 
 #[test]
@@ -415,7 +423,7 @@ fn the_header_reports_the_bin_width_of_the_buffer() {
         ..g
     };
     let tone: Vec<f64> = (0..109).map(|i| (i as f64 * 0.3).sin()).collect();
-    let plot = spectroscope(&g, &Spectroscope::default(), &[VecDeque::from([tone])]);
+    let plot = spectroscope(&g, &Spectroscope::default(), &VecDeque::from([vec![tone]]));
     assert_eq!(plot.sets[0].points.len(), 109);
     assert!((plot.sets[0].points[1].0 - 48000.0 / 109.0).abs() < 1e-6);
 }
@@ -537,31 +545,17 @@ fn reference_lines_are_drawn_as_scope_tuis_datasets_are() {
     assert!(grid.contains('⢸') && !grid.contains('⣸'), "{grid}");
 }
 
-/// Step the app's clock by `step` to `until` from `from`, drawing after
-/// each: `Driver::advance` steps by 50 ms at most and does not wake a
-/// `latest` thread due sooner (see the demo gaps), so a source faster
-/// than 20 buffers a second is stepped by hand.
-fn step(driver: &mut intuituive::Driver, from: Duration, until: Duration, step: Duration) {
-    let mut now = from;
-    while now < until {
-        now += step;
-        driver.update(now);
-        driver.render();
-    }
-}
-
 #[test]
 fn the_fps_counter_counts_frames_paused_or_not() {
     // On the app's clock, frame for frame: a buffer every 40 ms is 25 a
-    // second, counted by `rate` from `on_write`.
+    // second, counted by `rate` from `on_write_ref`.
     let mut driver = app().driver(100, 24);
-    let ms = Duration::from_millis;
-    step(&mut driver, ms(0), ms(2100), ms(10));
+    driver.advance(Duration::from_millis(2100));
     let rows = driver.screen().plain();
     assert!(rows[0].contains(" 25fps"), "{:?}", rows[0]);
     // Paused, scope-tui still reads its source a frame at a time.
     driver.press("space");
-    step(&mut driver, ms(2100), ms(4100), ms(10));
+    driver.advance(Duration::from_secs(2));
     let rows = driver.screen().plain();
     assert!(
         rows[0].contains(" 25fps") && rows[0].contains("||"),
@@ -571,16 +565,61 @@ fn the_fps_counter_counts_frames_paused_or_not() {
 }
 
 #[test]
+fn the_frame_rate_is_a_buffers_worth_of_time_as_scope_tuis() {
+    // scope-tui draws each buffer as it comes: 48000 / 2048 is 23.4 a
+    // second, 48000 / 1024 46.9. The test signal comes a buffer's worth
+    // of time apart, and the app is woken for each, faster than 20 a
+    // second too.
+    for (buffer, fps) in [(2048, " 23fps"), (1024, " 47fps"), (4096, " 12fps")] {
+        let command = parse(&args(&format!("-b {buffer} --still"))).unwrap();
+        let input = input(&command.source, &command.options).unwrap();
+        let mut driver = app_on(command.options, input).driver(100, 24);
+        driver.advance(Duration::from_millis(2100));
+        let rows = driver.screen().plain();
+        assert!(rows[0].contains(fps), "-b {buffer}: {:?}", rows[0]);
+    }
+}
+
+#[test]
 fn equal_buffers_are_frames_too() {
     // Digital silence: every buffer the same. A watch would see one; the
     // scope counts each, as scope-tui does.
     let silent = std::iter::repeat(silence(2, 64));
-    let input = Input::Every(Box::new(silent), Duration::from_millis(10));
+    let input = Input::Capture(Capture::simulated(silent, Duration::from_millis(10)));
     let mut driver = app_on(Options::default(), input).driver(100, 24);
-    let ms = Duration::from_millis;
-    step(&mut driver, ms(0), ms(1050), ms(5));
+    driver.advance(Duration::from_millis(1050));
     let rows = driver.screen().plain();
     assert!(rows[0].contains(" 100fps"), "{:?}", rows[0]);
+}
+
+#[test]
+fn a_capture_that_stalls_ends_the_app_as_scope_tuis_timeout() {
+    // `audio --timeout S`: no buffer for S seconds ends the app with
+    // scope-tui's message, a simulated capture standing in for the card.
+    let capture = Capture::simulated(std::iter::repeat(silence(2, 64)), PERIOD)
+        .stall_after(Duration::from_secs(2));
+    let control = capture.clone();
+    let mut driver = app_on(Options::default(), Input::Capture(capture)).driver(100, 24);
+    driver.advance(Duration::from_secs(3));
+    assert!(driver.take_error().is_none(), "running");
+    control.stall();
+    driver.advance(Duration::from_millis(1900));
+    assert!(driver.take_error().is_none(), "not yet stalled");
+    driver.advance(Duration::from_millis(200));
+    let error = driver.take_error().expect("stalled");
+    assert_eq!(error.to_string(), STALLED);
+}
+
+#[test]
+fn a_capture_that_fails_ends_the_app_saying_why() {
+    let capture = Capture::simulated(std::iter::repeat(silence(2, 64)), PERIOD);
+    let control = capture.clone();
+    let mut driver = app_on(Options::default(), Input::Capture(capture)).driver(100, 24);
+    driver.advance(Duration::from_millis(500));
+    control.fail("the device was unplugged");
+    driver.advance(Duration::from_millis(100));
+    let error = driver.take_error().expect("failed");
+    assert_eq!(error.to_string(), "the device was unplugged");
 }
 
 #[test]
@@ -591,12 +630,11 @@ fn past_the_end_of_the_input_the_scope_draws_silence() {
         references: false,
         ..Options::default()
     };
-    // Two buffers, one every 40 ms (`-l`), then silence every 40 ms, all
-    // on the app's clock.
-    let input = play(pcm, silence(2, 16), Some(PERIOD), PERIOD);
+    // Two buffers of 16 at 400 Hz, one every 40 ms (`-l`), then silence
+    // every 40 ms, all on the app's clock.
+    let input = play(pcm, 400, true);
     let mut driver = app_on(options, input).driver(100, 24);
-    let ms = Duration::from_millis;
-    step(&mut driver, ms(0), ms(1010), ms(10));
+    driver.advance(Duration::from_millis(1010));
     let rows = driver.screen().plain();
     // 25 frames a second, the file's two and silence's; every channel flat
     // on the zero line.
@@ -609,44 +647,118 @@ fn past_the_end_of_the_input_the_scope_draws_silence() {
 }
 
 #[test]
+fn the_end_of_a_file_or_a_pipe_does_not_end_the_scope() {
+    // scope-tui's file source pads the last buffer with silence and then
+    // reads silence for ever: the end of a file is not an error, and
+    // neither is a pipe's (read as fast as it comes, without `-l`).
+    for limit_rate in [true, false] {
+        let pcm = pcm_of(&[vec![vec![0.5; 16]; 2]]);
+        let mut driver = app_on(Options::default(), play(pcm, 400, limit_rate)).driver(100, 24);
+        driver.advance(Duration::from_millis(2100));
+        assert!(driver.take_error().is_none(), "-l {limit_rate}");
+        let rows = driver.screen().plain();
+        assert!(rows[0].contains(" 25fps"), "-l {limit_rate}: {:?}", rows[0]);
+    }
+}
+
+#[test]
 fn a_file_plays_at_its_sample_rate_with_l() {
-    // Four buffers at 40 ms each with `-l`: after 100 ms the third shows.
+    // Four buffers of 16 at 400 Hz with `-l`, 40 ms each: after 100 ms the
+    // third shows.
     let buffers: Vec<Matrix> = (1..=4).map(|n| vec![vec![n as f64 / 8.0; 16]]).collect();
     let options = Options {
         channels: 1,
         buffer: 16,
+        rate: 400,
         references: false,
         ..Options::default()
     };
-    let input = play(buffers.into_iter(), silence(1, 16), Some(PERIOD), PERIOD);
+    let input = play(pcm_of(&buffers), options.rate, true);
     let mut driver = app_on(options, input).driver(60, 18);
-    let ms = Duration::from_millis;
-    step(&mut driver, ms(0), ms(100), ms(10));
+    driver.advance(Duration::from_millis(100));
     let level = |rows: &[String]| {
         rows.iter()
             .position(|r| braille(std::slice::from_ref(r)) > 2)
     };
     let third = level(&driver.screen().plain());
-    step(&mut driver, ms(100), ms(140), ms(10));
+    driver.advance(Duration::from_millis(40));
     let fourth = level(&driver.screen().plain());
     assert!(third.is_some() && fourth < third, "{third:?} {fourth:?}");
 }
 
 #[test]
-fn question_mark_lists_the_keys_by_scope() {
+fn each_scope_takes_its_own_keys_only_while_it_shows() {
+    // t triggers in the oscilloscope; in the vectorscope it is not bound.
+    let rows = after("tab t tab tab");
+    assert!(
+        rows[0].contains("oscillo") && rows[0].contains("live"),
+        "{:?}",
+        rows[0]
+    );
+    // p: peaks in the oscilloscope, the phase difference in the
+    // spectroscope, each scope's own.
+    let rows = after("tab tab p");
+    assert!(row_of(&rows, "phase diff").is_some(), "{rows:#?}");
+    let rows = after("p tab tab");
+    assert!(row_of(&rows, "phase diff").is_none(), "{rows:#?}");
+    // PgUp: the trigger's threshold in one, the averaging in the other.
+    let rows = after_at("pageup tab tab pageup", 160);
+    assert!(rows[0].contains("2x avg"), "{:?}", rows[0]);
+    let rows = after("pageup tab tab pageup tab");
+    assert!(rows[0].contains("live"), "not triggering: {:?}", rows[0]);
+    let rows = after("t pageup tab tab pageup tab");
+    assert!(rows[0].contains("^ 250 trigger"), "{:?}", rows[0]);
+    // The debounce by its named keys: = and + up, - and _ down.
+    let rows = after("t equals plus plus minus underscore");
+    assert!(rows[0].contains("^ 0:11 trigger"), "{:?}", rows[0]);
+}
+
+/// The help as it opens after `keys`.
+fn help_after(keys: &str) -> Vec<String> {
     let script = Script::new()
         .wait(Duration::from_millis(100))
+        .keys(keys)
         .keys("?")
         .wait(Duration::from_millis(100));
-    let rows = screen(&common::run_open(app(), script, 120, 50));
-    // The framework's help, from the bindings' descriptions, each scope's
-    // keys under its name.
+    screen(&common::run_open(app(), script, 120, 50))
+}
+
+#[test]
+fn question_mark_lists_the_keys_of_the_scope_showing() {
+    let rows = help_after("");
+    // The framework's help, from the bindings' descriptions: the keys
+    // every scope takes, then the oscilloscope's under its name.
     assert!(row_of(&rows, "Help").is_some(), "{rows:#?}");
-    let at = |text| row_of(&rows, text).unwrap_or_else(|| panic!("{text:?} in {rows:#?}"));
-    assert!(at("oscilloscope") < at("rising or falling edge"));
-    assert!(at("spectroscope") < at("Hann window"));
-    // A key with its modifiers is one row.
-    assert!(at("scale up (shift ×10, ctrl ×5, alt ×0.2)") > 0);
+    let at = |rows: &[String], text| {
+        row_of(rows, text).unwrap_or_else(|| panic!("{text:?} in {rows:#?}"))
+    };
+    // A section's heading starts at the box's edge.
+    let heading = |rows: &[String], name: &str| row_of(rows, &format!("│{name} "));
+    assert!(
+        heading(&rows, "oscilloscope").expect("a heading") < at(&rows, "rising or falling edge")
+    );
+    assert!(at(&rows, "threshold up") > 0);
+    assert!(row_of(&rows, "Hann window").is_none(), "{rows:#?}");
+    assert!(heading(&rows, "spectroscope").is_none(), "{rows:#?}");
+    // A key with its modifiers is one row, said as scope-tui's docs say
+    // them; the named punctuation keys show as their characters.
+    assert!(at(&rows, "scale up (shift ×10, ctrl ×5, alt ⅕)") > 0);
+    let debounce = &rows[at(&rows, "debounce up by 10")];
+    assert!(debounce.contains('+'), "{debounce:?}");
+    // In the spectroscope, its keys instead; in the vectorscope, none of
+    // either.
+    let rows = help_after("tab tab");
+    assert!(heading(&rows, "spectroscope").expect("a heading") < at(&rows, "Hann window"));
+    assert!(heading(&rows, "oscilloscope").is_none(), "{rows:#?}");
+    assert!(at(&rows, "phase difference") > 0);
+    assert!(
+        row_of(&rows, "rising or falling edge").is_none(),
+        "{rows:#?}"
+    );
+    let rows = help_after("tab");
+    assert!(row_of(&rows, "Hann window").is_none(), "{rows:#?}");
+    assert!(row_of(&rows, "threshold up").is_none(), "{rows:#?}");
+    assert!(at(&rows, "reset the view") > 0);
 }
 
 #[test]
