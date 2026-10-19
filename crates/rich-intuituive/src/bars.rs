@@ -43,6 +43,8 @@ impl Caps {
 pub struct StatusSegment {
     markup: Box<dyn Fn() -> String>,
     style: Box<dyn Fn() -> String>,
+    /// For [`seg_gauge`]: the share filled, and the cells it takes.
+    gauge: Option<(Box<dyn Fn() -> f64>, u16)>,
 }
 
 /// A [`status_bar`] segment showing console `markup`, which may read
@@ -52,6 +54,44 @@ pub fn seg(markup: impl Fn() -> String + 'static) -> StatusSegment {
     StatusSegment {
         markup: Box::new(markup),
         style: Box::new(String::new),
+        gauge: None,
+    }
+}
+
+/// A [`status_bar`] segment that is a gauge: `width` cells (10 unless
+/// [`width`](StatusSegment::width) says), the first `fraction` of them
+/// (0 to 1, which may read signals) filled, with `label` (plain text, which
+/// may read signals) centred over both parts: Yazi's task progress. The
+/// filled part is in the segment's [`style`](StatusSegment::style), the
+/// theme's `status_bar.gauge` by default (black on green), the rest in
+/// `status_bar.gauge.rest` (white on bright black); its caps take the
+/// filled part's colour. An empty label still shows the gauge.
+///
+/// ```
+/// use intuituive::prelude::*;
+/// use intuituive::widgets::{seg, seg_gauge, status_bar};
+///
+/// let app = App::new(|| {
+///     let done = signal(0.5);
+///     status_bar(
+///         [seg(|| "copying ".into())],
+///         [seg_gauge(move || done.get(), || "50%".into()).width(8)],
+///     )
+/// });
+/// let mut driver = app.driver(20, 1);
+/// driver.settle();
+/// assert_eq!(driver.screen().plain()[0], "copying       50%   ");
+/// let styled = intuituive::testing::styled(&driver);
+/// assert!(styled.contains("[black on green]  50[/][white on bright_black]%"), "{styled}");
+/// ```
+pub fn seg_gauge(
+    fraction: impl Fn() -> f64 + 'static,
+    label: impl Fn() -> String + 'static,
+) -> StatusSegment {
+    StatusSegment {
+        markup: Box::new(label),
+        style: Box::new(|| "status_bar.gauge".into()),
+        gauge: Some((Box::new(fraction), 10)),
     }
 }
 
@@ -67,6 +107,15 @@ impl StatusSegment {
     /// Yazi's mode is blue, red in visual mode.
     pub fn style_with(mut self, style: impl Fn() -> String + 'static) -> StatusSegment {
         self.style = Box::new(style);
+        self
+    }
+
+    /// For a [`seg_gauge`]: the cells it takes (10 by default). Ignored on
+    /// other segments.
+    pub fn width(mut self, cells: u16) -> StatusSegment {
+        if let Some((_, width)) = &mut self.gauge {
+            *width = cells;
+        }
         self
     }
 }
@@ -131,10 +180,45 @@ impl Node {
     }
 }
 
-/// A segment's markup and style, read for one draw.
+/// A segment's markup and style, read for one draw; a gauge's cells
+/// made.
 struct Shown {
     markup: String,
     style: Style,
+    cells: Option<Vec<Segment>>,
+}
+
+/// A [`seg_gauge`]'s cells: `label` centred in `width` cells, the first
+/// `fraction` of them in `fill`, the rest in `rest`.
+fn gauge_cells(label: &str, fraction: f64, width: u16, fill: &Style, rest: &Style) -> Vec<Segment> {
+    let width = width as usize;
+    let fraction = if fraction.is_nan() {
+        0.0
+    } else {
+        fraction.clamp(0.0, 1.0)
+    };
+    let filled = (fraction * width as f64).round() as usize;
+    let label = rich::cells::set_cell_size(label, rich::cells::cell_len(label).min(width));
+    let before = (width - rich::cells::cell_len(&label)) / 2;
+    let text = format!("{}{label}", " ".repeat(before));
+    let text = rich::cells::set_cell_size(&text, width);
+    let (mut out, mut at): (Vec<Segment>, usize) = (Vec::new(), 0);
+    let (mut run, mut run_fill) = (String::new(), true);
+    for c in text.chars() {
+        let fill_here = at < filled;
+        if fill_here != run_fill && !run.is_empty() {
+            let style = if run_fill { fill } else { rest };
+            out.push(Segment::new(std::mem::take(&mut run), Some(style.clone())));
+        }
+        run_fill = fill_here;
+        run.push(c);
+        at += rich::cells::cell_len(c.encode_utf8(&mut [0; 4]));
+    }
+    if !run.is_empty() {
+        let style = if run_fill { fill } else { rest };
+        out.push(Segment::new(run, Some(style.clone())));
+    }
+    out
 }
 
 impl StatusBar {
@@ -144,12 +228,30 @@ impl StatusBar {
             .iter()
             .filter_map(|segment| {
                 let markup = (segment.markup)();
+                let name = (segment.style)();
+                if let Some((fraction, width)) = &segment.gauge {
+                    let fill = match name.as_str() {
+                        "status_bar.gauge" => theme_style(console, &name, "black on green"),
+                        _ => theme_style(console, &name, &name),
+                    };
+                    let rest =
+                        theme_style(console, "status_bar.gauge.rest", "white on bright_black");
+                    let cells = gauge_cells(&markup, fraction(), *width, &fill, &rest);
+                    return Some(Shown {
+                        markup,
+                        style: fill,
+                        cells: Some(cells),
+                    });
+                }
                 if markup.is_empty() {
                     return None;
                 }
-                let name = (segment.style)();
                 let style = theme_style(console, &name, &name);
-                Some(Shown { markup, style })
+                Some(Shown {
+                    markup,
+                    style,
+                    cells: None,
+                })
             })
             .collect()
     }
@@ -176,15 +278,19 @@ impl StatusBar {
                     out.push(cap(open, Some(own), before));
                 }
             }
-            let width = crate::widget::markup_width(&segment.markup);
-            let line = crate::widget::markup_line(console, &segment.markup, width);
-            out.extend(line.into_iter().map(|piece| {
-                let style = match &piece.style {
-                    Some(own) => segment.style.combine(own),
-                    None => segment.style.clone(),
-                };
-                Segment::new(piece.text, Some(style))
-            }));
+            if let Some(cells) = &segment.cells {
+                out.extend(cells.iter().cloned());
+            } else {
+                let width = crate::widget::markup_width(&segment.markup);
+                let line = crate::widget::markup_line(console, &segment.markup, width);
+                out.extend(line.into_iter().map(|piece| {
+                    let style = match &piece.style {
+                        Some(own) => segment.style.combine(own),
+                        None => segment.style.clone(),
+                    };
+                    Segment::new(piece.text, Some(style))
+                }));
+            }
             if let (Some((_, close)), Some(own)) = (glyphs, own) {
                 // After each segment of the left group, on the next; after
                 // the right group (rounded).

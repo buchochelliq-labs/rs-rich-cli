@@ -56,10 +56,14 @@
 //!   jobs and a streaming finder (`files`).
 //! - **Generic building blocks**: [`miller_of`] (Miller columns over any
 //!   [`MillerSource`] tree), [`jobs`](fn@jobs) and [`jobs_panel`]
-//!   (cancellable work with progress), [`finder_of`] (a fuzzy finder over
-//!   any stream of items) and [`preview_of`] (a value loaded off the app's
-//!   thread for the current key). The core is generic only; the domain
-//!   plugins above build on these.
+//!   (cancellable work with progress), [`fuzzy_list`] and [`finder_of`]
+//!   (a fuzzy list over any stream of items), [`preview_of`] (a value
+//!   loaded off the app's thread for the current key), [`multi_select`]
+//!   (a selection by key with a visual range), [`list_search`] (find next
+//!   and previous over a list), [`tab_set`] (tabs' states with one
+//!   active), [`facts`] (a description list) and [`digits`] (big digits
+//!   in any build). The core is generic only; the domain plugins above
+//!   build on these.
 //! - **Tests**: [`App::render_with`] and [`App::run_on`] with
 //!   `rich-interact`'s headless driver run an app without a terminal;
 //!   [`App::driver`] steps one, and [`assert_screen!`] compares its screen
@@ -80,7 +84,9 @@ mod builtin;
 mod calendar;
 mod datetime;
 mod dialog;
+mod digits;
 mod effect;
+mod facts;
 #[cfg(feature = "files")]
 pub mod files;
 pub mod finder;
@@ -105,10 +111,12 @@ mod reorder;
 mod rule;
 pub mod screen;
 mod scrollbar;
+pub mod select;
 mod sequence;
 mod sheet;
 mod solver;
 mod split;
+pub mod tab_set;
 mod table_scroll;
 pub mod task;
 pub mod testing;
@@ -134,8 +142,10 @@ pub use app::{
 pub use big_text::big_text;
 pub use border::{Border, BorderSet, Edge, Shadow, Sides};
 pub use dialog::{ConfirmOptions, PickOptions, PromptOptions};
+pub use digits::digits;
 pub use effect::{effect, fill};
-pub use finder::finder_of;
+pub use facts::{facts, facts_of};
+pub use finder::{finder_of, fuzzy_list, fuzzy_list_with, FuzzyOptions, FuzzySource};
 #[cfg(feature = "art")]
 pub use image::{image, image_of, image_with, ImageAnchor, ImageFit, ImageMode, ImageView};
 pub use input::{input, number_input};
@@ -157,8 +167,10 @@ pub use reactive::{memo, on_write, signal, viewport, watch, Memo, Proxy, Signal}
 /// What a text does with what does not fit a line: rich's.
 pub use rich::Overflow;
 pub use rule::rule;
+pub use select::{list_search, multi_select, ListSearch, Mark, MultiSelect};
 pub use sheet::{SheetError, Stylesheet};
 pub use solver::Solver;
+pub use tab_set::{tab_set, tabs_for, TabSet};
 pub use task::{
     latest, latest_every, resource, resource_for, spawn, spawn_future, spawn_stream, spawn_then,
     Latest, Load, Resource, Stream, Task,

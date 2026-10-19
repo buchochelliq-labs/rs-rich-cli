@@ -49,8 +49,16 @@ pub trait MillerSource: 'static {
 ///
 /// - Moving: [`arrow`](Self::arrow), [`move_to`](Self::move_to),
 ///   [`page`](Self::page), [`enter`](Self::enter),
-///   [`leave`](Self::leave), [`cd`](Self::cd); or bind the usual keys
-///   with [`navigation`](Self::navigation).
+///   [`leave`](Self::leave), [`cd`](Self::cd), or any [`Move`] with
+///   [`go`](Self::go); bind the usual keys with
+///   [`navigation`](Self::navigation), or your own keys and wording with
+///   [`navigation_with`](Self::navigation_with).
+/// - Reading: each signal has a method, [`at`](Self::at),
+///   [`cursor`](Self::cursor), [`hovered`](Self::hovered),
+///   [`items`](Self::items), [`first`](Self::first), the parent's and the
+///   preview's, and [`visited`](Self::visited), the levels shown.
+/// - The columns' lists take any list option through
+///   [`view_with`](Self::view_with)'s [`MillerOptions`].
 /// - Each level remembers the item last hovered in it: going back up, or
 ///   into it again, hovers that item.
 /// - The mouse: a click in the current column hovers an item and the
@@ -78,6 +86,11 @@ pub struct Miller<S: MillerSource> {
     pub parent_first: Signal<usize>,
     /// The item last hovered in each level visited.
     remember: Signal<HashMap<S::Key, String>>,
+    /// The levels shown, the most recent last.
+    visited: Signal<Vec<S::Key>>,
+    /// The preview column's hovered item and first row in view.
+    preview_cursor: Signal<usize>,
+    preview_first: Signal<usize>,
     rows: Signal<RowRects>,
     column: Signal<Option<RectHandle>>,
     /// The panes' shares of the width, which the rails drag.
@@ -167,6 +180,9 @@ pub fn miller_in<S: MillerSource>(source: S, at: Signal<S::Key>) -> Miller<S> {
         first: signal(0),
         parent_first: signal(0),
         remember: signal(HashMap::new()),
+        visited: signal(Vec::new()),
+        preview_cursor: signal(0),
+        preview_first: signal(0),
         rows: signal(RowRects::new()),
         column: signal(None),
         outer: signal(1.0 / 8.0),
@@ -181,6 +197,16 @@ pub fn miller_in<S: MillerSource>(source: S, at: Signal<S::Key>) -> Miller<S> {
                     r.insert(key, name);
                 });
             }
+        },
+    );
+    // The levels shown, the most recent last.
+    watch(
+        move || at.get(),
+        move |key, _| {
+            miller.visited.update(|visited| {
+                visited.retain(|k| *k != key);
+                visited.push(key);
+            })
         },
     );
     // The cursor stays on the items when they shrink.
@@ -208,6 +234,100 @@ pub fn miller_in<S: MillerSource>(source: S, at: Signal<S::Key>) -> Miller<S> {
 impl<S: MillerSource> Miller<S> {
     fn source(&self) -> Rc<S> {
         self.source.with_untracked(Rc::clone)
+    }
+
+    /// The current level, a signal (the `at` field).
+    pub fn at(&self) -> Signal<S::Key> {
+        self.at
+    }
+
+    /// The current level's items' names (the `items` field).
+    pub fn items(&self) -> Memo<Vec<String>> {
+        self.items
+    }
+
+    /// The level above's items' names (the `parent_items` field).
+    pub fn parent_items(&self) -> Memo<Vec<String>> {
+        self.parent_items
+    }
+
+    /// The hovered item's index in [`items`](Self::items), a signal (the
+    /// `cursor` field).
+    pub fn cursor(&self) -> Signal<usize> {
+        self.cursor
+    }
+
+    /// The current level's index in the level above (the `parent_cursor`
+    /// field).
+    pub fn parent_cursor(&self) -> Signal<usize> {
+        self.parent_cursor
+    }
+
+    /// The hovered item's name (the `hovered` field).
+    pub fn hovered(&self) -> Memo<Option<String>> {
+        self.hovered
+    }
+
+    /// The current column's first row in view, a signal (the `first`
+    /// field).
+    pub fn first(&self) -> Signal<usize> {
+        self.first
+    }
+
+    /// The parent column's first row in view (the `parent_first` field).
+    pub fn parent_first(&self) -> Signal<usize> {
+        self.parent_first
+    }
+
+    /// The hovered item in the default preview column (the level the
+    /// hovered item opens), and its first row in view.
+    pub fn preview_cursor(&self) -> (Signal<usize>, Signal<usize>) {
+        (self.preview_cursor, self.preview_first)
+    }
+
+    /// The item last hovered at each level shown, a signal: what
+    /// [`remembered`](Self::remembered) looks up.
+    pub fn remembered_all(&self) -> Signal<HashMap<S::Key, String>> {
+        self.remember
+    }
+
+    /// The levels shown so far, the most recent last (the current level
+    /// among them), a signal: a jump list, a "recent" menu, a frecency
+    /// store's visits.
+    ///
+    /// ```
+    /// # use intuituive::miller::MillerSource;
+    /// # use intuituive::miller_of;
+    /// # use intuituive::prelude::*;
+    /// # struct Menu;
+    /// # impl MillerSource for Menu {
+    /// #     type Key = String;
+    /// #     fn items(&self, at: &String) -> Vec<String> {
+    /// #         if at.is_empty() { vec!["fruit".into(), "veg".into()] } else { vec!["x".into()] }
+    /// #     }
+    /// #     fn child(&self, at: &String, name: &str) -> Option<String> {
+    /// #         at.is_empty().then(|| name.to_string())
+    /// #     }
+    /// #     fn parent(&self, at: &String) -> Option<(String, String)> {
+    /// #         (!at.is_empty()).then(|| (String::new(), at.clone()))
+    /// #     }
+    /// # }
+    /// let app = App::new(|| {
+    ///     let columns = miller_of(Menu, String::new());
+    ///     column([
+    ///         columns.view().flex(1),
+    ///         text(move || format!("{:?}", columns.visited().get())).fixed(1),
+    ///     ])
+    ///     .on_key("l", move |_| columns.enter())
+    ///     .on_key("h", move |_| columns.leave())
+    /// });
+    /// let mut driver = app.driver(40, 3);
+    /// driver.press("l");
+    /// driver.press("h");
+    /// assert_eq!(driver.screen().plain()[2].trim_end(), r#"["fruit", ""]"#);
+    /// ```
+    pub fn visited(&self) -> Signal<Vec<S::Key>> {
+        self.visited
     }
 
     /// The columns' shares of the width, `[1, 4, 3]` by default. A share
@@ -342,6 +462,78 @@ impl<S: MillerSource> Miller<S> {
         }
     }
 
+    /// Make move `to`: what [`navigation`](Self::navigation) binds each
+    /// key to, for a binding of your own (a key sequence:
+    /// `.bind_sequence("g g", "Top", move |_| m.go(Move::Top))`).
+    pub fn go(&self, to: Move) {
+        match to {
+            Move::Up => self.arrow(-1),
+            Move::Down => self.arrow(1),
+            Move::Leave => self.leave(),
+            Move::Enter => self.enter(),
+            Move::Top => self.move_to(0),
+            Move::Bottom => self.move_to(isize::MAX),
+            Move::HalfPageUp => self.page(-0.5),
+            Move::HalfPageDown => self.page(0.5),
+            Move::PageUp => self.page(-1.0),
+            Move::PageDown => self.page(1.0),
+        }
+    }
+
+    /// Bind the moves of a table on `node` (which should hold the view):
+    /// for each row, a move, its keys (space-separated, either of them,
+    /// as [`Node::bind`] takes them) and the description the help and the
+    /// which-key pop-up show. A clone keeps its own keys and wording where
+    /// [`navigation`](Self::navigation)'s are fixed; a move left out is
+    /// not bound, and one may have several rows. A key sequence is bound
+    /// with [`go`](Self::go). The node sees the keys before the focused
+    /// list.
+    ///
+    /// ```
+    /// # use intuituive::miller::MillerSource;
+    /// # use intuituive::miller_of;
+    /// # use intuituive::prelude::*;
+    /// # struct Menu;
+    /// # impl MillerSource for Menu {
+    /// #     type Key = String;
+    /// #     fn items(&self, at: &String) -> Vec<String> {
+    /// #         if at.is_empty() { vec!["fruit".into(), "veg".into()] } else { vec!["x".into()] }
+    /// #     }
+    /// #     fn child(&self, at: &String, name: &str) -> Option<String> {
+    /// #         at.is_empty().then(|| name.to_string())
+    /// #     }
+    /// #     fn parent(&self, at: &String) -> Option<(String, String)> {
+    /// #         (!at.is_empty()).then(|| (String::new(), at.clone()))
+    /// #     }
+    /// # }
+    /// use intuituive::miller::Move;
+    ///
+    /// let app = App::new(|| {
+    ///     let m = miller_of(Menu, String::new());
+    ///     m.navigation_with(
+    ///         m.view(),
+    ///         &[
+    ///             (Move::Up, "k up", "Previous file"),
+    ///             (Move::Down, "j down", "Next file"),
+    ///             (Move::PageDown, "shift+pagedown", "Next page"),
+    ///         ],
+    ///     )
+    ///     .bind_sequence("g g", "Top", move |_| m.go(Move::Top))
+    ///     .on_key("?", |cx| cx.help())
+    /// });
+    /// let mut driver = app.driver(60, 12);
+    /// driver.press("?");
+    /// assert!(driver.screen().plain().join("\n").contains("Previous file"));
+    /// ```
+    pub fn navigation_with(self, node: Node, moves: &[(Move, &str, &str)]) -> Node {
+        let m = self;
+        moves
+            .iter()
+            .fold(node.previews_keys(), |node, &(to, keys, description)| {
+                node.bind(keys, description, move |_| m.go(to))
+            })
+    }
+
     /// Bind the usual movement keys on `node` (which should hold the
     /// view): `j`/`k` (and the arrows) move, `h`/`l` (and ←/→) leave and
     /// enter, `g g`/`G` (and Home/End) go to the top and the bottom,
@@ -349,18 +541,22 @@ impl<S: MillerSource> Miller<S> {
     /// sees the keys before the focused list.
     pub fn navigation(self, node: Node) -> Node {
         let m = self;
-        node.previews_keys()
-            .bind("k up", "Move up", move |_| m.arrow(-1))
-            .bind("j down", "Move down", move |_| m.arrow(1))
-            .bind("h left", "Go up a level", move |_| m.leave())
-            .bind("l right", "Enter", move |_| m.enter())
-            .bind_sequence("g g", "Go to the top", move |_| m.move_to(0))
-            .bind("home", "Go to the top", move |_| m.move_to(0))
-            .bind("G end", "Go to the bottom", move |_| m.move_to(isize::MAX))
-            .bind("ctrl+d", "Half a page down", move |_| m.page(0.5))
-            .bind("ctrl+u", "Half a page up", move |_| m.page(-0.5))
-            .bind("pagedown ctrl+f", "A page down", move |_| m.page(1.0))
-            .bind("pageup ctrl+b", "A page up", move |_| m.page(-1.0))
+        self.navigation_with(
+            node,
+            &[
+                (Move::Up, "k up", "Move up"),
+                (Move::Down, "j down", "Move down"),
+                (Move::Leave, "h left", "Go up a level"),
+                (Move::Enter, "l right", "Enter"),
+                (Move::Top, "home", "Go to the top"),
+                (Move::Bottom, "G end", "Go to the bottom"),
+                (Move::HalfPageDown, "ctrl+d", "Half a page down"),
+                (Move::HalfPageUp, "ctrl+u", "Half a page up"),
+                (Move::PageDown, "pagedown ctrl+f", "A page down"),
+                (Move::PageUp, "pageup ctrl+b", "A page up"),
+            ],
+        )
+        .bind_sequence("g g", "Go to the top", move |_| m.go(Move::Top))
     }
 
     /// The three panes side by side, with draggable rails between them:
@@ -372,10 +568,46 @@ impl<S: MillerSource> Miller<S> {
     /// The three columns with the default ones: names in lists, and the
     /// hovered item's items as its preview.
     pub fn view(self) -> Node {
+        self.view_with(MillerOptions::new())
+    }
+
+    /// The default columns, each list given what `options` adds to it:
+    /// any list option ([`highlight_layer`](Node::highlight_layer),
+    /// [`on_context`](Node::on_context), [`marker`](Node::marker), …), a
+    /// handler, a name.
+    ///
+    /// ```
+    /// # use intuituive::miller::MillerSource;
+    /// # use intuituive::miller_of;
+    /// # use intuituive::prelude::*;
+    /// # struct Menu;
+    /// # impl MillerSource for Menu {
+    /// #     type Key = String;
+    /// #     fn items(&self, at: &String) -> Vec<String> {
+    /// #         if at.is_empty() { vec!["fruit".into(), "veg".into()] } else { vec!["x".into()] }
+    /// #     }
+    /// #     fn child(&self, at: &String, name: &str) -> Option<String> {
+    /// #         at.is_empty().then(|| name.to_string())
+    /// #     }
+    /// #     fn parent(&self, at: &String) -> Option<(String, String)> {
+    /// #         (!at.is_empty()).then(|| (String::new(), at.clone()))
+    /// #     }
+    /// # }
+    /// use intuituive::miller::MillerOptions;
+    ///
+    /// let app = App::new(|| {
+    ///     let m = miller_of(Menu, String::new());
+    ///     m.view_with(MillerOptions::new().current(|list| list.symbol("> ")))
+    /// });
+    /// let mut driver = app.driver(40, 2);
+    /// driver.settle();
+    /// assert!(driver.screen().plain()[0].contains("> fruit"));
+    /// ```
+    pub fn view_with(self, options: MillerOptions) -> Node {
         self.layout(
-            self.parent_column(),
-            self.current_column(),
-            self.preview_column(),
+            options.wrap_parent(self.parent_column()),
+            options.wrap_current(self.current_column()),
+            options.wrap_preview(self.preview_column()),
         )
     }
 
@@ -433,8 +665,7 @@ impl<S: MillerSource> Miller<S> {
             let items = source.items(&child);
             Some((child, items))
         });
-        let first = signal(0usize);
-        let cursor = signal(0usize);
+        let (first, cursor) = (self.preview_first, self.preview_cursor);
         watch(
             move || shown.get(),
             move |shown, _| {
@@ -477,5 +708,96 @@ impl<S: MillerSource> Miller<S> {
             m.enter_at(name);
             true
         })
+    }
+}
+
+/// A move of the [`Miller`] columns, for [`Miller::go`] and the table of
+/// [`Miller::navigation_with`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum Move {
+    /// The item above.
+    Up,
+    /// The item below.
+    Down,
+    /// Up a level, hovering the level left.
+    Leave,
+    /// Into the hovered item, if it opens a level.
+    Enter,
+    /// The first item.
+    Top,
+    /// The last item.
+    Bottom,
+    /// Half a column up.
+    HalfPageUp,
+    /// Half a column down.
+    HalfPageDown,
+    /// A column up.
+    PageUp,
+    /// A column down.
+    PageDown,
+}
+
+/// What [`MillerOptions`] does to a column's node.
+type Hook = Rc<dyn Fn(Node) -> Node>;
+
+/// What [`Miller::view_with`] adds to each column's list: a hook given
+/// the list as made, returning it with options of yours. A column view of
+/// your own (a plugin's, over [`Miller::layout`]) gives its lists to the
+/// hooks with [`wrap_current`](Self::wrap_current) and the like.
+#[derive(Clone, Default)]
+pub struct MillerOptions {
+    current: Option<Hook>,
+    parent: Option<Hook>,
+    preview: Option<Hook>,
+}
+
+impl MillerOptions {
+    /// No hooks: the columns as they come.
+    pub fn new() -> MillerOptions {
+        MillerOptions::default()
+    }
+
+    /// Give the current column's list to `hook`:
+    /// `.current(|list| list.highlight_layer(HighlightLayer::Under))`.
+    pub fn current(mut self, hook: impl Fn(Node) -> Node + 'static) -> MillerOptions {
+        self.current = Some(Rc::new(hook));
+        self
+    }
+
+    /// Give the parent column's list to `hook`.
+    pub fn parent(mut self, hook: impl Fn(Node) -> Node + 'static) -> MillerOptions {
+        self.parent = Some(Rc::new(hook));
+        self
+    }
+
+    /// Give the preview column's node (the default view's: a list) to
+    /// `hook`.
+    pub fn preview(mut self, hook: impl Fn(Node) -> Node + 'static) -> MillerOptions {
+        self.preview = Some(Rc::new(hook));
+        self
+    }
+
+    /// `column` through the [`current`](Self::current) hook, if there is
+    /// one.
+    pub fn wrap_current(&self, column: Node) -> Node {
+        wrap(&self.current, column)
+    }
+
+    /// `column` through the [`parent`](Self::parent) hook, if there is one.
+    pub fn wrap_parent(&self, column: Node) -> Node {
+        wrap(&self.parent, column)
+    }
+
+    /// `column` through the [`preview`](Self::preview) hook, if there is
+    /// one.
+    pub fn wrap_preview(&self, column: Node) -> Node {
+        wrap(&self.preview, column)
+    }
+}
+
+fn wrap(hook: &Option<Hook>, column: Node) -> Node {
+    match hook {
+        Some(hook) => hook(column),
+        None => column,
     }
 }
