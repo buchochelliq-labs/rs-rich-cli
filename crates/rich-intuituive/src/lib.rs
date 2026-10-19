@@ -122,6 +122,7 @@ mod notify;
 pub mod pixels;
 mod place;
 pub mod preview;
+pub mod query;
 pub mod reactive;
 mod reorder;
 mod rule;
@@ -157,6 +158,8 @@ pub use rich;
 /// rs-rich-interact, for its components (`interact::Input`,
 /// `interact::Select`, …) and the headless test driver.
 pub use rich_interact as interact;
+/// Dates as people type them (`tomorrow`, `eow`, `3d`): rs-rich-interact's.
+pub use rich_interact::dates;
 
 pub use app::{
     after, every, fixed_step, held_keys, plain_key, rate, Anchor, App, Ctx, Driver, Easing,
