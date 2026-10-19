@@ -2,7 +2,7 @@
 
 ## Round 1: taskwarrior-tui
 
-[`examples/tasks.rs`](../../../crates/rich-intuituive/examples/tasks.rs)
+[`examples/tasks.rs`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/crates/rich-intuituive/examples/tasks.rs)
 rebuilds [taskwarrior-tui](https://github.com/kdheepak/taskwarrior-tui),
 the Taskwarrior front end, on intuiTUIve with no framework change. It is
 2,582 lines (after rustfmt): about 920 are the domain (times and
@@ -21,7 +21,7 @@ the views and keys, and the rest the app, the sample tasks and `main`.
 `undo.jsonl` (each change's tasks as they were before it) and `taskrc`
 (`context.NAME=FILTER`, `context=NAME`). Ids are the working set's,
 renumbered on each load as Taskwarrior's are. The tests
-([`tests/taskwarrior.rs`](../../../crates/rich-intuituive/tests/taskwarrior.rs),
+([`tests/taskwarrior.rs`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/crates/rich-intuituive/tests/taskwarrior.rs),
 781 lines, 27 tests; `tests/tasks.rs` was taken by the background-task
 tests) fill a store in a temporary directory with a fixed "now" (Monday
 2026-10-19 12:00 UTC) and drive the app headless, checking the screen,

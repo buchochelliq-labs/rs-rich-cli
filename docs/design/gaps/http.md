@@ -2,7 +2,7 @@
 
 ## Round 1: Slumber
 
-[`examples/http.rs`](../../../crates/rich-intuituive/examples/http.rs)
+[`examples/http.rs`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/crates/rich-intuituive/examples/http.rs)
 rebuilds [Slumber](https://github.com/LucasPickering/slumber), the
 terminal HTTP client, on intuiTUIve with no framework change. It is 2,088
 lines (after rustfmt): about 270 read Slumber's YAML collection (through
@@ -11,7 +11,7 @@ hand, 80 are the templates, 280 build a request and send it (a plain
 HTTP/1.1 client on `std::net::TcpStream`: chunked bodies, a socket a
 cancel can shut, no TLS), 80 the history, 435 the state (40 of them the
 focus bookkeeping described below), and 890 the panes, popups and keys.
-Its tests ([`tests/http.rs`](../../../crates/rich-intuituive/tests/http.rs),
+Its tests ([`tests/http.rs`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/crates/rich-intuituive/tests/http.rs),
 674 lines, 20 tests) start a small HTTP server on 127.0.0.1 for each test
 (a thread a connection, recording what it was sent), write a collection
 pointing at it to the temporary directory, and drive the app headless.

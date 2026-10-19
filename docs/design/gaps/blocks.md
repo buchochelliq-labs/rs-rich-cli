@@ -2,7 +2,7 @@
 
 ## Round 1: rata-tetris
 
-The clone is [`examples/blocks.rs`](../../../crates/rich-intuituive/examples/blocks.rs),
+The clone is [`examples/blocks.rs`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/crates/rich-intuituive/examples/blocks.rs),
 a rebuild of [rata-tetris](https://github.com/nw-wood/rata-tetris) (Nathanyel
 Wood, MIT; ratatui 0.29, the most-downloaded ratatui Tetris on crates.io whose
 source is short enough to follow screen by screen). quantonganh's `tetris-tui`

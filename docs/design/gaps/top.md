@@ -2,7 +2,7 @@
 
 ## Round 1: bottom
 
-[`examples/top.rs`](../../../crates/rich-intuituive/examples/top.rs)
+[`examples/top.rs`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/crates/rich-intuituive/examples/top.rs)
 rebuilds [bottom](https://github.com/ClementTsang/bottom) (`btm`), the
 system monitor, on intuiTUIve with no framework change. It is 2,706 lines
 (after rustfmt): about 325 are the Linux data source (`/proc/stat`,
@@ -12,7 +12,7 @@ all through std), 700 the domain (bottom's units, the sliding history,
 the search query language, sorted, grouped and tree rows), and the rest
 the widgets, layout, keys and dialogs. The source sits behind a `Source`
 trait (`sample()`, `kill(pid, signal)`), sampled on a `latest_every`
-thread. Its tests ([`tests/top.rs`](../../../crates/rich-intuituive/tests/top.rs),
+thread. Its tests ([`tests/top.rs`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/crates/rich-intuituive/tests/top.rs),
 769 lines, 25 tests) feed scripted samples through that trait, record the
 signals sent, run the app on the app's clock (`wait_for_tasks(true)`,
 `Driver::advance`) and assert on the rendered text.

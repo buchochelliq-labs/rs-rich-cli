@@ -2,7 +2,7 @@
 
 ## Round 1: termusic
 
-[`examples/music.rs`](../../../crates/rich-intuituive/examples/music.rs)
+[`examples/music.rs`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/crates/rich-intuituive/examples/music.rs)
 rebuilds [termusic](https://github.com/tramhao/termusic), the terminal
 music player (tui-realm on ratatui), on intuiTUIve with no framework
 change. It needs the crate's `wav` and `art` features. It is 1,556 lines
@@ -11,7 +11,7 @@ termusic's filters and alphanumeric order, a WAV `LIST`/`INFO` tag reader
 through std, an `.lrc` parser with termusic's caption rule, the playlist
 and transport state as signals in a `Copy` struct), and the rest the
 panes, the search pop-up and the keys. Its tests
-([`tests/music.rs`](../../../crates/rich-intuituive/tests/music.rs), 508
+([`tests/music.rs`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/crates/rich-intuituive/tests/music.rs), 508
 lines, 17 tests) write a library into a temporary directory for each test
 (16-bit WAV files written byte by byte, two with an `INFO` chunk, a
 `cover.png`, an `.lrc` file, a fake `.mp3`, a hidden file and a text file),

@@ -2,7 +2,7 @@
 
 ## Round 1: rs-rich raycaster
 
-The demo is [`examples/raycast/`](../../../crates/rich-intuituive/examples/raycast/main.rs),
+The demo is [`examples/raycast/`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/crates/rich-intuituive/examples/raycast/main.rs),
 an original first-person shooter in the style of the early-90s ray casters
 (no id Software assets or names: the levels, textures, sprites and face
 are generated in code). The algorithm follows Lode Vandevenne's

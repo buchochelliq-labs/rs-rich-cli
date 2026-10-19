@@ -2,14 +2,14 @@
 
 ## Round 1: gitui
 
-[`examples/git.rs`](../../../crates/rich-intuituive/examples/git.rs)
+[`examples/git.rs`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/crates/rich-intuituive/examples/git.rs)
 rebuilds [gitui](https://github.com/extrawurst/gitui), the git TUI, on
 intuiTUIve with no framework change. It is 2,219 lines (after rustfmt):
 about 630 are the repository through the `git` command line (status,
 per-file diffs, `git apply` of a hunk or of chosen lines, commit, log,
 refs, details, branches, stashes, files at HEAD), 180 the file trees, 210
 the diff view, and the rest the tabs, panes, popups and keys. Its tests
-([`tests/git.rs`](../../../crates/rich-intuituive/tests/git.rs), 535
+([`tests/git.rs`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/crates/rich-intuituive/tests/git.rs), 535
 lines, 21 tests) build a repository in the temporary directory with the
 `git` command line for each test, isolated from the user's and the
 system's git configuration, and drive the app headless.

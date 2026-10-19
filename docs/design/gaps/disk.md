@@ -2,7 +2,7 @@
 
 ## Round 1: diskonaut
 
-The clone is [`examples/disk.rs`](../../../crates/rich-intuituive/examples/disk.rs),
+The clone is [`examples/disk.rs`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/crates/rich-intuituive/examples/disk.rs),
 a rebuild of [diskonaut](https://github.com/imsnif/diskonaut) (Aram
 Drevekenin, MIT; tui-rs with crossterm, jwalk for the scan). It is one screen
 and a few boxes over it, so the round covers all of it.

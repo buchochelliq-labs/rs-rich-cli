@@ -2,7 +2,7 @@
 
 ## Round 1: csvlens
 
-The clone is [`examples/csv.rs`](../../../crates/rich-intuituive/examples/csv.rs),
+The clone is [`examples/csv.rs`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/crates/rich-intuituive/examples/csv.rs),
 a rebuild of [csvlens](https://github.com/YS-L/csvlens) (YS-L, MIT; ratatui),
 the `less` for CSV. Its main view was the scope: the table, its keys, its
 status line and its lazy reading of long files.

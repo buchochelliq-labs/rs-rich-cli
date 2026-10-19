@@ -276,7 +276,7 @@ then a walk-through played with `Hold`, `KeyDown` and `KeyUp`, with the
 kitty keyboard protocol reported (`Set KittyKeyboard on`) so the arrows'
 releases reach the game. A second tape records the same walk-through with
 the example drawing iTerm2 images, which the recorder decodes and draws
-into the GIF. See [the recorder's README](../crates/rich-record/README.md)
+into the GIF. See [the recorder's README](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/crates/rich-record/README.md)
 for the tape commands, `Set Framerate` and the graphics it follows.
 
 ![The raycaster's walk-through](media/tapes/raycast/raycast.gif)
