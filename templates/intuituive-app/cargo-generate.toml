@@ -1,5 +1,11 @@
 # A cargo-generate template for an intuiTUIve app:
 #
 #     cargo generate --git https://github.com/buchochelliq-labs/rs-rich-cli templates/intuituive-app
+#
+# The manifest is `Cargo.toml.liquid`: cargo-generate drops the `.liquid`
+# suffix, and cargo, which reads every `Cargo.toml` in a git checkout of this
+# repo when a crate depends on one of ours by git, never sees the
+# `{{project-name}}` placeholder (not a valid package name). 0.23.4 fixed the
+# suffix being kept on git templates.
 [template]
-cargo_generate_version = ">=0.18"
+cargo_generate_version = ">=0.23.4"
