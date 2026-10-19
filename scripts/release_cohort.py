@@ -462,7 +462,8 @@ def main():
     guard.add_argument("tag")
     tagger = commands.add_parser("tag")
     tagger.add_argument("--commit", default="HEAD",
-                        help="commit to tag (default: HEAD, the local checkout; it must be on main)")
+                        help="commit to tag (default: HEAD, the local checkout): any commit on main, "
+                             "such as an earlier one known to be good; its RELEASES.toml decides")
     tagger.add_argument("--remote", default="origin")
     tagger.add_argument("--timeout", type=int, default=120, help="minutes to wait for each release")
     tagger.add_argument("--dry-run", action="store_true", help="show what would be tagged, then stop")

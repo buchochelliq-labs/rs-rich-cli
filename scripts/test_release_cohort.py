@@ -355,6 +355,17 @@ class Tag(unittest.TestCase):
         # Nothing was fetched: the checkout's view of main is where it was.
         self.assertEqual(git(self.work, "rev-parse", "origin/main"), self.sha)
 
+    def test_an_earlier_commit_on_main_is_released_as_it_was(self):
+        # main has moved on (rs-rich-art 0.2.1); --commit picks the earlier,
+        # known-good commit, and its RELEASES.toml and manifests decide.
+        write_tree(self.work, config=CONFIG.replace('version = "0.2.0"', 'version = "0.2.1"'),
+                   art=ART.replace("0.2.0", "0.2.1"))
+        git(self.work, "commit", "--quiet", "-am", "later")
+        git(self.work, "push", "--quiet", "origin", "main")
+        self.run_tag(commit=self.sha, registry="crates.io")
+        self.assertEqual(self.waited, ["rs-rich-art-v0.2.0"])
+        self.assertEqual(git(self.work, "rev-parse", "rs-rich-art-v0.2.0^{commit}"), self.sha)
+
     def test_a_commit_not_on_main_is_refused(self):
         git(self.work, "commit", "--quiet", "--allow-empty", "-m", "unmerged")
         with self.assertRaisesRegex(RuntimeError, "not on origin/main"):

@@ -353,8 +353,9 @@ from its manifest, a publishable crate is missing, or a crate is listed before a
 workspace crate it depends on. After a version bump, `release_cohort.py sync`
 rewrites the versions from the manifests.
 
-`release_cohort.py tag` tags the local checkout (`HEAD`, or `--commit`),
-which must be on `main` as last fetched. It fetches nothing and reads
+`release_cohort.py tag` tags the local checkout (`HEAD`), or `--commit
+<sha>`: any commit on `main` as last fetched, such as an earlier one known to
+be good, whose `RELEASES.toml` and manifests then decide what is released. It fetches nothing and reads
 `RELEASES.toml` and the manifests from that commit, so pull `main` first, and
 a run resumed later releases the same commit even if `main` has moved on
 (only the remote's tags and the registries are read live). For each entry in
