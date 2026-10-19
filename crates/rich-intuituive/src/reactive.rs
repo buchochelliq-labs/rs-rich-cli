@@ -133,6 +133,11 @@ pub(crate) struct Runtime {
     /// How many screens are open (the first, and those over it), for
     /// [`Ctx::is_modal`](crate::Ctx::is_modal) and the bindings that ask.
     pub(crate) layers: Cell<usize>,
+    /// What widgets draw over their neighbours ([`crate::float`]), by node.
+    pub(crate) floats: RefCell<HashMap<NodeId, crate::float::Float>>,
+    /// The app's focus path, once it is made: for a node that hands the
+    /// focus back to where it was (a command line).
+    pub(crate) focus_path: Cell<Option<Signal<Vec<NodeId>>>>,
 }
 
 thread_local! {
@@ -172,6 +177,8 @@ impl Runtime {
                 hints: Cell::new(None),
                 held_keys: Cell::new(None),
                 layers: Cell::new(1),
+                floats: RefCell::new(HashMap::new()),
+                focus_path: Cell::new(None),
                 locals: RefCell::new(HashMap::new()),
                 next_local: Cell::new(0),
             });

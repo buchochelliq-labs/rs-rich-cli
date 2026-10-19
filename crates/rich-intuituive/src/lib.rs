@@ -94,6 +94,7 @@ mod bindings;
 pub mod border;
 mod builtin;
 mod calendar;
+pub mod complete;
 mod datetime;
 mod dialog;
 mod digits;
@@ -103,6 +104,7 @@ mod feed;
 #[cfg(feature = "files")]
 pub mod files;
 pub mod finder;
+mod float;
 mod help;
 mod hex;
 #[cfg(feature = "art")]
@@ -169,6 +171,10 @@ pub use app::{
 pub use big_text::big_text;
 pub use bindings::{ModePage, Scaled, Stepped};
 pub use border::{Border, BorderSet, Edge, Shadow, Sides};
+pub use complete::{
+    complete_words, history_file, history_in, history_session, CompleteOptions, Completion,
+    InputHistory,
+};
 pub use dialog::{ConfirmOptions, PickOptions, PromptOptions};
 pub use digits::digits;
 pub use effect::{effect, fill};

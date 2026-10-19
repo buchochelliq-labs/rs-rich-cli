@@ -166,6 +166,8 @@ impl Ctx {
             title_style,
             change,
             cancel,
+            complete,
+            history,
         } = options;
         let submit = RefCell::new(Some(on_submit));
         self.popup_at(origin, offset, move || {
@@ -197,8 +199,14 @@ impl Ctx {
                         cancel(cx);
                     }
                 })
-                .autofocus()
-                .panel(&title);
+                .autofocus();
+            if let Some((completer, options)) = complete {
+                node = node.completer(Some(completer), options);
+            }
+            if let Some(history) = history {
+                node = node.history(history);
+            }
+            let mut node = node.panel(&title);
             if let Some(style) = &title_style {
                 node = node.title_style(style);
             }
@@ -351,6 +359,8 @@ pub struct PromptOptions {
     title_style: Option<String>,
     change: Option<OnChange>,
     cancel: Option<OnCancel>,
+    complete: Option<(crate::complete::Completer, crate::complete::CompleteOptions)>,
+    history: Option<crate::complete::InputHistory>,
 }
 
 impl Default for PromptOptions {
@@ -362,6 +372,8 @@ impl Default for PromptOptions {
             title_style: None,
             change: None,
             cancel: None,
+            complete: None,
+            history: None,
         }
     }
 }
@@ -404,6 +416,52 @@ impl PromptOptions {
     /// Run `cancel` when Esc closes it.
     pub fn on_cancel(mut self, cancel: impl FnOnce(&mut Ctx) + 'static) -> PromptOptions {
         self.cancel = Some(Box::new(cancel));
+        self
+    }
+
+    /// Complete the input with the candidates `complete` gives, as
+    /// [`Node::complete`](crate::Node::complete): a pop-up on Tab, ghost
+    /// text. Esc closes the pop-up first, then the prompt.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    /// use intuituive::{complete_words, PromptOptions};
+    ///
+    /// let app = App::new(|| {
+    ///     let picked = signal(String::new());
+    ///     text!("{picked}").on_key("o", move |cx| {
+    ///         let options = PromptOptions::new().complete(complete_words(["vim", "vimdiff", "less"]));
+    ///         cx.prompt_with("Open with:", "", options, move |text, _| picked.set(text))
+    ///     })
+    /// });
+    /// let mut driver = app.driver(60, 9);
+    /// driver.press("o v tab");
+    /// assert!(driver.screen().plain()[5].contains(" vimdiff "));
+    /// driver.press("down enter enter");
+    /// assert_eq!(driver.screen().plain()[0].trim_end(), "vimdiff");
+    /// ```
+    pub fn complete(
+        self,
+        complete: impl Fn(&str, usize) -> Vec<crate::complete::Completion> + 'static,
+    ) -> PromptOptions {
+        self.complete_with(complete, crate::complete::CompleteOptions::default())
+    }
+
+    /// [`complete`](Self::complete) as `options` say.
+    pub fn complete_with(
+        mut self,
+        complete: impl Fn(&str, usize) -> Vec<crate::complete::Completion> + 'static,
+        options: crate::complete::CompleteOptions,
+    ) -> PromptOptions {
+        self.complete = Some((std::rc::Rc::new(complete), options));
+        self
+    }
+
+    /// Go through `history` with ↑ and ↓, and add what is entered to it,
+    /// as [`Node::history`](crate::Node::history): a name for the
+    /// session's, or [`history_in`](crate::history_in) the app's state.
+    pub fn history(mut self, history: impl Into<crate::complete::InputHistory>) -> PromptOptions {
+        self.history = Some(history.into());
         self
     }
 }

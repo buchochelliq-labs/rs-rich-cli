@@ -149,6 +149,8 @@ pub(crate) struct TextArea {
     /// the column the text starts at.
     bar_at: Cell<Option<(Rect, usize, usize)>>,
     origin: Cell<u16>,
+    /// An input's completion and history.
+    pub(crate) assist: crate::complete::Assist,
 }
 
 impl TextArea {
@@ -176,6 +178,7 @@ impl TextArea {
             bar: Bar::default(),
             bar_at: Cell::new(None),
             origin: Cell::new(0),
+            assist: Default::default(),
         };
         area.place_caret();
         area
@@ -555,10 +558,16 @@ impl TextArea {
         let escaped = std::mem::replace(&mut self.escaped, key.code == KeyCode::Escape);
         let edit = !self.options.read_only;
         if self.options.single_line {
+            if let Some(used) = self.assist_key(key) {
+                return used;
+            }
             match key.code {
                 // Enter submits, with a handler; Tab moves on, and up, down
                 // and the page keys go to the app (a form).
                 KeyCode::Enter if !ctrl && !alt => {
+                    if let Some(history) = self.assist.history() {
+                        history.push(&self.buffer.text());
+                    }
                     let Some(submit) = self.on_submit.as_mut() else {
                         return false;
                     };
@@ -651,6 +660,275 @@ impl TextArea {
     }
 }
 
+impl TextArea {
+    /// The caret's byte in the (single-line) text.
+    fn caret_byte(&self) -> usize {
+        self.buffer.caret().at
+    }
+
+    /// The candidates for what is typed now.
+    fn candidates(&self) -> Vec<crate::complete::Completion> {
+        (self.assist).candidates(&self.buffer.text(), self.caret_byte())
+    }
+
+    /// Put `completion` in, the caret after it.
+    fn take(&mut self, completion: &crate::complete::Completion) {
+        let range = &completion.replace;
+        self.buffer.set_caret(Pos::new(0, range.start), false);
+        if range.end > range.start {
+            self.buffer.set_caret(Pos::new(0, range.end), true);
+        }
+        self.buffer.insert(&completion.text);
+        self.assist.popup = None;
+    }
+
+    /// The candidate the ghost and → take: the selected one in the pop-up,
+    /// else the top one; with its rest, when it continues what is typed up
+    /// to the caret at the end.
+    fn ghost(&mut self) -> Option<(crate::complete::Completion, String)> {
+        if !self.assist.options.ghost || self.buffer.selection().is_some() {
+            return None;
+        }
+        let text = self.buffer.text();
+        if self.caret_byte() != text.len() {
+            return None;
+        }
+        let revision = self.buffer.revision();
+        let candidate = match &self.assist.popup {
+            Some(popup) => popup.items.get(popup.selected).cloned(),
+            None => {
+                if self.assist.top.as_ref().map(|t| t.0) != Some(revision) {
+                    let top = self.candidates().into_iter().next();
+                    self.assist.top = Some((revision, top));
+                }
+                self.assist.top.as_ref().and_then(|t| t.1.clone())
+            }
+        }?;
+        if candidate.replace.end != text.len() {
+            return None;
+        }
+        let typed = &text[candidate.replace.clone()];
+        let rest = candidate
+            .text
+            .get(typed.len()..)
+            .filter(|_| {
+                candidate
+                    .text
+                    .to_lowercase()
+                    .starts_with(&typed.to_lowercase())
+            })?
+            .to_string();
+        (!rest.is_empty()).then_some((candidate, rest))
+    }
+
+    /// A key for the completion or the history: `Some` when one used it
+    /// (or wants it unused).
+    fn assist_key(&mut self, key: Key) -> Option<bool> {
+        let plain = !key.modifiers.ctrl && !key.modifiers.alt;
+        // Any key but ↑ and ↓ ends browsing the history, where it is.
+        if !matches!(key.code, KeyCode::Up | KeyCode::Down) {
+            if let (Some(_), Some(history)) = (self.assist.browse.take(), self.assist.history()) {
+                history.set_status(None);
+            }
+        }
+        let rows = self.assist.options.rows as usize;
+        if let Some(popup) = self.assist.popup.as_mut() {
+            match key.code {
+                KeyCode::Tab | KeyCode::Down => popup.step(1, rows),
+                KeyCode::BackTab | KeyCode::Up => popup.step(-1, rows),
+                KeyCode::PageDown => popup.step(rows as isize, rows),
+                KeyCode::PageUp => popup.step(-(rows as isize), rows),
+                KeyCode::Enter if plain => {
+                    let chosen = popup.items.get(popup.selected).cloned();
+                    match chosen {
+                        Some(chosen) => self.take(&chosen),
+                        None => self.assist.popup = None,
+                    }
+                }
+                KeyCode::Escape => self.assist.popup = None,
+                _ => return None,
+            }
+            return Some(true);
+        }
+        if self.assist.completer.is_some() && plain && !self.options.read_only {
+            match key.code {
+                KeyCode::Tab if !key.modifiers.shift => {
+                    let mut items = self.candidates();
+                    match items.len() {
+                        0 => return None,
+                        1 => self.take(&items.remove(0)),
+                        _ => {
+                            self.assist.popup = Some(crate::complete::Popup {
+                                items,
+                                selected: 0,
+                                top: 0,
+                            })
+                        }
+                    }
+                    return Some(true);
+                }
+                KeyCode::Right | KeyCode::End if !key.modifiers.shift => {
+                    if let Some((chosen, _)) = self.ghost() {
+                        self.take(&chosen);
+                        return Some(true);
+                    }
+                }
+                _ => {}
+            }
+        }
+        if let (Some(history), true) = (self.assist.history(), plain) {
+            let older = match key.code {
+                KeyCode::Up => true,
+                KeyCode::Down if self.assist.browse.is_some() => false,
+                _ => return None,
+            };
+            let (at, typed) = self
+                .assist
+                .browse
+                .clone()
+                .unwrap_or_else(|| (0, self.buffer.text()));
+            let found = history.matching(&typed);
+            if found.is_empty() {
+                return None;
+            }
+            let next = if older {
+                (at + 1).min(found.len())
+            } else {
+                at.saturating_sub(1)
+            };
+            let shown = match next {
+                0 => typed.clone(),
+                n => found[n - 1].clone(),
+            };
+            if shown != self.buffer.text() {
+                self.buffer.select_all();
+                self.buffer.insert(&shown);
+            }
+            if next == 0 {
+                self.assist.browse = None;
+                history.set_status(None);
+            } else {
+                self.assist.browse = Some((next, typed));
+                history.set_status(Some((next, found.len())));
+            }
+            return Some(true);
+        }
+        None
+    }
+
+    /// What is typed changed: the pop-up follows it (closing when nothing
+    /// is left), or opens as you type.
+    fn edited(&mut self) {
+        if self.assist.completer.is_none() {
+            return;
+        }
+        if self.assist.popup.is_some() || self.assist.options.auto {
+            let items = self.candidates();
+            self.assist.popup = (!items.is_empty()).then_some(crate::complete::Popup {
+                items,
+                selected: 0,
+                top: 0,
+            });
+        }
+    }
+
+    /// Draw the ghost after the caret, and set the pop-up's float.
+    fn draw_assist(&mut self, cx: &mut DrawCx, canvas: &mut Canvas) {
+        if !self.options.single_line || self.assist.completer.is_none() {
+            return;
+        }
+        let focused = cx.focused();
+        if !focused {
+            self.assist.popup = None;
+        }
+        if let (true, Some((x, y)), Some((_, rest))) = (focused, self.caret.get(), self.ghost()) {
+            let style = cx.style("input.ghost", "dim");
+            canvas.print(x, y, &rest, Some(&style));
+        }
+        let Some(popup) = self.assist.popup.clone() else {
+            if std::mem::take(&mut self.assist.floated) {
+                cx.float(None);
+            }
+            return;
+        };
+        let rows = self.assist.options.rows as usize;
+        let cells = rich::cells::cell_len;
+        let widest = popup
+            .items
+            .iter()
+            .map(|c| cells(&c.text) + c.detail.as_deref().map_or(0, |d| cells(d) + 2))
+            .max()
+            .unwrap_or(0)
+            .min(46);
+        let width = widest + 2;
+        let base = cx.style("completion", "on grey23");
+        let selected = cx.style("completion.selected", "reverse");
+        let detail = base.combine(&cx.style("completion.detail", "dim"));
+        let mut lines = Vec::new();
+        for (i, item) in popup.items.iter().enumerate().skip(popup.top).take(rows) {
+            let look = if i == popup.selected {
+                &selected
+            } else {
+                &base
+            };
+            let mut line = vec![Segment::new(" ", Some(look.clone()))];
+            let text_room = widest
+                - item
+                    .detail
+                    .as_deref()
+                    .map_or(0, |d| cells(d) + 2)
+                    .min(widest);
+            let shown = rich::cells::set_cell_size(
+                &item.text,
+                text_room.max(cells(&item.text).min(widest)),
+            );
+            let used = cells(&shown);
+            line.push(Segment::new(shown, Some(look.clone())));
+            if let Some(d) = &item.detail {
+                let room = widest.saturating_sub(used);
+                let d = rich::cells::set_cell_size(&format!("  {d}"), room);
+                let look = if i == popup.selected {
+                    selected.clone()
+                } else {
+                    detail.clone()
+                };
+                line.push(Segment::new(d, Some(look)));
+            } else {
+                line.push(Segment::new(
+                    " ".repeat(widest - used.min(widest)),
+                    Some(look.clone()),
+                ));
+            }
+            line.push(Segment::new(" ", Some(look.clone())));
+            lines.push(line);
+        }
+        // Under the start of the text it replaces.
+        let start = popup.items[popup.selected.min(popup.items.len() - 1)]
+            .replace
+            .start;
+        let text = self.buffer.text();
+        let left = if self.options.soft_wrap {
+            0
+        } else {
+            self.left.get()
+        };
+        let column = self
+            .shown_cells(&text[..start.min(text.len())])
+            .saturating_sub(left)
+            .min(canvas.width() as usize) as u16;
+        let row = self.caret.get().map_or(0, |(_, y)| y);
+        let (x, y) = cx.to_screen(self.origin.get() + column, row);
+        let (ax, _) = cx.to_screen(0, row);
+        cx.float(Some(crate::float::Float {
+            anchor: Rect::new(ax, y, canvas.width(), 1),
+            x: x.saturating_sub(1),
+            width: width.min(u16::MAX as usize) as u16,
+            lines,
+        }));
+        self.assist.floated = true;
+    }
+}
+
 impl Widget for TextArea {
     fn name(&self) -> &'static str {
         "text_area"
@@ -691,6 +969,8 @@ impl Widget for TextArea {
             self.top.set((0, 0));
             self.left.set(0);
             self.place_caret();
+            self.assist.popup = None;
+            self.assist.browse = None;
         }
         let (mut width, height) = (canvas.width(), canvas.height());
         // The bar keeps a column while the lines do not all fit.
@@ -798,6 +1078,7 @@ impl Widget for TextArea {
         }
         self.caret.set(caret_cell);
         *self.rows.borrow_mut() = rows;
+        self.draw_assist(cx, canvas);
     }
 
     fn event(&mut self, cx: &mut EventCx, event: &WidgetEvent) -> Used {
@@ -820,6 +1101,14 @@ impl Widget for TextArea {
                 if !self.key(cx, *key) {
                     return Used::No;
                 }
+                if self.buffer.revision() != revision && self.assist.browse.is_none() {
+                    self.edited();
+                }
+            }
+            WidgetEvent::Focus(false) if self.assist.popup.is_some() => {
+                self.assist.popup = None;
+                cx.redraw();
+                return Used::No;
             }
             WidgetEvent::Paste(text) if !self.options.read_only => {
                 if self.options.single_line {
@@ -1075,6 +1364,7 @@ mod tests {
             bar: Bar::default(),
             bar_at: Cell::new(None),
             origin: Cell::new(0),
+            assist: Default::default(),
         }
     }
 
