@@ -139,3 +139,8 @@ name = "git"
 # The bottom (btm) clone reads /proc and /sys through std; no feature.
 [[example]]
 name = "top"
+
+# The diskonaut clone scans with std and rs-rich-ext's `listing::walk`;
+# no feature.
+[[example]]
+name = "disk"
