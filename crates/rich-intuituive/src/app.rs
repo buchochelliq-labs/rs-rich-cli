@@ -3061,8 +3061,9 @@ impl App {
         for &id in path.iter().rev() {
             with_node(&self.top().root, id, &mut |node| {
                 let name = node.group_name();
+                // A binding that does not apply now is not listed.
                 for (index, bound) in node.keys.borrow().iter().enumerate() {
-                    if bound.description.is_empty() {
+                    if bound.description.is_empty() || !bound.active() {
                         continue;
                     }
                     let binding = rich_interact::keymap::Binding::new(
@@ -3074,7 +3075,7 @@ impl App {
                     out.push((id, index, binding));
                 }
                 for (index, bound) in node.sequences.borrow().iter().enumerate() {
-                    if bound.description.is_empty() {
+                    if bound.description.is_empty() || !bound.active() {
                         continue;
                     }
                     let binding = rich_interact::keymap::Binding::sequence(
@@ -3468,12 +3469,12 @@ impl App {
                     .keys
                     .borrow()
                     .iter()
-                    .any(|bound| key.matches_any(&bound.keys))
+                    .any(|bound| key.matches_any(bound.live_keys()))
                     || node
                         .sequences
                         .borrow()
                         .iter()
-                        .any(|bound| crate::sequence::starts(&bound.keys, &[key]))
+                        .any(|bound| crate::sequence::starts(bound.live_keys(), &[key]))
                     || node.body.borrow().widget.claims_key(key);
             });
         }
@@ -3646,7 +3647,9 @@ impl App {
                     let mut keys = node.keys.borrow_mut();
                     // A binding that names the key before one it could be
                     // (a Tab from a legacy terminal: `tab`, then `ctrl+i`).
-                    let picked = key.pick(keys.iter().map(|bound| bound.keys.as_slice()));
+                    // One that does not apply now has no keys (another of
+                    // the key may: two under different conditions).
+                    let picked = key.pick(keys.iter().map(|bound| bound.live_keys()));
                     if let Some(bound) = picked.and_then(|index| keys.get_mut(index)) {
                         (bound.handler)(&mut cx, key);
                         used = Some("on_key");
@@ -3656,7 +3659,7 @@ impl App {
                 let sequences = node.sequences.borrow();
                 if sequences
                     .iter()
-                    .any(|bound| crate::sequence::starts(&bound.keys, &[key]))
+                    .any(|bound| crate::sequence::starts(bound.live_keys(), &[key]))
                 {
                     starts = true;
                     return;
@@ -3703,7 +3706,7 @@ impl App {
         let (mut exact, mut longer) = (None, false);
         with_node(&self.top().root, pending.node, &mut |node| {
             for (index, bound) in node.sequences.borrow().iter().enumerate() {
-                if crate::sequence::starts(&bound.keys, &typed) {
+                if crate::sequence::starts(bound.live_keys(), &typed) {
                     if bound.keys.len() == typed.len() {
                         exact.get_or_insert(index);
                     } else {

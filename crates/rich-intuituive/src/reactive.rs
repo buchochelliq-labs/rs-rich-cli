@@ -1093,6 +1093,15 @@ impl Proxy {
     }
 }
 
+/// Run `f` subscribing no one to what it reads in the app running on this
+/// thread (or as it is, outside one).
+pub(crate) fn untracked<R>(f: impl FnOnce() -> R) -> R {
+    match CURRENT.with(|current| current.borrow().last().cloned()) {
+        Some(runtime) => runtime.untracked(f),
+        None => f(),
+    }
+}
+
 /// Note an event in the trace of the app running on this thread, while
 /// its inspector is open; `event` is only made then.
 pub(crate) fn traced(event: impl FnOnce() -> crate::inspect::Traced) {

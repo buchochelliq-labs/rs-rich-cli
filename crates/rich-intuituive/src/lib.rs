@@ -75,6 +75,7 @@ pub mod audio;
 mod bars;
 #[cfg(feature = "art")]
 mod big_text;
+mod bindings;
 pub mod border;
 mod builtin;
 mod calendar;
@@ -132,6 +133,7 @@ pub use app::{
 };
 #[cfg(feature = "art")]
 pub use big_text::big_text;
+pub use bindings::{Scaled, Stepped};
 pub use border::{Border, BorderSet, Edge, Shadow, Sides};
 pub use dialog::{ConfirmOptions, PickOptions, PromptOptions};
 pub use effect::{effect, fill};

@@ -116,7 +116,10 @@ impl Key {
     /// Parse a key name such as `enter`, `ctrl+c`, `shift+tab`, `pagedown`,
     /// `f5` or a single character. Case does not matter for names. The
     /// comma key is `,` or `comma` (`ctrl+comma`), the name a list of key
-    /// names can hold without quotes.
+    /// names can hold without quotes; the other punctuation keys have names
+    /// too, for where the character is awkward (a key list, a TOML string,
+    /// `ctrl+minus`): see [`punctuation`]. A key named so is the character,
+    /// and shows as it (`equals` is `=`).
     ///
     /// A name means the key: `ctrl+i` is Ctrl+I, not Tab, although a legacy
     /// terminal sends the two alike; [`matches`](Key::matches) is what lets
@@ -173,6 +176,9 @@ impl Key {
                 "space" => KeyCode::Char(' '),
                 // A list of key names is separated by commas too.
                 "comma" => KeyCode::Char(','),
+                // Shift with punctuation depends on the layout, as above.
+                other if punctuation(other).is_some() && modifiers.shift => return None,
+                other if punctuation(other).is_some() => KeyCode::Char(punctuation(other)?),
                 "up" => KeyCode::Up,
                 "down" => KeyCode::Down,
                 "left" => KeyCode::Left,
@@ -288,6 +294,63 @@ impl Key {
     pub fn is_interrupt(&self) -> bool {
         self.modifiers.ctrl && self.code == KeyCode::Char('c')
     }
+}
+
+/// The character a punctuation key's name stands for: `equals` `=`,
+/// `minus` (or `dash`) `-`, `plus` `+`, `underscore` `_`, `slash` `/`,
+/// `backslash` `\`, `period` (or `dot`) `.`, `semicolon` `;`, `colon` `:`,
+/// `quote` (or `apostrophe`) `'`, `doublequote` `"`, `backtick` (or
+/// `grave`) `` ` ``, `tilde` `~`, `bracketleft` `[`, `bracketright` `]`,
+/// `braceleft` `{`, `braceright` `}`, `parenleft` `(`, `parenright` `)`,
+/// `lt` (or `less`) `<`, `gt` (or `greater`) `>`, `question` `?`, `exclam`
+/// (or `bang`) `!`, `at` `@`, `hash` `#`, `dollar` `$`, `percent` `%`,
+/// `caret` `^`, `ampersand` `&`, `asterisk` (or `star`) `*`, `pipe` `|`,
+/// and `comma` `,`. Lower case; [`Key::parse`] takes any case.
+///
+/// ```
+/// use rich_interact::event::punctuation;
+/// use rich_interact::Key;
+///
+/// assert_eq!(punctuation("equals"), Some('='));
+/// assert_eq!(Key::parse("ctrl+minus"), Some(Key::ctrl('-')));
+/// assert_eq!(Key::parse("question").unwrap().to_string(), "?");
+/// ```
+pub fn punctuation(name: &str) -> Option<char> {
+    Some(match name {
+        "equals" => '=',
+        "minus" | "dash" => '-',
+        "plus" => '+',
+        "underscore" => '_',
+        "slash" => '/',
+        "backslash" => '\\',
+        "period" | "dot" => '.',
+        "comma" => ',',
+        "semicolon" => ';',
+        "colon" => ':',
+        "quote" | "apostrophe" => '\'',
+        "doublequote" => '"',
+        "backtick" | "grave" => '`',
+        "tilde" => '~',
+        "bracketleft" => '[',
+        "bracketright" => ']',
+        "braceleft" => '{',
+        "braceright" => '}',
+        "parenleft" => '(',
+        "parenright" => ')',
+        "lt" | "less" => '<',
+        "gt" | "greater" => '>',
+        "question" => '?',
+        "exclam" | "bang" => '!',
+        "at" => '@',
+        "hash" => '#',
+        "dollar" => '$',
+        "percent" => '%',
+        "caret" => '^',
+        "ampersand" => '&',
+        "asterisk" | "star" => '*',
+        "pipe" => '|',
+        _ => return None,
+    })
 }
 
 impl fmt::Display for Key {
@@ -593,6 +656,45 @@ mod tests {
         assert_eq!(Key::parse("+"), Some(Key::char('+')));
         assert_eq!(Key::parse("hyper+x"), None);
         assert_eq!(Key::parse("fx"), None);
+    }
+
+    #[test]
+    fn punctuation_keys_have_names() {
+        for (name, c) in [
+            ("equals", '='),
+            ("minus", '-'),
+            ("plus", '+'),
+            ("underscore", '_'),
+            ("slash", '/'),
+            ("backslash", '\\'),
+            ("period", '.'),
+            ("dot", '.'),
+            ("semicolon", ';'),
+            ("colon", ':'),
+            ("quote", '\''),
+            ("backtick", '`'),
+            ("tilde", '~'),
+            ("bracketleft", '['),
+            ("bracketright", ']'),
+            ("lt", '<'),
+            ("gt", '>'),
+            ("question", '?'),
+        ] {
+            assert_eq!(Key::parse(name), Some(Key::char(c)), "{name}");
+            // Shown as the character it names.
+            assert_eq!(Key::parse(name).unwrap().to_string(), c.to_string());
+        }
+        assert_eq!(Key::parse("Ctrl+Equals"), Some(Key::ctrl('=')));
+        let alt = Modifiers {
+            alt: true,
+            ..Modifiers::NONE
+        };
+        assert_eq!(
+            Key::parse("alt+slash"),
+            Some(Key::with(KeyCode::Char('/'), alt))
+        );
+        // Shift with punctuation is a layout's, not a key name.
+        assert_eq!(Key::parse("shift+minus"), None);
     }
 
     fn key(name: &str) -> Key {

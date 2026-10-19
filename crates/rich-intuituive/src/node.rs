@@ -75,8 +75,14 @@ pub(crate) struct KeyBinding {
     /// The keys the help and the palette show, when not all of `keys`
     /// ([`bind_scaled`](Node::bind_scaled) shows the plain ones).
     pub shown: Option<Vec<Key>>,
+    /// When it applies ([`bind_when`](Node::bind_when)); `None`, always.
+    pub when: Option<BindingCondition>,
     pub handler: KeyHandler,
 }
+
+/// When a binding applies: read untracked, as a key comes and as the help
+/// lists it.
+pub(crate) type BindingCondition = Rc<dyn Fn() -> bool>;
 
 impl KeyBinding {
     pub(crate) fn new(keys: Vec<Key>, description: &str, handler: KeyHandler) -> KeyBinding {
@@ -85,7 +91,25 @@ impl KeyBinding {
             description: description.to_string(),
             section: None,
             shown: None,
+            when: None,
             handler,
+        }
+    }
+
+    /// Whether it applies now: no condition, or its condition holds.
+    pub(crate) fn active(&self) -> bool {
+        self.when
+            .as_ref()
+            .is_none_or(|when| crate::reactive::untracked(|| when()))
+    }
+
+    /// Its keys while it applies; none while it does not, so a key passes
+    /// it by (to another binding of the key, on this node or above).
+    pub(crate) fn live_keys(&self) -> &[Key] {
+        if self.active() {
+            &self.keys
+        } else {
+            &[]
         }
     }
 }
@@ -1351,7 +1375,9 @@ impl Node {
     /// variant pressed. scope-tui's ↑, ten times with Shift and five with
     /// Ctrl. The help lists the keys of the first variant, its description
     /// followed by the others' (`(shift ×10, ctrl ×5)`); the palette runs
-    /// the first.
+    /// the first. A variant may say itself its own way, with a label in
+    /// place of `×value`: `("alt", 0.2, "⅕")` is listed `alt ⅕` (every
+    /// variant then has one; see [`Scaled`](crate::Scaled)).
     ///
     /// ```
     /// use intuituive::prelude::*;
@@ -1370,13 +1396,34 @@ impl Node {
     /// assert_eq!(driver.screen().plain()[0].trim_end(), "17");
     /// ```
     ///
+    /// With labels:
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| {
+    ///     let scale = signal(1.0);
+    ///     text!("{scale}")
+    ///         .bind_scaled(
+    ///             "up",
+    ///             &[("", 1.0, "one"), ("alt", 0.2, "⅕")],
+    ///             "Scale up",
+    ///             move |_, by| scale.update(|s| *s += by),
+    ///         )
+    ///         .on_key("?", |cx| cx.help())
+    /// });
+    /// let mut driver = app.driver(50, 12);
+    /// driver.press("?");
+    /// assert!(driver.screen().plain().join("\n").contains("Scale up (alt ⅕)"));
+    /// ```
+    ///
     /// # Panics
     /// On a name that is not a key, on no names or no variants, or on a
     /// modifier that makes no key with one of them (`"shift"` with `","`).
-    pub fn bind_scaled(
+    pub fn bind_scaled<V: crate::Scaled>(
         self,
         keys: &str,
-        variants: &[(&str, f64)],
+        variants: &[V],
         description: &str,
         mut handler: impl FnMut(&mut Ctx, f64) + 'static,
     ) -> Node {
@@ -1385,14 +1432,21 @@ impl Node {
             "bind_scaled({keys:?}) has no variants"
         );
         let plain = parse_keys(keys);
-        // What the help says of the others: `shift ×10`.
+        // What the help says of the others: `shift ×10`, or its label.
         let others: Vec<String> = variants[1..]
             .iter()
-            .map(|(modifiers, value)| format!("{} ×{value}", modifiers.trim_end_matches('+')))
+            .map(|variant| {
+                let modifiers = variant.modifiers().trim_end_matches('+');
+                match variant.label() {
+                    Some(label) => format!("{modifiers} {label}"),
+                    None => format!("{modifiers} ×{}", variant.value()),
+                }
+            })
             .collect();
         let variants: Vec<(Vec<Key>, f64)> = variants
             .iter()
-            .map(|&(modifiers, value)| {
+            .map(|variant| (variant.modifiers(), variant.value()))
+            .map(|(modifiers, value)| {
                 let modifiers = modifiers.trim_end_matches('+');
                 let keys = match modifiers {
                     "" => plain.clone(),
