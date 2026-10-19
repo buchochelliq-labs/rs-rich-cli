@@ -24,19 +24,23 @@
 //!
 //! Deleting is real: the item is removed from the disk.
 //!
-//! Bespoke: the treemap's layout (the squarify below, about 120 lines)
-//! and moving between its tiles by direction (about 40).
-//! intuiTUIve has no treemap; the tiles themselves are ordinary panels in
-//! rows and columns with collapsed borders, so the lines join as
-//! diskonaut's do.
+//! On intuiTUIve's components: the layout is `layout::squarify`, moving
+//! between tiles `focus::neighbour`, every line that picks the longest
+//! form that fits a `fit_text`, the map rebuilt by `keyed`, the small
+//! window `App::min_size`. Still the example's own: the tiles turned into
+//! one grid of joined lines (`joined`, a treemap node does not collapse
+//! its tiles' borders) and the folder tree.
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
+use intuituive::focus::{neighbour, Direction};
+use intuituive::layout::squarify;
 use intuituive::prelude::*;
 use intuituive::rich::markup::escape;
-use intuituive::{spawn_stream, ModalOptions};
+use intuituive::screen::Rect;
+use intuituive::{fit_text, spawn_stream, ModalOptions};
 use rich_ext::listing::walk;
 
 // ---------------------------------------------------------------------
@@ -242,19 +246,14 @@ impl Tile {
     pub fn is_dir(&self) -> bool {
         self.descendants.is_some()
     }
+
+    /// Its box, from line to line.
+    pub fn rect(&self) -> Rect {
+        Rect::new(self.x, self.y, self.w, self.h)
+    }
 }
 
-/// A strip of tiles taken off the top (`across`, tiles left to right) or
-/// the left (tiles top to bottom) of what is left of the map.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Strip {
-    pub across: bool,
-    pub thickness: u16,
-    pub tiles: usize,
-}
-
-/// The items too small for a tile of their own: what is left of the map
-/// after the strips, at the bottom right.
+/// The items too small for a tile of their own, sharing one block.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Small {
     pub x: u16,
@@ -264,11 +263,10 @@ pub struct Small {
     pub count: usize,
 }
 
-/// The folder laid out: tiles in strips, and the small items' block.
+/// The folder laid out: the tiles, and the small items' block.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
 pub struct Map {
     pub tiles: Vec<Tile>,
-    pub strips: Vec<Strip>,
     pub small: Option<Small>,
     /// The items the zoom hides, the largest.
     pub zoomed: usize,
@@ -287,178 +285,78 @@ pub fn children(folder: &Folder, zoom: usize) -> Vec<(String, &Item)> {
     items
 }
 
-/// Squarify `items` into a map `w` by `h` (counted from line to line):
-/// rows of tiles laid along the shorter side, each row grown while its
-/// worst aspect ratio improves, and only tiles of the minimum size or more;
-/// once the next item has no room for one, it and the rest are the small
-/// items' block.
+/// `items` squarified into a map `w` by `h` (counted from line to line),
+/// tiles of the minimum size or more, the rest in the small items' block.
 pub fn treemap(items: &[(String, &Item)], w: u16, h: u16, zoomed: usize) -> Map {
-    let n = items.len();
     let sizes: Vec<f64> = items.iter().map(|(_, item)| item.size() as f64).collect();
     let total: f64 = sizes.iter().sum();
-    // Empty files share the map equally, as diskonaut's do.
-    let weights: Vec<f64> = if total > 0.0 { sizes } else { vec![1.0; n] };
+    // Empty files share the map equally, as diskonaut's do; among larger
+    // ones they go with the small items.
+    let weights: Vec<f64> = match total > 0.0 {
+        true => sizes.iter().map(|s| s.max(f64::MIN_POSITIVE)).collect(),
+        false => vec![1.0; items.len()],
+    };
     let total: f64 = weights.iter().sum();
-    let mut map = Map {
-        zoomed,
-        ..Map::default()
-    };
-    let (mut x, mut y, mut rw, mut rh) = (0u16, 0u16, w, h);
-    let mut i = 0;
-    while i < n && rw > 0 && rh > 0 {
-        let rest: f64 = weights[i..].iter().sum();
-        if rest <= 0.0 {
-            break;
-        }
-        let area = f64::from(rw) * f64::from(rh);
-        let across = f64::from(rw) <= f64::from(rh) * RATIO;
-        let (side, room) = if across { (rw, rh) } else { (rh, rw) };
-        let side_f = f64::from(side);
-        let (min_len, min_thick) = if across {
-            (MIN_WIDTH, MIN_HEIGHT)
-        } else {
-            (MIN_HEIGHT, MIN_WIDTH)
-        };
-        // The most items, from i, whose strip has its worst ratio least.
-        let mut best: Option<(usize, f64)> = None;
-        for k in 1..=n - i {
-            let sum: f64 = weights[i..i + k].iter().sum();
-            let thick = sum / rest * area / side_f;
-            let last = weights[i + k - 1] / sum * side_f;
-            if last.round() < f64::from(min_len) {
-                break;
-            }
-            if thick.round() < f64::from(min_thick) {
-                continue;
-            }
-            let worst = weights[i..i + k]
-                .iter()
-                .map(|wt| {
-                    let len = wt / sum * side_f;
-                    let (a, b) = if across {
-                        (len, thick * RATIO)
-                    } else {
-                        (thick, len * RATIO)
-                    };
-                    a.max(b) / a.min(b)
-                })
-                .fold(0.0, f64::max);
-            match best {
-                Some((_, so_far)) if worst > so_far => break,
-                _ => best = Some((k, worst)),
-            }
-        }
-        let Some((k, _)) = best else { break };
-        let sum: f64 = weights[i..i + k].iter().sum();
-        let thick = if i + k == n {
-            room
-        } else {
-            // Items are left: keep a strip of the map for their block.
-            ((sum / rest * area / side_f).round() as u16).min(room.saturating_sub(2).max(1))
-        };
-        let (mut acc, mut from) = (0.0, 0u16);
-        for j in i..i + k {
-            acc += weights[j];
-            let to = if j + 1 == i + k {
-                side
-            } else {
-                (acc / sum * side_f).round() as u16
-            };
-            let (tx, ty, tw, th) = if across {
-                (x + from, y, to - from, thick)
-            } else {
-                (x, y + from, thick, to - from)
-            };
-            let (name, item) = &items[j];
-            map.tiles.push(Tile {
-                name: name.clone(),
-                size: item.size(),
-                descendants: match item {
-                    Item::Folder(folder) => Some(folder.descendants),
-                    Item::File(_) => None,
-                },
-                permille: (weights[j] / total * 1000.0).round() as u32,
-                x: tx,
-                y: ty,
-                w: tw,
-                h: th,
-            });
-            from = to;
-        }
-        map.strips.push(Strip {
-            across,
-            thickness: thick,
-            tiles: k,
-        });
-        if across {
-            y += thick;
-            rh -= thick;
-        } else {
-            x += thick;
-            rw -= thick;
-        }
-        i += k;
-    }
-    if i < n && rw > 0 && rh > 0 {
-        map.small = Some(Small {
-            x,
-            y,
-            w: rw,
-            h: rh,
-            count: n - i,
-        });
-    }
-    map
-}
-
-// ---------------------------------------------------------------------
-// Moving between tiles, diskonaut's way: to the tile beside this one, on
-// the side asked, that shares the most of its edge; off the edge of the
-// map, nothing is selected.
-// ---------------------------------------------------------------------
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Dir {
-    Left,
-    Right,
-    Up,
-    Down,
-}
-
-fn overlap(a0: u16, a1: u16, b0: u16, b1: u16) -> Option<u16> {
-    let (lo, hi) = (a0.max(b0), a1.min(b1));
-    (hi > lo).then(|| hi - lo)
-}
-
-pub fn step(tiles: &[Tile], selected: Option<usize>, dir: Dir) -> Option<usize> {
-    let Some(at) = selected.and_then(|i| tiles.get(i)) else {
-        return (!tiles.is_empty()).then_some(0);
-    };
-    tiles
+    let min = (MIN_WIDTH, MIN_HEIGHT);
+    let mut laid = squarify(Rect::new(0, 0, w, h), &weights, min, RATIO);
+    // squarify gives up (everything in the rest) when the rest's own tile
+    // is narrower than the minimum; then the small items get a strip at
+    // the bottom and the others the room above it.
+    let room = f64::from(w) * f64::from(h - h.min(MIN_HEIGHT));
+    let big = weights
         .iter()
-        .enumerate()
-        .filter_map(|(i, t)| {
-            let beside = match dir {
-                Dir::Right => t.x == at.x + at.w,
-                Dir::Left => t.x + t.w == at.x,
-                Dir::Down => t.y == at.y + at.h,
-                Dir::Up => t.y + t.h == at.y,
-            };
-            if !beside {
-                return None;
-            }
-            let shared = match dir {
-                Dir::Left | Dir::Right => overlap(t.y, t.y + t.h, at.y, at.y + at.h),
-                Dir::Up | Dir::Down => overlap(t.x, t.x + t.w, at.x, at.x + at.w),
-            };
-            shared.map(|s| (i, s))
+        .take_while(|wt| *wt / total * room >= f64::from(MIN_WIDTH * MIN_HEIGHT))
+        .count();
+    if laid.tiles.iter().all(Rect::is_empty) && big > 0 && big < weights.len() {
+        let above = Rect::new(0, 0, w, h - MIN_HEIGHT);
+        laid = squarify(above, &weights[..big], min, RATIO);
+        laid.tiles.resize(weights.len(), Rect::default());
+        let strip = Rect::new(0, h - MIN_HEIGHT, w, MIN_HEIGHT);
+        laid.rest = Some((strip, weights.len() - big));
+    }
+    let tiles = items
+        .iter()
+        .zip(&weights)
+        .zip(laid.tiles)
+        .filter(|(_, r)| !r.is_empty())
+        .map(|(((name, item), weight), r)| Tile {
+            name: name.clone(),
+            size: item.size(),
+            descendants: match item {
+                Item::Folder(folder) => Some(folder.descendants),
+                Item::File(_) => None,
+            },
+            permille: (weight / total * 1000.0).round() as u32,
+            x: r.x,
+            y: r.y,
+            w: r.width,
+            h: r.height,
         })
-        // The last of the ones that share the most, as `max_by_key` picks.
-        .fold(None, |best: Option<(usize, u16)>, (i, s)| match best {
-            Some((_, b)) if b > s => best,
-            _ => Some((i, s)),
-        })
-        .map(|(i, _)| i)
+        .collect();
+    let small = laid.rest.map(|(r, count)| Small {
+        x: r.x,
+        y: r.y,
+        w: r.width,
+        h: r.height,
+        count,
+    });
+    Map {
+        tiles,
+        small,
+        zoomed,
+    }
+}
+
+/// diskonaut's moves: to the tile beside this one, on the side asked, that
+/// shares the most of its edge; off the edge of the map, nothing is
+/// selected; with nothing selected, the first.
+pub fn step(tiles: &[Tile], selected: Option<usize>, dir: Direction) -> Option<usize> {
+    // Last first: of tiles alike, diskonaut goes to the last.
+    let rects: Vec<Rect> = tiles.iter().rev().map(Tile::rect).collect();
+    match selected.and_then(|i| tiles.get(i)) {
+        Some(at) => neighbour(&rects, at.rect(), dir).map(|i| tiles.len() - 1 - i),
+        None => (!rects.is_empty()).then_some(0),
+    }
 }
 
 // ---------------------------------------------------------------------
@@ -492,72 +390,33 @@ fn display_size_rounded(bytes: u64) -> String {
     }
 }
 
-/// Cut the middle out of a line too long: `long[..]name`.
-pub fn truncate_middle(line: &str, max: usize) -> String {
-    let count = line.chars().count();
-    if max < 6 {
-        line.chars().take(max).collect()
-    } else if count > max {
-        let keep = max / 2 - 2;
-        let head: String = line.chars().take(keep).collect();
-        let tail: String = line.chars().skip(count - keep).collect();
-        let dots = if max.is_multiple_of(2) {
-            "[...]"
-        } else {
-            "[..]"
-        };
-        format!("{head}{dots}{tail}")
-    } else {
-        line.to_string()
+/// A tile's first line, longest first: the name (a folder's with `/` and
+/// its count while there is room), the last cut in the middle.
+fn tile_name(tile: &Tile) -> Vec<String> {
+    match tile.descendants {
+        None => vec![tile.name.clone()],
+        Some(count) => {
+            let name = format!("{}/", tile.name);
+            vec![
+                format!("{name} (+{count} descendants)"),
+                format!("{name} (+{count})"),
+                name,
+            ]
+        }
     }
 }
 
-/// A tile's first line: the name (a folder's with `/` and its count when
-/// there is room), cut to fit.
-fn tile_name(tile: &Tile, max: usize) -> String {
-    let Some(count) = tile.descendants else {
-        return truncate_middle(&tile.name, max);
-    };
-    let name = format!("{}/", tile.name);
-    let long = format!("(+{count} descendants)");
-    let short = format!("(+{count})");
-    if name.len() + long.len() < max {
-        format!("{name} {long}")
-    } else if name.len() + short.len() < max {
-        format!("{name} {short}")
-    } else {
-        truncate_middle(&name, max)
-    }
-}
-
-/// A tile's second line: the size and share, or as much as fits.
-fn tile_size(tile: &Tile, max: usize) -> String {
-    let size = display_size(tile.size);
-    let rounded = display_size_rounded(tile.size);
+/// A tile's second line, longest first: the size and share, or as much
+/// as fits.
+fn tile_size(tile: &Tile) -> Vec<String> {
     let percent = (f64::from(tile.permille) / 10.0).round();
-    if max >= size.len() + 7 {
-        format!("{size} ({percent:.0}%)")
-    } else if max > size.len() {
-        size
-    } else if max > rounded.len() {
-        rounded
-    } else if max > 6 {
-        format!("({percent:.0}%)")
-    } else {
-        format!("{percent:.0}%")
-    }
-}
-
-/// The first of `variants` that fits in `width`, else the last cut.
-fn fit(variants: &[String], width: usize) -> String {
-    variants
-        .iter()
-        .find(|v| v.chars().count() < width)
-        .cloned()
-        .unwrap_or_else(|| {
-            let last = variants.last().cloned().unwrap_or_default();
-            truncate_middle(&last, width.saturating_sub(1))
-        })
+    vec![
+        format!("{} ({percent:.0}%)", display_size(tile.size)),
+        display_size(tile.size),
+        display_size_rounded(tile.size),
+        format!("({percent:.0}%)"),
+        format!("{percent:.0}%"),
+    ]
 }
 
 // ---------------------------------------------------------------------
@@ -597,7 +456,7 @@ impl Disk {
         self.map.with(|m| m.tiles.get(selected).cloned())
     }
 
-    fn go(&self, dir: Dir) {
+    fn go(&self, dir: Direction) {
         let next = self
             .map
             .with(|m| step(&m.tiles, self.selected.get_untracked(), dir));
@@ -725,35 +584,37 @@ impl Disk {
 // The screen.
 // ---------------------------------------------------------------------
 
+/// `forms` (plain text, longest first) as one line: the longest that
+/// fits, in `style`, centred, the last cut in the middle.
+fn fitted(forms: Vec<String>, style: &str) -> Node {
+    let forms: Vec<String> = forms
+        .iter()
+        .map(|f| match style {
+            "" => escape(f),
+            style => format!("[{style}]{}[/]", escape(f)),
+        })
+        .collect();
+    fit_text(move || forms.clone())
+        .truncate_middle()
+        .text_align(TextAlign::Center)
+        .fixed(1)
+}
+
 /// A tile's box: its name and size centred, filled when selected.
 fn tile_node(tile: &Tile, selected: bool) -> Node {
-    let max = usize::from(tile.w.saturating_sub(2));
-    let name = escape(&tile_name(tile, max));
-    let size = escape(&tile_size(tile, max));
     let (fill, first, second) = match (selected, tile.is_dir()) {
         (true, true) => ("on blue", "bold white", "black"),
         (true, false) => ("on white", "bold magenta", "bold magenta"),
         (false, true) => ("", "bold blue", ""),
         (false, false) => ("", "", ""),
     };
-    let line = |markup: String, style: &str| {
-        let markup = if style.is_empty() {
-            markup
-        } else {
-            format!("[{style}]{markup}[/]")
-        };
-        label(markup)
-            .text_align(TextAlign::Center)
-            .no_wrap()
-            .fixed(1)
-    };
     let inside = tile.h.saturating_sub(1);
-    let mut lines = vec![line(name, first)];
+    let mut lines = vec![fitted(tile_name(tile), first)];
     if inside >= 4 {
         lines.push(label("").fixed(1));
     }
     if inside >= 2 {
-        lines.push(line(size, second));
+        lines.push(fitted(tile_size(tile), second));
     }
     let content = column(lines).justify(Justify::Center);
     let content = if fill.is_empty() {
@@ -764,54 +625,60 @@ fn tile_node(tile: &Tile, selected: bool) -> Node {
     content.panel("").border(Border::Plain)
 }
 
-/// The strips from `strip` on, with the small items' block after them.
-fn region(map: &Map, selected: Option<usize>, strip: usize, first: usize) -> Option<Node> {
-    let Some(s) = map.strips.get(strip) else {
-        return map
-            .small
-            .as_ref()
-            .map(|_| fill("x", "black on white").panel("").border(Border::Plain));
+/// Boxes at rectangles that tile an area (counted from line to line) as
+/// one grid of joined lines: a track between each two lines a box has.
+fn joined(mut boxes: Vec<(Rect, Node)>) -> Node {
+    let lines = |ends: Vec<u16>| {
+        let mut ends = ends;
+        ends.sort_unstable();
+        ends.dedup();
+        ends
     };
-    let tiles = &map.tiles[first..first + s.tiles];
-    let boxes: Vec<Node> = tiles
-        .iter()
-        .enumerate()
-        .map(|(i, tile)| {
-            let node = tile_node(tile, selected == Some(first + i));
-            if i + 1 == tiles.len() {
-                node
-            } else if s.across {
-                node.fixed(tile.w + 1)
-            } else {
-                node.fixed(tile.h + 1)
-            }
-        })
+    let xs = lines(boxes.iter().flat_map(|(r, _)| [r.x, r.right()]).collect());
+    let ys = lines(boxes.iter().flat_map(|(r, _)| [r.y, r.bottom()]).collect());
+    // A collapsed track's size counts the line it shares with the next.
+    let tracks = |at: &[u16]| -> Vec<Size> {
+        at.windows(2)
+            .map(|p| Size::Fixed(p[1] - p[0] + 1))
+            .collect()
+    };
+    let span = |at: &[u16], from: u16, to: u16| {
+        let index = |v: u16| at.binary_search(&v).unwrap_or(0);
+        (index(to) - index(from)) as u16
+    };
+    // In reading order, each box lands where its top left corner is.
+    boxes.sort_by_key(|(r, _)| (r.y, r.x));
+    let nodes: Vec<Node> = boxes
+        .into_iter()
+        .map(|(r, node)| node.span(span(&xs, r.x, r.right()), span(&ys, r.y, r.bottom())))
         .collect();
-    let strip_node = if s.across { row(boxes) } else { column(boxes) }.collapse_borders();
-    Some(match region(map, selected, strip + 1, first + s.tiles) {
-        None => strip_node,
-        Some(rest) => {
-            let strip_node = strip_node.fixed(s.thickness + 1);
-            if s.across {
-                column([strip_node, rest])
-            } else {
-                row([strip_node, rest])
-            }
-            .collapse_borders()
-        }
-    })
+    grid(tracks(&xs), nodes)
+        .rows(tracks(&ys))
+        .collapse_borders()
 }
 
 /// The map, one frame of joined lines.
 fn board(map: &Map, selected: Option<usize>) -> Node {
-    let inside = region(map, selected, 0, 0).unwrap_or_else(|| {
+    let mut boxes: Vec<(Rect, Node)> = map
+        .tiles
+        .iter()
+        .enumerate()
+        .map(|(i, tile)| (tile.rect(), tile_node(tile, selected == Some(i))))
+        .collect();
+    if let Some(s) = &map.small {
+        let block = fill("x", "black on white").panel("").border(Border::Plain);
+        boxes.push((Rect::new(s.x, s.y, s.w, s.h), block));
+    }
+    let inside = if boxes.is_empty() {
         layers([
             fill(" ", "on white"),
             label("Folder is empty").place(Align::Center, Align::Center),
         ])
         .panel("")
         .border(Border::Plain)
-    });
+    } else {
+        joined(boxes)
+    };
     column([inside])
         .collapse_borders()
         .border(Border::Plain)
@@ -819,8 +686,8 @@ fn board(map: &Map, selected: Option<usize>) -> Node {
 }
 
 /// diskonaut's title: the total and what was freed, then the path, each
-/// part as long as the width allows.
-fn title(d: Disk, width: u16) -> String {
+/// part as long as the width allows; its forms, longest first.
+fn title(d: Disk) -> Vec<String> {
     let loading = d.loading.get();
     let (total, files, freed, failed, current) = d.tree.with(|t| {
         let cwd = d.cwd.get();
@@ -935,99 +802,86 @@ fn title(d: Disk, width: u16) -> String {
             .collect()
     };
     let sep = (" | ".to_string(), format!("white{bold}"));
-    let mut chosen = Vec::new();
-    for i in 0..depth {
-        let mut line = pick(&left, i);
-        line.push(sep.clone());
-        line.extend(pick(&right, i));
-        let len: usize = line.iter().map(|(t, _)| t.chars().count()).sum();
-        chosen = line;
-        if len + 1 < usize::from(width) {
-            break;
-        }
-    }
-    // While scanning, a few letters in bold run along the title.
-    let len: usize = chosen.iter().map(|(t, _)| t.chars().count()).sum();
-    let lit = if loading && len > 0 {
-        let at = (d.tick.get() as usize) % len;
-        at..at + 4
-    } else {
-        0..0
-    };
-    let mut markup = String::from(" ");
-    let mut n = 0;
-    for (text, style) in chosen {
-        for ch in text.chars() {
-            if n + 1 >= usize::from(width) {
-                break;
-            }
-            let style = if lit.contains(&n) {
-                format!("{style} bold")
+    let tick = d.tick.get() as usize;
+    (0..depth)
+        .map(|i| {
+            let mut line = pick(&left, i);
+            line.push(sep.clone());
+            line.extend(pick(&right, i));
+            // While scanning, a few letters in bold run along the title.
+            let len: usize = line.iter().map(|(t, _)| t.chars().count()).sum();
+            let lit = if loading && len > 0 {
+                let at = tick % len;
+                at..at + 4
             } else {
-                style.clone()
+                0..0
             };
-            markup.push_str(&format!("[{style}]{}[/]", escape(&ch.to_string())));
-            n += 1;
-        }
-    }
-    markup
+            let mut markup = String::from(" ");
+            let chars = line
+                .iter()
+                .flat_map(|(text, style)| text.chars().map(move |ch| (ch, style)));
+            for (n, (ch, style)) in chars.enumerate() {
+                let bold = if lit.contains(&n) { " bold" } else { "" };
+                markup.push_str(&format!("[{style}{bold}]{}[/]", escape(&ch.to_string())));
+            }
+            markup
+        })
+        .collect()
 }
 
-/// The status line: what is selected (or, while scanning, the path read
-/// last), and the small items' legend at the right.
-fn status(d: Disk, width: u16) -> String {
-    let small = d.map.with(|m| m.small.is_some());
-    let legend = "(x = Small files)";
-    let room = usize::from(width).saturating_sub(if small { legend.len() + 2 } else { 1 });
-    let left = match d
+/// The status line's left: what is selected (or, while scanning, the path
+/// read last); its forms, longest first.
+fn selection(d: Disk) -> Vec<String> {
+    let tile = d
         .selected
         .get()
-        .and_then(|i| d.map.with(|m| m.tiles.get(i).cloned()))
-    {
-        Some(tile) => {
-            let size = display_size(tile.size);
-            let (variants, style) = match tile.descendants {
-                Some(count) => (
-                    vec![
-                        format!("SELECTED: {} ({size}, {count} files)", tile.name),
-                        format!("SELECTED: {} ({size})", tile.name),
-                        format!("SELECTED: {}", tile.name),
-                        tile.name.clone(),
-                    ],
-                    "bold blue",
-                ),
-                None => (
-                    vec![
-                        format!("SELECTED: {} ({size})", tile.name),
-                        format!("SELECTED: {}", tile.name),
-                        tile.name.clone(),
-                    ],
-                    "bold",
-                ),
-            };
-            let text = fit(&variants, room);
-            (
-                text.chars().count(),
-                format!("[{style}]{}[/]", escape(&text)),
-            )
-        }
-        None if d.loading.get() => {
-            let path = truncate_middle(&d.last_read.get(), room.saturating_sub(1));
-            (path.chars().count(), escape(&path))
-        }
-        None => (0, String::new()),
+        .and_then(|i| d.map.with(|m| m.tiles.get(i).cloned()));
+    let Some(tile) = tile else {
+        return match d.loading.get() {
+            true => vec![escape(&d.last_read.get())],
+            false => vec![String::new()],
+        };
     };
-    let mut line = format!(" {}", left.1);
-    if small {
-        let pad = usize::from(width).saturating_sub(left.0 + 1 + legend.len() + 1);
-        line.push_str(&" ".repeat(pad));
-        line.push_str("([black on white]x[/] = Small files)");
-    }
-    line
+    let size = display_size(tile.size);
+    let (variants, style) = match tile.descendants {
+        Some(count) => (
+            vec![
+                format!("SELECTED: {} ({size}, {count} files)", tile.name),
+                format!("SELECTED: {} ({size})", tile.name),
+                format!("SELECTED: {}", tile.name),
+                tile.name.clone(),
+            ],
+            "bold blue",
+        ),
+        None => (
+            vec![
+                format!("SELECTED: {} ({size})", tile.name),
+                format!("SELECTED: {}", tile.name),
+                tile.name.clone(),
+            ],
+            "bold",
+        ),
+    };
+    variants
+        .iter()
+        .map(|v| format!("[{style}]{}[/]", escape(v)))
+        .collect()
 }
 
-/// The keys, as many as fit.
-fn controls(loading: bool, width: u16) -> String {
+/// The status line, with the small items' legend at the right.
+fn status(d: Disk) -> Node {
+    let map = d.map;
+    row([
+        fit_text(move || selection(d)).truncate_middle(),
+        label("([black on white]x[/] = Small files)")
+            .auto()
+            .shown_when(move || map.with(|m| m.small.is_some())),
+    ])
+    .padding(0, 1)
+}
+
+/// The keys, as many as fit; their forms, longest first.
+fn controls(loading: bool) -> Vec<String> {
     let (long, short) = if loading {
         (
             "<arrows> - move around, <ENTER> - enter folder, <ESC> - parent folder, <+/-/0> - zoom in/out/reset, <q> - quit",
@@ -1039,28 +893,23 @@ fn controls(loading: bool, width: u16) -> String {
             "←↓↑→/<ENTER>/<ESC>: navigate, <BACKSPACE>: del",
         )
     };
-    let room = usize::from(width).saturating_sub(1);
-    let line = if room >= long.chars().count() {
-        long
-    } else if room >= short.chars().count() {
-        short
-    } else {
-        "(...)"
-    };
-    format!(" [bold]{}[/]", escape(line))
+    [long, short, "(...)"]
+        .iter()
+        .map(|line| format!(" [bold]{}[/]", escape(line)))
+        .collect()
 }
 
-/// A box over the map, diskonaut's: lines centred, in `style`.
-fn message(lines: Vec<String>, style: &str) -> Node {
-    let lines: Vec<Node> = lines
-        .into_iter()
-        .map(|l| {
-            label(escape(&l))
-                .text_align(TextAlign::Center)
-                .no_wrap()
-                .fixed(1)
-        })
-        .collect();
+/// A line of a box: the longest of `forms` that fits, centred, the last
+/// cut at its end.
+fn say(forms: &[impl AsRef<str>]) -> Node {
+    let forms: Vec<String> = forms.iter().map(|f| escape(f.as_ref())).collect();
+    fit_text(move || forms.clone())
+        .text_align(TextAlign::Center)
+        .fixed(1)
+}
+
+/// A box over the map, diskonaut's: `lines` centred, in `style`.
+fn message(lines: Vec<Node>, style: &str) -> Node {
     column(lines)
         .gap(2)
         .justify(Justify::Center)
@@ -1072,32 +921,23 @@ fn message(lines: Vec<String>, style: &str) -> Node {
 fn delete_box(d: Disk, tile: Tile) -> Node {
     let (path, _) = d.target(&tile);
     let deleting = d.deleting;
-    let width = viewport().with(|v| v.0) / 2;
-    let room = usize::from(width.saturating_sub(4));
-    let shown = path.display().to_string();
-    let file_line = if shown.chars().count() < room {
-        shown
-    } else {
-        truncate_middle(&tile.name, room)
-    };
+    let file_line = vec![path.display().to_string(), tile.name.clone()];
     let question = match tile.descendants {
-        None => "Delete this file?".to_string(),
-        Some(count) => {
-            let long = format!("Delete folder with {count} children?");
-            if long.len() <= room {
-                long
-            } else {
-                "Delete folder?".into()
-            }
-        }
+        None => vec!["Delete this file?".to_string()],
+        Some(count) => vec![
+            format!("Delete folder with {count} children?"),
+            "Delete folder?".into(),
+        ],
     };
     switch(
         move || deleting.get(),
         move |now| {
+            // The path whole, or the name cut in the middle.
+            let file = fitted(file_line.clone(), "");
             let lines = if now {
-                vec!["Deleting".into(), file_line.clone()]
+                vec![say(&["Deleting"]), file]
             } else {
-                vec![question.clone(), file_line.clone(), "(y/n)".into()]
+                vec![say(&question), file, say(&["(y/n)"])]
             };
             message(lines, "bold red on black")
         },
@@ -1116,18 +956,16 @@ fn warning(cx: &mut Ctx) {
         Size::Fixed(10),
         ModalOptions::new(),
         || {
-            let width = usize::from(viewport().with_untracked(|v| v.0) / 2);
-            let text = [
-                "Sorry, deletion is only allowed once the scanning has completed",
-                "Deletion is not allowed while scanning",
-                "Can't delete while scanning",
-                "Can't delete now",
-            ]
-            .into_iter()
-            .find(|t| t.len() + 5 <= width)
-            .unwrap_or("Can't delete now");
             message(
-                vec![text.into(), "(Press any key to dismiss)".into()],
+                vec![
+                    say(&[
+                        "Sorry, deletion is only allowed once the scanning has completed",
+                        "Deletion is not allowed while scanning",
+                        "Can't delete while scanning",
+                        "Can't delete now",
+                    ]),
+                    say(&["(Press any key to dismiss)"]),
+                ],
                 "bold yellow on black",
             )
             .on_any_key(|cx, _| {
@@ -1145,7 +983,10 @@ fn error_box(cx: &mut Ctx, error: String) {
         ModalOptions::new(),
         move || {
             message(
-                vec![format!("Error: {error}"), "(Press <ESC> to dismiss)".into()],
+                vec![
+                    say(&[format!("Error: {error}")]),
+                    say(&["(Press <ESC> to dismiss)"]),
+                ],
                 "bold red on black",
             )
             .on_key("esc q ctrl+c", |cx| cx.pop())
@@ -1160,7 +1001,7 @@ fn quit_box(cx: &mut Ctx) {
         ModalOptions::new(),
         || {
             message(
-                vec!["Are you sure you want to quit?".into(), "(y/n)".into()],
+                vec![say(&["Are you sure you want to quit?"]), say(&["(y/n)"])],
                 "bold white on black",
             )
             .on_key("y", |cx| cx.quit())
@@ -1169,43 +1010,17 @@ fn quit_box(cx: &mut Ctx) {
     );
 }
 
-fn too_small_screen() -> Node {
-    layers([text(|| {
-        let width = usize::from(viewport().get().0);
-        let line = [
-            "Terminal window is too small ¯\\_(ツ)_/¯",
-            "Window too small ¯\\_(ツ)_/¯",
-            "too small ¯\\_(ツ)_/¯",
-            "¯\\_(ツ)_/¯",
-            "!!!",
-        ]
-        .into_iter()
-        .find(|l| l.chars().count() <= width)
-        .unwrap_or("!");
-        format!("[bold]{}[/]", escape(line))
-    })
-    .place(Align::Center, Align::Center)])
-}
-
 fn main_screen(d: Disk) -> Node {
-    let size = viewport();
-    let selected = d.selected;
-    let map = d.map;
+    let (map, selected) = (d.map, d.selected);
     column([
-        text(move || title(d, size.get().0)).no_wrap().fixed(1),
-        // The map, built again whenever it or the selection changes: one
-        // key, so the old one is dropped.
-        each(
-            move || vec![(map.get(), selected.get())],
-            move |(map, selected)| {
-                let rows = viewport().with_untracked(|v| v.1).saturating_sub(CHROME);
-                board(&map, selected).fixed(rows)
-            },
+        fit_text(move || title(d)).fixed(1),
+        // The map, built again whenever it or the selection changes.
+        keyed(
+            move || (map.get(), selected.get()),
+            |(map, selected)| board(&map, selected),
         ),
-        text(move || status(d, size.get().0)).no_wrap().fixed(1),
-        text(move || controls(d.loading.get(), size.get().0))
-            .no_wrap()
-            .fixed(1),
+        status(d).fixed(1),
+        fit_text(move || controls(d.loading.get())).fixed(1),
     ])
 }
 
@@ -1346,46 +1161,28 @@ pub fn disk_app(options: Options) -> App {
                 d.tick.update(|t| *t += 1);
             }
         });
-        let too_small = memo(move || {
-            let (w, h) = size.get();
-            w < 50 || h < 15
-        });
-        // Keys do nothing while the window is too small, but quit.
-        let key = move |f: fn(Disk, &mut Ctx)| {
-            move |cx: &mut Ctx| {
-                if !too_small.get_untracked() {
-                    f(d, cx)
-                }
-            }
-        };
-        switch(
-            move || too_small.get(),
-            move |small| {
-                if small {
-                    too_small_screen()
-                } else {
-                    main_screen(d)
-                }
-            },
-        )
-        .on_key("right l ctrl+f", key(|d, _| d.go(Dir::Right)))
-        .on_key("left h ctrl+b", key(|d, _| d.go(Dir::Left)))
-        .on_key("down j ctrl+n", key(|d, _| d.go(Dir::Down)))
-        .on_key("up k ctrl+p", key(|d, _| d.go(Dir::Up)))
-        .on_key("+", key(|d, _| d.zoom_by(1)))
-        .on_key("-", key(|d, _| d.zoom_by(-1)))
-        .on_key("0", key(|d, _| d.zoom_by(0)))
-        .on_key("enter", key(|d, _| d.enter()))
-        .on_key("esc", key(|d, _| d.up()))
-        .on_key("backspace ctrl+d", key(|d, cx| d.delete(cx)))
-        .on_key("q ctrl+c", move |cx| {
-            if too_small.get_untracked() {
-                cx.quit()
-            } else {
-                quit_box(cx)
-            }
-        })
+        main_screen(d)
+            .on_key("right l ctrl+f", move |_| d.go(Direction::Right))
+            .on_key("left h ctrl+b", move |_| d.go(Direction::Left))
+            .on_key("down j ctrl+n", move |_| d.go(Direction::Down))
+            .on_key("up k ctrl+p", move |_| d.go(Direction::Up))
+            .on_key("+", move |_| d.zoom_by(1))
+            .on_key("-", move |_| d.zoom_by(-1))
+            .on_key("0", move |_| d.zoom_by(0))
+            .on_key("enter", move |_| d.enter())
+            .on_key("esc", move |_| d.up())
+            .on_key("backspace ctrl+d", move |cx| d.delete(cx))
+            .on_key("q ctrl+c", quit_box)
     })
+    // Under 50 x 15, diskonaut's message; only `q` and Ctrl+C work there.
+    .min_size(
+        50,
+        15,
+        format!(
+            "[bold]{}[/]",
+            escape("Terminal window is too small ¯\\_(ツ)_/¯")
+        ),
+    )
 }
 
 fn main() -> std::io::Result<()> {

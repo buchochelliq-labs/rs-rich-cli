@@ -9,6 +9,7 @@ mod disk;
 use std::path::{Path, PathBuf};
 
 use disk::*;
+use intuituive::focus::Direction;
 use intuituive::Driver;
 
 const W: u16 = 80;
@@ -196,25 +197,23 @@ fn moving_goes_to_the_tile_sharing_the_most_edge() {
         tile("c", 30, 8, 40, 12),
     ];
     assert_eq!(
-        step(&tiles, None, Dir::Left),
+        step(&tiles, None, Direction::Left),
         Some(0),
         "nothing selected: the first"
     );
-    assert_eq!(step(&tiles, Some(0), Dir::Right), Some(2));
-    assert_eq!(step(&tiles, Some(2), Dir::Up), Some(1));
-    assert_eq!(step(&tiles, Some(1), Dir::Left), Some(0));
-    assert_eq!(step(&tiles, Some(0), Dir::Left), None, "off the edge");
-    assert_eq!(step(&tiles, Some(1), Dir::Down), Some(2));
+    assert_eq!(step(&tiles, Some(0), Direction::Right), Some(2));
+    assert_eq!(step(&tiles, Some(2), Direction::Up), Some(1));
+    assert_eq!(step(&tiles, Some(1), Direction::Left), Some(0));
+    assert_eq!(step(&tiles, Some(0), Direction::Left), None, "off the edge");
+    assert_eq!(step(&tiles, Some(1), Direction::Down), Some(2));
 }
 
 #[test]
-fn sizes_and_names_are_cut_as_diskonaut_cuts_them() {
+fn sizes_are_shown_as_diskonaut_shows_them() {
     assert_eq!(display_size(999), "999");
     assert_eq!(display_size(60_000), "58.6K");
     assert_eq!(display_size(5 * 1_048_576), "5.0M");
     assert_eq!(display_size(3 * 1_073_741_824), "3.0G");
-    assert_eq!(truncate_middle("a_long_file_name.txt", 12), "a_lo[...].txt");
-    assert_eq!(truncate_middle("short", 12), "short");
 }
 
 #[test]
@@ -658,7 +657,7 @@ fn the_map_grows_while_the_scan_runs() {
     // Deleting waits for the scan.
     driver.press("right backspace");
     assert!(
-        has(&driver, "Can't delete while scanning"),
+        has(&driver, "Deletion is not allowed while scanning"),
         "{}",
         dump(&driver)
     );

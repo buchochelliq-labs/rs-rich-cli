@@ -125,3 +125,101 @@ a deleted folder's descendants but not the folder itself.
 | A rebuild node | the one-key `each` | `rebuild(key, build)` | core | medium |
 | A min-size guard | the too-small switch and key guard (~30 lines, in blocks too) | `App::min_size(w, h)` | core | medium |
 | Delete through the trash, as a job | diskonaut deletes for good, on the app's thread; the files plugin's `tasks()` runs `Op::Trash`/`Op::Delete` with progress and cancel, which a large folder needs ("Deleting" can take minutes) | `tasks().run(Op::Delete { .. })` already exists; what is missing is the model updating when a job ends (`disk_usage.remove(path)`) | plugin | low |
+
+## Round 2: rebuilt on round 6
+
+`examples/disk.rs` went from 1,395 lines to 1,192 (tests 710 to 709, 21
+tests, all passing unchanged but for two lines noted below).
+
+### Replaced
+
+| Hand-built (round 1) | Now | Lines gone |
+|---|---|---|
+| The squarify (strips grown while their worst ratio improves, the small items' block) | `layout::squarify(rect, &weights, (8, 3), 2.5)`; the `Map` keeps the tiles and the rest, the `Strip` type is gone | ~110 |
+| The strips-to-nested-`row`/`column` recursion (`region`, `.fixed(len + 1)` per tile) | a `grid` of the tiles' distinct line positions with `.span(..)` and `collapse_borders()` (`joined`, 30 lines): any squarified (or other exact) tiling becomes one frame of joined lines | ~45 |
+| `step` and `Dir` (moving to the tile sharing the most edge) | `focus::neighbour(&rects, from, Direction)`; `step` is a 6-line wrapper for diskonaut's two extras (nothing selected: the first; ties: the last) | ~35 |
+| `truncate_middle`, `fit`, the tile labels' and keys' width arithmetic, the title's loop that picked a form and cut it by hand | `fit_text(|| forms)`, with `.truncate_middle()` where the last form loses its middle (names, the status path, the delete box's path); the title, the status, the keys, each tile line and each box line give their forms, longest first | ~60 |
+| The boxes guessing their width from `viewport() / 2` | the same `fit_text` lines, which read their own width | ~15 |
+| The one-key `each(.., ..)` with `.fixed(rows)` read from the viewport | `keyed(move \|\| (map.get(), selected.get()), ..)` laid out as a flex child | ~5 |
+| The too-small `switch`, its message picker and the key guard on every binding | `App::min_size(50, 15, message)` | ~40 |
+
+### Still hand-built, and why
+
+- **The joined frame from tiles (`joined`).** The `treemap` node places
+  each tile at its rectangle, but tiles that are panels do not share their
+  lines (collapsing is `row`/`column`/`grid` only), so diskonaut's look
+  (`┬ ┴ ├ ┤`) would become doubled lines. The clone lays the tiles out
+  with `squarify` and turns them into a collapsed `grid` instead, and
+  rebuilds the whole map (`keyed`) when the selection moves.
+- **A workaround for squarify's rest (12 lines)**: see the bug below.
+- **The folder tree and the scan** (`Tree`, `Folder`, `disk_walker`,
+  the batching in `scan`): no weighted tree, disk-usage plugin or batched
+  stream yet (round 1's gaps, still open).
+- **The selection** stays a `Signal<Option<usize>>` beside the map, not
+  the focus: diskonaut has "nothing selected" (and Enter then takes the
+  largest folder), and the tiles are rebuilt on every move.
+- **Fill on the selected tile** goes on the panel's content, as before.
+
+### Behaviour changes
+
+- The layout is `squarify`'s, not the clone's strips: the same folder
+  gives slightly different tiles (on the test folder, movie.mp4 and docs
+  now split their column evenly). The tests' moves still hold because the
+  clone breaks ties as diskonaut does (the last).
+- Names cut in the middle read `long_na…me.txt` (`truncate_middle`'s
+  `…`), not diskonaut's `long[...]name`; the clone's own
+  `truncate_middle` test went with the function.
+- The warning box shows the longest form that fits its real width
+  ("Deletion is not allowed while scanning" in an 80-column window, where
+  the clone guessed half the screen and showed "Can't delete while
+  scanning"); the live-scan test now expects that. The component's choice
+  is the better one: it fits what is there.
+- The small-window message is one form (`App::min_size` takes a string),
+  where the clone picked a shorter one on a narrow window.
+
+### New gaps
+
+| Gap | Needed for | API sketch | Where |
+|---|---|---|---|
+| **A treemap whose tiles share their lines.** `treemap(..)` tiles that are panels draw doubled lines; the clone needs a `grid` built from the tiles' edges to join them | diskonaut's frame; any tiled dashboard of panels | `treemap_with(.., TreemapOptions::new().collapse_borders())`, the treemap laying tiles out a cell larger and joining them as a collapsed `grid` does; or a generic `tiled(\|\| Vec<(K, Rect)>, build).collapse_borders()` for any exact tiling | core, generic |
+| **`neighbour`'s ties.** On a tie (same shared edge, same centre distance) it takes the first; diskonaut takes the last. The clone reverses the list to get it | apps porting another tool's moves | `neighbour_with(rects, from, dir, Tie::Last)`, or document the tie rule | core, generic (small) |
+| **`truncate_middle`'s marker.** Only `…`; diskonaut writes `[...]` (and `[..]` on odd widths) | names in tiles, faithful ports | `.truncate_middle_with("[...]")` | core, generic (small) |
+| **`App::min_size` with forms.** The message is one string; diskonaut shortens it on a narrow window | every app with a too-small screen | `App::min_size_with(w, h, \|\| node)` or take `fit_text` forms | core, generic |
+| **A treemap node that keeps a selection.** With `treemap`, a selection by state (not the focus) means rebuilding the tiles or reading the selection inside each tile; the clone rebuilds all | treemaps with a cursor (diskonaut, a memory map) | `treemap(..).selected(signal)` giving the tile builder a `selected: bool` read reactively, or tiles that read `is_selected(key)` | core, generic |
+
+Round 1's open gaps: a weighted tree and the disk-usage plugin, a
+batched stream with a time flush, `place` working outside `layers`, and
+a confirm in the app's own look.
+
+### Bugs found
+
+**`squarify` drops every tile when the rest's tile is narrower than the
+minimum.** The rest's own tile is held to `min` too; when it cannot be
+(a thin strip beside one large item), the loop lowers `k` to 0 and puts
+every item in the rest, so the largest item, 96% of the area, gets no
+tile and the whole map is the rest's block. The clone works around it
+(a strip of 3 rows for the rest, the others above). Minimal failing test:
+
+```rust
+#[test]
+fn a_thin_rest_does_not_swallow_the_tiles() {
+    use intuituive::layout::squarify;
+    use intuituive::screen::Rect;
+    let weights = [15000.0, 100.0, 100.0, 100.0, 100.0, 100.0, 100.0];
+    let map = squarify(Rect::new(0, 0, 79, 20), &weights, (8, 3), 2.5);
+    // Fails: tiles[0] is empty and the rest is the whole rectangle.
+    assert!(!map.tiles[0].is_empty(), "{map:?}");
+}
+```
+
+The fix is probably to hold only the item tiles to `min`, or to grow
+the rest's weight until its tile fits, rather than fall back to `k = 0`.
+
+### Components that would help
+
+| Component | What it would replace | API sketch | Where | Value |
+|---|---|---|---|---|
+| A collapsing treemap with a selection | `joined`, the `keyed` rebuild on every move, `step` (~60 lines) | `treemap_with(items, build, TreemapOptions::new().min_tile(8, 3).aspect(2.5).rest(..).collapse_borders()).selected(sig)` and directional moves on the selection | core | high |
+| A weighted tree (`rollup`) and a disk-usage plugin | `Tree`, `Folder`, `disk_walker`, `scan` (~200 lines) | round 1's sketch | core + plugin (files) | high |
+| A batched stream flushed by the clock | the batching in `scan` (~30 lines) | `spawn_batched(work, every, max, deliver)` | core | medium |
+| A styled confirm | `message` and the four boxes (~70 lines) | `ConfirmOptions::style(..).lines(..).answers(..)` | core | medium |
