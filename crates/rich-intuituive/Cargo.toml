@@ -56,6 +56,12 @@ pulse = ["audio", "cpal/pulseaudio"]
 # `audio::wav`, `audio::wav_writer` and `audio::record`: WAV files in and
 # out, through hound (pure Rust). Off by default.
 wav = ["pcm", "dep:hound"]
+# `meter`, `meter_with`, `sparkline`, `sparkline_with`, `spectrogram`,
+# `spectrogram_with`, `bar_spectrum` and `bar_spectrum_with` (and
+# `Node::hold`): levels and spectra as nodes, on rs-rich-ext's charts,
+# with no dependency of their own. A plugin: views of one domain's data,
+# not core components. Off by default.
+viz = []
 # `watch_path`: wake the app when files change, through notify (inotify,
 # FSEvents, ReadDirectoryChangesW, kqueue). Off by default.
 watch = ["dep:notify"]

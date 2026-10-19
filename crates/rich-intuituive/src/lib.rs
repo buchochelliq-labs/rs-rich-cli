@@ -46,14 +46,17 @@
 //! - **Responsive**: [`Node::hide_below`] and a stylesheet's `@media`
 //!   rules follow the terminal's size; [`viewport`] reads it.
 //! - **The outside world**, behind off-by-default features (plugins: the
-//!   core stays generic): `audio::pcm` reads raw PCM a buffer at a time
-//!   (`pcm`), `audio::input` captures a sound card into a signal
+//!   core stays generic): `audio::pcm` reads raw PCM a buffer at a time,
+//!   `audio::play` plays it at its rate and `audio::Capture::simulated`
+//!   stands in for a sound card in tests (`pcm`), `audio::input` captures
+//!   a sound card into a signal
 //!   (`audio`, with PulseAudio sources under `pulse`),
 //!   `audio::wav` reads and records WAV files (`wav`), `watch_path` wakes
 //!   the app when files change (`watch`), `image` draws an image file
-//!   in half blocks (`art`), and [`files`] has a file manager's
-//!   components: Miller columns, file lists, previews, background file
-//!   jobs and a streaming finder (`files`).
+//!   in half blocks (`art`), `meter`, `sparkline`, `spectrogram` and
+//!   `bar_spectrum` show levels and spectra (`viz`), and [`files`] has a
+//!   file manager's components: Miller columns, file lists, previews,
+//!   background file jobs and a streaming finder (`files`).
 //! - **Generic building blocks**: [`miller_of`] (Miller columns over any
 //!   [`MillerSource`] tree), [`jobs`](fn@jobs) and [`jobs_panel`]
 //!   (cancellable work with progress), [`fuzzy_list`] and [`finder_of`]
@@ -103,7 +106,6 @@ pub mod layout;
 mod list;
 pub mod log;
 pub mod menu;
-mod meter;
 pub mod miller;
 pub mod node;
 mod notify;
@@ -126,6 +128,8 @@ pub mod task;
 pub mod testing;
 mod text_area;
 mod tree;
+#[cfg(feature = "viz")]
+mod viz;
 #[cfg(feature = "watch")]
 mod watch;
 pub mod widget;
@@ -160,7 +164,6 @@ pub use jobs::{jobs, jobs_panel, Job, JobOutcome, JobProgress, JobState, Jobs};
 pub use layout::{Align, AlignContent, Justify, Size, StackLayout, TextAlign};
 pub use list::list_optional;
 pub use log::Log;
-pub use meter::{meter, meter_with, sparkline, sparkline_with};
 pub use miller::{miller_in, miller_of, MillerSource};
 pub use node::described;
 pub use node::{
@@ -184,6 +187,11 @@ pub use task::{
     Latest, Load, Resource, Stream, Task,
 };
 pub use text_area::Caret;
+#[cfg(feature = "viz")]
+pub use viz::{
+    bar_spectrum, bar_spectrum_with, meter, meter_with, sparkline, sparkline_with, spectrogram,
+    spectrogram_with,
+};
 #[cfg(feature = "watch")]
 pub use watch::{
     watch_path, watch_path_with, ChangeKind, PathChange, PathEvent, PathWatch, WatchOptions,
