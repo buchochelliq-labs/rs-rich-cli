@@ -149,6 +149,10 @@ pub struct Node {
     /// Takes the focus when its screen opens, before the first focusable
     /// node does.
     pub(crate) autofocus: bool,
+    /// Asked for the focus with [`autofocus`](Node::autofocus) but not
+    /// focusable of its own (a [`switch`], a panel): the focus passes to
+    /// the first node inside it that takes it, now or once built.
+    pub(crate) focus_passes: bool,
     pub(crate) keys: RefCell<Vec<KeyBinding>>,
     /// Key sequences ([`bind_sequence`](Node::bind_sequence)), their keys
     /// in order.
@@ -415,6 +419,7 @@ impl Node {
             highlit: Cell::new(false),
             focusable: false,
             autofocus: false,
+            focus_passes: false,
             keys: RefCell::new(Vec::new()),
             sequences: RefCell::new(Vec::new()),
             any_key: RefCell::new(None),
@@ -1181,10 +1186,38 @@ impl Node {
     /// let screen = app.render_with(&["x", "q"], 10, 3).unwrap();
     /// assert_eq!(screen[2].trim_end(), "list");
     /// ```
+    ///
+    /// On a node that is not focusable of its own and holds others (a
+    /// [`switch`], a panel or padding round a list), the focus passes to
+    /// the first node inside it that takes the focus, now or once it is
+    /// built: a list in a `switch` gets its own keys, and its ancestors'
+    /// bindings still see what it leaves.
     pub fn autofocus(mut self) -> Node {
+        self.focus_passes = !self.focusable;
         self.focusable = true;
         self.autofocus = true;
         self
+    }
+
+    /// Where the focus goes when this node is given it: the first node
+    /// inside that takes the focus, for one whose focus
+    /// [passes](Self::autofocus) inside; `None` to keep it.
+    pub(crate) fn focus_target(&self) -> Option<NodeId> {
+        if !self.focus_passes {
+            return None;
+        }
+        let mut found = None;
+        self.each_child(&mut |child| {
+            child.walk_accessible(&mut |node, _| {
+                if found.is_none()
+                    && node.takes_focus()
+                    && (!node.focus_passes || !node.has_children())
+                {
+                    found = Some(node.id);
+                }
+            });
+        });
+        found
     }
 
     /// Take this node out of the Tab order: a [`list`] that only shows, or

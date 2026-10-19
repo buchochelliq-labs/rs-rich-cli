@@ -3373,7 +3373,8 @@ impl App {
     fn focusable(&self) -> Vec<NodeId> {
         let mut ids = Vec::new();
         self.top().root.walk_accessible(&mut |node, _| {
-            if node.takes_focus() {
+            // A wrapper whose focus passes inside is not a stop of its own.
+            if node.takes_focus() && node.focus_target().is_none() {
                 ids.push(node.id);
             }
         });
@@ -3401,6 +3402,19 @@ impl App {
                         .copied()
                 });
                 self.set_focus(next);
+            }
+        }
+        // A wrapper given the focus hands it to what it holds, once that
+        // is built (a `switch`'s list).
+        if let Some(id) = self.focus() {
+            let mut target = None;
+            with_node(&self.top().root, id, &mut |node| {
+                target = node.focus_target()
+            });
+            if target.is_some() {
+                let fallback = self.top().fallback;
+                self.set_focus(target);
+                self.top_mut().fallback = fallback;
             }
         }
         if self.focus().is_none() {
@@ -3465,7 +3479,7 @@ impl App {
         let mut chosen = None;
         self.top().root.walk_accessible(&mut |node, _| {
             if node.autofocus && chosen.is_none() && !node.disabled() {
-                chosen = Some(node.id);
+                chosen = Some(node.focus_target().unwrap_or(node.id));
             }
         });
         chosen
