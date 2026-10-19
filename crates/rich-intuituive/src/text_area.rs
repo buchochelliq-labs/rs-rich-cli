@@ -73,6 +73,26 @@ pub(crate) struct Options {
     pub single_line: bool,
     /// Each character shown as this one (a password).
     pub mask: Option<char>,
+    /// Where the caret goes when the text is set: [`Node::caret`]; `None`
+    /// is the end for an input and the start for a text area.
+    pub caret: Option<Caret>,
+    /// What is selected when the text is set: [`Node::select`].
+    pub select: Option<Range<usize>>,
+}
+
+/// Where the caret of an [`input`](crate::input) or a
+/// [`text_area`](crate::text_area) goes when its text is set (when it is
+/// made, and when the signal is set from elsewhere): [`Node::caret`].
+/// Positions count characters (grapheme clusters), a line break as one.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Caret {
+    /// Before the first character: a text area's default.
+    Start,
+    /// After the last character: an input's default, as most toolkits
+    /// have it.
+    End,
+    /// Before character `n` (after the last when `n` is past it).
+    At(usize),
 }
 
 /// What an [`input`](crate::input) calls on Enter.
@@ -137,7 +157,7 @@ impl TextArea {
         if options.single_line {
             initial = one_line(&initial);
         }
-        TextArea {
+        let mut area = TextArea {
             buffer: Buffer::new(&initial),
             seen: text.get_untracked(),
             text,
@@ -156,7 +176,31 @@ impl TextArea {
             bar: Bar::default(),
             bar_at: Cell::new(None),
             origin: Cell::new(0),
+        };
+        area.place_caret();
+        area
+    }
+
+    /// The text was set: put the caret, or select, where the options say.
+    fn place_caret(&mut self) {
+        let pos = |buffer: &Buffer, n: usize| pos_of(buffer, n);
+        if let Some(range) = self.options.select.clone() {
+            let (start, end) = (pos(&self.buffer, range.start), pos(&self.buffer, range.end));
+            self.buffer.select(start, end);
+        } else {
+            let caret = match self.options.caret {
+                Some(caret) => caret,
+                None if self.options.single_line => Caret::End,
+                None => Caret::Start,
+            };
+            let at = match caret {
+                Caret::Start => Pos::default(),
+                Caret::End => pos(&self.buffer, usize::MAX),
+                Caret::At(n) => pos(&self.buffer, n),
+            };
+            self.buffer.set_caret(at, false);
         }
+        self.follow.set(true);
     }
 
     /// The cells `text` takes as shown: one a character when masked.
@@ -646,6 +690,7 @@ impl Widget for TextArea {
             }
             self.top.set((0, 0));
             self.left.set(0);
+            self.place_caret();
         }
         let (mut width, height) = (canvas.width(), canvas.height());
         // The bar keeps a column while the lines do not all fit.
@@ -878,6 +923,25 @@ impl Widget for TextArea {
     }
 }
 
+/// Where character `n` of `buffer`'s text is (grapheme clusters, a line
+/// break counting one); the end when `n` is past it.
+fn pos_of(buffer: &Buffer, mut n: usize) -> Pos {
+    let last = buffer.line_count() - 1;
+    for index in 0..=last {
+        let line = buffer.line(index);
+        let stops = graphemes(line);
+        if n <= stops.len() {
+            let at = stops.get(n).map_or(line.len(), |(start, _, _)| *start);
+            return Pos::new(index, at);
+        }
+        if index == last {
+            return Pos::new(index, line.len());
+        }
+        n -= stops.len() + 1;
+    }
+    Pos::default()
+}
+
 /// `text` on one line: line breaks become spaces.
 fn one_line(text: &str) -> String {
     text.replace("\r\n", " ").replace(['\n', '\r'], " ")
@@ -929,6 +993,48 @@ impl Node {
     /// one, Enter goes on to the app (a form's own binding).
     pub fn on_submit(self, submit: impl FnMut(&str, &mut crate::app::Ctx) + 'static) -> Node {
         self.widget_mut(|area: &mut TextArea| area.on_submit = Some(Box::new(submit)));
+        self
+    }
+
+    /// Where the caret goes when the text is set, as it is made and when
+    /// the signal is set from elsewhere: [`Caret::End`] (an input's
+    /// default), [`Caret::Start`] (a text area's) or [`Caret::At`] a
+    /// character.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    /// use intuituive::Caret;
+    ///
+    /// let app = App::new(|| input(signal("report.txt".to_string())).caret(Caret::At(6)));
+    /// let mut driver = app.driver(20, 1);
+    /// driver.type_text("-v2");
+    /// assert_eq!(driver.screen().plain()[0].trim_end(), "report-v2.txt");
+    /// ```
+    pub fn caret(self, caret: Caret) -> Node {
+        self.widget_mut(|area: &mut TextArea| {
+            area.options.caret = Some(caret);
+            area.place_caret();
+        });
+        self
+    }
+
+    /// Select characters `range` (grapheme clusters, a line break counting
+    /// one) when the text is set, the caret at its end: typing replaces
+    /// them. A rename that selects the name before the extension:
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| input(signal("report.txt".to_string())).select(0..6));
+    /// let mut driver = app.driver(20, 1);
+    /// driver.type_text("notes");
+    /// assert_eq!(driver.screen().plain()[0].trim_end(), "notes.txt");
+    /// ```
+    pub fn select(self, range: Range<usize>) -> Node {
+        self.widget_mut(|area: &mut TextArea| {
+            area.options.select = Some(range);
+            area.place_caret();
+        });
         self
     }
 

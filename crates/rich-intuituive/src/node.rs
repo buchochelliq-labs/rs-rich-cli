@@ -86,6 +86,8 @@ pub struct Node {
     pub(crate) body: RefCell<Body>,
     /// Where it was last laid out.
     pub(crate) rect: Cell<Rect>,
+    /// Where it is on the screen, for a [`rect_handle`](Node::rect_handle).
+    pub(crate) rect_slot: RefCell<Option<Signal<Option<Rect>>>>,
     /// Where it last drew; `None` before its first draw, or while hidden.
     drawn: Cell<Option<Rect>>,
     /// Whether it was last drawn in its focus style.
@@ -95,6 +97,14 @@ pub struct Node {
     /// node does.
     pub(crate) autofocus: bool,
     pub(crate) keys: RefCell<Vec<(Vec<Key>, String, Handler)>>,
+    /// Key sequences ([`bind_sequence`](Node::bind_sequence)): the keys in
+    /// order, a description and the handler.
+    pub(crate) sequences: RefCell<Vec<(Vec<Key>, String, Handler)>>,
+    /// What [`on_any_key`](Node::on_any_key) runs.
+    pub(crate) any_key: RefCell<Option<crate::sequence::AnyKey>>,
+    /// Its bindings see keys before the focused node inside it
+    /// ([`previews_keys`](Node::previews_keys)).
+    pub(crate) previews: bool,
     pub(crate) click: RefCell<Option<Handler>>,
     pub(crate) mouse: RefCell<Option<MouseHandler>>,
     /// Where the widget wants the text caret, on its surface.
@@ -330,11 +340,15 @@ impl Node {
                 view: None,
             }),
             rect: Cell::new(Rect::default()),
+            rect_slot: RefCell::new(None),
             drawn: Cell::new(None),
             highlit: Cell::new(false),
             focusable: false,
             autofocus: false,
             keys: RefCell::new(Vec::new()),
+            sequences: RefCell::new(Vec::new()),
+            any_key: RefCell::new(None),
+            previews: false,
             click: RefCell::new(None),
             mouse: RefCell::new(None),
             caret: Cell::new(None),
@@ -679,18 +693,31 @@ impl Node {
             .filter(|class| !active.contains(class))
             .collect();
         let (_, focus, hover) = self.sheet.borrow().watch;
-        let keys = self
+        let joined = |keys: &[Key], with: &str| {
+            keys.iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>()
+                .join(with)
+        };
+        let mut keys: Vec<String> = self
             .keys
             .borrow()
             .iter()
-            .map(|(keys, _, _)| {
-                keys.iter()
-                    .map(ToString::to_string)
-                    .collect::<Vec<_>>()
-                    .join("/")
-            })
+            .map(|(keys, _, _)| joined(keys, "/"))
             .collect();
+        keys.extend(
+            self.sequences
+                .borrow()
+                .iter()
+                .map(|(keys, _, _)| joined(keys, " ")),
+        );
         let mut handlers = Vec::new();
+        if self.any_key.borrow().is_some() {
+            handlers.push("on_any_key");
+        }
+        if self.previews {
+            handlers.push("previews_keys");
+        }
         if self.click.borrow().is_some() {
             handlers.push("on_click");
         }
@@ -845,6 +872,36 @@ impl Node {
     pub fn wrap(mut self) -> Node {
         self.widget_mut(|stack: &mut Stack| stack.flow.wrap = true);
         self.set[SET_WRAP] = true;
+        self
+    }
+
+    /// For a [`column`](fn@column) or [`row`]: how the lengths of its
+    /// children are solved. [`Solver::Ratatui`](crate::Solver::Ratatui)
+    /// solves them as ratatui's `Layout` does: percentages and ratios of
+    /// the whole length rather than of what the gaps leave, and what does
+    /// not fit squeezed as ratatui squeezes it, so a row ported from a
+    /// ratatui `Table` or `Layout` puts its cells in the same columns. The
+    /// [`justify`](Self::justify) is its `Flex` (`Start` by default). A
+    /// wrapping stack keeps the native solver. Ignored on other nodes.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    /// use intuituive::Solver;
+    ///
+    /// let cells = || [label("a").percent(50), label("b").percent(50)];
+    /// // Native: half each of the 19 cells the gap leaves.
+    /// let native = App::new(move || row(cells()).gap(1));
+    /// let mut driver = native.driver(20, 1);
+    /// driver.settle();
+    /// assert_eq!(driver.screen().plain()[0], "a         b         ");
+    /// // Ratatui: half each of the 20, the second squeezed by the gap.
+    /// let ratatui = App::new(move || row(cells()).gap(1).solver(Solver::Ratatui));
+    /// let mut driver = ratatui.driver(20, 1);
+    /// driver.settle();
+    /// assert_eq!(driver.screen().plain()[0], "a          b        ");
+    /// ```
+    pub fn solver(self, solver: crate::solver::Solver) -> Node {
+        self.widget_mut(|stack: &mut Stack| stack.flow.solver = solver);
         self
     }
 
@@ -1294,9 +1351,11 @@ impl Node {
     /// a stylesheet's `border`. [`Border::None`] draws no lines, but its
     /// titles keep their rows. For a container with
     /// [collapsed borders](Self::collapse_borders): the kind of its lines.
+    /// For a [`rule`](crate::rule()) on its own: the kind of its line.
     /// Ignored on other nodes.
     pub fn border(self, border: Border) -> Node {
         self.widget_mut(|panel: &mut Panel| panel.code.border = Some(border));
+        self.widget_mut(|rule: &mut crate::rule::Rule| rule.kind = Some(border));
         self.widget_mut(|stack: &mut Stack| stack.collapse.border = Some(border));
         self.widget_mut(|grid: &mut Grid| grid.collapse.border = Some(border));
         self
@@ -1305,7 +1364,9 @@ impl Node {
     /// For a [panel](Self::panel): the sides of the box it draws,
     /// [`Sides::ALL`] by default, or some of them joined with `|`. The
     /// inside grows into the sides it does not draw. A stylesheet's
-    /// `border-sides: top bottom` does the same. Ignored on other nodes.
+    /// `border-sides: top bottom` does the same. On a node that is not a
+    /// panel, it puts the node in a panel without a title first, so
+    /// `.borders(Sides::BOTTOM)` underlines anything.
     ///
     /// ```
     /// use intuituive::prelude::*;
@@ -1314,8 +1375,16 @@ impl Node {
     /// let mut driver = app.driver(12, 2);
     /// driver.settle();
     /// assert_eq!(driver.screen().plain(), ["── Notes ───", "body        "]);
+    ///
+    /// let app = App::new(|| column([label("Header").borders(Sides::BOTTOM).fixed(2), label("body")]));
+    /// let mut driver = app.driver(8, 3);
+    /// driver.settle();
+    /// assert_eq!(driver.screen().plain(), ["Header  ", "────────", "body    "]);
     /// ```
     pub fn borders(self, sides: Sides) -> Node {
+        if self.widget_ref(|_: &Panel| ()).is_none() {
+            return self.panel("").borders(sides);
+        }
         self.widget_mut(|panel: &mut Panel| panel.code.sides = Some(sides));
         self
     }
@@ -1836,7 +1905,7 @@ impl Node {
     }
 
     /// Call `f` with each child that is shown.
-    fn each_child(&self, f: &mut dyn FnMut(&Node)) {
+    pub(crate) fn each_child(&self, f: &mut dyn FnMut(&Node)) {
         for child in self.body.borrow().widget.children() {
             f(child);
         }
@@ -1845,6 +1914,11 @@ impl Node {
     /// Not shown this frame: no rectangle (so no clicks reach it or
     /// anything inside it), and it draws afresh when it comes back.
     fn hide(&self) {
+        if let Some(handle) = *self.rect_slot.borrow() {
+            if handle.get_untracked().is_some() {
+                handle.set(None);
+            }
+        }
         self.rect.set(Rect::default());
         self.inner.set(Rect::default());
         self.drawn.set(None);

@@ -5,7 +5,7 @@
             │ Cargo.toml                                  181B│
             │ readme╭─ Commands ───────────────────────────────────────────────╮
             │ README│? Command ›                                               │
-            │       │❯  Exit visual mode, clear selection, or cancel search    │
+            │       │❯  Exit visual mode, clear selection, or cancel sear… esc │
             │       │   Quit the process                                     q │
             │       │   Close the current tab, or quit if it's last     ctrl+c │
             │       │   Previous file                                      k/↑ │

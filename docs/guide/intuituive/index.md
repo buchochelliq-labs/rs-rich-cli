@@ -250,6 +250,26 @@ widget needs: `centered(width, height)`, `inset(top, right, bottom, left)`,
 `inner(n)`, `offset(dx, dy)`, `union`, `intersection`, `intersects`,
 `contains`, and `rows()` and `columns()` to go through it a line at a time.
 
+### Ratatui's solver
+
+A column or row takes percentages of the room its gaps leave, rounded
+down. Ratatui's `Layout` takes them of the whole length and lets a
+constraint solver squeeze what does not fit, so a header ported from a
+ratatui `Table` (scope-tui's) puts its cells a few columns off.
+`.solver(Solver::Ratatui)` solves a column or row as ratatui does, with the
+same constraints at the same strengths and the same solver (kasuari): a
+`Size::Percent` is ratatui's `Percentage`, `Fixed` its `Length`, `Flex` its
+`Fill`, the gap its `spacing`, and `.justify(..)` its `Flex` (`Start`, as a
+`Table`'s columns, by default; `Solver::RatatuiLegacy` is `Flex::Legacy`,
+a `Layout`'s default). It is off by default, so no existing layout
+changes, and `layout::split` takes it too (`StackLayout::solver`).
+
+```rust
+row([label("scope").percent(35), label("1ms").percent(25), label("60fps").percent(40)])
+    .gap(1)
+    .solver(Solver::Ratatui)
+```
+
 ### Responsive layout
 
 A layout can follow the terminal's size. The size is the app's
@@ -359,6 +379,23 @@ A stylesheet sets the same: `border: thick` (and every kind by name),
 `border-title`, `border-title-align`, `border-subtitle` (the bottom
 title), `border-subtitle-align` and `border-sides: top bottom`. Code wins
 over the sheet.
+
+### Rules, and a border on any node
+
+`rule()` is a line across, one row tall, in the theme's border style.
+Directly inside a panel, from its left side to its right, it joins the
+border, in the panel's kind and focus colour: the `├──┤` between the parts
+of a help box. Padding between them keeps it apart. `.border(Border::Thick)`
+picks the kind of a rule on its own, and it is left out of what assistive
+technology reads.
+
+```rust
+column([label("Keys"), rule(), label("q quit")]).panel("Help")
+```
+
+`.borders(Sides::BOTTOM)` (or any sides) on a node that is not a panel
+puts it in a panel without a title first: an underlined header, a status
+line with a rule above it.
 
 ### Collapsed borders
 
@@ -478,6 +515,40 @@ column([
   children, while it has the focus, which is how a list shows its selected
   row.
 
+### Key sequences, any key, and keys a container sees first
+
+```rust
+column([list(files, selected), status])
+    .previews_keys()
+    .bind_sequence("g g", "Go to the top", move |_| selected.set(0))
+    .bind_sequence("g h", "Go home", go_home)
+    .on_any_key(|cx, key| { log(key); false })
+```
+
+- **`.bind_sequence("g g", description, handler)`** (`.on_sequence` without
+  a description) runs once the keys are pressed one after another. The
+  first key starts the sequence where a binding of it would run (a deeper
+  node's binding of the key wins, as for any key; on one node, a binding of
+  the first key wins over the sequence). Esc cancels a sequence under way;
+  any other key that goes on with none of the node's sequences cancels it
+  and is then handled as usual, so `g` then `j` still moves down. The comma
+  key is written in quotes, as in any binding: `"\",\" s"`.
+- **`App::which_key(true)`** shows what can follow while a sequence waits,
+  Yazi's way: in up to three columns, in a box at the bottom of the screen,
+  the keys left in the theme's `which_key.key` style (else `accent`).
+  `App::which_key_delay(d)` waits `d` first, so a sequence typed quickly
+  shows nothing. The help and the command palette list sequences as `g g`.
+- **`.on_any_key(|cx, key| -> bool)`** gets every key that reaches the node
+  and none of its bindings or sequences took; it returns whether it used
+  it, and one it did not use goes on to the ancestors.
+- **`.previews_keys()`** lets a container's own bindings, sequences and
+  `on_any_key` see keys before the focused node inside it does, outermost
+  container first: an app-wide keymap that wins over a focused list's `j`,
+  `k` and `g`, without making the container focusable.
+- **With nothing focused** (a pop-up of plain text), keys go to the root
+  and down through every node that holds a single child, so a binding on
+  the content inside a pop-up's `.panel()` works.
+
 ## Components
 
 ```rust
@@ -530,6 +601,13 @@ column([
   Home/End go to the ends, and the wheel steps it. Digits type a new number
   (a `-` first for a negative one), which is set on the signal at once,
   clamped, and shown as typed until Enter or the focus leaves.
+- **The caret** goes to the end of an input's text when it is made and
+  whenever the signal is set from elsewhere (a text area's goes to the
+  start). `.caret(Caret::Start | Caret::End | Caret::At(n))` puts it
+  elsewhere, and `.select(range)` selects characters (grapheme clusters, a
+  line break counting one) with the caret at the end, so typing replaces
+  them: a rename that selects the name before its extension is
+  `input(name).select(0..stem)`.
 - Both are text boxes for assistive technology, with their text as the
   value. Validate them with `.error_when(..)`, as any node.
 
@@ -685,6 +763,12 @@ table_with(
   down the rows in the theme's `selected.column` style.
 - **`.scroll_padding(n)`** keeps `n` rows in view either side of the
   selection, where they fit.
+- **`.header(false)`** leaves the header out: the rows start at the top.
+  Names with their sizes beside them are one table this way.
+- **`.offset(signal)`** puts the first row in view in a signal you can
+  read, or set to scroll, as a list's does.
+- **`Column::overflow(Overflow::Crop)`** cuts the column's cells at its
+  edge, as ratatui's table does, rather than with `…`.
 - **`table_optional(columns, rows, selected, options)`** takes a
   `Signal<Option<usize>>`: `None` selects nothing and shows no highlight,
   and ↓ selects the first row.
@@ -722,6 +806,45 @@ them on the list itself (or a reorderable one), before `.panel(..)`.
   read, or set to scroll; the selection is still kept in view.
 - **`list_optional(items, selected)`** takes a `Signal<Option<usize>>`, as
   `table_optional` does.
+- **`list_lazy(len, item, selected)`** asks only for the items it draws,
+  where `list`'s closure builds every item on each draw: use it for a
+  directory of a hundred thousand files. It takes every option below.
+- A list sized `.auto()` is as wide as its widest item, with its symbol,
+  marker and trailing columns (it looks at every item to know).
+
+#### Rows as a file manager draws them
+
+```rust
+use intuituive::widgets::RowRects;
+
+let rects = RowRects::new();
+list(move || names.get(), cursor)
+    .trailing(move |i| sizes.with(|s| s[i].clone()))
+    .marker(move |i| marked.with(|m| m.contains(&i)).then(|| "on yellow".into()))
+    .row_style(move |i| Some(colour(i).into()))
+    .selected_style_for(move |i| Some(format!("reverse {}", colour(i))))
+    .scroll_padding(5)
+    .row_rects(&rects)
+// later, in a handler: a popup under the selected row
+// cx.popup(rects.get(cursor.get()).unwrap(), Placement::Below, ..)
+```
+
+- **`.trailing(|i| markup)`** draws markup at the right of item `i`'s
+  row, right-aligned, and cuts the item short of it: Yazi's line mode
+  (sizes, times) in the same list as the names. It is inside the row, so
+  the row's style and the highlight cover it. Empty markup shows none.
+- **`.marker(|i| Option<style>)`** keeps a one-cell column at the left of
+  the rows, outside the row style and the highlight, and fills item `i`'s
+  cell with the style it returns (or leaves it blank): selected, visual
+  and yanked markers. The column is kept with nothing marked, so the text
+  never moves when a mark comes or goes.
+- **`.selected_style_for(|i| Option<style>)`** is the highlight's style
+  when item `i` is selected, instead of the theme's `selected`: a hovered
+  directory reversed in its own blue.
+- **`.row_rects(&rects)`** records where each row in view was drawn on
+  the screen, so a handler can open a popup at a row:
+  `rects.get(i)` is item `i`'s rectangle, or `None` out of view. Tables
+  and `virtual_list` take it too.
 
 #### How a tab strip looks
 
@@ -859,7 +982,13 @@ hsplit(
   grid([Size::Fixed(22); 3], months)
   ```
 - **`virtual_list(len, row, selected)`** is the list form of
-  `virtual_table`: it asks only for the rows in view.
+  `virtual_table`: it asks only for the rows in view. `.scroll_padding(n)`,
+  `.row_style(|i| …)`, `.offset(signal)` and `.row_rects(&rects)` work on
+  it as on a list.
+- **`cell(markup)`** is a table cell outside a table: one line, cut at its
+  edge, never wrapped. A `row` of cells with `.percent(..)` widths and
+  `.gap(1)` is a one-row table, each cell drawing only when what it reads
+  changes, as scope-tui's header.
 - **`tree_lazy(roots, children, selected)`** loads each level when it is
   opened. `children(key)` runs on another thread, so it can read a
   directory or ask a server, and returns the level's `LazyItem`s
@@ -1351,6 +1480,27 @@ The anchor can also be a `Rect` of the screen, for a pop-up at a place
 rather than a node: `EventCx::rect()` gives a widget its own, and
 `Ctx::pointer()` gives where the mouse event being handled happened.
 
+`cx.popup_at(origin, offset, build)` places a pop-up from a point of the
+screen instead (Yazi's): an `Origin` (`TopLeft`, `TopCenter`, `TopRight`,
+`Center`, `BottomLeft`, `BottomCenter`, `BottomRight`, or `At(rect)`,
+below a rectangle or above it when there is no room), moved and sized by
+an `Offset { x, y, w, h }` (cells, negative to go left or up; the sizes as
+a modal's). However far the offset, the pop-up stays on the screen: it is
+moved back inside, and made smaller if it is larger. It closes as any
+pop-up does.
+
+```rust
+cx.popup_at(Origin::TopCenter, Offset::new(0, 2, 50, 3), move || {
+    input(name).select(0..stem).panel("Rename:")
+})
+```
+
+`node.rect_handle()`, taken while the tree is built, says where a node is
+on the screen after each frame (`None` while hidden or scrolled out of
+view); reading it with `get()` subscribes, so what reads it redraws when
+the node moves. `Origin::At(handle.get_untracked()?)` puts a pop-up under
+it.
+
 ### Menus
 
 ```rust
@@ -1397,12 +1547,36 @@ App::new(build).palette_key("ctrl+p").help_key("?")
 Bindings made with `.on_key` have no description and stay out of both.
 Name a node (`.name("Editor")`) to group its commands under that name.
 
+Sequence bindings are listed too, with their keys as `g g`; a long
+description is cut so its keys still show.
+
+### Confirming
+
+```rust
+cx.confirm("Trash 3 selected files?", "", names, move |cx| trash(cx, &paths))
+```
+
+`cx.confirm(title, body, items, on_yes)` asks in the framework's look,
+Yazi's way: a modal centred over the screen, the title on its top edge, the
+body under it, the items (ten at most, and a count of the rest) between two
+rules, and `[Y]es` and `(N)o`. `y`, or Enter on Yes, closes it and runs
+`on_yes`; `n`, Esc, or Enter on No closes it; Tab and the arrows move
+between the two, and a click picks one.
+
 ## Toasts and animations
 
 - **`cx.toast(markup)`** shows a message at the bottom right for three
   seconds, and `toast_for(markup, duration)` for as long as you say.
   Toasts stack and do not take the focus. On a screen too small for a
   toast's box, the newest shows reversed on the bottom row.
+- **`cx.notify(level, title, body)`** (`notify_for` with a duration; five
+  seconds by default) is a notification: a box with the title on its top
+  edge and the body wrapped inside, its border and title in the level's
+  style (`Level::Info`, `Warn` or `Error`: the theme's `notify.info`,
+  `notify.warn` or `notify.error`, else `accent`, `warn` or `bad`). It is
+  announced with its level (`Error: Copy failed: …`).
+- **`App::toasts_at(corner)`** stacks toasts and notifications in another
+  corner, newest nearest it: `Corner::TopRight` is Yazi's.
 - **`cx.animate(signal, to, duration, easing)`** moves a `Signal<f64>` to
   `to` over `duration`, setting it every frame, so whatever reads it moves
   with it: a split's ratio, a gauge, a scroll offset. `Easing` is `Linear`,
@@ -1464,6 +1638,76 @@ text(move || match user.get() {
   yourself (a tokio runtime, a file watcher) sends closures through a
   `Proxy` from `cx.proxy()` or `app.proxy()`: `proxy.run(move ||
   status.set(body))`, or `proxy.run_with(|cx| …)` for a `Ctx` too.
+- **The newest value from a thread:** `latest(|tx| loop { if !tx.send(read()) { break } })`
+  runs the closure on a thread of its own and returns a
+  `Signal<Option<T>>`: `None` until the first value, then the newest.
+  Nothing queues: values the app had no time for are skipped (an audio
+  buffer, a sensor, scope-tui's reader). `send` returns `false` once the
+  app has finished.
+- **Another program:** `cx.handoff(command)` gives the terminal to a
+  program once the handler returns (an editor, a pager, a shell): the app
+  leaves the alternate screen and raw mode, runs it and waits, then takes
+  the terminal back and draws everything again. `cx.handoff_then(command,
+  |result, cx| …)` hears how it ended. Under the headless driver the
+  program is recorded, not run; a loop of your own takes it with
+  `Driver::take_handoff` and gives it back with `Driver::handed_back`.
+
+## Files, sound and images
+
+Three off-by-default features bring the outside world in, each working on
+its own thread and delivering on the app's thread, between frames:
+
+```toml
+rs-rich-intuituive = { version = "0.0.4", features = ["watch", "audio", "art"] }
+```
+
+- **`watch`: files that change.** `watch_path(path, |event, cx| …)` wakes
+  the app when a file, or a directory's entries, change, through notify
+  (inotify, FSEvents, ReadDirectoryChangesW, kqueue), with no polling.
+  Changes less than 100 ms apart are one `PathEvent`: each path once, with
+  what last happened to it (`Created`, `Modified`, `Removed`, `Renamed`).
+  `watch_path_with(path, WatchOptions::new().recursive().debounce(d), …)`
+  watches a whole tree. The watcher runs as long as the app, or until its
+  `PathWatch` is `stop()`ped.
+
+```rust
+let entries = signal(list_dir(&dir));
+watch_path(&dir, move |_event, _cx| entries.set(list_dir(&dir)))?;
+```
+
+- **`audio`: a sound card.** `audio::input(device, rate, channels,
+  buffer)` returns a `Signal<Matrix>`, one row a channel of `buffer`
+  samples from -1 to 1, which changes with every buffer the device
+  captures (through cpal: ALSA, CoreAudio, WASAPI). The newest buffer
+  wins: one that arrives while the app is busy replaces the one still
+  waiting, so a slow frame drops buffers rather than falling behind.
+  `audio::devices()` lists the inputs (none, not a panic, on a machine
+  without sound). A device with fewer channels than asked for is spread
+  over the rows. On Linux the feature needs ALSA's headers to build
+  (`libasound2-dev`). For a spectrum, rs-rich-ext's `rich_ext::dsp` has
+  `fft` (any length), `hann` and `spectrum(samples, rate)`.
+
+```rust
+let samples = audio::input(None, 48_000, 2, 1024)?;
+renderable(move || oscilloscope(&samples.get()))
+```
+
+- **`art`: images.** `image(path)` is a node that draws an image file in
+  half blocks, sized to its rectangle and kept to its aspect ratio, decoded
+  on a worker thread (`loading…` until then). `image_with(path,
+  ImageView::new().fit(ImageFit::Cover))` fills the rectangle instead
+  (`Contain` centres, `Stretch` ignores the aspect), `.mode(ImageMode::
+  Quadrants)` (or `Braille`, `Ascii`) draws with other cells, and
+  `image_of(move || selected.get(), view)` follows a path that changes, as
+  a preview pane does. Kitty and Sixel pixels are not drawn yet: they need
+  escapes outside the cells, which the screen does not pass through.
+
+A file manager's other parts are in rs-rich-ext: `rich_ext::filetype`
+(Yazi's icons and type colours, MIME types, a Nerd Font check) and
+`rich_ext::fs` (local times, owner and group names); see
+[Files, spectra and warm-ups](../ext/files-and-signals.md). rs-rich-ratatui's
+`style_from_color_name("DarkGray")` reads a ratatui colour name, as a
+ported app's options take them, as a rich style.
 
 ## Themes
 
@@ -1479,6 +1723,12 @@ label("[accent]ops[/] · [good]12 up[/] · [bad]1 down[/]")
 Add your own with `Theme::dark().style("brand", Style::parse("bold magenta")?)`,
 set it with `App::theme`, and switch at run time with `cx.set_theme(theme)`;
 everything is drawn again in the new theme.
+
+The framework's own parts look for names of their own and fall back to
+these: a modal's or pop-up's panel title (the palette's, the help's, a
+confirm's) is drawn in `popup.title`, else `title`; the which-key keys in
+`which_key.key`, else `accent`; notifications in `notify.info`,
+`notify.warn` and `notify.error`, else `accent`, `warn` and `bad`.
 
 ### Theme files, reloaded live
 

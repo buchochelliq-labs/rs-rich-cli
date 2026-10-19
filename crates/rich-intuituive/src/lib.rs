@@ -45,6 +45,10 @@
 //!   instead of the alternate screen.
 //! - **Responsive**: [`Node::hide_below`] and a stylesheet's `@media`
 //!   rules follow the terminal's size; [`viewport`] reads it.
+//! - **The outside world** (off-by-default features): `audio::input`
+//!   captures a sound card into a signal (`audio`), `watch_path` wakes the
+//!   app when files change (`watch`), and `image` draws an image file in
+//!   half blocks (`art`).
 //! - **Tests**: [`App::render_with`] and [`App::run_on`] with
 //!   `rich-interact`'s headless driver run an app without a terminal;
 //!   [`App::driver`] steps one, and [`assert_screen!`] compares its screen
@@ -55,11 +59,16 @@
 
 pub mod a11y;
 pub mod app;
+#[cfg(feature = "audio")]
+pub mod audio;
 pub mod border;
 mod builtin;
 mod calendar;
 mod datetime;
+mod dialog;
 mod effect;
+#[cfg(feature = "art")]
+mod image;
 mod input;
 pub mod inspect;
 pub mod layout;
@@ -67,17 +76,24 @@ mod list;
 pub mod log;
 pub mod menu;
 pub mod node;
+mod notify;
+mod place;
 pub mod reactive;
 mod reorder;
+mod rule;
 pub mod screen;
 mod scrollbar;
+mod sequence;
 mod sheet;
+mod solver;
 mod split;
 mod table_scroll;
 pub mod task;
 pub mod testing;
 mod text_area;
 mod tree;
+#[cfg(feature = "watch")]
+mod watch;
 pub mod widget;
 pub mod widgets;
 
@@ -89,10 +105,12 @@ pub use rich;
 pub use rich_interact as interact;
 
 pub use app::{
-    every, Anchor, App, Ctx, Driver, Easing, FrameStats, ModalOptions, Placement, Theme,
+    every, Anchor, App, Ctx, Driver, Easing, FrameStats, Handoff, ModalOptions, Placement, Theme,
 };
 pub use border::{Border, BorderSet, Edge, Shadow, Sides};
 pub use effect::{effect, fill};
+#[cfg(feature = "art")]
+pub use image::{image, image_of, image_with, ImageAnchor, ImageFit, ImageMode, ImageView};
 pub use input::{input, number_input};
 pub use layout::{Align, AlignContent, Justify, Size, StackLayout, TextAlign};
 pub use list::list_optional;
@@ -102,11 +120,20 @@ pub use node::{
     column, component, each, grid, label, layers, leaf, list, renderable, repeating, row, scroll,
     scroll_both, scroll_both_with, scroll_with, scroll_x, switch, text, Node,
 };
+pub use notify::{Corner, Level};
+pub use place::{Offset, Origin, RectHandle};
 pub use reactive::{memo, signal, viewport, watch, Memo, Proxy, Signal};
 /// What a text does with what does not fit a line: rich's.
 pub use rich::Overflow;
+pub use rule::rule;
 pub use sheet::{SheetError, Stylesheet};
-pub use task::{resource, spawn, spawn_future, Load, Resource, Task};
+pub use solver::Solver;
+pub use task::{latest, resource, spawn, spawn_future, Latest, Load, Resource, Task};
+pub use text_area::Caret;
+#[cfg(feature = "watch")]
+pub use watch::{
+    watch_path, watch_path_with, ChangeKind, PathChange, PathEvent, PathWatch, WatchOptions,
+};
 pub use widget::{widget, Widget};
 pub use widgets::text_area;
 
@@ -115,8 +142,8 @@ pub mod prelude {
     // `text` is both the function and the `text!` macro.
     pub use crate::described;
     pub use crate::{
-        column, component, each, effect, every, fill, grid, input, label, layers, leaf, list,
-        list_optional, memo, number_input, renderable, repeating, resource, row, scroll,
+        column, component, each, effect, every, fill, grid, input, label, latest, layers, leaf,
+        list, list_optional, memo, number_input, renderable, repeating, resource, row, scroll,
         scroll_both, scroll_with, scroll_x, signal, spawn, switch, text, text_area, viewport,
         watch, widget, Align, App, Border, Ctx, Edge, Justify, Load, Log, Memo, Node, Overflow,
         Proxy, Resource, Shadow, Sides, Signal, Size, Task, TextAlign, Theme, Widget,

@@ -70,6 +70,11 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
+      # `cargo package --all-features` builds rs-rich-intuituive's `audio`
+      # feature, whose cpal needs ALSA's headers on Linux.
+      - name: Install ALSA headers
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev
+
       # Needs live crates.io access; registry failures are failures, never skips.
       # Unpublished siblings are staged by Cargo. This is not a publish dry run.
       - name: Verify registry identity before staged artifact builds
@@ -215,8 +220,9 @@ jobs:
           - crate: rs-rich-ratatui
             args: "--all-features"
           # intuiTUIve, the TUI framework, with both of interact's extra
-          # backends (its only features; each alone, and on macOS, in
-          # `backends`). Its benchmark against ratatui runs in release in
+          # backends (each alone, and on macOS, in `backends`) and its
+          # `art`, `audio` (ALSA headers installed below) and `watch`
+          # features. Its benchmark against ratatui runs in release in
           # `ratatui-gate`.
           - crate: rs-rich-intuituive
             args: "--all-features"
@@ -257,6 +263,12 @@ jobs:
 
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
+
+      # intuiTUIve's `audio` feature captures through cpal, which needs
+      # ALSA's headers on Linux.
+      - name: Install ALSA headers
+        if: matrix.crate == 'rs-rich-intuituive'
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev
 
       - name: Clippy (${{ matrix.crate }} ${{ matrix.args }})
         run: cargo clippy -p ${{ matrix.crate }} --all-targets ${{ matrix.args }} -- -D warnings
@@ -434,6 +446,10 @@ jobs:
 
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
+
+      # `--all-features` takes in intuiTUIve's `audio` (cpal: ALSA on Linux).
+      - name: Install ALSA headers
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev
 
       # The CLI's `lumis` feature pulls in rs-rich-lumis, so here the CLI is
       # checked with every other feature, and with `lumis` on lumis's MSRV below.

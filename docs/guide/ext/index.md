@@ -70,6 +70,10 @@ always available. The `use` path is `rich_ext::<module>`.
 | `badge`, `size_bar` | `Badge`/`Badges`: status, label, link and metadata chips; `SizeBar`: a size against a total or limit | none | [Badges and redaction](badges-and-redaction.md) |
 | `chart` | `Sparkline`, `BarChart`, `Histogram`, `LineChart` (Braille line and scatter), `Gauge`, `BulletChart`, `Heatmap`, `StatusMatrix`, `KpiCard` and `Timeline`, with `Scale`, `ValueFormat` and `Charset`; every chart has an ASCII form and reads without colour. In the shell: `rich chart` | none | [Charts](charts.md) |
 | `format` | Sizes, rates, durations, relative times, timestamps, percentages and numbers as people read them | none | [Badges and redaction](badges-and-redaction.md#formatters) |
+| `filetype` | `icon_for`/`icon_with`: Yazi's default file icons and colours (dark and light); `style_for`: its type colours; `mime_for`, `mime_for_path`, `mime_from_bytes`: MIME types by name and magic bytes; `nerd_font()`: whether a Nerd Font is likely | none | [Files, spectra and warm-ups](files-and-signals.md#file-type-icons-and-mime-types) |
+| `fs` | `user_name`, `group_name` (Unix); `local_time`, `short_local_time`: times in the local zone | none; `local-time` for the times | [Files, spectra and warm-ups](files-and-signals.md#local-times-and-owners) |
+| `dsp` | `fft` (any length), `hann`, `spectrum(samples, rate)` | none | [Files, spectra and warm-ups](files-and-signals.md#fft-and-spectrum) |
+| `syntax` | `preload(languages)`: warm the default highlighter on a worker thread | `syntax` (default) | [Files, spectra and warm-ups](files-and-signals.md#warming-up-syntax-highlighting) |
 | `redact` | `Redactor` (**experimental**, best effort: check its output): mask secrets in strings, ANSI text and rendered segments before they are exported or recorded | none | [Badges and redaction](badges-and-redaction.md#redaction) |
 
 ## Structured data and CLI authoring
@@ -121,6 +125,7 @@ needs them); every other feature is off.
 | `clap` | `CommandSpec::from_clap`, `cli_doc::clap::parse_or_exit` | `clap` |
 | `testing` | `testing`, `qa`, `diff::assert` | `serde`, `serde_json` |
 | `test-report` | `diff::test_report` | `serde`, `serde_json`, `quick-xml` |
+| `local-time` | `fs::local_time`, `fs::short_local_time` | `chrono` (`clock`: iana-time-zone) |
 | `serde` | `Serialize` for capability reports, contrast findings and ANSI explanations | `serde` |
 | `dylib-plugins`, `wasm-plugins` | Loading runtime plugins: native libraries, or sandboxed WASM modules ([Extending](../../PLUGINS.md)) | `libloading`, `wasmi` |
 

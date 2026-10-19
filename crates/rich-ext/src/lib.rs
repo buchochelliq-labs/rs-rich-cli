@@ -65,11 +65,17 @@ pub mod clipboard;
 // Documentation formats (Markdown, reStructuredText, Org, AsciiDoc, man).
 #[cfg(feature = "syntax")]
 pub mod document;
+// FFT, Hann window and spectrum.
+pub mod dsp;
 pub mod encoding;
 pub mod env_inspect;
 pub mod fidelity;
+// File-type icons, MIME types and the Nerd Font check.
+pub mod filetype;
 pub mod format;
 pub mod frame;
+// Local times and owner names for file listings.
+pub mod fs;
 pub mod graphics;
 pub mod hex;
 pub mod highlighter;
@@ -83,6 +89,9 @@ pub mod sanitize;
 pub mod size_bar;
 pub mod source_view;
 pub mod surface;
+// Warming up syntax highlighting on a worker thread.
+#[cfg(feature = "syntax")]
+pub mod syntax;
 pub mod table;
 pub mod target;
 pub mod theme;

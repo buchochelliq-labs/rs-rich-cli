@@ -116,7 +116,9 @@ pub use sparkline::{Direction, Levels, Sparkline};
 pub use status::{State, Status, StatusMatrix};
 pub use timeline::{Milestone, Span, Timeline};
 pub use world::MapResolution;
-pub use xy::{Axis, AxisScale, Chart, Dataset, GraphType, Labels, LegendPosition};
+pub use xy::{
+    Axis, AxisScale, Chart, Dataset, GraphType, Labels, Layering, LegendPosition, OutOfBounds,
+};
 
 use rich::cells::char_cell_width;
 use rich::{Console, ConsoleOptions, Segment, Style};

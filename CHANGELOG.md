@@ -9,6 +9,181 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### intuiTUIve: list and table rows (rs-rich-intuituive)
+
+What rebuilding Yazi and scope-tui found the lists and tables lack
+(round 1 of [the demo gaps](docs/design/intuituive-demo-gaps.md)).
+
+- **Row controls on `list`.** `.trailing(|i| markup)` puts right-aligned
+  markup at the right of a row, inside its style and highlight, and cuts
+  the item short of it. `.marker(|i| Option<style>)` keeps a one-cell
+  column at the left, outside the highlight, that never moves the text.
+  `.selected_style_for(|i| Option<style>)` is the highlight's style per
+  item. Yazi's names and line mode are one list now, not two on one
+  cursor.
+- **`list_lazy(len, item, selected)`** asks only for the items it draws,
+  with every list option; `list`'s closure builds every item each draw.
+- **A table without a header:** `TableOptions::header(false)`. A table
+  also takes `TableOptions::offset(signal)`, and
+  `Column::overflow(Overflow::Crop)` cuts its cells at the edge with no
+  `…`, as ratatui's do.
+- **`virtual_list` options:** `.scroll_padding(n)`, `.row_style(..)` and
+  `.offset(signal)` work on a `virtual_list` (and any table) as on a list.
+- **`widgets::cell(markup)`**: a text that keeps one line and is cut at
+  its edge, ratatui's table cell, for a `row` of cells as a one-row table.
+- **The screen rect of a row:** `.row_rects(&RowRects)` on a list, a
+  table or a `virtual_list` records where each row in view was drawn, so
+  a popup can open at one (`rects.get(i)`).
+- **Fixed: a `list` sized `Size::Auto` took the full width.** It measured
+  as wide as it was offered, so `row([list(a).flex(1), list(b).auto()])`
+  gave everything to the second. It is as wide as its widest item now,
+  with its symbol, marker, trailing text and scroll bar.
+
+### Charts drawn as ratatui 0.29 draws them (ext)
+
+Round 1 of the intuiTUIve demo gaps (see
+[what the rebuilt demos found missing](docs/design/intuituive-demo-gaps.md)):
+four `Chart` options the scope-tui clone needs to look like ratatui 0.29's
+`Chart`. Each default is the drawing as before.
+
+- **`out_of_bounds(OutOfBounds::Drop)`** leaves out a line, bar or area
+  segment with an end outside the bounds, as ratatui 0.29 does;
+  `OutOfBounds::Clip`, the default, draws the part inside.
+- **`layering(Layering::PerDataset)`** draws each dataset over the ones
+  before, as ratatui 0.29 draws a canvas per dataset: a cell a later
+  dataset draws in shows only its dots, so scope-tui's reference lines
+  break where the trace crosses them. `Layering::Merge`, the default,
+  shares the dots of a cell.
+- **`legend_style(..)`** gives the legend's box a style of its own; by
+  default it takes the x axis's.
+- **`legend_clear(false)`** leaves what the datasets drew under the
+  legend, unstyled around the names, as ratatui does; by default the box
+  clears it.
+
+### The outside world in intuiTUIve: files, sound and images (intuituive 0.0.4, ext 0.0.17, ratatui 0.0.4)
+
+What the Yazi and scope-tui rebuilds found missing from the plugin side
+(`docs/design/intuituive-demo-gaps.md`, "Data, sources and the outside
+world"). Every new dependency is behind an off-by-default feature.
+rs-rich-micro 0.0.6 and rs-rich-record 0.0.8 change only their
+requirement on rs-rich-ext 0.0.17.
+
+- **intuiTUIve `watch` feature: `watch_path(path, |event, cx| …)`** wakes
+  the app when files change, through notify (the version the CLI already
+  uses), with no polling. Changes less than 100 ms apart are one
+  `PathEvent` (each path once: `Created`, `Modified`, `Removed`,
+  `Renamed`); `watch_path_with` takes `WatchOptions` (`recursive()`,
+  `debounce(d)`). It runs as long as the app, or until `PathWatch::stop`.
+- **intuiTUIve `audio` feature: `audio::input(device, rate, channels,
+  buffer) -> Signal<Matrix>`** captures a sound card through cpal 0.18,
+  one row a channel; the newest buffer wins, so a slow frame drops
+  buffers instead of falling behind. A device with fewer channels than
+  asked for is spread over the rows. `audio::devices()` lists the inputs
+  and is empty, not a panic, without sound. On Linux it needs ALSA's
+  headers (`libasound2-dev`).
+- **intuiTUIve `art` feature: `image(path)`**, `image_with(path,
+  ImageView)` and `image_of(|| path, view)`: an image file as a node, drawn
+  by rs-rich-art in half blocks (or quadrants, Braille, ASCII) to fit its
+  rectangle, with `ImageFit::Contain`, `Cover` and `Stretch`; decoded on a
+  worker thread and drawn again only when its size changes. Kitty and
+  Sixel are not drawn: the cell screen cannot pass their escapes through
+  yet.
+- **`rich_ext::filetype`**: `icon_for(path, is_dir) -> (glyph, colour)`
+  and `icon_with(path, FileFlags, Appearance)`, Yazi's default icon and
+  colour rules (its dark and light presets, from nvim-web-devicons, both
+  MIT); `style_for(mime, flags)`, its type colours; `mime_for`,
+  `mime_for_path` and `mime_from_bytes`, MIME types by extension and magic
+  bytes; and `nerd_font()`, which says honestly what can be known
+  (`RICH_NERD_FONT`, or a Nerd Font file installed). No dependencies.
+- **`rich_ext::fs`**: `user_name(uid)` and `group_name(gid)` (Unix,
+  `getpwuid_r`/`getgrgid_r`, cached; `None` elsewhere), and with the new
+  off-by-default `local-time` feature (chrono, already in the tree)
+  `local_time(time, format)` and `short_local_time(time)`.
+- **`rich_ext::dsp`**: `fft` of any length (radix 2, and Bluestein's chirp
+  otherwise), `hann` and `spectrum(samples, rate)`, the scope example's
+  tested FFT lifted into the library.
+- **`rich_ext::syntax::preload(langs)`** warms core's default highlighter
+  (syntect's grammars, themes and each language's patterns) on a worker
+  thread, so an app's first Markdown preview does not stall for seconds in
+  a debug build. It goes through the public `CodeHighlighter` API; core is
+  unchanged.
+- **`rich_ratatui::style_from_color_name("DarkGray")`**: a colour as
+  ratatui's `Color::from_str` reads it (names in any case and spacing,
+  `#rrggbb`, an index) as a rich style (`bright_black`).
+- **CI** installs `libasound2-dev` for the jobs that build every feature
+  (the feature matrix's `--all-features` builds, the MSRV check and the
+  staged package build).
+- **Docs:** "Files, sound and images" in the intuiTUIve guide, a new ext
+  page, [Files, spectra and warm-ups](docs/guide/ext/files-and-signals.md),
+  and the colour names on the ratatui page.
+
+### Keys, pop-ups, chrome and the runtime, from the Yazi and scope-tui clones (intuituive, interact)
+
+What round 1 of rebuilding Yazi (`examples/files.rs`) and scope-tui
+(`examples/scope.rs`) on intuiTUIve found missing
+(`docs/design/intuituive-demo-gaps.md`).
+
+- **Key sequences:** `.bind_sequence("g g", description, handler)` and
+  `.on_sequence`. A prefix waits for the next key; Esc cancels a sequence
+  under way, and any other key cancels it and is then handled as usual.
+  `App::which_key(true)` (or `which_key_delay(d)`) shows what can follow
+  in up to three columns at the bottom of the screen. The help and the
+  command palette list sequences as `g g`.
+- **Any key:** `.on_any_key(|cx, key| -> bool)` takes what a node's
+  bindings leave.
+- **Keys a container sees first:** `.previews_keys()` on a column or any
+  node: its bindings, sequences and `on_any_key` run before the focused
+  node inside it gets the key.
+- **The caret of an input:** `.caret(Caret::Start | End | At(n))` and
+  `.select(range)` on an `input` or a `text_area`. Fixed: a prefilled
+  input put its caret at the start (`input(signal("alpha".into()))`, then
+  `x`, gave `xalpha`); an input's caret now goes to the end when it is made
+  and when the signal is set from elsewhere. A text area keeps the start.
+- **Fixed: bindings inside a pop-up's panel never fired.** With nothing
+  focused, keys go down from the root through every node that holds one
+  child, so the content's own bindings run.
+- **The palette** shows the keys of a binding with a long description (an
+  `esc` binding's keys were dropped): the description is cut instead
+  (interact). `rich_interact::keymap::Binding::sequence(..)`, and a
+  `sequence` field on `Binding` and `overlay::Command`, show keys pressed
+  one after another as `g g`; keymaps do not look them up (interact).
+- **`popup.title`:** a modal's or pop-up's panel title is drawn in the
+  theme's `popup.title`, else its `title` (so nothing changes unless a
+  theme sets it).
+- **Ratatui's solver:** `.solver(Solver::Ratatui)` (or `RatatuiLegacy`) on
+  a row or column, and `StackLayout::solver` for `layout::split`, lays the
+  children out as ratatui's `Layout` does: percentages of the whole length
+  and what does not fit squeezed by the same constraints through kasuari,
+  ratatui's solver (a new dependency). Off by default; existing layouts
+  are unchanged. Checked against ratatui over widths 10 to 200 for
+  scope-tui's header and over every `Flex`.
+- **Where a node is:** `node.rect_handle()` gives its rectangle on the
+  screen after each frame, as a handle whose `get()` subscribes.
+- **Pop-ups from a point of the screen:** `cx.popup_at(Origin, Offset,
+  build)` (and `popup_at_with`): a corner, an edge's middle, the centre or
+  below a rectangle, moved by a signed offset and kept on the screen.
+- **A rule joined to its panel:** `rule()` draws a line across that joins
+  the border of the panel it spans (`├──┤`). Fixed: `.borders(Sides::..)`
+  on a node that is not a panel drew nothing; it now puts the node in a
+  panel without a title with those sides.
+- **Notifications:** `cx.notify(Level::Info | Warn | Error, title, body)`
+  and `notify_for`: a box with the title on its edge, in the level's style
+  (`notify.info`, `notify.warn`, `notify.error`, else `accent`, `warn`,
+  `bad`), announced with its level. `App::toasts_at(Corner::..)` stacks
+  toasts in another corner (Yazi's top right). `cx.toast` is unchanged.
+- **A confirm dialog:** `cx.confirm(title, body, items, on_yes)`, centred,
+  with the items and `[Y]es`/`(N)o` (y, n, Enter, Esc, Tab, the arrows and
+  clicks).
+- **The newest value from a thread:** `latest(|tx| ..) -> Signal<Option<T>>`;
+  `Latest::send` keeps only the newest value, and returns `false` once the
+  app has finished.
+- **Handing the terminal to a program:** `cx.handoff(command)` and
+  `handoff_then(command, |result, cx| ..)`: `App::run` leaves the
+  alternate screen and raw mode, runs it, takes the terminal back and
+  redraws. `Driver::take_handoff` and `Driver::handed_back` for a loop of
+  your own; the headless driver records it.
+- **Docs:** the intuiTUIve guide covers each of these.
+
 ## 0.0.19 cohort
 
 ext 0.0.16 / micro 0.0.5 / record 0.0.7 / interact 0.0.7 / ratatui 0.0.4 /

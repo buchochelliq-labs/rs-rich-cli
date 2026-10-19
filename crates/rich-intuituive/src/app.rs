@@ -43,9 +43,16 @@ use rich_interact::{
 use crate::inspect::{Handled, Inspector, Names, NodeTiming, Probe, TraceEntry, Traced};
 use crate::layout::Size;
 use crate::node::{with_node, Axis, FrameState, Node};
+use crate::notify::{Corner, Level, Note};
+use crate::place::{Offset, Origin};
 use crate::reactive::{signal, NodeId, Proxy, Runtime, Signal};
 use crate::screen::{Painter, Rect, Screen};
 use crate::widget::{Used, WidgetEvent};
+
+/// The theme style a pop-up's title is drawn in: the palette's, the
+/// help's, a modal's or pop-up's panel, a [confirm](Ctx::confirm) dialog's.
+/// The theme's `title` when it does not name it.
+pub(crate) const POPUP_TITLE: &str = "popup.title";
 
 /// What a key or click handler can do.
 pub struct Ctx {
@@ -54,7 +61,7 @@ pub struct Ctx {
     proxy: Proxy,
     nav: Vec<Nav>,
     theme: Option<Theme>,
-    toasts: Vec<(String, Duration)>,
+    toasts: Vec<(Note, Duration)>,
     animations: Vec<(Signal<f64>, f64, Duration, Easing)>,
     copies: Vec<String>,
     announcements: Vec<crate::a11y::Announcement>,
@@ -65,6 +72,29 @@ pub struct Ctx {
     error: Option<io::Error>,
     /// Lines to print above an inline app.
     printed: Vec<String>,
+    /// Programs to give the terminal to, in turn.
+    handoffs: Vec<Handoff>,
+}
+
+/// What [`handoff_then`](Ctx::handoff_then) runs once the program is done.
+type HandedBack = Box<dyn FnOnce(io::Result<Option<i32>>, &mut Ctx)>;
+
+/// A program the app gives the terminal to ([`Ctx::handoff`]): what a loop
+/// of your own takes with [`Driver::take_handoff`], runs with the terminal
+/// as it was before the app, and gives back with
+/// [`Driver::handed_back`].
+pub struct Handoff {
+    /// The program, its arguments, its directory and environment.
+    pub command: std::process::Command,
+    then: Option<HandedBack>,
+}
+
+impl std::fmt::Debug for Handoff {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Handoff")
+            .field("command", &self.command)
+            .finish_non_exhaustive()
+    }
 }
 
 /// How a [modal](Ctx::modal_with) or a [pop-up](Ctx::popup_with) looks
@@ -173,18 +203,29 @@ pub enum Placement {
     Left,
 }
 
+impl Layer {
+    /// Whether it is a pop-up: Esc that nothing used, or a press outside
+    /// it, closes it.
+    fn is_popup(&self) -> bool {
+        self.anchor.is_some() || self.origin.is_some()
+    }
+}
+
 /// A change to the stack of screens.
 enum Nav {
     Push(Build),
     Modal(Size, Size, ModalOptions, Build),
     Popup(Anchor, Placement, Size, Size, ModalOptions, Build),
+    /// A pop-up placed from a point of the screen.
+    PopupAt(Origin, Offset, ModalOptions, Build),
     Pop,
     Replace(Build),
     /// The command palette, or the help, from the focused node's bindings.
     Palette,
     Help,
-    /// Run binding `index` of node `id`, as its key would.
-    Run(NodeId, usize),
+    /// Run binding `index` of node `id` (a key sequence's, if `true`), as
+    /// its key would.
+    Run(NodeId, usize, bool),
 }
 
 impl Ctx {
@@ -203,7 +244,50 @@ impl Ctx {
             exit: None,
             error: None,
             printed: Vec::new(),
+            handoffs: Vec::new(),
         }
+    }
+
+    /// Give the terminal to `command` (an editor, a pager, a shell) once
+    /// this handler returns: the app leaves the alternate screen and raw
+    /// mode, runs it and waits for it, then takes the terminal back and
+    /// draws everything again. Yazi's Enter on a file. Under the headless
+    /// driver the program is recorded, not run. A loop of your own takes it
+    /// with [`Driver::take_handoff`].
+    ///
+    /// ```
+    /// use intuituive::interact::headless::{Headless, Script};
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| {
+    ///     label("notes.txt")
+    ///         .on_key("enter", |cx| cx.handoff(std::process::Command::new("vi")))
+    ///         .on_key("q", |cx| cx.quit())
+    /// });
+    /// let mut backend = Headless::new(Script::new().keys("enter q"), 20, 2);
+    /// let record = backend.record();
+    /// app.run_on(&mut backend).unwrap();
+    /// assert_eq!(record.borrow().handoffs, ["vi"]);
+    /// ```
+    pub fn handoff(&mut self, command: std::process::Command) {
+        self.handoffs.push(Handoff {
+            command,
+            then: None,
+        });
+    }
+
+    /// [`handoff`](Self::handoff), then run `then` with how the program
+    /// ended (its exit code, `None` when a signal ended it, or why it could
+    /// not run), back on the app's thread with the terminal the app's again.
+    pub fn handoff_then(
+        &mut self,
+        command: std::process::Command,
+        then: impl FnOnce(io::Result<Option<i32>>, &mut Ctx) + 'static,
+    ) {
+        self.handoffs.push(Handoff {
+            command,
+            then: Some(Box::new(then)),
+        });
     }
 
     /// Open a screen built by `build` over the current one, which is kept
@@ -281,6 +365,52 @@ impl Ctx {
         ));
     }
 
+    /// Open a pop-up placed from a point of the screen rather than next to
+    /// a node: `origin` (a corner, an edge's middle, the centre, or below a
+    /// rectangle), moved and sized by `offset`, and kept on the screen
+    /// however large or far the offset (moved back inside, made smaller).
+    /// It takes the keys like a modal; Esc that nothing used, or a press
+    /// outside it, closes it. Yazi's input is at the top centre:
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    /// use intuituive::{Offset, Origin};
+    ///
+    /// let app = App::new(|| {
+    ///     label("files").on_key("r", |cx| {
+    ///         let name = signal("notes.txt".to_string());
+    ///         cx.popup_at(Origin::TopCenter, Offset::new(0, 2, 20, 3), move || {
+    ///             input(name).panel("Rename:")
+    ///         })
+    ///     })
+    /// });
+    /// let mut driver = app.driver(40, 8);
+    /// driver.press("r");
+    /// let top: String = driver.screen().plain()[2].chars().skip(10).take(20).collect();
+    /// assert_eq!(top, "╭─ Rename: ────────╮");
+    /// ```
+    pub fn popup_at(
+        &mut self,
+        origin: Origin,
+        offset: Offset,
+        build: impl FnOnce() -> Node + 'static,
+    ) {
+        self.popup_at_with(origin, offset, ModalOptions::default(), build);
+    }
+
+    /// A [`popup_at`](Self::popup_at) with a shadow or a backdrop, as
+    /// `options` says.
+    pub fn popup_at_with(
+        &mut self,
+        origin: Origin,
+        offset: Offset,
+        options: ModalOptions,
+        build: impl FnOnce() -> Node + 'static,
+    ) {
+        self.nav
+            .push(Nav::PopupAt(origin, offset, options, Box::new(build)));
+    }
+
     /// Open the command palette: every binding made with
     /// [`bind`](crate::Node::bind) (with a description) on the focused node
     /// and its ancestors, searched by name; the one picked runs as its key
@@ -309,14 +439,55 @@ impl Ctx {
         self.copies.push(text.into());
     }
 
-    /// Show `markup` in a toast at the bottom right for three seconds.
+    /// Show `markup` in a toast for three seconds, at the bottom right (or
+    /// in the corner [`App::toasts_at`] names).
     pub fn toast(&mut self, markup: impl Into<String>) {
         self.toast_for(markup, Duration::from_secs(3));
     }
 
     /// Show `markup` in a toast for `duration`.
     pub fn toast_for(&mut self, markup: impl Into<String>, duration: Duration) {
-        self.toasts.push((markup.into(), duration));
+        self.toasts.push((Note::plain(markup.into()), duration));
+    }
+
+    /// Show a notification for five seconds: a box with `title` (markup)
+    /// on its top edge and `body` (markup, wrapped) inside, its border and
+    /// title in the `level`'s style (the theme's `notify.info`,
+    /// `notify.warn` or `notify.error`, else `accent`, `warn` or `bad`). It
+    /// stacks with the toasts, in the corner [`App::toasts_at`] names, and
+    /// is announced as `Warning: title: body`.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    /// use intuituive::{Corner, Level};
+    ///
+    /// let app = App::new(|| {
+    ///     label("files").on_key("d", |cx| cx.notify(Level::Warn, "Trash", "3 files moved"))
+    /// })
+    /// .toasts_at(Corner::TopRight);
+    /// let mut driver = app.driver(40, 6);
+    /// driver.press("d");
+    /// let rows = driver.screen().plain();
+    /// assert!(rows[0].ends_with("╭─ Trash ───────╮ "));
+    /// assert!(rows[1].ends_with("│ 3 files moved │ "));
+    /// ```
+    pub fn notify(&mut self, level: Level, title: impl Into<String>, body: impl Into<String>) {
+        self.notify_for(level, title, body, Duration::from_secs(5));
+    }
+
+    /// [`notify`](Self::notify), shown for `duration`.
+    pub fn notify_for(
+        &mut self,
+        level: Level,
+        title: impl Into<String>,
+        body: impl Into<String>,
+        duration: Duration,
+    ) {
+        let note = Note {
+            markup: body.into(),
+            notice: Some((level, title.into())),
+        };
+        self.toasts.push((note, duration));
     }
 
     /// Say `text` to assistive technology (a screen reader through the
@@ -638,6 +809,8 @@ struct Layer {
     drawn: Option<Rect>,
     /// For a pop-up: what it is next to, and on which side.
     anchor: Option<(Anchor, Placement)>,
+    /// For a pop-up placed from a point of the screen: where.
+    origin: Option<(Origin, Offset)>,
     timers: Vec<Timer>,
     /// Its [watches](crate::watch), stopped when it closes.
     watches: Vec<usize>,
@@ -741,8 +914,9 @@ pub struct App {
     capture: Option<(NodeId, (i32, i32))>,
     /// Pointer movement reports: (wanted by a widget, turned on).
     motion: (bool, bool),
-    /// Toasts showing, with when each goes.
-    toasts: Vec<(String, Duration)>,
+    /// Toasts showing, with when each goes, and the corner they stack in.
+    toasts: Vec<(Note, Duration)>,
+    toast_corner: Corner,
     /// Animations running: the signal, from, to, start, length, easing.
     animations: Vec<Animation>,
     /// Keys that open the command palette and the help, if any.
@@ -819,6 +993,13 @@ pub struct App {
     poke: bool,
     /// The stylesheet generation the last frame matched nodes against.
     sheet_drawn: Option<u64>,
+    /// Programs handlers asked to give the terminal to, not yet run.
+    handoffs: Vec<Handoff>,
+    /// A key sequence under way, the which-key pop-up's delay (`None`:
+    /// off), and where it was last drawn.
+    pending: Option<crate::sequence::Pending>,
+    which_key: Option<Duration>,
+    which_key_at: Option<Rect>,
     /// While the inspector traces: the node that took the event being
     /// routed, and how.
     used: crate::inspect::Used,
@@ -915,6 +1096,7 @@ impl App {
                 look: ModalOptions::default(),
                 drawn: None,
                 anchor: None,
+                origin: None,
                 timers,
                 watches,
                 order: Vec::new(),
@@ -935,6 +1117,7 @@ impl App {
             clipboard: false,
             copies: Vec::new(),
             toasts: Vec::new(),
+            toast_corner: Corner::default(),
             animations: Vec::new(),
             palette_key: Vec::new(),
             help_key: Vec::new(),
@@ -973,6 +1156,10 @@ impl App {
             caret_at: None,
             poke: false,
             sheet_drawn: None,
+            handoffs: Vec::new(),
+            pending: None,
+            which_key: None,
+            which_key_at: None,
             used: None,
         }
     }
@@ -1059,15 +1246,13 @@ impl App {
     /// Say in a toast that the stylesheet does not parse.
     fn sheet_error(&mut self, error: &str) {
         let markup = format!("[bad]stylesheet:[/] {}", rich::markup::escape(error));
-        self.push_toast(markup, self.now + Duration::from_secs(6));
+        self.push_toast(Note::plain(markup), self.now + Duration::from_secs(6));
     }
 
     /// Show a toast until `until`, and announce it.
-    fn push_toast(&mut self, markup: String, until: Duration) {
-        let text = rich::Text::from_markup(&markup)
-            .map(|text| text.plain().to_string())
-            .unwrap_or_else(|_| markup.clone());
-        self.toasts.push((markup, until));
+    fn push_toast(&mut self, note: Note, until: Duration) {
+        let text = note.spoken();
+        self.toasts.push((note, until));
         self.poke = true;
         self.announce(
             crate::a11y::Announcement {
@@ -1319,6 +1504,49 @@ impl App {
         self.stats
     }
 
+    /// Stack toasts and [notifications](Ctx::notify) in `corner`, newest
+    /// nearest it: [`Corner::BottomRight`] by default, Yazi's
+    /// [`Corner::TopRight`].
+    pub fn toasts_at(mut self, corner: Corner) -> App {
+        self.toast_corner = corner;
+        self
+    }
+
+    /// Show the which-key pop-up while a [key
+    /// sequence](crate::Node::bind_sequence) is under way: what can follow
+    /// the keys pressed so far, with their descriptions, in up to three
+    /// columns in a box at the bottom of the screen (Yazi's). It shows at
+    /// once; [`which_key_delay`](Self::which_key_delay) waits first. Off by
+    /// default. Its keys are in the theme's `which_key.key` style, else
+    /// `accent`.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| {
+    ///     label("files")
+    ///         .bind_sequence("g g", "Go to the top", |_| {})
+    ///         .bind_sequence("g h", "Go home", |_| {})
+    /// })
+    /// .which_key(true);
+    /// let mut driver = app.driver(40, 6);
+    /// driver.press("g");
+    /// let rows = driver.screen().plain();
+    /// assert!(rows[3].contains("g  Go to the top") && rows[3].contains("h  Go home"));
+    /// ```
+    pub fn which_key(mut self, on: bool) -> App {
+        self.which_key = on.then_some(Duration::ZERO);
+        self
+    }
+
+    /// Turn the [which-key](Self::which_key) pop-up on, shown once a
+    /// sequence has waited `delay` for its next key (which-key.nvim's
+    /// habit: a sequence typed quickly shows nothing).
+    pub fn which_key_delay(mut self, delay: Duration) -> App {
+        self.which_key = Some(delay);
+        self
+    }
+
     /// Open the [command palette](Ctx::command_palette) with `keys` (say
     /// `"ctrl+p"`), when no binding of the app used them.
     pub fn palette_key(mut self, keys: &str) -> App {
@@ -1496,10 +1724,34 @@ impl App {
                 }
             }
         }
+        // Programs handlers gave the terminal to: run each with the
+        // terminal as it was, then draw everything again.
+        fn hand_off(
+            driver: &mut Driver,
+            backend: &mut impl Backend,
+            linear: bool,
+            inline: bool,
+        ) -> io::Result<()> {
+            while let Some(mut handoff) = driver.take_handoff() {
+                put(backend, linear, &driver.suspend())?;
+                let result = backend.handoff(&mut handoff.command);
+                if linear {
+                    backend.write("\x1b[?25h")?;
+                }
+                let (columns, rows) = backend.size();
+                if inline {
+                    driver.set_origin(backend.origin());
+                }
+                driver.resize(columns, rows);
+                driver.handed_back(handoff, result);
+            }
+            Ok(())
+        }
         let result = (|| -> io::Result<()> {
             loop {
                 driver.update(backend.elapsed());
                 copy_all(&mut driver, backend);
+                hand_off(&mut driver, backend, linear, inline)?;
                 if driver.is_done() {
                     return Ok(());
                 }
@@ -1555,6 +1807,7 @@ impl App {
                 }
                 driver.event(event);
                 copy_all(&mut driver, backend);
+                hand_off(&mut driver, backend, linear, inline)?;
                 if driver.is_done() {
                     return Ok(());
                 }
@@ -2054,6 +2307,10 @@ impl App {
                 .enumerate()
                 .map(|(i, layer)| match (layer.modal, layer.anchor) {
                     (None, _) => area,
+                    (Some(_), _) if layer.origin.is_some() => {
+                        let (origin, offset) = layer.origin.expect("a placed pop-up");
+                        crate::place::place(console, Some(&layer.root), area, origin, offset)
+                    }
                     (Some((width, height)), Some((anchor, placement))) => {
                         // The anchor is on a screen below this one.
                         let below = &self.layers[..base + i];
@@ -2195,6 +2452,33 @@ impl App {
                 layer.root.draw(&mut frame, *rect, screen, force);
                 layer.drawn = Some(*rect);
             }
+            // Where nodes with a rect handle are on the screen now.
+            if crate::place::any_handles() {
+                // Nowhere on the screen: whatever a full screen covers,
+                // and whatever is hidden.
+                for layer in &self.layers[..base] {
+                    clear_rect_handles(&layer.root);
+                }
+                for layer in &self.layers[base..] {
+                    layer.root.walk_all(&mut |node, _, hidden| {
+                        if hidden {
+                            clear_rect_handles(node);
+                        }
+                    });
+                }
+                for layer in &self.layers[base..] {
+                    crate::node::walk_screen(&layer.root, &mut |node, _, shift, clip| {
+                        if let Some(handle) = *node.rect_slot.borrow() {
+                            let rect =
+                                crate::node::translate(node.rect(), shift).intersection(clip);
+                            let rect = (!rect.is_empty()).then_some(rect);
+                            if handle.get_untracked() != rect {
+                                handle.set(rect);
+                            }
+                        }
+                    });
+                }
+            }
         });
         let took = started.map(|start| start.elapsed()).unwrap_or_default();
         self.stats.drawn = frame.drawn;
@@ -2210,44 +2494,40 @@ impl App {
                 frame.damage.push(rect);
             }
         }
-        // Toasts, newest at the bottom right, over everything. Linear, they
-        // are written as lines instead, and nothing covers the nodes whose
-        // names are read from the screen.
-        let mut bottom = area.bottom();
-        let toasts: &[(String, Duration)] = if self.linear { &[] } else { &self.toasts };
-        for (markup, _) in toasts.iter().rev() {
-            let text =
-                rich::Text::from_markup(markup).unwrap_or_else(|_| rich::Text::new(markup.clone()));
-            let w = (text.cell_len() as u16 + 4).min(area.width.saturating_sub(2));
-            if w < 5 || bottom < area.y + 3 {
-                // No room for a box: the newest toast on the bottom row,
-                // reversed, so it is still seen.
-                if bottom == area.bottom() && area.width > 0 && area.height > 0 {
-                    let rect = Rect::new(area.x, area.bottom() - 1, area.width, 1);
-                    let mut options = console.options().update_width(rect.width as usize);
-                    options.no_wrap = Some(true);
-                    options.overflow = Some(rich::Overflow::Ellipsis);
-                    let line = console.render_lines(&text, &options, false);
-                    let reverse = Style::parse("reverse").unwrap_or_default();
-                    screen.write_lines(rect, &line);
-                    for x in rect.x..rect.right() {
-                        screen.restyle(x, rect.y, &reverse);
-                    }
-                    frame.damage.push(rect);
-                }
-                break;
+        // Toasts, newest nearest their corner, over everything. Linear,
+        // they are written as lines instead, and nothing covers the nodes
+        // whose names are read from the screen.
+        if !self.linear {
+            let notes: Vec<&Note> = self.toasts.iter().map(|(note, _)| note).collect();
+            let corner = self.toast_corner;
+            let drawn = crate::notify::draw(console, screen, area, &notes, &self.theme, corner);
+            frame.damage.extend(drawn);
+        }
+        // The which-key pop-up, once its delay is over.
+        self.which_key_at = None;
+        let shown = self.layers.len();
+        let due = match (&self.which_key, &self.pending) {
+            (Some(delay), Some(pending)) => {
+                pending.depth == shown && self.now >= pending.since + *delay
             }
-            let rect = Rect::new(area.right().saturating_sub(w + 1), bottom - 3, w, 3);
-            let style = self.theme.border(false);
-            let lines = crate::node::border("", &style, &style, rect);
-            screen.write_lines(rect, &lines);
-            let mut options = console.options().update_width(rect.width as usize - 4);
-            options.no_wrap = Some(true);
-            options.overflow = Some(rich::Overflow::Ellipsis);
-            let inner = console.render_lines(&text, &options, false);
-            screen.write_lines(Rect::new(rect.x + 2, rect.y + 1, rect.width - 4, 1), &inner);
-            frame.damage.push(rect);
-            bottom -= 3;
+            _ => false,
+        };
+        if due && !self.linear {
+            let mut entries = Vec::new();
+            if let (Some(pending), Some(top)) = (&self.pending, self.layers.last()) {
+                with_node(&top.root, pending.node, &mut |node| {
+                    entries = crate::sequence::continuations(node, &pending.keys);
+                });
+            }
+            let drawn =
+                crate::sequence::draw_which_key(console, screen, area, &entries, &self.theme);
+            if let Some(rect) = drawn {
+                frame.damage.push(rect);
+            }
+            self.which_key_at = drawn;
+        }
+        if let Some(pending) = self.pending.as_mut().filter(|_| due) {
+            pending.shown = true;
         }
         // A tooltip, over the toasts too.
         if let Some(tip) = self.tip.as_ref().filter(|tip| tip.shown && !self.linear) {
@@ -2354,7 +2634,7 @@ impl App {
             self.announce(announcement, false);
         }
         // A screen or dialog that opened says what it shows, once drawn.
-        if std::mem::take(&mut self.opened) && self.top().anchor.is_none() {
+        if std::mem::take(&mut self.opened) && !self.top().is_popup() {
             let rect = self.top().drawn.unwrap_or(whole);
             let hidden = self.hidden_rects();
             let mut text = crate::a11y::screen_text(screen, rect, &hidden);
@@ -2397,8 +2677,9 @@ impl App {
             self.printed.extend(cx.printed);
         }
         self.copies.extend(cx.copies);
-        for (markup, duration) in cx.toasts {
-            self.push_toast(markup, self.now + duration);
+        self.handoffs.extend(cx.handoffs);
+        for (note, duration) in cx.toasts {
+            self.push_toast(note, self.now + duration);
         }
         for announcement in cx.announcements {
             self.announce(announcement, true);
@@ -2443,7 +2724,7 @@ impl App {
         let what = match &nav {
             Nav::Push(_) => Some("screen opened"),
             Nav::Modal(..) => Some("modal opened"),
-            Nav::Popup(..) => Some("pop-up opened"),
+            Nav::Popup(..) | Nav::PopupAt(..) => Some("pop-up opened"),
             Nav::Pop => (self.layers.len() > 1).then_some("screen closed"),
             Nav::Replace(_) => Some("screen replaced"),
             Nav::Palette => Some("command palette opened"),
@@ -2474,11 +2755,13 @@ impl App {
             }
             Nav::Replace(build) => {
                 let (modal, anchor) = (self.top().modal, self.top().anchor);
+                let origin = self.top().origin;
                 let look = self.top().look.clone();
                 if self.layers.len() > 1 {
                     self.close();
                     self.open(build, modal);
                     self.top_mut().anchor = anchor;
+                    self.top_mut().origin = origin;
                     self.top_mut().look = look;
                 } else {
                     // The first screen: its timers go with it.
@@ -2493,7 +2776,13 @@ impl App {
             }
             Nav::Palette => self.open_palette(false),
             Nav::Help => self.open_palette(true),
-            Nav::Run(id, index) => return self.run_binding(id, index),
+            Nav::PopupAt(origin, offset, look, build) => {
+                self.open(build, Some((offset.w, offset.h)));
+                let top = self.top_mut();
+                top.origin = Some((origin, offset));
+                top.look = look;
+            }
+            Nav::Run(id, index, sequence) => return self.run_binding(id, index, sequence),
         }
         false
     }
@@ -2517,6 +2806,18 @@ impl App {
                     let binding = rich_interact::keymap::Binding::new(
                         context.clone(),
                         format!("{id}:{index}"),
+                        keys.clone(),
+                        description.clone(),
+                    );
+                    out.push((id, index, binding));
+                }
+                for (index, (keys, description, _)) in node.sequences.borrow().iter().enumerate() {
+                    if description.is_empty() {
+                        continue;
+                    }
+                    let binding = rich_interact::keymap::Binding::sequence(
+                        context.clone(),
+                        format!("{id}:s{index}"),
                         keys.clone(),
                         description.clone(),
                     );
@@ -2547,17 +2848,19 @@ impl App {
             .iter()
             .map(|(_, _, binding)| rich_interact::overlay::Command::from_binding(binding))
             .collect();
-        let targets: Vec<(String, NodeId, usize)> = bindings
+        let targets: Vec<(String, NodeId, usize, bool)> = bindings
             .iter()
-            .map(|(id, index, binding)| (binding.id(), *id, *index))
+            .map(|(id, index, binding)| (binding.id(), *id, *index, binding.sequence))
             .collect();
         self.open(
             Box::new(move || {
                 let palette = rich_interact::overlay::Palette::new(commands);
                 crate::node::component(palette, move |command, cx| {
                     cx.pop();
-                    if let Some((_, id, index)) = targets.iter().find(|t| t.0 == command.id) {
-                        cx.nav.push(Nav::Run(*id, *index));
+                    if let Some((_, id, index, sequence)) =
+                        targets.iter().find(|t| t.0 == command.id)
+                    {
+                        cx.nav.push(Nav::Run(*id, *index, *sequence));
                     }
                 })
                 .on_cancel(|cx| cx.pop())
@@ -2567,13 +2870,18 @@ impl App {
         );
     }
 
-    /// Run binding `index` of node `id` on the top screen; whether to quit.
-    fn run_binding(&mut self, id: NodeId, index: usize) -> bool {
+    /// Run binding `index` of node `id` (its key sequence `index`, if
+    /// `sequence`) on the top screen; whether to quit.
+    fn run_binding(&mut self, id: NodeId, index: usize, sequence: bool) -> bool {
         let mut cx = self.ctx();
         let runtime = self.runtime.clone();
         runtime.enter(|| {
             with_node(&self.top().root, id, &mut |node| {
-                if let Some((_, _, handler)) = node.keys.borrow_mut().get_mut(index) {
+                let mut list = match sequence {
+                    true => node.sequences.borrow_mut(),
+                    false => node.keys.borrow_mut(),
+                };
+                if let Some((_, _, handler)) = list.get_mut(index) {
                     handler(&mut cx);
                 }
             });
@@ -2588,6 +2896,16 @@ impl App {
         WATCHES.with(|watches| *watches.borrow_mut() = Some(Vec::new()));
         let runtime = self.runtime.clone();
         let root = runtime.enter(build);
+        // A modal's or pop-up's panel titles itself in the theme's
+        // `popup.title`, unless code said otherwise.
+        if modal.is_some() {
+            root.widget_mut(|panel: &mut crate::builtin::Panel| {
+                panel
+                    .code
+                    .title_style
+                    .get_or_insert_with(|| POPUP_TITLE.to_string());
+            });
+        }
         let mut timers = BUILDING
             .with(|building| building.borrow_mut().take())
             .unwrap_or_default();
@@ -2598,6 +2916,7 @@ impl App {
         for timer in &mut timers {
             timer.next = self.now + timer.every;
         }
+        self.pending = None;
         self.layers.push(Layer {
             root,
             focus: None,
@@ -2605,6 +2924,7 @@ impl App {
             look: ModalOptions::default(),
             drawn: None,
             anchor: None,
+            origin: None,
             timers,
             watches,
             order: Vec::new(),
@@ -2619,6 +2939,7 @@ impl App {
 
     /// Take the top screen off, forgetting its subscriptions.
     fn close(&mut self) {
+        self.pending = None;
         let layer = self.layers.pop().expect("an app always has a screen");
         self.runtime.tracer.farewell(&layer.root);
         layer.root.forget(&self.runtime);
@@ -2781,10 +3102,10 @@ impl App {
             }
             let what = rich::markup::escape(&what);
             self.toasts.push((
-                format!(
+                Note::plain(format!(
                     "[bold red]{what} draws itself again and again[/]: it writes a \
                      signal it reads while it draws. Write it in a handler or a watch."
-                ),
+                )),
                 self.now + Duration::from_secs(8),
             ));
             self.restack = true;
@@ -2866,6 +3187,11 @@ impl App {
                     .borrow()
                     .iter()
                     .any(|(keys, _, _)| key.matches_any(keys))
+                    || node
+                        .sequences
+                        .borrow()
+                        .iter()
+                        .any(|(keys, _, _)| crate::sequence::starts(keys, &[key]))
                     || node.body.borrow().widget.claims_key(key);
             });
         }
@@ -2873,17 +3199,34 @@ impl App {
     }
 
     /// The nodes a key goes through, root first: to the focused node, or
-    /// with nothing focused, to the node under the pointer.
+    /// with nothing focused, to the node under the pointer, else down from
+    /// the root through each node that holds one child (a panel round a
+    /// pop-up's content, its padding), so the bindings of what a wrapper
+    /// holds work too.
     fn key_path(&self) -> Vec<NodeId> {
         match self.focus().map(|id| self.path_to(id)) {
             Some(path) if !path.is_empty() => path,
             _ => {
                 let hovered = self.hover_path.get_untracked();
                 if hovered.first() == Some(&self.top().root.id) {
-                    hovered
-                } else {
-                    vec![self.top().root.id]
+                    return hovered;
                 }
+                let mut path = Vec::new();
+                fn down(node: &Node, path: &mut Vec<NodeId>) {
+                    path.push(node.id);
+                    let body = node.body.borrow();
+                    let shown: Vec<&Node> = body
+                        .widget
+                        .children()
+                        .iter()
+                        .filter(|child| !child.hidden())
+                        .collect();
+                    if let [only] = shown[..] {
+                        down(only, path);
+                    }
+                }
+                down(&self.top().root, &mut path);
+                path
             }
         }
     }
@@ -2934,49 +3277,55 @@ impl App {
         // under the pointer, so a container that cannot take the focus
         // still gets keys while the mouse is over it.
         let path = self.key_path();
-        // Containers that asked see the key first, outermost first. A
+        // A key sequence under way takes a key that goes on with it; Esc
+        // cancels it; any other key cancels it and is routed as usual.
+        if let Some(pending) = self.pending.take() {
+            self.which_key_changed();
+            if let Some(quit) = self.continue_sequence(pending, key, &path) {
+                return quit;
+            }
+            if key.code == KeyCode::Escape {
+                return false;
+            }
+        }
+        // Containers that asked see the key first, outermost first: their
+        // widgets, and nodes' own bindings ([`Node::previews_keys`]). A
         // disabled node sees none: neither its widget nor its handlers.
         for &id in &path[..path.len().saturating_sub(1)] {
-            let mut previews = false;
+            let mut previews = (false, false);
             with_node(&self.top().root, id, &mut |node| {
-                previews = !node.disabled() && node.body.borrow().widget.previews_keys();
+                if !node.disabled() {
+                    previews = (node.body.borrow().widget.previews_keys(), node.previews);
+                }
             });
-            if previews {
+            if previews.0 {
                 if let Some(quit) = self.give_to_widget(id, &WidgetEvent::Preview(key)) {
                     return quit;
                 }
             }
+            if previews.1 {
+                if let Some(quit) = self.node_keys(id, key) {
+                    return quit;
+                }
+            }
         }
+        let focused = path.last().copied();
         for &id in path.iter().rev() {
-            let mut disabled = false;
-            with_node(&self.top().root, id, &mut |node| disabled = node.disabled());
-            if disabled {
+            // Disabled; or a container that saw the key first already.
+            let mut skip = (false, false);
+            with_node(&self.top().root, id, &mut |node| {
+                skip = (node.disabled(), node.previews && Some(id) != focused);
+            });
+            if skip.0 {
                 continue;
             }
             if let Some(quit) = self.give_to_widget(id, &WidgetEvent::Key(key)) {
                 return quit;
             }
-            let mut cx = self.ctx();
-            let mut used = false;
-            let runtime = self.runtime.clone();
-            runtime.enter(|| {
-                with_node(&self.top().root, id, &mut |node| {
-                    if node.disabled() {
-                        return;
-                    }
-                    let mut keys = node.keys.borrow_mut();
-                    // A binding that names the key before one it could be
-                    // (a Tab from a legacy terminal: `tab`, then `ctrl+i`).
-                    let picked = key.pick(keys.iter().map(|(keys, _, _)| keys.as_slice()));
-                    if let Some((_, _, handler)) = picked.and_then(|index| keys.get_mut(index)) {
-                        handler(&mut cx);
-                        used = true;
-                    }
-                });
-            });
-            if used {
-                self.note_used(id, "on_key");
-                return self.apply(cx);
+            if !skip.1 {
+                if let Some(quit) = self.node_keys(id, key) {
+                    return quit;
+                }
             }
         }
         if key == Key::new(KeyCode::F(1)) && self.show_focus_tip() {
@@ -2991,10 +3340,118 @@ impl App {
         match key.code {
             KeyCode::Tab => self.move_focus(true),
             KeyCode::BackTab => self.move_focus(false),
-            KeyCode::Escape if self.top().anchor.is_some() => return self.navigate(Nav::Pop),
+            KeyCode::Escape if self.top().is_popup() => return self.navigate(Nav::Pop),
             _ => {}
         }
         false
+    }
+
+    /// Offer `key` to node `id`'s own handlers: its bindings, then the
+    /// first key of its sequences (which starts one), then its
+    /// [`on_any_key`](crate::Node::on_any_key). `Some` (whether to quit)
+    /// when one took it.
+    fn node_keys(&mut self, id: NodeId, key: Key) -> Option<bool> {
+        let mut cx = self.ctx();
+        let mut used = None;
+        let mut starts = false;
+        let runtime = self.runtime.clone();
+        runtime.enter(|| {
+            with_node(&self.top().root, id, &mut |node| {
+                if node.disabled() {
+                    return;
+                }
+                {
+                    let mut keys = node.keys.borrow_mut();
+                    // A binding that names the key before one it could be
+                    // (a Tab from a legacy terminal: `tab`, then `ctrl+i`).
+                    let picked = key.pick(keys.iter().map(|(keys, _, _)| keys.as_slice()));
+                    if let Some((_, _, handler)) = picked.and_then(|index| keys.get_mut(index)) {
+                        handler(&mut cx);
+                        used = Some("on_key");
+                        return;
+                    }
+                }
+                let sequences = node.sequences.borrow();
+                if sequences
+                    .iter()
+                    .any(|(keys, _, _)| crate::sequence::starts(keys, &[key]))
+                {
+                    starts = true;
+                    return;
+                }
+                drop(sequences);
+                if let Some(handler) = node.any_key.borrow_mut().as_mut() {
+                    if handler(&mut cx, key) {
+                        used = Some("on_any_key");
+                    }
+                }
+            });
+        });
+        if starts {
+            self.pending = Some(crate::sequence::Pending {
+                node: id,
+                keys: vec![key],
+                since: self.now,
+                depth: self.layers.len(),
+                shown: false,
+            });
+            self.which_key_changed();
+            self.note_used(id, "sequence");
+            return Some(false);
+        }
+        let how = used?;
+        self.note_used(id, how);
+        Some(self.apply(cx))
+    }
+
+    /// Go on with the key sequence `pending` with `key`: run the sequence
+    /// it ends, or wait for the next key. `None` when no sequence of the
+    /// node goes on with it (or the node is no longer on the key's path).
+    fn continue_sequence(
+        &mut self,
+        pending: crate::sequence::Pending,
+        key: Key,
+        path: &[NodeId],
+    ) -> Option<bool> {
+        if pending.depth != self.layers.len() || !path.contains(&pending.node) {
+            return None;
+        }
+        let mut typed = pending.keys.clone();
+        typed.push(key);
+        let (mut exact, mut longer) = (None, false);
+        with_node(&self.top().root, pending.node, &mut |node| {
+            for (index, (keys, _, _)) in node.sequences.borrow().iter().enumerate() {
+                if crate::sequence::starts(keys, &typed) {
+                    if keys.len() == typed.len() {
+                        exact.get_or_insert(index);
+                    } else {
+                        longer = true;
+                    }
+                }
+            }
+        });
+        if let Some(index) = exact {
+            return Some(self.run_binding(pending.node, index, true));
+        }
+        if !longer {
+            return None;
+        }
+        self.pending = Some(crate::sequence::Pending {
+            keys: typed,
+            since: self.now,
+            shown: false,
+            ..pending
+        });
+        self.which_key_changed();
+        Some(false)
+    }
+
+    /// A key sequence started, went on or ended: the which-key pop-up
+    /// changes.
+    fn which_key_changed(&mut self) {
+        if self.which_key.is_some() {
+            self.restack = true;
+        }
     }
 
     /// Route a key's release to the widgets a press goes to, focused node
@@ -3113,6 +3570,10 @@ impl App {
     /// until one uses it. A press first focuses the deepest focusable node
     /// under the pointer. Whether to quit.
     fn mouse_event(&mut self, mouse: rich_interact::Mouse) -> Option<bool> {
+        // A press ends a key sequence under way.
+        if matches!(mouse.kind, MouseKind::Down(_)) && self.pending.take().is_some() {
+            self.which_key_changed();
+        }
         let hits = crate::node::hit_path(&self.top().root, mouse.column, mouse.row);
         let path: Vec<NodeId> = hits.iter().map(|(id, _)| *id).collect();
         let old = self.hover_path.get_untracked();
@@ -3162,7 +3623,7 @@ impl App {
             }
         }
         if matches!(mouse.kind, MouseKind::Down(_))
-            && self.top().anchor.is_some()
+            && self.top().is_popup()
             && !self
                 .top()
                 .drawn
@@ -3594,6 +4055,12 @@ impl Driver {
                 app.restack = true;
             }
         }
+        // A key sequence that waited long enough shows its which-key.
+        if let (Some(delay), Some(pending)) = (app.which_key, &app.pending) {
+            if !pending.shown && now >= pending.since + delay {
+                app.restack = true;
+            }
+        }
         // The inspector's redraw flash, over: it comes off the app.
         if app
             .inspector
@@ -3704,6 +4171,12 @@ impl Driver {
                     .map(|tip| (tip.since + TOOLTIP_DELAY).saturating_sub(now))
                     .unwrap_or(Duration::MAX),
             )
+            .min(match (app.which_key, &app.pending) {
+                (Some(delay), Some(pending)) if !pending.shown => {
+                    (pending.since + delay).saturating_sub(now)
+                }
+                _ => Duration::MAX,
+            })
             .min(
                 app.inspector
                     .as_ref()
@@ -4145,7 +4618,10 @@ impl Driver {
         let n = text.chars().count();
         let until = self.app.now + Duration::from_secs(2);
         self.app.push_toast(
-            format!("Copied {n} character{}", if n == 1 { "" } else { "s" }),
+            Note::plain(format!(
+                "Copied {n} character{}",
+                if n == 1 { "" } else { "s" }
+            )),
             until,
         );
         self.app.restack = true;
@@ -4170,6 +4646,35 @@ impl Driver {
         self.app.motion.1 = false;
         self.app.caret_shown = false;
         out
+    }
+
+    /// The next program a handler asked to give the terminal to
+    /// ([`Ctx::handoff`]), taken. A loop of your own writes
+    /// [`suspend`](Self::suspend)'s bytes, runs the command with the
+    /// terminal as it was before the app (out of raw mode, off the
+    /// alternate screen: rs-rich-interact's [`Backend::handoff`]), takes the
+    /// terminal back, calls [`resize`](Self::resize) with its size, then
+    /// [`handed_back`](Self::handed_back). [`App::run`] does all this.
+    pub fn take_handoff(&mut self) -> Option<Handoff> {
+        (!self.app.handoffs.is_empty()).then(|| self.app.handoffs.remove(0))
+    }
+
+    /// `handoff`'s program ended with `result`: its
+    /// [`handoff_then`](Ctx::handoff_then) runs, and everything draws
+    /// again.
+    pub fn handed_back(&mut self, handoff: Handoff, result: io::Result<Option<i32>>) {
+        self.first = true;
+        self.painter.invalidate();
+        let Some(then) = handoff.then else {
+            return;
+        };
+        let app = &mut self.app;
+        let mut cx = app.ctx();
+        let runtime = app.runtime.clone();
+        runtime.enter(|| then(result, &mut cx));
+        if app.apply(cx) {
+            self.done = true;
+        }
     }
 
     /// Inline: the terminal row the app's region starts on, for placing
@@ -4615,6 +5120,16 @@ fn modal_rect(console: &Console, root: &Node, area: Rect, width: Size, height: S
         w,
         h,
     )
+}
+
+/// Set every rect handle in `node`, and in everything inside it, to `None`.
+fn clear_rect_handles(node: &crate::node::Node) {
+    if let Some(handle) = *node.rect_slot.borrow() {
+        if handle.get_untracked().is_some() {
+            handle.set(None);
+        }
+    }
+    node.each_child(&mut |child| clear_rect_handles(child));
 }
 
 #[cfg(test)]

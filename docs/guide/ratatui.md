@@ -118,6 +118,7 @@ Both directions are built on public functions you can use directly:
 |---|---|
 | `to_ratatui_style`, `to_rich_style` | a rich `Style` ⇄ a ratatui `Style` |
 | `to_ratatui_color`, `to_rich_color` | a rich `Color` ⇄ a ratatui `Color` |
+| `style_from_color_name` | a colour name as ratatui reads one (`DarkGray`, `light red`, `#ff8800`, `208`) into a rich style (`bright_black`, `bright_red`, `#ff8800`, `color(208)`) |
 | `lines_to_buffer` | rich lines (`Console::render_lines`) into a rectangle of a buffer |
 | `buffer_to_lines`, `buffer_area_to_lines` | a buffer, or a rectangle of one, into rich lines |
 | `buffer::cells` | a rectangle of a buffer, cell by cell, without allocating |
@@ -145,6 +146,20 @@ for cell in cells(&buffer, Rect::new(0, 0, 6, 1)) {
     row.push_str(cell.symbol);
 }
 assert_eq!(row, "日本 o");
+```
+
+A ported app whose options take ratatui's colour names (`--axis-color
+DarkGray`) reads them with `style_from_color_name`, which accepts what
+ratatui's `Color::from_str` does (the 16 names in any case and spacing,
+`grey` and `silver`, `reset`, `#rrggbb` and an index) and answers rich's
+name for the same terminal colour, or `None`:
+
+```rust
+use rich_ratatui::style_from_color_name;
+
+assert_eq!(style_from_color_name("DarkGray").as_deref(), Some("bright_black"));
+assert_eq!(style_from_color_name("Gray").as_deref(), Some("white"));
+assert_eq!(style_from_color_name("nope"), None);
 ```
 
 ## What converts losslessly, and what is lost

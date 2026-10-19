@@ -91,10 +91,16 @@ pub fn key_hint(key: Key) -> String {
 
 /// Keys as hints, joined by `/`: `↑/ctrl+p`.
 pub fn keys_hint(keys: &[Key]) -> String {
+    keys_hint_of(keys, false)
+}
+
+/// [`keys_hint`], or for keys pressed one after another, joined with
+/// spaces: `g g`.
+pub fn keys_hint_of(keys: &[Key], sequence: bool) -> String {
     keys.iter()
         .map(|key| key_hint(*key))
         .collect::<Vec<_>>()
-        .join("/")
+        .join(if sequence { " " } else { "/" })
 }
 
 // ---------------------------------------------------------------------------
