@@ -942,3 +942,22 @@ styles between frames, a fast hash and a `put_rgb` path (sprites, raycast).
 Sprites landed during the round (`Sprite`, `stage`, `pixels`/`PixelBuf`,
 sprite sheets behind `art`, micro assets behind `micro`); blocks and raycast
 use them from round 6.
+
+### Real Doom (rs-rich-doom)
+
+[rs-rich-doom](https://github.com/buchochelliq-labs/rs-rich-doom) (GPL-2.0,
+a separate repo: the engine is GPL) runs doomgeneric on an intuiTUIve
+`latest` thread and draws its 320x200 frames in half blocks, Braille, Kitty,
+Sixel or iTerm2 at 33–35 fps (release, 80x24 and 160x50), with sound effects
+through cpal. What it needed from rs-rich, beyond the raycaster's list:
+
+| Gap | Shape | Where |
+|---|---|---|
+| `Painter::paint` clones the whole style table every frame and it never shrinks: averaged pixel colours made a frame 50 ms at 80x24 (nearest-neighbour sampling, keeping Doom's 256 colours, brought it to 4 ms) | drop unused styles between frames, or pixel cells that skip interning | rs-rich-ext surface (core) |
+| `DrawCx` has no public screen rect, so a widget emitting graphics guesses where it is | `DrawCx::rect()` (as `EventCx` has) | core |
+| Graphics output for a pixel buffer is hand-rolled (`PlacementSource`, shared state) | the `pixels` node drawing Kitty/Sixel/iTerm2 itself | `art` plugin |
+| Key state: modifiers alone are dropped; whether releases are reported is unknown to the app | kitty flag 8 opt-in, `held_keys`, `releases_reported()` | rs-rich-interact (core) |
+| Frame pacing and stats: no target-fps mode that skips frames; `App::stats` unreachable after `run()` | `every(..).target_fps(n)`, frames drawn in `FrameStats`, stats returned by `run` | core |
+| Encoders: indexed-palette Sixel is crate-private; Kitty has PNG only and no direct placement id | public palette Sixel, Kitty raw RGB (`f=24/32`, zlib), placement ids | rs-rich-art |
+| A git dependency on rs-rich-cli prints an "invalid character" error from `templates/intuituive-app/Cargo.toml` (`{{project-name}}`) | exclude the template from cargo's package discovery (rename the manifest, or a workspace `exclude`) | repo |
+| Music | MUS→MIDI and an OPL/MIDI synth | plugin |
