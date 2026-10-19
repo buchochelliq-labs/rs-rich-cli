@@ -75,6 +75,17 @@ jobs:
           RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
         run: python3 scripts/release_cohort.py unreleased "$RELEASE_TAG"
 
+      # One release, one commit. Every package of a release is tagged on the
+      # commit the release was cut from (release_cohort.py records it in each
+      # tag's message); a tag on another commit whose packages would ship
+      # other code beside the rest of its release under the same numbers is
+      # refused here, before the gate. The job summary names the commit.
+      - name: Refuse a tag that splits its release across commits
+        if: ${{ inputs.verify_only != true }}
+        env:
+          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+        run: python3 scripts/release_cohort.py same-commit "$RELEASE_TAG"
+
       - name: Require an annotated tag and pin its validated commit
         id: commit
         env:
