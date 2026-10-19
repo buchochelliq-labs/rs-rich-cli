@@ -1948,7 +1948,7 @@ plugins: the core stays generic, and what only one domain uses (files,
 sound, images) lives behind a feature, built on generic core pieces.
 
 ```toml
-rs-rich-intuituive = { version = "0.0.4", features = ["watch", "audio", "art", "files"] }
+rs-rich-intuituive = { version = "0.0.5", features = ["watch", "audio", "art", "files"] }
 # PulseAudio and PipeWire sources, and WAV files:
 # features = ["pulse", "wav"]
 # Raw PCM only, with no dependency:
@@ -2043,7 +2043,7 @@ file system plugged in, on rs-rich-ext's `listing`, `open`, `file_ops`,
 `trash` and `git`:
 
 ```toml
-rs-rich-intuituive = { version = "0.0.4", features = ["files", "watch", "art"] }
+rs-rich-intuituive = { version = "0.0.5", features = ["files", "watch", "art"] }
 ```
 
 ```rust

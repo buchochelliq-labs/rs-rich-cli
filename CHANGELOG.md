@@ -324,6 +324,77 @@ picks one. With the crate's `watch` feature it follows the disk, with
 `art` it draws image previews; CI's tapes job builds the examples with
 both. The example's tests cover the new behaviour.
 
+### Releases: one release, one commit, found for you
+
+- **`release_cohort.py tag` finds the release and its commit.** A release
+  is named by rs-rich-cli's version. With no `--commit`, the newest release
+  that has tags is resumed on the commit those tags are on while any of it
+  is unpublished; with nothing in progress, `HEAD` is released. On today's
+  repository it picks release 0.0.19 at 2fc9772 by itself and tags only web
+  0.0.2, data 0.0.3, cli 0.0.19 and python 0.0.7.
+- **`--release 0.0.20`** (or `v0.0.20`) releases that one: from the commit
+  its tags are on, else the last commit on main naming it.
+- **Tags record their release and commit.** Each tag's message carries
+  `Release:` and `Commit:` lines.
+- **The release workflows refuse a split release.** `release.yml` and
+  `pypi-release.yml` run `release_cohort.py same-commit <tag>` before
+  building: a tag whose commit ships other code than a package of its
+  release tagged elsewhere under the same number is refused, and the job
+  summary names the tag's commit and release.
+- **The split check counts tagged packages, not only published ones.** A
+  tag on another commit still running, or one that started publishing,
+  holds the release to that commit unless it ships the same files (then it
+  is waited on).
+- **A tag pushed again starts a fresh run.** A dead tag on the release
+  commit itself is pushed again, so re-running `tag` retries a release run
+  that failed before publishing; a release held only by dead tags is not
+  resumed. After moving or re-pushing a tag, the wait ignores the old run,
+  where it used to stop at once on its failure.
+- **Template.** `templates/intuituive-app` depends on rs-rich-intuituive
+  0.0.5, which #753 missed (main's interact and intuiTUIve test jobs).
+
+### Releases: a dead tag is moved, not a dead end
+
+- **`release_cohort.py tag` moves a tag whose release never happened.** A
+  tag on another commit, for a version that is not on its registry, whose
+  latest release run ran on that commit, ended without success (cancelled
+  or failed) and never started its publish job, is deleted and made again
+  on the commit being released; it used to stop with "resolve it by hand".
+  Anything less certain (a run still going, one that started publishing, a
+  run of another commit, or no run to see) still stops, now with the
+  commands to clear it. A local tag on
+  another commit that the remote does not have (a remote tag deleted by
+  hand leaves one) was never released, so it is replaced too, where it
+  stopped with "delete it first".
+- **`release_cohort.py tag --from <package or tag>`** starts later in
+  `RELEASES.toml`'s order and leaves the packages before it alone. It
+  refuses, before tagging anything, when a later crate depends on one of
+  them at a version not yet on crates.io, naming each, since that crate's
+  publish would fail. Without it, `tag` already begins at the first
+  unpublished package.
+- **`release_cohort.py tag` refuses a split cohort.** Before tagging, it
+  compares each published package's shipped files (by its `include`) at the
+  commit its tag is on with the commit being released; a package changed
+  under the same version stops the run, naming the package, the files and
+  the commit it was released from, with `--commit <that sha>` or a bump as
+  the way on. It would have stopped the run that put rs-rich-ext 0.0.17 on
+  #752 beside rs-rich-intuituive 0.0.4 from #751. `--commit` takes any
+  commit on main, such as an earlier one known to be good.
+
+### Releases: tag from the local checkout; versions after a split cohort
+
+- **`release_cohort.py tag` releases the local checkout.** It tags `HEAD`
+  (or `--commit`), which must be on `main` as last fetched, and fetches
+  nothing: `RELEASES.toml` and the manifests come from that commit. A run
+  resumed after `main` has moved on releases the same commit, where it used
+  to fetch and tag the newer `origin/main`, splitting a cohort across two
+  commits.
+- **Versions.** rs-rich-intuituive 0.0.4, rs-rich-ratatui 0.0.4,
+  rs-rich-interact 0.0.7 and rs-rich-embed 0.0.2 were published from commits
+  before #752, which changed them under the same numbers. They move to
+  rs-rich-intuituive 0.0.5, rs-rich-ratatui 0.0.5, rs-rich-interact 0.0.8 and
+  rs-rich-embed 0.0.3, so every published version matches its registry
+  package again.
 
 ### intuiTUIve: list and table rows (rs-rich-intuituive)
 

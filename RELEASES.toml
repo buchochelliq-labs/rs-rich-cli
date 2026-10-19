@@ -12,7 +12,12 @@
 #                                             manifests after a bump
 #   python3 scripts/release_cohort.py status   what is published, tagged, or due
 #   python3 scripts/release_cohort.py tag      tag everything not yet released,
-#                                             one at a time, on main
+#                                             one at a time: a release in
+#                                             progress on its commit, else HEAD
+#                                             (--release X.Y.Z, --commit SHA)
+#
+# A release is named by rs-rich-cli's version (the last crate below), and is
+# tagged from one commit; both release workflows refuse a tag that splits it.
 #
 # A version already on its registry is never tagged again: `tag` skips it, and
 # both release workflows fail a tag whose version is already published.
@@ -81,25 +86,25 @@ version = "0.0.8"
 name = "rs-rich-interact"
 registry = "crates.io"
 manifest = "crates/rich-interact/Cargo.toml"
-version = "0.0.7"
+version = "0.0.8"
 
 [[package]]
 name = "rs-rich-ratatui"
 registry = "crates.io"
 manifest = "crates/rich-ratatui/Cargo.toml"
-version = "0.0.4"
+version = "0.0.5"
 
 [[package]]
 name = "rs-rich-intuituive"
 registry = "crates.io"
 manifest = "crates/rich-intuituive/Cargo.toml"
-version = "0.0.4"
+version = "0.0.5"
 
 [[package]]
 name = "rs-rich-embed"
 registry = "crates.io"
 manifest = "crates/rich-embed/Cargo.toml"
-version = "0.0.2"
+version = "0.0.3"
 
 [[package]]
 name = "rs-rich-web"

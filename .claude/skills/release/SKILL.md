@@ -165,8 +165,10 @@ target unless there is a specific reason not to.
 
 ## 3. Land on main, then tag
 
-After the release PR merges, fetch `origin/main` and verify the exact intended
-commit. Only with authorization to publish, tag it from `RELEASES.toml`:
+After the release PR merges, check out `main` at the exact intended commit
+(`git switch main && git pull --ff-only`). `tag` releases the local checkout and
+fetches nothing, so a resumed run tags the same commit even after `main`
+moves. Only with authorization to publish, tag it from `RELEASES.toml`:
 
 ```bash
 python3 scripts/release_cohort.py tag --dry-run   # the plan
