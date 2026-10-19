@@ -64,6 +64,73 @@ pub enum KeyCode {
     /// others send nothing for it, so a binding on it usually has
     /// Shift+F10 beside it.
     Menu,
+    /// A modifier key on its own, parsed as `shift`, `ctrl`, `alt` or
+    /// `super`: only a terminal with the kitty keyboard protocol asked to
+    /// report every key reports these
+    /// ([`SessionOptions::all_keys`](crate::SessionOptions::all_keys)).
+    /// Either side's key is the same one.
+    Modifier(ModifierKey),
+}
+
+/// A modifier key pressed or let go on its own ([`KeyCode::Modifier`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum ModifierKey {
+    Shift,
+    Ctrl,
+    Alt,
+    /// The Windows, Command or Super key.
+    Super,
+}
+
+/// Which key releases ([`Event::KeyUp`]) a terminal reports, so an app
+/// knows whether it can count on them: a game that moves while a key is
+/// held falls back on the terminal's repeats, or on releases it makes up
+/// itself, for the keys it is not told about.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum Releases {
+    /// None: a terminal without the kitty keyboard protocol (or a backend
+    /// that does not read releases).
+    #[default]
+    None,
+    /// Every key's but the text keys': characters typed without Ctrl or
+    /// Alt (Space and Shift with a letter too), Enter, Tab and Backspace.
+    /// The kitty keyboard protocol as a session pushes it by default.
+    ExceptText,
+    /// Every key's: the kitty keyboard protocol asked to report every key
+    /// ([`SessionOptions::all_keys`](crate::SessionOptions::all_keys)),
+    /// and the Windows console.
+    All,
+}
+
+impl Releases {
+    /// Whether the release of `key` is reported.
+    ///
+    /// ```
+    /// use rich_interact::{Key, Releases};
+    ///
+    /// let up = Key::parse("up").unwrap();
+    /// let w = Key::parse("w").unwrap();
+    /// assert!(Releases::ExceptText.reported(&up));
+    /// assert!(!Releases::ExceptText.reported(&w));
+    /// assert!(Releases::All.reported(&w));
+    /// assert!(!Releases::None.reported(&up));
+    /// ```
+    pub fn reported(self, key: &Key) -> bool {
+        match self {
+            Releases::None => false,
+            Releases::All => true,
+            Releases::ExceptText => {
+                let text = match key.code {
+                    KeyCode::Char(_) => !key.modifiers.ctrl && !key.modifiers.alt,
+                    KeyCode::Enter | KeyCode::Tab | KeyCode::Backspace => true,
+                    // Reported only with every key.
+                    KeyCode::Modifier(_) => true,
+                    _ => false,
+                };
+                !text
+            }
+        }
+    }
 }
 
 /// A key press.
@@ -178,6 +245,10 @@ impl Key {
                 "delete" | "del" => KeyCode::Delete,
                 "insert" => KeyCode::Insert,
                 "menu" => KeyCode::Menu,
+                "shift" => KeyCode::Modifier(ModifierKey::Shift),
+                "ctrl" | "control" => KeyCode::Modifier(ModifierKey::Ctrl),
+                "alt" | "meta" => KeyCode::Modifier(ModifierKey::Alt),
+                "super" | "cmd" | "win" => KeyCode::Modifier(ModifierKey::Super),
                 "escape" | "esc" => KeyCode::Escape,
                 "space" => KeyCode::Char(' '),
                 // A list of key names is separated by commas too.
@@ -380,6 +451,12 @@ impl fmt::Display for Key {
             KeyCode::Char(c) if capital => write!(f, "{}", c.to_ascii_lowercase()),
             KeyCode::Char(c) => write!(f, "{c}"),
             KeyCode::F(n) => write!(f, "f{n}"),
+            KeyCode::Modifier(key) => f.write_str(match key {
+                ModifierKey::Shift => "shift",
+                ModifierKey::Ctrl => "ctrl",
+                ModifierKey::Alt => "alt",
+                ModifierKey::Super => "super",
+            }),
             code => f.write_str(&format!("{code:?}").to_ascii_lowercase()),
         }
     }
@@ -508,7 +585,7 @@ impl HeldButton {
 /// key that sends it (Enter, Tab, Esc, Backspace, or Ctrl with a letter,
 /// with Space for NUL and with 4 to 7 for the four after Esc). Any other
 /// character is itself.
-#[cfg(any(all(unix, feature = "termion"), feature = "termwiz"))]
+#[cfg(any(unix, feature = "termwiz"))]
 fn char_key(c: char, mut modifiers: Modifiers) -> Key {
     let code = match c {
         '\r' | '\n' => KeyCode::Enter,
@@ -530,6 +607,112 @@ fn char_key(c: char, mut modifiers: Modifiers) -> Key {
         c => KeyCode::Char(c),
     };
     Key::with(code, modifiers)
+}
+
+/// The keys in `bytes` as a legacy terminal sends them (before the kitty
+/// keyboard protocol is pushed): characters, control characters, Alt with
+/// a character (Esc before it), and the cursor, editing and function keys
+/// as xterm's `CSI` and `SS3` sequences, with xterm's modifiers. A
+/// sequence it does not know, or one cut short at the end, is dropped.
+/// For bytes read before the library's reader opened (keys typed while the
+/// session waited for the terminal's answer).
+#[cfg(unix)]
+pub(crate) fn from_legacy_bytes(bytes: &[u8]) -> Vec<Event> {
+    let text = String::from_utf8_lossy(bytes);
+    let chars: Vec<char> = text.chars().collect();
+    let mut events = Vec::new();
+    let mut at = 0;
+    while at < chars.len() {
+        let c = chars[at];
+        if c != '\x1b' {
+            events.push(Event::Key(char_key(c, Modifiers::NONE)));
+            at += 1;
+            continue;
+        }
+        match chars.get(at + 1) {
+            None | Some('\x1b') => {
+                events.push(Event::Key(Key::new(KeyCode::Escape)));
+                at += 1;
+            }
+            Some('[') => {
+                let start = at + 2;
+                let mut end = start;
+                while chars
+                    .get(end)
+                    .is_some_and(|c| ('\x20'..='\x3f').contains(c))
+                {
+                    end += 1;
+                }
+                let Some(&last) = chars.get(end) else {
+                    break;
+                };
+                let parameters: String = chars[start..end].iter().collect();
+                if let Some(key) = csi_key(&parameters, last) {
+                    events.push(Event::Key(key));
+                }
+                at = end + 1;
+            }
+            Some('O') if at + 2 < chars.len() => {
+                if let Some(key) = csi_key("", chars[at + 2]) {
+                    events.push(Event::Key(key));
+                }
+                at += 3;
+            }
+            Some(&c) => {
+                let alt = Modifiers {
+                    alt: true,
+                    ..Modifiers::NONE
+                };
+                events.push(Event::Key(char_key(c, alt)));
+                at += 2;
+            }
+        }
+    }
+    events
+}
+
+/// The key a legacy `CSI <parameters> <last>` (or `SS3 <last>`) sequence
+/// stands for, with xterm's modifiers (`1;5A` is Ctrl+↑).
+#[cfg(unix)]
+fn csi_key(parameters: &str, last: char) -> Option<Key> {
+    let mut parts = parameters.split(';');
+    let first = parts.next().unwrap_or("");
+    let modifiers = match parts.next().map(str::parse::<u8>) {
+        Some(Ok(code)) => {
+            let bits = code.saturating_sub(1);
+            Modifiers {
+                shift: bits & 1 != 0,
+                alt: bits & 2 != 0,
+                ctrl: bits & 4 != 0,
+            }
+        }
+        Some(Err(_)) => return None,
+        None => Modifiers::NONE,
+    };
+    let code = match last {
+        'A' => KeyCode::Up,
+        'B' => KeyCode::Down,
+        'C' => KeyCode::Right,
+        'D' => KeyCode::Left,
+        'H' => KeyCode::Home,
+        'F' => KeyCode::End,
+        'P'..='S' => KeyCode::F(1 + (last as u8 - b'P')),
+        'Z' => return Some(Key::new(KeyCode::BackTab)),
+        '~' => match first.parse::<u8>().ok()? {
+            1 | 7 => KeyCode::Home,
+            2 => KeyCode::Insert,
+            3 => KeyCode::Delete,
+            4 | 8 => KeyCode::End,
+            5 => KeyCode::PageUp,
+            6 => KeyCode::PageDown,
+            n @ 11..=15 => KeyCode::F(n - 10),
+            n @ 17..=21 => KeyCode::F(n - 11),
+            n @ 23..=24 => KeyCode::F(n - 12),
+            _ => return None,
+        },
+        _ => return None,
+    };
+    Some(Key::with(code, modifiers))
 }
 
 fn modifiers(state: crossterm::event::KeyModifiers) -> Modifiers {
@@ -572,6 +755,27 @@ fn translate(event: crossterm::event::Event, exact: bool) -> Option<Event> {
         Event as E, KeyCode as K, KeyEventKind, KeyModifiers as M, MouseEventKind as MK,
     };
     Some(match event {
+        E::Key(key) if matches!(key.code, crossterm::event::KeyCode::Modifier(_)) => {
+            use crossterm::event::{KeyCode as K, ModifierKeyCode as MK};
+            let K::Modifier(which) = key.code else {
+                return None;
+            };
+            let code = KeyCode::Modifier(match which {
+                MK::LeftShift | MK::RightShift => ModifierKey::Shift,
+                MK::LeftControl | MK::RightControl => ModifierKey::Ctrl,
+                MK::LeftAlt | MK::RightAlt | MK::LeftMeta | MK::RightMeta => ModifierKey::Alt,
+                MK::LeftSuper | MK::RightSuper => ModifierKey::Super,
+                _ => return None,
+            });
+            // The key itself, not the modifiers it leaves held.
+            let mut read = Key::new(code);
+            read.exact = exact;
+            if key.kind == KeyEventKind::Release {
+                Event::KeyUp(read)
+            } else {
+                Event::Key(read)
+            }
+        }
         E::Key(key) => {
             // Super and Hyper, which only the kitty protocol reports, are
             // not modifiers here: Super+A is not A.
@@ -647,6 +851,28 @@ fn translate(event: crossterm::event::Event, exact: bool) -> Option<Event> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn reads_legacy_bytes() {
+        let keys = |bytes: &[u8]| -> Vec<String> {
+            from_legacy_bytes(bytes)
+                .into_iter()
+                .map(|event| event.key().expect("a key").to_string())
+                .collect()
+        };
+        assert_eq!(
+            keys(b"qA \r\t\x7f\x03"),
+            ["q", "A", "space", "enter", "tab", "backspace", "ctrl+c"]
+        );
+        assert_eq!(
+            keys(b"\x1b[A\x1b[1;5C\x1bOP\x1b[5~\x1b[15~\x1b[Z"),
+            ["up", "ctrl+right", "f1", "pageup", "f5", "shift+tab"]
+        );
+        assert_eq!(keys("\x1bxé\x1b".as_bytes()), ["alt+x", "é", "escape"]);
+        // Unknown, and cut short: dropped.
+        assert_eq!(keys(b"a\x1b[99q b\x1b[1;"), ["a", "space", "b"]);
+    }
 
     #[test]
     fn parses_key_names() {

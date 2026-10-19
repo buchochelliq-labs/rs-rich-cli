@@ -70,32 +70,39 @@ impl Pty {
     }
 
     fn start_full(mode: &str, kitty: bool, pipe: &str, backend: Option<&str>) -> Pty {
-        Pty::start_answering(mode, kitty, false, pipe, backend, &[], b"")
+        Pty::start_answering(mode, Some((kitty, false)), pipe, backend, &[], b"")
     }
 
     /// A terminal that answers each cursor position query (`CSI 6 n`)
     /// with `cursor`, with the child driving it with `backend`.
     pub fn start_cursor_on(backend: &str, mode: &str, cursor: &'static [u8]) -> Pty {
-        Pty::start_answering(mode, false, false, "", Some(backend), &[], cursor)
+        Pty::start_answering(mode, Some((false, false)), "", Some(backend), &[], cursor)
     }
 
     /// A terminal that knows synchronized output (it answers DECRQM for
     /// mode 2026, reset) and, with `kitty`, the kitty keyboard protocol,
     /// with the child driving it with `backend` and `env` set.
     pub fn start_sync_on(backend: &str, mode: &str, kitty: bool, env: &[(&str, &str)]) -> Pty {
-        Pty::start_answering(mode, kitty, true, "", Some(backend), env, b"")
+        Pty::start_answering(mode, Some((kitty, true)), "", Some(backend), env, b"")
     }
 
     /// A terminal without synchronized output or the kitty keyboard
     /// protocol, with the child driving it with `backend` and `env` set.
     pub fn start_env_on(backend: &str, mode: &str, env: &[(&str, &str)]) -> Pty {
-        Pty::start_answering(mode, false, false, "", Some(backend), env, b"")
+        Pty::start_answering(mode, Some((false, false)), "", Some(backend), env, b"")
     }
 
+    /// A terminal that never answers the start-up query (nor any other):
+    /// a serial console, a terminal that drops unknown queries.
+    pub fn start_mute_on(backend: &str, mode: &str) -> Pty {
+        Pty::start_answering(mode, None, "", Some(backend), &[], b"")
+    }
+
+    /// `answers`: whether the terminal has the kitty keyboard protocol
+    /// and synchronized output; `None` for one that answers nothing.
     fn start_answering(
         mode: &str,
-        kitty: bool,
-        sync: bool,
+        answers: Option<(bool, bool)>,
         pipe: &str,
         backend: Option<&str>,
         env: &[(&str, &str)],
@@ -134,7 +141,7 @@ impl Pty {
         let sink = Arc::clone(&output);
         let writer: Arc<Mutex<Box<dyn Write + Send>>> =
             Arc::new(Mutex::new(pty.master.take_writer().unwrap()));
-        let answers = Arc::clone(&writer);
+        let replies = Arc::clone(&writer);
         std::thread::spawn(move || {
             let mut buffer = [0u8; 4096];
             let (mut answered, mut placed) = (0, 0);
@@ -146,6 +153,9 @@ impl Pty {
                 sink.extend_from_slice(&buffer[..read]);
                 // Answer each new query, so the session does not wait for
                 // an answer that never comes.
+                let Some((kitty, sync)) = answers else {
+                    continue;
+                };
                 let asked = sink
                     .windows(KITTY_QUERY.len())
                     .filter(|w| *w == KITTY_QUERY)
@@ -161,8 +171,8 @@ impl Pty {
                         answer.extend_from_slice(b"\x1b[?0u");
                     }
                     answer.extend_from_slice(b"\x1b[?62c");
-                    let mut answers = answers.lock().unwrap();
-                    let _ = answers.write_all(&answer).and_then(|()| answers.flush());
+                    let mut replies = replies.lock().unwrap();
+                    let _ = replies.write_all(&answer).and_then(|()| replies.flush());
                     answered += 1;
                 }
                 if cursor.is_empty() {
@@ -170,8 +180,8 @@ impl Pty {
                 }
                 let asked = sink.windows(4).filter(|w| *w == b"\x1b[6n").count();
                 while placed < asked {
-                    let mut answers = answers.lock().unwrap();
-                    let _ = answers.write_all(cursor).and_then(|()| answers.flush());
+                    let mut replies = replies.lock().unwrap();
+                    let _ = replies.write_all(cursor).and_then(|()| replies.flush());
                     placed += 1;
                 }
             }
@@ -244,7 +254,9 @@ impl Pty {
 /// update left open.
 pub fn assert_restored(output: &str, parser: &vt100::Parser) {
     assert_eq!(
-        output.matches("\x1b[>3u").count() + output.matches("\x1b[>1u").count(),
+        output.matches("\x1b[>3u").count()
+            + output.matches("\x1b[>1u").count()
+            + output.matches("\x1b[>15u").count(),
         output.matches("\x1b[<1u").count(),
         "kitty keyboard flags pushed and popped unevenly:\n{output:?}"
     );

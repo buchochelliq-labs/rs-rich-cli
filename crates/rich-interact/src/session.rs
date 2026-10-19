@@ -72,6 +72,11 @@ const SYNC: u8 = 32;
 /// termwiz reads the first flag's keys but not the second's releases, so
 /// a termwiz session pushes the first only.
 const PUSH_KITTY: &str = "\x1b[>3u";
+/// The flags [`SessionOptions::all_keys`] pushes: those two, every key as
+/// an escape code (8), so text keys report releases and modifier keys
+/// report themselves, and the alternate keys (4), so a shifted key still
+/// arrives as the character the layout makes (`!`, not Shift and `1`).
+const PUSH_KITTY_ALL: &str = "\x1b[>15u";
 #[cfg(feature = "termwiz")]
 const PUSH_KITTY_KEYS: &str = "\x1b[>1u";
 const POP_KITTY: &str = "\x1b[<1u";
@@ -587,12 +592,33 @@ fn lock<T>(mutex: &std::sync::Mutex<T>, wait: bool) -> io::Result<std::sync::Mut
     }
 }
 
-/// Ask the terminal `query` through `/dev/tty`, and read until `done` says
-/// the answer is complete, for two seconds at most (a terminal that does
-/// not answer). `None` when it does not answer in time. What it returns
-/// holds anything else read meanwhile, such as keys typed.
+/// How long the session waits for the terminal to answer a query: a
+/// terminal that answers does so within a few milliseconds, even over a
+/// slow link well inside this.
 #[cfg(unix)]
-fn ask_terminal(query: &str, done: impl Fn(&[u8]) -> bool) -> Option<Vec<u8>> {
+const ANSWER_WAIT: Duration = Duration::from_secs(1);
+
+/// How much longer it waits once keys come instead of an answer: someone
+/// is typing, and a terminal that has not answered by then likely never
+/// will. The keys are kept, not lost.
+#[cfg(unix)]
+const ANSWER_WAIT_TYPING: Duration = Duration::from_millis(250);
+
+/// What [`ask_terminal`] read: everything, answer or not (keys typed
+/// meanwhile among it), and whether `done` said the answer was complete.
+#[cfg(unix)]
+struct Asked {
+    bytes: Vec<u8>,
+    answered: bool,
+}
+
+/// Ask the terminal `query` through `/dev/tty`, and read until `done` says
+/// the answer is complete, for [`ANSWER_WAIT`] at most (a terminal that
+/// does not answer), or [`ANSWER_WAIT_TYPING`] after keys come. What it
+/// returns holds anything else read meanwhile, such as keys typed, for
+/// the reader; `None` only when the terminal cannot be opened or asked.
+#[cfg(unix)]
+fn ask_terminal(query: &str, done: impl Fn(&[u8]) -> bool) -> Option<Asked> {
     use std::io::Read;
     use std::os::unix::io::AsRawFd;
     let mut tty = std::fs::OpenOptions::new()
@@ -602,12 +628,23 @@ fn ask_terminal(query: &str, done: impl Fn(&[u8]) -> bool) -> Option<Vec<u8>> {
         .ok()?;
     tty.write_all(query.as_bytes()).ok()?;
     tty.flush().ok()?;
-    let end = Instant::now() + Duration::from_secs(2);
-    let mut answer = Vec::new();
-    while !done(&answer) {
+    let mut end = Instant::now() + ANSWER_WAIT;
+    let mut typing = false;
+    let mut bytes = Vec::new();
+    loop {
+        if done(&bytes) {
+            return Some(Asked {
+                bytes,
+                answered: true,
+            });
+        }
+        if !typing && !strip_answers(&bytes).is_empty() {
+            typing = true;
+            end = end.min(Instant::now() + ANSWER_WAIT_TYPING);
+        }
         let left = end.saturating_duration_since(Instant::now());
         if left.is_zero() {
-            return None;
+            break;
         }
         let mut ready = [filedescriptor::pollfd {
             fd: tty.as_raw_fd(),
@@ -615,20 +652,49 @@ fn ask_terminal(query: &str, done: impl Fn(&[u8]) -> bool) -> Option<Vec<u8>> {
             revents: 0,
         }];
         match filedescriptor::poll(&mut ready, Some(left)) {
-            Ok(0) => return None,
+            Ok(0) => break,
             Ok(_) => {}
             Err(filedescriptor::Error::Poll(e)) if e.kind() == io::ErrorKind::Interrupted => {
                 continue
             }
-            Err(_) => return None,
+            Err(_) => break,
         }
         let mut buffer = [0u8; 256];
         match tty.read(&mut buffer) {
-            Ok(0) | Err(_) => return None,
-            Ok(read) => answer.extend_from_slice(&buffer[..read]),
+            Ok(0) | Err(_) => break,
+            Ok(read) => bytes.extend_from_slice(&buffer[..read]),
         }
     }
-    Some(answer)
+    Some(Asked {
+        bytes,
+        answered: false,
+    })
+}
+
+/// `bytes` without the private answers in it (see [`private_answers`]),
+/// nor one cut short at its end: what was typed meanwhile.
+#[cfg(any(unix, test))]
+fn strip_answers(bytes: &[u8]) -> Vec<u8> {
+    let mut rest = Vec::new();
+    let mut at = 0;
+    while at < bytes.len() {
+        if !bytes[at..].starts_with(b"\x1b[?") {
+            rest.push(bytes[at]);
+            at += 1;
+            continue;
+        }
+        let mut end = at + 3;
+        while end < bytes.len() && (0x20..=0x3f).contains(&bytes[end]) {
+            end += 1;
+        }
+        match bytes.get(end) {
+            // Cut short: it is not keys.
+            None => break,
+            Some(0x40..=0x7e) => at = end + 1,
+            Some(_) => at = end,
+        }
+    }
+    rest
 }
 
 /// One complete `ESC [ ? <parameters> <intermediates> <final>` in what the
@@ -729,13 +795,21 @@ impl Answers {
 /// The start-up query, asked directly: synchronized output, the kitty
 /// keyboard protocol's flags, then the device attributes, which every
 /// terminal answers, so a terminal without the others answers only the
-/// last. One round trip for both questions.
+/// last. One round trip for both questions. Also what was typed while the
+/// session waited (keys pressed as the program opened), for the reader.
 #[cfg(unix)]
-fn ask_start() -> Answers {
+fn ask_start() -> (Answers, Vec<u8>) {
     let query = format!("{ASK_SYNC}\x1b[?u\x1b[c");
-    ask_terminal(&query, |bytes| Answers::read(bytes).is_some())
-        .and_then(|bytes| Answers::read(&bytes))
-        .unwrap_or_default()
+    match ask_terminal(&query, |bytes| Answers::read(bytes).is_some()) {
+        Some(asked) => {
+            let answers = match asked.answered {
+                true => Answers::read(&asked.bytes).unwrap_or_default(),
+                false => Answers::default(),
+            };
+            (answers, strip_answers(&asked.bytes))
+        }
+        None => (Answers::default(), Vec::new()),
+    }
 }
 
 /// The first complete cursor position report (`ESC [ <row> ; <column> R`)
@@ -771,7 +845,8 @@ fn cursor_report(bytes: &[u8]) -> Option<(u16, std::ops::Range<usize>)> {
 /// what was read with the answer (keys typed meanwhile), for the reader.
 #[cfg(all(unix, any(feature = "termion", feature = "termwiz")))]
 fn ask_cursor_row() -> (Option<u16>, Vec<u8>) {
-    let Some(bytes) = ask_terminal("\x1b[6n", |bytes| cursor_report(bytes).is_some()) else {
+    let Some(Asked { bytes, .. }) = ask_terminal("\x1b[6n", |bytes| cursor_report(bytes).is_some())
+    else {
         return (None, Vec::new());
     };
     match cursor_report(&bytes) {
@@ -846,6 +921,15 @@ pub struct SessionOptions {
     /// termion backend, standard output not a terminal) leaves it off
     /// unless this or the environment turns it on.
     pub synchronized_output: Option<bool>,
+    /// With the kitty keyboard protocol, have every key reported as an
+    /// escape code: releases then arrive for text keys too (letters,
+    /// Space, Enter), and modifier keys pressed on their own arrive as
+    /// [`KeyCode::Modifier`](crate::KeyCode::Modifier), as a game wants
+    /// them. Off by default: typed text then arrives as a base key and the
+    /// modifiers held, which loses characters an input method composes.
+    /// crossterm only (termwiz reads no releases); see
+    /// [`Session::releases_reported`].
+    pub all_keys: bool,
 }
 
 /// Ends a [`Backend::read`] under way early, from any thread: a value made
@@ -1084,6 +1168,11 @@ pub trait Backend {
     fn waker(&mut self) -> Option<Waker> {
         None
     }
+    /// Which key releases the backend reports (see
+    /// [`Releases`](crate::Releases)). The default: none.
+    fn releases_reported(&self) -> crate::Releases {
+        crate::Releases::None
+    }
 }
 
 /// How a session reads the terminal: the library's reader, opened on the
@@ -1135,6 +1224,9 @@ pub struct Session {
     input: Option<Input>,
     /// The [`Waker`] handed out, once one was.
     waker: Option<Waker>,
+    /// Keys typed while the start-up query waited for its answer, read
+    /// before anything else.
+    typed: std::collections::VecDeque<Event>,
     /// The terminal crossterm reads, when it is not standard input, opened
     /// to wait on it beside the waker.
     #[cfg(unix)]
@@ -1142,21 +1234,22 @@ pub struct Session {
 }
 
 /// What the terminal answered the start-up query, asked once a process
-/// with `ask` (with raw mode on): a terminal that answers none of it, not
-/// even the device attributes query at its end, keeps the session waiting
-/// (two seconds).
-fn answered(ask: impl FnOnce() -> Answers) -> Answers {
+/// with `ask` (with raw mode on), and the bytes typed while it was asked:
+/// a terminal that answers none of it, not even the device attributes
+/// query at its end, keeps the session waiting (a second, or a quarter
+/// of one once keys come).
+fn answered(ask: impl FnOnce() -> (Answers, Vec<u8>)) -> (Answers, Vec<u8>) {
     match ANSWERS.load(Ordering::SeqCst) {
         0 => {
-            let answers = if query_reaches_terminal() {
+            let (answers, typed) = if query_reaches_terminal() {
                 ask()
             } else {
-                Answers::default()
+                (Answers::default(), Vec::new())
             };
             ANSWERS.store(answers.encode(), Ordering::SeqCst);
-            answers
+            (answers, typed)
         }
-        bits => Answers::decode(bits),
+        bits => (Answers::decode(bits), Vec::new()),
     }
 }
 
@@ -1201,6 +1294,7 @@ impl Session {
             sync: false,
             input: None,
             waker: None,
+            typed: Default::default(),
             #[cfg(unix)]
             tty: None,
         };
@@ -1240,7 +1334,10 @@ impl Session {
         };
         self.kitty = answers.kitty;
         if self.kitty {
-            out.push_str(library.kitty_push());
+            out.push_str(match (library, self.options.all_keys) {
+                (BackendKind::Crossterm, true) => PUSH_KITTY_ALL,
+                _ => library.kitty_push(),
+            });
         }
         self.sync = self
             .options
@@ -1285,25 +1382,37 @@ impl Session {
 
     /// What the terminal answered the start-up query, for a library that
     /// reads the kitty keyboard protocol's keys; nothing asked for one that
-    /// does not.
-    fn answered(&self) -> Answers {
-        match self.options.backend {
+    /// does not. Keys typed while it was asked go to the reader, so none
+    /// is lost to a terminal slow to answer, or one that never does.
+    fn answered(&mut self) -> Answers {
+        let (answers, typed) = match self.options.backend {
             #[cfg(unix)]
             BackendKind::Crossterm => answered(ask_start),
             // Windows: crossterm's own answer, which reads no reply.
             #[cfg(not(unix))]
-            BackendKind::Crossterm => answered(|| Answers {
-                kitty: crossterm::terminal::supports_keyboard_enhancement().unwrap_or(false),
-                sync: false,
+            BackendKind::Crossterm => answered(|| {
+                let kitty = crossterm::terminal::supports_keyboard_enhancement().unwrap_or(false);
+                (Answers { kitty, sync: false }, Vec::new())
             }),
             // termion's reader does not know the protocol's keys.
             #[cfg(all(unix, feature = "termion"))]
-            BackendKind::Termion => Answers::default(),
+            BackendKind::Termion => (Answers::default(), Vec::new()),
             #[cfg(all(unix, feature = "termwiz"))]
             BackendKind::Termwiz => answered(ask_start),
             #[cfg(all(not(unix), feature = "termwiz"))]
-            BackendKind::Termwiz => Answers::default(),
+            BackendKind::Termwiz => (Answers::default(), Vec::new()),
+        };
+        if !typed.is_empty() {
+            match &mut self.input {
+                #[cfg(all(unix, feature = "termwiz"))]
+                Some(Input::Termwiz { probed, .. }) => with_termwiz::unread(probed, &typed),
+                // crossterm reads only the terminal: what was typed is read
+                // here, as the legacy terminal it still is before the
+                // protocol is pushed.
+                _ => self.typed.extend(crate::event::from_legacy_bytes(&typed)),
+            }
         }
+        answers
     }
 
     /// Whether the library's probe of the terminal allows the mouse and
@@ -1448,6 +1557,21 @@ impl Session {
         self.kitty
     }
 
+    /// Which key releases arrive as [`Event::KeyUp`]: with crossterm and
+    /// the kitty keyboard protocol, every key's but the text keys', or
+    /// every key's with [`SessionOptions::all_keys`]; every key's on the
+    /// Windows console; none otherwise.
+    pub fn releases_reported(&self) -> crate::Releases {
+        use crate::Releases;
+        match self.options.backend {
+            BackendKind::Crossterm if cfg!(windows) => Releases::All,
+            BackendKind::Crossterm if self.kitty && self.options.all_keys => Releases::All,
+            BackendKind::Crossterm if self.kitty => Releases::ExceptText,
+            #[allow(unreachable_patterns)]
+            _ => Releases::None,
+        }
+    }
+
     /// Whether frames are written as synchronized updates: forced by
     /// [`SessionOptions::synchronized_output`] or `RICH_SYNC_OUTPUT`, or
     /// the terminal answered that it knows mode 2026.
@@ -1496,6 +1620,9 @@ impl Backend for Session {
     }
 
     fn read(&mut self, timeout: Option<Duration>) -> io::Result<Option<Event>> {
+        if let Some(event) = self.typed.pop_front() {
+            return Ok(Some(event));
+        }
         let end = timeout.map(|timeout| Instant::now() + timeout);
         loop {
             // Back from a SIGTSTP sent from outside: the screen is the
@@ -1537,6 +1664,10 @@ impl Backend for Session {
     /// few milliseconds.
     fn waker(&mut self) -> Option<Waker> {
         Some(self.waker.get_or_insert_with(Waker::new).clone())
+    }
+
+    fn releases_reported(&self) -> crate::Releases {
+        Session::releases_reported(self)
     }
 
     fn synchronized_output(&self) -> bool {
@@ -1633,6 +1764,14 @@ mod tests {
             assert!(rest == "\x1b[?1049l" || rest.is_empty(), "{kind}: {rest:?}");
             assert_eq!(rest.is_empty(), kind.owns_alternate_screen());
         }
+    }
+
+    #[test]
+    fn answers_are_stripped_from_what_was_typed() {
+        assert_eq!(strip_answers(b"\x1b[?2026;2$yq\x1b[?62c"), b"q");
+        assert_eq!(strip_answers(b"ab\x1b[?62"), b"ab");
+        assert_eq!(strip_answers(b"\x1b[A\x1b"), b"\x1b[A\x1b");
+        assert!(strip_answers(b"\x1b[?0u\x1b[?62c").is_empty());
     }
 
     #[test]

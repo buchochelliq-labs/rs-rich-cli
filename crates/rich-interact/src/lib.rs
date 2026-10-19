@@ -123,7 +123,9 @@ pub use compose::{
     Axis, Column, ComponentExt, Label, Layer, LayerHandle, Layers, Rect, Row, Size, Split, Stack,
     Tabs,
 };
-pub use event::{Button, Event, HeldButton, Key, KeyCode, Modifiers, Mouse, MouseKind};
+pub use event::{
+    Button, Event, HeldButton, Key, KeyCode, ModifierKey, Modifiers, Mouse, MouseKind, Releases,
+};
 pub use event_loop::{
     degrade, run, run_with_graphics, Error, EventLoop, Handle, LoopOptions, Outcome, RunOptions,
 };

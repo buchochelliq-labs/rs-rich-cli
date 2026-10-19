@@ -86,6 +86,10 @@ pub(crate) struct KeyBinding {
     /// Bound, but not listed in the help, the which-key pop-up or a
     /// footer ([`unlisted`](Node::unlisted)); the palette still runs it.
     pub hidden: bool,
+    /// Held, it fires again after the first of these and then every
+    /// second, rather than on the terminal's repeats
+    /// ([`repeat`](Node::repeat)).
+    pub repeat: Option<(std::time::Duration, std::time::Duration)>,
     pub handler: KeyHandler,
 }
 
@@ -104,6 +108,7 @@ impl KeyBinding {
             any_modifiers: false,
             fall_through: false,
             hidden: false,
+            repeat: None,
             handler,
         }
     }
@@ -191,6 +196,8 @@ pub struct Node {
     /// the first node inside it that takes it, now or once built.
     pub(crate) focus_passes: bool,
     pub(crate) keys: RefCell<Vec<KeyBinding>>,
+    /// Bindings run when a key is let go ([`on_key_up`](Node::on_key_up)).
+    pub(crate) releases: RefCell<Vec<KeyBinding>>,
     /// Key sequences ([`bind_sequence`](Node::bind_sequence)), their keys
     /// in order.
     pub(crate) sequences: RefCell<Vec<KeyBinding>>,
@@ -458,6 +465,7 @@ impl Node {
             autofocus: false,
             focus_passes: false,
             keys: RefCell::new(Vec::new()),
+            releases: RefCell::new(Vec::new()),
             sequences: RefCell::new(Vec::new()),
             any_key: RefCell::new(None),
             previews: false,

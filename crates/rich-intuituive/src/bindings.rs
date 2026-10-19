@@ -5,7 +5,9 @@
 //! ([`Node::bind_toggle`], [`Node::bind_step`],
 //! [`Node::bind_step_scaled`]), and what a binding added last does with
 //! its key ([`Node::any_modifiers`], [`Node::fall_through`],
-//! [`Node::unlisted`], [`Node::bind_hidden`]).
+//! [`Node::unlisted`], [`Node::bind_hidden`], [`Node::repeat`]), and
+//! bindings for a key let go ([`Node::on_key_up`],
+//! [`Node::bind_release`]).
 //!
 //! A binding that does not apply now is as if it were not there: a key
 //! passes it by (to another binding of the key, on the same node or
@@ -15,6 +17,7 @@
 
 use std::ops::RangeInclusive;
 use std::rc::Rc;
+use std::time::Duration;
 
 use crate::app::Ctx;
 use crate::node::{BindingCondition, KeyBinding, Node};
@@ -418,6 +421,97 @@ impl Node {
         handler: impl FnMut(&mut Ctx) + 'static,
     ) -> Node {
         self.bind(keys, name, handler).unlisted()
+    }
+
+    /// Have the key binding added last repeat under the app's control
+    /// while its key is held: it fires as the key goes down, again after
+    /// `delay`, then every `rate` until the key is let go, whatever the
+    /// terminal's own repeat is set to (a game's DAS and ARR: blocks'
+    /// ← and → with 167 ms and 33 ms). The terminal's repeats of the key
+    /// are passed over.
+    ///
+    /// It needs to know when the key is let go: where the terminal
+    /// reports the key's release ([`Ctx::releases_reported`]), or with
+    /// [`App::synthesize_releases`](crate::App::synthesize_releases) on.
+    /// Elsewhere the binding fires on each of the terminal's repeats, as
+    /// one without `repeat` does.
+    ///
+    /// ```
+    /// use intuituive::interact::{Event, Key, Releases};
+    /// use intuituive::prelude::*;
+    /// use std::time::Duration;
+    ///
+    /// let ms = Duration::from_millis;
+    /// let app = App::new(|| {
+    ///     let x = signal(0);
+    ///     text!("{x}")
+    ///         .bind("right", "Move right", move |_| x.update(|x| *x += 1))
+    ///         .repeat(ms(167), ms(33))
+    /// });
+    /// let mut driver = app.driver(5, 1);
+    /// driver.set_releases(Releases::ExceptText);
+    /// driver.press("right");
+    /// // At once, at 167 ms, then every 33 ms: 200, 233, 266.
+    /// driver.advance(ms(280));
+    /// driver.send(Event::KeyUp(Key::parse("right").unwrap()));
+    /// driver.advance(ms(500));
+    /// assert_eq!(driver.screen().plain()[0].trim_end(), "5");
+    /// ```
+    pub fn repeat(self, delay: Duration, rate: Duration) -> Node {
+        let rate = rate.max(Duration::from_millis(1));
+        self.last_binding("repeat", |binding| binding.repeat = Some((delay, rate)))
+    }
+
+    /// Run `handler` when one of `keys` is let go while this node or a
+    /// node inside it has the focus (and nothing deeper used the
+    /// release): soft drop while ↓ is held, walking while W is. A binding
+    /// without modifiers takes the key's release whatever modifiers are
+    /// held by then (`w` is let go as `W` once Shift is down). Releases
+    /// come from a terminal that reports them (see
+    /// [`Ctx::releases_reported`]), or are made up by the app
+    /// ([`App::synthesize_releases`](crate::App::synthesize_releases)).
+    /// [`Ctx::key`] says which key it was.
+    ///
+    /// ```
+    /// use intuituive::interact::{Event, Key};
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| {
+    ///     let state = signal("up");
+    ///     text!("{state}")
+    ///         .on_key("down", move |_| state.set("down"))
+    ///         .on_key_up("down", move |_| state.set("up again"))
+    /// });
+    /// let mut driver = app.driver(10, 1);
+    /// driver.press("down");
+    /// assert_eq!(driver.screen().plain()[0].trim_end(), "down");
+    /// driver.send(Event::KeyUp(Key::parse("down").unwrap()));
+    /// assert_eq!(driver.screen().plain()[0].trim_end(), "up again");
+    /// ```
+    ///
+    /// # Panics
+    /// On a name that is not a key.
+    pub fn on_key_up(self, keys: &str, handler: impl FnMut(&mut Ctx) + 'static) -> Node {
+        self.bind_release(keys, "", handler)
+    }
+
+    /// [`on_key_up`](Self::on_key_up) with a description, which the help
+    /// lists as the key's, marked "(on release)".
+    ///
+    /// # Panics
+    /// On a name that is not a key.
+    pub fn bind_release(
+        self,
+        keys: &str,
+        description: &str,
+        mut handler: impl FnMut(&mut Ctx) + 'static,
+    ) -> Node {
+        let parsed = crate::node::parse_keys(keys);
+        let handler: crate::node::KeyHandler = Box::new(move |cx, _| handler(cx));
+        self.releases
+            .borrow_mut()
+            .push(KeyBinding::new(parsed, description, handler));
+        self
     }
 
     /// Change the key binding added last (not a sequence); a debug build

@@ -177,6 +177,18 @@ pub struct Headless {
     /// that knows DEC private mode 2026: each recorded paint is then wrapped
     /// in `CSI ? 2026 h` and `CSI ? 2026 l`. Off by default.
     pub synchronized_output: bool,
+    /// Whether the events of the script not separated by a
+    /// [`wait`](Script::wait) are all waiting at once, as keys typed
+    /// while a frame was slow are: a read that does not wait (a zero
+    /// timeout) then takes the next of them. Off by default: each event
+    /// arrives after whatever the loop did with the one before, as a
+    /// person types, so a loop that takes every event waiting before it
+    /// draws still draws once an event.
+    pub queued: bool,
+    /// Which key releases this terminal is taken to report
+    /// ([`Backend::releases_reported`]); none by default. A script's
+    /// [`key_up`](Script::key_up) sends a release whatever this says.
+    pub releases: crate::Releases,
 }
 
 impl Headless {
@@ -191,6 +203,8 @@ impl Headless {
             clipboard: true,
             exact_keys: false,
             synchronized_output: false,
+            queued: false,
+            releases: crate::Releases::None,
         }
     }
 
@@ -224,6 +238,8 @@ impl Backend for Headless {
     fn read(&mut self, timeout: Option<Duration>) -> io::Result<Option<Event>> {
         loop {
             match self.script.front_mut() {
+                // The end of the script comes after what the loop does now.
+                None if timeout == Some(Duration::ZERO) => return Ok(None),
                 None => {
                     return Err(io::Error::new(
                         io::ErrorKind::UnexpectedEof,
@@ -244,6 +260,10 @@ impl Backend for Headless {
                         self.script.pop_front();
                     }
                 },
+                // Not here yet: it comes after what the loop does now.
+                Some(Step::Event(_)) if timeout == Some(Duration::ZERO) && !self.queued => {
+                    return Ok(None)
+                }
                 Some(Step::Event(_)) => {
                     let Some(Step::Event(event)) = self.script.pop_front() else {
                         unreachable!()
@@ -264,6 +284,10 @@ impl Backend for Headless {
 
     fn synchronized_output(&self) -> bool {
         self.synchronized_output
+    }
+
+    fn releases_reported(&self) -> crate::Releases {
+        self.releases
     }
 
     fn elapsed(&self) -> Duration {

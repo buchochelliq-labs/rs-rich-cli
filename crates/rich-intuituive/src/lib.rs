@@ -159,8 +159,8 @@ pub use rich;
 pub use rich_interact as interact;
 
 pub use app::{
-    after, every, rate, Anchor, App, Ctx, Driver, Easing, FrameStats, Handoff, ModalOptions,
-    Placement, Theme,
+    after, every, fixed_step, held_keys, plain_key, rate, Anchor, App, Ctx, Driver, Easing,
+    FrameStats, Handoff, ModalOptions, Placement, StatsHandle, Theme, Timer,
 };
 #[cfg(feature = "art")]
 pub use big_text::big_text;
@@ -233,12 +233,12 @@ pub mod prelude {
     // `text` is both the function and the `text!` macro.
     pub use crate::described;
     pub use crate::{
-        after, column, component, each, effect, every, fill, grid, input, label, latest,
-        latest_every, layers, leaf, list, list_optional, memo, number_input, on_write,
+        after, column, component, each, effect, every, fill, fixed_step, grid, input, label,
+        latest, latest_every, layers, leaf, list, list_optional, memo, number_input, on_write,
         on_write_ref, rate, renderable, repeating, resource, resource_for, row, scroll,
         scroll_both, scroll_with, scroll_x, signal, spawn, switch, text, text_area, viewport,
         watch, widget, Align, App, Border, Ctx, Edge, Justify, Load, Log, Memo, Node, Overflow,
-        Proxy, Resource, Shadow, Sides, Signal, Size, Task, TextAlign, Theme, Widget,
+        Proxy, Resource, Shadow, Sides, Signal, Size, Task, TextAlign, Theme, Timer, Widget,
     };
 }
 
