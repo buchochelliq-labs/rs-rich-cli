@@ -29,6 +29,8 @@ fn glyph(c: char) -> Option<[&'static str; ROWS]> {
         'D' => ["┌┐ ", "│└┐", "└─┘"],
         'E' => ["┌─╴", "├─ ", "└─╴"],
         'F' => ["┌─╴", "├─ ", "╵  "],
+        'G' => ["┌─╴", "│╶┐", "└─┘"],
+        '#' => ["┼┼", "┼┼", "  "],
         '+' => ["   ", "╶┼╴", "   "],
         '-' => ["   ", "╶─╴", "   "],
         '=' => ["   ", "╶─╴", "╶─╴"],
@@ -138,8 +140,9 @@ impl rich_ext::a11y::AccessibleText for Digits {
 
 /// Console markup drawn three rows tall in box-drawing glyphs, from a
 /// closure that may read signals: a clock, a counter, a readout, as
-/// Textual's `Digits`. It has glyphs for `0`-`9`, `A`-`F` (and `a`-`f`),
-/// `+ - = / % ( ) : . ,` and the space; any other character is drawn as
+/// Textual's `Digits`. It has glyphs for `0`-`9`, `A`-`G` (and `a`-`g`:
+/// hex digits, and the notes with `#`), `+ - = / % ( ) : . , #` and the
+/// space; any other character is drawn as
 /// it is, on the middle row. Each run of the markup keeps its style
 /// (`"[green]12[/]:[red]34"`); each line of the markup is three rows. It
 /// needs no font, so it works in every build, where
@@ -168,7 +171,7 @@ mod tests {
 
     #[test]
     fn every_glyph_is_three_rows_of_one_width() {
-        for c in "0123456789ABCDEF+-=/%():., ".chars() {
+        for c in "0123456789ABCDEFG+-=/%():.,# ".chars() {
             let rows = glyph(c).unwrap();
             let width = rich::cells::cell_len(rows[0]);
             assert!(

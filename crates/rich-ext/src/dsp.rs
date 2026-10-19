@@ -5,7 +5,8 @@
 //! bands, with levels that fall under gravity ([`Falloff`]), as a bar
 //! spectrum's (cava's); and the frequencies of musical notes, in equal
 //! temperament or scope-tui's table ([`NoteTable`]), with the note nearest
-//! a frequency (a tuner's).
+//! a frequency, and a [`Tuner`] reading a spectrum's note and cents,
+//! smoothed.
 //!
 //! Not a port of anything upstream: an rs-rich addition, written for
 //! intuiTUIve's spectroscope (the `scope` example, after scope-tui), with
@@ -787,9 +788,198 @@ impl Falloff {
     }
 }
 
+/// What a [`Tuner`] reads: the frequency heard, the note nearest it (in
+/// equal temperament, A4 at 440 Hz) and how far off it is.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Reading {
+    /// The frequency, smoothed, in Hz.
+    pub hz: f64,
+    /// The nearest note's name (`"A"`, `"C#"`).
+    pub note: &'static str,
+    /// Its octave (A4 is octave 4).
+    pub octave: i32,
+    /// How far the frequency is from the note, in cents (-50 to 50): sharp
+    /// above 0, flat below.
+    pub cents: f64,
+}
+
+impl Reading {
+    /// The note with its octave: `A4`, `C#3`.
+    pub fn name(&self) -> String {
+        format!("{}{}", self.note, self.octave)
+    }
+
+    /// Whether it is within `cents` of the note: in tune.
+    pub fn in_tune(&self, cents: f64) -> bool {
+        self.cents.abs() <= cents
+    }
+}
+
+/// A tuner's reading of a spectrum, as a guitar tuner shows it: the
+/// loudest peak ([`peak_hz`]), the nearest note to it ([`nearest_note`])
+/// and the cents between, smoothed from one spectrum to the next so the
+/// needle settles rather than jitters. A peak more than half a semitone
+/// from the smoothed one is a new note, taken at once; quieter than the
+/// [`floor`](Self::floor), the tuner hears nothing, and after
+/// [`hold`](Self::hold) spectra of nothing it lets the reading go.
+///
+/// ```
+/// use rich_ext::dsp::{hann, spectrum, tone, Tuner};
+///
+/// let mut tuner = Tuner::new();
+/// // A string a little sharp of A4.
+/// let samples: Vec<f64> = tone(442.0, 48_000.0).take(4096).collect();
+/// let reading = tuner.listen(&samples, 48_000.0).unwrap();
+/// assert_eq!(reading.name(), "A4");
+/// assert!((reading.cents - 7.85).abs() < 1.0, "{reading:?}");
+/// // Silence: the last reading is held for a while, then let go.
+/// let quiet = spectrum(&hann(&[0.0; 4096]), 48_000.0);
+/// assert!(tuner.update(&quiet).is_some());
+/// for _ in 0..10 {
+///     tuner.update(&quiet);
+/// }
+/// assert_eq!(tuner.reading(), None);
+/// ```
+#[derive(Clone, Debug, PartialEq)]
+pub struct Tuner {
+    smoothing: f64,
+    floor: f64,
+    hold: usize,
+    hz: Option<f64>,
+    quiet: usize,
+}
+
+impl Default for Tuner {
+    fn default() -> Self {
+        Tuner::new()
+    }
+}
+
+impl Tuner {
+    /// A tuner smoothing by half, hearing any peak above 0.001, holding a
+    /// reading through four quiet spectra.
+    pub fn new() -> Self {
+        Tuner {
+            smoothing: 0.5,
+            floor: 0.001,
+            hold: 4,
+            hz: None,
+            quiet: 0,
+        }
+    }
+
+    /// How much of the last reading each new one keeps, from 0 (none: each
+    /// spectrum read alone) to just under 1 (barely moving); default a
+    /// half.
+    pub fn smoothing(mut self, keep: f64) -> Self {
+        if keep.is_finite() {
+            self.smoothing = keep.clamp(0.0, 0.99);
+        }
+        self
+    }
+
+    /// The quietest peak heard (a magnitude, as [`spectrum`] gives them);
+    /// default 0.001.
+    pub fn floor(mut self, level: f64) -> Self {
+        if level.is_finite() {
+            self.floor = level.max(0.0);
+        }
+        self
+    }
+
+    /// How many spectra with nothing heard keep the last reading (default
+    /// 4), so a note that dips does not blink out.
+    pub fn hold(mut self, spectra: usize) -> Self {
+        self.hold = spectra;
+        self
+    }
+
+    /// Read `spectrum` (`(Hz, magnitude)` pairs, lowest first, as
+    /// [`spectrum`] gives them): the reading now, smoothed.
+    pub fn update(&mut self, spectrum: &[(f64, f64)]) -> Option<Reading> {
+        let loudest = spectrum
+            .iter()
+            .filter(|(hz, _)| *hz > 0.0)
+            .map(|(_, level)| *level)
+            .fold(0.0f64, f64::max);
+        let heard = (loudest > self.floor)
+            .then(|| peak_hz(spectrum))
+            .flatten()
+            .filter(|hz| nearest_note(*hz).is_some());
+        match heard {
+            Some(hz) => {
+                self.quiet = 0;
+                self.hz = Some(match self.hz {
+                    // Within half a semitone: the same note, smoothed in
+                    // pitch (on the log of the frequency).
+                    Some(old) if (1200.0 * (hz / old).log2()).abs() < 50.0 => {
+                        (self.smoothing * old.log2() + (1.0 - self.smoothing) * hz.log2()).exp2()
+                    }
+                    _ => hz,
+                });
+            }
+            None => {
+                self.quiet += 1;
+                if self.quiet > self.hold {
+                    self.hz = None;
+                }
+            }
+        }
+        self.reading()
+    }
+
+    /// Read `samples` taken at `rate` samples a second: windowed
+    /// ([`hann`]) and transformed ([`spectrum`]), then
+    /// [`update`](Self::update).
+    pub fn listen(&mut self, samples: &[f64], rate: f64) -> Option<Reading> {
+        self.update(&spectrum(&hann(samples), rate))
+    }
+
+    /// The reading the last update gave.
+    pub fn reading(&self) -> Option<Reading> {
+        let hz = self.hz?;
+        let (note, octave, cents) = nearest_note(hz)?;
+        Some(Reading {
+            hz,
+            note,
+            octave,
+            cents,
+        })
+    }
+
+    /// Forget the reading: the next peak is taken as it is.
+    pub fn reset(&mut self) {
+        self.hz = None;
+        self.quiet = 0;
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_tuner_smooths_within_a_note_and_jumps_to_another() {
+        let rate = 48_000.0;
+        let read = |hz: f64| -> Vec<(f64, f64)> {
+            let samples: Vec<f64> = tone(hz, rate).take(8192).collect();
+            spectrum(&hann(&samples), rate)
+        };
+        let mut tuner = Tuner::new().smoothing(0.5);
+        let first = tuner.update(&read(440.0)).unwrap();
+        assert_eq!(first.name(), "A4");
+        assert!(first.in_tune(1.0), "{first:?}");
+        // Ten cents sharp: half way there after one more spectrum.
+        let sharp = 440.0 * 2f64.powf(10.0 / 1200.0);
+        let next = tuner.update(&read(sharp)).unwrap();
+        assert!((next.cents - 5.0).abs() < 1.0, "{next:?}");
+        // E2, a new note: taken at once.
+        let low = tuner.update(&read(82.41)).unwrap();
+        assert_eq!(low.name(), "E2");
+        assert!(low.cents.abs() < 5.0, "{low:?}");
+        tuner.reset();
+        assert_eq!(tuner.reading(), None);
+    }
 
     /// The DFT by its definition, to check the fast paths against.
     fn naive(samples: &[f64]) -> Vec<Complex> {
