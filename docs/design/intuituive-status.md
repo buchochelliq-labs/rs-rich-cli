@@ -18,7 +18,8 @@ rules are in [the demo gaps](intuituive-demo-gaps.md).
 - Round 5 clones (round 1 of each; reports in [`gaps/`](gaps/)): gitui
   (`git`), bottom (`top`), slumber (`http`), rata-tetris (`blocks`), csvlens
   (`csv`), diskonaut (`disk`), termusic (`music`), taskwarrior-tui (`tasks`,
-  test `taskwarrior`). All ten clone suites pass on the merged branch; the
+  test `taskwarrior`), and a Doom-style raycaster (`raycast`). Sprites
+  (`Sprite`, `stage`, `pixels`, sprite sheets, micro assets) merged. All ten clone suites pass on the merged branch; the
   gap note's "Round 5: nine new apps" section lists the shared gaps.
 
 ## In flight when this note was written
@@ -28,9 +29,7 @@ Each on its own local branch; pushed as a backup branch named
 
 | Work | Branch | State |
 |---|---|---|
-| Doom-style raycaster clone (`examples/raycast`) | `r5-apps` (wip-raycast) | in progress |
 | Round 5 plugins: files rebuilt on round-5 core, per-tab selection, Miller navigation, links, file picker, external previewers; one audio source type, `Pcm` errors, optional `stall_after`, tuner, `viz` persistence, audio output + player on a core `transport`, images from bytes, Kitty/Sixel | `r5-plugins` (wip-plugins) | in progress |
-| Sprites: `Sprite`, `stage`, `pixels` buffer, tweens; sprite sheets and Kitty/Sixel behind `art`; micro-asset adapter | `r5-sprites` (wip-sprites) | in progress |
 | Real Doom (GPL, separate repo) | [rs-rich-doom](https://github.com/buchochelliq-labs/rs-rich-doom) `claude/doom-frontend` | in progress |
 
 ## Next

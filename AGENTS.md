@@ -50,9 +50,10 @@ rich-cli ──▶ rich-data ──▶ rich-ext ──▶ rich       (tabular da
                                                  the workspace depends on it, or on ratatui)
              rich-intuituive ──▶ rich-interact ──▶ rich-ext ──▶ rich   (intuiTUIve, the TUI framework:
                   └ ─ ▶ rich-art, cpal, notify,  signals, retained tree, cell screen; ratatui only as a
-                        hound                    dev-dependency, for its benchmark gate. Its off-by-default
-                                                 `art` (image nodes, big text), `audio` (with `pulse`),
-                                                 `wav` and `watch` features)
+                        hound, rich-micro        dev-dependency, for its benchmark gate. Its off-by-default
+                                                 `art` (image nodes, big text, sprite sheets), `audio`
+                                                 (with `pulse`), `wav`, `watch`, `viz` and `micro`
+                                                 (micro assets as sprites) features)
              rich-embed ──▶ rich-intuituive, rich-record   (a terminal pane and a web view: `PtyHost`
                   └ ─ ▶ tungstenite, image       (portable-pty), `WebEngine`; Chrome over DevTools behind
                                                  its `chrome` feature, Browsh behind `browsh`)

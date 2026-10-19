@@ -895,7 +895,7 @@ with its own report in [`docs/design/gaps/`](gaps/):
 | diskonaut (disk treemap) | `examples/disk.rs` | 1,395 | 21 | [disk](gaps/disk.md) |
 | termusic (music player) | `examples/music.rs` | 1,556 | 17 | [music](gaps/music.md) |
 | taskwarrior-tui (tasks) | `examples/tasks.rs` | 2,582 | 27 | [tasks](gaps/tasks.md) |
-| a raycaster (Doom-style) | `examples/raycast.rs` | — | — | [raycast](gaps/raycast.md) |
+| a raycaster (Doom-style) | `examples/raycast/` | 2,924 | 26 | [raycast](gaps/raycast.md) |
 
 None draws a widget of its own except the game's playfield and the
 raycaster's 3D view. The round-5 core and plugin work (below the round-4
@@ -932,4 +932,13 @@ lost for up to 3 s (blocks); tables and lists treat Shift+↑/↓ as ↑/↓ (to
 an `.auto()` switch ignores its page's `.fixed()`/`.min_size()` (top);
 `Driver::event` does not settle as `press` does (top); a full-size layer
 paints over a `fill` beneath it (blocks); upstream's `Text.markup` is not
-ported (csv).
+ported (csv); the app loop handles one input event per frame, so queued
+keys spread out over slow frames: drain pending input before drawing
+(raycast); rs-rich-ext's `Screen` style table and the painter's code cache
+only grow, so a full-screen truecolour framebuffer leaks styles every frame,
+and interning hashes with SipHash (33 of 41 ms a frame at 160x50): compact
+styles between frames, a fast hash and a `put_rgb` path (sprites, raycast).
+
+Sprites landed during the round (`Sprite`, `stage`, `pixels`/`PixelBuf`,
+sprite sheets behind `art`, micro assets behind `micro`); blocks and raycast
+use them from round 6.
