@@ -86,3 +86,103 @@ is in [the porting guide](../guide/intuituive/porting.md).
 | A `list` sized `Size::Auto` measures as the full width | `row([list(a).flex(1), list(b).auto()])`: the second list takes everything | A `switch` on the measured width with `.fixed(w)` |
 | `.borders(Sides::BOTTOM)` draws nothing on a node without a panel | | A one-row `leaf` that draws a line |
 | A popup's bindings work only on its outermost node | Bindings on a node inside the popup's `.panel()` never fire | Bind after `.panel()` |
+
+## Round 2
+
+The round-1 gaps were added (PR #752) and the clones rebuilt on them, with
+no framework changes during the round.
+
+### scope
+
+[`examples/scope.rs`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/crates/rich-intuituive/examples/scope.rs)
+now uses no workaround from round 1. Checked side by side with scope-tui
+0.3.5 (built with `app,file`) on the same PCM file at 80x24, 100x32 and
+160x45: the header's cells start in the same columns and are cut the same
+way at every size, the vectorscope's reference lines break where the trace
+crosses them as ratatui's do, and the legend box matches. What still
+differs is deliberate and listed in the porting guide.
+
+#### Round-1 gaps now closed
+
+| Gap | Used where |
+|---|---|
+| `Solver::Ratatui` | `header()`: `row([...]).solver(Solver::Ratatui).gap(1)`; the cells sit where ratatui's `Table` puts them at every width (a test checks against ratatui's `Layout` at 60 to 200 columns), where round 1 was 1–3 columns off |
+| `widgets::cell` | `header()`: every header cell, cut with no `…` |
+| `Chart::out_of_bounds(OutOfBounds::Drop)` | `chart()`: replaces turning points outside the bounds into NaN |
+| `Chart::layering(Layering::PerDataset)` | `chart()`: the reference lines break under the trace |
+| `Chart::legend_style(..)` | `chart()`: `legend_style("")`, the chart's own style as ratatui's; the axis-style hack is gone and the axes keep their default style |
+| `Chart::legend_clear(false)` | `chart()` |
+| `rich_ext::dsp` | `spectroscope()`: `dsp::hann`, `dsp::fft`, `dsp::magnitude`; about 100 lines of FFT, Bluestein and Hann removed |
+| `rich_ratatui::style_from_color_name` | `parse()`: the ~30-line colour parser removed. rs-rich-ratatui is a dev-dependency of rs-rich-intuituive, so the example can use it |
+| `latest(..)` | `play()`: a file or a pipe is read on a `latest` thread; the `Source`/`Pull` trait, the `Threaded` reader with its mutex and the `every()` polling are gone |
+| `audio::input`, `audio::devices` | `scope_app()` and `list_devices()`: scope-tui's `audio [DEVICE] [--list]` and `pulse [DEVICE]` sources, behind `--features audio`; a default build says how to get them |
+
+Also from the round-1 work: the hand-written `?` modal is replaced by the
+framework's help (`cx.help()`), fed by `.bind(keys, description, ..)`.
+
+#### New gaps and bugs
+
+| Gap or bug | Needed for | API sketch | Where |
+|---|---|---|---|
+| A watch that runs on every write, not only on a change | Counting frames: a `watch` compares values, so two equal buffers (the still test signal, a file's trailing silence, digital silence from a sound card) are one. The example numbers a thread's buffers (`Frame { number, data }`) to get round it; `audio::input` cannot be numbered, so silence counts no fps there | `on_write(signal, \|value, cx\| ..)`, or `latest`/`audio::input` signals that carry a sequence number | core |
+| `latest` threads and the headless clock | A `latest` thread runs on the wall clock while a headless `Script::wait` advances a clock of its own, so a thread-fed app cannot be tested frame-exactly. The test signal moved to `every(period)` (the app's clock) for that reason, and the file test no longer checks fps | a `Headless`/`Driver` hook that lets `latest` threads catch up (`driver.settle_threads()`), or `latest_every(period, \|\| value)`, a generator on the app's clock | core |
+| An app builder cannot fail | `audio::input` must be called inside `App::new`, so a missing device cannot fail before the terminal is taken. The example carries the error to the first turn with `watch(\|\| (), move \|_, cx\| cx.fail(..))` | `App::try_new(\|\| -> Result<Node, E>)`, or `audio::open(..) -> Result<Capture>` before the app and `capture.signal()` inside | core (or the `audio` plugin) |
+| Audio device names are descriptions | `audio::devices()` names the ALSA `null` device "Discard all samples (playback) or generate zero samples (capture)", not `null`; `input` matches names, so ALSA PCM names such as `pulse` may not be reachable | `Device { id, name, default }`; `input` takes the id | plugin (`audio`) |
+| PulseAudio and PipeWire sources | scope-tui's `pulse [DEVICE] --server-buffer N`, whose main use is a sink's monitor; through cpal only ALSA's `pulse` device (the default source) is reachable, and `--server-buffer` has no meaning | `audio::input_with(AudioOptions { host: Host::Pulse, device, latency })`, or a `pulse` feature on libpulse-simple | plugin (`audio`) |
+| Device configurations | `audio --list` prints each input's channels, rate range, buffer range and sample format in scope-tui; `devices()` gives only names | `Device::configs() -> Vec<DeviceConfig>` | plugin (`audio`) |
+| A stalled stream | `audio --timeout S`: scope-tui ends when no buffer comes in time. Watching the signal cannot tell a stall from silence (see the first row), so the option is read but not enforced | an `AudioStatus` signal (`Running`, `Stalled(since)`, `Failed(error)`) beside the samples | plugin (`audio`) |
+| ALSA writes to stderr | Without a sound card, ALSA's `ALSA lib conf.c: ...` lines are printed before the app; printed while it runs, they would land on the screen | install `snd_lib_error_set_handler` while capturing, and pass the messages to the app's log | plugin (`audio`) |
+| Help sections | The help lists one node's bindings as one group; scope-tui's keys are per mode, so the descriptions carry "oscilloscope: …" | `.bind_in("oscilloscope", keys, description, f)`, or a help group per binding | core |
+| Modifier variants of a binding | Shift ×10, Ctrl ×5 and Alt ×⅕ on six keys are 24 bindings; to keep the help short only the plain ones are described | `.bind_scaled("up", &[("", 1.0), ("shift", 10.0), ..], "scale up", \|cx, m\| ..)`, shown as one row | core |
+
+No bugs were found in the round-1 additions themselves.
+
+#### Friction with the new APIs
+
+- **Two shapes for "the newest value from elsewhere".** `latest` gives
+  `Signal<Option<T>>` (`None` before the first), `audio::input` a
+  `Signal<Matrix>` that starts as empty rows. The example needs a match per
+  source to take a buffer. One shape (`Option`) for both would let a source
+  be one value.
+- **`dsp::spectrum` stops at the Nyquist frequency.** scope-tui plots every
+  bin, the mirrored half too, so the example uses `fft` and `magnitude`
+  instead. Fine as it is; a `spectrum_full` would only save three lines.
+- **`legend_style("")`** reads as "no style" only once you know it; ratatui's
+  legend takes the chart's own style. A `Chart::style(..)` that the legend
+  takes by default would say it directly.
+- **`style_from_color_name` lives in rs-rich-ratatui**, which brings
+  `ratatui-core`. Fine for the example (a dev-dependency); an app that only
+  wants to read ratatui's colour names on its command line pays for the
+  conversions too. It could sit in rs-rich-ext with rs-rich-ratatui
+  re-exporting it.
+- **Solver::Ratatui and `cell` were drop-in.** No friction: the header is
+  shorter than round 1's and exact.
+- **Frames per second count frames drawn.** `latest` drops what the app had
+  no time for, as intended; with a debug build at 80x24 the example shows
+  19–20 fps where scope-tui shows 21–22, because scope-tui counts every
+  buffer it reads.
+
+#### Components that would help
+
+Patterns written by hand from several built-ins, components from other
+ecosystems an audio or visualisation app would use, and plugins that would
+make the clone more capable. Value is for this kind of app.
+
+| Component | What in scope.rs it replaces or enables | API sketch | Where | Value |
+|---|---|---|---|---|
+| A live plot node | `renderable(move \|\| chart(..))` reading a frame signal, with no cap on how often it draws; a node that draws from a signal at most N times a second, dropping the rest | `live(fps_cap, move \|\| chart(..))` | core | medium |
+| A row of percentage cells | `header()`'s seven `cell(..).percent(..)` with the solver, the gap and the style: ratatui's one-row `Table` as one call | `cells([(35, a), (25, b), ..]).spacing(1)` | core | medium |
+| A frame-rate meter | the `frames`/`fps` signals and the one-second `every` | `rate(signal) -> Signal<u32>`, updates a second | core | medium |
+| A mode switcher | `Mode::next`, `name` and the `tab` binding | `cycle(signal, &[modes], "tab")` | core | low |
+| Generated key help with sections | the help's descriptions, prefixed by hand (see "Help sections") | `.bind_in(section, ..)` | core | medium |
+| A PCM reader | `Pcm` and `deinterleave`: interleaved s16le into rows | `audio::pcm(reader, Format::S16Le, channels, buffer) -> impl Iterator<Item = Matrix>` | plugin (`audio`) | medium |
+| WAV files in and out | reading WAV as well as raw PCM; recording what is shown | `audio::wav(path)`, `audio::record(signal, path)` | plugin (`audio`, hound) | medium |
+| A signal generator | `Demo`: tones, partials and filtered noise | `dsp::tone(hz, rate)`, `dsp::noise(seed)`, `dsp::mix(..)` | plugin (`dsp`) | medium |
+| Trigger detection | `triggered` and the offset search | `dsp::trigger(samples, level, depth, Edge::Rising) -> Option<usize>` | plugin (`dsp`) | low |
+| Musical notes | `tune`'s table of octave-0 pitches | `dsp::note_hz("A4") -> Option<f64>` | plugin (`dsp`) | low |
+| Axis grid lines | the spectroscope's reference lines, drawn as 29 datasets of two points | `Axis::grid([20.0, 30.0, ..])` in the axis style, under the datasets | plugin (rs-rich-ext chart) | medium |
+| A spectrogram (waterfall) | a fourth mode: spectrum against time, the newest at the top, as in cava, spek and Audacity | `Spectrogram::new(rows).push(spectrum)`, a heatmap over time | plugin (rs-rich-ext chart) | high |
+| A level meter with peak hold | a VU or peak meter per channel beside the scope (Bubbles' progress, ratatui's `Gauge`/`LineGauge`, and every DAW) | `meter(level, peak).hold(Duration)` | plugin (rs-rich-ext) | high |
+| A sparkline of a level | the level history in the header | ratatui's `Sparkline`, Textual's `Sparkline`: `sparkline(signal)` | plugin (rs-rich-ext) | low |
+| Big text | a large clock or level readout (tui-big-text) | `big_text(markup)` over rs-rich-art's FIGlet | plugin (rs-rich-art) | low |
+| A device picker | choosing among `audio::devices()` inside the app, as Bubble Tea's list does in audio TUIs | `audio::picker(on_pick)`, a list over the devices | plugin (`audio`) | medium |
