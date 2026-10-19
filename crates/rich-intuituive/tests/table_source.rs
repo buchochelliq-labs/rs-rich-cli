@@ -89,7 +89,7 @@ fn a_view_filters_sorts_and_finds_over_a_growing_source() {
     // first, the count not final.
     assert_eq!(plain(&driver)[1..4], ["49 3", "39 3", "29 3"]);
     assert_eq!(plain(&driver)[4], "5+ rows, 1/5");
-    assert_eq!(read.load(Atomic::SeqCst) >= 50, true);
+    assert!(read.load(Atomic::SeqCst) >= 50);
     driver.press("n n");
     assert_eq!(plain(&driver)[4], "5+ rows, 3/5");
     driver.press("N N N");

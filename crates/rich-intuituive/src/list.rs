@@ -740,7 +740,9 @@ fn list_of(items: Items, selection: Selection) -> Node {
     let page = move |rows: &Rc<Cell<usize>>| rows.get() as isize;
     let mut node = Node::from_widget(Box::new(widget), "list");
     node.list_model = Some(model);
-    let moves: [(&str, &str, Rc<dyn Fn() -> isize>); 6] = [
+    // Each move's keys, with Shift, and how far it goes.
+    type By = Rc<dyn Fn() -> isize>;
+    let moves: [(&str, &str, By); 6] = [
         ("up k", "shift+up", Rc::new(|| -1)),
         ("down j", "shift+down", Rc::new(|| 1)),
         ("pageup", "shift+pageup", {

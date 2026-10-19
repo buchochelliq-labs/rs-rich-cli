@@ -375,7 +375,7 @@ pub struct TableOptions {
     pub cells_when: Option<Box<dyn Fn() -> bool>>,
     /// A sorted column's title, from its title and the order: `"Name ▲"`
     /// by default.
-    pub sort_indicator: Option<Box<dyn Fn(&str, Order) -> String>>,
+    pub sort_indicator: Option<SortIndicator>,
     /// The style (or theme style name) of row `i`'s cell in a one-cell
     /// marker column at the left, outside the highlight; `None` is blank.
     pub marker: Option<RowStyle>,
@@ -394,6 +394,9 @@ pub struct TableOptions {
     /// Where the last draw put the columns and the rows.
     pub layout: Option<TableLayout>,
 }
+
+/// A sorted column's title, from its title and the order.
+pub type SortIndicator = Box<dyn Fn(&str, Order) -> String>;
 
 /// A table's symbol for row `i`, given whether it is selected: markup, or
 /// `None` for the plain [`symbol`](TableOptions::symbol) on the selected
@@ -1404,6 +1407,16 @@ fn pick(order: &[usize], identity: bool, row: Vec<String>) -> Vec<String> {
         .collect()
 }
 
+/// `cells` without the columns `gone` says were dropped.
+fn kept_cells(cells: Vec<String>, gone: &[bool]) -> Vec<String> {
+    cells
+        .into_iter()
+        .enumerate()
+        .filter(|(i, _)| !gone.get(*i).copied().unwrap_or(false))
+        .map(|(_, cell)| cell)
+        .collect()
+}
+
 /// A track's length clamped to its least and most.
 fn clamped(track: &Track, cells: u32) -> u32 {
     cells.clamp(track.min as u32, track.max.max(track.min) as u32)
@@ -2014,16 +2027,11 @@ impl Widget for Table {
             let gone = self.dropped(&tracks, &titles, room, spacing);
             if gone.contains(&true) {
                 let kept = |i: &usize| !gone[*i];
-                let keep = |cells: Vec<String>| -> Vec<String> {
-                    cells
-                        .into_iter()
-                        .enumerate()
-                        .filter(|(i, _)| kept(i))
-                        .map(|(_, cell)| cell)
-                        .collect()
-                };
-                titles = keep(titles);
-                rows = rows.into_iter().map(keep).collect();
+                titles = kept_cells(titles, &gone);
+                rows = rows
+                    .into_iter()
+                    .map(|cells| kept_cells(cells, &gone))
+                    .collect();
                 let columns = std::mem::take(&mut self.columns);
                 self.columns = columns
                     .into_iter()
