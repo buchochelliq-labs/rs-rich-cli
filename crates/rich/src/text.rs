@@ -729,6 +729,52 @@ impl Text {
         markup::render(markup_text)
     }
 
+    /// Console markup that renders this text: the plain string with every
+    /// tag-opening `[` escaped, and a tag around each span and the base style.
+    /// Port of the `Text.markup` property.
+    ///
+    /// As upstream, tags are emitted in `(offset, closing)` order with the base
+    /// style outermost, so at a shared offset every opening tag precedes every
+    /// closing one, and a falsy style (a null [`Style`] or an empty name) adds
+    /// no tag. A resolved style is written as its [`Style::definition`].
+    pub fn markup(&self) -> String {
+        let plain = &self.plain;
+        let mut markup_spans: Vec<(usize, bool, &StyleType)> =
+            Vec::with_capacity(self.spans.len() * 2 + 2);
+        markup_spans.push((0, false, &self.style));
+        markup_spans.extend(
+            self.spans
+                .iter()
+                .map(|span| (span.start, false, &span.style)),
+        );
+        markup_spans.extend(self.spans.iter().map(|span| (span.end, true, &span.style)));
+        markup_spans.push((plain.len(), true, &self.style));
+        // Stable, like Python's `sort(key=itemgetter(0, 1))`.
+        markup_spans.sort_by_key(|&(offset, closing, _)| (offset, closing));
+
+        let mut output = String::with_capacity(plain.len());
+        let mut position = 0;
+        for (offset, closing, style) in markup_spans {
+            let offset = offset.min(plain.len());
+            if offset > position {
+                output.push_str(&markup::escape(&plain[position..offset]));
+                position = offset;
+            }
+            if !is_falsy_style(style) {
+                output.push('[');
+                if closing {
+                    output.push('/');
+                }
+                match style {
+                    StyleType::Name(name) => output.push_str(name),
+                    StyleType::Style(style) => output.push_str(&style.definition()),
+                }
+                output.push(']');
+            }
+        }
+        output
+    }
+
     /// The unstyled string content.
     pub fn plain(&self) -> &str {
         &self.plain
@@ -2281,5 +2327,42 @@ mod tests {
         let mut text = Text::new("");
         text.append("a\u{0}b\u{1b}c", None);
         assert_eq!(text.plain(), "a\u{0}b\u{1b}c");
+    }
+
+    /// A resolved style is written as its definition, a null one adds no tag,
+    /// and a style that sets only metadata is truthy, so it is written as
+    /// `none` — `str(Style)` upstream.
+    #[test]
+    fn markup_writes_resolved_styles_as_definitions() {
+        let mut text = Text::styled("a[b]", Style::parse("bold").unwrap());
+        text.stylize(Style::parse("red on blue").unwrap(), 0, 1);
+        assert_eq!(
+            text.markup(),
+            "[bold][red on blue]a[/red on blue]\\[b][/bold]"
+        );
+
+        let mut text = Text::new("ab");
+        text.spans_mut().push(Span {
+            start: 0,
+            end: 1,
+            style: StyleType::Style(Style::new()),
+        });
+        assert_eq!(text.markup(), "ab");
+
+        use crate::style::MetaValue;
+        let mut text = Text::new("ab");
+        text.apply_meta([("k", MetaValue::Int(1))].into_iter().collect(), 0, Some(1));
+        assert_eq!(text.markup(), "[none]a[/none]b");
+    }
+
+    /// The markup re-parses to the same plain text and spans. (A trailing
+    /// backslash does not: `escape` doubles it, upstream too.)
+    #[test]
+    fn markup_round_trips_through_from_markup() {
+        let source = "[bold]a[i]b\\[c][/i][/bold] [link=https://x.y]宽[/link]";
+        let text = Text::from_markup(source).unwrap();
+        let again = Text::from_markup(&text.markup()).unwrap();
+        assert_eq!(again.plain(), text.plain());
+        assert_eq!(again.spans(), text.spans());
     }
 }
