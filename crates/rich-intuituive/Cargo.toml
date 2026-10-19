@@ -158,3 +158,13 @@ required-features = ["wav", "art"]
 [[test]]
 name = "music"
 required-features = ["wav", "art"]
+
+# The taskwarrior-tui clone keeps its tasks as JSON lines, read and
+# written with rs-rich-ext's `data` (JSON) parser.
+[[example]]
+name = "tasks"
+required-features = ["rich-ext/data"]
+
+[[test]]
+name = "taskwarrior"
+required-features = ["rich-ext/data"]
