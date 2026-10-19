@@ -17,11 +17,16 @@ const H: u16 = 24;
 
 /// Where the test folders go: a short path, as the top line shows the
 /// folder's path and, like diskonaut's, drops the totals before it when the
-/// path is too long (macOS's temporary folder is).
+/// path is too long (macOS's and Windows's temporary folders are).
 fn base() -> PathBuf {
-    let short = Path::new("/tmp");
-    if cfg!(unix) && short.is_dir() {
-        short.to_path_buf()
+    let short = if cfg!(windows) {
+        let drive = std::env::var("SystemDrive").unwrap_or_else(|_| "C:".into());
+        PathBuf::from(format!("{drive}\\tmp"))
+    } else {
+        PathBuf::from("/tmp")
+    };
+    if std::fs::create_dir_all(&short).is_ok() {
+        short
     } else {
         std::env::temp_dir()
     }
