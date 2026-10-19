@@ -29,34 +29,46 @@
 //! taskwarrior-tui's default keys. Views: `]` and `[` the next and previous
 //! view, `?` the help, `q` quits. Report: j/k (↓/↑) move, J/K a page, g/G
 //! the top and the bottom; `/` filters (Taskwarrior's syntax: `project:x`,
-//! `+tag`, `-tag`, `status:`, `priority:`, `due.before:`, ids, words); `a`
-//! adds, `l` logs a done task, `m` modifies, `A` annotates, `d` marks done,
+//! `+tag`, `-tag`, `status:`, `priority:`, `due.before:`, ids, words,
+//! `or`, `not` and parentheses); `a` adds, `l` logs a done task, `m`
+//! modifies, `A` annotates, `d` marks done,
 //! `x` deletes (asked first), `s` starts or stops, `t` toggles `+next`,
 //! H/M/L/N set the priority, `y` duplicates, `u` undoes (asked first), `v`
 //! marks a task and `V` every task (actions then apply to the marked
 //! ones), `:` jumps to an id, `z` hides the details, `\` puts them beside
 //! the report, Ctrl+E/Ctrl+Y scroll them, `c` opens the context menu and
 //! `R` the report menu, `r` reloads. In the command bar, Enter runs, Esc
-//! cancels and Tab completes attributes (`project:` values, tags, dates).
+//! cancels, Tab completes attributes (`project:` values, tags, dates) in a
+//! pop-up, the top one's rest shown as ghost text, and ↑/↓ go through
+//! what was typed before for the same action.
 //! Calendar: j/k a year, J/K ten.
 
-use std::cell::{Cell, RefCell};
+use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+use intuituive::command_line::Mode;
+use intuituive::complete::{word_before, Completion};
 use intuituive::prelude::*;
+use intuituive::query::{self, Grammar, Kind, Query, Record, TextMatch, Value};
 use intuituive::reactive::NodeId;
 use intuituive::rich::markup::escape;
 use intuituive::widgets::{
-    month, table_with, tabs, CalendarOptions, Column, Date, HighlightSpacing, TableOptions, Weekday,
+    table_with, tabs, year_view_with, CalendarOptions, Column, Date, HighlightSpacing, MonthTitle,
+    TableLayout, TableOptions, Weekday, YearOptions,
 };
-use intuituive::{multi_select, HelpOptions, MultiSelect, RectHandle};
-use rich_ext::data::{parse_json, Node as Json, Value};
+use intuituive::{
+    command_line_with, dates, keyed, multi_select, CommandLine, CommandLineOptions, HelpOptions,
+    MultiSelect,
+};
+use rich_ext::data::{parse_json, Node as Json, Value as JsonValue};
+use rich_interact::dates::DateOptions;
+use rich_interact::datetime::{DateTime, Zone};
 
 // ---------------------------------------------------------------------
-// Times: seconds since the epoch, shown in a fixed offset from UTC.
+// Times: seconds since the epoch, shown on a zone's clocks.
 // ---------------------------------------------------------------------
 
 /// Seconds since 1970-01-01 00:00 UTC.
@@ -76,48 +88,28 @@ pub fn unix_now() -> Time {
     }
 }
 
-/// The local offset from UTC in seconds, from rs-rich-ext's local time
-/// (`%z`, `+0200`).
-pub fn local_offset() -> i64 {
-    let z = rich_ext::fs::local_time(SystemTime::now(), "%z");
-    let sign = if z.starts_with('-') { -1 } else { 1 };
-    let digits: String = z.chars().filter(char::is_ascii_digit).collect();
-    if digits.len() != 4 {
-        return 0;
-    }
-    let h: i64 = digits[..2].parse().unwrap_or(0);
-    let m: i64 = digits[2..].parse().unwrap_or(0);
-    sign * (h * HOUR + m * MINUTE)
+/// The date on `zone`'s clocks at `ts`, and the seconds into it.
+pub fn local(ts: Time, zone: &Zone) -> (Date, i64) {
+    let at = DateTime::from_unix(ts, zone);
+    (at.date, i64::from(at.time.seconds()))
 }
 
-/// The local date and the seconds into it.
-pub fn local(ts: Time, offset: i64) -> (Date, i64) {
-    let t = ts + offset;
-    (Date::from_days(t.div_euclid(DAY)), t.rem_euclid(DAY))
+/// Midnight starting `date` on `zone`'s clocks, as a time.
+pub fn midnight(date: Date, zone: &Zone) -> Time {
+    DateTime::from(date).to_unix(zone)
 }
 
-/// Local midnight starting `date`, as a time.
-pub fn midnight(date: Date, offset: i64) -> Time {
-    date.days() * DAY - offset
+pub fn fmt_datetime(ts: Time, zone: &Zone) -> String {
+    DateTime::from_unix(ts, zone).format(true, false)
 }
 
-pub fn fmt_datetime(ts: Time, offset: i64) -> String {
-    let (date, s) = local(ts, offset);
-    format!(
-        "{date} {:02}:{:02}:{:02}",
-        s / HOUR,
-        s % HOUR / MINUTE,
-        s % MINUTE
-    )
-}
-
-pub fn fmt_date(ts: Time, offset: i64) -> String {
-    local(ts, offset).0.to_string()
+pub fn fmt_date(ts: Time, zone: &Zone) -> String {
+    local(ts, zone).0.to_string()
 }
 
 /// Taskwarrior's stored form: `20261019T120000Z`.
 pub fn stamp(ts: Time) -> String {
-    let (d, s) = local(ts, 0);
+    let (d, s) = local(ts, &Zone::Utc);
     format!(
         "{:04}{:02}{:02}T{:02}{:02}{:02}Z",
         d.year,
@@ -167,87 +159,13 @@ pub fn vague(from: Time, to: Time) -> String {
     format!("{minus}{n}{unit}")
 }
 
-/// Taskwarrior's date names this clone understands, for completion.
-pub const DATE_NAMES: [&str; 17] = [
-    "now",
-    "today",
-    "tomorrow",
-    "yesterday",
-    "eod",
-    "eow",
-    "eom",
-    "eoy",
-    "sow",
-    "som",
-    "monday",
-    "tuesday",
-    "wednesday",
-    "thursday",
-    "friday",
-    "saturday",
-    "sunday",
-];
-
-/// A date as Taskwarrior reads one: a name (`today`, `tomorrow`, `eow`,
-/// `friday`), an ISO date or date and time, or a duration from now
-/// (`3d`, `2w`, `4h`). Weeks start on Sunday, Taskwarrior's default.
-pub fn parse_date(word: &str, now: Time, offset: i64) -> Option<Time> {
-    let (today, _) = local(now, offset);
-    let day = |d: Date| midnight(d, offset);
-    let end = |d: Date| midnight(d, offset) + DAY - 1;
-    // Sunday is 6 in `Date::weekday`; days since the week began on Sunday.
-    let into_week = (today.weekday() as i64 + 1) % 7;
-    let w = word.to_ascii_lowercase();
-    let at = match w.as_str() {
-        "now" => now,
-        "today" | "sod" => day(today),
-        "tomorrow" => day(today.add_days(1)),
-        "yesterday" => day(today.add_days(-1)),
-        "eod" => end(today),
-        "eow" => end(today.add_days(6 - into_week)),
-        "sow" => day(today.add_days(7 - into_week)),
-        "eom" => end(today.last_of_month()),
-        "som" => day(today.first_of_month().add_months(1)),
-        "eoy" => end(Date::new(today.year, 12, 31)),
-        _ => {
-            if let Some(i) = (0..7).find(|&i| {
-                let name = DATE_NAMES[10 + i];
-                w == name || (w.len() == 3 && name.starts_with(&w))
-            }) {
-                // The next such day, never today.
-                let ahead = (i as i64 - today.weekday() as i64 - 1).rem_euclid(7) + 1;
-                return Some(day(today.add_days(ahead)));
-            }
-            if let Ok(date) = w.get(..10).unwrap_or("").parse::<Date>() {
-                let rest = &w[10..];
-                let secs = match rest.strip_prefix('t') {
-                    Some(t) => {
-                        let mut parts = t.split(':').map(|p| p.parse::<i64>().ok());
-                        let h = parts.next().flatten()?;
-                        let m = parts.next().flatten().unwrap_or(0);
-                        h * HOUR + m * MINUTE
-                    }
-                    None if rest.is_empty() => 0,
-                    None => return None,
-                };
-                return Some(day(date) + secs);
-            }
-            let digits: String = w.chars().take_while(char::is_ascii_digit).collect();
-            let n: i64 = digits.parse().ok()?;
-            let unit = match &w[digits.len()..] {
-                "s" | "sec" | "secs" | "seconds" => 1,
-                "min" | "mins" | "minutes" => MINUTE,
-                "h" | "hr" | "hrs" | "hours" => HOUR,
-                "d" | "day" | "days" => DAY,
-                "w" | "wk" | "wks" | "weeks" => WEEK,
-                "mo" | "month" | "months" => MONTH,
-                "y" | "yr" | "yrs" | "years" => YEAR,
-                _ => return None,
-            };
-            now + n * unit
-        }
-    };
-    Some(at)
+/// A date as Taskwarrior reads one (`today`, `eow`, `friday`, `3d`, ISO),
+/// by rs-rich-interact's `dates`, weeks from Sunday (Taskwarrior's
+/// default), on `zone`'s clocks.
+pub fn parse_date(word: &str, now: Time, zone: &Zone) -> Option<Time> {
+    let sunday = DateOptions::new().week_start(6);
+    let at = dates::parse_with(word, DateTime::from_unix(now, zone), sunday).ok()?;
+    Some(at.to_unix(zone))
 }
 
 // ---------------------------------------------------------------------
@@ -331,7 +249,7 @@ impl Task {
     /// The task as `task export` writes it (without `id` and `urgency`,
     /// which are computed).
     pub fn to_json(&self) -> String {
-        let s = |v: &str| Json::new(Value::String(v.to_string()));
+        let s = |v: &str| Json::new(JsonValue::String(v.to_string()));
         let mut map = vec![
             ("uuid".to_string(), s(&self.uuid)),
             ("description".to_string(), s(&self.description)),
@@ -352,20 +270,20 @@ impl Task {
         }
         if !self.tags.is_empty() {
             let tags = self.tags.iter().map(|t| s(t)).collect();
-            map.push(("tags".to_string(), Json::new(Value::Seq(tags))));
+            map.push(("tags".to_string(), Json::new(JsonValue::Seq(tags))));
         }
         if !self.annotations.is_empty() {
             let notes = (self.annotations.iter())
                 .map(|a| {
-                    Json::new(Value::Map(vec![
+                    Json::new(JsonValue::Map(vec![
                         ("entry".to_string(), s(&stamp(a.entry))),
                         ("description".to_string(), s(&a.description)),
                     ]))
                 })
                 .collect();
-            map.push(("annotations".to_string(), Json::new(Value::Seq(notes))));
+            map.push(("annotations".to_string(), Json::new(JsonValue::Seq(notes))));
         }
-        Json::new(Value::Map(map)).to_json().to_string()
+        Json::new(JsonValue::Map(map)).to_json().to_string()
     }
 
     pub fn from_json(line: &str) -> Result<Task, String> {
@@ -374,14 +292,14 @@ impl Task {
         let time = |key: &str| text(key).and_then(|v| parse_stamp(&v));
         let uuid = text("uuid").ok_or("a task without a uuid")?;
         let strings = |node: Option<&Json>| match node.map(|n| &n.value) {
-            Some(Value::Seq(items)) => items
+            Some(JsonValue::Seq(items)) => items
                 .iter()
                 .filter_map(|i| i.as_str().map(str::to_string))
                 .collect(),
             _ => Vec::new(),
         };
         let annotations = match json.get("annotations").map(|n| &n.value) {
-            Some(Value::Seq(items)) => items
+            Some(JsonValue::Seq(items)) => items
                 .iter()
                 .map(|a| Annotation {
                     entry: (a.get("entry").and_then(Json::as_str))
@@ -491,7 +409,7 @@ pub fn urgency(task: &Task, now: Time) -> f64 {
 }
 
 /// Taskwarrior's virtual tags, for the ones this clone can tell.
-pub fn virtual_tags(task: &Task, now: Time, offset: i64) -> Vec<&'static str> {
+pub fn virtual_tags(task: &Task, now: Time, zone: &Zone) -> Vec<&'static str> {
     let mut tags = Vec::new();
     let pending = task.is_pending();
     if task.start.is_some() && pending {
@@ -510,7 +428,7 @@ pub fn virtual_tags(task: &Task, now: Time, offset: i64) -> Vec<&'static str> {
         if due <= now + 7 * DAY {
             tags.push("DUE");
         }
-        if local(due, offset).0 == local(now, offset).0 {
+        if local(due, zone).0 == local(now, zone).0 {
             tags.push("DUETODAY");
         }
         if due < now {
@@ -533,7 +451,7 @@ pub fn virtual_tags(task: &Task, now: Time, offset: i64) -> Vec<&'static str> {
         tags.push("TAGGED");
     }
     if let (Some(due), true) = (task.due, pending) {
-        if local(due, offset).0 == local(now, offset).0 {
+        if local(due, zone).0 == local(now, zone).0 {
             tags.push("TODAY");
         }
     }
@@ -669,7 +587,7 @@ impl Store for JsonlStore {
         let mut undo = self.read_lines("undo.jsonl");
         let last = undo.pop().ok_or("No undo information available")?;
         let json = parse_json(&last).map_err(|e| e.to_string())?;
-        let Value::Seq(items) = &json.value else {
+        let JsonValue::Seq(items) = &json.value else {
             return Err("undo.jsonl: not a list".into());
         };
         for item in items {
@@ -736,7 +654,7 @@ impl Store for JsonlStore {
 }
 
 // ---------------------------------------------------------------------
-// Filters and modifications: a subset of Taskwarrior's command line.
+// Filters and modifications: Taskwarrior's command line.
 // ---------------------------------------------------------------------
 
 /// Split a command line into words, double quotes keeping spaces.
@@ -769,23 +687,6 @@ pub fn words(line: &str) -> Vec<String> {
     out
 }
 
-#[derive(Clone, Debug, PartialEq)]
-enum Term {
-    Project(String),
-    Tag(String, bool),
-    Status(Status),
-    Priority(Option<char>),
-    DueBefore(Time),
-    DueAfter(Time),
-    Ids(Vec<u64>),
-    Word(String),
-}
-
-/// A filter: every term must hold. Taskwarrior's `or`, `xor` and
-/// parentheses are not understood here.
-#[derive(Clone, Debug, Default, PartialEq)]
-pub struct Filter(Vec<Term>);
-
 fn priority_of(value: &str) -> Result<Option<char>, String> {
     match value {
         "" => Ok(None),
@@ -810,80 +711,109 @@ fn ids_of(word: &str) -> Option<Vec<u64>> {
     Some(ids)
 }
 
-impl Filter {
-    pub fn parse(line: &str, now: Time, offset: i64) -> Result<Filter, String> {
-        let mut terms = Vec::new();
-        for word in words(line) {
-            let lower = word.to_ascii_lowercase();
-            if matches!(lower.as_str(), "or" | "xor" | "(" | ")") || word.starts_with('(') {
-                return Err(format!(
-                    "'{word}': this filter syntax is not supported here."
-                ));
-            }
-            if lower == "and" {
-                continue;
-            }
-            if let Some(tag) = word.strip_prefix('+').filter(|t| !t.is_empty()) {
-                terms.push(Term::Tag(tag.to_string(), true));
-            } else if let Some(tag) = word.strip_prefix('-').filter(|t| !t.is_empty()) {
-                terms.push(Term::Tag(tag.to_string(), false));
-            } else if let Some((name, value)) = word.split_once(':') {
-                let date = || {
-                    parse_date(value, now, offset)
-                        .ok_or_else(|| format!("'{value}' is not a valid date."))
-                };
-                terms.push(match name {
-                    "project" | "pro" | "proj" => Term::Project(value.to_string()),
-                    "status" => Term::Status(
-                        Status::of(value)
-                            .ok_or_else(|| format!("Unrecognized status '{value}'."))?,
-                    ),
-                    "priority" | "pri" => Term::Priority(priority_of(value)?),
-                    "due.before" | "due.below" => Term::DueBefore(date()?),
-                    "due.after" | "due.above" => Term::DueAfter(date()?),
-                    "description" | "description.has" => Term::Word(value.to_string()),
-                    _ => Term::Word(word.clone()),
-                });
-            } else if let Some(ids) = ids_of(&word) {
-                terms.push(Term::Ids(ids));
-            } else {
-                terms.push(Term::Word(word));
-            }
+/// A task as the query language sees it: its fields, its description
+/// and annotations for bare words, and its tags with Taskwarrior's
+/// virtual ones (`+OVERDUE`).
+pub struct TaskRecord<'a> {
+    pub task: &'a Task,
+    pub now: Time,
+    pub zone: &'a Zone,
+}
+
+impl Record for TaskRecord<'_> {
+    fn field(&self, name: &str) -> Option<Value> {
+        let task = self.task;
+        let date = |t: Option<Time>| t.map(|t| Value::Date(DateTime::from_unix(t, self.zone)));
+        match name {
+            "id" => (task.id != 0).then_some(Value::Number(task.id as f64)),
+            "uuid" => Some(Value::from(task.uuid.as_str())),
+            "description" => Some(Value::Text(self.text())),
+            "status" => Some(Value::from(task.status.name())),
+            "project" => task.project.clone().map(Value::Text),
+            "priority" => task.priority.map(|p| Value::Text(p.to_string())),
+            "due" => date(task.due),
+            "start" => date(task.start),
+            "end" => date(task.end),
+            "entry" => date(Some(task.entry)),
+            "modified" => date(Some(task.modified)),
+            "urgency" => Some(Value::Number(urgency(task, self.now))),
+            _ => None,
         }
-        Ok(Filter(terms))
     }
 
-    pub fn matches(&self, task: &Task, now: Time, offset: i64) -> bool {
-        let virt = virtual_tags(task, now, offset);
-        self.0.iter().all(|term| match term {
-            Term::Project(p) if p.is_empty() => task.project.is_none(),
-            Term::Project(p) => task
-                .project
-                .as_deref()
-                .is_some_and(|t| t.starts_with(p.as_str())),
-            Term::Tag(tag, has) => {
-                let on = task.tags.contains(tag) || virt.contains(&tag.as_str());
-                on == *has
-            }
-            Term::Status(s) => task.status == *s,
-            Term::Priority(p) => task.priority == *p,
-            Term::DueBefore(t) => task.due.is_some_and(|d| d < *t),
-            Term::DueAfter(t) => task.due.is_some_and(|d| d > *t),
-            Term::Ids(ids) => task.id != 0 && ids.contains(&task.id),
-            Term::Word(w) => {
-                task.description.contains(w.as_str())
-                    || task
-                        .annotations
-                        .iter()
-                        .any(|a| a.description.contains(w.as_str()))
-            }
-        })
+    fn text(&self) -> String {
+        let notes = self.task.annotations.iter().map(|a| a.description.as_str());
+        std::iter::once(self.task.description.as_str())
+            .chain(notes)
+            .collect::<Vec<_>>()
+            .join("\n")
     }
+
+    fn tags(&self) -> Vec<String> {
+        self.task.tags.clone()
+    }
+
+    fn has_tag(&self, tag: &str, _case_sensitive: bool) -> bool {
+        self.task.tags.iter().any(|t| t == tag)
+            || virtual_tags(self.task, self.now, self.zone).contains(&tag)
+    }
+}
+
+/// Taskwarrior's filter syntax as a grammar for intuiTUIve's query
+/// language: its attributes and their short names, `project:` matching
+/// subprojects, dates as Taskwarrior names them relative to `now`, ids
+/// (`2,4-5`) as words of their own, an unknown `name:value` a word.
+pub fn grammar(now: Time, zone: &Zone) -> Grammar {
+    let zone = zone.clone();
+    Grammar::new()
+        .field("id", Kind::Number)
+        .field("uuid", Kind::Text)
+        .matching(TextMatch::Prefix)
+        .field("description", Kind::Text)
+        .matching(TextMatch::Contains)
+        .field("status", Kind::Text)
+        .read(|v| Status::of(v).map(|s| Value::from(s.name())))
+        .field("project", Kind::Text)
+        .matching(TextMatch::Prefix)
+        .alias("pro", "project")
+        .alias("proj", "project")
+        .field("priority", Kind::Text)
+        .read(|v| priority_of(v).ok().flatten().map(|p| Value::Text(p.to_string())))
+        .alias("pri", "priority")
+        .field("urgency", Kind::Number)
+        .alias("urg", "urgency")
+        .field("due", Kind::Date)
+        .field("start", Kind::Date)
+        .field("end", Kind::Date)
+        .field("entry", Kind::Date)
+        .field("modified", Kind::Date)
+        .dates(move |word| {
+            let at = parse_date(word, now, &zone)?;
+            Some(DateTime::from_unix(at, &zone))
+        })
+        .words(|word| {
+            let ids = ids_of(word)?;
+            Some(Rc::new(move |record: &dyn Record| {
+                matches!(record.field("id"), Some(Value::Number(id)) if ids.contains(&(id as u64)))
+            }))
+        })
+        .case_sensitive(true)
+        .lenient()
+}
+
+/// A filter as Taskwarrior reads one: `query::parse` by [`grammar`].
+pub fn parse_filter(text: &str, now: Time, zone: &Zone) -> Result<Query, String> {
+    query::parse(text, &grammar(now, zone)).map_err(|e| e.message)
+}
+
+/// Whether `task` passes `filter`.
+pub fn passes(filter: &Query, task: &Task, now: Time, zone: &Zone) -> bool {
+    filter.matches(&TaskRecord { task, now, zone })
 }
 
 /// Apply `task add`/`modify` words to `task`: attributes set, tags added
 /// or removed, the other words its description (replaced when any).
-pub fn modify(task: &mut Task, line: &str, now: Time, offset: i64) -> Result<(), String> {
+pub fn modify(task: &mut Task, line: &str, now: Time, zone: &Zone) -> Result<(), String> {
     let mut description = Vec::new();
     for word in words(line) {
         if let Some(tag) = word.strip_prefix('+').filter(|t| !t.is_empty()) {
@@ -904,7 +834,7 @@ pub fn modify(task: &mut Task, line: &str, now: Time, offset: i64) -> Result<(),
                 "due" if value.is_empty() => task.due = None,
                 "due" => {
                     task.due = Some(
-                        parse_date(value, now, offset)
+                        parse_date(value, now, zone)
                             .ok_or_else(|| format!("'{value}' is not a valid date."))?,
                     )
                 }
@@ -1082,7 +1012,7 @@ pub const REPORTS: [Report; 6] = [
 ];
 
 /// A task's cell in column `col`, as plain text.
-pub fn cell(task: &Task, col: Col, now: Time, offset: i64) -> String {
+pub fn cell(task: &Task, col: Col, now: Time, zone: &Zone) -> String {
     let age = |t: Option<Time>| t.map(|t| vague(t, now)).unwrap_or_default();
     match col {
         Col::Id if task.id == 0 => "-".to_string(),
@@ -1090,16 +1020,16 @@ pub fn cell(task: &Task, col: Col, now: Time, offset: i64) -> String {
         Col::Status => task.status.name()[..1].to_ascii_uppercase(),
         Col::Uuid => task.uuid.chars().take(8).collect(),
         Col::Active => age(task.start.filter(|_| task.is_pending())),
-        Col::Started => task.start.map(|t| fmt_date(t, offset)).unwrap_or_default(),
+        Col::Started => task.start.map(|t| fmt_date(t, zone)).unwrap_or_default(),
         Col::Age => vague(task.entry, now),
         Col::Done => age(task.end),
         Col::Priority => task.priority.map(String::from).unwrap_or_default(),
         Col::Project => task.project.clone().unwrap_or_default(),
         Col::Tags => task.tags.join(" "),
-        Col::Due => task.due.map(|t| fmt_date(t, offset)).unwrap_or_default(),
+        Col::Due => task.due.map(|t| fmt_date(t, zone)).unwrap_or_default(),
         Col::DueRel => task.due.map(|t| vague(now, t)).unwrap_or_default(),
-        Col::Entry => fmt_date(task.entry, offset),
-        Col::End => task.end.map(|t| fmt_date(t, offset)).unwrap_or_default(),
+        Col::Entry => fmt_date(task.entry, zone),
+        Col::End => task.end.map(|t| fmt_date(t, zone)).unwrap_or_default(),
         Col::Description if task.annotations.is_empty() => task.description.clone(),
         Col::Description => format!("{} [{}]", task.description, task.annotations.len()),
         Col::Urgency => format!("{:.2}", urgency(task, now)),
@@ -1152,9 +1082,9 @@ fn sort_tasks(tasks: &mut [Task], sort: &[(Sort, bool)], now: Time) {
 pub fn task_colours(
     task: &Task,
     now: Time,
-    offset: i64,
+    zone: &Zone,
 ) -> (Option<&'static str>, Option<&'static str>) {
-    let virt = virtual_tags(task, now, offset);
+    let virt = virtual_tags(task, now, zone);
     let has = |t: &str| virt.contains(&t);
     let mut fg = None;
     let mut bg = None;
@@ -1183,8 +1113,8 @@ pub fn task_colours(
 
 /// A row's style: the task's colours over Taskwarrior's alternate rows
 /// (`on gray2`).
-pub fn row_style(task: &Task, row: usize, now: Time, offset: i64) -> Option<String> {
-    let (fg, bg) = task_colours(task, now, offset);
+pub fn row_style(task: &Task, row: usize, now: Time, zone: &Zone) -> Option<String> {
+    let (fg, bg) = task_colours(task, now, zone);
     let bg = bg.or((row % 2 == 1).then_some("color(234)"));
     match (fg, bg) {
         (None, None) => None,
@@ -1195,8 +1125,8 @@ pub fn row_style(task: &Task, row: usize, now: Time, offset: i64) -> Option<Stri
 }
 
 /// `task info`: the task's attributes, then its urgency's terms.
-pub fn info(task: &Task, now: Time, offset: i64) -> String {
-    let when = |t: Time| format!("{} ({})", fmt_datetime(t, offset), vague(t, now));
+pub fn info(task: &Task, now: Time, zone: &Zone) -> String {
+    let when = |t: Time| format!("{} ({})", fmt_datetime(t, zone), vague(t, now));
     let mut rows: Vec<(&str, String)> = Vec::new();
     if task.id != 0 {
         rows.push(("ID", task.id.to_string()));
@@ -1205,7 +1135,7 @@ pub fn info(task: &Task, now: Time, offset: i64) -> String {
     for a in &task.annotations {
         description.push_str(&format!(
             "\n  {} {}",
-            fmt_datetime(a.entry, offset),
+            fmt_datetime(a.entry, zone),
             escape(&a.description)
         ));
     }
@@ -1223,19 +1153,19 @@ pub fn info(task: &Task, now: Time, offset: i64) -> String {
     }
     rows.push(("Entered", when(task.entry)));
     if let Some(t) = task.start {
-        rows.push(("Start", fmt_datetime(t, offset)));
+        rows.push(("Start", fmt_datetime(t, zone)));
     }
     if let Some(t) = task.end {
-        rows.push(("End", fmt_datetime(t, offset)));
+        rows.push(("End", fmt_datetime(t, zone)));
     }
     if let Some(t) = task.due {
-        rows.push(("Due", fmt_datetime(t, offset)));
+        rows.push(("Due", fmt_datetime(t, zone)));
     }
     rows.push(("Last modified", when(task.modified)));
     if !task.tags.is_empty() {
         rows.push(("Tags", escape(&task.tags.join(" "))));
     }
-    rows.push(("Virtual tags", virtual_tags(task, now, offset).join(" ")));
+    rows.push(("Virtual tags", virtual_tags(task, now, zone).join(" ")));
     rows.push(("UUID", task.uuid.clone()));
     rows.push(("Urgency", format!("{:5.3}", urgency(task, now))));
     let width = rows.iter().map(|(n, _)| n.len()).max().unwrap_or(4);
@@ -1327,8 +1257,8 @@ pub fn projects_text(tasks: &[Task]) -> String {
 
 /// `task timesheet`: the tasks completed and started each week, the last
 /// four weeks, the latest last.
-pub fn timesheet_text(tasks: &[Task], now: Time, offset: i64) -> String {
-    let (today, _) = local(now, offset);
+pub fn timesheet_text(tasks: &[Task], now: Time, zone: &Zone) -> String {
+    let (today, _) = local(now, zone);
     let sunday = today.add_days(-((today.weekday() as i64 + 1) % 7));
     let mut out = String::from(
         "\n[underline]Wk [/] [underline]Date      [/] [underline]Day[/] [underline]ID[/] \
@@ -1337,7 +1267,7 @@ pub fn timesheet_text(tasks: &[Task], now: Time, offset: i64) -> String {
     let (mut completed, mut started) = (0, 0);
     for back in (0..4).rev() {
         let first = sunday.add_days(-7 * back);
-        let (from, to) = (midnight(first, offset), midnight(first.add_days(7), offset));
+        let (from, to) = (midnight(first, zone), midnight(first.add_days(7), zone));
         let mut events: Vec<(Time, &Task, &str)> = Vec::new();
         for t in tasks {
             if let (Some(end), Status::Completed) = (t.end, t.status) {
@@ -1360,7 +1290,7 @@ pub fn timesheet_text(tasks: &[Task], now: Time, offset: i64) -> String {
             } else {
                 started += 1;
             }
-            let (date, _) = local(at, offset);
+            let (date, _) = local(at, zone);
             let day = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"][date.weekday() as usize];
             let id = if t.id == 0 {
                 "-".to_string()
@@ -1370,7 +1300,7 @@ pub fn timesheet_text(tasks: &[Task], now: Time, offset: i64) -> String {
             out.push_str(&format!(
                 "{wk:3} {date} {day} {id:>2} {action:9} {:7} {:10} {}\n",
                 escape(t.project.as_deref().unwrap_or("")),
-                t.due.map(|d| fmt_date(d, offset)).unwrap_or_default(),
+                t.due.map(|d| fmt_date(d, zone)).unwrap_or_default(),
                 escape(&t.description)
             ));
             wk = String::new();
@@ -1384,39 +1314,22 @@ pub fn timesheet_text(tasks: &[Task], now: Time, offset: i64) -> String {
 // The app's state.
 // ---------------------------------------------------------------------
 
-/// What the command bar is doing: taskwarrior-tui's actions.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Mode {
-    Report,
-    Filter,
-    Add,
-    Log,
-    Modify,
-    Annotate,
-    Jump,
-    DonePrompt,
-    DeletePrompt,
-    UndoPrompt,
-    Error,
-}
-
-impl Mode {
-    /// Whether the command bar takes typing.
-    pub fn edits(self) -> bool {
-        matches!(
-            self,
-            Mode::Filter | Mode::Add | Mode::Log | Mode::Modify | Mode::Annotate | Mode::Jump
-        )
-    }
-}
-
 /// How the app is set up.
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Debug)]
 pub struct Options {
     /// A fixed "now" (tests); `None` follows the clock.
     pub now: Option<Time>,
-    /// Seconds east of UTC that times are shown in.
-    pub offset: i64,
+    /// The zone whose clocks times are shown and read on.
+    pub zone: Zone,
+}
+
+impl Default for Options {
+    fn default() -> Options {
+        Options {
+            now: None,
+            zone: Zone::Local,
+        }
+    }
 }
 
 /// The report's tasks, filtered and sorted, or why the filter failed.
@@ -1426,20 +1339,12 @@ pub struct View {
     pub error: Option<String>,
 }
 
-/// Tab completion's state: the candidates for the word being completed,
-/// and the one shown.
-#[derive(Clone, Debug, PartialEq)]
-struct Completion {
-    candidates: Vec<String>,
-    at: usize,
-}
-
 #[derive(Clone, Copy)]
 struct Tw {
     store: Signal<RefCell<Box<dyn Store>>>,
     tasks: Signal<Vec<Task>>,
     now: Signal<Time>,
-    offset: i64,
+    zone: Signal<Zone>,
     filter: Signal<String>,
     report: Signal<usize>,
     context: Signal<Option<String>>,
@@ -1447,21 +1352,20 @@ struct Tw {
     view: Memo<View>,
     selected: Signal<usize>,
     marked: MultiSelect<String>,
-    mode: Signal<Mode>,
-    cmd: Signal<String>,
+    /// The command bar: taskwarrior-tui's prompts are its modes.
+    cmd: CommandLine,
+    /// Typing in the command bar (rather than asking yes or no).
+    typing: Signal<bool>,
+    /// The title over a yes-or-no question (`Delete Task 1?`).
+    asking: Signal<String>,
     error: Signal<Option<String>>,
-    /// The filter as it was when `/` was pressed, for Esc.
-    before: Signal<String>,
-    completion: Signal<Option<Completion>>,
     tab: Signal<usize>,
     details: Signal<bool>,
     beside: Signal<bool>,
     detail_top: Signal<u16>,
     year: Signal<i32>,
-    /// The report table's node, rebuilt when its columns change.
-    table_id: Signal<Cell<Option<NodeId>>>,
-    /// The command bar's input.
-    input_id: Signal<Cell<Option<NodeId>>>,
+    /// The report table's node.
+    table: Signal<Option<NodeId>>,
 }
 
 pub const VIEWS: [&str; 4] = ["Tasks", "Projects", "Timesheet", "Calendar"];
@@ -1469,7 +1373,7 @@ pub const VIEWS: [&str; 4] = ["Tasks", "Projects", "Timesheet", "Calendar"];
 impl Tw {
     fn new(store: Box<dyn Store>, options: Options) -> Tw {
         let now = signal(options.now.unwrap_or_else(unix_now));
-        let offset = options.offset;
+        let zone = signal(options.zone.clone());
         let tasks = signal(Vec::<Task>::new());
         let filter = signal(format!("{} ", REPORTS[0].filter));
         let report = signal(0usize);
@@ -1477,6 +1381,7 @@ impl Tw {
         let contexts = signal(store.contexts());
         let view = memo(move || {
             let now = now.get();
+            let zone = zone.get();
             let report = &REPORTS[report.get()];
             let context = context.get();
             let context_filter = context
@@ -1484,8 +1389,8 @@ impl Tw {
                     contexts.with(|cs| cs.iter().find(|(n, _)| *n == c).map(|(_, f)| f.clone()))
                 })
                 .unwrap_or_default();
-            let parsed = Filter::parse(&filter.get(), now, offset)
-                .and_then(|f| Filter::parse(&context_filter, now, offset).map(|c| (f, c)));
+            let parsed = parse_filter(&filter.get(), now, &zone)
+                .and_then(|f| parse_filter(&context_filter, now, &zone).map(|c| (f, c)));
             match parsed {
                 Err(error) => View {
                     tasks: Vec::new(),
@@ -1494,7 +1399,7 @@ impl Tw {
                 Ok((f, c)) => {
                     let mut shown: Vec<Task> = tasks.with(|all| {
                         (all.iter())
-                            .filter(|t| f.matches(t, now, offset) && c.matches(t, now, offset))
+                            .filter(|t| passes(&f, t, now, &zone) && passes(&c, t, now, &zone))
                             .cloned()
                             .collect()
                     });
@@ -1508,11 +1413,11 @@ impl Tw {
         });
         let marked = multi_select::<String>()
             .over(move || view.with(|v| v.tasks.iter().map(|t| t.uuid.clone()).collect()));
-        let tw = Tw {
+        Tw {
             store: signal(RefCell::new(store)),
             tasks,
             now,
-            offset,
+            zone,
             filter,
             report,
             context,
@@ -1520,44 +1425,36 @@ impl Tw {
             view,
             selected: signal(0usize),
             marked,
-            mode: signal(Mode::Report),
-            cmd: signal(String::new()),
+            cmd: CommandLine::new(),
+            typing: signal(false),
+            asking: signal(String::new()),
             error: signal(None),
-            before: signal(String::new()),
-            completion: signal(None),
             tab: signal(0usize),
             details: signal(true),
             beside: signal(false),
             detail_top: signal(0u16),
-            year: signal(local(now.get_untracked(), offset).0.year),
-            table_id: signal(Cell::new(None)),
-            input_id: signal(Cell::new(None)),
-        };
-        tw.cmd.set(tw.filter.get_untracked());
-        tw
+            year: signal(local(now.get_untracked(), &options.zone).0.year),
+            table: signal(None),
+        }
     }
 
     fn now(&self) -> Time {
         self.now.get_untracked()
     }
 
-    /// Read the store again. The selection follows the selected task
-    /// where it moved (a change of urgency re-sorts the report), as
-    /// taskwarrior-tui's does, and else stays in range.
+    fn zone(&self) -> Zone {
+        self.zone.get_untracked()
+    }
+
+    /// Read the store again. The table keeps its cursor on the selected
+    /// task (`cursor_by`), as taskwarrior-tui's does when a change of
+    /// urgency re-sorts the report.
     fn reload(&self) -> Result<(), String> {
-        let selected = self.current().map(|t| t.uuid);
         let tasks = self.store.with_untracked(|s| s.borrow_mut().load())?;
         self.tasks.set(tasks);
-        let (at, len) = self.view.with_untracked(|v| {
-            let at = selected.and_then(|u| v.tasks.iter().position(|t| t.uuid == u));
-            (at, v.tasks.len())
-        });
-        match at {
-            Some(at) => self.selected.set(at),
-            None if self.selected.get_untracked() >= len => {
-                self.selected.set(len.saturating_sub(1))
-            }
-            None => {}
+        let len = self.view.with_untracked(|v| v.tasks.len());
+        if self.selected.get_untracked() >= len {
+            self.selected.set(len.saturating_sub(1));
         }
         Ok(())
     }
@@ -1580,15 +1477,11 @@ impl Tw {
         })
     }
 
-    fn ids(tasks: &[Task]) -> String {
-        let ids: Vec<String> = tasks.iter().map(|t| t.id.to_string()).collect();
-        ids.join(",")
-    }
-
     fn task_label(&self, verb: &str) -> String {
         let targets = self.targets();
         let s = if targets.len() > 1 { "s" } else { "" };
-        format!("{verb} Task{s} {}", Tw::ids(&targets))
+        let ids: Vec<String> = targets.iter().map(|t| t.id.to_string()).collect();
+        format!("{verb} Task{s} {}", ids.join(","))
     }
 
     /// Change tasks in the store, as one change `u` can undo.
@@ -1624,174 +1517,136 @@ impl Tw {
         }
     }
 
-    /// Back to the report: the filter in the command bar, the report
-    /// focused.
-    fn back_to_report(&self, cx: &mut Ctx) {
-        self.mode.set(Mode::Report);
-        self.completion.set(None);
-        self.cmd.set(self.filter.get_untracked());
-        if let Some(id) = self.table_id.with_untracked(Cell::get) {
-            cx.focus(id);
-        }
-    }
-
-    /// taskwarrior-tui's error: the command bar's title in red, the
+    /// taskwarrior-tui's error: the command bar's title `Error` in red, the
     /// message in a box until a key is pressed.
     fn fail(&self, cx: &mut Ctx, message: String) {
         let tw = *self;
+        self.typing.set(false);
+        self.cmd.close(cx);
         self.error.set(Some(message.clone()));
-        self.mode.set(Mode::Error);
-        self.cmd.set("Press any key to continue.".to_string());
         cx.modal(Size::Percent(90), Size::Percent(60), move || {
             label(escape(&message))
                 .panel("[b]Error[/]")
                 .on_any_key(move |cx, _| {
                     cx.pop();
                     tw.error.set(None);
-                    tw.back_to_report(cx);
+                    // The modal gives the focus back to the command line
+                    // it opened over (closed by then), not the report.
+                    if let (0, Some(table)) = (tw.tab.get_untracked(), tw.table.get_untracked()) {
+                        cx.focus(table);
+                    }
                     true
                 })
         });
     }
 
-    /// Start typing in the command bar, in `mode`, with `text` to start.
-    fn edit(&self, cx: &mut Ctx, mode: Mode, text: String) {
-        if mode == Mode::Filter {
-            self.before.set(self.filter.get_untracked());
-        }
-        self.mode.set(mode);
-        self.completion.set(None);
-        self.cmd.set(text);
-        cx.focus(self.input_id());
-    }
-
-    fn input_id(&self) -> NodeId {
-        (self.input_id.with_untracked(Cell::get)).expect("the command bar is built")
-    }
-
-    /// A prompt in the command bar: `key` confirms.
-    fn prompt(&self, mode: Mode, key: &str) {
-        if self.targets().is_empty() && mode != Mode::UndoPrompt {
-            return;
-        }
-        self.mode.set(mode);
-        self.cmd
-            .set(format!("Press <{key}> to confirm or <q> to abort."));
-    }
-
-    /// Enter in the command bar.
-    fn submit(&self, cx: &mut Ctx) {
-        let text = self.cmd.get_untracked();
-        let now = self.now();
-        let offset = self.offset;
-        let outcome: Result<(), String> = match self.mode.get_untracked() {
-            Mode::Filter => Ok(()),
-            Mode::Add | Mode::Log => {
-                let uuid = self.store.with_untracked(|s| s.borrow_mut().new_uuid());
-                let mut task = Task::new(uuid, "", now);
-                match modify(&mut task, &text, now, offset) {
-                    Err(e) => Err(e),
-                    Ok(()) if task.description.trim().is_empty() => {
-                        Err("Additional text must be provided.".to_string())
-                    }
-                    Ok(()) => {
-                        if self.mode.get_untracked() == Mode::Log {
-                            task.status = Status::Completed;
-                            task.end = Some(now);
-                        }
-                        self.commit(cx, vec![task]);
-                        Ok(())
-                    }
-                }
-            }
-            Mode::Modify => {
-                let mut changes = Vec::new();
-                let mut failed = None;
-                for mut task in self.targets() {
-                    match modify(&mut task, &text, now, offset) {
-                        Ok(()) => changes.push(task),
-                        Err(e) => failed = Some(e),
-                    }
-                }
-                match failed {
-                    Some(e) => Err(e),
-                    None => {
-                        if self.commit(cx, changes) {
-                            self.marked.clear();
-                        }
-                        Ok(())
-                    }
-                }
-            }
-            Mode::Annotate => {
-                let note = words(&text).join(" ");
-                if !note.is_empty() {
-                    self.change_each(cx, |t, now| {
-                        t.annotations.push(Annotation {
-                            entry: now,
-                            description: note.clone(),
-                        })
-                    });
-                }
+    /// Open the command bar to type, titled `title`, starting with
+    /// `initial`, completing attributes and keeping a history per action
+    /// (taskwarrior-tui's); `submit` runs on Enter.
+    fn edit(
+        &self,
+        cx: &mut Ctx,
+        title: &str,
+        initial: String,
+        submit: impl Fn(Tw, &str, &mut Ctx) + 'static,
+    ) {
+        let tw = *self;
+        let history = title.split(' ').next().unwrap_or(title).to_lowercase();
+        let mode = Mode::new("")
+            .title(format!("[b]{}[/]", escape(title)))
+            .initial(initial)
+            .complete(move |text, caret| tw.complete(text, caret))
+            .history(history.as_str())
+            .on_submit(move |text, cx| {
+                tw.typing.set(false);
+                submit(tw, text, cx);
                 Ok(())
-            }
-            Mode::Jump => {
-                let at = text.trim().parse::<u64>().ok().and_then(|id| {
-                    self.view
-                        .with_untracked(|v| v.tasks.iter().position(|t| t.id == id))
-                });
-                match at {
-                    Some(at) => {
-                        self.selected.set(at);
-                        Ok(())
-                    }
-                    None => Err(format!("Cannot locate task id {}", text.trim())),
+            })
+            .on_cancel(move |_| tw.typing.set(false));
+        self.typing.set(true);
+        self.cmd.open(cx, mode);
+    }
+
+    /// `/`: the filter in the command bar, the report following each key,
+    /// Esc putting it back.
+    fn edit_filter(&self, cx: &mut Ctx) {
+        let tw = *self;
+        let before = self.filter.get_untracked();
+        let mode = Mode::new("")
+            .title("[b]Filter Tasks[/]")
+            .initial(before.clone())
+            .complete(move |text, caret| tw.complete(text, caret))
+            .history("filter")
+            .on_change(move |text, _| {
+                tw.filter.set(text.to_string());
+                // taskwarrior-tui's `command.error`: the title in red.
+                if parse_filter(text, tw.now(), &tw.zone()).is_err() {
+                    tw.cmd.error("Filter Tasks");
                 }
-            }
-            _ => Ok(()),
-        };
-        match outcome {
-            Ok(()) if self.mode.get_untracked() != Mode::Error => self.back_to_report(cx),
-            Ok(()) => {}
+            })
+            .on_submit(move |_, _| {
+                tw.typing.set(false);
+                Ok(())
+            })
+            .on_cancel(move |_| {
+                tw.typing.set(false);
+                tw.filter.set(before.clone());
+            });
+        self.typing.set(true);
+        self.cmd.open(cx, mode);
+    }
+
+    /// A yes-or-no question in the command bar, `title` over it: `key`
+    /// confirms, `q` or Esc aborts.
+    fn ask(&self, cx: &mut Ctx, title: String, key: &str, yes: impl FnOnce(&mut Ctx) + 'static) {
+        self.asking.set(format!("[b]{}[/]", escape(&title)));
+        let question = format!("Press <{key}> to confirm or <q> to abort.");
+        self.cmd.confirm_keys(cx, question, key, yes);
+    }
+
+    /// Enter on a new task (`a`), or a logged one (`l`).
+    fn add(&self, cx: &mut Ctx, text: &str, log: bool) {
+        let (now, zone) = (self.now(), self.zone());
+        let uuid = self.store.with_untracked(|s| s.borrow_mut().new_uuid());
+        let mut task = Task::new(uuid, "", now);
+        match modify(&mut task, text, now, &zone) {
             Err(e) => self.fail(cx, e),
-        }
-    }
-
-    /// Esc in the command bar.
-    fn cancel(&self, cx: &mut Ctx) {
-        if self.mode.get_untracked() == Mode::Filter {
-            self.filter.set(self.before.get_untracked());
-        }
-        self.back_to_report(cx);
-    }
-
-    /// Tab in the command bar: the next completion of the last word.
-    fn complete(&self) {
-        let text = self.cmd.get_untracked();
-        let start = text.rfind(' ').map_or(0, |i| i + 1);
-        let word = &text[start..];
-        let shown = self.completion.get_untracked();
-        let next = match shown {
-            Some(c) if c.candidates.get(c.at).is_some_and(|s| s == word) => Completion {
-                at: (c.at + 1) % c.candidates.len(),
-                candidates: c.candidates,
-            },
-            _ => {
-                let candidates = self.candidates(word);
-                if candidates.is_empty() {
-                    return;
-                }
-                Completion { candidates, at: 0 }
+            Ok(()) if task.description.trim().is_empty() => {
+                self.fail(cx, "Additional text must be provided.".to_string())
             }
-        };
-        let replaced = format!("{}{}", &text[..start], next.candidates[next.at]);
-        self.completion.set(Some(next));
-        self.cmd.set(replaced);
+            Ok(()) => {
+                if log {
+                    task.status = Status::Completed;
+                    task.end = Some(now);
+                }
+                self.commit(cx, vec![task]);
+            }
+        }
     }
 
-    /// What `word` may complete to: `project:` values, tags, priorities,
-    /// statuses, dates, or the attribute names.
-    fn candidates(&self, word: &str) -> Vec<String> {
+    /// Enter on a modification (`m`).
+    fn modify(&self, cx: &mut Ctx, text: &str) {
+        let (now, zone) = (self.now(), self.zone());
+        let mut changes = Vec::new();
+        for mut task in self.targets() {
+            if let Err(e) = modify(&mut task, text, now, &zone) {
+                return self.fail(cx, e);
+            }
+            changes.push(task);
+        }
+        if self.commit(cx, changes) {
+            self.marked.clear();
+        }
+    }
+
+    /// What the word before the caret may complete to: `project:` values,
+    /// tags, priorities, statuses, dates, or the attribute names.
+    fn complete(&self, text: &str, caret: usize) -> Vec<Completion> {
+        let range = word_before(text, caret);
+        let word = &text[range.clone()];
+        if word.is_empty() {
+            return Vec::new();
+        }
         let (projects, tags) = self.tasks.with_untracked(|all| {
             let p: BTreeSet<String> = all.iter().filter_map(|t| t.project.clone()).collect();
             let t: BTreeSet<String> = all.iter().flat_map(|t| t.tags.clone()).collect();
@@ -1804,7 +1659,7 @@ impl Tw {
                     "priority" | "pri" => vec!["H".into(), "M".into(), "L".into()],
                     "status" => vec!["pending".into(), "completed".into(), "deleted".into()],
                     "due" | "due.before" | "due.after" => {
-                        DATE_NAMES.iter().map(|d| d.to_string()).collect()
+                        dates::NAMES.iter().map(|d| d.to_string()).collect()
                     }
                     _ => Vec::new(),
                 };
@@ -1827,18 +1682,23 @@ impl Tw {
             .collect(),
         };
         out.retain(|c| c.starts_with(word) && c != word);
-        out
+        out.into_iter()
+            .map(|c| Completion::new(range.clone(), c))
+            .collect()
     }
 
-    fn row_cells(&self, columns: &[Col]) -> Vec<Vec<String>> {
-        let (now, offset) = (self.now.get(), self.offset);
+    /// Every column of the report, for each task: the ID cell with
+    /// taskwarrior-tui's `✔` while marking.
+    fn row_cells(&self) -> Vec<Vec<String>> {
+        let (now, zone) = (self.now.get(), self.zone());
+        let columns = REPORTS[self.report.get()].columns;
         let marking = !self.marked.is_empty();
         self.view.with(|v| {
             (v.tasks.iter())
                 .map(|t| {
                     (columns.iter())
-                        .map(|&c| {
-                            let text = escape(&cell(t, c, now, offset));
+                        .map(|&(c, _)| {
+                            let text = escape(&cell(t, c, now, &zone));
                             match (c, marking) {
                                 (Col::Id, true)
                                     if self.marked.mark(&t.uuid) != intuituive::Mark::None =>
@@ -1857,35 +1717,28 @@ impl Tw {
 
     /// The report's columns that have something in them: taskwarrior-tui
     /// drops the empty ones.
-    fn visible(&self) -> (usize, Vec<usize>) {
-        let report = self.report.get();
-        let (now, offset) = (self.now.get(), self.offset);
-        let columns = REPORTS[report].columns;
-        let shown = self.view.with(|v| {
-            if v.tasks.is_empty() {
-                return Vec::new();
-            }
+    fn visible(&self) -> Vec<usize> {
+        let (now, zone) = (self.now.get(), self.zone());
+        let columns = REPORTS[self.report.get()].columns;
+        self.view.with(|v| {
             (0..columns.len())
                 .filter(|&i| {
-                    v.tasks
-                        .iter()
-                        .any(|t| !cell(t, columns[i].0, now, offset).is_empty())
+                    (v.tasks.iter()).any(|t| !cell(t, columns[i].0, now, &zone).is_empty())
                 })
                 .collect()
-        });
-        (report, shown)
+        })
     }
 
     /// The style of the tasks due on `date`, for the calendar: the first
     /// one's, in the report's order.
     fn due_style(&self, date: Date) -> Option<String> {
-        let (now, offset) = (self.now.get(), self.offset);
+        let (now, zone) = (self.now.get(), self.zone());
         self.view.with(|v| {
             let task = v
                 .tasks
                 .iter()
-                .find(|t| t.due.is_some_and(|d| local(d, offset).0 == date))?;
-            let (fg, bg) = task_colours(task, now, offset);
+                .find(|t| t.due.is_some_and(|d| local(d, &zone).0 == date))?;
+            let (fg, bg) = task_colours(task, now, &zone);
             let style = match (fg, bg) {
                 (Some(f), Some(b)) => format!("{f} on {b}"),
                 (Some(f), None) => f.to_string(),
@@ -1924,53 +1777,53 @@ fn navbar(tw: Tw) -> Node {
     ])
 }
 
-/// The task report: a table of the report's columns that have anything
-/// in them, rebuilt when that set changes.
-fn report_table(tw: Tw) -> Node {
-    switch(
-        move || tw.visible(),
-        move |(report, shown): (usize, Vec<usize>)| {
-            let all = REPORTS[report].columns;
-            let node = if shown.is_empty() {
-                // taskwarrior-tui draws nothing for an empty report.
-                label("").focusable()
-            } else {
-                let columns = (shown.iter())
-                    .map(|&i| {
-                        let (col, title) = all[i];
-                        let size = if col == Col::Description {
-                            Size::Flex(1)
-                        } else {
-                            Size::Auto
-                        };
-                        Column::new(title, size)
-                    })
-                    .collect();
-                let cols: Vec<Col> = shown.iter().map(|&i| all[i].0).collect();
-                let options = TableOptions::default()
-                    .symbol("• ")
-                    .highlight_spacing(HighlightSpacing::Always)
-                    .row_style(move |i| {
-                        let (now, offset) = (tw.now.get(), tw.offset);
-                        tw.view
-                            .with(|v| v.tasks.get(i).and_then(|t| row_style(t, i, now, offset)))
-                    });
-                table_with(columns, move || tw.row_cells(&cols), tw.selected, options)
-            };
-            tw.table_id.with_untracked(|c| c.set(Some(node.id())));
-            node
-        },
-    )
+/// The task report: one table whose columns follow the report and drop
+/// the empty ones, its cursor kept on the selected task as the report
+/// re-sorts, `⦿`/`⦾` on the selected row while marking.
+fn report_table(tw: Tw, layout: &TableLayout) -> Node {
+    let columns = move || {
+        (REPORTS[tw.report.get()].columns.iter())
+            .map(|&(col, title)| {
+                let size = match col {
+                    Col::Description => Size::Flex(1),
+                    _ => Size::Auto,
+                };
+                Column::new(title, size)
+            })
+            .collect()
+    };
+    let uuid = move |i: usize| tw.view.with(|v| v.tasks.get(i).map(|t| t.uuid.clone()));
+    let options = TableOptions::default()
+        .columns_with(columns)
+        .columns_shown(move || tw.visible())
+        .symbol("• ")
+        .symbol_for(2, move |i, selected| {
+            let marked = uuid(i).is_some_and(|u| tw.marked.mark(&u) != intuituive::Mark::None);
+            match (selected, tw.marked.is_empty(), marked) {
+                (false, _, _) | (true, true, _) => None,
+                (true, false, true) => Some("⦿ ".into()),
+                (true, false, false) => Some("⦾ ".into()),
+            }
+        })
+        .highlight_spacing(HighlightSpacing::Always)
+        .row_style(move |i| {
+            let (now, zone) = (tw.now.get(), tw.zone());
+            tw.view
+                .with(|v| v.tasks.get(i).and_then(|t| row_style(t, i, now, &zone)))
+        })
+        .layout(layout);
+    table_with(Vec::new(), move || tw.row_cells(), tw.selected, options)
+        .cursor_by(move |i| uuid(i).unwrap_or_default())
 }
 
 /// The selected task's details: `task info`, under a rule.
 fn details(tw: Tw) -> Node {
     scroll_with(
         text(move || {
-            let (now, offset) = (tw.now.get(), tw.offset);
+            let (now, zone) = (tw.now.get(), tw.zone());
             let at = tw.selected.get();
             tw.view.with(|v| match v.tasks.get(at) {
-                Some(t) => info(t, now, offset),
+                Some(t) => info(t, now, &zone),
                 None => "Task not found".to_string(),
             })
         }),
@@ -1980,97 +1833,76 @@ fn details(tw: Tw) -> Node {
     .borders(Sides::TOP)
 }
 
-/// The two-line command bar: what it is doing, and the filter or what is
-/// being typed.
+/// The two-row command bar: a command line, and over it while it is
+/// closed (or asking) what taskwarrior-tui shows there: `Filter Tasks`
+/// and the filter, red when the filter cannot be read, or `Error`.
 fn command_bar(tw: Tw) -> Node {
-    let title = move || {
-        let mode = tw.mode.get();
-        let bold = |s: String| format!("[b]{}[/]", escape(&s));
-        match mode {
-            Mode::Report => "Filter Tasks".to_string(),
-            Mode::Filter => bold("Filter Tasks".into()),
-            Mode::Add => bold("Add Task".into()),
-            Mode::Log => bold("Log Task".into()),
-            Mode::Modify => bold(tw.task_label("Modify")),
-            Mode::Annotate => bold(tw.task_label("Annotate")),
-            Mode::Jump => bold("Jump to Task".into()),
-            Mode::DonePrompt => bold(format!("{}?", tw.task_label("Done"))),
-            Mode::DeletePrompt => bold(format!("{}?", tw.task_label("Delete"))),
-            Mode::UndoPrompt => bold("Run `task undo`?".into()),
-            Mode::Error => bold("Error".into()),
-        }
-    };
     let failed = move || {
-        tw.mode.get() == Mode::Error
-            || (matches!(tw.mode.get(), Mode::Report | Mode::Filter)
-                && tw.view.with(|v| v.error.is_some()))
+        tw.error.with(Option::is_some) || (!tw.cmd.is_open() && tw.view.with(|v| v.error.is_some()))
+    };
+    let title = move || {
+        if tw.cmd.is_open() {
+            tw.asking.get()
+        } else if tw.error.with(Option::is_some) {
+            "[b]Error[/]".to_string()
+        } else if failed() {
+            "[b]Filter Tasks[/]".to_string()
+        } else {
+            "Filter Tasks".to_string()
+        }
     };
     // taskwarrior-tui's `command` style (reversed), or `command.error`
     // (red).
-    let heading = switch(failed, move |failed| {
+    let heading = keyed(failed, move |failed| {
         text(title)
             .no_wrap()
             .style(if failed { "red" } else { "reverse" })
     });
-    let field = input(tw.cmd)
-        .disabled_when(move || !tw.mode.get().edits())
-        .on_submit(move |_, cx| tw.submit(cx))
-        .on_key("esc", move |cx| tw.cancel(cx))
-        .on_key("tab", move |_| tw.complete());
-    tw.input_id.with_untracked(|c| c.set(Some(field.id())));
-    // The filter follows what is typed, and the report with it.
-    watch(
-        move || tw.cmd.get(),
-        move |text, _| {
-            if tw.mode.get_untracked() == Mode::Filter {
-                tw.filter.set(text);
-            }
-        },
-    );
-    column([heading.fixed(1), field.fixed(1)])
+    let line = text(move || match tw.error.with(Option::is_some) {
+        true => "Press any key to continue.".to_string(),
+        false => escape(&tw.filter.get()),
+    })
+    .no_wrap()
+    .hidden_when(move || tw.cmd.is_open());
+    let closed = column([heading.fixed(1), line.fixed(1)]).hidden_when(move || tw.typing.get());
+    layers([
+        command_line_with(tw.cmd, CommandLineOptions::new().two_rows()),
+        closed,
+    ])
 }
 
-/// The Tasks view: the report over the details, the command bar, and
-/// the report's keys.
+/// The Tasks view: the report over (or beside) the details, the command
+/// bar, and the report's keys.
 fn tasks_view(tw: Tw) -> Node {
-    let area = RectHandle::new();
-    let main = switch(
-        move || (tw.details.get(), tw.beside.get()),
-        move |(show, beside)| {
-            let table = report_table(tw);
-            match (show, beside) {
-                (false, _) => table,
-                (true, false) => column([table.percent(50), details(tw).flex(1)]),
-                (true, true) => row([table.percent(50), details(tw).flex(1)]),
-            }
-        },
-    )
-    .rect_into(&area);
-    // A page of the report: its rows, less the header.
-    let page = move || {
-        let height = area.get_untracked().map_or(10, |r| r.height as usize);
-        let rows = if tw.details.get_untracked() && !tw.beside.get_untracked() {
-            height / 2
-        } else {
-            height
-        };
-        rows.saturating_sub(1).max(1)
-    };
+    let layout = TableLayout::new();
+    let table = report_table(tw, &layout);
+    tw.table.set(Some(table.id()));
+    let under = move || tw.details.get() && !tw.beside.get();
+    let beside = move || tw.details.get() && tw.beside.get();
+    let main = column([
+        row([table.flex(1), details(tw).flex(1).shown_when(beside)]).flex(1),
+        details(tw).flex(1).shown_when(under),
+    ]);
+    // A page of the report: the rows in view.
+    let page = move || layout.rows_in_view().max(1);
+    let page = Rc::new(page);
+    let page_up = page.clone();
     let last = move || tw.view.with_untracked(|v| v.tasks.len()).saturating_sub(1);
     watch(move || tw.selected.get(), move |_, _| tw.detail_top.set(0));
 
     let set_priority =
         move |p: Option<char>| move |cx: &mut Ctx| tw.change_each(cx, |t, _| t.priority = p);
-    column([main.flex(1), command_bar(tw).fixed(2)])
-        .in_mode(tw.mode, Mode::Report, "Task report", move |node| {
-            node.bind("slash", "Filter task report", move |cx| {
-                tw.edit(cx, Mode::Filter, tw.filter.get_untracked())
-            })
+    column([main.flex(1), command_bar(tw).fixed(2)]).section("Task report", move |node| {
+        node.bind("slash", "Filter task report", move |cx| tw.edit_filter(cx))
             .bind("a", "Add new task", move |cx| {
-                tw.edit(cx, Mode::Add, String::new())
+                tw.edit(cx, "Add Task", String::new(), |tw, text, cx| {
+                    tw.add(cx, text, false)
+                })
             })
             .bind("l", "Log new task", move |cx| {
-                tw.edit(cx, Mode::Log, String::new())
+                tw.edit(cx, "Log Task", String::new(), |tw, text, cx| {
+                    tw.add(cx, text, true)
+                })
             })
             .bind("m", "Modify selected task", move |cx| {
                 // taskwarrior-tui fills in the task's description and
@@ -2089,19 +1921,31 @@ fn tasks_view(tw: Tw) -> Node {
                             s.push_str(&format!("priority:{p} "));
                         }
                         if let Some(d) = t.due {
-                            s.push_str(&format!("due:{} ", fmt_date(d, tw.offset)));
+                            s.push_str(&format!("due:{} ", fmt_date(d, &tw.zone())));
                         }
                         s
                     }
                     _ => String::new(),
                 };
                 if !targets.is_empty() {
-                    tw.edit(cx, Mode::Modify, text);
+                    let title = tw.task_label("Modify");
+                    tw.edit(cx, &title, text, |tw, text, cx| tw.modify(cx, text));
                 }
             })
             .bind("A", "Annotate current task", move |cx| {
                 if !tw.targets().is_empty() {
-                    tw.edit(cx, Mode::Annotate, String::new())
+                    let title = tw.task_label("Annotate");
+                    tw.edit(cx, &title, String::new(), |tw, text, cx| {
+                        let note = words(text).join(" ");
+                        if !note.is_empty() {
+                            tw.change_each(cx, |t, now| {
+                                t.annotations.push(Annotation {
+                                    entry: now,
+                                    description: note.clone(),
+                                })
+                            });
+                        }
+                    })
                 }
             })
             .bind("d", "Mark task as done", move |cx| {
@@ -2111,8 +1955,17 @@ fn tasks_view(tw: Tw) -> Node {
                     t.start = None;
                 })
             })
-            .bind("x", "Delete task", move |_| {
-                tw.prompt(Mode::DeletePrompt, "x")
+            .bind("x", "Delete task", move |cx| {
+                if !tw.targets().is_empty() {
+                    let title = format!("{}?", tw.task_label("Delete"));
+                    tw.ask(cx, title, "x", move |cx| {
+                        tw.change_each(cx, |t, now| {
+                            t.status = Status::Deleted;
+                            t.end = Some(now);
+                            t.start = None;
+                        })
+                    });
+                }
             })
             .bind("s", "Toggle start and stop", move |cx| {
                 tw.change_each(cx, |t, now| {
@@ -2150,7 +2003,14 @@ fn tasks_view(tw: Tw) -> Node {
                     .collect();
                 tw.commit(cx, copies);
             })
-            .bind("u", "Undo", move |_| tw.prompt(Mode::UndoPrompt, "u"))
+            .bind("u", "Undo", move |cx| {
+                tw.ask(cx, "Run `task undo`?".into(), "u", move |cx| {
+                    let undone = tw.store.with_untracked(|s| s.borrow_mut().undo());
+                    if let Err(e) = undone.and_then(|_| tw.reload()) {
+                        tw.fail(cx, e);
+                    }
+                })
+            })
             .bind("v", "Toggle mark on selected", move |_| {
                 if let Some(t) = tw.current() {
                     tw.marked.toggle(t.uuid);
@@ -2165,7 +2025,16 @@ fn tasks_view(tw: Tw) -> Node {
                 }
             })
             .bind("colon", "Jump to task id", move |cx| {
-                tw.edit(cx, Mode::Jump, String::new())
+                tw.edit(cx, "Jump to Task", String::new(), |tw, text, cx| {
+                    let at = text.trim().parse::<u64>().ok().and_then(|id| {
+                        tw.view
+                            .with_untracked(|v| v.tasks.iter().position(|t| t.id == id))
+                    });
+                    match at {
+                        Some(at) => tw.selected.set(at),
+                        None => tw.fail(cx, format!("Cannot locate task id {}", text.trim())),
+                    }
+                })
             })
             .bind("z", "Toggle task info view", move |_| {
                 tw.details.update(|d| *d = !*d)
@@ -2185,7 +2054,7 @@ fn tasks_view(tw: Tw) -> Node {
                 tw.selected.update(|s| *s = (*s + page()).min(last()))
             })
             .bind("K", "Move page up", move |_| {
-                tw.selected.update(|s| *s = s.saturating_sub(page()))
+                tw.selected.update(|s| *s = s.saturating_sub(page_up()))
             })
             .bind("c", "Context switcher menu", move |cx| context_menu(tw, cx))
             .bind("R", "Report switcher menu", move |cx| report_menu(tw, cx))
@@ -2194,30 +2063,7 @@ fn tasks_view(tw: Tw) -> Node {
                     tw.fail(cx, e);
                 }
             })
-        })
-        .in_mode(tw.mode, Mode::DeletePrompt, "Delete prompt", move |node| {
-            node.bind("x", "Confirm", move |cx| {
-                tw.change_each(cx, |t, now| {
-                    t.status = Status::Deleted;
-                    t.end = Some(now);
-                    t.start = None;
-                });
-                if tw.mode.get_untracked() != Mode::Error {
-                    tw.back_to_report(cx);
-                }
-            })
-            .bind("q esc", "Abort", move |cx| tw.back_to_report(cx))
-        })
-        .in_mode(tw.mode, Mode::UndoPrompt, "Undo prompt", move |node| {
-            node.bind("u", "Confirm", move |cx| {
-                let undone = tw.store.with_untracked(|s| s.borrow_mut().undo());
-                match undone.and_then(|_| tw.reload()) {
-                    Ok(()) => tw.back_to_report(cx),
-                    Err(e) => tw.fail(cx, e),
-                }
-            })
-            .bind("q esc", "Abort", move |cx| tw.back_to_report(cx))
-        })
+    })
 }
 
 /// The Projects view: `task projects`.
@@ -2229,53 +2075,38 @@ fn projects_view(tw: Tw) -> Node {
 fn timesheet_view(tw: Tw) -> Node {
     scroll(text(move || {
         let now = tw.now.get();
-        tw.tasks.with(|t| timesheet_text(t, now, tw.offset))
+        tw.tasks.with(|t| timesheet_text(t, now, &tw.zone()))
     }))
 }
 
 /// The Calendar view: a year of months, as many across as fit, the due
-/// dates of the report's tasks in their colours.
+/// dates of the report's tasks in their colours, today's month and day
+/// bold.
 fn calendar_view(tw: Tw) -> Node {
-    let (today, _) = local(tw.now(), tw.offset);
-    let area = RectHandle::new();
-    let across = memo(move || {
-        area.get()
-            .map_or(3, |r| (r.width as usize / 24).clamp(1, 12))
-    });
-    let months = switch(
-        move || across.get(),
-        move |n| {
-            let months = (1..=12u32).map(|m| {
-                let options = CalendarOptions::new()
-                    .first_weekday(Weekday::Sunday)
-                    .today(today)
-                    .weekday_style("underline")
-                    .month_style("default")
-                    .events(move |date| tw.due_style(date));
-                month(move || Date::new(tw.year.get(), m, 1), options)
+    let (today, _) = local(tw.now(), &tw.zone());
+    let options = move || {
+        let heading = match tw.year.get() == today.year {
+            true => "bold underline",
+            false => "underline",
+        };
+        let months = CalendarOptions::new()
+            .title(MonthTitle::Name)
+            .first_weekday(Weekday::Sunday)
+            .today(today)
+            .weekday_style("underline")
+            .month_style_with(move |first: Date| {
+                let this = first.year == today.year && first.month == today.month;
+                Some(if this { "bold" } else { "default" })
             });
-            let grid = grid(vec![Size::Fixed(22); n], months)
-                .rows(vec![Size::Fixed(9); 12usize.div_ceil(n)]);
-            row([
-                label("").flex(1),
-                grid.fixed(22 * n as u16),
-                label("").flex(1),
-            ])
-        },
-    );
+        YearOptions::new()
+            .calendar(months)
+            .marks(move |date| tw.due_style(date))
+            .heading_style(heading)
+    };
     column([
         label("").fixed(1),
-        text(move || {
-            let year = tw.year.get();
-            let bold = if year == today.year { "bold " } else { "" };
-            format!("[{bold}underline]{year}[/]")
-        })
-        .text_align(TextAlign::Center)
-        .fixed(1),
-        label("").fixed(1),
-        months.flex(1),
+        year_view_with(move || tw.year.get(), options).flex(1),
     ])
-    .rect_into(&area)
     .focusable()
     .section("Calendar", |node| {
         node.bind("j down", "Forward a year", move |_| {
@@ -2413,13 +2244,12 @@ fn report_menu(tw: Tw, cx: &mut Ctx) {
         "Report  (type to filter)",
         &["Name", "Description"],
         rows,
-        move |name, cx| {
+        move |name, _| {
             if let Some(i) = REPORTS.iter().position(|r| r.name == name) {
                 tw.report.set(i);
                 tw.filter
                     .set(format!("{} ", REPORTS[i].filter).trim_start().to_string());
                 tw.selected.set(0);
-                tw.back_to_report(cx);
             }
         },
     );
@@ -2431,6 +2261,7 @@ fn report_menu(tw: Tw, cx: &mut Ctx) {
 
 /// The app over `store`.
 pub fn tasks_app(store: Box<dyn Store>, options: Options) -> App {
+    let follow_clock = options.now.is_none();
     App::new(move || {
         let tw = Tw::new(store, options);
         let loaded = tw.reload().err();
@@ -2454,7 +2285,7 @@ pub fn tasks_app(store: Box<dyn Store>, options: Options) -> App {
             move || tw.tab.get(),
             move |tab, cx| {
                 let id = match tab {
-                    0 => tw.table_id.with_untracked(Cell::get),
+                    0 => tw.table.get_untracked(),
                     _ => ids[tab],
                 };
                 if let Some(id) = id {
@@ -2472,7 +2303,7 @@ pub fn tasks_app(store: Box<dyn Store>, options: Options) -> App {
                 }
             },
         );
-        if options.now.is_none() {
+        if follow_clock {
             every(Duration::from_secs(30), move |cx| {
                 tw.now.set(unix_now());
                 if let Err(e) = tw.reload() {
@@ -2502,9 +2333,9 @@ pub fn tasks_app(store: Box<dyn Store>, options: Options) -> App {
 }
 
 /// A few tasks to start with, and two contexts.
-pub fn sample(store: &mut dyn Store, dir: &Path, now: Time, offset: i64) -> Result<(), String> {
-    let (today, _) = local(now, offset);
-    let day = |n: i64| midnight(today.add_days(n), offset);
+pub fn sample(store: &mut dyn Store, dir: &Path, now: Time, zone: &Zone) -> Result<(), String> {
+    let (today, _) = local(now, zone);
+    let day = |n: i64| midnight(today.add_days(n), zone);
     let mut add = |description: &str, entry: Time, f: &dyn Fn(&mut Task)| {
         let mut task = Task::new(store.new_uuid(), description, entry);
         f(&mut task);
@@ -2573,10 +2404,9 @@ fn main() -> std::io::Result<()> {
         .map_or(1, |d| d.as_nanos() as u64);
     let fail = |e: String| std::io::Error::other(e);
     let mut store = JsonlStore::open(&dir, seed).map_err(fail)?;
-    let offset = local_offset();
     if !dir.join("tasks.jsonl").exists() {
-        sample(&mut store, &dir, unix_now(), offset).map_err(fail)?;
+        sample(&mut store, &dir, unix_now(), &Zone::Local).map_err(fail)?;
     }
-    let options = Options { now: None, offset };
+    let options = Options::default();
     tasks_app(Box::new(store), options).run()
 }

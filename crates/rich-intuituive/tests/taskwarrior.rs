@@ -10,6 +10,7 @@ use std::path::PathBuf;
 
 use intuituive::widgets::Date;
 use intuituive::Driver;
+use rich_interact::datetime::Zone;
 use tasks::*;
 
 /// Monday 2026-10-19, noon UTC.
@@ -24,7 +25,7 @@ fn dir(name: &str) -> PathBuf {
 fn store(name: &str) -> (JsonlStore, PathBuf) {
     let dir = dir(name);
     let mut store = JsonlStore::open(&dir, 7).unwrap();
-    sample(&mut store, &dir, NOW, 0).unwrap();
+    sample(&mut store, &dir, NOW, &Zone::Utc).unwrap();
     (store, dir)
 }
 
@@ -32,7 +33,7 @@ fn driver_at(name: &str, width: u16, height: u16) -> (Driver, PathBuf) {
     let (store, dir) = store(name);
     let options = Options {
         now: Some(NOW),
-        offset: 0,
+        zone: Zone::Utc,
     };
     (
         tasks_app(Box::new(store), options).driver(width, height),
@@ -243,7 +244,8 @@ fn slash_filters_as_it_is_typed_and_esc_puts_it_back() {
     d.press("slash");
     assert_eq!(rows(&d)[28], "Filter Tasks");
     d.type_text("project:home");
-    assert_eq!(rows(&d)[29], "status:pending project:home");
+    // The top completion's rest shows after the caret (ghost text).
+    assert_eq!(rows(&d)[29], "status:pending project:home.bills");
     assert_eq!(report(&d), ["Pay the rent", "Fix the garden fence"]);
     d.press("esc");
     assert_eq!(report(&d).len(), 7);
@@ -278,9 +280,10 @@ fn slash_filters_as_it_is_typed_and_esc_puts_it_back() {
 fn a_filter_it_cannot_read_turns_the_bar_red() {
     let (mut d, _) = driver("bad-filter");
     d.press("slash");
-    d.type_text(" or +bills");
+    d.type_text(" (+bills");
     // taskwarrior-tui's `command.error` style: red, not reversed.
-    assert!(styled_line(&d, "Filter Tasks").starts_with("[bold red]Filter Tasks[/][red]"));
+    // (While typing, the command line's error style over the whole row.)
+    assert!(styled_line(&d, "Filter Tasks").starts_with("[bold red]Filter Tasks   "));
     assert!(!has(&d, "Pay the rent"));
 }
 
@@ -290,10 +293,10 @@ fn filters_read_taskwarriors_syntax() {
     let mut store = store;
     let tasks = store.load().unwrap();
     let ids = |f: &str| -> Vec<u64> {
-        let filter = Filter::parse(f, NOW, 0).unwrap();
+        let filter = parse_filter(f, NOW, &Zone::Utc).unwrap();
         tasks
             .iter()
-            .filter(|t| filter.matches(t, NOW, 0))
+            .filter(|t| passes(&filter, t, NOW, &Zone::Utc))
             .map(|t| t.id)
             .collect()
     };
@@ -307,13 +310,18 @@ fn filters_read_taskwarriors_syntax() {
     assert_eq!(ids("status:completed"), [0]);
     assert_eq!(ids("due.before:eow status:pending"), [1, 2, 3]);
     assert_eq!(ids("due.before:today"), [3]);
-    assert!(Filter::parse("+a or +b", NOW, 0).is_err());
-    assert!(Filter::parse("priority:X", NOW, 0).is_err());
+    // Taskwarrior's `or`, `not` and parentheses, through the query
+    // language.
+    assert_eq!(ids("+bills or +phone"), [1, 6]);
+    assert_eq!(ids("(project:work or project:travel) not +next"), [3, 4, 7]);
+    assert_eq!(ids("due.after:today due.before:eow"), [1, 2]);
+    assert!(parse_filter("priority:X", NOW, &Zone::Utc).is_err());
+    assert!(parse_filter("(+bills", NOW, &Zone::Utc).is_err());
 }
 
 #[test]
 fn dates_read_as_taskwarrior_reads_them() {
-    let at = |w: &str| parse_date(w, NOW, 0).map(|t| (Date::from_days(t / DAY), t % DAY));
+    let at = |w: &str| parse_date(w, NOW, &Zone::Utc).map(|t| (Date::from_days(t / DAY), t % DAY));
     assert_eq!(at("today"), Some((Date::new(2026, 10, 19), 0)));
     assert_eq!(at("tomorrow"), Some((Date::new(2026, 10, 20), 0)));
     assert_eq!(at("eod"), Some((Date::new(2026, 10, 19), DAY - 1)));
@@ -332,9 +340,15 @@ fn dates_read_as_taskwarrior_reads_them() {
     );
     assert_eq!(at("3d"), Some((Date::new(2026, 10, 22), 12 * 3_600)));
     assert_eq!(at("2w"), Some((Date::new(2026, 11, 2), 12 * 3_600)));
-    assert_eq!(at("someday"), None);
+    // Taskwarrior's `someday` is 9999-12-30; a word it does not know is
+    // no date.
+    assert_eq!(at("someday"), Some((Date::new(9999, 12, 30), 0)));
+    assert_eq!(at("whenever"), None);
     // In a zone two hours east, today starts at 22:00 UTC the day before.
-    assert_eq!(parse_date("today", NOW, 7_200), Some(20_745 * DAY - 7_200));
+    assert_eq!(
+        parse_date("today", NOW, &Zone::Fixed(7_200)),
+        Some(20_745 * DAY - 7_200)
+    );
 }
 
 #[test]
@@ -527,7 +541,9 @@ fn v_marks_tasks_and_actions_take_the_marked() {
     let (mut d, dir) = driver("marks");
     d.press("v j v");
     assert!(line(&d, "Write the quarterly").starts_with("  ✔ 2"));
-    assert!(line(&d, "Pay the rent").starts_with("• ✔ 1"));
+    // taskwarrior-tui's `⦿` on a marked selected row, `⦾` on an unmarked
+    // one, while marking.
+    assert!(line(&d, "Pay the rent").starts_with("⦿ ✔ 1"));
     assert!(line(&d, "Review pull").starts_with("    3"));
     d.press("m");
     assert_eq!(rows(&d)[28], "Modify Tasks 2,1");
@@ -564,29 +580,37 @@ fn tab_completes_projects_tags_and_dates() {
     let (mut d, _) = driver("complete");
     d.press("a");
     d.type_text("Plant bulbs project:ho");
-    d.press("tab");
+    // The top candidate's rest, as ghost text.
     assert_eq!(rows(&d)[29], "Plant bulbs project:home.bills");
+    // Tab opens a pop-up of the candidates; Tab moves, Enter takes.
     d.press("tab");
+    assert!(has(&d, " home.bills"), "{:#?}", rows(&d));
+    assert!(has(&d, " home.garden"), "{:#?}", rows(&d));
+    d.press("tab enter");
     assert_eq!(rows(&d)[29], "Plant bulbs project:home.garden");
+    // One candidate is taken at once.
     d.type_text(" +ph");
     d.press("tab");
     assert_eq!(rows(&d)[29], "Plant bulbs project:home.garden +phone");
     d.type_text(" due:to");
-    d.press("tab");
-    assert_eq!(
-        rows(&d)[29],
-        "Plant bulbs project:home.garden +phone due:today"
-    );
-    d.press("tab");
+    d.press("tab tab enter");
     assert_eq!(
         rows(&d)[29],
         "Plant bulbs project:home.garden +phone due:tomorrow"
     );
     d.type_text(" pri");
     d.press("tab");
+    // `priority:` taken, and its first value as ghost text.
     assert_eq!(
         rows(&d)[29],
-        "Plant bulbs project:home.garden +phone due:tomorrow priority:"
+        "Plant bulbs project:home.garden +phone due:tomorrow priority:H"
+    );
+    // Enter adds it, and ↑ brings it back from the add history.
+    d.type_text("M");
+    d.press("enter a up");
+    assert_eq!(
+        rows(&d)[29],
+        "Plant bulbs project:home.garden +phone due:tomorrow priority:M"
     );
 }
 
@@ -664,7 +688,9 @@ fn the_calendar_marks_the_due_dates() {
     d.press("bracketleft");
     let r = rows(&d);
     assert!(r[2].trim() == "2026", "{r:#?}");
-    assert!(has(&d, "October 2026"));
+    // Months titled by name, as taskwarrior-tui's (the year heads them).
+    assert!(has(&d, "October"));
+    assert!(!has(&d, "October 2026"));
     assert!(has(&d, "Su Mo Tu We Th Fr Sa"));
     let october = styled_line(&d, "[bold]19[/]");
     // Overdue in color9, due in color1, the active task's in its colours,
