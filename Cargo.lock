@@ -2994,6 +2994,7 @@ dependencies = [
  "unicode-width",
  "wasmi",
  "wat",
+ "windows-sys 0.61.2",
  "zip",
 ]
 

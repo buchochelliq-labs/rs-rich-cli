@@ -65,7 +65,8 @@ pub enum Op {
     /// Delete for good: a link itself (never what it points to), a file,
     /// a directory and everything in it.
     Delete(Vec<PathBuf>),
-    /// Move to the desktop trash ([`crate::trash::put`]).
+    /// Move to the platform's trash ([`crate::trash::send`]): the
+    /// FreeDesktop trash, the Finder's, the Recycle Bin.
     Trash(Vec<PathBuf>),
 }
 
@@ -175,7 +176,7 @@ pub fn run(op: &Op, cancel: &CancelToken, progress: &mut dyn FnMut(&Progress)) -
             Op::Copy { into, conflict, .. } => runner.paste(path, into, *conflict, false),
             Op::Move { into, conflict, .. } => runner.paste(path, into, *conflict, true),
             Op::Delete(_) => runner.delete(path),
-            Op::Trash(_) => crate::trash::put(path).map(|_| {
+            Op::Trash(_) => crate::trash::send(path).map(|_| {
                 runner.progress.items += 1;
                 runner.tell();
             }),

@@ -18,10 +18,13 @@
 //!   holds the original path (percent-encoded) and the local deletion time.
 //!   A name already in the trash gets `.2`, `.3`… after it.
 //! - On macOS and Windows, whose bins are kept by the Finder and the
-//!   shell, [`put`], [`list`] and [`home`] return an error of kind
-//!   [`Unsupported`](std::io::ErrorKind::Unsupported) that says so, rather
-//!   than writing a trash nothing else reads. [`Trash::at`] works anywhere:
-//!   it is a trash directory you name.
+//!   shell, [`send`] hands a file to them: the Finder through `osascript`
+//!   (so it can be put back from the Finder), the Recycle Bin through
+//!   `SHFileOperationW`. [`put`], [`list`] and [`home`] return an error
+//!   of kind [`Unsupported`](std::io::ErrorKind::Unsupported) there, as
+//!   those bins keep no `.trashinfo` this could read, rather than writing
+//!   a trash nothing else reads. [`Trash::at`] works anywhere: it is a
+//!   trash directory you name.
 //!
 //! ```
 //! use rich_ext::trash::Trash;
@@ -428,6 +431,115 @@ pub fn put(path: &Path) -> io::Result<TrashItem> {
     Err(unsupported())
 }
 
+/// Move `path` to the platform's trash: the FreeDesktop trash on Linux
+/// and the BSDs (as [`put`]), the Finder's on macOS (through `osascript`,
+/// so the Finder can put it back), the Recycle Bin on Windows (through
+/// the shell's `SHFileOperationW`, silently). What a file manager's
+/// "trash" does everywhere; [`put`] also says where the item went.
+pub fn send(path: &Path) -> io::Result<()> {
+    let original = std::path::absolute(path)?;
+    // Not found is an error before anything runs (the bins differ in
+    // what they say).
+    std::fs::symlink_metadata(&original)?;
+    send_to_bin(&original)
+}
+
+#[cfg(all(unix, not(target_os = "macos")))]
+fn send_to_bin(original: &Path) -> io::Result<()> {
+    put(original).map(|_| ())
+}
+
+#[cfg(target_os = "macos")]
+fn send_to_bin(original: &Path) -> io::Result<()> {
+    let out = finder_delete(original).output()?;
+    if out.status.success() {
+        return Ok(());
+    }
+    let said = String::from_utf8_lossy(&out.stderr).trim().to_string();
+    Err(io::Error::other(if said.is_empty() {
+        format!("the Finder could not trash it ({})", out.status)
+    } else {
+        said
+    }))
+}
+
+#[cfg(windows)]
+#[allow(unsafe_code)]
+fn send_to_bin(original: &Path) -> io::Result<()> {
+    use std::os::windows::ffi::OsStrExt;
+    use windows_sys::Win32::UI::Shell::{
+        SHFileOperationW, FOF_ALLOWUNDO, FOF_NOCONFIRMATION, FOF_NOERRORUI, FOF_SILENT, FO_DELETE,
+        SHFILEOPSTRUCTW,
+    };
+    // The shell takes no `\\?\` paths.
+    let shown = original.to_string_lossy();
+    let plain = match shown.strip_prefix(r"\\?\") {
+        Some(rest) if !rest.starts_with("UNC") => PathBuf::from(rest),
+        _ => original.to_path_buf(),
+    };
+    let from = nul_list([plain.as_os_str().encode_wide().collect()]);
+    let mut op = SHFILEOPSTRUCTW {
+        hwnd: std::ptr::null_mut(),
+        wFunc: FO_DELETE,
+        pFrom: from.as_ptr(),
+        pTo: std::ptr::null(),
+        fFlags: (FOF_ALLOWUNDO | FOF_NOCONFIRMATION | FOF_NOERRORUI | FOF_SILENT) as u16,
+        fAnyOperationsAborted: 0,
+        hNameMappings: std::ptr::null_mut(),
+        lpszProgressTitle: std::ptr::null(),
+    };
+    // SAFETY: `op` is a valid SHFILEOPSTRUCTW; `pFrom` points at `from`,
+    // a list ending in two NULs, which outlives the call; the other
+    // pointers are null, as the call allows for a delete.
+    let code = unsafe { SHFileOperationW(&mut op) };
+    if code != 0 {
+        return Err(io::Error::other(format!(
+            "the Recycle Bin refused it (shell error {code:#x})"
+        )));
+    }
+    if op.fAnyOperationsAborted != 0 {
+        return Err(io::Error::new(io::ErrorKind::Interrupted, "cancelled"));
+    }
+    Ok(())
+}
+
+#[cfg(not(any(unix, windows)))]
+fn send_to_bin(_original: &Path) -> io::Result<()> {
+    Err(unsupported())
+}
+
+/// The command that has the Finder move `original` (absolute) to the
+/// trash: AppleScript run by `osascript`, the path an argument, never
+/// part of the script.
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+fn finder_delete(original: &Path) -> std::process::Command {
+    let mut command = std::process::Command::new("osascript");
+    for line in [
+        "on run argv",
+        "repeat with p in argv",
+        "tell application \"Finder\" to delete (POSIX file (contents of p) as alias)",
+        "end repeat",
+        "end run",
+    ] {
+        command.arg("-e").arg(line);
+    }
+    command.arg(original);
+    command
+}
+
+/// Paths as the shell's file operations take them: each ended by a NUL,
+/// and the list by another.
+#[cfg_attr(not(windows), allow(dead_code))]
+fn nul_list(paths: impl IntoIterator<Item = Vec<u16>>) -> Vec<u16> {
+    let mut out = Vec::new();
+    for path in paths {
+        out.extend(path.into_iter().filter(|u| *u != 0));
+        out.push(0);
+    }
+    out.push(0);
+    out
+}
+
 /// The trash of the mount `original` (on `device`) is on.
 #[cfg(all(unix, not(target_os = "macos")))]
 fn mount_trash(original: &Path, device: u64) -> io::Result<Trash> {
@@ -538,6 +650,44 @@ mod tests {
         assert_eq!(when, "2004-08-31T22:32:08");
         assert!(parse_info("[Other]\nPath=/x\n").is_none());
         assert_eq!(utc_parts(1_093_991_528), (2004, 8, 31, 22, 32, 8));
+    }
+
+    #[test]
+    fn the_finder_is_asked_with_the_path_as_an_argument() {
+        let command = finder_delete(Path::new("/Users/ada/it's \"here\".txt"));
+        assert_eq!(command.get_program(), "osascript");
+        let args: Vec<String> = command
+            .get_args()
+            .map(|a| a.to_string_lossy().into_owned())
+            .collect();
+        // The script never holds the path: quotes in a name are harmless.
+        assert_eq!(args.len(), 11);
+        assert_eq!(args[0], "-e");
+        assert!(args[5].starts_with("tell application \"Finder\" to delete"));
+        assert!(args[..10].iter().all(|a| !a.contains("ada")));
+        assert_eq!(args[10], "/Users/ada/it's \"here\".txt");
+    }
+
+    #[test]
+    fn the_shell_takes_a_list_ending_in_two_nuls() {
+        let wide = |s: &str| s.encode_utf16().collect::<Vec<u16>>();
+        let list = nul_list([wide(r"C:\a.txt"), wide(r"C:\b")]);
+        let mut expected = wide(r"C:\a.txt");
+        expected.push(0);
+        expected.extend(wide(r"C:\b"));
+        expected.extend([0, 0]);
+        assert_eq!(list, expected);
+        // An empty list is two NULs, never one.
+        assert_eq!(nul_list(Vec::<Vec<u16>>::new()), [0]);
+    }
+
+    #[cfg(all(unix, not(target_os = "macos")))]
+    #[test]
+    fn send_puts_in_the_freedesktop_trash_here() {
+        assert_eq!(
+            send(Path::new("/no/such/file/here")).unwrap_err().kind(),
+            io::ErrorKind::NotFound
+        );
     }
 
     #[cfg(all(unix, not(target_os = "macos")))]
