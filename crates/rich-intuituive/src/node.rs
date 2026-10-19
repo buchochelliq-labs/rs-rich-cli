@@ -3010,6 +3010,11 @@ impl Node {
         }
         let inner = !std::mem::replace(&mut frame.damage, saved).is_empty();
         frame.shift = outer;
+        // The content is copied onto the screen by style, not by id, so
+        // its own table drops what no cell uses once that piles up.
+        if view.buffer.styles_piled_up() {
+            view.buffer.compact_styles();
+        }
         // Where the focus is inside, for scrolling it into view.
         let focused = frame.focus_path.with_untracked(|path| {
             let last = *path.last()?;

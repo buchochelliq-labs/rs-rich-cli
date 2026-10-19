@@ -5599,6 +5599,9 @@ impl Driver {
         }
         out.push_str(&app.caret(&mut self.painter));
         app.stats.bytes = out.len();
+        // Styles no cell uses any more go, once they pile up: a picture
+        // whose colours change every frame keeps a frame's worth.
+        self.painter.compact(&mut self.screen);
         out
     }
 

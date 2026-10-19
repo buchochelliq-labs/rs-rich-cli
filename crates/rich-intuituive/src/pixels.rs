@@ -26,11 +26,12 @@
 //! assert_eq!(driver.screen().plain(), ["  ▄▀▄   ", "   ▀    "]);
 //! ```
 
-use std::collections::HashMap;
 use std::rc::Rc;
 use std::time::Duration;
 
+#[cfg(test)]
 use rich::color::Color;
+#[cfg(test)]
 use rich::{Segment, Style};
 
 use crate::node::{Axis, Node};
@@ -438,35 +439,6 @@ fn opaque(p: Rgba) -> Option<Rgb> {
     (p[3] >= OPAQUE).then_some([p[0], p[1], p[2]])
 }
 
-/// Styles by (foreground, background), kept between frames: a pixel
-/// buffer's cells reuse a few colours.
-#[derive(Default)]
-pub(crate) struct Styles(HashMap<(u32, u32), Style>);
-
-impl Styles {
-    /// The style with `fg` and `bg`, either missing.
-    pub(crate) fn get(&mut self, fg: Option<Rgb>, bg: Option<Rgb>) -> Option<Style> {
-        let key = |c: Option<Rgb>| {
-            c.map_or(0, |[r, g, b]| {
-                (1 << 24) | (r as u32) << 16 | (g as u32) << 8 | b as u32
-            })
-        };
-        if fg.is_none() && bg.is_none() {
-            return None;
-        }
-        if self.0.len() > 8192 {
-            self.0.clear();
-        }
-        let style = self.0.entry((key(fg), key(bg))).or_insert_with(|| {
-            Style::from_color(
-                fg.map(|[r, g, b]| Color::from_rgb(r, g, b)),
-                bg.map(|[r, g, b]| Color::from_rgb(r, g, b)),
-            )
-        });
-        Some(style.clone())
-    }
-}
-
 /// One cell of half blocks from its `top` and `bottom` pixels: `None`
 /// when both are transparent. A cell with one pixel transparent has no
 /// background, so what is under it shows there.
@@ -526,76 +498,114 @@ fn two_colors(pixels: &[Rgba]) -> Option<(u32, Rgb, Option<Rgb>)> {
     Some((lit, average(true)?, average(false)))
 }
 
-/// `buf` as rows of cells in `mode`, `columns` x `rows` of them; runs of
-/// one style are one segment.
-pub(crate) fn render_lines(
+/// The cell at `column`, `row` of `buf` in `mode`: its glyph and colours.
+/// A space shows only its background, so it has no foreground. `scratch`
+/// holds a cell's pixels.
+#[inline]
+fn cell_at(
     buf: &PixelBuf,
     mode: PixelMode,
-    columns: u16,
-    rows: u16,
-    styles: &mut Styles,
-) -> Vec<Vec<Segment>> {
+    column: i32,
+    row: i32,
+    scratch: &mut Vec<Rgba>,
+) -> (char, Option<Rgb>, Option<Rgb>) {
     let (pw, ph) = mode.cell();
     let px = |x: i32, y: i32| buf.get(x, y).unwrap_or(CLEAR);
-    let mut lines = Vec::with_capacity(rows as usize);
-    let mut cell = Vec::with_capacity(8);
-    for row in 0..rows as i32 {
-        let mut line: Vec<Segment> = Vec::new();
-        let mut run = String::new();
-        let mut run_key: (Option<Rgb>, Option<Rgb>) = (None, None);
-        for column in 0..columns as i32 {
-            let (x, y) = (column * pw as i32, row * ph as i32);
-            let (glyph, fg, bg) = match mode {
-                PixelMode::HalfBlocks => {
-                    half_block(px(x, y), px(x, y + 1)).unwrap_or((' ', None, None))
-                }
-                PixelMode::Quadrants => {
-                    cell.clear();
-                    cell.extend([px(x, y), px(x + 1, y), px(x, y + 1), px(x + 1, y + 1)]);
-                    match two_colors(&cell) {
-                        None => (' ', None, None),
-                        Some((mask, fg, bg)) => (QUADRANTS[mask as usize], Some(fg), bg),
-                    }
-                }
-                PixelMode::Braille => {
-                    cell.clear();
-                    // In the order of the Braille pattern's bits.
-                    cell.extend([
-                        px(x, y),
-                        px(x, y + 1),
-                        px(x, y + 2),
-                        px(x + 1, y),
-                        px(x + 1, y + 1),
-                        px(x + 1, y + 2),
-                        px(x, y + 3),
-                        px(x + 1, y + 3),
-                    ]);
-                    match two_colors(&cell) {
-                        None => (' ', None, None),
-                        Some((mask, fg, bg)) => {
-                            let glyph = char::from_u32(0x2800 + mask).unwrap_or(' ');
-                            (glyph, Some(fg), bg)
-                        }
-                    }
-                }
-            };
-            // A space shows only its background.
-            let key = if glyph == ' ' { (None, bg) } else { (fg, bg) };
-            if key != run_key && !run.is_empty() {
-                line.push(Segment::new(
-                    std::mem::take(&mut run),
-                    styles.get(run_key.0, run_key.1),
-                ));
+    let (x, y) = (column * pw as i32, row * ph as i32);
+    let (glyph, fg, bg) = match mode {
+        PixelMode::HalfBlocks => half_block(px(x, y), px(x, y + 1)).unwrap_or((' ', None, None)),
+        PixelMode::Quadrants => {
+            scratch.clear();
+            scratch.extend([px(x, y), px(x + 1, y), px(x, y + 1), px(x + 1, y + 1)]);
+            match two_colors(scratch) {
+                None => (' ', None, None),
+                Some((mask, fg, bg)) => (QUADRANTS[mask as usize], Some(fg), bg),
             }
-            run_key = key;
-            run.push(glyph);
         }
-        if !run.is_empty() {
-            line.push(Segment::new(run, styles.get(run_key.0, run_key.1)));
+        PixelMode::Braille => {
+            scratch.clear();
+            // In the order of the Braille pattern's bits.
+            scratch.extend([
+                px(x, y),
+                px(x, y + 1),
+                px(x, y + 2),
+                px(x + 1, y),
+                px(x + 1, y + 1),
+                px(x + 1, y + 2),
+                px(x, y + 3),
+                px(x + 1, y + 3),
+            ]);
+            match two_colors(scratch) {
+                None => (' ', None, None),
+                Some((mask, fg, bg)) => {
+                    let glyph = char::from_u32(0x2800 + mask).unwrap_or(' ');
+                    (glyph, Some(fg), bg)
+                }
+            }
         }
-        lines.push(line);
+    };
+    if glyph == ' ' {
+        (glyph, None, bg)
+    } else {
+        (glyph, fg, bg)
     }
-    lines
+}
+
+/// Draw `buf` on `canvas` in `mode`, a cell at a time with plain colours
+/// ([`Canvas::put_rgb`]); the cells past the buffer are cleared.
+fn draw_cells(buf: &PixelBuf, mode: PixelMode, canvas: &mut Canvas) {
+    let (pw, ph) = mode.cell();
+    let (width, height) = (canvas.width(), canvas.height());
+    let columns = width.min(buf.width.div_ceil(pw));
+    let rows = height.min(buf.height.div_ceil(ph));
+    let mut scratch = Vec::with_capacity(8);
+    for row in 0..rows {
+        for column in 0..columns {
+            let (glyph, fg, bg) = cell_at(buf, mode, column as i32, row as i32, &mut scratch);
+            canvas.put_rgb(column, row, glyph, fg, bg);
+        }
+    }
+    if columns < width {
+        canvas.clear(columns, 0, width - columns, rows);
+    }
+    if rows < height {
+        canvas.clear(0, rows, width, height - rows);
+    }
+}
+
+/// `buf` as rows of cells in `mode`, `columns` x `rows` of them, as
+/// rendered segments (runs of one style are one segment): what the node
+/// drew before it wrote cells directly, kept to show they agree.
+#[cfg(test)]
+fn render_lines(buf: &PixelBuf, mode: PixelMode, columns: u16, rows: u16) -> Vec<Vec<Segment>> {
+    let style = |(fg, bg): (Option<Rgb>, Option<Rgb>)| {
+        (fg.is_some() || bg.is_some()).then(|| {
+            Style::from_color(
+                fg.map(|[r, g, b]| Color::from_rgb(r, g, b)),
+                bg.map(|[r, g, b]| Color::from_rgb(r, g, b)),
+            )
+        })
+    };
+    let mut scratch = Vec::with_capacity(8);
+    (0..rows as i32)
+        .map(|row| {
+            let mut line: Vec<Segment> = Vec::new();
+            let mut run = String::new();
+            let mut run_key = (None, None);
+            for column in 0..columns as i32 {
+                let (glyph, fg, bg) = cell_at(buf, mode, column, row, &mut scratch);
+                if (fg, bg) != run_key && !run.is_empty() {
+                    line.push(Segment::new(std::mem::take(&mut run), style(run_key)));
+                }
+                run_key = (fg, bg);
+                run.push(glyph);
+            }
+            if !run.is_empty() {
+                line.push(Segment::new(run, style(run_key)));
+            }
+            line
+        })
+        .collect()
 }
 
 type Draw = Box<dyn FnMut(&mut PixelBuf)>;
@@ -607,7 +617,6 @@ struct Pixels {
     mode: PixelMode,
     buf: PixelBuf,
     draw: Draw,
-    styles: Styles,
 }
 
 impl Widget for Pixels {
@@ -642,14 +651,7 @@ impl Widget for Pixels {
             self.buf.resize(width, height);
         }
         (self.draw)(&mut self.buf);
-        let lines = render_lines(
-            &self.buf,
-            self.mode,
-            columns.min(width.div_ceil(pw)),
-            rows.min(height.div_ceil(ph)),
-            &mut self.styles,
-        );
-        canvas.lines(&lines);
+        draw_cells(&self.buf, self.mode, canvas);
     }
 }
 
@@ -668,7 +670,6 @@ pub fn pixels(width: u16, height: u16, draw: impl FnMut(&mut PixelBuf) + 'static
             mode: PixelMode::HalfBlocks,
             buf: PixelBuf::new(width, height),
             draw: Box::new(draw),
-            styles: Styles::default(),
         }),
         "pixels",
     )
@@ -702,7 +703,6 @@ pub fn pixels_fit(draw: impl FnMut(&mut PixelBuf) + 'static) -> Node {
             mode: PixelMode::HalfBlocks,
             buf: PixelBuf::new(0, 0),
             draw: Box::new(draw),
-            styles: Styles::default(),
         }),
         "pixels",
     )
@@ -727,5 +727,78 @@ impl Node {
     pub fn pixel_mode(self, mode: PixelMode) -> Node {
         self.widget_mut(|pixels: &mut Pixels| pixels.mode = mode);
         self
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::app::App;
+
+    /// A buffer of every kind of cell: opaque, half and fully transparent,
+    /// flat and noisy.
+    fn sample(width: u16, height: u16) -> PixelBuf {
+        let mut buf = PixelBuf::new(width, height);
+        let mut n = 1u32;
+        for y in 0..height as i32 {
+            for x in 0..width as i32 {
+                n = n.wrapping_mul(1_103_515_245).wrapping_add(12_345);
+                let [r, g, b, a] = n.to_le_bytes();
+                let alpha = match (x + y) % 5 {
+                    0 => 0,
+                    1 => a,
+                    _ => 255,
+                };
+                buf.set(
+                    x,
+                    y,
+                    if x < 3 {
+                        [9, 9, 9, alpha]
+                    } else {
+                        [r, g, b, alpha]
+                    },
+                );
+            }
+        }
+        buf
+    }
+
+    #[test]
+    fn cells_written_directly_match_the_segments_they_replaced() {
+        for mode in [
+            PixelMode::HalfBlocks,
+            PixelMode::Quadrants,
+            PixelMode::Braille,
+        ] {
+            let buf = sample(13, 11);
+            let (pw, ph) = mode.cell();
+            // A canvas larger than the buffer: the rest is cleared alike.
+            let (columns, rows) = (9u16, 5u16);
+            let used = (
+                columns.min(13u16.div_ceil(pw)),
+                rows.min(11u16.div_ceil(ph)),
+            );
+            let lines = render_lines(&buf, mode, used.0, used.1);
+            let fill = buf.clone();
+            let app = App::new(move || {
+                let buf = fill.clone();
+                pixels(13, 11, move |b| *b = buf.clone()).pixel_mode(mode)
+            });
+            let mut driver = app.driver(columns, rows);
+            driver.settle();
+            let mut expected = crate::screen::Screen::new(columns, rows);
+            expected.write_lines(expected.area(), &lines);
+            let got = driver.screen();
+            for y in 0..rows {
+                for x in 0..columns {
+                    let (a, b) = (got.cell(x, y), expected.cell(x, y));
+                    assert_eq!(
+                        (&a.text, got.style(a.style)),
+                        (&b.text, expected.style(b.style)),
+                        "{mode:?} ({x}, {y})"
+                    );
+                }
+            }
+        }
     }
 }
