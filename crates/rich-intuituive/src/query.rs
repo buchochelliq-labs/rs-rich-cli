@@ -197,6 +197,9 @@ struct Field {
 /// A bare word's own test, from [`Grammar::words`].
 pub type Matcher = Rc<dyn Fn(&dyn Record) -> bool>;
 
+/// Gives bare words their own matchers.
+type WordsFn = Rc<dyn Fn(&str) -> Option<Matcher>>;
+
 /// What a [`parse`] reads: the fields (names, aliases, kinds), how dates
 /// read, whether case counts, and how bare words match. A syntax
 /// (Taskwarrior's, a process list's) is a grammar a plugin builds.
@@ -205,7 +208,7 @@ pub struct Grammar {
     fields: Vec<Field>,
     aliases: Vec<(String, String)>,
     dates: Option<Reader>,
-    words: Option<Rc<dyn Fn(&str) -> Option<Matcher>>>,
+    words: Option<WordsFn>,
     case_sensitive: bool,
     /// An unknown `name:value` is a bare word rather than an error.
     lenient: bool,

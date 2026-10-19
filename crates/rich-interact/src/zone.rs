@@ -430,6 +430,8 @@ mod platform {
         // and reads `time`, which lives across the call.
         unsafe {
             TZSET.call_once(|| tzset());
+            // `time_t` is 32 bits on some targets.
+            #[allow(clippy::useless_conversion)]
             let time: libc::time_t = unix.try_into().ok()?;
             let mut tm: libc::tm = std::mem::zeroed();
             if libc::localtime_r(&time, &mut tm).is_null() {
@@ -547,7 +549,7 @@ mod tests {
             out.push(version);
             out.extend([0; 15]);
             for n in [0, 0, 0, time, types, chars] {
-                out.extend((n as u32).to_be_bytes());
+                out.extend(n.to_be_bytes());
             }
         }
         let mut out = Vec::new();

@@ -482,9 +482,7 @@ impl Widget for CommandBar {
     }
 
     fn caret(&self) -> Option<(u16, u16)> {
-        if self.mode().is_none() {
-            return None;
-        }
+        self.mode()?;
         let (x, y) = self.area.caret()?;
         Some((self.input.x + x, self.input.y + y))
     }
