@@ -2868,6 +2868,7 @@ dependencies = [
  "chrono",
  "clap",
  "fancy-regex 0.19.2",
+ "flate2",
  "libc",
  "libloading",
  "log",
@@ -2887,6 +2888,7 @@ dependencies = [
  "unicode-width",
  "wasmi",
  "wat",
+ "zip",
 ]
 
 [[package]]

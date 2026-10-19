@@ -1,0 +1,529 @@
+//! A preview pane that picks its renderer by the file's type.
+
+use std::io::Read;
+use std::path::{Path, PathBuf};
+use std::rc::Rc;
+use std::sync::Arc;
+use std::time::Duration;
+
+use rich::markup::escape;
+use rich::{Console, Segment, Syntax};
+use rich_ext::filetype;
+use rich_ext::hex::HexView;
+use rich_ext::listing::{read_dir, readable_size, Entry, Sort};
+
+use super::model::dir_model_of;
+use super::row::{file_list, FileListOptions};
+use crate::app::Ctx;
+use crate::layout::TextAlign;
+use crate::node::{leaf, scroll_with, switch, text, Node};
+use crate::reactive::{signal, watch, Signal};
+use crate::scrollbar::{Scrollbar, Show};
+use crate::task::spawn;
+
+/// What a preview pane shows.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub enum Preview {
+    /// Nothing hovered, an empty file, or a preview still loading.
+    #[default]
+    Nothing,
+    /// A directory's entries, or why they cannot be read.
+    Dir(Result<Vec<Entry>, String>),
+    /// The start of a text file, highlighted, one line a row.
+    Code(Vec<Vec<Segment>>),
+    /// The start of a binary file as a hex dump.
+    Hex(Vec<Vec<Segment>>),
+    /// An archive's entries, a line each (with the `archive` feature).
+    Archive(Vec<Vec<Segment>>),
+    /// An image file, and what it is (shown when it is not drawn: without
+    /// the `art` feature).
+    Image { path: PathBuf, note: String },
+    /// A line about the file (an error, say), in markup.
+    Note(String),
+}
+
+/// What a preview is loaded for: the pane's width, and how a directory's
+/// entries are listed.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct PreviewSettings {
+    /// Columns to highlight and lay a hex dump out for.
+    pub width: u16,
+    pub hidden: bool,
+    pub sort: Sort,
+    /// The most lines of a text file highlighted (Yazi scrolls through
+    /// them with J and K).
+    pub max_lines: usize,
+    /// The most bytes of a binary file dumped.
+    pub hex_bytes: usize,
+}
+
+impl Default for PreviewSettings {
+    fn default() -> Self {
+        PreviewSettings {
+            width: 80,
+            hidden: false,
+            sort: Sort::default(),
+            max_lines: 500,
+            hex_bytes: 4096,
+        }
+    }
+}
+
+/// A previewer of your own: given the path, its sniffed MIME type and the
+/// settings, a [`Preview`] for the files it takes, or `None` to leave a
+/// file to the others. It runs on a worker thread.
+pub type Previewer = Arc<dyn Fn(&Path, &str, &PreviewSettings) -> Option<Preview> + Send + Sync>;
+
+/// Bytes read from a file's start to preview it.
+const HEAD: u64 = 256 * 1024;
+
+/// Load the preview of `path` (on a worker thread: it reads the disk and
+/// highlights): a directory's entries; an image; an archive's listing
+/// (with the `archive` feature); the start of a text file highlighted for
+/// the width; the start of anything else as a hex dump. `previewers` are
+/// asked first, in order.
+pub fn load_preview(path: &Path, settings: &PreviewSettings, previewers: &[Previewer]) -> Preview {
+    let meta = match std::fs::metadata(path) {
+        Ok(meta) => meta,
+        Err(error) => return Preview::Note(format!("[red]{}", escape(&error.to_string()))),
+    };
+    let mime = filetype::mime_for(path).unwrap_or("application/octet-stream");
+    for previewer in previewers {
+        if let Some(preview) = previewer(path, mime, settings) {
+            return preview;
+        }
+    }
+    if meta.is_dir() {
+        return Preview::Dir(
+            read_dir(path, settings.hidden, settings.sort).map_err(|e| e.to_string()),
+        );
+    }
+    let mut head = Vec::new();
+    let read = std::fs::File::open(path).and_then(|file| file.take(HEAD).read_to_end(&mut head));
+    if let Err(error) = read {
+        return Preview::Note(format!("[red]{}", escape(&error.to_string())));
+    }
+    if head.is_empty() {
+        return Preview::Nothing;
+    }
+    let size = readable_size(meta.len());
+    if mime.starts_with("image/") {
+        return Preview::Image {
+            path: path.to_path_buf(),
+            note: format!("[yellow]{mime}[/], {size}"),
+        };
+    }
+    #[cfg(feature = "archive")]
+    if let Some(preview) = archive_preview(path) {
+        return preview;
+    }
+    let width = settings.width.max(1) as usize;
+    let console = Console::builder().width(width).force_terminal(true).build();
+    let mut options = console.options().update_width(width);
+    options.no_wrap = Some(true);
+    if head.iter().take(8 * 1024).any(|b| *b == 0) || !looks_textual(mime) {
+        head.truncate(settings.hex_bytes);
+        let view = HexView::new(head).collapse(true);
+        return Preview::Hex(console.render_lines(&view, &options, false));
+    }
+    let language = path
+        .extension()
+        .map(|e| e.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "txt".into());
+    let text = String::from_utf8_lossy(&head);
+    let shown: String = text
+        .lines()
+        .take(settings.max_lines)
+        .collect::<Vec<_>>()
+        .join("\n");
+    // Yazi's code preview: two-space tabs, no wrapping, and the theme's
+    // colours on the terminal's own background.
+    let syntax = Syntax::new(shown, language.as_str())
+        .tab_size(2)
+        .background_color("default");
+    Preview::Code(console.render_lines(&syntax, &options, false))
+}
+
+/// Whether a type is shown as text (else as a hex dump).
+fn looks_textual(mime: &str) -> bool {
+    mime.starts_with("text/")
+        || mime == "inode/x-empty"
+        || matches!(
+            mime,
+            "application/json"
+                | "application/x-ndjson"
+                | "application/javascript"
+                | "application/toml"
+                | "application/yaml"
+                | "application/xml"
+                | "application/rtf"
+        )
+}
+
+/// An archive's listing, if `path` is one this build reads.
+#[cfg(feature = "archive")]
+fn archive_preview(path: &Path) -> Option<Preview> {
+    use rich::Style;
+    use rich_ext::archive;
+    archive::Format::of(path).ok()??;
+    let entries = match archive::entries(path) {
+        Ok(entries) => entries,
+        Err(error) => {
+            return Some(Preview::Note(format!(
+                "[red]{}",
+                escape(&error.to_string())
+            )))
+        }
+    };
+    let size_style = Style::parse("bright_black").ok();
+    let dir_style = Style::parse("blue").ok();
+    let lines = entries
+        .iter()
+        .map(|e| {
+            let size = if e.dir {
+                String::new()
+            } else {
+                readable_size(e.size)
+            };
+            let mut line = vec![Segment::new(format!("{size:>6} "), size_style.clone())];
+            if e.dir {
+                line.push(Segment::new(format!("{}/", e.path), dir_style.clone()));
+            } else {
+                line.push(Segment::new(e.path.clone(), None));
+            }
+            if let Some(to) = e.link.as_ref().filter(|t| !t.is_empty()) {
+                line.push(Segment::new(format!(" -> {to}"), None));
+            }
+            line
+        })
+        .collect();
+    Some(Preview::Archive(lines))
+}
+
+type DirClick = Rc<dyn Fn(Option<String>, &mut Ctx)>;
+type Remembered = Rc<dyn Fn(&Path) -> Option<String>>;
+
+/// How a [`preview`] pane behaves, and the signals it shares.
+#[derive(Clone, Default)]
+pub struct PreviewOptions {
+    pub(crate) hidden: Option<Signal<bool>>,
+    pub(crate) sort: Option<Signal<Sort>>,
+    pub(crate) state: Option<Signal<Preview>>,
+    pub(crate) top: Option<Signal<u16>>,
+    pub(crate) dir_cursor: Option<Signal<usize>>,
+    pub(crate) dir_offset: Option<Signal<usize>>,
+    pub(crate) refresh: Option<Signal<u64>>,
+    pub(crate) icons: bool,
+    pub(crate) previewers: Vec<Previewer>,
+    pub(crate) clear_after: Option<Duration>,
+    pub(crate) on_dir_click: Option<DirClick>,
+    pub(crate) remembered: Option<Remembered>,
+    pub(crate) max_lines: Option<usize>,
+}
+
+impl PreviewOptions {
+    pub fn new() -> PreviewOptions {
+        PreviewOptions::default()
+    }
+
+    /// List a directory's hidden entries as this says.
+    pub fn hidden(mut self, hidden: Signal<bool>) -> PreviewOptions {
+        self.hidden = Some(hidden);
+        self
+    }
+
+    /// Sort a directory's entries so.
+    pub fn sort(mut self, sort: Signal<Sort>) -> PreviewOptions {
+        self.sort = Some(sort);
+        self
+    }
+
+    /// Keep what is shown in `state` (to read it elsewhere).
+    pub fn state(mut self, state: Signal<Preview>) -> PreviewOptions {
+        self.state = Some(state);
+        self
+    }
+
+    /// The first line shown of a text, hex or archive preview (Yazi's J
+    /// and K move it); back to 0 for each new preview.
+    pub fn scroll(mut self, top: Signal<u16>) -> PreviewOptions {
+        self.top = Some(top);
+        self
+    }
+
+    /// The entry hovered in a directory's preview, and its first row in
+    /// view.
+    pub fn dir_cursor(mut self, cursor: Signal<usize>, first: Signal<usize>) -> PreviewOptions {
+        self.dir_cursor = Some(cursor);
+        self.dir_offset = Some(first);
+        self
+    }
+
+    /// Load again whenever this changes (after the files changed).
+    pub fn refresh(mut self, tick: Signal<u64>) -> PreviewOptions {
+        self.refresh = Some(tick);
+        self
+    }
+
+    /// Nerd Font icons in a directory's preview.
+    pub fn icons(mut self, on: bool) -> PreviewOptions {
+        self.icons = on;
+        self
+    }
+
+    /// Ask `previewer` before the built-in ones.
+    pub fn previewer(
+        mut self,
+        previewer: impl Fn(&Path, &str, &PreviewSettings) -> Option<Preview> + Send + Sync + 'static,
+    ) -> PreviewOptions {
+        self.previewers.push(Arc::new(previewer));
+        self
+    }
+
+    /// Clear the pane when a preview takes longer than `delay` (150 ms by
+    /// default), so a slow one does not leave the last file's on show.
+    pub fn clear_after(mut self, delay: Duration) -> PreviewOptions {
+        self.clear_after = Some(delay);
+        self
+    }
+
+    /// The most lines of a text file highlighted (500 by default).
+    pub fn max_lines(mut self, lines: usize) -> PreviewOptions {
+        self.max_lines = Some(lines);
+        self
+    }
+
+    /// Called with the entry clicked in a directory's preview (`None`
+    /// below the entries).
+    pub fn on_dir_click(
+        mut self,
+        click: impl Fn(Option<String>, &mut Ctx) + 'static,
+    ) -> PreviewOptions {
+        self.on_dir_click = Some(Rc::new(click));
+        self
+    }
+
+    /// The entry to hover in a directory's preview: where the cursor was
+    /// when that directory was last shown.
+    pub fn remembered(
+        mut self,
+        entry: impl Fn(&Path) -> Option<String> + 'static,
+    ) -> PreviewOptions {
+        self.remembered = Some(Rc::new(entry));
+        self
+    }
+}
+
+/// A pane previewing the file or directory `path` gives (which may read
+/// signals, as a hovered entry does): loaded off the app's thread whenever
+/// the path, the pane's width or a setting changes, and shown by type (see
+/// [`load_preview`]). A result for an earlier path is dropped. Text, hex
+/// and archive previews scroll; a directory's is a [`file_list`]; an image
+/// is drawn with the `art` feature and described without it.
+///
+/// ```
+/// use intuituive::files::{preview, PreviewOptions};
+/// use intuituive::prelude::*;
+///
+/// let path = std::env::temp_dir().join(format!("intuituive-preview-doc-{}.bin", std::process::id()));
+/// std::fs::write(&path, [0u8, 1, 2, 0xff]).unwrap();
+/// let shown = path.clone();
+/// let app = App::new(move || {
+///     let shown = shown.clone();
+///     preview(move || Some(shown.clone()), PreviewOptions::new())
+/// })
+/// .wait_for_tasks(true);
+/// let mut driver = app.driver(80, 2);
+/// driver.settle();
+/// let screen = driver.screen().plain();
+/// assert!(screen[0].starts_with("00000000  00 01 02 ff"), "{screen:?}");
+/// # std::fs::remove_file(&path).ok();
+/// ```
+pub fn preview(path: impl Fn() -> Option<PathBuf> + 'static, options: PreviewOptions) -> Node {
+    let state = options.state.unwrap_or_else(|| signal(Preview::Nothing));
+    let top = options.top.unwrap_or_else(|| signal(0u16));
+    let dir_cursor = options.dir_cursor.unwrap_or_else(|| signal(0usize));
+    let dir_offset = options.dir_offset.unwrap_or_else(|| signal(0usize));
+    let hidden = options.hidden.unwrap_or_else(|| signal(false));
+    let sort = options.sort.unwrap_or_else(|| signal(Sort::default()));
+    let refresh = options.refresh;
+    let icons = options.icons;
+    let on_dir_click = options.on_dir_click.clone();
+    let shown_path = signal(None::<PathBuf>);
+    let pane = switch(
+        move || {
+            state.with(|p| match p {
+                Preview::Dir(Ok(e)) if !e.is_empty() => 1,
+                Preview::Code(_) | Preview::Hex(_) | Preview::Archive(_) => 2,
+                Preview::Image { .. } => 3,
+                Preview::Note(_) => 4,
+                _ => 0,
+            })
+        },
+        move |kind| match kind {
+            1 => {
+                // The directory's entries as loaded on the worker, through
+                // a model that never reads the disk itself.
+                let dir = dir_model_of(
+                    move || shown_path.get(),
+                    move || {
+                        state.with(|p| match p {
+                            Preview::Dir(listing) => listing.clone(),
+                            _ => Ok(Vec::new()),
+                        })
+                    },
+                    hidden,
+                    sort,
+                );
+                let list = file_list(
+                    dir,
+                    dir_cursor,
+                    FileListOptions::new()
+                        .icons(icons)
+                        .offset(dir_offset)
+                        // Yazi underlines the entry the preview would hover.
+                        .selected_style("underline")
+                        .no_focus(),
+                );
+                let click = on_dir_click.clone();
+                list.on_mouse(move |cx, mouse| {
+                    use rich_interact::{Button, MouseKind};
+                    match mouse.kind {
+                        MouseKind::Down(Button::Left) => {}
+                        MouseKind::ScrollUp | MouseKind::ScrollDown => return true,
+                        _ => return false,
+                    }
+                    let Some(click) = &click else {
+                        return false;
+                    };
+                    let i = dir_offset.get_untracked() + mouse.row as usize;
+                    let name = state.with_untracked(|p| match p {
+                        Preview::Dir(Ok(entries)) => entries.get(i).map(|e| e.name.clone()),
+                        _ => None,
+                    });
+                    click(name, cx);
+                    true
+                })
+            }
+            2 => scroll_with(
+                leaf(move |_, _, _| {
+                    state.with(|p| match p {
+                        Preview::Code(lines) | Preview::Hex(lines) | Preview::Archive(lines) => {
+                            lines.clone()
+                        }
+                        _ => Vec::new(),
+                    })
+                }),
+                top,
+            )
+            // Yazi's preview has no scrollbar.
+            .scrollbar(Scrollbar::new().show(Show::Never))
+            .no_focus(),
+            3 => image_pane(state),
+            // What a file is, at the top left, as Yazi's `file` previewer.
+            4 => text(move || {
+                state.with(|p| match p {
+                    Preview::Note(note) => note.clone(),
+                    _ => String::new(),
+                })
+            }),
+            _ => text(move || {
+                state.with(|p| match p {
+                    Preview::Dir(Ok(_)) => "No items".into(),
+                    Preview::Dir(Err(e)) => format!("Error: {}", escape(e)),
+                    _ => String::new(),
+                })
+            })
+            .text_align(TextAlign::Center),
+        },
+    )
+    .name("preview");
+    let area = pane.rect_handle();
+    let generation = signal(0u64);
+    let previewers = Arc::new(options.previewers);
+    let remembered = options.remembered.clone();
+    let clear_after = options.clear_after.unwrap_or(Duration::from_millis(150));
+    let max_lines = options.max_lines.unwrap_or(500);
+    watch(
+        move || {
+            let settings = PreviewSettings {
+                width: area.get().map_or(0, |r| r.width),
+                hidden: hidden.get(),
+                sort: sort.get(),
+                max_lines,
+                ..PreviewSettings::default()
+            };
+            (path(), settings, refresh.map(|r| r.get()))
+        },
+        move |(path, settings, _), _| {
+            generation.update(|g| *g += 1);
+            top.set(0);
+            let mine = generation.get_untracked();
+            let Some(path) = path else {
+                state.set(Preview::Nothing);
+                shown_path.set(None);
+                return;
+            };
+            // Not laid out yet: the width comes with the first frame.
+            if settings.width == 0 {
+                return;
+            }
+            spawn(
+                move || std::thread::sleep(clear_after),
+                move |_, _| {
+                    if generation.get_untracked() == mine {
+                        state.set(Preview::Nothing);
+                    }
+                },
+            );
+            let previewers = previewers.clone();
+            // The entry to hover if it is a directory, while on this thread.
+            let hover = remembered.as_ref().and_then(|r| r(&path));
+            let loading = path.clone();
+            spawn(
+                move || load_preview(&loading, &settings, &previewers),
+                move |loaded, _| {
+                    if generation.get_untracked() != mine {
+                        return;
+                    }
+                    // Done: the clearing above has nothing left to do.
+                    generation.update(|g| *g += 1);
+                    if let Preview::Dir(Ok(entries)) = &loaded {
+                        let at = hover
+                            .and_then(|n| entries.iter().position(|e| e.name == n))
+                            .unwrap_or(0);
+                        dir_cursor.set(at);
+                    }
+                    shown_path.set(Some(path));
+                    state.set(loaded);
+                },
+            );
+        },
+    );
+    pane
+}
+
+/// An image preview: drawn in half blocks with the `art` feature.
+#[cfg(feature = "art")]
+fn image_pane(state: Signal<Preview>) -> Node {
+    let path = move || {
+        state.with(|p| match p {
+            Preview::Image { path, .. } => Some(path.clone()),
+            _ => None,
+        })
+    };
+    crate::image::image_of(path, crate::image::ImageView::default())
+}
+
+/// An image preview, described: images are drawn with the `art` feature.
+#[cfg(not(feature = "art"))]
+fn image_pane(state: Signal<Preview>) -> Node {
+    text(move || {
+        state.with(|p| match p {
+            Preview::Image { note, .. } => {
+                format!("{note}\n[bright_black]Images are drawn with the `art` feature.")
+            }
+            _ => String::new(),
+        })
+    })
+}

@@ -47,8 +47,10 @@
 //!   rules follow the terminal's size; [`viewport`] reads it.
 //! - **The outside world** (off-by-default features): `audio::input`
 //!   captures a sound card into a signal (`audio`), `watch_path` wakes the
-//!   app when files change (`watch`), and `image` draws an image file in
-//!   half blocks (`art`).
+//!   app when files change (`watch`), `image` draws an image file in
+//!   half blocks (`art`), and [`files`] has a file manager's components:
+//!   Miller columns, file lists, previews, background file jobs and a
+//!   streaming finder (`files`).
 //! - **Tests**: [`App::render_with`] and [`App::run_on`] with
 //!   `rich-interact`'s headless driver run an app without a terminal;
 //!   [`App::driver`] steps one, and [`assert_screen!`] compares its screen
@@ -67,6 +69,8 @@ mod calendar;
 mod datetime;
 mod dialog;
 mod effect;
+#[cfg(feature = "files")]
+pub mod files;
 #[cfg(feature = "art")]
 mod image;
 mod input;
