@@ -82,6 +82,7 @@ mod calendar;
 mod datetime;
 mod dialog;
 mod effect;
+mod feed;
 #[cfg(feature = "files")]
 pub mod files;
 pub mod finder;
@@ -109,6 +110,7 @@ pub mod screen;
 mod scrollbar;
 mod sequence;
 mod sheet;
+mod signals;
 mod solver;
 mod split;
 mod table_scroll;
@@ -138,6 +140,7 @@ pub use bindings::{Scaled, Stepped};
 pub use border::{Border, BorderSet, Edge, Shadow, Sides};
 pub use dialog::{ConfirmOptions, PickOptions, PromptOptions};
 pub use effect::{effect, fill};
+pub use feed::{latest_iter, latest_with_state, FeedEnd, FeedState, Pace, Play};
 pub use finder::finder_of;
 pub use help::{HelpOptions, KeyFormat};
 #[cfg(feature = "art")]
@@ -157,11 +160,12 @@ pub use node::{
 pub use notify::{Corner, Level};
 pub use place::{Offset, Origin, RectHandle};
 pub use preview::{preview_of, preview_of_with, PreviewOfOptions};
-pub use reactive::{memo, on_write, signal, viewport, watch, Memo, Proxy, Signal};
+pub use reactive::{memo, on_write, on_write_ref, signal, viewport, watch, Memo, Proxy, Signal};
 /// What a text does with what does not fit a line: rich's.
 pub use rich::Overflow;
 pub use rule::rule;
 pub use sheet::{SheetError, Stylesheet};
+pub use signals::{history, recent, smoothed, Count, History};
 pub use solver::Solver;
 pub use task::{
     latest, latest_every, resource, resource_for, spawn, spawn_future, spawn_stream, spawn_then,
@@ -181,11 +185,11 @@ pub mod prelude {
     pub use crate::described;
     pub use crate::{
         after, column, component, each, effect, every, fill, grid, input, label, latest,
-        latest_every, layers, leaf, list, list_optional, memo, number_input, on_write, rate,
-        renderable, repeating, resource, resource_for, row, scroll, scroll_both, scroll_with,
-        scroll_x, signal, spawn, switch, text, text_area, viewport, watch, widget, Align, App,
-        Border, Ctx, Edge, Justify, Load, Log, Memo, Node, Overflow, Proxy, Resource, Shadow,
-        Sides, Signal, Size, Task, TextAlign, Theme, Widget,
+        latest_every, layers, leaf, list, list_optional, memo, number_input, on_write,
+        on_write_ref, rate, renderable, repeating, resource, resource_for, row, scroll,
+        scroll_both, scroll_with, scroll_x, signal, spawn, switch, text, text_area, viewport,
+        watch, widget, Align, App, Border, Ctx, Edge, Justify, Load, Log, Memo, Node, Overflow,
+        Proxy, Resource, Shadow, Sides, Signal, Size, Task, TextAlign, Theme, Widget,
     };
 }
 

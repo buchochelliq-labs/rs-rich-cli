@@ -367,6 +367,12 @@ impl Runtime {
     /// so no reader computes while a signal's value is out of its slot.
     fn changed(&self, slot: usize) {
         self.queued.borrow_mut().push(slot);
+        self.pass_changes_on();
+    }
+
+    /// Reach the readers of the slots changed meanwhile, unless inside an
+    /// update (whose end does it).
+    fn pass_changes_on(&self) {
         if self.batch.get() > 0 {
             return;
         }
@@ -711,6 +717,23 @@ impl<T: 'static> Signal<T> {
 }
 
 impl<T: 'static> Signal<T> {
+    /// Lend the value to `f`, which may write other signals meanwhile (not
+    /// this one, nor read it): it is out of the table while `f` runs, and
+    /// what `f` changes reaches its readers after.
+    pub(crate) fn lend<R>(&self, f: impl FnOnce(&T) -> R) -> R {
+        let runtime = self.runtime();
+        runtime.batch.set(runtime.batch.get() + 1);
+        let value = std::mem::replace(
+            &mut runtime.values.borrow_mut()[self.slot],
+            Box::new(Updating),
+        );
+        let result = f(value.downcast_ref::<T>().expect("signal type"));
+        runtime.values.borrow_mut()[self.slot] = value;
+        runtime.batch.set(runtime.batch.get() - 1);
+        runtime.pass_changes_on();
+        result
+    }
+
     /// Replace the value and return the old one. Every reader updates,
     /// whether the value changed or not: [`set`](Self::set) for a type
     /// without `PartialEq` (a handle, a closure, a list of watchers).
@@ -955,6 +978,72 @@ pub fn on_write<T: Clone + 'static>(
     crate::app::building_watch(id);
 }
 
+/// [`on_write`] without cloning: `on_write` gets a borrow of `signal`'s
+/// value, between frames, after a turn that wrote it (an update, a
+/// [`latest`](crate::latest) delivery). The value is the signal's as it is
+/// then: a turn that wrote it twice (two updates in one handler) calls back
+/// once, with the last, where [`on_write`] keeps a clone of each. A feed
+/// writes once a turn, so a big value (a buffer, a frame) is seen each
+/// time it comes, and never copied. Not called at the start.
+///
+/// While `on_write` runs, the value is lent out of the signal: it may read
+/// and write other signals, not this one.
+///
+/// ```
+/// use intuituive::prelude::*;
+/// use intuituive::on_write_ref;
+///
+/// let app = App::new(|| {
+///     let frame = signal(vec![0u8; 4096]);
+///     let sum = signal(0u32);
+///     on_write_ref(frame, move |bytes: &Vec<u8>, _| {
+///         sum.set(bytes.iter().map(|b| *b as u32).sum())
+///     });
+///     text!("{sum}").on_key("w", move |_| frame.update(|f| f.fill(1)))
+/// });
+/// let mut driver = app.driver(10, 1);
+/// driver.press("w");
+/// assert_eq!(driver.screen().plain()[0].trim_end(), "4096");
+/// ```
+///
+/// # Panics
+/// Outside a running or building app, or for a signal of another app.
+#[track_caller]
+pub fn on_write_ref<T: 'static>(
+    signal: Signal<T>,
+    mut on_write: impl FnMut(&T, &mut Ctx) + 'static,
+) {
+    let runtime = Runtime::current_for("on_write_ref()");
+    assert_eq!(
+        signal.runtime, runtime.id,
+        "on_write_ref() follows a signal of the app it is called in"
+    );
+    let id = runtime.next_watch.get();
+    runtime.next_watch.set(id + 1);
+    runtime
+        .watch_sites
+        .borrow_mut()
+        .insert(id, Location::caller());
+    let written = Rc::new(Cell::new(false));
+    let marked = written.clone();
+    let keep: Keep = Rc::new(move |_: &dyn Any| marked.set(true));
+    runtime
+        .writes
+        .borrow_mut()
+        .entry(signal.slot)
+        .or_default()
+        .push((id, keep));
+    runtime.watches.borrow_mut().insert(
+        id,
+        Box::new(move |cx: &mut Ctx| {
+            if written.replace(false) {
+                signal.lend(|value| on_write(value, cx));
+            }
+        }),
+    );
+    crate::app::building_watch(id);
+}
+
 /// A counter of the writes to `signal` (as [`on_write`] sees them), for
 /// [`rate`](crate::rate): nothing is cloned. It stops counting with the
 /// screen it was made for.
@@ -986,6 +1075,12 @@ pub(crate) fn count_writes<T: 'static>(signal: Signal<T>) -> Rc<Cell<u32>> {
 }
 
 impl<T: 'static> Memo<T> {
+    /// `signal`, read only: a value the crate writes and its readers only
+    /// read.
+    pub(crate) fn of(signal: Signal<T>) -> Memo<T> {
+        Memo { inner: signal }
+    }
+
     pub fn with<R>(&self, f: impl FnOnce(&T) -> R) -> R {
         self.inner.with(f)
     }
