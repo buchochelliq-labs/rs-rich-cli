@@ -28,6 +28,7 @@ motion turned on in your system settings the cards stay still.
 [![A Markdown file paged in a viewport](media/tapes/viewport/paged.png){ data-gif="viewport.gif" loading=lazy }<span class="tape-card-title">An interactive component</span>](#an-interactive-component){ .tape-card }
 [![The command palette over a file list](media/tapes/palette/palette.png){ data-gif="palette.gif" loading=lazy }<span class="tape-card-title">Overlays and chrome</span>](#overlays-and-chrome){ .tape-card }
 [![The to-do app with the inspector docked on the right](media/tapes/intuituive/inspector.png){ data-gif="intuituive.gif" loading=lazy }<span class="tape-card-title">Terminal apps</span>](#terminal-apps){ .tape-card }
+[![The raycaster example, a first-person maze in half blocks](media/tapes/raycast/start.png){ data-gif="raycast.gif" loading=lazy }<span class="tape-card-title">A game, played with held keys</span>](#a-game-played-with-held-keys){ .tape-card }
 [![A Yazi-style file manager previewing a Rust file](media/tapes/files/files.png){ data-gif="files.gif" loading=lazy }<span class="tape-card-title">A file manager</span>](#a-file-manager){ .tape-card }
 [![scope-tui rebuilt on intuiTUIve: a Lissajous figure in the vectorscope](media/tapes/scope/vectorscope.png){ data-gif="scope.gif" loading=lazy }<span class="tape-card-title">An oscilloscope</span>](#an-oscilloscope){ .tape-card }
 [![A status page restyled after its stylesheet changed](media/tapes/stylesheet/reloaded.png){ data-gif="stylesheet.gif" loading=lazy }<span class="tape-card-title">Stylesheets</span>](#stylesheets){ .tape-card }
@@ -958,8 +959,12 @@ From one run it writes, under `docs/media/tapes/<tape>/`:
   [frame](guide/ext/live-and-layout.md#frames) as the rest of rich's export, so a screenshot
   looks like any other rich SVG;
 - the whole session as an asciinema cast, with the keys pressed;
-- a GIF with the keys shown as they are pressed, and an MP4 when FFmpeg is
-  installed;
+- a GIF and an animated PNG (APNG, in full colour) with the keys shown as
+  they are pressed, and an MP4 when FFmpeg is installed. Video holds every
+  screen update the program finished, dropped to the tape's frame rate
+  (`Set Framerate`, 12 a second by default) with identical frames merged,
+  and the Kitty, Sixel and iTerm2 images the program drew, over their
+  cells;
 - an HTML page (`<tape>.html`, the **Page** links above): a small player and
   the screenshots, all inline, with text you can select. It fetches nothing
   and plays only when asked;
@@ -979,12 +984,15 @@ wide as rich measures it, so the columns after it line up.
 |---|---|
 | `Set Size 100x28`, `Set Title "…"`, `Set TypingDelay 40ms`, `Set Timeout 15s`, `Set Env NAME value` | Configure the session |
 | `Set WindowFrame off`, `Set Caption "…"`, `Set KeyOverlay off` | Presentation: leave out the window frame (title bar and buttons) around PNGs, SVGs and video; add a line of text under them and under the page's player; leave out the keys shown in video and the player. The frame and the overlay are on by default |
-| `Output gif png`, `Output demo.html` | Write only these formats (`png`, `svg`, `cast`, `gif`, `mp4`, `html`; text grids always), or name the file a per-tape format goes to, as in VHS. Several words or lines add up; `--format` can still narrow them |
+| `Output gif png`, `Output demo.html` | Write only these formats (`png`, `svg`, `cast`, `gif`, `apng`, `mp4`, `html`; text grids always; without an `Output` line, all of them), or name the file a per-tape format goes to, as in VHS. Several words or lines add up; `--format` can still narrow them |
+| `Set Framerate 35`, `Set FontSize 10` | Video: frames a second, 1 to 60 (12 by default; `--fps` overrides it), and the size of video text in pixels, 4 to 64 (16) |
+| `Set KittyKeyboard on`, `Set KeyRepeat 200ms 33ms` | Keys: report the kitty keyboard protocol, so a program can turn it on and hear releases (off by default); a held key's autorepeat delay and interval (200ms 33ms) |
 | `Set Shell zsh` | Run in `bash` (the default), `zsh`, `fish` or `sh`, each without your profile or rc files and with the same `❯` prompt. CI records in all four |
 | `Write FILE "text"`, `Exec "command"` | Prepare or change files, outside the terminal |
 | `Type "text"` | Type into the terminal, one character at a time |
 | `Enter`, `Tab`, `Shift+Tab`, `Space`, `Backspace`, `Delete`, `Insert`, `Escape`, arrows, `Home`, `End`, `PageUp`, `PageDown`, `F1` to `F24`, `Ctrl+C`, `Alt+x`, and the arrows, `Home`, `End`, `PageUp`, `PageDown`, `Delete`, `Insert` and function keys after any of `Shift+`, `Alt+` and `Ctrl+` (`Alt+Left`, `Ctrl+Shift+PageDown`) | Press a key; a number after it repeats it. Modified keys go in xterm's form, `CSI 1;3D` for `Alt+Left`. F1 to F20 are sent as xterm sends them; F21 to F24 have no xterm form, so they go as the kitty keyboard protocol's codes, which an app reads once it has turned that protocol on |
 | `Click 10 4`, `RightClick`, `MiddleClick`, `DoubleClick`, `MouseMove 10 4`, `ScrollUp 10 4 3`, `ScrollDown`, `Drag 2 4 20 4` | Use the mouse at a cell (column and row, from 0 at the top left), as SGR mouse reports; a number after a click or scroll repeats it. `Drag` moves a cell at a time with the left button held. The app needs mouse reporting on, as intuiTUIve apps have |
+| `KeyDown Up`, `KeyUp Up`, `Hold f 2s` | Hold a key (a name as above, or one character) down, let it go, or both with a wait between. A held key autorepeats while the steps after it run, and every key still held is let go when the tape ends. With `Set KittyKeyboard on`, presses, repeats and releases go as the protocol's escapes once the program has turned it on; without it, a release sends nothing, as on a legacy terminal |
 | `Wait "text"`, `Wait /regex/` | Wait until the screen shows it, or has since the previous step began (so fast output that scrolls past is not missed) |
 | `Sleep 500ms` | Pause the recording |
 | `Screenshot NAME` | Save the screen |
@@ -1013,7 +1021,9 @@ Regenerate everything, or check it as CI does:
 
 ```bash
 cargo build -p rs-rich-cli -p rs-rich-interact -p rs-rich-intuituive -p rs-rich-embed \
-  --features rs-rich-cli/serve --bins --examples
+  --features rs-rich-cli/serve,rs-rich-intuituive/files,rs-rich-intuituive/archive,rs-rich-intuituive/watch,rs-rich-intuituive/art,rs-rich-intuituive/pcm,rs-rich-intuituive/viz \
+  --bins --examples
+cargo build -p rs-rich-ext --example guide_surface
 rich=target/debug/rich
 $rich record --bin-dir target/debug --output docs/media/tapes docs/tapes/*.tape
 $rich record --check --bin-dir target/debug --output docs/media/tapes docs/tapes/*.tape
@@ -1031,6 +1041,7 @@ tape, then:
 ```bash
 rich record demo.tape                       # writes recordings/demo/
 rich record --format gif,png demo.tape      # only the GIF and the PNGs
+rich record --fps 30 game.tape              # video at 30 frames a second
 rich record --format html demo.tape         # the page: a player and the screenshots
 rich record --window-frame off --caption 'Save to redraw' demo.tape
 rich record --check demo.tape               # fail if a screenshot changed
@@ -1040,9 +1051,10 @@ rich record --check demo.tape               # fail if a screenshot changed
 |---|---|
 | `--output DIR` | Write to `DIR/<tape>/` (default `recordings`) |
 | `--check` | Compare each screenshot's text with `DIR/<tape>/<name>.txt` instead of writing, and report screenshots the last write listed that the tape no longer takes; exits non-zero on any difference |
-| `--format LIST` | Any of `png`, `svg`, `cast`, `gif`, `mp4`, `html`, or `all` (the default). Text grids are always written. A tape's `Output` narrows it further |
+| `--format LIST` | Any of `png`, `svg`, `cast`, `gif`, `apng`, `mp4`, `html`, or `all` (the default). Text grids are always written. A tape's `Output` narrows it further |
 | `--window-frame on\|off`, `--caption TEXT`, `--key-overlay on\|off` | Override the tape's `Set WindowFrame`, `Set Caption` and `Set KeyOverlay` |
-| `--no-video` | Skip the GIF, the MP4 and the HTML page's player |
+| `--no-video` | Skip the GIF, the APNG, the MP4 and the HTML page's player |
+| `--fps N` | Video frames a second, 1 to 60, over the tape's `Set Framerate` |
 | `--bin-dir DIR` | Put `DIR` first on the session's `PATH` (default: the directory of the running `rich`) |
 | `--font FILE` | Draw PNG and GIF text in another font |
 
@@ -1071,6 +1083,6 @@ the disk or memory:
 | `Exec` | 60 seconds; the first 64 KiB of its error output is reported |
 | Tape names | A tape's name is its output directory: `...tape` (named `..`) is refused |
 | Stale screenshots | Removed only when `provenance.json` lists them from an earlier run; other files in the output directory are never touched |
-| Frames | At most 12 a second; a burst over 32 KiB is kept as a repaint of the screen |
+| Frames | At most 60 a second (`Set Framerate`); within one frame only the last update is kept, and output over 32 KiB is kept as a repaint of the screen. Frames are stored packed, about 12 bytes a cell, with unchanged rows shared |
 | Video | The first 5 minutes; a GIF, MP4 or HTML page of a longer recording is an error (use `--no-video`) |
 | Images | At most 100 million pixels; a GIF at most 65535 pixels a side |
