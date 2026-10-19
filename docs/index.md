@@ -65,6 +65,17 @@ Earlier releases are under [Releases](releases/0.0.19.md) in the
 navigation; the [roadmap](ROADMAP.md) and the
 [0.0.21 plan](plans/0.0.21.md) say what comes next.
 
+### Which version are these docs for?
+
+The version menu in the header picks the docs of a release. A release is
+named by `rs-rich-cli`'s version, and its docs match the crates of that
+release: the other crates' versions are in that release's
+[version table](#versions-in-this-checkout). **dev (main)** documents what
+is on `main` and not released yet. The site's root and `/latest/` show the
+newest release, and every other version says so in a banner with a link to
+it. The site keeps the newest releases; older releases' docs stay in the
+repository, under `docs/` at their `rs-rich-cli-vX.Y.Z` tags.
+
 ## What it does
 
 <div class="grid cards" markdown>
