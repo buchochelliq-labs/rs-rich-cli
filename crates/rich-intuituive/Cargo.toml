@@ -140,6 +140,11 @@ name = "git"
 [[example]]
 name = "top"
 
+# The csvlens clone reads its CSV through std (rs-rich-data is not a
+# dependency here); no feature.
+[[example]]
+name = "csv"
+
 # The diskonaut clone scans with std and rs-rich-ext's `listing::walk`;
 # no feature.
 [[example]]
