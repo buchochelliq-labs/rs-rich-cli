@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 use rich::{Console, Segment, Style};
-use rich_interact::{Button, MouseKind};
+use rich_interact::{Button, KeyCode, Modifiers, MouseKind};
 
 use crate::node::{Axis, Node};
 use crate::reactive::{Runtime, Signal};
@@ -134,6 +134,85 @@ impl Selection {
 /// its whole rows, or none.
 type RowStyle = Box<dyn Fn(usize) -> Option<String>>;
 
+/// What [`Node::on_context`] runs: item `i` was right-pressed, or had the
+/// focus when the menu key was.
+type OnContext = Rc<RefCell<dyn FnMut(usize, &mut crate::app::Ctx)>>;
+
+/// A marker cell's theme style for item `i`, with the style used when the
+/// theme has none: a [`MultiSelect`](crate::MultiSelect)'s markers.
+pub(crate) type Marks = Rc<dyn Fn(usize) -> Option<(&'static str, &'static str)>>;
+
+/// A list option, kept so a node that wraps a list can give it on: given
+/// a node, it sets itself if the node is a list (or a table, for an
+/// option tables share) and says whether it was.
+pub(crate) type ListOption = Rc<dyn Fn(&Node) -> bool>;
+
+/// The list options given a [`switch`](crate::switch), for the lists it
+/// builds now and later.
+#[derive(Clone, Default)]
+pub(crate) struct Forward(Rc<RefCell<Vec<ListOption>>>);
+
+impl Forward {
+    /// Give every option kept to `node`, a child just built.
+    pub(crate) fn apply(&self, node: &Node) {
+        let options = self.0.borrow().clone();
+        for option in &options {
+            give(node, option);
+        }
+    }
+}
+
+/// Give `option` to `node`: to the list (or table) it is, to the one a
+/// wrapper with one child holds (a panel, padding, a reorderable list),
+/// or, on a [`switch`](crate::switch), to each list it builds. Whether a
+/// list took it, or a switch kept it.
+pub(crate) fn give(node: &Node, option: &ListOption) -> bool {
+    if option(node) {
+        return true;
+    }
+    if let Some(forward) = &node.list_forward {
+        forward.0.borrow_mut().push(option.clone());
+        let body = node.body.borrow();
+        for child in body
+            .widget
+            .children()
+            .iter()
+            .chain(body.widget.hidden_children())
+        {
+            give(child, option);
+        }
+        return true;
+    }
+    let body = node.body.borrow();
+    match (
+        body.widget.children(),
+        body.widget.hidden_children().is_empty(),
+    ) {
+        ([child], true) => give(child, option),
+        _ => false,
+    }
+}
+
+/// In a debug build, say once on stderr that a list option met no list:
+/// it was called on a node that is not one and wraps none.
+fn unused(option: &'static str) {
+    #[cfg(debug_assertions)]
+    {
+        thread_local! {
+            static SAID: RefCell<std::collections::HashSet<&'static str>> =
+                RefCell::new(std::collections::HashSet::new());
+        }
+        if SAID.with(|said| said.borrow_mut().insert(option)) {
+            eprintln!(
+                "intuituive: .{option}(..) met no list: call it on a list, or on a node that \
+                 wraps one (a panel, a switch)"
+            );
+        }
+    }
+    #[cfg(not(debug_assertions))]
+    let _ = option;
+}
+
 /// What a list's builders set.
 #[derive(Default)]
 pub(crate) struct ListOptions {
@@ -161,6 +240,10 @@ pub(crate) struct ListOptions {
     rows: Option<Rc<RowCache>>,
     /// Where the rows in view were drawn, on the screen.
     rects: Option<RowRects>,
+    /// What a right press on an item, or the menu key, runs.
+    context: Option<OnContext>,
+    /// Marker cells by theme style, before [`marker`](Self::marker)'s.
+    pub(crate) marks: Option<Marks>,
 }
 
 /// Where a list's items come from: every item from one closure, or a count
@@ -549,7 +632,9 @@ pub fn list_rows(
         .trailing(move |i| trailing.get(i, |row| row.trailing.clone()))
         .row_style(move |i| style.get(i, |row| row.style.clone()))
         .selected_style_for(move |i| selected_style.get(i, |row| row.selected_style.clone()))
-        .list_options(|options| options.rows = Some(rows))
+        .list_options("list_rows", move |options| {
+            options.rows = Some(rows.clone())
+        })
 }
 
 fn list_of(items: Items, selection: Selection) -> Node {
@@ -904,7 +989,7 @@ impl List {
             Some(symbol) if options.spacing.keeps(selected) => crate::widget::markup_width(symbol),
             _ => 0,
         };
-        let gutter = u16::from(options.marker.is_some());
+        let gutter = u16::from(options.marker.is_some() || options.marks.is_some());
         (gutter, marker, symbol)
     }
 }
@@ -1086,14 +1171,20 @@ impl Widget for List {
                     .and_then(|style| style(i))
                     .map_or_else(|| highlight.clone(), style_of)
             });
-            let mark = (gutter > 0).then(|| {
-                let style = options
-                    .marker
-                    .as_ref()
-                    .and_then(|marker| marker(i))
-                    .map(style_of);
-                Segment::new(" ", style)
-            });
+            let mark =
+                (gutter > 0).then(|| {
+                    let marked = options.marks.as_ref().and_then(|marks| marks(i)).map(
+                        |(name, fallback)| crate::widget::theme_style(console, name, fallback),
+                    );
+                    let style = marked.or_else(|| {
+                        options
+                            .marker
+                            .as_ref()
+                            .and_then(|marker| marker(i))
+                            .map(style_of)
+                    });
+                    Segment::new(" ", style)
+                });
             let top = rows.len();
             for (n, line) in lines.iter().enumerate() {
                 let mut out = Vec::new();
@@ -1226,8 +1317,30 @@ impl Widget for List {
     }
 
     fn event(&mut self, cx: &mut EventCx, event: &WidgetEvent) -> Used {
-        let WidgetEvent::Mouse(mouse) = event else {
-            return Used::No;
+        let context = self.options.borrow().context.clone();
+        let mouse = match event {
+            WidgetEvent::Mouse(mouse) => mouse,
+            // The menu key (Shift+F10) on the selected item.
+            WidgetEvent::Key(key) => {
+                let (Some(context), Some(at)) = (context, self.selection.get_untracked()) else {
+                    return Used::No;
+                };
+                if *key
+                    != rich_interact::Key::with(
+                        KeyCode::F(10),
+                        Modifiers {
+                            shift: true,
+                            ..Modifiers::NONE
+                        },
+                    )
+                    || at >= self.items.len()
+                {
+                    return Used::No;
+                }
+                (context.borrow_mut())(at, cx.app());
+                return Used::Yes;
+            }
+            _ => return Used::No,
         };
         if let Some((rect, first, len, view)) = self.bar_at.get() {
             match self.bar.mouse(cx, mouse, rect, first, len, view) {
@@ -1268,9 +1381,16 @@ impl Widget for List {
                 };
                 // The press goes on to the node's own handler (a right
                 // click's menu is about the item it selected), as it did
-                // before a press selected.
+                // before a press selected; unless it is a right press and
+                // the list has a context handler.
                 self.selection.set(item);
-                Used::No
+                match context {
+                    Some(context) if button == Button::Right => {
+                        (context.borrow_mut())(item, cx.app());
+                        Used::Yes
+                    }
+                    _ => Used::No,
+                }
             }
             MouseKind::ScrollUp | MouseKind::ScrollDown => {
                 let step = self
@@ -1302,49 +1422,60 @@ impl Widget for List {
     }
 }
 
-/// A [`list`]'s options, as builders. On any other node they do nothing;
-/// call them on the list itself (or a reorderable list), before
-/// `.panel(..)` or anything else that wraps it.
+/// A [`list`]'s options, as builders. On a node that wraps a list (a
+/// panel, padding, a reorderable list: a node with one child; or a
+/// [`switch`](crate::switch), whose lists get them as they are built) they
+/// reach the list inside. On any other node they do nothing, and a debug
+/// build says so on stderr, once for each option.
 impl Node {
     /// Draw console `markup` (`"[red]>>[/] "`) before the selected item:
     /// ratatui's `highlight_symbol`. Other items get as many blank cells
     /// while the column is kept (see [`highlight_spacing`](Self::highlight_spacing)).
     pub fn symbol(self, markup: &str) -> Node {
-        self.list_options(|options| options.symbol = Some(markup.to_string()))
+        let markup = markup.to_string();
+        self.list_options("symbol", move |options| {
+            options.symbol = Some(markup.clone())
+        })
     }
 
     /// Draw the highlight symbol on every line of a
     /// [multi-line](Self::multiline) selected item, not only its first.
     pub fn repeat_symbol(self) -> Node {
-        self.list_options(|options| options.repeat_symbol = true)
+        self.list_options("repeat_symbol", |options| options.repeat_symbol = true)
     }
 
     /// When the highlight symbol keeps its column.
     pub fn highlight_spacing(self, spacing: HighlightSpacing) -> Node {
-        self.list_options(|options| options.spacing = spacing)
+        self.list_options("highlight_spacing", move |options| {
+            options.spacing = spacing
+        })
     }
 
     /// Which way the items run. Bottom to top, ↑ and ↓ still move up and
     /// down the screen, and Home and End go to the first and the last item.
     pub fn direction(self, direction: ListDirection) -> Node {
-        if let Some(model) = &self.list_model {
-            model.reversed.set(direction == ListDirection::BottomToTop);
-        }
-        self.list_options(|options| options.direction = direction)
+        self.list_option("direction", move |node| {
+            if let Some(model) = &node.list_model {
+                model.reversed.set(direction == ListDirection::BottomToTop);
+            }
+            set_list(node, |options| options.direction = direction)
+        })
     }
 
     /// Keep `items` items in view either side of the selected one, where
     /// they fit: ratatui's `scroll_padding`, Vim's `scrolloff`. On a
     /// [`virtual_list`](crate::widgets::virtual_list) or a table too.
     pub fn scroll_padding(self, items: usize) -> Node {
-        self.table_options(|options| options.scroll_padding = items);
-        self.list_options(|options| options.padding = items)
+        self.list_option("scroll_padding", move |node| {
+            let table = table_options(node, |options| options.scroll_padding = items);
+            set_list(node, |options| options.padding = items) || table
+        })
     }
 
     /// Items keep their lines and wrap to the width, each as tall as it
     /// needs, rather than showing their first line cut with `…`.
     pub fn multiline(self) -> Node {
-        self.list_options(|options| options.multiline = true)
+        self.list_options("multiline", |options| options.multiline = true)
     }
 
     /// A style (or theme style name) for item `i`'s whole rows, under the
@@ -1353,11 +1484,10 @@ impl Node {
     /// [`virtual_list`](crate::widgets::virtual_list) or a table too.
     pub fn row_style(self, style: impl Fn(usize) -> Option<String> + 'static) -> Node {
         let style: Rc<dyn Fn(usize) -> Option<String>> = Rc::new(style);
-        let for_table = style.clone();
-        self.table_options(move |options| {
-            options.row_style = Some(Box::new(move |i| for_table(i)));
-        });
-        self.list_options(|options| options.row_style = Some(Box::new(move |i| style(i))))
+        self.list_option("row_style", move |node| {
+            let table = table_options(node, |options| options.row_style = Some(boxed(&style)));
+            set_list(node, |options| options.row_style = Some(boxed(&style))) || table
+        })
     }
 
     /// The first item in view, in `first`: read it, or set it to scroll.
@@ -1381,8 +1511,10 @@ impl Node {
     /// assert_eq!(driver.screen().plain()[4].trim_end(), "first 7");
     /// ```
     pub fn offset(self, first: Signal<usize>) -> Node {
-        self.table_options(|options| options.offset = Some(first));
-        self.list_options(|options| options.offset = Some(first))
+        self.list_option("offset", move |node| {
+            let table = table_options(node, |options| options.offset = Some(first));
+            set_list(node, |options| options.offset = Some(first)) || table
+        })
     }
 
     /// Console markup at the right of item `i`'s row, right-aligned, its
@@ -1407,7 +1539,11 @@ impl Node {
     /// assert_eq!(driver.screen().plain()[1], "src          4");
     /// ```
     pub fn trailing(self, markup: impl Fn(usize) -> String + 'static) -> Node {
-        self.list_options(|options| options.trailing = Some(Box::new(markup)))
+        let markup = Rc::new(markup);
+        self.list_options("trailing", move |options| {
+            let markup = markup.clone();
+            options.trailing = Some(Box::new(move |i| markup(i)));
+        })
     }
 
     /// A one-cell marker column at the left of the rows, before the item's
@@ -1429,7 +1565,10 @@ impl Node {
     /// assert_eq!(driver.screen().plain()[1].trim_end(), " b.txt");
     /// ```
     pub fn marker(self, style: impl Fn(usize) -> Option<String> + 'static) -> Node {
-        self.list_options(|options| options.marker = Some(Box::new(style)))
+        let style: Rc<dyn Fn(usize) -> Option<String>> = Rc::new(style);
+        self.list_options("marker", move |options| {
+            options.marker = Some(boxed(&style))
+        })
     }
 
     /// The selection's style (or theme style name) when item `i` is
@@ -1443,7 +1582,10 @@ impl Node {
     /// `selected` (`.theme_styles([("selected", "reverse")])`) reverse it
     /// already, a hovered directory a blue bar.
     pub fn selected_style_for(self, style: impl Fn(usize) -> Option<String> + 'static) -> Node {
-        self.list_options(|options| options.selected_style = Some(Box::new(style)))
+        let style: Rc<dyn Fn(usize) -> Option<String>> = Rc::new(style);
+        self.list_options("selected_style_for", move |options| {
+            options.selected_style = Some(boxed(&style))
+        })
     }
 
     /// Where the highlight goes: [`HighlightLayer::Over`] the item's markup
@@ -1468,7 +1610,7 @@ impl Node {
     /// assert!(styled.starts_with("[not reverse blue]<[/][reverse blue]docs[/][not reverse blue]>"));
     /// ```
     pub fn highlight_layer(self, layer: HighlightLayer) -> Node {
-        self.list_options(|options| options.layer = layer)
+        self.list_options("highlight_layer", move |options| options.layer = layer)
     }
 
     /// Move the selection `items` items a turn of the mouse wheel, instead
@@ -1496,14 +1638,14 @@ impl Node {
     /// assert_eq!(driver.screen().plain()[3].trim_end(), "1");
     /// ```
     pub fn wheel_step(self, items: usize) -> Node {
-        self.list_options(|options| options.wheel = Some(items))
+        self.list_options("wheel_step", move |options| options.wheel = Some(items))
     }
 
     /// On a [`list_rows`] list: keep the one-cell marker column of
     /// [`marker`](Self::marker), each cell in its row's
     /// [`ListRow::marker`] style. On any other list it does nothing.
     pub fn marker_column(self) -> Node {
-        self.list_options(|options| {
+        self.list_options("marker_column", |options| {
             if let Some(rows) = options.rows.clone() {
                 options.marker = Some(Box::new(move |i| rows.get(i, |row| row.marker.clone())));
             }
@@ -1515,19 +1657,168 @@ impl Node {
     /// [`virtual_list`](crate::widgets::virtual_list) or a table too. See
     /// [`RowRects`].
     pub fn row_rects(self, rects: &RowRects) -> Node {
-        let for_table = rects.clone();
-        self.widget_mut(|table: &mut crate::widgets::Table| table.rects = Some(for_table));
-        self.list_options(|options| options.rects = Some(rects.clone()))
+        let rects = rects.clone();
+        self.list_option("row_rects", move |node| {
+            let table = node
+                .widget_mut(|table: &mut crate::widgets::Table| table.rects = Some(rects.clone()))
+                .is_some();
+            set_list(node, |options| options.rects = Some(rects.clone())) || table
+        })
     }
 
-    /// Run `f` on the options of a table or a
-    /// [`virtual_list`](crate::widgets::virtual_list) this node is.
-    fn table_options(&self, f: impl FnOnce(&mut crate::widgets::TableOptions)) {
-        self.widget_mut(|table: &mut crate::widgets::Table| f(table.options_mut()));
+    /// Run `handler` with an item's index when it is pressed with the
+    /// right button (it is selected first) or, while the list has the
+    /// focus, when the menu key (Shift+F10) is pressed on the selected
+    /// item: a context menu on a row, opened with `cx.pointer()` (`None`
+    /// from the keyboard) or the row's [`row_rects`](Self::row_rects).
+    /// The right press goes no further.
+    ///
+    /// ```
+    /// use intuituive::interact::{Button, Event, Mouse, MouseKind};
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| {
+    ///     let menu = signal(String::from("none"));
+    ///     let items = || vec!["alpha".to_string(), "beta".into()];
+    ///     column([
+    ///         list(items, signal(0))
+    ///             .on_context(move |i, _| menu.set(format!("menu on {i}")))
+    ///             .fixed(2),
+    ///         text!("{menu}"),
+    ///     ])
+    /// });
+    /// let mut driver = app.driver(12, 3);
+    /// driver.settle();
+    /// driver.event(Event::Mouse(Mouse::new(MouseKind::Down(Button::Right), 0, 1)));
+    /// driver.settle();
+    /// assert_eq!(driver.screen().plain()[2].trim_end(), "menu on 1");
+    /// ```
+    pub fn on_context(self, handler: impl FnMut(usize, &mut crate::app::Ctx) + 'static) -> Node {
+        let handler: OnContext = Rc::new(RefCell::new(handler));
+        self.list_options("on_context", move |options| {
+            options.context = Some(handler.clone())
+        })
     }
 
-    fn list_options(self, f: impl FnOnce(&mut ListOptions)) -> Node {
-        with_list(&self, |list| f(&mut list.options.borrow_mut()));
+    /// Keep the cursor on the same item when the items change (a re-sort,
+    /// a filter, items read again): `key(i)` names item `i` (a file's
+    /// name, a row's id), read from the app's data as
+    /// [`trailing`](Self::trailing) is. When the item the cursor was on
+    /// moves, the selection moves with it; when it is gone, the cursor
+    /// stays at its index and keeps the item now there (while the list is
+    /// empty it waits for the old one). Moving the cursor is unchanged.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| {
+    ///     let names = signal(vec!["cherry", "apple", "banana"]);
+    ///     let cursor = signal(0usize);
+    ///     list(move || names.get().iter().map(|n| n.to_string()).collect(), cursor)
+    ///         .cursor_by(move |i| names.with(|n| n.get(i).copied()))
+    ///         .on_key("s", move |_| names.update(|n| n.sort()))
+    /// });
+    /// let mut driver = app.driver(10, 3);
+    /// driver.settle();
+    /// driver.press("s");
+    /// // `cherry` was hovered at the top; sorted, it is last, still hovered.
+    /// assert_eq!(driver.screen().plain()[2].trim_end(), "cherry");
+    /// assert!(intuituive::testing::styled(&driver).contains("[reverse]cherry"));
+    /// ```
+    pub fn cursor_by<K: PartialEq + Clone + 'static>(
+        self,
+        key: impl Fn(usize) -> K + 'static,
+    ) -> Node {
+        let key: Rc<dyn Fn(usize) -> K> = Rc::new(key);
+        self.list_option("cursor_by", move |node| {
+            with_list(node, |list| (list.selection, list.items.clone()))
+                .map(|(selection, items)| keep_by_key(selection, items, key.clone()))
+                .is_some()
+        })
+    }
+
+    /// Give `option` to the list (or table) this node is or wraps; in a
+    /// debug build, say so once if it met none.
+    pub(crate) fn list_option(
+        self,
+        name: &'static str,
+        option: impl Fn(&Node) -> bool + 'static,
+    ) -> Node {
+        let option: ListOption = Rc::new(option);
+        if !give(&self, &option) {
+            unused(name);
+        }
         self
     }
+
+    /// Set the options of the list this node is or wraps with `f`.
+    pub(crate) fn list_options(
+        self,
+        name: &'static str,
+        f: impl Fn(&mut ListOptions) + 'static,
+    ) -> Node {
+        self.list_option(name, move |node| set_list(node, &f))
+    }
+}
+
+/// Run `f` on the options of a table or a
+/// [`virtual_list`](crate::widgets::virtual_list) `node` is; whether it is
+/// one.
+fn table_options(node: &Node, f: impl FnOnce(&mut crate::widgets::TableOptions)) -> bool {
+    node.widget_mut(|table: &mut crate::widgets::Table| f(table.options_mut()))
+        .is_some()
+}
+
+/// Run `f` on the options of the list `node` is; whether it is one.
+fn set_list(node: &Node, f: impl FnOnce(&mut ListOptions)) -> bool {
+    with_list(node, |list| f(&mut list.options.borrow_mut())).is_some()
+}
+
+/// Keep `selection` on the item `key` names across changes to `items`:
+/// [`Node::cursor_by`]. The item last under the cursor is remembered with
+/// its index; when the key now at that index differs, the items changed
+/// under it, and the selection goes to wherever its key is now.
+fn keep_by_key<K: PartialEq + Clone + 'static>(
+    selection: Selection,
+    items: Items,
+    key: Rc<dyn Fn(usize) -> K>,
+) {
+    let last: Rc<RefCell<Option<(usize, K)>>> = Rc::new(RefCell::new(None));
+    let (seen, read, len) = (last.clone(), key.clone(), items.clone());
+    crate::reactive::watch(
+        move || {
+            let len = items.len();
+            let at = selection.get().filter(|at| *at < len);
+            let was = seen.borrow().as_ref().map(|(i, _)| *i);
+            (
+                at,
+                at.map(|at| read(at)),
+                was.filter(|was| *was < len).map(|was| read(was)),
+            )
+        },
+        move |(at, now, there), _| {
+            let was = last.borrow().clone();
+            if let Some((_, was)) = was.filter(|(_, was)| there.as_ref() != Some(was)) {
+                // The items changed under the remembered item: find it.
+                if let Some(to) = (0..len.len()).find(|i| key(*i) == was) {
+                    *last.borrow_mut() = Some((to, was));
+                    if at != Some(to) {
+                        selection.set(to);
+                    }
+                    return;
+                }
+            }
+            // A move, or the item is gone: remember what is hovered now
+            // (nothing hovered keeps the item, for when it comes back).
+            if let (Some(at), Some(now)) = (at, now) {
+                *last.borrow_mut() = Some((at, now));
+            }
+        },
+    );
+}
+
+/// A shared row style as the box an option keeps.
+fn boxed(style: &Rc<dyn Fn(usize) -> Option<String>>) -> RowStyle {
+    let style = style.clone();
+    Box::new(move |i| style(i))
 }

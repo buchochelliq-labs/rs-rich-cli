@@ -21,7 +21,9 @@ use crate::reactive::Signal;
 use crate::scrollbar::Bar;
 use crate::widget::{widget, Canvas, DrawCx, EventCx, MeasureCx, Used, Widget, WidgetEvent};
 
-pub use crate::bars::{breadcrumb, cells, key_hints, live, seg, status_bar, Caps, StatusSegment};
+pub use crate::bars::{
+    breadcrumb, cells, key_hints, live, seg, seg_gauge, status_bar, Caps, StatusSegment,
+};
 pub use crate::calendar::{
     calendar, calendar_options, calendar_with, month, CalendarOptions, Date, DateTime, Time,
     Weekday,
@@ -37,6 +39,7 @@ pub use crate::list::{
 pub use crate::reorder::Move;
 pub use crate::scrollbar::{scrollbar, Scrollbar, ScrollbarSymbols, Show, Side};
 pub use crate::split::{hsplit, split, split_with, vsplit};
+pub use crate::tab_set::{tab_set, tabs_for, TabSet};
 pub use crate::text_area::text_area;
 pub use crate::tree::{tree, tree_lazy, tree_with, LazyItem, TreeItem};
 
@@ -1666,6 +1669,8 @@ struct Tabs {
     padding: (String, String),
     /// Where the strip sits in its width.
     align: Align,
+    /// Titles cut to share the width when they do not fit.
+    fit: bool,
 }
 
 /// A strip of tab titles with one selected: ←/→ (or h/l) and the number
@@ -1694,8 +1699,9 @@ struct Tabs {
 /// ```
 ///
 /// Its options are builders on the node: [`Node::divider`],
-/// [`Node::tab_padding`], [`Node::titles_align`], [`Node::auto_hide`] and
-/// [`Node::on_select`].
+/// [`Node::tab_padding`], [`Node::titles_align`], [`Node::fit`],
+/// [`Node::auto_hide`] and [`Node::on_select`]. For a set of tabs' states
+/// to show, see [`tab_set`] and [`tabs_for`].
 pub fn tabs(titles: impl Fn() -> Vec<String> + 'static, selected: Signal<usize>) -> Node {
     widget(Tabs {
         titles: std::rc::Rc::new(titles),
@@ -1705,6 +1711,7 @@ pub fn tabs(titles: impl Fn() -> Vec<String> + 'static, selected: Signal<usize>)
         divider: None,
         padding: (" ".into(), " ".into()),
         align: Align::Start,
+        fit: false,
     })
 }
 
@@ -1736,6 +1743,35 @@ impl Tabs {
                     .saturating_add(right)
             })
             .collect()
+    }
+
+    /// The cells each title's text gets in a strip `width` wide: all it
+    /// needs, or, [fitted](Node::fit) when they do not all fit, a fair
+    /// share of the room the padding and dividers leave: the short titles
+    /// whole, the long ones cut to an equal share.
+    fn rooms(&self, titles: &[String], width: u16) -> Vec<u16> {
+        let natural: Vec<u16> = titles.iter().map(|t| markup_width(t)).collect();
+        if !self.fit || self.total(titles) <= width {
+            return natural;
+        }
+        let padding: u16 = self
+            .widths(titles)
+            .iter()
+            .zip(&natural)
+            .map(|(w, n)| w - n)
+            .fold(0, u16::saturating_add);
+        let (_, divider) = self.divider();
+        let gaps = divider.saturating_mul(titles.len().saturating_sub(1) as u16);
+        let mut left = width.saturating_sub(padding).saturating_sub(gaps);
+        let mut order: Vec<usize> = (0..titles.len()).collect();
+        order.sort_by_key(|i| natural[*i]);
+        let mut rooms = vec![0; titles.len()];
+        for (done, i) in order.into_iter().enumerate() {
+            let share = left / (titles.len() - done) as u16;
+            rooms[i] = natural[i].min(share);
+            left -= rooms[i];
+        }
+        rooms
     }
 
     /// How wide the whole strip is.
@@ -1783,11 +1819,23 @@ impl Widget for Tabs {
             cx.style("tabs.selected.blur", "bold underline")
         };
         let divider_style = cx.style("tabs.divider", "bright_black");
+        let unselected = cx.style("tabs.unselected", "");
         let console = cx.console();
         let titles = (self.titles)();
-        let widths = self.widths(&titles);
+        let rooms = self.rooms(&titles, canvas.width());
+        let widths: Vec<u16> = self
+            .widths(&titles)
+            .iter()
+            .zip(&titles)
+            .zip(&rooms)
+            .map(|((w, title), room)| w - markup_width(title) + room)
+            .collect();
         let (divider, divider_width) = self.divider();
-        let room = canvas.width().saturating_sub(self.total(&titles));
+        let used = widths.iter().fold(
+            divider_width.saturating_mul(titles.len().saturating_sub(1) as u16),
+            |sum, w| sum.saturating_add(*w),
+        );
+        let room = canvas.width().saturating_sub(used);
         let mut x = match self.align {
             Align::Start | Align::Stretch => 0,
             Align::Center => room / 2,
@@ -1814,11 +1862,34 @@ impl Widget for Tabs {
             } else {
                 self.padding.0.clone()
             };
-            let line = cell_line(console, &format!("{left}{title}{}", self.padding.1), w);
+            let line = if rooms[i] < markup_width(title) {
+                // Cut to its share with `…`, its padding kept.
+                let mut line = cell_line(console, &left, markup_width(&left));
+                line.extend(cell_line(console, title, rooms[i]));
+                line.extend(cell_line(
+                    console,
+                    &self.padding.1,
+                    markup_width(&self.padding.1),
+                ));
+                line
+            } else {
+                cell_line(console, &format!("{left}{title}{}", self.padding.1), w)
+            };
             let line = if i == selected {
                 over(line, &chosen)
-            } else {
+            } else if unselected.is_null() {
                 line
+            } else {
+                // Under the title's own markup.
+                line.into_iter()
+                    .map(|segment| {
+                        let style = match &segment.style {
+                            Some(own) => unselected.combine(own),
+                            None => unselected.clone(),
+                        };
+                        Segment::new(segment.text, Some(style))
+                    })
+                    .collect()
             };
             canvas.lines_at(x, 0, w, 1, &[line]);
             spans.push((x, w));
@@ -1892,6 +1963,31 @@ impl Node {
     /// default), the centre or the end.
     pub fn titles_align(self, align: Align) -> Node {
         self.widget_mut(|tabs: &mut Tabs| tabs.align = align);
+        self
+    }
+
+    /// Cut the titles with `…` to share the strip's width when they do not
+    /// all fit, rather than losing the last ones off its end: the short
+    /// titles stay whole and the long ones are cut to an equal share, each
+    /// keeping its padding (Yazi's tab bar).
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    /// use intuituive::widgets::tabs;
+    ///
+    /// let app = App::new(|| {
+    ///     let titles = || vec!["src".to_string(), "documents".into(), "downloads".into()];
+    ///     tabs(titles, signal(0)).fit()
+    /// });
+    /// let mut driver = app.driver(20, 1);
+    /// driver.settle();
+    /// assert_eq!(driver.screen().plain()[0], " src │ doc… │ down… ");
+    /// ```
+    ///
+    /// Titles not selected are drawn in the theme's `tabs.unselected` style
+    /// (none by default), under their own markup, fitted or not.
+    pub fn fit(self) -> Node {
+        self.widget_mut(|tabs: &mut Tabs| tabs.fit = true);
         self
     }
 
