@@ -292,6 +292,43 @@ def run_conclusion(package):
     return tuple(fields) if result.returncode == 0 and len(fields) == 3 else None
 
 
+def tag_run(package):
+    """The latest release run for the package's tag, as a dict: status,
+    conclusion, url, head_sha, and whether its publish job started; None
+    when there is no GitHub CLI or no run."""
+    if not shutil.which("gh"):
+        return None
+    result = subprocess.run(
+        ["gh", "run", "list", "--workflow", package.workflow, "--branch", package.tag, "--limit", "1",
+         "--json", "status,conclusion,url,headSha,databaseId",
+         "--jq", '.[0] | "\\(.status) \\(.conclusion) \\(.url) \\(.headSha) \\(.databaseId)"'],
+        cwd=ROOT, text=True, encoding="utf-8", capture_output=True,
+    )
+    fields = result.stdout.split()
+    if result.returncode or len(fields) != 5:
+        return None
+    status, conclusion, url, head_sha, run_id = fields
+    # A publish job that started may have uploaded before the run ended:
+    # the registry can take a while to show it. Unknown counts as started.
+    jobs = subprocess.run(
+        ["gh", "api", f"repos/{{owner}}/{{repo}}/actions/runs/{run_id}/jobs",
+         "--jq", '[.jobs[] | select((.name | startswith("publish")) and .status != "queued"'
+                 ' and .conclusion != "skipped")] | length'],
+        cwd=ROOT, text=True, encoding="utf-8", capture_output=True,
+    )
+    started = jobs.returncode != 0 or jobs.stdout.strip() != "0"
+    return {"status": status, "conclusion": conclusion, "url": url, "head_sha": head_sha,
+            "publish_started": started}
+
+
+def dead_tag(run, tagged):
+    """Whether a tag's release run proves nothing was published from it: it
+    ran on the tagged commit, finished without success, and never started
+    publishing."""
+    return bool(run and run["head_sha"] == tagged and run["status"] == "completed"
+                and run["conclusion"] != "success" and not run["publish_started"])
+
+
 def wait_for(package, timeout, status=registry_status, conclusion=run_conclusion, sleep=time.sleep):
     """Return once the release is done: its run succeeded and the version is
     on the registry. The run uploads before it verifies the upload as a
@@ -313,7 +350,7 @@ def wait_for(package, timeout, status=registry_status, conclusion=run_conclusion
 
 
 def tag(commit, remote, timeout, dry_run, status=registry_status, wait=wait_for, registry=None,
-        conclusion=run_conclusion):
+        run=tag_run):
     # The local checkout decides what is released: nothing is fetched, so a
     # run that is resumed later tags the same commit, not whatever main has
     # moved on to since. Only the remote's tags and the registries are read.
@@ -336,19 +373,29 @@ def tag(commit, remote, timeout, dry_run, status=registry_status, wait=wait_for,
             print(f"skip   {package.tag}: {package} is already on {package.registry}", flush=True)
             continue
         if package.tag in existing and existing[package.tag] != sha:
-            # A tag on another commit whose version never reached the
-            # registry: when its release run ended without success
-            # (cancelled, failed), nothing was published from it, so it is
-            # moved here. One still running, or with no run to see, stops.
+            # A tag on another commit whose version is not on the registry.
+            # Moved here only when its release run, on that commit, ended
+            # without success and never started publishing; anything less
+            # certain stops.
             old = existing[package.tag][:12]
-            run = conclusion(package)
-            if not (run and run[0] == "completed" and run[1] != "success"):
-                state = f"its release run is {run[0]}: {run[2]}" if run else "no release run can be seen"
+            latest = run(package)
+            if not dead_tag(latest, existing[package.tag]):
+                if not latest:
+                    state = "no release run can be seen"
+                elif latest["head_sha"] != existing[package.tag]:
+                    state = f"its latest release run is on {latest['head_sha'][:12]}, not the tag"
+                elif latest["status"] != "completed":
+                    state = f"its release run is {latest['status']}: {latest['url']}"
+                elif latest["publish_started"]:
+                    state = f"its release run started publishing: {latest['url']}"
+                else:
+                    state = f"its release run succeeded: {latest['url']}"
                 raise RuntimeError(
                     f"{package.tag} exists on {remote} at {old}, not {sha[:12]}, and {package} is not "
                     f"published; {state}. If nothing will come of it, delete it and run again:\n"
                     f"  git push {remote} :refs/tags/{package.tag} && git tag -d {package.tag}")
-            print(f"move   {package.tag}: its run at {old} ended {run[1]}; tagging {sha[:12]}", flush=True)
+            print(f"move   {package.tag}: its run at {old} ended {latest['conclusion']} before publishing; "
+                  f"tagging {sha[:12]}", flush=True)
             if dry_run:
                 continue
             git("push", remote, f":refs/tags/{package.tag}", capture=False)

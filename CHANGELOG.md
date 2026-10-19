@@ -12,11 +12,13 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 ### Releases: a dead tag is moved, not a dead end
 
 - **`release_cohort.py tag` moves a tag whose release never happened.** A
-  tag on another commit, for a version that is not on its registry and whose
-  last release run ended without success (cancelled or failed), is deleted
-  and made again on the commit being released; it used to stop with
-  "resolve it by hand". A tag whose run is still going, or with no run to
-  see, still stops, now with the commands to clear it. A local tag on
+  tag on another commit, for a version that is not on its registry, whose
+  latest release run ran on that commit, ended without success (cancelled
+  or failed) and never started its publish job, is deleted and made again
+  on the commit being released; it used to stop with "resolve it by hand".
+  Anything less certain (a run still going, one that started publishing, a
+  run of another commit, or no run to see) still stops, now with the
+  commands to clear it. A local tag on
   another commit that the remote does not have (a remote tag deleted by
   hand leaves one) was never released, so it is replaced too, where it
   stopped with "delete it first".

@@ -219,7 +219,7 @@ class Tag(unittest.TestCase):
     def run_tag(self, **options):
         cohort.tag(options.get("commit", "HEAD"), "origin", 60, options.get("dry_run", False),
                    status=self.status, wait=self.wait, registry=options.get("registry"),
-                   conclusion=options.get("conclusion", lambda package: None))
+                   run=options.get("run", lambda package: None))
 
     def test_tags_only_what_is_unpublished_in_order_and_waits_for_each(self):
         self.run_tag()
@@ -258,10 +258,14 @@ class Tag(unittest.TestCase):
         git(self.work, "push", "--quiet", "origin", "rs-rich-art-v0.2.0")
         return git(self.work, "rev-parse", "HEAD")
 
+    def run_on(self, commit, status="completed", conclusion="cancelled", publish_started=False):
+        return lambda package: {"status": status, "conclusion": conclusion, "url": "https://example/run",
+                                "head_sha": commit, "publish_started": publish_started}
+
     def test_an_existing_tag_on_another_commit_with_a_run_going_stops(self):
         later = self.tag_a_later_commit()
         with self.assertRaisesRegex(RuntimeError, "release run is in_progress"):
-            self.run_tag(commit=self.sha, conclusion=lambda p: ("in_progress", "", "https://example/run"))
+            self.run_tag(commit=self.sha, run=self.run_on(later, status="in_progress", conclusion=""))
         self.assertEqual(cohort.remote_tags("origin")["rs-rich-art-v0.2.0"], later)
 
     def test_an_existing_tag_on_another_commit_with_no_run_says_how_to_clear_it(self):
@@ -270,13 +274,34 @@ class Tag(unittest.TestCase):
             self.run_tag(commit=self.sha)
 
     def test_a_tag_whose_run_was_cancelled_is_moved_to_this_commit(self):
-        # The cancelled run published nothing, so the tag is taken back and
-        # put on the commit being released, locally and on the remote.
-        self.tag_a_later_commit()
-        self.run_tag(commit=self.sha, conclusion=lambda p: ("completed", "cancelled", "https://example/run"))
+        # The cancelled run never started publishing, so the tag is taken
+        # back and put on the commit being released, locally and remotely.
+        later = self.tag_a_later_commit()
+        self.run_tag(commit=self.sha, run=self.run_on(later))
         self.assertEqual(cohort.remote_tags("origin")["rs-rich-art-v0.2.0"], self.sha)
         self.assertEqual(git(self.work, "rev-parse", "rs-rich-art-v0.2.0^{commit}"), self.sha)
         self.assertEqual(self.waited, ["rs-rich-art-v0.2.0", "python-v0.3.0"])
+
+    def test_a_cancelled_run_that_started_publishing_stops(self):
+        # The upload may have landed before the cancel; the registry can
+        # take a while to show it, so the tag stays.
+        later = self.tag_a_later_commit()
+        with self.assertRaisesRegex(RuntimeError, "started publishing"):
+            self.run_tag(commit=self.sha, run=self.run_on(later, publish_started=True))
+        self.assertEqual(cohort.remote_tags("origin")["rs-rich-art-v0.2.0"], later)
+
+    def test_a_failed_run_of_another_commit_does_not_condemn_the_tag(self):
+        # The latest run seen is an older one, of the tag before it moved:
+        # it says nothing about the tag as it is now.
+        later = self.tag_a_later_commit()
+        with self.assertRaisesRegex(RuntimeError, "not the tag"):
+            self.run_tag(commit=self.sha, run=self.run_on(self.sha, conclusion="failure"))
+        self.assertEqual(cohort.remote_tags("origin")["rs-rich-art-v0.2.0"], later)
+
+    def test_a_dry_run_only_says_it_would_move_a_dead_tag(self):
+        later = self.tag_a_later_commit()
+        self.run_tag(commit=self.sha, dry_run=True, run=self.run_on(later, conclusion="failure"))
+        self.assertEqual(cohort.remote_tags("origin")["rs-rich-art-v0.2.0"], later)
 
     def test_a_leftover_local_tag_on_another_commit_is_replaced(self):
         # A remote tag deleted by hand leaves the local one behind, on its
@@ -287,12 +312,6 @@ class Tag(unittest.TestCase):
         self.run_tag(commit=self.sha)
         self.assertEqual(git(self.work, "rev-parse", "rs-rich-art-v0.2.0^{commit}"), self.sha)
         self.assertEqual(cohort.remote_tags("origin")["rs-rich-art-v0.2.0"], self.sha)
-
-    def test_a_dry_run_only_says_it_would_move_a_dead_tag(self):
-        later = self.tag_a_later_commit()
-        self.run_tag(commit=self.sha, dry_run=True,
-                     conclusion=lambda p: ("completed", "failure", "https://example/run"))
-        self.assertEqual(cohort.remote_tags("origin")["rs-rich-art-v0.2.0"], later)
 
     def test_it_tags_the_local_checkout_not_a_newer_main(self):
         # main moves on (a later version of rs-rich-art) in another clone; a
