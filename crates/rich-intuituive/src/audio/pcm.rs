@@ -122,8 +122,9 @@ pub fn deinterleave(bytes: &[u8], format: Format, channels: usize) -> Matrix {
 /// Read interleaved PCM from `reader` (a file, a pipe, stdin) as buffers of
 /// `buffer` frames, `channels` rows each: an iterator that reads a buffer
 /// each time it is asked for one. A short last buffer is padded with
-/// silence; then it ends, as it does on a read error. Run it on a
-/// [`latest`](crate::latest) thread to feed an app.
+/// silence; then it ends, as it does on a read error, which [`Pcm::error`]
+/// then holds (a [`Capture::from_pcm`](super::Capture::from_pcm) fails
+/// with it). Run it on a [`latest`](crate::latest) thread to feed an app.
 ///
 /// ```
 /// use intuituive::audio::{pcm, Format};
@@ -143,6 +144,8 @@ pub fn pcm<R: Read>(reader: R, format: Format, channels: usize, buffer: usize) -
         format,
         channels,
         bytes: vec![0; buffer.max(1) * channels * format.bytes()],
+        error: None,
+        failed: false,
     }
 }
 
@@ -153,6 +156,10 @@ pub struct Pcm<R> {
     format: Format,
     channels: usize,
     bytes: Vec<u8>,
+    /// The read error that ended it, if one did, until taken.
+    error: Option<std::io::Error>,
+    /// A read failed: no more buffers.
+    failed: bool,
 }
 
 impl<R> Pcm<R> {
@@ -165,13 +172,55 @@ impl<R> Pcm<R> {
     pub fn buffer(&self) -> usize {
         self.bytes.len() / self.channels / self.format.bytes()
     }
+
+    /// The read error that ended the buffers, if one did (rather than the
+    /// end of the stream): scope-tui's "data source returned null".
+    ///
+    /// ```
+    /// use intuituive::audio::{pcm, Format};
+    /// use std::io::{self, Read};
+    ///
+    /// struct Broken;
+    /// impl Read for Broken {
+    ///     fn read(&mut self, _: &mut [u8]) -> io::Result<usize> {
+    ///         Err(io::Error::other("the pipe broke"))
+    ///     }
+    /// }
+    /// let mut buffers = pcm(Broken, Format::S16Le, 1, 4);
+    /// assert_eq!(buffers.next(), None);
+    /// assert_eq!(buffers.error().map(|e| e.to_string()), Some("the pipe broke".into()));
+    /// ```
+    pub fn error(&self) -> Option<&std::io::Error> {
+        self.error.as_ref()
+    }
+
+    /// The next buffer, `Ok(None)` at the end of the stream, or the read
+    /// error that ended it.
+    ///
+    /// # Errors
+    /// The reader failed (any samples read before it came as a buffer,
+    /// padded).
+    pub fn try_next(&mut self) -> std::io::Result<Option<Matrix>>
+    where
+        R: Read,
+    {
+        match self.next() {
+            Some(buffer) => Ok(Some(buffer)),
+            None => match self.error.take() {
+                Some(error) => Err(error),
+                None => Ok(None),
+            },
+        }
+    }
 }
 
 /// Play `pcm`'s buffers onto a signal at `rate` samples a second, a
 /// buffer's worth of time apart (the first at once), and then silence on
 /// the same beat, as a file played to a scope (scope-tui's `file` source
 /// pads with silence): the core's [`latest_iter`](crate::latest_iter)
-/// with [`Pace::Every`](crate::Pace::Every). In an app that
+/// with [`Pace::Every`](crate::Pace::Every). For a source with a state
+/// (ended, failed on a read error) in the shape of a sound card's, see
+/// [`Capture::from_pcm`](super::Capture::from_pcm). In an app that
 /// [waits for its tasks](crate::App::wait_for_tasks) it keeps to the
 /// app's clock. The reader is read on the signal's thread.
 ///
@@ -211,13 +260,20 @@ impl<R: Read> Iterator for Pcm<R> {
     type Item = Matrix;
 
     fn next(&mut self) -> Option<Matrix> {
+        if self.failed {
+            return None;
+        }
         let mut filled = 0;
         while filled < self.bytes.len() {
             match self.reader.read(&mut self.bytes[filled..]) {
                 Ok(0) => break,
                 Ok(n) => filled += n,
                 Err(error) if error.kind() == std::io::ErrorKind::Interrupted => {}
-                Err(_) => break,
+                Err(error) => {
+                    self.error = Some(error);
+                    self.failed = true;
+                    break;
+                }
             }
         }
         if filled == 0 {

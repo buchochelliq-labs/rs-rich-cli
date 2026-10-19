@@ -1,7 +1,8 @@
 //! The `viz` plugin: levels and spectra as nodes, each drawn by one of
 //! rs-rich-ext's charts from a closure that reads signals. A level meter
-//! with peak hold, a sparkline, a spectrogram (a waterfall) and a bar
-//! spectrum (cava's bars). There only with the off-by-default `viz`
+//! with peak hold, a sparkline, a spectrogram (a waterfall), a bar
+//! spectrum (cava's bars), a trace with a phosphor's persistence (an
+//! analogue scope's) and a tuner's readout. There only with the off-by-default `viz`
 //! feature: they are views of one domain's data (levels and spectra), not
 //! components other components build on, so they are not in the core.
 
@@ -9,9 +10,15 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
-use rich_ext::chart::{BarSpectrum, LevelMeter, PeakHold, Sparkline, Spectrogram};
+use rich::{Segment, Style};
+use rich_ext::chart::{
+    Axis as ChartAxis, BarSpectrum, Chart, Layering, LevelMeter, PeakHold, Persistence, Sparkline,
+    Spectrogram,
+};
+use rich_ext::dsp::Reading;
 
-use crate::node::{described, Axis, Node};
+use crate::digits::digits;
+use crate::node::{column, described, leaf, text, Axis, Node};
 use crate::screen::Rect;
 use crate::widget::{widget, Canvas, DrawCx, MeasureCx, Widget};
 
@@ -221,6 +228,180 @@ pub fn bar_spectrum_with(
     described(move || configure(BarSpectrum::new(bands())))
 }
 
+/// A trace's last frames drawn together, each older one fainter, as an
+/// analogue scope's phosphor (xoscope's persistence): rs-rich-ext's
+/// [`Persistence`] on a [`Chart`], from `frames`, a closure that may read
+/// signals and returns the frames, oldest first, each a trace's points.
+/// Keep them with the core's [`recent`](crate::recent) (`recent(trace,
+/// 8)`) or [`recent_of`](crate::recent_of). The axes span the points
+/// (-1 to 1 up the side while they are all within it); the newest frame
+/// is drawn on top.
+///
+/// ```
+/// use intuituive::prelude::*;
+/// use intuituive::{persistence_with, recent};
+///
+/// let app = App::new(|| {
+///     let trace = signal(vec![(0.0, -1.0), (1.0, 1.0)]);
+///     let frames = recent(trace, 4);
+///     persistence_with(move || frames.get(), |p| p.style("#00ff00").fade(0.25), |chart| chart)
+///         .on_key("f", move |_| trace.set(vec![(0.0, 1.0), (1.0, -1.0)]))
+/// });
+/// let mut driver = app.driver(10, 4);
+/// driver.press("f");
+/// // Both frames are drawn: an X.
+/// let rows = driver.screen().plain();
+/// assert!(rows[0].trim() != "" && rows[3].trim() != "", "{rows:?}");
+/// ```
+pub fn persistence<I>(frames: impl Fn() -> I + 'static) -> Node
+where
+    I: IntoIterator<Item = Vec<(f64, f64)>>,
+{
+    persistence_with(frames, |p| p, |chart| chart)
+}
+
+/// A [`persistence`] whose [`Persistence`] `trace` sets up (`.style(..)`,
+/// `.fade(..)`, `.background(..)`, `.marker(..)`) and whose [`Chart`]
+/// `chart` sets up (its axes' bounds and labels, a legend), each given one
+/// made from the frames.
+pub fn persistence_with<I>(
+    frames: impl Fn() -> I + 'static,
+    trace: impl Fn(Persistence) -> Persistence + 'static,
+    chart: impl Fn(Chart) -> Chart + 'static,
+) -> Node
+where
+    I: IntoIterator<Item = Vec<(f64, f64)>>,
+{
+    described(move || {
+        let frames: Vec<Vec<(f64, f64)>> = frames().into_iter().collect();
+        let (x, y) = spans(&frames);
+        let datasets = trace(Persistence::new(frames)).datasets();
+        chart(
+            Chart::new(datasets)
+                .x_axis(ChartAxis::default().bounds(x.0, x.1))
+                .y_axis(ChartAxis::default().bounds(y.0, y.1))
+                .layering(Layering::PerDataset),
+        )
+    })
+}
+
+/// The x and y spans of `frames`' points: y at least -1 to 1, an empty
+/// or flat span widened by one each way.
+fn spans(frames: &[Vec<(f64, f64)>]) -> ((f64, f64), (f64, f64)) {
+    let points = frames
+        .iter()
+        .flatten()
+        .filter(|(x, y)| x.is_finite() && y.is_finite());
+    let (mut x, mut y) = ((f64::INFINITY, f64::NEG_INFINITY), (-1.0f64, 1.0f64));
+    for &(px, py) in points {
+        x = (x.0.min(px), x.1.max(px));
+        y = (y.0.min(py), y.1.max(py));
+    }
+    if x.0 >= x.1 || x.0.is_infinite() {
+        let mid = if x.0.is_finite() { x.0 } else { 0.0 };
+        x = (mid - 1.0, mid + 1.0);
+    }
+    (x, y)
+}
+
+/// How far off a [`tuner`] reads before its colour changes: green within
+/// this many cents, yellow within three times it, red beyond.
+const IN_TUNE: f64 = 5.0;
+
+/// A tuner's readout of `reading`, a closure that may read signals (an
+/// rs-rich-ext [`Tuner`](rich_ext::dsp::Tuner)'s reading of the newest
+/// spectrum): the note in big glyphs ([`digits`]), a needle from flat to
+/// sharp across the width, its centre the note, and the frequency and
+/// cents. Green within 5 cents, yellow within 15, red beyond; `--` and
+/// `no signal` with no reading.
+///
+/// ```
+/// use intuituive::prelude::*;
+/// use intuituive::tuner;
+/// use rich_ext::dsp::Tuner;
+///
+/// let app = App::new(|| {
+///     let samples: Vec<f64> = rich_ext::dsp::tone(442.0, 48_000.0).take(4096).collect();
+///     let reading = Tuner::new().listen(&samples, 48_000.0);
+///     tuner(move || reading)
+/// });
+/// let mut driver = app.driver(21, 5);
+/// driver.settle();
+/// let rows = driver.screen().plain();
+/// // A4, big; the needle right of the centre, sharp.
+/// assert_eq!(rows[0].trim_end(), "┌─┐╷ ╷");
+/// assert_eq!(rows[3].trim_end(), "b─────────┼●────────#");
+/// assert_eq!(rows[4].trim_end(), "441.8 Hz  +7.1 cents");
+/// ```
+pub fn tuner(reading: impl Fn() -> Option<Reading> + 'static) -> Node {
+    let reading = std::rc::Rc::new(reading);
+    let (note, needle, readout) = (reading.clone(), reading.clone(), reading);
+    let colour = |r: &Reading| {
+        let off = r.cents.abs();
+        if off <= IN_TUNE {
+            "green"
+        } else if off <= 3.0 * IN_TUNE {
+            "yellow"
+        } else {
+            "red"
+        }
+    };
+    column([
+        digits(move || match note() {
+            Some(r) => format!("[{}]{}", colour(&r), r.name()),
+            None => "[bright_black]--".to_string(),
+        })
+        .fixed(3),
+        leaf(move |_, width, _| vec![needle_row(needle().as_ref(), width, colour)]).fixed(1),
+        text(move || match readout() {
+            Some(r) => format!("{:.1} Hz  [{}]{:+.1} cents", r.hz, colour(&r), r.cents),
+            None => "[bright_black]no signal".to_string(),
+        })
+        .fixed(1),
+    ])
+    .what("tuner")
+}
+
+/// The needle's row, `width` cells: `b` (flat) at the left, `#` (sharp) at
+/// the right, the note's mark in the middle, and the needle where the
+/// cents put it.
+fn needle_row(
+    reading: Option<&Reading>,
+    width: u16,
+    colour: fn(&Reading) -> &'static str,
+) -> Vec<Segment> {
+    let width = usize::from(width);
+    if width < 3 {
+        return Vec::new();
+    }
+    let centre = (width - 1) / 2;
+    let mut cells: Vec<char> = (0..width)
+        .map(|i| match i {
+            0 => 'b',
+            i if i == width - 1 => '#',
+            i if i == centre => '┼',
+            _ => '─',
+        })
+        .collect();
+    let at = reading.map(|r| {
+        let reach = (width - 1 - centre).min(centre).saturating_sub(1) as f64;
+        let off = (r.cents / 50.0).clamp(-1.0, 1.0) * reach;
+        (centre as f64 + off).round() as usize
+    });
+    let mut out = Vec::new();
+    if let (Some(at), Some(reading)) = (at, reading) {
+        cells[at] = '●';
+        let before: String = cells[..at].iter().collect();
+        let after: String = cells[at + 1..].iter().collect();
+        out.push(Segment::new(before, None));
+        out.push(Segment::new("●", Style::parse(colour(reading)).ok()));
+        out.push(Segment::new(after, None));
+    } else {
+        out.push(Segment::new(cells.into_iter().collect::<String>(), None));
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -327,5 +508,39 @@ mod tests {
         });
         let screen = app.render_with(&["a", "q"], 3, 1).unwrap();
         assert_eq!(screen[0], "▂▃█");
+    }
+
+    #[test]
+    fn a_tuner_with_nothing_heard_says_so_and_colours_by_cents() {
+        let app = crate::App::new(|| {
+            let reading = signal(None::<Reading>);
+            tuner(move || reading.get()).on_key("r", move |_| {
+                reading.set(Some(Reading {
+                    hz: 100.0,
+                    note: "G",
+                    octave: 2,
+                    cents: -30.0,
+                }))
+            })
+        });
+        let mut driver = app.driver(11, 5);
+        driver.settle();
+        let rows = driver.screen().plain();
+        assert_eq!(rows[3].trim_end(), "b────┼────#");
+        assert_eq!(rows[4].trim_end(), "no signal");
+        driver.press("r");
+        let rows = driver.screen().plain();
+        assert_eq!(rows[0].trim_end(), "┌─╴╶─┐");
+        // Thirty cents flat: left of the centre, red.
+        assert_eq!(rows[3].trim_end(), "b──●─┼────#");
+        let styled = crate::testing::styled(&driver);
+        assert!(styled.contains("[red]●"), "{styled}");
+    }
+
+    #[test]
+    fn spans_cover_the_points_and_at_least_a_full_scale() {
+        let frames = vec![vec![(0.0, 0.2), (4.0, 3.0)]];
+        assert_eq!(spans(&frames), ((0.0, 4.0), (-1.0, 3.0)));
+        assert_eq!(spans(&[]), ((-1.0, 1.0), (-1.0, 1.0)));
     }
 }

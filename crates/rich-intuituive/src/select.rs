@@ -2,7 +2,8 @@
 //! visual range, and [`list_search`], find next and previous over a list's
 //! items.
 
-use std::collections::HashSet;
+use std::cell::{Cell, RefCell};
+use std::collections::{HashMap, HashSet};
 use std::hash::Hash;
 use std::rc::Rc;
 
@@ -258,6 +259,68 @@ impl<K: Clone + Eq + Hash + 'static> MultiSelect<K> {
     /// End the visual range, leaving the selection as it was before it.
     pub fn cancel_visual(&self) {
         self.visual.set(None);
+    }
+
+    /// One selection per tab of `tabs`, through this one handle: when
+    /// another tab becomes active, what is chosen and the visual range
+    /// going on are kept for the tab left, and the tab arrived at's come
+    /// back (nothing chosen, for a tab new to it). Everything holding the
+    /// handle (a list's markers, an action's targets) follows the active
+    /// tab, as Yazi keeps a selection and a mode per tab.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    /// use intuituive::{multi_select, tab_set};
+    ///
+    /// let app = App::new(|| {
+    ///     let pages = tab_set(|| ());
+    ///     let picked = multi_select::<String>().scoped(&pages);
+    ///     text(move || picked.selected().join(" "))
+    ///         .on_key("a", move |_| picked.toggle("a".into()))
+    ///         .on_key("b", move |_| picked.toggle("b".into()))
+    ///         .on_key("t", move |_| {
+    ///             pages.open();
+    ///         })
+    ///         .on_key("1", move |_| pages.switch(0))
+    ///         .on_key("2", move |_| pages.switch(1))
+    /// });
+    /// let mut driver = app.driver(10, 1);
+    /// driver.press("a t b");
+    /// assert_eq!(driver.screen().plain()[0].trim_end(), "b");
+    /// driver.press("1");
+    /// assert_eq!(driver.screen().plain()[0].trim_end(), "a");
+    /// driver.press("2");
+    /// assert_eq!(driver.screen().plain()[0].trim_end(), "b");
+    /// ```
+    pub fn scoped<T: 'static>(self, tabs: &crate::tab_set::TabSet<T>) -> Self {
+        type Saved<K> = (Vec<K>, Option<Visual>);
+        let set = *tabs;
+        let saved: Rc<RefCell<HashMap<u64, Saved<K>>>> = Rc::default();
+        let last = Rc::new(Cell::new(crate::reactive::untracked(|| set.active_id())));
+        let selection = self;
+        crate::reactive::watch(
+            move || set.active_id(),
+            move |id, _| {
+                let left = last.replace(id);
+                if left == id {
+                    return;
+                }
+                let open = set.ids();
+                let mut saved = saved.borrow_mut();
+                saved.retain(|tab, _| open.contains(tab));
+                if open.contains(&left) {
+                    let order = selection.chosen.with_untracked(|c| c.order.clone());
+                    saved.insert(left, (order, selection.visual.get_untracked()));
+                }
+                let (order, visual) = saved.remove(&id).unwrap_or_default();
+                selection.chosen.update(|chosen| {
+                    chosen.set = order.iter().cloned().collect();
+                    chosen.order = order;
+                });
+                selection.visual.set(visual);
+            },
+        );
+        self
     }
 
     /// The keys the visual range covers now, in the items' order (none

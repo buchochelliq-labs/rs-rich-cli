@@ -65,10 +65,11 @@ viz = []
 # `watch_path`: wake the app when files change, through notify (inotify,
 # FSEvents, ReadDirectoryChangesW, kqueue). Off by default.
 watch = ["dep:notify"]
-# `image`: an image file as a node, drawn by rs-rich-art in half blocks
-# (or quadrants, Braille, ASCII); `sprite_sheet`: an image cut into pixel
-# and half-block sprites. Off by default.
-art = ["dep:rich-art", "rich-art/image"]
+# `image`: an image file (or bytes) as a node, drawn by rs-rich-art in half
+# blocks (or quadrants, Braille, ASCII), or in pixels through Kitty's,
+# Sixel's or iTerm2's protocol (`image_graphics`); `sprite_sheet`: an image
+# cut into pixel and half-block sprites. Off by default.
+art = ["dep:rich-art", "rich-art/image", "rich-art/kitty", "rich-art/sixel", "rich-art/iterm"]
 # `micro_sprite`: rs-rich-micro's micro assets (emoji-sized images and
 # animations) as sprites for a stage, fitted in half blocks. Off by
 # default.

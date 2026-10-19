@@ -1,6 +1,8 @@
 //! Threads that feed a signal, beyond [`latest`]: one that says how it is
 //! doing ([`latest_with_state`]: running, stalled, ended or failed), and an
-//! iterator played onto a signal at a pace ([`latest_iter`]).
+//! iterator played onto a signal at a pace ([`latest_iter`]). Either as
+//! one value, a [`Feed`] ([`latest_feed`], [`Play::feed`]): the newest
+//! value and the state together, whatever the thread is.
 
 use std::cell::Cell;
 use std::fmt::Display;
@@ -101,30 +103,115 @@ pub fn latest_with_state<T: Send + 'static, R: FeedEnd>(
     feed_with_state("latest_with_state()", stall_after.into(), |tx, _| run(tx))
 }
 
-/// Tells a feed's state from its thread, in order with its values.
-struct StateTeller {
+/// A feed as one value: the newest value a thread sent
+/// ([`value`](Self::value)) and how the thread is doing
+/// ([`state`](Self::state)), as [`latest_with_state`] gives them apart.
+/// `Copy`; made by [`latest_feed`] or [`Play::feed`], or from the pair
+/// (`Feed::from((value, state))`). One type for every source an app
+/// switches between: a device, a file played, a generator, a socket.
+pub struct Feed<T: 'static> {
+    value: Signal<Option<T>>,
+    state: Signal<FeedState>,
+}
+
+impl<T> Clone for Feed<T> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<T> Copy for Feed<T> {}
+
+impl<T: 'static> Feed<T> {
+    /// The newest value (`None` until the first), a signal.
+    pub fn value(&self) -> Signal<Option<T>> {
+        self.value
+    }
+
+    /// How the feed's thread is doing, a signal.
+    pub fn state(&self) -> Signal<FeedState> {
+        self.state
+    }
+
+    /// Whether the thread is still there (running or stalled),
+    /// subscribing.
+    pub fn is_live(&self) -> bool {
+        self.state.with(FeedState::is_live)
+    }
+
+    /// The two signals, as [`latest_with_state`] returns them.
+    pub fn parts(&self) -> (Signal<Option<T>>, Signal<FeedState>) {
+        (self.value, self.state)
+    }
+}
+
+impl<T: 'static> From<(Signal<Option<T>>, Signal<FeedState>)> for Feed<T> {
+    fn from((value, state): (Signal<Option<T>>, Signal<FeedState>)) -> Self {
+        Feed { value, state }
+    }
+}
+
+/// [`latest_with_state`] as one [`Feed`], its thread also given a
+/// [`FeedTeller`] to say how it is doing before it ends: `Ended` when a
+/// file has run out but silence plays on, `Failed` on a read error it
+/// pads over, `Running` again once a device is back.
+///
+/// ```
+/// use intuituive::prelude::*;
+/// use intuituive::{latest_feed, FeedState};
+///
+/// let app = App::new(|| {
+///     let feed = latest_feed(None, |tx, state| {
+///         tx.send(1);
+///         // The values have run out; a fallback follows.
+///         state.tell(FeedState::Ended);
+///         tx.send(0);
+///     });
+///     text(move || format!("{:?} {:?}", feed.value().get(), feed.state().get()))
+/// })
+/// .wait_for_tasks(true);
+/// let mut driver = app.driver(30, 1);
+/// driver.settle();
+/// assert_eq!(driver.screen().plain()[0].trim_end(), "Some(0) Ended");
+/// ```
+///
+/// # Panics
+/// Outside a running or building app.
+#[track_caller]
+pub fn latest_feed<T: Send + 'static, R: FeedEnd>(
+    stall_after: impl Into<Option<Duration>>,
+    run: impl FnOnce(Latest<T>, &FeedTeller) -> R + Send + 'static,
+) -> Feed<T> {
+    feed_with_state("latest_feed()", stall_after.into(), run).into()
+}
+
+/// Tells a feed's state from its thread, in order with its values: the
+/// second argument of a [`latest_feed`] thread.
+pub struct FeedTeller {
     state: Signal<FeedState>,
     proxy: crate::reactive::Proxy,
 }
 
-impl StateTeller {
-    fn tell(&self, now: FeedState) {
+impl FeedTeller {
+    /// Set the feed's state to `now`, after the values sent before (the
+    /// thread's end still sets the last state).
+    pub fn tell(&self, now: FeedState) {
         let state = self.state;
         self.proxy.run(move || state.set(now));
     }
 }
 
-/// [`latest_with_state`], its thread also given a [`StateTeller`].
+/// [`latest_with_state`], its thread also given a [`FeedTeller`].
 #[track_caller]
 fn feed_with_state<T: Send + 'static, R: FeedEnd>(
     what: &str,
     stall_after: Option<Duration>,
-    run: impl FnOnce(Latest<T>, &StateTeller) -> R + Send + 'static,
+    run: impl FnOnce(Latest<T>, &FeedTeller) -> R + Send + 'static,
 ) -> (Signal<Option<T>>, Signal<FeedState>) {
     let runtime = Runtime::current_for(what);
     let state = signal(FeedState::Running);
     let proxy = runtime.proxy();
-    let teller = StateTeller {
+    let teller = FeedTeller {
         state,
         proxy: proxy.clone(),
     };
@@ -329,6 +416,12 @@ impl<T: Send + 'static> Play<T> {
     /// ```
     #[track_caller]
     pub fn with_state(self) -> (Signal<Option<T>>, Signal<FeedState>) {
+        self.feed().parts()
+    }
+
+    /// [`with_state`](Self::with_state) as one [`Feed`].
+    #[track_caller]
+    pub fn feed(self) -> Feed<T> {
         let stall = self.stall_after;
         feed_with_state(
             "latest_iter(..).with_state()",
@@ -337,6 +430,7 @@ impl<T: Send + 'static> Play<T> {
                 self.play(&tx, Some(teller));
             },
         )
+        .into()
     }
 
     /// Start playing, and then call `after` on the thread with its
@@ -354,7 +448,7 @@ impl<T: Send + 'static> Play<T> {
     /// Play the values, then the tails, on the thread's `tx`, telling
     /// `teller` `Ended` when the values run out; `None` once the app has
     /// finished.
-    fn play(self, tx: &Latest<T>, teller: Option<&StateTeller>) -> Option<()> {
+    fn play(self, tx: &Latest<T>, teller: Option<&FeedTeller>) -> Option<()> {
         let Play {
             values,
             pace,

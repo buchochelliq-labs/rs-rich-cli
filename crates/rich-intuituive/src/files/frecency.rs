@@ -1,18 +1,15 @@
 //! Directories ranked by how often and how lately they were visited, kept
-//! across sessions: what zoxide keeps for Yazi's `Z`.
+//! across sessions: what zoxide keeps for Yazi's `Z`. The core's
+//! [`FrecencyStore`] keyed by paths.
 
-use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use super::miller::Miller;
-use crate::reactive::{signal, watch, Signal};
+use crate::reactive::watch;
+use crate::state::{frecency_session, frecency_store, FrecencyStore};
 
-/// The most a store keeps; past it the least visited go.
-const KEEP: usize = 500;
-/// When the ranks add up to more than this, they all age (zoxide's
-/// `_ZO_MAXAGE`).
-const MAX_AGE: f64 = 10_000.0;
+/// The app name intuiTUIve's own state is kept under ([`state_dir`]).
+const APP: &str = "intuituive";
 
 /// A directory in a [`Frecency`] store: how often it was visited (aged),
 /// and when last, in seconds since 1970.
@@ -27,34 +24,38 @@ impl Visit {
     /// Its score at `now` (zoxide's): the rank, four times over within the
     /// hour, twice within the day, halved within the week, else quartered.
     pub fn score(&self, now: u64) -> f64 {
-        let age = now.saturating_sub(self.last);
-        let factor = match age {
-            0..3_600 => 4.0,
-            3_600..86_400 => 2.0,
-            86_400..604_800 => 0.5,
-            _ => 0.25,
-        };
-        self.rank * factor
+        crate::state::Visit {
+            key: String::new(),
+            rank: self.rank,
+            last: self.last,
+        }
+        .score(now)
     }
 }
 
 /// Directories ranked by frecency, as zoxide ranks them for Yazi's `Z`:
 /// each [`visit`](Self::visit) adds one to a directory's rank and stamps
-/// the time, [`ranked`](Self::ranked) lists them best first, and the
-/// store is written to a small file after each visit (a whole new file
-/// renamed over the old, so a crash never leaves half of one), read again
-/// by the next session. `Copy`; made by [`frecency`] (the user's state
-/// directory) or [`frecency_at`] (a file you name).
+/// the time, [`ranked`](Self::ranked) lists them best first. The core's
+/// [`FrecencyStore`] keyed by paths: kept in a small file, read, changed
+/// and written under a lock on each visit (a whole new file renamed over
+/// the old), so two sessions' visits add up rather than the last one's
+/// winning, and read by the next session. `Copy`; made by [`frecency`]
+/// (the user's state directory) or [`frecency_at`] (a file you name).
 #[derive(Clone, Copy)]
 pub struct Frecency {
-    visits: Signal<Vec<Visit>>,
-    file: Signal<Option<PathBuf>>,
+    store: FrecencyStore,
 }
 
 /// The user's frecency store: `frecency.tsv` in intuiTUIve's state
-/// directory ([`state_dir`]), read now. Call it while the app is built.
+/// directory ([`state_dir`]), read now; for the session only where there
+/// is none. Call it while the app is built.
 pub fn frecency() -> Frecency {
-    store(state_dir().map(|dir| dir.join("frecency.tsv")))
+    Frecency {
+        store: match state_dir() {
+            Some(dir) => frecency_store(dir.join("frecency.tsv")),
+            None => frecency_session(),
+        },
+    }
 }
 
 /// A frecency store in `file` (made on the first visit), read now.
@@ -79,89 +80,73 @@ pub fn frecency() -> Frecency {
 /// assert_eq!(again.render_with(&[], 30, 1).unwrap()[0].trim_end(), r#"["/home", "/srv"]"#);
 /// ```
 pub fn frecency_at(file: impl Into<PathBuf>) -> Frecency {
-    store(Some(file.into()))
-}
-
-fn store(file: Option<PathBuf>) -> Frecency {
-    let visits = file.as_deref().map(read).unwrap_or_default();
     Frecency {
-        visits: signal(visits),
-        file: signal(file),
+        store: frecency_store(file),
     }
 }
 
-/// Where intuiTUIve keeps state between sessions: `$XDG_STATE_HOME/intuituive`
-/// (else `~/.local/state/intuituive`), `~/Library/Application
-/// Support/intuituive` on macOS, `%LOCALAPPDATA%\intuituive` on Windows.
+/// Where intuiTUIve keeps state between sessions: the core's
+/// [`state_dir`](crate::state_dir) for `intuituive`, so
+/// `$XDG_STATE_HOME/intuituive` (else `~/.local/state/intuituive`),
+/// `~/Library/Application Support/intuituive` on macOS,
+/// `%LOCALAPPDATA%\intuituive` on Windows.
 pub fn state_dir() -> Option<PathBuf> {
-    let var = |name: &str| std::env::var_os(name).filter(|v| !v.is_empty());
-    if cfg!(windows) {
-        return var("LOCALAPPDATA").map(|d| PathBuf::from(d).join("intuituive"));
-    }
-    let home = var("HOME").map(PathBuf::from);
-    if cfg!(target_os = "macos") {
-        return home.map(|h| h.join("Library/Application Support/intuituive"));
-    }
-    var("XDG_STATE_HOME")
-        .map(PathBuf::from)
-        .filter(|p| p.is_absolute())
-        .or_else(|| home.map(|h| h.join(".local/state")))
-        .map(|dir| dir.join("intuituive"))
+    crate::state::state_dir(APP)
 }
 
-fn now() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_or(0, |d| d.as_secs())
+/// A path as a store's key; `None` for one that is not UTF-8 or holds a
+/// tab or a line break (it would not read back).
+fn key(dir: &Path) -> Option<&str> {
+    dir.to_str().filter(|k| !k.contains(['\t', '\n', '\r']))
 }
 
 impl Frecency {
     /// Count a visit to `dir` now, and write the store.
     pub fn visit(&self, dir: &Path) {
-        let (dir, now) = (dir.to_path_buf(), now());
-        self.visits.update(|visits| {
-            match visits.iter_mut().find(|v| v.path == dir) {
-                Some(visit) => {
-                    visit.rank += 1.0;
-                    visit.last = now;
-                }
-                None => visits.push(Visit {
-                    path: dir,
-                    rank: 1.0,
-                    last: now,
-                }),
-            }
-            age(visits);
-        });
-        self.save();
+        if let Some(key) = key(dir) {
+            self.store.visit(key);
+        }
     }
 
     /// Forget `dir` (one that is gone), and write the store.
     pub fn remove(&self, dir: &Path) {
-        self.visits
-            .update(|visits| visits.retain(|v| v.path != dir));
-        self.save();
+        if let Some(key) = key(dir) {
+            self.store.remove(key);
+        }
     }
 
     /// The directories, best first, subscribing.
     pub fn ranked(&self) -> Vec<PathBuf> {
-        let now = now();
-        self.visits.with(|visits| {
-            let mut scored: Vec<(f64, &Visit)> = visits.iter().map(|v| (v.score(now), v)).collect();
-            scored.sort_by(|a, b| b.0.total_cmp(&a.0).then(b.1.last.cmp(&a.1.last)));
-            scored.into_iter().map(|(_, v)| v.path.clone()).collect()
-        })
+        self.store.ranked().into_iter().map(PathBuf::from).collect()
     }
 
     /// Every visit kept, subscribing.
     pub fn visits(&self) -> Vec<Visit> {
-        self.visits.get()
+        self.store
+            .visits()
+            .into_iter()
+            .map(|v| Visit {
+                path: PathBuf::from(v.key),
+                rank: v.rank,
+                last: v.last,
+            })
+            .collect()
     }
 
     /// The file it is kept in (`None` where there is no state directory:
     /// then it lasts the session).
     pub fn file(&self) -> Option<PathBuf> {
-        self.file.get_untracked()
+        self.store.file()
+    }
+
+    /// Read the file again: the visits other sessions wrote since.
+    pub fn reload(&self) {
+        self.store.reload();
+    }
+
+    /// The core store underneath.
+    pub fn store(&self) -> FrecencyStore {
+        self.store
     }
 
     /// Count a visit to each directory `miller`'s columns show, as Yazi
@@ -170,85 +155,6 @@ impl Frecency {
         let store = self;
         watch(move || miller.cwd.get(), move |dir, _| store.visit(&dir));
         self
-    }
-
-    /// Write the store: a new file beside the old, renamed over it.
-    fn save(&self) {
-        let Some(file) = self.file.get_untracked() else {
-            return;
-        };
-        let body = self.visits.with_untracked(|visits| {
-            visits
-                .iter()
-                .filter_map(|v| {
-                    let path = v.path.to_str()?;
-                    (!path.contains(['\t', '\n']))
-                        .then(|| format!("{}\t{}\t{path}\n", v.rank, v.last))
-                })
-                .collect::<String>()
-        });
-        // A store that cannot be written lasts the session.
-        let _ = write_atomic(&file, body.as_bytes());
-    }
-}
-
-/// Write `bytes` to `file` through a temporary file renamed over it.
-fn write_atomic(file: &Path, bytes: &[u8]) -> std::io::Result<()> {
-    if let Some(dir) = file.parent() {
-        std::fs::create_dir_all(dir)?;
-    }
-    let name = file
-        .file_name()
-        .map_or_else(|| "store".into(), |n| n.to_string_lossy().into_owned());
-    let temp = file.with_file_name(format!(".{name}.{}.tmp", std::process::id()));
-    let written = std::fs::File::create(&temp).and_then(|mut out| {
-        out.write_all(bytes)?;
-        out.sync_all()
-    });
-    match written.and_then(|_| std::fs::rename(&temp, file)) {
-        Ok(()) => Ok(()),
-        Err(error) => {
-            let _ = std::fs::remove_file(&temp);
-            Err(error)
-        }
-    }
-}
-
-/// The visits in `file`, a line each: `rank`, `last`, `path`, by tabs.
-/// Lines that do not read are left out.
-fn read(file: &Path) -> Vec<Visit> {
-    let Ok(text) = std::fs::read_to_string(file) else {
-        return Vec::new();
-    };
-    text.lines()
-        .filter_map(|line| {
-            let mut parts = line.splitn(3, '\t');
-            let rank = parts
-                .next()?
-                .parse::<f64>()
-                .ok()
-                .filter(|r| r.is_finite())?;
-            let last = parts.next()?.parse().ok()?;
-            let path = PathBuf::from(parts.next().filter(|p| !p.is_empty())?);
-            Some(Visit { path, rank, last })
-        })
-        .collect()
-}
-
-/// Age the ranks once they add up past [`MAX_AGE`], dropping what falls
-/// under one visit; keep at most [`KEEP`].
-fn age(visits: &mut Vec<Visit>) {
-    let total: f64 = visits.iter().map(|v| v.rank).sum();
-    if total > MAX_AGE {
-        let factor = 0.9 * MAX_AGE / total;
-        for visit in visits.iter_mut() {
-            visit.rank *= factor;
-        }
-        visits.retain(|v| v.rank >= 1.0);
-    }
-    if visits.len() > KEEP {
-        visits.sort_by(|a, b| b.rank.total_cmp(&a.rank).then(b.last.cmp(&a.last)));
-        visits.truncate(KEEP);
     }
 }
 
@@ -271,27 +177,27 @@ mod tests {
     }
 
     #[test]
-    fn ranks_age_and_the_store_round_trips() {
-        let mut visits: Vec<Visit> = [6_000.0, 6_000.0, 0.5]
-            .iter()
-            .enumerate()
-            .map(|(i, rank)| Visit {
-                path: PathBuf::from(format!("/d{i}")),
-                rank: *rank,
-                last: 5,
-            })
-            .collect();
-        age(&mut visits);
-        // 12 000.5 in all: aged to 9 000, the half visit dropped.
-        assert_eq!(visits.len(), 2);
-        let file =
-            std::env::temp_dir().join(format!("intuituive-frecency-{}.tsv", std::process::id()));
-        let body: String = visits
-            .iter()
-            .map(|v| format!("{}\t{}\t{}\n", v.rank, v.last, v.path.display()))
-            .collect();
-        write_atomic(&file, format!("{body}junk\n").as_bytes()).unwrap();
-        assert_eq!(read(&file), visits);
+    fn two_sessions_add_up() {
+        let file = std::env::temp_dir().join(format!(
+            "intuituive-frecency-two-{}.tsv",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_file(&file);
+        let (one, two) = (file.clone(), file.clone());
+        // Two windows open at once, each visiting a directory of its own.
+        let app = crate::App::new(move || {
+            let first = frecency_at(one.clone());
+            let second = frecency_at(two.clone());
+            first.visit(Path::new("/a"));
+            second.visit(Path::new("/b"));
+            first.visit(Path::new("/a"));
+            crate::label(format!("{:?}", first.ranked()))
+        });
+        let screen = app.render_with(&[], 30, 1).unwrap();
+        // The first saw the second's visit when it wrote.
+        assert_eq!(screen[0].trim_end(), r#"["/a", "/b"]"#);
+        let text = std::fs::read_to_string(&file).unwrap();
+        assert_eq!(text.lines().count(), 2, "{text}");
         std::fs::remove_file(&file).ok();
     }
 }
