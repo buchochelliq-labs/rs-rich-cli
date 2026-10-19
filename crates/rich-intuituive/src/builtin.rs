@@ -3,6 +3,7 @@
 //! components and scrolls. They use only what the trait gives any widget,
 //! which is the test that it is enough.
 
+use std::cell::Cell;
 use std::collections::HashMap;
 use std::hash::Hash;
 use std::rc::Rc;
@@ -1058,6 +1059,13 @@ impl Widget for Panel {
                 }
                 _ => None,
             };
+            // Drawn in full, it covers what is under it inside its frame
+            // too: in `layers`, the layer below shows only round it.
+            if cx.repaint() {
+                let shadow = self.shadow();
+                let (width, height) = (canvas.width(), canvas.height());
+                canvas.fill(0, 0, width - shadow, height - shadow, None);
+            }
             canvas.frame(cx.console(), &frame, self.shadow() == 1, shadow);
         }
         self.shown_focus = Some(focused);
@@ -1384,7 +1392,7 @@ fn row_height(cx: &MeasureCx, child: &Node, width: u16) -> u16 {
     if child.hidden() {
         return 0;
     }
-    let height = match child.size {
+    let height = match child.own_size() {
         Size::Fixed(n) => n,
         Size::Auto => cx.measure(child, Axis::Vertical, width, 0),
         _ => 1,
@@ -1479,24 +1487,68 @@ impl<K: Clone + Eq + Hash + 'static, F: Fn(K) -> Node + 'static> Widget for Each
 }
 
 /// One child at a time, chosen by a key, the others kept:
-/// [`switch`](crate::switch).
+/// [`switch`](crate::switch), and [`keyed`](crate::keyed).
 pub(crate) struct Switch<K, F> {
     pub key: Box<dyn Fn() -> K>,
     pub build: F,
     pub built: HashMap<K, Node>,
     pub current: Option<K>,
+    /// How many pages it keeps, the shown one included
+    /// ([`keep_last`](crate::Node::keep_last)), shared with its node;
+    /// `0`, all of them.
+    pub keep: Rc<Cell<usize>>,
+    /// The keys built, the most recently shown last.
+    pub recent: Vec<K>,
+    /// For [`keyed`](crate::keyed): its own node, whose first focusable
+    /// node takes the focus when the page that had it is dropped.
+    pub refocus: Option<Rc<Cell<Option<NodeId>>>>,
 }
 
 impl<K: Clone + Eq + Hash + 'static, F: Fn(K) -> Node> Switch<K, F> {
+    pub fn new(key: Box<dyn Fn() -> K>, build: F) -> Switch<K, F> {
+        Switch {
+            key,
+            build,
+            built: HashMap::new(),
+            current: None,
+            keep: Rc::new(Cell::new(0)),
+            recent: Vec::new(),
+            refocus: None,
+        }
+    }
+
     /// Read the key (subscribing to what it reads), and build its child,
-    /// untracked, if it is new.
+    /// untracked, if it is new; drop the pages past what it keeps.
     fn settle(&mut self) {
         let key = (self.key)();
+        if self.current.as_ref() == Some(&key) && self.built.contains_key(&key) {
+            return;
+        }
         if !self.built.contains_key(&key) {
             let node = Runtime::current().untracked(|| (self.build)(key.clone()));
             self.built.insert(key.clone(), node);
         }
+        self.recent.retain(|k| *k != key);
+        self.recent.push(key.clone());
         self.current = Some(key);
+        let keep = self.keep.get();
+        if keep == 0 || self.recent.len() <= keep {
+            return;
+        }
+        let runtime = Runtime::current();
+        let focus = runtime.focus_path();
+        let drop = self.recent.len() - keep;
+        for old in self.recent.drain(..drop) {
+            if let Some(gone) = self.built.remove(&old) {
+                // The focus was inside: the new page's first focusable
+                // node takes it, once it is laid out.
+                let focused = focus.as_ref().is_some_and(|path| path.contains(&gone.id()));
+                if let (true, Some(own)) = (focused, self.refocus.as_ref().and_then(|o| o.get())) {
+                    runtime.focus_within_later(own);
+                }
+                gone.forget(&runtime);
+            }
+        }
     }
 
     fn shown(&self) -> Option<&Node> {
@@ -1525,6 +1577,11 @@ impl<K: Clone + Eq + Hash + 'static, F: Fn(K) -> Node + 'static> Widget for Swit
             .values()
             .filter(|node| Some(node.id()) != shown)
             .collect()
+    }
+
+    fn sized_by(&mut self) -> Option<&Node> {
+        self.settle();
+        self.shown()
     }
 
     fn layout(&mut self, _cx: &MeasureCx, rect: Rect) -> Vec<Rect> {

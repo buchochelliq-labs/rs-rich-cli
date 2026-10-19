@@ -103,6 +103,7 @@ mod feed;
 #[cfg(feature = "files")]
 pub mod files;
 pub mod finder;
+pub mod focus;
 mod help;
 mod hex;
 #[cfg(feature = "art")]
@@ -191,8 +192,8 @@ pub use log::Log;
 pub use miller::{miller_in, miller_of, MillerSource};
 pub use node::described;
 pub use node::{
-    column, component, each, grid, label, layers, leaf, list, renderable, repeating, row, scroll,
-    scroll_both, scroll_both_with, scroll_with, scroll_x, switch, text, Node,
+    column, component, each, grid, keyed, label, layers, leaf, list, renderable, repeating, row,
+    scroll, scroll_both, scroll_both_with, scroll_with, scroll_x, switch, text, Node,
 };
 pub use notify::{Corner, Level};
 pub use place::{Offset, Origin, RectHandle};
@@ -233,7 +234,7 @@ pub mod prelude {
     // `text` is both the function and the `text!` macro.
     pub use crate::described;
     pub use crate::{
-        after, column, component, each, effect, every, fill, grid, input, label, latest,
+        after, column, component, each, effect, every, fill, grid, input, keyed, label, latest,
         latest_every, layers, leaf, list, list_optional, memo, number_input, on_write,
         on_write_ref, rate, renderable, repeating, resource, resource_for, row, scroll,
         scroll_both, scroll_with, scroll_x, signal, spawn, switch, text, text_area, viewport,

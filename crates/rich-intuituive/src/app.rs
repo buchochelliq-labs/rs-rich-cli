@@ -227,6 +227,8 @@ enum FocusMove {
     Next,
     Previous,
     To(NodeId),
+    /// The first focusable node inside a container, now or once built.
+    Within(NodeId),
 }
 
 type Build = Box<dyn FnOnce() -> Node>;
@@ -777,6 +779,38 @@ impl Ctx {
         self.focus = Some(FocusMove::To(id));
     }
 
+    /// Focus the first node inside the node with `id` that takes the focus
+    /// (the node itself, if it does and holds none): now, or once it is
+    /// built and laid out, when it is a page a [`switch`](crate::switch)
+    /// shows from the next frame, a [`keyed`](crate::keyed) child about to
+    /// be rebuilt, or a search box shown by a signal. A
+    /// [focus scope](crate::Node::focus_scope) gives the focus back to the
+    /// node inside it that had it last. Moving the focus again before then
+    /// (a key, a click, [`focus`](Self::focus)) drops the wait.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| {
+    ///     let page = signal(0usize);
+    ///     let pages = switch(move || page.get(), |page| match page {
+    ///         0 => label("start").focusable().name("start"),
+    ///         _ => column([label("title"), label("field").focusable().name("field")]),
+    ///     });
+    ///     let id = pages.id();
+    ///     pages.on_key("n", move |cx| {
+    ///         page.set(1);
+    ///         cx.focus_within(id);
+    ///     })
+    /// });
+    /// let mut driver = app.driver(10, 2);
+    /// driver.press("n");
+    /// driver.assert_focused("field");
+    /// ```
+    pub fn focus_within(&mut self, id: NodeId) {
+        self.focus = Some(FocusMove::Within(id));
+    }
+
     /// A handle for other threads (see [`Proxy`]).
     pub fn proxy(&self) -> Proxy {
         self.proxy.clone()
@@ -1230,6 +1264,10 @@ pub struct App {
     focused: Option<NodeId>,
     /// Focus, hover and resize events waiting to be told to their widgets.
     lifecycle: Vec<(NodeId, WidgetEvent)>,
+    /// Nodes with [`on_focus`](crate::Node::on_focus) or
+    /// [`on_blur`](crate::Node::on_blur) handlers the focus came into
+    /// (`true`) or left, waiting to be told with the lifecycle events.
+    focus_events: Vec<(NodeId, bool)>,
     /// Whether text selected with the mouse can be copied, and what was
     /// copied since the loop last asked.
     clipboard: bool,
@@ -1362,6 +1400,7 @@ impl App {
             // The trace says when the focus moves and the pointer acts.
             let focus_path = signal(Vec::new()).untraced();
             let hover_path = signal(Vec::new()).untraced();
+            Runtime::current().focus.set(Some(focus_path));
             // Made now, so a node closure reading it later makes nothing.
             crate::reactive::viewport();
             (build(), focus_path, hover_path)
@@ -1400,6 +1439,7 @@ impl App {
             drag: None,
             focused: None,
             lifecycle: Vec::new(),
+            focus_events: Vec::new(),
             clipboard: false,
             copies: Vec::new(),
             toasts: Vec::new(),
@@ -3140,10 +3180,15 @@ impl App {
             self.theme_base = theme;
             self.retheme();
         }
+        if cx.focus.is_some() {
+            // A focus move drops a wait for a container to be built.
+            self.runtime.focus_later.set(None);
+        }
         match cx.focus {
             Some(FocusMove::Next) => self.move_focus(true),
             Some(FocusMove::Previous) => self.move_focus(false),
             Some(FocusMove::To(id)) => self.set_focus(Some(id)),
+            Some(FocusMove::Within(id)) => self.focus_inside(id),
             None => {}
         }
         quit
@@ -3517,6 +3562,10 @@ impl App {
     /// the one before it if it was last; with nothing focused, to the
     /// first focusable node.
     fn keep_focus(&mut self) {
+        // A container asked to take the focus, once it is built.
+        if let Some(id) = self.runtime.focus_later.get() {
+            self.focus_inside(id);
+        }
         let ids = self.focusable();
         if let Some(id) = self.focus() {
             // A node that was disabled lets the focus go as one that left.
@@ -3615,6 +3664,43 @@ impl App {
         chosen
     }
 
+    /// Focus the first node inside `container` that takes the focus (a
+    /// focus scope's last one first), or wait for it to be built: the
+    /// wait is tried again after each frame.
+    fn focus_inside(&mut self, container: NodeId) {
+        match self.first_inside(container) {
+            Some(id) => {
+                self.runtime.focus_later.set(None);
+                self.set_focus(Some(id));
+            }
+            None => self.runtime.focus_later.set(Some(container)),
+        }
+    }
+
+    /// The node inside `container` (or `container` itself) that takes the
+    /// focus first, in Tab order; a focus scope's last focused node, while
+    /// it still takes it.
+    fn first_inside(&self, container: NodeId) -> Option<NodeId> {
+        let ids = self.focusable();
+        let mut found = None;
+        with_node(&self.top().root, container, &mut |node| {
+            if let Some(last) = node.scope_last().filter(|last| ids.contains(last)) {
+                let mut inside = false;
+                node.walk_accessible(&mut |n, _| inside |= n.id == last);
+                if inside {
+                    found = Some(last);
+                    return;
+                }
+            }
+            node.walk_accessible(&mut |n, _| {
+                if found.is_none() && ids.contains(&n.id) {
+                    found = Some(n.id);
+                }
+            });
+        });
+        found
+    }
+
     fn set_focus(&mut self, id: Option<NodeId>) {
         // Against the node last told, whichever screen it is on: opening a
         // modal takes the focus from the screen below, and closing it gives
@@ -3633,7 +3719,54 @@ impl App {
         top.fallback = false;
         let path = id.map(|id| self.path_to(id)).unwrap_or_default();
         let runtime = self.runtime.clone();
+        let before = runtime.enter(|| self.focus_path.get_untracked());
+        if before != path {
+            self.focus_moved(&before, &path, id);
+        }
         runtime.enter(|| self.focus_path.set(path));
+    }
+
+    /// The focus went from the nodes on `before` to those on `after`: the
+    /// focus scopes on `after` note `id`, and the nodes it came into or
+    /// left with focus handlers wait to be told.
+    fn focus_moved(&mut self, before: &[NodeId], after: &[NodeId], id: Option<NodeId>) {
+        let mut events = Vec::new();
+        for layer in &self.layers {
+            layer.root.walk_all(&mut |node, _, _| {
+                let (was, is) = (before.contains(&node.id), after.contains(&node.id));
+                if let (true, Some(id)) = (is, id) {
+                    node.note_scope_focus(id);
+                }
+                if was != is && !node.focus_handlers.borrow().is_empty() {
+                    events.push((node.id, is));
+                }
+            });
+        }
+        // The nodes it left first, then those it came into, each outermost
+        // first.
+        events.sort_by_key(|&(_, came)| came);
+        self.focus_events.extend(events);
+    }
+
+    /// Run the focus handlers of node `id`: those for the focus coming if
+    /// `came`, else those for it leaving. Whether to quit.
+    fn tell_focus(&mut self, id: NodeId, came: bool) -> bool {
+        let mut cx = self.ctx();
+        let mut ran = false;
+        let runtime = self.runtime.clone();
+        runtime.enter(|| {
+            for layer in &self.layers {
+                with_node(&layer.root, id, &mut |node| {
+                    for (on, handler) in node.focus_handlers.borrow_mut().iter_mut() {
+                        if *on == came {
+                            handler(&mut cx);
+                            ran = true;
+                        }
+                    }
+                });
+            }
+        });
+        ran && self.apply(cx)
     }
 
     fn move_focus(&mut self, forward: bool) {
@@ -3982,11 +4115,17 @@ impl App {
         // the next turn, a few rounds at most.
         for _ in 0..4 {
             let events = std::mem::take(&mut self.lifecycle);
-            if events.is_empty() {
+            let focus = std::mem::take(&mut self.focus_events);
+            if events.is_empty() && focus.is_empty() {
                 break;
             }
             for (id, event) in events {
                 if let Some(true) = self.give_to_widget(id, &event) {
+                    return true;
+                }
+            }
+            for (id, came) in focus {
+                if self.tell_focus(id, came) {
                     return true;
                 }
             }
