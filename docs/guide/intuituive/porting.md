@@ -298,10 +298,11 @@ way in for an app too big to port at once: move one pane at a time.
 reproduces Yazi as it looks and behaves out of the box: its 1:4:3 columns,
 its default dark theme, icons and type colours, header, tab strip and
 status line, and its default keymap. It is built only from the
-framework's ready-made components: the core's bars, tabs and dialogs, and
-the `files` plugin's Miller columns, previews, openers, tasks and finder.
-What it writes itself is Yazi's keymap and what each key does (about 1,450
-lines, half of round 2's). Its tests are in `tests/files.rs`. It does not
+framework's ready-made components: the core's bars, help, fuzzy lists and
+dialogs, and the `files` plugin's Miller columns, previews, tabs,
+selection, yank, openers, tasks, finder, frecency, search, shell, bulk
+rename and spotter. What it writes itself is Yazi's keymap and what each
+key does (about 1,200 lines, down from round 3's 1,450). Its tests are in `tests/files.rs`. It does not
 reuse any of Yazi's code: it is a rebuild of the behaviour, showing how a
 large ratatui app's ideas map.
 
@@ -320,21 +321,28 @@ large ratatui app's ideas map.
 | Yazi does | The rebuild uses |
 |---|---|
 | Three columns, parent, current and preview, in a 1:4:3 ratio, with rails the mouse drags; each directory remembers its hovered entry; a click in the parent column goes there, one in a directory's preview enters it | `files::miller(start)`: `cwd`, `cursor`, `hovered`, `hidden`, `sort`, `linemode` and `find` are its signals; `arrow`, `page`, `enter`, `leave`, `cd` and `refresh` its moves; `view_with(MillerOptions)` draws it |
-| One row per entry: icon, the type's colour (sniffed from the first bytes) across the row, the hovered row reversed, markers, find matches with `[2/5]`, git signs and a line mode at the right | the plugin's `file_list` inside the columns; `MillerOptions::markers(\|index, path\| Marker)` and `.git(git_status(model))`; `Linemode::{Size, Permissions, Mtime, Btime, Owner}` |
+| One row per entry: icon, the type's colour (sniffed from the first bytes) across the row, the hovered row reversed with rounded ends on a Nerd Font, markers, find matches with `[2/5]`, git signs and a line mode at the right | the plugin's `file_list` inside the columns; `MillerOptions::markers(Yank::markers(yanked))`, `.git(git_status(model))`, `.hovered_caps(..)`; `Linemode::{Size, Permissions, Mtime, Btime, Owner}` |
+| The cursor stays on its entry through a sort, a filter, hidden files and a refresh | Miller's cursor is kept by path (the list's `cursor_by`) |
+| Selection: Space, Ctrl+A, Ctrl+R, `v` and `V`, what `y`, `x`, `d` and `r` act on | `files::selection(m)` (the core's `multi_select`), marked in the columns; `m.targets()` |
+| Yank, cut and paste, the copied and cut markers | `files::Yank` in a signal: `Yank::markers`, `yank.paste(into, conflict)` |
+| Find (`/`, `?`), `n` and `N` | `m.find` and `m.find_next(previous)` (the core's `list_search`) |
 | A directory listing sorted, filtered, followed on disk | each column's `DirModel` (`m.current.filter`, `m.sort`, `m.hidden`); with `watch` it follows the disk |
-| Previews by type, off the UI thread, stale results dropped: code highlighted, images, archives, directories | the plugin's `preview` inside the columns; `archive` lists tar and zip, `art` draws images; `rich_ext::syntax::preload` warms the grammars at start-up |
-| Header: the path cut from the left, `~` for home, `(filter: x)`, and the selected or yanked count | `breadcrumb(path).home_tilde().crumb_suffix(..)` in the theme's `breadcrumb` styles (cyan) beside a `text` |
-| A status line: mode, size and name; task progress, permissions, `Top`/`Bot`/percent and position, with rounded caps on a Nerd Font | `status_bar(left, right)` of `seg(..).style_with(..)` segments, `.caps(Caps::Rounded)` with icons; `files::coloured_permissions` |
-| Tabs (`tt`, 1–9, `[ ]`, Ctrl+C), the strip shown from two tabs | `tabs(titles, active).auto_hide().on_select(\|to, _\| switch_tab(to))`; the tab keeps its history by watching `m.cwd` |
-| One keymap that wins over the focused column, with sequences (`gg`, `,s`, `cc`, `tt`) and a which-key pop-up | the root column `.previews_keys()` holds every `bind` and `bind_sequence` (`"comma s"`); `App::which_key(true)` in Yazi's which-key colours |
+| Previews by type, off the UI thread, stale results dropped: code highlighted, images, archives, directories, a binary file as `file` classifies it | the plugin's `preview` inside the columns, `MillerOptions::binary(BinaryPreview::FileType)`; `archive` lists tar and zip, `art` draws images; `rich_ext::syntax::preload` warms the grammars at start-up |
+| Header: the path cut from the left, `~` for home, `(filter: x)`, and the selected or yanked count | `files::path_crumb(cwd).crumb_suffix(..)` in the theme's `breadcrumb` styles (cyan) beside a `text` |
+| A status line: mode, size and name; a task progress gauge, permissions, `Top`/`Bot`/percent and position, with rounded caps on a Nerd Font | `status_bar(left, right)` of `seg(..).style_with(..)` segments and `seg_gauge` over `Tasks::summary()`, `.caps(Caps::Rounded)` with icons; `files::coloured_permissions` |
+| Tabs (`tt`, 1–9, `[ ]`, Ctrl+C), the strip shown from two tabs, each tab with its own history (`H`, `L`) | `files::tabs(m)` (the core's `tab_set` and `history`); `tabs(titles, active).fit().auto_hide()` |
+| One keymap that wins over the focused column, with sequences (`gg`, `,s`, `cc`, `tt`) and a which-key pop-up | the root column `.previews_keys()` holds every `bind` and `bind_sequence` (`"comma s"`) in a `section("mgr", ..)`; `App::which_key(true)` in Yazi's which-key colours |
 | Prompts for find, filter, create and `cd` at the top centre, 50 wide; rename below the hovered row with the caret before the extension | `cx.prompt_with(title, text, PromptOptions::new().title_style("default").on_change(..).on_cancel(..), ..)`; `.at(Origin::At(row), ..)` from `m.row_rects()` and `.caret(Caret::At(n))` |
 | Confirmations before trashing and deleting (70 x 20), overwriting (50 x 15) and quitting with tasks running | `cx.confirm_with(title, body, files, ConfirmOptions::new().size(..), on_yes)` |
-| Enter and `o` open with the first opener for the type; `O` picks one below the row | `files::opener_rules()` (Yazi's `[open]` rules) and `files::open_with`; `cx.pick_with("Open with:", Origin::At(row), ..)`; `extract` runs as a task |
-| Copy, move, trash (the system's trash) and delete as background tasks with progress; `w` shows them | `files::tasks()` with rs-rich-ext's `file_ops::Op`; `tasks_panel(jobs)` in a modal; failures are notifications too |
-| fzf and zoxide jumps (`z`, `Z`) | `files::finder(walk(cwd))`, which streams the walk; rs-rich-interact's `Jump` over the directories visited |
+| Enter and `o` open with the first opener for the type; `O` picks one below the row | `files::opener_rules()` (Yazi's `[open]` rules) and `files::open_with_tasks`; `cx.pick_with("Open with:", Origin::At(row), ..)`; `extract` runs as a task |
+| Copy, move, trash (the system's trash) and delete as background tasks with progress; `w` shows them; a failure told once | `files::tasks().on_fail(..)` with rs-rich-ext's `file_ops::Op`; `tasks_panel_with(jobs, JobsPanelOptions::new().failed_title(false))` in a modal |
+| fzf and zoxide jumps (`z`, `Z`), zoxide's ranks kept between sessions | `files::finder_with(walk(cwd), ..)` and the core's `fuzzy_list_with` over `files::frecency().follow(m)`'s `ranked()`, in the same look |
+| Search by name and content (`s`, `S`, Ctrl+S) into the current column | `files::search(cwd, query, SearchKind::Name \| Grep)` and `m.show_search(..)` |
+| A shell command on the selection (`;`, `:`) and bulk rename in `$EDITOR` (`r` on a selection) | `files::shell(cx, paths, ShellOptions::new().block(..).tasks(jobs))`, `files::bulk_rename(cx, paths, ..)` |
+| The spotter (Tab) | `files::spot(path)`, the core's `facts`, in a modal |
 | Errors as notifications at the top right | `cx.notify(Level::Error, ..)` and `App::toasts_at(Corner::TopRight)` |
-| The help, searchable | `cx.modal` holding an `input`, a `rule()` and a `list` |
-| (not in Yazi) a command palette and a right-click menu | `.palette_key("ctrl+p")`; `context_menu(cx, items)` in the columns' `on_mouse` |
+| The help, searchable, keys in Vim's notation | `cx.help_with(HelpOptions::new().title("mgr.help").key_format(KeyFormat::Vim).filter_first(true))` |
+| (not in Yazi) a command palette and a right-click menu | `.palette_key("ctrl+p")`; `MillerOptions::on_context(..)` opening `context_menu` |
 
 ![The which-key pop-up after `,`](../../media/tapes/files/files-which.png)
 
@@ -358,20 +366,17 @@ large ratatui app's ideas map.
 
 Where it differs from Yazi, and why:
 
-- **Trash** is the FreeDesktop trash, Yazi's on Linux; on macOS and
-  Windows, whose bins rs-rich-ext does not write, trashing fails with a
-  notification that says so.
-- **Binary files** preview as a hex dump; Yazi's `file` previewer prints
-  `file -bL`'s classification.
 - **Opening**: `$EDITOR` (split on spaces) and the system opener cover
   Yazi's `edit`, `open`, `play` and `reveal`, and `extract` with the
-  `archive` feature; there is no shell (`;`), `fd`/`rg` search or bulk
-  rename.
+  `archive` feature.
 - **Images** are drawn in half blocks: the `image` node places no Kitty
   or Sixel graphics yet.
-- **The hovered row** has no rounded ends with a Nerd Font: the core
-  list can put its highlight under the markup now, but the `files` rows
-  neither draw the ends nor reach that option.
+- **The selection and visual mode** are one for all tabs (Yazi keeps
+  them per tab); switching tabs ends visual mode.
+- **`h` in a search's listing** goes up from the directory searched,
+  where Yazi goes back to it.
+- **The help** filters as you type, where Yazi's moves with j/k and
+  filters after `/`.
 - **Icons** are off unless `--icons` is given or `RICH_NERD_FONT=1` says a
   Nerd Font is in use: an installed Nerd Font may not be the terminal's.
 
@@ -383,11 +388,12 @@ Two things the port shows:
    the likely grammars at start-up, and the preview worker highlights the
    text at the pane's size, so the app's thread only copies the finished
    lines onto the screen. Yazi does this for the same reason.
-2. **The components are signals, so the app adds to them by watching.**
-   Miller's columns know nothing of tabs or visual mode; the app watches
-   `m.cwd` to keep each tab's history and end visual mode, and reads
-   `m.hovered`, `m.cursor` and `m.current` for its status line and
-   markers, as Yazi's Lua components read its `cx`.
+2. **The components are signals, so they compose by watching.**
+   Miller's columns know nothing of tabs or selections; `files::tabs`
+   and `files::selection` watch `m.cwd` to keep each tab's history and
+   drop a visual range, and the app reads `m.hovered`, `m.cursor` and
+   `m.current` for its status line, as Yazi's Lua components read its
+   `cx`.
 
 ## Worked example: scope-tui, an oscilloscope
 

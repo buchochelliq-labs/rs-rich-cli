@@ -43,9 +43,17 @@ fn trash_dir() -> PathBuf {
     std::env::temp_dir().join(format!("intuituive-files-xdg-{}", std::process::id()))
 }
 
+/// The state directory Z's frecency store is kept in, not the user's.
+fn state_dir() -> PathBuf {
+    std::env::temp_dir().join(format!("intuituive-files-state-{}", std::process::id()))
+}
+
 fn trash_here() {
     static ONCE: std::sync::Once = std::sync::Once::new();
-    ONCE.call_once(|| std::env::set_var("XDG_DATA_HOME", trash_dir()));
+    ONCE.call_once(|| {
+        std::env::set_var("XDG_DATA_HOME", trash_dir());
+        std::env::set_var("XDG_STATE_HOME", state_dir());
+    });
 }
 
 fn app(root: &Path) -> App {
@@ -102,14 +110,19 @@ fn it_lists_directories_first_with_yazis_status_line() {
 }
 
 #[test]
-fn moving_previews_text_highlighted_and_binary_as_a_hex_dump() {
+fn moving_previews_text_highlighted_and_binary_as_file_classifies_it() {
     let root = tree("preview");
     let rows = screen(&run(app(&root), Script::new().keys("j j j q"), 80, 10));
     assert!(row_of(&rows, "# Title").is_some(), "notes.md: {rows:?}");
-    // A binary file is a hex dump (the `files` preview's; Yazi's `file`
-    // previewer prints `file -bL`'s classification).
+    // A binary file is what `file -bL` says it is, as Yazi's `file`
+    // previewer shows it (without `file`, a description of its type), not
+    // a hex dump.
     let rows = screen(&run(app(&root), Script::new().keys("j j q"), 80, 10));
-    assert!(row_of(&rows, "00000000  00 01 02").is_some(), "{rows:?}");
+    assert!(row_of(&rows, "00000000").is_none(), "{rows:?}");
+    let file = std::process::Command::new("file").arg("--version").output();
+    if file.is_ok_and(|o| o.status.success()) {
+        assert!(rows[1].trim_end().ends_with("│data"), "{rows:?}");
+    }
     // G is the last, gg (a chord) the first again.
     let rows = screen(&run(app(&root), Script::new().keys("G q"), 80, 10));
     assert!(
@@ -466,7 +479,10 @@ fn the_help_lists_every_key_and_filters() {
     let rows = screen(&run_open(app(&root), Script::new().keys("~"), 100, 30));
     assert!(row_of(&rows, "mgr.help").is_some(), "{rows:?}");
     assert!(row_of(&rows, "Previous file").is_some(), "{rows:?}");
-    let script = Script::new().keys("f1 /").text("tab");
+    // Keys in Vim's notation, as Yazi's help says them.
+    assert!(row_of(&rows, "<C-u>").is_some(), "{rows:?}");
+    // What is typed filters, keys and descriptions.
+    let script = Script::new().keys("f1").text("new tab");
     let rows = screen(&run_open(app(&root), script, 100, 30));
     assert!(
         row_of(&rows, "Create a new tab in CWD").is_some(),
@@ -763,4 +779,220 @@ fn archives_are_listed_in_the_preview_and_extracted_by_enter() {
     // Enter is Yazi's `extract` opener, a task: beside the archive.
     run(app(&root), Script::new().keys("j j j j enter q"), 80, 10);
     assert!(root.join("pack/alpha/a.txt").is_file());
+}
+
+#[test]
+fn select_all_invert_and_unset_mode() {
+    let root = tree("select-all");
+    // Ctrl+A selects the five, Ctrl+R inverts them to none.
+    let rows = screen(&run(app(&root), Script::new().keys("ctrl+a q"), 80, 10));
+    assert!(rows[0].trim_end().ends_with(" 5"), "{rows:?}");
+    let rows = screen(&run(
+        app(&root),
+        Script::new().keys("space ctrl+r q"),
+        80,
+        10,
+    ));
+    assert!(rows[0].trim_end().ends_with(" 4"), "{rows:?}");
+    // V unselects what it covers: UNS while it runs.
+    let rows = screen(&run(app(&root), Script::new().keys("ctrl+a V j q"), 80, 10));
+    assert!(status(&rows).starts_with(" UNS "), "{rows:?}");
+    let rows = screen(&run(
+        app(&root),
+        Script::new().keys("ctrl+a V j esc q"),
+        80,
+        10,
+    ));
+    assert!(rows[0].trim_end().ends_with(" 3"), "{rows:?}");
+}
+
+#[test]
+fn a_selection_is_what_y_acts_on_and_is_marked_while_yanked() {
+    let root = tree("select-yank");
+    // data.bin and notes.md selected and yanked: pasted into alpha.
+    let script = Script::new().keys("j j space space y g g l p q");
+    run(app(&root), script, 80, 10);
+    assert!(root.join("alpha/data.bin").exists());
+    assert!(root.join("alpha/notes.md").exists());
+    assert!(!root.join("alpha/z.txt").exists());
+    // Cut, the count is on red; Y cancels it.
+    let rows = screen(&run(app(&root), Script::new().keys("x q"), 80, 10));
+    assert!(rows[0].trim_end().ends_with(" 1"), "{rows:?}");
+    let rows = screen(&run(app(&root), Script::new().keys("x Y q"), 80, 10));
+    assert!(!rows[0].trim_end().ends_with(" 1"), "{rows:?}");
+}
+
+#[test]
+fn find_previous_goes_backwards_from_the_cursor() {
+    let root = tree("find-previous");
+    // From alpha, the previous "e" wraps round to notes.md.
+    let script = Script::new().keys("?").text("e").keys("enter q");
+    let rows = screen(&run(app(&root), script, 80, 10));
+    assert!(status(&rows).contains("notes.md"), "{rows:?}");
+    // A find that matches the hovered entry stays on it.
+    let script = Script::new().keys("j /").text("bet").keys("enter q");
+    let rows = screen(&run(app(&root), script, 80, 10));
+    assert!(status(&rows).contains("beta"), "{rows:?}");
+    // Esc in the prompt goes back to where it started.
+    let script = Script::new().keys("/").text("z").keys("esc q");
+    let rows = screen(&run(app(&root), script, 80, 10));
+    assert!(status(&rows).contains("alpha"), "{rows:?}");
+}
+
+#[test]
+fn the_cursor_stays_on_its_entry_through_a_sort_and_hidden_files() {
+    let root = tree("keep");
+    // notes.md hovered; sorted by size it is still hovered (now 4th).
+    let rows = screen(&run(
+        app(&root),
+        Script::new().keys("j j j").text(",s").keys("q"),
+        80,
+        10,
+    ));
+    assert!(status(&rows).contains("notes.md"), "{rows:?}");
+    // Hidden files shown: still notes.md, one place further down.
+    let rows = screen(&run(app(&root), Script::new().keys("j j j . q"), 80, 10));
+    assert!(status(&rows).contains("notes.md"), "{rows:?}");
+    assert!(status(&rows).contains("5/6"), "{rows:?}");
+}
+
+#[test]
+fn s_searches_below_here_and_esc_ends_it() {
+    let root = tree("search");
+    let mut driver = app(&root).driver(80, 10);
+    driver.press("s");
+    assert!(
+        row_of(&driver.screen().plain(), "Search via fd:").is_some(),
+        "{:?}",
+        driver.screen().plain()
+    );
+    driver.type_text("a.txt");
+    driver.press("enter");
+    driver.settle();
+    let rows = driver.screen().plain();
+    let sep = std::path::MAIN_SEPARATOR;
+    assert_eq!(current(&rows)[0], format!("alpha{sep}a.txt"), "{rows:?}");
+    assert!(rows[0].trim_end().ends_with("(search: a.txt)"), "{rows:?}");
+    // Esc ends it: the directory's own entries again.
+    driver.press("esc");
+    let rows = driver.screen().plain();
+    assert_eq!(current(&rows)[0], "alpha", "{rows:?}");
+    assert!(!rows[0].contains("(search"), "{rows:?}");
+}
+
+#[test]
+fn z_and_big_z_look_the_same_and_big_z_jumps_to_a_directory_visited() {
+    let root = tree("zoxide");
+    // alpha visited, then back up: Z offers it, Enter goes there. The
+    // tree's own name narrows it to this test's alpha.
+    let mut driver = app(&root).driver(80, 14);
+    driver.press("l h Z");
+    driver.type_text("zoxide alpha");
+    driver.settle();
+    let rows = driver.screen().plain();
+    let picker = rows.iter().position(|r| r.contains('╭')).expect("a border");
+    assert!(row_of(&rows, "alpha").is_some(), "{rows:?}");
+    driver.press("enter");
+    let rows = driver.screen().plain();
+    assert!(rows[0].trim_end().ends_with("alpha"), "{rows:?}");
+    // z's finder is the same fuzzy list in the same frame.
+    driver.press("z");
+    driver.settle();
+    let rows = driver.screen().plain();
+    assert_eq!(
+        rows.iter().position(|r| r.contains('╭')),
+        Some(picker),
+        "{rows:?}"
+    );
+    driver.press("esc");
+    // The store is kept for the next session, in the state directory
+    // (which the tests running beside this one write too).
+    assert!(state_dir().join("intuituive/frecency.tsv").is_file());
+}
+
+#[test]
+fn tab_spots_the_hovered_file() {
+    let root = tree("spot");
+    let rows = screen(&run_open(
+        app(&root),
+        Script::new().keys("j j j tab"),
+        80,
+        20,
+    ));
+    let name = row_of(&rows, "Name").expect("its name");
+    assert!(rows[name].contains("notes.md"), "{rows:?}");
+    assert!(row_of(&rows, "text/markdown").is_some(), "{rows:?}");
+    assert!(row_of(&rows, "21B (21 bytes)").is_some(), "{rows:?}");
+    // Esc closes it.
+    let rows = screen(&run(app(&root), Script::new().keys("tab esc q"), 80, 20));
+    assert!(row_of(&rows, "Spot").is_none(), "{rows:?}");
+}
+
+#[test]
+fn r_on_a_selection_renames_it_in_the_editor() {
+    let root = tree("bulk-rename");
+    let mut driver = app(&root).driver(80, 10);
+    // data.bin and notes.md selected, then r.
+    driver.press("j j space space r");
+    let handoff = driver
+        .take_handoff()
+        .expect("the editor takes the terminal");
+    let names = handoff.command.get_args().last().unwrap().to_owned();
+    assert_eq!(
+        std::fs::read_to_string(&names).unwrap(),
+        "data.bin\nnotes.md\n"
+    );
+    std::fs::write(&names, "data.bin\nreadme.md\n").unwrap();
+    driver.handed_back(handoff, Ok(Some(0)));
+    driver.settle();
+    assert!(root.join("readme.md").is_file());
+    assert!(!root.join("notes.md").exists());
+    assert!(root.join("data.bin").is_file());
+    // The selection is spent.
+    let rows = driver.screen().plain();
+    assert!(!rows[0].trim_end().ends_with(" 2"), "{rows:?}");
+}
+
+#[cfg(unix)]
+#[test]
+fn semicolon_runs_a_shell_command_on_the_selection() {
+    let root = tree("shell");
+    let script = Script::new()
+        .keys("j j j semicolon")
+        .text("cp \"$1\" \"$1.copy\"")
+        .keys("enter q");
+    run(app(&root), script, 80, 10);
+    assert!(root.join("notes.md.copy").is_file());
+    let rows = screen(&run_open(app(&root), Script::new().keys("colon"), 80, 10));
+    assert!(row_of(&rows, "Shell (block):").is_some(), "{rows:?}");
+}
+
+#[test]
+fn tabs_keep_their_own_history_and_fit_their_titles() {
+    let root = tree("tab-history-with-a-long-name-to-cut");
+    // Tab 2 goes into alpha; tab 1 has been nowhere, so H keeps it here.
+    let rows = screen(&run(app(&root), Script::new().keys("t t l 1 H q"), 80, 10));
+    assert!(!rows[0].ends_with("alpha"), "{rows:?}");
+    assert!(rows[2].contains("alpha"), "{rows:?}");
+    // Back in tab 2, H goes back up and L into alpha again.
+    let rows = screen(&run(
+        app(&root),
+        Script::new().keys("t t l 1 2 H L q"),
+        80,
+        10,
+    ));
+    assert!(rows[0].ends_with("alpha"), "{rows:?}");
+    // Narrow, the titles are cut to share the width.
+    let rows = screen(&run(app(&root), Script::new().keys("t t q"), 40, 10));
+    assert!(rows[1].contains('…'), "{rows:?}");
+    assert!(rows[1].chars().count() <= 40, "{rows:?}");
+}
+
+#[test]
+fn with_icons_the_hovered_row_has_rounded_ends() {
+    let root = tree("caps");
+    let app = files::files_app_with(root.clone(), true).wait_for_tasks(true);
+    let rows = screen(&run(app, Script::new().keys("q"), 80, 10));
+    assert!(rows[1].contains('\u{e0b6}'), "{rows:?}");
+    assert!(rows[1].contains('\u{e0b4}'), "{rows:?}");
 }
