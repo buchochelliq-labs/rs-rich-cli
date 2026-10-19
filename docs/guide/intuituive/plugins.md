@@ -25,14 +25,13 @@ rs-rich-intuituive = { version = "0.0.5", features = ["watch", "audio", "art", "
 
 ### Files that change (`watch`)
 
-`watch_path(path, |event, cx| …)` wakes
-the app when a file, or a directory's entries, change, through notify
-(inotify, FSEvents, ReadDirectoryChangesW, kqueue), with no polling.
-Changes less than 100 ms apart are one `PathEvent`: each path once, with
-what last happened to it (`Created`, `Modified`, `Removed`, `Renamed`).
-`watch_path_with(path, WatchOptions::new().recursive().debounce(d), …)`
-watches a whole tree. The watcher runs as long as the app, or until its
-`PathWatch` is `stop()`ped.
+`watch_path(path, |event, cx| …)` wakes the app when a file, or a
+directory's entries, change, through notify (inotify, FSEvents,
+ReadDirectoryChangesW, kqueue), with no polling. Changes less than 100 ms
+apart are one `PathEvent`: each path once, with what last happened to it
+(`Created`, `Modified`, `Removed`, `Renamed`). `watch_path_with(path,
+WatchOptions::new().recursive().debounce(d), …)` watches a whole tree. The
+watcher runs as long as the app, or until its `PathWatch` is `stop()`ped.
 
 ```rust
 let entries = signal(list_dir(&dir));
@@ -41,16 +40,17 @@ watch_path(&dir, move |_event, _cx| entries.set(list_dir(&dir)))?;
 
 ### Sound (`audio`, `pulse`, `pcm`, `wav`)
 
-`audio::input(device, rate, channels,
-buffer)` returns a `Signal<Option<Frame>>`, the shape of `latest`'s:
-`None` until the first buffer, then the newest `Frame`, numbered, with
-`samples` one row a channel of `buffer` samples from -1 to 1 (through
-cpal: ALSA, CoreAudio, WASAPI). Watch the number to see every buffer,
-silence included. The newest buffer wins: one that arrives while the
-app is busy replaces the one still waiting, so a slow frame drops
-buffers rather than falling behind. A device with fewer channels than
-asked for is spread over the rows. On Linux the feature needs ALSA's
-headers to build (`libasound2-dev`).
+`audio::input(device, rate, channels, buffer)` returns a
+`Signal<Option<Frame>>`, the shape of `latest`'s: `None` until the first
+buffer, then the newest `Frame`, numbered, with `samples` one row a
+channel of `buffer` samples from -1 to 1 (through cpal: ALSA, CoreAudio,
+WASAPI). Watch the number to see every buffer, silence included. The
+newest buffer wins: one that arrives while the app is busy replaces the
+one still waiting, so a slow frame drops buffers rather than falling
+behind. A device with fewer channels than asked for is spread over the
+rows. On Linux the feature needs ALSA's headers to build
+(`libasound2-dev`).
+
 - `audio::open(AudioOptions::new().device(id).rate(r).latency(frames)
   .stall_after(d))` opens one before the app, so a missing device fails
   before the terminal is taken; inside the app, `capture.samples()` is
@@ -161,16 +161,16 @@ rs-rich-intuituive --example scope --features pcm`):
 
 ### Images (`art`)
 
-`image(path)` is a node that draws an image file in
-half blocks, sized to its rectangle and kept to its aspect ratio, decoded
-on a worker thread (`loading…` until then). `image_with(path,
+`image(path)` is a node that draws an image file in half blocks, sized to
+its rectangle and kept to its aspect ratio, decoded on a worker thread
+(`loading…` until then). `image_with(path,
 ImageView::new().fit(ImageFit::Cover))` fills the rectangle instead
 (`Contain` centres, `Stretch` ignores the aspect), `.mode(ImageMode::
 Quadrants)` (or `Braille`, `Ascii`) draws with other cells, and
-`image_of(move || selected.get(), view)` follows a path that changes, as
-a preview pane does. `image_bytes(bytes, view)` and
-`image_bytes_of(|| cover.get(), view)` draw an image in memory (a cover
-embedded in a song).
+`image_of(move || selected.get(), view)` follows a path that changes, as a
+preview pane does. `image_bytes(bytes, view)` and `image_bytes_of(||
+cover.get(), view)` draw an image in memory (a cover embedded in a song).
+
 - **Real pixels:** `ImageView::new().pixels(Pixels::detect())` (or
   `Pixels::Kitty`, `Sixel`, `Iterm`) with
   `App::graphics(image_graphics())`: the node keeps its half blocks in

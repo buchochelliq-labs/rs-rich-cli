@@ -16,7 +16,7 @@ App::new(|| {
 })
 ```
 
-- **Timers:** `every` runs a handler on a schedule. Call it inside
+- **`every`** runs a handler on a schedule. Call it inside
   `App::new`'s closure (or a screen's), next to the signals it writes. A
   timer that fell behind (the clock jumped, the laptop slept) ticks once,
   not once for every tick it missed, and keeps to its step after that.
@@ -74,12 +74,12 @@ let s = stats.get();
 eprintln!("{} frames, {} held back", s.frames, s.skipped);
 ```
 
-`App::max_fps(n)` draws at most `n` frames a second
-  when the app runs its own loop: what changes in between is drawn by the
-  next frame, and `FrameStats::skipped` counts the frames held back.
-  `App::stats_handle()` keeps the `FrameStats` readable after `run`.
-`FrameStats` also has `drawn` (the nodes that drew in the last frame) and
-`bytes` (what it sent).
+`App::max_fps(n)` draws at most `n` frames a second when the app runs its
+own loop: what changes in between is drawn by the next frame, so an app
+fed faster than it can draw shows the newest state at a steady rate.
+Input and timers are still handled as they come. `App::stats_handle()`
+keeps the `FrameStats` readable after `run`: `frames` drawn, `skipped`
+(held back by `max_fps`), and the last frame's `drawn` nodes and `bytes`.
 
 A full screen of pixels whose every colour changes each frame is cheap
 enough for a game: a widget writes cells with
@@ -95,8 +95,8 @@ A game, a map or an animation draws things that move over a background.
   them transparent. `Sprite::from_markup(&lines, '.')` reads console markup
   lines, every `.` a hole; `Sprite::from_cells(rows)` takes `SpriteCell`s;
   `Sprite::from_pixels(&pixel_sprite)` draws pixel art in half blocks.
-  `Sprite::from_frames([..]).period(ms(120))` animates on the app's clock
-  (`.once()` stops on the last frame); `.anchor(x, y)` or `.centered()`
+  `Sprite::from_frames([..]).period(Duration::from_millis(120))` animates
+  on the app's clock (`.once()` stops on the last frame); `.anchor(x, y)` or `.centered()`
   says which cell goes at the sprite's position.
 - A **`stage`** draws `Placed` sprites from a closure that may read
   signals: `Placed::new(id, sprite).at(x, y).z(1).flip(true)`. Sprites are

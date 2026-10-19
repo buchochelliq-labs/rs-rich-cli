@@ -1,8 +1,8 @@
 # Terminal apps (intuiTUIve)
 
 `rs-rich-intuituive` (`intuituive`, new and early) is a framework for
-terminal apps, full-screen or inline. You describe the screen once as a tree of nodes
-and keep your state in **signals**. When a signal changes, the nodes that
+terminal apps, full-screen or inline. You describe the screen once as a
+tree of nodes and keep your state in **signals**. When a signal changes, the nodes that
 read it draw again, and only the cells that changed are sent to the
 terminal. You never write a draw loop, a layout pass, or "what changed"
 bookkeeping.
