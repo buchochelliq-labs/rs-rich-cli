@@ -145,6 +145,7 @@ pub mod testing;
 mod text_area;
 pub mod transport;
 mod tree;
+mod treemap;
 #[cfg(feature = "viz")]
 mod viz;
 #[cfg(feature = "watch")]
@@ -193,8 +194,9 @@ pub use log::Log;
 pub use miller::{miller_in, miller_of, MillerSource};
 pub use node::described;
 pub use node::{
-    column, component, each, grid, keyed, label, layers, leaf, list, renderable, repeating, row,
-    scroll, scroll_both, scroll_both_with, scroll_with, scroll_x, switch, text, Node,
+    column, component, each, fit_text, grid, keyed, label, layers, leaf, list, renderable,
+    repeating, row, scroll, scroll_both, scroll_both_with, scroll_with, scroll_x, switch, text,
+    Node,
 };
 pub use notify::{Corner, Level};
 pub use place::{Offset, Origin, RectHandle};
@@ -218,6 +220,7 @@ pub use task::{
 };
 pub use text_area::Caret;
 pub use transport::{transport, Transport};
+pub use treemap::{treemap, treemap_with, TreemapOptions};
 #[cfg(feature = "viz")]
 pub use viz::{
     bar_spectrum, bar_spectrum_with, meter, meter_with, persistence, persistence_with, sparkline,

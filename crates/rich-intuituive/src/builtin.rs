@@ -1214,6 +1214,12 @@ pub(crate) struct TextNode {
     /// Lines too long lose their start, not their end
     /// ([`Node::truncate_start`](crate::Node::truncate_start)).
     pub cut_start: bool,
+    /// Lines too long lose their middle
+    /// ([`Node::truncate_middle`](crate::Node::truncate_middle)).
+    pub cut_middle: bool,
+    /// Forms of the text, longest first, of which it shows the first that
+    /// fits ([`fit_text`](crate::fit_text)).
+    pub forms: Option<Box<dyn Fn() -> Vec<String>>>,
     /// Which of the three code set, which a stylesheet leaves alone.
     pub code: [bool; 3],
 }
@@ -1226,6 +1232,8 @@ impl TextNode {
             no_wrap: None,
             overflow: None,
             cut_start: false,
+            cut_middle: false,
+            forms: None,
             code: [false; 3],
         }
     }
@@ -1233,7 +1241,10 @@ impl TextNode {
     /// Its lines at `width`, aligned or not: alignment pads lines out to
     /// the width, and a text's natural width is its lines' own.
     fn lines(&self, console: &Console, width: u16, aligned: bool) -> Vec<Vec<Segment>> {
-        let markup = (self.markup)();
+        let markup = match &self.forms {
+            Some(forms) => fitting(forms(), width.max(1) as usize),
+            None => (self.markup)(),
+        };
         let mut text = rich::Text::from_markup(&markup).unwrap_or_else(|_| rich::Text::new(markup));
         let justify = match self.align {
             Some(TextAlign::Center) => Some(rich::Justify::Center),
@@ -1248,10 +1259,84 @@ impl TextNode {
         text.set_overflow(self.overflow);
         if self.cut_start {
             text = cut_start(&text, width.max(1) as usize);
+        } else if self.cut_middle {
+            text = cut_middle(&text, width.max(1) as usize);
         }
         let options = console.options().update_width(width.max(1) as usize);
         console.render_lines(&text, &options, false)
     }
+}
+
+/// The first of `forms` (markup, longest first) whose lines all fit in
+/// `width` cells, else the last.
+fn fitting(forms: Vec<String>, width: usize) -> String {
+    let fits = |markup: &str| {
+        let text = rich::Text::from_markup(markup).unwrap_or_else(|_| rich::Text::new(markup));
+        text.split("\n", false, true)
+            .iter()
+            .all(|line| line.cell_len() <= width)
+    };
+    let last = forms.len().saturating_sub(1);
+    forms
+        .into_iter()
+        .enumerate()
+        .find(|(i, form)| *i == last || fits(form))
+        .map(|(_, form)| form)
+        .unwrap_or_default()
+}
+
+/// `text` with each line longer than `width` cells cut in its middle, a
+/// `…` in place of what went: the start and end of a name both kept
+/// (`long_na…me.txt`).
+fn cut_middle(text: &rich::Text, width: usize) -> rich::Text {
+    let lines = text.split("\n", false, true);
+    if lines.iter().all(|line| line.cell_len() <= width) {
+        return text.clone();
+    }
+    let lines: Vec<rich::Text> = lines
+        .into_iter()
+        .map(|line| {
+            if line.cell_len() <= width {
+                return line;
+            }
+            // The head takes the extra cell of an odd room.
+            let room = width.saturating_sub(1);
+            let (head_room, tail_room) = (room - room / 2, room / 2);
+            let plain = line.plain().to_string();
+            let cells = |c: char| rich::cells::cell_len(c.encode_utf8(&mut [0; 4]));
+            let (mut used, mut head) = (0, 0);
+            for (i, c) in plain.char_indices() {
+                if used + cells(c) > head_room {
+                    break;
+                }
+                used += cells(c);
+                head = i + c.len_utf8();
+            }
+            let (mut used, mut tail) = (0, plain.len());
+            for (i, c) in plain.char_indices().rev() {
+                if used + cells(c) > tail_room || i < head {
+                    break;
+                }
+                used += cells(c);
+                tail = i;
+            }
+            let parts = line.divide(&[head, tail]);
+            let mut cut = line.blank_copy();
+            if let Some(first) = parts.first() {
+                cut = cut.append_text(first);
+            }
+            cut.append("…", None);
+            match parts.get(2) {
+                Some(last) => cut.append_text(last),
+                None => cut,
+            }
+        })
+        .collect();
+    let mut joined = rich::Text::new("\n").join(&lines);
+    joined.set_justify_option(text.get_justify_option());
+    joined.set_no_wrap(text.get_no_wrap());
+    joined.set_overflow(text.get_overflow());
+    joined
 }
 
 /// `text` with each line longer than `width` cells cut from its start, a
@@ -1314,6 +1399,12 @@ impl Widget for TextNode {
         }
         if self.cut_start {
             parts.push("truncate-start");
+        }
+        if self.cut_middle {
+            parts.push("truncate-middle");
+        }
+        if self.forms.is_some() {
+            parts.push("fit");
         }
         (!parts.is_empty()).then(|| parts.join(" "))
     }

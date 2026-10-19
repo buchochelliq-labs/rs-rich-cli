@@ -2058,6 +2058,57 @@ impl App {
         self
     }
 
+    /// Below `width` x `height` cells, show `message` (console markup)
+    /// centred instead of the app, as a fixed-layout app or a game does on
+    /// a terminal too small for it. Meanwhile keys go nowhere but `q` and
+    /// Ctrl+C, which quit; the app keeps its state, its timers run, and it
+    /// comes back as it was once the terminal is big enough. Pop-ups and
+    /// modals open over it as ever.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| label("board")).min_size(20, 5, "Terminal must be at least 20 x 5!");
+    /// let mut driver = app.driver(40, 5);
+    /// driver.settle();
+    /// assert_eq!(driver.screen().plain()[0].trim_end(), "board");
+    /// driver.resize(12, 5);
+    /// driver.settle();
+    /// let shown = driver.screen().plain().join("\n");
+    /// assert!(shown.contains("Terminal") && !shown.contains("board"));
+    /// driver.resize(20, 5);
+    /// driver.settle();
+    /// assert_eq!(driver.screen().plain()[0].trim_end(), "board");
+    /// ```
+    pub fn min_size(mut self, width: u16, height: u16, message: impl Into<String>) -> App {
+        use crate::node::{column, label, row, switch};
+        let message = message.into();
+        let runtime = self.runtime.clone();
+        let root =
+            runtime.enter(|| {
+                let app = std::mem::replace(&mut self.layers[0].root, label(""));
+                let app = std::cell::RefCell::new(Some(app));
+                let viewport = crate::reactive::viewport();
+                let small = move || {
+                    let (w, h) = viewport.get();
+                    (w, h) != (0, 0) && (w < width || h < height)
+                };
+                switch(small, move |small| match small {
+                    true => column([row([
+                        label(message.clone()).text_align(crate::TextAlign::Center)
+                    ])
+                    .justify(crate::Justify::Center)
+                    .auto()])
+                    .justify(crate::Justify::Center)
+                    .on_key("q", |cx| cx.quit())
+                    .on_key("ctrl+c", |cx| cx.quit()),
+                    false => app.borrow_mut().take().unwrap_or_else(|| label("")),
+                })
+            });
+        self.layers[0].root = root;
+        self
+    }
+
     /// Run in the terminal, on the alternate screen (or
     /// [inline](Self::inline)), until a handler calls [`Ctx::quit`] or
     /// Ctrl+C is pressed. The terminal is driven with crossterm; see

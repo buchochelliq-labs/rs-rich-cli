@@ -483,3 +483,142 @@ fn focus_moves_between_scopes_by_direction_keeping_their_place() {
     driver.press("h");
     driver.assert_focused("l2");
 }
+
+// A treemap.
+
+#[test]
+fn squarify_covers_the_rectangle_and_keeps_tiles_near_square() {
+    use intuituive::layout::squarify;
+    use intuituive::screen::Rect;
+    let area = Rect::new(2, 1, 60, 20);
+    let weights = [40.0, 25.0, 15.0, 10.0, 6.0, 4.0];
+    let map = squarify(area, &weights, (1, 1), 2.0);
+    let cells: u32 = map
+        .tiles
+        .iter()
+        .map(|t| t.width as u32 * t.height as u32)
+        .sum();
+    assert_eq!(cells, 60 * 20);
+    for (i, a) in map.tiles.iter().enumerate() {
+        assert!(area.intersection(*a) == *a, "{a:?} outside");
+        for b in &map.tiles[i + 1..] {
+            assert!(!a.intersects(*b), "{a:?} overlaps {b:?}");
+        }
+    }
+    // The largest takes about its share, and looks squarer than a strip.
+    let first = map.tiles[0];
+    let share = first.width as f64 * first.height as f64 / 1200.0;
+    assert!((share - 0.4).abs() < 0.05, "{share}");
+    assert!(first.width < 60 && first.height < 20 || first.height == 20);
+}
+
+#[test]
+fn squarify_groups_what_is_too_small_into_the_rest() {
+    use intuituive::layout::squarify;
+    use intuituive::screen::Rect;
+    let weights: Vec<f64> = (1..=30).rev().map(|n| n as f64).collect();
+    let map = squarify(Rect::new(0, 0, 40, 12), &weights, (8, 3), 2.0);
+    let (rest, count) = map.rest.expect("a rest");
+    assert!(count > 0 && rest.width >= 8 && rest.height >= 3);
+    for tile in map.tiles.iter().filter(|t| !t.is_empty()) {
+        assert!(tile.width >= 8 && tile.height >= 3, "{tile:?}");
+    }
+    // The ones kept are the heaviest.
+    let kept = map.tiles.iter().filter(|t| !t.is_empty()).count();
+    assert!(map.tiles[..kept].iter().all(|t| !t.is_empty()));
+    assert_eq!(kept + count, 30);
+}
+
+#[test]
+fn a_treemap_builds_a_tile_per_key_and_rebuilds_only_what_changed() {
+    use intuituive::{treemap_with, TreemapOptions};
+    let built = Rc::new(Cell::new(0));
+    let b = built.clone();
+    let app = App::new(move || {
+        let items = signal(vec![("a", 2.0), ("b", 1.0), ("c", 1.0)]);
+        let b = b.clone();
+        treemap_with(
+            move || items.get(),
+            move |name, rect| {
+                b.set(b.get() + 1);
+                label(format!("{name}{}", rect.width)).panel("")
+            },
+            TreemapOptions::new().aspect(1.0),
+        )
+        .on_key("x", move |_| items.update(|v| v[2] = ("d", 1.0)))
+    });
+    let mut driver = app.driver(20, 6);
+    driver.settle();
+    assert_eq!(built.get(), 3);
+    let shown = rows(&driver).join("\n");
+    assert!(shown.contains("a10") && shown.contains("c5"), "{shown}");
+    driver.press("x");
+    let shown = rows(&driver).join("\n");
+    assert!(shown.contains("d5") && !shown.contains("c5"), "{shown}");
+    assert_eq!(built.get(), 4);
+}
+
+// A too-small screen.
+
+#[test]
+fn a_too_small_screen_holds_the_apps_keys_and_quits_with_q() {
+    let app = App::new(|| {
+        let n = signal(0);
+        text!("count {n}").on_key("+", move |_| n.update(|n| *n += 1))
+    })
+    .min_size(30, 4, "Too small");
+    let mut driver = app.driver(40, 4);
+    driver.press("+");
+    assert_eq!(rows(&driver)[0], "count 1");
+    driver.resize(20, 4);
+    driver.press("+");
+    assert!(rows(&driver).iter().any(|r| r.trim() == "Too small"));
+    driver.resize(40, 4);
+    driver.settle();
+    assert_eq!(rows(&driver)[0], "count 1");
+    driver.resize(20, 4);
+    driver.press("q");
+    assert!(driver.is_done());
+}
+
+// Fitted text and middle truncation.
+
+#[test]
+fn fit_text_follows_its_width_and_state() {
+    let app = App::new(|| {
+        let name = signal("docs");
+        row([
+            intuituive::fit_text(move || {
+                vec![
+                    format!("SELECTED: {name} (29.3K, 1 files)"),
+                    format!("SELECTED: {name} (29.3K)"),
+                    format!("{name}"),
+                ]
+            })
+            .auto(),
+            label("|"),
+        ])
+        .on_key("n", move |_| name.set("src"))
+    });
+    let mut driver = app.driver(26, 1);
+    driver.settle();
+    assert_eq!(rows(&driver)[0], "SELECTED: docs (29.3K)|");
+    driver.press("n");
+    assert_eq!(rows(&driver)[0], "SELECTED: src (29.3K)|");
+    driver.resize(8, 1);
+    driver.settle();
+    assert_eq!(rows(&driver)[0], "src|");
+}
+
+#[test]
+fn truncate_middle_keeps_both_ends_of_wide_text() {
+    let app = App::new(|| label("日本語のファイル名.txt").truncate_middle());
+    let mut driver = app.driver(12, 1);
+    driver.settle();
+    let shown = rows(&driver)[0].clone();
+    assert!(
+        shown.starts_with("日本") && shown.ends_with(".txt"),
+        "{shown}"
+    );
+    assert!(shown.contains('…'));
+}

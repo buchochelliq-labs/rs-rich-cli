@@ -2347,6 +2347,30 @@ impl Node {
     pub fn truncate_start(self) -> Node {
         self.widget_mut(|text: &mut TextNode| {
             text.cut_start = true;
+            text.cut_middle = false;
+            text.no_wrap = Some(true);
+            text.code[1] = true;
+        });
+        self
+    }
+
+    /// For a [`text`](fn@text) or [`label`]: a line too long for the width
+    /// loses its middle, with `…` where it was cut, keeping its start and
+    /// its end (`long_na…me.txt`), and lines do not wrap: names and paths
+    /// in tiles, a status line, a delete prompt. Ignored on other nodes.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| label("long_file_name.txt").truncate_middle());
+    /// let mut driver = app.driver(11, 1);
+    /// driver.settle();
+    /// assert_eq!(driver.screen().plain()[0], "long_…e.txt");
+    /// ```
+    pub fn truncate_middle(self) -> Node {
+        self.widget_mut(|text: &mut TextNode| {
+            text.cut_middle = true;
+            text.cut_start = false;
             text.no_wrap = Some(true);
             text.code[1] = true;
         });
@@ -3738,6 +3762,36 @@ pub fn leaf(draw: impl Fn(&Console, u16, u16) -> Vec<Vec<Segment>> + 'static) ->
 /// [`Node::overflow`] change how they sit and where they are cut.
 pub fn text(markup: impl Fn() -> String + 'static) -> Node {
     Node::from_widget(Box::new(TextNode::new(Box::new(markup))), "text")
+}
+
+/// Text that shows the longest of its `forms` that fits its width: console
+/// markup, longest first (`SELECTED: docs (29.3K, 1 files)`, `SELECTED:
+/// docs (29.3K)`, `docs`), read from a closure that may read signals. None
+/// fits: the last, cut with `…`. Lines do not wrap. As wide as the longest
+/// form that fits the room it is given, so `.auto()` in a row takes no
+/// more than it shows.
+///
+/// ```
+/// use intuituive::prelude::*;
+/// use intuituive::fit_text;
+///
+/// let app = App::new(|| {
+///     fit_text(|| vec!["Press q to quit".into(), "q: quit".into(), "q".into()])
+/// });
+/// let mut driver = app.driver(10, 1);
+/// driver.settle();
+/// assert_eq!(driver.screen().plain()[0].trim_end(), "q: quit");
+/// driver.resize(20, 1);
+/// driver.settle();
+/// assert_eq!(driver.screen().plain()[0].trim_end(), "Press q to quit");
+/// ```
+pub fn fit_text(forms: impl Fn() -> Vec<String> + 'static) -> Node {
+    let mut text = TextNode::new(Box::new(String::new));
+    text.forms = Some(Box::new(forms));
+    text.no_wrap = Some(true);
+    text.overflow = Some(Overflow::Ellipsis);
+    text.code = [false, true, true];
+    Node::from_widget(Box::new(text), "text")
 }
 
 /// Console markup that never changes.
