@@ -163,7 +163,10 @@ pub use feed::{
 pub use finder::{finder_of, fuzzy_list, fuzzy_list_with, FuzzyOptions, FuzzySource};
 pub use help::{HelpOptions, KeyFormat};
 #[cfg(feature = "art")]
-pub use image::{image, image_of, image_with, ImageAnchor, ImageFit, ImageMode, ImageView};
+pub use image::{
+    image, image_bytes, image_bytes_of, image_graphics, image_of, image_with, ImageAnchor,
+    ImageFit, ImageMode, ImageView, Pixels,
+};
 pub use input::{input, number_input};
 pub use jobs::{
     jobs, jobs_panel, jobs_panel_with, Job, JobOutcome, JobProgress, JobState, Jobs,

@@ -65,9 +65,10 @@ viz = []
 # `watch_path`: wake the app when files change, through notify (inotify,
 # FSEvents, ReadDirectoryChangesW, kqueue). Off by default.
 watch = ["dep:notify"]
-# `image`: an image file as a node, drawn by rs-rich-art in half blocks
-# (or quadrants, Braille, ASCII). Off by default.
-art = ["dep:rich-art", "rich-art/image"]
+# `image`: an image file (or bytes) as a node, drawn by rs-rich-art in half
+# blocks (or quadrants, Braille, ASCII), or in pixels through Kitty's,
+# Sixel's or iTerm2's protocol (`image_graphics`). Off by default.
+art = ["dep:rich-art", "rich-art/image", "rich-art/kitty", "rich-art/sixel", "rich-art/iterm"]
 # `files`: a file manager's components (Miller columns, file lists,
 # previews by type, a watched directory model, background file jobs with
 # progress, a streaming fuzzy finder), on rs-rich-ext's `listing`, `open`,
