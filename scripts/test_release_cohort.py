@@ -217,7 +217,7 @@ class Tag(unittest.TestCase):
         return sorted(cohort.remote_tags("origin"))
 
     def run_tag(self, **options):
-        cohort.tag(options.get("commit", "origin/main"), "origin", 60, options.get("dry_run", False),
+        cohort.tag(options.get("commit", "HEAD"), "origin", 60, options.get("dry_run", False),
                    status=self.status, wait=self.wait, registry=options.get("registry"))
 
     def test_tags_only_what_is_unpublished_in_order_and_waits_for_each(self):
@@ -256,6 +256,27 @@ class Tag(unittest.TestCase):
         git(self.work, "push", "--quiet", "origin", "rs-rich-art-v0.2.0")
         with self.assertRaisesRegex(RuntimeError, "resolve it by hand"):
             self.run_tag(commit=self.sha)
+
+    def test_it_tags_the_local_checkout_not_a_newer_main(self):
+        # main moves on (a later version of rs-rich-art) in another clone; a
+        # run from this checkout, which has not pulled, still releases what
+        # it has: nothing is fetched.
+        other = Path(self.dir.name) / "other"
+        git(Path(self.dir.name), "clone", "--quiet", "-b", "main", str(self.remote), str(other))
+        git(other, "config", "user.email", "test@example.com")
+        git(other, "config", "user.name", "Test")
+        write_tree(other, config=CONFIG.replace('version = "0.2.0"', 'version = "0.2.1"'),
+                   art=ART.replace("0.2.0", "0.2.1"))
+        git(other, "commit", "--quiet", "-am", "later")
+        git(other, "push", "--quiet", "origin", "main")
+        tag = cohort.tag
+        with mock.patch.object(sys, "argv", ["release_cohort.py", "tag", "--registry", "crates.io"]), \
+                mock.patch.object(cohort, "tag", lambda *a, **k: tag(*a, status=self.status, wait=self.wait, **k)):
+            self.assertEqual(cohort.main(), 0)
+        self.assertEqual(self.waited, ["rs-rich-art-v0.2.0"])
+        self.assertEqual(git(self.work, "rev-parse", "rs-rich-art-v0.2.0^{commit}"), self.sha)
+        # Nothing was fetched: the checkout's view of main is where it was.
+        self.assertEqual(git(self.work, "rev-parse", "origin/main"), self.sha)
 
     def test_a_commit_not_on_main_is_refused(self):
         git(self.work, "commit", "--quiet", "--allow-empty", "-m", "unmerged")

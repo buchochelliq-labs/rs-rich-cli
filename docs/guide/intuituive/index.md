@@ -1658,7 +1658,7 @@ Three off-by-default features bring the outside world in, each working on
 its own thread and delivering on the app's thread, between frames:
 
 ```toml
-rs-rich-intuituive = { version = "0.0.4", features = ["watch", "audio", "art"] }
+rs-rich-intuituive = { version = "0.0.5", features = ["watch", "audio", "art"] }
 ```
 
 - **`watch`: files that change.** `watch_path(path, |event, cx| …)` wakes
