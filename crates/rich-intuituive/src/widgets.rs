@@ -42,7 +42,10 @@ pub use crate::scrollbar::{scrollbar, Scrollbar, ScrollbarSymbols, Show, Side};
 pub use crate::split::{hsplit, split, split_with, vsplit};
 pub use crate::tab_set::{tab_set, tabs_for, TabSet};
 pub use crate::text_area::text_area;
-pub use crate::tree::{tree, tree_lazy, tree_with, LazyItem, TreeItem};
+pub use crate::tree::{
+    tree, tree_keyed, tree_lazy, tree_lazy_with, tree_reveal, tree_with, LazyItem, LazyTree,
+    TreeItem, TreeKeys,
+};
 
 /// A table column: its title, how wide it is (cells, a percentage, a
 /// flexible share, or [`Size::Auto`]: as wide as its title and the cells

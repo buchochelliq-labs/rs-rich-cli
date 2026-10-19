@@ -1430,10 +1430,16 @@ impl Node {
     /// Draw console `markup` (`"[red]>>[/] "`) before the selected item:
     /// ratatui's `highlight_symbol`. Other items get as many blank cells
     /// while the column is kept (see [`highlight_spacing`](Self::highlight_spacing)).
+    ///
+    /// On a [`tree`](crate::widgets::tree) too: the symbol's column is kept
+    /// on every row (termusic's 🦄).
     pub fn symbol(self, markup: &str) -> Node {
         let markup = markup.to_string();
-        self.list_options("symbol", move |options| {
-            options.symbol = Some(markup.clone())
+        self.list_option("symbol", move |node| {
+            let tree = node
+                .widget_mut(|tree: &mut crate::tree::Tree| tree.symbol = Some(markup.clone()))
+                .is_some();
+            set_list(node, |options| options.symbol = Some(markup.clone())) || tree
         })
     }
 
