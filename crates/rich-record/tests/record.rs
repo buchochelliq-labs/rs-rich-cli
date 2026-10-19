@@ -333,8 +333,14 @@ fn held_keys_repeat_and_their_releases_follow_the_programs_flags() {
     .unwrap();
     let recording = record::record(&tape, "kitty-keys", &Options::default()).unwrap();
     let grid = recording.shots[0].1.text_grid();
+    // The press, a repeat or more (a sleep can overshoot into a second on
+    // a busy machine), the release; then `w` pressed and let go.
+    let mut once = grid.clone();
+    while once.contains("^[[1;1:2A^[[1;1:2A") {
+        once = once.replace("^[[1;1:2A^[[1;1:2A", "^[[1;1:2A");
+    }
     assert!(
-        grid.contains("^[[A^[[1;1:2A^[[1;1:3Aw^[[27u^[[27;1:3u"),
+        once.contains("^[[A^[[1;1:2A^[[1;1:3Aw^[[27u^[[27;1:3u"),
         "{grid}"
     );
 
@@ -379,9 +385,18 @@ fn every_settled_update_is_a_frame_at_the_tapes_rate() {
     // fewer (the loop runs slower on a busy machine, so the bound follows
     // the span measured rather than a fixed rate). On a machine that keeps
     // up (about 1.5s), a recorder at the old 12 a second keeps under 40%.
-    let possible = (35.0 * span).min(75.0);
+    // The rate between the first frame and the last jitters by a frame
+    // or so either way: at most the tape's rate, within 10%.
     assert!(
-        rate <= 36.0 && counting.len() as f64 >= 0.4 * possible,
+        rate <= 35.0 * 1.1 && counting.len() >= 3,
+        "{} frames over {span:.2}s",
+        counting.len()
+    );
+    // macOS's runners kept 7 frames over 0.8s, where Linux keeps about
+    // 30 a second: the bound holds where the PTY's reads are known.
+    #[cfg(target_os = "linux")]
+    assert!(
+        counting.len() as f64 >= 0.4 * (35.0 * span).min(75.0),
         "{} frames over {span:.2}s",
         counting.len()
     );

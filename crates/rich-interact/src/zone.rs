@@ -1,7 +1,7 @@
 //! Time zones for [`datetime`](crate::datetime): how far a zone's clocks
 //! are from UTC at a moment, summer time included. The local zone is the
 //! platform's (`localtime_r` on Unix, `SystemTimeToTzSpecificLocalTime`
-//! on Windows); a zone can also be read from a TZif file (the zoneinfo
+//! on Windows unless `TZ` is set); a zone can also be read from a TZif file (the zoneinfo
 //! database's format) or a POSIX `TZ` rule, with no dependency.
 
 use std::sync::Arc;
@@ -450,9 +450,13 @@ mod platform {
     use crate::datetime::{Date, DateTime, Time};
 
     /// The system's zone, through `SystemTimeToTzSpecificLocalTime`: the
-    /// local time at `unix`, less `unix`.
+    /// local time at `unix`, less `unix`. A `TZ` that is set wins, as it
+    /// does for the C runtime's `localtime`: the fallback reads it.
     #[allow(unsafe_code)]
     pub(super) fn offset(unix: i64) -> Option<i32> {
+        if std::env::var_os("TZ").is_some_and(|tz| !tz.is_empty()) {
+            return None;
+        }
         let utc = DateTime::from_unix(unix, &super::Zone::Utc);
         let st = |at: DateTime| SYSTEMTIME {
             wYear: at.date.year as u16,
