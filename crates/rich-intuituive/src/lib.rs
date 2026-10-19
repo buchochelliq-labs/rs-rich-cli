@@ -94,6 +94,7 @@ mod bindings;
 pub mod border;
 mod builtin;
 mod calendar;
+pub mod command_line;
 pub mod complete;
 mod datetime;
 mod dialog;
@@ -171,6 +172,7 @@ pub use app::{
 pub use big_text::big_text;
 pub use bindings::{ModePage, Scaled, Stepped};
 pub use border::{Border, BorderSet, Edge, Shadow, Sides};
+pub use command_line::{command_line, command_line_with, CommandLine, CommandLineOptions};
 pub use complete::{
     complete_words, history_file, history_in, history_session, CompleteOptions, Completion,
     InputHistory,

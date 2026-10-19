@@ -661,6 +661,11 @@ impl TextArea {
 }
 
 impl TextArea {
+    /// The selection, if any.
+    pub(crate) fn buffer_selection(&self) -> Option<(Pos, Pos)> {
+        self.buffer.selection()
+    }
+
     /// The caret's byte in the (single-line) text.
     fn caret_byte(&self) -> usize {
         self.buffer.caret().at
