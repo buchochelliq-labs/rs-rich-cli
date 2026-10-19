@@ -120,6 +120,38 @@ pub trait Widget: Any {
         None
     }
 
+    /// What assistive technology reads for it, as it is now: a meter's
+    /// `Level 42%`, where its cells are block glyphs. A widget that says
+    /// something is read as text (unless its [`role`](Self::role) is
+    /// another), its accessible name what this returns, after a
+    /// [`label`](crate::Node::label) code gave it; the accessibility tree,
+    /// [linear](crate::App::linear) mode and a screen reader use it. Called
+    /// after a draw, so it can say what the last one showed. Default: none,
+    /// and the widget's cells are read.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    /// use intuituive::widget::{Canvas, DrawCx};
+    ///
+    /// struct Meter(u8);
+    /// impl Widget for Meter {
+    ///     fn draw(&mut self, _cx: &mut DrawCx, canvas: &mut Canvas) {
+    ///         canvas.print(0, 0, &"█".repeat(self.0 as usize / 10), None);
+    ///     }
+    ///     fn access_text(&self) -> Option<String> {
+    ///         Some(format!("Level {}%", self.0))
+    ///     }
+    /// }
+    ///
+    /// let app = App::new(|| widget(Meter(42)));
+    /// let mut driver = app.driver(10, 1);
+    /// driver.settle();
+    /// assert_eq!(driver.accessibility()[0].name, "Level 42%");
+    /// ```
+    fn access_text(&self) -> Option<String> {
+        None
+    }
+
     /// Cells along `axis` the widget needs, given `width` x `height` (a
     /// height of 0: as tall as it likes). Called for a [`Size::Auto`]
     /// node, and by a modal sized to its content. Default: all it is
@@ -659,6 +691,33 @@ pub struct DrawCx<'a> {
 }
 
 impl DrawCx<'_> {
+    /// The app's clock: the time since it started, as its loop (or a test's
+    /// [`Driver::update`](crate::Driver::update) and
+    /// [`advance`](crate::Driver::advance)) last gave it. A peak that holds
+    /// for a second, a stall noticed after five, tested frame by frame.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    /// use intuituive::widget::{Canvas, DrawCx};
+    /// use std::time::Duration;
+    ///
+    /// struct Clock;
+    /// impl Widget for Clock {
+    ///     fn draw(&mut self, cx: &mut DrawCx, canvas: &mut Canvas) {
+    ///         canvas.print(0, 0, &format!("{}ms", cx.now().as_millis()), None);
+    ///     }
+    /// }
+    ///
+    /// let app = App::new(|| widget(Clock));
+    /// let mut driver = app.driver(10, 1);
+    /// driver.update(Duration::from_millis(250));
+    /// driver.render();
+    /// assert_eq!(driver.screen().plain()[0].trim_end(), "250ms");
+    /// ```
+    pub fn now(&self) -> std::time::Duration {
+        crate::reactive::Runtime::current().now.get()
+    }
+
     /// The console the app renders with: render any rich renderable with
     /// it, and look up theme styles by name.
     pub fn console(&self) -> &Console {

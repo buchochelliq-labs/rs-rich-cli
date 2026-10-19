@@ -300,3 +300,53 @@ into itself, and tab clicks going through `switch_tab` (all tested).
 | Fuzzy finder over the tree | fzf/`fd` as a component that streams results (Yazi's `z`, Television, Bubbles' `list` filter) | `jump`'s blocking 20,000-entry walk | `fuzzy_find(walk(root).hidden(false)).stream()` | plugin (rs-rich-interact `Jump` + a walker) | medium |
 | Task manager | running file jobs with progress (Yazi's `w`) | errors-only notifications; enables progress | `tasks_panel(scheduler)` | core | low |
 | Hex view | a hex dump previewer (ratatui's `hexyl`-style widgets) | the binary note | `hex_view(bytes)` | plugin (rs-rich-ext has `hex`) | low |
+
+## Round 2's gaps in the core: widgets, pop-ups and the clock
+
+The core items of round 2 above, and those the plugin work (files, audio,
+charts) asked for, were added; the clones are rebuilt on them in the next
+round.
+
+| Gap | Now |
+|---|---|
+| Highlight over the markup | `.highlight_layer(HighlightLayer::Under)` |
+| No left-cut overflow | `Node::truncate_start()`; `breadcrumb(path)` |
+| `cx.confirm` 50 wide, empty body | `cx.confirm_with(.., ConfirmOptions::new().size(w, h).title_style(..), ..)`; no row or rule for an empty body |
+| Pop-up title styles | a pop-up's panel's `.title_style` already won over `popup.title`; `ConfirmOptions`, `PromptOptions` and `PickOptions` take one |
+| `rule()` and padding | a rule runs across the padding it touches to the border |
+| `popup_at` sliding away | `Origin::At` shrinks the box to the room under the rectangle before moving it |
+| `notify` 48 cells | `App::notify_width(size)` |
+| `list_lazy`'s five closures | `list_rows(len, \|i\| ListRow, selected)` + `.marker_column()` |
+| `selected_style_for`'s docs | corrected |
+| Input prompt, pick menu | `cx.prompt` / `prompt_with`, `cx.pick` / `pick_with` |
+| Status bar, breadcrumb, key-hint footer, live plot, percentage cells | `status_bar` + `seg` + `Caps`, `breadcrumb`, `key_hints`, `live`, `cells` |
+| Tab strip hiding, click routing | `tabs(..).auto_hide().on_select(..)` |
+| One-shot timer, stepping the clock | `after` / `cx.after`, `Driver::advance`; `stale_after` on the app's clock; `DrawCx::now()` |
+| Sequences in sections, cycling back | `bind_sequence_in`, `bind_cycle_back` |
+| An app dropped unfinished | dropping an `App` closes its runtime |
+| A non-`Send` continuation, a stream as a task | `spawn_then`, `spawn_stream` |
+| Cleanup when a node goes | `Node::on_unmount` |
+| `render_with` needing a quit | it settles after its keys and reads the screen |
+| The wheel over a list | `.wheel_step(n)`, `0` passing it on |
+| Accessible text for a widget | `Widget::access_text` |
+| Kitty/Sixel pass-through | `App::graphics(PlacementSource)` after each frame's cells; the `image` node still draws cells (below) |
+
+### New gaps and bugs
+
+| Gap or bug | Found where | API sketch | Where |
+|---|---|---|---|
+| The `image` node places no graphics | `App::graphics` draws what a `PlacementSource` finds in the cells, but `image` writes half blocks with nothing to find. Wanted: with the terminal's support detected, `image` writes Kitty placeholder cells (`rich_art::kitty::placeholder_row`, the image sent once with `transmit`) or reserves its rect for a Sixel overlay, and an app-level source maps them to placements | `ImageView::graphics(Auto)`; a `GraphicsRegistry` the image node registers with, given to `App::graphics` by the `art` feature | core (`art`) + rs-rich-art |
+| `switch` keeps every page it built | `on_unmount` never runs for a page switched away from, and a switch keyed by a path grows without end | `switch(..).forget_hidden()`, or a `switch_fresh` | core |
+| `after` cannot be cancelled | a debounce restarts its wait; today the handler checks a generation | `after(..) -> Timeout` with `cancel()` | core |
+| `truncate_start`'s `…` is unstyled | a cyan path gets a plain `…` | the `…` in the first kept cell's style | core |
+| A `rule` in a row is one cell wide | `rule()` is `Size::Fixed(1)`, meant for columns | size a rule `Flex(1)` across a row | core (bug) |
+| `key_hints` leaves out the app's keys | the palette and help keys (`App::help_key`) and sequences are not listed | include them, or `key_hints().with(..)` | core |
+| `live` measures without a cap | sized `Auto`, each layout renders it | measure from the last draw | core |
+
+### Components that would help
+
+| Component | What it would replace or enable | API sketch | Where | Value |
+|---|---|---|---|---|
+| A debounced signal | the find-as-you-type and preview reloads built from `after` and a generation | `debounced(signal, 150ms) -> Signal<T>` | core | medium |
+| A mode line | `status_bar` segments that follow `bind_cycle`'s mode, its colour per mode | `mode_segment(mode, &[(Mode::Normal, "NOR", "blue"), ..])` | core | low |
+| A footer that pages | `key_hints` showing more on `?` (Bubbles' short and full help) | `key_hints().expand_on("?")` | core | low |

@@ -73,6 +73,9 @@ struct Graph {
     quiet: HashSet<NodeId>,
 }
 
+/// What a key-hint footer shows: each binding's keys and description.
+pub(crate) type Hints = Vec<(String, String)>;
+
 /// One app's reactive state.
 pub(crate) struct Runtime {
     id: u32,
@@ -109,6 +112,18 @@ pub(crate) struct Runtime {
     watch_sites: RefCell<HashMap<usize, &'static Location<'static>>>,
     /// What the inspector traces while it is open.
     pub(crate) tracer: crate::inspect::Tracer,
+    /// One-shot timers [`after`](crate::after) made, with how long each
+    /// waits, until the app takes them onto its clock.
+    pub(crate) afters: RefCell<Vec<crate::app::After>>,
+    /// The app's clock at the top of its last turn.
+    pub(crate) now: Cell<std::time::Duration>,
+    /// What a [`key_hints`](crate::widgets::key_hints) footer shows, once
+    /// one is made: each binding's keys and description.
+    pub(crate) hints: Cell<Option<Signal<Hints>>>,
+    /// [`spawn_then`](crate::spawn_then)'s continuations, by number, kept
+    /// on the app's thread while their work runs.
+    pub(crate) locals: RefCell<HashMap<u64, Box<dyn Any>>>,
+    pub(crate) next_local: Cell<u64>,
 }
 
 thread_local! {
@@ -141,6 +156,11 @@ impl Runtime {
                 sites: RefCell::new(Vec::new()),
                 watch_sites: RefCell::new(HashMap::new()),
                 tracer: Default::default(),
+                afters: RefCell::new(Vec::new()),
+                now: Cell::new(std::time::Duration::ZERO),
+                hints: Cell::new(None),
+                locals: RefCell::new(HashMap::new()),
+                next_local: Cell::new(0),
             });
             all.push(Some(runtime.clone()));
             runtime

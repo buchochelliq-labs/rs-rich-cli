@@ -74,6 +74,23 @@ pub struct Ctx {
     printed: Vec<String>,
     /// Programs to give the terminal to, in turn.
     handoffs: Vec<Handoff>,
+    /// One-shot timers made with [`Ctx::after`].
+    afters: Vec<After>,
+}
+
+/// A one-shot timer waiting to be put on the app's clock: how long it
+/// waits, what it runs, and where it was made.
+pub(crate) struct After {
+    pub wait: Duration,
+    pub run: Box<dyn FnOnce(&mut Ctx)>,
+    pub at: &'static Location<'static>,
+}
+
+/// A one-shot timer on the app's clock: when it is due.
+struct Timeout {
+    due: Duration,
+    run: Box<dyn FnOnce(&mut Ctx)>,
+    at: &'static Location<'static>,
 }
 
 /// What [`handoff_then`](Ctx::handoff_then) runs once the program is done.
@@ -245,7 +262,19 @@ impl Ctx {
             error: None,
             printed: Vec::new(),
             handoffs: Vec::new(),
+            afters: Vec::new(),
         }
+    }
+
+    /// Run `then` once, `wait` from now on the app's clock: [`after`] from
+    /// a handler.
+    #[track_caller]
+    pub fn after(&mut self, wait: Duration, then: impl FnOnce(&mut Ctx) + 'static) {
+        self.afters.push(After {
+            wait,
+            run: Box::new(then),
+            at: Location::caller(),
+        });
     }
 
     /// Give the terminal to `command` (an editor, a pager, a shell) once
@@ -867,6 +896,44 @@ pub fn every(interval: Duration, tick: impl FnMut(&mut Ctx) + 'static) {
     });
 }
 
+/// Call `then` once, `wait` from now on the app's clock (the time a
+/// [`Driver`] is given, so a test steps it exactly): clear a message after
+/// a while, retry later, give up on something slow. Call it while the app
+/// is built or running: in [`App::new`]'s closure, a handler, a watch.
+/// [`Ctx::after`] does the same from a handler's `cx`.
+///
+/// ```
+/// use intuituive::prelude::*;
+/// use intuituive::after;
+/// use std::time::Duration;
+///
+/// let app = App::new(|| {
+///     let message = signal("Saved");
+///     after(Duration::from_secs(2), move |_| message.set(""));
+///     text!("{message}")
+/// });
+/// let mut driver = app.driver(10, 1);
+/// driver.advance(Duration::from_millis(1900));
+/// assert_eq!(driver.screen().plain()[0].trim_end(), "Saved");
+/// driver.advance(Duration::from_millis(100));
+/// assert_eq!(driver.screen().plain()[0].trim_end(), "");
+/// ```
+///
+/// # Panics
+/// Outside a running or building app.
+#[track_caller]
+pub fn after(wait: Duration, then: impl FnOnce(&mut Ctx) + 'static) {
+    let at = Location::caller();
+    Runtime::current_for("after()")
+        .afters
+        .borrow_mut()
+        .push(After {
+            wait,
+            run: Box::new(then),
+            at,
+        });
+}
+
 /// How many times a second `source` is written, counted over each second
 /// of the app's clock (and 0 for the first): a frame-rate meter. Each
 /// write counts, an equal value too, as [`on_write`](crate::on_write)
@@ -952,8 +1019,16 @@ pub struct App {
     /// Toasts showing, with when each goes, and the corner they stack in.
     toasts: Vec<(Note, Duration)>,
     toast_corner: Corner,
+    /// The widest a notification grows.
+    notify_width: Size,
     /// Animations running: the signal, from, to, start, length, easing.
     animations: Vec<Animation>,
+    /// One-shot timers ([`after`]), with when each is due.
+    timeouts: Vec<Timeout>,
+    /// Terminal graphics placed on the cells ([`App::graphics`]), and the
+    /// placements the last frame drew.
+    graphics: Option<std::sync::Arc<dyn rich_ext::frame::PlacementSource>>,
+    placements: Vec<rich_ext::frame::Placement>,
     /// Keys that open the command palette and the help, if any.
     palette_key: Vec<Key>,
     help_key: Vec<Key>,
@@ -1100,6 +1175,15 @@ struct ThemeFile {
     error: Option<String>,
 }
 
+/// An app dropped without [`Driver::finish`] (a test that stops early, a
+/// driver let go) closes its runtime all the same: `latest` threads asleep
+/// on its clock wake and end, and its signals go.
+impl Drop for App {
+    fn drop(&mut self) {
+        self.runtime.close();
+    }
+}
+
 impl App {
     /// Build the app: `build` runs once, creates the app's signals and
     /// returns the root node.
@@ -1153,7 +1237,11 @@ impl App {
             copies: Vec::new(),
             toasts: Vec::new(),
             toast_corner: Corner::default(),
+            notify_width: Size::Fixed(crate::notify::NOTICE_WIDTH),
             animations: Vec::new(),
+            timeouts: Vec::new(),
+            graphics: None,
+            placements: Vec::new(),
             palette_key: Vec::new(),
             help_key: Vec::new(),
             legacy_keys: false,
@@ -1590,6 +1678,46 @@ impl App {
         self
     }
 
+    /// Draw terminal graphics (Kitty, iTerm2 and Sixel images) beside the
+    /// cells: after each frame's cells are written, `source` finds the
+    /// [placements](rich_ext::frame::Placement) on the screen's cells, and
+    /// those that are new, moved, on another animation frame or wiped by
+    /// cells written over them are drawn again (rs-rich-ext's
+    /// [`plan`](rich_ext::frame::plan), as its `Surface::graphics` does);
+    /// an overlay that went away has its cells repainted. The cells under a
+    /// placement are what a terminal without graphics shows, so the frame
+    /// stays exact either way. When the app ends, `source` releases what
+    /// the terminal holds. Choosing a protocol the terminal supports is the
+    /// source's.
+    pub fn graphics(mut self, source: std::sync::Arc<dyn rich_ext::frame::PlacementSource>) -> App {
+        self.graphics = Some(source);
+        self
+    }
+
+    /// The widest a [notification](Ctx::notify) grows: 48 cells by
+    /// default, or a share of the screen ([`Size::Percent`]); never wider
+    /// than the screen. A notification is as wide as its body's longest
+    /// line and its title within that, and wraps beyond it.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    /// use intuituive::{Corner, Level};
+    ///
+    /// let error = "Failed to rename notes.txt: permission denied (os error 13)";
+    /// let app = App::new(move || label("").on_key("e", move |cx| cx.notify(Level::Error, "Rename", error)))
+    ///     .toasts_at(Corner::TopRight)
+    ///     .notify_width(Size::Percent(90));
+    /// let mut driver = app.driver(80, 6);
+    /// driver.press("e");
+    /// // One line: the box's body row, then its bottom edge.
+    /// assert!(driver.screen().plain()[1].contains(error));
+    /// assert!(driver.screen().plain()[2].contains("╰───"));
+    /// ```
+    pub fn notify_width(mut self, width: Size) -> App {
+        self.notify_width = width;
+        self
+    }
+
     /// Show the which-key pop-up while a [key
     /// sequence](crate::Node::bind_sequence) is under way: what can follow
     /// the keys pressed so far, with their descriptions, in up to three
@@ -1990,17 +2118,42 @@ impl App {
     }
 
     /// Run headless at `width` x `height`, pressing `keys` (key names,
-    /// one per step), and return the last screen's rows as plain text.
+    /// one per step, or several separated by spaces), and return the last
+    /// screen's rows as plain text. The app need not quit: once the keys
+    /// are pressed, it settles (watches set off by the first frames run,
+    /// a [`RectHandle`](crate::RectHandle)'s readers load) and the screen
+    /// is read. Keys after a quit are dropped; a handed-off program is
+    /// taken to have ended with 0. An error the app
+    /// [failed](Ctx::fail) with is returned.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| {
+    ///     let n = signal(0);
+    ///     text!("{n}").on_key("+", move |_| n.update(|n| *n += 1))
+    /// });
+    /// assert_eq!(app.render_with(&["+ +"], 5, 1).unwrap()[0].trim_end(), "2");
+    /// ```
     pub fn render_with(self, keys: &[&str], width: u16, height: u16) -> io::Result<Vec<String>> {
-        let mut script = rich_interact::headless::Script::new();
+        let mut driver = self.driver(width, height);
+        let hand_back = |driver: &mut Driver| {
+            while let Some(handoff) = driver.take_handoff() {
+                driver.handed_back(handoff, Ok(Some(0)));
+                driver.settle();
+            }
+        };
+        driver.settle();
+        hand_back(&mut driver);
         for key in keys {
-            script = script.keys(key);
+            driver.press(key);
+            hand_back(&mut driver);
         }
-        let mut backend = rich_interact::headless::Headless::new(script, width, height);
-        let record = backend.record();
-        self.run_on(&mut backend)?;
-        let last = record.borrow().last_frame().to_string();
-        Ok(last.lines().map(str::to_string).collect())
+        driver.settle();
+        if let Some(error) = driver.take_error() {
+            return Err(error);
+        }
+        Ok(driver.screen().plain())
     }
 
     fn console_for(&mut self, width: u16) -> Console {
@@ -2582,7 +2735,9 @@ impl App {
         if !self.linear {
             let notes: Vec<&Note> = self.toasts.iter().map(|(note, _)| note).collect();
             let corner = self.toast_corner;
-            let drawn = crate::notify::draw(console, screen, area, &notes, &self.theme, corner);
+            let widest = crate::place::resolve(self.notify_width, area.width, &|| area.width);
+            let look = (&self.theme, corner, widest);
+            let drawn = crate::notify::draw(console, screen, area, &notes, look);
             frame.damage.extend(drawn);
         }
         // The which-key pop-up, once its delay is over.
@@ -2732,6 +2887,19 @@ impl App {
         damage
     }
 
+    /// Put the one-shot timers [`after`] made since the last turn on the
+    /// app's clock, from now.
+    fn take_afters(&mut self) {
+        let made = std::mem::take(&mut *self.runtime.afters.borrow_mut());
+        for after in made {
+            self.timeouts.push(Timeout {
+                due: self.now + after.wait,
+                run: after.run,
+                at: after.at,
+            });
+        }
+    }
+
     fn ctx(&self) -> Ctx {
         let mut cx = Ctx::new(self.runtime.proxy());
         cx.pointer = self.pointer;
@@ -2741,6 +2909,14 @@ impl App {
     /// Apply what a handler asked for; whether to quit.
     fn apply(&mut self, cx: Ctx) -> bool {
         let mut quit = cx.quit;
+        for after in cx.afters {
+            self.timeouts.push(Timeout {
+                due: self.now + after.wait,
+                run: after.run,
+                at: after.at,
+            });
+        }
+        self.take_afters();
         if let Some(exit) = cx.exit {
             self.exit = Some(exit);
         }
@@ -2908,6 +3084,24 @@ impl App {
             });
         }
         out
+    }
+
+    /// What a [`key_hints`](crate::widgets::key_hints) footer shows: the
+    /// described bindings (not sequences) of the focused node and its
+    /// ancestors, innermost first, each keys once. Nothing without one.
+    fn refresh_hints(&self) {
+        let Some(hints) = self.runtime.hints.get() else {
+            return;
+        };
+        let mut shown: Vec<(String, String)> = Vec::new();
+        for (_, _, binding) in self.bindings() {
+            let keys = binding.hint();
+            if binding.sequence || shown.iter().any(|(k, _)| *k == keys) {
+                continue;
+            }
+            shown.push((keys, binding.description));
+        }
+        self.runtime.enter(|| hints.set(shown));
     }
 
     /// The command palette (or the help, if `help`) over the top screen.
@@ -3997,6 +4191,64 @@ impl App {
     }
 }
 
+/// After a frame's cells: the graphics `source` places on `screen` that
+/// moved, went away or had cells written under them, as rs-rich-ext's
+/// `Surface` draws them. `placements` is what the last frame drew.
+fn draw_graphics(
+    source: &dyn rich_ext::frame::PlacementSource,
+    placements: &mut Vec<rich_ext::frame::Placement>,
+    screen: &Screen,
+    painter: &mut Painter,
+) -> String {
+    use rich::Segment;
+    use rich_ext::frame::{Change, Frame};
+    let mut segments = Vec::new();
+    for line in screen.lines() {
+        segments.extend(line);
+        segments.push(Segment::line());
+    }
+    let frame = Frame::from_segments(&segments);
+    let height = frame.height();
+    let next: Vec<_> = source
+        .placements(&frame)
+        .into_iter()
+        .filter(|p| p.row + p.rows <= height)
+        .collect();
+    let changes: Vec<Change> = painter
+        .written()
+        .iter()
+        .flat_map(|rect| {
+            (rect.y..rect.bottom()).map(move |row| Change {
+                row: row as usize,
+                columns: rect.x as usize..rect.right() as usize,
+            })
+        })
+        .collect();
+    let plan = rich_ext::frame::plan_graphics(placements, &next, &changes);
+    let mut out = String::new();
+    let repaint: Vec<Rect> = plan
+        .repaint
+        .iter()
+        .map(|(row, columns)| {
+            Rect::new(
+                columns.start as u16,
+                *row as u16,
+                (columns.end - columns.start) as u16,
+                1,
+            )
+        })
+        .collect();
+    if !repaint.is_empty() {
+        out.push_str(&painter.repaint(screen, &repaint));
+    }
+    for placement in &plan.draw {
+        out.push_str(&painter.move_to(placement.column as u16, placement.row as u16));
+        out.push_str(&placement.graphic.draw(placement.frame));
+    }
+    *placements = next;
+    out
+}
+
 /// What [`App::run_on`]'s loop ended with: the app's value or an error,
 /// and the rows printed above a full-screen app, left to write.
 struct Ended {
@@ -4076,9 +4328,31 @@ impl Driver {
         app.reload_sheet();
         app.now = now;
         app.runtime.tracer.set_now(now);
+        app.runtime.now.set(now);
+        app.take_afters();
         let mut cx = app.ctx();
         let runtime = app.runtime.clone();
+        // One-shot timers that are due, in the order they fall due.
+        let mut due = Vec::new();
+        let mut i = 0;
+        while i < app.timeouts.len() {
+            if app.timeouts[i].due <= now {
+                due.push(app.timeouts.remove(i));
+            } else {
+                i += 1;
+            }
+        }
+        due.sort_by_key(|timeout| timeout.due);
         runtime.enter(|| {
+            for timeout in due {
+                if runtime.tracer.on() {
+                    runtime.tracer.push(Traced::Timer {
+                        every: Duration::ZERO,
+                        at: timeout.at,
+                    });
+                }
+                (timeout.run)(&mut cx);
+            }
             for layer in &mut app.layers {
                 for timer in &mut layer.timers {
                     if now >= timer.next {
@@ -4186,6 +4460,7 @@ impl Driver {
         if self.done {
             return None;
         }
+        self.app.refresh_hints();
         let out = self.needs_render().then(|| {
             let mut out = String::new();
             if !self.started {
@@ -4242,6 +4517,13 @@ impl Driver {
             .min()
             .unwrap_or(Duration::from_millis(50))
             .min(Duration::from_millis(50))
+            .min(
+                app.timeouts
+                    .iter()
+                    .map(|t| t.due.saturating_sub(now))
+                    .min()
+                    .unwrap_or(Duration::MAX),
+            )
             .min(if app.animations.is_empty() {
                 Duration::MAX
             } else {
@@ -4432,6 +4714,35 @@ impl Driver {
             if !drew && !self.needs_render() && self.app.lifecycle.is_empty() {
                 return;
             }
+        }
+    }
+
+    /// Move the app's clock on by `by`, a step at a time, and draw after
+    /// each step: every timer, [`after`], animation and toast in between
+    /// runs at its own time, as it would with a real clock. A step goes
+    /// to the next thing due, 50 ms at most. A test of something timed.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    /// use std::time::Duration;
+    ///
+    /// let app = App::new(|| {
+    ///     let ticks = signal(0);
+    ///     every(Duration::from_millis(100), move |_| ticks.update(|t| *t += 1));
+    ///     text!("{ticks}")
+    /// });
+    /// let mut driver = app.driver(5, 1);
+    /// driver.advance(Duration::from_secs(1));
+    /// assert_eq!(driver.screen().plain()[0].trim_end(), "10");
+    /// ```
+    pub fn advance(&mut self, by: Duration) {
+        let end = self.app.now + by;
+        self.settle();
+        while !self.done && self.app.now < end {
+            let step = self.timeout(self.app.now).max(Duration::from_millis(1));
+            let next = (self.app.now + step).min(end);
+            self.update(next);
+            self.settle();
         }
     }
 
@@ -4869,6 +5180,14 @@ impl Driver {
         } else if self.app.inline.is_some() && (self.app.restack || self.app.runtime.has_dirty()) {
             out.push_str(&self.paint(false));
         }
+        if let Some(source) = &self.app.graphics {
+            // Inline, the last frame stays, with its graphics.
+            let retained = match self.app.inline {
+                Some(_) => self.app.placements.clone(),
+                None => Vec::new(),
+            };
+            out.push_str(&source.release(&retained));
+        }
         out.push_str(&self.painter.finish());
         out.push_str("\x1b[0m\x1b[?25h");
         self.app.runtime.close();
@@ -4913,6 +5232,14 @@ impl Driver {
             app.caret_shown = false;
         }
         out.push_str(&painted);
+        if let Some(source) = app.graphics.clone() {
+            out.push_str(&draw_graphics(
+                &*source,
+                &mut app.placements,
+                screen,
+                &mut self.painter,
+            ));
+        }
         if app.motion.0 && !app.motion.1 && app.captures_mouse() {
             // A widget reads hover: report the pointer's movement too. The
             // session turns it off with the rest of the mouse on the way out.

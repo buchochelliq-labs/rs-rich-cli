@@ -25,7 +25,9 @@ pub enum Origin {
     BottomCenter,
     BottomRight,
     /// Below this rectangle, from its left edge; above it when there is no
-    /// room below.
+    /// room below. A box wider than the room right of the rectangle's edge
+    /// is made narrower to stay there (down to the rectangle's width), and
+    /// only moved left when even that does not fit.
     At(Rect),
 }
 
@@ -89,9 +91,20 @@ pub(crate) fn place(
         },
         None => 0,
     };
-    let w = resolve(offset.w, area.width, &|| {
+    let mut w = resolve(offset.w, area.width, &|| {
         measure(Axis::Horizontal, area.width)
     });
+    // Below a rectangle, a box too wide for the room right of it is made
+    // narrower before it is moved: it stays under the rectangle, as wide
+    // as the room there, while that is at least as wide as the rectangle
+    // (or the box, if narrower).
+    if let Origin::At(rect) = origin {
+        let start = (rect.x as i32 + offset.x as i32).max(area.x as i32);
+        let room = (area.right() as i32 - start).max(0) as u16;
+        if w > room && room >= rect.width.min(w).max(1) {
+            w = room;
+        }
+    }
     let h = resolve(offset.h, area.height, &|| measure(Axis::Vertical, w));
     let middle = |start: u16, room: u16, size: u16| start + (room - size) / 2;
     let (x, y) = match origin {

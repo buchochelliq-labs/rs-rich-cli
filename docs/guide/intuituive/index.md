@@ -104,6 +104,12 @@ as wide as its longest line. A stylesheet sets the same with
 `text-align`, `text-wrap: nowrap` and `text-overflow: ellipsis` (or `clip`,
 or `fold`).
 
+**`.truncate_start()`** cuts a line too long from its start instead, with
+`…` where it was cut, and does not wrap: a path keeps where you are
+(`…/rich/src`), as Yazi's header does. rich's `Overflow` is a mirror of
+upstream's and cuts only at the end, so this is the node's own option.
+For a path with its parts styled, see [`breadcrumb`](#bars-for-an-apps-chrome).
+
 ## Layout
 
 A child's size along its parent's axis:
@@ -385,7 +391,10 @@ over the sheet.
 `rule()` is a line across, one row tall, in the theme's border style.
 Directly inside a panel, from its left side to its right, it joins the
 border, in the panel's kind and focus colour: the `├──┤` between the parts
-of a help box. Padding between them keeps it apart. `.border(Border::Thick)`
+of a help box. Padding between them does not keep it apart: a rule at the
+inside edge of a padded column (`.padding(0, 1)`), or of a panel a
+stylesheet pads, runs across the padding to the border, so the column is
+padded once rather than each part. `.border(Border::Thick)`
 picks the kind of a rule on its own, and it is left out of what assistive
 technology reads.
 
@@ -854,12 +863,44 @@ list(move || names.get(), cursor)
   and yanked markers. The column is kept with nothing marked, so the text
   never moves when a mark comes or goes.
 - **`.selected_style_for(|i| Option<style>)`** is the highlight's style
-  when item `i` is selected, instead of the theme's `selected`: a hovered
-  directory reversed in its own blue.
+  when item `i` is selected, instead of the theme's `selected`: a
+  different look per row (the preview's underline). A bar in each row's
+  own colour needs none: `.row_style` of the colour and a `reverse`
+  `selected` reverse it already.
+- **`.highlight_layer(HighlightLayer::Under)`** puts the highlight under
+  the item's markup rather than over it, so what the markup styles keeps
+  its own style on the selected row: Yazi's rounded ends
+  (`[not reverse blue]\u{e0b6}[/]`) outside the reversed name.
+- **`.wheel_step(n)`** moves the selection `n` items a turn of the wheel
+  (three by default); `0` leaves the wheel to the list's ancestors, whose
+  `on_mouse` otherwise never sees it.
 - **`.row_rects(&rects)`** records where each row in view was drawn on
   the screen, so a handler can open a popup at a row:
   `rects.get(i)` is item `i`'s rectangle, or `None` out of view. Tables
   and `virtual_list` take it too.
+
+`list_lazy`'s closures, and those of `.trailing`, `.marker` and
+`.row_style`, each read the app's data again for the same row.
+**`list_rows(len, |i| ListRow, selected)`** asks one closure per row and
+makes each row once a draw, its parts together:
+
+```rust
+use intuituive::widgets::{list_rows, ListRow};
+
+list_rows(move || files.with(Vec::len), move |i| {
+    files.with(|f| {
+        let entry = &f[i];
+        ListRow::new(entity(entry))
+            .trailing(linemode(entry))
+            .marker(marker_style(entry))
+            .style(row_style(entry))
+    })
+}, cursor)
+.marker_column()
+```
+
+`.marker_column()` keeps the marker column, filled from each row's
+`marker`; every other list option still applies.
 
 #### How a tab strip looks
 
@@ -875,6 +916,11 @@ none), in the theme's `tabs.divider` style; **`.tab_padding(left, right)`**
 replaces the space either side of each title; and **`.titles_align(..)`**
 puts the strip at the start, the centre or the end of its width. Clicks
 find the right title whatever the divider and padding.
+**`.auto_hide()`** hides the strip while it has fewer than two titles (it
+takes no row then), and **`.on_select(|to, cx| ..)`** is told the title a
+click, ←/→ or a number key picked, instead of the strip setting its
+signal: the app moves there its own way and sets the signal itself, with
+no click routing of its own.
 
 #### Scrollbars
 
@@ -1340,6 +1386,13 @@ What a widget can do:
   [`layers`](#layers) does: a child draws again wherever an earlier one
   drew in the same frame, and a click goes to the later one.
 - **`caret`** places the text caret while it has the focus.
+- **`access_text`** says what it shows to assistive technology (`Level
+  42%` for a meter of block glyphs): the widget is read as text with that
+  name, after a `.label` code gave it, in the accessibility tree, linear
+  mode and to a screen reader, with no `described` child to wrap.
+- **`cx.now()`** in `draw` is the app's clock, the time its loop (or a
+  test's `update` and `advance`) gave it: a peak that holds for a second,
+  a stall seen after five, tested frame by frame.
 
 Every built-in node is a widget built on this trait: text, labels,
 renderables, columns, rows, grids, panels, padding, `each`, `switch`,
@@ -1357,6 +1410,59 @@ holds them sees keys first (`previews_keys`), and while it is paused it
 keeps them from the meters.
 
 ![Four meters, each a widget of its own](../../media/tapes/intuituive/meters.png)
+
+### Bars for an app's chrome
+
+Five ready-made nodes cover the rows round an app's content (in
+`intuituive::widgets`):
+
+```rust
+use intuituive::widgets::{breadcrumb, cells, key_hints, live, seg, status_bar, Caps};
+
+column([
+    breadcrumb(move || cwd.get()).home_tilde().crumb_suffix(move || flags()),
+    body.flex(1),
+    status_bar(
+        [
+            seg(move || format!(" {} ", mode.get())).style_with(move || mode_style()),
+            seg(move || format!(" {} ", size())).style("blue on white"),
+            seg(move || format!(" {}", name())),
+        ],
+        [seg(move || format!(" {}/{} ", at(), len())).style("white on blue")],
+    )
+    .caps(Caps::Rounded),
+    key_hints(),
+])
+```
+
+- **`status_bar(left, right)`** is one row of segments, the left group
+  from the left edge and the right against the right one. A segment is
+  markup on a style (`seg(..).style(..)`, or `style_with` for one that
+  changes); with `.caps(Caps::Powerline)` or `Caps::Rounded` (Yazi's;
+  both need a Nerd Font) a glyph between two segments takes the colour of
+  the one it ends on the background of the next, as lualine and
+  vim-airline draw them. A segment with no background gets no cap, an
+  empty one is left out, and the left group is cut with `…` when the two
+  do not fit.
+- **`breadcrumb(path)`** is a path header: its parts joined by `/`, the
+  last in the theme's `breadcrumb.last` style (bold by default), the rest
+  in `breadcrumb` and the slashes in `breadcrumb.separator`. Too long, it
+  loses its start, `…` where it was cut. `.home_tilde()` shows the home
+  directory as `~` (`.home_tilde_at(dir)` names it), and
+  `.crumb_suffix(|| markup)` adds markup after it that is never cut.
+- **`key_hints()`** is a footer of the keys that work now: the described
+  bindings of the focused node and its ancestors (a pop-up's while one is
+  open), innermost first, `key description` in `key_hints.key` and
+  `key_hints.desc`, `·` apart; what does not fit is left out whole. Bubbles'
+  `help` and Textual's `Footer`, from the same `.bind` descriptions the
+  help uses.
+- **`cells([(35, a), (25, b), ..])`** is ratatui's one-row `Table`: a row
+  of nodes sized by percentages with `Solver::Ratatui` and a cell between
+  (`.gap(n)` changes it), text cut at each cell's edge with no `…`.
+- **`live(fps_cap, || renderable)`** draws a renderable at most `fps_cap`
+  times a second of the app's clock: a plot fed by a fast source draws at
+  the cap and drops the changes between, the next draw showing the newest,
+  and a change within the cap waits its turn, so the last one is shown.
 
 ### Effects
 
@@ -1506,8 +1612,13 @@ screen instead (Yazi's): an `Origin` (`TopLeft`, `TopCenter`, `TopRight`,
 below a rectangle or above it when there is no room), moved and sized by
 an `Offset { x, y, w, h }` (cells, negative to go left or up; the sizes as
 a modal's). However far the offset, the pop-up stays on the screen: it is
-moved back inside, and made smaller if it is larger. It closes as any
-pop-up does.
+moved back inside, and made smaller if it is larger. Below a rectangle
+(`Origin::At`), a box wider than the room right of the rectangle is made
+narrower first, to stay under it (down to the rectangle's width), and is
+only moved left when even that does not fit: Yazi's 80-wide rename box
+at 80 columns stays under the row. It closes as any pop-up does. Its
+panel's `.title_style(..)` styles that pop-up's title instead of the
+theme's `popup.title` (Yazi's input titles are plain, `"default"`).
 
 ```rust
 cx.popup_at(Origin::TopCenter, Offset::new(0, 2, 50, 3), move || {
@@ -1522,6 +1633,32 @@ the node moves. `Origin::At(handle.get_untracked()?)` puts a pop-up under
 it. App state that wants the handle before the view is built makes one
 with `RectHandle::new()` and gives it to the node later with
 `.rect_into(&handle)`.
+
+Two presets build the usual pop-ups:
+
+```rust
+// Yazi's input: top centre, two rows down, 50 wide; Enter submits, Esc cancels.
+cx.prompt("Rename:", name.get_untracked(), move |text, cx| rename(text, cx));
+cx.prompt_with("Find:", "", PromptOptions::new()
+    .at(Origin::At(row), Offset::new(0, 1, 50, 3))
+    .caret(Caret::At(stem))
+    .title_style("default")
+    .on_change(move |text, _| query.set(text.to_string()))
+    .on_cancel(move |_| query.set(String::new())),
+    |text, cx| find(text, cx));
+// Yazi's "Open with:": a short list below the hovered row.
+cx.pick("Open with:", Origin::At(row), openers, move |i, cx| open_with(i, cx));
+```
+
+- **`cx.prompt(title, initial, |text, cx| ..)`** is a one-line input in a
+  box, the caret at the end. `prompt_with` takes `PromptOptions`: where it
+  opens (`at(origin, offset)`, as `popup_at`), the caret, a title style,
+  and handlers for each edit and for Esc.
+- **`cx.pick(title, origin, items, |index, cx| ..)`** is a list of markup
+  items in a box as wide as the widest item (or the title) and as tall as
+  the items; Enter or a click picks, Esc or `q` closes it with nothing
+  picked. `pick_with` takes `PickOptions`: an offset and size, a title
+  style.
 
 ### Menus
 
@@ -1586,10 +1723,14 @@ and the same keys with modifiers, each variant with its value (Shift ten
 times, Ctrl five, Alt a fifth), and the help shows them as one row: the
 plain keys, and `Scale up (shift ×10, ctrl ×5)`. `.bind_cycle(keys,
 description, signal, &modes)` moves a signal on to the next of its modes,
-round to the first after the last.
+round to the first after the last; `.bind_cycle_back(keys, ..)` moves it
+back, round to the last (Shift+Tab to Tab's cycle).
 
 Sequence bindings are listed too, with their keys as `g g`; a long
-description is cut so its keys still show.
+description is cut so its keys still show. `.bind_sequence_in(section,
+keys, description, handler)` lists one under a section of its own, as
+`bind_in` does a binding. The same descriptions make a footer of the keys
+that work now: [`key_hints()`](#bars-for-an-apps-chrome).
 
 ### Confirming
 
@@ -1602,7 +1743,13 @@ Yazi's way: a modal centred over the screen, the title on its top edge, the
 body under it, the items (ten at most, and a count of the rest) between two
 rules, and `[Y]es` and `(N)o`. `y`, or Enter on Yes, closes it and runs
 `on_yes`; `n`, Esc, or Enter on No closes it; Tab and the arrows move
-between the two, and a click picks one.
+between the two, and a click picks one. With no body, the items sit right
+under the title; with neither, only the answers show.
+
+`cx.confirm_with(title, body, items, ConfirmOptions::new().size(w, h)
+.title_style("blue"), on_yes)` sizes the box (50 wide and as tall as its
+content by default; Yazi's trash confirm is 70 x 20, the items taking
+the room and the answers at the bottom) and styles its title.
 
 ## Toasts and animations
 
@@ -1618,6 +1765,10 @@ between the two, and a click picks one.
   announced with its level (`Error: Copy failed: …`).
 - **`App::toasts_at(corner)`** stacks toasts and notifications in another
   corner, newest nearest it: `Corner::TopRight` is Yazi's.
+- **`App::notify_width(size)`**: a notification is as wide as its body's
+  longest line (and its title), 48 cells at most by default, and wraps
+  beyond. `Size::Fixed(n)` or `Size::Percent(p)` of the screen lets a
+  one-line error stay on one line.
 - **`cx.animate(signal, to, duration, easing)`** moves a `Signal<f64>` to
   `to` over `duration`, setting it every frame, so whatever reads it moves
   with it: a split's ratio, a gauge, a scroll offset. `Easing` is `Linear`,
@@ -1646,11 +1797,28 @@ App::new(|| {
   `App::new`'s closure (or a screen's), next to the signals it writes. A
   timer that fell behind (the clock jumped, the laptop slept) ticks once,
   not once for every tick it missed, and keeps to its step after that.
+  `after(wait, |cx| ..)` runs a handler once, `wait` from now, on the
+  app's clock: anywhere while the app is built or running (a handler, a
+  watch), or `cx.after(..)` from a handler. A test steps through it with
+  `Driver::advance`; `Resource::stale_after` waits this way.
 - **Tasks:** `spawn(work, done)` runs `work` on its own thread and `done`
   with the result back on the app's thread, where it can write signals,
   open a screen or quit. `spawn_future` does the same for a future that does
   not need a particular async runtime. Both return a `Task`, which you can
-  `cancel()` (its result is dropped).
+  `cancel()` (its result is dropped). `done` must be `Send`;
+  **`spawn_then(work, done)`** keeps `done` on the app's thread while the
+  work runs, so it can hold an `Rc` or a node's handle. **`spawn_stream(
+  |stream| ..)`** runs a thread that sends results as it goes through
+  `stream.proxy()`, counted as a task until it returns (an app that waits
+  for its tasks waits for the whole stream) and told of a `cancel()` by
+  `stream.cancelled()`.
+- **Cleaning up:** `node.on_unmount(|| ..)` runs once when the node leaves
+  the tree: its screen or pop-up closes, its `each` row goes, or the app
+  ends (a `switch` keeps the pages it built). Stop what the node started
+  there: set the flag a background walk reads, drop a watcher. The app
+  may be ending, so leave its signals alone. An app dropped without
+  `Driver::finish` (a test that stops early) closes its runtime all the
+  same, so `latest` threads asleep on its clock end.
 
 ```rust
 .on_key("r", move |_| {
@@ -1680,6 +1848,14 @@ text(move || match user.get() {
 .on_key("r", move |_| user.reload())
 ```
 
+- **Terminal graphics:** `App::graphics(source)` takes rs-rich-ext's
+  `PlacementSource` and draws Kitty, iTerm2 or Sixel images beside the
+  cells, as rs-rich-ext's `Surface` does: after each frame's cells,
+  placements that are new, moved, on another animation frame or written
+  over are drawn again, and an overlay that went away has its cells
+  repainted. The cells under a placement are what a terminal without
+  graphics shows. The `art` feature's `image` node still draws half
+  blocks; giving it a placement is to come.
 - **Other threads:** signals live on the app's thread. Work you start
   yourself (a tokio runtime, a file watcher) sends closures through a
   `Proxy` from `cx.proxy()` or `app.proxy()`: `proxy.run(move ||
@@ -2462,7 +2638,7 @@ out.write_all(driver.finish().as_bytes())?;
 - **`render()`** draws what changed and returns the escape sequences that
   show it, or `None` when nothing did.
 - **`timeout(now)`** is how long you may wait for an event: until the next
-  timer, a frame while something animates, at most 50 ms.
+  timer or `after`, a frame while something animates, at most 50 ms.
 - **`event(e)`** takes a key, mouse event, paste or resize;
   `resize(w, h)` sets the size directly.
 - **`screen()`** is the frame as cells, and `screen().lines()` as styled
@@ -2503,10 +2679,13 @@ terminal.draw(|frame| {
 ## Testing
 
 `render_with` runs an app headless, pressing keys, and returns the last
-screen:
+screen. The app need not quit: once the keys are pressed it settles
+(watches the first frames set off run, so what loads from a
+`rect_handle`'s width is there) and the screen is read. An error the app
+failed with comes back as the `Err`.
 
 ```rust
-let screen = app.render_with(&["+", "+", "q"], 30, 2)?;
+let screen = app.render_with(&["+", "+"], 30, 2)?;
 assert_eq!(screen[0].trim_end(), "Count: 2");
 ```
 
@@ -2517,7 +2696,9 @@ terminal and no clock of its own. For a test it has:
   which draws until nothing is left to draw;
 - `type_text("Ada")`: a key a character, as a person types;
 - `resize(columns, rows)`, `event(…)` for the mouse and pastes, and
-  `update(now)` to move the clock;
+  `update(now)` to move the clock; `advance(d)` moves it on by `d` a step
+  at a time, to each timer, `after`, animation or toast due (50 ms at
+  most), drawing after each, so what is timed runs at its own time;
 - `assert_focused("save")`: the focus is on the node with that
   `.name("…")`, or that accessible name (its `.label("…")`, the text it
   shows, a panel's title). When it is not, the message says where the

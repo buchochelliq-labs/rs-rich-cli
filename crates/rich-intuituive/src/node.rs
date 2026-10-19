@@ -205,6 +205,20 @@ pub struct Node {
     /// at its content's size.
     pub(crate) inset: Option<[u16; 4]>,
     pub(crate) place: Option<(Align, Align)>,
+    /// What runs when it leaves the tree ([`on_unmount`](Node::on_unmount)).
+    unmount: Vec<Unmount>,
+}
+
+/// An [`on_unmount`](Node::on_unmount) handler, run when its node is
+/// dropped: when it leaves the tree.
+struct Unmount(Option<Box<dyn FnOnce()>>);
+
+impl Drop for Unmount {
+    fn drop(&mut self) {
+        if let Some(handler) = self.0.take() {
+            handler();
+        }
+    }
 }
 
 /// A node's own style: a style (or theme style name), a foreground and a
@@ -414,6 +428,7 @@ impl Node {
             scope: RefCell::new(None),
             inset: None,
             place: None,
+            unmount: Vec::new(),
         }
     }
 
@@ -558,6 +573,10 @@ impl Node {
         if role != Role::Group {
             return role;
         }
+        // A widget that says what it shows is read as text.
+        if self.body.borrow().widget.access_text().is_some() {
+            return Role::Text;
+        }
         let clickable = self.click.borrow().is_some();
         match self.what {
             "text" | "label" | "renderable" | "leaf" if clickable => Role::Button,
@@ -568,11 +587,13 @@ impl Node {
     }
 
     /// Its accessible name, if code gave one; a panel's is its title. A
-    /// [`described`] node's is what it says, after the name code gave.
+    /// [`described`] node's is what it says, after the name code gave, as
+    /// is a widget's [`access_text`](Widget::access_text).
     pub(crate) fn access_label(&self) -> Option<String> {
         let says = self
             .widget_ref(|d: &Described| d.text.clone())
             .flatten()
+            .or_else(|| self.body.borrow().widget.access_text())
             .filter(|text| !text.is_empty());
         match (self.access_label.clone(), says) {
             (Some(label), Some(text)) => return Some(format!("{label}: {text}")),
@@ -1085,6 +1106,13 @@ impl Node {
         self.when_viewport(rule, move |(_, height)| height < rows)
     }
 
+    /// Shown only while `shown` holds (it may read signals: the parent lays
+    /// out again when they change); `rule` is how the inspector names it.
+    pub(crate) fn shown_if(mut self, rule: &str, shown: impl Fn() -> bool + 'static) -> Node {
+        self.shown_when.push((rule.to_string(), Box::new(shown)));
+        self
+    }
+
     /// Shown only while `shown` holds of the app's viewport; `rule` is how
     /// the inspector names the condition.
     fn when_viewport(mut self, rule: String, shown: impl Fn((u16, u16)) -> bool + 'static) -> Node {
@@ -1437,6 +1465,81 @@ impl Node {
         })
     }
 
+    /// [`bind_cycle`](Self::bind_cycle) the other way: `keys` move `mode`
+    /// back to the one before, round to the last from the first (Shift+Tab
+    /// to Tab's [`bind_cycle`](Self::bind_cycle)). A value that is not
+    /// among `modes` moves to the last.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| {
+    ///     let mode = signal("scope");
+    ///     let modes = ["scope", "vector", "spectrum"];
+    ///     text!("{mode}")
+    ///         .bind_cycle("tab", "Next mode", mode, &modes)
+    ///         .bind_cycle_back("shift+tab", "Previous mode", mode, &modes)
+    /// });
+    /// let mut driver = app.driver(10, 1);
+    /// driver.press("shift+tab");
+    /// assert_eq!(driver.screen().plain()[0].trim_end(), "spectrum");
+    /// driver.press("tab shift+tab shift+tab");
+    /// assert_eq!(driver.screen().plain()[0].trim_end(), "vector");
+    /// ```
+    ///
+    /// # Panics
+    /// On a name that is not a key, or on no names or no modes.
+    pub fn bind_cycle_back<T: PartialEq + Clone + 'static>(
+        self,
+        keys: &str,
+        description: &str,
+        mode: Signal<T>,
+        modes: &[T],
+    ) -> Node {
+        assert!(!modes.is_empty(), "bind_cycle_back({keys:?}) has no modes");
+        let modes = modes.to_vec();
+        self.bind(keys, description, move |_| {
+            let at = mode.with_untracked(|now| modes.iter().position(|m| m == now));
+            let back = at.map_or(modes.len() - 1, |i| (i + modes.len() - 1) % modes.len());
+            mode.set(modes[back].clone());
+        })
+    }
+
+    /// Run `handler` once, when this node leaves the tree: its screen or
+    /// pop-up closes, its [`each`] row goes, or the app ends. (A
+    /// [`switch`] keeps the pages it built, so one shown no more is still
+    /// in the tree.) Stop what it started there: a background
+    /// walk (set the flag it reads), a watcher, a device. The app may be
+    /// ending, so leave its signals alone.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    /// use std::sync::atomic::{AtomicBool, Ordering};
+    /// use std::sync::Arc;
+    ///
+    /// let stop = Arc::new(AtomicBool::new(false));
+    /// let flag = stop.clone();
+    /// let app = App::new(move || {
+    ///     label("files").on_key("s", move |cx| {
+    ///         let flag = flag.clone();
+    ///         cx.push(move || {
+    ///             label("searching…")
+    ///                 .on_unmount(move || flag.store(true, Ordering::SeqCst))
+    ///                 .on_key("esc", |cx| cx.pop())
+    ///         })
+    ///     })
+    /// });
+    /// let mut driver = app.driver(20, 1);
+    /// driver.press("s");
+    /// assert!(!stop.load(Ordering::SeqCst));
+    /// driver.press("esc");
+    /// assert!(stop.load(Ordering::SeqCst));
+    /// ```
+    pub fn on_unmount(mut self, handler: impl FnOnce() + 'static) -> Node {
+        self.unmount.push(Unmount(Some(Box::new(handler))));
+        self
+    }
+
     /// Run `handler` when this node is clicked. A clickable node is also
     /// focusable, and a click focuses it.
     pub fn on_click(mut self, handler: impl FnMut(&mut Ctx) + 'static) -> Node {
@@ -1747,6 +1850,29 @@ impl Node {
         self.widget_mut(|text: &mut TextNode| {
             text.overflow = Some(overflow);
             text.code[2] = true;
+        });
+        self
+    }
+
+    /// For a [`text`](fn@text) or [`label`]: a line too long for the width
+    /// loses its start rather than its end, with `…` where it was cut, and
+    /// lines do not wrap. A path in a header keeps where you are, as
+    /// Yazi's does (rich's [`Overflow`] cuts only at the end). Ignored on
+    /// other nodes.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| label("~/projects/rich/src").truncate_start());
+    /// let mut driver = app.driver(10, 1);
+    /// driver.settle();
+    /// assert_eq!(driver.screen().plain()[0], "…/rich/src");
+    /// ```
+    pub fn truncate_start(self) -> Node {
+        self.widget_mut(|text: &mut TextNode| {
+            text.cut_start = true;
+            text.no_wrap = Some(true);
+            text.code[1] = true;
         });
         self
     }

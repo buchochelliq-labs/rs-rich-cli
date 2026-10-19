@@ -124,6 +124,42 @@ impl Node {
         self
     }
 
+    /// [`bind_sequence`](Self::bind_sequence), listed in the help (and the
+    /// palette) under `section`, as [`bind_in`](Self::bind_in) lists a
+    /// binding.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| {
+    ///     label("files")
+    ///         .bind_sequence_in("goto", "g h", "Go home", |_| {})
+    ///         .bind_in("tabs", "t", "New tab", |_| {})
+    ///         .on_key("?", |cx| cx.help())
+    /// });
+    /// let mut driver = app.driver(60, 16);
+    /// driver.press("?");
+    /// let rows = driver.screen().plain().join("\n");
+    /// assert!(rows.find("goto") < rows.find("Go home"));
+    /// assert!(rows.find("tabs") < rows.find("New tab"));
+    /// ```
+    ///
+    /// # Panics
+    /// As [`bind_sequence`](Self::bind_sequence).
+    pub fn bind_sequence_in(
+        self,
+        section: &str,
+        keys: &str,
+        description: &str,
+        handler: impl FnMut(&mut Ctx) + 'static,
+    ) -> Node {
+        let node = self.bind_sequence(keys, description, handler);
+        if let Some(sequence) = node.sequences.borrow_mut().last_mut() {
+            sequence.section = Some(section.to_string());
+        }
+        node
+    }
+
     /// [`bind_sequence`](Self::bind_sequence) without a description.
     pub fn on_sequence(self, keys: &str, handler: impl FnMut(&mut Ctx) + 'static) -> Node {
         self.bind_sequence(keys, "", handler)
