@@ -9,6 +9,60 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### intuiTUIve: tables, trees and lists that follow state (rs-rich-intuituive)
+
+The round-5 clones rebuilt tables under a `switch` for every change of
+layout, wrote marks into cells, found their selection again by hand after
+each re-sort, and walked trees for index paths to reopen
+([the demo gaps](docs/design/intuituive-demo-gaps.md), "Round 5", shared
+gaps; [csv](docs/design/gaps/csv.md), [tasks](docs/design/gaps/tasks.md),
+[music](docs/design/gaps/music.md), [top](docs/design/gaps/top.md),
+[git](docs/design/gaps/git.md)). All of it is now generic core:
+
+- **Tables whose options follow state** (`TableOptions`):
+  `columns_with(|| columns)` and `columns_shown(|| indices)` change the
+  columns, their titles, which show and their order in the same table, so
+  the scroll across, the cursor and the widths stay;
+  `freeze_columns_with`, `multiline_when`, `cells_when(|| on, column)`
+  and `sort_indicator(|title, order| ..)` read state at each draw;
+  `widths(Signal<Vec<Option<u16>>>)` is shared with the mouse's drags;
+  `offset_x(signal)` reads and sets the scroll across;
+  `layout(&TableLayout)` records `width_of(column)`, `columns_in_view()`,
+  `first_row()` and `rows_in_view()`.
+- **Columns:** `Column::min_percent` / `max_percent` (of the table's
+  width, scrolled across too) and `Column::priority(n)`: columns dropped
+  whole, lowest first, when they do not fit, so a flexible column keeps
+  its minimum.
+- **Marks and the cursor on tables:** `TableOptions::marker(|i| style)`
+  (a marker column outside the highlight), `Node::selection_markers` and
+  `Node::marks_by` on tables, `Node::cursor_by` on tables,
+  `TableOptions::symbol_for(width, |i, selected| markup)` (a symbol per
+  row) and `highlight_layer(HighlightLayer::Under)` (also through
+  `Node::highlight_layer`).
+- **Row heights:** `TableOptions::row_height_for(|i| lines)`; a
+  `virtual_table` with `multiline` lays out only the rows near the view.
+- **Rows from a source** (the new `source` module, re-exported from
+  `widgets`): the `TableSource` trait (`len() -> RowCount`, `Exact` or
+  `AtLeast`, and `row(i)`), `source_table(source, columns, selected,
+  options)`, and `view_of(source, || ViewQuery)`, which filters, sorts
+  and finds over a `Send + Sync` source on a worker thread, one read a row
+  a pass, a new query dropping the old; the `View` is a `TableSource`
+  with `source_row`, `found`, `next_found`, `previous_found`, `place` and
+  `is_busy`.
+- **Keyed trees:** `tree_keyed(items, selected, expanded)` keeps the
+  selection and the open items by `TreeItem::key` (an item that goes
+  leaves the cursor at its row); `tree_reveal(&items, key, selected,
+  expanded)`; `TreeItem::keyed`, `TreeItem::prefix(markup)` (drawn before
+  the indent); `Node::symbol` on trees; `Node::tree_keys(TreeKeys)` to
+  leave Enter/Space, the letters or ←/→ to the ancestors; `LazyTree` and
+  `tree_lazy_with` to reload a lazy tree's level. `TreeItem` has two new
+  public fields (`key`, `prefix`): one built with a struct literal needs
+  `..Default::default()`.
+- **Ranges on lists:** `list(..).range(anchor)`: Shift with the moves
+  extends a range from the anchor, a plain move ends it, the rows between
+  in the theme's `selected.range`; a list without one leaves Shift to its
+  ancestors.
+
 ### Rendering: styles that don't pile up, fast pixel cells (rs-rich-ext, rs-rich-intuituive)
 
 A full screen of truecolour pixels added thousands of styles a frame that

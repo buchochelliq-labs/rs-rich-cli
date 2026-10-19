@@ -39,6 +39,7 @@ pub use crate::list::{
 };
 pub use crate::reorder::Move;
 pub use crate::scrollbar::{scrollbar, Scrollbar, ScrollbarSymbols, Show, Side};
+pub use crate::source::{source_table, view_of, RowCount, TableSource, View, ViewQuery};
 pub use crate::split::{hsplit, split, split_with, vsplit};
 pub use crate::tab_set::{tab_set, tabs_for, TabSet};
 pub use crate::text_area::text_area;

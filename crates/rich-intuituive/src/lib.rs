@@ -132,6 +132,7 @@ mod sequence;
 mod sheet;
 mod signals;
 mod solver;
+pub mod source;
 mod split;
 pub mod sprite;
 #[cfg(feature = "art")]
