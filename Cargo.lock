@@ -2875,7 +2875,7 @@ dependencies = [
 
 [[package]]
 name = "rs-rich"
-version = "0.0.9"
+version = "0.0.10"
 dependencies = [
  "anstyle-query",
  "fancy-regex 0.19.2",
@@ -2887,7 +2887,7 @@ dependencies = [
 
 [[package]]
 name = "rs-rich-art"
-version = "0.0.12"
+version = "0.0.13"
 dependencies = [
  "icy_sixel",
  "image",
@@ -2896,7 +2896,7 @@ dependencies = [
 
 [[package]]
 name = "rs-rich-cli"
-version = "0.0.19"
+version = "0.0.20"
 dependencies = [
  "cap-fs-ext",
  "cap-std",
@@ -2930,7 +2930,7 @@ dependencies = [
 
 [[package]]
 name = "rs-rich-data"
-version = "0.0.3"
+version = "0.0.4"
 dependencies = [
  "arrow-array",
  "arrow-ipc",
@@ -2944,7 +2944,7 @@ dependencies = [
 
 [[package]]
 name = "rs-rich-diagram"
-version = "0.0.2"
+version = "0.0.3"
 dependencies = [
  "rs-rich",
  "rs-rich-ext",
@@ -3040,7 +3040,7 @@ dependencies = [
 
 [[package]]
 name = "rs-rich-lumis"
-version = "0.0.3"
+version = "0.0.4"
 dependencies = [
  "lumis",
  "rs-rich",
@@ -3050,7 +3050,7 @@ dependencies = [
 
 [[package]]
 name = "rs-rich-macros"
-version = "0.0.3"
+version = "0.0.4"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -3060,7 +3060,7 @@ dependencies = [
 
 [[package]]
 name = "rs-rich-mermaid"
-version = "0.0.5"
+version = "0.0.6"
 dependencies = [
  "rs-rich",
  "rs-rich-art",
@@ -3089,7 +3089,7 @@ dependencies = [
 
 [[package]]
 name = "rs-rich-plugin-api"
-version = "0.0.3"
+version = "0.0.4"
 dependencies = [
  "inventory",
  "rs-rich",
@@ -3127,7 +3127,7 @@ dependencies = [
 
 [[package]]
 name = "rs-rich-web"
-version = "0.0.2"
+version = "0.0.3"
 dependencies = [
  "data-encoding",
  "getrandom 0.4.3",

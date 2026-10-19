@@ -9,6 +9,17 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Versions: core and the crates published since the 0.0.19 cohort
+
+- rs-rich moves to 0.0.10: the `Text.markup` port changes `src/text.rs`, and
+  0.0.9 is on crates.io. Cargo's 0.0.x requirements are exact, so the
+  published crates that depend on it move with it: plugin API 0.0.4, macros
+  0.0.4, art 0.0.13, diagram 0.0.3, Mermaid 0.0.6, lumis 0.0.4. Data 0.0.4,
+  web 0.0.3 and the CLI 0.0.20 changed since the 0.0.19 cohort was cut
+  (2fc9772) and are published at their old numbers. The other crates already
+  carry unpublished versions. `RELEASES.toml`, the version tables and both
+  `Cargo.lock` files follow.
+
 ### Repo: the app template no longer trips git dependencies
 
 - `templates/intuituive-app/Cargo.toml` is now `Cargo.toml.liquid`. A crate

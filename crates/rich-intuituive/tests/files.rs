@@ -574,7 +574,7 @@ fn line_modes_show_local_times_and_owner_names() {
         let meta = std::fs::metadata(root.join("alpha")).unwrap();
         let user = rich_ext::fs::user_name(meta.uid()).unwrap_or(meta.uid().to_string());
         let rows = screen(&run(app(&root), Script::new().keys("m o q"), 80, 10));
-        assert!(rows[1].contains(&format!("{user}:")), "{user}: {rows:?}");
+        assert!(rows[1].contains(&format!("{user}:")), "{rows:?}");
     }
 }
 
