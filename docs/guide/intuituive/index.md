@@ -1123,6 +1123,104 @@ anything: plain values, or signals made for the tab (a cwd and its
 history). **`tabs_for(&set, |state| title)`** is a `tabs` strip over it,
 a click or a key switching tabs; it takes every strip option.
 
+#### Tables that follow state
+
+```rust
+use intuituive::widgets::{table_with, Column, HighlightLayer, TableLayout, TableOptions};
+
+let layout = TableLayout::new();
+let options = TableOptions::default()
+    .columns_with(move || report.with(|r| r.columns()))    // titles and sets that change
+    .columns_shown(move || shown.get())                     // a column filter, by index
+    .freeze_columns_with(move || frozen.get())              // csvlens's `f<n>`
+    .cells_when(move || mode.get() == Mode::Cell, column)   // Tab between row and cell modes
+    .multiline_when(move || wrap.get())                     // `-S`
+    .widths(widths)                                         // `<`/`>`, shared with drags
+    .sort(sort)
+    .sort_indicator(|title, order| format!("{title} [{}]", if order == Order::Ascending { "▴" } else { "▾" }))
+    .offset_x(first_column)                                 // `Col n`, Ctrl+←/→
+    .highlight_layer(HighlightLayer::Under)                 // matches keep their colours
+    .marker(move |i| marked(i).then(|| "on yellow".into()))
+    .symbol_for(2, move |i, _| (i == playing.get()).then(|| "► ".into()))
+    .layout(&layout);
+table_with(vec![], rows, cursor, options)
+    .selection_markers(picked, move |i| key_of(i))
+    .cursor_by(move |i| key_of(i))
+```
+
+A table's options can follow state, so a change of layout needs no new
+table (and keeps the scroll across, the cursor and the widths):
+
+- **`.columns_with(|| columns)`** gives the columns from a closure that
+  may read signals, in place of the ones the table was made with: `PID`
+  becoming `Count`, another report's set. **`.columns_shown(|| indices)`**
+  shows only some of them, in the order given. A column's cursor, sort and
+  width stay its own (by its index among all the columns).
+- **`.freeze_columns_with(|| n)`**, **`.multiline_when(|| on)`**,
+  **`.cells_when(|| on, column)`** (the cell cursor on or off; off, ←/→
+  go to the ancestors or scroll across) and **`.sort_indicator(|title,
+  order| ..)`** are the frozen count, wrapping, the selection mode and the
+  sorted title, read at each draw.
+- **`.widths(signal)`** holds each column's width (`None` keeps its
+  `Size`); the mouse's drags write it too, so a key can resize.
+  **`Column::min_percent(p)`** and **`max_percent(p)`** clamp a column to
+  a share of the table (csvlens's 30% cap), scrolled across too.
+  **`Column::priority(n)`** drops a column whole, lowest first, when the
+  columns do not fit, so a flexible column keeps its `min` (or title)
+  instead of shrinking to nothing; a column with no priority is never
+  dropped.
+- **`.offset_x(signal)`** is the first scrolled column in view (its place
+  among the columns shown), to read or set; **`.layout(&TableLayout)`**
+  records what each draw laid out: `width_of(column)`,
+  `columns_in_view()`, `first_row()` and `rows_in_view()`.
+- **`.marker(|i| style)`** is a one-cell marker column outside the
+  highlight, as a list's, and **`.selection_markers(..)`** and
+  **`.marks_by(..)`** draw a `multi_select`'s marks in it. **`.cursor_by(|i|
+  key)`** keeps the cursor on its row when the rows are sorted or
+  filtered again. **`.symbol_for(width, |i, selected| markup)`** gives each
+  row a symbol in a column `width` wide (`None`: the plain `.symbol` on
+  the selected row). **`.highlight_layer(HighlightLayer::Under)`** puts the
+  selection's highlight under the cells' own styles.
+- **`.row_height_for(|i| lines)`** gives each row its height; a
+  `virtual_table` asks only for the rows near the view, with
+  `.multiline()` too.
+
+#### Rows from a source
+
+```rust
+use intuituive::widgets::{source_table, view_of, Order, RowCount, TableSource, ViewQuery};
+
+struct Indexed { /* an index of record offsets, built on a task */ }
+impl TableSource for Indexed {
+    fn len(&self) -> RowCount { /* RowCount::AtLeast(n) until the index is done */ }
+    fn row(&self, i: usize) -> Vec<String> { /* seek and parse record i */ }
+}
+
+let view = view_of(Indexed::open(path), move || {
+    let (pattern, sort) = (filter.get(), sort.get());
+    let mut query = ViewQuery::default().keep(move |cells| matches(&pattern, cells));
+    if let Some((column, order)) = sort {
+        query = query.sort(column, order);
+    }
+    query
+});
+source_table(view, columns, cursor, options).cursor_by(move |i| view.source_row(i))
+```
+
+- **`TableSource`** is rows by index: `len()` (a `RowCount`, `Exact(n)` or
+  `AtLeast(n)` while not all are found; it prints `n+`) and `row(i)`.
+  **`source_table(source, columns, selected, options)`** is a
+  `virtual_table_with` over one; a `len` that reads a signal draws the
+  table again as the source grows.
+- **`view_of(source, || query)`** filters (`keep`), sorts (`sort`, with an
+  optional `compare`) and finds (`find`) over a `Send + Sync` source on a
+  worker thread, reading each row once a pass; a new query, or the count
+  becoming final, starts a new pass and drops the old. The `View` is
+  `Copy` and a `TableSource` itself: `len()`, `source_row(at)`,
+  `found()`, `next_found(at)` and `previous_found(at)` (round the ends),
+  `place(at)` for `[Find: 2/4]`, `is_busy()`. Nothing in it knows a file
+  format: the source does.
+
 #### Scrollbars
 
 ```rust
@@ -1257,6 +1355,18 @@ hsplit(
   (`LazyItem::leaf` or `LazyItem::branch`). The tree shows
   "loading…" until they arrive, and shows an error in red if loading
   fails. `selected` holds the key of the selected item.
+  `tree_lazy_with(roots, children, selected, loads)` keeps what loaded in a
+  `LazyTree`, whose `reload(key)` and `reload_all()` load a level again
+  (a file deleted under an open folder).
+- **`tree_keyed(items, selected, expanded)`** keeps the selection and the
+  open items by each `TreeItem`'s key (`TreeItem::keyed(key, label)`), not
+  its place: a file staged moves every row after it, and the tree stays on
+  its item with its folders open. An item that goes leaves the cursor at
+  its row. **`tree_reveal(&items, key, selected, expanded)`** opens a key's
+  ancestors and selects it. **`TreeItem::prefix(markup)`** is drawn before
+  the indent (gitui's status letters), **`.symbol("🦄 ")`** before the
+  selected row, and **`.tree_keys(TreeKeys::default().no_toggle())`** (or
+  `no_letters`, `no_open_close`) leaves those keys to the tree's ancestors.
 
 #### Times, and a date with a time
 
@@ -1321,6 +1431,20 @@ selects it first, and goes no further) or the menu key (`menu`, which
 terminals with the kitty keyboard protocol report, or Shift+F10) on the
 selected item: place the menu at `cx.pointer()`, or at the row's
 `row_rects` from the keyboard.
+
+#### A range of rows
+
+```rust
+let anchor = signal(None);
+list(move || lines(), cursor).range(anchor)
+```
+
+**`.range(anchor)`** gives a list a range from an anchor to the cursor:
+Shift with ↑/↓, PgUp/PgDn or Home/End sets the anchor where the cursor
+was and moves the cursor, a move without Shift clears it, and the rows
+between are lit in the theme's `selected.range` style. Read it as
+`anchor..=cursor`, either way round. A list without a range leaves Shift
+with a move to its ancestors.
 
 #### Picking several items, and finding in a list
 

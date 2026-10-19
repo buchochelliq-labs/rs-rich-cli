@@ -418,8 +418,8 @@ impl<K: Clone + Eq + Hash + 'static> MultiSelect<K> {
 }
 
 impl Node {
-    /// On a [`list`](crate::list): draw `selection`'s marks in the
-    /// one-cell marker column, item `i` being `key(i)`: a selected item in
+    /// On a [`list`](crate::list) or a table: draw `selection`'s marks in
+    /// the one-cell marker column, item `i` being `key(i)`: a selected item in
     /// the theme's `marker.selected` style (yellow), one a visual range
     /// covers in `marker.visual` (cyan), and a selected one a range
     /// unselects in `marker.unset` (red). A [`marker`](Self::marker) shows
@@ -435,9 +435,7 @@ impl Node {
             Mark::Visual => Some(("marker.visual", "on cyan")),
             Mark::Unset => Some(("marker.unset", "on red")),
         });
-        self.list_options("selection_markers", move |options| {
-            options.marks = Some(marks.clone())
-        })
+        self.list_marks("selection_markers", marks)
     }
 
     /// [`selection_markers`](Self::selection_markers) for a list that is
@@ -474,9 +472,7 @@ impl Node {
             Mark::Visual => Some(("marker.visual", "on cyan")),
             Mark::Unset => Some(("marker.unset", "on red")),
         });
-        self.list_options("marks_by", move |options| {
-            options.marks = Some(marks.clone())
-        })
+        self.list_marks("marks_by", marks)
     }
 }
 

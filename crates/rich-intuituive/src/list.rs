@@ -244,6 +244,9 @@ pub(crate) struct ListOptions {
     context: Option<OnContext>,
     /// Marker cells by theme style, before [`marker`](Self::marker)'s.
     pub(crate) marks: Option<Marks>,
+    /// A range's anchor: the rows from it to the cursor are lit
+    /// ([`Node::range`]).
+    range: Option<Signal<Option<usize>>>,
 }
 
 /// Where a list's items come from: every item from one closure, or a count
@@ -703,22 +706,66 @@ fn list_of(items: Items, selection: Selection) -> Node {
             ListDirection::BottomToTop => -by,
         }
     };
-    let step = {
-        let len = len.clone();
-        move |by: isize| selection.step(len(), along(by))
+    // A move with Shift extends a range from where the cursor was; a move
+    // without ends it.
+    let anchor = {
+        let options = options.clone();
+        move |extend: bool| {
+            let Some(range) = options.borrow().range else {
+                return;
+            };
+            match (extend, range.get_untracked()) {
+                (true, None) => range.set(selection.get_untracked()),
+                (false, Some(_)) => range.set(None),
+                _ => {}
+            }
+        }
     };
-    let (rows_up, rows_down) = (rows.clone(), rows);
-    let (up, down, pgup, pgdn) = (step.clone(), step.clone(), step.clone(), step);
-    let (home_len, end_len) = (len.clone(), len);
+    let ranged = {
+        let options = options.clone();
+        move || options.borrow().range.is_some()
+    };
+    // What a key does: `by` items, or to an end (`isize::MIN`, `MAX`).
+    let go = {
+        let len = len.clone();
+        move |by: isize, extend: bool| {
+            anchor(extend);
+            match by {
+                isize::MIN => selection.first(len()),
+                isize::MAX => selection.last(len()),
+                by => selection.step(len(), along(by)),
+            }
+        }
+    };
+    let page = move |rows: &Rc<Cell<usize>>| rows.get() as isize;
     let mut node = Node::from_widget(Box::new(widget), "list");
     node.list_model = Some(model);
-    node.focusable()
-        .on_key("up k", move |_| up(-1))
-        .on_key("down j", move |_| down(1))
-        .on_key("pageup", move |_| pgup(-(rows_up.get() as isize)))
-        .on_key("pagedown", move |_| pgdn(rows_down.get() as isize))
-        .on_key("home g", move |_| selection.first(home_len()))
-        .on_key("end G", move |_| selection.last(end_len()))
+    // Each move's keys, with Shift, and how far it goes.
+    type By = Rc<dyn Fn() -> isize>;
+    let moves: [(&str, &str, By); 6] = [
+        ("up k", "shift+up", Rc::new(|| -1)),
+        ("down j", "shift+down", Rc::new(|| 1)),
+        ("pageup", "shift+pageup", {
+            let rows = rows.clone();
+            Rc::new(move || -page(&rows))
+        }),
+        ("pagedown", "shift+pagedown", {
+            let rows = rows.clone();
+            Rc::new(move || page(&rows))
+        }),
+        ("home g", "shift+home", Rc::new(|| isize::MIN)),
+        ("end G", "shift+end", Rc::new(|| isize::MAX)),
+    ];
+    let mut node = node.focusable();
+    for (keys, shifted, by) in moves {
+        let (plain, extended, go_plain, go_extended) = (by.clone(), by, go.clone(), go.clone());
+        node = node
+            .on_key(keys, move |_| go_plain(plain(), false))
+            .when(ranged.clone(), move |node| {
+                node.on_key(shifted, move |_| go_extended(extended(), true))
+            });
+    }
+    node
 }
 
 /// Run `f` on `node`'s list: the node itself, or the list a
@@ -1140,6 +1187,16 @@ impl Widget for List {
         let carrying = self.carried.get().is_some_and(|carried| carried.get());
         let marked = crate::a11y::text_mode();
         let highlight = cx.style("selected", "reverse");
+        // A range from its anchor to the cursor, the cursor's own row
+        // aside.
+        let range = options
+            .range
+            .and_then(|anchor| anchor.get())
+            .zip(selected)
+            .map(|(a, s)| a.min(s)..=a.max(s));
+        let range_style = range
+            .as_ref()
+            .map(|_| cx.style("selected.range", "on grey30"));
         let symbol_lines = options
             .symbol
             .as_ref()
@@ -1164,13 +1221,20 @@ impl Widget for List {
                 .as_ref()
                 .and_then(|style| style(i))
                 .map(style_of);
-            let row_highlight = is_selected.then(|| {
-                options
-                    .selected_style
-                    .as_ref()
-                    .and_then(|style| style(i))
-                    .map_or_else(|| highlight.clone(), style_of)
-            });
+            let in_range = range.as_ref().is_some_and(|range| range.contains(&i));
+            let row_highlight = if is_selected {
+                Some(
+                    options
+                        .selected_style
+                        .as_ref()
+                        .and_then(|style| style(i))
+                        .map_or_else(|| highlight.clone(), style_of),
+                )
+            } else if in_range {
+                range_style.clone()
+            } else {
+                None
+            };
             let mark =
                 (gutter > 0).then(|| {
                     let marked = options.marks.as_ref().and_then(|marks| marks(i)).map(
@@ -1430,10 +1494,16 @@ impl Node {
     /// Draw console `markup` (`"[red]>>[/] "`) before the selected item:
     /// ratatui's `highlight_symbol`. Other items get as many blank cells
     /// while the column is kept (see [`highlight_spacing`](Self::highlight_spacing)).
+    ///
+    /// On a [`tree`](crate::widgets::tree) too: the symbol's column is kept
+    /// on every row (termusic's 🦄).
     pub fn symbol(self, markup: &str) -> Node {
         let markup = markup.to_string();
-        self.list_options("symbol", move |options| {
-            options.symbol = Some(markup.clone())
+        self.list_option("symbol", move |node| {
+            let tree = node
+                .widget_mut(|tree: &mut crate::tree::Tree| tree.symbol = Some(markup.clone()))
+                .is_some();
+            set_list(node, |options| options.symbol = Some(markup.clone())) || tree
         })
     }
 
@@ -1589,8 +1659,9 @@ impl Node {
 
     /// Where the highlight goes: [`HighlightLayer::Over`] the item's markup
     /// (the default) or [`HighlightLayer::Under`] it, so a selected row's
-    /// markup keeps the colours it sets. Yazi's hovered row has rounded
-    /// ends in the entry's colour, outside the reversed bar:
+    /// markup keeps the colours it sets. On a table too. Yazi's hovered
+    /// row has rounded ends in the entry's colour, outside the reversed
+    /// bar:
     ///
     /// ```
     /// use intuituive::prelude::*;
@@ -1609,7 +1680,10 @@ impl Node {
     /// assert!(styled.starts_with("[not reverse blue]<[/][reverse blue]docs[/][not reverse blue]>"));
     /// ```
     pub fn highlight_layer(self, layer: HighlightLayer) -> Node {
-        self.list_options("highlight_layer", move |options| options.layer = layer)
+        self.list_option("highlight_layer", move |node| {
+            let table = table_options(node, |options| options.highlight_layer = layer);
+            set_list(node, |options| options.layer = layer) || table
+        })
     }
 
     /// Move the selection `items` items a turn of the mouse wheel, instead
@@ -1705,7 +1779,9 @@ impl Node {
     /// [`trailing`](Self::trailing) is. When the item the cursor was on
     /// moves, the selection moves with it; when it is gone, the cursor
     /// stays at its index and keeps the item now there (while the list is
-    /// empty it waits for the old one). Moving the cursor is unchanged.
+    /// empty it waits for the old one). Moving the cursor is unchanged. On
+    /// a table too, `key(i)` naming row `i` (taskwarrior-tui's selection
+    /// following a task by its uuid when the report sorts again).
     ///
     /// ```
     /// use intuituive::prelude::*;
@@ -1730,10 +1806,53 @@ impl Node {
     ) -> Node {
         let key: Rc<dyn Fn(usize) -> K> = Rc::new(key);
         self.list_option("cursor_by", move |node| {
-            with_list(node, |list| (list.selection, list.items.clone()))
-                .map(|(selection, items)| keep_by_key(selection, items, key.clone()))
+            let list = with_list(node, |list| {
+                let items = list.items.clone();
+                let len: Rc<dyn Fn() -> usize> = Rc::new(move || items.len());
+                (list.selection, len)
+            });
+            let table = || {
+                node.widget_mut(|table: &mut crate::widgets::Table| {
+                    let rows = table.rows.clone();
+                    let len: Rc<dyn Fn() -> usize> = Rc::new(move || rows.len());
+                    (table.selection, len)
+                })
+            };
+            list.or_else(table)
+                .map(|(selection, len)| keep_by_key(selection, len, key.clone()))
                 .is_some()
         })
+    }
+
+    /// A range on the list from `anchor` to the cursor: Shift with ↑/↓,
+    /// PgUp/PgDn and Home/End sets the anchor where the cursor was (when
+    /// there is none) and moves the cursor, a move without Shift clears it,
+    /// and the rows between are lit in the theme's `selected.range` style
+    /// (`on grey30`), the cursor's in `selected`. Read the range as
+    /// `anchor..=cursor` (either way round); set the anchor to start one
+    /// from a key of your own (gitui's line selection in a diff).
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| {
+    ///     let (cursor, anchor) = (signal(1usize), signal(None));
+    ///     let items = || (0..5).map(|i| format!("line {i}")).collect();
+    ///     column([
+    ///         list(items, cursor).range(anchor).fixed(5),
+    ///         text(move || format!("{:?} {}", anchor.get(), cursor.get())),
+    ///     ])
+    /// });
+    /// let mut driver = app.driver(12, 6);
+    /// driver.press("shift+down shift+down");
+    /// assert_eq!(driver.screen().plain()[5].trim_end(), "Some(1) 3");
+    /// let styled = intuituive::testing::styled(&driver);
+    /// assert!(styled.lines().nth(2).unwrap().starts_with("[on grey30]line 2"), "{styled}");
+    /// driver.press("down");
+    /// assert_eq!(driver.screen().plain()[5].trim_end(), "None 4");
+    /// ```
+    pub fn range(self, anchor: Signal<Option<usize>>) -> Node {
+        self.list_options("range", move |options| options.range = Some(anchor))
     }
 
     /// Give `option` to the list (or table) this node is or wraps; in a
@@ -1748,6 +1867,17 @@ impl Node {
             unused(name);
         }
         self
+    }
+
+    /// Give `marks` to the list or table this node is or wraps: its
+    /// marker column's cells by theme style.
+    pub(crate) fn list_marks(self, name: &'static str, marks: Marks) -> Node {
+        self.list_option(name, move |node| {
+            let table = node
+                .widget_mut(|table: &mut crate::widgets::Table| table.marks = Some(marks.clone()))
+                .is_some();
+            set_list(node, |options| options.marks = Some(marks.clone())) || table
+        })
     }
 
     /// Set the options of the list this node is or wraps with `f`.
@@ -1779,14 +1909,14 @@ fn set_list(node: &Node, f: impl FnOnce(&mut ListOptions)) -> bool {
 /// under it, and the selection goes to wherever its key is now.
 fn keep_by_key<K: PartialEq + Clone + 'static>(
     selection: Selection,
-    items: Items,
+    items: Rc<dyn Fn() -> usize>,
     key: Rc<dyn Fn(usize) -> K>,
 ) {
     let last: Rc<RefCell<Option<(usize, K)>>> = Rc::new(RefCell::new(None));
     let (seen, read, len) = (last.clone(), key.clone(), items.clone());
     crate::reactive::watch(
         move || {
-            let len = items.len();
+            let len = items();
             let at = selection.get().filter(|at| *at < len);
             let was = seen.borrow().as_ref().map(|(i, _)| *i);
             (
@@ -1799,7 +1929,7 @@ fn keep_by_key<K: PartialEq + Clone + 'static>(
             let was = last.borrow().clone();
             if let Some((_, was)) = was.filter(|(_, was)| there.as_ref() != Some(was)) {
                 // The items changed under the remembered item: find it.
-                if let Some(to) = (0..len.len()).find(|i| key(*i) == was) {
+                if let Some(to) = (0..len()).find(|i| key(*i) == was) {
                     *last.borrow_mut() = Some((to, was));
                     if at != Some(to) {
                         selection.set(to);
