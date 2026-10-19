@@ -618,3 +618,133 @@ entries are generic: another, unrelated component could use them.
 | Big digits | a level or frequency readout (Textual's `Digits`, tui-big-text) | `big_text` exists behind `art`; a `digits(text)` in box-drawing glyphs with no FIGlet would suit every build | core (generic) | low |
 | A fake capture | `--timeout` and device failures under test (see the gaps) | `audio::Capture::simulated(..)` | plugin (`audio`) | medium |
 | Already there, not in scope-tui | `Spectrogram` (spek's, Audacity's waterfall), `meter`/`PeakHold` (every DAW), `sparkline` (ratatui's, Textual's), `audio::picker` (Bubbles' list), `audio::record` | an extended scope, not this clone | plugin | — |
+
+## Round 4: files (Yazi)
+
+`examples/files.rs` rebuilt on round 4's additions: the runtime's
+settled layouts, the core's `tab_set`, `history`, `multi_select`,
+`list_search`, `cursor_by`, `on_context`, `seg_gauge`, `facts`,
+`fuzzy_list`, `tabs(..).fit()` and `help_with`, and the `files` plugin's
+`tabs`, `selection`, `Yank`, `find_next`, `hovered_caps`,
+`BinaryPreview::FileType`, `open_with_tasks`, `Tasks::on_fail` and
+`summary`, `frecency`, `finder_with`, `spot`, `bulk_rename`, `shell` and
+`search`. No framework change in the round. It went from 1,449 lines to
+1,198 while gaining Yazi's search (`s`, `S`, Ctrl+S), shell (`;`, `:`),
+bulk rename (`r` on a selection), a frecency `Z` kept between sessions,
+per-tab history and a progress gauge: what is left is Yazi's keymap as a
+table, what each key does, the create and rename prompts, the opener
+choice, the confirms, the header and the status line's segments. Its
+tests went from 766 lines to 992 (36 tests to 47). The example still
+needs `files` only (`required-features = ["files"]`); the tape's keys did
+not change, so it was not re-recorded.
+
+### Round-3 gaps now closed, and where files.rs uses them
+
+| Round-3 gap or component | Now | Where in files.rs |
+|---|---|---|
+| **Bug:** a layout's work not settled before the next event (no preview in the first frame) | fixed in the runtime; `files::preview` is a `resource_for` keyed by its width | the tests' `first_frame()` wait is gone; `clicks_hover_and_the_parent_column_goes_there` clicks the preview at once |
+| **Bug:** list options on a wrapper (`file_list`'s `switch`) dropped | fixed: options reach the list a wrapper builds | `columns` (`hovered_caps` puts the highlight under the row) |
+| The hovered row's rounded ends | `MillerOptions::hovered_caps` | `columns`, with icons on; `with_icons_the_hovered_row_has_rounded_ends` |
+| A binary file as a hex dump | `MillerOptions::binary(BinaryPreview::FileType)` | `columns`; `moving_previews_text_highlighted_and_binary_as_file_classifies_it` (`data`) |
+| Tabs and their history (~140 lines: `Tab`, `history`, `new_tab`, `switch_tab`, `close_tab`, `swap_tab`, the watch on `m.cwd`) | `files::tabs(m)` on the core's `tab_set` and `history` | `Fm::new`, `run` (`Back`, `Forward`, `Tab*`, `Close`); `tabs_keep_their_own_history_and_fit_their_titles` |
+| Selection and visual mode (~100 lines: `selected`, `visual`, `end_visual`, `targets`, `marker`) | `files::selection(m)` (the core's `multi_select`) and `Miller::targets()` | `Fm::targets`, `run` (`Toggle`, `SelectAll`, `Invert`, `Visual`, `Escape`), `status_line`, `header`; `select_all_invert_and_unset_mode` |
+| Yank state and paste | `files::Yank`: `copy`, `cut`, `markers`, `paste(into, conflict)` | `run` (`Yank`), `paste`, `columns`; `a_selection_is_what_y_acts_on_and_is_marked_while_yanked` |
+| `find_arrow` (~25 lines) | `Miller::find_next(previous)` on `list_search` | `run` (`Find`, `FindArrow`); `find_previous_goes_backwards_from_the_cursor` |
+| `keep` round every sort, filter and hidden toggle | the cursor kept by path (`cursor_by`) | gone; `the_cursor_stays_on_its_entry_through_a_sort_and_hidden_files` |
+| A right-click menu from `cx.pointer()` and `row_rects` maths | `MillerOptions::on_context` | `columns`, `menu` |
+| `launch` matching `Launch::Extract` to call `Tasks::extract` | `open_with_tasks` | `launch` (one line) |
+| The status line's progress as text | `seg_gauge` over `Tasks::summary()` | `status_line` |
+| Z over a session-only `visited` set, through rs-rich-interact's `Jump` | `files::frecency().follow(m)`, zoxide's ranks in the state directory | `Fm::new`, `zoxide`; `z_and_big_z_look_the_same_and_big_z_jumps_to_a_directory_visited` |
+| z and Z looking different | `fuzzy_list_with` and `files::finder_with`, one `FuzzyOptions` | `picker_look`, `jump`, `zoxide` |
+| `finder` with no Esc, title or border | `finder_with(.., FuzzyOptions)`; Esc closes its modal | `jump` (no `on_key("esc")` of its own) |
+| Tab titles cut by hand, the unselected style as markup | `tabs(..).fit()`, the theme's `tabs.unselected` | `tab_strip`, `theme` |
+| The trash on macOS and Windows | `trash::send` (the Finder, the Recycle Bin) | `remove` (tested on Linux only) |
+| Tasks reporting a failure twice | `Tasks::on_fail` once; `tasks_panel_with(.., failed_title(false))` | `Fm::new`, `task_manager`; no `done` closure per job (`Fm::job`) |
+| The hand-built help modal (~45 lines) | `cx.help_with(HelpOptions::new().title("mgr.help").key_format(KeyFormat::Vim).filter_first(true))` | `run` (`Help`); the keymap table lost its Vim-notation column |
+| The spotter's markup lines | `files::spot(path)` on `facts`, `.key_style("blue")` | `spotter`; `tab_spots_the_hovered_file` |
+| Bulk rename, the shell prompt, content search | `files::bulk_rename`, `files::shell` with `ShellOptions`, `files::search` with `Miller::show_search` | `rename`, `run` (`Shell`, `Search`, `SearchCancel`, `Escape`); `r_on_a_selection_renames_it_in_the_editor`, `semicolon_runs_a_shell_command_on_the_selection`, `s_searches_below_here_and_esc_ends_it` |
+| `readable_path` and `home()` | `files::path_parts`, `files::home_dir` | `readable_path` (one line) |
+
+Newly faithful, and tested: per-tab history; `file`'s classification of
+binaries; the cursor kept through a sort or a filter; find as you type
+staying on a hovered match; Ctrl+A, Ctrl+R and `V`; a selection yanked;
+`s`/`S` search listings that Esc ends; `;` and `:`; bulk rename;
+frecency-ranked `Z` across sessions; Yazi's help in Vim key notation;
+fitted tab titles; a progress gauge shown while tasks run, red once one
+fails.
+
+Not used, on purpose: `bind_when` and `when` (Yazi's manager keymap is
+the same in every state: visual mode, a search and one tab all keep it;
+a binding hidden while it does nothing would leave Yazi's help); the
+`MillerOptions::current`/`parent`/`preview` hooks (nothing needed past
+`MillerOptions`); `Miller::visited()` (`frecency().follow(m)` already
+sees every directory, and lasts the session where there is no state
+directory); `Miller::navigation` and the core's `navigation_with` (see
+the gaps: unreachable from `files::Miller`).
+
+### New gaps and bugs
+
+| Gap or bug | Needed for | API sketch | Where |
+|---|---|---|---|
+| **Bug:** `.autofocus()` on a `switch` focuses the switch, not the node it builds. `file_list` is a `switch` (for its "No items"), so Miller's current column never has the keys: its own Down/PgDn do nothing, and the menu key and Shift+F10 never reach `MillerOptions::on_context` (only the right button does). Repro: `App::new(|| miller(dir).view_with(MillerOptions::new().on_context(..)))`, press `menu` or `down`: no call, the cursor stays; `driver.focused_name()` is `Some("current")`. The clone binds every key on its root, so only the menu key is lost; its keyboard branch in `menu` is written but unreachable, and untested | the menu key on a file; any focused wrapped list | a wrapper hands focus (and so key events) to the focusable node it built, as round 4 hands it list options; or `autofocus` is a list option `file_list` forwards | core (generic: any `switch`, panel or padding round a focusable node) |
+| `files::Miller` does not forward the core's `navigation_with`, `go` or `Move` (its `columns` are private): Yazi's wording for the moves ("Previous file", "Move cursor up half page") needs them bound by hand, so the clone's own `Act::Arrow`/`Page`/`Top`/… stay | j/k, h/l, Ctrl+U/D, PgUp/PgDn with Yazi's descriptions | `files::Miller::navigation_with(node, &[(Move, keys, desc)])` and `go(Move)`, or `Miller::columns() -> miller::Miller<_>` | plugin (the core has it) |
+| Selection and visual mode are one for all tabs. Yazi keeps a mode and a selection per tab: `v` in tab 2 then `1` shows tab 1 in normal mode, and tab 2 still selecting. The clone cancels visual mode when the active tab changes (a `watch` in `Fm::new`) | per-tab selection and mode | core: `tab_set`'s state holding any value per tab already works; what is missing is a `MultiSelect` that can be swapped under the columns (`multi_select().scoped(key)`: one selection per key, here the tab); plugin: `FileTab::selection`, with `files::selection` following the active tab | core + plugin |
+| A status segment cannot hide: `seg_gauge` always draws its cells, but Yazi's progress shows only while tasks run, so `status` is a `switch` between two status bars | Yazi's progress, any optional segment | `StatusSegment::when(\|\| bool)`, a segment (and its caps) left out while false | core |
+| `tabs_for` and `FileTabs::strip()` give a title with no index: Yazi numbers its tabs (` 1 src `), so `tab_strip` builds the titles from `set.tabs()` itself | Yazi's strip | `tabs_for_indexed(&set, \|i, t\| title)`, or `tabs(..).numbered()` | core |
+| `find_next` starts after the cursor. Yazi's find as you type stays on the hovered entry when it matches; the clone tests the hovered name with `smart_contains` before calling it | `/` and `?` | `ListSearch::next_from(here: bool)`; `Miller::find_next_from(previous, here)` | core + plugin |
+| A search's listing is not a level: `h` in it goes up from the directory searched, where Yazi (whose search is a virtual folder) goes back to it; the same would serve bookmarks and "recent" listings | `h` and `l` in a search, a bookmarks listing | core: a level overlay on `miller_of` (`m.push_level(name, items)`, popped by `leave`, its items opening as their own keys); plugin: `show_search` as such a level | core + plugin |
+| The core help filters as you type; Yazi's moves with j/k and filters after `/` | Yazi's help keys | `HelpOptions::filter_key("/")`: until it, letters move (j/k, gg, G) | core |
+| `facts` styles its keys only: Yazi's spotter has yellow values | the spotter's look | `facts(..).value_style(..)` (theme `facts.value`) | core |
+| Yazi's links: `-` and `_` symlink the yanked files (absolute, relative), Ctrl+- hardlinks them; there is no operation for it | three Yazi keys missing from the clone | `Op::Link { from, into, kind: Symbolic { relative } \| Hard }` in rs-rich-ext's `file_ops`, `Yank::link(into, kind) -> Op` | plugin (rs-rich-ext + `files`) |
+| Two sessions' frecency stores clobber each other: each app writes its own copy whole, so the last to visit wins (the tests, which run side by side, show it) | Z across several Yazi windows | merge on write: read, add this session's visits, write (zoxide's approach); see the state store below | plugin, on a core state store |
+| `Tasks::summary()` is read three times a frame by the gauge (share, label, style), each a pass over the jobs | the gauge | a `Memo` from `summary_memo()`, or `seg_gauge_of(memo, …)` | plugin |
+| `Tasks::on_fail`'s job carries its errors in `JobState::Failed(errors)`, so every handler matches on it | the notification | `Job::errors() -> &[String]` | core (`jobs`) |
+
+### Friction with the new APIs
+
+- **Prompts repeat their look.** Yazi's inputs have plain titles; each
+  `prompt_with` takes `input_look()`, and `ShellOptions::prompt` has to
+  be given it again. An app-wide default (`App::prompt_defaults(PromptOptions)`)
+  would let a clone set it once. Core.
+- **The menu from the keyboard needs `row_rects`.** `on_context` says
+  "then below the hovered row" but leaves it to the app: `menu` matches
+  `cx.pointer()` and `row_rects().get(cursor)` to choose between
+  `context_menu` and `open_menu`. A `context_menu_at(cx, fallback_rect)`,
+  or an `on_context` that passes the item's rect, would do it.
+- **`selection` and `Yank` mark in two ways.** The selection is drawn by
+  the columns because `selection(m)` stores itself in the `Miller`
+  (made before `view_with`, or it is not marked); the yank is a
+  `MillerOptions::markers` closure. Either way works, but the order
+  dependence is silent: `selection` after `view_with` marks nothing.
+- **Visual mode before an action.** `Miller::targets()` counts a visual
+  range but does not end it, so every action calls `end_visual()` first
+  (`Fm::targets`), as Yazi ends visual mode on `y`, `x`, `d`.
+- **The parent column's marks** are re-derived by path inside
+  `files::Miller` because `selection_markers` reads the visual range by
+  index of the current column; the files agent's "marks by key" (a
+  `MultiSelect::mark(&key)` marker any list showing the same keys can
+  use, no cursor) would make that one call.
+- **`files::Miller`'s state is still half fields, half methods**
+  (`m.cwd`, `m.find`, `m.current.filter` but `m.searching()`,
+  `m.visited()`, `m.row_rects()`); the core `Miller` moved to methods in
+  round 4, the plugin did not.
+- **`tests/files.rs` still needs `#![cfg(feature = "files")]`** by hand
+  for an example it includes by path.
+
+### Components that would help
+
+| Component | What it would replace or enable in files.rs | API sketch | Where | Value |
+|---|---|---|---|---|
+| Edit text in `$EDITOR` | `bulk_rename`'s temporary file, handoff and read-back; also "edit the command" in `:` and a commit-message box anywhere (Bubble Tea's `tea.ExecProcess`, Textual's `App.suspend`) | `cx.edit_text(initial, \|edited: Result<String>, cx\| ..)`; `files::bulk_rename` on it | core (generic) | high |
+| App state files | frecency's private `state_dir` and atomic write; tab sessions, prompt history, a last directory (Yazi keeps its state in `~/.local/state/yazi`) | `state_dir(app_name)`, `write_state(name, bytes)` (temporary file renamed over), `read_state(name)`; merge-on-write with a closure | core (generic) | high |
+| A generic frecency store | `files::frecency` keyed by paths; a command palette's recent commands, a launcher's apps | `frecency::<K: Serialize>(name)` with `visit`, `ranked`, `remove`, aged as zoxide; `files::frecency` on it | core + plugin | medium |
+| A level overlay on Miller | `h` leaving a search to the parent; bookmarks and "recent" as listings (Yazi's search is a virtual `search://` folder) | `miller.push_level(title, items)` popped by `leave`; `files::Miller::show_search` and a `files::bookmarks` on it | core + plugin | medium |
+| Jobs running a process | `files::shell`'s background command and extraction each spawn and watch a child by hand; Yazi's task manager shows a shell task's output (Enter) and kills it | `jobs.run_process(title, Command, done)`: cancel kills it, its output kept for an inspect view | core (generic) + plugin | medium |
+| Kitty, Sixel and iTerm images | half blocks only (ratatui-image's protocols; Yazi's main draw) | the paint step placing `Surface::graphics`; `image(path)` choosing the protocol the terminal answers | core paint + plugin (rs-rich-art) | high |
+| Input completion | Yazi's `cmp` pop-up under `g Space` (paths as you type); Textual's `Suggester`, Bubbles' `textinput.SetSuggestions` | core: `PromptOptions::complete(\|text\| Vec<String>)` with a pop-up list; plugin: `files::path_completer(cwd)` | core + plugin | medium |
+| Prompt history | Up/Down in Yazi's inputs (find, filter, shell); Bubbles' and Textual's inputs keep one | `PromptOptions::history(key)`, kept in the state store | core | medium |
+| Per-tab state, generically | the selection per tab (above); any app with tabs of documents | `tab_set` with `scoped` values (`tabs.scoped(\|\| multi_select())`), switched with the active tab | core | medium |
+| Links | `-`, `_`, Ctrl+- | `Op::Link` and `Yank::link` | plugin | medium |
+| Optional status segments | the `switch` between two status bars | `StatusSegment::when(..)` | core | low |
+| A file picker | not this clone; any app that asks for a file (Bubbles' `filepicker`, Textual's `DirectoryTree`) | `files::pick_file(cx, start, filter, \|path, cx\| ..)` on `miller_of` or the core `tree` | plugin | medium |
+| PDF and video previews | Yazi's previewers through `pdftoppm` and `ffmpegthumbnailer` | `Previewer::command(mime_glob, argv)` producing an image or text | plugin | low |
