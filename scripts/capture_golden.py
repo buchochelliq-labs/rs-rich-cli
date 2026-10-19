@@ -848,6 +848,29 @@ FUNCTION_CASES: list[tuple[str, list]] = [
     ("ratio_resolve", [3, [[None, 1, 2], [None, 1, 2]]]),
     ("ratio_resolve", [20, [[None, 1, 1], [None, 1, 1], [None, 1, 1]]]),
     ("ratio_resolve", [7, [[None, 3, 1], [None, 1, 1]]]),
+    # text_markup — `Text.markup` of Text(plain, style=base, spans=[Span(...)])
+    # with spans as [start, end, style], offsets in characters. Opening tags
+    # sort before closing ones at a shared offset; a falsy style adds no tag.
+    ("text_markup", ["hello", "", []]),
+    ("text_markup", ["hello world", "", [[0, 5, "bold"]]]),
+    ("text_markup", ["hello", "red", []]),
+    ("text_markup", ["", "red", []]),
+    ("text_markup", ["[x] a[b] [/] \\[y]", "", [[4, 8, "italic"]]]),
+    ("text_markup", ["abcdef", "", [[0, 4, "bold"], [2, 6, "red"]]]),
+    ("text_markup", ["abcd", "", [[0, 2, "bold"], [2, 4, "red"]]]),
+    ("text_markup", ["abcd", "dim", [[0, 4, "bold"], [0, 4, "red"]]]),
+    ("text_markup", ["abc", "", [[1, 1, "bold"]]]),
+    ("text_markup", ["宽é🙂x", "", [[1, 3, "green"], [0, 4, "u"]]]),
+    ("text_markup", ["trailing\\", "", [[0, 3, "b"]]]),
+    ("text_markup", ["a [1] b", "", [[0, 7, "repr.number"]]]),
+    # text_markup_from_markup — `Text.from_markup(arg).markup`
+    ("text_markup_from_markup", ["[bold red]hi[/] [i]there[/i]"]),
+    ("text_markup_from_markup", ["[b]a[i]b[/b]c[/i]"]),
+    ("text_markup_from_markup", ["[link=https://example.com]link[/link] x"]),
+    ("text_markup_from_markup", ["\\[not a tag] [b]\\[x][/b]"]),
+    ("text_markup_from_markup", ["[on blue]  [/on blue][bold not italic]x[/]"]),
+    # (No `[@handler]` case: those tags carry no meta here, DIVERGENCES §3a,
+    # so upstream's `[none]bell[/none]` is `bell`.)
 ]
 
 COLORS_HEADER = """\
@@ -2630,6 +2653,7 @@ def main() -> None:
     from dataclasses import dataclass
 
     from rich._ratio import ratio_resolve
+    from rich.text import Span
     from rich.cells import cell_len, chop_cells, set_cell_size
 
     @dataclass
@@ -2650,6 +2674,12 @@ def main() -> None:
         if fn == "ratio_resolve":
             total, raw_edges = args
             return ratio_resolve(total, [_Edge(*edge) for edge in raw_edges])
+        if fn == "text_markup":
+            plain, style, spans = args
+            text = Text(plain, style=style, spans=[Span(*span) for span in spans])
+            return text.markup
+        if fn == "text_markup_from_markup":
+            return Text.from_markup(args[0]).markup
         raise SystemExit(f"no capture wired for function {fn!r}")
 
     functions_path = golden_dir() / "functions.tsv"

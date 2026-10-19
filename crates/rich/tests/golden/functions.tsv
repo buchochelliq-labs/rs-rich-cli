@@ -30,3 +30,20 @@ ratio_resolve	[10, [[null, 1, 4], [null, 1, 4]]]	[5, 5]
 ratio_resolve	[3, [[null, 1, 2], [null, 1, 2]]]	[2, 2]
 ratio_resolve	[20, [[null, 1, 1], [null, 1, 1], [null, 1, 1]]]	[6, 7, 7]
 ratio_resolve	[7, [[null, 3, 1], [null, 1, 1]]]	[5, 2]
+text_markup	["hello", "", []]	"hello"
+text_markup	["hello world", "", [[0, 5, "bold"]]]	"[bold]hello[/bold] world"
+text_markup	["hello", "red", []]	"[red]hello[/red]"
+text_markup	["", "red", []]	"[red][/red]"
+text_markup	["[x] a[b] [/] \\[y]", "", [[4, 8, "italic"]]]	"\\[x] [italic]a\\[b][/italic] \\[/] \\\\\\[y]"
+text_markup	["abcdef", "", [[0, 4, "bold"], [2, 6, "red"]]]	"[bold]ab[red]cd[/bold]ef[/red]"
+text_markup	["abcd", "", [[0, 2, "bold"], [2, 4, "red"]]]	"[bold]ab[red][/bold]cd[/red]"
+text_markup	["abcd", "dim", [[0, 4, "bold"], [0, 4, "red"]]]	"[dim][bold][red]abcd[/bold][/red][/dim]"
+text_markup	["abc", "", [[1, 1, "bold"]]]	"a[bold][/bold]bc"
+text_markup	["宽é🙂x", "", [[1, 3, "green"], [0, 4, "u"]]]	"[u]宽[green]é🙂[/green]x[/u]"
+text_markup	["trailing\\", "", [[0, 3, "b"]]]	"[b]tra[/b]iling\\\\"
+text_markup	["a [1] b", "", [[0, 7, "repr.number"]]]	"[repr.number]a [1] b[/repr.number]"
+text_markup_from_markup	["[bold red]hi[/] [i]there[/i]"]	"[bold red]hi[/bold red] [italic]there[/italic]"
+text_markup_from_markup	["[b]a[i]b[/b]c[/i]"]	"[bold]a[italic]b[/bold]c[/italic]"
+text_markup_from_markup	["[link=https://example.com]link[/link] x"]	"[link https://example.com]link[/link https://example.com] x"
+text_markup_from_markup	["\\[not a tag] [b]\\[x][/b]"]	"\\[not a tag] [bold]\\[x][/bold]"
+text_markup_from_markup	["[on blue]  [/on blue][bold not italic]x[/]"]	"[on blue]  [bold not italic][/on blue]x[/bold not italic]"

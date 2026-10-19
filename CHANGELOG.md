@@ -9,6 +9,17 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Core: `Text.markup` (rs-rich)
+
+- **`Text::markup()`**, a port of upstream's `Text.markup` property: the console
+  markup that renders a `Text`, with every tag-opening `[` escaped and a tag
+  around the base style and each span, in upstream's order (opening tags before
+  closing ones at a shared offset; a null style or empty name adds none).
+  `Text::from_markup(&text.markup())` gives back the same plain text and spans.
+  Byte-checked against rich 15.0.0 in `golden/functions.tsv` (`text_markup`,
+  `text_markup_from_markup`). An `[@handler]` tag still carries no meta
+  (DIVERGENCES §3a), so its text gets no `[none]` tag.
+
 ### Rendering: styles that don't pile up, fast pixel cells (rs-rich-ext, rs-rich-intuituive)
 
 A full screen of truecolour pixels added thousands of styles a frame that
