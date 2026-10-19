@@ -13,6 +13,7 @@
 //! | [`oklab`] | a colour from Oklab, a space where equal steps look equal |
 //! | [`okhsv`] | a colour from Okhsv: HSV, with Oklab's even hues and values |
 //! | [`blend`], [`gradient`] | a colour between two, or along several |
+//! | [`style_from_color_name`] | a colour named as ratatui reads one, as a console style |
 //!
 //! Credit, and the terms of what is used here:
 //!
@@ -283,6 +284,102 @@ pub fn gradient(stops: &[Color], t: f64) -> Color {
     }
 }
 
+/// rich's names for the 16 standard colours, by ANSI number.
+const STANDARD: [&str; 16] = [
+    "black",
+    "red",
+    "green",
+    "yellow",
+    "blue",
+    "magenta",
+    "cyan",
+    "white",
+    "bright_black",
+    "bright_red",
+    "bright_green",
+    "bright_yellow",
+    "bright_blue",
+    "bright_magenta",
+    "bright_cyan",
+    "bright_white",
+];
+
+/// The console style of a colour named as ratatui reads one, or `None` when
+/// ratatui would not read it: everything its `Color::from_str` accepts.
+///
+/// That is the 16 names in any case and spacing (`DarkGray`, `light red`,
+/// `bright_red`, `grey`, `silver`), `reset`, a `#rrggbb` hex triplet and an
+/// indexed colour's number (`208`). The result is rich's canonical name for
+/// the same terminal colour, ready for a style string or a markup tag:
+/// ratatui's `Gray` is ANSI white (`white`), its `DarkGray` bright black
+/// (`bright_black`) and its `White` bright white; `reset` is rich's
+/// `default` and `208` is `color(208)`. A command-line option that takes
+/// ratatui colour names (`--axis-color DarkGray`) maps straight onto a rich
+/// style with it, without ratatui: rs-rich-ratatui re-exports this, and
+/// checks it against ratatui's own parser.
+///
+/// ```
+/// use rich_ext::palette::style_from_color_name;
+///
+/// assert_eq!(style_from_color_name("DarkGray").as_deref(), Some("bright_black"));
+/// assert_eq!(style_from_color_name("light red").as_deref(), Some("bright_red"));
+/// assert_eq!(style_from_color_name("#FF8800").as_deref(), Some("#ff8800"));
+/// assert_eq!(style_from_color_name("208").as_deref(), Some("color(208)"));
+/// assert_eq!(style_from_color_name("reset").as_deref(), Some("default"));
+/// assert_eq!(style_from_color_name("chartreuse"), None);
+/// ```
+pub fn style_from_color_name(name: &str) -> Option<String> {
+    // ratatui's normalisation, step for step: its replacements overlap
+    // (`bright` becomes `light`, then `lightblack` becomes `darkgray`).
+    let normal = name
+        .to_lowercase()
+        .replace([' ', '-', '_'], "")
+        .replace("bright", "light")
+        .replace("grey", "gray")
+        .replace("silver", "gray")
+        .replace("lightblack", "darkgray")
+        .replace("lightwhite", "white")
+        .replace("lightgray", "white");
+    let number = match normal.as_str() {
+        "reset" => return Some("default".to_string()),
+        "black" => 0,
+        "red" => 1,
+        "green" => 2,
+        "yellow" => 3,
+        "blue" => 4,
+        "magenta" => 5,
+        "cyan" => 6,
+        "gray" => 7,
+        "darkgray" => 8,
+        "lightred" => 9,
+        "lightgreen" => 10,
+        "lightyellow" => 11,
+        "lightblue" => 12,
+        "lightmagenta" => 13,
+        "lightcyan" => 14,
+        "white" => 15,
+        // The number and the triplet are read from the name as given.
+        _ => {
+            if let Ok(index) = name.parse::<u8>() {
+                return Some(format!("color({index})"));
+            }
+            return hex_triplet(name).map(|(r, g, b)| format!("#{r:02x}{g:02x}{b:02x}"));
+        }
+    };
+    Some(STANDARD[number].to_string())
+}
+
+/// `#rrggbb`, as ratatui reads it.
+fn hex_triplet(input: &str) -> Option<(u8, u8, u8)> {
+    if !input.starts_with('#') || input.len() != 7 {
+        return None;
+    }
+    let r = u8::from_str_radix(input.get(1..3)?, 16).ok()?;
+    let g = u8::from_str_radix(input.get(3..5)?, 16).ok()?;
+    let b = u8::from_str_radix(input.get(5..7)?, 16).ok()?;
+    Some((r, g, b))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -386,5 +483,39 @@ mod tests {
         assert_eq!(hex(gradient(&stops, -1.0)), "#ff0000");
         assert_eq!(hex(gradient(&stops[..1], 0.7)), "#ff0000");
         assert!(gradient(&[], 0.5).is_default());
+    }
+
+    #[test]
+    fn ratatui_colour_names_are_console_styles() {
+        for name in [
+            "Gray",
+            "grey",
+            "Silver",
+            "light gray",
+            "bright-white",
+            "LightBlack",
+            "BRIGHT_CYAN",
+            "white",
+            "0",
+            "255",
+            "+7",
+            "#00aaFF",
+            "reset",
+        ] {
+            let style = style_from_color_name(name).unwrap_or_else(|| panic!("{name}"));
+            assert!(rich::Style::parse(&style).is_ok(), "{name}: {style}");
+        }
+        assert_eq!(style_from_color_name("Gray").as_deref(), Some("white"));
+        assert_eq!(
+            style_from_color_name("light gray").as_deref(),
+            Some("bright_white")
+        );
+        assert_eq!(
+            style_from_color_name("LightBlack").as_deref(),
+            Some("bright_black")
+        );
+        for bad in ["", "256", "-1", "#abc", "#gg0000", "color(3)", "ff8800"] {
+            assert_eq!(style_from_color_name(bad), None, "{bad}");
+        }
     }
 }

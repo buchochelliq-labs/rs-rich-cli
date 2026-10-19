@@ -22,6 +22,8 @@
 //! | [`Distribution`] | the count, quantiles and mean of values, and a box-and-whisker strip on one line |
 //! | [`DistributionSet`] | distributions stacked on one scale, their columns aligned |
 //! | [`SmallMultiples`] | a grid of titled charts ([`Facet`]s) on one value scale, fitted to the width |
+//! | [`Spectrogram`] | spectra over time, the newest at the top, each a row of shades (a waterfall) |
+//! | [`LevelMeter`] | an audio level as a bar, green to red, with its peak and the peak a [`PeakHold`] keeps |
 //!
 //! And laid out as ratatui's widgets, so a ported app looks the same:
 //!
@@ -91,11 +93,13 @@ mod gauge;
 mod heatmap;
 mod kpi;
 mod line;
+mod meter;
 mod multiples;
 mod plot_canvas;
 mod progress;
 mod scale;
 mod sparkline;
+mod spectrogram;
 mod status;
 mod timeline;
 mod world;
@@ -108,11 +112,13 @@ pub use gauge::{Band, BulletChart, Gauge};
 pub use heatmap::Heatmap;
 pub use kpi::KpiCard;
 pub use line::{LineChart, Series, SeriesKind};
+pub use meter::{LevelMeter, MeterScale, PeakHold};
 pub use multiples::{Facet, SmallMultiples};
 pub use plot_canvas::{Canvas, CanvasPainter, Marker, Shape};
 pub use progress::{FillGauge, LineGauge, LineSet};
 pub use scale::{Scale, ValueFormat};
 pub use sparkline::{Direction, Levels, Sparkline};
+pub use spectrogram::Spectrogram;
 pub use status::{State, Status, StatusMatrix};
 pub use timeline::{Milestone, Span, Timeline};
 pub use world::MapResolution;

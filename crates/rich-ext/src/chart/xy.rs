@@ -71,7 +71,14 @@ pub struct Axis {
     scale: AxisScale,
     style: Option<String>,
     label_format: ValueFormat,
+    /// Behind one pointer, as a [`Facet`](super::Facet) holds a chart and
+    /// its two axes, and must stay small.
+    grid: Option<Box<GridLines>>,
 }
+
+/// An [`Axis`]'s grid values.
+#[derive(Clone, Debug, PartialEq)]
+struct GridLines(Vec<f64>);
 
 impl Axis {
     /// The values at either end, in either order. Without bounds, the axis
@@ -134,6 +141,33 @@ impl Axis {
     /// [`ValueFormat::Compact`]).
     pub fn label_format(mut self, format: ValueFormat) -> Self {
         self.label_format = format;
+        self
+    }
+
+    /// Grid lines across the plot at these values, in the axis's
+    /// [`style`](Self::style), drawn under the datasets with the first
+    /// dataset's marker: the x axis's run up the plot, the y axis's along
+    /// it. Values the axis cannot show (outside its bounds, or not positive
+    /// on a log axis) are left out. With [`Layering::PerDataset`] the
+    /// datasets are drawn over the grid, so a trace breaks the lines it
+    /// crosses, as datasets drawn for the purpose do in ratatui.
+    ///
+    /// ```
+    /// use rich::Console;
+    /// use rich_ext::chart::{Axis, Chart, Dataset, Marker};
+    ///
+    /// let console = Console::builder().width(9).color_system(None).build();
+    /// let chart = Chart::new(vec![Dataset::new([(2.0, 1.0)]).marker(Marker::Ascii('o'))])
+    ///     .x_axis(Axis::default().bounds(0.0, 8.0).grid([4.0]))
+    ///     .y_axis(Axis::default().bounds(0.0, 2.0).grid([0.0]))
+    ///     .width(9)
+    ///     .height(3);
+    /// // The point at (2, 1); the grid at x = 4 and y = 0, in the axis style.
+    /// assert_eq!(console.render_export(&chart), "    o    \n  o o    \nooooooooo\n");
+    /// ```
+    pub fn grid(mut self, values: impl IntoIterator<Item = f64>) -> Self {
+        let values: Vec<f64> = values.into_iter().collect();
+        self.grid = (!values.is_empty()).then(|| Box::new(GridLines(values)));
         self
     }
 
@@ -317,6 +351,18 @@ fn over(base: &Option<Style>, own: &Option<Style>) -> Option<Style> {
 }
 
 impl Resolved {
+    /// `axis`'s grid values that this span shows, mapped.
+    fn grid(&self, axis: &Axis) -> Vec<f64> {
+        let (lo, hi) = (self.scale.min(), self.scale.max());
+        let slack = (hi - lo).abs() * 1e-9;
+        axis.grid
+            .iter()
+            .flat_map(|lines| lines.0.iter())
+            .filter_map(|v| axis.map(*v))
+            .filter(|m| lo.min(hi) - slack <= *m && *m <= lo.max(hi) + slack)
+            .collect()
+    }
+
     fn has_labels(&self) -> bool {
         !matches!(self.labels, Placed::None)
     }
@@ -527,9 +573,9 @@ pub enum Layering {
 ///   a corner of the plot ([`LegendPosition::TopRight`] by default). It
 ///   hides itself when it would take more than a share of the plot: a
 ///   quarter of the width and a quarter of the height by default. Its box
-///   is in the x axis's style unless [`legend_style`](Self::legend_style)
-///   says otherwise, and it clears the plot under it unless
-///   [`legend_clear`](Self::legend_clear) is false.
+///   is in the chart's [`style`](Self::style), or else the x axis's, unless
+///   [`legend_style`](Self::legend_style) says otherwise, and it clears the
+///   plot under it unless [`legend_clear`](Self::legend_clear) is false.
 /// - It fills the height it is given, as ratatui's fills its area: a
 ///   `Layout` region, a `Panel` with a height, an intuiTUIve node through
 ///   `renderable(..)`. [`height`](Self::height) fixes it instead; given no
@@ -574,7 +620,9 @@ pub struct Chart {
     y_axis: Axis,
     legend: LegendPosition,
     hidden_legend: (f64, f64),
-    legend_style: Option<String>,
+    // Boxed strings keep a chart small enough for a `Facet`.
+    legend_style: Option<Box<str>>,
+    style: Option<Box<str>>,
     legend_clear: bool,
     out_of_bounds: OutOfBounds,
     layering: Layering,
@@ -598,6 +646,7 @@ impl Chart {
             legend: LegendPosition::TopRight,
             hidden_legend: (0.25, 0.25),
             legend_style: None,
+            style: None,
             legend_clear: true,
             out_of_bounds: OutOfBounds::Clip,
             layering: Layering::Merge,
@@ -644,8 +693,38 @@ impl Chart {
         self
     }
 
+    /// The chart's own style, as ratatui's `Chart::style`: a theme key or a
+    /// definition put under every cell of the chart (a background fills
+    /// it), and the style of the legend's box unless
+    /// [`legend_style`](Self::legend_style) gives one. `"none"` is the
+    /// terminal's own colours, as a ratatui chart with no style: the legend
+    /// then leaves the axis style. Without it the chart has no style of
+    /// its own and the legend's box takes the x axis's.
+    ///
+    /// ```
+    /// use rich::Console;
+    /// use rich_ext::chart::{Axis, Chart, Dataset, Marker};
+    ///
+    /// let console = Console::builder().width(6).force_terminal(true).build();
+    /// let chart = Chart::new(vec![Dataset::new([]).name("a")])
+    ///     .x_axis(Axis::default().bounds(0.0, 1.0))
+    ///     .y_axis(Axis::default().bounds(0.0, 1.0))
+    ///     .hidden_legend_fraction(1.0, 1.0)
+    ///     .style("on blue")
+    ///     .width(6)
+    ///     .height(3);
+    /// let out = console.render_export(&chart);
+    /// // Every cell on blue, the legend's box too.
+    /// assert!(out.starts_with("\u{1b}[44m"));
+    /// ```
+    pub fn style(mut self, style: impl Into<String>) -> Self {
+        self.style = Some(style.into().into_boxed_str());
+        self
+    }
+
     /// The style of the legend's box: a theme key or a definition (default:
-    /// the x axis's style). The names keep their datasets' styles.
+    /// the chart's [`style`](Self::style) when it has one, else the x
+    /// axis's style). The names keep their datasets' styles.
     ///
     /// ```
     /// use rich_ext::chart::{Chart, Dataset};
@@ -654,7 +733,7 @@ impl Chart {
     ///     .legend_style("dim");
     /// ```
     pub fn legend_style(mut self, style: impl Into<String>) -> Self {
-        self.legend_style = Some(style.into());
+        self.legend_style = Some(style.into().into_boxed_str());
         self
     }
 
@@ -937,9 +1016,9 @@ impl Chart {
                 } else {
                     ['┌', '┐', '└', '┘', '─', '│']
                 };
-                let style = match &self.legend_style {
-                    Some(spec) => spec_style(console, spec),
-                    None => x_style.clone(),
+                let style = match (self.legend_style.as_deref(), self.style.as_deref()) {
+                    (Some(spec), _) | (None, Some(spec)) => spec_style(console, spec),
+                    (None, None) => x_style.clone(),
                 };
                 let box_ = LegendBox {
                     at: (top, col),
@@ -950,6 +1029,9 @@ impl Chart {
                 };
                 box_.draw(&mut grid, &named);
             }
+        }
+        if let Some(style) = self.style.as_deref().and_then(|s| spec_style(console, s)) {
+            grid.underlay(&style);
         }
         grid
     }
@@ -978,6 +1060,24 @@ impl Chart {
             self.out_of_bounds == OutOfBounds::Clip || (inside(a) && inside(b))
         };
         let mut ops = Vec::new();
+        // The grid lines first, under the datasets, with their marker.
+        let marker = self.datasets.first().map_or(Marker::Dot, |d| d.marker);
+        let spec = |axis: &Axis| axis.style.clone().unwrap_or_else(|| "chart.axis".into());
+        let (x_lines, y_lines) = (x.grid(&self.x_axis), y.grid(&self.y_axis));
+        if !x_lines.is_empty() || !y_lines.is_empty() {
+            ops.push(Op::Marker(marker));
+            let (bottom, top) = (y.scale.min(), y.scale.max());
+            for at in x_lines {
+                ops.push(Op::Line((at, bottom), (at, top), spec(&self.x_axis)));
+            }
+            let (left, right) = (x.scale.min(), x.scale.max());
+            for at in y_lines {
+                ops.push(Op::Line((left, at), (right, at), spec(&self.y_axis)));
+            }
+            if self.layering == Layering::PerDataset {
+                ops.push(Op::Layer);
+            }
+        }
         for (index, dataset) in self.datasets.iter().enumerate() {
             if index > 0 && self.layering == Layering::PerDataset {
                 ops.push(Op::Layer);
@@ -1999,5 +2099,68 @@ mod tests {
             rows(&chart, 10),
             vec!["│         ", "│         ", "│o        ", "└─────────"]
         );
+    }
+
+    #[test]
+    fn grid_lines_go_under_the_datasets_and_within_the_bounds() {
+        let trace = Dataset::new([(0.0, 1.0), (4.0, 1.0)])
+            .graph_type(GraphType::Line)
+            .marker(Marker::Ascii('o'));
+        let chart = Chart::new(vec![trace])
+            .x_axis(Axis::default().bounds(0.0, 4.0).grid([2.0, 9.0]))
+            .y_axis(Axis::default().bounds(0.0, 2.0).grid([-1.0]))
+            .layering(Layering::PerDataset)
+            .width(5)
+            .height(3);
+        assert_eq!(rows(&chart, 5), ["  o  ", "ooooo", "  o  "]);
+        // On a log axis, only positive values.
+        let log = Chart::new(vec![Dataset::new([]).marker(Marker::Ascii('+'))])
+            .x_axis(
+                Axis::default()
+                    .bounds(1.0, 100.0)
+                    .scale(AxisScale::Log)
+                    .grid([0.0, 10.0]),
+            )
+            .y_axis(Axis::default().bounds(0.0, 1.0))
+            .width(5)
+            .height(2);
+        assert_eq!(rows(&log, 5), ["  +  ", "  +  "]);
+    }
+
+    #[test]
+    fn grid_lines_take_the_axis_style() {
+        let console = Console::builder().width(3).build();
+        let chart = Chart::new(vec![Dataset::new([]).marker(Marker::Ascii('.'))])
+            .x_axis(Axis::default().bounds(0.0, 2.0).grid([1.0]).style("red"))
+            .y_axis(Axis::default().bounds(0.0, 1.0))
+            .width(3)
+            .height(1);
+        let grid = chart.grid(&console, &console.options());
+        assert_eq!(grid.row_string(0), " . ");
+        assert_eq!(grid.style_at(0, 1), Style::parse("red").ok());
+    }
+
+    #[test]
+    fn the_chart_style_is_under_everything_and_the_legends() {
+        let console = Console::builder().width(8).build();
+        let chart = Chart::new(vec![Dataset::new([]).name("a")])
+            .x_axis(Axis::default().bounds(0.0, 1.0).style("red"))
+            .y_axis(Axis::default().bounds(0.0, 1.0))
+            .hidden_legend_fraction(1.0, 1.0)
+            .width(8)
+            .height(3);
+        // No chart style: the legend's box in the x axis's.
+        let grid = chart.grid(&console, &console.options());
+        assert_eq!(grid.style_at(0, 5), Style::parse("red").ok());
+        assert_eq!(grid.style_at(2, 0), None);
+        let styled = chart.clone().style("on blue");
+        let grid = styled.grid(&console, &console.options());
+        assert_eq!(grid.style_at(0, 5), Style::parse("on blue").ok());
+        assert_eq!(grid.style_at(2, 0), Style::parse("on blue").ok());
+        // legend_style still wins.
+        let grid = styled
+            .legend_style("green")
+            .grid(&console, &console.options());
+        assert_eq!(grid.style_at(0, 5), Style::parse("on blue green").ok());
     }
 }

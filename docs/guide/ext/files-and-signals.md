@@ -86,8 +86,43 @@ let bins = spectrum(&hann(&samples), 48_000.0);
 ```
 
 `fft(&samples)` returns the complex bins as `(re, im)` pairs, and
-`magnitude(bin)` their size. intuiTUIve's `audio::input` (its `audio`
-feature) gives the samples to feed it, a buffer at a time.
+`magnitude(bin)` their size. `spectrum_full(samples, rate)` gives every
+bin, the mirrored half above the Nyquist frequency too, as scope-tui plots
+them. intuiTUIve's `audio::input` (its `audio` feature) gives the samples
+to feed it, a buffer at a time.
+
+## Test signals, triggers and notes
+
+The same module makes signals to test a scope with, and finds what one
+shows:
+
+```rust
+use rich_ext::dsp::{mix, noise, note_hz, partials, tone, trigger, Edge};
+
+let rate = 48_000.0;
+let a4 = note_hz("A4").unwrap(); // 440.0
+let mut signal = mix()
+    .add(0.6, tone(a4, rate))
+    .add(0.3, partials(a4 * 1.5, rate, &[1.0, 0.5, 0.25]))
+    .add(0.05, noise(7).low_pass(300.0, rate));
+let buffer: Vec<f64> = signal.by_ref().take(2048).collect();
+// Where to start drawing, so the wave stands still.
+let start = trigger(&buffer, 0.0, 4, Edge::Rising).unwrap_or(0);
+```
+
+- **`tone(hz, rate)`** is an endless sine (`.amplitude(a)`, `.phase(rad)`)
+  whose phase carries on from buffer to buffer; **`partials(hz, rate,
+  &amplitudes)`** a note with its overtones, those at or past the Nyquist
+  frequency left out; **`noise(seed)`** white noise, the same for the same
+  seed, and `.low_pass(hz, rate)` smooths it into a wander. **`mix()`**
+  adds sources, each with a gain; all are iterators of samples.
+- **`trigger(samples, level, depth, edge)`** finds where the samples
+  cross `level` (`Edge::Rising` or `Falling`) and stay past it for
+  `depth` samples: an oscilloscope's trigger.
+- **`note_hz("C#3")`** is a note's frequency in equal temperament, A4 at
+  440 Hz (sharps `#`, flats `b`, octaves -1 to 9, 4 when left out), and
+  **`nearest_note(hz)`** the note nearest a frequency with how many cents
+  off it is: a tuner's reading.
 
 ## Warming up syntax highlighting
 
