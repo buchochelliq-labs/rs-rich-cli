@@ -20,6 +20,7 @@ use crate::reactive::Signal;
 use crate::scrollbar::Bar;
 use crate::widget::{widget, Canvas, DrawCx, EventCx, MeasureCx, Used, Widget, WidgetEvent};
 
+pub use crate::bars::{breadcrumb, cells, key_hints, live, seg, status_bar, Caps, StatusSegment};
 pub use crate::calendar::{
     calendar, calendar_options, calendar_with, month, CalendarOptions, Date, DateTime, Time,
     Weekday,
@@ -27,7 +28,10 @@ pub use crate::calendar::{
 pub use crate::datetime::{
     datetime_picker, time_picker, time_picker_with, DateTimeOptions, TimeOptions,
 };
-pub use crate::list::{list_lazy, list_optional, HighlightSpacing, ListDirection, RowRects};
+pub use crate::list::{
+    list_lazy, list_optional, list_rows, HighlightLayer, HighlightSpacing, ListDirection, ListRow,
+    RowRects,
+};
 pub use crate::reorder::Move;
 pub use crate::scrollbar::{scrollbar, Scrollbar, ScrollbarSymbols, Show, Side};
 pub use crate::split::{hsplit, split, split_with, vsplit};
@@ -1643,8 +1647,14 @@ fn marked_text() -> bool {
     crate::a11y::text_mode()
 }
 
+/// What a [`tabs`] strip calls with the title picked
+/// ([`Node::on_select`]).
+type OnSelect = Box<dyn FnMut(usize, &mut crate::app::Ctx)>;
+
 struct Tabs {
-    titles: Box<dyn Fn() -> Vec<String>>,
+    titles: std::rc::Rc<dyn Fn() -> Vec<String>>,
+    /// Told the title picked, instead of the strip setting it.
+    on_select: Option<OnSelect>,
     selected: Signal<usize>,
     /// Where each title was drawn: its first column and width.
     spans: RefCell<Vec<(u16, u16)>>,
@@ -1682,10 +1692,12 @@ struct Tabs {
 /// ```
 ///
 /// Its options are builders on the node: [`Node::divider`],
-/// [`Node::tab_padding`] and [`Node::titles_align`].
+/// [`Node::tab_padding`], [`Node::titles_align`], [`Node::auto_hide`] and
+/// [`Node::on_select`].
 pub fn tabs(titles: impl Fn() -> Vec<String> + 'static, selected: Signal<usize>) -> Node {
     widget(Tabs {
-        titles: Box::new(titles),
+        titles: std::rc::Rc::new(titles),
+        on_select: None,
         selected,
         spans: RefCell::new(Vec::new()),
         divider: None,
@@ -1813,22 +1825,19 @@ impl Widget for Tabs {
         *self.spans.borrow_mut() = spans;
     }
 
-    fn event(&mut self, _cx: &mut EventCx, event: &WidgetEvent) -> Used {
+    fn event(&mut self, cx: &mut EventCx, event: &WidgetEvent) -> Used {
         let last = (self.titles)().len().saturating_sub(1);
-        match event {
+        let now = self.selected.get_untracked();
+        let to = match event {
             WidgetEvent::Key(key) => match key.code {
-                KeyCode::Left | KeyCode::Char('h') => {
-                    self.selected.update(|s| *s = s.saturating_sub(1))
-                }
-                KeyCode::Right | KeyCode::Char('l') => {
-                    self.selected.update(|s| *s = (*s + 1).min(last))
-                }
+                KeyCode::Left | KeyCode::Char('h') => now.saturating_sub(1),
+                KeyCode::Right | KeyCode::Char('l') => (now + 1).min(last),
                 KeyCode::Char(c @ '1'..='9') => {
                     let i = c as usize - '1' as usize;
                     if i > last {
                         return Used::No;
                     }
-                    self.selected.set(i);
+                    i
                 }
                 _ => return Used::No,
             },
@@ -1842,11 +1851,15 @@ impl Widget for Tabs {
                     .iter()
                     .position(|(x, w)| mouse.column >= *x && mouse.column < x + w);
                 match hit {
-                    Some(i) => self.selected.set(i),
+                    Some(i) => i,
                     None => return Used::No,
                 }
             }
             _ => return Used::No,
+        };
+        match &mut self.on_select {
+            Some(on_select) => on_select(to, cx.app()),
+            None => self.selected.set(to),
         }
         Used::Yes
     }
@@ -1877,6 +1890,69 @@ impl Node {
     /// default), the centre or the end.
     pub fn titles_align(self, align: Align) -> Node {
         self.widget_mut(|tabs: &mut Tabs| tabs.align = align);
+        self
+    }
+
+    /// Hide the strip while it has fewer than two titles: it takes no row
+    /// then, and comes back with the second tab (Yazi's). Call it on the
+    /// strip, before `.fixed(..)` or anything that wraps it.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    /// use intuituive::widgets::tabs;
+    ///
+    /// let app = App::new(|| {
+    ///     let titles = signal(vec!["~".to_string()]);
+    ///     column([
+    ///         tabs(move || titles.get(), signal(0)).auto_hide().fixed(1),
+    ///         label("files"),
+    ///     ])
+    ///     .on_key("t", move |_| titles.update(|t| t.push("src".into())))
+    /// });
+    /// let mut driver = app.driver(12, 2);
+    /// driver.settle();
+    /// assert_eq!(driver.screen().plain()[0].trim_end(), "files");
+    /// driver.press("t");
+    /// assert_eq!(driver.screen().plain()[0].trim_end(), " ~ │ src");
+    /// ```
+    pub fn auto_hide(self) -> Node {
+        let titles = self
+            .widget_mut(|tabs: &mut Tabs| tabs.titles.clone())
+            .map(|titles| move || titles().len() >= 2);
+        match titles {
+            Some(shown) => self.shown_if("auto_hide", shown),
+            None => self,
+        }
+    }
+
+    /// Call `handler` with the title picked (a click, ←/→, a number key)
+    /// instead of setting the strip's signal: the app moves to it its own
+    /// way (Yazi's tab switch also ends visual mode), and sets the signal
+    /// itself.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    /// use intuituive::widgets::tabs;
+    ///
+    /// let app = App::new(|| {
+    ///     let active = signal(0usize);
+    ///     let picks = signal(0);
+    ///     column([
+    ///         tabs(|| vec!["one".into(), "two".into()], active)
+    ///             .on_select(move |to, _| {
+    ///                 picks.update(|p| *p += 1);
+    ///                 active.set(to);
+    ///             })
+    ///             .fixed(1),
+    ///         text!("{active} after {picks}"),
+    ///     ])
+    /// });
+    /// let mut driver = app.driver(20, 2);
+    /// driver.press("right");
+    /// assert_eq!(driver.screen().plain()[1].trim_end(), "1 after 1");
+    /// ```
+    pub fn on_select(self, handler: impl FnMut(usize, &mut crate::app::Ctx) + 'static) -> Node {
+        self.widget_mut(|tabs: &mut Tabs| tabs.on_select = Some(Box::new(handler)));
         self
     }
 }

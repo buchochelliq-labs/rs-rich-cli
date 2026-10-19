@@ -1075,6 +1075,10 @@ impl Widget for Panel {
             return;
         }
         let [_, right, _, left] = self.insets();
+        // Through the panel's own padding (a stylesheet's), to its frame.
+        let [_, pad_right, _, pad_left] = self.look.padding;
+        let inside = cx.rect.inset(0, right + self.shadow(), 0, left);
+        crate::rule::reach(&mut rules, inside, pad_left, pad_right);
         let sides = self.sides();
         let (joins_left, joins_right) = (sides.contains(Sides::LEFT), sides.contains(Sides::RIGHT));
         let area = cx.rect;
@@ -1115,6 +1119,9 @@ pub(crate) struct TextNode {
     pub align: Option<TextAlign>,
     pub no_wrap: Option<bool>,
     pub overflow: Option<Overflow>,
+    /// Lines too long lose their start, not their end
+    /// ([`Node::truncate_start`](crate::Node::truncate_start)).
+    pub cut_start: bool,
     /// Which of the three code set, which a stylesheet leaves alone.
     pub code: [bool; 3],
 }
@@ -1126,6 +1133,7 @@ impl TextNode {
             align: None,
             no_wrap: None,
             overflow: None,
+            cut_start: false,
             code: [false; 3],
         }
     }
@@ -1146,9 +1154,49 @@ impl TextNode {
         }
         text.set_no_wrap(self.no_wrap);
         text.set_overflow(self.overflow);
+        if self.cut_start {
+            text = cut_start(&text, width.max(1) as usize);
+        }
         let options = console.options().update_width(width.max(1) as usize);
         console.render_lines(&text, &options, false)
     }
+}
+
+/// `text` with each line longer than `width` cells cut from its start, a
+/// `…` in place of what went: the end of a path, where you are.
+fn cut_start(text: &rich::Text, width: usize) -> rich::Text {
+    let lines = text.split("\n", false, true);
+    if lines.iter().all(|line| line.cell_len() <= width) {
+        return text.clone();
+    }
+    let lines: Vec<rich::Text> = lines
+        .into_iter()
+        .map(|line| {
+            if line.cell_len() <= width {
+                return line;
+            }
+            // The most of its end that fits beside the `…`.
+            let room = width.saturating_sub(1);
+            let (mut used, mut at) = (0, line.plain().len());
+            for (i, c) in line.plain().char_indices().rev() {
+                let w = rich::cells::cell_len(c.encode_utf8(&mut [0; 4]));
+                if used + w > room {
+                    break;
+                }
+                used += w;
+                at = i;
+            }
+            let tail = line.divide(&[at]).pop().unwrap_or_default();
+            let mut cut = line.blank_copy();
+            cut.append("…", None);
+            cut.append_text(&tail)
+        })
+        .collect();
+    let mut joined = rich::Text::new("\n").join(&lines);
+    joined.set_justify_option(text.get_justify_option());
+    joined.set_no_wrap(text.get_no_wrap());
+    joined.set_overflow(text.get_overflow());
+    joined
 }
 
 impl Widget for TextNode {
@@ -1171,6 +1219,9 @@ impl Widget for TextNode {
             Some(Overflow::Ellipsis) => parts.push("text-overflow:ellipsis"),
             Some(Overflow::Crop) => parts.push("text-overflow:clip"),
             _ => {}
+        }
+        if self.cut_start {
+            parts.push("truncate-start");
         }
         (!parts.is_empty()).then(|| parts.join(" "))
     }

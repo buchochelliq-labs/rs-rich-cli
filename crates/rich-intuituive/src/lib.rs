@@ -61,6 +61,7 @@ pub mod a11y;
 pub mod app;
 #[cfg(feature = "audio")]
 pub mod audio;
+mod bars;
 pub mod border;
 mod builtin;
 mod calendar;
@@ -105,10 +106,11 @@ pub use rich;
 pub use rich_interact as interact;
 
 pub use app::{
-    every, rate, Anchor, App, Ctx, Driver, Easing, FrameStats, Handoff, ModalOptions, Placement,
-    Theme,
+    after, every, rate, Anchor, App, Ctx, Driver, Easing, FrameStats, Handoff, ModalOptions,
+    Placement, Theme,
 };
 pub use border::{Border, BorderSet, Edge, Shadow, Sides};
+pub use dialog::{ConfirmOptions, PickOptions, PromptOptions};
 pub use effect::{effect, fill};
 #[cfg(feature = "art")]
 pub use image::{image, image_of, image_with, ImageAnchor, ImageFit, ImageMode, ImageView};
@@ -130,7 +132,8 @@ pub use rule::rule;
 pub use sheet::{SheetError, Stylesheet};
 pub use solver::Solver;
 pub use task::{
-    latest, latest_every, resource, resource_for, spawn, spawn_future, Latest, Load, Resource, Task,
+    latest, latest_every, resource, resource_for, spawn, spawn_future, spawn_stream, spawn_then,
+    Latest, Load, Resource, Stream, Task,
 };
 pub use text_area::Caret;
 #[cfg(feature = "watch")]
@@ -145,12 +148,12 @@ pub mod prelude {
     // `text` is both the function and the `text!` macro.
     pub use crate::described;
     pub use crate::{
-        column, component, each, effect, every, fill, grid, input, label, latest, latest_every,
-        layers, leaf, list, list_optional, memo, number_input, on_write, rate, renderable,
-        repeating, resource, resource_for, row, scroll, scroll_both, scroll_with, scroll_x, signal,
-        spawn, switch, text, text_area, viewport, watch, widget, Align, App, Border, Ctx, Edge,
-        Justify, Load, Log, Memo, Node, Overflow, Proxy, Resource, Shadow, Sides, Signal, Size,
-        Task, TextAlign, Theme, Widget,
+        after, column, component, each, effect, every, fill, grid, input, label, latest,
+        latest_every, layers, leaf, list, list_optional, memo, number_input, on_write, rate,
+        renderable, repeating, resource, resource_for, row, scroll, scroll_both, scroll_with,
+        scroll_x, signal, spawn, switch, text, text_area, viewport, watch, widget, Align, App,
+        Border, Ctx, Edge, Justify, Load, Log, Memo, Node, Overflow, Proxy, Resource, Shadow,
+        Sides, Signal, Size, Task, TextAlign, Theme, Widget,
     };
 }
 

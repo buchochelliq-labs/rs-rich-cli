@@ -253,7 +253,11 @@ fn a_stale_value_stays_a_while_and_then_goes() {
     driver.press("n");
     // Still the last key's value, until the wait is over…
     assert_eq!(driver.screen().plain()[0].trim_end(), "user 1");
-    wait_for(&mut driver, "loading");
+    // The wait is on the app's clock: exactly 100 ms of it.
+    driver.advance(Duration::from_millis(99));
+    assert_eq!(driver.screen().plain()[0].trim_end(), "user 1");
+    driver.advance(Duration::from_millis(1));
+    assert_eq!(driver.screen().plain()[0].trim_end(), "loading");
     // …and the new one once it comes.
     open[1].send(()).unwrap();
     wait_for(&mut driver, "user 2");

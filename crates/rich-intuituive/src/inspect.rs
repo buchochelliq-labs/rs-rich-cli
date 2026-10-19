@@ -1841,6 +1841,10 @@ fn describe(event: &Traced, names: &Names) -> (TraceKind, String) {
             TraceKind::Proxy,
             format!("job from another thread ({})", site(at)),
         ),
+        // A one-shot timer ([`after`](crate::after)) has no interval.
+        Traced::Timer { every, at } if every.is_zero() => {
+            (TraceKind::Timer, format!("timer, once ({})", site(at)))
+        }
         Traced::Timer { every, at } => (
             TraceKind::Timer,
             format!("timer every {} ({})", interval(*every), site(at)),

@@ -116,6 +116,134 @@ fn spawn_at<T: Send + 'static>(
     task
 }
 
+/// [`spawn`] whose `done` need not be [`Send`]: it stays on the app's
+/// thread while `work` runs, so it can hold an `Rc`, a node's handle, or
+/// anything else that cannot cross threads. Only the value travels.
+///
+/// ```
+/// use intuituive::prelude::*;
+/// use intuituive::spawn_then;
+/// use std::rc::Rc;
+///
+/// let app = App::new(|| {
+///     let shown = signal(String::new());
+///     let prefix = Rc::new(String::from("answer: "));
+///     spawn_then(|| 6 * 7, move |n, _| shown.set(format!("{prefix}{n}")));
+///     text!("{shown}")
+/// })
+/// .wait_for_tasks(true);
+/// let mut driver = app.driver(12, 1);
+/// driver.settle();
+/// assert_eq!(driver.screen().plain()[0].trim_end(), "answer: 42");
+/// ```
+///
+/// # Panics
+/// Outside a running or building app.
+#[track_caller]
+pub fn spawn_then<T: Send + 'static>(
+    work: impl FnOnce() -> T + Send + 'static,
+    done: impl FnOnce(T, &mut Ctx) + 'static,
+) -> Task {
+    let runtime = Runtime::current_for("spawn_then()");
+    let id = runtime.next_local.get();
+    runtime.next_local.set(id + 1);
+    let done: Then<T> = Box::new(done);
+    runtime.locals.borrow_mut().insert(id, Box::new(done));
+    spawn_at(Location::caller(), work, move |value, cx| {
+        // The continuation waited on this thread, under its number.
+        let done = Runtime::current().locals.borrow_mut().remove(&id);
+        if let Some(done) = done.and_then(|d| d.downcast::<Then<T>>().ok()) {
+            done(value, cx);
+        }
+    })
+}
+
+/// Run `work` on a thread of its own with a [`Proxy`](crate::Proxy) to send
+/// results back as it goes (lines of a log, entries of a directory walk),
+/// counted as a [task](Task) until it returns: an app that
+/// [waits for its tasks](crate::App::wait_for_tasks) waits for the whole
+/// stream each turn, so a test sees all of it. The [`Task`] says when it
+/// has finished; [`cancel`](Task::cancel) sets a flag `work` can read from
+/// the [`Stream`] it is given, to stop early.
+///
+/// ```
+/// use intuituive::prelude::*;
+/// use intuituive::spawn_stream;
+///
+/// let app = App::new(|| {
+///     let lines = signal(Vec::<String>::new());
+///     spawn_stream(move |stream| {
+///         for n in 1..=3 {
+///             if stream.cancelled() {
+///                 break;
+///             }
+///             stream.proxy().run(move || lines.update(|l| l.push(format!("line {n}"))));
+///         }
+///     });
+///     text(move || lines.get().join(","))
+/// })
+/// .wait_for_tasks(true);
+/// let mut driver = app.driver(30, 1);
+/// driver.settle();
+/// assert_eq!(driver.screen().plain()[0].trim_end(), "line 1,line 2,line 3");
+/// ```
+///
+/// # Panics
+/// Outside a running or building app.
+#[track_caller]
+pub fn spawn_stream(work: impl FnOnce(Stream) + Send + 'static) -> Task {
+    let runtime = Runtime::current_for("spawn_stream()");
+    let stream = Stream {
+        proxy: runtime.proxy(),
+        cancelled: Arc::new(AtomicBool::new(false)),
+    };
+    let task = Task {
+        cancelled: stream.cancelled.clone(),
+        finished: Arc::new(AtomicBool::new(false)),
+    };
+    let tasks = runtime.tasks.clone();
+    let finished = task.finished.clone();
+    tasks.fetch_add(1, Ordering::SeqCst);
+    std::thread::spawn(move || {
+        // Done however the work ends, a panic included. The count goes
+        // down after the last result is queued, so a waiting app takes
+        // them all.
+        struct Done(Arc<std::sync::atomic::AtomicUsize>, Arc<AtomicBool>);
+        impl Drop for Done {
+            fn drop(&mut self) {
+                self.1.store(true, Ordering::SeqCst);
+                self.0.fetch_sub(1, Ordering::SeqCst);
+            }
+        }
+        let _done = Done(tasks, finished);
+        work(stream);
+    });
+    task
+}
+
+/// What a [`spawn_stream`] thread sends its results with.
+#[derive(Clone)]
+pub struct Stream {
+    proxy: crate::reactive::Proxy,
+    cancelled: Arc<AtomicBool>,
+}
+
+impl Stream {
+    /// The proxy to the app: [`run`](crate::Proxy::run) a closure on the
+    /// app's thread with each result.
+    pub fn proxy(&self) -> &crate::reactive::Proxy {
+        &self.proxy
+    }
+
+    /// Whether the stream's [`Task`] was cancelled: stop then.
+    pub fn cancelled(&self) -> bool {
+        self.cancelled.load(Ordering::SeqCst)
+    }
+}
+
+/// A [`spawn_then`] continuation, kept on the app's thread.
+type Then<T> = Box<dyn FnOnce(T, &mut Ctx)>;
+
 /// Drive `future` to completion on its own thread, then run `done` with its
 /// output on the app's thread. The future is polled with a waker that
 /// parks and unparks that thread, so it suits futures that do not need a
@@ -207,7 +335,9 @@ impl<T: 'static> Resource<T> {
     /// [`resource_for`]), keep the last value (or error) for up to `wait`
     /// rather than going back to [`Load::Loading`] at once: a preview pane
     /// that does not blink between two quick loads, and clears once a slow
-    /// one has kept the old value on show for `wait`.
+    /// one has kept the old value on show for `wait`. The wait is on the
+    /// app's clock ([`after`](crate::after)), so a test steps through it
+    /// with [`Driver::advance`](crate::Driver::advance).
     pub fn stale_after(self, wait: Duration) -> Resource<T> {
         self.stale.set(Some(wait));
         self
@@ -344,16 +474,13 @@ fn load<T: Send + 'static>(
     match stale.get_untracked() {
         Some(wait) if !state.with_untracked(Load::is_loading) => {
             let arrived = arrived.clone();
-            spawn_at(
-                site,
-                move || std::thread::sleep(wait),
-                move |(), _| {
-                    // Still waiting for this fetch: the old value goes.
-                    if generation.get_untracked() == mine && !arrived.load(Ordering::SeqCst) {
-                        state.update(|s| *s = Load::Loading);
-                    }
-                },
-            );
+            // On the app's clock, so a test steps through the wait.
+            crate::app::after(wait, move |_| {
+                // Still waiting for this fetch: the old value goes.
+                if generation.get_untracked() == mine && !arrived.load(Ordering::SeqCst) {
+                    state.update(|s| *s = Load::Loading);
+                }
+            });
         }
         _ => state.update(|s| *s = Load::Loading),
     }

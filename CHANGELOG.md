@@ -9,6 +9,69 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### intuiTUIve: widgets, pop-ups and runtime from round 2 (rs-rich-intuituive)
+
+The rest of what the round-2 rebuilds of scope-tui and Yazi found
+missing (see [the demo gaps](docs/design/intuituive-demo-gaps.md)), and
+what the plugin work on files, audio and charts asked of the core.
+
+- **Lists.** `.highlight_layer(HighlightLayer::Under)` puts a list's
+  highlight under the item's markup, so Yazi's rounded ends keep their
+  colour on the hovered row. **`list_rows(len, |i| ListRow, selected)`**
+  makes each row once a draw, with its trailing text, marker, row style
+  and highlight style (`.marker_column()` keeps the marker column);
+  `list_lazy` is unchanged. `.wheel_step(n)` sets how far the wheel moves
+  the selection, and `0` leaves the wheel to the list's ancestors.
+  `selected_style_for`'s docs no longer suggest it where `row_style` and a
+  reversed highlight do.
+- **`Node::truncate_start()`**: a text too long loses its start, with
+  `…`, rather than its end.
+- **Pop-ups.** `cx.confirm_with(.., ConfirmOptions::new().size(w, h)
+  .title_style(..), ..)` sizes a confirm and styles its title; with no
+  body, the items sit under the title with no empty row or rule (fixed).
+  **`cx.prompt(title, initial, |text, cx| ..)`** and `prompt_with(..,
+  PromptOptions)` (placement, caret, title style, change and cancel
+  handlers) are Yazi's input; **`cx.pick(title, origin, items, |i, cx|
+  ..)`** and `pick_with` its "Open with:" menu. A pop-up's panel's
+  `.title_style` already overrode `popup.title` per pop-up.
+- **Fixed: a rule inside padding did not join its panel.** A rule at the
+  inside edge of a padded column, or of a panel a stylesheet pads, runs
+  across the padding to the border.
+- **Fixed: a pop-up below a row slid away from it.** `Origin::At` makes a
+  box too wide for the room right of the rectangle narrower (down to the
+  rectangle's width) before moving it.
+- **`App::notify_width(size)`**: how wide a notification may grow, 48
+  cells by default.
+- **Bars.** `status_bar(left, right)` of `seg(..)` segments with
+  `.caps(Caps::Powerline | Caps::Rounded)`; `breadcrumb(path)` with
+  `.home_tilde()` and `.crumb_suffix(..)`; `key_hints()`, a footer of the
+  keys that work now; `cells([(35, a), ..])`, ratatui's one-row table;
+  `live(fps_cap, || renderable)`, which draws at most so many times a
+  second of the app's clock.
+- **Tabs.** `.auto_hide()` hides a strip of fewer than two titles;
+  `.on_select(|to, cx| ..)` hears the title picked instead of the strip
+  setting its signal.
+- **Clock.** `after(wait, |cx| ..)` (and `cx.after`) runs once on the
+  app's clock; `Resource::stale_after` waits on it. `Driver::advance(d)`
+  steps the clock to each thing due and draws. `DrawCx::now()` gives a
+  widget the app's clock.
+- **Keys.** `.bind_sequence_in(section, ..)`; `.bind_cycle_back(..)`
+  cycles a mode backwards.
+- **Tasks.** `spawn_then(work, done)` keeps a non-`Send` `done` on the
+  app's thread; `spawn_stream(|stream| ..)` is a thread with a proxy
+  counted as a task until it returns, told of a cancel.
+- **`Node::on_unmount(|| ..)`** runs when a node leaves the tree.
+- **`Widget::access_text`**: what a widget says to assistive technology,
+  read as text.
+- **`App::graphics(source)`** draws an rs-rich-ext `PlacementSource`'s
+  terminal graphics beside the cells after each frame, and releases them
+  at the end. The `image` node does not place graphics yet.
+- **`render_with` needs no quit**: it presses its keys, settles and reads
+  the screen; an app's error is its `Err`.
+- **Fixed: an app dropped without `finish()`** (a driver let go) left its
+  `latest` threads asleep on its clock; dropping an `App` now closes its
+  runtime.
+
 ### intuiTUIve: runtime, keys and signals from round 2 (rs-rich-intuituive, interact)
 
 What the round-2 rebuilds of scope-tui and Yazi found missing from the

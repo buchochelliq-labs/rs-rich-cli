@@ -52,6 +52,20 @@ pub enum ListDirection {
     BottomToTop,
 }
 
+/// Where a list's highlight goes: over the item's markup (the default,
+/// ratatui's), or under it, so markup that sets its own colours (Yazi's
+/// rounded ends, `[not reverse blue]`) keeps them on the selected row.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum HighlightLayer {
+    /// Over the markup and the row style: the selected row is all in the
+    /// highlight (the default).
+    #[default]
+    Over,
+    /// Over the row style, under the markup: what the markup styles keeps
+    /// its own style.
+    Under,
+}
+
 /// What a list's selection is: always an item, or an item or none.
 #[derive(Clone, Copy)]
 pub(crate) enum Selection {
@@ -138,6 +152,13 @@ pub(crate) struct ListOptions {
     /// The selection's style when item `i` is selected, or none (the
     /// theme's `selected`).
     selected_style: Option<RowStyle>,
+    /// Whether the highlight goes over the markup or under it.
+    layer: HighlightLayer,
+    /// Items a turn of the wheel moves the selection, when not
+    /// [`WHEEL_STEP`]; 0 leaves the wheel to the list's ancestors.
+    wheel: Option<usize>,
+    /// For [`list_rows`]: the rows one draw made, cleared at each.
+    rows: Option<Rc<RowCache>>,
     /// Where the rows in view were drawn, on the screen.
     rects: Option<RowRects>,
 }
@@ -150,6 +171,8 @@ pub(crate) enum Items {
     Lazy {
         len: Rc<dyn Fn() -> usize>,
         item: Rc<dyn Fn(usize) -> String>,
+        /// What forgets the rows the last draw made ([`list_rows`]).
+        reset: Option<Rc<dyn Fn()>>,
     },
 }
 
@@ -166,11 +189,16 @@ impl Items {
     fn fetch(&self) -> Fetched<'_> {
         match self {
             Items::All(items) => Fetched::All(items()),
-            Items::Lazy { len, item } => Fetched::Lazy {
-                len: len(),
-                item: &**item,
-                cache: RefCell::new(HashMap::new()),
-            },
+            Items::Lazy { len, item, reset } => {
+                if let Some(reset) = reset {
+                    reset();
+                }
+                Fetched::Lazy {
+                    len: len(),
+                    item: &**item,
+                    cache: RefCell::new(HashMap::new()),
+                }
+            }
         }
     }
 }
@@ -392,8 +420,136 @@ pub fn list_lazy(
     let items = Items::Lazy {
         len: Rc::new(len),
         item: Rc::new(item),
+        reset: None,
     };
     list_of(items, Selection::One(selected))
+}
+
+/// One row of a [`list_rows`] list: its markup, and what
+/// [`trailing`](Node::trailing), [`marker`](Node::marker),
+/// [`row_style`](Node::row_style) and
+/// [`selected_style_for`](Node::selected_style_for) would give it.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ListRow {
+    /// The item's console markup.
+    pub text: String,
+    /// Markup at the right of its first line; empty for none.
+    pub trailing: String,
+    /// Its marker cell's style (or theme style name), with
+    /// [`marker_column`](Node::marker_column); `None` for a blank cell.
+    pub marker: Option<String>,
+    /// Its rows' style, under the markup; `None` for none.
+    pub style: Option<String>,
+    /// The highlight's style when it is selected; `None` for the theme's.
+    pub selected_style: Option<String>,
+}
+
+impl ListRow {
+    /// A row of console `markup`, with nothing else.
+    pub fn new(markup: impl Into<String>) -> ListRow {
+        ListRow {
+            text: markup.into(),
+            ..ListRow::default()
+        }
+    }
+
+    /// Markup at the right of the row.
+    pub fn trailing(mut self, markup: impl Into<String>) -> ListRow {
+        self.trailing = markup.into();
+        self
+    }
+
+    /// The marker cell's style.
+    pub fn marker(mut self, style: Option<String>) -> ListRow {
+        self.marker = style;
+        self
+    }
+
+    /// The row's style.
+    pub fn style(mut self, style: Option<String>) -> ListRow {
+        self.style = style;
+        self
+    }
+
+    /// The highlight's style when the row is selected.
+    pub fn selected_style(mut self, style: Option<String>) -> ListRow {
+        self.selected_style = style;
+        self
+    }
+}
+
+/// The rows a [`list_rows`] list made in one draw (or measure): each made
+/// once, however many of its parts are asked for.
+pub(crate) struct RowCache {
+    row: Box<dyn Fn(usize) -> ListRow>,
+    made: RefCell<HashMap<usize, ListRow>>,
+}
+
+impl RowCache {
+    /// Row `i`'s part `part`, the row made if this draw has not yet.
+    fn get<R>(&self, i: usize, part: impl FnOnce(&ListRow) -> R) -> R {
+        if let Some(row) = self.made.borrow().get(&i) {
+            return part(row);
+        }
+        let row = (self.row)(i);
+        let out = part(&row);
+        self.made.borrow_mut().insert(i, row);
+        out
+    }
+}
+
+/// A [`list_lazy`] whose items come from one closure: `row(i)` gives item
+/// `i`'s markup with its trailing text, marker, row style and highlight
+/// style as one [`ListRow`], made once a draw, where `list_lazy`'s
+/// closures (and [`trailing`](Node::trailing), [`marker`](Node::marker),
+/// [`row_style`](Node::row_style)) each read the app's data again. Only the
+/// rows drawn are made. [`marker_column`](Node::marker_column) keeps the
+/// marker column.
+///
+/// ```
+/// use intuituive::prelude::*;
+/// use intuituive::widgets::{list_rows, ListRow};
+///
+/// let app = App::new(|| {
+///     let files = signal(vec![("notes.txt", 12), ("src", 4)]);
+///     list_rows(
+///         move || files.with(Vec::len),
+///         move |i| {
+///             let (name, size) = files.with(|f| f[i]);
+///             ListRow::new(name)
+///                 .trailing(size.to_string())
+///                 .marker((i == 1).then(|| "on yellow".into()))
+///         },
+///         signal(0),
+///     )
+///     .marker_column()
+/// });
+/// let mut driver = app.driver(14, 2);
+/// driver.settle();
+/// assert_eq!(driver.screen().plain()[0], " notes.txt  12");
+/// assert_eq!(driver.screen().plain()[1], " src         4");
+/// ```
+pub fn list_rows(
+    len: impl Fn() -> usize + 'static,
+    row: impl Fn(usize) -> ListRow + 'static,
+    selected: Signal<usize>,
+) -> Node {
+    let rows = Rc::new(RowCache {
+        row: Box::new(row),
+        made: RefCell::new(HashMap::new()),
+    });
+    let (text, reset) = (rows.clone(), rows.clone());
+    let items = Items::Lazy {
+        len: Rc::new(len),
+        item: Rc::new(move |i| text.get(i, |row| row.text.clone())),
+        reset: Some(Rc::new(move || reset.made.borrow_mut().clear())),
+    };
+    let (trailing, style, selected_style) = (rows.clone(), rows.clone(), rows.clone());
+    list_of(items, Selection::One(selected))
+        .trailing(move |i| trailing.get(i, |row| row.trailing.clone()))
+        .row_style(move |i| style.get(i, |row| row.style.clone()))
+        .selected_style_for(move |i| selected_style.get(i, |row| row.selected_style.clone()))
+        .list_options(|options| options.rows = Some(rows))
 }
 
 fn list_of(items: Items, selection: Selection) -> Node {
@@ -958,11 +1114,24 @@ impl Widget for List {
                     }
                 }
                 out.extend(line.iter().cloned());
-                if let Some(style) = &row_style {
-                    out = under(out, style, row_width);
-                }
-                if let Some(style) = &row_highlight {
-                    out = over(out, style, row_width);
+                match (&row_style, &row_highlight, options.layer) {
+                    // Under the markup: the row style, then the highlight
+                    // over it, as one style under the item's own.
+                    (row_style, Some(highlight), HighlightLayer::Under) => {
+                        let style = match row_style {
+                            Some(row) => row.combine(highlight),
+                            None => highlight.clone(),
+                        };
+                        out = under(out, &style, row_width);
+                    }
+                    (row_style, highlight, _) => {
+                        if let Some(style) = row_style {
+                            out = under(out, style, row_width);
+                        }
+                        if let Some(style) = highlight {
+                            out = over(out, style, row_width);
+                        }
+                    }
                 }
                 if let Some(mark) = &mark {
                     out.insert(0, mark.clone());
@@ -1104,10 +1273,18 @@ impl Widget for List {
                 Used::No
             }
             MouseKind::ScrollUp | MouseKind::ScrollDown => {
+                let step = self
+                    .options
+                    .borrow()
+                    .wheel
+                    .map_or(WHEEL_STEP, |step| step.min(isize::MAX as usize) as isize);
+                if step == 0 {
+                    return Used::No;
+                }
                 let down = if mouse.kind == MouseKind::ScrollDown {
-                    WHEEL_STEP
+                    step
                 } else {
-                    -WHEEL_STEP
+                    -step
                 };
                 let by = match self.options.borrow().direction {
                     ListDirection::TopToBottom => down,
@@ -1257,11 +1434,80 @@ impl Node {
 
     /// The selection's style (or theme style name) when item `i` is
     /// selected, over its row style and its markup, instead of the theme's
-    /// `selected`; `None` keeps the theme's. Yazi reverses the hovered row
-    /// in the entry's own colour, so a hovered directory is a blue bar:
-    /// `.selected_style_for(|i| Some(format!("reverse {}", colour(i))))`.
+    /// `selected`; `None` keeps the theme's. For a highlight that differs
+    /// from row to row in more than colour: Yazi's preview underlines its
+    /// hovered row, `.selected_style_for(|_| Some("underline".into()))`.
+    ///
+    /// A bar in each row's own colour needs no closure: a
+    /// [`row_style`](Self::row_style) of the colour and a `reverse`
+    /// `selected` (`.theme_styles([("selected", "reverse")])`) reverse it
+    /// already, a hovered directory a blue bar.
     pub fn selected_style_for(self, style: impl Fn(usize) -> Option<String> + 'static) -> Node {
         self.list_options(|options| options.selected_style = Some(Box::new(style)))
+    }
+
+    /// Where the highlight goes: [`HighlightLayer::Over`] the item's markup
+    /// (the default) or [`HighlightLayer::Under`] it, so a selected row's
+    /// markup keeps the colours it sets. Yazi's hovered row has rounded
+    /// ends in the entry's colour, outside the reversed bar:
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    /// use intuituive::widgets::HighlightLayer;
+    ///
+    /// let app = App::new(|| {
+    ///     let items = || vec!["[not reverse blue]<[/]docs[not reverse blue]>".to_string()];
+    ///     list(items, signal(0))
+    ///         .row_style(|_| Some("blue".into()))
+    ///         .highlight_layer(HighlightLayer::Under)
+    /// });
+    /// let mut driver = app.driver(8, 1);
+    /// driver.settle();
+    /// // The ends keep their own colour, not reversed; the name is.
+    /// let styled = intuituive::testing::styled(&driver);
+    /// assert!(styled.starts_with("[not reverse blue]<[/][reverse blue]docs[/][not reverse blue]>"));
+    /// ```
+    pub fn highlight_layer(self, layer: HighlightLayer) -> Node {
+        self.list_options(|options| options.layer = layer)
+    }
+
+    /// Move the selection `items` items a turn of the mouse wheel, instead
+    /// of three. `0` leaves the wheel alone: it goes on to the list's
+    /// ancestors, whose [`on_mouse`](Self::on_mouse) sees it (a list
+    /// otherwise uses every turn, and nothing above it hears the wheel).
+    ///
+    /// ```
+    /// use intuituive::interact::{Event, Mouse, MouseKind};
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| {
+    ///     let turns = signal(0);
+    ///     let items = || (0..9).map(|i| i.to_string()).collect();
+    ///     column([list(items, signal(0)).wheel_step(0).fixed(3), text!("{turns}")])
+    ///         .on_mouse(move |_, mouse| {
+    ///             turns.update(|t| *t += 1);
+    ///             mouse.kind == MouseKind::ScrollDown
+    ///         })
+    /// });
+    /// let mut driver = app.driver(5, 4);
+    /// driver.settle();
+    /// driver.event(Event::Mouse(Mouse::new(MouseKind::ScrollDown, 0, 0)));
+    /// driver.settle();
+    /// assert_eq!(driver.screen().plain()[3].trim_end(), "1");
+    /// ```
+    pub fn wheel_step(self, items: usize) -> Node {
+        self.list_options(|options| options.wheel = Some(items))
+    }
+
+    /// On a [`list_rows`] list: keep the one-cell marker column of
+    /// [`marker`](Self::marker), each cell in its row's
+    /// [`ListRow::marker`] style. On any other list it does nothing.
+    pub fn marker_column(self) -> Node {
+        self.list_options(|options| {
+            if let Some(rows) = options.rows.clone() {
+                options.marker = Some(Box::new(move |i| rows.get(i, |row| row.marker.clone())));
+            }
+        })
     }
 
     /// Record where the rows in view are drawn on the screen in `rects`, at
