@@ -27,6 +27,11 @@ Yazi-style file manager rebuilt on intuiTUIve.
 cargo generate --git https://github.com/buchochelliq-labs/rs-rich-cli templates/intuituive-app
 ```
 
+The template needs cargo-generate 0.23.4 or later: its manifest is
+`Cargo.toml.liquid`, so a crate that depends on this repo by git does not
+trip over the `{{project-name}}` placeholder, and older releases leave the
+suffix on.
+
 ## A first app
 
 ```rust
