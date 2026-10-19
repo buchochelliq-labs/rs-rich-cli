@@ -301,12 +301,13 @@ def selected_by(tag, packages):
     return chosen
 
 
-def unreleased(tag, packages, status=registry_status, existing=None, sha=None):
+def unreleased(tag, packages, status=registry_status, existing=None, sha=None, lightweight=frozenset()):
     """What the tag's run publishes; raise when that is already on its
     registry. A crate or `python-v` tag: its package, which must not be out.
     A release tag: every crate of the release not yet on crates.io, which
-    must not be none, each with its own tag (a record, `tag` pushes it) on
-    the release tag's commit `sha` in `existing` (tag -> commit)."""
+    must not be none, each with its own annotated tag (a record, `tag` pushes
+    it; none of the `lightweight` tag names) on the release tag's commit `sha`
+    in `existing` (tag -> commit)."""
     chosen = selected_by(tag, packages)
     if release.RELEASE.fullmatch(tag):
         due = []
@@ -324,6 +325,9 @@ def unreleased(tag, packages, status=registry_status, existing=None, sha=None):
         if untagged:
             raise RuntimeError(f"{tag}: each selected crate's tag must be on {sha[:12]}, the release "
                                f"commit: {', '.join(untagged)}. release_cohort.py tag pushes them.")
+        if plain := [p.tag for p in due if p.tag in lightweight]:
+            raise RuntimeError(f"{tag}: a record tag must be annotated: {', '.join(plain)} "
+                               "is lightweight. release_cohort.py tag pushes annotated ones.")
         return due
     released = []
     for package in chosen:
@@ -380,6 +384,14 @@ def remote_tags(remote):
         else:
             tags.setdefault(name, sha)
     return tags
+
+
+def lightweight_tags(remote):
+    """The names of `remote`'s tags that are not annotated (no peeled `^{}` line)."""
+    names = [line.split("\t")[1].removeprefix("refs/tags/") for line in
+             git("ls-remote", "--tags", remote).splitlines()]
+    annotated = {name.removesuffix("^{}") for name in names if name.endswith("^{}")}
+    return {name for name in names if not name.endswith("^{}")} - annotated
 
 
 def run_conclusion(tag_name):
@@ -900,8 +912,13 @@ def main():
             if release.RELEASE.fullmatch(args.tag):
                 existing = remote_tags(args.remote)
                 sha = git("rev-parse", "--verify", f"refs/tags/{args.tag}^{{commit}}")
-            guard = unreleased if args.command == "unreleased" else published
-            write_selection(guard(args.tag, load(files_on_disk()), existing=existing, sha=sha))
+            if args.command == "unreleased":
+                lightweight = lightweight_tags(args.remote) if existing is not None else frozenset()
+                chosen = unreleased(args.tag, load(files_on_disk()), existing=existing, sha=sha,
+                                    lightweight=lightweight)
+            else:
+                chosen = published(args.tag, load(files_on_disk()), existing=existing, sha=sha)
+            write_selection(chosen)
         elif args.command == "same-commit":
             summary = same_commit(args.tag, args.remote)
             print(summary)

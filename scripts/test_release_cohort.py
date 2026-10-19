@@ -224,6 +224,14 @@ class ReleaseTags(unittest.TestCase):
         cohort.unreleased("release-0.0.20", self.packages[:2] + self.packages[2:],
                           self.status(("crates.io", "rs-rich-ext"), ("crates.io", "rs-rich-cli")), tags, "c")
 
+    def test_a_selected_crates_record_tag_must_be_annotated(self):
+        with self.assertRaisesRegex(RuntimeError, r"must be annotated: rs-rich-cli-v0\.0\.20 is lightweight"):
+            cohort.unreleased("release-0.0.20", self.packages, self.status(), self.tags, "c",
+                              lightweight={"rs-rich-cli-v0.0.20"})
+        # A published crate is not selected, so its tag's kind does not matter.
+        cohort.unreleased("release-0.0.20", self.packages, self.status(("crates.io", "rs-rich-cli")),
+                          self.tags, "c", lightweight={"rs-rich-cli-v0.0.20"})
+
     def test_verify_only_checks_what_the_release_tagged_on_its_commit(self):
         tags = {**self.tags, "rs-rich-v0.0.10": "older"}
         everything = self.status(("crates.io", "rs-rich"), ("crates.io", "rs-rich-ext"), ("crates.io", "rs-rich-cli"))
@@ -339,6 +347,12 @@ class Tag(unittest.TestCase):
         cohort.tag(options.get("commit", "HEAD"), "origin", 60, options.get("dry_run", False),
                    status=self.status, wait=self.wait, registry=options.get("registry"),
                    run=options.get("run", lambda tag_name: None), release_wanted=options.get("release"))
+
+    def test_lightweight_tags_are_the_remotes_tags_with_no_tag_object(self):
+        git(self.work, "tag", "rs-rich-art-v0.2.0")
+        git(self.work, "tag", "-a", "-m", "release", "release-0.2.0")
+        git(self.work, "push", "--quiet", "origin", "rs-rich-art-v0.2.0", "release-0.2.0")
+        self.assertEqual(cohort.lightweight_tags("origin"), {"rs-rich-art-v0.2.0"})
 
     def test_tags_what_is_unpublished_and_the_release_and_waits_for_each_run(self):
         self.run_tag()
