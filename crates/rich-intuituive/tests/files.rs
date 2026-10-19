@@ -72,13 +72,6 @@ fn current(rows: &[String]) -> Vec<String> {
         .collect()
 }
 
-/// A script that lets the first frame's work end before its first event:
-/// the `files` preview starts loading only once the first frame has given
-/// its pane a width.
-fn first_frame() -> Script {
-    Script::new().wait(std::time::Duration::from_millis(50))
-}
-
 fn status(rows: &[String]) -> &str {
     rows.last().unwrap()
 }
@@ -86,7 +79,7 @@ fn status(rows: &[String]) -> &str {
 #[test]
 fn it_lists_directories_first_with_yazis_status_line() {
     let root = tree("list");
-    let rows = screen(&run(app(&root), first_frame().keys("q"), 80, 10));
+    let rows = screen(&run(app(&root), Script::new().keys("q"), 80, 10));
     assert_eq!(
         &current(&rows)[..5],
         ["alpha", "beta", "data.bin", "notes.md", "z.txt"]
@@ -447,10 +440,11 @@ fn clicks_hover_and_the_parent_column_goes_there() {
         10,
     ));
     assert!(status(&rows).contains("notes.md"), "{rows:?}");
-    // A click on an entry of a directory's preview enters it.
+    // A click on an entry of a directory's preview enters it, from the
+    // first frame on (the preview is there before the first event).
     let rows = screen(&run(
         app(&root),
-        first_frame().click(60, 1).keys("q"),
+        Script::new().click(60, 1).keys("q"),
         80,
         10,
     ));
