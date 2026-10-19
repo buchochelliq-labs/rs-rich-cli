@@ -1,13 +1,14 @@
 //! A capture as the app sees it: the newest buffer and how the feed is
-//! doing, on the core's `latest_with_state`, whether a sound card fills
-//! it (`audio`) or a simulation does (any build with `pcm`).
+//! doing, on the core's `latest_feed`, whether a sound card fills it
+//! (`audio`), a simulation, a generator or a reader played at its rate
+//! (any build with `pcm`).
 
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard};
 use std::time::Duration;
 
 use super::{Frame, Matrix};
-use crate::feed::{latest_with_state, FeedState};
+use crate::feed::{latest_feed, Feed, FeedState, FeedTeller};
 #[cfg(feature = "audio")]
 use crate::log::Log;
 use crate::reactive::{Proxy, Runtime, Signal};
@@ -65,8 +66,9 @@ pub(super) struct Shared {
     count: AtomicU64,
     /// Why the stream broke, once it has.
     failed: Mutex<Option<String>>,
-    /// How long without a buffer before the capture is stalled.
-    stall: Mutex<Duration>,
+    /// How long without a buffer before the capture is stalled (`None`:
+    /// never).
+    stall: Mutex<Option<Duration>>,
     /// What a simulated capture plays, until its signals are taken.
     simulation: Mutex<Option<Simulation>>,
     /// Buffers are held back ([`Capture::stall`]).
@@ -80,10 +82,26 @@ pub(super) struct Shared {
     pub(super) dropped: AtomicBool,
 }
 
-/// A simulated capture's buffers and beat.
+/// The next buffer of a played source: `None` at its end, an `Err` when
+/// it failed.
+type NextFrame = Box<dyn FnMut() -> Option<Result<Matrix, String>> + Send>;
+
+/// A played capture's buffers and beat, and what comes after them.
 struct Simulation {
-    frames: Box<dyn Iterator<Item = Matrix> + Send>,
+    frames: NextFrame,
     period: Duration,
+    after: After,
+}
+
+/// What a played capture does once its buffers run out.
+enum After {
+    /// Nothing more, as a device gone quiet: it stalls.
+    Quiet,
+    /// It ends: `Ended`.
+    End,
+    /// `Ended`, and this silence on the same beat until stopped, as
+    /// scope-tui pads a file.
+    Silence(Matrix),
 }
 
 /// The app side of a capture.
@@ -101,7 +119,7 @@ fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
 }
 
 impl Shared {
-    pub(super) fn new(device: String, stall: Duration) -> Shared {
+    pub(super) fn new(device: String, stall: Option<Duration>) -> Shared {
         Shared {
             device,
             latest: Mutex::new(None),
@@ -183,11 +201,21 @@ impl Shared {
         }
     }
 
-    /// The feed of a simulated capture: its buffers a period apart, then
-    /// none (a device gone quiet), until it fails or stops.
-    fn feed_simulation(&self, simulation: Simulation, tx: &Latest<Frame>) -> Result<(), String> {
-        let Simulation { mut frames, period } = simulation;
+    /// The feed of a played capture: its buffers a period apart, then
+    /// what comes after them, until it fails or stops.
+    fn feed_simulation(
+        &self,
+        simulation: Simulation,
+        tx: &Latest<Frame>,
+        teller: &FeedTeller,
+    ) -> Result<(), String> {
+        let Simulation {
+            mut frames,
+            period,
+            after,
+        } = simulation;
         let mut first = true;
+        let mut ran_out = false;
         loop {
             if !first && !tx.sleep(period) {
                 return Ok(());
@@ -202,11 +230,28 @@ impl Shared {
             if self.quiet.load(Ordering::SeqCst) {
                 continue;
             }
-            if let Some(samples) = frames.next() {
-                let number = self.number();
-                if !tx.send(Frame { number, samples }) {
-                    return Ok(());
+            let next = if ran_out { None } else { frames() };
+            let samples = match next {
+                Some(Ok(samples)) => samples,
+                Some(Err(why)) => return Err(why),
+                None => {
+                    if !ran_out {
+                        ran_out = true;
+                        match &after {
+                            After::Quiet => {}
+                            After::End => return Ok(()),
+                            After::Silence(_) => teller.tell(FeedState::Ended),
+                        }
+                    }
+                    match &after {
+                        After::Silence(silence) => silence.clone(),
+                        _ => continue,
+                    }
                 }
+            };
+            let number = self.number();
+            if !tx.send(Frame { number, samples }) {
+                return Ok(());
             }
         }
     }
@@ -265,20 +310,115 @@ impl Capture {
         I: IntoIterator<Item = Matrix>,
         I::IntoIter: Send + 'static,
     {
-        let shared = Shared::new("simulated".to_string(), Duration::from_secs(1));
-        *lock(&shared.simulation) = Some(Simulation {
-            frames: Box::new(frames.into_iter()),
+        let mut frames = frames.into_iter();
+        Capture::played(
+            "simulated",
+            Box::new(move || frames.next().map(Ok)),
             period,
+            After::Quiet,
+        )
+    }
+
+    /// A capture of generated buffers: `frames` a `period` apart (the first
+    /// at once), `Ended` once they run out. A test signal, a demo's tone
+    /// or a recording in memory, in the shape of a sound card's capture
+    /// ([`samples`](Self::samples), [`status`](Self::status)), so an app
+    /// treats every source alike.
+    ///
+    /// ```
+    /// use intuituive::audio::Capture;
+    /// use intuituive::prelude::*;
+    /// use std::time::Duration;
+    ///
+    /// let tone = rich_ext::dsp::tone(440.0, 8000.0);
+    /// let buffers = (0..3).map(move |_| vec![tone.clone().take(80).collect()]);
+    /// let capture = Capture::generated(buffers, Duration::from_millis(10));
+    /// let app = App::new(move || {
+    ///     let feed = capture.feed();
+    ///     text(move || {
+    ///         let number = feed.value().with(|f| f.as_ref().map_or(0, |f| f.number));
+    ///         format!("{number} {:?}", feed.state().get())
+    ///     })
+    /// })
+    /// .wait_for_tasks(true);
+    /// let mut driver = app.driver(20, 1);
+    /// driver.advance(Duration::from_millis(50));
+    /// assert_eq!(driver.screen().plain()[0].trim_end(), "3 Ended");
+    /// ```
+    pub fn generated<I>(frames: I, period: Duration) -> Capture
+    where
+        I: IntoIterator<Item = Matrix>,
+        I::IntoIter: Send + 'static,
+    {
+        let mut frames = frames.into_iter();
+        Capture::played(
+            "generated",
+            Box::new(move || frames.next().map(Ok)),
+            period,
+            After::End,
+        )
+    }
+
+    /// A capture of raw PCM read from `pcm` (a file, a pipe, stdin) and
+    /// played at `rate` samples a second, a buffer's time apart, in the
+    /// shape of a sound card's capture: `Ended` once the reader runs out,
+    /// and silence after on the same beat (as scope-tui pads a file);
+    /// `Failed` with the reader's error when a read fails (scope-tui's
+    /// "data source returned null"). What [`play`](super::play) plays,
+    /// with a state.
+    ///
+    /// ```
+    /// use intuituive::audio::{pcm, Capture, Format};
+    /// use intuituive::prelude::*;
+    /// use std::time::Duration;
+    ///
+    /// // Two mono u8 buffers of two samples at 100 Hz: 20 ms each.
+    /// let bytes = std::io::Cursor::new(vec![255u8, 255, 0, 0]);
+    /// let capture = Capture::from_pcm(pcm(bytes, Format::U8, 1, 2), 100);
+    /// let app = App::new(move || {
+    ///     let (samples, status) = (capture.samples(), capture.status());
+    ///     text(move || {
+    ///         let first = samples.with(|f| f.as_ref().map(|f| f.samples[0][0]));
+    ///         format!("{first:?} {:?}", status.get())
+    ///     })
+    /// })
+    /// .wait_for_tasks(true);
+    /// let mut driver = app.driver(30, 1);
+    /// driver.advance(Duration::from_millis(30));
+    /// assert_eq!(driver.screen().plain()[0].trim_end(), "Some(-1.0) Running");
+    /// driver.advance(Duration::from_millis(20));
+    /// // Run out: silence, and the state says so.
+    /// assert_eq!(driver.screen().plain()[0].trim_end(), "Some(0.0) Ended");
+    /// ```
+    pub fn from_pcm<R: std::io::Read + Send + 'static>(
+        mut pcm: super::Pcm<R>,
+        rate: u32,
+    ) -> Capture {
+        let frames = pcm.buffer() as f64;
+        let period = Duration::from_secs_f64(frames / f64::from(rate.max(1)));
+        let silence = vec![vec![0.0; pcm.buffer()]; pcm.channels()];
+        let next = Box::new(move || pcm.try_next().map_err(|e| e.to_string()).transpose());
+        Capture::played("pcm", next, period, After::Silence(silence))
+    }
+
+    /// A played capture named `device`.
+    fn played(device: &str, frames: NextFrame, period: Duration, after: After) -> Capture {
+        let shared = Shared::new(device.to_string(), Some(Duration::from_secs(1)));
+        *lock(&shared.simulation) = Some(Simulation {
+            frames,
+            period,
+            after,
         });
         Capture::from_shared(Arc::new(shared))
     }
 
     /// How long without a buffer before the [`status`](Self::status) is
-    /// `Stalled`, for a capture whose signals are not yet taken (a device's
-    /// is set by [`AudioOptions::stall_after`](super::AudioOptions::stall_after)
-    /// when the `audio` feature is on). At least a millisecond.
-    pub fn stall_after(self, quiet: Duration) -> Capture {
-        *lock(&self.shared.stall) = quiet.max(Duration::from_millis(1));
+    /// `Stalled` (`None`: never, as a source that blocks with no timeout),
+    /// for a capture whose signals are not yet taken (a device's is set by
+    /// [`AudioOptions::stall_after`](super::AudioOptions::stall_after) when
+    /// the `audio` feature is on). At least a millisecond.
+    pub fn stall_after(self, quiet: impl Into<Option<Duration>>) -> Capture {
+        *lock(&self.shared.stall) = quiet.into().map(|q| q.max(Duration::from_millis(1)));
         self
     }
 
@@ -349,6 +489,18 @@ impl Capture {
         self.attach("Capture::status()").status
     }
 
+    /// The [`samples`](Self::samples) and the [`status`](Self::status) as
+    /// one value, the core's [`Feed`]: the shape any source has, so a
+    /// sound card, a file and a generator are one type to an app.
+    ///
+    /// # Panics
+    /// Outside a running or building app.
+    #[track_caller]
+    pub fn feed(&self) -> Feed<Frame> {
+        let sink = self.attach("Capture::feed()");
+        (sink.samples, sink.status).into()
+    }
+
     /// Send ALSA's messages to `log` from now on, the ones already kept
     /// first (see [`messages`](super::messages)).
     #[cfg(feature = "audio")]
@@ -377,10 +529,11 @@ impl Capture {
         let shared = self.shared.clone();
         let simulation = lock(&shared.simulation).take();
         let stall = *lock(&shared.stall);
-        let (samples, status) = latest_with_state(stall, move |tx| match simulation {
-            Some(simulation) => shared.feed_simulation(simulation, &tx),
+        let (samples, status) = latest_feed(stall, move |tx, teller| match simulation {
+            Some(simulation) => shared.feed_simulation(simulation, &tx, teller),
             None => shared.feed_device(&tx),
-        });
+        })
+        .parts();
         let sink = Sink {
             proxy: runtime.proxy(),
             samples,
@@ -405,7 +558,7 @@ mod tests {
 
     #[test]
     fn frames_are_numbered_and_the_newest_waits_for_the_app() {
-        let shared = Arc::new(Shared::new("test".into(), Duration::from_secs(60)));
+        let shared = Arc::new(Shared::new("test".into(), Some(Duration::from_secs(60))));
         shared.deliver(vec![vec![0.0]]);
         shared.deliver(vec![vec![0.0]]);
         // Not in an app yet: the newest waits, numbered.
@@ -433,10 +586,14 @@ mod tests {
 
     #[test]
     fn a_device_feed_fails_and_ends() {
-        let failing =
-            Capture::from_shared(Arc::new(Shared::new("t".into(), Duration::from_secs(60))));
-        let stopping =
-            Capture::from_shared(Arc::new(Shared::new("t".into(), Duration::from_secs(60))));
+        let failing = Capture::from_shared(Arc::new(Shared::new(
+            "t".into(),
+            Some(Duration::from_secs(60)),
+        )));
+        let stopping = Capture::from_shared(Arc::new(Shared::new(
+            "t".into(),
+            Some(Duration::from_secs(60)),
+        )));
         let (f, s) = (failing.clone(), stopping.clone());
         let app = crate::App::new(move || crate::column([shows(&f), shows(&s)]));
         let mut driver = app.driver(30, 2);
@@ -493,5 +650,42 @@ mod tests {
         let row = driver.screen().plain()[0].trim_end().to_string();
         // Its last buffer at 10 ms, stalled since then.
         assert_eq!(row, "2 Stalled(10ms)");
+    }
+
+    #[test]
+    fn a_reader_that_fails_fails_the_capture_saying_why() {
+        use std::io::Read;
+        /// One buffer's worth of bytes, then an error.
+        struct Breaks(usize);
+        impl Read for Breaks {
+            fn read(&mut self, out: &mut [u8]) -> std::io::Result<usize> {
+                if self.0 == 0 {
+                    return Err(std::io::Error::other("data source returned null"));
+                }
+                let n = out.len().min(self.0);
+                out[..n].fill(128);
+                self.0 -= n;
+                Ok(n)
+            }
+        }
+        let pcm = super::super::pcm(Breaks(2), super::super::Format::U8, 1, 2);
+        let capture = Capture::from_pcm(pcm, 100);
+        let app = crate::App::new(move || shows(&capture)).wait_for_tasks(true);
+        let mut driver = app.driver(40, 1);
+        driver.advance(Duration::from_millis(50));
+        assert_eq!(
+            driver.screen().plain()[0].trim_end(),
+            "1 Failed(\"data source returned null\")"
+        );
+    }
+
+    #[test]
+    fn a_capture_with_no_stall_time_never_stalls() {
+        let capture =
+            Capture::simulated(vec![vec![vec![0.0]]], Duration::from_millis(10)).stall_after(None);
+        let app = crate::App::new(move || shows(&capture)).wait_for_tasks(true);
+        let mut driver = app.driver(30, 1);
+        driver.advance(Duration::from_secs(5));
+        assert_eq!(driver.screen().plain()[0].trim_end(), "1 Running");
     }
 }

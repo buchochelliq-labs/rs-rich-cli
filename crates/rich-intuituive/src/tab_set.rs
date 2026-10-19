@@ -1,6 +1,8 @@
 //! A set of tabs' states with one active: [`tab_set`], the model a
 //! [`tabs`](crate::widgets::tabs) strip shows.
 
+use std::cell::RefCell;
+use std::collections::HashMap;
 use std::rc::Rc;
 
 use crate::node::Node;
@@ -21,6 +23,10 @@ pub struct TabSet<T: 'static> {
     tabs: Signal<Vec<T>>,
     active: Signal<usize>,
     make: Signal<Make<T>>,
+    /// Each tab's identity, in the tabs' order: what [`scoped`](TabSet::scoped)
+    /// values are kept by, through opens, closes and swaps.
+    ids: Signal<Vec<u64>>,
+    next_id: Signal<u64>,
 }
 
 impl<T> Clone for TabSet<T> {
@@ -66,6 +72,8 @@ pub fn tab_set<T: 'static>(make: impl Fn() -> T + 'static) -> TabSet<T> {
         tabs: signal(vec![first]),
         active: signal(0),
         make: signal(make),
+        ids: signal(vec![0]),
+        next_id: signal(1),
     }
 }
 
@@ -103,6 +111,9 @@ impl<T: 'static> TabSet<T> {
     /// index.
     pub fn open_with(&self, state: T) -> usize {
         let at = (self.active.get_untracked() + 1).min(self.tabs.with_untracked(Vec::len));
+        let id = self.next_id.get_untracked();
+        self.next_id.set(id + 1);
+        self.ids.update(|ids| ids.insert(at, id));
         self.tabs.update(|tabs| tabs.insert(at, state));
         self.active.set(at);
         at
@@ -116,6 +127,9 @@ impl<T: 'static> TabSet<T> {
         if len <= 1 || i >= len {
             return false;
         }
+        self.ids.update(|ids| {
+            ids.remove(i);
+        });
         self.tabs.update(|tabs| {
             tabs.remove(i);
         });
@@ -154,6 +168,10 @@ impl<T: 'static> TabSet<T> {
         if to == from {
             return;
         }
+        self.ids.update(|ids| {
+            let id = ids.remove(from);
+            ids.insert(to, id);
+        });
         self.tabs.update(|tabs| {
             let tab = tabs.remove(from);
             tabs.insert(to, tab);
@@ -185,12 +203,136 @@ impl<T: 'static> TabSet<T> {
         });
     }
 
+    /// The active tab's identity, subscribing: a number that stays with the
+    /// tab through opens, closes and swaps (unlike its index), and is never
+    /// given to another tab. What [`scoped`](Self::scoped) values are kept
+    /// by.
+    pub fn active_id(&self) -> u64 {
+        let at = self.active.get();
+        self.ids.with(|ids| ids[at.min(ids.len() - 1)])
+    }
+
+    /// Every tab's identity, in the tabs' order, subscribing.
+    pub fn ids(&self) -> Vec<u64> {
+        self.ids.get()
+    }
+
+    /// A value per tab, beside the tabs' own states: the active tab's is
+    /// [`Scoped::get`], and switching tabs switches it. `make` makes a tab's
+    /// value the first time it is asked for (the tabs already open
+    /// included), so it may make signals: a selection per tab, a scroll
+    /// position, a draft. A closed tab's value goes. For a value made of
+    /// signals, a `Copy` handle such as a
+    /// [`MultiSelect`](crate::MultiSelect), `get` returns the active tab's
+    /// handle; to keep one handle and switch what it holds instead, see
+    /// [`MultiSelect::scoped`](crate::MultiSelect::scoped).
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    /// use intuituive::tab_set;
+    ///
+    /// let app = App::new(|| {
+    ///     let pages = tab_set(|| ());
+    ///     // A draft per tab.
+    ///     let draft = pages.scoped(|| signal(String::new()));
+    ///     text(move || draft.get().get())
+    ///         .on_key("a", move |_| draft.get().update(|d| d.push('a')))
+    ///         .on_key("t", move |_| {
+    ///             pages.open();
+    ///         })
+    ///         .on_key("1", move |_| pages.switch(0))
+    /// });
+    /// let mut driver = app.driver(10, 1);
+    /// driver.press("a a t a");
+    /// assert_eq!(driver.screen().plain()[0].trim_end(), "a");
+    /// driver.press("1");
+    /// assert_eq!(driver.screen().plain()[0].trim_end(), "aa");
+    /// ```
+    pub fn scoped<S: Clone + 'static>(&self, make: impl Fn() -> S + 'static) -> Scoped<S> {
+        Scoped {
+            values: signal(Rc::new(RefCell::new(HashMap::new()))),
+            version: signal(0),
+            ids: self.ids,
+            active: self.active,
+            make: signal(Rc::new(make) as Make<S>),
+        }
+    }
+
     /// The tabs' titles, `title` of each state, as a closure for a
     /// [`tabs`](crate::widgets::tabs) strip; it reads the set (and whatever
     /// `title` reads).
     pub fn titles(&self, title: impl Fn(&T) -> String + 'static) -> impl Fn() -> Vec<String> {
         let tabs = self.tabs;
         move || tabs.with(|tabs| tabs.iter().map(&title).collect())
+    }
+}
+
+/// A value per tab of a [`TabSet`], switched with the active tab: made by
+/// [`TabSet::scoped`]. `Copy`.
+pub struct Scoped<S: 'static> {
+    /// The values by tab identity: not a signal of its own, so a value can
+    /// be made while a node draws or a memo computes.
+    values: Signal<Rc<RefCell<HashMap<u64, S>>>>,
+    /// Bumped by [`update`](Scoped::update), for readers of a plain value.
+    version: Signal<u64>,
+    ids: Signal<Vec<u64>>,
+    active: Signal<usize>,
+    make: Signal<Make<S>>,
+}
+
+impl<S> Clone for Scoped<S> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<S> Copy for Scoped<S> {}
+
+impl<S: Clone + 'static> Scoped<S> {
+    /// The active tab's value (a clone), made now if it has none,
+    /// subscribing to which tab is active and to [`update`](Self::update)s.
+    pub fn get(&self) -> S {
+        let at = self.active.get();
+        let id = self.ids.with(|ids| ids[at.min(ids.len() - 1)]);
+        self.version.with(|_| ());
+        self.of_id(id)
+    }
+
+    /// Tab `i`'s value (a clone), made now if it has none; `None` past the
+    /// last tab.
+    pub fn of(&self, i: usize) -> Option<S> {
+        let id = self.ids.with(|ids| ids.get(i).copied())?;
+        self.version.with(|_| ());
+        Some(self.of_id(id))
+    }
+
+    /// Change the active tab's value in place (in an event handler or a
+    /// watch: readers of [`get`](Self::get) update).
+    pub fn update(&self, f: impl FnOnce(&mut S)) {
+        let at = self.active.get_untracked();
+        let id = self.ids.with_untracked(|ids| ids[at.min(ids.len() - 1)]);
+        self.of_id(id);
+        let values = self.values.with_untracked(Rc::clone);
+        if let Some(value) = values.borrow_mut().get_mut(&id) {
+            f(value);
+        }
+        self.version.update(|v| *v += 1);
+    }
+
+    /// The value of the tab whose identity is `id`, made if it has none;
+    /// the values of tabs that have closed are dropped meanwhile.
+    fn of_id(&self, id: u64) -> S {
+        let values = self.values.with_untracked(Rc::clone);
+        if let Some(value) = values.borrow().get(&id).cloned() {
+            return value;
+        }
+        let make = self.make.with_untracked(Rc::clone);
+        let value = crate::reactive::untracked(|| make());
+        let open = self.ids.get_untracked();
+        let mut values = values.borrow_mut();
+        values.retain(|id, _| open.contains(id));
+        values.insert(id, value.clone());
+        value
     }
 }
 

@@ -34,7 +34,8 @@ pub trait MillerSource: 'static {
     fn parent(&self, at: &Self::Key) -> Option<(Self::Key, String)>;
 
     /// Called when the columns arrive at a level, before its cursor is
-    /// placed: clear a filter, say. Nothing by default.
+    /// placed (and when an [`overlay`](Miller::overlay) at it ends, back
+    /// to its own items): clear a filter, say. Nothing by default.
     fn arrive(&self, at: &Self::Key) {
         let _ = at;
     }
@@ -491,14 +492,37 @@ impl<S: MillerSource> Miller<S> {
         self.overlay.with(|o| o.as_ref().map(|o| o.at.clone()))
     }
 
+    /// Replace the items the [`overlay`](Self::overlay) lists, staying on
+    /// its level with the cursor where it is (kept among the items): a
+    /// search's results arriving while it runs. Nothing without one.
+    pub fn update_overlay(&self, items: Vec<(String, Option<S::Key>)>) {
+        if self.overlay.with_untracked(Option::is_none) {
+            return;
+        }
+        let (names, opens): (Vec<String>, Vec<Option<S::Key>>) = items.into_iter().unzip();
+        self.overlay.update(|overlay| {
+            if let Some(overlay) = overlay {
+                overlay.names = names;
+                overlay.opens = opens;
+            }
+        });
+        let len = self.items.with_untracked(Vec::len);
+        if self.cursor.get_untracked() >= len {
+            self.cursor.set(len.saturating_sub(1));
+        }
+    }
+
     /// End the [`overlay`](Self::overlay): the level's own items again,
-    /// hovering the one hovered before it. Nothing without one.
+    /// hovering the one hovered before it. The source's
+    /// [`arrive`](MillerSource::arrive) runs, as the columns arrive back at
+    /// the level. Nothing without one.
     pub fn end_overlay(&self) {
         if self.overlay.with_untracked(Option::is_none) {
             return;
         }
         self.overlay.set(None);
         let at = self.at.get_untracked();
+        self.source().arrive(&at);
         let to = self
             .remembered(&at)
             .and_then(|n| self.position(&n))

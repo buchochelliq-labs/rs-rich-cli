@@ -130,10 +130,185 @@ impl Previewer {
         })
     }
 
+    /// An external previewer, as Yazi runs `pdftoppm` and
+    /// `ffmpegthumbnailer`: for files whose MIME type matches `mime` (a
+    /// glob: `application/pdf`, `video/*`, `*`), run `argv` (the program,
+    /// then its arguments) and show what it writes. In `argv`, `%s` is the
+    /// file's path (put last when no argument has it), `%o` a file for the
+    /// command to write its output to (else its standard output is read),
+    /// and `%w` the pane's width in cells. Output that is an image (PNG,
+    /// JPEG, GIF, BMP, WebP or PPM) is shown as one (drawn with the `art`
+    /// feature), anything else as plain text. A program that is not there
+    /// leaves the file to the other previewers; one that fails says why.
+    ///
+    /// ```
+    /// use intuituive::files::{Preview, PreviewSettings, Previewer};
+    ///
+    /// // A PDF's first page as a PNG, or a video's thumbnail, as Yazi:
+    /// let pdf = Previewer::command("application/pdf", &["pdftoppm", "-png", "-singlefile", "-f", "1", "-l", "1", "-scale-to", "800", "%s"]);
+    /// let video = Previewer::command("video/*", &["ffmpegthumbnailer", "-i", "%s", "-o", "%o", "-c", "png", "-s", "800"]);
+    /// # let _ = (pdf, video);
+    /// # #[cfg(unix)]
+    /// # {
+    /// let path = std::env::temp_dir().join(format!("intuituive-command-doc-{}.txt", std::process::id()));
+    /// std::fs::write(&path, "b\na\n").unwrap();
+    /// let sorted = Previewer::command("text/*", &["sort", "%s"]);
+    /// let shown = sorted.preview(&path, "text/plain", &PreviewSettings::default());
+    /// let Some(Preview::Code(lines)) = shown else { panic!("{shown:?}") };
+    /// assert_eq!(lines[0][0].text, "a");
+    /// // Another type is left to the other previewers.
+    /// assert_eq!(sorted.preview(&path, "image/png", &PreviewSettings::default()), None);
+    /// # std::fs::remove_file(&path).ok();
+    /// # }
+    /// ```
+    pub fn command(mime: &str, argv: &[&str]) -> Previewer {
+        let glob = mime.to_string();
+        let argv: Vec<String> = argv.iter().map(|a| a.to_string()).collect();
+        Previewer::new(move |path, mime, settings| {
+            if argv.is_empty() || !mime_matches(&glob, mime) || path.is_dir() {
+                return None;
+            }
+            run_previewer(&argv, path, mime, settings)
+        })
+    }
+
     /// Ask it about `path`, of type `mime`.
     pub fn preview(&self, path: &Path, mime: &str, settings: &PreviewSettings) -> Option<Preview> {
         (self.0)(path, mime, settings)
     }
+}
+
+/// Whether `mime` matches `glob`, whose `*`s match any run of
+/// characters.
+fn mime_matches(glob: &str, mime: &str) -> bool {
+    fn matches(glob: &[u8], text: &[u8]) -> bool {
+        match glob.split_first() {
+            None => text.is_empty(),
+            Some((b'*', rest)) => (0..=text.len()).any(|i| matches(rest, &text[i..])),
+            Some((c, rest)) => text
+                .split_first()
+                .is_some_and(|(t, text)| t.eq_ignore_ascii_case(c) && matches(rest, text)),
+        }
+    }
+    matches(glob.as_bytes(), mime.as_bytes())
+}
+
+/// Run a [`Previewer::command`]'s `argv` on `path`: its output as an image
+/// or as text; `None` when the program is not there.
+fn run_previewer(
+    argv: &[String],
+    path: &Path,
+    mime: &str,
+    settings: &PreviewSettings,
+) -> Option<Preview> {
+    use std::process::{Command, Stdio};
+    let out_file = argv
+        .iter()
+        .any(|a| a.contains("%o"))
+        .then(|| previews_dir().join(format!("out-{}", key_of(path, settings))));
+    let fill = |arg: &str| {
+        let mut arg = arg.replace("%s", &path.to_string_lossy());
+        arg = arg.replace("%w", &settings.width.to_string());
+        if let Some(out) = &out_file {
+            arg = arg.replace("%o", &out.to_string_lossy());
+        }
+        arg
+    };
+    let mut command = Command::new(&argv[0]);
+    command.args(argv[1..].iter().map(|a| fill(a)));
+    if !argv.iter().any(|a| a.contains("%s")) {
+        command.arg(path);
+    }
+    if let Some(out) = &out_file {
+        let _ = std::fs::create_dir_all(previews_dir());
+        let _ = std::fs::remove_file(out);
+    }
+    let ran = command
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .output();
+    let ran = match ran {
+        Ok(ran) => ran,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return None,
+        Err(error) => {
+            return Some(Preview::Note(format!(
+                "[red]{}",
+                escape(&error.to_string())
+            )))
+        }
+    };
+    let bytes = match &out_file {
+        Some(out) => {
+            let bytes = std::fs::read(out).unwrap_or_default();
+            let _ = std::fs::remove_file(out);
+            bytes
+        }
+        None => ran.stdout,
+    };
+    if !ran.status.success() || bytes.is_empty() {
+        let said = String::from_utf8_lossy(&ran.stderr);
+        let why = said
+            .lines()
+            .rev()
+            .find(|l| !l.trim().is_empty())
+            .map_or_else(|| ran.status.to_string(), str::to_string);
+        return Some(Preview::Note(format!(
+            "[red]{}: {}",
+            escape(&argv[0]),
+            escape(&why)
+        )));
+    }
+    if let Some(ext) = image_kind(&bytes) {
+        let image = previews_dir().join(format!("{}.{ext}", key_of(path, settings)));
+        let size = readable_size(bytes.len() as u64);
+        return Some(match crate::state::write_atomic(&image, &bytes) {
+            Ok(()) => Preview::Image {
+                path: image,
+                note: format!("[yellow]{mime}[/] by {}, {size}", escape(&argv[0])),
+            },
+            Err(error) => Preview::Note(format!("[red]{}", escape(&error.to_string()))),
+        });
+    }
+    let text = String::from_utf8_lossy(&bytes);
+    let lines = text
+        .lines()
+        .take(settings.max_lines)
+        .map(|line| vec![Segment::new(line.replace('\t', "  "), None)])
+        .collect();
+    Some(Preview::Code(lines))
+}
+
+/// Where command previewers' images are kept: this process's folder in
+/// the temporary directory.
+fn previews_dir() -> PathBuf {
+    std::env::temp_dir().join(format!("intuituive-previews-{}", std::process::id()))
+}
+
+/// A name for `path`'s preview at these settings, changing with the file.
+fn key_of(path: &Path, settings: &PreviewSettings) -> String {
+    use std::hash::{Hash, Hasher};
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    path.hash(&mut hasher);
+    settings.width.hash(&mut hasher);
+    std::fs::metadata(path)
+        .and_then(|m| m.modified())
+        .ok()
+        .hash(&mut hasher);
+    format!("{:016x}", hasher.finish())
+}
+
+/// The extension of the image `bytes` are, by their first bytes.
+fn image_kind(bytes: &[u8]) -> Option<&'static str> {
+    Some(match bytes {
+        [0x89, b'P', b'N', b'G', ..] => "png",
+        [0xff, 0xd8, 0xff, ..] => "jpg",
+        [b'G', b'I', b'F', b'8', ..] => "gif",
+        [b'B', b'M', ..] => "bmp",
+        [b'R', b'I', b'F', b'F', _, _, _, _, b'W', b'E', b'B', b'P', ..] => "webp",
+        [b'P', b'1'..=b'6', b'\n' | b' ' | b'\r' | b'\t', ..] => "ppm",
+        _ => return None,
+    })
 }
 
 /// What `path` is: `file -bL`'s classification, else a description of
@@ -647,4 +822,59 @@ fn image_pane(state: Signal<Preview>) -> Node {
             _ => String::new(),
         })
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn mime_globs_and_image_kinds() {
+        assert!(mime_matches("video/*", "video/mp4"));
+        assert!(mime_matches("*", "anything"));
+        assert!(mime_matches("application/pdf", "application/PDF"));
+        assert!(!mime_matches("video/*", "audio/ogg"));
+        assert!(!mime_matches("text/plain", "text/plainer"));
+        assert_eq!(image_kind(b"\x89PNG\r\n"), Some("png"));
+        assert_eq!(image_kind(b"P6\n4 4\n255\n"), Some("ppm"));
+        assert_eq!(image_kind(b"plain text"), None);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_command_writing_an_image_is_shown_as_one() {
+        let path = std::env::temp_dir().join(format!(
+            "intuituive-command-image-{}.pdf",
+            std::process::id()
+        ));
+        std::fs::write(&path, "%PDF").unwrap();
+        // A stand-in for pdftoppm: a tiny PPM to the output file.
+        let previewer = Previewer::command(
+            "application/pdf",
+            &[
+                "sh",
+                "-c",
+                "printf 'P3\\n1 1\\n255\\n255 0 0\\n' > \"$1\"",
+                "sh",
+                "%o",
+            ],
+        );
+        let shown = previewer.preview(&path, "application/pdf", &PreviewSettings::default());
+        let Some(Preview::Image { path: image, note }) = shown else {
+            panic!("{shown:?}")
+        };
+        assert!(image.extension().is_some_and(|e| e == "ppm"), "{image:?}");
+        assert!(note.contains("by sh"), "{note}");
+        // A failure says why; a missing program is left to the others.
+        let failing = Previewer::command("*", &["sh", "-c", "echo no pages >&2; exit 1", "sh"]);
+        let said = failing.preview(&path, "application/pdf", &PreviewSettings::default());
+        assert_eq!(said, Some(Preview::Note("[red]sh: no pages".into())));
+        let missing = Previewer::command("*", &["intuituive-no-such-previewer"]);
+        assert_eq!(
+            missing.preview(&path, "application/pdf", &PreviewSettings::default()),
+            None
+        );
+        std::fs::remove_file(&path).ok();
+        std::fs::remove_file(&image).ok();
+    }
 }

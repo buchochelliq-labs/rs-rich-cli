@@ -13,13 +13,15 @@ use super::model::{dir_model_with, DirModel};
 use super::preview::{preview, BinaryPreview, Preview, PreviewOptions, PreviewSettings, Previewer};
 use super::row::{file_list, FileListOptions, Linemode, Marker, MarkerFn};
 use super::search::Search;
+use super::tabs::FileTab;
 use crate::app::Ctx;
 use crate::list::RowRects;
-use crate::miller::{miller_in, MillerSource};
+use crate::miller::{miller_in, MillerSource, Move};
 use crate::node::{label, row, Node};
-use crate::reactive::{memo, signal, Memo, Signal};
+use crate::reactive::{memo, signal, watch, Memo, Signal};
 use crate::screen::Rect;
 use crate::select::{list_search, MultiSelect};
+use crate::tab_set::TabSet;
 
 /// A directory tree as the core's Miller columns browse it: the current
 /// directory's and the parent's items come from their models (sorted,
@@ -152,6 +154,9 @@ pub struct Miller {
     icons: bool,
     /// The selection [`selection`](crate::files::selection) made for it.
     pub(crate) selection: Signal<Option<MultiSelect<PathBuf>>>,
+    /// The tabs [`tabs`](crate::files::tabs) made over it: a selection is
+    /// kept per tab.
+    pub(crate) tabs: Signal<Option<TabSet<FileTab>>>,
     /// The search whose results the current column lists.
     search: Signal<Option<Search>>,
 }
@@ -303,6 +308,28 @@ pub fn miller(start: impl Into<PathBuf>) -> Miller {
         search,
     };
     let columns = miller_in(tree, cwd);
+    // A search's results are an overlay at its root (a level of their
+    // own, as Yazi's `search://` folder): its items follow them as they
+    // arrive.
+    let found = current.entries();
+    watch(
+        move || {
+            search.with(Option::is_some).then(|| {
+                let dir = cwd.get();
+                found.with(|entries| {
+                    entries
+                        .iter()
+                        .map(|e| (e.name.clone(), e.dir.then(|| dir.join(&e.name))))
+                        .collect::<Vec<_>>()
+                })
+            })
+        },
+        move |items, _| {
+            if let Some(items) = items {
+                columns.update_overlay(items);
+            }
+        },
+    );
     let cursor = columns.cursor;
     let entries = current.entries();
     let hovered = memo(move || {
@@ -326,6 +353,7 @@ pub fn miller(start: impl Into<PathBuf>) -> Miller {
         preview_first: signal(0),
         icons: false,
         selection: signal(None),
+        tabs: signal(None),
         search,
     }
 }
@@ -448,10 +476,13 @@ impl Miller {
     }
 
     /// List `search`'s results in the current column, in place of its
-    /// root's entries (Yazi's search listing): the columns go to the root,
-    /// each result named by its path from there, and its results arrive
-    /// while it runs. Entering a directory, going up or anywhere else ends
-    /// it, as [`end_search`](Self::end_search) does.
+    /// root's entries (Yazi's search listing, a virtual folder): the core's
+    /// [`overlay`](crate::miller::Miller::overlay) at the root, each result
+    /// named by its path from there, its results arriving while it runs.
+    /// Entering a directory found goes there; going up (`h`) goes back to
+    /// the directory searched, hovering what was hovered before, as Yazi
+    /// does; either ends the search, as [`end_search`](Self::end_search)
+    /// does.
     ///
     /// ```
     /// use intuituive::files::{miller, search, SearchKind};
@@ -476,7 +507,9 @@ impl Miller {
     /// # std::fs::remove_dir_all(&dir).ok();
     /// ```
     pub fn show_search(&self, search: Search) {
-        self.cd(search.root(), None);
+        // A search listed before ends; the columns stay on its level.
+        self.stop_search();
+        self.columns.overlay(search.root(), Vec::new());
         self.search.replace(Some(search));
         self.current.results.replace(Some(search.found()));
         self.cursor.set(0);
@@ -488,12 +521,61 @@ impl Miller {
         self.search.with(|s| *s)
     }
 
-    /// Stop listing a search's results: the directory's own entries again.
+    /// Stop listing a search's results: the directory searched's own
+    /// entries again, hovering the one hovered before the search.
     pub fn end_search(&self) {
+        self.columns.end_overlay();
+        self.stop_search();
+    }
+
+    /// Cancel the search listed, if any, and list the directory's own
+    /// entries, leaving the overlay to the caller.
+    fn stop_search(&self) {
         if let Some(search) = self.search.replace(None) {
             search.cancel();
             self.current.results.replace(None);
         }
+    }
+
+    /// Make move `to` (the core's [`Move`]): what
+    /// [`navigation`](Self::navigation) binds each key to, for a binding
+    /// of your own (`.bind_sequence("g g", "Go to the top", move |_|
+    /// m.go(Move::Top))`).
+    pub fn go(&self, to: Move) {
+        self.columns.go(to);
+    }
+
+    /// Bind the moves of a table on `node` (which should hold the view),
+    /// each with its keys and the description the help shows: Yazi's own
+    /// wording ("Move cursor up half page") without binding each key by
+    /// hand. The core's
+    /// [`navigation_with`](crate::miller::Miller::navigation_with); `J`
+    /// and `K` are not bound (see [`navigation`](Self::navigation)).
+    ///
+    /// ```
+    /// use intuituive::files::{miller, Move};
+    /// use intuituive::prelude::*;
+    ///
+    /// let dir = std::env::temp_dir().join(format!("intuituive-files-moves-doc-{}", std::process::id()));
+    /// std::fs::create_dir_all(dir.join("inner")).unwrap();
+    /// std::fs::write(dir.join("notes.txt"), "").unwrap();
+    /// let start = dir.clone();
+    /// let app = App::new(move || {
+    ///     let m = miller(start.clone());
+    ///     m.navigation_with(
+    ///         m.view(),
+    ///         &[(Move::Up, "k up", "Previous file"), (Move::Down, "j down", "Next file")],
+    ///     )
+    ///     .on_key("?", |cx| cx.help())
+    /// })
+    /// .wait_for_tasks(true);
+    /// let mut driver = app.driver(60, 10);
+    /// driver.press("?");
+    /// assert!(driver.screen().plain().join("\n").contains("Next file"));
+    /// # std::fs::remove_dir_all(&dir).ok();
+    /// ```
+    pub fn navigation_with(self, node: Node, moves: &[(Move, &str, &str)]) -> Node {
+        self.columns.navigation_with(node, moves)
     }
 
     /// Bind Yazi's movement keys on `node` (which should hold the view):
@@ -572,37 +654,40 @@ impl Miller {
 
     fn parent_column(self, options: &MillerOptions) -> Node {
         let m = self;
-        let selection = self.selection.get_untracked();
-        let markers: Option<MarkerFn> = match (options.markers.clone(), selection) {
-            (None, None) => None,
-            (marker, selection) => Some(Rc::new(move |_, path: &Path| {
-                // The selection's mark first, as the current column draws
-                // it (the parent has no visual range).
-                let key = path.to_path_buf();
-                if selection.is_some_and(|s| s.mark(&key) == crate::select::Mark::Selected) {
-                    return Marker::Selected;
-                }
-                marker.as_ref().map_or(Marker::None, |f| f(None, path))
-            })),
-        };
+        // The parent has no visual range: its markers are told so.
+        let markers: Option<MarkerFn> = options
+            .markers
+            .clone()
+            .map(|marker| Rc::new(move |_, path: &Path| marker(None, path)) as MarkerFn);
         let list = FileListOptions::new()
             .icons(self.icons)
             .offset(self.columns.parent_first)
             .lead(true)
             .marker_fn(markers)
             .no_focus();
-        file_list(self.parent, self.columns.parent_cursor, list)
-            .name("parent")
-            .on_mouse(move |_, mouse| {
-                use rich_interact::{Button, MouseKind};
-                match mouse.kind {
-                    MouseKind::Down(Button::Left) => {}
-                    MouseKind::ScrollUp | MouseKind::ScrollDown => return true,
-                    _ => return false,
+        let mut node = file_list(self.parent, self.columns.parent_cursor, list);
+        if let Some(selection) = self.selection.get_untracked() {
+            // The selection's marks by path, in the theme's
+            // `marker.selected`, before any other marker.
+            let (parent, entries) = (self.parent, self.parent.entries());
+            node = node.marks_by(selection, move |i| {
+                let name = entries.with(|e| e.get(i).map(|e| e.name.clone()));
+                match (parent.dir(), name) {
+                    (Some(dir), Some(name)) => dir.join(name),
+                    _ => PathBuf::new(),
                 }
-                m.columns.click_parent(mouse.row as usize);
-                true
-            })
+            });
+        }
+        node.name("parent").on_mouse(move |_, mouse| {
+            use rich_interact::{Button, MouseKind};
+            match mouse.kind {
+                MouseKind::Down(Button::Left) => {}
+                MouseKind::ScrollUp | MouseKind::ScrollDown => return true,
+                _ => return false,
+            }
+            m.columns.click_parent(mouse.row as usize);
+            true
+        })
     }
 
     fn preview_column(self, options: &MillerOptions) -> Node {
