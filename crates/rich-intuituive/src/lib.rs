@@ -156,7 +156,10 @@ pub use help::{HelpOptions, KeyFormat};
 #[cfg(feature = "art")]
 pub use image::{image, image_of, image_with, ImageAnchor, ImageFit, ImageMode, ImageView};
 pub use input::{input, number_input};
-pub use jobs::{jobs, jobs_panel, Job, JobOutcome, JobProgress, JobState, Jobs};
+pub use jobs::{
+    jobs, jobs_panel, jobs_panel_with, Job, JobOutcome, JobProgress, JobState, Jobs,
+    JobsPanelOptions,
+};
 pub use layout::{Align, AlignContent, Justify, Size, StackLayout, TextAlign};
 pub use list::list_optional;
 pub use log::Log;
