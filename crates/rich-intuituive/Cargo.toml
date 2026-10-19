@@ -168,3 +168,12 @@ required-features = ["rich-ext/data"]
 [[test]]
 name = "taskwarrior"
 required-features = ["rich-ext/data"]
+
+# The raycaster draws its view in cells and pixels with rs-rich-art (`art`).
+[[example]]
+name = "raycast"
+required-features = ["art"]
+
+[[test]]
+name = "raycast"
+required-features = ["art"]
