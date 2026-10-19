@@ -9,7 +9,7 @@ do not, [rustup.rs](https://rustup.rs) is the one-line installer.
 |---|---|
 | **Rust** | 1.90 or later (the MSRV, checked in CI) |
 | **Terminal** | any VT-capable terminal. On Windows use Windows Terminal — the legacy `cmd.exe` console is [not supported](known-issues.md#windows-legacy-console-is-not-supported) |
-| **Tested on** | Linux (`ubuntu-latest`) and macOS in CI; developed and exercised on Windows 11 |
+| **Tested on** | Linux (`ubuntu-latest`) and macOS in CI, the whole suite; Windows in CI for what differs there (the pager, batch paths, browser sessions, the interactive crates and time zones), and developed and exercised on Windows 11 |
 | **Cost** | none — MIT licensed, no account, no network calls except the optional URL-fetch feature |
 
 ## Install
@@ -30,7 +30,7 @@ do not, [rustup.rs](https://rustup.rs) is the one-line installer.
 
     ```toml
     [dependencies]
-    rs-rich = "0.0.9"
+    rs-rich = "0.0.10"
     ```
 
 !!! tip "Published on crates.io"
@@ -45,7 +45,8 @@ do not, [rustup.rs](https://rustup.rs) is the one-line installer.
     `rs-rich-micro` (new in 0.0.14) · `rs-rich-diagram` (new in 0.0.15) ·
     `rs-rich-data` (new in 0.0.16) · `rs-rich-ratatui` · `rs-rich-intuituive` (both new in 0.0.17) ·
     `rs-rich-web` · `rs-rich-embed` (both new in 0.0.18) —
-    follow the links for current published versions.
+    follow the links for current published versions, and see the
+    [version table](index.md#versions-in-this-checkout) for this checkout's.
     API documentation is on [docs.rs](https://docs.rs/rs-rich).
 
 ## Check the install worked
@@ -96,7 +97,7 @@ package carries an `rs-` prefix. The library target keeps the short name, so the
 dependency and the `use` line differ:
 
 ```toml
-rs-rich = "0.0.9"      # the latest published release
+rs-rich = "0.0.10"     # the 0.0.20 release's core
 ```
 
 ```rust
@@ -168,3 +169,6 @@ and the [export guide](guide/core/export.md).
   progress display.
 - The [gallery](gallery.md) is the fastest way to see what exists.
 - [Parity](parity.md) explains what "a port" means here, and where it stops.
+- [Terminal apps](guide/intuituive/index.md) builds full-screen programs with
+  intuiTUIve, and [Interactive](guide/interact/index.md) asks questions in
+  a program or a script.
