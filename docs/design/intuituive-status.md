@@ -62,3 +62,9 @@ test first, generic core, stay in your area). Areas, each on its own branch:
 | F | (next) | port `Text.markup` with goldens; the template manifest noise for git dependencies |
 
 Then every clone is rebuilt on the fixes.
+| G | `r6-record` | rich-record: Kitty/Sixel/iTerm2 capture, every-frame video at a set fps, `KeyDown`/`KeyUp`/`Hold`, APNG; gameplay videos of the raycaster (here) and of Doom's demo playback (rs-rich-doom) |
+
+**When all of it has landed and the full gate passes: open two PRs** (the
+user asked for this): rs-rich-cli `claude/next-priority-items-3c5p8e` →
+`main` (PR template, release handoff comment, drive CI and review), and
+rs-rich-doom `claude/doom-frontend` → `main`.
