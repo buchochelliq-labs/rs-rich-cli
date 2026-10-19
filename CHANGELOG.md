@@ -59,6 +59,21 @@ confirm pop-ups, which-key, `latest`/`latest_every`, `rate` and the
 `bind_*` family. The image nodes stay behind `art`, `watch_path` behind
 `watch`.
 
+### The Yazi clone rebuilt on round 3 (rs-rich-intuituive)
+
+- `examples/files.rs` is rebuilt on the `files` feature's Miller columns,
+  previews, openers, tasks and finder and the core's `status_bar`,
+  `breadcrumb`, `tabs(..).auto_hide().on_select(..)`, `cx.prompt_with`,
+  `cx.pick_with` and `cx.confirm_with`: 2,756 lines down to 1,450. Newly as
+  Yazi: the system's trash, file jobs in the background with a task
+  manager (`w`) and a quit confirm while they run, git signs, sniffed type
+  colours, archive previews and extraction, the streaming finder (`z`),
+  50-wide prompts, 70 x 20 confirms, and a click in the parent column that
+  goes into the directory. It now needs the crate's `files` feature
+  (`required-features`); CI's tapes job builds it with `files` and
+  `archive`. Round 3's findings are in
+  [the demo gaps](docs/design/intuituive-demo-gaps.md).
+
 ### intuiTUIve: widgets, pop-ups and runtime from round 2 (rs-rich-intuituive)
 
 The rest of what the round-2 rebuilds of scope-tui and Yazi found

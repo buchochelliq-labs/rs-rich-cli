@@ -585,13 +585,14 @@ jobs:
 
       # The CLI with its `serve` feature (the serve tape), the interact
       # examples (the viewport tape), and the intuiTUIve and embed examples;
-      # intuiTUIve's with `watch` and `art`, so the files tape follows the
+      # intuiTUIve's with `files` (the files example needs it), `archive`,
+      # `watch` and `art`, so the files tape lists an archive, follows the
       # disk and draws its image preview, and `pcm`, which the scope
       # example needs.
       - name: Build the CLI and the examples the tapes run
         run: >-
           cargo build -p rs-rich-cli -p rs-rich-interact -p rs-rich-intuituive
-          -p rs-rich-embed --features rs-rich-cli/serve,rs-rich-intuituive/watch,rs-rich-intuituive/art,rs-rich-intuituive/pcm
+          -p rs-rich-embed --features rs-rich-cli/serve,rs-rich-intuituive/files,rs-rich-intuituive/archive,rs-rich-intuituive/watch,rs-rich-intuituive/art,rs-rich-intuituive/pcm
           --bins --examples --locked
 
       # rs-rich-ext's examples are guide programs; the surface tape runs one.

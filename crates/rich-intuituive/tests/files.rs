@@ -1,5 +1,7 @@
 //! The Yazi-style file manager (examples/files.rs), on a directory made for
-//! each test.
+//! each test. The example needs the `files` feature.
+
+#![cfg(feature = "files")]
 
 mod common;
 
@@ -18,6 +20,7 @@ use rich_interact::headless::Script;
 /// root/
 ///   alpha/a.txt  beta/  .hidden  notes.md  data.bin  z.txt
 fn tree(name: &str) -> PathBuf {
+    trash_here();
     let root = std::env::temp_dir().join(format!("intuituive-files-{name}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(root.join("alpha")).unwrap();
@@ -32,6 +35,17 @@ fn tree(name: &str) -> PathBuf {
         Some(rest) if rest.as_bytes().get(1) == Some(&b':') => PathBuf::from(rest),
         _ => full,
     }
+}
+
+/// The FreeDesktop trash the app trashes to: under the temporary
+/// directory (so on the trees' file system), not the user's.
+fn trash_dir() -> PathBuf {
+    std::env::temp_dir().join(format!("intuituive-files-xdg-{}", std::process::id()))
+}
+
+fn trash_here() {
+    static ONCE: std::sync::Once = std::sync::Once::new();
+    ONCE.call_once(|| std::env::set_var("XDG_DATA_HOME", trash_dir()));
 }
 
 fn app(root: &Path) -> App {
@@ -50,6 +64,13 @@ fn current(rows: &[String]) -> Vec<String> {
         .collect()
 }
 
+/// A script that lets the first frame's work end before its first event:
+/// the `files` preview starts loading only once the first frame has given
+/// its pane a width.
+fn first_frame() -> Script {
+    Script::new().wait(std::time::Duration::from_millis(50))
+}
+
 fn status(rows: &[String]) -> &str {
     rows.last().unwrap()
 }
@@ -57,7 +78,7 @@ fn status(rows: &[String]) -> &str {
 #[test]
 fn it_lists_directories_first_with_yazis_status_line() {
     let root = tree("list");
-    let rows = screen(&run(app(&root), Script::new().keys("q"), 80, 10));
+    let rows = screen(&run(app(&root), first_frame().keys("q"), 80, 10));
     assert_eq!(
         &current(&rows)[..5],
         ["alpha", "beta", "data.bin", "notes.md", "z.txt"]
@@ -81,12 +102,14 @@ fn it_lists_directories_first_with_yazis_status_line() {
 }
 
 #[test]
-fn moving_previews_text_highlighted_and_binary_as_a_note() {
+fn moving_previews_text_highlighted_and_binary_as_a_hex_dump() {
     let root = tree("preview");
     let rows = screen(&run(app(&root), Script::new().keys("j j j q"), 80, 10));
     assert!(row_of(&rows, "# Title").is_some(), "notes.md: {rows:?}");
+    // A binary file is a hex dump (the `files` preview's; Yazi's `file`
+    // previewer prints `file -bL`'s classification).
     let rows = screen(&run(app(&root), Script::new().keys("j j q"), 80, 10));
-    assert!(row_of(&rows, "Binary data, 6B").is_some(), "{rows:?}");
+    assert!(row_of(&rows, "00000000  00 01 02").is_some(), "{rows:?}");
     // G is the last, gg (a chord) the first again.
     let rows = screen(&run(app(&root), Script::new().keys("G q"), 80, 10));
     assert!(
@@ -310,10 +333,19 @@ fn trash_and_delete_ask_first() {
     assert!(row_of(&rows, "[Y]es").is_some(), "{rows:?}");
     run(app(&root), Script::new().keys("G d n q"), 80, 24);
     assert!(root.join("z.txt").exists());
-    // y moves it to .trash in the directory the app started in.
+    // y moves it to the FreeDesktop trash, with a note of where it was.
     run(app(&root), Script::new().keys("G d y q"), 80, 24);
     assert!(!root.join("z.txt").exists());
-    assert!(root.join(".trash/z.txt").exists());
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        let trashed = rich_ext::trash::list().unwrap();
+        assert!(
+            trashed
+                .iter()
+                .any(|item| item.original == root.join("z.txt")),
+            "{trashed:?}"
+        );
+    }
     // D deletes for good, a directory and all in it too.
     let rows = screen(&run_open(app(&root), Script::new().keys("D"), 80, 24));
     assert!(
@@ -322,11 +354,18 @@ fn trash_and_delete_ask_first() {
     );
     run(app(&root), Script::new().keys("D y q"), 80, 24);
     assert!(!root.join("alpha").exists());
-    // The trash itself is never moved into itself.
-    let script = Script::new().keys(". f").text(".trash").keys("enter d y q");
-    run(app(&root), script, 80, 24);
-    assert!(root.join(".trash/z.txt").exists());
-    assert!(!root.join(".trash/.trash").exists());
+}
+
+#[test]
+fn the_trash_confirm_is_yazis_70_by_20() {
+    let root = tree("confirm-size");
+    let rows = screen(&run_open(app(&root), Script::new().keys("d"), 100, 30));
+    let top = row_of(&rows, "Trash 1 selected file?").expect("the confirm");
+    let line = &rows[top][rows[top].find('╭').expect("its border")..];
+    let width = line.chars().take_while(|&c| c != '╮').count() + 1;
+    assert_eq!(width, 70, "{rows:?}");
+    let yes = row_of(&rows, "[Y]es").expect("the answers");
+    assert_eq!(yes, top + 18, "{rows:?}");
 }
 
 #[test]
@@ -378,18 +417,27 @@ fn clicks_hover_and_the_parent_column_goes_there() {
         10,
     ));
     assert!(status(&rows).contains("3/5"), "{rows:?}");
-    // In alpha, a click on its parent's beta goes to the root, beta hovered.
+    // In alpha, a click on its parent's beta goes into beta, as Yazi's
+    // parent column `cd`s to what is clicked.
     let rows = screen(&run(
         app(&root),
         Script::new().keys("l").click(3, 2).keys("q"),
         80,
         10,
     ));
-    assert!(status(&rows).contains("beta"), "{rows:?}");
+    assert!(rows[0].ends_with("beta"), "{rows:?}");
+    // On a file there, its directory with the file hovered.
+    let rows = screen(&run(
+        app(&root),
+        Script::new().keys("l").click(3, 4).keys("q"),
+        80,
+        10,
+    ));
+    assert!(status(&rows).contains("notes.md"), "{rows:?}");
     // A click on an entry of a directory's preview enters it.
     let rows = screen(&run(
         app(&root),
-        Script::new().click(60, 1).keys("q"),
+        first_frame().click(60, 1).keys("q"),
         80,
         10,
     ));
@@ -456,9 +504,12 @@ fn the_rename_prompt_opens_below_the_hovered_row() {
     assert_eq!(row_of(&rows, "Rename:"), Some(3), "{rows:?}");
 }
 
-/// The program `$EDITOR` names, as the example reads it.
+/// The program `$EDITOR` names, as the opener rules read it.
 fn editor() -> String {
-    files::editor().get_program().to_string_lossy().into_owned()
+    rich_ext::open::editor()
+        .get_program()
+        .to_string_lossy()
+        .into_owned()
 }
 
 #[test]
@@ -467,6 +518,9 @@ fn enter_hands_the_terminal_to_the_editor_as_yazi_does() {
     // notes.md is text: Enter (and o) open it in $EDITOR.
     let record = run(app(&root), Script::new().keys("j j j enter o q"), 80, 10);
     assert_eq!(record.handoffs, [editor(), editor()]);
+    // With the hovered file as its argument.
+    let notes = root.join("notes.md").display().to_string();
+    assert_eq!(record.handoff_commands[0].1.last(), Some(&notes));
     // Yazi's rules give a directory to the editor too.
     let record = run(app(&root), Script::new().keys("enter q"), 80, 10);
     assert_eq!(record.handoffs, [editor()]);
@@ -483,8 +537,15 @@ fn open_interactively_offers_the_openers_of_the_files_type() {
     assert!(rows[at + 2].contains("Reveal"), "{rows:?}");
     let record = run(app(&root), Script::new().keys("j j j O enter q"), 80, 14);
     assert_eq!(record.handoffs, [editor()]);
-    assert_eq!(files::openers_for("image/png")[0], files::Opener::Open);
-    assert_eq!(files::openers_for("video/mp4")[0], files::Opener::Play);
+    let rules = intuituive::files::opener_rules();
+    assert_eq!(
+        rules.matching(Path::new("a.png"), "image/png")[0].name,
+        "open"
+    );
+    assert_eq!(
+        rules.matching(Path::new("a.mp4"), "video/mp4")[0].name,
+        "play"
+    );
 }
 
 #[test]
@@ -604,4 +665,102 @@ fn images_are_drawn_in_the_preview() {
     let rows = driver.screen().plain();
     assert!(status(&rows).contains("a.png"), "{rows:?}");
     assert!(rows[1].contains('▀'), "{rows:?}");
+}
+
+#[test]
+fn prompts_are_yazis_50_wide_at_the_top_centre() {
+    let root = tree("prompt-width");
+    let rows = screen(&run_open(app(&root), Script::new().keys("a"), 100, 10));
+    let at = row_of(&rows, "Create:").expect("the prompt");
+    // Two rows down, centred, 50 wide.
+    assert_eq!(at, 2, "{rows:?}");
+    let (left, line) = rows[at].split_at(rows[at].find('╭').expect("its border"));
+    let line: String = line.chars().take_while(|&c| c != '╮').collect();
+    assert!(line.starts_with("╭─ Create: ─"), "{rows:?}");
+    assert_eq!(line.chars().count() + 1, 50, "{rows:?}");
+    assert_eq!(left.chars().count(), 25, "{rows:?}");
+}
+
+#[test]
+fn z_finds_a_file_below_here_and_goes_to_it() {
+    let root = tree("finder");
+    let rows = screen(&run_open(
+        app(&root),
+        Script::new().keys("z").text("a.txt"),
+        80,
+        14,
+    ));
+    assert!(row_of(&rows, "alpha/a.txt").is_some(), "{rows:?}");
+    let script = Script::new().keys("z").text("a.txt").keys("enter q");
+    let rows = screen(&run(app(&root), script, 80, 14));
+    assert!(rows[0].ends_with("alpha"), "{rows:?}");
+    assert!(status(&rows).contains("a.txt"), "{rows:?}");
+}
+
+#[test]
+fn w_shows_the_task_manager() {
+    let root = tree("tasks");
+    let rows = screen(&run_open(app(&root), Script::new().keys("w"), 80, 14));
+    assert!(row_of(&rows, "Tasks").is_some(), "{rows:?}");
+    assert!(row_of(&rows, "No tasks").is_some(), "{rows:?}");
+    // Esc closes it.
+    let rows = screen(&run(app(&root), Script::new().keys("w esc q"), 80, 14));
+    assert!(row_of(&rows, "No tasks").is_none(), "{rows:?}");
+}
+
+#[test]
+fn a_file_job_that_fails_is_a_notification_and_stays_in_the_tasks() {
+    let root = tree("job-fails");
+    // alpha cut and pasted inside itself: refused.
+    let script = Script::new().keys("x l p");
+    let rows = screen(&run_open(app(&root), script, 100, 14));
+    assert!(
+        row_of(&rows, "can't go inside itself").is_some(),
+        "{rows:?}"
+    );
+    let script = Script::new().keys("x l p w");
+    let rows = screen(&run_open(app(&root), script, 100, 14));
+    assert!(row_of(&rows, "failed").is_some(), "{rows:?}");
+}
+
+#[test]
+fn git_signs_show_beside_the_line_mode() {
+    let git = std::process::Command::new("git").arg("--version").output();
+    if !git.is_ok_and(|o| o.status.success()) {
+        return;
+    }
+    let root = tree("git");
+    let init = std::process::Command::new("git")
+        .args(["init", "-q"])
+        .current_dir(&root)
+        .status()
+        .unwrap();
+    assert!(init.success());
+    // Everything is untracked: `?` before the size.
+    let rows = screen(&run(app(&root), Script::new().keys("m s q"), 80, 10));
+    let notes = row_of(&rows, "notes.md").expect("notes.md");
+    assert!(rows[notes].contains("? 21B │"), "{rows:?}");
+}
+
+#[cfg(feature = "archive")]
+#[test]
+fn archives_are_listed_in_the_preview_and_extracted_by_enter() {
+    let tar = std::process::Command::new("tar").arg("--version").output();
+    if !tar.is_ok_and(|o| o.status.success()) {
+        return;
+    }
+    let root = tree("archive");
+    let made = std::process::Command::new("tar")
+        .args(["-cf", "pack.tar", "alpha"])
+        .current_dir(&root)
+        .status()
+        .unwrap();
+    assert!(made.success());
+    // alpha, beta, data.bin, notes.md, pack.tar: its entries previewed.
+    let rows = screen(&run(app(&root), Script::new().keys("j j j j q"), 80, 10));
+    assert!(status(&rows).contains("pack.tar"), "{rows:?}");
+    assert!(row_of(&rows, "alpha/a.txt").is_some(), "{rows:?}");
+    // Enter is Yazi's `extract` opener, a task: beside the archive.
+    run(app(&root), Script::new().keys("j j j j enter q"), 80, 10);
+    assert!(root.join("pack/alpha/a.txt").is_file());
 }

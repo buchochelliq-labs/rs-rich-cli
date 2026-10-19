@@ -109,3 +109,8 @@ ratatui = { version = "0.30", default-features = false, features = ["crossterm",
 # app (tests/ratatui_widgets.rs). Path only, so `cargo publish` drops it:
 # a published crate need not wait on its dev-dependencies.
 rich-ratatui = { package = "rs-rich-ratatui", path = "../rich-ratatui", features = ["interact"] }
+
+# The Yazi clone is built from the `files` feature's components.
+[[example]]
+name = "files"
+required-features = ["files"]

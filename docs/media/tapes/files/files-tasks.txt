@@ -1,0 +1,26 @@
+~/project/src                                                       ╭─ Move src to src ───────────╮
+ 1 project  2 src                                                   │ src: can't go inside itself │
+  src       │ lib.rs                                     225B │//! o╰─────────────────────────────╯
+  tests     │ render.rs                                  271B │
+  run.sh    │ main.rs                                    289B │mod event_loop;
+  scripts.t…│ event_loop.rs                              611B │mod render;
+  Cargo.to╭─────────────────────────────────── Tasks ────────────────────────────────────╮
+  logo.png│ failed  Move src to src: src: can't go inside itself                         │
+  readme-l│                                                                              │:args()
+  README.m│                                                                              │rg != "--
+          │                                                                              │
+          │                                                                              │se().ok()
+          │                                                                              │
+          │                                                                              │);
+          │                                                                              │
+          │                                                                              │
+          │                                                                              │
+          │                                                                              │
+          ╰──────────────────────────────────────────────────────────────────────────────╯
+            │                                                 │
+            │                                                 │
+            │                                                 │
+            │                                                 │
+            │                                                 │
+            │                                                 │
+ NOR  289B  main.rs                                                          -rw-r--r--  75%   3/4
