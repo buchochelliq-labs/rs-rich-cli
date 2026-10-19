@@ -254,7 +254,9 @@ impl Pty {
 /// update left open.
 pub fn assert_restored(output: &str, parser: &vt100::Parser) {
     assert_eq!(
-        output.matches("\x1b[>3u").count() + output.matches("\x1b[>1u").count(),
+        output.matches("\x1b[>3u").count()
+            + output.matches("\x1b[>1u").count()
+            + output.matches("\x1b[>15u").count(),
         output.matches("\x1b[<1u").count(),
         "kitty keyboard flags pushed and popped unevenly:\n{output:?}"
     );

@@ -577,6 +577,57 @@ column([list(files, selected), status])
   and down through every node that holds a single child, so a binding on
   the content inside a pop-up's `.panel()` works.
 
+### Held keys, releases and key repeat
+
+```rust
+App::new(|| {
+    let game = signal(Game::new());
+    let held = held_keys();
+    column([view(game, held)])
+        .bind("left a", "Move left", move |cx| game.update(|g| g.left(cx.key())))
+        .repeat(Duration::from_millis(167), Duration::from_millis(33))
+        .bind("down", "Soft drop", move |_| game.update(|g| g.soft(true)))
+        .bind_release("down", "Stop the soft drop", move |_| game.update(|g| g.soft(false)))
+})
+.all_keys(true)
+.synthesize_releases(Some(Duration::from_millis(600)))
+```
+
+- **`held_keys()`** is a memo of the keys held down, as plain keys
+  (`plain_key`: no modifiers, a letter in lower case, so `w` is held with
+  or without Shift), in the order they went down. `cx.is_held("w up")`
+  asks of one, `cx.held_keys()` reads them once. A key is held from its
+  press to its release; one whose release will not come is never held.
+- **Releases** reach `.on_key_up(keys, ..)` and `.bind_release(keys,
+  description, ..)` (listed in the help as "(on release)") on the focused
+  path, after the widgets there (which get `WidgetEvent::KeyUp`). A
+  binding without modifiers takes its key's release with any modifiers
+  held by then.
+- **Which releases come:** `cx.releases_reported()` says, as a
+  `Releases`: `None` (a legacy terminal), `ExceptText` (the kitty keyboard
+  protocol: no release for text keys, Enter, Tab and Backspace) or `All`.
+  **`App::all_keys(true)`** asks a kitty terminal to report every key
+  (flag 8, with alternate keys so Shift+1 is still `!`): text keys then
+  report releases, and a modifier on its own is a key (`"shift"`,
+  `"ctrl"`, `"alt"`, `"super"`), as a game wants it.
+  **`App::synthesize_releases(Some(hold))`** makes up the releases that do
+  not come, `hold` after a key's last press or repeat: pick it longer than
+  the terminal's repeat delay. A test sets what its terminal reports with
+  `driver.set_releases(..)` and sends releases with
+  `driver.send(Event::KeyUp(..))`.
+- **Repeat under the app's control:** `.repeat(delay, rate)` after a
+  binding fires it at once, after `delay`, then every `rate` while the key
+  is held, passing the terminal's own repeats over (a game's DAS and ARR).
+  Without a release to stop it, the binding fires on the terminal's
+  repeats instead.
+- **Which key fired:** `cx.key()` in a binding (pressed, repeating or let
+  go) is the key that fired it, so `.bind("w up", ..)` tells `w` from ↑.
+- **Input waiting is taken together:** the loop handles every event
+  already waiting (64 at most) before it draws, so keys typed while a
+  frame was slow are not spread over the frames after. Keys typed while
+  the terminal is asked about itself at the start are kept: the session
+  waits a second at most for the answer, a quarter of one once keys come.
+
 ## Components
 
 ```rust
@@ -2108,6 +2159,23 @@ App::new(|| {
   app's clock: anywhere while the app is built or running (a handler, a
   watch), or `cx.after(..)` from a handler. A test steps through it with
   `Driver::advance`; `Resource::stale_after` waits this way.
+- **A timer's handle:** `every`, `after` and their `cx` forms return a
+  `Timer` (`Copy`, like a signal) that `pause()`s (keeping the time it
+  had left), `resume()`s, `set_period(d)` (the next tick `d` after the
+  last), `reset()`s and `cancel()`s; a cancelled or fired timer's handle
+  does nothing. `cx.every(d, ..)` starts one from a handler, on the screen
+  the handler runs on, so a game's tick starts with play and stops when its
+  screen closes. In a timer's function `cx.now()` is the app's clock and
+  `cx.missed_ticks()` the ticks it fell behind.
+- **A fixed timestep:** `fixed_step(period, |cx, steps| ..)` (and
+  `cx.fixed_step`) is told how many steps are due, all of them after a
+  stall, so a game keeps to the clock rather than to the frame rate;
+  `.max_catch_up(n)` caps them. Under a `Driver`, `advance` calls it once a
+  period with 1, so a test steps the game exactly.
+- **Frame pacing:** `App::max_fps(n)` draws at most `n` frames a second
+  when the app runs its own loop: what changes in between is drawn by the
+  next frame, and `FrameStats::skipped` counts the frames held back.
+  `App::stats_handle()` keeps the `FrameStats` readable after `run`.
 - **Tasks:** `spawn(work, done)` runs `work` on its own thread and `done`
   with the result back on the app's thread, where it can write signals,
   open a screen or quit. `spawn_future` does the same for a future that does

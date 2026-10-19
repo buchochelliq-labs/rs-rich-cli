@@ -72,6 +72,11 @@ const SYNC: u8 = 32;
 /// termwiz reads the first flag's keys but not the second's releases, so
 /// a termwiz session pushes the first only.
 const PUSH_KITTY: &str = "\x1b[>3u";
+/// The flags [`SessionOptions::all_keys`] pushes: those two, every key as
+/// an escape code (8), so text keys report releases and modifier keys
+/// report themselves, and the alternate keys (4), so a shifted key still
+/// arrives as the character the layout makes (`!`, not Shift and `1`).
+const PUSH_KITTY_ALL: &str = "\x1b[>15u";
 #[cfg(feature = "termwiz")]
 const PUSH_KITTY_KEYS: &str = "\x1b[>1u";
 const POP_KITTY: &str = "\x1b[<1u";
@@ -916,6 +921,15 @@ pub struct SessionOptions {
     /// termion backend, standard output not a terminal) leaves it off
     /// unless this or the environment turns it on.
     pub synchronized_output: Option<bool>,
+    /// With the kitty keyboard protocol, have every key reported as an
+    /// escape code: releases then arrive for text keys too (letters,
+    /// Space, Enter), and modifier keys pressed on their own arrive as
+    /// [`KeyCode::Modifier`](crate::KeyCode::Modifier), as a game wants
+    /// them. Off by default: typed text then arrives as a base key and the
+    /// modifiers held, which loses characters an input method composes.
+    /// crossterm only (termwiz reads no releases); see
+    /// [`Session::releases_reported`].
+    pub all_keys: bool,
 }
 
 /// Ends a [`Backend::read`] under way early, from any thread: a value made
@@ -1154,6 +1168,11 @@ pub trait Backend {
     fn waker(&mut self) -> Option<Waker> {
         None
     }
+    /// Which key releases the backend reports (see
+    /// [`Releases`](crate::Releases)). The default: none.
+    fn releases_reported(&self) -> crate::Releases {
+        crate::Releases::None
+    }
 }
 
 /// How a session reads the terminal: the library's reader, opened on the
@@ -1315,7 +1334,10 @@ impl Session {
         };
         self.kitty = answers.kitty;
         if self.kitty {
-            out.push_str(library.kitty_push());
+            out.push_str(match (library, self.options.all_keys) {
+                (BackendKind::Crossterm, true) => PUSH_KITTY_ALL,
+                _ => library.kitty_push(),
+            });
         }
         self.sync = self
             .options
@@ -1535,6 +1557,21 @@ impl Session {
         self.kitty
     }
 
+    /// Which key releases arrive as [`Event::KeyUp`]: with crossterm and
+    /// the kitty keyboard protocol, every key's but the text keys', or
+    /// every key's with [`SessionOptions::all_keys`]; every key's on the
+    /// Windows console; none otherwise.
+    pub fn releases_reported(&self) -> crate::Releases {
+        use crate::Releases;
+        match self.options.backend {
+            BackendKind::Crossterm if cfg!(windows) => Releases::All,
+            BackendKind::Crossterm if self.kitty && self.options.all_keys => Releases::All,
+            BackendKind::Crossterm if self.kitty => Releases::ExceptText,
+            #[allow(unreachable_patterns)]
+            _ => Releases::None,
+        }
+    }
+
     /// Whether frames are written as synchronized updates: forced by
     /// [`SessionOptions::synchronized_output`] or `RICH_SYNC_OUTPUT`, or
     /// the terminal answered that it knows mode 2026.
@@ -1627,6 +1664,10 @@ impl Backend for Session {
     /// few milliseconds.
     fn waker(&mut self) -> Option<Waker> {
         Some(self.waker.get_or_insert_with(Waker::new).clone())
+    }
+
+    fn releases_reported(&self) -> crate::Releases {
+        Session::releases_reported(self)
     }
 
     fn synchronized_output(&self) -> bool {

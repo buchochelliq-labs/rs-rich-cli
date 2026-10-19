@@ -159,8 +159,8 @@ pub use rich;
 pub use rich_interact as interact;
 
 pub use app::{
-    after, every, fixed_step, rate, Anchor, App, Ctx, Driver, Easing, FrameStats, Handoff,
-    ModalOptions, Placement, StatsHandle, Theme, Timer,
+    after, every, fixed_step, held_keys, plain_key, rate, Anchor, App, Ctx, Driver, Easing,
+    FrameStats, Handoff, ModalOptions, Placement, StatsHandle, Theme, Timer,
 };
 #[cfg(feature = "art")]
 pub use big_text::big_text;

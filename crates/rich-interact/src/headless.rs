@@ -185,6 +185,10 @@ pub struct Headless {
     /// person types, so a loop that takes every event waiting before it
     /// draws still draws once an event.
     pub queued: bool,
+    /// Which key releases this terminal is taken to report
+    /// ([`Backend::releases_reported`]); none by default. A script's
+    /// [`key_up`](Script::key_up) sends a release whatever this says.
+    pub releases: crate::Releases,
 }
 
 impl Headless {
@@ -200,6 +204,7 @@ impl Headless {
             exact_keys: false,
             synchronized_output: false,
             queued: false,
+            releases: crate::Releases::None,
         }
     }
 
@@ -279,6 +284,10 @@ impl Backend for Headless {
 
     fn synchronized_output(&self) -> bool {
         self.synchronized_output
+    }
+
+    fn releases_reported(&self) -> crate::Releases {
+        self.releases
     }
 
     fn elapsed(&self) -> Duration {

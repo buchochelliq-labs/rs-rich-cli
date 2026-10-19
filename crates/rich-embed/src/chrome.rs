@@ -30,7 +30,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 use std::{fmt, io};
 
-use rich_intuituive::interact::{Button, Key, KeyCode, Modifiers, Mouse, MouseKind};
+use rich_intuituive::interact::{Button, Key, KeyCode, ModifierKey, Modifiers, Mouse, MouseKind};
 use serde_json::{json, Value};
 use tungstenite::{Message, WebSocket};
 
@@ -447,6 +447,12 @@ fn key_parts(key: Key) -> (String, u32, Option<String>) {
         KeyCode::PageUp => named("PageUp", 33),
         KeyCode::PageDown => named("PageDown", 34),
         KeyCode::Menu => named("ContextMenu", 93),
+        KeyCode::Modifier(which) => match which {
+            ModifierKey::Shift => named("Shift", 16),
+            ModifierKey::Ctrl => named("Control", 17),
+            ModifierKey::Alt => named("Alt", 18),
+            ModifierKey::Super => named("Meta", 91),
+        },
         KeyCode::F(n) => (format!("F{n}"), 111 + n as u32, None),
     }
 }

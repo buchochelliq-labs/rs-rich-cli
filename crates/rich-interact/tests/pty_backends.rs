@@ -100,6 +100,9 @@ fn child() {
     if std::env::var_os("INTERACT_CHILD").is_some_and(|mode| mode == "legacy") {
         options.session.legacy_keys = true;
     }
+    if std::env::var_os("INTERACT_CHILD").is_some_and(|mode| mode == "all-keys") {
+        options.session.all_keys = true;
+    }
     if std::env::var_os("INTERACT_CHILD").is_some_and(|mode| mode == "inline") {
         options.session.alternate_screen = false;
     }
@@ -149,7 +152,9 @@ fn event_for_parts(pty: &mut Pty, parts: &[&str]) -> String {
 /// How many times the kitty keyboard flags were pushed: crossterm's both
 /// flags, or termwiz's first.
 fn kitty_pushes(text: &str) -> usize {
-    text.matches("\x1b[>3u").count() + text.matches("\x1b[>1u").count()
+    text.matches("\x1b[>3u").count()
+        + text.matches("\x1b[>1u").count()
+        + text.matches("\x1b[>15u").count()
 }
 
 fn key(name: &str) -> Event {
@@ -667,4 +672,32 @@ fn every_backend_keeps_keys_typed_while_the_terminal_does_not_answer() {
         assert!(took < Duration::from_millis(900), "{backend}: {took:?}");
         finish(pty, backend);
     }
+}
+
+/// Doom, raycast: with every key reported (kitty flag 8), text keys report
+/// their release, and a modifier on its own is a key. crossterm only:
+/// termwiz pushes its one flag whatever is asked.
+#[test]
+fn all_keys_reports_text_releases_and_modifiers_alone() {
+    use rich_interact::{KeyCode, ModifierKey};
+    let mut pty = Pty::start_kitty_on("crossterm", "all-keys");
+    pty.wait_for("child ready");
+    assert!(pty.text().contains("\x1b[>15u"), "{:?}", pty.text());
+    let shift = Key::new(KeyCode::Modifier(ModifierKey::Shift)).exact();
+    for (bytes, expected) in [
+        ("\x1b[119u", Event::Key(Key::char('w').exact())),
+        ("\x1b[119;1:3u", Event::KeyUp(Key::char('w').exact())),
+        ("\x1b[57441;2u", Event::Key(shift)),
+        ("\x1b[57441;1:3u", Event::KeyUp(shift)),
+        // The alternate key: Shift with `1` is `!`.
+        ("\x1b[49:33;2u", Event::Key(Key::char('!').exact())),
+        ("\x1b[13u", Event::Key(Key::new(KeyCode::Enter).exact())),
+    ] {
+        assert_eq!(
+            event_for(&mut pty, bytes),
+            format!("{expected:?}"),
+            "{bytes:?}"
+        );
+    }
+    finish(pty, "crossterm");
 }

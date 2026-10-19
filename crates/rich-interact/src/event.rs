@@ -64,6 +64,73 @@ pub enum KeyCode {
     /// others send nothing for it, so a binding on it usually has
     /// Shift+F10 beside it.
     Menu,
+    /// A modifier key on its own, parsed as `shift`, `ctrl`, `alt` or
+    /// `super`: only a terminal with the kitty keyboard protocol asked to
+    /// report every key reports these
+    /// ([`SessionOptions::all_keys`](crate::SessionOptions::all_keys)).
+    /// Either side's key is the same one.
+    Modifier(ModifierKey),
+}
+
+/// A modifier key pressed or let go on its own ([`KeyCode::Modifier`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum ModifierKey {
+    Shift,
+    Ctrl,
+    Alt,
+    /// The Windows, Command or Super key.
+    Super,
+}
+
+/// Which key releases ([`Event::KeyUp`]) a terminal reports, so an app
+/// knows whether it can count on them: a game that moves while a key is
+/// held falls back on the terminal's repeats, or on releases it makes up
+/// itself, for the keys it is not told about.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum Releases {
+    /// None: a terminal without the kitty keyboard protocol (or a backend
+    /// that does not read releases).
+    #[default]
+    None,
+    /// Every key's but the text keys': characters typed without Ctrl or
+    /// Alt (Space and Shift with a letter too), Enter, Tab and Backspace.
+    /// The kitty keyboard protocol as a session pushes it by default.
+    ExceptText,
+    /// Every key's: the kitty keyboard protocol asked to report every key
+    /// ([`SessionOptions::all_keys`](crate::SessionOptions::all_keys)),
+    /// and the Windows console.
+    All,
+}
+
+impl Releases {
+    /// Whether the release of `key` is reported.
+    ///
+    /// ```
+    /// use rich_interact::{Key, Releases};
+    ///
+    /// let up = Key::parse("up").unwrap();
+    /// let w = Key::parse("w").unwrap();
+    /// assert!(Releases::ExceptText.reported(&up));
+    /// assert!(!Releases::ExceptText.reported(&w));
+    /// assert!(Releases::All.reported(&w));
+    /// assert!(!Releases::None.reported(&up));
+    /// ```
+    pub fn reported(self, key: &Key) -> bool {
+        match self {
+            Releases::None => false,
+            Releases::All => true,
+            Releases::ExceptText => {
+                let text = match key.code {
+                    KeyCode::Char(_) => !key.modifiers.ctrl && !key.modifiers.alt,
+                    KeyCode::Enter | KeyCode::Tab | KeyCode::Backspace => true,
+                    // Reported only with every key.
+                    KeyCode::Modifier(_) => true,
+                    _ => false,
+                };
+                !text
+            }
+        }
+    }
 }
 
 /// A key press.
@@ -178,6 +245,10 @@ impl Key {
                 "delete" | "del" => KeyCode::Delete,
                 "insert" => KeyCode::Insert,
                 "menu" => KeyCode::Menu,
+                "shift" => KeyCode::Modifier(ModifierKey::Shift),
+                "ctrl" | "control" => KeyCode::Modifier(ModifierKey::Ctrl),
+                "alt" | "meta" => KeyCode::Modifier(ModifierKey::Alt),
+                "super" | "cmd" | "win" => KeyCode::Modifier(ModifierKey::Super),
                 "escape" | "esc" => KeyCode::Escape,
                 "space" => KeyCode::Char(' '),
                 // A list of key names is separated by commas too.
@@ -380,6 +451,12 @@ impl fmt::Display for Key {
             KeyCode::Char(c) if capital => write!(f, "{}", c.to_ascii_lowercase()),
             KeyCode::Char(c) => write!(f, "{c}"),
             KeyCode::F(n) => write!(f, "f{n}"),
+            KeyCode::Modifier(key) => f.write_str(match key {
+                ModifierKey::Shift => "shift",
+                ModifierKey::Ctrl => "ctrl",
+                ModifierKey::Alt => "alt",
+                ModifierKey::Super => "super",
+            }),
             code => f.write_str(&format!("{code:?}").to_ascii_lowercase()),
         }
     }
@@ -678,6 +755,27 @@ fn translate(event: crossterm::event::Event, exact: bool) -> Option<Event> {
         Event as E, KeyCode as K, KeyEventKind, KeyModifiers as M, MouseEventKind as MK,
     };
     Some(match event {
+        E::Key(key) if matches!(key.code, crossterm::event::KeyCode::Modifier(_)) => {
+            use crossterm::event::{KeyCode as K, ModifierKeyCode as MK};
+            let K::Modifier(which) = key.code else {
+                return None;
+            };
+            let code = KeyCode::Modifier(match which {
+                MK::LeftShift | MK::RightShift => ModifierKey::Shift,
+                MK::LeftControl | MK::RightControl => ModifierKey::Ctrl,
+                MK::LeftAlt | MK::RightAlt | MK::LeftMeta | MK::RightMeta => ModifierKey::Alt,
+                MK::LeftSuper | MK::RightSuper => ModifierKey::Super,
+                _ => return None,
+            });
+            // The key itself, not the modifiers it leaves held.
+            let mut read = Key::new(code);
+            read.exact = exact;
+            if key.kind == KeyEventKind::Release {
+                Event::KeyUp(read)
+            } else {
+                Event::Key(read)
+            }
+        }
         E::Key(key) => {
             // Super and Hyper, which only the kitty protocol reports, are
             // not modifiers here: Super+A is not A.

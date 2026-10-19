@@ -37,7 +37,8 @@ use std::time::Duration;
 
 use rich::{ColorSystem, Console, Style};
 use rich_interact::{
-    Backend, BackendKind, Button, Event, Key, KeyCode, MouseKind, Session, SessionOptions,
+    Backend, BackendKind, Button, Event, Key, KeyCode, Modifiers, MouseKind, Releases, Session,
+    SessionOptions,
 };
 
 use crate::inspect::{Handled, Inspector, Names, NodeTiming, Probe, TraceEntry, Traced};
@@ -45,7 +46,7 @@ use crate::layout::Size;
 use crate::node::{with_node, Axis, FrameState, Node};
 use crate::notify::{Corner, Level, Note};
 use crate::place::{Offset, Origin};
-use crate::reactive::{signal, NodeId, Proxy, Runtime, Signal};
+use crate::reactive::{signal, Memo, NodeId, Proxy, Runtime, Signal};
 use crate::screen::{Painter, Rect, Screen};
 use crate::widget::{Used, WidgetEvent};
 
@@ -80,6 +81,10 @@ pub struct Ctx {
     tickers: Vec<Ticker>,
     /// In a timer's function: the ticks it stands for.
     ticks: u64,
+    /// In a key binding: the key that fired it.
+    key: Option<Key>,
+    /// Which key releases the terminal reports.
+    releases: Releases,
     /// Screens open when the handler was called.
     layers: usize,
     /// The handler passed its key on ([`pass_key`](Ctx::pass_key)).
@@ -297,6 +302,8 @@ impl Ctx {
             afters: Vec::new(),
             tickers: Vec::new(),
             ticks: 0,
+            key: None,
+            releases: Releases::None,
             layers: 1,
             passed: false,
         }
@@ -426,6 +433,59 @@ impl Ctx {
     /// however many are due). 0 when it is on time, and outside a timer.
     pub fn missed_ticks(&self) -> u64 {
         self.ticks.saturating_sub(1)
+    }
+
+    /// In a key binding (pressed, repeating or let go): the key that fired
+    /// it, as it came, so one binding of `"w up"` tells `w` from ↑. The
+    /// command palette runs a binding with its first key. `None` outside
+    /// a key binding.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| {
+    ///     let last = signal(String::new());
+    ///     text!("{last}").bind("w up", "Walk", move |cx| {
+    ///         last.set(cx.key().map(|k| k.to_string()).unwrap_or_default())
+    ///     })
+    /// });
+    /// let mut driver = app.driver(5, 1);
+    /// driver.press("up");
+    /// assert_eq!(driver.screen().plain()[0].trim_end(), "up");
+    /// driver.press("w");
+    /// assert_eq!(driver.screen().plain()[0].trim_end(), "w");
+    /// ```
+    pub fn key(&self) -> Option<Key> {
+        self.key
+    }
+
+    /// Which key releases the terminal reports: none, every key's but the
+    /// text keys' (the kitty keyboard protocol), or every key's (with
+    /// [`App::all_keys`], or the Windows console). Releases the app makes
+    /// up ([`App::synthesize_releases`]) are not counted.
+    pub fn releases_reported(&self) -> Releases {
+        self.releases
+    }
+
+    /// Whether one of `keys` (key names, as [`on_key`](crate::Node::on_key)
+    /// takes) is held down: see [`held_keys`]. `"w"` is held while W is,
+    /// with or without Shift.
+    ///
+    /// # Panics
+    /// On a name that is not a key.
+    pub fn is_held(&self, keys: &str) -> bool {
+        let held = self.held_keys();
+        crate::node::parse_keys(keys)
+            .into_iter()
+            .any(|key| held.contains(&plain_key(key)))
+    }
+
+    /// The keys held down: [`held_keys`], read once.
+    pub fn held_keys(&self) -> Vec<Key> {
+        Runtime::try_current()
+            .and_then(|runtime| runtime.held_keys.get())
+            .map(|held| held.get_untracked())
+            .unwrap_or_default()
     }
 
     /// Give the terminal to `command` (an editor, a pager, a shell) once
@@ -1280,12 +1340,15 @@ impl std::fmt::Debug for Timer {
     }
 }
 
+/// A [`fixed_step`]'s function: told how many steps are due.
+type StepFn = Box<dyn FnMut(&mut Ctx, u64)>;
+
 /// What a repeating timer runs.
 enum Tick {
     /// [`every`]: once however many ticks are due.
     Every(Box<dyn FnMut(&mut Ctx)>),
     /// [`fixed_step`]: told how many.
-    Steps(Box<dyn FnMut(&mut Ctx, u64)>),
+    Steps(StepFn),
 }
 
 /// A repeating timer of a screen: its handle, what it runs, and where it
@@ -1717,6 +1780,99 @@ pub struct App {
     /// While the inspector traces: the node that took the event being
     /// routed, and how.
     used: crate::inspect::Used,
+    /// Ask the terminal to report every key ([`all_keys`](Self::all_keys)).
+    all_keys: bool,
+    /// Which key releases the backend reports.
+    releases: Releases,
+    /// Releases made up for keys whose release is not reported, after
+    /// this long without a repeat ([`synthesize_releases`](Self::synthesize_releases)).
+    synthesize: Option<Duration>,
+    /// The keys held down, and what [`held_keys`] reads.
+    held: Vec<Held>,
+    held_keys: Signal<Vec<Key>>,
+    /// The key being routed is held already: the terminal's repeat.
+    repeating_key: bool,
+    /// Bindings repeating under the app's control ([`Node::repeat`]).
+    repeats: Vec<Repeat>,
+}
+
+/// A key held down: as a [plain key](plain_key), when it was last pressed
+/// or repeated, and whether its release will be reported.
+struct Held {
+    key: Key,
+    last: Duration,
+    reported: bool,
+}
+
+/// A binding repeating while its key is held ([`Node::repeat`]): the
+/// plain key, the key as pressed (told to the handler), the binding, the
+/// screen it is on, and when it fires next and how often.
+struct Repeat {
+    key: Key,
+    pressed: Key,
+    node: NodeId,
+    index: usize,
+    depth: usize,
+    next: Duration,
+    rate: Duration,
+}
+
+/// `key` as [`held_keys`] and releases name it: without modifiers, a
+/// letter in lower case (Shift with `w` is `W`, and is let go as either),
+/// Shift+Tab as Tab.
+///
+/// ```
+/// use intuituive::interact::Key;
+/// use intuituive::app::plain_key;
+///
+/// let k = |name| Key::parse(name).unwrap();
+/// assert_eq!(plain_key(k("W")), k("w"));
+/// assert_eq!(plain_key(k("ctrl+up")), k("up"));
+/// assert_eq!(plain_key(k("shift+tab")), k("tab"));
+/// ```
+pub fn plain_key(key: Key) -> Key {
+    let code = match key.code {
+        KeyCode::Char(c) if c.is_alphabetic() => {
+            KeyCode::Char(c.to_lowercase().next().unwrap_or(c))
+        }
+        KeyCode::BackTab => KeyCode::Tab,
+        code => code,
+    };
+    Key::with(code, Modifiers::NONE)
+}
+
+/// The keys held down in the current app, as [plain keys](plain_key), in
+/// the order they went down: a game moves while `w` is in it. A key is
+/// held from its press until its release, which the terminal reports
+/// (see [`Ctx::releases_reported`]) or the app makes up
+/// ([`App::synthesize_releases`]). A key whose release will come neither
+/// way is never in it: on a terminal without releases, and with none made
+/// up, it stays empty. Nodes that read it draw again as keys go down and
+/// up.
+///
+/// ```
+/// use intuituive::interact::{Event, Key, Releases};
+/// use intuituive::prelude::*;
+/// use intuituive::held_keys;
+///
+/// let app = App::new(|| {
+///     let held = held_keys();
+///     text(move || held.get().iter().map(|k| k.to_string()).collect::<Vec<_>>().join(" "))
+/// });
+/// let mut driver = app.driver(10, 1);
+/// driver.set_releases(Releases::All);
+/// driver.press("w shift+d");
+/// assert_eq!(driver.screen().plain()[0].trim_end(), "w d");
+/// driver.send(Event::KeyUp(Key::parse("w").unwrap()));
+/// assert_eq!(driver.screen().plain()[0].trim_end(), "d");
+/// ```
+///
+/// # Panics
+/// Outside a running or building app.
+pub fn held_keys() -> Memo<Vec<Key>> {
+    let runtime = Runtime::current_for("held_keys()");
+    let signal = runtime.held_keys.get().expect("an app keeps its held keys");
+    Memo::of(signal)
 }
 
 /// A theme file the app reloads when it changes.
@@ -1795,13 +1951,16 @@ impl App {
         let runtime = Runtime::new();
         BUILDING.with(|building| *building.borrow_mut() = Some(Vec::new()));
         WATCHES.with(|watches| *watches.borrow_mut() = Some(Vec::new()));
-        let (root, focus_path, hover_path) = runtime.enter(|| {
+        let (root, focus_path, hover_path, held_keys) = runtime.enter(|| {
             // The trace says when the focus moves and the pointer acts.
             let focus_path = signal(Vec::new()).untraced();
             let hover_path = signal(Vec::new()).untraced();
+            // And what is held, by the keys themselves.
+            let held_keys = signal(Vec::<Key>::new()).untraced();
+            Runtime::current().held_keys.set(Some(held_keys));
             // Made now, so a node closure reading it later makes nothing.
             crate::reactive::viewport();
-            (build(), focus_path, hover_path)
+            (build(), focus_path, hover_path, held_keys)
         });
         let timers = BUILDING
             .with(|building| building.borrow_mut().take())
@@ -1889,6 +2048,13 @@ impl App {
             which_key: None,
             which_key_at: None,
             used: None,
+            all_keys: false,
+            releases: Releases::None,
+            synthesize: None,
+            held: Vec::new(),
+            held_keys,
+            repeating_key: false,
+            repeats: Vec::new(),
         }
     }
 
@@ -2219,6 +2385,7 @@ impl App {
             bracketed_paste: true,
             output: Default::default(),
             legacy_keys: self.legacy_keys,
+            all_keys: self.all_keys,
             backend,
             // Linear, lines are appended as they come: nothing to hold.
             synchronized_output: if self.linear {
@@ -2413,6 +2580,48 @@ impl App {
         self
     }
 
+    /// Have [`run`](Self::run) ask a terminal with the kitty keyboard
+    /// protocol to report every key (its flag 8, see
+    /// [`SessionOptions::all_keys`]): text keys report their release too,
+    /// so [`held_keys`] and [`Node::on_key_up`] work for `w` and Space,
+    /// and a modifier on its own is a key (`shift`, `ctrl`), as a game
+    /// wants. Off by default. [`Ctx::releases_reported`] says what the
+    /// terminal does.
+    pub fn all_keys(mut self, on: bool) -> App {
+        self.all_keys = on;
+        self
+    }
+
+    /// Make up the release of a key whose release the terminal does not
+    /// report, once `hold` passes without the key being pressed or
+    /// repeated again: [`held_keys`], [`Node::on_key_up`] and
+    /// [`Node::repeat`] then work on every terminal, approximately. Pick
+    /// `hold` longer than the terminal's repeat delay (often 500 ms, set
+    /// by the system), or a held key is let go before its repeats come,
+    /// and pressed again when they do. `None` (the default) makes none up.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    /// use intuituive::held_keys;
+    /// use std::time::Duration;
+    ///
+    /// let app = App::new(|| {
+    ///     let held = held_keys();
+    ///     text(move || format!("{} held", held.get().len()))
+    /// })
+    /// .synthesize_releases(Some(Duration::from_millis(600)));
+    /// let mut driver = app.driver(10, 1);
+    /// driver.press("w");
+    /// driver.advance(Duration::from_millis(599));
+    /// assert_eq!(driver.screen().plain()[0].trim_end(), "1 held");
+    /// driver.advance(Duration::from_millis(1));
+    /// assert_eq!(driver.screen().plain()[0].trim_end(), "0 held");
+    /// ```
+    pub fn synthesize_releases(mut self, hold: Option<Duration>) -> App {
+        self.synthesize = hold;
+        self
+    }
+
     /// Whether [`run`](Self::run) reads keys as a legacy terminal sends
     /// them (off by default). Off, a terminal with the kitty keyboard
     /// protocol has it turned on: Tab and Ctrl+I are told apart, and widgets
@@ -2555,6 +2764,7 @@ impl App {
         let mut last_frame: Option<Duration> = None;
         let mut driver = self.driver(width, height);
         driver.set_clipboard(backend.clipboard().is_ok());
+        driver.set_releases(backend.releases_reported());
         // A value from another thread ends the wait on the terminal.
         if let Some(waker) = backend.waker() {
             driver.set_waker(move || waker.wake());
@@ -3598,6 +3808,7 @@ impl App {
         let mut cx = Ctx::new(self.runtime.proxy());
         cx.pointer = self.pointer;
         cx.layers = self.layers.len();
+        cx.releases = self.releases;
         cx
     }
 
@@ -3863,6 +4074,18 @@ impl App {
     /// Run binding `index` of node `id` (its key sequence `index`, if
     /// `sequence`) on the top screen; whether to quit.
     fn run_binding(&mut self, id: NodeId, index: usize, sequence: bool) -> bool {
+        self.run_binding_with(id, index, sequence, None)
+    }
+
+    /// [`run_binding`](Self::run_binding), telling it `key` (else its
+    /// first key).
+    fn run_binding_with(
+        &mut self,
+        id: NodeId,
+        index: usize,
+        sequence: bool,
+        key: Option<Key>,
+    ) -> bool {
         let mut cx = self.ctx();
         let runtime = self.runtime.clone();
         runtime.enter(|| {
@@ -3872,8 +4095,9 @@ impl App {
                     false => node.keys.borrow_mut(),
                 };
                 if let Some(bound) = list.get_mut(index) {
-                    // As its first key would.
-                    let key = bound.keys[0];
+                    // As its first key would, unless told the key.
+                    let key = key.unwrap_or(bound.keys[0]);
+                    cx.key = Some(key);
                     (bound.handler)(&mut cx, key);
                 }
             });
@@ -4239,6 +4463,7 @@ impl App {
     }
 
     fn key(&mut self, key: Key) -> bool {
+        self.repeating_key = self.press_held(key);
         self.hide_tip();
         if key.code == KeyCode::Escape && self.drag.as_ref().is_some_and(|drag| drag.active) {
             // Esc cancels a drag.
@@ -4360,6 +4585,12 @@ impl App {
     fn node_keys(&mut self, id: NodeId, key: Key) -> Option<bool> {
         let mut cx = self.ctx();
         let mut used = None;
+        // A binding that repeats by itself, while the key's release will
+        // come: its first press starts the repeat, and the terminal's own
+        // repeats pass it by.
+        let release_known = self.release_known(&key);
+        let repeating = self.repeating_key;
+        let mut repeat = None;
         let mut starts = false;
         // A binding ran and passed the key on: it goes on up.
         let mut passed = false;
@@ -4381,6 +4612,14 @@ impl App {
                     let mut ran = Vec::new();
                     while let Some(index) = crate::node::pick_binding(key, &keys, &ran) {
                         let bound = &mut keys[index];
+                        if let (Some(times), true) = (bound.repeat, release_known) {
+                            if repeating {
+                                used = Some("repeat");
+                                return;
+                            }
+                            repeat = Some((index, times));
+                        }
+                        cx.key = Some(key);
                         (bound.handler)(&mut cx, key);
                         used = Some("on_key");
                         if !(bound.fall_through || std::mem::take(&mut cx.passed)) {
@@ -4423,6 +4662,19 @@ impl App {
             return Some(false);
         }
         let how = used?;
+        if let Some((index, (delay, rate))) = repeat {
+            let plain = plain_key(key);
+            self.repeats.retain(|r| r.key != plain);
+            self.repeats.push(Repeat {
+                key: plain,
+                pressed: key,
+                node: id,
+                index,
+                depth: self.layers.len(),
+                next: self.now + delay,
+                rate,
+            });
+        }
         self.note_used(id, how);
         let quit = self.apply(cx);
         if passed && !quit {
@@ -4486,12 +4738,139 @@ impl App {
     /// first, until one uses it. Bindings are for presses only. Whether to
     /// quit.
     fn key_up(&mut self, key: Key) -> bool {
+        self.release_held(key);
         for id in self.key_path().into_iter().rev() {
             if let Some(quit) = self.give_to_widget(id, &WidgetEvent::KeyUp(key)) {
                 return quit;
             }
+            if let Some(quit) = self.node_releases(id, key) {
+                return quit;
+            }
         }
         false
+    }
+
+    /// Offer the release of `key` to node `id`'s release bindings
+    /// ([`Node::on_key_up`]). `Some` (whether to quit) when one took it.
+    fn node_releases(&mut self, id: NodeId, key: Key) -> Option<bool> {
+        let mut cx = self.ctx();
+        let mut ran = false;
+        let runtime = self.runtime.clone();
+        runtime.enter(|| {
+            with_node(&self.top().root, id, &mut |node| {
+                if node.disabled() {
+                    return;
+                }
+                let mut releases = node.releases.borrow_mut();
+                let found = releases.iter_mut().find(|bound| {
+                    bound
+                        .live_keys()
+                        .iter()
+                        .any(|own| match own.modifiers == Modifiers::NONE {
+                            true => plain_key(*own) == plain_key(key),
+                            false => key.matches(own),
+                        })
+                });
+                if let Some(bound) = found {
+                    cx.key = Some(key);
+                    (bound.handler)(&mut cx, key);
+                    ran = true;
+                }
+            });
+        });
+        if !ran {
+            return None;
+        }
+        self.note_used(id, "on_key_up");
+        Some(self.apply(cx))
+    }
+
+    /// Whether the release of `key` will come: reported, or made up.
+    fn release_known(&self, key: &Key) -> bool {
+        self.synthesize.is_some() || self.releases.reported(key)
+    }
+
+    /// Note `key` pressed (or repeated); whether it was held already.
+    fn press_held(&mut self, key: Key) -> bool {
+        // A key whose release will not come would be held for good.
+        if !self.release_known(&key) {
+            return false;
+        }
+        let plain = plain_key(key);
+        let reported = self.releases.reported(&key);
+        if let Some(held) = self.held.iter_mut().find(|held| held.key == plain) {
+            held.last = self.now;
+            return true;
+        }
+        self.held.push(Held {
+            key: plain,
+            last: self.now,
+            reported,
+        });
+        self.publish_held();
+        false
+    }
+
+    /// Note `key` let go: no longer held, and its repeats stop.
+    fn release_held(&mut self, key: Key) {
+        let plain = plain_key(key);
+        self.repeats.retain(|repeat| repeat.key != plain);
+        let before = self.held.len();
+        self.held.retain(|held| held.key != plain);
+        if self.held.len() != before {
+            self.publish_held();
+        }
+    }
+
+    fn publish_held(&self) {
+        let keys: Vec<Key> = self.held.iter().map(|held| held.key).collect();
+        self.runtime.enter(|| self.held_keys.set(keys));
+    }
+
+    /// Releases made up for keys held `hold` without a repeat, and the
+    /// repeats due, at `now`. Whether to quit.
+    fn held_due(&mut self, now: Duration) -> bool {
+        if let Some(hold) = self.synthesize {
+            let gone: Vec<Key> = self
+                .held
+                .iter()
+                .filter(|held| !held.reported && now >= held.last + hold)
+                .map(|held| held.key)
+                .collect();
+            for key in gone {
+                if self.key_up(key) {
+                    return true;
+                }
+            }
+        }
+        let depth = self.layers.len();
+        self.repeats.retain(|repeat| repeat.depth == depth);
+        let mut fire = Vec::new();
+        for repeat in &mut self.repeats {
+            while repeat.next <= now {
+                fire.push((repeat.node, repeat.index, repeat.pressed));
+                repeat.next += repeat.rate;
+            }
+        }
+        for (node, index, key) in fire {
+            if self.run_binding_with(node, index, false, Some(key)) {
+                return true;
+            }
+        }
+        false
+    }
+
+    /// When the next made-up release or repeat is due.
+    fn held_next(&self) -> Option<Duration> {
+        let releases = self.synthesize.and_then(|hold| {
+            self.held
+                .iter()
+                .filter(|held| !held.reported)
+                .map(|held| held.last + hold)
+                .min()
+        });
+        let repeats = self.repeats.iter().map(|repeat| repeat.next).min();
+        releases.into_iter().chain(repeats).min()
     }
 
     /// Offer `event` to the focused node's widget and then its
@@ -5089,6 +5468,11 @@ impl Driver {
         app.runtime.tracer.set_now(now);
         app.runtime.now.set(now);
         app.take_afters();
+        if app.held_due(now) {
+            self.done = true;
+            return;
+        }
+        let app = &mut self.app;
         let mut cx = app.ctx();
         let runtime = app.runtime.clone();
         // One-shot timers that are due, in the order they fall due; and
@@ -5366,6 +5750,20 @@ impl Driver {
                     .map(|due| due.saturating_sub(now))
                     .unwrap_or(Duration::MAX),
             )
+            .min(
+                app.held_next()
+                    .map(|due| due.saturating_sub(now))
+                    .unwrap_or(Duration::MAX),
+            )
+    }
+
+    /// Tell the app which key releases the terminal reports
+    /// ([`Ctx::releases_reported`]): a loop of your own sets what its
+    /// terminal does; [`App::run_on`] sets the backend's
+    /// ([`Backend::releases_reported`]). A test sets it to stand for a
+    /// terminal with the kitty keyboard protocol. None by default.
+    pub fn set_releases(&mut self, releases: Releases) {
+        self.app.releases = releases;
     }
 
     /// Have every [`Proxy`] send (a [`latest`](crate::latest) value, a

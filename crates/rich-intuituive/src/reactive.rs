@@ -124,6 +124,8 @@ pub(crate) struct Runtime {
     /// What a [`key_hints`](crate::widgets::key_hints) footer shows, once
     /// one is made: each binding's keys and description.
     pub(crate) hints: Cell<Option<Signal<Hints>>>,
+    /// The keys held down, as [`held_keys`](crate::held_keys) reads them.
+    pub(crate) held_keys: Cell<Option<Signal<Vec<rich_interact::Key>>>>,
     /// [`spawn_then`](crate::spawn_then)'s continuations, by number, kept
     /// on the app's thread while their work runs.
     pub(crate) locals: RefCell<HashMap<u64, Box<dyn Any>>>,
@@ -168,6 +170,7 @@ impl Runtime {
                 now: Cell::new(std::time::Duration::ZERO),
                 timers: Default::default(),
                 hints: Cell::new(None),
+                held_keys: Cell::new(None),
                 layers: Cell::new(1),
                 locals: RefCell::new(HashMap::new()),
                 next_local: Cell::new(0),

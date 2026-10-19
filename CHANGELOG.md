@@ -9,6 +9,40 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Input and timing: every key, held keys, timers you can steer (rs-rich-interact, rs-rich-intuituive)
+
+The round-5 input and timing gaps of the falling-block, raycaster and
+system-monitor clones and of real Doom ([the demo
+gaps](docs/design/intuituive-demo-gaps.md), "Round 5"):
+
+- **Fixed:** the app loop handled one input event a frame, so keys queued
+  during a slow frame spread out over the frames after; it now handles
+  every event waiting (64 at most) before drawing (`Headless::queued`
+  scripts it). Keys typed while the terminal did not answer the start-up
+  query were lost for up to 3 s; they are kept and delivered, and the
+  query waits 1 s at most, 250 ms once keys come. Tables took Shift+↑/↓
+  as ↑/↓, so an ancestor's binding never fired; they leave modified keys
+  to their ancestors. `Driver::send(event)` settles after an event as
+  `press` does (`Driver::event` still does not draw, for loops of your
+  own).
+- **Key state:** `held_keys()`, `Ctx::is_held`, `Ctx::held_keys`,
+  `plain_key`; release bindings `Node::on_key_up` and `bind_release`;
+  `Ctx::key()`, the key that fired a binding; `KeyCode::Modifier`
+  (`ModifierKey`) for a modifier on its own; `SessionOptions::all_keys`
+  and `App::all_keys` (kitty flags 1+2+4+8); `Releases`,
+  `Session::releases_reported`, `Backend::releases_reported`,
+  `Ctx::releases_reported`, `Driver::set_releases`; releases made up with
+  `App::synthesize_releases(hold)`.
+- **Key repeat:** `Node::repeat(delay, rate)` fires a held binding at the
+  app's own delay and rate (DAS/ARR), passing the terminal's repeats over.
+- **Timers:** `every`, `after`, `Ctx::after` return a `Timer` (`pause`,
+  `resume`, `set_period`, `reset`, `cancel`); `Ctx::every`,
+  `Ctx::fixed_step` and `fixed_step(period, |cx, steps| ..)` with
+  catch-up and `Timer::max_catch_up`, exact under `Driver::advance`;
+  `Ctx::missed_ticks`.
+- **Frame pacing:** `App::max_fps(n)`, `FrameStats::skipped`,
+  `App::stats_handle()` (`StatsHandle`) for the stats after `run`.
+
 ### intuiTUIve: sprites, stages and pixel buffers (rs-rich-intuituive)
 
 Cell art that moves over a backdrop, and a framebuffer drawn in cells: the

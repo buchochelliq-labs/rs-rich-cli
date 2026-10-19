@@ -276,3 +276,154 @@ fn without_max_fps_every_change_draws() {
     assert_eq!(stats.get().frames, 101);
     assert_eq!(stats.get().skipped, 0);
 }
+
+fn up(name: &str) -> Event {
+    Event::KeyUp(Key::parse(name).unwrap())
+}
+
+/// raycast, blocks: key state. Where releases are reported, keys are held
+/// from press to release, a binding is told which key fired it, and a
+/// release binding runs on the release, whatever modifiers are held by
+/// then.
+#[test]
+fn held_keys_releases_and_the_key_that_fired() {
+    use intuituive::interact::Releases;
+    let app = App::new(|| {
+        let said = signal(String::new());
+        text!("{said}")
+            .bind("w up", "Walk", move |cx| {
+                let key = cx.key().unwrap();
+                let held = cx.is_held("w") as u8;
+                said.set(format!("walk {key} {held}"));
+            })
+            .bind_release("w", "Stop", move |cx| {
+                let held = cx.held_keys().len();
+                said.set(format!("stop {} {held}", cx.key().unwrap()));
+            })
+    });
+    let mut driver = app.driver(20, 1);
+    driver.set_releases(Releases::All);
+    driver.press("w");
+    assert_eq!(first(&driver), "walk w 1");
+    driver.press("up");
+    assert_eq!(first(&driver), "walk up 1");
+    // Let go with Shift down: `W`.
+    driver.send(up("W"));
+    assert_eq!(first(&driver), "stop W 1");
+    driver.send(up("up"));
+    driver.press("up");
+    assert_eq!(first(&driver), "walk up 0");
+}
+
+/// Without releases, nothing is held: a key would be held for good.
+#[test]
+fn without_releases_no_key_is_held() {
+    let app = App::new(|| {
+        let n = signal(0usize);
+        text!("{n}").on_key("w", move |cx| n.set(cx.held_keys().len()))
+    });
+    let mut driver = app.driver(5, 1);
+    driver.press("w w");
+    assert_eq!(first(&driver), "0");
+}
+
+/// blocks: DAS and ARR. Held, the binding fires at once, after the delay,
+/// then at the rate, and the terminal's own repeats are passed over; it
+/// stops on the release. Exact under `advance`.
+#[test]
+fn a_repeating_binding_keeps_its_own_delay_and_rate() {
+    use intuituive::interact::Releases;
+    let app = App::new(|| {
+        let x = signal(0);
+        text!("{x}")
+            .bind("left", "Left", move |_| x.update(|x| *x += 1))
+            .repeat(ms(167), ms(33))
+    });
+    let mut driver = app.driver(5, 1);
+    driver.set_releases(Releases::ExceptText);
+    driver.press("left");
+    assert_eq!(first(&driver), "1");
+    driver.advance(ms(166));
+    assert_eq!(first(&driver), "1");
+    driver.advance(ms(1));
+    assert_eq!(first(&driver), "2");
+    // The terminal repeats: passed over.
+    driver.press("left left");
+    driver.advance(ms(33 * 3));
+    assert_eq!(first(&driver), "5");
+    driver.send(up("left"));
+    driver.advance(ms(500));
+    assert_eq!(first(&driver), "5");
+    // Pressed again: at once, and the delay again.
+    driver.press("left");
+    driver.advance(ms(100));
+    assert_eq!(first(&driver), "6");
+}
+
+/// With no releases (and none made up) a repeating binding falls back to
+/// the terminal's repeats: each press fires.
+#[test]
+fn a_repeating_binding_without_releases_fires_on_each_press() {
+    let app = App::new(|| {
+        let x = signal(0);
+        text!("{x}")
+            .bind("left", "Left", move |_| x.update(|x| *x += 1))
+            .repeat(ms(167), ms(33))
+    });
+    let mut driver = app.driver(5, 1);
+    driver.press("left left left");
+    driver.advance(ms(500));
+    assert_eq!(first(&driver), "3");
+}
+
+/// Releases made up: a key is let go `hold` after its last press or
+/// repeat, so holding (repeats coming) keeps it held and a tap ends.
+#[test]
+fn synthesized_releases_end_a_hold_after_the_timeout() {
+    let app = App::new(|| {
+        let (x, said) = (signal(0), signal(""));
+        text!("{x} {said}")
+            .bind("d", "Right", move |_| x.update(|x| *x += 1))
+            .repeat(ms(100), ms(50))
+            .on_key_up("d", move |_| said.set("up"))
+    })
+    .synthesize_releases(Some(ms(300)));
+    let mut driver = app.driver(10, 1);
+    driver.press("d");
+    // The terminal's repeats at 250 and 280 ms keep it held.
+    driver.advance(ms(250));
+    driver.press("d");
+    driver.advance(ms(30));
+    driver.press("d");
+    assert_eq!(first(&driver), "5");
+    // 300 ms after the last repeat: let go.
+    driver.advance(ms(299));
+    assert_eq!(first(&driver), "11");
+    driver.advance(ms(1));
+    assert_eq!(first(&driver), "11 up");
+    driver.advance(ms(500));
+    assert_eq!(first(&driver), "11 up");
+}
+
+/// Doom: a modifier on its own is a key, bound and held by name.
+#[test]
+fn a_modifier_alone_is_a_key() {
+    use intuituive::interact::Releases;
+    let app = App::new(|| {
+        let said = signal(String::new());
+        text!("{said}")
+            .on_key("ctrl", move |_| said.set("fire".into()))
+            .on_key("w", move |cx| {
+                said.set(format!("run {}", cx.is_held("shift")))
+            })
+    });
+    let mut driver = app.driver(10, 1);
+    driver.set_releases(Releases::All);
+    driver.press("ctrl");
+    assert_eq!(first(&driver), "fire");
+    driver.press("shift w");
+    assert_eq!(first(&driver), "run true");
+    driver.send(up("shift"));
+    driver.press("w");
+    assert_eq!(first(&driver), "run false");
+}

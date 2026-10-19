@@ -67,6 +67,15 @@ fn vim_key(key: Key) -> String {
         KeyCode::PageDown => Some("PageDown".to_string()),
         KeyCode::F(n) => Some(format!("F{n}")),
         KeyCode::Menu => Some("Menu".to_string()),
+        KeyCode::Modifier(which) => Some(
+            match which {
+                rich_interact::ModifierKey::Shift => "Shift",
+                rich_interact::ModifierKey::Ctrl => "Ctrl",
+                rich_interact::ModifierKey::Alt => "Alt",
+                rich_interact::ModifierKey::Super => "Super",
+            }
+            .to_string(),
+        ),
     };
     let mut held = String::new();
     if key.modifiers.ctrl {
