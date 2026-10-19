@@ -1,0 +1,15 @@
+{
+  "tape": "docs/tapes/raycast.tape",
+  "tape_fnv1a64": "3f05439d25b43358",
+  "recorder": "rs-rich-record 0.0.8",
+  "rich": null,
+  "commit": "6939c74c6df849afdba0ceb3f43185f71e8231ed",
+  "screenshots": [
+    "title",
+    "start",
+    "map",
+    "keys",
+    "paused"
+  ],
+  "note": "Every frame is real output of the program under test on a PTY."
+}
