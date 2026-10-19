@@ -136,7 +136,7 @@ pub use app::{
 };
 #[cfg(feature = "art")]
 pub use big_text::big_text;
-pub use bindings::{Scaled, Stepped};
+pub use bindings::{ModePage, Scaled, Stepped};
 pub use border::{Border, BorderSet, Edge, Shadow, Sides};
 pub use dialog::{ConfirmOptions, PickOptions, PromptOptions};
 pub use effect::{effect, fill};

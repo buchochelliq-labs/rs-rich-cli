@@ -9,6 +9,53 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### intuiTUIve: round 4 runtime (rs-rich-intuituive)
+
+Runtime fixes and generic pieces the round-3 clones asked for
+([the demo gaps](docs/design/intuituive-demo-gaps.md)):
+
+- **Fixed: values from other threads were picked up at most every 50 ms.**
+  A `Proxy` send (a `latest` value, a task's result, `Proxy::run`) now
+  wakes the run loop's wait on the terminal through the backend's new
+  `Waker`, so a feed faster than 20 a second is seen at its rate on every
+  backend. Headless, `Driver::timeout` (and so `Driver::advance` and a
+  script's `wait`) steps to the next `latest` thread asleep on the app's
+  clock: a `rate` of a 10 ms `latest_every` reads 100, not 20.
+  `Driver::set_waker` wires a loop of one's own.
+- **Fixed: work a layout set off was not settled before the next event.**
+  `Driver::render` runs the watches its new rects woke (a `RectHandle`'s
+  readers) and, under `wait_for_tasks`, their tasks, before it returns.
+- **Bindings in a state:** `Node::bind_when(cond, keys, desc, f)` and the
+  `when(cond, |node| …)` scope (any kind of binding, sequences too): a
+  binding applies, and is listed in the help, the palette, the which-key
+  pop-up and `key_hints`, only while its condition holds; two may share a
+  key. `in_mode(mode, value, section, |node| …)` and `modes(mode, &[…])`
+  scope a mode's bindings and help section to the mode a signal holds.
+- **Sections for every kind of binding:** `Node::section(name, |node| …)`.
+- **`bind_toggle`** (a `bool` field of a signal's value) and **`bind_step`**
+  (a number field moved by a step, clamped to a range; `Stepped`).
+- **`bind_scaled` labels:** `("alt", 0.2, "⅕")` is listed `alt ⅕`
+  (`Scaled`); the old two-item form still works.
+- **The help wraps long rows** instead of cutting them, and
+  **`Ctx::help_with(HelpOptions)`** sets its title, its key notation
+  (`KeyFormat::Vim`: `<C-u>`, `gg`) and a filter-first layout (Yazi's).
+- **Feeds and signals over time:** `latest_with_state(stall_after, run)`
+  (`FeedState::{Running, Stalled(since), Ended, Failed(why)}`),
+  `latest_iter(iter, Pace::Every(d) | Pace::Free)` with `.then(iter)` /
+  `.then_with(f)` / `.signal()`, `history(signal)` (`back`, `forward`,
+  `can_back`, `can_forward`, `limit`), `recent(signal, n)` (`n` a number
+  or a signal: `Count`), `smoothed(signal, attack, release)` and
+  `on_write_ref(signal, |&T, cx| …)`.
+
+rs-rich-interact, for the above: `Backend::waker` and `Waker` (a self-pipe
+polled with the terminal on the crossterm, termion and termwiz backends on
+Unix; short waits elsewhere); `Key::parse` names the punctuation keys
+(`equals`, `minus`, `plus`, `underscore`, `slash`, `backslash`,
+`period`/`dot`, `semicolon`, `colon`, `quote`, `backtick`, `tilde`,
+`bracketleft`/`bracketright`, `lt`, `gt`, `question`, …;
+`event::punctuation`), shown as the character; `overlay::Help::wrap`,
+`::flat` and `::key_format`, off by default.
+
 ### intuiTUIve: core components are generic (rs-rich-intuituive)
 
 The rule for intuiTUIve is now that its always-compiled core holds only

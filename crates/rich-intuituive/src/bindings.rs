@@ -191,7 +191,7 @@ impl Node {
     pub fn modes<T: PartialEq + Clone + 'static>(
         self,
         mode: Signal<T>,
-        pages: &[(T, &str, &dyn Fn(Node) -> Node)],
+        pages: &[ModePage<'_, T>],
     ) -> Node {
         pages.iter().fold(self, |node, (value, section, scope)| {
             node.in_mode(mode, value.clone(), section, scope)
@@ -298,6 +298,10 @@ impl Node {
         node
     }
 }
+
+/// One mode of [`Node::modes`]: its value, its help section, and what
+/// binds its keys.
+pub type ModePage<'a, T> = (T, &'a str, &'a dyn Fn(Node) -> Node);
 
 /// A variant of a [`bind_scaled`](Node::bind_scaled) binding: the
 /// modifiers that make its keys, its value, and how the help says it.

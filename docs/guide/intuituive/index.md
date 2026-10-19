@@ -1738,6 +1738,79 @@ keys, description, handler)` lists one under a section of its own, as
 `bind_in` does a binding. The same descriptions make a footer of the keys
 that work now: [`key_hints()`](#bars-for-an-apps-chrome).
 
+A variant of `bind_scaled` may say itself its own way: with a label as a
+third item, `("alt", 0.2, "⅕")` is listed `alt ⅕` rather than `alt ×0.2`.
+A help row too long for the help wraps under its description.
+
+### Bindings in a state, sections and help options
+
+```rust
+#[derive(Clone, Copy, PartialEq)]
+enum Mode { Osc, Spec }
+
+label("scope")
+    .in_mode(mode, Mode::Osc, "oscilloscope", |node| {
+        node.bind_toggle("t", "Toggle the trigger", cfg, |c| &mut c.triggering)
+            .bind("p", "Peaks", show_peaks)
+    })
+    .in_mode(mode, Mode::Spec, "spectroscope", |node| {
+        node.bind_toggle("l", "Logarithmic scale", cfg, |c| &mut c.log)
+            .bind("p", "Phase", show_phase)
+    })
+    .section("view", |node| {
+        node.bind_scaled("pageup", &[("", 1.0, "1"), ("alt", 0.2, "⅕")], "Up", nudge)
+            .bind_step("equals", "More samples", cfg, |c| &mut c.samples, 256.0, 256..=8192)
+            .bind_step("minus", "Fewer samples", cfg, |c| &mut c.samples, -256.0, 256..=8192)
+            .bind_cycle("tab", "Next mode", mode, &[Mode::Osc, Mode::Spec])
+    })
+```
+
+- **`.bind_when(|| cond, keys, description, handler)`** binds a key that
+  applies only while `cond()` is true: a key passes a binding that does
+  not apply by (to another of the key, on the node or above), and the
+  help, the palette, the which-key pop-up and `key_hints()` leave it out.
+  Two bindings may so share a key under different conditions: `p` for
+  peaks in one mode and phase in another. `.when(|| cond, |node| …)`
+  does the same for every binding the closure adds, of any kind
+  (sequences too); scopes nest.
+- **`.in_mode(mode, value, "section", |node| …)`** is the bindings of one
+  mode: they apply, and are listed under the section, only while `mode`
+  holds `value`. `.modes(mode, &[(value, "section", &|node: Node| …), …])`
+  does several at once. The mode's view is a `switch` on the same signal.
+- **`.section("name", |node| …)`** lists every binding the closure adds
+  under a help section: `bind_scaled`, `bind_cycle`, `bind_toggle` and
+  `bind_step` take no section of their own. A binding given its own
+  (`bind_in`) keeps it.
+- **`.bind_toggle(keys, description, signal, |s| &mut s.flag)`** flips a
+  `bool` field of a signal's value; **`.bind_step(keys, description,
+  signal, |s| &mut s.n, step, range)`** moves a number field (any integer
+  or float type) by `step`, negative to go down, kept within `range`.
+- **Punctuation keys by name**, wherever keys are parsed (bindings,
+  `Driver::press`, scripts, keymap files): `equals`, `minus`, `plus`,
+  `underscore`, `slash`, `backslash`, `period` or `dot`, `comma`,
+  `semicolon`, `colon`, `quote`, `doublequote`, `backtick`, `tilde`,
+  `bracketleft`, `bracketright`, `braceleft`, `braceright`, `lt`, `gt`,
+  `question`, `exclam`, `at`, `hash`, `dollar`, `percent`, `caret`,
+  `ampersand`, `asterisk`, `pipe`: `ctrl+minus`, `"equals plus"`. The
+  help shows the character.
+
+`cx.help_with(options)` shows the help another way:
+
+```rust
+cx.help_with(
+    HelpOptions::new()
+        .title("mgr.help")
+        .key_format(KeyFormat::Vim) // <C-u>, <S-Tab>, gg
+        .filter_first(true),        // Yazi's: search, a rule, one list
+)
+```
+
+`KeyFormat::Vim` says keys in vim's notation (`<C-u>`, `<A-x>`,
+`<PageUp>`, a sequence as `gg`), and the search finds them as said;
+`filter_first(true)` lists every binding in one list under the search
+line and a rule, with no section headings. `KeyFormat::keys(&keys,
+sequence)` says keys the same way anywhere else.
+
 ### Confirming
 
 ```rust
@@ -1876,6 +1949,32 @@ text(move || match user.get() {
   `latest_every(period, || value)` is a thread that makes a value every
   `period`. Both keep to the app's clock in a test (see
   [Testing](#testing)). The thread starts when the app starts running.
+  Each value wakes the loop's wait on the terminal at once, on every
+  backend, so a feed faster than the screen's frames is seen at its own
+  rate (a `rate` of a 10 ms `latest_every` reads 100).
+- **A feed with a state:** `let (value, state) =
+  latest_with_state(stall_after, |tx| …)` is `latest` with a second
+  signal, a `FeedState`: `Running`; `Stalled(since)` once no value came
+  for `stall_after` (`None`: never), until the next comes; `Ended` when
+  the closure returns `()` or `Ok(())`; `Failed(why)` when it returns an
+  `Err` or panics. Any thread: a sensor, a log's tail, a socket.
+- **An iterator at a pace:** `latest_iter(frames, Pace::Every(period))`
+  plays an iterator onto a signal on the app's clock (`Pace::Free`: as
+  fast as it comes), then `.then(fallback)` plays another at the same
+  beat (`std::iter::repeat(silence)`), `.then_with(|tx| …)` runs a
+  closure with the thread's `Latest`, and `.signal()` plays nothing after.
+- **Signals over time:** `history(signal)` goes `back()` and `forward()`
+  through the values a signal has had (`can_back()`, `can_forward()`,
+  `.limit(n)`), not recording its own moves: a browser's, a pager's, a
+  file manager's tabs. `recent(signal, n)` is a `Memo<VecDeque<T>>` of its
+  last `n` writes (`n` may be a signal): an average over the last frames,
+  a peak, persistence. `smoothed(signal, attack, release)` is a number
+  that eases after another on the app's clock, rising with the `attack`
+  time constant and falling with `release`: a meter's needle, a progress
+  bar that glides, bars falling back slowly.
+- **Each write, borrowed:** `on_write(signal, |value, cx| …)` gets a clone
+  of each write; `on_write_ref(signal, |&value, cx| …)` a borrow of the
+  value after a turn that wrote it, so a big frame is never copied.
 - **Another program:** `cx.handoff(command)` gives the terminal to a
   program once the handler returns (an editor, a pager, a shell): the app
   leaves the alternate screen and raw mode, runs it and waits, then takes
@@ -2715,6 +2814,14 @@ out.write_all(driver.finish().as_bytes())?;
   show it, or `None` when nothing did.
 - **`timeout(now)`** is how long you may wait for an event: until the next
   timer or `after`, a frame while something animates, at most 50 ms.
+  `set_waker(|| …)` is called from any thread that sends the app a value
+  (a `latest` value, a task's result, a `Proxy`), so a loop that waits on
+  something can stop waiting at once: `run` and `run_on` use the
+  backend's `Waker`, which a read on the terminal waits on beside it.
+- **`render()`** also runs the watches its layout set off (one that reads
+  a `RectHandle`: a pane that loads once it has a width) and, in an app
+  that waits for its tasks, their tasks, so the next event finds what
+  they load.
 - **`event(e)`** takes a key, mouse event, paste or resize;
   `resize(w, h)` sets the size directly.
 - **`screen()`** is the frame as cells, and `screen().lines()` as styled
@@ -2773,8 +2880,9 @@ terminal and no clock of its own. For a test it has:
 - `type_text("Ada")`: a key a character, as a person types;
 - `resize(columns, rows)`, `event(…)` for the mouse and pastes, and
   `update(now)` to move the clock; `advance(d)` moves it on by `d` a step
-  at a time, to each timer, `after`, animation or toast due (50 ms at
-  most), drawing after each, so what is timed runs at its own time;
+  at a time, to each timer, `after`, animation, toast or `latest` thread
+  asleep on the app's clock due (50 ms at most), drawing after each, so
+  what is timed runs at its own time, and a feed's every value is seen;
 - `assert_focused("save")`: the focus is on the node with that
   `.name("…")`, or that accessible name (its `.label("…")`, the text it
   shows, a panel's title). When it is not, the message says where the
